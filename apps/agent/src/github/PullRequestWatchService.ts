@@ -443,7 +443,7 @@ export class PullRequestWatchService {
               `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`,
               'checkout',
               '-B',
-              `codepilotx/pr-watch-${identity.number}`,
+              `pidex/pr-watch-${identity.number}`,
               input.headSha,
             ],
           })

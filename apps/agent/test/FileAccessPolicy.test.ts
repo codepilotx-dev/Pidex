@@ -440,7 +440,7 @@ describe('真实路径的配置与敏感文件保护', () => {
 
   test('外部新建项目配置和 Git hooks 通过目录链接仍要求审批', async () => {
     const { root, outside, executor, approvals, context } = await fixture()
-    const configDir = join(outside, '.codepilotx')
+    const configDir = join(outside, '.pidex')
     const hooksDir = join(outside, '.git', 'hooks')
     await mkdir(configDir)
     await mkdir(hooksDir, { recursive: true })

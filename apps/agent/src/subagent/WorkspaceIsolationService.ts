@@ -336,9 +336,9 @@ export class WorkspaceIsolationService {
     const env = {
       GIT_INDEX_FILE: indexPath,
       GIT_AUTHOR_NAME: 'Pidex',
-      GIT_AUTHOR_EMAIL: 'codepilotx@local.invalid',
+      GIT_AUTHOR_EMAIL: 'pidex@local.invalid',
       GIT_COMMITTER_NAME: 'Pidex',
-      GIT_COMMITTER_EMAIL: 'codepilotx@local.invalid',
+      GIT_COMMITTER_EMAIL: 'pidex@local.invalid',
       GIT_AUTHOR_DATE: `@${Math.floor(this.now() / 1000)} +0000`,
       GIT_COMMITTER_DATE: `@${Math.floor(this.now() / 1000)} +0000`,
     }
@@ -387,7 +387,7 @@ export class WorkspaceIsolationService {
       repository.rootPath,
       `Pidex ${mode} baseline ${id}`,
     )
-    const ref = `refs/codepilotx/baselines/${id}`
+    const ref = `refs/pidex/baselines/${id}`
     await this.requireGit(
       repository.rootPath,
       ['update-ref', ref, snapshot.commit],
@@ -661,9 +661,9 @@ export class WorkspaceIsolationService {
         undefined,
         {
           GIT_AUTHOR_NAME: 'Pidex',
-          GIT_AUTHOR_EMAIL: 'codepilotx@local.invalid',
+          GIT_AUTHOR_EMAIL: 'pidex@local.invalid',
           GIT_COMMITTER_NAME: 'Pidex',
-          GIT_COMMITTER_EMAIL: 'codepilotx@local.invalid',
+          GIT_COMMITTER_EMAIL: 'pidex@local.invalid',
         },
       )
       const token = this.nextID()

@@ -80,7 +80,7 @@ export type UseDesktopSettingsResult = {
   pullRequestPrompt: string
   sandboxMode: DesktopSandboxMode
   allowNetworkAccess: boolean
-  installCodePilotXDependencies: boolean
+  installPidexDependencies: boolean
   workspaceDependenciesMigrated: boolean
   firstUseSetupCompleted: 0 | 1 | undefined
   personality: DesktopPersonality
@@ -423,8 +423,8 @@ function useDesktopSettingsState(
   const [pullRequestPrompt, setPullRequestPrompt] = useState(initial.pullRequestPrompt)
   const [sandboxMode, setSandboxMode] = useState<DesktopSandboxMode>(initial.sandboxMode)
   const [allowNetworkAccess, setAllowNetworkAccess] = useState(initial.allowNetworkAccess)
-  const [installCodePilotXDependencies, setInstallPidexDependencies] = useState(
-    initial.installCodePilotXDependencies,
+  const [installPidexDependencies, setInstallPidexDependencies] = useState(
+    initial.installPidexDependencies,
   )
   const [workspaceDependenciesMigrated, setWorkspaceDependenciesMigrated] = useState(
     initial.workspaceDependenciesMigrated,
@@ -594,7 +594,7 @@ function useDesktopSettingsState(
         setPullRequestPrompt(settings.pullRequestPrompt)
         setSandboxMode(settings.sandboxMode)
         setAllowNetworkAccess(settings.allowNetworkAccess)
-        setInstallPidexDependencies(settings.installCodePilotXDependencies)
+        setInstallPidexDependencies(settings.installPidexDependencies)
         setWorkspaceDependenciesMigrated(settings.workspaceDependenciesMigrated)
         setFirstUseSetupCompleted(settings.firstUseSetupCompleted)
         setPersonality(settings.personality)
@@ -690,7 +690,7 @@ function useDesktopSettingsState(
       pullRequestPrompt,
       sandboxMode,
       allowNetworkAccess,
-      installCodePilotXDependencies,
+      installPidexDependencies,
       workspaceDependenciesMigrated,
       ...(firstUseSetupCompleted === undefined ? {} : { firstUseSetupCompleted }),
       'desktop.voice.preferredInputDeviceId':
@@ -776,7 +776,7 @@ function useDesktopSettingsState(
       pullRequestPrompt,
       sandboxMode,
       allowNetworkAccess,
-      installCodePilotXDependencies,
+      installPidexDependencies,
       workspaceDependenciesMigrated,
       firstUseSetupCompleted,
       committedDraftValues['desktop.voice.preferredInputDeviceId'],
@@ -898,7 +898,7 @@ function useDesktopSettingsState(
     setPullRequestPrompt(snapshot.pullRequestPrompt)
     setSandboxMode(snapshot.sandboxMode)
     setAllowNetworkAccess(snapshot.allowNetworkAccess)
-    setInstallPidexDependencies(snapshot.installCodePilotXDependencies)
+    setInstallPidexDependencies(snapshot.installPidexDependencies)
     setWorkspaceDependenciesMigrated(snapshot.workspaceDependenciesMigrated)
     setFirstUseSetupCompleted(snapshot.firstUseSetupCompleted)
     setPersonality(snapshot.personality)
@@ -1126,7 +1126,7 @@ function useDesktopSettingsState(
     pullRequestPrompt,
     sandboxMode,
     allowNetworkAccess,
-    installCodePilotXDependencies,
+    installPidexDependencies,
     workspaceDependenciesMigrated,
     firstUseSetupCompleted,
     personality,

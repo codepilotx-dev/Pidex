@@ -104,9 +104,9 @@ import { AGENT_LIVE_EVENT_FILTERS } from './EventSubscriptionFilters.js'
 import { SessionCatalogCoordinator } from './SessionCatalogCoordinator.js'
 import type { SessionLifecycleUpdate } from './SessionCatalogCoordinator.js'
 
-export const WORKSPACE_FILE_CHANGED_EVENT = 'codepilotx-workspace-file-changed'
-export const WORKSPACE_GIT_CHANGED_EVENT = 'codepilotx-workspace-git-changed'
-export const CONFIG_UPDATED_EVENT = 'codepilotx-config-updated'
+export const WORKSPACE_FILE_CHANGED_EVENT = 'pidex-workspace-file-changed'
+export const WORKSPACE_GIT_CHANGED_EVENT = 'pidex-workspace-git-changed'
+export const CONFIG_UPDATED_EVENT = 'pidex-config-updated'
 
 const RENDERER_PROTOCOL = 'thread-rpc-v4' as const
 

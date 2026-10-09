@@ -174,7 +174,7 @@ describe('desktop runtime skills client', () => {
       description: 'Run built-in helper.',
       path: 'builtin://builtin-helper/SKILL.md',
       scope: 'user',
-      format: 'codepilotx',
+      format: 'pidex',
       enabled: true,
     } as const
     const fetcher = async (_path: string, init?: RequestInit): Promise<Response> => {

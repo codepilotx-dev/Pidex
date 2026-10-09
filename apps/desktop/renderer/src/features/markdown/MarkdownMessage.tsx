@@ -54,7 +54,7 @@ import type {
   MarkdownRenderBlock,
 } from './Types.js'
 
-export const MARKDOWN_THREAD_NAVIGATION_EVENT = 'codepilotx:markdown-thread-navigation'
+export const MARKDOWN_THREAD_NAVIGATION_EVENT = 'pidex:markdown-thread-navigation'
 
 export function handleMarkdownThreadLinkClick(
   event: { preventDefault: () => void },

@@ -17,24 +17,24 @@ async function temporaryRoot(): Promise<string> {
 }
 
 describe('Electron data location store', () => {
-  test('schedules a parent/.codepilotx relocation and promotes it after ready', async () => {
+  test('schedules a parent/.pidex relocation and promotes it after ready', async () => {
     const root = await temporaryRoot()
     const userData = join(root, 'app-data')
-    const current = join(root, 'current', '.codepilotx')
+    const current = join(root, 'current', '.pidex')
     const parent = join(root, 'selected')
     await Promise.all([mkdir(current, { recursive: true }), mkdir(parent, { recursive: true })])
     const store = new DataLocationStore(userData, current, null)
 
     const change = await store.schedule(parent, join(root, 'install'))
-    expect(change.targetDataDir).toBe(join(parent, '.codepilotx'))
+    expect(change.targetDataDir).toBe(join(parent, '.pidex'))
     expect((await store.launch()).relocation).toMatchObject({
       sourceDataDir: current,
-      targetDataDir: join(parent, '.codepilotx'),
+      targetDataDir: join(parent, '.pidex'),
     })
 
     await store.promotePending()
     expect(await store.state()).toMatchObject({
-      currentDataDir: join(parent, '.codepilotx'),
+      currentDataDir: join(parent, '.pidex'),
       pendingDataDir: null,
       controlSource: 'bootstrap',
     })
@@ -49,7 +49,7 @@ describe('Electron data location store', () => {
     )
     expect((await store.state()).isEnvControlled).toBe(true)
     await expect(store.schedule(join(root, 'selected'), join(root, 'install'))).rejects.toThrow(
-      'CODEPILOTX_DATA_DIR',
+      'PIDEX_DATA_DIR',
     )
   })
 
@@ -60,7 +60,7 @@ describe('Electron data location store', () => {
     await mkdir(workspace, { recursive: true })
     const store = new DataLocationStore(
       join(root, 'app-data'),
-      join(root, 'current', '.codepilotx'),
+      join(root, 'current', '.pidex'),
       null,
     )
 
@@ -71,14 +71,14 @@ describe('Electron data location store', () => {
 
   test('rejects invalid, non-empty, and installation-owned targets', async () => {
     const root = await temporaryRoot()
-    const current = join(root, 'current', '.codepilotx')
+    const current = join(root, 'current', '.pidex')
     const store = new DataLocationStore(join(root, 'app-data'), current, null)
     await mkdir(current, { recursive: true })
 
     await expect(store.schedule(current, join(root, 'install'))).rejects.toThrow('父目录')
 
     const nonEmptyParent = join(root, 'non-empty')
-    const nonEmptyTarget = join(nonEmptyParent, '.codepilotx')
+    const nonEmptyTarget = join(nonEmptyParent, '.pidex')
     await mkdir(nonEmptyTarget, { recursive: true })
     await writeFile(join(nonEmptyTarget, 'unexpected.txt'), 'occupied', 'utf8')
     await expect(store.schedule(nonEmptyParent, join(root, 'install'))).rejects.toThrow('必须为空')
@@ -96,7 +96,7 @@ describe('Electron data location store', () => {
 
   test('keeps the pending relocation for retry and can restore the source', async () => {
     const root = await temporaryRoot()
-    const current = join(root, 'current', '.codepilotx')
+    const current = join(root, 'current', '.pidex')
     const selectedParent = join(root, 'selected')
     await Promise.all([
       mkdir(current, { recursive: true }),

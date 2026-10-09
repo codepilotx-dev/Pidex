@@ -2,10 +2,10 @@ import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs
 import { isAbsolute, relative, resolve, sep } from 'node:path'
 import { AgentError } from '../Domain'
 
-const MARKER_NAME = '.codepilotx-projectless.json'
-// 托管无项目工作区目录沿用产品改名前的名称，改名后仍指向同一目录，
-// 否则既有工作区记录会因目录校验失败而无法访问。
-const MANAGED_ROOT_DIRECTORY_NAME = 'CodePilotX'
+const MARKER_NAME = '.pidex-projectless.json'
+// 托管无项目工作区的固定目录名。品牌清零后改用新名称；旧名称下的既有目录不会被
+// 删除或改写，但不再被识别，需由用户自行确认后处理。
+const MANAGED_ROOT_DIRECTORY_NAME = 'Pidex'
 const MAX_SLUG_LENGTH = 80
 const MAX_NUMBERED_ATTEMPTS = 100
 const MAX_RANDOM_ATTEMPTS = 5

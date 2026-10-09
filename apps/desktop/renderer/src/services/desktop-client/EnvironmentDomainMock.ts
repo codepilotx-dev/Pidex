@@ -20,7 +20,7 @@ export async function browserEnvironmentCall<M extends RpcMethod>(
           {
             id: 'mock-default',
             name: '默认环境',
-            path: `C:/mock/${String(input.projectId)}/.codepilotx/environments/environment.jsonc`,
+            path: `C:/mock/${String(input.projectId)}/.pidex/environments/environment.jsonc`,
             inherited: false,
             exists: false,
             invalid: false,
@@ -33,7 +33,7 @@ export async function browserEnvironmentCall<M extends RpcMethod>(
     case 'local-environment/read':
       result = {
         exists: false,
-        filePath: `C:/mock/${String(input.projectId ?? input.threadId)}/.codepilotx/environments/environment.jsonc`,
+        filePath: `C:/mock/${String(input.projectId ?? input.threadId)}/.pidex/environments/environment.jsonc`,
         gitRoot: 'C:/mock',
         revision: '0'.repeat(64),
         configHash: '0'.repeat(64),

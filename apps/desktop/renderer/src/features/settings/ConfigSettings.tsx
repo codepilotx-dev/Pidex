@@ -582,8 +582,8 @@ export function ConfigSettings(): React.ReactNode {
             title="更改位置"
             description={
               dataLocation?.isEnvControlled
-                ? '当前由 CODEPILOTX_DATA_DIR 控制；移除环境变量后才能通过桌面设置迁移。'
-                : '选择父目录后会创建 .codepilotx，并立即重启完成安全迁移。旧目录不会删除。'
+                ? '当前由 PIDEX_DATA_DIR 控制；移除环境变量后才能通过桌面设置迁移。'
+                : '选择父目录后会创建 .pidex，并立即重启完成安全迁移。旧目录不会删除。'
             }
             control={
               <Button

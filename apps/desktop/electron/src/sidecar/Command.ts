@@ -38,7 +38,7 @@ export function resolveBunExecutable(
   env: NodeJS.ProcessEnv = process.env,
   platform: NodeJS.Platform = process.platform,
 ): string {
-  const explicit = env.CODEPILOTX_BUN_PATH?.trim()
+  const explicit = env.PIDEX_BUN_PATH?.trim()
   if (explicit) return explicit
 
   const bunInstall = env.BUN_INSTALL?.trim()
@@ -64,7 +64,7 @@ export function resolveBunExecutable(
   if (executable) return executable
 
   throw new Error(
-    '未找到 Bun 可执行文件。请先运行 bun run dev:agent，再运行 bun run dev:desktop，或设置 CODEPILOTX_BUN_PATH。',
+    '未找到 Bun 可执行文件。请先运行 bun run dev:agent，再运行 bun run dev:desktop，或设置 PIDEX_BUN_PATH。',
   )
 }
 
@@ -83,7 +83,7 @@ export function resolveSidecarCommand(input: {
 
   return {
     executable: resolveBunExecutable(env),
-    args: ['run', env.CODEPILOTX_AGENT_ENTRY ?? 'apps/agent/src/index.ts'],
+    args: ['run', env.PIDEX_AGENT_ENTRY ?? 'apps/agent/src/index.ts'],
     cwd: resolve(input.moduleDirectory, '../../../../'),
   }
 }

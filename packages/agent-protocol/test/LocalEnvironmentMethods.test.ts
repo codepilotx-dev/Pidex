@@ -36,7 +36,7 @@ describe('local environment method contracts', () => {
   test('read/update 使用 SHA-256 revision 且配置保持 JSON 值', () => {
     const read = {
       exists: true,
-      filePath: 'C:\\repo\\.codepilotx\\environments\\environment.jsonc',
+      filePath: 'C:\\repo\\.pidex\\environments\\environment.jsonc',
       gitRoot: 'C:\\repo',
       revision: digest,
       configHash: digest,

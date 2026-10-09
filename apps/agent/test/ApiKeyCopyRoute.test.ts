@@ -42,7 +42,7 @@ describe('API Key 安全复制路由', () => {
 
     const cookieOnly = await app.request(path, {
       method: 'POST',
-      headers: { Cookie: 'codepilotx_session=desktop-token' },
+      headers: { Cookie: 'pidex_session=desktop-token' },
     })
     expect(cookieOnly.status).toBe(403)
     expect(reads).toBe(0)

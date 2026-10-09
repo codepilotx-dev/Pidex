@@ -288,12 +288,12 @@ describe('PiModelsFileStore', () => {
 
     expect((await store.read('dynamic'))?.models[0]?.id).toBe('model')
     expect(await readFile(legacyPath, 'utf8')).toBe('legacy-model-cache')
-    expect(await readFile(cachePath, 'utf8')).toContain('"owner": "codepilotx"')
+    expect(await readFile(cachePath, 'utf8')).toContain('"owner": "pidex"')
 
     await writeFile(
       cachePath,
       JSON.stringify({
-        owner: 'codepilotx',
+        owner: 'pidex',
         formatVersion: 99,
         providers: {},
       }),

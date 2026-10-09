@@ -224,9 +224,8 @@ export class AgentLogger {
     options: AgentLoggerOptions = {},
   ) {
     this.activeFile = join(directory, 'agent.jsonl')
-    this.consoleLevel =
-      options.consoleLevel ?? parseConsoleLevel(process.env.CODEPILOTX_CONSOLE_LOG)
-    this.detailMode = options.detailMode ?? parseDetailMode(process.env.CODEPILOTX_LOG_DETAIL)
+    this.consoleLevel = options.consoleLevel ?? parseConsoleLevel(process.env.PIDEX_CONSOLE_LOG)
+    this.detailMode = options.detailMode ?? parseDetailMode(process.env.PIDEX_LOG_DETAIL)
     this.consoleSink = options.consoleSink ?? ((line) => process.stdout.write(line))
     this.now = options.now ?? (() => new Date())
     this.prepare()

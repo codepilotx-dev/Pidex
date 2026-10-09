@@ -12,7 +12,7 @@ describe('Codex syntax theme resolution', () => {
   test('uses Codex defaults for automatic and invalid selections', () => {
     expect(resolveThemeId('auto', 'light')).toBe('codex-light')
     expect(resolveThemeId('auto', 'dark')).toBe('codex-dark')
-    expect(resolveThemeId('codepilotx', 'light')).toBe('codex-light')
+    expect(resolveThemeId('pidex', 'light')).toBe('codex-light')
     expect(resolveThemeId('not-a-theme', 'dark')).toBe('codex-dark')
   })
 

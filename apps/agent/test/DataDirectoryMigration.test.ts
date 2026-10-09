@@ -163,8 +163,8 @@ describe('legacy Agent data migration', () => {
 describe('active Agent data relocation', () => {
   test('publishes the owned data atomically and preserves the source', async () => {
     const root = await temporaryRoot()
-    const source = join(root, 'source', '.codepilotx')
-    const target = join(root, 'target', '.codepilotx')
+    const source = join(root, 'source', '.pidex')
+    const target = join(root, 'target', '.pidex')
     await Promise.all([
       mkdir(join(source, 'skills', 'demo'), { recursive: true }),
       mkdir(join(source, 'tooling', 'nodejs'), { recursive: true }),

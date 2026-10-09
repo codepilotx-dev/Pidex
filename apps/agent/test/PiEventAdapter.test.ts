@@ -556,7 +556,7 @@ describe('PiEventAdapter', () => {
       result: {
         content: [{ type: 'text', text: '报告' }],
         structuredContent: {
-          kind: 'codepilotx.result-card',
+          kind: 'pidex.result-card',
           version: 1,
           card: {
             title: '  任务已完成  ',
@@ -580,7 +580,7 @@ describe('PiEventAdapter', () => {
       {
         type: 'json',
         value: {
-          kind: 'codepilotx.result-card',
+          kind: 'pidex.result-card',
           version: 1,
           card: {
             title: '任务已完成',
@@ -601,14 +601,14 @@ describe('PiEventAdapter', () => {
 
   test('keeps forged or future result-card envelopes as raw JSON blocks', async () => {
     const forged = [
-      { kind: 'codepilotx.result-card', version: 1, card: { title: '无摘要' } },
+      { kind: 'pidex.result-card', version: 1, card: { title: '无摘要' } },
       {
-        kind: 'codepilotx.result-card',
+        kind: 'pidex.result-card',
         version: 2,
         card: { title: '未来版本', summary: '按 JSON 降级' },
       },
       {
-        kind: 'codepilotx.other-card',
+        kind: 'pidex.other-card',
         version: 1,
         card: { title: '错误标记', summary: '按 JSON 降级' },
       },

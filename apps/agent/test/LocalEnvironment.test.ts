@@ -72,7 +72,7 @@ afterEach(async () => {
 describe('LocalEnvironmentService', () => {
   test('唯一 ID 环境可作为默认环境发现，操作列表使用相同配置；legacy 与显式选择优先', async () => {
     const {root,service,discovery} = await fixture()
-    const directory = join(root,'.codepilotx','environments')
+    const directory = join(root,'.pidex','environments')
     await mkdir(directory,{recursive:true})
     const named = join(directory,'stable-id.jsonc')
     await writeFile(named,JSON.stringify({schema_version:1,name:'启动',actions:[{name:'启动桌面',command:'bun run dev:desktop'},{name:'启动agent',command:'bun run dev:agent'}]}),'utf8')
@@ -102,7 +102,7 @@ describe('LocalEnvironmentService', () => {
     const { root, trust, runner } = await fixture()
     const projectRoot = join(root, 'app')
     const worktreeRoot = join(root, 'worktree')
-    await Promise.all([mkdir(projectRoot), mkdir(worktreeRoot), mkdir(join(root,'.codepilotx','environments'), { recursive: true })])
+    await Promise.all([mkdir(projectRoot), mkdir(worktreeRoot), mkdir(join(root,'.pidex','environments'), { recursive: true })])
     await writeFile(join(root, LOCAL_ENVIRONMENT_RELATIVE_PATH), '// 保留注释\n{"schema_version":1,"name":"继承环境","future":42,"actions":[]}', 'utf8')
     const sqlite = new Database(':memory:')
     sqlite.exec('CREATE TABLE projects (id TEXT PRIMARY KEY); CREATE TABLE managed_worktrees (id TEXT PRIMARY KEY,path TEXT,deleted_at INTEGER)')
@@ -169,8 +169,8 @@ describe('LocalEnvironmentService', () => {
       bindingId: 'worktree',
       kind: 'setup',
       environment: {
-        CODEPILOTX_SOURCE_TREE_PATH: 'C:\\source',
-        CODEPILOTX_WORKTREE_PATH: 'C:\\managed',
+        PIDEX_SOURCE_TREE_PATH: 'C:\\source',
+        PIDEX_WORKTREE_PATH: 'C:\\managed',
       },
     })
   })
@@ -356,8 +356,8 @@ describe('LocalEnvironmentService', () => {
     await mkdir(dirname(configPath), { recursive: true })
     const successCommand =
       process.platform === 'win32'
-        ? "$env:LOCAL_ENV_TEST_DELTA='updated'; $env:CODEPILOTX_SECRET_CONTROL='blocked'; Write-Output ('x' * 70000)"
-        : "export LOCAL_ENV_TEST_DELTA=updated; export CODEPILOTX_SECRET_CONTROL=blocked; head -c 70000 /dev/zero | tr '\\0' x"
+        ? "$env:LOCAL_ENV_TEST_DELTA='updated'; $env:PIDEX_SECRET_CONTROL='blocked'; Write-Output ('x' * 70000)"
+        : "export LOCAL_ENV_TEST_DELTA=updated; export PIDEX_SECRET_CONTROL=blocked; head -c 70000 /dev/zero | tr '\\0' x"
     await writeFile(
       configPath,
       JSON.stringify(
@@ -385,7 +385,7 @@ describe('LocalEnvironmentService', () => {
     expect(operation).toMatchObject({ status: 'succeeded', errorCode: null })
     expect(streamed.join('')).not.toHaveLength(0)
     expect((await deltas.read('binding')).set.LOCAL_ENV_TEST_DELTA).toBe('updated')
-    expect((await deltas.read('binding')).set.CODEPILOTX_SECRET_CONTROL).toBeUndefined()
+    expect((await deltas.read('binding')).set.PIDEX_SECRET_CONTROL).toBeUndefined()
     const output = runner.output('setup-1')!
     expect(
       Buffer.byteLength(output.chunks.map((chunk) => chunk.data).join(''), 'utf8'),
@@ -453,7 +453,7 @@ describe('LocalEnvironmentService', () => {
     try {
       await symlink(
         outside,
-        join(root, '.codepilotx'),
+        join(root, '.pidex'),
         process.platform === 'win32' ? 'junction' : 'dir',
       )
     } catch (cause) {

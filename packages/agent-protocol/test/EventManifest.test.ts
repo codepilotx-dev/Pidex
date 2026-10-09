@@ -162,7 +162,7 @@ describe('event manifest invariants', () => {
     }
     expect(decode(payload)).toEqual(payload)
     for (const forbidden of [
-      { filePath: 'C:/Users/example/.codepilotx/config.json' },
+      { filePath: 'C:/Users/example/.pidex/config.json' },
       { config: { apiKey: 'secret' } },
       { value: 'secret' },
       { token: 'secret' },

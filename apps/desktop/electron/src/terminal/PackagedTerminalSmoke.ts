@@ -5,7 +5,7 @@ import { isAbsolute, relative, resolve } from 'node:path'
 import { spawn as spawnPty, type IPty } from 'node-pty'
 import { HostProcessTreeKiller } from './ProcessTree.js'
 
-const FIXED_MARKER = 'CODEPILOTX_CONPTY_SMOKE_OK'
+const FIXED_MARKER = 'PIDEX_CONPTY_SMOKE_OK'
 const FIXED_EXIT_CODE = 23
 // GitHub-hosted Windows runners can spend more than 10 seconds cold-starting
 // PowerShell/ConPTY. Keep each phase bounded without treating that startup tail

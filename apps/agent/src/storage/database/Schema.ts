@@ -19,4 +19,5 @@ export const DATA_EPOCH = HISTORY_APPLICATION_ID
 
 /** Profile schema 3 is the forward-compatible profile baseline. */
 export const PROFILE_SCHEMA_VERSION = 4
-export const PROFILE_APPLICATION_ID = 0x43505850
+/** Profile ownership marker spelling the product name in ASCII (PDXP). */
+export const PROFILE_APPLICATION_ID = 0x50445850

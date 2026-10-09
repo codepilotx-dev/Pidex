@@ -125,7 +125,7 @@ import type {
   DesktopSpeechStatus,
 } from './Types.js'
 
-const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'codepilotx.desktop.appearance.v6'
+const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v6'
 
 const BROWSER_UNAVAILABLE_SPEECH_STATUS = {
   state: 'unsupported',
@@ -467,7 +467,7 @@ export function createBrowserMockDesktopClient(
     diagnoseDesktopToolchain: async () => {
       const runtimeStatus = mockRuntimeStatus()
       return {
-        enabled: settings.installCodePilotXDependencies,
+        enabled: settings.installPidexDependencies,
         root: runtimeStatus.toolchainRoot,
         managedRoot: runtimeStatus.managedToolchainRoot,
         packagedRoot: runtimeStatus.packagedToolchainRoot,
@@ -482,7 +482,7 @@ export function createBrowserMockDesktopClient(
         root: runtimeStatus.managedToolchainRoot,
         copiedFrom: null,
         diagnostics: {
-          enabled: settings.installCodePilotXDependencies,
+          enabled: settings.installPidexDependencies,
           root: runtimeStatus.toolchainRoot,
           managedRoot: runtimeStatus.managedToolchainRoot,
           packagedRoot: runtimeStatus.packagedToolchainRoot,
@@ -498,7 +498,7 @@ export function createBrowserMockDesktopClient(
         root: runtimeStatus.managedToolchainRoot,
         copiedFrom: null,
         diagnostics: {
-          enabled: settings.installCodePilotXDependencies,
+          enabled: settings.installPidexDependencies,
           root: null,
           managedRoot: runtimeStatus.managedToolchainRoot,
           packagedRoot: runtimeStatus.packagedToolchainRoot,
@@ -516,7 +516,7 @@ export function createBrowserMockDesktopClient(
               {
                 kind: 'user' as const,
                 displayName: '用户配置',
-                filePath: 'C:/Users/mock/.codepilotx/config.json',
+                filePath: 'C:/Users/mock/.pidex/config.json',
                 version: configVersion,
                 writable: true,
                 trusted: true,
@@ -548,7 +548,7 @@ export function createBrowserMockDesktopClient(
       return {
         status: 'ok',
         version: configVersion,
-        filePath: params.filePath ?? 'C:/Users/mock/.codepilotx/config.json',
+        filePath: params.filePath ?? 'C:/Users/mock/.pidex/config.json',
       }
     },
     listConfigProfiles: async () => ({
@@ -558,7 +558,7 @@ export function createBrowserMockDesktopClient(
         restartRequired: selectedProfile !== null,
       },
       profiles: [],
-      profilesDirectory: 'C:/Users/mock/.codepilotx/profiles',
+      profilesDirectory: 'C:/Users/mock/.pidex/profiles',
     }),
     selectConfigProfile: async (profileId) => {
       selectedProfile = profileId
@@ -568,7 +568,7 @@ export function createBrowserMockDesktopClient(
       return {
         status: 'ok',
         version: configVersion,
-        filePath: 'C:/Users/mock/.codepilotx/config.json',
+        filePath: 'C:/Users/mock/.pidex/config.json',
         profileState: {
           activeProfile: null,
           selectedProfile,
@@ -583,8 +583,8 @@ export function createBrowserMockDesktopClient(
       return settings
     },
     listProjectMemories: async (workspacePath) => ({
-      memoryDir: `${workspacePath || 'mock'}/.codepilotx-memory/`,
-      entrypointPath: `${workspacePath || 'mock'}/.codepilotx-memory/MEMORY.md`,
+      memoryDir: `${workspacePath || 'mock'}/.pidex-memory/`,
+      entrypointPath: `${workspacePath || 'mock'}/.pidex-memory/MEMORY.md`,
       memories: [],
     }),
     readProjectMemory: async (_workspacePath, relativePath) => ({
@@ -605,7 +605,7 @@ export function createBrowserMockDesktopClient(
     deleteProjectMemory: async () => {},
     resetProjectMemory: async () => {},
     listProjectMemoryRecalls: async (workspacePath) => ({
-      recallLogPath: `${workspacePath || 'mock'}/.codepilotx-memory/.recall-events.jsonl`,
+      recallLogPath: `${workspacePath || 'mock'}/.pidex-memory/.recall-events.jsonl`,
       recalls: [],
     }),
     listUserMemories: async () => ({

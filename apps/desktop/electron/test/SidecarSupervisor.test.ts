@@ -6,19 +6,19 @@ import type { DesktopLogger } from '../src/logging/DesktopLogger'
 import { SidecarSupervisor, type SidecarSupervisorDependencies } from '../src/sidecar/Supervisor'
 import { SidecarTerminationError } from '../src/sidecar/FailureDiagnostics'
 
-const originalManagedOrigin = process.env.CODEPILOTX_AGENT_URL
+const originalManagedOrigin = process.env.PIDEX_AGENT_URL
 
 afterEach(() => {
   if (originalManagedOrigin === undefined) {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
   } else {
-    process.env.CODEPILOTX_AGENT_URL = originalManagedOrigin
+    process.env.PIDEX_AGENT_URL = originalManagedOrigin
   }
 })
 
 describe('SidecarSupervisor owned 生命周期', () => {
   test('打包 sidecar 使用安装资源中的内置 Skills 与 Plugins', async () => {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
     const harness = createHarness({
       appRuntime: {
         isPackaged: true,
@@ -29,18 +29,14 @@ describe('SidecarSupervisor owned 生命周期', () => {
     const supervisor = harness.supervisor()
     await supervisor.connect(async () => undefined)
 
-    expect(harness.environments[0]?.CODEPILOTX_BUILTIN_SKILLS_DIR).toBe(
-      'C:\\resources\\agent\\skills',
-    )
-    expect(harness.environments[0]?.CODEPILOTX_BUILTIN_PLUGINS_DIR).toBe(
-      'C:\\resources\\agent\\plugins',
-    )
+    expect(harness.environments[0]?.PIDEX_BUILTIN_SKILLS_DIR).toBe('C:\\resources\\agent\\skills')
+    expect(harness.environments[0]?.PIDEX_BUILTIN_PLUGINS_DIR).toBe('C:\\resources\\agent\\plugins')
     harness.children[0]?.exitOnSignal()
     await supervisor.stop()
   })
 
   test('每次 spawn 注入新 identity，并同时校验 stdout 与 /api/ready', async () => {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
     const harness = createHarness()
     const supervisor = harness.supervisor()
     const first = await supervisor.connect(async () => undefined)
@@ -48,8 +44,8 @@ describe('SidecarSupervisor owned 生命周期', () => {
     expect(first.generation).toBe(1)
     expect(first.instanceToken).toBe('instance-1')
     expect(harness.environments[0]).toMatchObject({
-      CODEPILOTX_DESKTOP_MANAGED: '1',
-      CODEPILOTX_SIDECAR_INSTANCE_TOKEN: 'instance-1',
+      PIDEX_DESKTOP_MANAGED: '1',
+      PIDEX_SIDECAR_INSTANCE_TOKEN: 'instance-1',
     })
     expect(harness.stdoutExpectations).toEqual(['instance-1'])
     expect(harness.healthExpectations).toEqual(['instance-1'])
@@ -63,7 +59,7 @@ describe('SidecarSupervisor owned 生命周期', () => {
   })
 
   test('旧 child 延迟 exit 不能污染使用相同端口的新 generation', async () => {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
     const harness = createHarness({
       processTreeKiller: {
         kill: async () => 'process-not-found' as const,
@@ -92,7 +88,7 @@ describe('SidecarSupervisor owned 生命周期', () => {
   })
 
   test('旧 generation 的延迟 fetch 响应不能作为当前连接结果返回', async () => {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
     const staleResponse = deferred<Response>()
     let staleRequestStarted = false
     const harness = createHarness({
@@ -121,7 +117,7 @@ describe('SidecarSupervisor owned 生命周期', () => {
   })
 
   test('旧 generation 的 ready 与 watchdog 延迟回调不能改变新连接', async () => {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
     const staleReady = deferred<{
       type: 'ready'
       host: string
@@ -188,7 +184,7 @@ describe('SidecarSupervisor owned 生命周期', () => {
   })
 
   test('优雅退出和 SIGTERM hang 后升级进程树清理并等待 exit', async () => {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
     let killedPid: number | undefined
     const harness = createHarness({
       processTreeKiller: {
@@ -209,7 +205,7 @@ describe('SidecarSupervisor owned 生命周期', () => {
   })
 
   test('无法确认退出时进入 terminal failure 并阻止再次 spawn', async () => {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
     const harness = createHarness({
       processTreeKiller: {
         kill: async () => {
@@ -228,7 +224,7 @@ describe('SidecarSupervisor owned 生命周期', () => {
   })
 
   test('退出确认失败后再次 stop 会重新检查残留进程', async () => {
-    delete process.env.CODEPILOTX_AGENT_URL
+    delete process.env.PIDEX_AGENT_URL
     let killCalls = 0
     const harness = createHarness({
       processTreeKiller: {
@@ -249,7 +245,7 @@ describe('SidecarSupervisor owned 生命周期', () => {
   })
 
   test('managed origin 不设置实例标识、不 spawn 且 stop 不关闭外部 Agent', async () => {
-    process.env.CODEPILOTX_AGENT_URL = 'http://127.0.0.1:4800'
+    process.env.PIDEX_AGENT_URL = 'http://127.0.0.1:4800'
     const harness = createHarness()
     const supervisor = harness.supervisor()
     const connection = await supervisor.connect(async () => undefined)

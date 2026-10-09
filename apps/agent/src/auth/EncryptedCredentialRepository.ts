@@ -25,7 +25,7 @@ export type {
   ProviderCredentialSummary,
 } from './ProviderCredentialRepository'
 
-const SERVICE = 'com.codepilotx.credentials'
+const SERVICE = 'com.pidex.credentials'
 const MASTER_KEY_NAME = 'master-key-v1'
 const KEY_VERSION = 1
 const KEY_BYTES = 32

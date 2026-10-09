@@ -54,8 +54,8 @@ export function safeInternalRoute(value: string | null): string | null {
   if (value.includes('\\')) return null
 
   try {
-    const parsed = new URL(value, 'https://codepilotx.invalid')
-    if (parsed.origin !== 'https://codepilotx.invalid') return null
+    const parsed = new URL(value, 'https://pidex.invalid')
+    if (parsed.origin !== 'https://pidex.invalid') return null
     return `${parsed.pathname}${parsed.search}${parsed.hash}`
   } catch {
     return null

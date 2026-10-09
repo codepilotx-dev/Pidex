@@ -1,7 +1,7 @@
 export const RENDERER_DATA_EPOCH = 3
 
-const DATA_EPOCH_KEY = 'codepilotx.dataEpoch'
-const TRANSIENT_PREFIXES = ['conversation.ui-state.', 'codepilotx.subagent.scroll.']
+const DATA_EPOCH_KEY = 'pidex.dataEpoch'
+const TRANSIENT_PREFIXES = ['conversation.ui-state.', 'pidex.subagent.scroll.']
 
 function transientKeys(storage: Storage): string[] {
   const keys: string[] = []

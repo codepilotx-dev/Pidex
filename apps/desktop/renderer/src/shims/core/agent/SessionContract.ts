@@ -14,7 +14,7 @@ export const DEFAULT_COLLABORATION_MODE: CollaborationMode = {
   mode: 'default',
 }
 
-export const PLAN_CODEPILOTX_COLLABORATION_MODE: CollaborationMode = {
+export const PLAN_PIDEX_COLLABORATION_MODE: CollaborationMode = {
   mode: 'plan',
 }
 
@@ -22,7 +22,7 @@ export function normalizeCollaborationMode(value: unknown): CollaborationMode {
   if (!value || typeof value !== 'object') return DEFAULT_COLLABORATION_MODE
   const mode = (value as { mode?: unknown }).mode
   return mode === 'plan'
-    ? PLAN_CODEPILOTX_COLLABORATION_MODE
+    ? PLAN_PIDEX_COLLABORATION_MODE
     : DEFAULT_COLLABORATION_MODE
 }
 
@@ -34,7 +34,7 @@ export function collaborationModeFromPlanModeActive(
   planModeActive: boolean | undefined,
 ): CollaborationMode {
   return planModeActive === true
-    ? PLAN_CODEPILOTX_COLLABORATION_MODE
+    ? PLAN_PIDEX_COLLABORATION_MODE
     : DEFAULT_COLLABORATION_MODE
 }
 

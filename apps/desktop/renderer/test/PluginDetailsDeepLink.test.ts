@@ -14,7 +14,7 @@ const plugin: PluginCatalogItem = {
   category: 'included',
   actionKind: 'none',
   iconName: 'computer-use',
-  tone: 'codepilotx',
+  tone: 'pidex',
   status: 'included',
 }
 
@@ -24,7 +24,7 @@ const builtinSkill: DesktopInstalledSkill = {
   path: 'builtin://builtin-helper/SKILL.md',
   scope: 'system',
   source: 'system',
-  format: 'codepilotx',
+  format: 'pidex',
   enabled: true,
 }
 

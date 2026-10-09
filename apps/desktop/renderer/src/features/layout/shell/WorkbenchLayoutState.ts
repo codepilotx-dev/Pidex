@@ -12,7 +12,7 @@ import {
 } from './WorkbenchLayoutSizing.js'
 
 export const WORKBENCH_LAYOUT_SCHEMA_VERSION = 1
-export const WORKBENCH_LAYOUT_STORAGE_KEY = 'codepilotx.desktop.workbenchLayout.v1'
+export const WORKBENCH_LAYOUT_STORAGE_KEY = 'pidex.desktop.workbenchLayout.v1'
 
 export type WorkbenchPartId =
   'primary-sidebar' | 'main-content' | 'auxiliary-panel' | 'bottom-panel'

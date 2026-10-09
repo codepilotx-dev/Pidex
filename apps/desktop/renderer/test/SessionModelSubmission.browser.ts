@@ -50,7 +50,7 @@ function Harness() {
     permissionMode: 'default', permissionConfig: { sandboxMode: 'workspace-write', approvalPolicy: 'on-request', approvalsReviewer: 'user' },
     planModeActive: false, localRouterMode: 'off', providerID: 'WRONG-GLOBAL', providerBaseURL: 'https://wrong.example', model: 'WRONG-MODEL',
     thinkingMode: 'disabled', sessionName: '', systemPrompt: '', appendSystemPrompt: '', additionalDirectories: '',
-    installCodePilotXDependencies: false, enableMemory: false, rustSearchAndDiffKernels: false,
+    installPidexDependencies: false, enableMemory: false, rustSearchAndDiffKernels: false,
     onError: message => { document.body.dataset.error = message }, onDiffForActive() {}, onRefreshActiveWorkspace() {}, onOpenDrawerPermissions() {},
   });
   window.api = state;

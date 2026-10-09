@@ -37,16 +37,14 @@ describe('desktop logging', () => {
 
   test('日志目录优先显式配置，迁移时使用源目录', () => {
     const launch = {
-      dataDir: resolve('D:/target/.codepilotx'),
+      dataDir: resolve('D:/target/.pidex'),
       relocation: {
         operationId: 'operation-1',
-        sourceDataDir: resolve('C:/source/.codepilotx'),
-        targetDataDir: resolve('D:/target/.codepilotx'),
+        sourceDataDir: resolve('C:/source/.pidex'),
+        targetDataDir: resolve('D:/target/.pidex'),
       },
     }
-    expect(resolveDesktopLogDirectory(launch, undefined)).toBe(
-      resolve('C:/source/.codepilotx/logs'),
-    )
+    expect(resolveDesktopLogDirectory(launch, undefined)).toBe(resolve('C:/source/.pidex/logs'))
     expect(resolveDesktopLogDirectory(launch, 'E:/logs')).toBe(resolve('E:/logs'))
   })
 

@@ -157,7 +157,7 @@ export function GitSettings(): React.ReactNode {
               <Input
                 className="settings-input-narrow"
                 value={gitBranchPrefix}
-                placeholder="codepilotx/"
+                placeholder="pidex/"
                 onBlur={() => void save(['gitBranchPrefix'])}
                 onChange={(event) => draft.setValue('gitBranchPrefix', event.target.value)}
               />

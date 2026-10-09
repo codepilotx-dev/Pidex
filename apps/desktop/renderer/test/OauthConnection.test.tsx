@@ -4,7 +4,7 @@ import * as React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 
 // 模块 mock 在独立 Bun 进程中运行，避免影响其他 Provider/client 测试。
-if (process.env.CODEPILOTX_OAUTH_UI_TEST === '1') {
+if (process.env.PIDEX_OAUTH_UI_TEST === '1') {
   const originalUseState = React.useState
   let seed: unknown = null
   let writes: unknown[] = []
@@ -174,7 +174,7 @@ if (process.env.CODEPILOTX_OAUTH_UI_TEST === '1') {
 } else {
   test('OAuth 登录状态、折叠回调、中英文与重试清理回归', async () => {
     const child = Bun.spawn([process.execPath, import.meta.filename], {
-      env: { ...process.env, CODEPILOTX_OAUTH_UI_TEST: '1' },
+      env: { ...process.env, PIDEX_OAUTH_UI_TEST: '1' },
       stdout: 'pipe',
       stderr: 'pipe',
     })

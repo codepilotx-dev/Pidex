@@ -58,7 +58,7 @@ export class LocalEnvironmentCatalog {
     const scopeRoot = resolve(this.root(projectId))
     const discovered = await this.discovery.discover(
       scopeRoot,
-      join(scopeRoot, '.codepilotx', 'environments', 'environment.jsonc'),
+      join(scopeRoot, '.pidex', 'environments', 'environment.jsonc'),
     )
     const entries: Array<{
       id: string
@@ -70,7 +70,7 @@ export class LocalEnvironmentCatalog {
     }> = []
     let current = scopeRoot
     for (;;) {
-      const directory = join(current, '.codepilotx', 'environments')
+      const directory = join(current, '.pidex', 'environments')
       const files = await readdir(directory, { withFileTypes: true }).catch(
         (cause: NodeJS.ErrnoException) => {
           if (cause.code === 'ENOENT') return []
@@ -95,7 +95,7 @@ export class LocalEnvironmentCatalog {
       current = parent
     }
     if (!entries.length) {
-      const path = join(scopeRoot, '.codepilotx', 'environments', 'environment.jsonc')
+      const path = join(scopeRoot, '.pidex', 'environments', 'environment.jsonc')
       entries.push({
         id: idFor(discovered.gitRoot, path),
         name: basename(scopeRoot),
@@ -211,7 +211,7 @@ export class LocalEnvironmentCatalog {
     const previous = this.repository.selection(projectId)
       ? null
       : await this.discovery.discover(root)
-    const path = join(root, '.codepilotx', 'environments', environmentFileName(name))
+    const path = join(root, '.pidex', 'environments', environmentFileName(name))
     const initial = await this.service.read(root, path)
     if (initial.exists)
       throw new AgentError('LOCAL_ENVIRONMENT_CONFLICT', '已存在同名环境，请使用其他名称', 409)

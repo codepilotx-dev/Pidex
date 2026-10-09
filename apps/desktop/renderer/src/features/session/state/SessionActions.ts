@@ -50,7 +50,7 @@ export type SessionSettingsSnapshot = {
   systemPrompt: string
   appendSystemPrompt: string
   additionalDirectories: string
-  installCodePilotXDependencies: boolean
+  installPidexDependencies: boolean
   enableMemory: boolean
   rustSearchAndDiffKernels: boolean
   creationSurface?: ThreadCreationSurface
@@ -163,7 +163,7 @@ export async function createSessionForWorkspaceAction(
       systemPrompt: normalizeOptionalText(settings.systemPrompt),
       appendSystemPrompt: normalizeOptionalText(settings.appendSystemPrompt),
       additionalDirectories: parseAdditionalDirectories(settings.additionalDirectories),
-      installCodePilotXDependencies: settings.installCodePilotXDependencies,
+      installPidexDependencies: settings.installPidexDependencies,
       enableMemory: settings.enableMemory,
       rustSearchAndDiffKernels: settings.rustSearchAndDiffKernels,
     })

@@ -43,13 +43,6 @@ describe('pidex thread deep links in markdown targets', () => {
     }
   })
 
-  test('legacy codepilotx:// links still classify as internal threads', () => {
-    expect(classifyMarkdownTarget('codepilotx://threads/legacy-1')).toEqual({
-      kind: 'thread',
-      threadId: 'legacy-1',
-    })
-  })
-
   test('never treats wrong scheme, host, query, hash, or extra segments as an internal thread', () => {
     const invalid = [
       'http://threads/abc',
@@ -70,7 +63,6 @@ describe('pidex thread deep links in markdown targets', () => {
       'pidex://threads//',
       'pidex://threads/abc/extra',
       'pidex://threads/abc/',
-      'codepilotx://threads/abc/extra',
     ]
     for (const link of invalid) {
       expect(classifyMarkdownTarget(link)).not.toMatchObject({

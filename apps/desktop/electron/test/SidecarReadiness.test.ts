@@ -57,7 +57,7 @@ describe('Sidecar readiness 实例校验', () => {
       },
     }
     const result = waitForReadyMessage(child, capturingLogger, 'expected-secret')
-    child.stdout.write('diagnostic CODEPILOTX_SIDECAR_INSTANCE_TOKEN=expected-secret\n')
+    child.stdout.write('diagnostic PIDEX_SIDECAR_INSTANCE_TOKEN=expected-secret\n')
     child.stdout.write(
       `${JSON.stringify({
         type: 'ready',

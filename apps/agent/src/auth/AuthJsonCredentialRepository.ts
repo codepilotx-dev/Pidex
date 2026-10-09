@@ -16,7 +16,7 @@ import {
 } from './ProviderCredentialRepository'
 import { isRecord } from '@pidex/shared/guards'
 
-const FORMAT = 'codepilotx-provider-auth'
+const FORMAT = 'pidex-provider-auth'
 const SCHEMA_VERSION = 1
 
 type JsonCredential = {

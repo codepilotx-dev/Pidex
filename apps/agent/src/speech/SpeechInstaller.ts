@@ -312,8 +312,8 @@ export class SpeechInstaller {
     const script = [
       "$ErrorActionPreference='Stop'",
       'Add-Type -AssemblyName System.IO.Compression.FileSystem',
-      '$zip=[IO.Compression.ZipFile]::OpenRead($env:CODEPILOTX_ZIP_VALIDATION_ARCHIVE)',
-      '$root=[IO.Path]::GetFullPath($env:CODEPILOTX_ZIP_VALIDATION_DESTINATION + [IO.Path]::DirectorySeparatorChar)',
+      '$zip=[IO.Compression.ZipFile]::OpenRead($env:PIDEX_ZIP_VALIDATION_ARCHIVE)',
+      '$root=[IO.Path]::GetFullPath($env:PIDEX_ZIP_VALIDATION_DESTINATION + [IO.Path]::DirectorySeparatorChar)',
       'try { foreach($e in $zip.Entries) {',
       "  $name=$e.FullName.Replace('/', [IO.Path]::DirectorySeparatorChar)",
       '  $target=[IO.Path]::GetFullPath([IO.Path]::Combine($root,$name))',
@@ -342,8 +342,8 @@ export class SpeechInstaller {
         stdio: 'ignore',
         env: {
           ...process.env,
-          CODEPILOTX_ZIP_VALIDATION_ARCHIVE: archive,
-          CODEPILOTX_ZIP_VALIDATION_DESTINATION: destination,
+          PIDEX_ZIP_VALIDATION_ARCHIVE: archive,
+          PIDEX_ZIP_VALIDATION_DESTINATION: destination,
         },
       },
     )

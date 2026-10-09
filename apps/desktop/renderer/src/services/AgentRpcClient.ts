@@ -611,7 +611,7 @@ function asRecord(value: unknown): Record<string, unknown> {
 function rpcHeaders(connectionId: string | null): HeadersInit {
   return {
     'content-type': 'application/json',
-    ...(connectionId ? { 'x-codepilotx-connection-id': connectionId } : {}),
+    ...(connectionId ? { 'x-pidex-connection-id': connectionId } : {}),
   }
 }
 

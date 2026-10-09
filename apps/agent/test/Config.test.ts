@@ -14,42 +14,38 @@ describe('Agent data directories', () => {
     const userHome = resolve('C:/Users/Example')
     const environment = { CODEX_HOME: resolve('D:/codex-home') }
 
-    expect(resolveAgentDataDirectory(environment, userHome)).toBe(join(userHome, '.codepilotx'))
-    expect(resolveAgentLogDirectory(environment, userHome)).toBe(
-      join(userHome, '.codepilotx', 'logs'),
-    )
-    expect(resolveAgentPetsDirectory(environment, userHome)).toBe(
-      join(userHome, '.codepilotx', 'pets'),
-    )
+    expect(resolveAgentDataDirectory(environment, userHome)).toBe(join(userHome, '.pidex'))
+    expect(resolveAgentLogDirectory(environment, userHome)).toBe(join(userHome, '.pidex', 'logs'))
+    expect(resolveAgentPetsDirectory(environment, userHome)).toBe(join(userHome, '.pidex', 'pets'))
   })
 
   test('keeps Pidex-specific overrides authoritative', () => {
     const environment = {
-      CODEPILOTX_DATA_DIR: resolve('D:/agent-data'),
-      CODEPILOTX_LOG_DIR: resolve('D:/agent-logs'),
-      CODEPILOTX_PETS_DIR: resolve('D:/agent-pets'),
+      PIDEX_DATA_DIR: resolve('D:/agent-data'),
+      PIDEX_LOG_DIR: resolve('D:/agent-logs'),
+      PIDEX_PETS_DIR: resolve('D:/agent-pets'),
       CODEX_HOME: resolve('D:/codex-home'),
     }
 
-    expect(resolveAgentDataDirectory(environment)).toBe(environment.CODEPILOTX_DATA_DIR)
-    expect(resolveAgentLogDirectory(environment)).toBe(environment.CODEPILOTX_LOG_DIR)
-    expect(resolveAgentPetsDirectory(environment)).toBe(environment.CODEPILOTX_PETS_DIR)
+    expect(resolveAgentDataDirectory(environment)).toBe(environment.PIDEX_DATA_DIR)
+    expect(resolveAgentLogDirectory(environment)).toBe(environment.PIDEX_LOG_DIR)
+    expect(resolveAgentPetsDirectory(environment)).toBe(environment.PIDEX_PETS_DIR)
     expect(
       resolveBuiltinSkillsDirectory({
-        CODEPILOTX_BUILTIN_SKILLS_DIR: resolve('D:/agent-skills'),
+        PIDEX_BUILTIN_SKILLS_DIR: resolve('D:/agent-skills'),
       }),
     ).toBe(resolve('D:/agent-skills'))
     expect(
       resolveBuiltinPluginsDirectory({
-        CODEPILOTX_BUILTIN_PLUGINS_DIR: resolve('D:/agent-plugins'),
+        PIDEX_BUILTIN_PLUGINS_DIR: resolve('D:/agent-plugins'),
       }),
     ).toBe(resolve('D:/agent-plugins'))
   })
 
   test('derives every managed directory from the selected data root', () => {
-    const dataRoot = resolve('D:/PidexData/.codepilotx')
+    const dataRoot = resolve('D:/PidexData/.pidex')
     const layout = resolveAgentStorageLayout(
-      { CODEPILOTX_DATA_DIR: dataRoot },
+      { PIDEX_DATA_DIR: dataRoot },
       resolve('C:/Users/Example'),
     )
 

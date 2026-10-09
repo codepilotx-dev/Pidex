@@ -733,7 +733,7 @@ describe('desktop history client', () => {
       agentId: 'agent-1',
       createdAt: now,
       version: 3,
-      configPath: '.codepilotx/hooks.json',
+      configPath: '.pidex/hooks.json',
       sha256: 'fixture-sha256',
       hook: {
         id: 'hook-1',

@@ -15,7 +15,7 @@ export type PluginIconName =
   | 'presentations'
   | 'github'
   | 'minimax'
-export type PluginTone = 'chrome' | 'codepilotx' | 'sheet' | 'slides' | 'github' | 'creative'
+export type PluginTone = 'chrome' | 'pidex' | 'sheet' | 'slides' | 'github' | 'creative'
 
 export type PluginCatalogDescriptor = {
   id: string
@@ -79,7 +79,7 @@ export const PLUGIN_CATALOG_DESCRIPTORS = [
     name: 'Computer Use',
     description: '通过 Pidex 控制 Windows 应用',
     iconName: 'computer-use',
-    tone: 'codepilotx',
+    tone: 'pidex',
   },
   {
     ...FEATURED_UNAVAILABLE,
@@ -201,7 +201,7 @@ export function mergePluginCatalog(
     category: 'manageable',
     actionKind: plugin.installed ? 'toggle-plugin' : 'install',
     iconName: runtimeIconName(plugin.id),
-    tone: plugin.id === 'task-planning' ? 'codepilotx' : 'creative',
+    tone: plugin.id === 'task-planning' ? 'pidex' : 'creative',
     status: plugin.status === 'ready' ? (plugin.enabled ? 'enabled' : 'disabled') : 'unavailable',
     installed: plugin.installed,
     enabled: plugin.enabled,

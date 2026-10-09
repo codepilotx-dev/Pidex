@@ -5,7 +5,7 @@ import { OperationParamsSchema, SequenceSchema, TimestampSchema } from '../wire/
 const SkillPathSchema = Schema.String.check(Schema.isMinLength(1))
 
 export const SkillScopeSchema = Schema.Literals(['workspace', 'user'])
-export const SkillFormatSchema = Schema.Literals(['codepilotx', 'agents', 'codex', 'claude'])
+export const SkillFormatSchema = Schema.Literals(['pidex', 'agents', 'codex', 'claude'])
 
 export const InstalledSkillSchema = Schema.Struct({
   name: Schema.String.check(Schema.isMinLength(1)),

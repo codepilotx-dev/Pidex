@@ -6,7 +6,7 @@ describe('Shell 静态风险分类与灾难级拒绝', () => {
     ['format C:', 'destructive'],
     ['Remove-Item -Path C:\\Users -Recurse -Force', 'destructive'],
     ['Set-MpPreference -DisableRealtimeMonitoring $true', 'security_control'],
-    ['Remove-Item F:\\CodeProject\\Pidex\\.codepilotx\\hooks.json -Force', 'security_control'],
+    ['Remove-Item F:\\CodeProject\\Pidex\\.pidex\\hooks.json -Force', 'security_control'],
     ['net user srt-sandbox /delete', 'security_control'],
     ['mimikatz privilege::debug sekurlsa::logonpasswords', 'credential_access'],
     ['procdump.exe -ma lsass.exe C:\\temp\\process.dmp', 'credential_access'],

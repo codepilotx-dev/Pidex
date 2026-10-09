@@ -51,7 +51,7 @@ interface RiskRule {
 }
 
 const SANDBOX_POLICY_TARGET =
-  /(?:\bsrt-sandbox\b|\bsandbox-runtime-users\b|(?:^|[\\/\s"'=])\.git[\\/](?:config|hooks)(?=$|[\\/\s"'`;|&])|(?:^|[\\/\s"'=])\.codepilotx[\\/](?:config\.toml|hooks\.json|skills)(?=$|[\\/\s"'`;|&])|(?:^|[\\/\s"'=])\.(?:claude|agents)[\\/]skills(?=$|[\\/\s"'`;|&]))/i
+  /(?:\bsrt-sandbox\b|\bsandbox-runtime-users\b|(?:^|[\\/\s"'=])\.git[\\/](?:config|hooks)(?=$|[\\/\s"'`;|&])|(?:^|[\\/\s"'=])\.pidex[\\/](?:config\.toml|hooks\.json|skills)(?=$|[\\/\s"'`;|&])|(?:^|[\\/\s"'=])\.(?:claude|agents)[\\/]skills(?=$|[\\/\s"'`;|&]))/i
 const SANDBOX_POLICY_TAMPER_ACTION =
   /\b(?:remove|delete|disable|stop|uninstall|modify|alter|write|rename|set)\b/i
 const SANDBOX_POLICY_TAMPER = new RegExp(

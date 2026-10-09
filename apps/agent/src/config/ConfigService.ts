@@ -114,7 +114,7 @@ type LoadedFile = {
 }
 
 const EMPTY_VERSION = createHash('sha256').update('').digest('hex')
-const PROJECT_CONFIG_DIRECTORY = '.codepilotx'
+const PROJECT_CONFIG_DIRECTORY = '.pidex'
 const CONFIG_FILE_NAME = 'config.json'
 const LEGACY_CONFIG_FILE_NAME = 'config.toml'
 const PROFILE_DIRECTORY_NAME = 'profiles'
@@ -1299,7 +1299,7 @@ export class ConfigService {
       await this.refreshFile(this.userConfigPath, 'user', [])
       return
     }
-    if (filePath.replaceAll('\\', '/').toLowerCase() !== '.codepilotx/config.json') return
+    if (filePath.replaceAll('\\', '/').toLowerCase() !== '.pidex/config.json') return
     const target = resolve(workspaceRoot, PROJECT_CONFIG_DIRECTORY, CONFIG_FILE_NAME)
     await this.refreshFile(target, 'project', [])
   }

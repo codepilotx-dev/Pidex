@@ -259,7 +259,7 @@ describe('执行恢复不变量', () => {
       threadID: thread.id,
       turnID: turn.turnID,
       workspacePath: 'C:/workspace',
-      configPath: 'C:/workspace/.codepilotx/hooks.json',
+      configPath: 'C:/workspace/.pidex/hooks.json',
       configHash: 'b'.repeat(64),
       auditSummary: { hooks: [] },
     })
@@ -326,7 +326,7 @@ describe('执行恢复不变量', () => {
       threadID: thread.id,
       turnID: turn.turnID,
       workspacePath: 'C:/workspace',
-      configPath: 'C:/workspace/.codepilotx/hooks.json',
+      configPath: 'C:/workspace/.pidex/hooks.json',
       configHash: 'a'.repeat(64),
       auditSummary: { hooks: [] },
     })
@@ -338,7 +338,7 @@ describe('执行恢复不变量', () => {
       ) VALUES (?, ?, ?, 'allow', ?, ?)
     `,
       )
-      .run('C:/workspace', 'a'.repeat(64), 'C:/workspace/.codepilotx/hooks.json', 1, 1)
+      .run('C:/workspace', 'a'.repeat(64), 'C:/workspace/.pidex/hooks.json', 1, 1)
 
     recoverInterruptedRuns(db)
 

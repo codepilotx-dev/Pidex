@@ -5,7 +5,7 @@ import { parse as parseYaml } from 'yaml'
 import type { SkillSelection } from '@pidex/agent-protocol'
 import { AgentError } from '../Domain'
 
-const COMPATIBILITY_DIRS = ['.codepilotx', '.agents', '.codex', '.claude'] as const
+const COMPATIBILITY_DIRS = ['.pidex', '.agents', '.codex', '.claude'] as const
 const USER_COMPATIBILITY_DIRS = ['.agents', '.codex', '.claude'] as const
 const MAX_SKILL_BYTES = 1024 * 1024
 const decoder = new TextDecoder('utf-8', { fatal: true })
@@ -17,7 +17,7 @@ export interface SkillMetadata {
   path: string
   root: string
   origin: 'workspace' | 'user' | 'builtin'
-  format: 'codepilotx' | 'agents' | 'codex' | 'claude'
+  format: 'pidex' | 'agents' | 'codex' | 'claude'
   /** Public identity. Built-in Skills deliberately use a stable builtin:// URI. */
   hash: string
   metadata: Record<string, unknown>
@@ -406,7 +406,7 @@ export class SkillService {
         containmentRoot: dataRoot,
         skillsRoot: join(dataRoot, 'skills'),
         origin: 'user' as const,
-        format: 'codepilotx' as const,
+        format: 'pidex' as const,
       },
       ...USER_COMPATIBILITY_DIRS.map((compatibilityDir) => ({
         containmentRoot: userHome,
@@ -420,7 +420,7 @@ export class SkillService {
               containmentRoot: builtinSkillsRoot,
               skillsRoot: builtinSkillsRoot,
               origin: 'builtin' as const,
-              format: 'codepilotx' as const,
+              format: 'pidex' as const,
               publicPath: builtinSkillPath,
             },
           ]
@@ -576,7 +576,7 @@ export class SkillService {
         containmentRoot: dataRoot,
         skillsRoot: join(dataRoot, 'skills'),
         origin: 'user' as const,
-        format: 'codepilotx' as const,
+        format: 'pidex' as const,
       },
       ...USER_COMPATIBILITY_DIRS.map((compatibilityDir) => ({
         containmentRoot: userHome,
@@ -590,7 +590,7 @@ export class SkillService {
               containmentRoot: builtinSkillsRoot,
               skillsRoot: builtinSkillsRoot,
               origin: 'builtin' as const,
-              format: 'codepilotx' as const,
+              format: 'pidex' as const,
               publicPath: builtinSkillPath,
             },
           ]

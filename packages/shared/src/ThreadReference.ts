@@ -1,10 +1,7 @@
 const DEEP_LINK_SCHEME = 'pidex'
-// Links created before the rename still resolve, and the Windows installer keeps
-// registering the old scheme so existing shortcuts and shared links keep working.
-const LEGACY_DEEP_LINK_SCHEME = 'codepilotx'
 const DEEP_LINK_HOST = 'threads'
-const DEEP_LINK_PREFIXES = [`${DEEP_LINK_SCHEME}://`, `${LEGACY_DEEP_LINK_SCHEME}://`] as const
-const DEEP_LINK_AUTHORITY = `${DEEP_LINK_PREFIXES[0]}${DEEP_LINK_HOST}/`
+const DEEP_LINK_PREFIX = `${DEEP_LINK_SCHEME}://`
+const DEEP_LINK_AUTHORITY = `${DEEP_LINK_PREFIX}${DEEP_LINK_HOST}/`
 
 const URL_SCHEME_PATTERN = /^[a-zA-Z][a-zA-Z0-9+.-]*:/
 
@@ -20,11 +17,10 @@ export function parseThreadDeepLink(value: string): string | null {
     return null
   }
   const trimmed = value.trim()
-  const prefix = DEEP_LINK_PREFIXES.find((candidate) => trimmed.startsWith(candidate))
-  if (prefix === undefined) {
+  if (!trimmed.startsWith(DEEP_LINK_PREFIX)) {
     return null
   }
-  const rest = trimmed.slice(prefix.length)
+  const rest = trimmed.slice(DEEP_LINK_PREFIX.length)
   const slashIndex = rest.indexOf('/')
   const queryIndex = rest.indexOf('?')
   const hashIndex = rest.indexOf('#')

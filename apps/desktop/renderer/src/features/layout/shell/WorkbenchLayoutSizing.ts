@@ -20,8 +20,8 @@ export const BOTTOM_PANEL_MIN_HEIGHT = 160
 export const BOTTOM_PANEL_DEFAULT_HEIGHT = 220
 export const BOTTOM_PANEL_UPPER_MIN_HEIGHT = 240
 
-export const RIGHT_DOCK_WIDTH_RATIO_STORAGE_KEY = 'codepilotx.desktop.rightDockWidthRatio.v2'
-export const BOTTOM_PANEL_HEIGHT_RATIO_STORAGE_KEY = 'codepilotx.desktop.bottomPanelHeightRatio.v3'
+export const RIGHT_DOCK_WIDTH_RATIO_STORAGE_KEY = 'pidex.desktop.rightDockWidthRatio.v2'
+export const BOTTOM_PANEL_HEIGHT_RATIO_STORAGE_KEY = 'pidex.desktop.bottomPanelHeightRatio.v3'
 export interface WorkbenchSize {
   width: number
   height: number

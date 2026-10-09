@@ -257,7 +257,7 @@ export const rpcTransportAuthority = (
   if (!authToken) return undefined
   const bearer = authorizationHeader?.replace(/^Bearer\s+/i, '')
   if (bearer === authToken) return 'desktop-host'
-  return cookieValue(cookieHeader, 'codepilotx_session') === authToken ? 'renderer' : undefined
+  return cookieValue(cookieHeader, 'pidex_session') === authToken ? 'renderer' : undefined
 }
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -666,7 +666,7 @@ export const createApp = (dependencies: TransportDependencies) => {
   app.use('/api/*', async (context, next) => {
     if (!config.authToken) return next()
     const bearer = context.req.header('Authorization')?.replace(/^Bearer\s+/i, '')
-    const cookie = cookieValue(context.req.header('Cookie') ?? null, 'codepilotx_session')
+    const cookie = cookieValue(context.req.header('Cookie') ?? null, 'pidex_session')
     if (bearer !== config.authToken && cookie !== config.authToken)
       throw new AgentError('UNAUTHORIZED', 'Agent 认证失败', 401)
     return next()
@@ -675,7 +675,7 @@ export const createApp = (dependencies: TransportDependencies) => {
   app.use('/rpc*', async (context, next) => {
     if (!config.authToken) return next()
     const bearer = context.req.header('Authorization')?.replace(/^Bearer\s+/i, '')
-    const cookie = cookieValue(context.req.header('Cookie') ?? null, 'codepilotx_session')
+    const cookie = cookieValue(context.req.header('Cookie') ?? null, 'pidex_session')
     if (bearer !== config.authToken && cookie !== config.authToken)
       throw new AgentError('UNAUTHORIZED', 'Agent 认证失败', 401)
     return next()
@@ -695,7 +695,7 @@ export const createApp = (dependencies: TransportDependencies) => {
           ? 'initialized'
           : 'unknown'
     const startedAt = performance.now()
-    const connectionId = context.req.header('x-codepilotx-connection-id')
+    const connectionId = context.req.header('x-pidex-connection-id')
     const transportAuthority = rpcTransportAuthority(
       context.req.header('Authorization') ?? null,
       context.req.header('Cookie') ?? null,
@@ -910,8 +910,8 @@ export const createApp = (dependencies: TransportDependencies) => {
   app.get('/api/ready', (context) => {
     db.sqlite.query('SELECT 1').get()
     const instanceToken =
-      process.env.CODEPILOTX_DESKTOP_MANAGED === '1'
-        ? process.env.CODEPILOTX_SIDECAR_INSTANCE_TOKEN
+      process.env.PIDEX_DESKTOP_MANAGED === '1'
+        ? process.env.PIDEX_SIDECAR_INSTANCE_TOKEN
         : undefined
     return context.json({
       ok: true,
@@ -1015,7 +1015,7 @@ export const createApp = (dependencies: TransportDependencies) => {
   })
 
   app.post('/api/shutdown', (context) => {
-    if (process.env.CODEPILOTX_DESKTOP_MANAGED !== '1')
+    if (process.env.PIDEX_DESKTOP_MANAGED !== '1')
       throw new AgentError('SHUTDOWN_DENIED', '仅桌面托管的 Agent 可以通过 HTTP 关闭', 403)
     setTimeout(() => process.emit('SIGTERM'), 25)
     return context.json({ ok: true })

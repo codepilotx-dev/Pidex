@@ -1000,7 +1000,7 @@ function EditorFileTreePresenceItem({
 }
 
 function fileTreeViewStorageKey(workspacePath: string): string {
-  return `codepilotx.desktop.fileTreeView:${workspacePath.replace(/\\/g, '/').toLowerCase()}`
+  return `pidex.desktop.fileTreeView:${workspacePath.replace(/\\/g, '/').toLowerCase()}`
 }
 
 function readFileTreeViewState(workspacePath: string, defaultVisible = true): FileTreeViewState {

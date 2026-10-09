@@ -26,9 +26,7 @@ export async function startAgentServer(): Promise<void> {
     pid: process.pid,
   })
   const instanceToken =
-    process.env.CODEPILOTX_DESKTOP_MANAGED === '1'
-      ? process.env.CODEPILOTX_SIDECAR_INSTANCE_TOKEN
-      : undefined
+    process.env.PIDEX_DESKTOP_MANAGED === '1' ? process.env.PIDEX_SIDECAR_INSTANCE_TOKEN : undefined
   process.stdout.write(
     `${JSON.stringify({ type: 'ready', port: server.port, url, ...(instanceToken ? { instanceToken } : {}) })}\n`,
   )

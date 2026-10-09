@@ -43,7 +43,7 @@ const builtinPath = (path: string) => path.startsWith('builtin://')
 const workspaceRootForSkill = (path: string) => {
   const normalized = resolve(path).replaceAll('\\', '/')
   for (const marker of [
-    '/.codepilotx/skills/',
+    '/.pidex/skills/',
     '/.agents/skills/',
     '/.codex/skills/',
     '/.claude/skills/',
@@ -141,7 +141,7 @@ export class SkillManagementService {
           skill.origin === 'workspace' ? workspaceRootForSkill(skill.path) : null
         const target = workspaceRoot
           ? {
-              filePath: join(workspaceRoot, '.codepilotx', 'config.json'),
+              filePath: join(workspaceRoot, '.pidex', 'config.json'),
               cwd: workspaceRoot,
             }
           : {}

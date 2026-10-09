@@ -244,7 +244,7 @@ describe('RPC v4 Router', () => {
     expect(rpcTransportAuthority('Bearer desktop-token', null, 'desktop-token')).toBe(
       'desktop-host',
     )
-    expect(rpcTransportAuthority(null, 'codepilotx_session=desktop-token', 'desktop-token')).toBe(
+    expect(rpcTransportAuthority(null, 'pidex_session=desktop-token', 'desktop-token')).toBe(
       'renderer',
     )
     expect(rpcTransportAuthority(null, null, 'desktop-token')).toBeUndefined()
@@ -341,8 +341,8 @@ describe('RPC v4 Router', () => {
   })
 
   test('terminal host RPC 同时要求 capability、桌面 authority 与托管进程', async () => {
-    const previousManaged = process.env.CODEPILOTX_DESKTOP_MANAGED
-    process.env.CODEPILOTX_DESKTOP_MANAGED = '1'
+    const previousManaged = process.env.PIDEX_DESKTOP_MANAGED
+    process.env.PIDEX_DESKTOP_MANAGED = '1'
     try {
       const denied = await fixture({
         terminalContext: { resolve: async () => null } as never,
@@ -410,8 +410,8 @@ describe('RPC v4 Router', () => {
       ).toBe('UNAUTHORIZED')
       allowed.db.close()
     } finally {
-      if (previousManaged === undefined) delete process.env.CODEPILOTX_DESKTOP_MANAGED
-      else process.env.CODEPILOTX_DESKTOP_MANAGED = previousManaged
+      if (previousManaged === undefined) delete process.env.PIDEX_DESKTOP_MANAGED
+      else process.env.PIDEX_DESKTOP_MANAGED = previousManaged
     }
   })
 
@@ -2002,7 +2002,7 @@ describe('RPC v4 Router', () => {
       threadID: thread.id,
       turnID: turn.turnID,
       workspacePath: roots.at(-1)!,
-      configPath: join(roots.at(-1)!, '.codepilotx', 'hooks.json'),
+      configPath: join(roots.at(-1)!, '.pidex', 'hooks.json'),
       configHash: 'a'.repeat(64),
       auditSummary: {
         hooks: [{ id: 'pre-tool', event: 'preToolUse', command: 'bun run check' }],

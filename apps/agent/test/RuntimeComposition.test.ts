@@ -221,7 +221,7 @@ describe('RuntimeCompositionService', () => {
 
 describe('RuntimeCompositionSnapshotV2 Skills 引用冻结', () => {
   const writeSkill = async (root: string, name: string, body: string) => {
-    const dir = join(root, '.codepilotx', 'skills', name)
+    const dir = join(root, '.pidex', 'skills', name)
     await mkdir(dir, { recursive: true })
     await writeFile(
       join(dir, 'SKILL.md'),
@@ -445,7 +445,7 @@ describe('RuntimeComposition rebind 生命周期工具', () => {
 
 describe('RuntimeCompositionSnapshotV2 引用证据持久化与组合身份', () => {
   const writeSkill = async (root: string, name: string, body: string) => {
-    const dir = join(root, '.codepilotx', 'skills', name)
+    const dir = join(root, '.pidex', 'skills', name)
     await mkdir(dir, { recursive: true })
     await writeFile(
       join(dir, 'SKILL.md'),

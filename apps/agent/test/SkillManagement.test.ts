@@ -19,7 +19,7 @@ afterEach(async () => removeFixturePaths(roots.splice(0)))
 
 const writeSkill = async (
   root: string,
-  compatibilityDirectory: '.codex' | '.agents' | '.codepilotx',
+  compatibilityDirectory: '.codex' | '.agents' | '.pidex',
   name: string,
 ) => {
   const path = join(root, compatibilityDirectory, 'skills', name, 'SKILL.md')

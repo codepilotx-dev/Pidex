@@ -77,29 +77,27 @@ import { registerProviderIconIpc } from './ipc/RegisterProviderIconIpc.js'
 import { DESKTOP_PROVIDER_ICON_IPC_CHANNELS } from '@pidex/shared/desktop-provider-icon-ipc'
 
 const moduleDirectory = dirname(fileURLToPath(import.meta.url))
-const configuredUserDataDirectory = process.env.CODEPILOTX_USER_DATA_DIR?.trim()
-// Electron 默认把 userData 建在 appData/<应用名> 下。产品名改为 Pidex Desktop 后
-// 该目录会漂移，导致设置、会话索引与浏览器分区状态失联，因此这里显式固定到改名前的
-// 目录；显式指定目录的优先级不变。
-const LEGACY_USER_DATA_DIRECTORY = join(app.getPath('appData'), '@codepilotx', 'desktop-electron')
-app.setPath('userData', configuredUserDataDirectory ? resolve(configuredUserDataDirectory) : LEGACY_USER_DATA_DIRECTORY)
+const configuredUserDataDirectory = process.env.PIDEX_USER_DATA_DIR?.trim()
+// Electron 默认把 userData 建在 appData/<应用名> 下。这里显式固定到产品展示名，
+// 避免应用名或打包名称再次变化时目录漂移，导致外观设置、窗口与宠物状态、会话索引
+// 和浏览器分区失联；显式指定目录的优先级不变。
+const USER_DATA_DIRECTORY_NAME = 'Pidex Desktop'
+const DEFAULT_USER_DATA_DIRECTORY = join(app.getPath('appData'), USER_DATA_DIRECTORY_NAME)
+app.setPath('userData', configuredUserDataDirectory ? resolve(configuredUserDataDirectory) : DEFAULT_USER_DATA_DIRECTORY)
 
 // Windows toast 归属依赖 AppUserModelID；packaged 使用与 electron-builder
 // appId 一致的稳定 ID，开发态只能用进程路径做功能调试。
 if (process.platform === 'win32') {
-  app.setAppUserModelId(app.isPackaged ? 'com.codepilotx.desktop' : process.execPath)
+  app.setAppUserModelId(app.isPackaged ? 'com.pidex.desktop' : process.execPath)
 }
 
 // Windows 默认协议客户端注册保持最小：packaged 安装由 electron-builder protocols
-// 注册，这里只补充运行时默认客户端注册，不改变开发/打包启动路径。新链接使用
-// pidex://，同时继续注册 codepilotx://，使改名前的链接与快捷方式仍然可达。
+// 注册，这里只补充运行时默认客户端注册，不改变开发/打包启动路径。
 if (process.platform === 'win32') {
-  for (const scheme of ['pidex', 'codepilotx']) {
-    if (process.defaultApp && process.argv.length >= 2) {
-      app.setAsDefaultProtocolClient(scheme, process.execPath, [resolve(process.argv[1])])
-    } else {
-      app.setAsDefaultProtocolClient(scheme)
-    }
+  if (process.defaultApp && process.argv.length >= 2) {
+    app.setAsDefaultProtocolClient('pidex', process.execPath, [resolve(process.argv[1])])
+  } else {
+    app.setAsDefaultProtocolClient('pidex')
   }
 }
 
@@ -120,7 +118,7 @@ let deepLinkController: ThreadDeepLinkController | undefined
 const rendererDeepLinkReady = new Set<number>()
 const rendererDeepLinkTracked = new Set<number>()
 
-const packagedTerminalSmokeResult = process.env.CODEPILOTX_PACKAGED_TERMINAL_SMOKE_RESULT?.trim()
+const packagedTerminalSmokeResult = process.env.PIDEX_PACKAGED_TERMINAL_SMOKE_RESULT?.trim()
 const packagedTerminalSmokeRequested = process.argv.includes('--pidex-packaged-terminal-smoke')
 if (
   app.isPackaged &&
@@ -183,13 +181,13 @@ if (
 async function startDesktop(): Promise<void> {
   dataLocationStore = new DataLocationStore(
     app.getPath('userData'),
-    join(app.getPath('home'), '.codepilotx'),
-    process.env.CODEPILOTX_DATA_DIR?.trim() || null,
+    join(app.getPath('home'), '.pidex'),
+    process.env.PIDEX_DATA_DIR?.trim() || null,
   )
   dataLocationLaunch = await dataLocationStore.launch()
   const logDirectory = resolveDesktopLogDirectory(
     dataLocationLaunch,
-    process.env.CODEPILOTX_LOG_DIR,
+    process.env.PIDEX_LOG_DIR,
   )
   logger = createDesktopLogger(logDirectory)
   logger.info('desktop.starting', {
@@ -370,7 +368,7 @@ async function startDesktop(): Promise<void> {
   })
   windows.createStartupWindow()
 
-  const token = process.env.CODEPILOTX_AUTH_TOKEN ?? randomBytes(32).toString('base64url')
+  const token = process.env.PIDEX_AUTH_TOKEN ?? randomBytes(32).toString('base64url')
   supervisor = new SidecarSupervisor(token, logger, moduleDirectory, dataLocationLaunch, {
     appRuntime: {
       isPackaged: app.isPackaged,
@@ -389,7 +387,7 @@ async function startDesktop(): Promise<void> {
         agentOrigin: candidate.origin,
         isPackaged: app.isPackaged,
         managedAgent: candidate.managed,
-        rendererDevUrl: process.env.CODEPILOTX_RENDERER_DEV_URL,
+        rendererDevUrl: process.env.PIDEX_RENDERER_DEV_URL,
       })
       activeWindows.showStartupStatus('正在验证 Agent 认证', candidate.origin)
       await configureAuthCookie(candidate.origin, token, activeLogger)

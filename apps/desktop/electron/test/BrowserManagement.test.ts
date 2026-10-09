@@ -341,7 +341,7 @@ test('controller enforces window/generation, shares device state, and isolates c
     webContents: { fromId: () => guest },
     session: {
       fromPartition: (partition: string) => {
-        expect(partition).toBe('persist:codepilotx-browser')
+        expect(partition).toBe('persist:pidex-browser')
         return session
       },
     },

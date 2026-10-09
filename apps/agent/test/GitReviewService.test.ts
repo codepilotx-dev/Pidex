@@ -406,7 +406,7 @@ describe('GitReviewService', () => {
     await expect(
       review.summary(project.id, {
         kind: 'pull-request',
-        owner: 'codepilotx',
+        owner: 'pidex',
         repository: 'fixture',
         number: 1,
       }),
@@ -667,7 +667,7 @@ describe('GitReviewService', () => {
     expect(pullRequestPreparations).toBe(0)
     await review.summary(project.id, {
       kind: 'pull-request',
-      owner: 'codepilotx',
+      owner: 'pidex',
       repository: 'fixture',
       number: 1,
     })
@@ -1007,7 +1007,7 @@ describe('GitReviewService', () => {
       turnId: turn.turnID,
       phase: 'after',
     })
-    const refRoot = `refs/codepilotx/review/${thread.id}/${turn.turnID}`
+    const refRoot = `refs/pidex/review/${thread.id}/${turn.turnID}`
     expect(await git(root, 'show-ref', '--verify', `${refRoot}/before`)).toContain(
       `${refRoot}/before`,
     )

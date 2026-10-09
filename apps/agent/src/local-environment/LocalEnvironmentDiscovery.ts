@@ -4,11 +4,7 @@ import { createHash } from 'node:crypto'
 import { AgentError } from '../Domain'
 import type { GitCommandRunner } from '../git/GitCommandRunner'
 
-export const LOCAL_ENVIRONMENT_RELATIVE_PATH = join(
-  '.codepilotx',
-  'environments',
-  'environment.jsonc',
-)
+export const LOCAL_ENVIRONMENT_RELATIVE_PATH = join('.pidex', 'environments', 'environment.jsonc')
 
 export type DiscoveredLocalEnvironment = {
   gitRoot: string

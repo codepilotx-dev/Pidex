@@ -19,8 +19,8 @@ describe('终端管理器', () => {
       ptyFactory: factory,
       processTreeKiller: { kill: async () => undefined },
       environment: {
-        CODEPILOTX_AUTH_TOKEN: 'secret',
-        CODEPILOTX_PORT: '1234',
+        PIDEX_AUTH_TOKEN: 'secret',
+        PIDEX_PORT: '1234',
         USER_VISIBLE: 'yes',
       },
       onEvent: () => undefined,
@@ -42,8 +42,8 @@ describe('终端管理器', () => {
     expect(second.terminalId).toBe(first.terminalId)
     expect(factory.spawns).toHaveLength(1)
     expect(factory.spawns[0]?.options.env).toMatchObject({ USER_VISIBLE: 'yes' })
-    expect(factory.spawns[0]?.options.env).not.toHaveProperty('CODEPILOTX_AUTH_TOKEN')
-    expect(factory.spawns[0]?.options.env).not.toHaveProperty('CODEPILOTX_PORT')
+    expect(factory.spawns[0]?.options.env).not.toHaveProperty('PIDEX_AUTH_TOKEN')
+    expect(factory.spawns[0]?.options.env).not.toHaveProperty('PIDEX_PORT')
   })
 
   test('支持同一 threadId 打开多个独立终端并按 terminalId 隔离', async () => {
@@ -167,9 +167,9 @@ describe('终端管理器', () => {
               set: {
                 PATH: 'C:\\action-bin',
                 ACTION_VISIBLE: 'yes',
-                CODEPILOTX_AUTH_TOKEN: 'must-not-leak',
+                PIDEX_AUTH_TOKEN: 'must-not-leak',
               },
-              unset: ['REMOVE_ME', 'codepilotx_port'],
+              unset: ['REMOVE_ME', 'pidex_port'],
             },
             command: 'bun run dev',
           }
@@ -181,7 +181,7 @@ describe('终端管理器', () => {
       environment: {
         Path: 'C:\\base-bin',
         REMOVE_ME: 'remove',
-        CODEPILOTX_PORT: '1234',
+        PIDEX_PORT: '1234',
       },
       onEvent: () => undefined,
     })
@@ -207,8 +207,8 @@ describe('终端管理器', () => {
     expect(actionEnvironment).toMatchObject({ PATH: 'C:\\action-bin', ACTION_VISIBLE: 'yes' })
     expect(actionEnvironment).not.toHaveProperty('Path')
     expect(actionEnvironment).not.toHaveProperty('REMOVE_ME')
-    expect(actionEnvironment).not.toHaveProperty('CODEPILOTX_AUTH_TOKEN')
-    expect(actionEnvironment).not.toHaveProperty('CODEPILOTX_PORT')
+    expect(actionEnvironment).not.toHaveProperty('PIDEX_AUTH_TOKEN')
+    expect(actionEnvironment).not.toHaveProperty('PIDEX_PORT')
     expect(() => manager.attach(old.terminalId, old.instanceId, -1)).toThrow()
   })
 

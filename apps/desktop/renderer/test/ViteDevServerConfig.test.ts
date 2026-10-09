@@ -7,9 +7,9 @@ import {
 } from '../vite.config'
 
 const agentEnvironment = {
-  CODEPILOTX_AGENT_URL: 'http://127.0.0.1:43120',
-  CODEPILOTX_AUTH_TOKEN: 'local_development_token_1234567890',
-  CODEPILOTX_RENDERER_PORT: '49152',
+  PIDEX_AGENT_URL: 'http://127.0.0.1:43120',
+  PIDEX_AUTH_TOKEN: 'local_development_token_1234567890',
+  PIDEX_RENDERER_PORT: '49152',
 }
 
 describe('Renderer Vite development server configuration', () => {
@@ -29,8 +29,8 @@ describe('Renderer Vite development server configuration', () => {
     const server = resolveRendererDevServer('development', agentEnvironment)
 
     expect(Object.keys(server.proxy ?? {})).toEqual(['/rpc', '/api'])
-    expect(server.proxy?.['/rpc']?.target).toBe(agentEnvironment.CODEPILOTX_AGENT_URL)
-    expect(server.proxy?.['/api']?.target).toBe(agentEnvironment.CODEPILOTX_AGENT_URL)
+    expect(server.proxy?.['/rpc']?.target).toBe(agentEnvironment.PIDEX_AGENT_URL)
+    expect(server.proxy?.['/api']?.target).toBe(agentEnvironment.PIDEX_AGENT_URL)
   })
 
   test('adds Agent authentication on the proxy server without exposing it in client config', () => {
@@ -55,9 +55,9 @@ describe('Renderer Vite development server configuration', () => {
       },
     })
 
-    expect(headers.get('Authorization')).toBe(`Bearer ${agentEnvironment.CODEPILOTX_AUTH_TOKEN}`)
+    expect(headers.get('Authorization')).toBe(`Bearer ${agentEnvironment.PIDEX_AUTH_TOKEN}`)
     expect(JSON.stringify({ port: server.port, hmr: server.hmr })).not.toContain(
-      agentEnvironment.CODEPILOTX_AUTH_TOKEN,
+      agentEnvironment.PIDEX_AUTH_TOKEN,
     )
   })
 
@@ -67,14 +67,14 @@ describe('Renderer Vite development server configuration', () => {
     try {
       resolveRendererDevServer('development', {
         ...agentEnvironment,
-        CODEPILOTX_AUTH_TOKEN: secret,
-        CODEPILOTX_RENDERER_PORT: '70000',
+        PIDEX_AUTH_TOKEN: secret,
+        PIDEX_RENDERER_PORT: '70000',
       })
     } catch (error) {
       message = error instanceof Error ? error.message : String(error)
     }
 
-    expect(message).toContain('CODEPILOTX_RENDERER_PORT')
+    expect(message).toContain('PIDEX_RENDERER_PORT')
     expect(message).not.toContain(secret)
   })
 
@@ -94,13 +94,13 @@ describe('Renderer Vite development server configuration', () => {
   test('requires Agent origin and token together and rejects malformed tokens', () => {
     expect(() =>
       resolveRendererDevServer('development', {
-        CODEPILOTX_AGENT_URL: agentEnvironment.CODEPILOTX_AGENT_URL,
+        PIDEX_AGENT_URL: agentEnvironment.PIDEX_AGENT_URL,
       }),
     ).toThrow()
     expect(() =>
       resolveRendererDevServer('development', {
-        CODEPILOTX_AGENT_URL: agentEnvironment.CODEPILOTX_AGENT_URL,
-        CODEPILOTX_AUTH_TOKEN: 'contains spaces and is invalid',
+        PIDEX_AGENT_URL: agentEnvironment.PIDEX_AGENT_URL,
+        PIDEX_AUTH_TOKEN: 'contains spaces and is invalid',
       }),
     ).toThrow()
   })
@@ -116,8 +116,8 @@ describe('Renderer Vite development server configuration', () => {
   test('does not read credentials or create a proxy for production builds', () => {
     expect(
       resolveRendererServerOverrides('build', 'production', {
-        CODEPILOTX_AGENT_URL: 'https://not-a-development-agent.example',
-        CODEPILOTX_AUTH_TOKEN: 'a secret that production must not inspect',
+        PIDEX_AGENT_URL: 'https://not-a-development-agent.example',
+        PIDEX_AUTH_TOKEN: 'a secret that production must not inspect',
       }),
     ).toEqual({})
   })

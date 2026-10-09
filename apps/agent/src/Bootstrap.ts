@@ -336,8 +336,8 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const legacyToolingPreference =
       desktopSettings?.workspaceDependenciesMigrated === true
         ? undefined
-        : typeof desktopSettings?.installCodePilotXDependencies === 'boolean'
-          ? desktopSettings.installCodePilotXDependencies
+        : typeof desktopSettings?.installPidexDependencies === 'boolean'
+          ? desktopSettings.installPidexDependencies
           : undefined
     const toolingPreferences =
       Object.keys(configuredToolingPreferences).length > 0
@@ -357,7 +357,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
           }
         : {
             root: config.storage.toolingRoot,
-            legacyInstallCodePilotXDependencies: legacyToolingPreference,
+            legacyInstallPidexDependencies: legacyToolingPreference,
             preferences: toolingPreferences,
             persistPreferences: false,
           },

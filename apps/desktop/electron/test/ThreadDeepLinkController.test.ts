@@ -21,18 +21,18 @@ const LEGAL_IDS = ['plain-id-123', '会话 with spaces/123', 'a?b#c&d=100% loade
 const ILLEGAL_LINKS = [
   'http://threads/abc',
   'https://threads/abc',
-  'codepilotx://chat/abc',
-  'codepilotx://threads:8080/abc',
-  'codepilotx://threads/abc?tab=open',
-  'codepilotx://threads/abc#section',
-  'codepilotx://user@threads/abc',
-  'codepilotx://user:pass@threads/abc',
-  'codepilotx://threads/',
-  'codepilotx://threads',
-  'codepilotx://threads//',
-  'codepilotx://threads/abc/def',
-  'codepilotx://threads/abc/',
-  'codepilotx://threads/%',
+  'pidex://chat/abc',
+  'pidex://threads:8080/abc',
+  'pidex://threads/abc?tab=open',
+  'pidex://threads/abc#section',
+  'pidex://user@threads/abc',
+  'pidex://user:pass@threads/abc',
+  'pidex://threads/',
+  'pidex://threads',
+  'pidex://threads//',
+  'pidex://threads/abc/def',
+  'pidex://threads/abc/',
+  'pidex://threads/%',
   '',
   '   ',
 ]
@@ -277,7 +277,7 @@ describe('ThreadDeepLinkController second-instance 运行时激活', () => {
   test('非法深链一律忽略：不聚焦、不发送、不缓存', () => {
     const harness = createHarness({ argv: [], ready: true })
 
-    harness.controller.pushRuntimeActivation(['C:\\Pidex Desktop.exe', 'codepilotx://evil/abc'])
+    harness.controller.pushRuntimeActivation(['C:\\Pidex Desktop.exe', 'pidex://evil/abc'])
     expect(harness.focusCalls).toBe(0)
     expect(harness.notifyCalls).toEqual([])
     expect(harness.controller.consumePendingThreadDeepLink()).toBeNull()
@@ -312,7 +312,7 @@ describe('ThreadDeepLinkController open-url（macOS 生命周期兼容）', () =
   test('非法 open-url 链接同样忽略', () => {
     const harness = createHarness({ argv: [], ready: true })
 
-    harness.controller.pushRuntimeActivation(['codepilotx://threads?tab=open'])
+    harness.controller.pushRuntimeActivation(['pidex://threads?tab=open'])
     expect(harness.focusCalls).toBe(0)
     expect(harness.notifyCalls).toEqual([])
     expect(harness.controller.consumePendingThreadDeepLink()).toBeNull()

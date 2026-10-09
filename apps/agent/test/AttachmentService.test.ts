@@ -26,14 +26,14 @@ describe('AttachmentService', () => {
   test('浏览器批注 JSON 与独立 PNG 经附件存储读取往返', async () => {
     const service = await setup()
     const json = JSON.stringify({
-      format: 'codepilotx.browser-annotations',
+      format: 'pidex.browser-annotations',
       schemaVersion: 1,
       annotations: [{ id: 'one', body: '调整按钮', screenshotName: 'annotation.png' }],
     })
     const stored = await service.store([
       {
         kind: 'text',
-        name: 'codepilotx-browser-annotations.json',
+        name: 'pidex-browser-annotations.json',
         mimeType: 'application/json',
         data: json,
       },

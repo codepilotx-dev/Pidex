@@ -27,9 +27,9 @@ describe('Bun sidecar 命令解析', () => {
   })
 
   test('显式路径优先于 PATH 自动发现', () => {
-    expect(
-      resolveBunExecutable({ CODEPILOTX_BUN_PATH: 'D:\\tools\\bun.exe', Path: '' }, 'win32'),
-    ).toBe('D:\\tools\\bun.exe')
+    expect(resolveBunExecutable({ PIDEX_BUN_PATH: 'D:\\tools\\bun.exe', Path: '' }, 'win32')).toBe(
+      'D:\\tools\\bun.exe',
+    )
   })
 
   test('开发模式默认启动统一 Agent 入口', () => {
@@ -38,7 +38,7 @@ describe('Bun sidecar 命令解析', () => {
         packaged: false,
         resourcesPath: '',
         moduleDirectory: import.meta.dir,
-        env: { CODEPILOTX_BUN_PATH: 'D:\\tools\\bun.exe' },
+        env: { PIDEX_BUN_PATH: 'D:\\tools\\bun.exe' },
       }).args,
     ).toEqual(['run', 'apps/agent/src/index.ts'])
   })

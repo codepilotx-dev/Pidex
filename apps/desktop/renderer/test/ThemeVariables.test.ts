@@ -427,7 +427,7 @@ describe('fixed Codex UI themes', () => {
     const migrated = normalizeDesktopThemeSettings({
       mode: 'dark',
       codeThemeId: 'dracula',
-      activeThemeIds: { light: 'light-codepilotx', dark: 'dark-dracula' },
+      activeThemeIds: { light: 'light-pidex', dark: 'dark-dracula' },
       customThemes: [{ id: 'custom-theme' }],
       presetOverrides: { 'dark-dracula': {} },
       reduceMotion: 'on',

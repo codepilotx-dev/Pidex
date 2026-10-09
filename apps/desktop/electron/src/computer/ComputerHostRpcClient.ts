@@ -54,7 +54,7 @@ export class ComputerHostRpcClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(this.connectionId ? { 'X-CodePilotX-Connection-ID': this.connectionId } : {}),
+        ...(this.connectionId ? { 'X-Pidex-Connection-ID': this.connectionId } : {}),
       },
       signal: AbortSignal.timeout(
         method === 'computer/host/next' ? NEXT_TIMEOUT_MS : CALL_TIMEOUT_MS,
@@ -98,7 +98,7 @@ export class ComputerHostRpcClient {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CodePilotX-Connection-ID': connectionId,
+        'X-Pidex-Connection-ID': connectionId,
       },
       signal: AbortSignal.timeout(CALL_TIMEOUT_MS),
       body: JSON.stringify({

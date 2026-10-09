@@ -72,7 +72,7 @@ function toolItem(overrides: Partial<ToolItem> = {}): ToolItem {
 /** Builds the fixture through the shared decoder so it is a real v1 envelope. */
 function resultCardEnvelope(overrides: { card?: Record<string, unknown> } = {}) {
   const envelope = decodeResultCardEnvelope({
-    kind: 'codepilotx.result-card',
+    kind: 'pidex.result-card',
     version: 1,
     card: {
       title: '任务已完成',
@@ -1309,14 +1309,14 @@ describe('canonical tool item display', () => {
   test('keeps plain, forged and future JSON blocks as code', () => {
     const blocks = [
       { items: [{ id: 1, ok: true }] },
-      { kind: 'codepilotx.result-card', version: 1, card: { title: '缺少摘要' } },
+      { kind: 'pidex.result-card', version: 1, card: { title: '缺少摘要' } },
       {
-        kind: 'codepilotx.result-card',
+        kind: 'pidex.result-card',
         version: 2,
         card: { title: '未来版本', summary: '未知版本' },
       },
       {
-        kind: 'codepilotx.other-card',
+        kind: 'pidex.other-card',
         version: 1,
         card: { title: '错误标记', summary: '未知标记' },
       },

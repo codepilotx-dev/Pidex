@@ -170,7 +170,7 @@ describe('Skills catalog', () => {
     )
     await writeSkill(
       workspace,
-      '.codepilotx',
+      '.pidex',
       'deploy-native',
       '---\nname: deploy\ndescription: >-\n  workspace\n  native\nmetadata:\n  category: release\n---\nnative',
     )
@@ -236,7 +236,7 @@ describe('Skills catalog', () => {
 
     await writeSkill(
       workspace,
-      '.codepilotx',
+      '.pidex',
       'builtin-helper',
       '---\nname: builtin-helper\ndescription: workspace planner\n---\nworkspace body',
     )
@@ -274,7 +274,7 @@ describe('Skills catalog', () => {
     const user = await temporaryDirectory()
     await writeSkill(
       workspace,
-      '.codepilotx',
+      '.pidex',
       'audit',
       [
         '---',
@@ -351,7 +351,7 @@ describe('Skills catalog', () => {
   test('相对资源被限制在 Skill 根目录内', async () => {
     const workspace = await temporaryDirectory()
     const user = await temporaryDirectory()
-    const root = await writeSkill(workspace, '.codepilotx', 'safe', '---\nname: safe\n---\nbody')
+    const root = await writeSkill(workspace, '.pidex', 'safe', '---\nname: safe\n---\nbody')
     await writeFile(join(root, 'reference.txt'), 'ok', 'utf8')
     const service = new SkillService()
     await service.scan({ workspaceRoot: workspace, dataRoot: user, userHome: user })
@@ -363,7 +363,7 @@ describe('Skills catalog', () => {
     const workspace = await temporaryDirectory()
     const user = await temporaryDirectory()
     const outside = await temporaryDirectory()
-    const root = await writeSkill(workspace, '.codepilotx', 'safe', '---\nname: safe\n---\nbody')
+    const root = await writeSkill(workspace, '.pidex', 'safe', '---\nname: safe\n---\nbody')
     await writeFile(join(outside, 'secret.txt'), 'secret', 'utf8')
     await symlink(outside, join(root, 'outside'), 'junction')
     const service = new SkillService()

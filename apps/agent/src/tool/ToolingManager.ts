@@ -128,7 +128,7 @@ export class ToolingError extends Error {
 export interface ToolingManagerOptions {
   root?: string
   fetch?: typeof fetch
-  legacyInstallCodePilotXDependencies?: boolean
+  legacyInstallPidexDependencies?: boolean
   preferences?: Partial<Record<ManagedToolID, ToolingPreference>>
   persistPreferences?: boolean
 }
@@ -182,7 +182,7 @@ const sanitizeError = (cause: unknown) =>
 export class ToolingManager {
   readonly root: string
   private readonly fetchImpl: typeof fetch
-  private readonly legacyInstallCodePilotXDependencies: boolean | undefined
+  private readonly legacyInstallPidexDependencies: boolean | undefined
   private readonly configuredPreferences:
     Partial<Record<ManagedToolID, ToolingPreference>> | undefined
   private readonly persistPreferences: boolean
@@ -202,7 +202,7 @@ export class ToolingManager {
   constructor(options: ToolingManagerOptions = {}) {
     this.root = resolve(options.root ?? resolveAgentStorageLayout().toolingRoot)
     this.fetchImpl = options.fetch ?? fetch
-    this.legacyInstallCodePilotXDependencies = options.legacyInstallCodePilotXDependencies
+    this.legacyInstallPidexDependencies = options.legacyInstallPidexDependencies
     this.configuredPreferences = options.preferences
     this.persistPreferences = options.persistPreferences !== false
   }
@@ -588,8 +588,8 @@ export class ToolingManager {
     const validationScript = [
       "$ErrorActionPreference='Stop'",
       'Add-Type -AssemblyName System.IO.Compression.FileSystem',
-      '$zip=[IO.Compression.ZipFile]::OpenRead($env:CODEPILOTX_ZIP_VALIDATION_ARCHIVE)',
-      '$root=[IO.Path]::GetFullPath($env:CODEPILOTX_ZIP_VALIDATION_DESTINATION + [IO.Path]::DirectorySeparatorChar)',
+      '$zip=[IO.Compression.ZipFile]::OpenRead($env:PIDEX_ZIP_VALIDATION_ARCHIVE)',
+      '$root=[IO.Path]::GetFullPath($env:PIDEX_ZIP_VALIDATION_DESTINATION + [IO.Path]::DirectorySeparatorChar)',
       'try { foreach($e in $zip.Entries) {',
       "  $name=$e.FullName.Replace('/', [IO.Path]::DirectorySeparatorChar)",
       '  $target=[IO.Path]::GetFullPath([IO.Path]::Combine($root,$name))',
@@ -616,8 +616,8 @@ export class ToolingManager {
       signal,
       {
         ...process.env,
-        CODEPILOTX_ZIP_VALIDATION_ARCHIVE: archivePath,
-        CODEPILOTX_ZIP_VALIDATION_DESTINATION: destination,
+        PIDEX_ZIP_VALIDATION_ARCHIVE: archivePath,
+        PIDEX_ZIP_VALIDATION_DESTINATION: destination,
       },
     )
     if (signal?.aborted) throw new ToolingError('TOOLING_ABORTED', '工具安装已取消')
@@ -823,13 +823,13 @@ export class ToolingManager {
   private systemOverride(id: ManagedToolID) {
     switch (id) {
       case 'nodejs':
-        return process.env.CODEPILOTX_NODEJS_PATH?.trim()
+        return process.env.PIDEX_NODEJS_PATH?.trim()
       case 'python':
-        return process.env.CODEPILOTX_PYTHON_PATH?.trim()
+        return process.env.PIDEX_PYTHON_PATH?.trim()
       case 'git-bash':
-        return process.env.CODEPILOTX_GIT_BASH_PATH?.trim()
+        return process.env.PIDEX_GIT_BASH_PATH?.trim()
       case 'ripgrep':
-        return process.env.CODEPILOTX_RIPGREP_PATH?.trim()
+        return process.env.PIDEX_RIPGREP_PATH?.trim()
     }
   }
 
@@ -890,7 +890,7 @@ export class ToolingManager {
   private async migrateLegacySettings(): Promise<ToolingSettings> {
     let legacy: {
       preferences?: Partial<Record<ManagedToolID, unknown>>
-      installCodePilotXDependencies?: unknown
+      installPidexDependencies?: unknown
     } = {}
     try {
       legacy = JSON.parse(await readFile(this.legacySettingsPath(), 'utf8')) as typeof legacy
@@ -898,10 +898,10 @@ export class ToolingManager {
       /* 首次安装没有旧设置。 */
     }
     const oldDependencyPreference =
-      typeof this.legacyInstallCodePilotXDependencies === 'boolean'
-        ? this.legacyInstallCodePilotXDependencies
-        : typeof legacy.installCodePilotXDependencies === 'boolean'
-          ? legacy.installCodePilotXDependencies
+      typeof this.legacyInstallPidexDependencies === 'boolean'
+        ? this.legacyInstallPidexDependencies
+        : typeof legacy.installPidexDependencies === 'boolean'
+          ? legacy.installPidexDependencies
           : true
     return {
       version: 2,

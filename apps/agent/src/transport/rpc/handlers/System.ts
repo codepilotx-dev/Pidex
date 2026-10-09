@@ -63,7 +63,7 @@ export const systemHandlers = {
         if (
           requestedAuthority === 'desktop-host' &&
           (context.transportAuthority !== 'desktop-host' ||
-            process.env.CODEPILOTX_DESKTOP_MANAGED !== '1')
+            process.env.PIDEX_DESKTOP_MANAGED !== '1')
         ) {
           throw new AgentError('PERMISSION_DENIED', '桌面宿主 authority 与传输认证来源不匹配', 403)
         }
@@ -105,7 +105,7 @@ export const systemHandlers = {
         decodeParams(decodeSandboxUninstall, rawParams, 'sandbox/uninstall')
         throw new AgentError('SANDBOX_UNAVAILABLE', 'Pidex 不再提供内置安全沙箱。', 503)
       case 'shutdown':
-        if (process.env.CODEPILOTX_DESKTOP_MANAGED !== '1')
+        if (process.env.PIDEX_DESKTOP_MANAGED !== '1')
           throw new AgentError('SHUTDOWN_DENIED', '仅桌面托管的 Agent 可以通过 RPC 关闭', 403)
         setTimeout(() => process.emit('SIGTERM'), 25)
         return { ok: true, acceptedAt: Date.now() }

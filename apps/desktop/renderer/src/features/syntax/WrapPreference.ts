@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react'
 
-export const CODE_WRAP_STORAGE_KEY = 'codepilotx.syntax.wrap-v1'
+export const CODE_WRAP_STORAGE_KEY = 'pidex.syntax.wrap-v1'
 
 let memoryValue: boolean | undefined
 const listeners = new Set<() => void>()

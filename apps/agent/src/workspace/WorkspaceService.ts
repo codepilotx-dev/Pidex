@@ -539,7 +539,7 @@ export class WorkspaceService {
   private async createPath(path: string) {
     const requested = this.requestedPath(path)
     const alias = this.aliasTarget(path)
-    if (!alias && path.replaceAll('\\', '/').toLowerCase() === '.codepilotx/config.json') {
+    if (!alias && path.replaceAll('\\', '/').toLowerCase() === '.pidex/config.json') {
       await mkdir(dirname(requested), { recursive: true })
     }
     const parent = await realpath(dirname(requested)).catch(() => {
@@ -743,7 +743,7 @@ export class WorkspaceService {
     if (Buffer.byteLength(content, 'utf8') > maxBytes)
       throw new AgentError('WORKSPACE_FILE_TOO_LARGE', `最终文件超过 ${maxBytes} 字节上限`, 413)
     const bytes = Buffer.from(content, 'utf8')
-    const temporary = resolve(dirname(path), `.codepilotx-${randomUUID()}.tmp`)
+    const temporary = resolve(dirname(path), `.pidex-${randomUUID()}.tmp`)
     try {
       await writeFile(temporary, bytes, { flag: 'wx' })
       if (mode !== undefined) await chmod(temporary, mode)
@@ -1029,7 +1029,7 @@ export class WorkspaceService {
             content: encoded?.content ?? null,
             bytes: encoded?.bytes ?? null,
             temporaryPath: encoded
-              ? resolve(dirname(inspection.canonicalPath), `.codepilotx-${randomUUID()}.tmp`)
+              ? resolve(dirname(inspection.canonicalPath), `.pidex-${randomUUID()}.tmp`)
               : null,
           })
         }

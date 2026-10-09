@@ -122,7 +122,7 @@ export class TerminalHostRpcClient
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CodePilotX-Connection-ID': connectionId,
+        'X-Pidex-Connection-ID': connectionId,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -199,7 +199,7 @@ export class TerminalHostRpcClient
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'X-CodePilotX-Connection-ID': connectionId,
+        'X-Pidex-Connection-ID': connectionId,
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -330,7 +330,7 @@ function isEnvironmentKey(value: string): boolean {
 }
 
 function isInternalEnvironmentKey(value: string): boolean {
-  return value.toUpperCase().startsWith('CODEPILOTX_')
+  return value.toUpperCase().startsWith('PIDEX_')
 }
 
 function isIdentifier(value: unknown): value is string {

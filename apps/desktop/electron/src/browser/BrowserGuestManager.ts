@@ -522,13 +522,13 @@ export class DesktopBrowserController {
               await this.#rpc.call('browser/downloads/remove', {})
             else if (category === 'cache')
               await session
-                .fromPartition('persist:codepilotx-browser')
+                .fromPartition('persist:pidex-browser')
                 .clearData({ dataTypes: ['cache'] })
             else {
               for (const entry of this.#entries.values())
                 if (entry.tab.controlThreadId)
                   await this.control(entry.owner, entry.tab.tabId, null)
-              await session.fromPartition('persist:codepilotx-browser').clearData({
+              await session.fromPartition('persist:pidex-browser').clearData({
                 dataTypes: [
                   'cookies',
                   'fileSystems',
@@ -666,14 +666,14 @@ export class DesktopBrowserController {
       const budgetHost = host
       host.budgetTimer = setInterval(() => void this.#budget(budgetHost), 60_000)
       owner.webContents.on('will-attach-webview', (event, preferences, params) => {
-        if (params.partition !== 'persist:codepilotx-browser' || params.src !== 'about:blank') {
+        if (params.partition !== 'persist:pidex-browser' || params.src !== 'about:blank') {
           event.preventDefault()
           return
         }
         delete preferences.preload
         Object.assign(preferences, {
           session: undefined,
-          partition: 'persist:codepilotx-browser',
+          partition: 'persist:pidex-browser',
           sandbox: true,
           contextIsolation: true,
           nodeIntegration: false,

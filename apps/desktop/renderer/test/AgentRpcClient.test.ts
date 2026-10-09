@@ -49,7 +49,7 @@ describe('agent RPC v4 client', () => {
           })
         }
         if (body.method === 'initialized') {
-          expect(new Headers(init?.headers).get('x-codepilotx-connection-id')).toBe(
+          expect(new Headers(init?.headers).get('x-pidex-connection-id')).toBe(
             'connection-automatic',
           )
           initialized = true
@@ -201,7 +201,7 @@ describe('agent RPC v4 client', () => {
         clientInstanceId: 'renderer-1',
       },
     })
-    expect(requests[1]?.headers.get('x-codepilotx-connection-id')).toBe('connection-1')
+    expect(requests[1]?.headers.get('x-pidex-connection-id')).toBe('connection-1')
   })
 
   test('Agent 重启导致连接代次失效时重新握手并只重试当前请求一次', async () => {
@@ -215,7 +215,7 @@ describe('agent RPC v4 client', () => {
           id?: string
           method?: string
         }
-        const requestConnectionId = new Headers(init?.headers).get('x-codepilotx-connection-id')
+        const requestConnectionId = new Headers(init?.headers).get('x-pidex-connection-id')
         methods.push(body.method ?? 'unknown')
         if (body.method === 'initialize') {
           activeConnectionId = `connection-${++generation}`
@@ -771,7 +771,7 @@ describe('agent RPC v4 client', () => {
       },
       fetch: async (_input, init) => {
         const body = JSON.parse(String(init?.body)) as Record<string, unknown>
-        const requestConnectionId = new Headers(init?.headers).get('x-codepilotx-connection-id')
+        const requestConnectionId = new Headers(init?.headers).get('x-pidex-connection-id')
         requests.push({ connectionId: requestConnectionId, body })
         if (body.method === 'initialize') {
           activeConnectionId = `connection-${++serverGeneration}`

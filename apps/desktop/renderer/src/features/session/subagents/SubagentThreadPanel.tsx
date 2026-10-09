@@ -135,7 +135,7 @@ export function SubagentThreadPanel({
   const blocked = isBlockedRun(run) || viewBlocked
   const canStop = capabilities.canStop && Boolean(callbacks.onStop) && isActiveRun(run)
   const canRetry = capabilities.canRetry && Boolean(callbacks.onRetry) && isTerminalRun(run)
-  const scrollStorageKey = `codepilotx.subagent.scroll.${task.childThreadId}`
+  const scrollStorageKey = `pidex.subagent.scroll.${task.childThreadId}`
   const initialScrollOffset = React.useMemo(() => {
     try {
       const stored = Number(window.sessionStorage.getItem(scrollStorageKey) ?? 0)

@@ -48,11 +48,11 @@ type PlatformCommand = EnvironmentPlatformCommand
 
 export const WORKTREE_SETUP_VARIABLES = [
   {
-    name: 'CODEPILOTX_SOURCE_TREE_PATH',
+    name: 'PIDEX_SOURCE_TREE_PATH',
     description: '源任务的权威工作区路径',
   },
   {
-    name: 'CODEPILOTX_WORKTREE_PATH',
+    name: 'PIDEX_WORKTREE_PATH',
     description: '新托管工作树的路径',
   },
 ] as const

@@ -56,9 +56,9 @@ export class ComputerPolicyService {
   ) {
     this.machinePath =
       machinePath ??
-      // 机器策略由管理员按产品改名前的路径部署，改名后继续读取同一位置，
-      // 否则已部署的 requirements.toml 会静默失效。
-      join(process.env.ProgramData || 'C:\\ProgramData', 'CodePilotX', 'requirements.toml')
+      // 机器策略由管理员预置在 ProgramData 下。品牌清零后只读取新产品目录，
+      // 已按旧目录部署的机器需由管理员把 requirements.toml 迁移到此处。
+      join(process.env.ProgramData || 'C:\\ProgramData', 'Pidex', 'requirements.toml')
   }
   async initialize() {
     await this.refresh()

@@ -212,7 +212,7 @@ export class HookService {
     const projectHooks: HookDefinition[] = []
     let projectConfig: ReturnType<typeof readConfig> | null = null
     if (input.projectRoot && input.includeProjectHooks !== false) {
-      const configFile = resolve(input.projectRoot, '.codepilotx/hooks.json')
+      const configFile = resolve(input.projectRoot, '.pidex/hooks.json')
       if (existsSync(configFile)) {
         const loaded = readConfig(configFile, input.projectRoot)
         projectHooks.push(...loaded.definitions)

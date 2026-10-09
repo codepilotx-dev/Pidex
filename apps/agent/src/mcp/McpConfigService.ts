@@ -249,7 +249,7 @@ export class McpConfigService {
   private target(identity: McpWorkspaceIdentity | null, scope: McpScope) {
     return scope === 'local' && identity
       ? {
-          filePath: join(identity.root, '.codepilotx', 'config.json'),
+          filePath: join(identity.root, '.pidex', 'config.json'),
           cwd: identity.root,
         }
       : {}

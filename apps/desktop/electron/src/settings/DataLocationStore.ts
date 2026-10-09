@@ -96,13 +96,13 @@ export class DataLocationStore {
   ): Promise<DesktopDataLocationChange> {
     await this.load()
     if (this.#environmentDataDir) {
-      throw new Error('当前数据目录由 CODEPILOTX_DATA_DIR 控制')
+      throw new Error('当前数据目录由 PIDEX_DATA_DIR 控制')
     }
     const parent = requireLocalAbsolutePath(selectedParent)
-    if (basename(parent).toLowerCase() === '.codepilotx') {
-      throw new Error('请选择 .codepilotx 的父目录')
+    if (basename(parent).toLowerCase() === '.pidex') {
+      throw new Error('请选择 .pidex 的父目录')
     }
-    const targetDataDir = resolve(parent, '.codepilotx')
+    const targetDataDir = resolve(parent, '.pidex')
     const sourceDataDir = this.#value!.activeDataDir ?? this.#defaultDataDir
     if (samePath(sourceDataDir, targetDataDir)) {
       throw new Error('所选位置就是当前数据目录')
@@ -117,7 +117,7 @@ export class DataLocationStore {
       throw new Error('目标数据目录不能与已注册工作区互相包含')
     }
     if ((await pathExists(targetDataDir)) && !(await isEmptyDirectory(targetDataDir))) {
-      throw new Error('目标 .codepilotx 目录必须为空')
+      throw new Error('目标 .pidex 目录必须为空')
     }
     const pending = {
       operationId: randomUUID(),

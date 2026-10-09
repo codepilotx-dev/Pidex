@@ -39,7 +39,7 @@ describe('终端 Agent host RPC', () => {
     expect(initializeBody.params.clientInfo.authority).toBe('desktop-host')
     expect(initializeBody.params.capabilities).toContain('terminal.host.v1')
     expect(requests[2]?.init.headers).toMatchObject({
-      'X-CodePilotX-Connection-ID': 'terminal-host-1',
+      'X-Pidex-Connection-ID': 'terminal-host-1',
     })
   })
 
@@ -129,7 +129,7 @@ describe('终端 Agent host RPC', () => {
           params?: Record<string, unknown>
         }
         const connectionId = (init.headers as Record<string, string> | undefined)?.[
-          'X-CodePilotX-Connection-ID'
+          'X-Pidex-Connection-ID'
         ]
         requests.push({ method: body.method, connectionId })
         if (body.method === 'initialize') {

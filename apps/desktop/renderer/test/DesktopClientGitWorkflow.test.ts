@@ -137,8 +137,8 @@ describe('desktop git workflow client', () => {
       repository: {
         id: 42,
         name: 'fixture',
-        fullName: 'codepilotx/fixture',
-        owner: 'codepilotx',
+        fullName: 'pidex/fixture',
+        owner: 'pidex',
         private: false,
         fork: false,
         archived: false,
@@ -249,8 +249,8 @@ describe('desktop git workflow client', () => {
       repository: {
         id: 42,
         name: 'fixture',
-        fullName: 'codepilotx/fixture',
-        owner: 'codepilotx',
+        fullName: 'pidex/fixture',
+        owner: 'pidex',
         private: false,
         fork: false,
         archived: false,

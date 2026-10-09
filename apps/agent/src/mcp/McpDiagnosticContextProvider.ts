@@ -8,7 +8,7 @@ const MAX_TOOLS = 50
 const MAX_TEXT_BYTES = 16 * 1024
 const MAX_CONTEXT_BYTES = 64 * 1024
 
-export const MCP_DIAGNOSTIC_CONTEXT_KEY = 'com.codepilotx/diagnostic-context'
+export const MCP_DIAGNOSTIC_CONTEXT_KEY = 'com.pidex/diagnostic-context'
 
 export type McpDiagnosticContext = {
   version: 1

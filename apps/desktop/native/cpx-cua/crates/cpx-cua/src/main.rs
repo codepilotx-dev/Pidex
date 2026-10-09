@@ -75,7 +75,7 @@ async fn main() -> anyhow::Result<()> {
         let mut response = serde_json::to_value(response)?;
         if response["result"]["serverInfo"].is_object() {
             response["result"]["serverInfo"] = json!({"name":"CPX-CUA","version":env!("CARGO_PKG_VERSION")});
-            response["result"]["instructions"] = json!("CPX-CUA Windows runtime. Application authorization and control ownership belong to CodePilotX.");
+            response["result"]["instructions"] = json!("CPX-CUA Windows runtime. Application authorization and control ownership belong to Pidex.");
         }
         writer.write_all(serde_json::to_string(&response)?.as_bytes()).await?;
         writer.write_all(b"\n").await?;

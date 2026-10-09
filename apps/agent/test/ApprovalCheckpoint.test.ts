@@ -58,8 +58,8 @@ async function scopedFixture() {
   const db = new AgentDatabase(join(root, 'history.sqlite'))
   databases.push(db)
   const workspace = join(root, 'workspace')
-  await mkdir(join(workspace, '.codepilotx'), { recursive: true })
-  const projectFile = join(workspace, '.codepilotx', 'config.json')
+  await mkdir(join(workspace, '.pidex'), { recursive: true })
+  const projectFile = join(workspace, '.pidex', 'config.json')
   await writeFile(projectFile, '{ "future_key": { "keep": true } }\n', 'utf8')
   const config = new ConfigService(join(root, 'config.json'))
   configs.push(config)
@@ -1045,7 +1045,7 @@ describe('可恢复审批 checkpoint', () => {
       threadID: thread.id,
       turnID: turn.turnID,
       workspacePath: 'F:\\repo',
-      configPath: 'F:\\repo\\.codepilotx\\hooks.json',
+      configPath: 'F:\\repo\\.pidex\\hooks.json',
       configHash: 'hash',
       auditSummary: { hooks: [] },
     })
@@ -1075,7 +1075,7 @@ describe('可恢复审批 checkpoint', () => {
     db.claimTurnExecution(second.turnID)
     const trust = {
       workspacePath: 'F:\\repo',
-      configPath: 'F:\\repo\\.codepilotx\\hooks.json',
+      configPath: 'F:\\repo\\.pidex\\hooks.json',
       configHash: 'same-hash',
       auditSummary: { hooks: [] },
     }

@@ -103,7 +103,7 @@ describe('composer skill inline token', () => {
           id: 'thread-1',
           kind: 'thread' as const,
           label: '任务：登录修复',
-          value: 'codepilotx://threads/thread-1',
+          value: 'pidex://threads/thread-1',
           from: 2,
           to: 2,
         },

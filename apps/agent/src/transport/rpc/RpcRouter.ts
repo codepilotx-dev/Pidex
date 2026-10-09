@@ -451,7 +451,7 @@ export class RpcRouter {
     const connectionId = this.requireConnection(context)
     const connection = this.connections.get(connectionId)
     if (
-      process.env.CODEPILOTX_DESKTOP_MANAGED !== '1' ||
+      process.env.PIDEX_DESKTOP_MANAGED !== '1' ||
       connection?.authority !== 'desktop-host' ||
       connection.transportAuthority !== 'desktop-host'
     ) {

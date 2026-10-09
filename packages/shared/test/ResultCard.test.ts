@@ -48,7 +48,7 @@ describe('result card envelope contract', () => {
 
   test('错误 marker、未知 version、空标题和不完整结构被拒绝', () => {
     const rejected: unknown[] = [
-      envelope({ kind: 'codepilotx.other-card' }),
+      envelope({ kind: 'pidex.other-card' }),
       envelope({ version: 2 }),
       envelope({ version: '1' }),
       envelope({ card: card({ title: '   ' }) }),
@@ -57,7 +57,7 @@ describe('result card envelope contract', () => {
       envelope({ card: undefined }),
       { kind: RESULT_CARD_ENVELOPE_KIND, version: RESULT_CARD_ENVELOPE_VERSION },
       [envelope()],
-      'codepilotx.result-card',
+      'pidex.result-card',
       null,
     ]
     for (const value of rejected) {

@@ -32,7 +32,7 @@ export async function send(
     credentials: 'include',
     headers: {
       'content-type': 'application/json',
-      ...(connectionId ? { 'x-codepilotx-connection-id': connectionId } : {}),
+      ...(connectionId ? { 'x-pidex-connection-id': connectionId } : {}),
     },
     body: JSON.stringify(message),
   }

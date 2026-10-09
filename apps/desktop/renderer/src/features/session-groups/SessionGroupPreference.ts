@@ -1,4 +1,4 @@
-const KEY = 'codepilotx.last-session-group-id'
+const KEY = 'pidex.last-session-group-id'
 
 export function readPreferredSessionGroupId(): string | null {
   try {

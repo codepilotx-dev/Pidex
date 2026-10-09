@@ -162,7 +162,7 @@ describe('核心工具面', () => {
 
     await executor.execute<{ decision: string }>(
       'Write',
-      { file_path: '.codepilotx/config.json', content: '{\n  "model": "project"\n}\n' },
+      { file_path: '.pidex/config.json', content: '{\n  "model": "project"\n}\n' },
       {
         ...context,
         authorizationOnly: true,

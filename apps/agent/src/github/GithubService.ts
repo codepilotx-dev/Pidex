@@ -534,7 +534,7 @@ export class GithubService {
         {
           GIT_ASKPASS: helperPath,
           GIT_TERMINAL_PROMPT: '0',
-          CODEPILOTX_GITHUB_TOKEN: credential.accessToken,
+          PIDEX_GITHUB_TOKEN: credential.accessToken,
         },
       )
       if (result.code !== 0) {
@@ -586,7 +586,7 @@ export class GithubService {
     const helperRoot = await mkdtemp(join(tmpdir(), 'pidex-github-askpass-'))
     try {
       const helperPath = await writeAskPassHelper(helperRoot)
-      const result = await this.git(input.workspaceRoot, ['-c', 'credential.helper=', '-c', `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`, ...input.args.map((arg) => arg === '__WATCH_REMOTE__' ? `https://x-access-token@github.com/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}.git` : arg)], { GIT_ASKPASS: helperPath, GIT_TERMINAL_PROMPT: '0', CODEPILOTX_GITHUB_TOKEN: credential.accessToken })
+      const result = await this.git(input.workspaceRoot, ['-c', 'credential.helper=', '-c', `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`, ...input.args.map((arg) => arg === '__WATCH_REMOTE__' ? `https://x-access-token@github.com/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}.git` : arg)], { GIT_ASKPASS: helperPath, GIT_TERMINAL_PROMPT: '0', PIDEX_GITHUB_TOKEN: credential.accessToken })
       if (result.code !== 0) throw new AgentError('GIT_COMMAND_FAILED', 'PR 工作树 Git 操作失败', 409)
       return result
     } finally { await rm(helperRoot, { recursive: true, force: true }).catch(() => undefined) }
@@ -766,7 +766,7 @@ export class GithubService {
         const env = {
           GIT_ASKPASS: helperPath,
           GIT_TERMINAL_PROMPT: '0',
-          CODEPILOTX_GITHUB_TOKEN: credential.accessToken,
+          PIDEX_GITHUB_TOKEN: credential.accessToken,
         }
         const remote = `https://github.com/${input.owner}/${input.repository}.git`
         const baseFetch = await this.git(
@@ -866,7 +866,7 @@ export class GithubService {
         {
           GIT_ASKPASS: helperPath,
           GIT_TERMINAL_PROMPT: '0',
-          CODEPILOTX_GITHUB_TOKEN: credential.accessToken,
+          PIDEX_GITHUB_TOKEN: credential.accessToken,
         },
       )
       if (result.code !== 0)
@@ -1177,11 +1177,11 @@ const isGitRepository = async (root: string) =>
 const writeAskPassHelper = async (root: string) => {
   if (process.platform === 'win32') {
     const path = join(root, 'askpass.cmd')
-    await writeFile(path, ['@echo off', 'echo %CODEPILOTX_GITHUB_TOKEN%'].join('\r\n'), 'utf8')
+    await writeFile(path, ['@echo off', 'echo %PIDEX_GITHUB_TOKEN%'].join('\r\n'), 'utf8')
     return path
   }
   const path = join(root, 'askpass.sh')
-  await writeFile(path, ['#!/bin/sh', 'printf \'%s\\n\' "$CODEPILOTX_GITHUB_TOKEN"'].join('\n'), {
+  await writeFile(path, ['#!/bin/sh', 'printf \'%s\\n\' "$PIDEX_GITHUB_TOKEN"'].join('\n'), {
     encoding: 'utf8',
     mode: 0o700,
   })

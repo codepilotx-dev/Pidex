@@ -42,9 +42,9 @@ export type BrowserAnnotationEditor = {
   anchors: BrowserAnnotationAnchor[]
   includeHtml: boolean
 }
-export const BROWSER_ANNOTATION_MANIFEST_NAME = 'codepilotx-browser-annotations.json'
+export const BROWSER_ANNOTATION_MANIFEST_NAME = 'pidex-browser-annotations.json'
 export function serializeBrowserAnnotations(annotations: readonly BrowserAnnotation[]): string {
-  return JSON.stringify({ format: 'codepilotx.browser-annotations', schemaVersion: 1, annotations })
+  return JSON.stringify({ format: 'pidex.browser-annotations', schemaVersion: 1, annotations })
 }
 export function isBrowserAnnotationAnchor(value: unknown): value is BrowserAnnotationAnchor {
   if (!isRecord(value)) return false
@@ -119,7 +119,7 @@ export function parseBrowserAnnotations(text: string): BrowserAnnotation[] | nul
     const value: unknown = JSON.parse(text)
     if (
       !isRecord(value) ||
-      value.format !== 'codepilotx.browser-annotations' ||
+      value.format !== 'pidex.browser-annotations' ||
       value.schemaVersion !== 1 ||
       !Array.isArray(value.annotations) ||
       !value.annotations.every(isBrowserAnnotation)

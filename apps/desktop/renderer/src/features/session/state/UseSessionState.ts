@@ -76,7 +76,7 @@ export type UseSessionStateOptions = {
   systemPrompt: string
   appendSystemPrompt: string
   additionalDirectories: string
-  installCodePilotXDependencies: boolean
+  installPidexDependencies: boolean
   enableMemory: boolean
   rustSearchAndDiffKernels: boolean
   onError: (message: string) => void
@@ -193,7 +193,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     systemPrompt,
     appendSystemPrompt,
     additionalDirectories,
-    installCodePilotXDependencies,
+    installPidexDependencies,
     enableMemory,
     rustSearchAndDiffKernels,
     onError,
@@ -625,14 +625,14 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       systemPrompt,
       appendSystemPrompt,
       additionalDirectories,
-      installCodePilotXDependencies,
+      installPidexDependencies,
       enableMemory,
       rustSearchAndDiffKernels,
     }),
     [
       additionalDirectories,
       appendSystemPrompt,
-      installCodePilotXDependencies,
+      installPidexDependencies,
       enableMemory,
       rustSearchAndDiffKernels,
       model,

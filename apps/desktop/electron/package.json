@@ -26,7 +26,7 @@
     "typescript": "5.9.3"
   },
   "build": {
-    "appId": "com.codepilotx.desktop",
+    "appId": "com.pidex.desktop",
     "productName": "Pidex Desktop",
     "publish": {
       "provider": "github",
@@ -96,8 +96,7 @@
       {
         "name": "Pidex Deep Link",
         "schemes": [
-          "pidex",
-          "codepilotx"
+          "pidex"
         ]
       }
     ],

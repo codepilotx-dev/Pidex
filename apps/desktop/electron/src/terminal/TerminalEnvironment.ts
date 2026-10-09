@@ -5,7 +5,7 @@ export function createTerminalEnvironment(
   for (const [key, value] of Object.entries(source)) {
     if (value === undefined) continue
     const normalizedKey = process.platform === 'win32' ? key.toLowerCase() : key
-    if (normalizedKey.toLowerCase().startsWith('codepilotx_')) continue
+    if (normalizedKey.toLowerCase().startsWith('pidex_')) continue
     environment[key] = value
   }
   environment.TERM_PROGRAM = 'Pidex'
@@ -43,5 +43,5 @@ export function applyTerminalEnvironmentDelta(
 }
 
 function isInternalKey(key: string): boolean {
-  return key.toUpperCase().startsWith('CODEPILOTX_')
+  return key.toUpperCase().startsWith('PIDEX_')
 }

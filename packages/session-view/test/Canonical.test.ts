@@ -1008,7 +1008,7 @@ describe('canonical thread state', () => {
         createdAt: 30,
         version: 1,
         kind: 'hookTrust',
-        configPath: '.codepilotx/hooks.json',
+        configPath: '.pidex/hooks.json',
         sha256: 'fixture-sha256',
         hook: {
           id: 'hook-1',
@@ -1021,7 +1021,7 @@ describe('canonical thread state', () => {
 
     expect(requested.hookTrustsById.get('hook-trust-1')).toMatchObject({
       kind: 'hookTrust',
-      configPath: '.codepilotx/hooks.json',
+      configPath: '.pidex/hooks.json',
     })
     const resolved = applyThreadEnvelope(
       requested,

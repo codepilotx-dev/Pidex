@@ -40,8 +40,8 @@ function parsePort(value: string | undefined, name: string): number | undefined 
 
 export function normalizeRendererAgentOrigin(value: string): string {
   const match = LOOPBACK_AGENT_ORIGIN_PATTERN.exec(value)
-  if (!match || parsePort(match[1], 'CODEPILOTX_AGENT_URL') === undefined) {
-    throw new Error('CODEPILOTX_AGENT_URL 必须是带有效端口的 127.0.0.1 HTTP origin')
+  if (!match || parsePort(match[1], 'PIDEX_AGENT_URL') === undefined) {
+    throw new Error('PIDEX_AGENT_URL 必须是带有效端口的 127.0.0.1 HTTP origin')
   }
   return value
 }
@@ -62,9 +62,9 @@ export function resolveRendererDevServer(
   mode: string,
   environment: RendererDevEnvironment = process.env,
 ): Pick<ServerOptions, 'port' | 'hmr' | 'proxy'> {
-  const port = parsePort(environment.CODEPILOTX_RENDERER_PORT, 'CODEPILOTX_RENDERER_PORT')
-  const agentOrigin = environment.CODEPILOTX_AGENT_URL
-  const authToken = environment.CODEPILOTX_AUTH_TOKEN
+  const port = parsePort(environment.PIDEX_RENDERER_PORT, 'PIDEX_RENDERER_PORT')
+  const agentOrigin = environment.PIDEX_AGENT_URL
+  const authToken = environment.PIDEX_AUTH_TOKEN
   if ((agentOrigin === undefined) !== (authToken === undefined)) {
     throw new Error('开发 Agent origin 与认证令牌必须同时提供')
   }

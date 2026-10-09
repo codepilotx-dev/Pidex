@@ -24,9 +24,9 @@ describe('ConfigService', () => {
     const profileDirectory = join(root, 'profiles')
     const profileConfig = join(profileDirectory, 'focused.json')
     const workspace = join(root, 'workspace')
-    const projectConfig = join(workspace, '.codepilotx', 'config.json')
+    const projectConfig = join(workspace, '.pidex', 'config.json')
     await mkdir(profileDirectory, { recursive: true })
-    await mkdir(join(workspace, '.codepilotx'), { recursive: true })
+    await mkdir(join(workspace, '.pidex'), { recursive: true })
     await writeFile(
       userConfig,
       [
@@ -119,9 +119,9 @@ describe('ConfigService', () => {
     const userConfig = join(root, 'config.json')
     const profileDirectory = join(root, 'profiles')
     const workspace = join(root, 'workspace')
-    const projectConfig = join(workspace, '.codepilotx', 'config.json')
+    const projectConfig = join(workspace, '.pidex', 'config.json')
     await mkdir(profileDirectory, { recursive: true })
-    await mkdir(join(workspace, '.codepilotx'), { recursive: true })
+    await mkdir(join(workspace, '.pidex'), { recursive: true })
     await writeFile(
       userConfig,
       JSON.stringify(
@@ -236,8 +236,8 @@ describe('ConfigService', () => {
     const userConfig = join(root, 'config.json')
     const workspace = join(root, 'workspace')
     const trust = new Map<string, 'trusted' | 'untrusted'>()
-    await mkdir(join(workspace, '.codepilotx'), { recursive: true })
-    await writeFile(join(workspace, '.codepilotx', 'config.json'), '{}\n', 'utf8')
+    await mkdir(join(workspace, '.pidex'), { recursive: true })
+    await writeFile(join(workspace, '.pidex', 'config.json'), '{}\n', 'utf8')
     await writeFile(
       userConfig,
       JSON.stringify(
@@ -278,9 +278,9 @@ describe('ConfigService', () => {
   test('项目向上查找不会把用户 config.json 当成项目配置', async () => {
     const root = await temporaryRoot()
     const home = join(root, 'home')
-    const userConfig = join(home, '.codepilotx', 'config.json')
+    const userConfig = join(home, '.pidex', 'config.json')
     const workspace = join(home, 'workspace')
-    await mkdir(join(home, '.codepilotx'), { recursive: true })
+    await mkdir(join(home, '.pidex'), { recursive: true })
     await mkdir(workspace, { recursive: true })
     await writeFile(userConfig, '{}\n', 'utf8')
     const service = new ConfigService(userConfig)
@@ -432,8 +432,8 @@ describe('ConfigService', () => {
     const root = await temporaryRoot()
     const workspace = join(root, 'workspace')
     const userConfig = join(root, 'data', 'config.json')
-    const projectConfig = join(workspace, '.codepilotx', 'config.json')
-    await mkdir(join(workspace, '.codepilotx'), { recursive: true })
+    const projectConfig = join(workspace, '.pidex', 'config.json')
+    await mkdir(join(workspace, '.pidex'), { recursive: true })
     await writeFile(projectConfig, '{\n  // keep\n}\n', 'utf8')
     const service = new ConfigService(userConfig)
     await service.initialize()
@@ -482,9 +482,9 @@ describe('ConfigService', () => {
     const root = await temporaryRoot()
     const userConfig = join(root, 'data', 'config.json')
     const workspace = join(root, 'workspace')
-    const legacyProjectConfig = join(workspace, '.codepilotx', 'config.toml')
-    const projectConfig = join(workspace, '.codepilotx', 'config.json')
-    await mkdir(join(workspace, '.codepilotx'), { recursive: true })
+    const legacyProjectConfig = join(workspace, '.pidex', 'config.toml')
+    const projectConfig = join(workspace, '.pidex', 'config.json')
+    await mkdir(join(workspace, '.pidex'), { recursive: true })
     await writeFile(legacyProjectConfig, 'model = "project-model"\n', 'utf8')
     const service = new ConfigService(userConfig)
     await service.initialize()
@@ -606,10 +606,10 @@ describe('ConfigService', () => {
     const root = await temporaryRoot()
     const workspace = join(root, 'workspace')
     const userConfig = join(root, 'data', 'config.json')
-    const projectConfig = join(workspace, '.codepilotx', 'config.json')
+    const projectConfig = join(workspace, '.pidex', 'config.json')
     const hash = createHash('sha256').update(workspace.toLowerCase()).digest('hex')
     await mkdir(join(root, 'data'), { recursive: true })
-    await mkdir(join(workspace, '.codepilotx'), { recursive: true })
+    await mkdir(join(workspace, '.pidex'), { recursive: true })
     await writeFile(
       userConfig,
       JSON.stringify(

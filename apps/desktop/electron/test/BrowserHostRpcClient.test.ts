@@ -36,7 +36,7 @@ test('browser host completes one notification handshake before concurrent reques
   await notification
   expect(requests.map(({ body }) => body.method)).toEqual(['initialize', 'initialized'])
   expect(requests[1]!.body).not.toHaveProperty('id')
-  expect(requests[1]!.headers).toMatchObject({ 'X-CodePilotX-Connection-ID': 'browser:1' })
+  expect(requests[1]!.headers).toMatchObject({ 'X-Pidex-Connection-ID': 'browser:1' })
   finish()
   expect(await calls).toEqual([
     { tabs: [], permissions: [] },

@@ -299,7 +299,7 @@ describe('canonical conversation auxiliary selector', () => {
           createdAt: 2,
           version: 1,
           kind: 'hookTrust',
-          configPath: '.codepilotx/hooks.json',
+          configPath: '.pidex/hooks.json',
           sha256: 'fixture-sha256',
           hook: {
             id: 'hook-1',
@@ -322,7 +322,7 @@ describe('canonical conversation auxiliary selector', () => {
         toolName: 'HookTrust',
         description: '项目 Hook“Pre tool hook”请求信任，是否允许？',
         input: expect.objectContaining({
-          configPath: '.codepilotx/hooks.json',
+          configPath: '.pidex/hooks.json',
           configSha256: 'fixture-sha256',
         }),
       }),

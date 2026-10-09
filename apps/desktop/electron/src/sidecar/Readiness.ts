@@ -174,8 +174,8 @@ function redactSidecarInstanceToken(
   return withoutExpected
     .replace(/(\"instanceToken\"\s*:\s*\")[^\"]*(\")/gi, '$1[REDACTED]$2')
     .replace(
-      /\bCODEPILOTX_SIDECAR_INSTANCE_TOKEN=([^\s,;]+)/gi,
-      'CODEPILOTX_SIDECAR_INSTANCE_TOKEN=[REDACTED]',
+      /\bPIDEX_SIDECAR_INSTANCE_TOKEN=([^\s,;]+)/gi,
+      'PIDEX_SIDECAR_INSTANCE_TOKEN=[REDACTED]',
     )
 }
 

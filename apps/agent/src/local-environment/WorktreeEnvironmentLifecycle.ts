@@ -13,8 +13,8 @@ export class LocalEnvironmentWorktreeLifecycle implements WorktreeEnvironmentLif
       kind: 'setup',
       operationId: input.operationId,
       environment: {
-        CODEPILOTX_SOURCE_TREE_PATH: input.sourceWorkspacePath,
-        CODEPILOTX_WORKTREE_PATH: input.workspacePath,
+        PIDEX_SOURCE_TREE_PATH: input.sourceWorkspacePath,
+        PIDEX_WORKTREE_PATH: input.workspacePath,
       },
       onOutput: input.onOutput,
     })

@@ -2,7 +2,7 @@ import { useEffect, type ReactNode } from 'react'
 import { useRouteError } from 'react-router-dom'
 import { Button } from '../../components/ui/Button.js'
 
-const DYNAMIC_MODULE_RELOAD_KEY = 'codepilotx.route.dynamic-module-reload'
+const DYNAMIC_MODULE_RELOAD_KEY = 'pidex.route.dynamic-module-reload'
 const DYNAMIC_MODULE_RELOAD_COOLDOWN_MS = 30_000
 
 const DYNAMIC_MODULE_LOAD_ERROR_PATTERN =

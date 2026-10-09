@@ -24,7 +24,7 @@ export function filePathProtection(canonicalPath: string, displayPath: string) {
   const configScope =
     displayPath === '@pidex/config.json'
       ? ('user' as const)
-      : /(?:^|\/)\.codepilotx\/config\.json$/.test(path)
+      : /(?:^|\/)\.pidex\/config\.json$/.test(path)
         ? ('project' as const)
         : null
   return {

@@ -463,20 +463,20 @@ describe('desktop thread settings client', () => {
             {
               id: 'deep-review',
               displayName: '深度审查',
-              filePath: 'C:/Users/example/.codepilotx/profiles/deep-review.json',
+              filePath: 'C:/Users/example/.pidex/profiles/deep-review.json',
               version: 'a'.repeat(64),
               valid: true,
               diagnostics: [],
             },
           ],
-          profilesDirectory: 'C:/Users/example/.codepilotx/profiles',
+          profilesDirectory: 'C:/Users/example/.pidex/profiles',
         })
       }
       if (body.method === 'config/profile/select') {
         return rpc(body.id, {
           status: 'ok',
           version: 'b'.repeat(64),
-          filePath: 'C:/Users/example/.codepilotx/config.json',
+          filePath: 'C:/Users/example/.pidex/config.json',
           profileState: {
             activeProfile: null,
             selectedProfile: 'deep-review',
@@ -1224,7 +1224,7 @@ describe('desktop thread settings client', () => {
               createdAt: now,
               version: 1,
               kind: 'hookTrust',
-              configPath: '.codepilotx/hooks.json',
+              configPath: '.pidex/hooks.json',
               sha256: 'fixture-sha256',
               hook: {
                 id: 'hook-1',
@@ -1241,7 +1241,7 @@ describe('desktop thread settings client', () => {
               createdAt: now,
               version: 1,
               kind: 'hookTrust',
-              configPath: '.codepilotx/hooks.json',
+              configPath: '.pidex/hooks.json',
               sha256: 'fixture-sha256',
               hook: {
                 id: 'hook-1',

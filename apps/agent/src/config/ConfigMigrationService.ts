@@ -297,7 +297,7 @@ export class ConfigMigrationService {
       })
     }
     for (const project of legacy.projects) {
-      const projectFile = join(project.rootPath, '.codepilotx', 'config.json')
+      const projectFile = join(project.rootPath, '.pidex', 'config.json')
       const projectRead = await this.config.read({
         includeLayers: true,
         cwd: project.rootPath,

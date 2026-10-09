@@ -154,8 +154,8 @@ export function createDesktopLogger(
   options: DesktopLoggerOptions = {},
 ): DesktopLogger {
   const path = join(directory, 'desktop.jsonl')
-  const consoleLevel = options.consoleLevel ?? parseConsoleLevel(process.env.CODEPILOTX_CONSOLE_LOG)
-  const detailMode = options.detailMode ?? parseDetailMode(process.env.CODEPILOTX_LOG_DETAIL)
+  const consoleLevel = options.consoleLevel ?? parseConsoleLevel(process.env.PIDEX_CONSOLE_LOG)
+  const detailMode = options.detailMode ?? parseDetailMode(process.env.PIDEX_LOG_DETAIL)
   const now = options.now ?? (() => new Date())
   const consoleSink =
     options.consoleSink ??

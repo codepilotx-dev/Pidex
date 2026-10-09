@@ -715,7 +715,7 @@ const computerState: RpcResult<'computer/state'> = {
 }
 const settingsEnvironment = {
   exists: true,
-  filePath: 'F:/fixture/.codepilotx/environments/environment.jsonc',
+  filePath: 'F:/fixture/.pidex/environments/environment.jsonc',
   gitRoot: 'F:/fixture',
   revision: 'a'.repeat(64),
   configHash: 'a'.repeat(64),
@@ -1335,7 +1335,7 @@ const fixtures = {
         {
           kind: 'user',
           displayName: '用户配置',
-          filePath: 'C:/Users/example/.codepilotx/config.json',
+          filePath: 'C:/Users/example/.pidex/config.json',
           version: 'a'.repeat(64),
           writable: true,
           trusted: true,
@@ -1360,7 +1360,7 @@ const fixtures = {
     {
       status: 'ok',
       version: 'b'.repeat(64),
-      filePath: 'C:/Users/example/.codepilotx/config.json',
+      filePath: 'C:/Users/example/.pidex/config.json',
     },
   ),
   'config/batchWrite': methodFixture(
@@ -1376,7 +1376,7 @@ const fixtures = {
     {
       status: 'ok-overridden',
       version: 'c'.repeat(64),
-      filePath: 'C:/Users/example/.codepilotx/config.json',
+      filePath: 'C:/Users/example/.pidex/config.json',
       overridden: [{ keyPath: ['model'], by: 'project' }],
     },
   ),
@@ -1394,13 +1394,13 @@ const fixtures = {
           id: 'deep-review',
           displayName: '深度审查',
           description: '高推理强度',
-          filePath: 'C:/Users/example/.codepilotx/profiles/deep-review.json',
+          filePath: 'C:/Users/example/.pidex/profiles/deep-review.json',
           version: 'd'.repeat(64),
           valid: true,
           diagnostics: [],
         },
       ],
-      profilesDirectory: 'C:/Users/example/.codepilotx/profiles',
+      profilesDirectory: 'C:/Users/example/.pidex/profiles',
     },
   ),
   'config/profile/select': methodFixture(
@@ -1411,7 +1411,7 @@ const fixtures = {
     {
       status: 'ok',
       version: 'e'.repeat(64),
-      filePath: 'C:/Users/example/.codepilotx/config.json',
+      filePath: 'C:/Users/example/.pidex/config.json',
       profileState: {
         activeProfile: null,
         selectedProfile: 'deep-review',
@@ -1440,7 +1440,7 @@ const fixtures = {
     {
       status: 'ok',
       version: 'd'.repeat(64),
-      filePath: 'C:/Users/example/.codepilotx/config.json',
+      filePath: 'C:/Users/example/.pidex/config.json',
     },
   ),
   initialize: methodFixture(
@@ -2381,7 +2381,7 @@ const fixtures = {
               type: 'stdio',
               command: 'bun',
               args: ['fixture.ts'],
-              envFromHost: { MCP_TOKEN: 'CODEPILOTX_MCP_TOKEN' },
+              envFromHost: { MCP_TOKEN: 'PIDEX_MCP_TOKEN' },
             },
             startupTimeoutMs: 10_000,
             toolTimeoutMs: 60_000,
@@ -2434,7 +2434,7 @@ const fixtures = {
           auth: 'oauth',
           scopes: ['mcp:read', 'mcp:write'],
           oauthResource: 'https://example.com/',
-          headerFromEnv: { Authorization: 'CODEPILOTX_MCP_AUTHORIZATION' },
+          headerFromEnv: { Authorization: 'PIDEX_MCP_AUTHORIZATION' },
         },
       },
       operationId: 'operation:mcp-save:1',
@@ -2452,7 +2452,7 @@ const fixtures = {
               auth: 'oauth',
               scopes: ['mcp:read', 'mcp:write'],
               oauthResource: 'https://example.com/',
-              headerFromEnv: { Authorization: 'CODEPILOTX_MCP_AUTHORIZATION' },
+              headerFromEnv: { Authorization: 'PIDEX_MCP_AUTHORIZATION' },
             },
           },
           effective: true,
@@ -3939,7 +3939,7 @@ const fixtures = {
     },
     {
       exists: true,
-      filePath: 'F:\\fixture\\.codepilotx\\environments\\environment.jsonc',
+      filePath: 'F:\\fixture\\.pidex\\environments\\environment.jsonc',
       gitRoot: 'F:\\fixture',
       revision: 'a'.repeat(64),
       configHash: 'a'.repeat(64),
@@ -3955,7 +3955,7 @@ const fixtures = {
       edits: [{ keyPath: ['name'], value: 'Fixture' }],
     },
     {
-      filePath: 'F:\\fixture\\.codepilotx\\environments\\environment.jsonc',
+      filePath: 'F:\\fixture\\.pidex\\environments\\environment.jsonc',
       revision: 'b'.repeat(64),
       configHash: 'b'.repeat(64),
       executionTrusted: false,

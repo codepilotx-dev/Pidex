@@ -13,7 +13,7 @@
  * entry so a JSON projection never pulls the Effect runtime into a UI bundle.
  */
 
-export const RESULT_CARD_ENVELOPE_KIND = 'codepilotx.result-card'
+export const RESULT_CARD_ENVELOPE_KIND = 'pidex.result-card'
 export const RESULT_CARD_ENVELOPE_VERSION = 1
 
 /** Titles are bounded tighter than free text to keep card headers single-line. */

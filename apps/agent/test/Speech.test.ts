@@ -130,7 +130,7 @@ describe('speech installer supply-chain guards', () => {
     const packagePath = require.resolve('extract-zip/package.json')
     const packageJson = JSON.parse(await readFile(packagePath, 'utf8')) as { version?: string }
 
-    expect(packageJson.version).toBe('2.0.2-codepilotx.1')
+    expect(packageJson.version).toBe('2.0.2-pidex.1')
     expect(packagePath.replaceAll('\\', '/')).toContain(
       '/node_modules/.bun/extract-zip@file+vendor+extract-zip',
     )

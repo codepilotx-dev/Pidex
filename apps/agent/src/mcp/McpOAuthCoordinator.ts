@@ -116,7 +116,7 @@ class StoredOAuthProvider implements OAuthClientProvider {
       grant_types: ['authorization_code', 'refresh_token'],
       response_types: ['code'],
       client_name: 'Pidex',
-      software_id: 'codepilotx',
+      software_id: 'pidex',
       software_version: '0.2.0',
       ...(this.scopes.length ? { scope: this.scopes.join(' ') } : {}),
     }

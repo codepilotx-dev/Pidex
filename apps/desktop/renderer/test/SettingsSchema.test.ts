@@ -43,16 +43,16 @@ describe('界面语言设置', () => {
 describe('工作空间依赖项迁移', () => {
   test('默认等待一次性迁移并持久化完成标记', () => {
     expect(defaultDesktopStoredSettings()).toMatchObject({
-      installCodePilotXDependencies: true,
+      installPidexDependencies: true,
       workspaceDependenciesMigrated: false,
     })
     expect(
       normalizeDesktopStoredSettings({
-        installCodePilotXDependencies: false,
+        installPidexDependencies: false,
         workspaceDependenciesMigrated: true,
       }),
     ).toMatchObject({
-      installCodePilotXDependencies: false,
+      installPidexDependencies: false,
       workspaceDependenciesMigrated: true,
     })
   })

@@ -7,7 +7,7 @@ export const THREAD_SUMMARY_BODY_WIDTH = 736
 export const THREAD_SUMMARY_OVERLAY_MAX_WIDTH = 1095
 export const THREAD_SUMMARY_SHIFT_MAX_WIDTH = 1535
 /** 置顶偏好是独立的 UI 偏好键；浮层开合只存在于当前会话状态。 */
-export const THREAD_SUMMARY_PINNED_STORAGE_KEY = 'codepilotx.desktop.threadSummaryPinned.v1'
+export const THREAD_SUMMARY_PINNED_STORAGE_KEY = 'pidex.desktop.threadSummaryPinned.v1'
 
 export type ThreadSummaryDisplayMode = 'overlay' | 'shift' | 'gutter'
 

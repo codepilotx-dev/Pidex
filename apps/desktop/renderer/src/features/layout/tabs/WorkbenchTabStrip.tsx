@@ -219,7 +219,7 @@ export function WorkbenchTabStrip({
                         event.currentTarget.classList.add('dragging')
                         event.dataTransfer.effectAllowed = 'move'
                         event.dataTransfer.setData(
-                          'application/x-codepilotx-workbench-tab',
+                          'application/x-pidex-workbench-tab',
                           JSON.stringify({ source: target, tabId: tab.id }),
                         )
                       }}
@@ -417,7 +417,7 @@ function readTabDragPayload(event: React.DragEvent): {
   source: WorkbenchPanelTarget
   tabId: WorkbenchTabId
 } | null {
-  const raw = event.dataTransfer.getData('application/x-codepilotx-workbench-tab')
+  const raw = event.dataTransfer.getData('application/x-pidex-workbench-tab')
   try {
     const value = JSON.parse(raw) as {
       source?: unknown

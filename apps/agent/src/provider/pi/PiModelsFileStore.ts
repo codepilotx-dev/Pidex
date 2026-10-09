@@ -3,7 +3,7 @@ import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { randomUUID } from 'node:crypto'
 
-const OWNER = 'codepilotx'
+const OWNER = 'pidex'
 const FORMAT_VERSION = 1
 
 interface StoreDocument {

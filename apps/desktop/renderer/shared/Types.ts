@@ -985,7 +985,7 @@ export type DesktopStoredSettings = {
   /** @deprecated Loader-only legacy input. Normalized settings never serialize this field. */
   sandboxMode?: DesktopSandboxMode
   allowNetworkAccess?: boolean
-  installCodePilotXDependencies: boolean
+  installPidexDependencies: boolean
   workspaceDependenciesMigrated: boolean
   firstUseSetupCompleted?: 0 | 1
   'desktop.voice.preferredInputDeviceId': string
@@ -1246,7 +1246,7 @@ export type DesktopSessionSettingsSnapshot = {
   systemPrompt?: string
   appendSystemPrompt?: string
   additionalDirectories: string[]
-  installCodePilotXDependencies?: boolean
+  installPidexDependencies?: boolean
   enableMemory?: boolean
   rustSearchAndDiffKernels?: boolean
 }
@@ -1356,7 +1356,7 @@ export type CreateDesktopSessionOptions = {
   systemPrompt?: string
   appendSystemPrompt?: string
   additionalDirectories?: string[]
-  installCodePilotXDependencies?: boolean
+  installPidexDependencies?: boolean
   enableMemory?: boolean
   rustSearchAndDiffKernels?: boolean
 }
@@ -1380,7 +1380,7 @@ export type DesktopRuntimePermissionProfile = {
   description: string | null
 }
 
-export type DesktopSkillFormat = 'codepilotx' | 'agents' | 'codex' | 'claude'
+export type DesktopSkillFormat = 'pidex' | 'agents' | 'codex' | 'claude'
 
 export type DesktopSkillSource = 'workspace' | 'user' | 'system' | 'admin'
 

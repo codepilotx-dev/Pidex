@@ -49,7 +49,7 @@ const SOURCE_OPTIONS: readonly { value: ToolingPreference; label: string }[] = [
 
 export function WorkspaceDependenciesSettings({ onError, onNotice }: Props): React.ReactNode {
   const { draft } = useDesktopSettings()
-  const legacyManagedPreference = draft.values.installCodePilotXDependencies
+  const legacyManagedPreference = draft.values.installPidexDependencies
   const migrationComplete = draft.values.workspaceDependenciesMigrated
   const [statuses, setStatuses] = React.useState<readonly ToolingStatus[]>([])
   const [loading, setLoading] = React.useState(true)

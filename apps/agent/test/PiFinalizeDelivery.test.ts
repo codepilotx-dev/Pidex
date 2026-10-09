@@ -205,7 +205,7 @@ describe('structured result module', () => {
     for (const [outcome, title, tone] of scenarios) {
       const result = parseStructuredResult({ ...validResult(), outcome })
       const envelope = resultCardEnvelopeFromStructuredResult(result)
-      expect(envelope?.kind).toBe('codepilotx.result-card')
+      expect(envelope?.kind).toBe('pidex.result-card')
       expect(envelope?.version).toBe(1)
       expect(envelope?.card).toMatchObject({
         title,
@@ -294,7 +294,7 @@ describe('finalize_result structured delivery runtime', () => {
       version?: number
       card?: unknown
     }
-    expect(envelope.kind).toBe('codepilotx.result-card')
+    expect(envelope.kind).toBe('pidex.result-card')
     expect(envelope.version).toBe(1)
     expect(envelope.card).toEqual(
       resultCardEnvelopeFromStructuredResult(validSubagentResult())!.card,

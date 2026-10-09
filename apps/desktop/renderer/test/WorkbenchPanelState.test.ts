@@ -1812,14 +1812,14 @@ describe('workbench layout snapshot v1', () => {
   test('save helper 只写 v1 key，不破坏其他 key', () => {
     const storage = makeMemoryStorage()
     storage.setItem(RIGHT_DOCK_WIDTH_RATIO_STORAGE_KEY, '.5')
-    storage.setItem('codepilotx.legacy.otherKey', 'untouched')
+    storage.setItem('pidex.legacy.otherKey', 'untouched')
 
     const snapshot = makeSnapshot({ primarySidebarWidth: 305 })
     saveWorkbenchLayoutSnapshot(snapshot, { storage })
 
     expect(storage.getItem(WORKBENCH_LAYOUT_STORAGE_KEY)).not.toBeNull()
     expect(storage.getItem(RIGHT_DOCK_WIDTH_RATIO_STORAGE_KEY)).toBe('.5')
-    expect(storage.getItem('codepilotx.legacy.otherKey')).toBe('untouched')
+    expect(storage.getItem('pidex.legacy.otherKey')).toBe('untouched')
     const written = JSON.parse(storage.getItem(WORKBENCH_LAYOUT_STORAGE_KEY) as string)
     expect(written.schemaVersion).toBe(WORKBENCH_LAYOUT_SCHEMA_VERSION)
     expect(written.primarySidebarWidth).toBe(305)

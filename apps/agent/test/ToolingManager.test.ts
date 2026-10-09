@@ -6,10 +6,10 @@ import { removeFixturePaths } from './FixtureCleanup'
 import { TOOLING_CATALOG, ToolingManager, type ToolingStatus } from '../src/tool/ToolingManager'
 
 const roots: string[] = []
-const originalGitBash = process.env.CODEPILOTX_GIT_BASH_PATH
-const originalRipgrep = process.env.CODEPILOTX_RIPGREP_PATH
-const originalNodejs = process.env.CODEPILOTX_NODEJS_PATH
-const originalPython = process.env.CODEPILOTX_PYTHON_PATH
+const originalGitBash = process.env.PIDEX_GIT_BASH_PATH
+const originalRipgrep = process.env.PIDEX_RIPGREP_PATH
+const originalNodejs = process.env.PIDEX_NODEJS_PATH
+const originalPython = process.env.PIDEX_PYTHON_PATH
 
 const temporaryRoot = async () => {
   const root = await mkdtemp(join(tmpdir(), 'pidex-tooling-'))
@@ -18,10 +18,10 @@ const temporaryRoot = async () => {
 }
 
 afterEach(async () => {
-  process.env.CODEPILOTX_GIT_BASH_PATH = originalGitBash
-  process.env.CODEPILOTX_RIPGREP_PATH = originalRipgrep
-  process.env.CODEPILOTX_NODEJS_PATH = originalNodejs
-  process.env.CODEPILOTX_PYTHON_PATH = originalPython
+  process.env.PIDEX_GIT_BASH_PATH = originalGitBash
+  process.env.PIDEX_RIPGREP_PATH = originalRipgrep
+  process.env.PIDEX_NODEJS_PATH = originalNodejs
+  process.env.PIDEX_PYTHON_PATH = originalPython
   await removeFixturePaths(roots.splice(0))
 })
 
@@ -47,7 +47,7 @@ describe('ToolingManager', () => {
 
   test('国内镜像失败后自动尝试官方源且仍校验同一摘要', async () => {
     const root = await temporaryRoot()
-    process.env.CODEPILOTX_RIPGREP_PATH = join(root, 'missing-rg.exe')
+    process.env.PIDEX_RIPGREP_PATH = join(root, 'missing-rg.exe')
     const requested: string[] = []
     const manager = new ToolingManager({
       root,
@@ -84,10 +84,10 @@ describe('ToolingManager', () => {
 
   test('默认使用托管版并将独立来源偏好持久化到 tooling home', async () => {
     const root = await temporaryRoot()
-    process.env.CODEPILOTX_GIT_BASH_PATH = join(root, 'missing-bash.exe')
-    process.env.CODEPILOTX_RIPGREP_PATH = join(root, 'missing-rg.exe')
-    process.env.CODEPILOTX_NODEJS_PATH = join(root, 'missing-node.exe')
-    process.env.CODEPILOTX_PYTHON_PATH = join(root, 'missing-python.exe')
+    process.env.PIDEX_GIT_BASH_PATH = join(root, 'missing-bash.exe')
+    process.env.PIDEX_RIPGREP_PATH = join(root, 'missing-rg.exe')
+    process.env.PIDEX_NODEJS_PATH = join(root, 'missing-node.exe')
+    process.env.PIDEX_PYTHON_PATH = join(root, 'missing-python.exe')
     const manager = new ToolingManager({ root })
 
     const initial = await manager.listStatuses()
@@ -202,7 +202,7 @@ describe('ToolingManager', () => {
       join(root, 'v1', 'settings.json'),
       JSON.stringify({
         version: 1,
-        installCodePilotXDependencies: false,
+        installPidexDependencies: false,
         preferences: { 'git-bash': 'system', ripgrep: 'managed' },
       }),
       'utf8',
@@ -219,7 +219,7 @@ describe('ToolingManager', () => {
 
   test('显式旧依赖偏好仅迁移 Node.js 与 Python', async () => {
     const root = await temporaryRoot()
-    const manager = new ToolingManager({ root, legacyInstallCodePilotXDependencies: false })
+    const manager = new ToolingManager({ root, legacyInstallPidexDependencies: false })
     const statuses = await manager.listStatuses()
     expect(Object.fromEntries(statuses.map((status) => [status.id, status.preference]))).toEqual({
       nodejs: 'system',
@@ -250,8 +250,8 @@ describe('ToolingManager', () => {
 
   test('resolveEnvironment 对缺失依赖保留逐项结果且不注入 PATH', async () => {
     const root = await temporaryRoot()
-    process.env.CODEPILOTX_NODEJS_PATH = join(root, 'missing-node.exe')
-    process.env.CODEPILOTX_PYTHON_PATH = join(root, 'missing-python.exe')
+    process.env.PIDEX_NODEJS_PATH = join(root, 'missing-node.exe')
+    process.env.PIDEX_PYTHON_PATH = join(root, 'missing-python.exe')
     const manager = new ToolingManager({ root })
     await manager.setPreference('nodejs', 'system')
     await manager.setPreference('python', 'system')
@@ -265,7 +265,7 @@ describe('ToolingManager', () => {
 
   test('并发安装共用下载且摘要失败不会留下 staging 半成品', async () => {
     const root = await temporaryRoot()
-    process.env.CODEPILOTX_RIPGREP_PATH = join(root, 'missing-rg.exe')
+    process.env.PIDEX_RIPGREP_PATH = join(root, 'missing-rg.exe')
     let requests = 0
     const manager = new ToolingManager({
       root,

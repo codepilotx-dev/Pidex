@@ -33,13 +33,13 @@ describe('composer submit transaction', () => {
         tokens: [
           { id: 'a', kind: 'plugin', label: 'A', value: 'plugin://a', from: 7, to: 7 },
           { id: 'b', kind: 'browser', label: 'B', value: 'https://b', from: 7, to: 7 },
-          { id: 'c', kind: 'thread', label: 'C', value: 'codepilotx://threads/c', from: 9, to: 9 },
+          { id: 'c', kind: 'thread', label: 'C', value: 'pidex://threads/c', from: 9, to: 9 },
         ],
       },
     })
     const prepared = prepareComposerSubmission(source)
     expect('input' in prepared && prepared.input.text).toBe(
-      '前[@A](plugin://a)[B](<https://b>)中后[C](<codepilotx://threads/c>)',
+      '前[@A](plugin://a)[B](<https://b>)中后[C](<pidex://threads/c>)',
     )
     expect(source.document.tokens[0]?.from).toBe(7)
     expect(
@@ -424,7 +424,7 @@ describe('composer submit transaction', () => {
               id: 'thread-1',
               kind: 'thread',
               label: '任务：[登录修复]',
-              value: 'codepilotx://threads/thread-1',
+              value: 'pidex://threads/thread-1',
               from: 0,
               to: 0,
             },
@@ -442,7 +442,7 @@ describe('composer submit transaction', () => {
     )
 
     expect('input' in prepared && prepared.input.text).toBe(
-      '[任务：\\[登录修复\\]](<codepilotx://threads/thread-1>)[网页：参考文档](<https://example.com/docs>)',
+      '[任务：\\[登录修复\\]](<pidex://threads/thread-1>)[网页：参考文档](<https://example.com/docs>)',
     )
     expect('input' in prepared && prepared.input.attachments).toEqual([])
   })

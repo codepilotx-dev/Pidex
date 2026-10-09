@@ -146,7 +146,7 @@ describe('ConfigMigrationService', () => {
       sidebarManualOrder: { all: ['session-1'] },
     })
     expect(await readFile(join(data, 'config.json'), 'utf8')).not.toContain('sidebarManualOrder')
-    expect(await readFile(join(workspace, '.codepilotx', 'config.json'), 'utf8')).toContain(
+    expect(await readFile(join(workspace, '.pidex', 'config.json'), 'utf8')).toContain(
       '"model": "project-model"',
     )
     await expect(readFile(appearancePath, 'utf8')).rejects.toMatchObject({

@@ -219,7 +219,7 @@ describe('read_thread 工具冻结行为', () => {
     const deepLink = buildThreadDeepLink(thread.id)
     expect(resolveThreadReference(deepLink)).toBe(thread.id)
     expect(resolveThreadReference(thread.id)).toBe(thread.id)
-    expect(resolveThreadReference('codepilotx://threads/')).toBeNull()
+    expect(resolveThreadReference('pidex://threads/')).toBeNull()
 
     const byRaw = await fixture.executor.execute<ReadThreadOutput>(
       'read_thread',

@@ -20,15 +20,6 @@ describe('thread-reference deep links', () => {
     }
   })
 
-  test('legacy codepilotx:// links keep resolving to the same thread id', () => {
-    const ids = ['plain-id-123', 'thread with spaces', '会话/你好 world']
-    for (const id of ids) {
-      const legacy = `codepilotx://threads/${encodeURIComponent(id)}`
-      expect(parseThreadDeepLink(legacy)).toBe(id)
-      expect(resolveThreadReference(legacy)).toBe(id)
-    }
-  })
-
   test('parseThreadDeepLink rejects a wrong or missing scheme', () => {
     const invalid = [
       'http://threads/abc',
@@ -49,7 +40,6 @@ describe('thread-reference deep links', () => {
       'pidex://thread/abc',
       'pidex://threads.example/abc',
       'pidex://Threads/abc',
-      'codepilotx://threads.example/abc',
     ]
     for (const link of invalid) {
       expect(parseThreadDeepLink(link)).toBeNull()
@@ -63,7 +53,6 @@ describe('thread-reference deep links', () => {
       'pidex://threads/abc#section',
       'pidex://user@threads/abc',
       'pidex://user:pass@threads/abc',
-      'codepilotx://user:pass@threads/abc',
     ]
     for (const link of invalid) {
       expect(parseThreadDeepLink(link)).toBeNull()
@@ -77,7 +66,6 @@ describe('thread-reference deep links', () => {
       'pidex://threads//',
       'pidex://threads/abc/def',
       'pidex://threads/abc/',
-      'codepilotx://threads/abc/',
     ]
     for (const link of invalid) {
       expect(parseThreadDeepLink(link)).toBeNull()
@@ -105,7 +93,6 @@ describe('thread-reference deep links', () => {
       'pidex://threads/abc/extra',
       'pidex://threads/abc?tab=open',
       'pidex://otherhost/abc',
-      'codepilotx://otherhost/abc',
       'http://threads/abc',
     ]
     for (const link of invalid) {

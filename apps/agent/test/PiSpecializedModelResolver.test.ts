@@ -63,9 +63,9 @@ describe('resolveSpecializedPiModel', () => {
     roots.push(root)
     const data = join(root, 'data')
     const workspace = join(root, 'workspace')
-    await mkdir(join(workspace, '.codepilotx'), { recursive: true })
+    await mkdir(join(workspace, '.pidex'), { recursive: true })
     await writeFile(
-      join(workspace, '.codepilotx', 'config.json'),
+      join(workspace, '.pidex', 'config.json'),
       JSON.stringify({
         model_provider: 'provider:project',
         model: 'project-main',

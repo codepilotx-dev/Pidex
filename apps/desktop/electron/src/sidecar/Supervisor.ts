@@ -385,7 +385,7 @@ export class SidecarSupervisor {
     attempt: number,
     reportStage: (stage: SidecarConnectStage) => void,
   ): Promise<SidecarConnection> {
-    const managedOrigin = process.env.CODEPILOTX_AGENT_URL
+    const managedOrigin = process.env.PIDEX_AGENT_URL
     if (managedOrigin) {
       reportStage('managed-origin')
       const origin = normalizeOrigin(managedOrigin)
@@ -425,42 +425,42 @@ export class SidecarSupervisor {
     reportStage('resolve-environment')
     const childEnvironment: NodeJS.ProcessEnv = {
       ...process.env,
-      CODEPILOTX_HOST: '127.0.0.1',
-      CODEPILOTX_PORT: String(this.#preferredPort ?? 0),
-      CODEPILOTX_AUTH_TOKEN: this.#token,
-      CODEPILOTX_DESKTOP_MANAGED: '1',
-      CODEPILOTX_SIDECAR_INSTANCE_TOKEN: identity.instanceToken,
-      CODEPILOTX_DATA_DIR: dataDirectory,
-      CODEPILOTX_PETS_DIR: join(dataDirectory, 'pets'),
-      CODEPILOTX_TOOLING_HOME: join(dataDirectory, 'tooling'),
-      CODEPILOTX_BUILTIN_SKILLS_DIR: this.#app.isPackaged
+      PIDEX_HOST: '127.0.0.1',
+      PIDEX_PORT: String(this.#preferredPort ?? 0),
+      PIDEX_AUTH_TOKEN: this.#token,
+      PIDEX_DESKTOP_MANAGED: '1',
+      PIDEX_SIDECAR_INSTANCE_TOKEN: identity.instanceToken,
+      PIDEX_DATA_DIR: dataDirectory,
+      PIDEX_PETS_DIR: join(dataDirectory, 'pets'),
+      PIDEX_TOOLING_HOME: join(dataDirectory, 'tooling'),
+      PIDEX_BUILTIN_SKILLS_DIR: this.#app.isPackaged
         ? join(this.#app.resourcesPath, 'agent', 'skills')
-        : process.env.CODEPILOTX_BUILTIN_SKILLS_DIR,
-      CODEPILOTX_BUILTIN_PLUGINS_DIR: this.#app.isPackaged
+        : process.env.PIDEX_BUILTIN_SKILLS_DIR,
+      PIDEX_BUILTIN_PLUGINS_DIR: this.#app.isPackaged
         ? join(this.#app.resourcesPath, 'agent', 'plugins')
-        : process.env.CODEPILOTX_BUILTIN_PLUGINS_DIR,
-      CODEPILOTX_BUILTIN_INTEGRATIONS_DIR: this.#app.isPackaged
+        : process.env.PIDEX_BUILTIN_PLUGINS_DIR,
+      PIDEX_BUILTIN_INTEGRATIONS_DIR: this.#app.isPackaged
         ? join(this.#app.resourcesPath, 'agent', 'integrations')
-        : process.env.CODEPILOTX_BUILTIN_INTEGRATIONS_DIR,
-      CODEPILOTX_LEGACY_DATA_DIR: join(this.#app.getPath('userData'), 'agent'),
-      CODEPILOTX_LEGACY_APPEARANCE_SETTINGS_PATH: join(
+        : process.env.PIDEX_BUILTIN_INTEGRATIONS_DIR,
+      PIDEX_LEGACY_DATA_DIR: join(this.#app.getPath('userData'), 'agent'),
+      PIDEX_LEGACY_APPEARANCE_SETTINGS_PATH: join(
         this.#app.getPath('userData'),
         'appearance-settings.json',
       ),
-      CODEPILOTX_DOCUMENTS_DIR: resolveDocumentsDirectory((name) => this.#app.getPath(name)),
-      CODEPILOTX_LOG_DIR: join(dataDirectory, 'logs'),
+      PIDEX_DOCUMENTS_DIR: resolveDocumentsDirectory((name) => this.#app.getPath(name)),
+      PIDEX_LOG_DIR: join(dataDirectory, 'logs'),
       ...(relocation
         ? {
-            CODEPILOTX_RELOCATION_SOURCE_DIR: relocation.sourceDataDir,
-            CODEPILOTX_RELOCATION_OPERATION_ID: relocation.operationId,
+            PIDEX_RELOCATION_SOURCE_DIR: relocation.sourceDataDir,
+            PIDEX_RELOCATION_OPERATION_ID: relocation.operationId,
           }
         : {
-            CODEPILOTX_RELOCATION_SOURCE_DIR: undefined,
-            CODEPILOTX_RELOCATION_OPERATION_ID: undefined,
+            PIDEX_RELOCATION_SOURCE_DIR: undefined,
+            PIDEX_RELOCATION_OPERATION_ID: undefined,
           }),
-      CODEPILOTX_STATIC_DIR: this.#app.isPackaged
+      PIDEX_STATIC_DIR: this.#app.isPackaged
         ? join(this.#app.resourcesPath, 'renderer')
-        : process.env.CODEPILOTX_STATIC_DIR,
+        : process.env.PIDEX_STATIC_DIR,
     }
     reportStage('spawn-process')
     const child = this.#spawnProcess(command.executable, command.args, {

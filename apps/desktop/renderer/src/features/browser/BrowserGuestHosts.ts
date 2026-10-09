@@ -44,7 +44,7 @@ export class BrowserGuestHosts {
       // geometry itself is written by `layout()`, so only the fixed stacking
       // frame is expressed as classes here.
       element.className = 'browser-guest-surface tw:fixed tw:z-1 tw:flex tw:border-0'
-      element.setAttribute('partition', 'persist:codepilotx-browser')
+      element.setAttribute('partition', 'persist:pidex-browser')
       element.setAttribute('src', 'about:blank')
       surface = {
         element,

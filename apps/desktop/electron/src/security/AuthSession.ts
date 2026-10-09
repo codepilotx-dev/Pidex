@@ -2,7 +2,7 @@ import { session } from 'electron'
 import type { DesktopLogger } from '../logging/DesktopLogger.js'
 import { probeReady } from '../sidecar/Readiness.js'
 
-const AUTH_COOKIE = 'codepilotx_session'
+const AUTH_COOKIE = 'pidex_session'
 
 export async function configureAuthCookie(
   origin: string,

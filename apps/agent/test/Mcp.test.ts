@@ -357,7 +357,7 @@ describe('MCP configuration', () => {
     const root = await mkdtemp(join(tmpdir(), 'pidex-mcp-trust-'))
     temporaryDirectories.push(root)
     const workspace = await mkdtemp(join(root, 'workspace-'))
-    const configService = new ConfigService(join(root, '.codepilotx', 'config.json'))
+    const configService = new ConfigService(join(root, '.pidex', 'config.json'))
     await configService.initialize()
     try {
       const database = new MemorySettings()
@@ -373,7 +373,7 @@ describe('MCP configuration', () => {
           url: 'http://127.0.0.1:43123/mcp',
         },
       } satisfies McpServerDeclaration
-      const projectConfig = join(workspace, '.codepilotx', 'config.json')
+      const projectConfig = join(workspace, '.pidex', 'config.json')
 
       await expect(
         configs.save({
@@ -636,7 +636,7 @@ describe('MCP transports', () => {
       needsAuth: true,
     } satisfies Partial<McpConnectionError>)
 
-    process.env.CODEPILOTX_MCP_FIXTURE_TOKEN = 'fixture-token'
+    process.env.PIDEX_MCP_FIXTURE_TOKEN = 'fixture-token'
     const authenticated = await factory.connect(
       {
         name: 'http-fixture',
@@ -645,7 +645,7 @@ describe('MCP transports', () => {
         transport: {
           type: 'http',
           url: modern.url,
-          bearerTokenEnvVar: 'CODEPILOTX_MCP_FIXTURE_TOKEN',
+          bearerTokenEnvVar: 'PIDEX_MCP_FIXTURE_TOKEN',
         },
       },
       () => undefined,
@@ -654,7 +654,7 @@ describe('MCP transports', () => {
       expect(authenticated.transport).toBe('http')
       expect(authenticated.tools.map((tool) => tool.name)).toContain('echo')
     } finally {
-      delete process.env.CODEPILOTX_MCP_FIXTURE_TOKEN
+      delete process.env.PIDEX_MCP_FIXTURE_TOKEN
       await authenticated.close()
     }
   }, 30_000)

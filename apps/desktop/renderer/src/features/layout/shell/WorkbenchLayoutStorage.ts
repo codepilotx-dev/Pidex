@@ -30,7 +30,7 @@ export { WORKBENCH_LAYOUT_STORAGE_KEY, WORKBENCH_LAYOUT_SCHEMA_VERSION }
 
 export type { WorkbenchLayoutSnapshot, WorkbenchLayoutState, WorkbenchPartVisibility }
 
-const LEGACY_RIGHT_DOCK_WIDTH_STORAGE_KEY = 'codepilotx.desktop.rightDockWidth'
+const LEGACY_RIGHT_DOCK_WIDTH_STORAGE_KEY = 'pidex.desktop.rightDockWidth'
 const LEGACY_SIDEBAR_WIDTH_STORAGE_KEY = 'layout.sidebarWidth'
 const LEGACY_SIDEBAR_COLLAPSED_STORAGE_KEY = 'layout.sidebarCollapsed'
 

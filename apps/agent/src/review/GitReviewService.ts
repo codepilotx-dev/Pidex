@@ -452,7 +452,7 @@ export class GitReviewService {
       else await this.git(rootPath, ['read-tree', '--empty'], undefined, [0], env)
       await this.git(rootPath, ['add', '-A'], undefined, [0], env)
       const tree = (await this.git(rootPath, ['write-tree'], undefined, [0], env)).stdout.trim()
-      const snapshotRef = `refs/codepilotx/review/${input.threadId}/${input.turnId}/${input.phase}`
+      const snapshotRef = `refs/pidex/review/${input.threadId}/${input.turnId}/${input.phase}`
       const validRef = await this.git(
         rootPath,
         ['check-ref-format', snapshotRef],
@@ -505,7 +505,7 @@ export class GitReviewService {
       for (const row of rows) {
         for (const phase of ['before', 'after'] as const) {
           if (phase === 'before' ? !row.before_tree : !row.after_tree) continue
-          const ref = `refs/codepilotx/review/${row.thread_id}/${row.turn_id}/${phase}`
+          const ref = `refs/pidex/review/${row.thread_id}/${row.turn_id}/${phase}`
           await this.git(
             row.repository_root,
             ['update-ref', '-d', ref],

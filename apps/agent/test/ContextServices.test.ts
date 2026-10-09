@@ -399,14 +399,14 @@ describe('Hooks 与记忆', () => {
   test('用户 Hook 先执行，未知项目 Hook 暂停且响应后可恢复', async () => {
     const { root, db, thread } = await fixture()
     const userConfig = join(root, 'user-hooks.json')
-    await mkdir(join(root, '.codepilotx'))
+    await mkdir(join(root, '.pidex'))
     await writeFile(
       userConfig,
       JSON.stringify({ hooks: [{ id: 'user', event: 'pre_tool_use', command: 'user-hook' }] }),
       'utf8',
     )
     await writeFile(
-      join(root, '.codepilotx', 'hooks.json'),
+      join(root, '.pidex', 'hooks.json'),
       JSON.stringify({
         hooks: [{ id: 'project', event: 'pre_tool_use', command: 'project-hook' }],
       }),
@@ -473,9 +473,9 @@ describe('Hooks 与记忆', () => {
       },
     })
     expect(hooks.load({ projectRoot: root })).toEqual([])
-    await mkdir(join(root, '.codepilotx'))
+    await mkdir(join(root, '.pidex'))
     await writeFile(
-      join(root, '.codepilotx', 'hooks.json'),
+      join(root, '.pidex', 'hooks.json'),
       JSON.stringify({
         hooks: [{ id: 'check', event: 'pre_tool_use', command: 'check-hook', timeoutMs: 1000 }],
       }),
@@ -506,9 +506,9 @@ describe('Hooks 与记忆', () => {
 
   test('Hook narrowedInput 不能扩大原始 scope', async () => {
     const { root, db } = await fixture()
-    await mkdir(join(root, '.codepilotx'))
+    await mkdir(join(root, '.pidex'))
     await writeFile(
-      join(root, '.codepilotx', 'hooks.json'),
+      join(root, '.pidex', 'hooks.json'),
       JSON.stringify({ hooks: [{ id: 'narrow', event: 'pre_tool_use', command: 'check' }] }),
       'utf8',
     )
@@ -531,8 +531,8 @@ describe('Hooks 与记忆', () => {
 
   test('Hook hash 变化重新请求信任且 block 后绝不执行', async () => {
     const { root, db } = await fixture()
-    await mkdir(join(root, '.codepilotx'))
-    const path = join(root, '.codepilotx', 'hooks.json')
+    await mkdir(join(root, '.pidex'))
+    const path = join(root, '.pidex', 'hooks.json')
     await writeFile(
       path,
       JSON.stringify({ hooks: [{ id: 'project', event: 'pre_tool_use', command: 'first' }] }),
@@ -580,17 +580,17 @@ describe('Hooks 与记忆', () => {
     const projectA = join(root, 'project-a')
     const projectB = join(root, 'project-b')
     await Promise.all([
-      mkdir(join(projectA, '.codepilotx'), { recursive: true }),
-      mkdir(join(projectB, '.codepilotx'), { recursive: true }),
+      mkdir(join(projectA, '.pidex'), { recursive: true }),
+      mkdir(join(projectB, '.pidex'), { recursive: true }),
     ])
     await Promise.all([
       writeFile(
-        join(projectA, '.codepilotx', 'hooks.json'),
+        join(projectA, '.pidex', 'hooks.json'),
         JSON.stringify({ hooks: [{ id: 'same-id', event: 'pre_tool_use', command: 'project-a' }] }),
         'utf8',
       ),
       writeFile(
-        join(projectB, '.codepilotx', 'hooks.json'),
+        join(projectB, '.pidex', 'hooks.json'),
         JSON.stringify({ hooks: [{ id: 'same-id', event: 'pre_tool_use', command: 'project-b' }] }),
         'utf8',
       ),

@@ -190,7 +190,7 @@ export function defaultDesktopStoredSettings(): DesktopStoredSettings {
     providerBaseURL: '',
     showContextUsage: true,
     defaultOpenTargetId: 'auto',
-    gitBranchPrefix: 'codepilotx/',
+    gitBranchPrefix: 'pidex/',
     gitPrMergeMethod: 'merge',
     gitShowPrIconsInSidebar: true,
     gitDraftPullRequest: true,
@@ -203,7 +203,7 @@ export function defaultDesktopStoredSettings(): DesktopStoredSettings {
     allowForcePush: false,
     commitMessagePrompt: '',
     pullRequestPrompt: '',
-    installCodePilotXDependencies: true,
+    installPidexDependencies: true,
     workspaceDependenciesMigrated: false,
     'desktop.voice.preferredInputDeviceId': '',
     personality: 'pragmatic',
@@ -423,10 +423,10 @@ export function normalizeDesktopStoredSettings(value: unknown): DesktopStoredSet
       typeof parsed.allowForcePush === 'boolean' ? parsed.allowForcePush : defaults.allowForcePush,
     commitMessagePrompt: stringOrDefault(parsed.commitMessagePrompt, defaults.commitMessagePrompt),
     pullRequestPrompt: stringOrDefault(parsed.pullRequestPrompt, defaults.pullRequestPrompt),
-    installCodePilotXDependencies:
-      typeof parsed.installCodePilotXDependencies === 'boolean'
-        ? parsed.installCodePilotXDependencies
-        : defaults.installCodePilotXDependencies,
+    installPidexDependencies:
+      typeof parsed.installPidexDependencies === 'boolean'
+        ? parsed.installPidexDependencies
+        : defaults.installPidexDependencies,
     workspaceDependenciesMigrated:
       typeof parsed.workspaceDependenciesMigrated === 'boolean'
         ? parsed.workspaceDependenciesMigrated
