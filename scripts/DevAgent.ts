@@ -15,7 +15,7 @@ const root = fileURLToPath(new URL('..', import.meta.url))
 const instanceToken = crypto.randomUUID()
 
 function configuredAgentPort() {
-  const value = process.env.CODEPILOTX_DEV_AGENT_PORT?.trim()
+  const value = process.env.PIDEX_DEV_AGENT_PORT?.trim()
   if (!value) return undefined
   const port = Number(value)
   if (!Number.isInteger(port) || port < 1 || port > 65_535)
@@ -76,21 +76,21 @@ async function run() {
       NO_PROXY: noProxy,
       no_proxy: noProxy,
       PORT: String(port),
-      CODEPILOTX_PORT: String(port),
-      CODEPILOTX_AUTH_TOKEN: authToken,
-      CODEPILOTX_DESKTOP_MANAGED: '1',
-      CODEPILOTX_SIDECAR_INSTANCE_TOKEN: instanceToken,
-      CODEPILOTX_DATA_DIR: agentDataDir,
-      CODEPILOTX_PETS_DIR: join(agentDataDir, 'pets'),
-      CODEPILOTX_TOOLING_HOME: join(agentDataDir, 'tooling'),
-      CODEPILOTX_BUILTIN_SKILLS_DIR: join(root, 'apps', 'agent', 'resources', 'skills'),
-      CODEPILOTX_BUILTIN_PLUGINS_DIR: join(root, 'apps', 'agent', 'resources', 'plugins'),
-      CODEPILOTX_BUILTIN_INTEGRATIONS_DIR: join(root, 'apps', 'agent', 'resources', 'integrations'),
-      CODEPILOTX_LEGACY_DATA_DIR: join(root, '.codepilotx'),
-      CODEPILOTX_LOG_DIR: agentLogDir,
-      CODEPILOTX_CONSOLE_LOG: process.env.CODEPILOTX_CONSOLE_LOG ?? 'info',
-      CODEPILOTX_LOG_DETAIL: 'development',
-      CODEPILOTX_RENDERER_DIST: fileURLToPath(new URL('../dist/renderer', import.meta.url)),
+      PIDEX_PORT: String(port),
+      PIDEX_AUTH_TOKEN: authToken,
+      PIDEX_DESKTOP_MANAGED: '1',
+      PIDEX_SIDECAR_INSTANCE_TOKEN: instanceToken,
+      PIDEX_DATA_DIR: agentDataDir,
+      PIDEX_PETS_DIR: join(agentDataDir, 'pets'),
+      PIDEX_TOOLING_HOME: join(agentDataDir, 'tooling'),
+      PIDEX_BUILTIN_SKILLS_DIR: join(root, 'apps', 'agent', 'resources', 'skills'),
+      PIDEX_BUILTIN_PLUGINS_DIR: join(root, 'apps', 'agent', 'resources', 'plugins'),
+      PIDEX_BUILTIN_INTEGRATIONS_DIR: join(root, 'apps', 'agent', 'resources', 'integrations'),
+      PIDEX_LEGACY_DATA_DIR: join(root, '.pidex'),
+      PIDEX_LOG_DIR: agentLogDir,
+      PIDEX_CONSOLE_LOG: process.env.PIDEX_CONSOLE_LOG ?? 'info',
+      PIDEX_LOG_DETAIL: 'development',
+      PIDEX_RENDERER_DIST: fileURLToPath(new URL('../dist/renderer', import.meta.url)),
     },
     stdin: 'inherit',
     stdout: 'pipe',

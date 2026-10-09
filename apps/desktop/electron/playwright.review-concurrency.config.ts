@@ -5,7 +5,7 @@ export default defineConfig({
   testDir: './smoke-tests',
   testMatch: 'ReviewConcurrency.smoke.ts',
   outputDir: resolve(
-    process.env.CODEPILOTX_PLAYWRIGHT_OUTPUT_DIR ?? './test-results/review-concurrency',
+    process.env.PIDEX_PLAYWRIGHT_OUTPUT_DIR ?? './test-results/review-concurrency',
   ),
   fullyParallel: false,
   forbidOnly: true,

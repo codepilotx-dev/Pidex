@@ -74,7 +74,7 @@ jobs:
             -KeyExportPolicy Exportable -KeySpec Signature
           $thumbprint = $cert.Thumbprint
           $password = -join ((1..24) | ForEach-Object { [char](Get-Random -Minimum 33 -Maximum 126) })
-          $pfxPath = Join-Path $env:CODEPILOTX_RELEASE_RUN_ROOT "parity.pfx"
+          $pfxPath = Join-Path $env:PIDEX_RELEASE_RUN_ROOT "parity.pfx"
           Export-PfxCertificate -Cert $cert -FilePath $pfxPath `
             -Password (ConvertTo-SecureString $password -AsPlainText -Force) | Out-Null
           # 不向用户根存储添加自签证书：Windows 会触发极慢的根验证/自动更新，
@@ -85,8 +85,8 @@ jobs:
       - name: Sign agent with synthetic certificate
         shell: pwsh
         env:
-          CODEPILOTX_WINDOWS_CERTIFICATE_PATH: ${{ steps.parity-cert.outputs.pfx }}
-          CODEPILOTX_WINDOWS_CERTIFICATE_PASSWORD: ${{ steps.parity-cert.outputs.password }}
+          PIDEX_WINDOWS_CERTIFICATE_PATH: ${{ steps.parity-cert.outputs.pfx }}
+          PIDEX_WINDOWS_CERTIFICATE_PASSWORD: ${{ steps.parity-cert.outputs.password }}
         run: |
           bun scripts/SignWinAgent.ts
           if ($LASTEXITCODE -ne 0) { throw "Synthetic Authenticode signing failed" }

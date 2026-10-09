@@ -17,7 +17,7 @@ const model = { providerID: 'openai', id: 'performance' }
 
 const short = benchmark(100)
 const long = benchmark(500)
-const batch = Math.max(1, Number.parseInt(process.env.CODEPILOTX_PERF_BATCH ?? '1', 10) || 1)
+const batch = Math.max(1, Number.parseInt(process.env.PIDEX_PERF_BATCH ?? '1', 10) || 1)
 const sample: PerformanceSample = {
   batch,
   environment: {

@@ -28,7 +28,7 @@ export function createIsolatedProcessEnvironment(
 function isReleaseRunnerInternalKey(key: string): boolean {
   const normalized = key.toLowerCase()
   return (
-    normalized.startsWith('codepilotx_') ||
+    normalized.startsWith('pidex_') ||
     normalized.startsWith('github_') ||
     normalized.startsWith('runner_') ||
     normalized.startsWith('actions_') ||

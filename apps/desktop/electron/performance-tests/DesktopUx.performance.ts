@@ -109,7 +109,7 @@ async function launchDesktop(
   dataDirectory: string,
   logDirectory: string,
 ): Promise<ElectronApplication> {
-  const packagedExecutable = process.env.CODEPILOTX_PERF_EXECUTABLE?.trim()
+  const packagedExecutable = process.env.PIDEX_PERF_EXECUTABLE?.trim()
   if (packagedExecutable && !existsSync(packagedExecutable)) {
     throw new Error(`Packaged performance executable not found: ${packagedExecutable}`)
   }
@@ -125,11 +125,11 @@ async function launchDesktop(
     cwd: repositoryRoot,
     env: {
       ...process.env,
-      CODEPILOTX_BUN_PATH: resolveBunExecutable(),
-      CODEPILOTX_USER_DATA_DIR: userDataDirectory,
-      CODEPILOTX_DATA_DIR: dataDirectory,
-      CODEPILOTX_LOG_DIR: logDirectory,
-      CODEPILOTX_STATIC_DIR: rendererDist,
+      PIDEX_BUN_PATH: resolveBunExecutable(),
+      PIDEX_USER_DATA_DIR: userDataDirectory,
+      PIDEX_DATA_DIR: dataDirectory,
+      PIDEX_LOG_DIR: logDirectory,
+      PIDEX_STATIC_DIR: rendererDist,
       NO_PROXY: '127.0.0.1,localhost,::1',
       no_proxy: '127.0.0.1,localhost,::1',
     },
@@ -570,12 +570,12 @@ async function record(
   sample: number,
   metrics: Record<string, number>,
 ): Promise<void> {
-  const batch = Math.max(1, Number.parseInt(process.env.CODEPILOTX_PERF_BATCH ?? '1', 10) || 1)
+  const batch = Math.max(1, Number.parseInt(process.env.PIDEX_PERF_BATCH ?? '1', 10) || 1)
   const value: PerformanceSample = {
     batch,
     environment: {
       cpuCount: process.env.NUMBER_OF_PROCESSORS ?? null,
-      executable: process.env.CODEPILOTX_PERF_EXECUTABLE ? '<packaged>' : '<dev>',
+      executable: process.env.PIDEX_PERF_EXECUTABLE ? '<packaged>' : '<dev>',
       platform: process.platform,
     },
     metrics: Object.fromEntries(
@@ -595,7 +595,7 @@ async function record(
 }
 
 function resolveBunExecutable(): string {
-  if (process.env.CODEPILOTX_BUN_PATH) return process.env.CODEPILOTX_BUN_PATH
+  if (process.env.PIDEX_BUN_PATH) return process.env.PIDEX_BUN_PATH
   const output = execFileSync('where.exe', ['bun'], {
     encoding: 'utf8',
     windowsHide: true,

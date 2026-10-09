@@ -8,7 +8,7 @@ if (process.argv.slice(2).join(' ') !== '--x64') {
 }
 
 await run(['bun', 'run', 'build'])
-const requireSigning = process.env.CODEPILOTX_REQUIRE_SIGNING === '1'
+const requireSigning = process.env.PIDEX_REQUIRE_SIGNING === '1'
 if (requireSigning) await run(['bun', 'scripts/SignWinAgent.ts'])
 const manifest = JSON.parse(await readFile(resolve(root, 'package.json'), 'utf8')) as {
   version?: unknown

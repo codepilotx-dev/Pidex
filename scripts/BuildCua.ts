@@ -6,8 +6,8 @@ const project = resolve(root, 'apps/desktop/native/cpx-cua')
 const target = 'x86_64-pc-windows-msvc'
 // Release is the shipping profile and the one development also exercises, so a
 // slower native path can never hide behind a debug-only build. Set
-// CODEPILOTX_CUA_PROFILE=debug only for a fast local iteration loop.
-const release = process.env.CODEPILOTX_CUA_PROFILE !== 'debug'
+// PIDEX_CUA_PROFILE=debug only for a fast local iteration loop.
+const release = process.env.PIDEX_CUA_PROFILE !== 'debug'
 const built = resolve(project, 'target', target, release ? 'release' : 'debug', 'cpx-cua.exe')
 const output = resolve(project, 'dist', 'cpx-cua.exe')
 

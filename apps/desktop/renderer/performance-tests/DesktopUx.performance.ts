@@ -63,8 +63,8 @@ test.describe('desktop UX performance', () => {
       const original = Storage.prototype.setItem
       Storage.prototype.setItem = function setItem(key, value) {
         if (
-          key === 'codepilotx.desktop.rightDockWidthRatio.v2' ||
-          key === 'codepilotx.desktop.bottomPanelHeightRatio.v3'
+          key === 'pidex.desktop.rightDockWidthRatio.v2' ||
+          key === 'pidex.desktop.bottomPanelHeightRatio.v3'
         ) {
           const writes = target.__workbenchSizeWrites ?? {}
           writes[key] = (writes[key] ?? 0) + 1
@@ -93,13 +93,13 @@ test.describe('desktop UX performance', () => {
       const during = await readRightPanelGeometry(rightShell, mainRoute)
       const writesDuringDrag = await readWorkbenchWriteCount(
         page,
-        'codepilotx.desktop.rightDockWidthRatio.v2',
+        'pidex.desktop.rightDockWidthRatio.v2',
       )
       await page.mouse.up()
       const interaction = await stopInteractionProbe(page)
       const writesAfterDrop = await readWorkbenchWriteCount(
         page,
-        'codepilotx.desktop.rightDockWidthRatio.v2',
+        'pidex.desktop.rightDockWidthRatio.v2',
       )
       await recordRendererSample(page, 'workbench-right-live-resize', sample, {
         ...interaction,
@@ -131,13 +131,13 @@ test.describe('desktop UX performance', () => {
       const during = await readPanelGeometry(bottomShell, bottomSpacer, upperRegion, 'height')
       const writesDuringDrag = await readWorkbenchWriteCount(
         page,
-        'codepilotx.desktop.bottomPanelHeightRatio.v3',
+        'pidex.desktop.bottomPanelHeightRatio.v3',
       )
       await page.mouse.up()
       const interaction = await stopInteractionProbe(page)
       const writesAfterDrop = await readWorkbenchWriteCount(
         page,
-        'codepilotx.desktop.bottomPanelHeightRatio.v3',
+        'pidex.desktop.bottomPanelHeightRatio.v3',
       )
       await recordRendererSample(page, 'bottom-panel-live-resize', sample, {
         ...interaction,
@@ -158,7 +158,7 @@ test.describe('desktop UX performance', () => {
       target.__workbenchLayoutWrites = 0
       const original = Storage.prototype.setItem
       Storage.prototype.setItem = function setItem(key, value) {
-        if (key === 'codepilotx.desktop.workbenchLayout.v1') {
+        if (key === 'pidex.desktop.workbenchLayout.v1') {
           target.__workbenchLayoutWrites = (target.__workbenchLayoutWrites ?? 0) + 1
         }
         return original.call(this, key, value)

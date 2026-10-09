@@ -27,9 +27,9 @@ function job(workflow: string, name: string): string {
 describe('release workflows', () => {
   test('ordinary pull requests never enter a self-hosted release runner', () => {
     expect(job(packageWorkflow, 'unsigned-smoke')).toContain('runs-on: windows-latest')
-    expect(job(packageWorkflow, 'unsigned-smoke')).not.toContain('codepilotx-release')
+    expect(job(packageWorkflow, 'unsigned-smoke')).not.toContain('pidex-release')
     expect(job(packageWorkflow, 'release-parity')).toContain('runs-on: windows-latest')
-    expect(job(packageWorkflow, 'release-parity')).not.toContain('codepilotx-release')
+    expect(job(packageWorkflow, 'release-parity')).not.toContain('pidex-release')
   })
 
   test('release-parity actually runs synthetic signing, verifier and cleanup', () => {
@@ -65,7 +65,7 @@ describe('release workflows', () => {
     expect(sourceRelease).toContain("--jq '.assets | length'")
     expect(sourceRelease).not.toContain('self-hosted')
     expect(sourceRelease).not.toContain('package:win')
-    expect(sourceRelease).not.toContain('CODEPILOTX_REQUIRE_SIGNING')
+    expect(sourceRelease).not.toContain('PIDEX_REQUIRE_SIGNING')
     expect(sourceRelease).not.toContain('Pidex-Desktop-*-x64.exe')
     expect(sourceRelease).not.toContain('upload-artifact')
     expect(sourceRelease).not.toContain('attest-')

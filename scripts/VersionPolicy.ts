@@ -23,7 +23,7 @@ import {
 /* ─────────────── 路径 ─────────────── */
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
-const ROOT = process.env.CODEPILOTX_PROJECT_ROOT ?? join(SCRIPT_DIR, '..')
+const ROOT = process.env.PIDEX_PROJECT_ROOT ?? join(SCRIPT_DIR, '..')
 
 const MANIFESTS = [
   'package.json',

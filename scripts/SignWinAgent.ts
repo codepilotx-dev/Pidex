@@ -3,13 +3,13 @@ import { join, resolve } from 'node:path'
 
 const root = resolve(import.meta.dir, '..')
 const agent = resolve(root, 'apps/agent/dist/x64/pidex-agent.exe')
-const certificate = process.env.CODEPILOTX_WINDOWS_CERTIFICATE_PATH?.trim()
-const password = process.env.CODEPILOTX_WINDOWS_CERTIFICATE_PASSWORD
-const explicitSignTool = process.env.CODEPILOTX_SIGNTOOL_PATH?.trim()
+const certificate = process.env.PIDEX_WINDOWS_CERTIFICATE_PATH?.trim()
+const password = process.env.PIDEX_WINDOWS_CERTIFICATE_PASSWORD
+const explicitSignTool = process.env.PIDEX_SIGNTOOL_PATH?.trim()
 
 if (!certificate || !existsSync(certificate))
-  throw new Error('Release 构建缺少 CODEPILOTX_WINDOWS_CERTIFICATE_PATH')
-if (!password) throw new Error('Release 构建缺少 CODEPILOTX_WINDOWS_CERTIFICATE_PASSWORD')
+  throw new Error('Release 构建缺少 PIDEX_WINDOWS_CERTIFICATE_PATH')
+if (!password) throw new Error('Release 构建缺少 PIDEX_WINDOWS_CERTIFICATE_PASSWORD')
 if (!existsSync(agent)) throw new Error(`Agent PE 不存在：${agent}`)
 
 const signTool = explicitSignTool || (await findSignTool())
@@ -22,7 +22,7 @@ const sign = Bun.spawn(
     '/td',
     'SHA256',
     '/tr',
-    process.env.CODEPILOTX_TIMESTAMP_URL ?? 'http://timestamp.digicert.com',
+    process.env.PIDEX_TIMESTAMP_URL ?? 'http://timestamp.digicert.com',
     '/f',
     certificate,
     '/p',

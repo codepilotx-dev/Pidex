@@ -57,7 +57,7 @@ function main() {
   }
 
   try {
-    const root = process.env.CODEPILOTX_PROJECT_ROOT ?? DEFAULT_ROOT
+    const root = process.env.PIDEX_PROJECT_ROOT ?? DEFAULT_ROOT
     const rootManifest = JSON.parse(readFileSync(join(root, 'package.json'), 'utf-8')) as {
       version?: unknown
     }

@@ -63,7 +63,7 @@ jobs:
           if (-not $executable) {
             throw "Pidex Desktop.exe was not found in the unpacked package"
           }
-          "CODEPILOTX_PERF_EXECUTABLE=$($executable.FullName)" |
+          "PIDEX_PERF_EXECUTABLE=$($executable.FullName)" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Packaged Electron performance
         run: bun run perf:electron

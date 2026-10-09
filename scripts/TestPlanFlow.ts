@@ -59,15 +59,15 @@ try {
     const token = crypto.randomUUID()
     const agent = startAgentProcess('apps/agent/scripts/PlanSmokeServer.ts', activeChildren, {
       ...process.env,
-      CODEPILOTX_AUTH_TOKEN: token,
-      CODEPILOTX_DATA_DIR: agentDataDir,
-      CODEPILOTX_DOCUMENTS_DIR: documentsDir,
-      CODEPILOTX_LOG_DIR: join(isolatedRoot, 'agent-logs'),
-      CODEPILOTX_DESKTOP_MANAGED: '1',
-      CODEPILOTX_PORT: '0',
-      CODEPILOTX_PLAN_SMOKE_LIVE: live ? '1' : '0',
+      PIDEX_AUTH_TOKEN: token,
+      PIDEX_DATA_DIR: agentDataDir,
+      PIDEX_DOCUMENTS_DIR: documentsDir,
+      PIDEX_LOG_DIR: join(isolatedRoot, 'agent-logs'),
+      PIDEX_DESKTOP_MANAGED: '1',
+      PIDEX_PORT: '0',
+      PIDEX_PLAN_SMOKE_LIVE: live ? '1' : '0',
       ...(live ? {} : { OPENAI_API_KEY: 'pidex-plan-smoke-not-a-real-key' }),
-      CODEPILOTX_STATIC_DIR: join(repositoryRoot, 'dist', 'renderer'),
+      PIDEX_STATIC_DIR: join(repositoryRoot, 'dist', 'renderer'),
       NO_PROXY: '127.0.0.1,localhost,::1',
       no_proxy: '127.0.0.1,localhost,::1',
     })
@@ -86,12 +86,12 @@ try {
     )
     await runBun(['run', '--cwd', 'apps/desktop/electron', 'test:plan'], activeChildren, {
       ...process.env,
-      CODEPILOTX_AGENT_URL: origin,
-      CODEPILOTX_AUTH_TOKEN: token,
-      CODEPILOTX_DATA_DIR: agentDataDir,
-      CODEPILOTX_PLAN_SMOKE_ROOT: isolatedRoot,
-      CODEPILOTX_PLAN_SMOKE_LIVE: live ? '1' : '0',
-      CODEPILOTX_PLAYWRIGHT_OUTPUT_DIR: join(isolatedRoot, 'playwright'),
+      PIDEX_AGENT_URL: origin,
+      PIDEX_AUTH_TOKEN: token,
+      PIDEX_DATA_DIR: agentDataDir,
+      PIDEX_PLAN_SMOKE_ROOT: isolatedRoot,
+      PIDEX_PLAN_SMOKE_LIVE: live ? '1' : '0',
+      PIDEX_PLAYWRIGHT_OUTPUT_DIR: join(isolatedRoot, 'playwright'),
       NO_PROXY: '127.0.0.1,localhost,::1',
       no_proxy: '127.0.0.1,localhost,::1',
     })
@@ -112,7 +112,7 @@ try {
 
 async function prepareLiveProfile(targetDataDir: string): Promise<void> {
   const sourceDataDir = resolve(
-    process.env.CODEPILOTX_PLAN_LIVE_SOURCE_DIR?.trim() || join(homedir(), '.codepilotx'),
+    process.env.PIDEX_PLAN_LIVE_SOURCE_DIR?.trim() || join(homedir(), '.pidex'),
   )
   const sourceProfile = join(sourceDataDir, 'profile.sqlite')
   const sourceConfig = join(sourceDataDir, 'config.json')

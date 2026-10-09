@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { prepareVisualTheme, waitForVisualPage } from './VisualTestHelpers.js'
 
-const THEME_STORAGE_KEY = 'codepilotx.desktop.appearance.v6'
+const THEME_STORAGE_KEY = 'pidex.desktop.appearance.v6'
 
 test('theme font inputs preserve rapid edits and keyboard semantics', async ({ page }) => {
   await prepareVisualTheme(page, 'dark')

@@ -418,7 +418,7 @@ async function launchDesktop(
   userDataDirectory: string,
   logDirectory: string,
 ): Promise<ElectronApplication> {
-  const packagedExecutable = process.env.CODEPILOTX_SMOKE_EXECUTABLE?.trim()
+  const packagedExecutable = process.env.PIDEX_SMOKE_EXECUTABLE?.trim()
   return electron.launch({
     ...(packagedExecutable
       ? { executablePath: resolve(packagedExecutable), args: [] }
@@ -426,11 +426,11 @@ async function launchDesktop(
     cwd: repositoryRoot,
     env: {
       ...process.env,
-      CODEPILOTX_BUN_PATH: resolveBunExecutable(),
-      CODEPILOTX_USER_DATA_DIR: userDataDirectory,
-      CODEPILOTX_DATA_DIR: join(userDataDirectory, 'agent-home'),
-      CODEPILOTX_LOG_DIR: logDirectory,
-      CODEPILOTX_STATIC_DIR: rendererDist,
+      PIDEX_BUN_PATH: resolveBunExecutable(),
+      PIDEX_USER_DATA_DIR: userDataDirectory,
+      PIDEX_DATA_DIR: join(userDataDirectory, 'agent-home'),
+      PIDEX_LOG_DIR: logDirectory,
+      PIDEX_STATIC_DIR: rendererDist,
       NO_PROXY: '127.0.0.1,localhost,::1',
       no_proxy: '127.0.0.1,localhost,::1',
     },
@@ -487,8 +487,8 @@ async function expectHostContract(page: Page): Promise<void> {
 }
 
 function resolveBunExecutable(): string {
-  if (process.env.CODEPILOTX_BUN_PATH) {
-    return process.env.CODEPILOTX_BUN_PATH
+  if (process.env.PIDEX_BUN_PATH) {
+    return process.env.PIDEX_BUN_PATH
   }
   const output = execFileSync('where.exe', ['bun'], {
     encoding: 'utf8',

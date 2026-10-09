@@ -44,7 +44,7 @@ describe('release run context', () => {
         ]) {
           expect(existsSync(directory)).toBe(true)
         }
-        expect(existsSync(join(context.root, '.codepilotx-release-ownership.json'))).toBe(true)
+        expect(existsSync(join(context.root, '.pidex-release-ownership.json'))).toBe(true)
       }
       await disposeReleaseRunContext(first.root, { ...options, runnerTemp })
       await disposeReleaseRunContext(second.root, { ...options, runnerTemp })
@@ -71,7 +71,7 @@ describe('release run context', () => {
     const runnerTemp = await freshRunnerTemp()
     try {
       const context = await createReleaseRunContext({ ...options, runnerTemp })
-      const markerPath = join(context.root, '.codepilotx-release-ownership.json')
+      const markerPath = join(context.root, '.pidex-release-ownership.json')
       const marker = JSON.parse(await readFile(markerPath, 'utf8')) as Record<string, unknown>
 
       await writeFile(markerPath, JSON.stringify({ ...marker, repository: 'other/repo' }), 'utf8')
@@ -90,13 +90,10 @@ describe('release run context', () => {
       ).rejects.toThrow('run attempt 不匹配')
 
       await writeFile(markerPath, JSON.stringify(marker), 'utf8')
-      const renamed = join(
-        runnerTemp,
-        'codepilotx-release-42-1-00000000-0000-0000-0000-000000000000',
-      )
+      const renamed = join(runnerTemp, 'pidex-release-42-1-00000000-0000-0000-0000-000000000000')
       await mkdir(renamed)
       await writeFile(
-        join(renamed, '.codepilotx-release-ownership.json'),
+        join(renamed, '.pidex-release-ownership.json'),
         JSON.stringify(marker),
         'utf8',
       )

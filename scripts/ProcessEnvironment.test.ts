@@ -6,17 +6,17 @@ describe('发布进程环境', () => {
     expect(
       mergeProcessEnvironment(
         {
-          codepilotx_agent_url: 'http://runner.invalid',
+          pidex_agent_url: 'http://runner.invalid',
           Path: 'runner-path',
           KEEP: 'yes',
         },
         {
-          CODEPILOTX_AGENT_URL: undefined,
+          PIDEX_AGENT_URL: undefined,
           PATH: 'release-path',
         },
       ),
     ).toEqual({
-      CODEPILOTX_AGENT_URL: undefined,
+      PIDEX_AGENT_URL: undefined,
       PATH: 'release-path',
       KEEP: 'yes',
     })
@@ -26,8 +26,8 @@ describe('发布进程环境', () => {
     expect(
       createIsolatedProcessEnvironment(
         {
-          codepilotx_agent_url: 'http://runner.invalid',
-          CodePilotX_Static_Dir: 'runner-static',
+          pidex_agent_url: 'http://runner.invalid',
+          Pidex_Static_Dir: 'runner-static',
           GITHUB_EVENT_PATH: 'event.json',
           Runner_Temp: 'runner-temp',
           ACTIONS_CACHE_URL: 'https://cache.invalid',
@@ -35,14 +35,14 @@ describe('发布进程环境', () => {
           KEEP: 'yes',
         },
         {
-          CODEPILOTX_AUTH_TOKEN: 'smoke-token',
-          CODEPILOTX_DATA_DIR: 'smoke-data',
+          PIDEX_AUTH_TOKEN: 'smoke-token',
+          PIDEX_DATA_DIR: 'smoke-data',
         },
       ),
     ).toEqual({
       KEEP: 'yes',
-      CODEPILOTX_AUTH_TOKEN: 'smoke-token',
-      CODEPILOTX_DATA_DIR: 'smoke-data',
+      PIDEX_AUTH_TOKEN: 'smoke-token',
+      PIDEX_DATA_DIR: 'smoke-data',
     })
   })
 })

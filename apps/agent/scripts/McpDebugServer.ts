@@ -15,7 +15,7 @@ const MAX_CALLS = 200
 const MAX_CHANNELS = 32
 const MAX_STATE_BYTES = 1024 * 1024
 const MAX_TEXT_BYTES = 16 * 1024
-const DIAGNOSTIC_CONTEXT_KEY = 'com.codepilotx/diagnostic-context'
+const DIAGNOSTIC_CONTEXT_KEY = 'com.pidex/diagnostic-context'
 
 type DebugTransport = 'stdio' | 'http'
 

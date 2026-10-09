@@ -13,10 +13,10 @@ import {
 } from './PlanSmokeFixture'
 
 const dataDir = await mkdtemp(join(tmpdir(), 'pidex-pi-rpc-'))
-const priorDataDir = process.env.CODEPILOTX_DATA_DIR
-const priorDesktopManaged = process.env.CODEPILOTX_DESKTOP_MANAGED
-process.env.CODEPILOTX_DATA_DIR = dataDir
-process.env.CODEPILOTX_DESKTOP_MANAGED = '1'
+const priorDataDir = process.env.PIDEX_DATA_DIR
+const priorDesktopManaged = process.env.PIDEX_DESKTOP_MANAGED
+process.env.PIDEX_DATA_DIR = dataDir
+process.env.PIDEX_DESKTOP_MANAGED = '1'
 
 const fixture = createPlanSmokeModels()
 let runtime:
@@ -37,7 +37,7 @@ try {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
-        ...(connectionId ? { 'x-codepilotx-connection-id': connectionId } : {}),
+        ...(connectionId ? { 'x-pidex-connection-id': connectionId } : {}),
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -71,7 +71,7 @@ try {
     method: 'POST',
     headers: {
       'content-type': 'application/json',
-      'x-codepilotx-connection-id': connectionId,
+      'x-pidex-connection-id': connectionId,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',
@@ -294,12 +294,12 @@ try {
 } finally {
   await runtime?.dispose()
   runtime?.db.close()
-  if (priorDataDir === undefined) delete process.env.CODEPILOTX_DATA_DIR
-  else process.env.CODEPILOTX_DATA_DIR = priorDataDir
+  if (priorDataDir === undefined) delete process.env.PIDEX_DATA_DIR
+  else process.env.PIDEX_DATA_DIR = priorDataDir
   if (priorDesktopManaged === undefined) {
-    delete process.env.CODEPILOTX_DESKTOP_MANAGED
+    delete process.env.PIDEX_DESKTOP_MANAGED
   } else {
-    process.env.CODEPILOTX_DESKTOP_MANAGED = priorDesktopManaged
+    process.env.PIDEX_DESKTOP_MANAGED = priorDesktopManaged
   }
   await rm(dataDir, { recursive: true, force: true }).catch(() => undefined)
 }

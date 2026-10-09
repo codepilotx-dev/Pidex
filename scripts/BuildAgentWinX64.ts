@@ -7,7 +7,6 @@ const agentRoot = resolve(root, 'apps/agent')
 const outputDirectory = resolve(agentRoot, 'dist/x64')
 const output = resolve(outputDirectory, 'pidex-agent.exe')
 const temporaryOutput = `${output}.building.exe`
-const legacyOutput = resolve(agentRoot, 'dist/codepilotx-agent.exe')
 const builtinSkillsSource = resolve(agentRoot, 'resources/skills')
 const builtinSkillsOutput = resolve(outputDirectory, 'skills')
 const builtinPluginsSource = resolve(agentRoot, 'resources/plugins')
@@ -48,7 +47,6 @@ try {
   await cp(builtinPluginsSource, builtinPluginsOutput, { recursive: true })
   await rm(builtinIntegrationsOutput, { recursive: true, force: true })
   await cp(builtinIntegrationsSource, builtinIntegrationsOutput, { recursive: true })
-  await rm(legacyOutput, { force: true })
   console.log(`[Pidex] Agent x64 PE verified: ${output}`)
 } catch (error) {
   await rm(temporaryOutput, { force: true })

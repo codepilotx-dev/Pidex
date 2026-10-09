@@ -69,7 +69,7 @@ async function main() {
       cwd: rendererRoot,
       env: {
         ...process.env,
-        CODEPILOTX_VISUAL_PORT: String(port),
+        PIDEX_VISUAL_PORT: String(port),
       },
       stdio: 'inherit',
       windowsHide: true,

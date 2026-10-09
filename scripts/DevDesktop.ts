@@ -17,8 +17,7 @@ import {
 const root = fileURLToPath(new URL('..', import.meta.url))
 const unavailable = '未发现可用的开发 Agent。请先在另一个终端运行：bun run dev:agent'
 const legacyUnavailable = '检测到旧版开发 Agent。请停止后重新运行：bun run dev:agent'
-const rendererUnavailable =
-  'Renderer 开发服务启动失败。请检查 CODEPILOTX_DEV_RENDERER_PORT 或端口占用。'
+const rendererUnavailable = 'Renderer 开发服务启动失败。请检查 PIDEX_DEV_RENDERER_PORT 或端口占用。'
 type Child = ReturnType<typeof Bun.spawn>
 const children: Child[] = []
 
@@ -74,9 +73,9 @@ async function startRenderer(agentOrigin: string, authToken: string) {
     }
     const rendererOrigin = `http://127.0.0.1:${port}`
     const renderer = spawn([process.execPath, 'run', '--cwd', 'apps/desktop/renderer', 'dev'], {
-      CODEPILOTX_RENDERER_PORT: String(port),
-      CODEPILOTX_AGENT_URL: agentOrigin,
-      CODEPILOTX_AUTH_TOKEN: authToken,
+      PIDEX_RENDERER_PORT: String(port),
+      PIDEX_AGENT_URL: agentOrigin,
+      PIDEX_AUTH_TOKEN: authToken,
     })
     try {
       await waitForRenderer(renderer, rendererOrigin)
@@ -121,16 +120,16 @@ try {
   console.log(`Renderer 已就绪（端口 ${port}，worktree ${instance.shortId}）。`)
   await ensureCuaRuntime()
   const electron = spawn([process.execPath, 'run', '--cwd', 'apps/desktop/electron', 'dev'], {
-    CODEPILOTX_AGENT_URL: runtime.origin,
-    CODEPILOTX_RENDERER_DEV_URL: rendererOrigin,
-    CODEPILOTX_AGENT_MANAGED: '1',
-    CODEPILOTX_AUTH_TOKEN: runtime.authToken,
-    CODEPILOTX_BUN_PATH: process.execPath,
-    CODEPILOTX_DATA_DIR: agentDataDir,
-    CODEPILOTX_USER_DATA_DIR: instance.userDataDir,
-    CODEPILOTX_LOG_DIR: instance.logDir,
-    CODEPILOTX_CONSOLE_LOG: process.env.CODEPILOTX_CONSOLE_LOG ?? 'info',
-    CODEPILOTX_LOG_DETAIL: 'development',
+    PIDEX_AGENT_URL: runtime.origin,
+    PIDEX_RENDERER_DEV_URL: rendererOrigin,
+    PIDEX_AGENT_MANAGED: '1',
+    PIDEX_AUTH_TOKEN: runtime.authToken,
+    PIDEX_BUN_PATH: process.execPath,
+    PIDEX_DATA_DIR: agentDataDir,
+    PIDEX_USER_DATA_DIR: instance.userDataDir,
+    PIDEX_LOG_DIR: instance.logDir,
+    PIDEX_CONSOLE_LOG: process.env.PIDEX_CONSOLE_LOG ?? 'info',
+    PIDEX_LOG_DETAIL: 'development',
   })
   const outcome = await Promise.race([
     electron.exited.then((code) => ({ source: 'Electron', code })),

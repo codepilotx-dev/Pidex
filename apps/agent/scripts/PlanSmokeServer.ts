@@ -4,7 +4,7 @@ import { parse } from 'smol-toml'
 import { createBootstrap } from '../src/Bootstrap'
 import { createPlanSmokeModels, initializePlanSmokeDatabase } from './PlanSmokeFixture'
 
-const live = process.env.CODEPILOTX_PLAN_SMOKE_LIVE === '1'
+const live = process.env.PIDEX_PLAN_SMOKE_LIVE === '1'
 const fixture = live ? null : createPlanSmokeModels()
 let runtime:
   Awaited<ReturnType<typeof Effect.runPromise<ReturnType<typeof createBootstrap>>>> | undefined

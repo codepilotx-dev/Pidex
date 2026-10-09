@@ -91,8 +91,8 @@ export async function assertAuthenticodeValid(
   // 构建链后固定链根 thumbprint 必须等于锚证书，效果等价且全环境可用
   // （pwsh 在本地开发机可能只是 WindowsApps 别名，Bun 无法直接启动）。
   const command = anchor
-    ? "$ErrorActionPreference='Stop'; $paths=ConvertFrom-Json $env:CODEPILOTX_SIGNATURE_PATHS; $anchorThumbprint=$env:CODEPILOTX_TRUST_ANCHOR_THUMBPRINT; foreach($path in $paths){ $signature=Get-AuthenticodeSignature -LiteralPath $path; Write-Output \"$path`t$($signature.Status)\"; if($signature.Status -ne 'Valid' -and $signature.Status -ne 'UnknownError'){ exit 12 }; $chain=New-Object System.Security.Cryptography.X509Certificates.X509Chain; $chain.ChainPolicy.RevocationMode='NoCheck'; $chain.ChainPolicy.VerificationFlags=[System.Security.Cryptography.X509Certificates.X509VerificationFlags]::AllowUnknownCertificateAuthority; $anchorCert=Get-ChildItem \"Cert:\\CurrentUser\\My\\$anchorThumbprint\"; $chain.ChainPolicy.ExtraStore.Add($anchorCert); if(-not $chain.Build($signature.SignerCertificate)){ exit 13 }; $root=$chain.ChainElements[$chain.ChainElements.Count-1].Certificate; if(-not ($root.Thumbprint -eq $anchorThumbprint)){ exit 13 } }"
-    : "$ErrorActionPreference='Stop'; $paths=ConvertFrom-Json $env:CODEPILOTX_SIGNATURE_PATHS; foreach($path in $paths){ $status=(Get-AuthenticodeSignature -LiteralPath $path).Status; Write-Output \"$path`t$status\"; if($status -ne 'Valid'){ exit 12 } }"
+    ? "$ErrorActionPreference='Stop'; $paths=ConvertFrom-Json $env:PIDEX_SIGNATURE_PATHS; $anchorThumbprint=$env:PIDEX_TRUST_ANCHOR_THUMBPRINT; foreach($path in $paths){ $signature=Get-AuthenticodeSignature -LiteralPath $path; Write-Output \"$path`t$($signature.Status)\"; if($signature.Status -ne 'Valid' -and $signature.Status -ne 'UnknownError'){ exit 12 }; $chain=New-Object System.Security.Cryptography.X509Certificates.X509Chain; $chain.ChainPolicy.RevocationMode='NoCheck'; $chain.ChainPolicy.VerificationFlags=[System.Security.Cryptography.X509Certificates.X509VerificationFlags]::AllowUnknownCertificateAuthority; $anchorCert=Get-ChildItem \"Cert:\\CurrentUser\\My\\$anchorThumbprint\"; $chain.ChainPolicy.ExtraStore.Add($anchorCert); if(-not $chain.Build($signature.SignerCertificate)){ exit 13 }; $root=$chain.ChainElements[$chain.ChainElements.Count-1].Certificate; if(-not ($root.Thumbprint -eq $anchorThumbprint)){ exit 13 } }"
+    : "$ErrorActionPreference='Stop'; $paths=ConvertFrom-Json $env:PIDEX_SIGNATURE_PATHS; foreach($path in $paths){ $status=(Get-AuthenticodeSignature -LiteralPath $path).Status; Write-Output \"$path`t$status\"; if($status -ne 'Valid'){ exit 12 } }"
   const environment = Object.fromEntries(
     Object.entries(process.env).filter(([key]) => key.toLowerCase() !== 'psmodulepath'),
   )
@@ -100,8 +100,8 @@ export async function assertAuthenticodeValid(
     cwd: process.cwd(),
     env: {
       ...environment,
-      CODEPILOTX_SIGNATURE_PATHS: JSON.stringify(paths),
-      ...(anchor ? { CODEPILOTX_TRUST_ANCHOR_THUMBPRINT: anchor } : {}),
+      PIDEX_SIGNATURE_PATHS: JSON.stringify(paths),
+      ...(anchor ? { PIDEX_TRUST_ANCHOR_THUMBPRINT: anchor } : {}),
     },
     stdout: 'inherit',
     stderr: 'inherit',
@@ -145,11 +145,11 @@ export async function verifyPackagedAgentRuntime(
     cwd: isolatedRoot,
     env: {
       ...process.env,
-      CODEPILOTX_AUTH_TOKEN: token,
-      CODEPILOTX_DATA_DIR: join(isolatedRoot, 'data'),
-      CODEPILOTX_LOG_DIR: join(isolatedRoot, 'logs'),
-      CODEPILOTX_DESKTOP_MANAGED: '1',
-      CODEPILOTX_PORT: '0',
+      PIDEX_AUTH_TOKEN: token,
+      PIDEX_DATA_DIR: join(isolatedRoot, 'data'),
+      PIDEX_LOG_DIR: join(isolatedRoot, 'logs'),
+      PIDEX_DESKTOP_MANAGED: '1',
+      PIDEX_PORT: '0',
       NO_PROXY: '127.0.0.1,localhost,::1',
       no_proxy: '127.0.0.1,localhost,::1',
       ...options.extraEnv,
@@ -207,7 +207,7 @@ async function assertPackagedRpcCatalogs(
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
-        ...(connectionId ? { 'x-codepilotx-connection-id': connectionId } : {}),
+        ...(connectionId ? { 'x-pidex-connection-id': connectionId } : {}),
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -244,7 +244,7 @@ async function assertPackagedRpcCatalogs(
     headers: {
       authorization: `Bearer ${token}`,
       'content-type': 'application/json',
-      'x-codepilotx-connection-id': connectionId,
+      'x-pidex-connection-id': connectionId,
     },
     body: JSON.stringify({
       jsonrpc: '2.0',

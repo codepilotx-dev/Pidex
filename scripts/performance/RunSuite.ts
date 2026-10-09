@@ -31,7 +31,7 @@ async function runBatch(batch: number): Promise<void> {
     cwd: repositoryRoot,
     env: {
       ...process.env,
-      CODEPILOTX_PERF_BATCH: String(batch),
+      PIDEX_PERF_BATCH: String(batch),
     },
     stderr: 'inherit',
     stdout: 'inherit',
@@ -45,7 +45,7 @@ async function runBatch(batch: number): Promise<void> {
       cwd: repositoryRoot,
       env: {
         ...process.env,
-        CODEPILOTX_PERF_BATCH: String(batch),
+        PIDEX_PERF_BATCH: String(batch),
       },
       stderr: 'inherit',
       stdout: 'inherit',

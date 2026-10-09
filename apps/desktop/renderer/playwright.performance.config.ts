@@ -36,7 +36,7 @@ export default defineConfig({
     command:
       'bunx vite build --mode performance && bunx vite preview --host 127.0.0.1 --port 47174 --strictPort',
     cwd: rendererRoot,
-    reuseExistingServer: process.env.CODEPILOTX_PERFORMANCE_REUSE_SERVER === '1',
+    reuseExistingServer: process.env.PIDEX_PERFORMANCE_REUSE_SERVER === '1',
     timeout: 120_000,
     url: 'http://127.0.0.1:47174',
   },

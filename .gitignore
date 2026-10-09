@@ -21,6 +21,7 @@ dist-ssr
 *.crt
 *.p12
 *.pfx
+.pidex
 .codepilotx
 data
 release

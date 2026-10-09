@@ -19,7 +19,7 @@ import { basename, join, normalize, resolve } from 'node:path'
 
 export const RELEASE_RUN_CONTEXT_SCHEMA_VERSION = 1 as const
 export const RELEASE_RUN_REPOSITORY = 'codepilotx-dev/Pidex' as const
-export const RELEASE_RUN_PREFIX = 'codepilotx-release' as const
+export const RELEASE_RUN_PREFIX = 'pidex-release' as const
 
 const RETRYABLE_REMOVE_CODES = new Set(['EBUSY', 'EPERM', 'ENOTEMPTY'])
 
@@ -108,7 +108,7 @@ function assertRepository(repository: string): void {
 }
 
 function markerPath(root: string): string {
-  return join(root, '.codepilotx-release-ownership.json')
+  return join(root, '.pidex-release-ownership.json')
 }
 
 export function releaseRunRootName(runId: string, runAttempt: string, uuid: string): string {
@@ -282,24 +282,24 @@ async function main(): Promise<void> {
   if (command === 'create') {
     const context = await createReleaseRunContext()
     // 隔离后续步骤的 TEMP/APPDATA/LOCALAPPDATA 与 Agent 数据目录，
-    // 并显式清除继承的 CODEPILOTX_AGENT_URL、旧测试端口和旧 smoke 数据目录。
+    // 并显式清除继承的 PIDEX_AGENT_URL、旧测试端口和旧 smoke 数据目录。
     appendGithubEnvironment([
-      ['CODEPILOTX_RELEASE_RUN_ROOT', context.root],
+      ['PIDEX_RELEASE_RUN_ROOT', context.root],
       ['TEMP', context.temp],
       ['TMP', context.temp],
       ['APPDATA', context.appData],
       ['LOCALAPPDATA', context.localAppData],
-      ['CODEPILOTX_USER_DATA_DIR', context.userData],
-      ['CODEPILOTX_DATA_DIR', context.data],
-      ['CODEPILOTX_LOG_DIR', context.logs],
-      ['CODEPILOTX_AGENT_URL', ''],
-      ['CODEPILOTX_PORT', ''],
+      ['PIDEX_USER_DATA_DIR', context.userData],
+      ['PIDEX_DATA_DIR', context.data],
+      ['PIDEX_LOG_DIR', context.logs],
+      ['PIDEX_AGENT_URL', ''],
+      ['PIDEX_PORT', ''],
     ])
     console.log(JSON.stringify(context, null, 2))
     return
   }
   if (command === 'dispose') {
-    const root = process.env.CODEPILOTX_RELEASE_RUN_ROOT
+    const root = process.env.PIDEX_RELEASE_RUN_ROOT
     if (!root || !existsSync(resolve(root))) {
       console.log('[Pidex] No release run context to dispose')
       return

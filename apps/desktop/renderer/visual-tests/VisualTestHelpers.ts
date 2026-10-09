@@ -1,7 +1,7 @@
 import { expect, type Page } from '@playwright/test'
 
 export const VISUAL_MODES = ['light', 'dark'] as const
-export const V6_VISUAL_BASELINES_ENABLED = process.env.CODEPILOTX_VISUAL_BASELINES_V6 === '1'
+export const V6_VISUAL_BASELINES_ENABLED = process.env.PIDEX_VISUAL_BASELINES_V6 === '1'
 
 export type VisualMode = (typeof VISUAL_MODES)[number]
 
@@ -58,7 +58,7 @@ export async function prepareVisualTheme(
         surface: '#111111',
       }
       localStorage.setItem(
-        'codepilotx.desktop.appearance.v6',
+        'pidex.desktop.appearance.v6',
         JSON.stringify({
           version: 6,
           mode: selectedMode,

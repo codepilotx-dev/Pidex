@@ -21,7 +21,7 @@ export async function recordRendererSample(
   sample: number,
   metrics: Record<string, number>,
 ): Promise<void> {
-  const batch = Math.max(1, Number.parseInt(process.env.CODEPILOTX_PERF_BATCH ?? '1', 10) || 1)
+  const batch = Math.max(1, Number.parseInt(process.env.PIDEX_PERF_BATCH ?? '1', 10) || 1)
   const value: PerformanceSample = {
     batch,
     environment: {

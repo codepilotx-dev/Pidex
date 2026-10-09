@@ -4,9 +4,7 @@ import { lstat, mkdir, open, readFile, rename, rm } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join, normalize, resolve } from 'node:path'
 
-export const agentDataDir = resolve(
-  process.env.CODEPILOTX_DATA_DIR?.trim() || join(homedir(), '.codepilotx'),
-)
+export const agentDataDir = resolve(process.env.PIDEX_DATA_DIR?.trim() || join(homedir(), '.pidex'))
 export const runtimeDir = join(agentDataDir, 'runtime')
 export const runtimeFile = join(runtimeDir, 'dev-agent-v2.json')
 export const legacyRuntimeFile = join(runtimeDir, 'dev-agent-v1.json')
@@ -334,7 +332,7 @@ export function createWorktreeInstance(path: string, dataDir = agentDataDir) {
   }
 }
 
-export function configuredRendererPort(value = process.env.CODEPILOTX_DEV_RENDERER_PORT) {
+export function configuredRendererPort(value = process.env.PIDEX_DEV_RENDERER_PORT) {
   const configured = value?.trim()
   if (!configured) return undefined
   const port = Number(configured)

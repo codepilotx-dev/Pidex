@@ -13,10 +13,10 @@ import {
 const repositoryRoot = resolve(import.meta.dirname, '../../../..')
 const electronRoot = resolve(repositoryRoot, 'apps/desktop/electron')
 const rendererDist = resolve(repositoryRoot, 'dist/renderer')
-const isolatedRoot = requiredEnvironment('CODEPILOTX_PLAN_SMOKE_ROOT')
-const agentOrigin = requiredEnvironment('CODEPILOTX_AGENT_URL')
-const authToken = requiredEnvironment('CODEPILOTX_AUTH_TOKEN')
-const live = process.env.CODEPILOTX_PLAN_SMOKE_LIVE === '1'
+const isolatedRoot = requiredEnvironment('PIDEX_PLAN_SMOKE_ROOT')
+const agentOrigin = requiredEnvironment('PIDEX_AGENT_URL')
+const authToken = requiredEnvironment('PIDEX_AUTH_TOKEN')
+const live = process.env.PIDEX_PLAN_SMOKE_LIVE === '1'
 
 test.describe('Plan 桌面全流程', () => {
   let application: ElectronApplication | undefined
@@ -152,13 +152,13 @@ async function launchDesktop(): Promise<ElectronApplication> {
     cwd: repositoryRoot,
     env: {
       ...process.env,
-      CODEPILOTX_AGENT_URL: agentOrigin,
-      CODEPILOTX_AUTH_TOKEN: authToken,
-      CODEPILOTX_BUN_PATH: resolveBunExecutable(),
-      CODEPILOTX_USER_DATA_DIR: userDataDirectory,
-      CODEPILOTX_DATA_DIR: join(isolatedRoot, 'agent'),
-      CODEPILOTX_LOG_DIR: logDirectory,
-      CODEPILOTX_STATIC_DIR: rendererDist,
+      PIDEX_AGENT_URL: agentOrigin,
+      PIDEX_AUTH_TOKEN: authToken,
+      PIDEX_BUN_PATH: resolveBunExecutable(),
+      PIDEX_USER_DATA_DIR: userDataDirectory,
+      PIDEX_DATA_DIR: join(isolatedRoot, 'agent'),
+      PIDEX_LOG_DIR: logDirectory,
+      PIDEX_STATIC_DIR: rendererDist,
       NO_PROXY: '127.0.0.1,localhost,::1',
       no_proxy: '127.0.0.1,localhost,::1',
     },
@@ -182,8 +182,8 @@ function requiredEnvironment(name: string): string {
 }
 
 function resolveBunExecutable(): string {
-  if (process.env.CODEPILOTX_BUN_PATH) {
-    return process.env.CODEPILOTX_BUN_PATH
+  if (process.env.PIDEX_BUN_PATH) {
+    return process.env.PIDEX_BUN_PATH
   }
   const output = execFileSync('where.exe', ['bun'], {
     encoding: 'utf8',

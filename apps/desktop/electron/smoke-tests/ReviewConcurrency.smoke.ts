@@ -19,9 +19,9 @@ import {
 const repositoryRoot = resolve(import.meta.dirname, '../../../..')
 const electronRoot = resolve(repositoryRoot, 'apps/desktop/electron')
 const rendererDist = resolve(repositoryRoot, 'dist/renderer')
-const isolatedRoot = requiredEnvironment('CODEPILOTX_REVIEW_CONCURRENCY_ROOT')
-const agentOrigin = requiredEnvironment('CODEPILOTX_AGENT_URL')
-const authToken = requiredEnvironment('CODEPILOTX_AUTH_TOKEN')
+const isolatedRoot = requiredEnvironment('PIDEX_REVIEW_CONCURRENCY_ROOT')
+const agentOrigin = requiredEnvironment('PIDEX_AGENT_URL')
+const authToken = requiredEnvironment('PIDEX_AUTH_TOKEN')
 const releaseFileName = '.review-concurrency-release'
 const totalThreadCount = 30
 const historicalTurnCount = 500
@@ -269,7 +269,7 @@ test.describe('真实 Agent/Electron 并发 Review', () => {
       panel: rightPanel,
       deltaX: 96,
       deltaY: 0,
-      storageKey: 'codepilotx.desktop.rightDockWidthRatio.v2',
+      storageKey: 'pidex.desktop.rightDockWidthRatio.v2',
     })
     await markInteractionPhase(page, 'right-drag-end')
     expect(rightResize.liveSize.width).toBeLessThan(rightPanelBox.width - 64)
@@ -324,7 +324,7 @@ test.describe('真实 Agent/Electron 并发 Review', () => {
       panel: bottomPanel,
       deltaX: 0,
       deltaY: -88,
-      storageKey: 'codepilotx.desktop.bottomPanelHeightRatio.v3',
+      storageKey: 'pidex.desktop.bottomPanelHeightRatio.v3',
     })
     await markInteractionPhase(page, 'bottom-drag-end')
     expect(bottomResize.liveSize.height).toBeGreaterThan(bottomPanelBox.height + 56)
@@ -334,8 +334,8 @@ test.describe('真实 Agent/Electron 并发 Review', () => {
     await rm(join(workspaceRoot, releaseFileName))
     const interaction = await stopInteractionProbe(page)
     const layoutStorageWrites = await stopLayoutStorageProbe(page)
-    expect(layoutStorageWrites['codepilotx.desktop.rightDockWidthRatio.v2']).toBe(1)
-    expect(layoutStorageWrites['codepilotx.desktop.bottomPanelHeightRatio.v3']).toBe(1)
+    expect(layoutStorageWrites['pidex.desktop.rightDockWidthRatio.v2']).toBe(1)
+    expect(layoutStorageWrites['pidex.desktop.bottomPanelHeightRatio.v3']).toBe(1)
 
     await refreshReviewAfterDrag(rpc, project.project.id)
     await page.reload()
@@ -531,13 +531,13 @@ async function launchDesktop(
     cwd: repositoryRoot,
     env: {
       ...process.env,
-      CODEPILOTX_AGENT_URL: agentOrigin,
-      CODEPILOTX_AUTH_TOKEN: authToken,
-      CODEPILOTX_BUN_PATH: resolveBunExecutable(),
-      CODEPILOTX_USER_DATA_DIR: join(isolatedRoot, userDataDirectory),
-      CODEPILOTX_DATA_DIR: join(isolatedRoot, 'agent'),
-      CODEPILOTX_LOG_DIR: join(isolatedRoot, 'desktop-logs'),
-      CODEPILOTX_STATIC_DIR: rendererDist,
+      PIDEX_AGENT_URL: agentOrigin,
+      PIDEX_AUTH_TOKEN: authToken,
+      PIDEX_BUN_PATH: resolveBunExecutable(),
+      PIDEX_USER_DATA_DIR: join(isolatedRoot, userDataDirectory),
+      PIDEX_DATA_DIR: join(isolatedRoot, 'agent'),
+      PIDEX_LOG_DIR: join(isolatedRoot, 'desktop-logs'),
+      PIDEX_STATIC_DIR: rendererDist,
       NO_PROXY: '127.0.0.1,localhost,::1',
       no_proxy: '127.0.0.1,localhost,::1',
     },
@@ -716,8 +716,8 @@ async function startLayoutStorageProbe(currentPage: Page): Promise<void> {
     Storage.prototype.setItem = function setItem(key: string, value: string): void {
       if (
         this === window.localStorage &&
-        (key === 'codepilotx.desktop.rightDockWidthRatio.v2' ||
-          key === 'codepilotx.desktop.bottomPanelHeightRatio.v3')
+        (key === 'pidex.desktop.rightDockWidthRatio.v2' ||
+          key === 'pidex.desktop.bottomPanelHeightRatio.v3')
       ) {
         writes[key] = (writes[key] ?? 0) + 1
       }
@@ -1045,7 +1045,7 @@ async function createRpcClient(origin: string, token: string): Promise<RpcClient
       headers: {
         authorization: `Bearer ${token}`,
         'content-type': 'application/json',
-        ...(connectionId ? { 'x-codepilotx-connection-id': connectionId } : {}),
+        ...(connectionId ? { 'x-pidex-connection-id': connectionId } : {}),
       },
       body: JSON.stringify({
         jsonrpc: '2.0',
@@ -1159,8 +1159,8 @@ function requiredEnvironment(name: string): string {
 }
 
 function resolveBunExecutable(): string {
-  if (process.env.CODEPILOTX_BUN_PATH) {
-    return process.env.CODEPILOTX_BUN_PATH
+  if (process.env.PIDEX_BUN_PATH) {
+    return process.env.PIDEX_BUN_PATH
   }
   const output = execFileSync('where.exe', ['bun'], {
     encoding: 'utf8',

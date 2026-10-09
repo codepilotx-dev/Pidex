@@ -127,7 +127,7 @@ describe('开发 Agent runtime 描述', () => {
     try {
       const child = Bun.spawn([process.execPath, '-e', script], {
         cwd: new URL('..', import.meta.url).pathname.slice(1),
-        env: { ...process.env, CODEPILOTX_DATA_DIR: dataDir },
+        env: { ...process.env, PIDEX_DATA_DIR: dataDir },
         stdout: 'pipe',
         stderr: 'pipe',
       })
@@ -185,7 +185,7 @@ describe('开发 Agent runtime 描述', () => {
       try {
         const child = Bun.spawn([process.execPath, '-e', script], {
           cwd: new URL('..', import.meta.url).pathname.slice(1),
-          env: { ...process.env, CODEPILOTX_DATA_DIR: dataDir },
+          env: { ...process.env, PIDEX_DATA_DIR: dataDir },
           stdout: 'pipe',
           stderr: 'pipe',
         })
@@ -222,7 +222,7 @@ describe('开发 Agent runtime 描述', () => {
       await writeFile(descriptorPath, JSON.stringify(descriptor), 'utf8')
       const child = Bun.spawn([process.execPath, 'run', 'scripts/DevAgent.ts'], {
         cwd: new URL('..', import.meta.url).pathname.slice(1),
-        env: { ...process.env, CODEPILOTX_DATA_DIR: dataDir },
+        env: { ...process.env, PIDEX_DATA_DIR: dataDir },
         stdout: 'pipe',
         stderr: 'pipe',
       })
@@ -280,11 +280,11 @@ describe('独立开发启动命令', () => {
   test('Agent 与 Desktop launcher 的进程所有权和 origin 相互独立', async () => {
     const agent = await readFile(new URL('./DevAgent.ts', import.meta.url), 'utf8')
     const desktop = await readFile(new URL('./DevDesktop.ts', import.meta.url), 'utf8')
-    expect(agent).toContain('CODEPILOTX_SIDECAR_INSTANCE_TOKEN: instanceToken')
-    expect(agent).not.toContain('CODEPILOTX_RENDERER_DEV_URL')
-    expect(desktop).toMatch(/CODEPILOTX_AGENT_MANAGED:\s*['"]1['"]/)
-    expect(desktop).toContain('CODEPILOTX_RENDERER_DEV_URL: rendererOrigin')
-    expect(desktop).toContain('CODEPILOTX_USER_DATA_DIR: instance.userDataDir')
+    expect(agent).toContain('PIDEX_SIDECAR_INSTANCE_TOKEN: instanceToken')
+    expect(agent).not.toContain('PIDEX_RENDERER_DEV_URL')
+    expect(desktop).toMatch(/PIDEX_AGENT_MANAGED:\s*['"]1['"]/)
+    expect(desktop).toContain('PIDEX_RENDERER_DEV_URL: rendererOrigin')
+    expect(desktop).toContain('PIDEX_USER_DATA_DIR: instance.userDataDir')
     expect(desktop).not.toContain('/api/shutdown')
     expect(desktop).not.toContain('apps/agent/src/index.ts')
   })
@@ -294,7 +294,7 @@ describe('独立开发启动命令', () => {
     try {
       const child = Bun.spawn([process.execPath, 'run', 'scripts/DevDesktop.ts'], {
         cwd: new URL('..', import.meta.url).pathname.slice(1),
-        env: { ...process.env, CODEPILOTX_DATA_DIR: dataDir },
+        env: { ...process.env, PIDEX_DATA_DIR: dataDir },
         stdout: 'pipe',
         stderr: 'pipe',
       })
@@ -336,7 +336,7 @@ describe('独立开发启动命令', () => {
       await writeFile(descriptorPath, JSON.stringify(descriptor), 'utf8')
       const child = Bun.spawn([process.execPath, 'run', 'scripts/DevDesktop.ts'], {
         cwd: new URL('..', import.meta.url).pathname.slice(1),
-        env: { ...process.env, CODEPILOTX_DATA_DIR: dataDir },
+        env: { ...process.env, PIDEX_DATA_DIR: dataDir },
         stdout: 'pipe',
         stderr: 'pipe',
       })

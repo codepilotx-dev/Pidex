@@ -457,7 +457,7 @@ async function openVisualFixture(
 ): Promise<void> {
   await page.setViewportSize({ width: 1366, height: 768 })
   await prepareVisualTheme(page, 'light', { reduceMotion: motion })
-  const visualPort = process.env.CODEPILOTX_VISUAL_PORT?.trim() || '47173'
+  const visualPort = process.env.PIDEX_VISUAL_PORT?.trim() || '47173'
   const fixtureURL = `http://127.0.0.1:${visualPort}/?visualCase=${visualCase}#/threads/visual-${visualCase}`
   await page.evaluate((url) => {
     window.location.assign(url)

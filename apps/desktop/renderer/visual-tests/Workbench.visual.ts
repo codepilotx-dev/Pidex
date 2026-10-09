@@ -1682,7 +1682,7 @@ test('narrow file panel keeps the editor and file tree side by side', async ({ p
     target.__fileTreeViewWrites = 0
     const original = Storage.prototype.setItem
     Storage.prototype.setItem = function setItem(key, value) {
-      if (key.startsWith('codepilotx.desktop.fileTreeView:')) {
+      if (key.startsWith('pidex.desktop.fileTreeView:')) {
         target.__fileTreeViewWrites = (target.__fileTreeViewWrites ?? 0) + 1
       }
       return original.call(this, key, value)
@@ -1785,7 +1785,7 @@ test('wide workspace keeps the summary beside a 600px review panel', async ({ pa
   })
   await page.addInitScript(
     ({ ratio }) => {
-      localStorage.setItem('codepilotx.desktop.rightDockWidthRatio.v2', String(ratio))
+      localStorage.setItem('pidex.desktop.rightDockWidthRatio.v2', String(ratio))
     },
     {
       ratio: 600 / (viewport.width - 275 - 1),
@@ -4125,7 +4125,7 @@ test('Dracula code theme applies the recovered Codex runtime hierarchy', async (
       composer: '#373843',
     })
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem('codepilotx.desktop.appearance.v6')))
+    .poll(() => page.evaluate(() => localStorage.getItem('pidex.desktop.appearance.v6')))
     .toContain('"dracula"')
 
   await page.reload()
@@ -4754,7 +4754,7 @@ for (const mode of MODES) {
     await expect
       .poll(() =>
         page.evaluate(() => {
-          const raw = localStorage.getItem('codepilotx.desktop.appearance.v6')
+          const raw = localStorage.getItem('pidex.desktop.appearance.v6')
           return raw ? JSON.parse(raw).mode : null
         }),
       )

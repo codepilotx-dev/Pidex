@@ -7,7 +7,7 @@ import {
   waitForVisualPage,
 } from './VisualTestHelpers.js'
 
-const THEME_STORAGE_KEY = 'codepilotx.desktop.appearance.v6'
+const THEME_STORAGE_KEY = 'pidex.desktop.appearance.v6'
 
 const MOCK_FONTS = [
   { family: 'Inter', fullName: 'Inter Regular', postscriptName: 'Inter-Regular', style: 'Regular' },

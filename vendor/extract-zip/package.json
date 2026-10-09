@@ -1,7 +1,7 @@
 {
   "name": "extract-zip",
-  "version": "2.0.2-codepilotx.1",
-  "description": "CodePilotX-maintained security fix for extract-zip 2.0.1",
+  "version": "2.0.2-pidex.1",
+  "description": "Pidex-maintained security fix for extract-zip 2.0.1",
   "main": "index.js",
   "types": "index.d.ts",
   "bin": {
