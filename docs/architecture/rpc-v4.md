@@ -84,7 +84,6 @@ encode results. They do not perform business mutations directly.
 - JSON-RPC wire messages keep `jsonrpc: "2.0"`.
 - The product protocol is identified as `thread-rpc-v4`.
 - The v3 WebSocket endpoint is `/rpc/ws`.
-- WebSocket advertises subprotocol `codepilotx.thread-rpc.v4`.
 - Every connection must complete `initialize` and then `initialized` before any
   non-initialization call, subscription, or server request.
 - `initialize` exchanges client identity, supported protocol versions, and

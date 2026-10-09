@@ -68,8 +68,8 @@ bun run debug:mcp:config:oauth
 HTTP Bearer 认证只从宿主环境变量读取，避免 token 出现在命令行和日志中：
 
 ```powershell
-$env:CODEPILOTX_DEBUG_MCP_TOKEN = "replace-me"
-bun apps/agent/scripts/McpDebugServer.ts --transport=http --auth-token-env=CODEPILOTX_DEBUG_MCP_TOKEN
+$env:PIDEX_DEBUG_MCP_TOKEN = "replace-me"
+bun apps/agent/scripts/McpDebugServer.ts --transport=http --auth-token-env=PIDEX_DEBUG_MCP_TOKEN
 ```
 
 配置时使用 HTTP transport 的 `bearerTokenEnvVar` 引用同一环境变量。默认日志只写入

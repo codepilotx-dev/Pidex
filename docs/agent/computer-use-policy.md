@@ -5,8 +5,10 @@
 
 ## 管理员策略
 
-Agent 只读 `%ProgramData%\CodePilotX\requirements.toml`，不会创建或修改它。
+Agent 只读 `%ProgramData%\Pidex\requirements.toml`，不会创建或修改它。
 部署者应让 Administrators 和 SYSTEM 拥有写权限，普通用户仅有读取权限，且目录不能被普通用户替换。
+品牌清零后只读取上述新目录：仍放在 `%ProgramData%\CodePilotX\requirements.toml` 的策略不会被读取，
+已部署机器策略的管理员需要在升级前把文件移动到 `%ProgramData%\Pidex\`，否则电脑控制策略会静默失效。
 示例使用原生发现的准确 AUMID 和证书 X.500 发布者名称；不能使用应用显示名或路径作为发布者规则。
 
 ```toml

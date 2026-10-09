@@ -9,7 +9,7 @@
 
 ### Added
 
-- [repo] 补充 Electron 默认 `userData` 路径稳定性契约测试，以及新旧深链（`pidex://` 与 `codepilotx://`）兼容回归测试。
+- [repo] 补充 Electron 默认 `userData` 路径稳定性契约测试，以及品牌标识（数据目录、安装身份、环境变量前缀）的回归测试。
 
 - [agent/desktop] 子 Agent 支持三层递归父子协作、排队后续任务与报告，完成时等待后代结算，停止时回收整个子树；沿用共享工作区、权限上限和持久化恢复。
 
@@ -40,16 +40,21 @@
 
 ### Changed
 
-- [repo/website] 本地 Codex 环境显示名、格式配置注释和官网分享卡片同步使用 Pidex，保留既有数据路径及兼容配置键。
+- [repo/website] 本地 Codex 环境显示名、格式配置注释和官网分享卡片同步使用 Pidex。
 
 - [repo] GitHub 仓库更名为 codepilotx-dev/Pidex，同步官网、文档、安全报告、版本记录、安装包更新地址与 CI 发布身份校验。
 
 - [desktop/website] 品牌标识统一替换为 Pidex 墨绿主标，启动页与 QuickChat 保留主题适配及扫光效果，Windows 应用图标和桌面、官网 favicon 从同一 SVG 导出。
 
+- [release] 发布与自动更新源随 GitHub 仓库改名切换到 `codepilotx-dev/Pidex`：同步发布块 owner／repo、打包校验期望值、release notes 仓库常量与协议 schema、发布工作流的仓库身份守卫、README／贡献／安全文档、官网链接与问题模板；旧名仍由 GitHub 重定向。
 - [repo] 产品统一更名为 Pidex Desktop：根包与 workspace 包改为 `@pidex/*`，自有 TS/TSX/CTS/MTS 模块文件统一为 PascalCase，preload 桥接对象改为 `window.DesktopBridge`，自有类型、主题模块与环境标识移除 CodePilotX/Codex 品牌前缀；安装产物改为 `Pidex Desktop.exe`、`Pidex-Desktop-${version}-${arch}.exe` 与 `pidex-agent.exe`，窗口标题、启动页、菜单、设置、通知与网站文案同步更新。
-- [desktop/agent] 深链新增 `pidex://threads/<id>`，解析与 Windows 协议注册同时支持已有 `codepilotx://` 链接，复用原解析与安全校验。
-- [desktop] Electron 默认 `userData` 固定到改名前的 `%APPDATA%\@codepilotx\desktop-electron`，避免产品名变化导致设置、会话索引与浏览器分区状态失联；显式指定目录的优先级不变。
-- [repo] 保留 SQLite application ID 与 schema、存储格式标识、已有设置键、IPC channel、环境变量、`.codepilotx` 数据/配置目录、安装身份 `com.codepilotx.desktop`；真实 Codex Provider、模型标识、外部命令与第三方署名保持准确。
+- [repo] 自有品牌标识全量清零：数据根与工作区配置目录改为 `.pidex`，环境变量前缀改为 `PIDEX_*`，无项目工作区与记忆目录、`Documents\Pidex`、`ProgramData\Pidex`、凭据库服务、浏览器分区、localStorage 前缀、会话 cookie 与 RPC connection header、凭据与模型缓存格式标识、结果卡与批注格式、git ref 与身份、release 运行前缀、桌面依赖偏好设置键、原生运行时清单身份与 profile 库 ownership marker 全部改用 `pidex`／`Pidex`；决策与影响记录在 `docs/architecture/pidex-identity.md`。
+- [desktop] 深链统一为 `pidex://threads/<id>`，只解析并注册该 scheme。
+- [desktop] Electron 默认 `userData` 固定为 `%APPDATA%\Pidex Desktop`，避免应用名或打包名称再次变化时目录漂移；显式指定目录的优先级不变。
+- [agent] 机器策略只读取 `%ProgramData%\Pidex\requirements.toml`；已按旧目录部署的机器需由管理员迁移文件。
+- [agent/storage] profile 数据库 ownership marker 改为 `0x50445850`（PDXP）。
+- [repo] 旧品牌标识路径（`.codepilotx` 数据与工作区目录、旧 userData 目录、`Documents\CodePilotX`、`ProgramData\CodePilotX`）不做迁移：既不读取也不删除，保留原样在磁盘上；产品未发布，本次以所有者确认的测试数据为前提。
+- [repo] 保留真实外部名称与历史记录：GitHub 仓库与发布/更新源、已部署的认证服务地址、第三方名称与许可证、`docs/research` 与 CHANGELOG 历史区段不变；`HISTORY_APPLICATION_ID` 与兼容基线字段保持原值。
 
 - [desktop/agent] 代码审查的自动刷新改为工作区变化停止 60 秒后执行：Git 变化只重置尾部防抖计时器，首次打开、切换来源、手动刷新以及暂存/撤销后的刷新仍立即执行；自动刷新遇到 `REVIEW_REPOSITORY_BUSY` 时保留当前列表与 diff、结束 loading 并在 60 秒后重试且不弹出共享错误，手动刷新继续反馈错误；Agent 侧不再抑制同一项目的后续变化通知。
 
@@ -67,7 +72,7 @@
 
 - [desktop/renderer] 统一工具调用卡片与会话正文代码块规范：工具执行卡片统一为单个带容器圆角（--cpx-sys-radius-container）的代码卡片，输入与输出在卡片内通过轻量分割线连贯展示，避免命令与结果拆散成独立方块；全局 .md-code-surface 补齐容器圆角，消除直角；输入与输出移除 details 折叠截断，支持换行控制与复制；非命令行工具（如 ComputerRead、文件读取等）不再误标 Shell 标签，自动识别 JSON 入参及结果并启用语法高亮；彻底去重避免输出与 resultBlocks 文本块重复展示。
 - [desktop/renderer] 侧栏头部操作与行级悬浮按钮（项目与会话的置顶、归档、更多、新建对话及整理菜单触发器）切换为 Button `variant="text"` 纯文本变体，移除悬停灰底噪块；时间线 ToolCall 条目及处理过程折叠行移除 Hover 灰底，对齐 UI-Design 纯文本墨水加深规范。
-- [desktop/renderer] 外观设置页代码主题选择升级为分层下拉菜单，顶层选项为「CodePilotX」（映射 Codex(new)），其余代码高亮主题归入「Codex 主题」滚动二级子菜单，并采用圆形主题色徽标。
+- [desktop/renderer] 外观设置页代码主题选择升级为分层下拉菜单，顶层选项为「Pidex」（映射 Codex(new)），其余代码高亮主题归入「Codex 主题」滚动二级子菜单，并采用圆形主题色徽标。
 
 - [desktop/renderer] 会话导轨按用户输入逐条导航，保留 Codex 细刻度、波峰与预览，增加长导轨虚拟化、完整历史批量加载与重试，并保持阅读锚点和实时队列。
 
@@ -97,6 +102,8 @@
 
 ### Removed
 
+- [desktop] 移除 `codepilotx://` 深链解析与 Windows 协议注册、旧环境变量前缀识别与旧安装产物清理逻辑。
+
 - [desktop/renderer] 淘汰独立的 IconButton 组件，全仓 60 处图标按钮调用点统一重构为 <Button isIconOnly ... /> 并彻底移除 IconButton.tsx。
 
 - [desktop/renderer] 移除输入框已无消费者的 `onOpenComputerSettings` 回调及其在两处会话布局中的 `settings/computer` 跳转，电脑控制设置仍经设置导航进入。
@@ -104,6 +111,8 @@
 - [desktop/agent] 移除 `ComputerUseService` 对旧 `desktop.computerUseEnabled` 的运行时监听与状态跟踪，该键仅保留给首次接入迁移读取，插件状态为唯一启用来源。
 
 ### Fixed
+
+- [release] 发布与自动更新源保持 `codepilotx-dev/Pidex` 不变：品牌清理不得改写发布块的 owner／repo，否则打包产物的 `app-update.yml` 会指向不存在的仓库并让自动更新静默失效；新增配置契约测试锁定 `package.json` 发布块、Agent release notes 与打包校验三处一致。
 
 - [agent/desktop] 环境脚本沿用项目文件夹信任，已信任项目不再要求配置版本二次授权；撤销文件夹信任后立即拒绝执行。
 
@@ -223,7 +232,7 @@
 
 - [desktop] 移除页面宽度的默认/窄/宽手动档位：外观设置与会话工具栏不再提供宽度切换，布局也不再读取该设置；`conversationWidth` 存储字段与往返保存保留，仅作为兼容数据不再影响渲染。会话页与新建聊天页统一改为 736px 正文上限（其他一级页面继续使用 1009px 默认宽度），消息、输入框、审批与状态卡片共用同一对齐规则和左侧 48px、右侧 16px 安全边距。
 
-- [desktop] 置顶摘要改为按聊天区域宽度自动布局：小于 1096px 用工具栏浮层、1096～1535px 置顶并与正文并排、达到 1536px 起固定在右侧留白；正文偏移量改为由摘要宽度与间隙推导，不再写死。置顶偏好改用独立 UI 偏好键 `codepilotx.desktop.threadSummaryPinned.v1` 保存，浮层开合不持久化，切换会话或进入内容全宽时关闭浮层但保留置顶偏好。
+- [desktop] 置顶摘要改为按聊天区域宽度自动布局：小于 1096px 用工具栏浮层、1096～1535px 置顶并与正文并排、达到 1536px 起固定在右侧留白；正文偏移量改为由摘要宽度与间隙推导，不再写死。置顶偏好改用独立 UI 偏好键 `pidex.desktop.threadSummaryPinned.v1` 保存，浮层开合不持久化，切换会话或进入内容全宽时关闭浮层但保留置顶偏好。
 
 - [desktop] 右侧工作区切换语义收敛：右栏按钮改为「进入内容全宽 / 退出内容全宽」，工具栏在内容全宽时显示「进入分屏视图」；仅聊天且没有保留标签时，入口复用现有浏览器标签创建流程，浏览器不可用时禁用并说明原因。隐藏右侧内容后焦点回到聊天输入框；内容全宽改用 React `Activity` 保留聊天页状态（草稿、折叠与滚动位置），只隐藏聊天区域，主导航与底部面板保持独立。
 

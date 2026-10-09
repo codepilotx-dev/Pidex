@@ -72,7 +72,7 @@ type PetManifest = {
 
 ### 安装根
 
-默认使用当前 Pidex 用户数据根中的 `pets`。桌面端迁移用户数据根时，宠物和社区目录缓存会一起迁移；直接启动 Agent 时可用 `CODEPILOTX_PETS_DIR` 显式覆盖。`CODEX_HOME/pets` 仅作为旧版本一次性导入来源，不再作为运行时安装目录。
+默认使用当前 Pidex 用户数据根中的 `pets`。桌面端迁移用户数据根时，宠物和社区目录缓存会一起迁移；直接启动 Agent 时可用 `PIDEX_PETS_DIR` 显式覆盖。`CODEX_HOME/pets` 仅作为旧版本一次性导入来源，不再作为运行时安装目录。
 
 所有删除和替换只能发生在解析后的宠物根内，不能删除整个 data dir、userData 或 `$HOME`。
 

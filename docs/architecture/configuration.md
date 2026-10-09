@@ -4,10 +4,10 @@
 
 ## 文件与优先级
 
-默认用户数据根为 `%USERPROFILE%\.codepilotx`：
+默认用户数据根为 `%USERPROFILE%\.pidex`：
 
 ```text
-.codepilotx\
+.pidex\
   config.json
   profiles\
     deep-review.json
@@ -19,7 +19,7 @@
 1. 内置默认值；
 2. 用户 `config.json`；
 3. Agent 启动时冻结的活动 Profile；
-4. 已信任项目的 `<workspace>\.codepilotx\config.json`。
+4. 已信任项目的 `<workspace>\.pidex\config.json`。
 
 所有配置文件都接受标准 JSON 和带注释、尾逗号的 JSONC。写入使用 key-path 局部编辑和同文件写队列，保留未修改的注释、字段顺序以及当前版本不认识的键。未知用户/项目根键会产生警告但不会被删除；不允许的 Profile 根键和含密钥材料的值会被拒绝。
 
