@@ -18,6 +18,24 @@ afterEach(async () => {
 })
 
 describe('ConfigService', () => {
+  test('首次保存外观时跳过不存在的 nullable 字体项并仍可删除已有项', async () => {
+    const root = await temporaryRoot()
+    const service = new ConfigService(join(root, 'config.json'))
+    await service.initialize()
+    try {
+      await service.batchWrite({ edits: [
+        { keyPath: ['desktop', 'appearance', 'chromeThemes', 'light', 'fonts', 'code'], value: null },
+        { keyPath: ['desktop', 'appearance', 'mode'], value: 'dark' },
+        { keyPath: ['desktop', 'appearance', 'chromeThemes', 'light', 'fonts', 'ui'], value: null },
+      ] })
+      expect(service.snapshot().desktop).toEqual({ appearance: { mode: 'dark' } })
+      await service.writeValue({ keyPath: ['desktop', 'appearance', 'mode'], value: null })
+      expect(service.snapshot().desktop).toEqual({ appearance: {} })
+    } finally {
+      await service.dispose()
+    }
+  })
+
   test('三层配置幂等迁移任务模型且保留旧键与未知内容', async () => {
     const root = await temporaryRoot()
     const userConfig = join(root, 'config.json')

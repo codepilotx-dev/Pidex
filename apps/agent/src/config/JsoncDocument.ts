@@ -118,6 +118,7 @@ export const patchJsonc = (source: string, edits: readonly JsoncEdit[]): string 
     assertKeyPath(edit.keyPath)
     const current = parseJsoncObject(body)
     const existing = valueAtPath(current, edit.keyPath)
+    if (edit.value === null && existing === undefined) continue
     const replacement =
       edit.value === null
         ? undefined
