@@ -50,7 +50,7 @@ describe('release workflows', () => {
     expect(parity).not.toContain('name: beta-release')
   })
 
-  test('source-release only publishes source archives for v* tags', () => {
+  test('source-release creates v* releases before manual Windows uploads', () => {
     const sourceRelease = job(packageWorkflow, 'source-release')
     expect(sourceRelease).toContain(
       "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')",
@@ -62,7 +62,7 @@ describe('release workflows', () => {
     expect(sourceRelease).toContain('gh release create')
     expect(sourceRelease).toContain('--verify-tag')
     expect(sourceRelease).toContain('--prerelease')
-    expect(sourceRelease).toContain("--jq '.assets | length'")
+    expect(sourceRelease).not.toContain('asset_count')
     expect(sourceRelease).not.toContain('self-hosted')
     expect(sourceRelease).not.toContain('package:win')
     expect(sourceRelease).not.toContain('PIDEX_REQUIRE_SIGNING')

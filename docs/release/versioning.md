@@ -61,7 +61,7 @@ Git 标签格式：`v<根 package.json 的 version>`。
 
 ## 人工发布步骤
 
-预发布与正式版本都使用同一套人工发布流程。版本文件由 `version:prepare` 生成，提交与 `v*` 标签必须签名，标签必须指向 `main` 历史。推送标签后由 GitHub-hosted runner 创建 source-only GitHub Release；仓库不上传预构建安装包或其他二进制发布附件。
+预发布与正式版本都使用同一套人工发布流程。版本文件由 `version:prepare` 生成，提交与 `v*` 标签必须签名，标签必须指向 `main` 历史。推送标签后由 GitHub-hosted runner 创建 GitHub Release；需要 Windows 安装包时，从对应标签运行 `bun run package:win`，验证通过后人工上传同版本 x64 EXE。
 
 1. 确认 `Unreleased` 区段非空。
 2. 运行 `bun run version:prepare -- <新版本> [--stable]`，生成四 manifest、lockfile 与 CHANGELOG 归档区段。
@@ -93,10 +93,10 @@ Git 标签格式：`v<根 package.json 的 version>`。
    ```
 
 8. 推送 `v*` 标签后，GitHub-hosted runner 校验标签目标属于 `main`、验证标签与根版本一致，并从对应的 CHANGELOG 归档区段生成 Release 正文。
-9. CI 在 `codepilotx-dev/Pidex` 创建不含附件的 GitHub Release；GitHub 自动提供 `Source code (zip)` 与 `Source code (tar.gz)`，使用者在 Windows x64 上自行运行 `bun run package:win`。
+9. CI 在 `codepilotx-dev/Pidex` 创建 GitHub Release，GitHub 自动提供源码归档；需要安装包时，在对应标签运行 `bun run package:win`，通过打包校验与 smoke 后使用 `gh release upload v<版本> release/Pidex-Desktop-<版本>-x64.exe` 上传，不覆盖已有附件。未使用正式 Authenticode 证书时，必须在 Release 正文注明安装包未签名。
 10. Beta/Alpha/RC 的人工确认发生在创建和推送签名标签的时刻；稳定版还额外经过 `release` Environment 的审批。
 
-预发布标签（`alpha.N`、`beta.N`、`rc.N`）会创建 prerelease；无后缀版本会创建正式 Release。已发布 Release 不可覆盖；相同标签已发布时工作流失败关闭。发布工作流会验证 Release API 的附件数为 0，避免重新引入安装包、更新元数据或其他二进制附件。
+预发布标签（`alpha.N`、`beta.N`、`rc.N`）会创建 prerelease；无后缀版本会创建正式 Release。已发布 Release 不可覆盖；相同标签已发布时工作流失败关闭。标签工作流只创建 Release，Windows 安装包由人工验证后追加上传。
 
 > 桌面端运行时仅从 GitHub Releases 读取更新日志，不读取本地 `CHANGELOG.md`。CHANGELOG 只作为标签发布流水线生成 Release 正文的来源。
 
@@ -110,7 +110,7 @@ Git 标签格式：`v<根 package.json 的 version>`。
 - 分支保护、环境保护规则和必需检查与转移前一致。
 - `.github/workflows/windows-x64-package.yml` 在组织仓库中启用，标签触发权限未被组织策略禁用。
 - 仓库可见性符合发布阶段：调试期可保持私有，正式发布前再公开。
-- 使用测试仓库或契约测试验证 source-only 工作流配置；以上项目全部确认前，不推送首个公开版本标签。
+- 使用测试仓库或契约测试验证标签发布工作流配置；以上项目全部确认前，不推送首个公开版本标签。
 
 发布工作流带有仓库身份保护，仅允许在 `codepilotx-dev/Pidex` 创建 Release，避免转移前误发到个人仓库。
 

@@ -162,7 +162,7 @@ jobs:
           bun scripts/WriteReleaseNotes.ts \
             --tag "$GITHUB_REF_NAME" \
             --output release/RELEASE_NOTES.md
-      - name: Create source-only GitHub Release
+      - name: Create GitHub Release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -185,8 +185,3 @@ jobs:
             release_args+=(--prerelease)
           fi
           gh release create "${release_args[@]}"
-
-          asset_count="$(gh api \
-            "repos/${GITHUB_REPOSITORY}/releases/tags/${tag}" \
-            --jq '.assets | length')"
-          test "$asset_count" = "0"

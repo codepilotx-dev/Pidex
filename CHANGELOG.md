@@ -7,6 +7,12 @@
 
 ## Unreleased
 
+### Changed
+
+- [release] 准备 0.2.0-beta.6，并允许在标签 Release 创建后上传经打包验证的同版本 Windows x64 安装包；未签名产物明确标注。
+
+## 0.2.0-beta.6 — 2026-10-11
+
 ### Added
 
 - [repo] 补充 Electron 默认 `userData` 路径稳定性契约测试，以及品牌标识（数据目录、安装身份、环境变量前缀）的回归测试。
