@@ -1,18 +1,15 @@
 import React from 'react'
 import { Download, RefreshCw, RotateCcw } from 'lucide-react'
-import type {
-  ToolingID,
-  ToolingPreference,
-  ToolingStatus,
-} from '@codepilotx/agent-protocol'
-import { APP_ICON_SIZE } from '../../components/ui/iconTokens.js'
+import type { ToolingID, ToolingPreference, ToolingStatus } from '@pidex/agent-protocol'
+import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { Button } from '../../components/ui/Button.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
-import { SegmentedControl } from './SegmentedControl.js'
+import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
-import { useDesktopSettings } from './useDesktopSettings.js'
+import { useDesktopSettings } from './UseDesktopSettings.js'
+import { errorMessageOr as errorMessage } from '@pidex/shared/errors'
 
 type Props = {
   onError: (message: string) => void
@@ -50,23 +47,18 @@ const SOURCE_OPTIONS: readonly { value: ToolingPreference; label: string }[] = [
   { value: 'system', label: '本机' },
 ]
 
-export function WorkspaceDependenciesSettings({
-  onError,
-  onNotice,
-}: Props): React.ReactNode {
+export function WorkspaceDependenciesSettings({ onError, onNotice }: Props): React.ReactNode {
   const { draft } = useDesktopSettings()
-  const legacyManagedPreference = draft.values.installCodePilotXDependencies
+  const legacyManagedPreference = draft.values.installPidexDependencies
   const migrationComplete = draft.values.workspaceDependenciesMigrated
   const [statuses, setStatuses] = React.useState<readonly ToolingStatus[]>([])
   const [loading, setLoading] = React.useState(true)
   const [refreshing, setRefreshing] = React.useState(false)
-  const [busyTools, setBusyTools] = React.useState<ReadonlySet<ToolingID>>(
-    () => new Set(),
-  )
+  const [busyTools, setBusyTools] = React.useState<ReadonlySet<ToolingID>>(() => new Set())
   const migrationStarted = React.useRef(false)
 
   const setToolBusy = React.useCallback((id: ToolingID, busy: boolean): void => {
-    setBusyTools(current => {
+    setBusyTools((current) => {
       const next = new Set(current)
       if (busy) next.add(id)
       else next.delete(id)
@@ -75,8 +67,8 @@ export function WorkspaceDependenciesSettings({
   }, [])
 
   const replaceStatus = React.useCallback((next: ToolingStatus): void => {
-    setStatuses(current => {
-      const existing = current.findIndex(status => status.id === next.id)
+    setStatuses((current) => {
+      const existing = current.findIndex((status) => status.id === next.id)
       if (existing < 0) return [...current, next]
       const copy = [...current]
       copy[existing] = next
@@ -114,15 +106,14 @@ export function WorkspaceDependenciesSettings({
 
   React.useEffect(() => {
     let active = true
-    void desktopClient.listTooling()
-      .then(async next => {
+    void desktopClient
+      .listTooling()
+      .then(async (next) => {
         if (!active) return
         setStatuses(next)
         if (!migrationComplete && !migrationStarted.current) {
           migrationStarted.current = true
-          const preference: ToolingPreference = legacyManagedPreference
-            ? 'managed'
-            : 'system'
+          const preference: ToolingPreference = legacyManagedPreference ? 'managed' : 'system'
           const migrated = [
             await desktopClient.setToolingPreference('nodejs', preference),
             await desktopClient.setToolingPreference('python', preference),
@@ -132,7 +123,7 @@ export function WorkspaceDependenciesSettings({
           await completeMigration()
         }
       })
-      .catch(error => {
+      .catch((error) => {
         migrationStarted.current = false
         if (active) {
           onError(errorMessage(error, '无法读取或迁移工作空间依赖项状态。'))
@@ -141,51 +132,35 @@ export function WorkspaceDependenciesSettings({
       .finally(() => {
         if (active) setLoading(false)
       })
-    const unsubscribe = desktopClient.onToolingUpdated(status => {
+    const unsubscribe = desktopClient.onToolingUpdated((status) => {
       if (active) replaceStatus(status)
     })
     return () => {
       active = false
       unsubscribe()
     }
-  }, [
-    legacyManagedPreference,
-    migrationComplete,
-    onError,
-    completeMigration,
-    replaceStatus,
-  ])
+  }, [legacyManagedPreference, migrationComplete, onError, completeMigration, replaceStatus])
 
   const changePreference = async (
     status: ToolingStatus,
     preference: ToolingPreference,
   ): Promise<void> => {
-    if (
-      preference === status.preference ||
-      busyTools.has(status.id) ||
-      refreshing
-    ) {
+    if (preference === status.preference || busyTools.has(status.id) || refreshing) {
       return
     }
     if (
       preference === 'system' &&
       status.managed.installed &&
-      !window.confirm(
-        `切换到本机会删除 CodePilotX 内置的 ${TOOL_LABELS[status.id]}。确认继续吗？`,
-      )
+      !window.confirm(`切换到本机会删除 Pidex 内置的 ${TOOL_LABELS[status.id]}。确认继续吗？`)
     ) {
       return
     }
 
     setToolBusy(status.id, true)
     try {
-      replaceStatus(
-        await desktopClient.setToolingPreference(status.id, preference),
-      )
+      replaceStatus(await desktopClient.setToolingPreference(status.id, preference))
       onNotice?.(
-        `${TOOL_LABELS[status.id]} 已切换为${
-          preference === 'managed' ? '内置' : '本机'
-        }。`,
+        `${TOOL_LABELS[status.id]} 已切换为${preference === 'managed' ? '内置' : '本机'}。`,
       )
     } catch (error) {
       onError(errorMessage(error, `无法切换 ${TOOL_LABELS[status.id]} 来源。`))
@@ -199,9 +174,7 @@ export function WorkspaceDependenciesSettings({
     if (busyTools.has(status.id) || refreshing) return
     setToolBusy(status.id, true)
     try {
-      replaceStatus(
-        await desktopClient.installTooling(status.id, status.managed.installed),
-      )
+      replaceStatus(await desktopClient.installTooling(status.id, status.managed.installed))
       onNotice?.(`${TOOL_LABELS[status.id]} 内置版已安装。`)
     } catch (error) {
       onError(errorMessage(error, `${TOOL_LABELS[status.id]} 安装失败。`))
@@ -214,7 +187,7 @@ export function WorkspaceDependenciesSettings({
   if (loading && statuses.length === 0) {
     return (
       <SettingsContentArea>
-        <div className="settings-content-inner">
+        <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
           <WorkspaceDependenciesHeader
             disabled
             refreshing={refreshing}
@@ -230,22 +203,20 @@ export function WorkspaceDependenciesSettings({
 
   return (
     <SettingsContentArea>
-      <div className="settings-content-inner">
+      <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <WorkspaceDependenciesHeader
           disabled={refreshing || busyTools.size > 0}
           refreshing={refreshing}
           onRefresh={() => void rescan()}
         />
-        {TOOL_IDS.map(id => {
-          const status = statuses.find(item => item.id === id)
+        {TOOL_IDS.map((id) => {
+          const status = statuses.find((item) => item.id === id)
           return status ? (
             <DependencySection
               busy={busyTools.has(id) || refreshing}
               key={id}
               onInstall={() => void install(status)}
-              onPreferenceChange={preference =>
-                void changePreference(status, preference)
-              }
+              onPreferenceChange={(preference) => void changePreference(status, preference)}
               status={status}
             />
           ) : null
@@ -265,10 +236,13 @@ function WorkspaceDependenciesHeader({
   refreshing: boolean
 }): React.ReactNode {
   return (
-    <div className="settings-page-header">
+    <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
       <div className="settings-section-header">
-        <h2 className="settings-page-title">工作空间依赖项</h2>
+        <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+          工作空间依赖项
+        </h2>
         <Button
+          color="primary"
           disabled={disabled}
           onClick={onRefresh}
           title={refreshing ? '正在扫描工作空间依赖项' : '重新扫描'}
@@ -278,7 +252,7 @@ function WorkspaceDependenciesHeader({
           {refreshing ? '扫描中…' : '重新扫描'}
         </Button>
       </div>
-      <p className="settings-page-desc">
+      <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
         四项运行环境彼此独立；内置版只在首次使用或手动安装时下载，不会打包进应用。
       </p>
     </div>
@@ -296,8 +270,7 @@ function DependencySection({
   onPreferenceChange: (preference: ToolingPreference) => void
   status: ToolingStatus
 }): React.ReactNode {
-  const installing =
-    status.phase === 'downloading' || status.phase === 'installing'
+  const installing = status.phase === 'downloading' || status.phase === 'installing'
   const activeLabel =
     status.activeSource === 'managed'
       ? '内置'
@@ -306,10 +279,7 @@ function DependencySection({
         : '不可用'
 
   return (
-    <SettingsSection
-      title={TOOL_LABELS[status.id]}
-      description={TOOL_DESCRIPTIONS[status.id]}
-    >
+    <SettingsSection title={TOOL_LABELS[status.id]} description={TOOL_DESCRIPTIONS[status.id]}>
       <SettingsRow
         title="来源"
         description={
@@ -321,7 +291,7 @@ function DependencySection({
           <SegmentedControl
             ariaLabel={`${TOOL_LABELS[status.id]} 来源`}
             className="settings-segmented-control"
-            onChange={value => {
+            onChange={(value) => {
               if (!busy) onPreferenceChange(value)
             }}
             options={SOURCE_OPTIONS}
@@ -332,11 +302,7 @@ function DependencySection({
       <SettingsRow
         title="当前状态"
         description={status.error?.message ?? progressDescription(status)}
-        control={
-          <span className="settings-row-status">
-            {PHASE_LABELS[status.phase]}
-          </span>
-        }
+        control={<span className="settings-row-status">{PHASE_LABELS[status.phase]}</span>}
       />
       <SettingsRow
         title="实际来源"
@@ -358,21 +324,13 @@ function DependencySection({
               : '首次使用时也会自动安装代码内固定的版本。'
           }
           control={
-            <Button
-              disabled={busy || installing}
-              onClick={onInstall}
-              type="button"
-            >
+            <Button color="primary" disabled={busy || installing} onClick={onInstall} type="button">
               {status.managed.installed ? (
                 <RotateCcw size={APP_ICON_SIZE} />
               ) : (
                 <Download size={APP_ICON_SIZE} />
               )}
-              {installing
-                ? '处理中…'
-                : status.managed.installed
-                  ? '重新安装'
-                  : '安装内置版'}
+              {installing ? '处理中…' : status.managed.installed ? '重新安装' : '安装内置版'}
             </Button>
           }
         />
@@ -385,11 +343,9 @@ function progressDescription(status: ToolingStatus): string {
   const progress = status.progress
   if (!progress) {
     if (status.phase === 'cleanup-pending') {
-      return '文件正在使用，CodePilotX 会在下次启动时继续清理。'
+      return '文件正在使用，Pidex 会在下次启动时继续清理。'
     }
-    return status.phase === 'idle'
-      ? '尚未解析可用版本。'
-      : '依赖项状态已更新。'
+    return status.phase === 'idle' ? '尚未解析可用版本。' : '依赖项状态已更新。'
   }
   const received = formatBytes(progress.receivedBytes)
   return progress.totalBytes === undefined
@@ -402,9 +358,7 @@ function resolvedPath(status: ToolingStatus): string {
     return status.system.path ?? '本机路径不可用'
   }
   if (status.activeSource === 'managed') {
-    return `CodePilotX 托管目录 · ${status.id}/${
-      status.managed.version ?? status.pinnedVersion
-    }`
+    return `Pidex 托管目录 · ${status.id}/${status.managed.version ?? status.pinnedVersion}`
   }
   return '没有可执行文件路径'
 }
@@ -413,8 +367,4 @@ function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`
   if (bytes < 1024 ** 2) return `${(bytes / 1024).toFixed(1)} KiB`
   return `${(bytes / 1024 ** 2).toFixed(1)} MiB`
-}
-
-function errorMessage(error: unknown, fallback: string): string {
-  return error instanceof Error && error.message ? error.message : fallback
 }

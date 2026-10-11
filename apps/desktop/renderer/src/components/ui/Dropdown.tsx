@@ -1,6 +1,7 @@
 import type React from 'react'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
-import { buildPopoverSizingStyle, type PopoverSizingProps } from './popoverSizing.js'
+import { Dropdown as DropdownMenu } from './floating/Dropdown.js'
+import { useFloatingFocusModality } from '../../utils/FloatingFocus.js'
+import { buildPopoverSizingStyle, type PopoverSizingProps } from './PopoverSizing.js'
 
 type Props = {
   children: React.ReactNode
@@ -13,7 +14,6 @@ type Props = {
   collisionPadding?: number
   avoidCollisions?: boolean
   textMode?: 'nowrap' | 'wrap'
-  modal?: boolean
   onOpenChange?: (open: boolean) => void
 } & PopoverSizingProps
 
@@ -28,18 +28,19 @@ export function Dropdown({
   collisionPadding = 6,
   avoidCollisions = true,
   textMode = 'nowrap',
-  modal = false,
-  width,
-  maxWidth,
+  size,
   onOpenChange,
 }: Props): React.ReactNode {
+  const focusModality = useFloatingFocusModality()
   return (
-    <DropdownMenu.Root modal={modal} open={open} onOpenChange={onOpenChange}>
-      <DropdownMenu.Trigger asChild>
+    <DropdownMenu.Root mode="menu" open={open} onOpenChange={onOpenChange}>
+      <DropdownMenu.Trigger asChild {...focusModality.triggerInteractionProps}>
         {trigger}
       </DropdownMenu.Trigger>
       <DropdownMenu.Portal>
         <DropdownMenu.Content
+          size={size ?? 'md'}
+          data-theme-component="dropdown-surface"
           align={align}
           className={[
             'popover-surface',
@@ -50,11 +51,12 @@ export function Dropdown({
           ].join(' ')}
           collisionPadding={collisionPadding}
           avoidCollisions={avoidCollisions}
+          onCloseAutoFocus={focusModality.suppressFocusRingOnClose}
           side={side}
           sideOffset={sideOffset}
-          style={buildPopoverSizingStyle({ width, maxWidth })}
+          style={buildPopoverSizingStyle({ size })}
         >
-          <div className="popover-scroll-content tw:min-w-0 tw:overflow-y-auto">
+          <div className="popover-scroll-content tw:flex tw:min-w-0 tw:max-w-full tw:flex-col tw:gap-0.5">
             {children}
           </div>
         </DropdownMenu.Content>

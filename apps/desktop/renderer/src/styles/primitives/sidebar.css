@@ -1,0 +1,292 @@
+/*
+ * Sidebar residue: the parts of the migrated layout-sidebar stylesheet that
+ * Tailwind utilities cannot express.
+ *
+ * Kept here on purpose:
+ * - vendor pseudo-elements (`::-webkit-scrollbar*`, the `::before`/`::after`
+ *   decorations of the resizer and the collapse target);
+ * - the sidebar density contract (`--sidebar-*`), i.e. runtime geometry that
+ *   TSX utilities consume through `var()` and that
+ *   `test/SidebarOriginLayout.browser.ts` reads back with getComputedStyle;
+ * - subtree overrides that must reach every descendant regardless of the
+ *   component class each child carries: the icon-button size override and the
+ *   "grabbing" cursor while a reorder item is being dragged;
+ * - one `color-mix()` surface (sidebar session approval chip);
+ * - rules whose consumers are owned by another migration group:
+ *   `.sidebar-panel-content` (layout/shell/DesktopLayout.tsx),
+ *   `.sidebar-layout` (settings/SettingsSidebarContent.tsx),
+ *   `.settings-nav-*` (settings/SettingsNav.tsx),
+ *   `.sidebar-session-list-extra` (anchor of the animation contract in
+ *   scripts/CheckStyleContracts.ts).
+ */
+@layer primitives {
+  .sidebar-rail-destinations {
+    scrollbar-width: none;
+  }
+
+  .sidebar-rail-destinations::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Long titles dissolve into the action slot instead of hitting a hard edge. */
+  .sidebar-session-title {
+    text-overflow: ellipsis;
+  }
+
+  .sidebar-session-title[data-overflowing='true'] {
+    mask-image: linear-gradient(to right, black calc(100% - var(--cpx-sys-space-4)), transparent);
+    text-overflow: clip;
+  }
+
+  .sidebar-session-title[data-overflowing='true'][data-scrolling='true'] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--cpx-sys-space-2),
+      black calc(100% - var(--cpx-sys-space-4)),
+      transparent
+    );
+  }
+
+  @media (forced-colors: active) {
+    .sidebar-session-title[data-overflowing='true'],
+    .sidebar-session-title[data-overflowing='true'][data-scrolling='true'] {
+      mask-image: none;
+      text-overflow: ellipsis;
+    }
+  }
+
+  /*
+   * Sidebar density contract: outer gutter and row internals (8px gutter, 30px
+   * row height, 10px row radius, 24px icon box, 16px section gap). Consumed by
+   * TSX utilities through the `--sidebar-…` runtime geometry variables.
+   */
+  .desktop-sidebar {
+    --sidebar-inline-gutter: var(--cpx-sys-space-2);
+    --sidebar-leading-width: var(--cpx-sys-space-6);
+    --sidebar-icon-size: var(--cpx-sys-icon-size-md);
+    --sidebar-icon-button-size: var(--cpx-sys-space-6);
+    --sidebar-item-gap: var(--cpx-sys-space-2);
+    --sidebar-row-gap: calc(var(--cpx-sys-space-1) / 2);
+    --sidebar-padding-x: var(--sidebar-inline-gutter);
+    --sidebar-row-pad-y: var(--cpx-sys-space-1);
+    --sidebar-row-height: 30px;
+    --sidebar-row-radius: var(--cpx-sys-radius-md);
+    --sidebar-indent-step: var(--cpx-sys-space-4);
+    --sidebar-section-gap: var(--cpx-sys-space-4);
+    --sidebar-trailing-width: 4.286em;
+    --sidebar-row-columns: var(--sidebar-leading-width) minmax(0, 1fr) auto;
+    --sidebar-session-content-indent: calc(
+      var(--sidebar-inline-gutter) + var(--sidebar-indent-step)
+    );
+  }
+
+  /* Every icon button inside the sidebar uses the 24px sidebar icon box. */
+  .desktop-sidebar .icon-button {
+    --button-size: var(--sidebar-icon-button-size);
+  }
+
+  .sidebar-hover-card-surface {
+    --sidebar-icon-size: var(--cpx-sys-icon-size-sm);
+    --sidebar-icon-button-size: var(--cpx-sys-space-6);
+    --sidebar-hover-leading-width: var(--sidebar-icon-size);
+    --sidebar-hover-column-gap: var(--cpx-sys-space-2);
+  }
+
+  .sidebar-hover-card-surface .icon-button {
+    --button-size: var(--sidebar-icon-button-size);
+  }
+
+  /* While a reorder item is dragged the whole sidebar shows the grabbing cursor. */
+  .desktop-sidebar:has(.sidebar-reorder-item[data-dragging='true']) {
+    cursor: grabbing;
+  }
+
+  .desktop-sidebar:has(.sidebar-reorder-item[data-dragging='true']) * {
+    cursor: grabbing;
+  }
+
+  /* Styled scrollbars need vendor pseudo-elements. */
+  .sidebar-scroll-area::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  .sidebar-scroll-area::-webkit-scrollbar-track {
+    background-color: transparent;
+  }
+
+  .sidebar-scroll-area::-webkit-scrollbar-thumb {
+    border-radius: var(--cpx-sys-radius-full);
+    background-color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  .sidebar-scroll-area:hover::-webkit-scrollbar-thumb {
+    background-color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  .sidebar-scroll-area::-webkit-scrollbar-thumb:active {
+    background-color: var(--cpx-sys-color-fg-primary);
+  }
+
+  @media (forced-colors: active) {
+    .sidebar-scroll-area::-webkit-scrollbar-thumb {
+      border-color: Canvas;
+      background: ButtonText;
+    }
+  }
+
+  /* --- Resizer ------------------------------------------------------- */
+  .desktop-sidebar.is-collapsed .sidebar-resizer {
+    display: none;
+  }
+
+  /* --- Collapse confirm target --------------------------------------- */
+  .sidebar-collapse-confirm-target {
+    --sidebar-collapse-progress: 0turn;
+    --sidebar-collapse-target-offset: calc(var(--sidebar-collapse-target-size) / -2);
+
+    position: fixed;
+    z-index: var(--cpx-sys-z-sticky);
+    width: var(--sidebar-collapse-target-size);
+    height: var(--sidebar-collapse-target-size);
+    margin: var(--sidebar-collapse-target-offset) 0 0 var(--sidebar-collapse-target-offset);
+    border-radius: 0;
+    pointer-events: none;
+    border: 1px solid var(--cpx-sys-color-accent);
+    background: var(--cpx-sys-color-hover);
+    box-shadow: none;
+    opacity: 1;
+  }
+
+  .sidebar-collapse-confirm-target::after {
+    content: '';
+    position: absolute;
+    inset: 8px;
+    box-sizing: border-box;
+    border: 1px solid var(--cpx-sys-color-border-default);
+    border-radius: 0;
+    background: var(--cpx-sys-color-surface-canvas);
+  }
+
+  :root[data-reduce-motion='on']
+    :is(.desktop-sidebar, .desktop-sidebar-spacer, .sidebar-collapse-confirm-target) {
+    transition: none;
+  }
+
+  :root[data-reduce-motion='on'] .sidebar-collapse-confirm-target {
+    animation: none;
+  }
+
+  .sidebar-status-pill-progress {
+    animation-name: sidebar-status-pill-countdown;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+  }
+
+  @keyframes sidebar-status-pill-countdown {
+    from {
+      transform: scaleX(1);
+    }
+
+    to {
+      transform: scaleX(0);
+    }
+  }
+
+  /*
+   * Electron-only window-drag contract: every interactive sidebar surface must
+   * opt out of the window drag region. `-webkit-app-region` has no Tailwind
+   * utility and several of these are plain `div`/`a` elements.
+   */
+  .sidebar-row,
+  .sidebar-product-mode-trigger,
+  .sidebar-footer-trigger,
+  .sidebar-hover-card-surface,
+  .popover-usage-action {
+    -webkit-app-region: no-drag;
+  }
+
+  /*
+   * Cross-element state pairing: a workspace-meta session row keeps its trailing
+   * slot aligned to the title line while row actions are open. The `:has()` pair
+   * spans the row and its trailing slot, so it cannot be expressed as utilities
+   * on either element alone.
+   */
+  .sidebar-session-row:has(.sidebar-session-button-lines--meta)
+    > .sidebar-row-trailing:has(.sidebar-session-actions) {
+    align-self: start;
+    padding-top: calc(var(--cpx-sys-space-1) / 2);
+  }
+
+  /* Rejected multi-select drop paints the selected rows with the danger surface. */
+  .sidebar-drop-rejected .sidebar-item--selected > .sidebar-row {
+    background: var(--cpx-sys-color-danger-subtle-bg);
+  }
+
+  /*
+   * 工作流时间线的步骤轨道连接线（`session-groups.scss` 同组迁移，伪元素无法用
+   * utility 表达，因此与侧栏残渣同文件保留）。最后一个步骤不画连接线。
+   */
+  .session-group-step__rail::after {
+    content: '';
+    position: absolute;
+    top: 28px;
+    bottom: 0;
+    width: 2px;
+    background: var(--cpx-sys-color-border-subtle);
+  }
+
+  .session-group-step:last-child .session-group-step__rail::after {
+    display: none;
+  }
+
+  /* --- Rules owned by other migration groups ------------------------- */
+  .sidebar-panel-content {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .sidebar-panel-content[hidden] {
+    display: none;
+  }
+
+  .sidebar-layout {
+    position: relative;
+    min-width: var(--sidebar-current-width);
+    background: transparent;
+    transition: opacity var(--cpx-sys-motion-micro) var(--cpx-sys-ease-out);
+  }
+
+  /* Inside the modern shell the panel width is driven by the shell geometry. */
+  .desktop-sidebar[data-sidebar-layout='modern'] .sidebar-layout {
+    min-width: 0;
+  }
+
+  .settings-nav-scroll-content {
+    padding-inline: var(--sidebar-inline-gutter);
+  }
+
+  .settings-nav-group,
+  .settings-nav-group-items,
+  .settings-search-results {
+    gap: var(--sidebar-row-gap);
+  }
+
+  .settings-nav-icon {
+    width: var(--sidebar-icon-size);
+    height: var(--sidebar-icon-size);
+    flex: 0 0 var(--sidebar-icon-size);
+  }
+
+  /*
+   * Animation contract anchor (scripts/CheckStyleContracts.ts): the extra
+   * session list must stay restricted to `overflow: hidden` and never carry a
+   * persistent `will-change`.
+   */
+  .sidebar-session-list-extra {
+    overflow: hidden;
+  }
+}

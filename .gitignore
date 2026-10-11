@@ -21,6 +21,7 @@ dist-ssr
 *.crt
 *.p12
 *.pfx
+.pidex
 .codepilotx
 data
 release
@@ -32,7 +33,7 @@ apps/agent/catalog.cache.json
 .playwright-cli/
 apps/desktop/renderer/test-results/
 apps/desktop/renderer/playwright-report/
-apps/desktop/renderer/visual-tests/__screenshots__/workbench.visual.ts/
+apps/desktop/renderer/visual-tests/__screenshots__/Workbench.visual.ts/
 apps/desktop/electron/test-results/
 apps/desktop/electron/playwright-report/
 performance-results/
@@ -50,3 +51,5 @@ performance-results/
 *.sw?
 .gstack/
 .zcode/
+apps/desktop/native/cpx-cua/target/
+apps/desktop/native/cpx-cua/dist/

@@ -1,0 +1,305 @@
+@import '@fontsource-variable/manrope';
+@import '@fontsource/ibm-plex-mono';
+@import 'tailwindcss';
+
+@theme {
+  --font-sans:
+    'Manrope Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  --color-canvas: #f4f0e7;
+  --color-paper: #fcfaf5;
+  --color-ink: #17211d;
+  --color-moss: #63715a;
+  --color-clay: #c9936e;
+  --color-line: #dcd6cb;
+
+  --color-moss-light: #f0f4ec;
+  --color-clay-light: #fbf4ee;
+  --color-ink-muted: #55625d;
+
+  --radius-card: 28px;
+  --radius-card-lg: 36px;
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    background-color: #000;
+    color: #f3f1ec;
+  }
+
+  body {
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+    background-color: #000;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-clay);
+    outline-offset: 3px;
+  }
+}
+
+.site-shell {
+  background: #000;
+}
+
+.hero-canvas {
+  position: relative;
+  width: min(100%, 1600px);
+  margin-inline: auto;
+  background: #273238;
+}
+
+.hero-navbar {
+  left: 50%;
+  width: min(100%, 1600px);
+  transform: translateX(-50%);
+}
+
+.hero-navbar::before {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 112px;
+  content: '';
+  pointer-events: none;
+  opacity: 0;
+  background: linear-gradient(
+    180deg,
+    rgba(0, 0, 0, 0.96) 0%,
+    rgba(0, 0, 0, 0.78) 38%,
+    rgba(0, 0, 0, 0.34) 70%,
+    rgba(0, 0, 0, 0) 100%
+  );
+  transition: opacity 300ms ease;
+}
+
+.hero-navbar--scrolled::before {
+  opacity: 1;
+}
+
+.hero-section {
+  min-height: min(1000px, 100svh);
+  background:
+    radial-gradient(ellipse 75% 34% at 50% 48%, rgba(126, 119, 127, 0.28), transparent 72%),
+    linear-gradient(180deg, #222d33 0%, #303a3f 48%, #6a6267 72%, #3d393b 100%);
+}
+
+.hero-copy {
+  width: min(100%, 860px);
+  padding-top: clamp(128px, 15vh, 168px);
+}
+
+.hero-eyebrow {
+  padding: 7px 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: inset 0 1px rgba(255, 255, 255, 0.05);
+}
+
+.hero-cta {
+  color: #202528;
+  background: rgba(248, 248, 246, 0.92);
+  box-shadow: 0 8px 24px rgba(11, 15, 17, 0.14);
+}
+
+.hero-product {
+  left: 50%;
+  bottom: -38%;
+  width: min(800px, 58vw);
+  transform: translateX(-50%);
+}
+
+.hero-product-window {
+  border-radius: 20px 20px 0 0;
+}
+
+.landscape-layer {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+}
+
+.landscape-far {
+  top: 2%;
+  background:
+    radial-gradient(65% 52% at 10% 100%, #6b5655 0 49%, transparent 50%),
+    radial-gradient(65% 46% at 45% 100%, #796365 0 48%, transparent 49%),
+    radial-gradient(58% 50% at 92% 100%, #655654 0 47%, transparent 48%);
+  opacity: 0.8;
+}
+
+.landscape-mid {
+  top: 13%;
+  background:
+    radial-gradient(56% 68% at 5% 103%, #18261f 0 50%, transparent 51%),
+    radial-gradient(58% 70% at 31% 108%, #273029 0 48%, transparent 49%),
+    radial-gradient(54% 71% at 83% 105%, #1c271f 0 50%, transparent 51%);
+  filter: saturate(0.72);
+}
+
+.landscape-front {
+  z-index: 20;
+  top: 38%;
+  background:
+    radial-gradient(42% 72% at -2% 112%, #101711 0 56%, transparent 57%),
+    radial-gradient(52% 83% at 28% 120%, #2f2425 0 56%, transparent 57%),
+    radial-gradient(48% 72% at 70% 120%, #402c30 0 57%, transparent 58%),
+    radial-gradient(37% 66% at 105% 110%, #241c1e 0 58%, transparent 59%);
+  filter: saturate(0.75);
+}
+
+.landscape-vignette {
+  position: absolute;
+  z-index: 30;
+  inset: 0;
+  background:
+    linear-gradient(180deg, transparent 45%, rgba(0, 0, 0, 0.54) 100%),
+    radial-gradient(ellipse at 50% 60%, transparent 35%, rgba(0, 0, 0, 0.35) 100%);
+}
+
+.product-media-fill {
+  background:
+    radial-gradient(circle at 68% 34%, rgba(210, 224, 255, 0.82), transparent 25%),
+    radial-gradient(circle at 80% 67%, rgba(195, 129, 205, 0.52), transparent 34%),
+    radial-gradient(circle at 33% 20%, rgba(173, 229, 204, 0.74), transparent 30%),
+    linear-gradient(120deg, #141414 10%, #658579 36%, #d3e6df 58%, #b8a0cb 100%);
+}
+
+main > section:not(.hero-section),
+main > .hero-canvas + section {
+  background: #050505;
+}
+
+/* The marketing surface stays fully dark after the immersive hero. The
+   existing semantic utility classes remain reusable while their website
+   presentation is translated into a restrained charcoal palette here. */
+.site-shell :where(main > section, footer) {
+  color: #f3f1ec;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+.site-shell :where(main > section, footer) [class*='text-[#17211D]'] {
+  color: #f3f1ec !important;
+}
+
+.site-shell :where(main > section, footer) [class*='text-[#55625D]'] {
+  color: #a9ada9 !important;
+}
+
+.site-shell :where(main > section, footer) [class*='text-[#63715A]'] {
+  color: #9daa94 !important;
+}
+
+.site-shell :where(main > section, footer) [class*='text-[#C9936E]'] {
+  color: #cf9d7d !important;
+}
+
+.site-shell :where(main > section, footer) [class*='bg-[#FCFAF5]'] {
+  background-color: #121313 !important;
+}
+
+.site-shell :where(main > section, footer) [class*='bg-[#F4F0E7]'] {
+  background-color: #0a0b0b !important;
+}
+
+.site-shell :where(main > section, footer) [class*='bg-[#DCD6CB]'] {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.site-shell :where(main > section, footer) [class*='bg-[#17211D]'] {
+  background-color: #ecebe7 !important;
+  color: #111313 !important;
+}
+
+.site-shell :where(main > section, footer) [class*='border-[#DCD6CB]'] {
+  border-color: rgba(255, 255, 255, 0.11) !important;
+}
+
+.site-shell :where(main > section, footer) [class*='border-[#17211D]'] {
+  border-color: rgba(255, 255, 255, 0.35) !important;
+}
+
+.site-shell :where(main > section, footer) .product-media {
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  background: #101111 !important;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.45);
+}
+
+/* Subtle dot grid pattern for technical clarity */
+.bg-subtle-grid {
+  background-image: radial-gradient(var(--color-line) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Hero entry keyframes */
+@keyframes heroFadeUp {
+  0% {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-fade-up-1 {
+  animation: heroFadeUp 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.05s both;
+}
+
+.animate-fade-up-2 {
+  animation: heroFadeUp 0.8s cubic-bezier(0.16, 1, 0.3, 1) 0.15s both;
+}
+
+.animate-fade-up-3 {
+  animation: heroFadeUp 0.85s cubic-bezier(0.16, 1, 0.3, 1) 0.25s both;
+}
+
+.animate-fade-up-4 {
+  animation: heroFadeUp 0.95s cubic-bezier(0.16, 1, 0.3, 1) 0.38s both;
+}
+
+/* Motion reduction compliance */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+  .animate-hero-float {
+    animation: none !important;
+  }
+}
+
+@media (max-width: 767px) {
+  .hero-section {
+    min-height: 812px;
+  }
+
+  .hero-copy {
+    padding-top: 116px;
+  }
+
+  .hero-copy h1 {
+    font-size: clamp(38px, 11vw, 52px);
+  }
+
+  .hero-product {
+    bottom: -2%;
+    width: min(620px, 88vw);
+  }
+
+  .hero-landscape {
+    height: 49%;
+  }
+
+  .landscape-front {
+    top: 48%;
+  }
+}

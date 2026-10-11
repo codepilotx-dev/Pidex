@@ -1,9 +1,11 @@
-export * from "./runtime/capabilities"
-export * from "./runtime/client"
-export * from "./wire/definition"
-export * from "./runtime/dispatcher"
-export * from "./wire/events"
-export * from "./wire/interactions"
-export * from "./wire/messages"
-export * from "./methods/index"
-export * from "./wire/primitives"
+export * from './runtime/Capabilities'
+export * from './runtime/Client'
+export * from './wire/Definition'
+export * from './runtime/Dispatcher'
+export * from './wire/Events'
+export * from './wire/Interactions'
+export * from './wire/Messages'
+export * from './methods/index'
+export { SkillSelectionSchema, type SkillSelection } from './methods/Core'
+export { decodeThreadPatchDiff } from './methods/Core'
+export * from './wire/Primitives'

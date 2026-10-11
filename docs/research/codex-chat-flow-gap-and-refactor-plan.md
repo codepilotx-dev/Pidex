@@ -13,7 +13,7 @@ CodePilotX 已经拥有持久 SQLite Turn、输入队列、事务 outbox、SSE c
 
 1. `apps/agent/src/session/ThreadService.ts` 的 `submit()` 同时决定新 Turn、排队和 guide。
 2. guide 先写入持久 mailbox，`executeTurn()` 通常只在一次完整运行前后读取 mailbox。
-3. `PiOrchestratorAdapter.steer()` 和 `PiAgentRuntime.steer()` 已存在，但主 ThreadService 没有调用。
+3. 旧的两层 Pi runtime 都提供了 `steer()`，但主 ThreadService 当时没有调用；当前由唯一 `AgentRuntime` 门面承接。
 4. `turn/steer` 没有复用 `turn/start` 的附件校验和绑定流程。
 5. `turn/interrupt` 接受可选 Turn ID，但 handler 没有用它进行精确匹配。
 6. Renderer 根据本地 `running/waiting` 快照选择 queue 或 guide，并提前推断提交结果。
@@ -67,9 +67,9 @@ completed
 - `apps/agent/src/session/TurnCoordinator.ts:24` 提供 Thread 级串行 admission gate、精确活动 Turn、steer admission 开关和 terminal promise。
 - `apps/agent/src/session/TurnRunner.ts:20` 成为普通 Chat 唯一 Turn terminalize 入口，统一完成终态事务、outbox 发布、临时 Turn 权限清理和 terminal promise 解析。
 - `apps/agent/src/session/ThreadService.ts:402-505` 将 start、follow-up、steer 分成明确入口；附件使用同一校验/绑定链路，`inputId` 负责幂等和竞态对账。
-- `apps/agent/src/orchestration/PiOrchestratorAdapter.ts:408,840` 将持久 mailbox 注入 live Pi runtime，并在 Pi session flush 的同一 SQLite 事务中标记 `steer-consumed`。
+- `apps/agent/src/orchestration/AgentRuntimeService.ts` 将持久 mailbox 注入 live Harness，并在 Pi session flush 的同一 SQLite 事务中标记 `steer-consumed`。
 - 中断时，已 consumed steer 留在原 Turn；未 consumed steer 保留原 `inputId`，转换为队首 FIFO follow-up，并随队列一起暂停。
-- `apps/agent/src/transport/rpc/handlers/thread.ts:182-248` 接通精确 `turn/steer`、必填 Turn ID 的 `turn/interrupt` 和显式 `queue/add`，删除 reorder 与 queue-to-steer RPC。
+- `apps/agent/src/transport/rpc/handlers/Thread.ts:182-248` 接通精确 `turn/steer`、必填 Turn ID 的 `turn/interrupt` 和显式 `queue/add`，删除 reorder 与 queue-to-steer RPC。
 - 权限交互区分 requested/granted permissions，进程内 grant store 实现 tool-call、Turn 和 Thread 隔离的运行会话生命周期，并在实际 Shell 权限判断处求安全交集。
 - 结构化提问保存 1–3 题 canonical payload，支持自由输入和自动决议；审批、权限、问题与 Hook 信任的 response、resolved outbox 和 interaction operation 在同一 SQLite 事务提交后才唤醒 runner。
 - Desktop 的活动 Turn 默认发送为 steer；`Ctrl+Enter` 和发送菜单为 follow-up；队列栏只保留查看、编辑、删除和暂停恢复。

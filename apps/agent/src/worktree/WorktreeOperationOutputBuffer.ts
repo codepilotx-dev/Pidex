@@ -1,5 +1,5 @@
-import { secretScrubber } from "../security/SecretScrubber"
-import { TerminalControlStripper } from "../security/TerminalControlStripper"
+import { secretScrubber } from '../security/SecretScrubber'
+import { TerminalControlStripper } from '../security/TerminalControlStripper'
 
 const MAX_OUTPUT_BYTES = 64 * 1024
 const COMPLETED_TTL_MS = 10 * 60 * 1000
@@ -15,7 +15,7 @@ type OutputState = {
 }
 
 class StreamingSecretScrubber {
-  private pending = ""
+  private pending = ''
   private droppingLine = false
   truncated = false
   discardedBytes = 0
@@ -25,26 +25,25 @@ class StreamingSecretScrubber {
     if (this.droppingLine) {
       const delimiter = input.search(/[\r\n]/)
       if (delimiter < 0) {
-        this.discardedBytes += Buffer.byteLength(input, "utf8")
-        return ""
+        this.discardedBytes += Buffer.byteLength(input, 'utf8')
+        return ''
       }
-      const next = input[delimiter] === "\r" && input[delimiter + 1] === "\n"
-        ? delimiter + 2
-        : delimiter + 1
-      this.discardedBytes += Buffer.byteLength(input.slice(0, next), "utf8")
+      const next =
+        input[delimiter] === '\r' && input[delimiter + 1] === '\n' ? delimiter + 2 : delimiter + 1
+      this.discardedBytes += Buffer.byteLength(input.slice(0, next), 'utf8')
       input = input.slice(next)
       this.droppingLine = false
     }
     this.pending += input
-    const delimiter = Math.max(this.pending.lastIndexOf("\r"), this.pending.lastIndexOf("\n"))
-    let output = ""
+    const delimiter = Math.max(this.pending.lastIndexOf('\r'), this.pending.lastIndexOf('\n'))
+    let output = ''
     if (delimiter >= 0) {
       output = secretScrubber.scrubText(this.pending.slice(0, delimiter + 1))
       this.pending = this.pending.slice(delimiter + 1)
     }
-    if (Buffer.byteLength(this.pending, "utf8") > MAX_OUTPUT_BYTES) {
-      this.discardedBytes += Buffer.byteLength(this.pending, "utf8")
-      this.pending = ""
+    if (Buffer.byteLength(this.pending, 'utf8') > MAX_OUTPUT_BYTES) {
+      this.discardedBytes += Buffer.byteLength(this.pending, 'utf8')
+      this.pending = ''
       this.droppingLine = true
       this.truncated = true
     }
@@ -52,9 +51,9 @@ class StreamingSecretScrubber {
   }
 
   flush() {
-    if (this.droppingLine) return ""
+    if (this.droppingLine) return ''
     const output = secretScrubber.scrubText(this.pending)
-    this.pending = ""
+    this.pending = ''
     return output
   }
 }
@@ -89,7 +88,7 @@ export class WorktreeOperationOutputBuffer {
   }
 
   private appendSanitized(state: OutputState, value: string) {
-    const encoded = Buffer.from(value, "utf8")
+    const encoded = Buffer.from(value, 'utf8')
     state.data = Buffer.concat([state.data, encoded])
     state.nextCursor += encoded.byteLength
     if (state.data.length > MAX_OUTPUT_BYTES) {
@@ -120,14 +119,15 @@ export class WorktreeOperationOutputBuffer {
   read(operationId: string, afterCursor = 0) {
     this.sweep()
     const state = this.operations.get(operationId)
-    if (!state) return { cursor: Math.max(0, afterCursor), data: "", truncated: false, complete: true }
+    if (!state)
+      return { cursor: Math.max(0, afterCursor), data: '', truncated: false, complete: true }
     const safeCursor = Math.max(0, Math.min(afterCursor, state.nextCursor))
     const truncated = safeCursor < state.oldestCursor || state.secrets.truncated
     let start = truncated ? 0 : safeCursor - state.oldestCursor
     while (start < state.data.length && (state.data[start]! & 0xc0) === 0x80) start += 1
     return {
       cursor: state.nextCursor,
-      data: state.data.subarray(start).toString("utf8"),
+      data: state.data.subarray(start).toString('utf8'),
       truncated,
       complete: state.complete,
     }

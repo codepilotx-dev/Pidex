@@ -1,4 +1,4 @@
-import type { DesktopEditAction } from '@codepilotx/shared/desktop-edit-ipc'
+import type { DesktopEditAction } from '@pidex/shared/desktop-edit-ipc'
 import {
   createContext,
   useCallback,
@@ -30,14 +30,8 @@ type EditCommandContextValue = {
   activeCapabilities: EditCommandCapabilities
   activeContext: CapturedEditCommandContext | null
   captureContext: (target: EventTarget | null) => CapturedEditCommandContext | null
-  perform: (
-    action: DesktopEditAction,
-    context?: CapturedEditCommandContext | null,
-  ) => Promise<void>
-  registerTarget: (
-    element: HTMLElement,
-    adapter: EditCommandAdapter,
-  ) => () => void
+  perform: (action: DesktopEditAction, context?: CapturedEditCommandContext | null) => Promise<void>
+  registerTarget: (element: HTMLElement, adapter: EditCommandAdapter) => () => void
 }
 
 const EMPTY_CAPABILITIES: EditCommandCapabilities = {
@@ -58,24 +52,16 @@ const EditCommandContext = createContext<EditCommandContextValue>({
   registerTarget: () => () => undefined,
 })
 
-export function EditCommandProvider({
-  children,
-}: {
-  children: ReactNode
-}): ReactNode {
+export function EditCommandProvider({ children }: { children: ReactNode }): ReactNode {
   const adaptersRef = useRef(new WeakMap<HTMLElement, EditCommandAdapter>())
   const activeContextRef = useRef<CapturedEditCommandContext | null>(null)
-  const [activeContext, setActiveContext] =
-    useState<CapturedEditCommandContext | null>(null)
+  const [activeContext, setActiveContext] = useState<CapturedEditCommandContext | null>(null)
   const [, setCapabilityVersion] = useState(0)
 
-  const updateActiveContext = useCallback(
-    (next: CapturedEditCommandContext | null): void => {
-      activeContextRef.current = next
-      setActiveContext(next)
-    },
-    [],
-  )
+  const updateActiveContext = useCallback((next: CapturedEditCommandContext | null): void => {
+    activeContextRef.current = next
+    setActiveContext(next)
+  }, [])
 
   const registerTarget = useCallback(
     (element: HTMLElement, adapter: EditCommandAdapter): (() => void) => {
@@ -92,10 +78,7 @@ export function EditCommandProvider({
 
   const captureContext = useCallback(
     (target: EventTarget | null): CapturedEditCommandContext | null => {
-      const next = resolveEditCommandContext(
-        target,
-        adaptersRef.current,
-      )
+      const next = resolveEditCommandContext(target, adaptersRef.current)
       updateActiveContext(next)
       return next
     },
@@ -103,29 +86,26 @@ export function EditCommandProvider({
   )
 
   const perform = useCallback(
-    async (
-      action: DesktopEditAction,
-      context = activeContextRef.current,
-    ): Promise<void> => {
+    async (action: DesktopEditAction, context = activeContextRef.current): Promise<void> => {
       if (!context?.getCapabilities()[action]) return
 
-      await new Promise<void>(resolve => {
+      await new Promise<void>((resolve) => {
         window.setTimeout(resolve, 0)
       })
       context.restore()
 
       if (context.adapter?.perform?.(action)) {
-        setCapabilityVersion(version => version + 1)
+        setCapabilityVersion((version) => version + 1)
         return
       }
 
-      const bridge = window.codePilotXDesktop?.performEditAction
+      const bridge = window.DesktopBridge?.performEditAction
       if (bridge) {
         await bridge(action).catch(() => undefined)
       } else {
         performBrowserEditAction(action)
       }
-      setCapabilityVersion(version => version + 1)
+      setCapabilityVersion((version) => version + 1)
     },
     [],
   )
@@ -133,15 +113,12 @@ export function EditCommandProvider({
   useEffect(() => {
     const refreshCapabilities = (): void => {
       if (activeContextRef.current) {
-        setCapabilityVersion(version => version + 1)
+        setCapabilityVersion((version) => version + 1)
       }
     }
     const handleFocusIn = (event: FocusEvent): void => {
       const target = event.target
-      if (
-        target instanceof Element &&
-        target.closest('[data-edit-command-preserve-target]')
-      ) {
+      if (target instanceof Element && target.closest('[data-edit-command-preserve-target]')) {
         return
       }
       const next = resolveEditCommandContext(target, adaptersRef.current)
@@ -149,10 +126,7 @@ export function EditCommandProvider({
     }
     const handlePointerDown = (event: PointerEvent): void => {
       const target = event.target
-      if (
-        target instanceof Element &&
-        target.closest('[data-edit-command-preserve-target]')
-      ) {
+      if (target instanceof Element && target.closest('[data-edit-command-preserve-target]')) {
         return
       }
       const next = resolveEditCommandContext(target, adaptersRef.current)
@@ -171,9 +145,7 @@ export function EditCommandProvider({
     }
   }, [updateActiveContext])
 
-  const activeCapabilities = activeContext
-    ? activeContext.getCapabilities()
-    : EMPTY_CAPABILITIES
+  const activeCapabilities = activeContext ? activeContext.getCapabilities() : EMPTY_CAPABILITIES
   const value = useMemo<EditCommandContextValue>(
     () => ({
       activeCapabilities,
@@ -182,20 +154,10 @@ export function EditCommandProvider({
       perform,
       registerTarget,
     }),
-    [
-      activeCapabilities,
-      activeContext,
-      captureContext,
-      perform,
-      registerTarget,
-    ],
+    [activeCapabilities, activeContext, captureContext, perform, registerTarget],
   )
 
-  return (
-    <EditCommandContext.Provider value={value}>
-      {children}
-    </EditCommandContext.Provider>
-  )
+  return <EditCommandContext.Provider value={value}>{children}</EditCommandContext.Provider>
 }
 
 export function useEditCommands(): EditCommandContextValue {
@@ -206,11 +168,8 @@ function resolveEditCommandContext(
   target: EventTarget | null,
   adapters: WeakMap<HTMLElement, EditCommandAdapter>,
 ): CapturedEditCommandContext | null {
-  const element = target instanceof HTMLElement
-    ? target
-    : target instanceof Node
-      ? target.parentElement
-      : null
+  const element =
+    target instanceof HTMLElement ? target : target instanceof Node ? target.parentElement : null
   if (!element) return captureDocumentSelection()
 
   for (
@@ -230,10 +189,7 @@ function resolveEditCommandContext(
   }
 
   const textControl = element.closest('input, textarea')
-  if (
-    textControl instanceof HTMLInputElement ||
-    textControl instanceof HTMLTextAreaElement
-  ) {
+  if (textControl instanceof HTMLInputElement || textControl instanceof HTMLTextAreaElement) {
     return captureTextControl(textControl)
   }
 
@@ -251,8 +207,7 @@ function captureTextControl(
   const selectionStart = element.selectionStart ?? 0
   const selectionEnd = element.selectionEnd ?? selectionStart
   const readonly = element.readOnly || element.disabled
-  const password =
-    element instanceof HTMLInputElement && element.type === 'password'
+  const password = element instanceof HTMLInputElement && element.type === 'password'
 
   return {
     kind: readonly ? 'readonly-editor' : 'editable',
@@ -268,9 +223,7 @@ function captureTextControl(
         copy: !password && hasSelection,
         paste: !readonly,
         delete: !readonly && hasSelection,
-        selectAll:
-          hasValue &&
-          (currentStart !== 0 || currentEnd !== element.value.length),
+        selectAll: hasValue && (currentStart !== 0 || currentEnd !== element.value.length),
       }
     },
     restore: () => {
@@ -284,13 +237,10 @@ function captureTextControl(
   }
 }
 
-function captureContentEditable(
-  element: HTMLElement,
-): CapturedEditCommandContext {
+function captureContentEditable(element: HTMLElement): CapturedEditCommandContext {
   const selection = window.getSelection()
   const range =
-    selection?.rangeCount &&
-    element.contains(selection.getRangeAt(0).commonAncestorContainer)
+    selection?.rangeCount && element.contains(selection.getRangeAt(0).commonAncestorContainer)
       ? selection.getRangeAt(0).cloneRange()
       : null
 
@@ -303,9 +253,7 @@ function captureContentEditable(
       copy: Boolean(range && !range.collapsed),
       paste: true,
       delete: Boolean(range && !range.collapsed),
-      selectAll: element.textContent?.length
-        ? !selectionCoversElement(element)
-        : false,
+      selectAll: element.textContent?.length ? !selectionCoversElement(element) : false,
     }),
     restore: () => {
       element.focus({ preventScroll: true })

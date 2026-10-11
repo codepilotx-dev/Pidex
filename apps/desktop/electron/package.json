@@ -1,12 +1,12 @@
 {
-  "name": "@codepilotx/desktop-electron",
-  "version": "0.2.0-beta.4",
+  "name": "@pidex/desktop-electron",
+  "version": "0.2.0-beta.6",
   "private": true,
   "type": "module",
   "main": "dist/main.js",
   "scripts": {
-    "typecheck": "tsc -p tsconfig.json --noEmit",
-    "build": "tsc -p tsconfig.json && bun build src/main.ts --target=node --format=esm --outdir=dist --external electron --external node-pty --sourcemap=external",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.preload.json --noEmit",
+    "build": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.preload.json --noEmit && bun build src/preload.cts --target=node --format=cjs --outfile=dist/preload.cjs --external electron && bun build src/main.ts --target=node --format=esm --outdir=dist --external electron --external node-pty --sourcemap=external && bun scripts/BuildBrowserRuntime.ts",
     "dev": "bun run build && electron .",
     "test:smoke": "playwright test --config playwright.smoke.config.ts",
     "test:performance": "playwright test --config playwright.performance.config.ts",
@@ -15,20 +15,23 @@
     "package:win": "electron-builder --win --x64 --publish never"
   },
   "devDependencies": {
-    "@codepilotx/shared": "workspace:*",
-    "@playwright/test": "1.55.1",
+    "@pidex/shared": "workspace:*",
+    "@pidex/agent-protocol": "workspace:*",
+    "playwright-core": "1.59.1",
+    "effect": "4.0.0-beta.83",
+    "@playwright/test": "1.59.1",
     "@types/node": "^24.0.0",
-    "electron": "39.8.10",
+    "electron": "41.10.6",
     "electron-builder": "26.15.3",
-    "typescript": "~5.8.3"
+    "typescript": "5.9.3"
   },
   "build": {
-    "appId": "com.codepilotx.desktop",
-    "productName": "CodePilotX",
+    "appId": "com.pidex.desktop",
+    "productName": "Pidex Desktop",
     "publish": {
       "provider": "github",
       "owner": "codepilotx-dev",
-      "repo": "CodePilotX"
+      "repo": "Pidex"
     },
     "asar": true,
     "npmRebuild": false,
@@ -49,12 +52,28 @@
         "to": "icon.ico"
       },
       {
-        "from": "../build/whale-icon.svg",
-        "to": "whale-icon.svg"
+        "from": "../build/pidex-mark-green.svg",
+        "to": "pidex-mark-green.svg"
       },
       {
-        "from": "../../agent/dist/x64/codepilotx-agent.exe",
-        "to": "agent/codepilotx-agent.exe"
+        "from": "../../agent/dist/x64/pidex-agent.exe",
+        "to": "agent/pidex-agent.exe"
+      },
+      {
+        "from": "../../agent/resources/skills",
+        "to": "agent/skills"
+      },
+      {
+        "from": "../../agent/resources/plugins",
+        "to": "agent/plugins"
+      },
+      {
+        "from": "../../agent/resources/integrations",
+        "to": "agent/integrations"
+      },
+      {
+        "from": "../native/cpx-cua/dist/cpx-cua.exe",
+        "to": "cua/cpx-cua.exe"
       },
       {
         "from": "../../../dist/renderer",
@@ -69,14 +88,22 @@
         "to": "third_party"
       },
       {
-        "from": "../../../packages/pi-agent-core/LICENSE",
-        "to": "packages/pi-agent-core/LICENSE"
+        "from": "../../agent/third_party/pi-agent-core/LICENSE",
+        "to": "agent/third_party/pi-agent-core/LICENSE"
+      }
+    ],
+    "protocols": [
+      {
+        "name": "Pidex Deep Link",
+        "schemes": [
+          "pidex"
+        ]
       }
     ],
     "win": {
       "icon": "icon.ico",
       "target": "nsis",
-      "artifactName": "CodePilotX-${version}-${arch}.${ext}"
+      "artifactName": "Pidex-Desktop-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,
@@ -88,6 +115,6 @@
     "electron-updater": "6.8.9",
     "jsonc-parser": "3.3.1",
     "node-pty": "1.1.0",
-    "smol-toml": "^1.7.0"
+    "smol-toml": "1.7.1"
   }
 }

@@ -1,6 +1,4 @@
-export type ProposedPlanChunk =
-  | { kind: "text"; delta: string }
-  | { kind: "plan"; delta: string }
+export type ProposedPlanChunk = { kind: 'text'; delta: string } | { kind: 'plan'; delta: string }
 
 const OPEN_TAG = /^\s*<proposed_plan>\s*$/
 const CLOSE_TAG = /^\s*<\/proposed_plan>\s*$/
@@ -11,22 +9,22 @@ const CLOSE_TAG = /^\s*<\/proposed_plan>\s*$/
  * authoritative plan, matching Codex's final-item reconciliation semantics.
  */
 export class ProposedPlanStreamParser {
-  private buffer = ""
-  private mode: "text" | "plan" = "text"
-  private text = ""
-  private currentPlan = ""
+  private buffer = ''
+  private mode: 'text' | 'plan' = 'text'
+  private text = ''
+  private currentPlan = ''
   private completedPlan: string | null = null
 
   push(delta: string): ProposedPlanChunk[] {
     if (!delta) return []
     this.buffer += delta
     const chunks: ProposedPlanChunk[] = []
-    let newline = this.buffer.indexOf("\n")
+    let newline = this.buffer.indexOf('\n')
     while (newline >= 0) {
       const line = this.buffer.slice(0, newline + 1)
       this.buffer = this.buffer.slice(newline + 1)
       this.consumeLine(line, chunks)
-      newline = this.buffer.indexOf("\n")
+      newline = this.buffer.indexOf('\n')
     }
     return chunks
   }
@@ -35,9 +33,9 @@ export class ProposedPlanStreamParser {
     const chunks: ProposedPlanChunk[] = []
     if (this.buffer) {
       this.consumeLine(this.buffer, chunks)
-      this.buffer = ""
+      this.buffer = ''
     }
-    if (this.mode === "plan") this.completeCurrentPlan()
+    if (this.mode === 'plan') this.completeCurrentPlan()
     const plan = this.completedPlan?.trim()
     return {
       chunks,
@@ -47,25 +45,25 @@ export class ProposedPlanStreamParser {
   }
 
   private consumeLine(line: string, chunks: ProposedPlanChunk[]) {
-    const withoutNewline = line.replace(/\r?\n$/, "")
+    const withoutNewline = line.replace(/\r?\n$/, '')
     if (OPEN_TAG.test(withoutNewline)) {
-      if (this.mode === "plan") this.completeCurrentPlan()
-      this.mode = "plan"
-      this.currentPlan = ""
+      if (this.mode === 'plan') this.completeCurrentPlan()
+      this.mode = 'plan'
+      this.currentPlan = ''
       return
     }
-    if (CLOSE_TAG.test(withoutNewline) && this.mode === "plan") {
+    if (CLOSE_TAG.test(withoutNewline) && this.mode === 'plan') {
       this.completeCurrentPlan()
-      this.mode = "text"
+      this.mode = 'text'
       return
     }
-    if (this.mode === "plan") {
+    if (this.mode === 'plan') {
       this.currentPlan += line
-      chunks.push({ kind: "plan", delta: line })
+      chunks.push({ kind: 'plan', delta: line })
       return
     }
     this.text += line
-    chunks.push({ kind: "text", delta: line })
+    chunks.push({ kind: 'text', delta: line })
   }
 
   private completeCurrentPlan() {
@@ -75,5 +73,5 @@ export class ProposedPlanStreamParser {
 
 export const proposedPlanTitle = (markdown: string) => {
   const heading = markdown.match(/^\s*#\s+(.+?)\s*$/m)?.[1]?.trim()
-  return heading || "实施计划"
+  return heading || '实施计划'
 }

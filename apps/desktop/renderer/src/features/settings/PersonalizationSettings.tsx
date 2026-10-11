@@ -1,6 +1,6 @@
 import React from 'react'
-import { useDesktopSettings } from './useDesktopSettings.js'
-import type { DesktopPersonality } from '../../../shared/types.js'
+import { useDesktopSettings } from './UseDesktopSettings.js'
+import type { DesktopPersonality } from '../../../shared/Types.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
 import { SettingsRow } from './SettingsRow.js'
@@ -17,27 +17,12 @@ const PERSONALITY_OPTIONS: Array<{
   { value: 'encouraging', label: '鼓励' },
 ]
 
-function LearnMoreLink() {
-  return (
-    <a
-      className="settings-row-link personalization-learn-more-link"
-      href="#"
-      onClick={event => event.preventDefault()}
-    >
-      了解更多
-    </a>
-  )
-}
-
 type Props = {
   onError?: (message: string) => void
   onNotice?: (message: string) => void
 }
 
-export function PersonalizationSettings({
-  onError,
-  onNotice,
-}: Props = {}): React.ReactNode {
+export function PersonalizationSettings({ onError, onNotice }: Props = {}): React.ReactNode {
   const { draft } = useDesktopSettings()
 
   async function saveCustomInstructions(): Promise<void> {
@@ -52,23 +37,25 @@ export function PersonalizationSettings({
 
   return (
     <SettingsContentArea className="">
-      <div className="settings-content-inner">
-        <div className="settings-page-header">
-          <h2 className="settings-page-title">个性化</h2>
+      <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
+        <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
+          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+            个性化
+          </h2>
         </div>
 
         <SettingsSection>
           <SettingsRow
             title="个性"
-            description="选择 CodePilotX 回复的默认语气"
+            description="选择 Pidex 回复的默认语气"
             autoSave
             control={
               <SettingsDropdown
-                width={240}
+                size="md"
                 ariaLabel="个性"
                 value={draft.values.personality}
                 options={PERSONALITY_OPTIONS}
-                onChange={value => {
+                onChange={(value) => {
                   draft.setValue('personality', value as DesktopPersonality)
                   draft.autoSave()
                 }}
@@ -79,24 +66,18 @@ export function PersonalizationSettings({
 
         <SettingsSection
           title="自定义指令"
-          description={
-            <>
-              为此主机上的所有任务向 CodePilotX 提供额外说明和上下文。
-              <LearnMoreLink />
-            </>
-          }
+          description={<>为此主机上的所有任务向 Pidex 提供额外说明和上下文。</>}
         >
-          <div className="personalization-instructions-editor">
+          <div className="personalization-instructions-editor tw:grid tw:gap-3">
             <textarea
-              className="settings-textarea settings-textarea-tall personalization-textarea"
-              onChange={event =>
-                draft.setValue('customInstructions', event.target.value)
-              }
+              className="settings-textarea settings-textarea-tall personalization-textarea tw:min-h-105 tw:w-full tw:font-mono tw:text-[length:var(--cpx-sys-font-size-code)] tw:[line-height:var(--cpx-sys-line-height-code)]"
+              onChange={(event) => draft.setValue('customInstructions', event.target.value)}
               placeholder="1、用 utf-8 读取文件！&#10;2、不写测试"
               value={draft.values.customInstructions}
             />
-            <div className="personalization-actions">
+            <div className="personalization-actions tw:flex tw:justify-end">
               <Button
+                color="primary"
                 disabled={draft.saving}
                 onClick={() => void saveCustomInstructions()}
                 type="button"

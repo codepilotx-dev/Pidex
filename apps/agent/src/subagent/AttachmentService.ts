@@ -1,6 +1,6 @@
-import { randomUUID } from "node:crypto"
-import { AgentError } from "../domain"
-import { ContentBlobStore, contentSha256 } from "../storage/ContentBlobStore"
+import { randomUUID } from 'node:crypto'
+import { AgentError } from '../Domain'
+import { ContentBlobStore, contentSha256 } from '../storage/ContentBlobStore'
 
 export const ATTACHMENT_LIMITS = {
   maxCount: 8,
@@ -9,17 +9,17 @@ export const ATTACHMENT_LIMITS = {
   maxTotalBytes: 25 * 1024 * 1024,
 } as const
 
-const IMAGE_MIME_TYPES = new Set(["image/png", "image/jpeg", "image/gif", "image/webp"])
+const IMAGE_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp'])
 const TEXT_APPLICATION_MIME_TYPES = new Set([
-  "application/json",
-  "application/ld+json",
-  "application/javascript",
-  "application/xml",
-  "application/yaml",
+  'application/json',
+  'application/ld+json',
+  'application/javascript',
+  'application/xml',
+  'application/yaml',
 ])
 const WINDOWS_RESERVED_NAME = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i
 
-export type AttachmentKind = "text" | "image"
+export type AttachmentKind = 'text' | 'image'
 
 export interface AttachmentUpload {
   readonly kind: AttachmentKind
@@ -68,8 +68,11 @@ export interface AttachmentServiceOptions {
   readonly id?: () => string
 }
 
-const cloneBinding = (binding: AttachmentBinding | null) => binding ? { ...binding } : null
-const cloneRecord = (record: AttachmentRecord): AttachmentRecord => ({ ...record, binding: cloneBinding(record.binding) })
+const cloneBinding = (binding: AttachmentBinding | null) => (binding ? { ...binding } : null)
+const cloneRecord = (record: AttachmentRecord): AttachmentRecord => ({
+  ...record,
+  binding: cloneBinding(record.binding),
+})
 const bindingEquals = (left: AttachmentBinding | null, right: AttachmentBinding) =>
   left?.type === right.type && left.id === right.id
 
@@ -78,7 +81,7 @@ export class InMemoryAttachmentCatalog implements AttachmentCatalog {
 
   async insertMany(records: readonly AttachmentRecord[]) {
     if (records.some((record) => this.records.has(record.id))) {
-      throw new AgentError("ATTACHMENT_ID_CONFLICT", "附件 ID 已存在", 409)
+      throw new AgentError('ATTACHMENT_ID_CONFLICT', '附件 ID 已存在', 409)
     }
     for (const record of records) this.records.set(record.id, cloneRecord(record))
   }
@@ -96,14 +99,17 @@ export class InMemoryAttachmentCatalog implements AttachmentCatalog {
   }
 
   async listByBinding(binding: AttachmentBinding) {
-    return [...this.records.values()].filter((record) => bindingEquals(record.binding, binding)).map(cloneRecord)
+    return [...this.records.values()]
+      .filter((record) => bindingEquals(record.binding, binding))
+      .map(cloneRecord)
   }
 
   async bindMany(ids: readonly string[], binding: AttachmentBinding) {
     const records = ids.map((id) => this.records.get(id))
-    if (records.some((record) => !record)) throw new AgentError("ATTACHMENT_NOT_FOUND", "一个或多个附件不存在", 404)
+    if (records.some((record) => !record))
+      throw new AgentError('ATTACHMENT_NOT_FOUND', '一个或多个附件不存在', 404)
     if (records.some((record) => record!.binding && !bindingEquals(record!.binding, binding))) {
-      throw new AgentError("ATTACHMENT_ALREADY_BOUND", "附件已绑定到其他对象", 409)
+      throw new AgentError('ATTACHMENT_ALREADY_BOUND', '附件已绑定到其他对象', 409)
     }
     for (const record of records as AttachmentRecord[]) {
       this.records.set(record.id, { ...record, binding: { ...binding } })
@@ -112,9 +118,10 @@ export class InMemoryAttachmentCatalog implements AttachmentCatalog {
 
   async unbindMany(ids: readonly string[], binding: AttachmentBinding) {
     const records = ids.map((id) => this.records.get(id))
-    if (records.some((record) => !record)) throw new AgentError("ATTACHMENT_NOT_FOUND", "一个或多个附件不存在", 404)
+    if (records.some((record) => !record))
+      throw new AgentError('ATTACHMENT_NOT_FOUND', '一个或多个附件不存在', 404)
     if (records.some((record) => !bindingEquals(record!.binding, binding))) {
-      throw new AgentError("ATTACHMENT_BINDING_MISMATCH", "附件绑定对象不匹配", 409)
+      throw new AgentError('ATTACHMENT_BINDING_MISMATCH', '附件绑定对象不匹配', 409)
     }
     for (const record of records as AttachmentRecord[]) {
       this.records.set(record.id, { ...record, binding: null })
@@ -143,71 +150,108 @@ export class InMemoryAttachmentCatalog implements AttachmentCatalog {
 
 const validateName = (name: string) => {
   if (
-    !name || name.length > 255 || name === "." || name === ".." ||
-    /[\\/\x00-\x1f]/.test(name) || name.endsWith(".") || name.endsWith(" ") || WINDOWS_RESERVED_NAME.test(name)
+    !name ||
+    name.length > 255 ||
+    name === '.' ||
+    name === '..' ||
+    /[\\/\x00-\x1f]/.test(name) ||
+    name.endsWith('.') ||
+    name.endsWith(' ') ||
+    WINDOWS_RESERVED_NAME.test(name)
   ) {
-    throw new AgentError("ATTACHMENT_NAME_INVALID", "附件名称不安全", 400)
+    throw new AgentError('ATTACHMENT_NAME_INVALID', '附件名称不安全', 400)
   }
 }
 
 const validateBinding = (binding: AttachmentBinding) => {
   if (
-    !binding.type || binding.type.length > 64 || !binding.id || binding.id.length > 256 ||
-    /[\x00-\x1f]/.test(binding.type) || /[\x00-\x1f]/.test(binding.id)
+    !binding.type ||
+    binding.type.length > 64 ||
+    !binding.id ||
+    binding.id.length > 256 ||
+    /[\x00-\x1f]/.test(binding.type) ||
+    /[\x00-\x1f]/.test(binding.id)
   ) {
-    throw new AgentError("ATTACHMENT_BINDING_INVALID", "附件绑定标识无效", 400)
+    throw new AgentError('ATTACHMENT_BINDING_INVALID', '附件绑定标识无效', 400)
   }
 }
 
 const uniqueIDs = (ids: readonly string[]) => {
   if (ids.length === 0 || new Set(ids).size !== ids.length || ids.some((id) => !id)) {
-    throw new AgentError("ATTACHMENT_IDS_INVALID", "附件 ID 必须非空且不能重复", 400)
+    throw new AgentError('ATTACHMENT_IDS_INVALID', '附件 ID 必须非空且不能重复', 400)
   }
 }
 
 export const normalizeAttachmentMimeType = (kind: AttachmentKind, value: string) => {
-  const parts = value.toLowerCase().split(";").map((part) => part.trim())
-  const mimeType = parts[0] ?? ""
-  const charset = parts.find((part) => part.startsWith("charset="))?.slice("charset=".length).replaceAll('"', "")
-  if (charset && charset !== "utf-8" && charset !== "utf8") {
-    throw new AgentError("ATTACHMENT_CHARSET_UNSUPPORTED", "文本附件只支持 UTF-8", 400)
+  const parts = value
+    .toLowerCase()
+    .split(';')
+    .map((part) => part.trim())
+  const mimeType = parts[0] ?? ''
+  const charset = parts
+    .find((part) => part.startsWith('charset='))
+    ?.slice('charset='.length)
+    .replaceAll('"', '')
+  if (charset && charset !== 'utf-8' && charset !== 'utf8') {
+    throw new AgentError('ATTACHMENT_CHARSET_UNSUPPORTED', '文本附件只支持 UTF-8', 400)
   }
-  if (kind === "image" && !IMAGE_MIME_TYPES.has(mimeType)) {
-    throw new AgentError("ATTACHMENT_IMAGE_TYPE_UNSUPPORTED", "仅支持 PNG、JPEG、GIF 和 WebP 图片", 400)
+  if (kind === 'image' && !IMAGE_MIME_TYPES.has(mimeType)) {
+    throw new AgentError(
+      'ATTACHMENT_IMAGE_TYPE_UNSUPPORTED',
+      '仅支持 PNG、JPEG、GIF 和 WebP 图片',
+      400,
+    )
   }
-  if (kind === "text" && !mimeType.startsWith("text/") && !TEXT_APPLICATION_MIME_TYPES.has(mimeType)) {
-    throw new AgentError("ATTACHMENT_TEXT_TYPE_UNSUPPORTED", "附件 MIME 类型不是受支持的文本类型", 400)
+  if (
+    kind === 'text' &&
+    !mimeType.startsWith('text/') &&
+    !TEXT_APPLICATION_MIME_TYPES.has(mimeType)
+  ) {
+    throw new AgentError(
+      'ATTACHMENT_TEXT_TYPE_UNSUPPORTED',
+      '附件 MIME 类型不是受支持的文本类型',
+      400,
+    )
   }
   return mimeType
 }
 
 const hasImageSignature = (mimeType: string, data: Uint8Array) => {
-  if (mimeType === "image/png") {
-    return data.length >= 8 && [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => data[index] === byte)
+  if (mimeType === 'image/png') {
+    return (
+      data.length >= 8 &&
+      [137, 80, 78, 71, 13, 10, 26, 10].every((byte, index) => data[index] === byte)
+    )
   }
-  if (mimeType === "image/jpeg") return data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
-  if (mimeType === "image/gif") {
+  if (mimeType === 'image/jpeg')
+    return data.length >= 3 && data[0] === 0xff && data[1] === 0xd8 && data[2] === 0xff
+  if (mimeType === 'image/gif') {
     const header = new TextDecoder().decode(data.subarray(0, 6))
-    return header === "GIF87a" || header === "GIF89a"
+    return header === 'GIF87a' || header === 'GIF89a'
   }
-  return data.length >= 12 &&
-    new TextDecoder().decode(data.subarray(0, 4)) === "RIFF" &&
-    new TextDecoder().decode(data.subarray(8, 12)) === "WEBP"
+  return (
+    data.length >= 12 &&
+    new TextDecoder().decode(data.subarray(0, 4)) === 'RIFF' &&
+    new TextDecoder().decode(data.subarray(8, 12)) === 'WEBP'
+  )
 }
 
 export const attachmentUploadBytes = (upload: AttachmentUpload, mimeType: string) => {
-  if (upload.kind === "image" && typeof upload.data === "string") {
-    throw new AgentError("ATTACHMENT_IMAGE_BYTES_REQUIRED", "图片附件必须使用二进制数据", 400)
+  if (upload.kind === 'image' && typeof upload.data === 'string') {
+    throw new AgentError('ATTACHMENT_IMAGE_BYTES_REQUIRED', '图片附件必须使用二进制数据', 400)
   }
-  const data = typeof upload.data === "string" ? new TextEncoder().encode(upload.data) : new Uint8Array(upload.data)
-  if (upload.kind === "text") {
+  const data =
+    typeof upload.data === 'string'
+      ? new TextEncoder().encode(upload.data)
+      : new Uint8Array(upload.data)
+  if (upload.kind === 'text') {
     try {
-      new TextDecoder("utf-8", { fatal: true }).decode(data)
+      new TextDecoder('utf-8', { fatal: true }).decode(data)
     } catch {
-      throw new AgentError("ATTACHMENT_UTF8_INVALID", "文本附件不是有效 UTF-8", 400)
+      throw new AgentError('ATTACHMENT_UTF8_INVALID', '文本附件不是有效 UTF-8', 400)
     }
   } else if (!hasImageSignature(mimeType, data)) {
-    throw new AgentError("ATTACHMENT_IMAGE_INVALID", "图片内容与 MIME 类型不匹配", 400)
+    throw new AgentError('ATTACHMENT_IMAGE_INVALID', '图片内容与 MIME 类型不匹配', 400)
   }
   return data
 }
@@ -216,9 +260,14 @@ export const prepareAttachmentUpload = (upload: AttachmentUpload) => {
   validateName(upload.name)
   const mimeType = normalizeAttachmentMimeType(upload.kind, upload.mimeType)
   const data = attachmentUploadBytes(upload, mimeType)
-  const limit = upload.kind === "text" ? ATTACHMENT_LIMITS.maxTextBytes : ATTACHMENT_LIMITS.maxImageBytes
+  const limit =
+    upload.kind === 'text' ? ATTACHMENT_LIMITS.maxTextBytes : ATTACHMENT_LIMITS.maxImageBytes
   if (data.byteLength > limit) {
-    throw new AgentError("ATTACHMENT_FILE_TOO_LARGE", `附件 ${upload.name} 超过 ${limit} 字节上限`, 413)
+    throw new AgentError(
+      'ATTACHMENT_FILE_TOO_LARGE',
+      `附件 ${upload.name} 超过 ${limit} 字节上限`,
+      413,
+    )
   }
   return { upload, mimeType, data, sha256: contentSha256(data) }
 }
@@ -244,19 +293,30 @@ export class AttachmentService {
 
   private exclusive<T>(operation: () => Promise<T>) {
     const result = this.mutationQueue.then(operation, operation)
-    this.mutationQueue = result.then(() => undefined, () => undefined)
+    this.mutationQueue = result.then(
+      () => undefined,
+      () => undefined,
+    )
     return result
   }
 
   async store(uploads: readonly AttachmentUpload[]) {
     return this.exclusive(async () => {
       if (uploads.length === 0 || uploads.length > ATTACHMENT_LIMITS.maxCount) {
-        throw new AgentError("ATTACHMENT_COUNT_LIMIT", `每次必须包含 1 到 ${ATTACHMENT_LIMITS.maxCount} 个附件`, 413)
+        throw new AgentError(
+          'ATTACHMENT_COUNT_LIMIT',
+          `每次必须包含 1 到 ${ATTACHMENT_LIMITS.maxCount} 个附件`,
+          413,
+        )
       }
       const prepared = uploads.map(prepareAttachmentUpload)
       const total = prepared.reduce((sum, item) => sum + item.data.byteLength, 0)
       if (total > ATTACHMENT_LIMITS.maxTotalBytes) {
-        throw new AgentError("ATTACHMENT_TOTAL_TOO_LARGE", `附件总量超过 ${ATTACHMENT_LIMITS.maxTotalBytes} 字节上限`, 413)
+        throw new AgentError(
+          'ATTACHMENT_TOTAL_TOO_LARGE',
+          `附件总量超过 ${ATTACHMENT_LIMITS.maxTotalBytes} 字节上限`,
+          413,
+        )
       }
 
       const createdAt = this.now()
@@ -270,8 +330,11 @@ export class AttachmentService {
         createdAt,
         binding: null,
       }))
-      if (new Set(records.map((record) => record.id)).size !== records.length || records.some((record) => !record.id)) {
-        throw new AgentError("ATTACHMENT_ID_INVALID", "附件 ID 生成器返回了无效或重复 ID", 500)
+      if (
+        new Set(records.map((record) => record.id)).size !== records.length ||
+        records.some((record) => !record.id)
+      ) {
+        throw new AgentError('ATTACHMENT_ID_INVALID', '附件 ID 生成器返回了无效或重复 ID', 500)
       }
 
       const createdBlobs = new Set<string>()
@@ -280,7 +343,7 @@ export class AttachmentService {
         for (const item of prepared) {
           const stored = await this.blobs.put(item.data)
           if (stored.sha256 !== item.sha256) {
-            throw new AgentError("ATTACHMENT_BLOB_CORRUPT", "附件 Blob 摘要不一致", 500)
+            throw new AgentError('ATTACHMENT_BLOB_CORRUPT', '附件 Blob 摘要不一致', 500)
           }
           if (stored.created) createdBlobs.add(item.sha256)
         }
@@ -288,9 +351,10 @@ export class AttachmentService {
         catalogInserted = true
         return records.map(cloneRecord)
       } catch (error) {
-        if (catalogInserted) await this.catalog.removeMany(records.map((record) => record.id)).catch(() => undefined)
+        if (catalogInserted)
+          await this.catalog.removeMany(records.map((record) => record.id)).catch(() => undefined)
         for (const hash of createdBlobs) {
-          if (await this.catalog.countBySha256(hash).catch(() => 1) === 0) {
+          if ((await this.catalog.countBySha256(hash).catch(() => 1)) === 0) {
             await this.blobs.remove(hash).catch(() => undefined)
           }
         }
@@ -302,18 +366,22 @@ export class AttachmentService {
   async read(id: string): Promise<AttachmentReadResult> {
     return this.exclusive(async () => {
       const record = await this.catalog.get(id)
-      if (!record) throw new AgentError("ATTACHMENT_NOT_FOUND", "附件不存在", 404)
+      if (!record) throw new AgentError('ATTACHMENT_NOT_FOUND', '附件不存在', 404)
       return { record, data: await this.blobs.read(record.sha256) }
     })
   }
 
   async readText(id: string) {
     const result = await this.read(id)
-    if (result.record.kind !== "text") throw new AgentError("ATTACHMENT_NOT_TEXT", "附件不是文本", 400)
+    if (result.record.kind !== 'text')
+      throw new AgentError('ATTACHMENT_NOT_TEXT', '附件不是文本', 400)
     try {
-      return { record: result.record, text: new TextDecoder("utf-8", { fatal: true }).decode(result.data) }
+      return {
+        record: result.record,
+        text: new TextDecoder('utf-8', { fatal: true }).decode(result.data),
+      }
     } catch {
-      throw new AgentError("ATTACHMENT_UTF8_INVALID", "文本附件不是有效 UTF-8", 500)
+      throw new AgentError('ATTACHMENT_UTF8_INVALID', '文本附件不是有效 UTF-8', 500)
     }
   }
 
@@ -342,14 +410,14 @@ export class AttachmentService {
 
   async cleanupOrphans(createdBefore: number, limit = 100) {
     if (!Number.isFinite(createdBefore) || !Number.isInteger(limit) || limit < 1 || limit > 1_000) {
-      throw new AgentError("ATTACHMENT_CLEANUP_INPUT_INVALID", "孤儿清理参数无效", 400)
+      throw new AgentError('ATTACHMENT_CLEANUP_INPUT_INVALID', '孤儿清理参数无效', 400)
     }
     return this.exclusive(async () => {
       const removed = await this.catalog.removeOrphans(createdBefore, limit)
       const hashes = [...new Set(removed.map((record) => record.sha256))]
       let deletedBlobs = 0
       for (const hash of hashes) {
-        if (await this.catalog.countBySha256(hash) === 0) {
+        if ((await this.catalog.countBySha256(hash)) === 0) {
           if (await this.blobs.remove(hash)) deletedBlobs += 1
         }
       }

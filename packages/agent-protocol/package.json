@@ -1,28 +1,31 @@
 {
-  "name": "@codepilotx/agent-protocol",
+  "name": "@pidex/agent-protocol",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./capabilities": "./src/runtime/capabilities.ts",
-    "./client": "./src/runtime/client.ts",
-    "./dispatcher": "./src/runtime/dispatcher.ts",
-    "./events": "./src/wire/events.ts",
-    "./interactions": "./src/wire/interactions.ts",
+    "./capabilities": "./src/runtime/Capabilities.ts",
+    "./client": "./src/runtime/Client.ts",
+    "./dispatcher": "./src/runtime/Dispatcher.ts",
+    "./events": "./src/wire/Events.ts",
+    "./interactions": "./src/wire/Interactions.ts",
     "./methods": "./src/methods/index.ts",
-    "./host": "./src/methods/host.ts",
-    "./local-environment": "./src/methods/local-environment.ts",
-    "./terminal": "./src/methods/terminal.ts",
-    "./worktree": "./src/methods/worktree.ts"
+    "./automation": "./src/methods/Automation.ts",
+    "./calendar": "./src/methods/Calendar.ts",
+    "./host": "./src/methods/Host.ts",
+    "./local-environment": "./src/methods/LocalEnvironment.ts",
+    "./terminal": "./src/methods/Terminal.ts",
+    "./worktree": "./src/methods/Worktree.ts",
+    "./session-group": "./src/methods/SessionGroup.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "dependencies": {
-    "@codepilotx/model-schema": "workspace:*",
-    "@codepilotx/shared": "workspace:*",
+    "@pidex/model-schema": "workspace:*",
+    "@pidex/shared": "workspace:*",
     "effect": "4.0.0-beta.83"
   },
   "devDependencies": {

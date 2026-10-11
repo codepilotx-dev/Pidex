@@ -1,0 +1,171 @@
+/*
+ * Overlay motion residue: floating surfaces, tooltips and dialogs.
+ *
+ * Why these rules are not Tailwind utilities:
+ * - Every portalled surface enters and exits through shared keyframes
+ *   (radix-floating-surface-in/out, tooltip-fade-in, ui-dialog-backdrop-in/out)
+ *   whose duration and easing come from --cpx-sys-motion-* / --cpx-sys-ease-*.
+ *   `tw:animate-*` can only name an existing --animate-* theme entry, and
+ *   registering a new keyframe + duration pair would need styles/tailwind.css,
+ *   so the animation declarations stay verbatim here.
+ * - The slide distance is carried by --cpx-floating-offset-x/y, which only
+ *   these keyframes read, so the per-side offsets live next to them.
+ * - transform-origin consumes Radix's runtime --radix-*-transform-origin
+ *   variables, which exist only on the portalled element at runtime.
+ * The semantic class names stay because features and visual tests query them.
+ */
+@layer primitives {
+  .popover-surface[data-side],
+  .sidebar-context-menu-content[data-side],
+  .settings-dropdown-content[data-side],
+  .permission-select-content[data-side],
+  .appearance-color-popover[data-side],
+  .thread-summary-popover[data-side],
+  .tooltip-presence[data-side] {
+    --cpx-floating-offset-x: 0px;
+    --cpx-floating-offset-y: 0px;
+
+    transform-origin: var(--radix-menubar-content-transform-origin, center);
+
+    &[data-side='top'] {
+      transform-origin: bottom center;
+      --cpx-floating-offset-y: var(--cpx-sys-space-1);
+    }
+
+    &[data-side='bottom'] {
+      transform-origin: top center;
+      --cpx-floating-offset-y: calc(var(--cpx-sys-space-1) * -1);
+    }
+
+    &[data-side='left'] {
+      transform-origin: center right;
+      --cpx-floating-offset-x: var(--cpx-sys-space-1);
+    }
+
+    &[data-side='right'] {
+      transform-origin: center left;
+      --cpx-floating-offset-x: calc(var(--cpx-sys-space-1) * -1);
+    }
+
+    &[data-state='open'] {
+      animation: radix-floating-surface-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
+    }
+
+    &[data-state='closed'] {
+      animation: radix-floating-surface-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
+    }
+  }
+
+  .tooltip-content {
+    transform-origin: var(--radix-tooltip-content-transform-origin, center);
+  }
+
+  .tooltip-presence:is([data-state='delayed-open'], [data-state='instant-open']) {
+    animation: tooltip-fade-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
+  }
+
+  .tooltip-presence[data-state='closed'] {
+    animation: radix-floating-surface-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
+  }
+
+  .ui-dialog-backdrop[data-state='open'] {
+    animation: ui-dialog-backdrop-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
+  }
+
+  .ui-dialog-backdrop[data-state='closed'] {
+    animation: ui-dialog-backdrop-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
+  }
+
+  .ui-dialog-surface[data-state='open'] {
+    animation: radix-floating-surface-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
+  }
+
+  .ui-dialog-surface[data-state='closed'] {
+    animation: radix-floating-surface-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
+  }
+
+  /* Centered and right-side dialogs reuse the shared floating keyframes. */
+  .ui-dialog-surface--centered {
+    --cpx-floating-offset-x: 0px;
+    --cpx-floating-offset-y: var(--cpx-sys-space-1);
+  }
+
+  .ui-dialog-surface--side-right {
+    --cpx-floating-offset-x: var(--cpx-sys-space-1);
+    --cpx-floating-offset-y: 0px;
+  }
+
+  :root[data-reduce-motion='on']
+    :is(
+      .popover-surface[data-side],
+      .sidebar-context-menu-content[data-side],
+      .settings-dropdown-content[data-side],
+      .permission-select-content[data-side],
+      .appearance-color-popover[data-side],
+      .thread-summary-popover[data-side],
+      .popover[data-state],
+      .popover-item-tooltip,
+      .tooltip-content,
+      .tooltip-presence,
+      .ui-dialog-backdrop,
+      .ui-dialog-surface
+    ) {
+    animation: none;
+  }
+
+  @keyframes radix-floating-surface-in {
+    from {
+      opacity: 0;
+      transform: translate(var(--cpx-floating-offset-x, 0), var(--cpx-floating-offset-y, 0));
+    }
+
+    to {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+  }
+
+  @keyframes radix-floating-surface-out {
+    from {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+
+    to {
+      opacity: 0;
+      transform: translate(var(--cpx-floating-offset-x, 0), var(--cpx-floating-offset-y, 0));
+    }
+  }
+
+  @keyframes tooltip-fade-in {
+    from {
+      opacity: 0;
+      transform: translate(var(--cpx-floating-offset-x, 0), var(--cpx-floating-offset-y, 0));
+    }
+
+    to {
+      opacity: 1;
+      transform: translate(0, 0);
+    }
+  }
+
+  @keyframes ui-dialog-backdrop-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes ui-dialog-backdrop-out {
+    from {
+      opacity: 1;
+    }
+
+    to {
+      opacity: 0;
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "extract-zip",
+  "version": "2.0.2-pidex.1",
+  "description": "Pidex-maintained security fix for extract-zip 2.0.1",
+  "main": "index.js",
+  "types": "index.d.ts",
+  "bin": {
+    "extract-zip": "cli.js"
+  },
+  "files": [
+    "cli.js",
+    "index.d.ts",
+    "index.js",
+    "LICENSE",
+    "readme.md"
+  ],
+  "author": "max ogden",
+  "license": "BSD-2-Clause",
+  "repository": "maxogden/extract-zip",
+  "keywords": [
+    "unzip",
+    "zip",
+    "extract"
+  ],
+  "engines": {
+    "node": ">= 10.17.0"
+  },
+  "dependencies": {
+    "debug": "^4.1.1",
+    "get-stream": "^5.1.0",
+    "yauzl": "^2.10.0"
+  },
+  "optionalDependencies": {
+    "@types/yauzl": "^2.9.1"
+  }
+}

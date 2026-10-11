@@ -10,12 +10,12 @@
 
 遵循严格 SemVer（`MAJOR.MINOR.PATCH-PRERELEASE`），例如 `0.2.0-beta.1`。
 
-| 组成部分 | 规则 |
-|---|---|
-| `MAJOR` | `0.x` 阶段破坏性变化至少提升 minor；`1.0.0` 后破坏性变化提升 major |
-| `MINOR` | 稳定版中兼容功能提升 minor；`0.x` 的功能开发也提升 minor |
-| `PATCH` | 修复或性能优化提升 patch |
-| `PRERELEASE` | `alpha.N`、`beta.N`、`rc.N`，序号从 1 开始连续递增 |
+| 组成部分     | 规则                                                               |
+| ------------ | ------------------------------------------------------------------ |
+| `MAJOR`      | `0.x` 阶段破坏性变化至少提升 minor；`1.0.0` 后破坏性变化提升 major |
+| `MINOR`      | 稳定版中兼容功能提升 minor；`0.x` 的功能开发也提升 minor           |
+| `PATCH`      | 修复或性能优化提升 patch                                           |
+| `PRERELEASE` | `alpha.N`、`beta.N`、`rc.N`，序号从 1 开始连续递增                 |
 
 ## 生命周期
 
@@ -23,12 +23,12 @@
 功能开发 → alpha.N → beta.N → rc.N → 稳定版（无后缀）
 ```
 
-| 阶段 | 允许变更 | 升版规则 |
-|---|---|---|
-| `alpha.N` | 新功能、重构、修复 | `0.x.0-alpha.N` → `0.x.0-alpha.N+1` |
-| `beta.N` | 修复、小幅完善 | `0.x.0-beta.N` → `0.x.0-beta.N+1` |
-| `rc.N` | 仅修复 | `0.x.0-rc.N` → `0.x.0-rc.N+1` |
-| 稳定版 | — | 去掉预发布后缀，如 `0.2.0-rc.3` → `0.2.0` |
+| 阶段      | 允许变更           | 升版规则                                  |
+| --------- | ------------------ | ----------------------------------------- |
+| `alpha.N` | 新功能、重构、修复 | `0.x.0-alpha.N` → `0.x.0-alpha.N+1`       |
+| `beta.N`  | 修复、小幅完善     | `0.x.0-beta.N` → `0.x.0-beta.N+1`         |
+| `rc.N`    | 仅修复             | `0.x.0-rc.N` → `0.x.0-rc.N+1`             |
+| 稳定版    | —                  | 去掉预发布后缀，如 `0.2.0-rc.3` → `0.2.0` |
 
 - 是否从 Beta 进入 RC、从 RC 进入稳定版、递增当前 beta 序号或开启新的版本线，均由**人工决定并运行 `version:prepare`**，不以日期、提交数或版本号自动触发。
 - 只有人工明确宣布稳定后，才允许发布无预发布后缀的版本。
@@ -40,12 +40,12 @@ Git 标签格式：`v<根 package.json 的 version>`。
 
 示例：
 
-| 版本 | 标签 |
-|---|---|
-| `0.2.0-beta.1` | `v0.2.0-beta.1` |
+| 版本            | 标签             |
+| --------------- | ---------------- |
+| `0.2.0-beta.1`  | `v0.2.0-beta.1`  |
 | `0.3.0-alpha.1` | `v0.3.0-alpha.1` |
-| `0.3.0-rc.2` | `v0.3.0-rc.2` |
-| `0.3.0` | `v0.3.0` |
+| `0.3.0-rc.2`    | `v0.3.0-rc.2`    |
+| `0.3.0`         | `v0.3.0`         |
 
 标签、manifest 及 CHANGELOG 中的版本在发布时必须一致。
 
@@ -61,7 +61,7 @@ Git 标签格式：`v<根 package.json 的 version>`。
 
 ## 人工发布步骤
 
-预发布与正式版本都使用同一套人工发布流程。版本文件由 `version:prepare` 生成，提交与 `v*` 标签必须签名，标签必须指向 `main` 历史。推送标签后由 GitHub-hosted runner 创建 source-only GitHub Release；仓库不上传预构建安装包或其他二进制发布附件。
+预发布与正式版本都使用同一套人工发布流程。版本文件由 `version:prepare` 生成，提交与 `v*` 标签必须签名，标签必须指向 `main` 历史。推送标签后由 GitHub-hosted runner 创建 GitHub Release；需要 Windows 安装包时，从对应标签运行 `bun run package:win`，验证通过后人工上传同版本 x64 EXE。
 
 1. 确认 `Unreleased` 区段非空。
 2. 运行 `bun run version:prepare -- <新版本> [--stable]`，生成四 manifest、lockfile 与 CHANGELOG 归档区段。
@@ -74,6 +74,7 @@ Git 标签格式：`v<根 package.json 的 version>`。
    ```
 
    不要在 `dev` 上同时推送版本分支和标签，也不要先在 `dev` 上打标签。
+
 5. 通过正常 PR/合并流程让该提交进入 `main`，并等待其合入 `origin/main`。
 6. 本地拉取 `main`，确认目标提交属于 `origin/main` 历史：
 
@@ -83,24 +84,25 @@ Git 标签格式：`v<根 package.json 的 version>`。
    ```
 
    `v*` 标签必须指向 `main` 历史，由 `Protect release tags` ruleset 的创建限制与 required signature、以及工作流内的 `version:check --tag` 与 main ancestor 检查共同保证。
+
 7. 在 `main` 上的目标提交创建签名 `v<版本>` 标签，并**单独**推送该标签：
 
    ```bash
-   git tag -s v<版本> -m "CodePilotX v<版本>"
+   git tag -s v<版本> -m "Pidex v<版本>"
    git push origin v<版本>
    ```
 
 8. 推送 `v*` 标签后，GitHub-hosted runner 校验标签目标属于 `main`、验证标签与根版本一致，并从对应的 CHANGELOG 归档区段生成 Release 正文。
-9. CI 在 `codepilotx-dev/CodePilotX` 创建不含附件的 GitHub Release；GitHub 自动提供 `Source code (zip)` 与 `Source code (tar.gz)`，使用者在 Windows x64 上自行运行 `bun run package:win`。
+9. CI 在 `codepilotx-dev/Pidex` 创建 GitHub Release，GitHub 自动提供源码归档；需要安装包时，在对应标签运行 `bun run package:win`，通过打包校验与 smoke 后使用 `gh release upload v<版本> release/Pidex-Desktop-<版本>-x64.exe` 上传，不覆盖已有附件。未使用正式 Authenticode 证书时，必须在 Release 正文注明安装包未签名。
 10. Beta/Alpha/RC 的人工确认发生在创建和推送签名标签的时刻；稳定版还额外经过 `release` Environment 的审批。
 
-预发布标签（`alpha.N`、`beta.N`、`rc.N`）会创建 prerelease；无后缀版本会创建正式 Release。已发布 Release 不可覆盖；相同标签已发布时工作流失败关闭。发布工作流会验证 Release API 的附件数为 0，避免重新引入安装包、更新元数据或其他二进制附件。
+预发布标签（`alpha.N`、`beta.N`、`rc.N`）会创建 prerelease；无后缀版本会创建正式 Release。已发布 Release 不可覆盖；相同标签已发布时工作流失败关闭。标签工作流只创建 Release，Windows 安装包由人工验证后追加上传。
 
 > 桌面端运行时仅从 GitHub Releases 读取更新日志，不读取本地 `CHANGELOG.md`。CHANGELOG 只作为标签发布流水线生成 Release 正文的来源。
 
 ## 迁移到组织仓库
 
-首次公开发布前，将当前仓库通过 GitHub Transfer 转移到 `codepilotx-dev/CodePilotX`，并逐项确认：
+首次公开发布前，将当前仓库通过 GitHub Transfer 转移到 `codepilotx-dev/Pidex`，并逐项确认：
 
 - 本地 `origin` 已更新为组织仓库地址，拉取和推送均正常。
 - Actions 的 Workflow permissions 允许工作流使用 `contents: write` 创建 Release。
@@ -108,19 +110,19 @@ Git 标签格式：`v<根 package.json 的 version>`。
 - 分支保护、环境保护规则和必需检查与转移前一致。
 - `.github/workflows/windows-x64-package.yml` 在组织仓库中启用，标签触发权限未被组织策略禁用。
 - 仓库可见性符合发布阶段：调试期可保持私有，正式发布前再公开。
-- 使用测试仓库或契约测试验证 source-only 工作流配置；以上项目全部确认前，不推送首个公开版本标签。
+- 使用测试仓库或契约测试验证标签发布工作流配置；以上项目全部确认前，不推送首个公开版本标签。
 
-发布工作流带有仓库身份保护，仅允许在 `codepilotx-dev/CodePilotX` 创建 Release，避免转移前误发到个人仓库。
+发布工作流带有仓库身份保护，仅允许在 `codepilotx-dev/Pidex` 创建 Release，避免转移前误发到个人仓库。
 
 ## 常用命令
 
-| 命令 | 说明 |
-|---|---|
-| `bun run version:check` | 验证四 manifest 一致、lockfile 一致、CHANGELOG 结构有效 |
-| `bun run version:check -- --base <git-sha>` | 验证 PR 中 `Unreleased` 有新增说明 |
-| `bun run version:check -- --tag <v版本>` | 额外验证标签与 manifest 版本一致 |
-| `bun run version:prepare -- <新版本>` | 归档 `Unreleased`、同步 manifest、刷新 lockfile |
-| `bun run version:prepare -- <新版本> --stable` | 同上，但允许无预发布后缀的稳定版 |
+| 命令                                                               | 说明                                                                                   |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| `bun run version:check`                                            | 验证四 manifest 一致、lockfile 一致、CHANGELOG 结构有效                                |
+| `bun run version:check -- --base <git-sha>`                        | 验证 PR 中 `Unreleased` 有新增说明                                                     |
+| `bun run version:check -- --tag <v版本>`                           | 额外验证标签与 manifest 版本一致                                                       |
+| `bun run version:prepare -- <新版本>`                              | 归档 `Unreleased`、同步 manifest、刷新 lockfile                                        |
+| `bun run version:prepare -- <新版本> --stable`                     | 同上，但允许无预发布后缀的稳定版                                                       |
 | `bun scripts/write-release-notes.ts --tag <v版本> --output <文件>` | 从对应的已归档 CHANGELOG 版本区段生成 Release 正文；标签、根版本或归档区段不一致时失败 |
 
 ## 示例

@@ -1,16 +1,22 @@
-import { EventManifest, type EventType } from "@codepilotx/agent-protocol"
-import { Effect } from "effect"
-import type { EventEnvelope } from "../../domain"
-import type { AgentDatabase } from "../database/AgentDatabase"
+import { EventManifest, type EventType } from '@pidex/agent-protocol'
+import { Effect } from 'effect'
+import type { EventEnvelope } from '../../Domain'
+import type { AgentDatabase } from '../database/AgentDatabase'
 
 export const isLiveEvent = (method: string): method is EventType =>
-  method in EventManifest && EventManifest[method as EventType].durability === "live"
+  method in EventManifest && EventManifest[method as EventType].durability === 'live'
 
-export const globalEventSequence = (db: Pick<AgentDatabase, "sqlite">) =>
-  Number((db.sqlite.query("SELECT COALESCE(MAX(id), 0) AS sequence FROM events").get() as { sequence: number }).sequence)
+export const globalEventSequence = (db: Pick<AgentDatabase, 'sqlite'>) =>
+  Number(
+    (
+      db.sqlite.query('SELECT COALESCE(MAX(id), 0) AS sequence FROM events').get() as {
+        sequence: number
+      }
+    ).sequence,
+  )
 
 export const createLiveEvent = (
-  db: Pick<AgentDatabase, "sqlite">,
+  db: Pick<AgentDatabase, 'sqlite'>,
   threadId: string | null,
   turnId: string | null,
   method: string,
@@ -29,7 +35,7 @@ export const createLiveEvent = (
 
 /** Manifest-aware publishing boundary shared by transport and orchestration. */
 export const publishAgentEvent = async (
-  db: Pick<AgentDatabase, "insertEvent" | "sqlite">,
+  db: Pick<AgentDatabase, 'insertEvent' | 'sqlite'>,
   hub: { publish(event: EventEnvelope): Effect.Effect<unknown> },
   threadId: string | null,
   turnId: string | null,

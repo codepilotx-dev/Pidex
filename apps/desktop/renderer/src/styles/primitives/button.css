@@ -1,0 +1,137 @@
+/*
+ * Button residue. Size, colour, typography and icon-slot utilities moved to
+ * `src/components/ui/Button.tsx`; this file keeps the rules that cannot be a
+ * class on the rendered element.
+ *
+ * Two layers, because a layer outranks every earlier layer regardless of
+ * selector specificity and Tailwind emits its utilities into `utilities`:
+ * - `primitives` restores exactly what `components/button.scss` declared: the
+ *   global Lucide stroke weight (asserted through `getComputedStyle` by
+ *   `test/IconSize.browser.ts`), the Electron drag region, the `.icon-button`
+ *   layout hook that features render on plain `<div>`/`<svg>`/`<span>` elements,
+ *   the `forced-colors` keywords the utility set cannot name, and the ghost
+ *   surface. Keeping the ghost rules here lets the `shell`/`features` layers win
+ *   again, as they did before the migration.
+ * - `overrides` holds the one group that has to beat the button's own utilities:
+ *   `tw:[&>svg]:size-icon-*` would otherwise win over the chevron slot.
+ */
+@layer primitives {
+  .lucide:not([data-icon-kind='artwork']) {
+    flex-shrink: 0;
+    stroke-width: var(--cpx-sys-icon-stroke-width);
+  }
+
+  .lucide[data-icon-kind='artwork'] {
+    --cpx-sys-icon-stroke-width: 2;
+  }
+
+  .ui-button,
+  .icon-button {
+    -webkit-app-region: no-drag;
+  }
+
+  .icon-button {
+    flex: 0 0 auto;
+  }
+
+  @media (forced-colors: active) {
+    .ui-button[data-color='primary'] {
+      border-color: ButtonText;
+      background: ButtonFace;
+      color: ButtonText;
+    }
+
+    .ui-button[data-color='secondary'] {
+      border-color: ButtonText;
+      background: transparent;
+    }
+
+    .ui-button[data-color='text'],
+    .ui-button[data-variant='text'] {
+      border-color: transparent;
+      background: transparent;
+      color: ButtonText;
+    }
+  }
+
+  /*
+   * Ghost tiers declare their resting foreground next to the state rule below:
+   * the colour has to share one layer with the rule that lifts it. Everything
+   * else of a tier (border, surface, states) is a utility in Button.tsx.
+   */
+  .ui-button[data-color='ghost'],
+  .ui-button[data-color='ghostTertiary'] {
+    color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  .ui-button[data-color='ghostSecondary'] {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  .ui-button[data-color='ghostActive'] {
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  /*
+   * A ghost icon button takes no hover surface: it stays transparent and lifts
+   * only its foreground. Verbatim from `components/button.scss`, including the
+   * `aria-pressed` exclusion and the disabled guards; the plain ghost buttons
+   * outside `.icon-button` take the hover surface through Button.tsx instead.
+   */
+  .ui-button.icon-button:is(
+      [data-color='ghost'],
+      [data-color='ghostSecondary'],
+      [data-color='ghostActive']
+    ):where(:not([aria-pressed='true'])):where(:enabled:not([aria-disabled='true'])):hover,
+  .ui-button.icon-button:is(
+      [data-color='ghost'],
+      [data-color='ghostSecondary'],
+      [data-color='ghostActive']
+    ):where(:not([aria-pressed='true'])):where(
+      :not(:disabled):not([aria-disabled='true'])
+    )[data-state='open'],
+  .ui-button.icon-button:is(
+      [data-color='ghost'],
+      [data-color='ghostSecondary'],
+      [data-color='ghostActive']
+    ):where(:not([aria-pressed='true'])):where(
+      :not(:disabled):not([aria-disabled='true'])
+    )[data-active] {
+    background: transparent;
+    color: var(--cpx-sys-color-fg-primary);
+  }
+}
+
+@layer overrides {
+  /*
+   * A trailing chevron is an affordance one step below the button icon slot, so
+   * it keeps the 12px slot; `data-icon-size` replaces it, mirroring the former
+   * `--button-icon-size-override` / `--cpx-sys-icon-size-sm` fallback chain. The
+   * overrides drop `.ui-button`'s own weight with `:where()` so they land on the
+   * base rule's specificity and win by source order, staying inside the
+   * `selector-max-specificity` contract.
+   */
+  .ui-button:not([data-uniform])
+    > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
+    width: var(--cpx-sys-icon-size-sm);
+    height: var(--cpx-sys-icon-size-sm);
+  }
+
+  :where(.ui-button)[data-icon-size='sm']:not([data-uniform])
+    > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
+    width: var(--cpx-sys-icon-size-sm);
+    height: var(--cpx-sys-icon-size-sm);
+  }
+
+  :where(.ui-button)[data-icon-size='md']:not([data-uniform])
+    > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
+    width: var(--cpx-sys-icon-size-md);
+    height: var(--cpx-sys-icon-size-md);
+  }
+
+  :where(.ui-button)[data-icon-size='lg']:not([data-uniform])
+    > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
+    width: var(--cpx-sys-icon-size-lg);
+    height: var(--cpx-sys-icon-size-lg);
+  }
+}

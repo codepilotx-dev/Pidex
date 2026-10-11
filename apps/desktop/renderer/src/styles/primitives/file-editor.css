@@ -1,0 +1,81 @@
+/*
+ * File editor and conflict merge editor residue.
+ *
+ * Everything utilities can express (the editor shells, host boxes, the conflict
+ * header/labels and the floating status chip) moved to
+ * `src/features/editor/FileEditor.tsx` and
+ * `src/features/editor/ConflictMergeEditor.tsx`.
+ *
+ * What stays here is CodeMirror's own generated DOM (`.cm-editor`,
+ * `.cm-mergeView*`, `.cm-content`, `.cm-changedLine`, `.cm-changeGutter`) plus
+ * the status chip spinner:
+ * - `.cm-*` elements are created by CodeMirror, never rendered by React, so no
+ *   `className` exists to carry a utility.
+ * - The status spinner is a `::before` pseudo-element, which a class list cannot
+ *   express, together with its `@keyframes`.
+ *
+ * `:root[data-reduce-motion='on']` handling is global in `src/styles/base.css`
+ * and is not repeated here.
+ */
+@layer primitives {
+  .file-editor-host > .cm-editor,
+  .conflict-merge-editor-host > .cm-mergeView {
+    height: 100%;
+  }
+
+  .file-editor[data-readonly] .cm-content {
+    cursor: default;
+  }
+
+  .file-editor-status:not([data-error])::before {
+    width: var(--cpx-sys-icon-size-sm);
+    height: var(--cpx-sys-icon-size-sm);
+    box-sizing: border-box;
+    flex: 0 0 var(--cpx-sys-icon-size-sm);
+    content: '';
+    border: 1.5px solid currentcolor;
+    border-right-color: transparent;
+    border-radius: var(--cpx-sys-radius-full);
+    animation: file-editor-status-spin var(--cpx-sys-motion-loading) var(--cpx-sys-ease-linear)
+      infinite;
+  }
+
+  @keyframes file-editor-status-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .conflict-merge-editor-host .cm-mergeViewEditors {
+    height: 100%;
+  }
+
+  .conflict-merge-editor-host .cm-mergeViewEditor {
+    min-width: 0;
+  }
+
+  .conflict-merge-editor-host .cm-mergeViewEditor + .cm-mergeViewEditor {
+    border-left: 1px solid var(--cpx-sys-color-border-default);
+  }
+
+  .conflict-merge-editor-host .cm-changedLine {
+    background: color-mix(in srgb, var(--cpx-sys-color-accent) 9%, transparent);
+  }
+
+  .conflict-merge-editor-host .cm-changeGutter {
+    background: var(--cpx-sys-color-surface-recessed);
+  }
+
+  @media (max-width: 720px) {
+    .conflict-merge-editor-host .cm-mergeViewEditors {
+      display: grid;
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .conflict-merge-editor-host .cm-mergeViewEditor + .cm-mergeViewEditor {
+      border-top: 1px solid var(--cpx-sys-color-border-default);
+      border-left: 0;
+    }
+  }
+}

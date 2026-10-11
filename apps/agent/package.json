@@ -1,6 +1,6 @@
 {
-  "name": "@codepilotx/agent",
-  "version": "0.2.0-beta.4",
+  "name": "@pidex/agent",
+  "version": "0.2.0-beta.6",
   "private": true,
   "type": "module",
   "scripts": {
@@ -9,28 +9,30 @@
     "typecheck": "tsc --noEmit",
     "test": "bun test",
     "build:js": "bun build src/index.ts --target=bun --outdir=dist",
-    "build": "bun ../../scripts/build-agent-win-x64.ts",
+    "build": "bun ../../scripts/BuildAgentWinX64.ts",
     "compile": "bun run build"
   },
   "dependencies": {
-    "@codepilotx/agent-protocol": "workspace:*",
-    "@codepilotx/model-schema": "workspace:*",
-    "@codepilotx/pi-agent-core": "workspace:*",
-    "@codepilotx/shared": "workspace:*",
-    "@earendil-works/pi-ai": "0.82.1",
-    "@modelcontextprotocol/sdk": "1.30.0",
+    "@pidex/agent-protocol": "workspace:*",
+    "@pidex/model-schema": "workspace:*",
+    "@pidex/shared": "workspace:*",
+    "@earendil-works/pi-ai": "0.99.2",
+    "@earendil-works/pi-mcp": "0.99.2",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "diff": "8.0.4",
     "effect": "4.0.0-beta.83",
-    "extract-zip": "2.0.1",
+    "extract-zip": "file:../../vendor/extract-zip",
     "hono": "4.12.32",
     "jsonc-parser": "3.3.1",
-    "smol-toml": "^1.7.0",
+    "rrule": "^2.8.1",
+    "smol-toml": "1.7.1",
+    "typebox": "1.1.38",
     "yaml": "2.9.0",
     "zod": "4"
   },
   "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.31.0",
     "@types/bun": "1.3.14",
     "typescript": "5.9.3"
   },

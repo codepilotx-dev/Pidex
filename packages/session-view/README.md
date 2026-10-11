@@ -1,8 +1,8 @@
-# @codepilotx/session-view
+# @pidex/session-view
 
-`@codepilotx/session-view` is the platform-neutral conversation projection for CodePilotX.
+`@pidex/session-view` is the platform-neutral conversation projection for Pidex.
 
-It accepts the durable `SessionSnapshot` from `@codepilotx/shared` and exposes two pure operations:
+It accepts the durable `SessionSnapshot` from `@pidex/shared` and exposes two pure operations:
 
 - `applySessionEvent(snapshot, envelope)` merges server events into the snapshot.
 - `createSessionView(snapshot, { now })` projects the snapshot into ordered `TimelineRow` records.

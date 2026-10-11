@@ -1,0 +1,258 @@
+/*
+ * Composer residue: appearance the Tailwind utility set cannot own.
+ *
+ * 1. ProseMirror mounts `.composer-editor-content` and the inline token spans on
+ *    DOM it creates after render, and other surfaces (the user-message editor in
+ *    `_canonical-conversation.scss`) override the same class names through
+ *    descendant selectors. Utilities would outrank those feature-layer
+ *    overrides, so the editor surface keeps its class-based cascade here.
+ * 2. Pseudo-elements: the composer placeholder, the token selection ring and the
+ *    attachment file bullet.
+ * 3. Role + weight font pairs: every `--cpx-sys-type-*` role is a `font`
+ *    shorthand, and its longhand reset would drop a neighbouring weight utility,
+ *    so role-with-override stays one rule. The numeric readouts need the mono
+ *    family for the same reason — no mono caption role exists.
+ * 4. The attachment image tile: `.canonical-user-message` overrides its
+ *    width/height and the image's object-fit from the features layer, which a
+ *    utility would outrank.
+ * 5. Entrance keyframes consumed through `tw:animate-[...]` on the composer
+ *    shell. Tailwind only ships `spin`/`pulse`, and these carry the composer's
+ *    own translate/scale entry.
+ * 6. Composer scroll containers that hide their scrollbar: `::-webkit-scrollbar`
+ *    is a vendor pseudo-element, and `scrollbar-width` has no utility in the
+ *    design set.
+ * 7. The suggestion menu's scroll-mask fades: they are gradients selected by a
+ *    `data-scroll-mask` attribute, and a `data-[...]` variant cannot carry an
+ *    arbitrary `[mask-image:...]` property in this Tailwind build.
+ */
+@layer primitives {
+  /* --- ProseMirror editor surface ------------------------------------- */
+  .composer-input .composer-editor {
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+  }
+
+  .composer-input .composer-editor-content {
+    position: relative;
+    width: 100%;
+    max-height: 40vh;
+    min-height: 2.67em;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--cpx-sys-color-fg-primary);
+    font: var(--cpx-sys-type-reading);
+    overflow-y: auto;
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+
+  .composer-editor-content:focus,
+  .composer-editor-content:focus-visible {
+    outline: none;
+    box-shadow: none;
+  }
+
+  .composer-editor-content > p {
+    min-height: 1.6em;
+    margin: 0;
+  }
+
+  .composer-editor-content.is-empty::before {
+    position: absolute;
+    color: var(--cpx-sys-color-fg-tertiary);
+    content: attr(data-placeholder);
+    pointer-events: none;
+  }
+
+  .composer-editor-content[data-placeholder]::before {
+    color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  /* --- Inline tokens (ProseMirror node views) -------------------------- */
+  .composer-inline-skill-token {
+    display: inline;
+    padding-inline: var(--cpx-sys-space-1);
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    color: var(--cpx-sys-color-accent-fg);
+    box-decoration-break: clone;
+    font-size: inherit;
+    font-weight: var(--cpx-sys-font-weight-medium);
+    line-height: inherit;
+    vertical-align: baseline;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .composer-inline-skill-token:hover .composer-inline-skill-token-label {
+    text-decoration: underline dashed;
+    text-decoration-thickness: 0.5px;
+    text-underline-offset: 2px;
+  }
+
+  .composer-inline-skill-token-icon,
+  .composer-inline-skill-token-fallback-icon {
+    width: 14px;
+    height: 14px;
+    margin-inline-end: var(--cpx-sys-space-1);
+    border-radius: var(--cpx-sys-radius-indicator);
+    object-fit: contain;
+    vertical-align: text-bottom;
+  }
+
+  .composer-inline-skill-token-fallback-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* `ProseMirror-selectednode` is mounted by the editor, not by this app. */
+  .composer-inline-skill-token:is(.ProseMirror-selectednode, :focus-visible) {
+    border-radius: var(--cpx-sys-radius-md);
+    outline: none;
+    box-shadow: var(--cpx-sys-focus-ring-inset);
+  }
+
+  .composer-inline-context-token {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--cpx-sys-space-1);
+    margin-inline: var(--cpx-sys-space-1);
+    padding-inline: var(--cpx-sys-space-1);
+    border-radius: var(--cpx-sys-radius-sm);
+    background: var(--cpx-sys-color-accent-subtle-bg);
+    color: var(--cpx-sys-color-accent-fg);
+    font-size: inherit;
+    font-weight: var(--cpx-sys-font-weight-medium);
+    line-height: inherit;
+    white-space: nowrap;
+    user-select: none;
+  }
+
+  .composer-inline-context-token-icon {
+    color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  .composer-inline-context-token.ProseMirror-selectednode {
+    outline: none;
+    box-shadow: var(--cpx-sys-focus-ring-inset);
+  }
+
+  /* --- Role + weight pairs -------------------------------------------- */
+  .composer-models-title {
+    font: var(--cpx-sys-type-row-title);
+    font-weight: var(--cpx-sys-font-weight-bold);
+  }
+
+  .composer-hub-row-name {
+    font: var(--cpx-sys-type-control);
+    font-weight: var(--cpx-sys-font-weight-bold);
+  }
+
+  .composer-hub-action-btn {
+    font: var(--cpx-sys-type-caption);
+    font-weight: var(--cpx-sys-font-weight-bold);
+  }
+
+  .composer-model-name {
+    font: var(--cpx-sys-type-control);
+  }
+
+  .composer-model-row.is-selected .composer-model-name {
+    font-weight: var(--cpx-sys-font-weight-bold);
+  }
+
+  .context-usage-panel-total {
+    font: var(--cpx-sys-type-caption);
+    font-family: var(--cpx-sys-font-family-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .context-usage-panel-value {
+    font-family: var(--cpx-sys-font-family-mono);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- Shared attachment image tile ----------------------------------- */
+  .attachment-image-tile {
+    position: relative;
+    width: 80px;
+    height: 80px;
+    flex: 0 0 auto;
+    overflow: visible;
+    border: 1px solid var(--cpx-sys-color-border-default);
+    border-radius: var(--cpx-sys-radius-lg);
+    background: var(--cpx-sys-color-surface-editor);
+    box-shadow: var(--cpx-sys-shadow-resting);
+  }
+
+  .attachment-image-tile[data-status='error'] {
+    width: 64px;
+    height: 64px;
+    border-color: var(--cpx-sys-color-warning-subtle-border);
+    background: var(--cpx-sys-color-warning-subtle-bg);
+  }
+
+  .attachment-image-tile__image {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    border-radius: inherit;
+  }
+
+  .attachment-file-pill__detail::before {
+    content: '· ';
+  }
+
+  /* --- Hidden-scrollbar rows ------------------------------------------ */
+  .composer-utility-bar,
+  .composer-attachment-row,
+  .attachment-horizontal-row,
+  .composer-provider-list,
+  .composer-models-list {
+    scrollbar-width: none;
+  }
+
+  .composer-utility-bar::-webkit-scrollbar,
+  .composer-attachment-row::-webkit-scrollbar,
+  .attachment-horizontal-row::-webkit-scrollbar,
+  .composer-provider-list::-webkit-scrollbar,
+  .composer-models-list::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* --- Suggestion menu scroll masks ----------------------------------- */
+  .chat-input__suggestion-menu[data-scroll-mask='top'] {
+    mask-image: linear-gradient(to bottom, transparent, currentColor var(--cpx-sys-space-3));
+  }
+
+  .chat-input__suggestion-menu[data-scroll-mask='bottom'] {
+    mask-image: linear-gradient(to top, transparent, currentColor var(--cpx-sys-space-3));
+  }
+
+  .chat-input__suggestion-menu[data-scroll-mask='both'] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      currentColor var(--cpx-sys-space-3),
+      currentColor calc(100% - var(--cpx-sys-space-3)),
+      transparent
+    );
+  }
+
+  /* --- Composer entrance keyframes ------------------------------------ */
+  @keyframes composer-utility-enter {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

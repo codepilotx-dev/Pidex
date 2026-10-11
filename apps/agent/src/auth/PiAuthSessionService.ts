@@ -1,22 +1,16 @@
-import type {
-  AuthEvent,
-  AuthInteraction,
-  AuthPrompt,
-  Models,
-} from "@earendil-works/pi-ai"
-import { AgentError } from "../domain"
-import { secretScrubber } from "../security/SecretScrubber"
+import type { AuthEvent, AuthInteraction, AuthPrompt, Models } from '@earendil-works/pi-ai'
+import { AgentError } from '../Domain'
+import { secretScrubber } from '../security/SecretScrubber'
 
 const DEFAULT_TTL_MS = 15 * 60_000
 const MAX_NOTICES = 20
 
 export type PiAuthTarget =
-  | { kind: "provider"; providerId: string }
-  | { kind: "usage"; sourceId: string }
+  { kind: 'provider'; providerId: string } | { kind: 'usage'; sourceId: string }
 
 export type PiAuthPromptView = {
   id: string
-  type: "text" | "secret" | "select" | "manual_code"
+  type: 'text' | 'secret' | 'select' | 'manual_code'
   message: string
   placeholder?: string
   options?: readonly {
@@ -28,24 +22,24 @@ export type PiAuthPromptView = {
 
 export type PiAuthNoticeView =
   | {
-      type: "info"
+      type: 'info'
       message: string
       links?: readonly { url: string; label?: string }[]
     }
-  | { type: "auth_url"; url: string; instructions?: string }
+  | { type: 'auth_url'; url: string; instructions?: string }
   | {
-      type: "device_code"
+      type: 'device_code'
       userCode: string
       verificationUri: string
       intervalSeconds?: number
       expiresInSeconds?: number
     }
-  | { type: "progress"; message: string }
+  | { type: 'progress'; message: string }
 
 export type PiAuthSessionView = {
   id: string
   target: PiAuthTarget
-  status: "running" | "waiting" | "complete" | "failed" | "cancelled" | "expired"
+  status: 'running' | 'waiting' | 'complete' | 'failed' | 'cancelled' | 'expired'
   prompt?: PiAuthPromptView
   notices: readonly PiAuthNoticeView[]
   error?: string
@@ -68,7 +62,7 @@ type PendingPrompt = {
 type SessionRecord = {
   id: string
   target: PiAuthTarget
-  status: PiAuthSessionView["status"]
+  status: PiAuthSessionView['status']
   prompt?: PiAuthPromptView | undefined
   pendingPrompt?: PendingPrompt | undefined
   notices: PiAuthNoticeView[]
@@ -83,6 +77,7 @@ type SessionRecord = {
 export interface PiAuthSessionServiceOptions {
   now?: () => number
   ttlMs?: number
+  getDeviceId?: () => string
   resolveTarget(target: PiAuthTarget): Promise<PiAuthLoginTarget> | PiAuthLoginTarget
   onUpdated?(session: PiAuthSessionView): void | Promise<void>
   onCompleted?(target: PiAuthTarget): void | Promise<void>
@@ -105,21 +100,18 @@ export class PiAuthSessionService {
   async start(target: PiAuthTarget): Promise<PiAuthSessionView> {
     this.prune()
     const loginTarget = await this.options.resolveTarget(target)
-    const provider = loginTarget.models.getProviders()
+    const provider = loginTarget.models
+      .getProviders()
       .find((candidate) => candidate.id === loginTarget.providerID)
     if (!provider?.auth.oauth) {
-      throw new AgentError(
-        "PROVIDER_UNAVAILABLE",
-        "目标 Provider 不支持 OAuth",
-        400,
-      )
+      throw new AgentError('PROVIDER_UNAVAILABLE', '目标 Provider 不支持 OAuth', 400)
     }
 
     const createdAt = this.now()
     const record: SessionRecord = {
       id: `auth_${crypto.randomUUID()}`,
       target,
-      status: "running",
+      status: 'running',
       notices: [],
       createdAt,
       expiresAt: createdAt + this.ttlMs,
@@ -138,23 +130,19 @@ export class PiAuthSessionService {
     return this.view(record)
   }
 
-  async respond(
-    sessionID: string,
-    promptID: string,
-    value: string,
-  ): Promise<PiAuthSessionView> {
+  async respond(sessionID: string, promptID: string, value: string): Promise<PiAuthSessionView> {
     const record = this.required(sessionID)
     if (record.expiresAt <= this.now()) this.expire(record)
-    if (record.status !== "waiting" || !record.pendingPrompt) {
-      throw new AgentError("CONFLICT", "认证会话当前未等待输入", 409)
+    if (record.status !== 'waiting' || !record.pendingPrompt) {
+      throw new AgentError('CONFLICT', '认证会话当前未等待输入', 409)
     }
     if (record.pendingPrompt.id !== promptID) {
-      throw new AgentError("CONFLICT", "认证输入已过期，请按当前提示重试", 409)
+      throw new AgentError('CONFLICT', '认证输入已过期，请按当前提示重试', 409)
     }
     const pending = record.pendingPrompt
     record.pendingPrompt = undefined
     record.prompt = undefined
-    record.status = "running"
+    record.status = 'running'
     pending.cleanup()
     pending.resolve(value)
     await this.emit(record)
@@ -163,12 +151,12 @@ export class PiAuthSessionService {
 
   async cancel(sessionID: string): Promise<PiAuthSessionView> {
     const record = this.required(sessionID)
-    if (record.status === "complete" || record.status === "failed") {
+    if (record.status === 'complete' || record.status === 'failed') {
       return this.view(record)
     }
-    this.finish(record, "cancelled")
-    record.controller.abort(new Error("认证已取消"))
-    record.pendingPrompt?.reject(new Error("认证已取消"))
+    this.finish(record, 'cancelled')
+    record.controller.abort(new Error('认证已取消'))
+    record.pendingPrompt?.reject(new Error('认证已取消'))
     record.pendingPrompt?.cleanup()
     record.pendingPrompt = undefined
     record.prompt = undefined
@@ -188,15 +176,21 @@ export class PiAuthSessionService {
       },
     }
     try {
-      await target.models.login(target.providerID, "oauth", interaction)
+      await target.models.login(
+        target.providerID,
+        'oauth',
+        interaction,
+        this.options.getDeviceId ? { getDeviceId: this.options.getDeviceId } : undefined,
+      )
       if (!this.isActive(record)) return
-      this.finish(record, "complete")
-      await this.emit(record)
       await this.options.onCompleted?.(record.target)
+      if (!this.isActive(record)) return
+      this.finish(record, 'complete')
+      await this.emit(record)
     } catch (cause) {
       if (!this.isActive(record)) return
       const cancelled = record.controller.signal.aborted
-      this.finish(record, cancelled ? "cancelled" : "failed")
+      this.finish(record, cancelled ? 'cancelled' : 'failed')
       if (!cancelled) {
         record.error = this.safeError(cause)
       }
@@ -206,35 +200,33 @@ export class PiAuthSessionService {
 
   private prompt(record: SessionRecord, prompt: AuthPrompt): Promise<string> {
     if (!this.isActive(record)) {
-      return Promise.reject(new Error("认证会话已结束"))
+      return Promise.reject(new Error('认证会话已结束'))
     }
-    record.pendingPrompt?.reject(new Error("认证提示已被替换"))
+    record.pendingPrompt?.reject(new Error('认证提示已被替换'))
     record.pendingPrompt?.cleanup()
     const id = `prompt_${crypto.randomUUID()}`
     record.prompt = {
       id,
       type: prompt.type,
       message: prompt.message,
-      ...("placeholder" in prompt && prompt.placeholder
-        ? { placeholder: prompt.placeholder }
-        : {}),
-      ...(prompt.type === "select" ? { options: prompt.options } : {}),
+      ...('placeholder' in prompt && prompt.placeholder ? { placeholder: prompt.placeholder } : {}),
+      ...(prompt.type === 'select' ? { options: prompt.options } : {}),
     }
-    record.status = "waiting"
+    record.status = 'waiting'
 
     return new Promise<string>((resolve, reject) => {
       const abort = () => {
         if (record.pendingPrompt?.id !== id) return
         record.pendingPrompt = undefined
         record.prompt = undefined
-        reject(prompt.signal?.reason ?? new Error("认证提示已取消"))
+        reject(prompt.signal?.reason ?? new Error('认证提示已取消'))
       }
-      prompt.signal?.addEventListener("abort", abort, { once: true })
+      prompt.signal?.addEventListener('abort', abort, { once: true })
       record.pendingPrompt = {
         id,
         resolve,
         reject,
-        cleanup: () => prompt.signal?.removeEventListener("abort", abort),
+        cleanup: () => prompt.signal?.removeEventListener('abort', abort),
       }
       void this.emit(record)
     })
@@ -242,37 +234,37 @@ export class PiAuthSessionService {
 
   private notice(event: AuthEvent): PiAuthNoticeView {
     switch (event.type) {
-      case "info":
+      case 'info':
         return {
-          type: "info",
+          type: 'info',
           message: event.message,
           ...(event.links ? { links: event.links.map((link) => ({ ...link })) } : {}),
         }
-      case "auth_url":
+      case 'auth_url':
         return {
-          type: "auth_url",
+          type: 'auth_url',
           url: event.url,
           ...(event.instructions ? { instructions: event.instructions } : {}),
         }
-      case "device_code":
+      case 'device_code':
         return { ...event }
-      case "progress":
+      case 'progress':
         return { ...event }
     }
   }
 
   private expire(record: SessionRecord) {
     if (!this.isActive(record)) return
-    this.finish(record, "expired")
-    record.controller.abort(new Error("认证会话已过期"))
-    record.pendingPrompt?.reject(new Error("认证会话已过期"))
+    this.finish(record, 'expired')
+    record.controller.abort(new Error('认证会话已过期'))
+    record.pendingPrompt?.reject(new Error('认证会话已过期'))
     record.pendingPrompt?.cleanup()
     record.pendingPrompt = undefined
     record.prompt = undefined
     void this.emit(record)
   }
 
-  private finish(record: SessionRecord, status: SessionRecord["status"]) {
+  private finish(record: SessionRecord, status: SessionRecord['status']) {
     record.status = status
     if (record.timer) clearTimeout(record.timer)
     record.timer = undefined
@@ -281,13 +273,13 @@ export class PiAuthSessionService {
   private required(sessionID: string) {
     const record = this.sessions.get(sessionID)
     if (!record) {
-      throw new AgentError("AUTHORIZATION_FAILED", "未找到认证会话", 404)
+      throw new AgentError('AUTHORIZATION_FAILED', '未找到认证会话', 404)
     }
     return record
   }
 
   private isActive(record: SessionRecord) {
-    return record.status === "running" || record.status === "waiting"
+    return record.status === 'running' || record.status === 'waiting'
   }
 
   private view(record: SessionRecord): PiAuthSessionView {
@@ -304,13 +296,20 @@ export class PiAuthSessionService {
   }
 
   private emit(record: SessionRecord) {
-    return Promise.resolve(this.options.onUpdated?.(this.view(record)))
+    const session = this.view(record)
+    // ChatGPT 授权链接包含安装 ID；完整链接只通过认证 RPC 返回，不写入事件。
+    session.notices = session.notices.filter(
+      (notice) => notice.type !== 'auth_url' || !notice.url.includes('ext_agent_host_id='),
+    )
+    return Promise.resolve(this.options.onUpdated?.(session))
   }
 
   private safeError(cause: unknown) {
-    const message = cause instanceof Error ? cause.message : "OAuth 授权失败"
-    return secretScrubber.scrubText(message).replace(/\s+/g, " ").trim().slice(0, 500)
-      || "OAuth 授权失败"
+    const message = cause instanceof Error ? cause.message : 'OAuth 授权失败'
+    return (
+      secretScrubber.scrubText(message).replace(/\s+/g, ' ').trim().slice(0, 500) ||
+      'OAuth 授权失败'
+    )
   }
 
   private prune() {

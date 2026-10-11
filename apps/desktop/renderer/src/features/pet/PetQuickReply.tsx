@@ -1,8 +1,8 @@
 import React from 'react'
-import type {
-  DesktopPermissionDecision,
-  DesktopPermissionRequest,
-} from '../../../shared/types.js'
+import { Button } from '../../components/ui/Button.js'
+import { Checkbox } from '../../components/ui/Checkbox.js'
+import { RadioGroup, RadioItem } from '../../components/ui/RadioGroup.js'
+import type { DesktopPermissionDecision, DesktopPermissionRequest } from '../../../shared/Types.js'
 import {
   CUSTOM_OPTION_ID,
   buildAskUserQuestionUpdatedInput,
@@ -12,7 +12,7 @@ import {
   selectQuestionOption,
   type AskUserQuestion,
   type QuestionState,
-} from '../session/approvals/askUserQuestionModel.js'
+} from '../session/approvals/AskUserQuestionModel.js'
 
 export type PetQuickReplyProps = {
   request: DesktopPermissionRequest
@@ -30,12 +30,9 @@ export function PetQuickReply({
   disabled = false,
   onRespond,
 }: PetQuickReplyProps): React.ReactNode {
-  const questions = request.toolName === 'AskUserQuestion'
-    ? parseAskUserQuestions(request.input)
-    : null
-  const [questionStates, setQuestionStates] = React.useState<
-    Record<string, QuestionState>
-  >({})
+  const questions =
+    request.toolName === 'AskUserQuestion' ? parseAskUserQuestions(request.input) : null
+  const [questionStates, setQuestionStates] = React.useState<Record<string, QuestionState>>({})
   const [questionIndex, setQuestionIndex] = React.useState(0)
   const [action, setAction] = React.useState<QuickReplyAction>('allow')
   const [feedback, setFeedback] = React.useState('')
@@ -69,21 +66,21 @@ export function PetQuickReply({
     if (!questions) {
       return (
         <QuickReplyFrame error="无法解析问题，请打开任务后处理。">
-          <button
-            className={secondaryButtonClass}
+          <Button
+            color="secondary"
             disabled={blocked}
             type="button"
             onClick={() => void respond({ behavior: 'deny' })}
           >
             跳过
-          </button>
+          </Button>
         </QuickReplyFrame>
       )
     }
 
     const question = questions[questionIndex] ?? questions[0]
     const canAdvance = hasQuestionAnswer(questionStates[question.question])
-    const canSubmit = questions.every(question =>
+    const canSubmit = questions.every((question) =>
       hasQuestionAnswer(questionStates[question.question]),
     )
     const lastQuestion = questionIndex === questions.length - 1
@@ -95,12 +92,9 @@ export function PetQuickReply({
           key={question.id ?? question.question}
           question={question}
           questionCount={questions.length}
-          state={
-            questionStates[question.question]
-            ?? emptyQuestionState(question)
-          }
-          onChange={state => {
-            setQuestionStates(current => ({
+          state={questionStates[question.question] ?? emptyQuestionState(question)}
+          onChange={(state) => {
+            setQuestionStates((current) => ({
               ...current,
               [question.question]: state,
             }))
@@ -108,27 +102,27 @@ export function PetQuickReply({
           }}
         />
         <div className="tw:flex tw:items-center tw:justify-end tw:gap-2">
-          <button
-            className={secondaryButtonClass}
+          <Button
+            color="secondary"
             disabled={blocked}
             type="button"
             onClick={() => void respond({ behavior: 'deny' })}
           >
             跳过
-          </button>
+          </Button>
           {questionIndex > 0 ? (
-            <button
-              className={secondaryButtonClass}
+            <Button
+              color="secondary"
               disabled={blocked}
               type="button"
-              onClick={() => setQuestionIndex(current => current - 1)}
+              onClick={() => setQuestionIndex((current) => current - 1)}
             >
               上一题
-            </button>
+            </Button>
           ) : null}
           {lastQuestion ? (
-            <button
-              className={primaryButtonClass}
+            <Button
+              color="primary"
               disabled={blocked || !canSubmit}
               type="button"
               onClick={() => {
@@ -147,16 +141,16 @@ export function PetQuickReply({
               }}
             >
               {submitting ? '提交中…' : '提交回答'}
-            </button>
+            </Button>
           ) : (
-            <button
-              className={primaryButtonClass}
+            <Button
+              color="primary"
               disabled={blocked || !canAdvance}
               type="button"
-              onClick={() => setQuestionIndex(current => current + 1)}
+              onClick={() => setQuestionIndex((current) => current + 1)}
             >
               下一题
-            </button>
+            </Button>
           )}
         </div>
       </QuickReplyFrame>
@@ -165,43 +159,37 @@ export function PetQuickReply({
 
   return (
     <QuickReplyFrame error={error}>
-      <p className="tw:m-0 tw:text-sm tw:leading-5 tw:text-app-text">
+      <p className="tw:type-body-sm tw:m-0 tw:text-app-text">
         {request.description || '是否允许这次操作？'}
       </p>
-      <div className="tw:grid tw:grid-cols-2 tw:gap-2" role="radiogroup">
-        <ActionButton
-          checked={action === 'allow'}
-          disabled={blocked}
-          label="允许一次"
-          onClick={() => {
-            setAction('allow')
-            setError(null)
-          }}
-        />
-        <ActionButton
-          checked={action === 'deny'}
-          disabled={blocked}
-          label="拒绝"
-          onClick={() => {
-            setAction('deny')
-            setError(null)
-          }}
-        />
-      </div>
+      <RadioGroup
+        ariaLabel="权限决定"
+        className="tw:grid tw:grid-cols-2 tw:gap-2"
+        disabled={blocked}
+        orientation="horizontal"
+        value={action}
+        onValueChange={(value) => {
+          setAction(value as QuickReplyAction)
+          setError(null)
+        }}
+      >
+        <RadioItem label="允许一次" value="allow" variant="card" />
+        <RadioItem label="拒绝" value="deny" variant="card" />
+      </RadioGroup>
       {action === 'deny' ? (
         <textarea
-          className="tw:min-h-16 tw:w-full tw:resize-y tw:rounded-lg tw:border tw:border-app-border tw:bg-app-canvas tw:px-2.5 tw:py-2 tw:text-sm tw:text-app-text tw:outline-none tw:focus:border-app-accent"
+          className="tw:type-control tw:min-h-16 tw:w-full tw:resize-y tw:border tw:border-app-border tw:bg-app-canvas tw:px-2.5 tw:py-2 tw:text-app-text tw:outline-none tw:focus:border-app-accent"
           disabled={blocked}
           placeholder="可选：说明拒绝原因"
           value={feedback}
-          onChange={event => {
+          onChange={(event) => {
             setFeedback(event.target.value)
             setError(null)
           }}
         />
       ) : null}
-      <button
-        className={primaryButtonClass}
+      <Button
+        color="primary"
         disabled={blocked}
         type="button"
         onClick={() => {
@@ -213,7 +201,7 @@ export function PetQuickReply({
         }}
       >
         {submitting ? '提交中…' : '提交'}
-      </button>
+      </Button>
     </QuickReplyFrame>
   )
 }
@@ -235,66 +223,71 @@ function QuestionReply({
 }): React.ReactNode {
   return (
     <fieldset className="tw:m-0 tw:flex tw:min-w-0 tw:flex-col tw:gap-1.5 tw:border-0 tw:p-0">
-      <legend className="tw:mb-1 tw:text-sm tw:font-semibold tw:text-app-text">
+      <legend className="tw:type-control tw:mb-1 tw:text-app-text">
         {question.header ? `${question.header} · ` : ''}
         {question.question}
-        <span className="tw:ml-1 tw:text-xs tw:font-normal tw:text-app-text-soft">
+        <span className="tw:type-caption tw:ml-1 tw:text-app-text-soft">
           {index + 1}/{questionCount}
         </span>
       </legend>
-      {question.options.map(option => {
-        const selected = state.selected.includes(option.label)
-        return (
-          <button
-            aria-pressed={selected}
-            className={optionButtonClass(selected)}
-            disabled={disabled}
-            key={option.label}
-            title={option.description}
-            type="button"
-            onClick={() =>
-              onChange(
-                selectQuestionOption(
-                  state,
-                  option.label,
-                  question.multiSelect,
-                  'toggle',
-                ),
-              )}
-          >
-            <span>{selected ? '✓' : '○'}</span>
-            <span className="tw:min-w-0 tw:flex-1 tw:text-left">
-              <span className="tw:block tw:truncate">{option.label}</span>
-              <span className="tw:block tw:truncate tw:text-xs tw:text-app-text-soft">
-                {option.description}
-              </span>
-            </span>
-          </button>
-        )
-      })}
-      <textarea
-        aria-label={`${question.question}的自定义回答`}
-        className="tw:min-h-14 tw:w-full tw:resize-y tw:rounded-lg tw:border tw:border-app-border tw:bg-app-canvas tw:px-2.5 tw:py-2 tw:text-sm tw:text-app-text tw:outline-none tw:focus:border-app-accent"
-        disabled={disabled}
-        placeholder="其他回答…"
-        value={state.custom}
-        onChange={event => {
-          const custom = event.target.value
-          const next = selectQuestionOption(
-            state,
-            CUSTOM_OPTION_ID,
-            question.multiSelect,
-            'focus',
-          )
-          onChange({
-            ...next,
-            custom,
-            answered:
-              Boolean(custom.trim())
-              || (question.multiSelect && next.selected.length > 0),
-          })
-        }}
-      />
+      {question.multiSelect ? (
+        <>
+          {question.options.map((option) => (
+            <Checkbox
+              checked={state.selected.includes(option.label)}
+              disabled={disabled}
+              key={option.label}
+              onCheckedChange={() =>
+                onChange(selectQuestionOption(state, option.label, true, 'toggle'))
+              }
+            >
+              <span title={option.description}>{option.label}</span>
+            </Checkbox>
+          ))}
+          <div className="tw:flex tw:items-start tw:gap-2">
+            <Checkbox
+              ariaLabel="使用自定义回答"
+              checked={state.selected.includes(CUSTOM_OPTION_ID)}
+              disabled={disabled}
+              onCheckedChange={() =>
+                onChange(selectQuestionOption(state, CUSTOM_OPTION_ID, true, 'toggle'))
+              }
+            />
+            <CustomAnswerInput
+              disabled={disabled}
+              question={question}
+              state={state}
+              onChange={onChange}
+            />
+          </div>
+        </>
+      ) : (
+        <RadioGroup
+          ariaLabel={question.question}
+          disabled={disabled}
+          value={state.selected[0] ?? ''}
+          onValueChange={(value) => onChange(selectQuestionOption(state, value, false, 'toggle'))}
+        >
+          {question.options.map((option) => (
+            <RadioItem
+              detail={option.description}
+              key={option.label}
+              label={option.label}
+              value={option.label}
+              variant="card"
+            />
+          ))}
+          <div className="tw:flex tw:items-start tw:gap-2">
+            <RadioItem ariaLabel="使用自定义回答" value={CUSTOM_OPTION_ID} />
+            <CustomAnswerInput
+              disabled={disabled}
+              question={question}
+              state={state}
+              onChange={onChange}
+            />
+          </div>
+        </RadioGroup>
+      )}
     </fieldset>
   )
 }
@@ -306,29 +299,37 @@ function emptyQuestionState(question: AskUserQuestion): QuestionState {
   }
 }
 
-function ActionButton({
-  label,
-  checked,
+function CustomAnswerInput({
+  question,
+  state,
   disabled,
-  onClick,
+  onChange,
 }: {
-  label: string
-  checked: boolean
+  question: AskUserQuestion
+  state: QuestionState
   disabled: boolean
-  onClick: () => void
+  onChange: (state: QuestionState) => void
 }): React.ReactNode {
   return (
-    <button
-      aria-checked={checked}
-      className={optionButtonClass(checked)}
+    <textarea
+      aria-label={`${question.question}的自定义回答`}
+      className="tw:type-control tw:min-h-14 tw:w-full tw:resize-y tw:border tw:border-app-border tw:bg-app-canvas tw:px-2.5 tw:py-2 tw:text-app-text tw:outline-none tw:focus:border-app-accent"
       disabled={disabled}
-      role="radio"
-      type="button"
-      onClick={onClick}
-    >
-      <span>{checked ? '●' : '○'}</span>
-      <span>{label}</span>
-    </button>
+      placeholder="其他回答…"
+      value={state.custom}
+      onFocus={() =>
+        onChange(selectQuestionOption(state, CUSTOM_OPTION_ID, question.multiSelect, 'focus'))
+      }
+      onChange={(event) => {
+        const custom = event.target.value
+        const next = selectQuestionOption(state, CUSTOM_OPTION_ID, question.multiSelect, 'focus')
+        onChange({
+          ...next,
+          custom,
+          answered: Boolean(custom.trim()) || (question.multiSelect && next.selected.length > 0),
+        })
+      }}
+    />
   )
 }
 
@@ -343,28 +344,10 @@ function QuickReplyFrame({
     <div className="tw:flex tw:min-w-72 tw:max-w-96 tw:flex-col tw:gap-3">
       {children}
       {error ? (
-        <p
-          aria-live="polite"
-          className="tw:m-0 tw:text-xs tw:leading-4 tw:text-app-danger"
-          role="alert"
-        >
+        <p aria-live="polite" className="tw:type-caption tw:m-0 tw:text-app-danger" role="alert">
           {error}
         </p>
       ) : null}
     </div>
   )
 }
-
-const primaryButtonClass =
-  'tw:inline-flex tw:min-h-8 tw:items-center tw:justify-center tw:rounded-lg tw:border-0 tw:bg-app-primary-action tw:px-3 tw:text-sm tw:font-medium tw:text-app-primary-action-foreground tw:disabled:cursor-not-allowed tw:disabled:opacity-50'
-
-const secondaryButtonClass =
-  'tw:inline-flex tw:min-h-8 tw:items-center tw:justify-center tw:rounded-lg tw:border tw:border-app-border tw:bg-app-canvas tw:px-3 tw:text-sm tw:text-app-text tw:disabled:cursor-not-allowed tw:disabled:opacity-50'
-
-const optionButtonClass = (selected: boolean): string =>
-  [
-    'tw:flex tw:min-h-9 tw:w-full tw:items-center tw:gap-2 tw:rounded-lg tw:border tw:px-2.5 tw:py-1.5 tw:text-sm tw:disabled:cursor-not-allowed tw:disabled:opacity-50',
-    selected
-      ? 'tw:border-app-accent tw:bg-app-panel tw:text-app-text'
-      : 'tw:border-app-border tw:bg-app-canvas tw:text-app-text',
-  ].join(' ')

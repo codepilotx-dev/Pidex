@@ -1,16 +1,16 @@
 export {
   createProviderManagementStore,
   providerManagementStore,
-} from './providerManagementStore.js'
+} from './ProviderManagementStore.js'
 export type {
   ProviderManagementClient,
   ProviderManagementStore,
-} from './providerManagementStore.js'
+} from './ProviderManagementStore.js'
 export {
   selectAnalyticsSources,
   selectConfiguredProviderGroups,
   selectProviderConnections,
-} from './selectors.js'
+} from './Selectors.js'
 export type {
   AnalyticsSource,
   ConfiguredProviderGroup,
@@ -19,8 +19,6 @@ export type {
   ProviderManagementSnapshot,
   ProviderUsageQueryParams,
   ProviderUsageQueryResult,
-} from './types.js'
-export { useProviderManagementSnapshot } from './useProviderManagementSnapshot.js'
-export {
-  useAuthSession,
-} from './useAuthSession.js'
+} from './Types.js'
+export { useProviderManagementSnapshot } from './UseProviderManagementSnapshot.js'
+export { useAuthSession } from './UseAuthSession.js'

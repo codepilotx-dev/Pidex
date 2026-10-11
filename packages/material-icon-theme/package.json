@@ -1,24 +1,18 @@
 {
-  "name": "@codepilotx/material-icon-theme",
+  "name": "@pidex/material-icon-theme",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
-    "./icons": "./src/icons/index.ts",
-    "./icons/*": "./src/icons/*.tsx"
+    ".": "./src/index.ts"
   },
   "scripts": {
-    "sync": "bun run scripts/sync-upstream.ts",
-    "sync:check": "bun run scripts/sync-upstream.ts --check",
+    "sync": "bun run scripts/SyncUpstream.ts",
+    "sync:check": "bun run scripts/SyncUpstream.ts --check",
     "test": "bun test test",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {
-    "react": "19.2.3"
-  },
   "devDependencies": {
-    "@types/react": "19.2.7",
     "material-icon-theme": "5.37.0",
     "typescript": "5.9.3"
   }

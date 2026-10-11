@@ -1,5 +1,5 @@
 {
-  "styleEntrypoint": "src/styles/index.scss",
+  "styleEntrypoint": "src/styles/tailwind.css",
   "styleEntrypointImporter": "src/main.tsx",
   "cascadeLayerOrder": [
     "theme",
@@ -12,52 +12,86 @@
     "utilities",
     "overrides"
   ],
-  "utilityContract": {
-    "source": "src/styles/design-system/utilities.scss",
-    "prefix": "u-",
-    "maxSelectors": 220,
-    "maxBytes": 18432,
-    "maxGzipBytes": 4096
-  },
   "directStyleImportAllowlist": [
-    "src/main.tsx -> src/styles/tailwind.css",
-    "src/features/labs/LabsPage.tsx -> src/styles/lazy/labs.scss",
-    "src/features/pet/PetCatalogPage.tsx -> src/styles/lazy/pet-catalog.scss",
-    "src/features/pet/PetOverlayPage.tsx -> src/styles/lazy/pet-overlay.scss",
-    "src/features/settings/SettingsLayout.tsx -> src/styles/lazy/settings.scss",
-    "src/features/terminal/TerminalPanel.tsx -> src/styles/lazy/terminal.scss",
-    "src/features/whats-new/WhatsNewDialog.tsx -> src/styles/lazy/whats-new.scss"
+    "src/features/pet/PetOverlayPage.tsx -> src/styles/lazy/pet-overlay.css",
+    "src/features/terminal/TerminalPanel.tsx -> src/styles/lazy/terminal.css"
   ],
   "lazyStyleEntrypoints": {
-    "src/styles/lazy/labs.scss": "features",
-    "src/styles/lazy/pet-catalog.scss": "features",
-    "src/styles/lazy/pet-overlay.scss": "features",
-    "src/styles/lazy/settings.scss": "features",
-    "src/styles/lazy/terminal.scss": "vendor",
-    "src/styles/lazy/whats-new.scss": "features"
+    "src/styles/lazy/pet-overlay.css": "features",
+    "src/styles/lazy/terminal.css": "vendor"
   },
   "customPropertyReferenceAllowlist": [
-    "--inline-approval-card-margin-bottom",
-    "--inline-approval-card-radius",
-    "--popover-overflow-x",
-    "--radix-context-menu-content-transform-origin",
-    "--radix-dropdown-menu-content-transform-origin",
-    "--radix-popover-content-transform-origin",
-    "--radix-select-content-transform-origin",
-    "--radix-select-trigger-width"
+    "--radix-menubar-content-transform-origin",
+    "--radix-menubar-content-available-height",
+    "--radix-tooltip-content-transform-origin",
+    "--sidebar-collapse-target-size"
   ],
   "forbiddenCustomPropertyPatterns": [
     "^--color-bg(?:-|$)",
     "^--surface-",
-    "^--state-",
     "^--border-(?:subtle|muted|control|strong)$",
     "^--color-text(?:$|-(?:strong|meta|soft|mute|muted|placeholder|disabled|on-accent)$)"
   ],
   "importantDeclarationAllowlist": {
-    "src/styles/base.scss": 12,
-    "src/styles/popover.scss": 1
+    "src/styles/base.css": 8,
+    "src/styles/popover.css": 1
   },
   "dataThemeSelectorAllowlist": {
-    "src/styles/features/model-center.scss": 2
+    "src/styles/design-system/tokens.css": 4
+  },
+  "literalLineHeightAllowlist": {},
+  "tailwindLeadingAllowlist": {},
+  "featureColorContract": {
+    "roots": ["src/styles/features", "src/styles/lazy"],
+    "componentTokenExceptions": [
+      {
+        "file": "src/styles/lazy/terminal.css",
+        "token": "--cpx-comp-terminal-bg",
+        "reason": "终端表面配色是 xterm 第三方适配器调色板，成对声明在惰性 vendor 入口内，不能拆成系统语义色。"
+      },
+      {
+        "file": "src/styles/lazy/terminal.css",
+        "token": "--cpx-comp-terminal-fg",
+        "reason": "终端表面配色是 xterm 第三方适配器调色板，成对声明在惰性 vendor 入口内，不能拆成系统语义色。"
+      }
+    ],
+    "literalColorExceptions": [],
+    "colorMixExceptions": []
+  },
+  "featureTokenContract": {
+    "roots": ["src/styles/features", "src/styles/lazy"],
+    "scriptRoots": ["src/features", "src/components"],
+    "componentGeometryExceptions": [],
+    "inlineStyleExceptions": [],
+    "tailwindArbitraryExceptions": [
+      {
+        "file": "src/features/layout/workspace-header/DesktopWorkspaceHeader.tsx",
+        "property": "className",
+        "value": "tw:px-[var(--workspace-header-center-padding)]",
+        "reason": "工作区工具栏的路由带居中内边距由左右插槽宽度在 CSS 中推导，是运行时几何值，没有静态设计令牌可替代。"
+      }
+    ],
+    "tailwindTypographyExceptions": [],
+    "literalTypographyExceptions": [],
+    "literalRadiusExceptions": [],
+    "literalMotionExceptions": [],
+    "literalShadowExceptions": [],
+    "literalZIndexExceptions": [
+      {
+        "file": "src/styles/features/layout-workspace-header.css",
+        "property": "z-index",
+        "value": "1",
+        "reason": "Workspace header route groups use local grid-item ordering inside the dock layer."
+      }
+    ],
+    "literalSpacingExceptions": []
+  },
+  "interactionContract": {
+    "interactiveRowAllowedFiles": [
+      "src/components/ui/DropdownActions.tsx",
+      "src/components/ui/PopoverItem.tsx",
+      "src/components/ui/SearchablePopoverContent.tsx",
+      "src/features/session/summary/ThreadSummaryPanel.tsx"
+    ]
   }
 }

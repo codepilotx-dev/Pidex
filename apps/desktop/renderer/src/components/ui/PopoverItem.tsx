@@ -1,12 +1,14 @@
 import type React from 'react'
-import * as DropdownMenu from '@radix-ui/react-dropdown-menu'
+import { Dropdown as DropdownMenu } from './floating/Dropdown.js'
 import { Check, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react'
-import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from './iconTokens.js'
+import { APP_ICON_STROKE_WIDTH, APP_ICON_SIZES } from './IconTokens.js'
 import { Tooltip } from './Tooltip.js'
+import { cx } from '../../utils/Cx.js'
 
 type BaseProps = {
   children: React.ReactNode
   active?: boolean
+  description?: React.ReactNode
   disabled?: boolean
   icon?: React.ReactNode
   meta?: React.ReactNode
@@ -60,59 +62,69 @@ function buildItemClassName({
     hasRichContent ? 'rich' : '',
     active ? 'active' : '',
     selected ? 'selected' : '',
-  ].join(' ')
+  ]
+    .filter(Boolean)
+    .join(' ')
 }
 
 function PopoverItemContent({
   children,
+  description,
   icon,
   indicator,
   shortcut,
   withArrow,
   arrowDirection = 'right',
 }: ItemContentProps): React.ReactNode {
-  const hasRichContent = Boolean(shortcut)
   return (
     <>
       <span className="popover-item-leading">
         {icon ? <span className="popover-item-icon">{icon}</span> : null}
       </span>
-      {hasRichContent ? (
-        <span className="popover-item-rich">
-          <span className="popover-item-label">{children}</span>
+      {description ? (
+        <span className="popover-item-label popover-item-label--rich">
+          <span className="popover-item-title">{children}</span>
+          <span className="popover-item-description">{description}</span>
         </span>
       ) : (
         <span className="popover-item-label">{children}</span>
       )}
       <span className="popover-item-trailing">
-        {shortcut ? (
-          <span className="popover-item-shortcut">{shortcut}</span>
-        ) : null}
-        {indicator ?? (withArrow ? (
-          arrowDirection === 'down' ? (
-            <ChevronDown className="popover-item-arrow" size={APP_ICON_SIZE} />
-          ) : arrowDirection === 'up' ? (
-            <ChevronUp className="popover-item-arrow" size={APP_ICON_SIZE} />
-          ) : (
-            <ChevronRight className="popover-item-arrow" size={APP_ICON_SIZE} />
-          )
-        ) : null)}
+        {shortcut ? <span className="popover-item-shortcut">{shortcut}</span> : null}
+        {indicator ??
+          (withArrow ? (
+            arrowDirection === 'down' ? (
+              <ChevronDown
+                className="popover-item-arrow"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            ) : arrowDirection === 'up' ? (
+              <ChevronUp
+                className="popover-item-arrow"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            ) : (
+              <ChevronRight
+                className="popover-item-arrow"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            )
+          ) : null)}
       </span>
     </>
   )
 }
 
-function withOptionalTooltip(
-  item: React.ReactElement,
-  meta: React.ReactNode,
-): React.ReactNode {
+function withOptionalTooltip(item: React.ReactElement, meta: React.ReactNode): React.ReactNode {
   if (!meta) return item
   return (
     <Tooltip
       align="center"
-      className="popover-item-tooltip"
+      className="popover-item-tooltip tw:w-max tw:wrap-anywhere"
       content={meta}
-      delayDuration={350}
       side="right"
       sideOffset={10}
     >
@@ -124,6 +136,7 @@ function withOptionalTooltip(
 export function PopoverItem({
   children,
   active,
+  description,
   disabled,
   icon,
   meta,
@@ -137,14 +150,14 @@ export function PopoverItem({
   onMouseEnter,
   onMouseLeave,
 }: Props): React.ReactNode {
-  const hasRichContent = Boolean(meta) || Boolean(shortcut)
+  const hasRichContent = Boolean(description)
   const item = (
     <DropdownMenu.Item
       className={buildItemClassName({ active, hasRichContent, selected })}
       disabled={disabled}
       onPointerEnter={onMouseEnter}
       onPointerLeave={onMouseLeave}
-      onSelect={event => {
+      onSelect={(event) => {
         if (disabled) {
           event.preventDefault()
           return
@@ -157,10 +170,17 @@ export function PopoverItem({
     >
       <PopoverItemContent
         arrowDirection={arrowDirection}
+        description={description}
         icon={icon}
-        indicator={selected && withCheck ? (
-          <Check className="popover-item-check" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-        ) : undefined}
+        indicator={
+          selected && withCheck ? (
+            <Check
+              className="popover-item-check"
+              size={APP_ICON_SIZES.sm}
+              strokeWidth={APP_ICON_STROKE_WIDTH}
+            />
+          ) : undefined
+        }
         shortcut={shortcut}
         withArrow={withArrow}
       >
@@ -176,6 +196,7 @@ export function PopoverCheckboxItem({
   children,
   active,
   checked,
+  description,
   disabled,
   icon,
   meta,
@@ -187,7 +208,7 @@ export function PopoverCheckboxItem({
   onMouseEnter,
   onMouseLeave,
 }: CheckboxProps): React.ReactNode {
-  const hasRichContent = Boolean(meta) || Boolean(shortcut)
+  const hasRichContent = Boolean(description)
   const item = (
     <DropdownMenu.CheckboxItem
       checked={checked}
@@ -196,18 +217,23 @@ export function PopoverCheckboxItem({
       onCheckedChange={onCheckedChange}
       onPointerEnter={onMouseEnter}
       onPointerLeave={onMouseLeave}
-      onSelect={event => {
+      onSelect={(event) => {
         if (keepOpen) event.preventDefault()
       }}
     >
       <PopoverItemContent
         arrowDirection={arrowDirection}
+        description={description}
         icon={icon}
-        indicator={(
+        indicator={
           <DropdownMenu.ItemIndicator asChild>
-            <Check className="popover-item-check" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <Check
+              className="popover-item-check"
+              size={APP_ICON_SIZES.sm}
+              strokeWidth={APP_ICON_STROKE_WIDTH}
+            />
           </DropdownMenu.ItemIndicator>
-        )}
+        }
         shortcut={shortcut}
         withArrow={withArrow}
       >
@@ -233,6 +259,7 @@ export function PopoverRadioGroup({
 export function PopoverRadioItem({
   children,
   active,
+  description,
   disabled,
   icon,
   meta,
@@ -243,7 +270,7 @@ export function PopoverRadioItem({
   onMouseEnter,
   onMouseLeave,
 }: RadioItemProps): React.ReactNode {
-  const hasRichContent = Boolean(meta) || Boolean(shortcut)
+  const hasRichContent = Boolean(description)
   const item = (
     <DropdownMenu.RadioItem
       className={buildItemClassName({ active, hasRichContent })}
@@ -254,12 +281,17 @@ export function PopoverRadioItem({
     >
       <PopoverItemContent
         arrowDirection={arrowDirection}
+        description={description}
         icon={icon}
-        indicator={(
+        indicator={
           <DropdownMenu.ItemIndicator asChild>
-            <Check className="popover-item-check" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <Check
+              className="popover-item-check"
+              size={APP_ICON_SIZES.sm}
+              strokeWidth={APP_ICON_STROKE_WIDTH}
+            />
           </DropdownMenu.ItemIndicator>
-        )}
+        }
         shortcut={shortcut}
         withArrow={withArrow}
       >
@@ -280,11 +312,17 @@ export function PopoverLabel({
   children,
   className = 'popover-section-title',
 }: React.ComponentPropsWithoutRef<typeof DropdownMenu.Label>): React.ReactNode {
-  return <DropdownMenu.Label className={className}>{children}</DropdownMenu.Label>
+  return (
+    <DropdownMenu.Label
+      className={cx(className, 'tw:px-2 tw:py-1 tw:text-app-text-meta tw:type-label')}
+    >
+      {children}
+    </DropdownMenu.Label>
+  )
 }
 
 export function PopoverSeparator({
   className = 'popover-divider',
 }: React.ComponentPropsWithoutRef<typeof DropdownMenu.Separator>): React.ReactNode {
-  return <DropdownMenu.Separator className={className} />
+  return <DropdownMenu.Separator className={cx(className, 'tw:h-px tw:my-1 tw:bg-app-border')} />
 }

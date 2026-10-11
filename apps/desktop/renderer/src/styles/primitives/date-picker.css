@@ -1,0 +1,17 @@
+/*
+ * DatePicker residue: the selected day must keep its highlight in
+ * `forced-colors` mode, which needs the system colour keywords the utility set
+ * cannot name. The utilities layer outranks this layer, so the appearance is
+ * redirected through the tokens those utilities consume instead of the
+ * properties themselves; `forced-color-adjust: none` keeps the platform from
+ * flattening the selection to Canvas.
+ */
+@layer primitives {
+  @media (forced-colors: active) {
+    .ui-date-picker-day[aria-selected='true'] {
+      --cpx-sys-color-accent: Highlight;
+      --cpx-sys-color-fg-on-accent: HighlightText;
+      forced-color-adjust: none;
+    }
+  }
+}

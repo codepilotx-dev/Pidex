@@ -1,0 +1,132 @@
+/*
+ * Primitive residue. Generated from menu-item.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer primitives {
+  /* Submenu rows reclaim an empty icon column; actual icons remain visible. */
+  [data-menu-subcontent] :is(.popover-item-leading, .sidebar-context-menu-leading):empty {
+    display: none;
+  }
+  [data-menu-subcontent]
+    :where(.popover-item, .sidebar-context-menu-item, .sidebar-context-menu-sub-trigger):has(
+      > :is(.popover-item-leading, .sidebar-context-menu-leading):empty
+    )
+    > :is(.popover-item-label, .sidebar-context-menu-label) {
+    flex: 1 1 auto;
+  }
+  [data-menu-subcontent]:is(.popover-menu--grid, .app-context-menu--grid)
+    :where(.popover-item, .sidebar-context-menu-item, .sidebar-context-menu-sub-trigger):has(
+      > :where(.popover-item-leading, .sidebar-context-menu-leading):empty
+    )
+    > :where(.popover-item-label, .sidebar-context-menu-label) {
+    grid-column: 1 / span 2;
+  }
+  [data-menu-subcontent] .popover-item-trailing {
+    margin-left: auto;
+  }
+
+  /* ===== Unified Menu / Dropdown Item Layout (residue) =====
+     Shared geometry and interaction states live in interactive-row.scss.
+
+     Migrated out of this file:
+     - `.app-context-menu--flex` / `.app-context-menu--grid` and their
+       `.sidebar-context-menu-*` cells: now Tailwind utilities in
+       components/ui/AppContextMenu.tsx.
+     - `.rm-model-menu .rm-menu-item` / `.rm-sub-trigger`: no TSX consumer.
+
+     Still here because the consumers live in other batches' in-flight files
+     (rendered by their own row components, so the utilities have to land there):
+     - `.popover-menu--flex/--grid/--no-icons/--text-only` containers are set by
+       ~20 surfaces across sidebar / session / review / tabs / composer.
+     - `.popover-item*`, `.popover-sub-trigger`: PopoverItem.tsx and
+       SearchablePopoverContent.tsx own the component, but SidebarFooter,
+       ReviewSourceMenu, ConversationPage and InlineApprovalCard render the
+       sub-trigger markup directly.
+     - `.menubar-item`: MenuBar.tsx (layout batch) is already migrating it.
+     - `.settings-dropdown-item` / `.permission-select-item`: Select.tsx and
+       ComposerCard.tsx permission menu (settings / composer batches).
+     - `.chat-input__dropdown-item`: ComposerCommandMenu.tsx.
+  */
+  .popover-item,
+  .popover-sub-trigger,
+  .menubar-item,
+  .settings-dropdown-item,
+  .permission-select-item,
+  .chat-input__dropdown-item,
+  .sidebar-context-menu-item,
+  .sidebar-context-menu-sub-trigger {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+    box-shadow: none;
+  }
+
+  /* Menu layout belongs to the menu surface, not the item primitive. */
+  .popover-menu--flex .popover-item,
+  .popover-menu--flex .popover-sub-trigger {
+    display: flex;
+    gap: var(--cpx-comp-row-gap);
+    align-items: center;
+  }
+  .popover-menu--flex .popover-item-leading {
+    display: none;
+  }
+  .popover-menu--flex .popover-item-label,
+  .popover-menu--flex .popover-item-rich {
+    flex: 1 1 auto;
+  }
+  .popover-menu--flex .popover-item-trailing {
+    flex: 0 0 auto;
+    margin-left: auto;
+  }
+
+  .popover-menu--grid .popover-item,
+  .popover-menu--grid .popover-sub-trigger {
+    display: grid;
+    grid-template-columns: var(--cpx-comp-menu-icon-size) minmax(0, 1fr) max-content;
+    column-gap: var(--cpx-comp-row-gap);
+    align-items: center;
+  }
+  .popover-menu--grid .popover-item.rich {
+    grid-template-columns: var(--cpx-comp-menu-icon-size) minmax(0, 1fr) max-content;
+    align-items: center;
+  }
+
+  .popover-menu--no-icons .popover-item,
+  .popover-menu--no-icons .popover-sub-trigger,
+  .popover-menu--text-only .popover-item,
+  .popover-menu--text-only .popover-sub-trigger {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    column-gap: var(--cpx-comp-row-gap);
+    align-items: center;
+  }
+  .popover-menu--no-icons .popover-item-leading,
+  .popover-menu--text-only .popover-item-leading {
+    display: none;
+  }
+
+  .menubar-item {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) max-content;
+    column-gap: calc(var(--cpx-comp-row-gap) + var(--cpx-comp-row-gap));
+    align-items: center;
+  }
+
+  .settings-dropdown-item,
+  .permission-select-item {
+    display: flex;
+    gap: var(--cpx-comp-row-gap);
+    align-items: center;
+  }
+
+  .popover-item-label,
+  .sidebar-context-menu-label,
+  .settings-dropdown-item > span,
+  .permission-select-item > span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+}

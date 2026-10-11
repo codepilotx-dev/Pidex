@@ -1,6 +1,6 @@
 # 参与贡献
 
-感谢你改进 CodePilotX。这个仓库是 Windows-first 的 TypeScript monorepo，统一使用 Bun 1.3.14。提交变更前，请先阅读根目录 `AGENTS.md`、本文件和所修改目录下更具体的 `AGENTS.md`。
+感谢你改进 Pidex。这个仓库是 Windows-first 的 TypeScript monorepo，统一使用 Bun 1.3.14。提交变更前，请先阅读根目录 `AGENTS.md`、本文件和所修改目录下更具体的 `AGENTS.md`。
 
 参与本项目即表示你同意遵守 [行为准则](CODE_OF_CONDUCT.md)。安全漏洞请按 [安全策略](SECURITY.md) 私密报告，不要创建公开 Issue。
 
@@ -16,8 +16,8 @@
 需要 Windows、Git 和 Bun 1.3.14。
 
 ```powershell
-git clone https://github.com/codepilotx-dev/CodePilotX.git
-Set-Location CodePilotX
+git clone https://github.com/codepilotx-dev/Pidex.git
+Set-Location Pidex
 bun install --frozen-lockfile
 bun run dev
 ```

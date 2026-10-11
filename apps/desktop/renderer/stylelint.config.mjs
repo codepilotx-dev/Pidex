@@ -1,6 +1,5 @@
 export default {
-  extends: ['stylelint-config-standard-scss'],
-  customSyntax: 'postcss-scss',
+  extends: ['stylelint-config-standard'],
   ignoreFiles: ['dist/**'],
   rules: {
     // Keep the initial rollout focused on correctness. Formatting and selector
@@ -36,30 +35,28 @@ export default {
     'selector-not-notation': null,
     'selector-pseudo-element-colon-notation': null,
     'shorthand-property-no-redundant-values': null,
-    'scss/operator-no-newline-after': null,
+    'declaration-property-value-no-unknown': null,
     'value-keyword-case': null,
   },
   overrides: [
     {
       files: ['**/tailwind.css'],
       rules: {
+        // Tailwind owns this entrypoint: `@theme`/`@utility` are its directives
+        // and `prefix()`/`source()` are its `@import` modifiers, so the core
+        // rules that predate those extensions are turned off here only.
+        'at-rule-no-unknown': [true, { ignoreAtRules: ['theme', 'utility'] }],
+        'at-rule-prelude-no-invalid': null,
         'color-no-hex': null,
         'custom-property-pattern': null,
         'function-disallowed-list': null,
-        'scss/at-rule-no-unknown': [
-          true,
-          {
-            ignoreAtRules: ['theme'],
-          },
-        ],
       },
     },
     {
       files: [
-        '**/design-system/tokens.scss',
-        '**/design-system/codex-semantic-tokens.scss',
-        '**/features/_settings-appearance.scss',
-        '**/features/_labs.scss',
+        '**/design-system/tokens.css',
+        '**/design-system/codex-semantic-tokens.css',
+        '**/primitives/settings.css',
       ],
       rules: {
         'color-no-hex': null,
@@ -68,15 +65,9 @@ export default {
       },
     },
     {
-      files: ['**/base.scss', '**/popover.scss'],
+      files: ['**/base.css', '**/popover.css'],
       rules: {
         'declaration-no-important': null,
-      },
-    },
-    {
-      files: ['**/design-system/utilities.scss'],
-      rules: {
-        'selector-class-pattern': '^u-[a-z0-9]+(?:-[a-z0-9]+)*$',
       },
     },
   ],

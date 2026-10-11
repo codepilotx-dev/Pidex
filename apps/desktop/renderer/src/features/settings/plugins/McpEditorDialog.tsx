@@ -1,24 +1,28 @@
 import * as Dialog from '@radix-ui/react-dialog'
 import { ChevronDown, ChevronUp, ExternalLink, Plus, Trash2, X } from 'lucide-react'
 import type React from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useId, useRef, useState } from 'react'
 import type {
   DesktopEditableMcpScope,
   DesktopMcpServerConfig,
   DesktopMcpServerListItem,
   DesktopMcpToolApprovalMode,
   SaveDesktopMcpServerOptions,
-} from '../../../../shared/types.js'
+} from '../../../../shared/Types.js'
 import { Button } from '../../../components/ui/Button.js'
-import { IconButton } from '../../../components/ui/IconButton.js'
+
 import { Input } from '../../../components/ui/Input.js'
 import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
 import { ToggleSwitch } from '../../../components/ui/ToggleSwitch.js'
+import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
 import {
   APP_ICON_SIZE,
   APP_ICON_STROKE_WIDTH,
-} from '../../../components/ui/iconTokens.js'
+  APP_ICON_SIZES,
+} from '../../../components/ui/IconTokens.js'
 import { SettingsDropdown } from '../SettingsDropdown.js'
+import { useLastNonNull } from '../../../hooks/UsePresenceRetention.js'
+import { errorMessageOf as rawErrorMessage } from '@pidex/shared/errors'
 
 type TransportType = DesktopMcpServerConfig['type']
 
@@ -110,7 +114,8 @@ const APPROVAL_MODE_OPTIONS: Array<{
   { value: 'approve', label: '始终允许' },
 ]
 const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/
-const SENSITIVE_NAME = /(?:^|[_-])(authorization|cookie|password|secret|token|api[_-]?key)(?:$|[_-])/i
+const SENSITIVE_NAME =
+  /(?:^|[_-])(authorization|cookie|password|secret|token|api[_-]?key)(?:$|[_-])/i
 const STATIC_SECRET_HEADERS = new Set([
   'authorization',
   'proxy-authorization',
@@ -120,7 +125,7 @@ const STATIC_SECRET_HEADERS = new Set([
 
 export function McpEditorDialog({
   open,
-  server,
+  server: currentServer,
   busy,
   workspaceAvailable,
   restoreFocusElement,
@@ -129,27 +134,27 @@ export function McpEditorDialog({
   onRemove,
   onOpenDocumentation,
 }: Props): React.ReactNode {
+  const retainedServer = useLastNonNull(currentServer)
+  const server = open ? currentServer : retainedServer
   const closeRef = useRef<HTMLButtonElement | null>(null)
   const visitedTransportTypes = useRef<Set<TransportType>>(new Set())
   const stdioDiagnosticContext = useRef(false)
   const [form, setForm] = useState<FormState>(() => formForServer(null))
-  const [advanced, setAdvanced] = useState(false)
+  const advancedRef = useRef(false)
   const [validationError, setValidationError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
     setForm(formForServer(server))
-    visitedTransportTypes.current = new Set([
-      server?.transport.type ?? 'stdio',
-    ])
+    visitedTransportTypes.current = new Set([server?.transport.type ?? 'stdio'])
     stdioDiagnosticContext.current = server?.diagnosticContext ?? false
-    setAdvanced(false)
+    advancedRef.current = false
     setValidationError(null)
   }, [open, server])
 
   function update(mutator: (current: FormState) => FormState): void {
     setValidationError(null)
-    setForm(current => {
+    setForm((current) => {
       if (current.type === 'stdio') {
         stdioDiagnosticContext.current = current.diagnosticContext
       }
@@ -164,7 +169,7 @@ export function McpEditorDialog({
 
   function updateType(type: TransportType): void {
     setValidationError(null)
-    setForm(current => {
+    setForm((current) => {
       const firstVisit = !visitedTransportTypes.current.has(type)
       visitedTransportTypes.current.add(type)
       const defaults = formFromTransport(templateConfig(type))
@@ -191,9 +196,7 @@ export function McpEditorDialog({
               bearerTokenEnvVar: defaults.bearerTokenEnvVar,
             }
           : {}),
-        diagnosticContext: type === 'stdio'
-          ? stdioDiagnosticContext.current
-          : false,
+        diagnosticContext: type === 'stdio' ? stdioDiagnosticContext.current : false,
         configText: '',
       }
       return {
@@ -206,13 +209,13 @@ export function McpEditorDialog({
   function applyAdvancedJson(): void {
     try {
       const config = parseMcpServerJson(form.configText)
-      if (server && (
-        config.scope !== server.scope
-        || config.transport.type !== server.transport.type
-      )) {
+      if (
+        server &&
+        (config.scope !== server.scope || config.transport.type !== server.transport.type)
+      ) {
         throw new Error('现有 MCP server 的配置范围和 transport 不能修改。')
       }
-      setForm(current => formFromEditorConfig(config, current.originalName))
+      setForm((current) => formFromEditorConfig(config, current.originalName))
       setValidationError(null)
     } catch (error) {
       setValidationError(`高级 JSON 无法应用：${errorMessageOf(error)}`)
@@ -221,12 +224,9 @@ export function McpEditorDialog({
 
   async function save(): Promise<void> {
     let candidate = form
-    if (advanced) {
+    if (advancedRef.current) {
       try {
-        candidate = formFromEditorConfig(
-          parseMcpServerJson(form.configText),
-          form.originalName,
-        )
+        candidate = formFromEditorConfig(parseMcpServerJson(form.configText), form.originalName)
       } catch (error) {
         setValidationError(`高级 JSON 无法应用：${errorMessageOf(error)}`)
         return
@@ -241,10 +241,7 @@ export function McpEditorDialog({
       setValidationError('工作区 MCP 配置需要先打开一个工作区。')
       return
     }
-    if (server && (
-      candidate.scope !== server.scope
-      || candidate.type !== server.transport.type
-    )) {
+    if (server && (candidate.scope !== server.scope || candidate.type !== server.transport.type)) {
       setValidationError('现有 MCP server 的配置范围和 transport 不能修改。')
       return
     }
@@ -306,370 +303,453 @@ export function McpEditorDialog({
   return (
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
-        <Dialog.Overlay className="permission-modal-backdrop">
-          <Dialog.Content
-            className="permission-modal tw:flex tw:max-h-[min(48rem,calc(100vh-3rem))] tw:w-[min(44rem,calc(100vw-3rem))] tw:flex-col tw:overflow-hidden tw:rounded-xl tw:p-0 tw:text-app-text"
-            onCloseAutoFocus={event => {
-              if (!restoreFocusElement?.isConnected) return
-              event.preventDefault()
-              restoreFocusElement.focus()
-            }}
-            onOpenAutoFocus={event => {
-              event.preventDefault()
-              closeRef.current?.focus()
-            }}
-          >
-            <header className="tw:flex tw:items-start tw:gap-3 tw:border-b tw:border-app-border tw:px-5 tw:py-4">
-              <span className="tw:min-w-0 tw:flex-1">
-                <Dialog.Title className="tw:m-0 tw:text-lg tw:font-[var(--font-weight-heading)]">
-                  {server ? `MCP：${server.name}` : '新增 MCP server'}
-                </Dialog.Title>
-                <Dialog.Description className="tw:mt-1 tw:mb-0 tw:text-sm tw:text-app-text-soft">
-                  使用结构化字段配置 stdio 或 Streamable HTTP；HTTP 会在协议不兼容时自动回退 SSE。
-                </Dialog.Description>
-                <Button
-                  className="tw:mt-1"
-                  onClick={onOpenDocumentation}
-                >
-                  官方 MCP 文档
-                  <ExternalLink aria-hidden="true" size={12} />
-                </Button>
-              </span>
-              <Dialog.Close asChild>
-                <IconButton ref={closeRef} title="关闭 MCP 编辑器" variant="plain">
-                  <X aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                </IconButton>
-              </Dialog.Close>
-            </header>
+        <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
+        <Dialog.Content
+          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:max-h-[min(48rem,calc(100vh-3rem))] tw:w-[min(44rem,calc(100vw-3rem))] tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text"
+          onCloseAutoFocus={(event) => {
+            if (!restoreFocusElement?.isConnected) return
+            event.preventDefault()
+            restoreFocusElement.focus()
+          }}
+          onOpenAutoFocus={(event) => {
+            event.preventDefault()
+            closeRef.current?.focus()
+          }}
+        >
+          <header className="settings-management-dialog-header tw:flex tw:items-start tw:gap-3">
+            <span className="settings-management-dialog-heading tw:min-w-0 tw:flex-1">
+              <Dialog.Title className="tw:type-title-sm tw:m-0">
+                {server ? `MCP：${server.name}` : '新增 MCP server'}
+              </Dialog.Title>
+              <Dialog.Description className="tw:type-body-sm tw:mt-1 tw:mb-0 tw:text-app-text-soft">
+                使用结构化字段配置 stdio 或 Streamable HTTP；HTTP 会在协议不兼容时自动回退 SSE。
+              </Dialog.Description>
+              <Button color="secondary" className="tw:mt-1" onClick={onOpenDocumentation}>
+                官方 MCP 文档
+                <ExternalLink aria-hidden="true" size={APP_ICON_SIZE} />
+              </Button>
+            </span>
+            <Dialog.Close asChild>
+              <Button
+                isIconOnly
+                color="ghostSecondary"
+                ref={closeRef}
+                size="toolbar"
+                title="关闭 MCP 编辑器"
+              >
+                <X aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+              </Button>
+            </Dialog.Close>
+          </header>
 
-            <div className="tw:grid tw:min-h-0 tw:flex-1 tw:gap-4 tw:overflow-auto tw:px-5 tw:py-4">
-              {runtimeError || needsAuth ? (
-                <div className="tw:rounded-lg tw:border tw:border-app-border tw:bg-app-canvas tw:px-3 tw:py-2 tw:text-sm tw:text-app-text-soft">
-                  {runtimeError ?? '该 server 需要认证。请从 MCP 列表发起 OAuth 登录，或配置宿主环境变量凭据。'}
-                </div>
-              ) : null}
-              {validationError ? (
-                <div
-                  className="tw:rounded-lg tw:border tw:border-app-danger/40 tw:bg-app-danger/10 tw:px-3 tw:py-2 tw:text-sm tw:text-app-danger"
-                  role="alert"
-                >
-                  {validationError}
-                </div>
-              ) : null}
+          <div className="settings-management-dialog-body tw:grid tw:min-h-0 tw:flex-1 tw:gap-4 tw:overflow-auto">
+            {runtimeError || needsAuth ? (
+              <div className="tw:type-body-sm tw:border tw:border-app-border tw:bg-app-canvas tw:px-3 tw:py-2 tw:text-app-text-soft">
+                {runtimeError ??
+                  '该 server 需要认证。请从 MCP 列表发起 OAuth 登录，或配置宿主环境变量凭据。'}
+              </div>
+            ) : null}
+            {validationError ? (
+              <div
+                className="tw:type-body-sm tw:border tw:border-app-danger/40 tw:bg-app-danger/10 tw:px-3 tw:py-2 tw:text-app-danger"
+                role="alert"
+              >
+                {validationError}
+              </div>
+            ) : null}
 
+            <FormCard>
+              <FormRow label="名称">
+                <Input
+                  aria-label="MCP server 名称"
+                  value={form.name}
+                  placeholder="MCP server name"
+                  onChange={(event) =>
+                    update((current) => ({ ...current, name: event.target.value }))
+                  }
+                />
+              </FormRow>
+              <FormRow label="类型">
+                <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
+                  {server ? (
+                    <span className="tw:type-caption tw:text-app-text-soft">
+                      已有配置的 transport 不可修改。
+                    </span>
+                  ) : (
+                    <span />
+                  )}
+                  <SegmentedControl
+                    ariaLabel="MCP transport"
+                    value={form.type}
+                    options={TYPE_OPTIONS.map((option) => ({
+                      ...option,
+                      disabled: Boolean(server),
+                    }))}
+                    onChange={updateType}
+                  />
+                </div>
+              </FormRow>
+            </FormCard>
+
+            {form.type === 'stdio' ? (
               <FormCard>
-                <FormRow label="名称">
+                <FormRow label="启动命令">
                   <Input
-                    aria-label="MCP server 名称"
-                    value={form.name}
-                    placeholder="MCP server name"
-                    onChange={event => update(current => ({ ...current, name: event.target.value }))}
+                    aria-label="stdio 启动命令"
+                    value={form.command}
+                    placeholder="bun"
+                    onChange={(event) =>
+                      update((current) => ({ ...current, command: event.target.value }))
+                    }
                   />
                 </FormRow>
-                <FormRow label="类型">
-                  <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
-                    {server ? (
-                      <span className="tw:text-xs tw:text-app-text-soft">
-                        已有配置的 transport 不可修改。
+                <ValueListField
+                  addLabel="添加参数"
+                  label="参数"
+                  placeholder="server.ts"
+                  rows={form.args}
+                  onChange={(args) => update((current) => ({ ...current, args }))}
+                />
+                <MapListField
+                  addLabel="添加环境变量"
+                  keyLabel="环境变量名"
+                  label="环境变量"
+                  rows={form.env}
+                  valueLabel="值"
+                  onChange={(env) => update((current) => ({ ...current, env }))}
+                />
+                <MapListField
+                  addLabel="添加变量"
+                  keyLabel="MCP 变量名"
+                  label="环境变量传递"
+                  rows={form.envFromHost}
+                  valueLabel="宿主变量名"
+                  onChange={(envFromHost) => update((current) => ({ ...current, envFromHost }))}
+                />
+                <FormRow label="工作目录">
+                  <Input
+                    aria-label="stdio 工作目录"
+                    value={form.cwd}
+                    placeholder="C:\workspace"
+                    onChange={(event) =>
+                      update((current) => ({ ...current, cwd: event.target.value }))
+                    }
+                  />
+                </FormRow>
+              </FormCard>
+            ) : (
+              <FormCard>
+                <FormRow label="URL">
+                  <Input
+                    aria-label="MCP URL"
+                    value={form.url}
+                    placeholder="https://mcp.example.com/mcp"
+                    onChange={(event) =>
+                      update((current) => ({ ...current, url: event.target.value }))
+                    }
+                  />
+                </FormRow>
+                <FormRow label="Bearer 令牌环境变量">
+                  <Input
+                    aria-label="Bearer Token 环境变量名"
+                    value={form.bearerTokenEnvVar}
+                    placeholder="MCP_BEARER_TOKEN"
+                    onChange={(event) =>
+                      update((current) => ({ ...current, bearerTokenEnvVar: event.target.value }))
+                    }
+                  />
+                </FormRow>
+                <MapListField
+                  addLabel="添加标头"
+                  keyLabel="标头名称"
+                  label="标头"
+                  rows={form.headers}
+                  valueLabel="值"
+                  onChange={(headers) => update((current) => ({ ...current, headers }))}
+                />
+                <MapListField
+                  addLabel="添加变量"
+                  keyLabel="标头名称"
+                  label="来自环境变量的标头"
+                  rows={form.headerFromEnv}
+                  valueLabel="宿主变量名"
+                  onChange={(headerFromEnv) => update((current) => ({ ...current, headerFromEnv }))}
+                />
+              </FormCard>
+            )}
+
+            <FormCard>
+              <FormRow label="配置范围">
+                <SettingsDropdown
+                  value={form.scope}
+                  size="md"
+                  disabled={Boolean(server)}
+                  options={SCOPE_OPTIONS.map((option) => ({
+                    ...option,
+                    disabled: option.value === 'local' && !workspaceAvailable,
+                  }))}
+                  onChange={(value) =>
+                    update((current) => ({
+                      ...current,
+                      scope: value as DesktopEditableMcpScope,
+                    }))
+                  }
+                  ariaLabel="MCP scope"
+                />
+              </FormRow>
+              <FormRow label="启用">
+                <ToggleSwitch
+                  ariaLabel="MCP server"
+                  checked={form.enabled}
+                  onChange={(enabled) => update((current) => ({ ...current, enabled }))}
+                />
+              </FormRow>
+              <FormRow label="必需 Server">
+                <span className="tw:flex tw:items-center tw:gap-2">
+                  <ToggleSwitch
+                    ariaLabel="必需 Server"
+                    checked={form.required}
+                    onChange={(required) => update((current) => ({ ...current, required }))}
+                  />
+                  <span className="tw:type-caption tw:text-app-text-soft">
+                    开启后，连接失败会阻止任务开始。
+                  </span>
+                </span>
+              </FormRow>
+              {form.type === 'http' ? (
+                <>
+                  <FormRow label="OAuth">
+                    <span className="tw:flex tw:items-center tw:gap-2">
+                      <ToggleSwitch
+                        ariaLabel="OAuth"
+                        checked={form.httpAuth === 'oauth'}
+                        onChange={(enabled) =>
+                          update((current) => ({
+                            ...current,
+                            httpAuth: enabled ? 'oauth' : 'none',
+                          }))
+                        }
+                      />
+                      <span className="tw:type-body-sm tw:text-app-text-soft">
+                        {form.httpAuth === 'oauth' ? '使用 OAuth 登录' : '不使用 OAuth'}
                       </span>
-                    ) : <span />}
-                    <SegmentedControl
-                      ariaLabel="MCP transport"
-                      value={form.type}
-                      options={TYPE_OPTIONS.map(option => ({
-                        ...option,
-                        disabled: Boolean(server),
-                      }))}
-                      onChange={updateType}
+                    </span>
+                  </FormRow>
+                  {form.httpAuth === 'oauth' ? (
+                    <>
+                      <ValueListField
+                        addLabel="添加 Scope"
+                        label="OAuth Scopes"
+                        placeholder="scope"
+                        rows={form.scopes}
+                        onChange={(scopes) => update((current) => ({ ...current, scopes }))}
+                      />
+                      <FormRow label="OAuth Resource">
+                        <Input
+                          aria-label="OAuth Resource"
+                          value={form.oauthResource}
+                          placeholder="https://mcp.example.com"
+                          onChange={(event) =>
+                            update((current) => ({ ...current, oauthResource: event.target.value }))
+                          }
+                        />
+                      </FormRow>
+                    </>
+                  ) : null}
+                </>
+              ) : null}
+            </FormCard>
+
+            <McpAdvancedDisclosure
+              open={open}
+              onExpandedChange={(expanded) => {
+                advancedRef.current = expanded
+              }}
+            >
+              <FormCard>
+                <ValueListField
+                  addLabel="添加启用工具"
+                  label="仅启用这些工具"
+                  placeholder="tool-name"
+                  rows={form.enabledTools}
+                  onChange={(enabledTools) =>
+                    update((current) => ({
+                      ...current,
+                      enabledTools,
+                      enabledToolsConfigured: true,
+                    }))
+                  }
+                />
+                <ValueListField
+                  addLabel="添加禁用工具"
+                  label="禁用这些工具"
+                  placeholder="tool-name"
+                  rows={form.disabledTools}
+                  onChange={(disabledTools) => update((current) => ({ ...current, disabledTools }))}
+                />
+                <FormRow label="默认工具审批">
+                  <SettingsDropdown
+                    ariaLabel="默认 MCP 工具审批模式"
+                    value={form.defaultToolsApprovalMode}
+                    size="md"
+                    options={APPROVAL_MODE_OPTIONS}
+                    onChange={(value) =>
+                      update((current) => ({
+                        ...current,
+                        defaultToolsApprovalMode: value as DesktopMcpToolApprovalMode,
+                      }))
+                    }
+                  />
+                </FormRow>
+                <ToolApprovalListField
+                  rows={form.toolApprovals}
+                  onChange={(toolApprovals) => update((current) => ({ ...current, toolApprovals }))}
+                />
+                {form.type === 'stdio' ? (
+                  <FormRow label="传递会话诊断上下文">
+                    <ToggleSwitch
+                      ariaLabel="传递会话诊断上下文"
+                      checked={form.diagnosticContext}
+                      onChange={(diagnosticContext) =>
+                        update((current) => ({
+                          ...current,
+                          diagnosticContext,
+                        }))
+                      }
+                    />
+                    <span className="tw:type-caption tw:text-app-text-soft">
+                      仅向本地进程传递最近的可见消息和工具状态摘要，不包含系统提示词、推理内容、路径或工具原始参数。
+                    </span>
+                  </FormRow>
+                ) : null}
+                <FormRow label="超时">
+                  <div className="tw:grid tw:grid-cols-2 tw:gap-3 tw:max-[640px]:grid-cols-1">
+                    <Input
+                      aria-label="启动超时（ms）"
+                      inputMode="numeric"
+                      value={form.startupTimeoutMs}
+                      placeholder="启动：10000ms"
+                      onChange={(event) =>
+                        update((current) => ({ ...current, startupTimeoutMs: event.target.value }))
+                      }
+                    />
+                    <Input
+                      aria-label="工具超时（ms）"
+                      inputMode="numeric"
+                      value={form.toolTimeoutMs}
+                      placeholder="工具：60000ms"
+                      onChange={(event) =>
+                        update((current) => ({ ...current, toolTimeoutMs: event.target.value }))
+                      }
                     />
                   </div>
                 </FormRow>
               </FormCard>
+              <Field label="Server JSON">
+                <textarea
+                  className="settings-textarea settings-code-textarea tw:min-h-52 tw:w-full tw:resize-y"
+                  rows={10}
+                  spellCheck={false}
+                  value={form.configText}
+                  onBlur={applyAdvancedJson}
+                  onChange={(event) => {
+                    setValidationError(null)
+                    setForm((current) => ({
+                      ...current,
+                      configText: event.target.value,
+                    }))
+                  }}
+                />
+              </Field>
+            </McpAdvancedDisclosure>
+          </div>
 
-              {form.type === 'stdio' ? (
-                <FormCard>
-                  <FormRow label="启动命令">
-                    <Input
-                      aria-label="stdio 启动命令"
-                      value={form.command}
-                      placeholder="bun"
-                      onChange={event => update(current => ({ ...current, command: event.target.value }))}
-                    />
-                  </FormRow>
-                  <ValueListField
-                    addLabel="添加参数"
-                    label="参数"
-                    placeholder="server.ts"
-                    rows={form.args}
-                    onChange={args => update(current => ({ ...current, args }))}
+          <footer className="settings-management-dialog-footer tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
+            <span>
+              {server?.removable ? (
+                <Button color="danger" disabled={busy} onClick={() => onRemove(server)}>
+                  <Trash2
+                    aria-hidden="true"
+                    size={APP_ICON_SIZE}
+                    strokeWidth={APP_ICON_STROKE_WIDTH}
                   />
-                  <MapListField
-                    addLabel="添加环境变量"
-                    keyLabel="环境变量名"
-                    label="环境变量"
-                    rows={form.env}
-                    valueLabel="值"
-                    onChange={env => update(current => ({ ...current, env }))}
-                  />
-                  <MapListField
-                    addLabel="添加变量"
-                    keyLabel="MCP 变量名"
-                    label="环境变量传递"
-                    rows={form.envFromHost}
-                    valueLabel="宿主变量名"
-                    onChange={envFromHost => update(current => ({ ...current, envFromHost }))}
-                  />
-                  <FormRow label="工作目录">
-                    <Input
-                      aria-label="stdio 工作目录"
-                      value={form.cwd}
-                      placeholder="C:\workspace"
-                      onChange={event => update(current => ({ ...current, cwd: event.target.value }))}
-                    />
-                  </FormRow>
-                </FormCard>
-              ) : (
-                <FormCard>
-                  <FormRow label="URL">
-                    <Input
-                      aria-label="MCP URL"
-                      value={form.url}
-                      placeholder="https://mcp.example.com/mcp"
-                      onChange={event => update(current => ({ ...current, url: event.target.value }))}
-                    />
-                  </FormRow>
-                  <FormRow label="Bearer 令牌环境变量">
-                    <Input
-                      aria-label="Bearer Token 环境变量名"
-                      value={form.bearerTokenEnvVar}
-                      placeholder="MCP_BEARER_TOKEN"
-                      onChange={event => update(current => ({ ...current, bearerTokenEnvVar: event.target.value }))}
-                    />
-                  </FormRow>
-                  <MapListField
-                    addLabel="添加标头"
-                    keyLabel="标头名称"
-                    label="标头"
-                    rows={form.headers}
-                    valueLabel="值"
-                    onChange={headers => update(current => ({ ...current, headers }))}
-                  />
-                  <MapListField
-                    addLabel="添加变量"
-                    keyLabel="标头名称"
-                    label="来自环境变量的标头"
-                    rows={form.headerFromEnv}
-                    valueLabel="宿主变量名"
-                    onChange={headerFromEnv => update(current => ({ ...current, headerFromEnv }))}
-                  />
-                </FormCard>
-              )}
-
-              <Button
-                aria-controls="mcp-advanced-options"
-                aria-expanded={advanced}
-                onClick={() => setAdvanced(current => !current)}
-              >
-                {advanced ? <ChevronUp aria-hidden="true" size={APP_ICON_SIZE} /> : <ChevronDown aria-hidden="true" size={APP_ICON_SIZE} />}
-                高级选项
-              </Button>
-              {advanced ? (
-                <div id="mcp-advanced-options" className="tw:grid tw:gap-4">
-                  <FormCard>
-                    <FormRow label="配置范围">
-                      <SettingsDropdown
-                        value={form.scope}
-                        width={260}
-                        disabled={Boolean(server)}
-                        options={SCOPE_OPTIONS.map(option => ({
-                          ...option,
-                          disabled: option.value === 'local' && !workspaceAvailable,
-                        }))}
-                        onChange={value => update(current => ({
-                          ...current,
-                          scope: value as DesktopEditableMcpScope,
-                        }))}
-                        ariaLabel="MCP scope"
-                      />
-                    </FormRow>
-                    <FormRow label="启用">
-                      <ToggleSwitch
-                        ariaLabel="MCP server"
-                        checked={form.enabled}
-                        onChange={enabled => update(current => ({ ...current, enabled }))}
-                      />
-                    </FormRow>
-                    <FormRow label="必需 Server">
-                      <span className="tw:flex tw:items-center tw:gap-2">
-                        <ToggleSwitch
-                          ariaLabel="必需 Server"
-                          checked={form.required}
-                          onChange={required => update(current => ({ ...current, required }))}
-                        />
-                        <span className="tw:text-xs tw:leading-5 tw:text-app-text-soft">
-                          开启后，连接失败会阻止任务开始。
-                        </span>
-                      </span>
-                    </FormRow>
-                    {form.type === 'http' ? (
-                      <>
-                        <FormRow label="OAuth">
-                          <span className="tw:flex tw:items-center tw:gap-2">
-                            <ToggleSwitch
-                              ariaLabel="OAuth"
-                              checked={form.httpAuth === 'oauth'}
-                              onChange={enabled => update(current => ({
-                                ...current,
-                                httpAuth: enabled ? 'oauth' : 'none',
-                              }))}
-                            />
-                            <span className="tw:text-sm tw:text-app-text-soft">
-                              {form.httpAuth === 'oauth' ? '使用 OAuth 登录' : '不使用 OAuth'}
-                            </span>
-                          </span>
-                        </FormRow>
-                        {form.httpAuth === 'oauth' ? (
-                          <>
-                            <ValueListField
-                              addLabel="添加 Scope"
-                              label="OAuth Scopes"
-                              placeholder="scope"
-                              rows={form.scopes}
-                              onChange={scopes => update(current => ({ ...current, scopes }))}
-                            />
-                            <FormRow label="OAuth Resource">
-                              <Input
-                                aria-label="OAuth Resource"
-                                value={form.oauthResource}
-                                placeholder="https://mcp.example.com"
-                                onChange={event => update(current => ({ ...current, oauthResource: event.target.value }))}
-                              />
-                            </FormRow>
-                          </>
-                        ) : null}
-                      </>
-                    ) : null}
-                    <ValueListField
-                      addLabel="添加启用工具"
-                      label="仅启用这些工具"
-                      placeholder="tool-name"
-                      rows={form.enabledTools}
-                        onChange={enabledTools => update(current => ({
-                          ...current,
-                          enabledTools,
-                          enabledToolsConfigured: true,
-                        }))}
-                    />
-                    <ValueListField
-                      addLabel="添加禁用工具"
-                      label="禁用这些工具"
-                      placeholder="tool-name"
-                      rows={form.disabledTools}
-                      onChange={disabledTools => update(current => ({ ...current, disabledTools }))}
-                    />
-                    <FormRow label="默认工具审批">
-                      <SettingsDropdown
-                        ariaLabel="默认 MCP 工具审批模式"
-                        value={form.defaultToolsApprovalMode}
-                        width={260}
-                        options={APPROVAL_MODE_OPTIONS}
-                        onChange={value => update(current => ({
-                          ...current,
-                          defaultToolsApprovalMode: value as DesktopMcpToolApprovalMode,
-                        }))}
-                      />
-                    </FormRow>
-                    <ToolApprovalListField
-                      rows={form.toolApprovals}
-                      onChange={toolApprovals => update(current => ({ ...current, toolApprovals }))}
-                    />
-                    {form.type === 'stdio' ? (
-                      <FormRow label="传递会话诊断上下文">
-                        <ToggleSwitch
-                          ariaLabel="传递会话诊断上下文"
-                          checked={form.diagnosticContext}
-                          onChange={diagnosticContext => update(current => ({
-                            ...current,
-                            diagnosticContext,
-                          }))}
-                        />
-                        <span className="tw:text-xs tw:leading-5 tw:text-app-text-soft">
-                          仅向本地进程传递最近的可见消息和工具状态摘要，不包含系统提示词、推理内容、路径或工具原始参数。
-                        </span>
-                      </FormRow>
-                    ) : null}
-                    <FormRow label="超时">
-                      <div className="tw:grid tw:grid-cols-2 tw:gap-3 tw:max-[640px]:grid-cols-1">
-                        <Input
-                          aria-label="启动超时（ms）"
-                          inputMode="numeric"
-                          value={form.startupTimeoutMs}
-                          placeholder="启动：10000ms"
-                          onChange={event => update(current => ({ ...current, startupTimeoutMs: event.target.value }))}
-                        />
-                        <Input
-                          aria-label="工具超时（ms）"
-                          inputMode="numeric"
-                          value={form.toolTimeoutMs}
-                          placeholder="工具：60000ms"
-                          onChange={event => update(current => ({ ...current, toolTimeoutMs: event.target.value }))}
-                        />
-                      </div>
-                    </FormRow>
-                  </FormCard>
-                  <Field label="Server JSON">
-                    <textarea
-                      className="settings-textarea settings-code-textarea tw:min-h-52 tw:w-full tw:resize-y"
-                      rows={10}
-                      spellCheck={false}
-                      value={form.configText}
-                      onBlur={applyAdvancedJson}
-                      onChange={event => {
-                        setValidationError(null)
-                        setForm(current => ({
-                          ...current,
-                          configText: event.target.value,
-                        }))
-                      }}
-                    />
-                  </Field>
-                </div>
-              ) : null}
-            </div>
-
-            <footer className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2 tw:border-t tw:border-app-border tw:px-5 tw:py-4">
-              <span>
-                {server?.removable ? (
-                  <Button disabled={busy} tone="danger" onClick={() => onRemove(server)}>
-                    <Trash2 aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                    删除
-                  </Button>
-                ) : null}
-              </span>
-              <span className="tw:flex tw:items-center tw:gap-2">
-                <Dialog.Close asChild><Button>关闭</Button></Dialog.Close>
-                <Button disabled={busy} loading={busy} onClick={() => void save()}>
-                  保存
+                  删除
                 </Button>
-              </span>
-            </footer>
-          </Dialog.Content>
-        </Dialog.Overlay>
+              ) : null}
+            </span>
+            <span className="tw:flex tw:items-center tw:gap-2">
+              <Dialog.Close asChild>
+                <Button color="secondary">关闭</Button>
+              </Dialog.Close>
+              <Button color="primary" disabled={busy} loading={busy} onClick={() => void save()}>
+                保存
+              </Button>
+            </span>
+          </footer>
+        </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
   )
 }
 
-function Field({
-  label,
+const McpAdvancedDisclosure = memo(function McpAdvancedDisclosure({
   children,
+  open,
+  onExpandedChange,
 }: {
-  label: string
   children: React.ReactNode
+  open: boolean
+  onExpandedChange: (expanded: boolean) => void
 }): React.ReactNode {
+  const [expanded, setExpanded] = useState(false)
+  const contentId = useId()
+
+  useEffect(() => {
+    if (open) return
+    setExpanded(false)
+    onExpandedChange(false)
+  }, [onExpandedChange, open])
+
+  const toggle = (): void => {
+    setExpanded((current) => {
+      const next = !current
+      onExpandedChange(next)
+      return next
+    })
+  }
+
+  return (
+    <>
+      <button
+        aria-controls={contentId}
+        aria-expanded={expanded}
+        className="mcp-editor-advanced-disclosure tw:inline-flex tw:min-h-8 tw:cursor-pointer tw:items-center tw:justify-start tw:gap-2 tw:rounded-compact tw:border-0 tw:bg-transparent tw:px-2 tw:text-app-text-soft tw:hover:bg-app-hover tw:hover:text-app-text tw:aria-expanded:bg-app-hover tw:aria-expanded:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-solid tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus"
+        type="button"
+        onClick={toggle}
+      >
+        {expanded ? (
+          <ChevronUp aria-hidden="true" size={APP_ICON_SIZES.sm} />
+        ) : (
+          <ChevronDown aria-hidden="true" size={APP_ICON_SIZES.sm} />
+        )}
+        高级选项
+      </button>
+      <DisclosureContent
+        contentClassName="tw:grid tw:gap-4"
+        expanded={expanded}
+        id={contentId}
+        mountPolicy="always"
+      >
+        {children}
+      </DisclosureContent>
+    </>
+  )
+})
+
+function Field({ label, children }: { label: string; children: React.ReactNode }): React.ReactNode {
   return (
     <label className="tw:grid tw:gap-1.5">
-      <span className="tw:text-sm tw:font-[var(--font-weight-label)]">{label}</span>
+      <span className="tw:type-control">{label}</span>
       {children}
     </label>
   )
@@ -677,7 +757,7 @@ function Field({
 
 function FormCard({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
-    <section className="tw:grid tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border tw:bg-app-panel">
+    <section className="settings-management-dialog-card tw:grid tw:overflow-hidden">
       {children}
     </section>
   )
@@ -691,9 +771,9 @@ function FormRow({
   children: React.ReactNode
 }): React.ReactNode {
   return (
-    <div className="tw:grid tw:gap-2 tw:border-b tw:border-app-border tw:px-4 tw:py-3 last:tw:border-b-0">
-      <span className="tw:text-sm tw:font-[var(--font-weight-label)]">{label}</span>
-      {children}
+    <div className="settings-management-dialog-row">
+      <span className="settings-management-dialog-row-label">{label}</span>
+      <div className="settings-management-dialog-row-control">{children}</div>
     </div>
   )
 }
@@ -715,27 +795,44 @@ function ValueListField({
     <FormRow label={label}>
       <div className="tw:grid tw:gap-2">
         {rows.map((row, index) => (
-          <div className="tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:items-center tw:gap-2" key={row.id}>
+          <div
+            className="tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:items-center tw:gap-2"
+            key={row.id}
+          >
             <Input
               aria-label={`${label} ${index + 1}`}
               value={row.value}
               placeholder={placeholder}
-              onChange={event => onChange(rows.map(item => (
-                item.id === row.id ? { ...item, value: event.target.value } : item
-              )))}
+              onChange={(event) =>
+                onChange(
+                  rows.map((item) =>
+                    item.id === row.id ? { ...item, value: event.target.value } : item,
+                  ),
+                )
+              }
             />
-            <IconButton
+            <Button
+              isIconOnly
               aria-label={`删除${label} ${index + 1}`}
               disabled={rows.length === 1 && !row.value}
+              color="ghostSecondary"
+              size="iconMd"
               title={`删除${label}`}
-              variant="plain"
               onClick={() => onChange(removeValueRow(rows, row.id))}
             >
-              <Trash2 aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-            </IconButton>
+              <Trash2
+                aria-hidden="true"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            </Button>
           </div>
         ))}
-        <Button className="tw:w-full tw:justify-center" onClick={() => onChange([...rows, createValueRow()])}>
+        <Button
+          color="primary"
+          className="tw:w-full tw:justify-center"
+          onClick={() => onChange([...rows, createValueRow()])}
+        >
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           {addLabel}
         </Button>
@@ -763,33 +860,50 @@ function MapListField({
     <FormRow label={label}>
       <div className="tw:grid tw:gap-2">
         {rows.map((row, index) => (
-          <div className="tw:grid tw:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:max-[640px]:grid-cols-[minmax(0,1fr)_auto]" key={row.id}>
+          <div
+            className="tw:grid tw:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:max-[640px]:grid-cols-[minmax(0,1fr)_auto]"
+            key={row.id}
+          >
             <Input
               aria-label={`${label}${keyLabel} ${index + 1}`}
               value={row.key}
               placeholder={keyLabel}
-              onChange={event => onChange(updateMapRow(rows, row.id, { key: event.target.value }))}
+              onChange={(event) =>
+                onChange(updateMapRow(rows, row.id, { key: event.target.value }))
+              }
             />
             <Input
               aria-label={`${label}${valueLabel} ${index + 1}`}
               className="tw:max-[640px]:col-start-1"
               value={row.value}
               placeholder={valueLabel}
-              onChange={event => onChange(updateMapRow(rows, row.id, { value: event.target.value }))}
+              onChange={(event) =>
+                onChange(updateMapRow(rows, row.id, { value: event.target.value }))
+              }
             />
-            <IconButton
+            <Button
+              isIconOnly
               aria-label={`删除${label} ${index + 1}`}
               className="tw:max-[640px]:col-start-2 tw:max-[640px]:row-start-1"
               disabled={rows.length === 1 && !row.key && !row.value}
+              color="ghostSecondary"
+              size="iconMd"
               title={`删除${label}`}
-              variant="plain"
               onClick={() => onChange(removeMapRow(rows, row.id))}
             >
-              <Trash2 aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-            </IconButton>
+              <Trash2
+                aria-hidden="true"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            </Button>
           </div>
         ))}
-        <Button className="tw:w-full tw:justify-center" onClick={() => onChange([...rows, createMapRow()])}>
+        <Button
+          color="primary"
+          className="tw:w-full tw:justify-center"
+          onClick={() => onChange([...rows, createMapRow()])}
+        >
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           {addLabel}
         </Button>
@@ -809,34 +923,49 @@ function ToolApprovalListField({
     <FormRow label="单个工具审批覆盖">
       <div className="tw:grid tw:gap-2">
         {rows.map((row, index) => (
-          <div className="tw:grid tw:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:max-[640px]:grid-cols-[minmax(0,1fr)_auto]" key={row.id}>
+          <div
+            className="tw:grid tw:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:max-[640px]:grid-cols-[minmax(0,1fr)_auto]"
+            key={row.id}
+          >
             <Input
               aria-label={`工具名称 ${index + 1}`}
               value={row.key}
               placeholder="tool-name"
-              onChange={event => onChange(updateMapRow(rows, row.id, { key: event.target.value }))}
+              onChange={(event) =>
+                onChange(updateMapRow(rows, row.id, { key: event.target.value }))
+              }
             />
             <div className="tw:max-[640px]:col-start-1">
               <SettingsDropdown
                 ariaLabel={`工具审批模式 ${index + 1}`}
                 value={isApprovalMode(row.value) ? row.value : 'auto'}
-                width={260}
+                size="md"
                 options={APPROVAL_MODE_OPTIONS}
-                onChange={value => onChange(updateMapRow(rows, row.id, { value }))}
+                onChange={(value) => onChange(updateMapRow(rows, row.id, { value }))}
               />
             </div>
-            <IconButton
+            <Button
+              isIconOnly
               className="tw:max-[640px]:col-start-2 tw:max-[640px]:row-start-1"
               disabled={rows.length === 1 && !row.key}
+              color="ghostSecondary"
+              size="iconMd"
               title={`删除工具审批覆盖 ${index + 1}`}
-              variant="plain"
               onClick={() => onChange(removeMapRow(rows, row.id))}
             >
-              <Trash2 aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-            </IconButton>
+              <Trash2
+                aria-hidden="true"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            </Button>
           </div>
         ))}
-        <Button className="tw:w-full tw:justify-center" onClick={() => onChange([...rows, createMapRow('', 'auto')])}>
+        <Button
+          color="primary"
+          className="tw:w-full tw:justify-center"
+          onClick={() => onChange([...rows, createMapRow('', 'auto')])}
+        >
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           添加工具覆盖
         </Button>
@@ -893,48 +1022,43 @@ function formForServer(server: DesktopMcpServerListItem | null): FormState {
   }
 }
 
-function formFromTransport(transport: DesktopMcpServerConfig): Omit<
+function formFromTransport(
+  transport: DesktopMcpServerConfig,
+): Omit<
   FormState,
   | 'originalName'
   | 'name'
   | 'scope'
   | 'enabled'
-    | 'diagnosticContext'
-    | 'startupTimeoutMs'
-    | 'toolTimeoutMs'
-    | 'required'
-    | 'enabledToolsConfigured'
-    | 'enabledTools'
-    | 'disabledTools'
-    | 'defaultToolsApprovalMode'
-    | 'toolApprovals'
+  | 'diagnosticContext'
+  | 'startupTimeoutMs'
+  | 'toolTimeoutMs'
+  | 'required'
+  | 'enabledToolsConfigured'
+  | 'enabledTools'
+  | 'disabledTools'
+  | 'defaultToolsApprovalMode'
+  | 'toolApprovals'
 > {
   return {
     type: transport.type,
     command: transport.type === 'stdio' ? transport.command : '',
     args: valueRows(transport.type === 'stdio' ? transport.args : undefined),
-    cwd: transport.type === 'stdio' ? transport.cwd ?? '' : '',
+    cwd: transport.type === 'stdio' ? (transport.cwd ?? '') : '',
     env: mapRows(transport.type === 'stdio' ? transport.env : undefined),
-    envFromHost: mapRows(
-      transport.type === 'stdio' ? transport.envFromHost : undefined,
-    ),
+    envFromHost: mapRows(transport.type === 'stdio' ? transport.envFromHost : undefined),
     url: transport.type === 'http' ? transport.url : '',
-    httpAuth: transport.type === 'http' ? transport.auth ?? 'oauth' : 'none',
+    httpAuth: transport.type === 'http' ? (transport.auth ?? 'oauth') : 'none',
     scopes: valueRows(transport.type === 'http' ? transport.scopes : undefined),
-    oauthResource: transport.type === 'http' ? transport.oauthResource ?? '' : '',
+    oauthResource: transport.type === 'http' ? (transport.oauthResource ?? '') : '',
     headers: mapRows(transport.type === 'http' ? transport.headers : undefined),
-    headerFromEnv: mapRows(
-      transport.type === 'http' ? transport.headerFromEnv : undefined,
-    ),
-    bearerTokenEnvVar: transport.type === 'http' ? transport.bearerTokenEnvVar ?? '' : '',
+    headerFromEnv: mapRows(transport.type === 'http' ? transport.headerFromEnv : undefined),
+    bearerTokenEnvVar: transport.type === 'http' ? (transport.bearerTokenEnvVar ?? '') : '',
     configText: formatConfig(transport),
   }
 }
 
-function formFromEditorConfig(
-  config: ParsedMcpServerJson,
-  originalName: string,
-): FormState {
+function formFromEditorConfig(config: ParsedMcpServerJson, originalName: string): FormState {
   const form: FormState = {
     ...formFromTransport(config.transport),
     originalName,
@@ -1016,17 +1140,13 @@ function transportForForm(form: FormState): DesktopMcpServerConfig {
     type: 'http',
     url,
     ...(form.httpAuth === 'oauth' ? { auth: 'oauth' as const } : {}),
-    ...(form.httpAuth === 'oauth' && scopes.length
-      ? { scopes }
-      : {}),
+    ...(form.httpAuth === 'oauth' && scopes.length ? { scopes } : {}),
     ...(form.httpAuth === 'oauth' && form.oauthResource.trim()
       ? { oauthResource: form.oauthResource.trim() }
       : {}),
     ...(Object.keys(headers).length ? { headers } : {}),
     ...(Object.keys(headerFromEnv).length ? { headerFromEnv } : {}),
-    ...(form.bearerTokenEnvVar.trim()
-      ? { bearerTokenEnvVar: form.bearerTokenEnvVar.trim() }
-      : {}),
+    ...(form.bearerTokenEnvVar.trim() ? { bearerTokenEnvVar: form.bearerTokenEnvVar.trim() } : {}),
   }
 }
 
@@ -1059,8 +1179,8 @@ export function parseMcpServerJson(text: string): ParsedMcpServerJson {
     'tools',
   ])
   if (
-    typeof value.name !== 'string'
-    || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value.name.trim())
+    typeof value.name !== 'string' ||
+    !/^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.test(value.name.trim())
   ) {
     throw new Error('名称必须为 1-64 位字母、数字、点、下划线或连字符。')
   }
@@ -1070,17 +1190,10 @@ export function parseMcpServerJson(text: string): ParsedMcpServerJson {
   if (typeof value.enabled !== 'boolean') {
     throw new Error('enabled 必须是 boolean。')
   }
-  if (
-    value.diagnosticContext !== undefined
-    && typeof value.diagnosticContext !== 'boolean'
-  ) {
+  if (value.diagnosticContext !== undefined && typeof value.diagnosticContext !== 'boolean') {
     throw new Error('diagnosticContext 必须是 boolean。')
   }
-  if (
-    !value.transport
-    || typeof value.transport !== 'object'
-    || Array.isArray(value.transport)
-  ) {
+  if (!value.transport || typeof value.transport !== 'object' || Array.isArray(value.transport)) {
     throw new Error('transport 必须是 object。')
   }
   const transport = validateTransport(value.transport as Record<string, unknown>)
@@ -1088,10 +1201,7 @@ export function parseMcpServerJson(text: string): ParsedMcpServerJson {
   if (diagnosticContext && transport.type !== 'stdio') {
     throw new Error('会话诊断上下文只支持 stdio transport。')
   }
-  const startupTimeoutMs = validateJsonTimeout(
-    value.startupTimeoutMs,
-    '启动超时',
-  )
+  const startupTimeoutMs = validateJsonTimeout(value.startupTimeoutMs, '启动超时')
   const toolTimeoutMs = validateJsonTimeout(value.toolTimeoutMs, '工具超时')
   if (value.required !== undefined && typeof value.required !== 'boolean') {
     throw new Error('required 必须是 boolean。')
@@ -1119,26 +1229,26 @@ export function parseMcpServerJson(text: string): ParsedMcpServerJson {
   }
 }
 
-function validateTransport(value: Record<string, unknown> | DesktopMcpServerConfig): DesktopMcpServerConfig {
+function validateTransport(
+  value: Record<string, unknown> | DesktopMcpServerConfig,
+): DesktopMcpServerConfig {
   if (value.type === 'stdio') {
     rejectUnknownFields(value, ['type', 'command', 'args', 'cwd', 'env', 'envFromHost'])
     if (typeof value.command !== 'string' || !value.command.trim()) {
       throw new Error('stdio command 必须是非空字符串。')
     }
     const args = value.args
-    if (args !== undefined && (
-      !Array.isArray(args)
-      || args.some(argument => typeof argument !== 'string')
-    )) throw new Error('stdio args 必须是字符串数组。')
+    if (
+      args !== undefined &&
+      (!Array.isArray(args) || args.some((argument) => typeof argument !== 'string'))
+    )
+      throw new Error('stdio args 必须是字符串数组。')
     const cwd = value.cwd
     if (cwd !== undefined && typeof cwd !== 'string') {
       throw new Error('stdio cwd 必须是字符串。')
     }
-    if (
-      typeof cwd === 'string'
-      && cwd
-      && !/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(cwd)
-    ) throw new Error('stdio cwd 必须是绝对路径。')
+    if (typeof cwd === 'string' && cwd && !/^(?:[A-Za-z]:[\\/]|\\\\|\/)/.test(cwd))
+      throw new Error('stdio cwd 必须是绝对路径。')
     const env = validateStringMap(value.env, '静态环境变量')
     for (const name of Object.keys(env ?? {})) {
       if (!ENV_NAME.test(name)) throw new Error(`${name} 不是有效的环境变量名。`)
@@ -1191,15 +1301,12 @@ function validateTransport(value: Record<string, unknown> | DesktopMcpServerConf
     const scopes = validateOptionalStringArray(value.scopes, 'HTTP scopes')
     validateOAuthScopes(scopes ?? [])
     if (
-      value.oauthResource !== undefined
-      && (typeof value.oauthResource !== 'string' || !value.oauthResource.trim())
+      value.oauthResource !== undefined &&
+      (typeof value.oauthResource !== 'string' || !value.oauthResource.trim())
     ) {
       throw new Error('HTTP oauthResource 必须是非空字符串。')
     }
-    if (
-      auth !== 'oauth'
-      && ((scopes?.length ?? 0) > 0 || value.oauthResource !== undefined)
-    ) {
+    if (auth !== 'oauth' && ((scopes?.length ?? 0) > 0 || value.oauthResource !== undefined)) {
       throw new Error('HTTP scopes 和 oauthResource 仅能用于 OAuth。')
     }
     if (typeof value.oauthResource === 'string') {
@@ -1216,10 +1323,10 @@ function validateTransport(value: Record<string, unknown> | DesktopMcpServerConf
     }
     const bearerTokenEnvVar = value.bearerTokenEnvVar
     if (
-      bearerTokenEnvVar !== undefined
-      && (typeof bearerTokenEnvVar !== 'string'
-        || !ENV_NAME.test(bearerTokenEnvVar))
-    ) throw new Error('Bearer token 环境变量名无效。')
+      bearerTokenEnvVar !== undefined &&
+      (typeof bearerTokenEnvVar !== 'string' || !ENV_NAME.test(bearerTokenEnvVar))
+    )
+      throw new Error('Bearer token 环境变量名无效。')
     return {
       type: 'http',
       url: value.url.trim(),
@@ -1229,51 +1336,34 @@ function validateTransport(value: Record<string, unknown> | DesktopMcpServerConf
         ? { oauthResource: value.oauthResource.trim() }
         : {}),
       ...(headers && Object.keys(headers).length ? { headers } : {}),
-      ...(headerFromEnv && Object.keys(headerFromEnv).length
-        ? { headerFromEnv }
-        : {}),
-      ...(typeof bearerTokenEnvVar === 'string' && bearerTokenEnvVar
-        ? { bearerTokenEnvVar }
-        : {}),
+      ...(headerFromEnv && Object.keys(headerFromEnv).length ? { headerFromEnv } : {}),
+      ...(typeof bearerTokenEnvVar === 'string' && bearerTokenEnvVar ? { bearerTokenEnvVar } : {}),
     }
   }
   throw new Error('高级 JSON 只支持 stdio 或 http transport。')
 }
 
-function rejectUnknownFields(
-  value: Record<string, unknown>,
-  allowed: readonly string[],
-): void {
-  const unknown = Object.keys(value).find(key => !allowed.includes(key))
+function rejectUnknownFields(value: Record<string, unknown>, allowed: readonly string[]): void {
+  const unknown = Object.keys(value).find((key) => !allowed.includes(key))
   if (unknown) throw new Error(`未知字段：${unknown}`)
 }
 
-function validateStringMap(
-  value: unknown,
-  label: string,
-): Record<string, string> | undefined {
+function validateStringMap(value: unknown, label: string): Record<string, string> | undefined {
   if (value === undefined) return undefined
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     throw new Error(`${label} 必须是字符串 map。`)
   }
-  if (Object.entries(value).some(
-    ([key, item]) => !key.trim() || typeof item !== 'string',
-  )) throw new Error(`${label} 的键和值都必须是字符串。`)
+  if (Object.entries(value).some(([key, item]) => !key.trim() || typeof item !== 'string'))
+    throw new Error(`${label} 的键和值都必须是字符串。`)
   return { ...value } as Record<string, string>
 }
 
-function validateOptionalStringArray(
-  value: unknown,
-  label: string,
-): string[] | undefined {
+function validateOptionalStringArray(value: unknown, label: string): string[] | undefined {
   if (value === undefined) return undefined
-  if (
-    !Array.isArray(value)
-    || value.some(item => typeof item !== 'string' || !item.trim())
-  ) {
+  if (!Array.isArray(value) || value.some((item) => typeof item !== 'string' || !item.trim())) {
     throw new Error(`${label} 必须是非空字符串数组。`)
   }
-  const normalized = value.map(item => String(item).trim())
+  const normalized = value.map((item) => String(item).trim())
   if (new Set(normalized).size !== normalized.length) {
     throw new Error(`${label} 不能包含重复项。`)
   }
@@ -1305,10 +1395,7 @@ function validateToolPolicies(
     }
     const record = policy as Record<string, unknown>
     rejectUnknownFields(record, ['approvalMode'])
-    const approvalMode = validateApprovalMode(
-      record.approvalMode,
-      `${name}.approvalMode`,
-    )
+    const approvalMode = validateApprovalMode(record.approvalMode, `${name}.approvalMode`)
     if (!approvalMode) throw new Error(`${name}.approvalMode 为必填项。`)
     result[name] = { approvalMode }
   }
@@ -1330,16 +1417,11 @@ function valueRows(values?: readonly string[]): EditableValueRow[] {
 }
 
 function valuesFromRows(rows: EditableValueRow[]): string[] {
-  return rows.map(row => row.value).filter(value => value.length > 0)
+  return rows.map((row) => row.value).filter((value) => value.length > 0)
 }
 
-function uniqueNamesFromRows(
-  rows: EditableValueRow[],
-  label: string,
-): string[] {
-  const values = rows
-    .map(row => row.value.trim())
-    .filter(Boolean)
+function uniqueNamesFromRows(rows: EditableValueRow[], label: string): string[] {
+  const values = rows.map((row) => row.value.trim()).filter(Boolean)
   if (new Set(values).size !== values.length) {
     throw new Error(`${label}不能包含重复项。`)
   }
@@ -1368,16 +1450,13 @@ function validateAbsoluteUri(value: string, label: string): void {
 }
 
 function validateOAuthScopes(scopes: readonly string[]): void {
-  if (scopes.length > 32 || scopes.some(scope => scope.length > 256)) {
+  if (scopes.length > 32 || scopes.some((scope) => scope.length > 256)) {
     throw new Error('OAuth scopes 最多 32 项且每项不能超过 256 字符。')
   }
 }
 
-function removeValueRow(
-  rows: EditableValueRow[],
-  id: string,
-): EditableValueRow[] {
-  const next = rows.filter(row => row.id !== id)
+function removeValueRow(rows: EditableValueRow[], id: string): EditableValueRow[] {
+  const next = rows.filter((row) => row.id !== id)
   return next.length ? next : [createValueRow()]
 }
 
@@ -1386,9 +1465,7 @@ function createMapRow(key = '', value = ''): EditableMapRow {
 }
 
 function mapRows(value?: Record<string, string>): EditableMapRow[] {
-  const rows = Object.entries(value ?? {}).map(([key, item]) =>
-    createMapRow(key, item)
-  )
+  const rows = Object.entries(value ?? {}).map(([key, item]) => createMapRow(key, item))
   return rows.length ? rows : [createMapRow()]
 }
 
@@ -1396,7 +1473,7 @@ function toolPolicyRows(
   value?: Record<string, { approvalMode: DesktopMcpToolApprovalMode }>,
 ): EditableMapRow[] {
   const rows = Object.entries(value ?? {}).map(([key, policy]) =>
-    createMapRow(key, policy.approvalMode)
+    createMapRow(key, policy.approvalMode),
   )
   return rows.length ? rows : [createMapRow('', 'auto')]
 }
@@ -1406,18 +1483,15 @@ function updateMapRow(
   id: string,
   patch: Partial<Pick<EditableMapRow, 'key' | 'value'>>,
 ): EditableMapRow[] {
-  return rows.map(row => row.id === id ? { ...row, ...patch } : row)
+  return rows.map((row) => (row.id === id ? { ...row, ...patch } : row))
 }
 
 function removeMapRow(rows: EditableMapRow[], id: string): EditableMapRow[] {
-  const next = rows.filter(row => row.id !== id)
+  const next = rows.filter((row) => row.id !== id)
   return next.length ? next : [createMapRow()]
 }
 
-function mapFromRows(
-  rows: EditableMapRow[],
-  label: string,
-): Record<string, string> {
+function mapFromRows(rows: EditableMapRow[], label: string): Record<string, string> {
   const result: Record<string, string> = {}
   for (const row of rows) {
     const key = row.key.trim()
@@ -1434,7 +1508,7 @@ function mapFromRows(
 }
 
 function isApprovalMode(value: string): value is DesktopMcpToolApprovalMode {
-  return APPROVAL_MODE_OPTIONS.some(option => option.value === value)
+  return APPROVAL_MODE_OPTIONS.some((option) => option.value === value)
 }
 
 function toolPoliciesFromRows(
@@ -1465,10 +1539,7 @@ function optionalTimeout(value: string, label: string): number | undefined | Err
   return number
 }
 
-function validateJsonTimeout(
-  value: unknown,
-  label: string,
-): number | undefined {
+function validateJsonTimeout(value: unknown, label: string): number | undefined {
   if (value === undefined) return undefined
   if (!Number.isInteger(value) || Number(value) < 100 || Number(value) > 600_000) {
     throw new Error(`${label}必须是 100-600000ms 之间的整数。`)
@@ -1480,7 +1551,4 @@ function formatConfig(value: unknown): string {
   return JSON.stringify(value, null, 2)
 }
 
-function errorMessageOf(error: unknown): string {
-  if (error instanceof Error && error.message) return error.message
-  return String(error)
-}
+const errorMessageOf = (error: unknown): string => rawErrorMessage(error) || String(error)

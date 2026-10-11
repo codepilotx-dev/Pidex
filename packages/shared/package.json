@@ -1,31 +1,52 @@
 {
-  "name": "@codepilotx/shared",
+  "name": "@pidex/shared",
   "version": "0.1.0",
   "private": true,
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./api": "./src/api.ts",
-    "./events": "./src/llm-event.ts",
-    "./desktop-theme": "./src/desktop-theme.ts",
-    "./desktop-pet-overlay": "./src/desktop-pet-overlay.ts",
-    "./desktop-data-location-ipc": "./src/desktop-data-location-ipc.ts",
-    "./desktop-edit-ipc": "./src/desktop-edit-ipc.ts",
-    "./desktop-notification-ipc": "./src/desktop-notification-ipc.ts",
-    "./desktop-settings-ipc": "./src/desktop-settings-ipc.ts",
-    "./desktop-terminal-ipc": "./src/desktop-terminal-ipc.ts",
-    "./desktop-update-ipc": "./src/desktop-update-ipc.ts",
-    "./model": "./src/model.ts",
-    "./thread": "./src/thread/index.ts"
+    "./api": "./src/Api.ts",
+    "./errors": "./src/Errors.ts",
+    "./automation": "./src/Automation.ts",
+    "./calendar": "./src/Calendar.ts",
+    "./events": "./src/LlmEvent.ts",
+    "./desktop-theme": "./src/DesktopTheme.ts",
+    "./desktop-pet-overlay": "./src/DesktopPetOverlay.ts",
+    "./desktop-data-location-ipc": "./src/DesktopDataLocationIpc.ts",
+    "./desktop-deep-link-ipc": "./src/DesktopDeepLinkIpc.ts",
+    "./desktop-window-ipc": "./src/DesktopWindowIpc.ts",
+    "./desktop-workspace-ipc": "./src/DesktopWorkspaceIpc.ts",
+    "./desktop-shell-ipc": "./src/DesktopShellIpc.ts",
+    "./desktop-startup-ipc": "./src/DesktopStartupIpc.ts",
+    "./desktop-appearance-ipc": "./src/DesktopAppearanceIpc.ts",
+    "./desktop-attachment-ipc": "./src/DesktopAttachmentIpc.ts",
+    "./desktop-browser-ipc": "./src/DesktopBrowserIpc.ts",
+    "./browser-annotation": "./src/BrowserAnnotation.ts",
+    "./desktop-clipboard-ipc": "./src/DesktopClipboardIpc.ts",
+    "./desktop-edit-ipc": "./src/DesktopEditIpc.ts",
+    "./desktop-microphone-ipc": "./src/DesktopMicrophoneIpc.ts",
+    "./desktop-notification-ipc": "./src/DesktopNotificationIpc.ts",
+    "./desktop-provider-icon-ipc": "./src/DesktopProviderIconIpc.ts",
+    "./desktop-settings-ipc": "./src/DesktopSettingsIpc.ts",
+    "./desktop-terminal-ipc": "./src/DesktopTerminalIpc.ts",
+    "./desktop-update-ipc": "./src/DesktopUpdateIpc.ts",
+    "./model": "./src/Model.ts",
+    "./schedule-plan": "./src/SchedulePlan.ts",
+    "./scheduled-task": "./src/ScheduledTask.ts",
+    "./session-group": "./src/SessionGroup.ts",
+    "./thread": "./src/thread/index.ts",
+    "./thread-reference": "./src/ThreadReference.ts",
+    "./thread-result-card": "./src/ThreadResultCard.ts",
+    "./guards": "./src/Guards.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@codepilotx/model-schema": "workspace:*",
+    "@pidex/model-schema": "workspace:*",
     "effect": "4.0.0-beta.83"
   },
   "devDependencies": {
-    "typescript": "^5.9.3"
+    "typescript": "5.9.3"
   }
 }

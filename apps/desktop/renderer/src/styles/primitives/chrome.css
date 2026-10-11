@@ -1,0 +1,29 @@
+/*
+ * Window chrome residue: Electron window-drag regions.
+ *
+ * `-webkit-app-region` is an Electron-only property with no Tailwind
+ * counterpart, so the Windows title-bar drag map (drag on the bar itself,
+ * no-drag on every interactive descendant) stays in plain CSS. Geometry,
+ * colours and blur keep living in the component utilities; the selectors and
+ * values below are unchanged from the former shell layer implementation.
+ */
+@layer primitives {
+  .menubar-titlebar,
+  .auxiliary-titlebar {
+    -webkit-app-region: drag;
+  }
+
+  .menubar-left > button,
+  .menubar-root,
+  .menubar-root *,
+  .menubar-content,
+  .menubar-content *,
+  .menubar-trigger,
+  .window-controls,
+  .window-control-button,
+  .desktop-workspace-header-shell-controls,
+  .desktop-workspace-header-item,
+  .auxiliary-titlebar button {
+    -webkit-app-region: no-drag;
+  }
+}

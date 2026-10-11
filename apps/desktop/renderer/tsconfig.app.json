@@ -18,7 +18,7 @@
     "jsx": "react-jsx",
     "types": ["vite/client"],
     "paths": {
-      "@codepilotx/core/*": ["./src/shims/core/*"]
+      "@pidex/core/*": ["./src/shims/core/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.d.ts", "shared/**/*.ts"],

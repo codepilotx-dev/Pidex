@@ -1,0 +1,60 @@
+/*
+ * Primitive residue. Generated from card.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer primitives {
+  /* ===== Shared Card / Surface Patterns (residue) =====
+   *
+   * The dead card family (`.ds-surface`, `.ds-surface-raised`, `.ds-product-surface`,
+   * `.utility-card`, `.empty-canvas-card`, `.message-card`, `.placeholder-card`) had
+   * no TSX/TS consumer and is gone, together with `.plugins-empty` (marketplace.scss
+   * re-declares it in the features layer for the only component that renders it).
+   *
+   * What stays here is owned by surfaces whose batch SCSS is still loaded:
+   * - `.composer` (features/_composer-shell.scss) keeps the glass backdrop; its
+   *   border, background, radius and shadow are already overridden by
+   *   `.composer-input-surface` in the features layer.
+   * - `.thread-summary-error`: `_thread-summary.scss` was deleted and the session
+   *   residue (primitives/session.css) only re-states radius/color for this box, so
+   *   its raised surface still has to come from here.
+   * - `.desktop-sidebar.is-floating`: SidebarFrame.tsx already carries the radius,
+   *   border, background and shadow as utilities; the glass backdrop-filter has no
+   *   utility yet, so the block cannot be dropped until that lands.
+   *
+   * `.thread-summary-panel` was dropped: primitives/session.css now owns its surface
+   * (border: 0, prominent radius and shadow) and this file, loaded later in the same
+   * layer, was silently overriding it.
+   */
+  .composer {
+    border: 1px solid var(--cpx-sys-color-border-default);
+    border-radius: var(--cpx-comp-composer-radius);
+    background: var(--cpx-comp-surface-raised);
+    backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));
+    box-shadow: var(--cpx-comp-composer-shadow);
+  }
+
+  .desktop-sidebar.is-floating {
+    border: var(--cpx-comp-surface-edge);
+    border-radius: var(--cpx-sys-radius-container);
+    background: var(--cpx-comp-glass-bg, var(--cpx-comp-surface-floating));
+    backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));
+    box-shadow: var(--cpx-sys-shadow-floating);
+  }
+
+  .thread-summary-error {
+    border: var(--cpx-comp-surface-edge);
+    border-radius: var(--cpx-sys-radius-container);
+    background: var(--cpx-comp-surface-raised);
+    backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));
+    box-shadow: var(--cpx-sys-shadow-raised);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .composer,
+    .thread-summary-error,
+    .desktop-sidebar.is-floating {
+      backdrop-filter: none;
+      background: var(--cpx-comp-surface-floating);
+    }
+  }
+}

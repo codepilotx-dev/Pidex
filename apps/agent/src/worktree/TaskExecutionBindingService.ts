@@ -1,11 +1,12 @@
-import { createHash, randomUUID } from "node:crypto"
-import { resolve } from "node:path"
-import { AgentError } from "../domain"
-import type { StoredThreadWorkspace } from "../storage/repositories/repository-core"
-import type { WorktreeRepository } from "./WorktreeRepository"
-import type { TaskExecutionBinding } from "./types"
+import { createHash, randomUUID } from 'node:crypto'
+import { resolve } from 'node:path'
+import { AgentError } from '../Domain'
+import type { StoredThreadWorkspace } from '../storage/repositories/RepositoryCore'
+import type { WorktreeRepository } from './WorktreeRepository'
+import type { TaskExecutionBinding } from './Types'
 
-const bindingDigest = (...parts: string[]) => createHash("sha256").update(parts.join("\0"), "utf8").digest("hex")
+const bindingDigest = (...parts: string[]) =>
+  createHash('sha256').update(parts.join('\0'), 'utf8').digest('hex')
 
 /** Owns the execution identity independently from the immutable thread workspace descriptor. */
 export class TaskExecutionBindingService {
@@ -26,7 +27,7 @@ export class TaskExecutionBindingService {
     return {
       threadId,
       bindingId: `local:${bindingDigest(threadId, workspace.kind, cwd)}`,
-      kind: "local",
+      kind: 'local',
       projectId: workspace.projectID,
       cwd,
       worktreeId: null,
@@ -41,13 +42,19 @@ export class TaskExecutionBindingService {
     return this.id()
   }
 
-  bindLocal(input: { threadId: string; projectId: string | null; cwd: string; bindingId?: string; environmentRevision?: number }) {
+  bindLocal(input: {
+    threadId: string
+    projectId: string | null
+    cwd: string
+    bindingId?: string
+    environmentRevision?: number
+  }) {
     const current = this.repository.binding(input.threadId)
     const timestamp = this.now()
     return this.repository.bind({
       threadId: input.threadId,
       bindingId: current?.bindingId ?? input.bindingId ?? this.id(),
-      kind: "local",
+      kind: 'local',
       projectId: input.projectId,
       cwd: resolve(input.cwd),
       worktreeId: null,
@@ -58,14 +65,20 @@ export class TaskExecutionBindingService {
     })
   }
 
-  bindWorktree(input: { threadId: string; projectId: string; worktreeId: string; bindingId?: string; environmentRevision?: number }) {
+  bindWorktree(input: {
+    threadId: string
+    projectId: string
+    worktreeId: string
+    bindingId?: string
+    environmentRevision?: number
+  }) {
     const worktree = this.validateWorktree(input.projectId, input.worktreeId)
     const current = this.repository.binding(input.threadId)
     const timestamp = this.now()
     const binding = this.repository.bind({
       threadId: input.threadId,
       bindingId: current?.bindingId ?? input.bindingId ?? this.id(),
-      kind: "worktree",
+      kind: 'worktree',
       projectId: input.projectId,
       cwd: worktree.path,
       worktreeId: worktree.id,
@@ -80,21 +93,29 @@ export class TaskExecutionBindingService {
 
   validateWorktree(projectId: string, worktreeId: string) {
     const worktree = this.repository.readWorktree(worktreeId)
-    if (!worktree || worktree.projectId !== projectId || worktree.status === "cleaned") {
-      throw new AgentError("WORKTREE_NOT_FOUND", "托管 worktree 不存在", 404)
+    if (!worktree || worktree.projectId !== projectId || worktree.status === 'cleaned') {
+      throw new AgentError('WORKTREE_NOT_FOUND', '托管 worktree 不存在', 404)
     }
-    if (worktree.status === "ready-with-setup-error" && !worktree.continuedWithoutSetup) {
-      throw new AgentError("WORKTREE_SETUP_REQUIRED", "worktree setup 失败，必须先重试或明确跳过", 409)
+    if (worktree.status === 'ready-with-setup-error' && !worktree.continuedWithoutSetup) {
+      throw new AgentError(
+        'WORKTREE_SETUP_REQUIRED',
+        'worktree setup 失败，必须先重试或明确跳过',
+        409,
+      )
     }
-    if (worktree.status !== "ready" && worktree.status !== "ready-with-setup-error") {
-      throw new AgentError("WORKTREE_NOT_READY", "worktree 尚未可用于任务执行", 409)
+    if (worktree.status !== 'ready' && worktree.status !== 'ready-with-setup-error') {
+      throw new AgentError('WORKTREE_NOT_READY', 'worktree 尚未可用于任务执行', 409)
     }
     return worktree
   }
 
   updateEnvironmentRevision(threadId: string, environmentRevision: number) {
-    const binding = this.repository.bumpEnvironmentRevision(threadId, environmentRevision, this.now())
-    if (!binding) throw new AgentError("THREAD_NOT_FOUND", "任务执行绑定不存在", 404)
+    const binding = this.repository.bumpEnvironmentRevision(
+      threadId,
+      environmentRevision,
+      this.now(),
+    )
+    if (!binding) throw new AgentError('THREAD_NOT_FOUND', '任务执行绑定不存在', 404)
     return binding
   }
 }

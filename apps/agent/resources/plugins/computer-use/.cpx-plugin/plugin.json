@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "installation": "INSTALLED_BY_DEFAULT",
+  "capabilities": ["computer-use"]
+}

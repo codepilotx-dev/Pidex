@@ -1,0 +1,10 @@
+/* MiSans Web Fonts (Regular 400, Medium 500, Demibold 600, Bold 700) */
+@import './misans/MiSans-Regular.min.css';
+@import './misans/MiSans-Medium.min.css';
+@import './misans/MiSans-Demibold.min.css';
+@import './misans/MiSans-Bold.min.css';
+
+/* JetBrains Mono Web Fonts (400, 500, 600) */
+@import './jetbrains-mono/400.css';
+@import './jetbrains-mono/500.css';
+@import './jetbrains-mono/600.css';

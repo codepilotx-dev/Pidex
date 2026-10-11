@@ -1,20 +1,25 @@
-import type { ConfigObject } from "../config/ConfigService"
-import { LOCAL_ENVIRONMENT_SCHEMA_VERSION, type LocalEnvironmentAction, type LocalEnvironmentConfig, type PlatformCommand } from "./types"
+import type { ConfigObject } from '../config/ConfigService'
+import {
+  LOCAL_ENVIRONMENT_SCHEMA_VERSION,
+  type LocalEnvironmentAction,
+  type LocalEnvironmentConfig,
+  type PlatformCommand,
+} from './Types'
 
 export class LocalEnvironmentConfigError extends Error {
-  readonly code = "LOCAL_ENVIRONMENT_INVALID"
+  readonly code = 'LOCAL_ENVIRONMENT_INVALID'
 
   constructor(message: string) {
     super(message)
-    this.name = "LocalEnvironmentConfigError"
+    this.name = 'LocalEnvironmentConfigError'
   }
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
-  typeof value === "object" && value !== null && !Array.isArray(value)
+  typeof value === 'object' && value !== null && !Array.isArray(value)
 
 const nonEmpty = (value: unknown, path: string): string => {
-  if (typeof value !== "string" || !value.trim()) {
+  if (typeof value !== 'string' || !value.trim()) {
     throw new LocalEnvironmentConfigError(`${path} 必须是非空字符串`)
   }
   return value
@@ -60,10 +65,12 @@ const action = (value: unknown, index: number): LocalEnvironmentAction => {
 
 export const parseLocalEnvironmentConfig = (value: ConfigObject): LocalEnvironmentConfig => {
   if (value.schema_version !== LOCAL_ENVIRONMENT_SCHEMA_VERSION) {
-    throw new LocalEnvironmentConfigError(`schema_version 必须为 ${LOCAL_ENVIRONMENT_SCHEMA_VERSION}`)
+    throw new LocalEnvironmentConfigError(
+      `schema_version 必须为 ${LOCAL_ENVIRONMENT_SCHEMA_VERSION}`,
+    )
   }
   const actionsValue = value.actions ?? []
-  if (!Array.isArray(actionsValue)) throw new LocalEnvironmentConfigError("actions 必须是数组")
+  if (!Array.isArray(actionsValue)) throw new LocalEnvironmentConfigError('actions 必须是数组')
   const actions = actionsValue.map(action)
   const names = new Set<string>()
   for (const item of actions) {
@@ -73,9 +80,9 @@ export const parseLocalEnvironmentConfig = (value: ConfigObject): LocalEnvironme
   }
   return {
     schema_version: LOCAL_ENVIRONMENT_SCHEMA_VERSION,
-    name: nonEmpty(value.name, "name"),
-    ...(value.setup !== undefined ? { setup: platformCommand(value.setup, "setup") } : {}),
-    ...(value.cleanup !== undefined ? { cleanup: platformCommand(value.cleanup, "cleanup") } : {}),
+    name: nonEmpty(value.name, 'name'),
+    ...(value.setup !== undefined ? { setup: platformCommand(value.setup, 'setup') } : {}),
+    ...(value.cleanup !== undefined ? { cleanup: platformCommand(value.cleanup, 'cleanup') } : {}),
     actions,
   }
 }

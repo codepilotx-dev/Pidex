@@ -1,5 +1,5 @@
 import type React from 'react'
-import { cx } from '../../utils/cx.js'
+import { cx } from '../../utils/Cx.js'
 
 export type SkeletonRegionProps = {
   label: string
@@ -9,6 +9,7 @@ export type SkeletonRegionProps = {
 
 export type SkeletonBlockProps = {
   className?: string
+  label?: string
 }
 
 export function SkeletonRegion({
@@ -20,22 +21,25 @@ export function SkeletonRegion({
     <div
       aria-busy="true"
       aria-live="polite"
-      className={cx('ui-skeleton-region', className)}
+      className={cx('ui-skeleton-region tw:min-w-0', className)}
       role="status"
     >
-      <span className="u-sr-only">{label}</span>
+      <span className="tw:sr-only">{label}</span>
       {children}
     </div>
   )
 }
 
-export function SkeletonBlock({
-  className,
-}: SkeletonBlockProps): React.ReactNode {
+export function SkeletonBlock({ className, label }: SkeletonBlockProps): React.ReactNode {
   return (
     <span
-      aria-hidden="true"
-      className={cx('ui-skeleton-block', className)}
+      aria-hidden={label ? undefined : 'true'}
+      aria-label={label}
+      className={cx(
+        'ui-skeleton-block tw:relative tw:block tw:overflow-hidden tw:shadow-none',
+        className,
+      )}
+      role={label ? 'status' : undefined}
     />
   )
 }

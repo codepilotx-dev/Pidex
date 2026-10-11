@@ -20,8 +20,8 @@ export function LazyRender({
       return
     }
     const observer = new IntersectionObserver(
-      entries => {
-        if (!entries.some(entry => entry.isIntersecting)) return
+      (entries) => {
+        if (!entries.some((entry) => entry.isIntersecting)) return
         setVisible(true)
         observer.disconnect()
       },

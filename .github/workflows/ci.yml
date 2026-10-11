@@ -31,6 +31,12 @@ jobs:
         run: bun run version:check
       - name: Typecheck
         run: bun run typecheck
+      - name: Formatting check
+        run: bun run format:check
+      - name: Lint
+        run: bun run lint
+      - name: Icon upstream sync check
+        run: bun run --cwd packages/material-icon-theme sync:check
       - name: Renderer CSS policy check
         run: bun run desktop:css:check
       - name: Build agent
@@ -40,7 +46,7 @@ jobs:
       - name: Performance statistics tests
         run: bun run test:performance:stats
       - name: Renderer performance observation
-        run: bun scripts/performance/run-suite.ts --suite=renderer
+        run: bun scripts/performance/RunSuite.ts --suite=renderer
       - name: Upload renderer performance report
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
