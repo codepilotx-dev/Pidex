@@ -1,10 +1,7 @@
 import type React from 'react'
 import { useLayoutEffect, useMemo } from 'react'
 import { useWorkspaceHeaderContext } from './WorkspaceHeaderProvider.js'
-import type {
-  WorkspaceHeaderAlign,
-  WorkspaceHeaderSlot,
-} from './workspaceHeaderStore.js'
+import type { WorkspaceHeaderAlign, WorkspaceHeaderSlot } from './WorkspaceHeaderStore.js'
 
 export type WorkspaceHeaderItemProps = {
   align?: WorkspaceHeaderAlign
@@ -35,10 +32,7 @@ export function WorkspaceHeaderItem({
     [align, children, id, order, routeScope, slot],
   )
 
-  useLayoutEffect(
-    () => store.register(item, token),
-    [id, routeScope, store, token],
-  )
+  useLayoutEffect(() => store.register(item, token), [id, routeScope, store, token])
   useLayoutEffect(() => store.update(token, item), [item, store, token])
 
   return null

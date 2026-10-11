@@ -1,18 +1,19 @@
-import type {
-  McpReloadResultSchema,
-  McpScope,
-  McpServerDeclaration,
-} from "@codepilotx/agent-protocol"
-import type { Schema } from "effect"
-import { McpConfigError, McpConfigService, isMcpSettingsConflict } from "./McpConfigService"
-import { McpConnectionManager } from "./McpConnectionManager"
-import { McpOAuthError, McpOAuthService } from "./McpOAuthService"
+import type { McpReloadResultSchema, McpScope, McpServerDeclaration } from '@pidex/agent-protocol'
+import { McpConfigError, McpConfigService, isMcpSettingsConflict } from './McpConfigService'
+import { McpConnectionManager } from './McpConnectionManager'
+import { McpOAuthError, McpOAuthService } from './McpOAuthService'
 
 type McpReloadResult = typeof McpReloadResultSchema.Type
 
 export class McpRuntimeError extends Error {
   constructor(
-    readonly code: "MCP_CONFIG_INVALID" | "MCP_SERVER_NOT_FOUND" | "MCP_OAUTH_UNAVAILABLE" | "MCP_UNAVAILABLE" | "PATH_DENIED" | "CONFLICT",
+    readonly code:
+      | 'MCP_CONFIG_INVALID'
+      | 'MCP_SERVER_NOT_FOUND'
+      | 'MCP_OAUTH_UNAVAILABLE'
+      | 'MCP_UNAVAILABLE'
+      | 'PATH_DENIED'
+      | 'CONFLICT',
     message: string,
     readonly status: number,
   ) {
@@ -21,7 +22,10 @@ export class McpRuntimeError extends Error {
 }
 
 export class McpRuntimeService {
-  private readonly reloadOperations = new Map<string, { fingerprint: string; result: McpReloadResult }>()
+  private readonly reloadOperations = new Map<
+    string,
+    { fingerprint: string; result: McpReloadResult }
+  >()
 
   constructor(
     private readonly configs: McpConfigService,
@@ -46,16 +50,15 @@ export class McpRuntimeService {
     return this.wrap(async () => {
       const existing = (await this.configs.list(input.workspace)).servers.find(
         (item) =>
-          item.server.scope === input.server.scope
-          && item.server.name === (input.originalName ?? input.server.name),
+          item.server.scope === input.server.scope &&
+          item.server.name === (input.originalName ?? input.server.name),
       )?.server
       const result = await this.configs.save(input)
-      const changedIdentity = existing?.transport.type === "http"
-        && (
-          input.server.transport.type !== "http"
-          || existing.name !== input.server.name
-          || existing.transport.url !== input.server.transport.url
-        )
+      const changedIdentity =
+        existing?.transport.type === 'http' &&
+        (input.server.transport.type !== 'http' ||
+          existing.name !== input.server.name ||
+          existing.transport.url !== input.server.transport.url)
       if (changedIdentity) {
         await this.oauth?.invalidateDeclaration(existing, input.workspace)
       }
@@ -63,17 +66,10 @@ export class McpRuntimeService {
     })
   }
 
-  async remove(input: {
-    workspace?: string
-    scope: McpScope
-    name: string
-    operationId: string
-  }) {
+  async remove(input: { workspace?: string; scope: McpScope; name: string; operationId: string }) {
     return this.wrap(async () => {
       const existing = (await this.configs.list(input.workspace)).servers.find(
-        (item) =>
-          item.server.scope === input.scope
-          && item.server.name === input.name,
+        (item) => item.server.scope === input.scope && item.server.name === input.name,
       )?.server
       const result = await this.configs.remove(input)
       if (existing) {
@@ -98,7 +94,7 @@ export class McpRuntimeService {
     const existing = this.reloadOperations.get(input.operationId)
     if (existing) {
       if (existing.fingerprint !== fingerprint) {
-        throw new McpRuntimeError("CONFLICT", "operationId 已用于其他 MCP 重载请求", 409)
+        throw new McpRuntimeError('CONFLICT', 'operationId 已用于其他 MCP 重载请求', 409)
       }
       return existing.result
     }
@@ -110,45 +106,23 @@ export class McpRuntimeService {
     return result
   }
 
-  oauthStart(input: {
-    workspace?: string
-    scope: McpScope
-    name: string
-    operationId: string
-  }) {
+  oauthStart(input: { workspace?: string; scope: McpScope; name: string; operationId: string }) {
     if (!this.oauth) {
-      throw new McpRuntimeError(
-        "MCP_OAUTH_UNAVAILABLE",
-        "MCP OAuth 服务未配置",
-        503,
-      )
+      throw new McpRuntimeError('MCP_OAUTH_UNAVAILABLE', 'MCP OAuth 服务未配置', 503)
     }
     return this.wrap(() => this.oauth!.start(input))
   }
 
   oauthStatus(input: { attemptId: string }) {
     if (!this.oauth) {
-      throw new McpRuntimeError(
-        "MCP_OAUTH_UNAVAILABLE",
-        "MCP OAuth 服务未配置",
-        503,
-      )
+      throw new McpRuntimeError('MCP_OAUTH_UNAVAILABLE', 'MCP OAuth 服务未配置', 503)
     }
     return this.oauth.status(input)
   }
 
-  oauthLogout(input: {
-    workspace?: string
-    scope: McpScope
-    name: string
-    operationId: string
-  }) {
+  oauthLogout(input: { workspace?: string; scope: McpScope; name: string; operationId: string }) {
     if (!this.oauth) {
-      throw new McpRuntimeError(
-        "MCP_OAUTH_UNAVAILABLE",
-        "MCP OAuth 服务未配置",
-        503,
-      )
+      throw new McpRuntimeError('MCP_OAUTH_UNAVAILABLE', 'MCP OAuth 服务未配置', 503)
     }
     return this.wrap(() => this.oauth!.logout(input))
   }
@@ -165,7 +139,11 @@ export class McpRuntimeService {
         throw new McpRuntimeError(cause.code, cause.message, cause.status)
       }
       if (isMcpSettingsConflict(cause)) {
-        throw new McpRuntimeError("CONFLICT", cause instanceof Error ? cause.message : "MCP 设置冲突", 409)
+        throw new McpRuntimeError(
+          'CONFLICT',
+          cause instanceof Error ? cause.message : 'MCP 设置冲突',
+          409,
+        )
       }
       throw cause
     }

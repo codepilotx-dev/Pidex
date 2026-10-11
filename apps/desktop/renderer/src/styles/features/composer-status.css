@@ -1,0 +1,25 @@
+/*
+ * Feature residue. Generated from _composer-status.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer features {
+  /*
+   * Composer status residue.
+   *
+   * The status overlay itself migrated to Tailwind utilities in
+   * `src/features/session/composer/ComposerStatusOverlay.tsx`. Only the quota bar
+   * fill stays here: the animation contract in `scripts/CheckStyleContracts.ts`
+   * reads `.composer-status-bar-fill` out of this exact file and requires it to
+   * transition `transform` only, so the compositor-safe fill keeps its class-based
+   * rule instead of a `tw:transition-transform` utility.
+   */
+  .composer-status-bar-fill {
+    width: 100%;
+    height: 100%;
+    border-radius: var(--cpx-sys-radius-indicator);
+    background: var(--cpx-sys-color-accent);
+    transform: scaleX(var(--usage-ratio, 0));
+    transform-origin: left;
+    transition: transform var(--cpx-sys-motion-panel) var(--cpx-sys-ease-standard);
+  }
+}

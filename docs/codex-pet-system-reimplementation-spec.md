@@ -1,6 +1,6 @@
-# CodePilotX 宠物系统复刻规格
+# Pidex 宠物系统复刻规格
 
-本文是 CodePilotX 宠物系统的实现与验收规格。它将逆向结果转化为仓库内可维护的模块边界，覆盖 v1/v2 宠物包、Agent 安装服务、Electron overlay、Renderer 动画和跨任务提醒。
+本文是 Pidex 宠物系统的实现与验收规格。它将逆向结果转化为仓库内可维护的模块边界，覆盖 v1/v2 宠物包、Agent 安装服务、Electron overlay、Renderer 动画和跨任务提醒。
 
 逆向证据与不可恢复边界见 [Codex 宠物系统逆向分析](research/codex-pet-system-reverse-engineering.md)。
 
@@ -72,7 +72,7 @@ type PetManifest = {
 
 ### 安装根
 
-默认使用当前 CodePilotX 用户数据根中的 `pets`。桌面端迁移用户数据根时，宠物和社区目录缓存会一起迁移；直接启动 Agent 时可用 `CODEPILOTX_PETS_DIR` 显式覆盖。`CODEX_HOME/pets` 仅作为旧版本一次性导入来源，不再作为运行时安装目录。
+默认使用当前 Pidex 用户数据根中的 `pets`。桌面端迁移用户数据根时，宠物和社区目录缓存会一起迁移；直接启动 Agent 时可用 `PIDEX_PETS_DIR` 显式覆盖。`CODEX_HOME/pets` 仅作为旧版本一次性导入来源，不再作为运行时安装目录。
 
 所有删除和替换只能发生在解析后的宠物根内，不能删除整个 data dir、userData 或 `$HOME`。
 
@@ -82,12 +82,12 @@ type PetManifest = {
 
 能力：`pets.management.v1`
 
-| 方法 | 参数 | 结果 | mutation |
-|---|---|---|---|
-| `pet/list` | `{}` | `{pets}` | 否 |
-| `pet/install/preview` | `{url}` | `{pet,sourceUrl,sizeBytes}` | 否 |
-| `pet/install` | `{url,operationId}` | `{pet}` | 是 |
-| `pet/remove` | `{id,operationId}` | `{id,removed:true}` | 是 |
+| 方法                  | 参数                | 结果                        | mutation |
+| --------------------- | ------------------- | --------------------------- | -------- |
+| `pet/list`            | `{}`                | `{pets}`                    | 否       |
+| `pet/install/preview` | `{url}`             | `{pet,sourceUrl,sizeBytes}` | 否       |
+| `pet/install`         | `{url,operationId}` | `{pet}`                     | 是       |
+| `pet/remove`          | `{id,operationId}`  | `{id,removed:true}`         | 是       |
 
 公共 descriptor 不包含绝对路径：
 
@@ -153,9 +153,9 @@ X-Content-Type-Options: nosniff
 
 ```text
 apps/desktop/electron/src/
-  windows/pet-overlay-window.ts
-  windows/pet-overlay-window-state.ts
-  ipc/register-pet-overlay-ipc.ts
+  windows/PetOverlayWindow.ts
+  windows/PetOverlayWindowState.ts
+  ipc/RegisterPetOverlayIpc.ts
 ```
 
 `main.ts` 只负责装配：
@@ -202,7 +202,7 @@ Renderer 不能传入 URL。
 
 ### Typed bridge
 
-契约源：`@codepilotx/shared/desktop-pet-overlay`
+契约源：`@pidex/shared/desktop-pet-overlay`
 
 ```ts
 interface DesktopPetOverlayBridge {
@@ -311,8 +311,7 @@ spritesheet 裁切：
 ```ts
 const rows = spriteVersionNumber === 2 ? 11 : 9
 backgroundSize = `800% ${rows * 100}%`
-backgroundPosition =
-  `${column * (100 / 7)}% ${row * (100 / (rows - 1))}%`
+backgroundPosition = `${column * (100 / 7)}% ${row * (100 / (rows - 1))}%`
 ```
 
 显示比例保持 192:208。reduced motion 下固定第 0 帧。非 idle 播放 3 次后回到 idle。
@@ -334,8 +333,7 @@ backgroundPosition =
 v2 图集的第 9、10 行保存 16 个静态朝向帧。宠物浮窗可见且未拖动时，每 50ms 通过受限 preload bridge 读取一次全局鼠标位置；renderer 结合浮窗屏幕坐标和宠物 DOMRect 计算宠物中心：
 
 ```ts
-const angle =
-  (Math.atan2(deltaX, -deltaY) * 180 / Math.PI + 360) % 360
+const angle = ((Math.atan2(deltaX, -deltaY) * 180) / Math.PI + 360) % 360
 const directionIndex = Math.round(angle / 22.5) % 16
 const row = 9 + Math.floor(directionIndex / 8)
 const column = directionIndex % 8
@@ -363,32 +361,32 @@ Electron 只使用 `screen.getCursorScreenPoint()` 采样，renderer 不提供�
 
 角色和尺寸的 preview 与持久化分离。设置页立即发布 `{ selectedPetId, size }`；尺寸保存防抖 100ms，并在指针释放、失焦或卸载时强制提交。主进程只在设置保存成功后向主窗口和宠物窗口广播规范化的完整设置。保存失败时 renderer 回滚至最后一次 canonical presentation。
 
-preload 的 channel 全部保留为本地字面量，并以 `satisfies typeof import(...)` 编译期校验；构建产物不得出现 `require("@codepilotx/shared/...")`。
+preload 的 channel 全部保留为本地字面量，并以 `satisfies typeof import(...)` 编译期校验；构建产物不得出现 `require("@pidex/shared/...")`。
 
 ## 当前实现文件
 
 协议与 Agent：
 
-- `packages/agent-protocol/src/methods/pet.ts`
+- `packages/agent-protocol/src/methods/Pet.ts`
 - `apps/agent/src/pet/PetService.ts`
-- `apps/agent/src/transport/rpc/handlers/pet.ts`
-- `apps/agent/src/transport/server.ts`
+- `apps/agent/src/transport/rpc/handlers/Pet.ts`
+- `apps/agent/src/transport/Server.ts`
 
 Electron：
 
-- `packages/shared/src/desktop-pet-overlay.ts`
-- `apps/desktop/electron/src/windows/pet-overlay-window.ts`
-- `apps/desktop/electron/src/windows/pet-overlay-window-state.ts`
-- `apps/desktop/electron/src/ipc/register-pet-overlay-ipc.ts`
+- `packages/shared/src/DesktopPetOverlay.ts`
+- `apps/desktop/electron/src/windows/PetOverlayWindow.ts`
+- `apps/desktop/electron/src/windows/PetOverlayWindowState.ts`
+- `apps/desktop/electron/src/ipc/RegisterPetOverlayIpc.ts`
 
 Renderer：
 
 - `apps/desktop/renderer/src/features/settings/PetSettings.tsx`
 - `apps/desktop/renderer/src/features/pet/PetOverlayPage.tsx`
 - `apps/desktop/renderer/src/features/pet/PetSprite.tsx`
-- `apps/desktop/renderer/src/features/pet/petAnimationModel.ts`
-- `apps/desktop/renderer/src/features/pet/petNotificationProjector.ts`
-- `apps/desktop/renderer/src/features/pet/usePetOverlayController.ts`
+- `apps/desktop/renderer/src/features/pet/PetAnimationModel.ts`
+- `apps/desktop/renderer/src/features/pet/PetNotificationProjector.ts`
+- `apps/desktop/renderer/src/features/pet/UsePetOverlayController.ts`
 
 ## 验收
 
@@ -423,9 +421,9 @@ bun run --cwd packages/agent-protocol typecheck
 bun run --cwd apps/agent typecheck
 bun run --cwd apps/desktop/electron typecheck
 bun run --cwd apps/desktop/renderer typecheck
-bun test apps/desktop/renderer/test/pet-animation-model.test.ts
-bun test apps/desktop/renderer/test/pet-notification-projector.test.ts
-bun test apps/desktop/electron/test/pet-overlay-window-state.test.ts
+bun test apps/desktop/renderer/test/PetAnimationModel.test.ts
+bun test apps/desktop/renderer/test/PetNotificationProjector.test.ts
+bun test apps/desktop/electron/test/PetOverlayWindowState.test.ts
 bun run --cwd apps/desktop/renderer css:check
 bun run build:renderer
 bun run build:desktop

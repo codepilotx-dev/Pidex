@@ -1,0 +1,42 @@
+/*
+ * ToggleSwitch 残余样式：旋钮的填充色与描边色来自 switch 组件调色板，并且必须在
+ * 强制颜色（forced-colors）模式下保持可读——此时填充会解析为 ButtonText/GrayText，
+ * 这两个系统颜色没有对应的 utility（GrayText 连组件令牌都没有）。视觉测试也会读取
+ * 旋钮的 computed background-color / box-shadow，因此这些声明集中保留在此处，
+ * 而不是被拆进 utilities。
+ */
+@layer primitives {
+  .toggle-knob {
+    border-color: var(--cpx-sys-color-border-default);
+    background: var(--cpx-comp-switch-thumb-fill);
+  }
+
+  .toggle-knob[data-state='unchecked'] {
+    border-color: var(--cpx-sys-color-border-default);
+    background: var(--cpx-comp-switch-thumb-fill);
+  }
+
+  .toggle-switch[data-state='checked'] .toggle-knob,
+  .toggle-knob[data-state='checked'],
+  .toggle-switch[aria-checked='true'] .toggle-knob {
+    border-color: transparent;
+    background: var(--cpx-comp-switch-thumb-fill);
+  }
+
+  .toggle-knob[data-disabled] {
+    border-color: var(--cpx-sys-color-border-subtle);
+    background: var(--cpx-comp-surface-raised);
+  }
+
+  @media (forced-colors: active) {
+    .toggle-knob {
+      border-color: ButtonText;
+      background: ButtonText;
+    }
+
+    .toggle-knob[data-disabled] {
+      border-color: GrayText;
+      background: GrayText;
+    }
+  }
+}

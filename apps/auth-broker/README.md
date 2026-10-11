@@ -1,6 +1,6 @@
-# CodePilotX Auth Broker
+# Pidex Auth Broker
 
-Cloudflare Worker，用于 CodePilotX 桌面端的 GitHub OAuth Authorization Code + PKCE 登录。Broker 是唯一持有 OAuth App `client_secret` 的组件；桌面端只保存短期 PKCE verifier，并在登录成功后使用自己的加密凭据仓库存储 access token。
+Cloudflare Worker，用于 Pidex 桌面端的 GitHub OAuth Authorization Code + PKCE 登录。Broker 是唯一持有 OAuth App `client_secret` 的组件；桌面端只保存短期 PKCE verifier，并在登录成功后使用自己的加密凭据仓库存储 access token。
 
 ## 安全边界
 

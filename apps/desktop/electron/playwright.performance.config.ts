@@ -3,7 +3,7 @@ import { resolve } from 'node:path'
 
 export default defineConfig({
   testDir: './performance-tests',
-  testMatch: 'desktop-ux.performance.ts',
+  testMatch: 'DesktopUx.performance.ts',
   outputDir: resolve('./test-results/performance'),
   fullyParallel: false,
   forbidOnly: true,

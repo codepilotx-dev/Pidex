@@ -14,7 +14,7 @@ This package is derived from the OpenCode schema package:
 
 The local source snapshot did not include Git metadata, so an upstream commit hash was not available.
 
-Changes in this package are limited to the model/provider integration contracts needed by CodePilotX. Event definitions, identifier generation, and unrelated schemas were omitted. Current identifiers replace the upstream transitional `V2` names, and `Model.Ref` is limited to `providerID`, `id`, and optional `variant`.
+Changes in this package are limited to the model/provider integration contracts needed by Pidex. Event definitions, identifier generation, and unrelated schemas were omitted. Current identifiers replace the upstream transitional `V2` names, and `Model.Ref` is limited to `providerID`, `id`, and optional `variant`.
 
 Local implementation files are all files under `src/`.
 

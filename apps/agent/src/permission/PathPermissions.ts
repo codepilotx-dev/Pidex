@@ -1,8 +1,8 @@
-import { resolve, sep } from "node:path"
+import { resolve, sep } from 'node:path'
 
 const normalizedPathKey = (value: string) => {
-  const normalized = resolve(value).replace(/[\\/]+$/, "")
-  return process.platform === "win32" ? normalized.toLowerCase() : normalized
+  const normalized = resolve(value).replace(/[\\/]+$/, '')
+  return process.platform === 'win32' ? normalized.toLowerCase() : normalized
 }
 
 export const pathContains = (parent: string, candidate: string) => {

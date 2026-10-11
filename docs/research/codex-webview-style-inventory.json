@@ -664899,7 +664899,7 @@
     {
       "area": "runtime theme",
       "status": "map",
-      "target": "src/features/theme/themeVariables.ts",
+      "target": "src/features/theme/ThemeVariables.ts",
       "recommendation": "对照 Electron 明暗类和根节点 setProperty 证据，动态值不固化为 SCSS 默认值。"
     },
     {

@@ -4,15 +4,12 @@ import {
   DESKTOP_VIEWPORT,
   prepareVisualTheme,
   waitForVisualPage,
-} from './visual-test-helpers.js'
+} from './VisualTestHelpers.js'
 
-async function expectSearchFitsPopover(
-  surface: Locator,
-  searchInput: Locator,
-): Promise<void> {
+async function expectSearchFitsPopover(surface: Locator, searchInput: Locator): Promise<void> {
   const searchContainer = searchInput.locator('..')
   const widthContainer = searchContainer.locator('..')
-  const measurements = await widthContainer.evaluate(container => {
+  const measurements = await widthContainer.evaluate((container) => {
     const search = container.querySelector(':scope > .search-input')
     if (!(search instanceof HTMLElement)) {
       throw new Error('SearchInput container is not mounted')
@@ -31,26 +28,18 @@ async function expectSearchFitsPopover(
       searchWidth,
     }
   })
-  const surfaceOverflow = await surface.evaluate(element => ({
+  const surfaceOverflow = await surface.evaluate((element) => ({
     clientWidth: element.clientWidth,
     scrollWidth: element.scrollWidth,
   }))
 
-  expect(measurements.searchWidth).toBeLessThanOrEqual(
-    measurements.availableWidth + 1,
-  )
-  expect(measurements.searchWidth).toBeGreaterThanOrEqual(
-    measurements.availableWidth - 3,
-  )
+  expect(measurements.searchWidth).toBeLessThanOrEqual(measurements.availableWidth + 1)
+  expect(measurements.searchWidth).toBeGreaterThanOrEqual(measurements.availableWidth - 3)
   expect(measurements.scrollWidth).toBeLessThanOrEqual(measurements.clientWidth)
-  expect(surfaceOverflow.scrollWidth).toBeLessThanOrEqual(
-    surfaceOverflow.clientWidth,
-  )
+  expect(surfaceOverflow.scrollWidth).toBeLessThanOrEqual(surfaceOverflow.clientWidth)
 }
 
-test('SettingsDropdown searchable — combobox keyboard and clear behavior', async ({
-  page,
-}) => {
+test('SettingsDropdown searchable — combobox keyboard and clear behavior', async ({ page }) => {
   await page.setViewportSize(COMPACT_VIEWPORT)
   await prepareVisualTheme(page, 'light', { reduceMotion: 'off' })
   await page.goto('/?visualCase=empty#/settings/general')
@@ -76,10 +65,7 @@ test('SettingsDropdown searchable — combobox keyboard and clear behavior', asy
 
   // aria-expanded should be true when opened
   await expect(searchField).toHaveAttribute('aria-expanded', 'true')
-  await expectSearchFitsPopover(
-    page.locator('.settings-dropdown-content'),
-    searchField,
-  )
+  await expectSearchFitsPopover(page.locator('.settings-dropdown-content'), searchField)
 
   // Filter items
   await searchField.fill('English')
@@ -116,9 +102,7 @@ test('SettingsDropdown searchable — combobox keyboard and clear behavior', asy
   await expect(searchField2).not.toBeVisible()
 })
 
-test('Popover SearchInput follows the available surface width', async ({
-  page,
-}) => {
+test('Popover SearchInput follows the available surface width', async ({ page }) => {
   await page.setViewportSize(DESKTOP_VIEWPORT)
   await prepareVisualTheme(page, 'light', { reduceMotion: 'off' })
   await page.goto('/?visualCase=empty#/new')

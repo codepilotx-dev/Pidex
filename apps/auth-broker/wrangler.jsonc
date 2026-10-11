@@ -7,25 +7,25 @@
   "routes": [
     {
       "pattern": "auth-staging.codepilotx.top",
-      "custom_domain": true
-    }
+      "custom_domain": true,
+    },
   ],
   "vars": {
-    "GITHUB_OAUTH_CLIENT_ID": "Ov23libpTIwI7SBaVpVs"
+    "GITHUB_OAUTH_CLIENT_ID": "Ov23libpTIwI7SBaVpVs",
   },
   "durable_objects": {
     "bindings": [
       {
         "name": "OAUTH_ATTEMPTS",
-        "class_name": "OAuthAttempt"
-      }
-    ]
+        "class_name": "OAuthAttempt",
+      },
+    ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": ["OAuthAttempt"]
-    }
+      "new_sqlite_classes": ["OAuthAttempt"],
+    },
   ],
   "ratelimits": [
     {
@@ -33,12 +33,12 @@
       "namespace_id": "1001",
       "simple": {
         "limit": 10,
-        "period": 60
-      }
-    }
+        "period": 60,
+      },
+    },
   ],
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
-  }
+    "head_sampling_rate": 1,
+  },
 }

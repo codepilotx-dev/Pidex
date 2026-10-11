@@ -1,0 +1,72 @@
+import type { ContextUsageBreakdownEntry, ContextUsageBreakdownSource } from '@pidex/shared/thread'
+
+/** 分类展示顺序固定，占比相同的分类之间也保持稳定排序。 */
+export const CONTEXT_USAGE_BREAKDOWN_ORDER: readonly ContextUsageBreakdownSource[] = [
+  'messages',
+  'system_prompt',
+  'system_tools',
+  'mcp_tools',
+  'skills',
+  'memory',
+  'project',
+  'other',
+]
+
+export const CONTEXT_USAGE_BREAKDOWN_LABELS: Record<ContextUsageBreakdownSource, string> = {
+  messages: '消息',
+  system_prompt: '系统提示词',
+  system_tools: '系统工具',
+  mcp_tools: 'MCP 工具',
+  skills: '技能',
+  memory: '记忆',
+  project: '项目指令',
+  other: '其他',
+}
+
+export interface ContextUsageBreakdownSegment {
+  source: ContextUsageBreakdownSource
+  chars: number
+  percent: number
+}
+
+/**
+ * Agent 只下发各来源的字符量，占比在渲染层按字符总量计算——
+ * 与 provider 的 token 总数无关，因此各分类之和恒为 100%。
+ */
+export function buildContextUsageBreakdownSegments(
+  breakdown: readonly ContextUsageBreakdownEntry[] | undefined,
+): ContextUsageBreakdownSegment[] {
+  const charsBySource = new Map<ContextUsageBreakdownSource, number>()
+  for (const entry of breakdown ?? []) {
+    if (!Number.isFinite(entry.chars) || entry.chars <= 0) continue
+    charsBySource.set(entry.source, (charsBySource.get(entry.source) ?? 0) + entry.chars)
+  }
+  const totalChars = [...charsBySource.values()].reduce((sum, chars) => sum + chars, 0)
+  if (totalChars <= 0) return []
+
+  return [...charsBySource.entries()]
+    .map(([source, chars]) => ({ source, chars, percent: chars / totalChars }))
+    .sort(
+      (left, right) =>
+        right.chars - left.chars ||
+        CONTEXT_USAGE_BREAKDOWN_ORDER.indexOf(left.source) -
+          CONTEXT_USAGE_BREAKDOWN_ORDER.indexOf(right.source),
+    )
+}
+
+const SEGMENT_TONE_PERCENTS = [100, 78, 58, 42, 28] as const
+
+/** 按降序位置给堆叠条分段配色，超出色阶的段落复用最后一档。 */
+export function contextUsageSegmentColor(index: number): string {
+  const tone = SEGMENT_TONE_PERCENTS[Math.min(index, SEGMENT_TONE_PERCENTS.length - 1)] ?? 100
+  return `color-mix(in srgb, var(--cpx-sys-color-accent) ${tone}%, var(--cpx-sys-color-surface-canvas))`
+}
+
+export function formatPercentValue(percent: number): string {
+  return `${(percent * 100).toFixed(1)}%`
+}
+
+export function formatCacheHitRate(hitRate: number | null | undefined): string | null {
+  if (hitRate === null || hitRate === undefined || !Number.isFinite(hitRate)) return null
+  return formatPercentValue(Math.max(0, Math.min(1, hitRate)))
+}

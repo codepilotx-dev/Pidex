@@ -1,0 +1,17 @@
+/*
+ * Feature residue. Generated from _primary-page.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer features {
+  /*
+   * Primary page residue.
+   *
+   * The body top margin stays in CSS on purpose: `pull-requests.scss` overrides
+   * it inside the features layer (`.pull-requests-placeholder
+   * .primary-page-layout__body`), and a Tailwind utility would win over that
+   * override because the utilities layer comes after features.
+   */
+  .primary-page-layout__body {
+    margin-top: var(--cpx-sys-space-6);
+  }
+}

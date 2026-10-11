@@ -1,0 +1,43 @@
+/*
+ * Feature residue. Generated from _composer-controls.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer features {
+  @charset "UTF-8";
+
+  /*
+   * Composer controls residue.
+   *
+   * Only the context-usage ring stays here: it reads the runtime
+   * `--context-usage-progress` ratio and punches its centre out through a
+   * `::before`, neither of which a utility can express.
+   *
+   * Everything else this file used to carry — the permission chip and its Select
+   * menu, the plan-mode / goal chip, the model picker (panel, provider rail, hub
+   * rows, search), the reasoning menu, the chat input dropdown and suggestion
+   * menu — migrated to Tailwind utilities in the composer components. Dropping
+   * this file needs the two negative assertions in
+   * `test/CodexStyleContracts.test.ts` ("keeps the permission Select on shared
+   * rich-menu geometry") to be re-pointed first.
+   */
+  .chip-dot {
+    width: 100%;
+    height: 100%;
+    display: inline-block;
+    position: relative;
+    border-radius: var(--cpx-sys-radius-full);
+    background: conic-gradient(
+      var(--cpx-sys-color-fg-secondary) calc(var(--context-usage-progress, 0) * 1%),
+      color-mix(in srgb, var(--cpx-sys-color-fg-secondary) 20%, transparent)
+        calc(var(--context-usage-progress, 0) * 1%),
+      color-mix(in srgb, var(--cpx-sys-color-fg-secondary) 20%, transparent) 360deg
+    );
+  }
+  .chip-dot::before {
+    content: '';
+    position: absolute;
+    inset: 2px;
+    border-radius: var(--cpx-sys-radius-full);
+    background: var(--cpx-sys-color-surface-canvas);
+  }
+}

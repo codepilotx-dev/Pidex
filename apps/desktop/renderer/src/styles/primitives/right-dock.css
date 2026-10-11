@@ -1,0 +1,114 @@
+/*
+ * Right dock / workbench panel residue.
+ *
+ * Everything kept here needs a mechanism Tailwind utilities cannot reach:
+ *
+ * - Resize-handle and tab-divider decorations are `::after` pseudo-elements
+ *   whose gradient mixes the primary foreground into `transparent`; the
+ *   divider additionally hides itself from a sibling `:has(+ …:hover)` state.
+ * - The tab strip viewport hides its native scrollbar through vendor
+ *   pseudo-elements, and `scrollbar-width` has no utility in the design set.
+ * - `right-dock-is-resizing` / `bottom-panel-is-resizing` /
+ *   `file-tree-is-resizing` are `document.body` state classes applied
+ *   imperatively by the resize controllers, so no rendered element can carry
+ *   them as a utility.
+ * - `.right-dock-plan-document` retargets markdown-owned children
+ *   (`.md-body`, `.md-code-block`, `.md-code-header`) that the plan panel
+ *   cannot put utilities on, and three of those declarations are colour-mix
+ *   surfaces with no palette entry.
+ *
+ * The semantic class names stay because base.css, the resize controllers and
+ * the visual tests query them.
+ */
+@layer primitives {
+  /* --- panel + file tree resize handles -------------------------------- */
+  .right-dock-editor-tree-resize-handle::after {
+    position: absolute;
+    inset-block: 0;
+    left: 3px;
+    width: 2px;
+    background: transparent;
+    content: '';
+  }
+
+  .right-dock-editor-tree-resize-handle:hover::after,
+  .right-dock-editor-tree-resize-handle:focus-visible::after,
+  .file-tree-is-resizing .right-dock-editor-tree-resize-handle::after {
+    background: var(--cpx-sys-color-accent);
+  }
+
+  /* --- right dock tab strip ------------------------------------------- */
+  .right-dock-tab-title {
+    mask-image: linear-gradient(to right, black calc(100% - 20px), transparent);
+  }
+
+  .right-dock-tabs-viewport {
+    scrollbar-width: none;
+  }
+
+  .right-dock-tabs-viewport::-webkit-scrollbar {
+    display: none;
+  }
+
+  .right-dock-tab-wrap.has-divider::after {
+    position: absolute;
+    top: 50%;
+    right: -2px;
+    width: 1px;
+    height: 12px;
+    background: linear-gradient(
+      to bottom,
+      transparent,
+      color-mix(in srgb, var(--cpx-sys-color-fg-primary) 25%, transparent),
+      transparent
+    );
+    content: '';
+    pointer-events: none;
+    transform: translateY(-50%);
+  }
+
+  /* 当前或相邻标签处于 active / hover / focus 时隐藏分隔线，避免与状态底色叠线。 */
+  .right-dock-tab-wrap.has-divider:hover::after,
+  .right-dock-tab-wrap.has-divider:focus-within::after,
+  .right-dock-tab-wrap.has-divider:has(+ .right-dock-tab-wrap.active)::after,
+  .right-dock-tab-wrap.has-divider:has(+ .right-dock-tab-wrap:hover)::after,
+  .right-dock-tab-wrap.has-divider:has(+ .right-dock-tab-wrap:focus-within)::after {
+    content: none;
+  }
+
+  /* --- imperative document.body resize state --------------------------- */
+  .right-dock-is-resizing,
+  .right-dock-is-resizing *,
+  .bottom-panel-is-resizing,
+  .bottom-panel-is-resizing * {
+    cursor: col-resize;
+    user-select: none;
+  }
+
+  .bottom-panel-is-resizing,
+  .bottom-panel-is-resizing * {
+    cursor: row-resize;
+  }
+
+  .file-tree-is-resizing,
+  .file-tree-is-resizing * {
+    cursor: col-resize;
+    user-select: none;
+  }
+
+  /* --- plan document markdown overrides -------------------------------- */
+  .right-dock-plan-document .md-body .md-code-block {
+    border-color: var(--cpx-sys-color-border-default);
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 5%, transparent);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .right-dock-plan-document .md-body :not(pre) > code {
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 5%, transparent);
+  }
+
+  .right-dock-plan-document .md-body .md-code-header {
+    border-bottom-color: var(--cpx-sys-color-border-subtle);
+    background: var(--cpx-sys-color-surface-raised);
+  }
+}

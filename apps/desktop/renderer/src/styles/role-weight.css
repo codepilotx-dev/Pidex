@@ -1,0 +1,35 @@
+/*
+ * Role + weight pairs.
+ *
+ * A `tw:type-*` role declares the complete `font:` shorthand, and Tailwind emits
+ * every `type-weight-*` rule before the role rules — so combining the two in one
+ * class list is a silent no-op (`tw:type-label tw:type-weight-heading` renders at
+ * the role's own weight). The four elements below need a weight their role does
+ * not provide, so the pair is declared here: the `overrides` layer is the only
+ * one that outranks the utilities layer.
+ *
+ * Everything else uses a role that already carries the weight
+ * (`type-label`, `type-row-title`, `type-control`), or a bare
+ * `tw:type-weight-*` on an element that has no role.
+ */
+@layer overrides {
+  .automation-calendar__year-label,
+  .automation-calendar__tasks-popover-title,
+  .browser-address-error {
+    font-weight: var(--cpx-sys-font-weight-bold);
+  }
+
+  /* The active month keeps the caption role but lifts it to the bold weight. */
+  .automation-calendar__month-grid-btn--active {
+    font-weight: var(--cpx-sys-font-weight-bold);
+  }
+
+  /* Today's day number keeps the caption geometry and lifts to the bold weight. */
+  .automation-calendar__day[data-today] .automation-calendar__day-num {
+    font-weight: var(--cpx-sys-font-weight-bold);
+  }
+
+  .workflow-plan-card__title {
+    font-weight: var(--cpx-sys-font-weight-medium);
+  }
+}

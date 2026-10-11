@@ -7,42 +7,32 @@ export {
   presentHighlightedCode,
   SYNTAX_HIGHLIGHT_CACHE_CAPACITY,
   SYNTAX_HIGHLIGHT_CACHE_MAX_WEIGHT,
-} from './highlighter.js'
+} from './Highlighter.js'
 export {
   formatSyntaxLanguageLabel,
   normalizeSyntaxLanguage,
   resolveLanguageFromPath,
-} from './language.js'
+} from './Language.js'
+export { SyntaxHighlighterService, syntaxHighlighter, syntaxHighlighterService } from './Service.js'
 export {
-  SyntaxHighlighterService,
-  syntaxHighlighter,
-  syntaxHighlighterService,
-} from './service.js'
-export {
-  CODEX_HIGHLIGHT_THEMES,
-  DEFAULT_CODEX_SYNTAX_THEMES,
+  HIGHLIGHT_THEMES,
+  DEFAULT_SYNTAX_THEMES,
   getThemesForVariant,
   isThemeCompatibleWithVariant,
   normalizeThemeIdForVariant,
   resolveThemeId,
-} from './theme.js'
-export type {
-  CodexHighlightThemeSlug,
-  SyntaxThemeVariant,
-} from './theme.js'
+} from './Theme.js'
+export type { HighlightThemeSlug, SyntaxThemeVariant } from './Theme.js'
 export type {
   HighlightCodeOptions,
   SyntaxHighlightPresentation,
   SyntaxHighlightResult,
   SyntaxToken,
-} from './types.js'
-export {
-  STREAMING_HIGHLIGHT_INTERVAL_MS,
-  useHighlightedCode,
-} from './useHighlightedCode.js'
+} from './Types.js'
+export { STREAMING_HIGHLIGHT_INTERVAL_MS, useHighlightedCode } from './UseHighlightedCode.js'
 export {
   CODE_WRAP_STORAGE_KEY,
   readCodeWrapPreference,
   setCodeWrapPreference,
   useCodeWrapPreference,
-} from './wrapPreference.js'
+} from './WrapPreference.js'

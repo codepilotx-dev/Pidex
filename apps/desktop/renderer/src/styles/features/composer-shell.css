@@ -1,0 +1,79 @@
+/*
+ * Feature residue. Generated from _composer-shell.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer features {
+  @charset "UTF-8";
+
+  /*
+   * Composer shell residue.
+   *
+   * The composer silhouette is a variant function, not a per-element utility:
+   * `--composer-radius` resolves from the composer layout + radius variant
+   * declared on `.composer-stack`, and the nested surfaces inherit the resolved
+   * value. `test/CodexStyleContracts.test.ts` pins these declarations (and the
+   * home-surface selectors below) as the composer radius contract, so the
+   * silhouette stays a stylesheet rule instead of a `tw:rounded-*` class list.
+   *
+   * Every other shell property — surfaces, borders, elevation, spacing, the
+   * utility bar, submit/dictation chrome, attachments — migrated to Tailwind
+   * utilities in the composer components (`ComposerCard`, `ComposerAttachmentTray`,
+   * `ComposerSurface`, `AttachmentRowPrimitives`), and the ProseMirror-authored
+   * editor surface lives in `src/styles/primitives/composer.css`.
+   */
+  .composer-stack {
+    --composer-radius: var(--cpx-sys-radius-prominent);
+  }
+
+  .composer-stack[data-composer-layout='single-line'][data-composer-radius-variant='default'] {
+    --composer-radius: var(--cpx-sys-radius-pill);
+  }
+
+  .composer-stack[data-composer-radius-variant='single-line'] {
+    --composer-radius: var(--cpx-sys-radius-prominent);
+  }
+
+  .composer-stack[data-composer-radius-variant='compact'] {
+    --composer-radius: var(--cpx-sys-radius-container);
+  }
+
+  .composer,
+  .composer-input-surface {
+    border-radius: var(--composer-radius);
+  }
+
+  .composer-utility-bar {
+    border-radius: var(--composer-radius) var(--composer-radius) 0 0;
+  }
+
+  /* The home (Working / Coding new-session) bars pin their own corner silhouette:
+     they stand in for the missing surface seam instead of nesting. */
+  .composer-stack[data-composer-utility-bar-variant='home'][data-surface='working']
+    .composer-utility-bar {
+    border-radius: 0 0 var(--cpx-sys-radius-control) var(--cpx-sys-radius-control);
+  }
+
+  .composer-stack[data-composer-utility-bar-variant='home'][data-surface='coding']
+    .composer-utility-bar {
+    border-radius: var(--cpx-sys-radius-control) var(--cpx-sys-radius-control) 0 0;
+  }
+
+  /* The editor content is mounted by ProseMirror, so the home surfaces clamp its
+     resting height through a descendant rule. */
+  .composer-stack[data-composer-utility-bar-variant='home'][data-surface] .composer-editor-content {
+    min-height: 44px;
+    font: var(--cpx-sys-type-reading);
+  }
+
+  /* `corner-shape` has no utility in the design set and needs the modern-syntax
+     guard, so the superellipse opt-in stays a stylesheet rule. */
+  @supports (corner-shape: superellipse(1.5)) {
+    .composer-stack[data-composer-layout='multiline'][data-composer-radius-variant='default'],
+    .composer-stack[data-composer-layout='multiline'][data-composer-radius-variant='default']
+      .composer-input-surface,
+    .composer-stack[data-composer-radius-variant='compact'],
+    .composer-stack[data-composer-radius-variant='compact'] .composer-input-surface {
+      corner-shape: var(--cpx-sys-corner-shape);
+    }
+  }
+}

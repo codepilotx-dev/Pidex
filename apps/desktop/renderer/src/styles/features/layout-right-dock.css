@@ -1,0 +1,47 @@
+/*
+ * Application shell residue. Generated from _layout-right-dock.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer shell {
+  /*
+   * Right dock residue.
+   *
+   * The dock's own appearance (panel frame, tab strip, resize handles, launcher
+   * and panel states) now lives as Tailwind utilities in
+   * `src/features/layout/dock/*`, `src/features/layout/panels/*` and
+   * `src/features/layout/tabs/WorkbenchTabStrip.tsx`.
+   *
+   * `src/styles/primitives/right-dock.css` keeps the parts utilities cannot
+   * express: the `::after` resize-handle / tab-divider decorations, the hidden
+   * tab-strip scrollbar and the imperative `document.body` resize state classes.
+   *
+   * Two rules stay here because their consumers live in other features:
+   *
+   * - `.workbench-tab-panel` is reused by the auxiliary window host
+   *   (`src/features/layout/auxiliary/AuxiliaryWindowsHost.tsx`).
+   * - `.right-dock-browser` is owned by the browser feature
+   *   (`src/features/browser/DesktopBrowserPanel.tsx`).
+   */
+  .workbench-tab-panel {
+    display: flex;
+    flex: 1 1 auto;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .workbench-tab-panel[hidden] {
+    display: none;
+  }
+
+  .right-dock-browser {
+    container-type: inline-size;
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+    background: var(--cpx-sys-color-workbench-panel-bg);
+  }
+}

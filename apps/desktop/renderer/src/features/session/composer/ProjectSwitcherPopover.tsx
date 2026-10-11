@@ -1,13 +1,13 @@
 import type React from 'react'
 import { useMemo, useState } from 'react'
 import { Check, Folder, FolderPlus, FolderX, GitFork } from 'lucide-react'
-import { APP_ICON_SIZE } from '../../../components/ui/iconTokens.js'
+import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import {
   SearchablePopoverAction,
   SearchablePopoverContent,
 } from '../../../components/ui/SearchablePopoverContent.js'
-import type { PopoverSizingProps } from '../../../components/ui/popoverSizing.js'
-import type { DesktopWorkspace } from '../../../../shared/types.js'
+import type { PopoverSizingProps } from '../../../components/ui/PopoverSizing.js'
+import type { DesktopWorkspace } from '../../../../shared/Types.js'
 
 type Props = {
   recentWorkspaces: DesktopWorkspace[]
@@ -39,26 +39,19 @@ export function ProjectSwitcherPopover({
   side,
   align,
   sideOffset,
-  width,
-  maxWidth,
+  size,
 }: Props): React.ReactNode {
   const [search, setSearch] = useState('')
-  const filtered = useMemo(() => {
-    const keyword = search.trim().toLowerCase()
-    if (!keyword) return recentWorkspaces
-    return recentWorkspaces.filter(item =>
-      [item.name, item.path, item.branchName ?? '']
-        .join(' ')
-        .toLowerCase()
-        .includes(keyword),
-    )
-  }, [recentWorkspaces, search])
   const options = useMemo(
     () => [
-      ...filtered.map(item => ({ value: item.path, workspace: item })),
-      { value: '__no_workspace__', workspace: null },
+      ...recentWorkspaces.map((item) => ({
+        value: item.path,
+        workspace: item,
+        textValue: [item.name, item.path, item.branchName ?? ''].join(' '),
+      })),
+      { value: '__no_workspace__', workspace: null, filter: false },
     ],
-    [filtered],
+    [recentWorkspaces],
   )
 
   return (
@@ -67,7 +60,7 @@ export function ProjectSwitcherPopover({
       className={className}
       contentLabel="切换项目"
       emptyLabel="无匹配项目"
-      footer={(
+      footer={
         <>
           <SearchablePopoverAction
             icon={<FolderPlus size={APP_ICON_SIZE} />}
@@ -92,8 +85,7 @@ export function ProjectSwitcherPopover({
             </SearchablePopoverAction>
           ) : null}
         </>
-      )}
-      listClassName="popover-section"
+      }
       listLabel="最近项目"
       open={open}
       options={options}
@@ -101,16 +93,16 @@ export function ProjectSwitcherPopover({
         <>
           <span className="popover-item-leading">
             <span className="popover-item-icon">
-              {option.workspace
-                ? <Folder size={APP_ICON_SIZE} />
-                : <FolderX size={APP_ICON_SIZE} />}
+              {option.workspace ? (
+                <Folder size={APP_ICON_SIZE} />
+              ) : (
+                <FolderX size={APP_ICON_SIZE} />
+              )}
             </span>
           </span>
-          <span className="popover-item-label">
-            {option.workspace?.name ?? '不使用项目'}
-          </span>
+          <span className="popover-item-label">{option.workspace?.name ?? '不使用项目'}</span>
           <span className="popover-item-trailing">
-            {selected ? <Check size={APP_ICON_SIZE} /> : null}
+            {selected ? <Check size={APP_ICON_SIZES.sm} /> : null}
           </span>
         </>
       )}
@@ -121,11 +113,11 @@ export function ProjectSwitcherPopover({
       side={side}
       sideOffset={sideOffset}
       trigger={trigger}
-      width={width}
-      maxWidth={maxWidth}
+      size={size}
+
       onOpenChange={onOpenChange}
       onSearchChange={setSearch}
-      onSelect={option => {
+      onSelect={(option) => {
         if (option.workspace) onOpenWorkspace(option.workspace)
         else onClearWorkspace()
         onOpenChange(false)

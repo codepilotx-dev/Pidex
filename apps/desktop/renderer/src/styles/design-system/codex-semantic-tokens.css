@@ -1,0 +1,306 @@
+@layer tokens {
+  :root {
+    /* 1. Dropdown / Popover Component */
+    --cpx-comp-dropdown-trigger-bg: var(--cpx-sys-color-surface-control);
+    --cpx-comp-dropdown-trigger-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-dropdown-trigger-border: var(--cpx-sys-color-border-subtle);
+    --cpx-comp-dropdown-trigger-hover-bg: var(--cpx-sys-color-hover);
+    --cpx-comp-dropdown-trigger-open-bg: var(--cpx-sys-color-selected);
+    --cpx-comp-dropdown-trigger-disabled-fg: var(--cpx-sys-color-fg-disabled);
+    --cpx-comp-dropdown-menu-bg: var(--cpx-sys-color-surface-raised);
+    --cpx-comp-dropdown-menu-backdrop-filter: none;
+    --cpx-comp-dropdown-menu-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-dropdown-menu-border: var(--cpx-sys-color-border-default);
+    --cpx-comp-dropdown-item-hover-bg: var(--cpx-sys-color-hover);
+    --cpx-comp-dropdown-item-selected-bg: var(--cpx-sys-color-selected);
+    --cpx-comp-dropdown-item-pressed-bg: var(--cpx-sys-color-active);
+    --cpx-comp-dropdown-item-disabled-fg: var(--cpx-sys-color-fg-disabled);
+    --cpx-comp-dropdown-focus-border: var(--cpx-sys-color-border-focus);
+    --cpx-comp-dropdown-menu-radius: var(--cpx-sys-radius-floating);
+    --cpx-comp-dropdown-menu-shadow: var(--cpx-sys-shadow-floating);
+
+    /* 2. Button / IconButton Component */
+    --cpx-comp-button-bg: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 5%, transparent);
+    --cpx-comp-button-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-button-border: var(--cpx-sys-color-border-subtle);
+    --cpx-comp-button-hover-bg: var(--cpx-sys-color-hover);
+    --cpx-comp-button-active-bg: var(--cpx-sys-color-active);
+    --cpx-comp-button-pressed: var(--cpx-sys-color-active);
+    --cpx-comp-button-radius-md: var(--cpx-sys-radius-md);
+    --cpx-comp-button-radius-lg: var(--cpx-sys-radius-lg);
+    --cpx-comp-button-radius-xl: var(--cpx-sys-radius-xl);
+    --cpx-comp-button-radius-2xl: var(--cpx-sys-radius-2xl);
+    --cpx-comp-button-size-compact: 24px;
+    --cpx-comp-button-size-toolbar: 28px;
+    --cpx-comp-button-size-medium: 32px;
+    --cpx-comp-button-size-large: 36px;
+    --cpx-comp-button-primary-bg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-button-primary-fg: var(--cpx-sys-color-surface-canvas);
+    --cpx-comp-button-primary-hover-bg: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 80%,
+      transparent
+    );
+    --cpx-comp-button-primary-active-bg: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 80%,
+      transparent
+    );
+    --cpx-comp-button-primary-disabled-bg: var(--cpx-sys-color-fg-disabled);
+
+    /* 3. Input / SearchInput Component */
+    --cpx-comp-input-bg: var(--cpx-sys-color-surface-control);
+    --cpx-comp-input-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-input-border: var(--cpx-sys-color-border-subtle);
+    --cpx-comp-input-placeholder-fg: var(--cpx-sys-color-fg-tertiary);
+    --cpx-comp-input-focus-border: var(--cpx-sys-color-border-focus);
+    --cpx-comp-input-radius: var(--cpx-sys-radius-md);
+    --cpx-comp-input-disabled-bg: var(--cpx-sys-color-surface-control);
+    --cpx-comp-input-disabled-fg: var(--cpx-sys-color-fg-disabled);
+    --cpx-comp-input-validation-error-bg: var(--cpx-sys-color-danger);
+    --cpx-comp-input-validation-error-border: var(--cpx-sys-color-danger);
+    --cpx-comp-input-validation-warning-bg: var(--cpx-sys-color-warning);
+    --cpx-comp-input-validation-warning-border: var(--cpx-sys-color-warning);
+
+    /* 4. Switch & SegmentedControl Component */
+    --cpx-comp-switch-bg: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 10%, transparent);
+    --cpx-comp-switch-border: var(--cpx-sys-color-border-default);
+    --cpx-comp-switch-checked-bg: var(--cpx-sys-color-accent);
+    --cpx-comp-switch-radius: var(--cpx-sys-radius-full);
+    --cpx-comp-switch-thumb-shadow: var(--cpx-sys-shadow-control);
+    --cpx-comp-switch-thumb-fill: #ffffff;
+    --cpx-comp-segmented-bg: var(--cpx-sys-color-surface-recessed);
+    --cpx-comp-segmented-border: var(--cpx-sys-color-border-default);
+    --cpx-comp-segmented-item-selected-bg: var(--cpx-sys-color-surface-canvas);
+    --cpx-comp-segmented-item-selected-fg: var(--cpx-sys-color-fg-primary);
+
+    /* 5. Tooltip, ScrollArea & MetaChip Component */
+    --cpx-comp-tooltip-bg: var(--cpx-sys-color-surface-raised);
+    --cpx-comp-tooltip-backdrop-filter: none;
+    --cpx-comp-tooltip-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-tooltip-border: 1px solid var(--cpx-sys-color-border-subtle);
+    --cpx-comp-tooltip-shadow: var(--cpx-sys-shadow-floating);
+    --cpx-comp-tooltip-radius: var(--cpx-sys-radius-sm);
+    --cpx-comp-scrollbar-slider-bg: var(--cpx-sys-color-border-default);
+    --cpx-comp-scrollbar-slider-hover-bg: var(--cpx-sys-color-border-strong);
+    --cpx-comp-scrollbar-slider-active-bg: var(--cpx-sys-color-border-strong);
+    --cpx-comp-chip-bg: var(--cpx-sys-color-surface-canvas);
+    --cpx-comp-chip-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-chip-border: var(--cpx-sys-color-border-subtle);
+    --cpx-comp-chip-success-bg: var(--cpx-sys-color-success-subtle-bg);
+    --cpx-comp-chip-success-fg: var(--cpx-sys-color-success-fg);
+    --cpx-comp-chip-success-border: var(--cpx-sys-color-success-subtle-border);
+    --cpx-comp-chip-danger-bg: var(--cpx-sys-color-danger-subtle-bg);
+    --cpx-comp-chip-danger-fg: var(--cpx-sys-color-danger-fg);
+    --cpx-comp-chip-danger-border: var(--cpx-sys-color-danger-subtle-border);
+    --cpx-comp-chip-warning-bg: var(--cpx-sys-color-warning-subtle-bg);
+    --cpx-comp-chip-warning-fg: var(--cpx-sys-color-warning-fg);
+    --cpx-comp-chip-warning-border: var(--cpx-sys-color-warning-subtle-border);
+    --cpx-comp-chip-skill-bg: var(--cpx-sys-color-skill-subtle-bg);
+    --cpx-comp-chip-skill-fg: var(--cpx-sys-color-skill-fg);
+    --cpx-comp-chip-skill-border: var(--cpx-sys-color-skill-subtle-border);
+    --cpx-comp-chip-info-bg: var(--cpx-sys-color-info-subtle-bg);
+    --cpx-comp-chip-info-fg: var(--cpx-sys-color-info-fg);
+    --cpx-comp-chip-info-border: var(--cpx-sys-color-info-subtle-border);
+    --cpx-comp-chip-accent-bg: var(--cpx-sys-color-accent-subtle-bg);
+    --cpx-comp-chip-accent-fg: var(--cpx-sys-color-accent-fg);
+    --cpx-comp-chip-accent-border: var(--cpx-sys-color-accent-subtle-border);
+
+    /* 6. Surfaces & Containers Component */
+    --cpx-comp-surface-underlay: var(--cpx-sys-color-surface-recessed);
+    --cpx-comp-surface-canvas: var(--cpx-sys-color-surface-canvas);
+    --cpx-comp-surface-panel: var(--cpx-sys-color-surface-panel);
+    --cpx-comp-surface-raised: var(--cpx-sys-color-surface-raised);
+    --cpx-comp-surface-floating: var(--cpx-sys-color-surface-raised);
+    --cpx-comp-surface-edge: 1px solid var(--cpx-sys-color-border-subtle);
+    --cpx-comp-surface-edge-strong: 1px solid var(--cpx-sys-color-border-default);
+    --cpx-comp-surface-card-radius: var(--cpx-sys-radius-container);
+    --cpx-comp-surface-panel-radius: var(--cpx-sys-radius-container);
+    --cpx-comp-surface-shadow-floating: var(--cpx-sys-shadow-floating);
+    --cpx-comp-surface-shadow-raised: var(--cpx-sys-shadow-raised);
+    --cpx-comp-surface-fog: transparent;
+
+    /* Glass Container Component Slot */
+    --cpx-comp-glass-bg: var(--cpx-sys-glass-bg);
+    --cpx-comp-glass-border: var(--cpx-sys-glass-border);
+    --cpx-comp-glass-shadow: var(--cpx-sys-glass-shadow);
+    --cpx-comp-glass-filter: var(--cpx-sys-glass-filter);
+
+    /* 7. Modal & Dialog Component */
+    --cpx-comp-modal-bg: var(--cpx-sys-color-surface-raised);
+    --cpx-comp-modal-backdrop-filter: none;
+    --cpx-comp-modal-border: 1px solid var(--cpx-sys-color-border-subtle);
+    --cpx-comp-modal-shadow: var(--cpx-sys-shadow-floating);
+    --cpx-comp-modal-radius: var(--cpx-sys-radius-prominent);
+    --cpx-comp-modal-preformat-bg: var(--cpx-sys-color-surface-editor);
+    --cpx-comp-modal-scrim: var(--cpx-sys-color-scrim);
+
+    /* 8. Sidebar & RightDock Component */
+    --cpx-comp-sidebar-bg: var(--cpx-sys-color-workbench-sidebar-bg);
+    --cpx-comp-sidebar-border: 0;
+    --cpx-comp-sidebar-item-hover-bg: var(--cpx-sys-color-hover);
+    --cpx-comp-sidebar-item-active-bg: var(--cpx-sys-color-selected);
+    --cpx-comp-sidebar-item-radius: var(--cpx-sys-radius-item);
+    --cpx-comp-dock-bg: var(--cpx-sys-color-workbench-panel-bg);
+    --cpx-comp-dock-border: var(--cpx-sys-color-border-subtle);
+    --cpx-comp-dock-tab-hover-bg: var(--cpx-sys-color-hover);
+    --cpx-comp-dock-tab-active-bg: var(--cpx-sys-color-selected);
+    --cpx-comp-dock-tab-radius: var(--cpx-sys-radius-item);
+    --cpx-comp-dock-tab-height: 46px;
+
+    /* 9. Workbench Component */
+    --cpx-comp-workbench-panel-bg: var(--cpx-sys-color-workbench-panel-bg);
+    --cpx-comp-workbench-main-surface-bg: var(--cpx-sys-color-workbench-main-bg);
+    --cpx-comp-workbench-tab-active-bg: var(--cpx-sys-color-selected);
+    --cpx-comp-workbench-tab-height: 46px;
+    --cpx-comp-workbench-tab-hover-bg: var(--cpx-sys-color-hover);
+    --cpx-comp-workbench-tab-border: var(--cpx-sys-color-border-subtle);
+
+    /* 10. MenuBar Component */
+    --cpx-comp-menubar-height: 36px;
+    --cpx-comp-menubar-selection-bg: var(--cpx-sys-color-selected);
+    --cpx-comp-menubar-selection-fg: var(--cpx-sys-color-fg-primary);
+
+    /* 11. Composer Component */
+    --cpx-comp-composer-bg: var(--cpx-sys-color-surface-control);
+    --cpx-comp-composer-backdrop-filter: none;
+    --cpx-comp-composer-toolbar-hover-bg: var(--cpx-sys-color-hover);
+    --cpx-comp-composer-floating-height: 142px;
+    --cpx-comp-composer-safe-pad: 78px;
+    --cpx-comp-composer-border: var(--cpx-sys-color-border-default);
+    --cpx-comp-composer-shadow: var(--cpx-sys-shadow-prominent);
+    --cpx-comp-composer-radius: var(--cpx-sys-radius-prominent);
+
+    /* 12. Terminal Component */
+    --cpx-comp-terminal-bg: var(--cpx-sys-color-surface-editor);
+    --cpx-comp-terminal-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-terminal-border: var(--cpx-sys-color-border-default);
+    --cpx-comp-terminal-ansi-blue: var(--cpx-sys-color-accent);
+    --cpx-comp-terminal-ansi-green: var(--cpx-sys-color-success);
+    --cpx-comp-terminal-ansi-red: var(--cpx-sys-color-danger);
+    --cpx-comp-terminal-ansi-yellow: var(--cpx-sys-color-warning);
+    --cpx-comp-terminal-ansi-magenta: var(--cpx-sys-color-skill);
+    --cpx-comp-terminal-ansi-cyan: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 70%,
+      var(--cpx-sys-color-success)
+    );
+    --cpx-comp-terminal-ansi-white: var(--cpx-sys-color-fg-secondary);
+    --cpx-comp-terminal-ansi-black: var(--cpx-sys-color-surface-recessed);
+    --cpx-comp-terminal-ansi-bright-black: var(--cpx-sys-color-fg-tertiary);
+    --cpx-comp-terminal-ansi-bright-red: var(--cpx-sys-color-danger);
+    --cpx-comp-terminal-ansi-bright-green: var(--cpx-sys-color-success);
+    --cpx-comp-terminal-ansi-bright-yellow: var(--cpx-sys-color-warning);
+    --cpx-comp-terminal-ansi-bright-blue: var(--cpx-sys-color-accent);
+    --cpx-comp-terminal-ansi-bright-magenta: var(--cpx-sys-color-skill);
+    --cpx-comp-terminal-ansi-bright-cyan: var(--cpx-sys-color-info);
+    --cpx-comp-terminal-ansi-bright-white: var(--cpx-sys-color-fg-secondary);
+
+    /* 13. Review Diff Component */
+    --cpx-comp-diff-surface: var(--cpx-sys-color-surface-editor);
+    --cpx-comp-diff-inserted-line-bg: var(--cpx-sys-color-diff-added-line);
+    --cpx-comp-diff-inserted-text-bg: var(--cpx-sys-color-diff-added-text);
+    --cpx-comp-diff-removed-line-bg: var(--cpx-sys-color-diff-removed-line);
+    --cpx-comp-diff-removed-text-bg: var(--cpx-sys-color-diff-removed-text);
+    --cpx-comp-diff-added-fg: var(--cpx-sys-color-diff-added-fg);
+    --cpx-comp-diff-removed-fg: var(--cpx-sys-color-diff-removed-fg);
+
+    /* Interactive Row Profiles */
+    --cpx-comp-row-bg: transparent;
+    --cpx-comp-row-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-row-height-nav: calc(var(--cpx-sys-font-size-md) + 16px);
+    --cpx-comp-row-height-menu: calc(var(--cpx-sys-font-size-md) + 18px);
+    --cpx-comp-row-height-menu-rich: 44px;
+    --cpx-comp-row-height-toolbar: 28px;
+    --cpx-comp-row-height-composer: 28px;
+    --cpx-comp-row-radius: var(--cpx-sys-radius-lg);
+    --cpx-comp-row-padding-inline: 8px;
+    --cpx-comp-row-padding-block: 5px;
+    --cpx-comp-row-padding-block-rich: 6px;
+    --cpx-comp-row-gap: 6px;
+    --cpx-comp-row-gap-y: 2px;
+    --cpx-comp-row-hover-bg: var(--cpx-sys-color-hover);
+    --cpx-comp-row-hover-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-row-pressed-bg: var(--cpx-sys-color-active);
+    --cpx-comp-row-open-bg: var(--cpx-sys-color-selected);
+    --cpx-comp-row-selected-bg: var(--cpx-sys-color-selected);
+    --cpx-comp-row-selected-fg: var(--cpx-sys-color-fg-primary);
+    --cpx-comp-row-focus-border: var(--cpx-sys-color-border-focus);
+    --cpx-comp-row-disabled-fg: var(--cpx-sys-color-fg-disabled);
+    --cpx-comp-row-disabled-opacity: 0.55;
+
+    /* --------------------------------------------------------------------------- */
+
+    /* Component Geometry (Comp: private to the matching base component only). */
+
+    /* Reuses the pre-2A size semantics/values; cross-feature layout roles live */
+
+    /* in --cpx-sys-layout-*; selector-scoped locals stay inside Feature styles. */
+
+    /* --------------------------------------------------------------------------- */
+
+    /* Button / IconButton */
+    --cpx-comp-button-padding-block: 5px;
+    --cpx-comp-button-padding-inline: 8px;
+    --cpx-comp-button-gap: 6px;
+    --cpx-comp-button-padding-block-compact: 3px;
+    --cpx-comp-button-padding-inline-compact: 6px;
+    --cpx-comp-button-gap-compact: 4px;
+    --cpx-comp-button-font: var(--cpx-sys-type-body);
+
+    /* Input / SearchInput */
+    --cpx-comp-input-height-sm: 24px;
+    --cpx-comp-input-height-md: 28px;
+    --cpx-comp-input-height-lg: 32px;
+    --cpx-comp-input-padding-block: 5px;
+    --cpx-comp-input-padding-inline: 8px;
+    --cpx-comp-input-gap: 6px;
+    --cpx-comp-input-font: var(--cpx-sys-type-body);
+
+    /* Menu */
+    --cpx-comp-menu-surface-padding: 4px;
+    --cpx-comp-menu-item-padding-block: 5px;
+    --cpx-comp-menu-item-padding-inline: 8px;
+    --cpx-comp-menu-item-gap: 6px;
+    --cpx-comp-menu-item-gap-y: 2px;
+    --cpx-comp-menu-rich-item-height: 44px;
+    --cpx-comp-menu-rich-item-padding-block: 6px;
+    --cpx-comp-menu-icon-size: var(--cpx-sys-icon-size);
+    --cpx-comp-menu-font: var(--cpx-sys-type-body);
+    --cpx-comp-menu-detail-font: var(--cpx-sys-type-body-sm);
+
+    /* Dropdown (trigger + menu surface) */
+    --cpx-comp-dropdown-menu-padding: 4px;
+    --cpx-comp-dropdown-item-padding-block: 5px;
+    --cpx-comp-dropdown-item-padding-inline: 8px;
+    --cpx-comp-dropdown-item-gap: 6px;
+    --cpx-comp-dropdown-item-gap-y: 2px;
+    --cpx-comp-dropdown-rich-item-height: 44px;
+    --cpx-comp-dropdown-rich-item-padding-block: 6px;
+    --cpx-comp-dropdown-icon-size: var(--cpx-sys-icon-size);
+
+    /* Icon */
+    --cpx-comp-icon-size-sm: var(--cpx-sys-icon-size-sm);
+    --cpx-comp-icon-size-md: var(--cpx-sys-icon-size-md);
+    --cpx-comp-icon-size-lg: var(--cpx-sys-icon-size-lg);
+    --cpx-comp-icon-stroke-width: var(--cpx-sys-icon-stroke-width);
+
+    /* Navigation row */
+    --cpx-comp-nav-row-height: calc(var(--cpx-sys-font-size-md) + 16px);
+    --cpx-comp-nav-row-padding-block: 5px;
+    --cpx-comp-nav-row-padding-inline: 5px;
+    --cpx-comp-nav-section-gap: 18px;
+    --cpx-comp-nav-session-indent: 30px;
+
+    /* Switch */
+    --cpx-comp-switch-width: 32px;
+    --cpx-comp-switch-height: 18px;
+    --cpx-comp-switch-thumb-size: 14px;
+    --cpx-comp-switch-thumb-gap: 2px;
+
+    /* Card */
+    --cpx-comp-card-padding: var(--cpx-sys-layout-card-padding);
+    --cpx-comp-card-gap: var(--cpx-sys-layout-card-gap);
+    --cpx-comp-card-radius: var(--cpx-sys-radius-container);
+  }
+}

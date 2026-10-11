@@ -1,7 +1,7 @@
-import type { AgentDatabase, QueuePauseReason } from "../storage/database/AgentDatabase"
-import type { EventHub } from "../storage/events/EventHub"
-import { Effect } from "effect"
-import type { TurnCoordinator, TurnTerminalStatus } from "./TurnCoordinator"
+import type { AgentDatabase, QueuePauseReason } from '../storage/database/AgentDatabase'
+import type { EventHub } from '../storage/events/EventHub'
+import { Effect } from 'effect'
+import type { TurnCoordinator, TurnTerminalStatus } from './TurnCoordinator'
 
 type TerminalizeInput = {
   threadID: string
@@ -26,11 +26,10 @@ export class TurnRunner {
   ) {}
 
   async terminalize(input: TerminalizeInput): Promise<TurnTerminalStatus> {
-    const row = this.db.sqlite.query("SELECT status FROM turns WHERE id = ? AND thread_id = ?").get(
-      input.turnID,
-      input.threadID,
-    ) as { status: string } | null
-    if (row?.status === "completed" || row?.status === "failed" || row?.status === "interrupted") {
+    const row = this.db.sqlite
+      .query('SELECT status FROM turns WHERE id = ? AND thread_id = ?')
+      .get(input.turnID, input.threadID) as { status: string } | null
+    if (row?.status === 'completed' || row?.status === 'failed' || row?.status === 'interrupted') {
       const status = row.status
       this.clearTurnPermissionGrants(input.threadID, input.turnID)
       this.coordinator.finish(input.threadID, input.turnID, status)

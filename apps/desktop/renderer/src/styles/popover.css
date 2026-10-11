@@ -1,0 +1,486 @@
+/*
+ * Primitive residue. Generated from popover.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer primitives {
+  :root {
+    --popover-default-max-width: min(360px, calc(100vw - 16px));
+    --popover-surface-padding: var(--cpx-comp-menu-surface-padding);
+  }
+
+  /* UI-Design: one frame and three widths for every floating menu/popover. */
+  [data-popover-size='sm'] {
+    --popover-width: 220px;
+  }
+  [data-popover-size='md'] {
+    --popover-width: 280px;
+  }
+  [data-popover-size='lg'] {
+    --popover-width: 360px;
+  }
+
+  [data-popover-size]:is(
+    .popover-surface,
+    .sidebar-context-menu-content,
+    .sidebar-hover-card-surface,
+    .thread-summary-popover
+  ) {
+    width: var(--popover-width);
+    min-width: 0;
+    max-width: calc(100vw - 16px);
+    border: 1px solid var(--cpx-comp-dropdown-menu-border, var(--cpx-sys-color-border-default));
+    border-radius: var(--cpx-comp-dropdown-menu-radius);
+    background: var(--cpx-comp-dropdown-menu-bg, var(--cpx-comp-surface-floating));
+    backdrop-filter: var(--cpx-comp-dropdown-menu-backdrop-filter, blur(16px));
+    box-shadow: var(--cpx-comp-dropdown-menu-shadow, var(--cpx-sys-shadow-floating));
+  }
+
+  .popover-arrow {
+    position: absolute;
+    fill: var(--cpx-comp-dropdown-menu-bg);
+    pointer-events: none;
+  }
+  .popover-surface:has(> .popover-arrow) {
+    --popover-overflow-x: visible;
+    --popover-overflow-y: visible;
+  }
+  [data-side='bottom'] > .popover-arrow {
+    top: -5px;
+    left: calc(var(--popover-arrow-x, 50%) - 5px);
+  }
+  [data-side='top'] > .popover-arrow {
+    bottom: -5px;
+    left: calc(var(--popover-arrow-x, 50%) - 5px);
+    transform: rotate(180deg);
+  }
+  [data-side='left'] > .popover-arrow {
+    right: -7px;
+    top: calc(var(--popover-arrow-y, 50%) - 3px);
+    transform: rotate(90deg);
+  }
+  [data-side='right'] > .popover-arrow {
+    left: -7px;
+    top: calc(var(--popover-arrow-y, 50%) - 3px);
+    transform: rotate(-90deg);
+  }
+
+  /* Developer-themeable Dropdown family contract. The data attributes mark only
+   * dropdown/select surfaces; generic popovers, dialogs and tooltips stay intact. */
+  [data-theme-component='dropdown-trigger']:not(.interactive-row, .sidebar-row, .ui-button) {
+    --cpx-comp-row-bg: var(--cpx-comp-dropdown-trigger-bg);
+    --cpx-comp-row-fg: var(--cpx-comp-dropdown-trigger-fg);
+    --cpx-comp-row-hover-bg: var(--cpx-comp-dropdown-trigger-hover-bg);
+    --cpx-comp-row-open-bg: var(--cpx-comp-dropdown-trigger-open-bg);
+    --cpx-comp-row-disabled-fg: var(--cpx-comp-dropdown-trigger-disabled-fg);
+    --cpx-comp-row-focus-border: var(--cpx-comp-dropdown-focus-border);
+    border-color: var(--cpx-comp-dropdown-trigger-border);
+    background: var(--cpx-comp-dropdown-trigger-bg);
+    color: var(--cpx-comp-dropdown-trigger-fg);
+  }
+
+  [data-theme-component='dropdown-trigger']:not(
+      .interactive-row,
+      .sidebar-row,
+      .ui-button
+    ):hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: var(--cpx-comp-dropdown-trigger-hover-bg);
+  }
+
+  [data-theme-component='dropdown-trigger']:not(.interactive-row, .sidebar-row, .ui-button):where(
+      [data-state='open'],
+      [aria-expanded='true']
+    ) {
+    background: var(--cpx-comp-dropdown-trigger-open-bg);
+  }
+
+  [data-theme-component='dropdown-trigger']:where(
+    :disabled,
+    [data-disabled],
+    [aria-disabled='true']
+  ) {
+    color: var(--cpx-comp-dropdown-trigger-disabled-fg);
+  }
+
+  [data-theme-component='dropdown-trigger']:focus-visible {
+    outline: 2px solid var(--cpx-comp-dropdown-focus-border);
+    outline-offset: 1px;
+  }
+
+  .popover-surface[data-theme-component='dropdown-surface'] {
+    --cpx-comp-row-bg: transparent;
+    --cpx-comp-row-fg: var(--cpx-comp-dropdown-menu-fg);
+    --cpx-comp-row-hover-bg: var(--cpx-comp-dropdown-item-hover-bg);
+    --cpx-comp-row-pressed-bg: var(--cpx-comp-dropdown-item-pressed-bg);
+    --cpx-comp-row-selected-bg: var(--cpx-comp-dropdown-item-selected-bg);
+    --cpx-comp-row-disabled-fg: var(--cpx-comp-dropdown-item-disabled-fg);
+    --cpx-comp-row-focus-border: var(--cpx-comp-dropdown-focus-border);
+    color: var(--cpx-comp-dropdown-menu-fg);
+    border-color: var(--cpx-comp-dropdown-menu-border);
+    background: var(--cpx-comp-dropdown-menu-bg);
+  }
+
+  .popover-surface[data-theme-component='dropdown-surface']
+    :where(
+      .popover-item,
+      .popover-sub-trigger,
+      .menubar-item,
+      .settings-dropdown-item,
+      .permission-select-item,
+      .chat-input__dropdown-item
+    ):focus-visible {
+    box-shadow: inset 0 0 0 1px var(--cpx-comp-dropdown-focus-border);
+  }
+
+  .popover-surface,
+  .sidebar-context-menu-content,
+  .settings-dropdown-content,
+  .permission-select-content,
+  .appearance-color-popover,
+  .thread-summary-popover {
+    --popover-available-height: calc(100vh - 96px);
+    z-index: var(--cpx-sys-z-popover);
+    width: var(--popover-width, 280px);
+    max-width: var(--popover-max-width, var(--popover-default-max-width));
+    max-height: var(
+      --popover-max-height,
+      min(420px, var(--popover-available-height, calc(100vh - 96px)))
+    );
+    overflow-x: var(--popover-overflow-x, hidden);
+    overflow-y: var(--popover-overflow-y, auto);
+    overscroll-behavior: contain;
+    border-radius: var(--cpx-comp-dropdown-menu-radius);
+    corner-shape: var(--cpx-sys-corner-shape);
+    color: var(--cpx-sys-color-fg-primary);
+    font: var(--cpx-sys-type-control);
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-app-region: no-drag;
+  }
+
+  :where(
+    .popover-surface,
+    .sidebar-context-menu-content,
+    .settings-dropdown-content,
+    .permission-select-content,
+    .appearance-color-popover,
+    .thread-summary-popover,
+    .sidebar-hover-card-surface
+  ) {
+    border: var(--cpx-comp-surface-edge);
+    background: var(--cpx-comp-dropdown-menu-bg, var(--cpx-comp-surface-floating));
+    backdrop-filter: var(--cpx-comp-dropdown-menu-backdrop-filter, blur(16px));
+    box-shadow: var(--cpx-sys-shadow-floating);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :where(
+      .popover-surface,
+      .sidebar-context-menu-content,
+      .settings-dropdown-content,
+      .permission-select-content,
+      .appearance-color-popover,
+      .thread-summary-popover,
+      .sidebar-hover-card-surface
+    ) {
+      backdrop-filter: none;
+      background: var(--cpx-comp-surface-floating);
+    }
+  }
+  .popover-surface {
+    border: 1px solid var(--cpx-comp-dropdown-menu-border, var(--cpx-sys-color-border-default));
+    background: var(--cpx-comp-dropdown-menu-bg, var(--cpx-comp-surface-floating));
+    backdrop-filter: var(--cpx-comp-dropdown-menu-backdrop-filter, blur(16px));
+    box-shadow: var(--cpx-comp-dropdown-menu-shadow, var(--cpx-sys-shadow-floating));
+    border-radius: var(--cpx-comp-dropdown-menu-radius, var(--cpx-sys-radius-floating));
+  }
+
+  /* The floating tooltip surface (border, background, radius, shadow, padding and
+   * typography) is expressed as Tailwind utilities in components/ui/Tooltip.tsx. */
+
+  /* Popover body, scroll/search regions and footer regions are expressed as
+   * Tailwind utilities in components/ui/Dropdown.tsx, ui/Select.tsx and
+   * ui/SearchablePopoverContent.tsx. */
+  .settings-dropdown-content,
+  .permission-select-content {
+    padding: var(--popover-surface-padding);
+  }
+
+  .popover {
+    z-index: var(--cpx-sys-z-popover);
+    display: inline-block;
+  }
+
+  /* The per-side floating offsets, transform-origin and enter/exit keyframes live
+   * with the shared motion residue in styles/primitives/overlays.css. */
+  [data-radix-popper-content-wrapper]:has(.menubar-content) {
+    z-index: var(--cpx-sys-z-popover) !important;
+    border-radius: var(--cpx-comp-dropdown-menu-radius);
+    background: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+    color: var(--cpx-sys-color-fg-primary);
+    font: var(--cpx-sys-type-control);
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-app-region: no-drag;
+  }
+
+  .sidebar-context-menu-content {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cpx-comp-row-gap-y, 2px);
+    width: var(--popover-width, 280px);
+    max-width: var(--popover-max-width, var(--popover-default-max-width));
+    padding: var(--cpx-comp-menu-surface-padding);
+  }
+
+  .app-context-menu-root {
+    min-width: 180px;
+  }
+
+  .app-context-menu-sub-content {
+    min-width: 200px;
+  }
+
+  .sidebar-context-menu-item[data-color='red'] {
+    color: var(--cpx-sys-color-danger);
+  }
+
+  .sidebar-context-menu-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sidebar-context-menu-leading {
+    width: var(--cpx-comp-menu-icon-size);
+    height: var(--cpx-comp-menu-icon-size);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .sidebar-context-menu-leading > svg,
+  .sidebar-context-menu-leading > img {
+    stroke-width: var(--cpx-comp-icon-stroke-width);
+  }
+
+  .sidebar-context-menu-arrow {
+    width: var(--cpx-sys-icon-size-sm);
+    height: var(--cpx-sys-icon-size-sm);
+    stroke-width: var(--cpx-comp-icon-stroke-width);
+    color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  .sidebar-context-menu-trailing {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    justify-self: end;
+  }
+
+  .sidebar-context-menu-shortcut {
+    color: var(--cpx-sys-color-fg-tertiary);
+    font: var(--cpx-sys-type-caption);
+    white-space: nowrap;
+  }
+
+  .sidebar-context-menu-separator {
+    height: 1px;
+    margin: 4px 0;
+    background-color: var(--cpx-sys-color-border-default);
+  }
+
+  .popover *,
+  .chip-button *,
+  .meta-chip * {
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-app-region: no-drag;
+  }
+
+  .popover-item,
+  .popover-sub-trigger,
+  .sidebar-context-menu-item,
+  .sidebar-context-menu-sub-trigger,
+  .settings-dropdown-item,
+  .permission-select-item,
+  .chat-input__dropdown-item {
+    transition:
+      background var(--cpx-sys-motion-instant) var(--cpx-sys-ease-standard),
+      color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard);
+  }
+
+  .popover-sub-content {
+    padding: var(--cpx-comp-menu-surface-padding);
+  }
+
+  .popover-header {
+    padding: 4px 8px;
+    color: var(--cpx-sys-color-fg-tertiary);
+    font: var(--cpx-sys-type-label);
+    letter-spacing: normal;
+  }
+
+  .popover-section,
+  .popover-surface [role='radiogroup'],
+  .popover-surface [role='group'] {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cpx-comp-row-gap-y, 2px);
+    padding: 0;
+  }
+
+  .popover-empty {
+    padding: 8px;
+    color: var(--cpx-comp-input-placeholder-fg);
+    font: var(--cpx-sys-type-body-sm);
+    text-align: center;
+  }
+
+  /* --- Popover item interaction states --- */
+  .popover-item:hover:not(:disabled) .popover-item-icon,
+  .popover-item.active .popover-item-icon,
+  .popover-item[data-highlighted] .popover-item-icon,
+  .permission-select-item[data-highlighted] .permission-select-item-icon {
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .popover-item:hover:not(:disabled) .popover-item-arrow,
+  .popover-item.active .popover-item-arrow,
+  .popover-item[data-highlighted] .popover-item-arrow {
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  /* --- Popover item children --- */
+  .popover-item-leading {
+    width: var(--cpx-comp-menu-icon-size);
+    height: var(--cpx-comp-menu-icon-size);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  .popover-item-trailing {
+    min-width: 0;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cpx-comp-row-gap);
+    justify-self: end;
+  }
+
+  .popover-item-icon {
+    width: var(--cpx-comp-menu-icon-size);
+    height: var(--cpx-comp-menu-icon-size);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .popover-item-icon > svg {
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .popover-item-icon > img {
+    width: 14px;
+    height: 14px;
+    object-fit: contain;
+  }
+
+  .popover-item-check,
+  .popover-item-arrow {
+    width: var(--cpx-sys-icon-size-sm);
+    height: var(--cpx-sys-icon-size-sm);
+    display: block;
+    stroke-width: var(--cpx-comp-icon-stroke-width);
+    object-fit: contain;
+  }
+
+  .popover-item-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font: var(--cpx-sys-type-control);
+    white-space: nowrap;
+  }
+
+  .popover-item-label--rich {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 1px;
+    min-width: 0;
+  }
+
+  .popover-item-title {
+    color: currentColor;
+    font: var(--cpx-sys-type-control);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .popover-item-description {
+    color: var(--cpx-sys-color-fg-secondary);
+    font: var(--cpx-sys-type-body-sm);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .popover-text-wrap .popover-item-label {
+    overflow: visible;
+    text-overflow: clip;
+    white-space: normal;
+    word-break: break-word;
+  }
+  .popover-text-wrap .popover-item {
+    align-items: flex-start;
+  }
+
+  .popover-item.rich .popover-item-leading,
+  .popover-item.rich .popover-item-icon {
+    width: var(--cpx-comp-menu-icon-size);
+    height: var(--cpx-comp-menu-icon-size);
+  }
+
+  .popover-item-shortcut {
+    color: var(--cpx-sys-color-fg-tertiary);
+    font: var(--cpx-sys-type-caption);
+    letter-spacing: normal;
+    white-space: nowrap;
+  }
+
+  .popover-item:disabled .popover-item-shortcut,
+  .popover-item[data-disabled] .popover-item-shortcut {
+    color: var(--cpx-sys-color-fg-disabled);
+  }
+
+  .popover-item-arrow {
+    color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  /* Tooltip surface, arrow fill and the floating enter/exit keyframes are
+   * expressed in components/ui/Tooltip.tsx and styles/primitives/overlays.css. */
+  @media (forced-colors: active) {
+    :is(
+      .popover-item,
+      .popover-sub-trigger,
+      .sidebar-context-menu-item,
+      .sidebar-context-menu-sub-trigger,
+      .settings-dropdown-item,
+      .permission-select-item,
+      .menubar-item
+    ):is([data-highlighted], :focus-visible) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+}

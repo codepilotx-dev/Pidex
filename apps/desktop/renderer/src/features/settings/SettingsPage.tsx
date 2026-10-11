@@ -1,24 +1,7 @@
-import React, { Suspense } from 'react'
-import type { DesktopInstalledSkill } from '../../../shared/types.js'
-import { SETTINGS_ITEMS } from './settingsRegistry.js'
-
-const AppearanceSettings = React.lazy(() => import('./AppearanceSettings.js').then(module => ({ default: module.AppearanceSettings })))
-const ArchivedConversationsSettings = React.lazy(() => import('./ArchivedConversationsSettings.js').then(module => ({ default: module.ArchivedConversationsSettings })))
-const BrowserSettings = React.lazy(() => import('./BrowserSettings.js').then(module => ({ default: module.BrowserSettings })))
-const ConfigSettings = React.lazy(() => import('./ConfigSettings.js').then(module => ({ default: module.ConfigSettings })))
-const EnvironmentSettings = React.lazy(() => import('./EnvironmentSettings.js').then(module => ({ default: module.EnvironmentSettings })))
-const GeneralSettings = React.lazy(() => import('./GeneralSettings.js').then(module => ({ default: module.GeneralSettings })))
-const GitSettings = React.lazy(() => import('./GitSettings.js').then(module => ({ default: module.GitSettings })))
-const KeyboardShortcutsSettings = React.lazy(() => import('./KeyboardShortcutsSettings.js').then(module => ({ default: module.KeyboardShortcutsSettings })))
-const PluginsSettingsPage = React.lazy(() => import('./plugins/PluginsSettingsPage.js').then(module => ({ default: module.PluginsSettingsPage })))
-const MemorySettings = React.lazy(() => import('./MemorySettings.js').then(module => ({ default: module.MemorySettings })))
-const PetSettings = React.lazy(() => import('./PetSettings.js').then(module => ({ default: module.PetSettings })))
-const PersonalizationSettings = React.lazy(() => import('./PersonalizationSettings.js').then(module => ({ default: module.PersonalizationSettings })))
-const ProfileSettings = React.lazy(() => import('./ProfileSettings.js').then(module => ({ default: module.ProfileSettings })))
-const UsageBillingSettings = React.lazy(() => import('./UsageBillingSettings.js').then(module => ({ default: module.UsageBillingSettings })))
-const WorkspaceDependenciesSettings = React.lazy(() => import('./WorkspaceDependenciesSettings.js').then(module => ({ default: module.WorkspaceDependenciesSettings })))
-const LocalEnvironmentSettings = React.lazy(() => import('./local-environment/LocalEnvironmentSettings.js').then(module => ({ default: module.LocalEnvironmentSettings })))
-const WorktreeSettings = React.lazy(() => import('../worktree/WorktreeSettings.js').then(module => ({ default: module.WorktreeSettings })))
+import React, { Suspense, lazy } from 'react'
+import type { DesktopInstalledSkill } from '../../../shared/Types.js'
+import { SETTINGS_ITEMS, type SettingsTabId } from './SettingsRegistry.js'
+import { SettingsPanelFallback } from './SettingsPanelFallback.js'
 
 type Props = {
   activeTab: string
@@ -28,6 +11,65 @@ type Props = {
   onNotice?: (message: string) => void
 }
 
+type SettingsPanelProps = {
+  workspacePath: string | null
+  onUseSkill: (skill: DesktopInstalledSkill) => void
+  onError: (message: string) => void
+  onNotice: (message: string) => void
+}
+
+type SettingsPanel = React.ComponentType<SettingsPanelProps>
+
+const SETTINGS_PANELS: Record<SettingsTabId, SettingsPanel> = {
+  general: lazy(() => import('./GeneralSettings.js').then((m) => ({ default: m.GeneralSettings }))),
+  voice: lazy(() => import('./VoiceSettings.js').then((m) => ({ default: m.VoiceSettings }))),
+  profile: lazy(() => import('./ProfileSettings.js').then((m) => ({ default: m.ProfileSettings }))),
+  appearance: lazy(() =>
+    import('./AppearanceSettings.js').then((m) => ({ default: m.AppearanceSettings })),
+  ),
+  pets: lazy(() => import('./PetSettings.js').then((m) => ({ default: m.PetSettings }))),
+  config: lazy(() => import('./ConfigSettings.js').then((m) => ({ default: m.ConfigSettings }))),
+  personalization: lazy(() =>
+    import('./PersonalizationSettings.js').then((m) => ({ default: m.PersonalizationSettings })),
+  ),
+  memory: lazy(() => import('./MemorySettings.js').then((m) => ({ default: m.MemorySettings }))),
+  shortcuts: lazy(() =>
+    import('./KeyboardShortcutsSettings.js').then((m) => ({
+      default: m.KeyboardShortcutsSettings,
+    })),
+  ),
+  billing: lazy(() =>
+    import('./UsageBillingSettings.js').then((m) => ({ default: m.UsageBillingSettings })),
+  ),
+  providers: lazy(() =>
+    import('../models/ModelCenterView.js').then((m) => ({ default: m.ProviderSettings })),
+  ),
+  plugins: lazy(() =>
+    import('./plugins/PluginsSettingsPage.js').then((m) => ({ default: m.PluginsSettingsPage })),
+  ),
+  browser: lazy(() => import('./BrowserSettings.js').then((m) => ({ default: m.BrowserSettings }))),
+  computer: lazy(() =>
+    import('./ComputerSettings.js').then((m) => ({ default: m.ComputerSettings })),
+  ),
+  worktrees: lazy(() =>
+    import('../worktree/WorktreeSettings.js').then((m) => ({ default: m.WorktreeSettings })),
+  ),
+  dependencies: lazy(() =>
+    import('./WorkspaceDependenciesSettings.js').then((m) => ({
+      default: m.WorkspaceDependenciesSettings,
+    })),
+  ),
+  'code-review': lazy(() =>
+    import('./CodeReviewSettings.js').then((m) => ({ default: m.CodeReviewSettings })),
+  ),
+  git: lazy(() => import('./GitSettings.js').then((m) => ({ default: m.GitSettings }))),
+  archived: lazy(() =>
+    import('./ArchivedConversationsSettings.js').then((m) => ({
+      default: m.ArchivedConversationsSettings,
+    })),
+  ),
+}
+
 export function SettingsPage({
   activeTab,
   workspacePath,
@@ -35,45 +77,20 @@ export function SettingsPage({
   onError,
   onNotice,
 }: Props): React.ReactNode {
-  const resolvedTab = SETTINGS_ITEMS.some(item => item.routeId === activeTab)
+  const resolvedTab = SETTINGS_ITEMS.some((item) => item.routeId === activeTab)
     ? activeTab
     : 'general'
-  let content: React.ReactNode
-  if (resolvedTab === 'general') content = <GeneralSettings onNotice={onNotice} />
-  else if (resolvedTab === 'appearance') content = <AppearanceSettings onError={onError} />
-  else if (resolvedTab === 'config') content = <ConfigSettings />
-  else if (resolvedTab === 'plugins') {
-    content = (
-      <PluginsSettingsPage
+  const Panel = SETTINGS_PANELS[resolvedTab as SettingsTabId]
+  const label = SETTINGS_ITEMS.find((item) => item.routeId === resolvedTab)?.label
+  return (
+    <Suspense fallback={<SettingsPanelFallback label={label} />}>
+      <Panel
+        key={resolvedTab === 'memory' ? (workspacePath ?? 'no-workspace') : undefined}
         workspacePath={workspacePath}
         onUseSkill={onUseSkill}
         onError={onError}
-        onNotice={onNotice}
+        onNotice={onNotice ?? (() => {})}
       />
-    )
-  }
-  else if (resolvedTab === 'git') content = <GitSettings />
-  else if (resolvedTab === 'environment') {
-    content = <EnvironmentSettings onError={onError} onNotice={onNotice} />
-  }
-  else if (resolvedTab === 'local-environment') content = <LocalEnvironmentSettings onError={onError} onNotice={onNotice} />
-  else if (resolvedTab === 'worktrees') content = <WorktreeSettings onError={onError} onNotice={onNotice} />
-  else if (resolvedTab === 'profile') content = <ProfileSettings />
-  else if (resolvedTab === 'personalization') content = <PersonalizationSettings onError={onError} onNotice={onNotice} />
-  else if (resolvedTab === 'memory') {
-    content = (
-      <MemorySettings
-        key={workspacePath ?? 'no-workspace'}
-        workspacePath={workspacePath}
-      />
-    )
-  }
-  else if (resolvedTab === 'pets') content = <PetSettings onError={onError} onNotice={onNotice} />
-  else if (resolvedTab === 'shortcuts') content = <KeyboardShortcutsSettings />
-  else if (resolvedTab === 'archived') content = <ArchivedConversationsSettings />
-  else if (resolvedTab === 'billing') content = <UsageBillingSettings />
-  else if (resolvedTab === 'browser') content = <BrowserSettings />
-  else if (resolvedTab === 'dependencies') content = <WorkspaceDependenciesSettings onError={onError} onNotice={onNotice} />
-  else content = <GeneralSettings onNotice={onNotice} />
-  return <Suspense fallback={null}>{content}</Suspense>
+    </Suspense>
+  )
 }

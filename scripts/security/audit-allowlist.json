@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
   "exceptions": {
-    "GHSA-qwww-vcr4-c8h2": {
-      "reason": "Renderer 仅使用 React Router 客户端路由，不启用受影响的 RSC action 执行模式；等待上游发布可用修复版本。",
-      "owner": "@xiaohai-ouyang",
-      "expires": "2026-08-29"
+    "GHSA-vfj7-8cjw-p6xm": {
+      "reason": "braces 只经 Stylelint 依赖链（stylelint -> globby -> fast-glob -> micromatch -> braces）以仓库固定 glob 模式引入，不接受外部输入；上游当前版本仍受影响，暂无修复版本。",
+      "owner": "xiaohai-ouyang",
+      "expires": "2026-10-19"
     }
   }
 }

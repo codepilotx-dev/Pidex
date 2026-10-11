@@ -1,0 +1,43 @@
+/*
+ * SearchInput residue.
+ *
+ * - `:focus-within` border mixes the accent into the subtle border with a 42%
+ *   weight; there is no palette entry for that blend, so it stays a colour-mix.
+ * - The native search cancel/decoration chrome needs vendor pseudo-elements.
+ * - `forced-colors` needs a system colour keyword the utility set cannot name.
+ */
+@layer primitives {
+  .search-input:focus-within {
+    border-color: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 42%,
+      var(--cpx-sys-color-border-subtle)
+    );
+  }
+
+  .search-input--embedded:focus-within {
+    border-color: transparent;
+  }
+
+  .search-input--embedded:has(:focus-visible) {
+    box-shadow: none;
+    outline: none;
+  }
+
+  .search-input input[type='search']::-webkit-search-cancel-button,
+  .search-input input[type='search']::-webkit-search-decoration {
+    appearance: none;
+    display: none;
+  }
+
+  .search-input--disabled,
+  .search-input:has(input:disabled) {
+    border-color: var(--cpx-sys-color-border-subtle);
+  }
+
+  @media (forced-colors: active) {
+    .search-input:has(:focus-visible) {
+      outline: 2px solid Highlight;
+    }
+  }
+}

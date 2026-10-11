@@ -6,7 +6,7 @@
     "moduleResolution": "Bundler",
     "baseUrl": ".",
     "paths": {
-      "@codepilotx/model-schema": ["../model-schema/src/index.ts"]
+      "@pidex/model-schema": ["../model-schema/src/index.ts"]
     },
     "resolveJsonModule": true,
     "strict": true,

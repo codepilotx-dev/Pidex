@@ -9,17 +9,10 @@ type MermaidModule = {
 
 type MermaidApi = {
   initialize: (config: Record<string, unknown>) => void
-  render: (
-    id: string,
-    definition: string,
-  ) => Promise<{ svg: string } | string>
+  render: (id: string, definition: string) => Promise<{ svg: string } | string>
 }
 
-export function MermaidRenderer({
-  definition,
-}: {
-  definition: string
-}): React.ReactNode {
+export function MermaidRenderer({ definition }: { definition: string }): React.ReactNode {
   const fallback = (
     <pre className="md-mermaid-fallback">
       <code>{definition}</code>
@@ -51,7 +44,7 @@ function MermaidContent({
     setFailed(false)
 
     void import('mermaid')
-      .then(async module => {
+      .then(async (module) => {
         const api = ((module as MermaidModule).default ?? module) as MermaidApi
         api.initialize({
           securityLevel: 'strict',
@@ -76,14 +69,7 @@ function MermaidContent({
   }, [definition, reactId])
 
   if (failed) return fallback
-  return (
-    <div
-      aria-label="Mermaid diagram"
-      className="md-mermaid"
-      ref={hostRef}
-      role="img"
-    />
-  )
+  return <div aria-label="Mermaid diagram" className="md-mermaid" ref={hostRef} role="img" />
 }
 
 function parseSafeMermaidSvg(source: string): SVGElement | null {
@@ -92,9 +78,7 @@ function parseSafeMermaidSvg(source: string): SVGElement | null {
   if (document.querySelector('parsererror')) return null
   const root = document.documentElement
   if (root.localName.toLowerCase() !== 'svg') return null
-  for (const forbidden of root.querySelectorAll(
-    'script, foreignObject, iframe, object, embed',
-  )) {
+  for (const forbidden of root.querySelectorAll('script, foreignObject, iframe, object, embed')) {
     forbidden.remove()
   }
   for (const element of [root, ...root.querySelectorAll('*')]) {
@@ -103,8 +87,7 @@ function parseSafeMermaidSvg(source: string): SVGElement | null {
       const value = attribute.value.trim().toLowerCase()
       if (
         name.startsWith('on') ||
-        ((name === 'href' || name.endsWith(':href')) &&
-          /^(?:javascript|data|file):/u.test(value))
+        ((name === 'href' || name.endsWith(':href')) && /^(?:javascript|data|file):/u.test(value))
       ) {
         element.removeAttribute(attribute.name)
       }

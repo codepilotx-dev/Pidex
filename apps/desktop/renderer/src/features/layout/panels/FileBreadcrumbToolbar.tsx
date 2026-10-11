@@ -1,18 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
 import type React from 'react'
-import {
-  ChevronDown,
-  ChevronRight,
-  FolderOpen,
-} from 'lucide-react'
-import type {
-  DesktopExternalOpenTarget,
-  DesktopWorkspace,
-} from '../../../../shared/types.js'
+import { ChevronDown, ChevronRight, FolderOpen } from 'lucide-react'
+import type { DesktopExternalOpenTarget, DesktopWorkspace } from '../../../../shared/Types.js'
+import { Button } from '../../../components/ui/Button.js'
 import {
   APP_ICON_SIZE,
   APP_ICON_STROKE_WIDTH,
-} from '../../../components/ui/iconTokens.js'
+  APP_ICON_SIZES,
+} from '../../../components/ui/IconTokens.js'
 import {
   PopoverItem,
   PopoverRadioGroup,
@@ -20,32 +15,34 @@ import {
   PopoverSeparator,
 } from '../../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
-import { OpenTargetIcon } from '../../../components/ui/openTargetIcon.js'
+import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
+import { OpenTargetIcon } from '../../../components/ui/OpenTargetIcon.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import {
   loadExternalOpenTargets,
   openPathWithExternalTarget,
-} from '../../../services/externalOpenTargetsStore.js'
-import { FileTypeIcon } from '../FileTypeIcon.js'
-import type { MarkdownFileViewMode } from '../dock/rightDockState.js'
+} from '../../../services/ExternalOpenTargetsStore.js'
+import type { MarkdownFileViewMode } from '../dock/RightDockState.js'
 
 export type FileBreadcrumbToolbarProps = {
   path: string
   readonly?: boolean
   treeAvailable: boolean
+  treeToggleRef?: React.Ref<HTMLButtonElement>
   treeVisible: boolean
   markdownViewMode?: MarkdownFileViewMode
   switching?: boolean
   workspace: DesktopWorkspace | null
   workspacePath: string
   onToggleTree: () => void
-  onToggleMarkdownViewMode?: () => void
+  onToggleMarkdownViewMode?: (mode: MarkdownFileViewMode) => void
 }
 
 export function FileBreadcrumbToolbar({
   path,
   readonly = false,
   treeAvailable,
+  treeToggleRef,
   treeVisible,
   markdownViewMode,
   switching = false,
@@ -64,11 +61,10 @@ export function FileBreadcrumbToolbar({
     () => resolveAbsolutePath(workspacePath, path),
     [path, workspacePath],
   )
-  const preferredOpenTarget =
-    openTargets.find(target => target.preferred) ?? openTargets[0]
+  const preferredOpenTarget = openTargets.find((target) => target.preferred) ?? openTargets[0]
 
   function rememberPreferredTarget(target: DesktopExternalOpenTarget): void {
-    const next = openTargets.map(candidate => ({
+    const next = openTargets.map((candidate) => ({
       ...candidate,
       preferred: candidate.id === target.id,
     }))
@@ -88,7 +84,7 @@ export function FileBreadcrumbToolbar({
     }
     let active = true
     void loadExternalOpenTargets(absolutePath)
-      .then(targets => {
+      .then((targets) => {
         if (active) setOpenTargets(targets)
       })
       .catch(() => {
@@ -100,10 +96,10 @@ export function FileBreadcrumbToolbar({
   }, [absolutePath])
 
   return (
-    <header className="file-breadcrumb-toolbar">
+    <header className="file-breadcrumb-toolbar tw:flex tw:h-10 tw:min-h-10 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-app-border-subtle tw:bg-app-dock tw:px-2">
       <div
         aria-label={`文件路径：${path}`}
-        className="file-breadcrumb-toolbar__path"
+        className="file-breadcrumb-toolbar__path tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:overflow-hidden tw:type-control"
       >
         {segments.map((segment, index) => {
           return (
@@ -112,28 +108,16 @@ export function FileBreadcrumbToolbar({
                 <ChevronRight
                   aria-hidden="true"
                   className="file-breadcrumb-toolbar__separator"
-                  size={APP_ICON_SIZE}
+                  size={APP_ICON_SIZES.sm}
                   strokeWidth={APP_ICON_STROKE_WIDTH}
                 />
               ) : null}
               {segment.file ? (
-                <span
-                  className="file-breadcrumb-toolbar__filename"
-                  title={path}
-                >
-                  <FileTypeIcon
-                    aria-hidden="true"
-                    path={path}
-                    size={APP_ICON_SIZE}
-                    strokeWidth={APP_ICON_STROKE_WIDTH}
-                  />
+                <span className="file-breadcrumb-toolbar__filename" title={path}>
                   <strong>{segment.label}</strong>
                 </span>
               ) : (
-                <span
-                  className="file-breadcrumb-toolbar__directory"
-                  title={segment.title}
-                >
+                <span className="file-breadcrumb-toolbar__directory" title={segment.title}>
                   {segment.label}
                 </span>
               )}
@@ -141,48 +125,44 @@ export function FileBreadcrumbToolbar({
           )
         })}
       </div>
-      <div className="file-breadcrumb-toolbar__actions">
+      <div className="file-breadcrumb-toolbar__actions tw:flex tw:shrink-0 tw:items-center tw:gap-1">
         {markdownViewMode && onToggleMarkdownViewMode ? (
-          <button
-            aria-busy={switching}
+          <SegmentedControl<MarkdownFileViewMode>
+            ariaLabel="Markdown 查看模式"
             className="file-breadcrumb-toolbar__view-mode"
-            disabled={switching}
-            type="button"
-            onClick={onToggleMarkdownViewMode}
-          >
-            {markdownViewMode === 'rich' ? '查看源代码' : '查看预览'}
-          </button>
+            onChange={onToggleMarkdownViewMode}
+            options={[
+              { value: 'rich', label: '预览', disabled: switching },
+              { value: 'source', label: '源码', disabled: switching },
+            ]}
+            overflowMode="fit"
+            value={markdownViewMode}
+          />
         ) : null}
         {readonly ? <small>只读</small> : null}
-        <button
-          aria-label={treeVisible ? '隐藏文件树' : '显示文件树'}
+        <Button
+          isIconOnly
+          ref={treeToggleRef}
           aria-pressed={treeVisible}
           className="file-breadcrumb-toolbar__action"
+          color="ghostSecondary"
           disabled={!treeAvailable}
-          title={
-            treeAvailable
-              ? treeVisible
-                ? '隐藏文件树'
-                : '显示文件树'
-              : '面板过窄，无法显示文件树'
-          }
+          size="toolbar"
+          title={treeVisible ? '隐藏文件树' : '显示文件树'}
           type="button"
           onClick={onToggleTree}
         >
-          <FolderOpen
-            aria-hidden="true"
-            size={APP_ICON_SIZE}
-            strokeWidth={APP_ICON_STROKE_WIDTH}
-          />
-        </button>
+          <FolderOpen aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+        </Button>
         <div className="file-breadcrumb-toolbar__open-group">
-          <button
+          <Button
+            isIconOnly
+            color="ghostSecondary"
+            size="toolbar"
             className="file-breadcrumb-toolbar__open"
             disabled={!absolutePath || !preferredOpenTarget}
             title={
-              preferredOpenTarget
-                ? `使用 ${preferredOpenTarget.label} 打开`
-                : '没有可用的外部应用'
+              preferredOpenTarget ? `使用 ${preferredOpenTarget.label} 打开` : '没有可用的外部应用'
             }
             type="button"
             onClick={() => {
@@ -197,42 +177,43 @@ export function FileBreadcrumbToolbar({
                 targetId={preferredOpenTarget.id}
               />
             ) : null}
-            <span>打开</span>
-          </button>
+          </Button>
           <PopoverMenu
             align="end"
             className="file-breadcrumb-open-popover popover-menu--grid"
             open={openTargetMenu}
             side="bottom"
             sideOffset={4}
-            width={220}
+            size="sm"
             trigger={
-              <button
-                aria-label="选择外部打开方式"
+              <Button
+                isIconOnly
                 className="file-breadcrumb-toolbar__open-menu"
+                color="ghostSecondary"
                 disabled={!absolutePath || openTargets.length === 0}
+                size="toolbar"
                 title="选择外部打开方式"
                 type="button"
               >
                 <ChevronDown
                   aria-hidden="true"
-                  size={APP_ICON_SIZE}
+                  size={APP_ICON_SIZES.sm}
                   strokeWidth={APP_ICON_STROKE_WIDTH}
                 />
-              </button>
+              </Button>
             }
             onOpenChange={setOpenTargetMenu}
           >
             <PopoverRadioGroup
               value={preferredOpenTarget?.id ?? ''}
-              onValueChange={targetId => {
-                const target = openTargets.find(item => item.id === targetId)
+              onValueChange={(targetId) => {
+                const target = openTargets.find((item) => item.id === targetId)
                 if (!target || !absolutePath) return
                 openWithTarget(target)
                 setOpenTargetMenu(false)
               }}
             >
-              {openTargets.map(target => (
+              {openTargets.map((target) => (
                 <PopoverRadioItem
                   icon={
                     <OpenTargetIcon
@@ -248,7 +229,7 @@ export function FileBreadcrumbToolbar({
                 </PopoverRadioItem>
               ))}
             </PopoverRadioGroup>
-            <PopoverSeparator className="sidebar-context-menu-separator" />
+            <PopoverSeparator />
             <PopoverItem
               icon={
                 <FolderOpen
@@ -285,10 +266,7 @@ function buildBreadcrumbSegments(
   workspace: DesktopWorkspace | null,
   workspacePath: string,
 ): BreadcrumbSegment[] {
-  const relativeSegments = path
-    .replace(/\\/g, '/')
-    .split('/')
-    .filter(Boolean)
+  const relativeSegments = path.replace(/\\/g, '/').split('/').filter(Boolean)
   const workspaceLabel =
     workspace?.name?.trim() ||
     workspacePath.replace(/\\/g, '/').split('/').filter(Boolean).at(-1) ||
@@ -317,10 +295,7 @@ function buildBreadcrumbSegments(
   return segments
 }
 
-function resolveAbsolutePath(
-  workspacePath: string | null,
-  relativePath: string,
-): string | null {
+function resolveAbsolutePath(workspacePath: string | null, relativePath: string): string | null {
   const value = relativePath.trim()
   if (!value) return null
   if (/^(?:[a-zA-Z]:[\\/]|\\\\|\/)/u.test(value)) return value

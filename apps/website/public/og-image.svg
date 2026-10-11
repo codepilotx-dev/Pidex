@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" fill="none">
+  <defs>
+    <radialGradient id="bgGrad" cx="50%" cy="40%" r="70%">
+      <stop offset="0%" stop-color="#FCFAF5" />
+      <stop offset="60%" stop-color="#F4F0E7" />
+      <stop offset="100%" stop-color="#EBE5D8" />
+    </radialGradient>
+    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="16" stdDeviation="24" flood-color="#17211D" flood-opacity="0.08" />
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bgGrad)" />
+
+  <!-- Organic topography contour lines -->
+  <path d="M-50 480 Q 200 420 500 490 T 1000 440 T 1250 480" stroke="#DCD6CB" stroke-width="1.5" fill="none" opacity="0.6" />
+  <path d="M-50 520 Q 300 460 650 540 T 1100 490 T 1250 530" stroke="#DCD6CB" stroke-width="1.5" fill="none" opacity="0.6" />
+  <path d="M-50 560 Q 250 510 600 580 T 1050 530 T 1250 570" stroke="#DCD6CB" stroke-width="1.5" fill="none" opacity="0.5" />
+  <path d="M-50 600 Q 350 540 750 610 T 1200 570 T 1250 610" stroke="#DCD6CB" stroke-width="1.5" fill="none" opacity="0.4" />
+
+  <!-- Card container -->
+  <rect x="80" y="70" width="1040" height="490" rx="32" fill="#FCFAF5" stroke="#DCD6CB" stroke-width="1.5" filter="url(#softShadow)" />
+
+  <!-- Header: Badge & Brand -->
+  <g transform="translate(140, 130)">
+    <!-- Eyebrow Pill -->
+    <rect width="210" height="36" rx="18" fill="#F4F0E7" stroke="#DCD6CB" stroke-width="1" />
+    <circle cx="18" cy="18" r="4" fill="#63715A" />
+    <text x="32" y="23" font-family="system-ui, -apple-system, sans-serif" font-size="14" font-weight="600" fill="#63715A" letter-spacing="0.5">AI CODING, ON YOUR TERMS</text>
+
+    <!-- Beta chip -->
+    <rect x="220" y="4" width="60" height="28" rx="14" fill="#EBE5D8" />
+    <text x="250" y="22" font-family="system-ui, -apple-system, sans-serif" font-size="12" font-weight="700" fill="#17211D" text-anchor="middle">BETA</text>
+  </g>
+
+  <!-- Main Headline -->
+  <text x="140" y="240" font-family="system-ui, -apple-system, sans-serif" font-size="52" font-weight="800" fill="#17211D" letter-spacing="-1.5">
+    Give every coding task
+  </text>
+  <text x="140" y="300" font-family="system-ui, -apple-system, sans-serif" font-size="52" font-weight="800" fill="#17211D" letter-spacing="-1.5">
+    a place to move forward.
+  </text>
+
+  <!-- Subhead -->
+  <text x="140" y="365" font-family="system-ui, -apple-system, sans-serif" font-size="20" font-weight="400" fill="#63715A" max-width="700">
+    Open-source, Windows-first AI programming workbench driven by local workspaces.
+  </text>
+
+  <!-- Tags / Bottom details -->
+  <g transform="translate(140, 440)">
+    <rect width="170" height="42" rx="21" fill="#17211D" />
+    <text x="85" y="26" font-family="system-ui, -apple-system, sans-serif" font-size="15" font-weight="600" fill="#FCFAF5" text-anchor="middle">View on GitHub →</text>
+
+    <text x="210" y="27" font-family="monospace, 'IBM Plex Mono'" font-size="14" fill="#63715A">
+      Windows x64 · SQLite WAL · Multi-Model
+    </text>
+  </g>
+
+  <!-- Brand watermark right side -->
+  <g transform="translate(860, 240)" opacity="0.85">
+    <rect width="180" height="180" rx="40" fill="#F4F0E7" stroke="#DCD6CB" stroke-width="1.5" />
+    <text x="90" y="105" font-family="system-ui, -apple-system, sans-serif" font-size="28" font-weight="800" fill="#17211D" text-anchor="middle">Pidex</text>
+  </g>
+</svg>

@@ -1,12 +1,12 @@
-import { defineConfig } from "@playwright/test"
+import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
-  testDir: "./smoke-tests",
-  testMatch: "desktop-host.smoke.ts",
+  testDir: './smoke-tests',
+  testMatch: 'DesktopHost.smoke.ts',
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,
-  reporter: "line",
+  reporter: 'line',
   workers: 1,
   timeout: 120_000,
   expect: {

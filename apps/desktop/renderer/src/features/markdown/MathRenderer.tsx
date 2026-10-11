@@ -14,11 +14,7 @@ type KatexOptions = {
   trust: boolean
 }
 
-type RenderKatex = (
-  expression: string,
-  element: HTMLElement,
-  options: KatexOptions,
-) => void
+type RenderKatex = (expression: string, element: HTMLElement, options: KatexOptions) => void
 
 export function MathRenderer({
   display,
@@ -36,11 +32,7 @@ export function MathRenderer({
   )
   return (
     <LazyRender fallback={fallback}>
-      <KatexContent
-        display={display}
-        expression={expression}
-        fallback={fallback}
-      />
+      <KatexContent display={display} expression={expression} fallback={fallback} />
     </LazyRender>
   )
 }
@@ -65,7 +57,7 @@ function KatexContent({
     setFailed(false)
 
     void import('katex')
-      .then(module => {
+      .then((module) => {
         if (cancelled) return
         const katex = (module as KatexModule).default ?? module
         const render = katex.render

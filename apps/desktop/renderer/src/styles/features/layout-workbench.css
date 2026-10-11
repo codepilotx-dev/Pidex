@@ -1,0 +1,112 @@
+/*
+ * Application shell residue. Generated from _layout-workbench.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer shell {
+  /*
+   * Workbench shell residue.
+   *
+   * - `desktop-workspace` / `desktop-main-route` keep their runtime layout
+   *   custom properties: they are read by the workspace header, the right dock
+   *   and the chat content, and one of them is written back from TSX.
+   * - The panel hosts are owned by the panels group and are not part of this
+   *   migration, so their geometry and the body-level resize state rules stay.
+   * - `forced-colors` needs a system colour keyword the utility set cannot name.
+   */
+
+  /* Runtime layout variables derived from the chrome geometry tokens. */
+  .desktop-workspace {
+    --workspace-header-height: var(--workspace-toolbar-height);
+    --workspace-pane-header-height: var(--pane-toolbar-height);
+    --workspace-right-panel-live-width: 0px;
+  }
+
+  .desktop-main-route {
+    --page-content-max-width: var(--cpx-sys-layout-content-max-width);
+  }
+
+  .desktop-workspace-panel {
+    min-width: 0;
+    min-height: 0;
+    flex: 0 0 auto;
+    contain: size layout paint;
+    overflow: hidden;
+  }
+
+  .desktop-workspace-panel-spacer {
+    min-width: 0;
+    min-height: 0;
+    flex: 0 0 auto;
+    contain: size layout;
+    overflow: hidden;
+    pointer-events: none;
+  }
+
+  .right-dock-is-resizing .desktop-workspace-panel--right {
+    will-change: width;
+  }
+  .right-dock-is-resizing .desktop-main-route,
+  .right-dock-is-resizing .desktop-workspace-panel--right .workbench-panel-content {
+    pointer-events: none;
+  }
+
+  .app-shell[data-resize-active='true'] .desktop-workspace-panel--right {
+    will-change: width;
+  }
+  .app-shell[data-resize-active='true'] .desktop-main-route,
+  .app-shell[data-resize-active='true'] .desktop-workspace-panel--right .workbench-panel-content {
+    pointer-events: none;
+  }
+
+  .bottom-panel-is-resizing .desktop-workspace-panel--bottom,
+  .bottom-panel-is-resizing .desktop-workspace-panel-spacer--bottom {
+    will-change: height;
+  }
+  .bottom-panel-is-resizing .desktop-workspace__upper,
+  .bottom-panel-is-resizing .desktop-workspace-panel--bottom .workbench-panel-content {
+    pointer-events: none;
+  }
+
+  .desktop-workspace-panel--right {
+    position: relative;
+    height: 100%;
+    max-width: 100%;
+  }
+
+  .desktop-workspace-panel--bottom {
+    position: absolute;
+    inset: auto 0 0;
+    width: 100%;
+    max-height: 50%;
+  }
+
+  .desktop-workspace-panel-spacer--bottom {
+    width: 100%;
+    max-height: 50%;
+  }
+
+  .desktop-workspace-panel__surface {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    contain: size layout paint;
+    overflow: hidden;
+  }
+
+  .desktop-workspace-panel[data-workbench-panel-presence='hidden'] {
+    pointer-events: none;
+  }
+
+  @media (forced-colors: active) {
+    .desktop-main {
+      border-radius: 0;
+      box-shadow: none;
+      outline: 1px solid CanvasText;
+      outline-offset: -1px;
+    }
+  }
+}

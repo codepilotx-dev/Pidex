@@ -9,11 +9,1117 @@
 
 ### Changed
 
-- [release/docs] 后续 GitHub Release 统一改为 source-only：标签流水线使用 GitHub-hosted runner，仅发布 CHANGELOG 正文与 GitHub 自动生成的源码归档，不再依赖自托管签名 runner 或上传 Windows 安装包、更新元数据、校验和及 SBOM；README 改为指导 Windows x64 使用者自行打包
+- [release] 准备 0.2.0-beta.6，并允许在标签 Release 创建后上传经打包验证的同版本 Windows x64 安装包；未签名产物明确标注。
 
 ### Fixed
 
+- [release] 性能 fixture 补齐模拟模型就绪与工作区状态，对齐当前工作区入口、文件入口、工具组 DOM 和静态骨架屏；保留采样及性能阈值，避免旧测试契约阻塞发布。
+
+- [release] 图标同步检查忽略 Git 在 Windows checkout 的 CRLF 差异，机器策略监听测试等待真实拒绝状态，避免初始化通知造成竞争。
+
+- [desktop/renderer] 提升默认次级文字、文件链接与非当前月日期的对比度，补齐日历行语义与代码块键盘访问，并更新外观与键盘无障碍验证入口。
+
+- [release] 修复导入过滤正则回溯风险，更新已变更的权限、环境和面板契约测试，并修正发布检查发现的格式漂移与图标生成器旧文件名；从固定 material-icon-theme@5.37.0 重新生成图标索引与分片。
+
+### Security
+
+- [release] 升级 MCP SDK、ProseMirror、sharp、proxy-addr 与 source-map-js 至安全修复版本，解除 beta 6 依赖审计阻塞。
+
+## 0.2.0-beta.6 — 2026-10-11
+
+### Added
+
+- [repo] 补充 Electron 默认 `userData` 路径稳定性契约测试，以及品牌标识（数据目录、安装身份、环境变量前缀）的回归测试。
+
+- [agent/desktop] 子 Agent 支持三层递归父子协作、排队后续任务与报告，完成时等待后代结算，停止时回收整个子树；沿用共享工作区、权限上限和持久化恢复。
+
+- [agent/desktop] 环境配置按名称保存为 JSONC，重命名同步默认选择与工作树引用并拒绝同名覆盖；概览可展开环境列表并直接切换启动配置。
+- [agent/desktop] 修复唯一 ID 环境未被聊天发现、配置变更后启动操作未刷新，以及工作树列表失败导致概览丢失操作的问题。
+- [desktop/agent] 环境项目卡片直接进入详情或编辑，移除创建弹窗和多余设置，加入项目面包屑及摘要面板的启动项选择与运行按钮，允许普通本地项目配置环境。
+- [desktop] 对齐本地环境的平台脚本与操作编辑，将操作接入聊天顶部栏，区分 AI 审查和 PR 修复监控，并在缺少多环境能力时提示更新 Agent。
+- [desktop] 合并环境配置到 Worktrees 标签，移除重复环境导航并将 PR 监控迁入代码审查页，修正标签间距。
+- [desktop/agent] 接入设置页工作树、多环境、Git 与归档管理，沿用现有主题 Token、权限和持久化链路。
+
+- [desktop/agent] 完善 Plan 模式入口与结构化澄清，计划侧栏复用复制和导出；新增可协商的新聊天实施能力，保留原工作区及规划历史，并以事务和幂等审批保证只启动一次。
+- [agent/storage] history schema 56 新增可空的无项目目录所有者关联，允许新上下文复用原工作目录且保持标记校验，不新增表、不迁移目录或复制用户数据。
+
+- [desktop/agent] 电脑控制接入内置插件与技能体系，统一插件页和设置启停，继承原有开关与应用授权；加载上下文支持真实插件引用，禁用立即停止控制并阻止旧工具继续执行。
+
+- [desktop/renderer] 加载上下文与 `@` 菜单改为从真实插件列表生成已启用插件候选并插入 `plugin` 引用，替换原电脑操控普通文本入口；插件目录以真实 Computer Use 插件替换占位条目，保留图标、启用开关、详情与技能。
+
+- [desktop/renderer] 共享纵向滚动区域补齐随顶部与底部边界变化的柔和渐隐，覆盖聊天、计划任务、插件、设置侧栏及导航轨；长聊天标题增加边缘淡出，保留减少动效和高对比度适配。
+
+- [desktop/renderer] 工具调用按语义分离命令、读取搜索与集成详情；命令卡片新增独立命令/日志复制、144px 输出视口、滚动渐隐及停止吸底后保持实时更新，展示已有退出码并保留日志缩进和末尾换行。
+
+- [desktop/renderer] 新增 Button 组件 `variant="text"` 纯文本变体（及 `color="text"` 映射）：严格对齐 UI-Design 规范，全生命周期无背景色与边框，静态呈现次级字色，Hover 与 Active 状态加深为主字色墨水对比度，无下划线，禁用点击微缩放，并保留各尺寸标准高度、内边距与无障碍高对比度适配。
+- [desktop] 会话导轨新增 Codex 风格书签：预览卡标题右侧提供添加/取消书签按钮，已收藏刻度全不透明并附带跟随刻度长度的 2px 圆点；书签按会话与输入 ID 存于 Agent 端（独立书签表、会话版本表、幂等记录与 54→55 前向迁移），通过 `thread.bookmarks.v1` capability 的 `thread/bookmarks/list`、`thread/bookmarks/set` RPC 与 `thread/bookmarks/updated` durable 事件实现跨窗口同步、重启恢复与删除级联清理；预览卡改为受控浮层，支持鼠标移入卡片保持打开、Escape 关闭并恢复键盘焦点；未协商 capability 时隐藏书签按钮，保留普通导轨导航。
+- [desktop/renderer] 会话正文对齐 Codex 阅读行高与间距，优化工具组滚动渐隐、标题和富文本层级；新增代码换行偏好及带公式保护的表格 CSV 下载，保留现有主题、复制和流式渲染能力。
+
+- [desktop/renderer] 引入 UI-Design 规范的 ButtonGroup 容器组件，支持 attached 边框折叠与 orientation 排布并级联透传按钮尺寸与视觉变体；Button 组件新增 isIconOnly、leftIcon、rightIcon、loadingText 与 asChild 委派渲染支持。
+- [desktop] 限制底部面板仅允许终端标签，支持点击加号启动多个终端，并约束底部与右侧栏仅在首页和会话中显示。
+
+### Changed
+
+- [repo/website] 本地 Codex 环境显示名、格式配置注释和官网分享卡片同步使用 Pidex。
+
+- [repo] GitHub 仓库更名为 codepilotx-dev/Pidex，同步官网、文档、安全报告、版本记录、安装包更新地址与 CI 发布身份校验。
+
+- [desktop/website] 品牌标识统一替换为 Pidex 墨绿主标，启动页与 QuickChat 保留主题适配及扫光效果，Windows 应用图标和桌面、官网 favicon 从同一 SVG 导出。
+
+- [release] 发布与自动更新源随 GitHub 仓库改名切换到 `codepilotx-dev/Pidex`：同步发布块 owner／repo、打包校验期望值、release notes 仓库常量与协议 schema、发布工作流的仓库身份守卫、README／贡献／安全文档、官网链接与问题模板；旧名仍由 GitHub 重定向。
+- [repo] 产品统一更名为 Pidex Desktop：根包与 workspace 包改为 `@pidex/*`，自有 TS/TSX/CTS/MTS 模块文件统一为 PascalCase，preload 桥接对象改为 `window.DesktopBridge`，自有类型、主题模块与环境标识移除 CodePilotX/Codex 品牌前缀；安装产物改为 `Pidex Desktop.exe`、`Pidex-Desktop-${version}-${arch}.exe` 与 `pidex-agent.exe`，窗口标题、启动页、菜单、设置、通知与网站文案同步更新。
+- [repo] 自有品牌标识全量清零：数据根与工作区配置目录改为 `.pidex`，环境变量前缀改为 `PIDEX_*`，无项目工作区与记忆目录、`Documents\Pidex`、`ProgramData\Pidex`、凭据库服务、浏览器分区、localStorage 前缀、会话 cookie 与 RPC connection header、凭据与模型缓存格式标识、结果卡与批注格式、git ref 与身份、release 运行前缀、桌面依赖偏好设置键、原生运行时清单身份与 profile 库 ownership marker 全部改用 `pidex`／`Pidex`；决策与影响记录在 `docs/architecture/pidex-identity.md`。
+- [desktop] 深链统一为 `pidex://threads/<id>`，只解析并注册该 scheme。
+- [desktop] Electron 默认 `userData` 固定为 `%APPDATA%\Pidex Desktop`，避免应用名或打包名称再次变化时目录漂移；显式指定目录的优先级不变。
+- [agent] 机器策略只读取 `%ProgramData%\Pidex\requirements.toml`；已按旧目录部署的机器需由管理员迁移文件。
+- [agent/storage] profile 数据库 ownership marker 改为 `0x50445850`（PDXP）。
+- [repo] 旧品牌标识路径（`.codepilotx` 数据与工作区目录、旧 userData 目录、`Documents\CodePilotX`、`ProgramData\CodePilotX`）不做迁移：既不读取也不删除，保留原样在磁盘上；产品未发布，本次以所有者确认的测试数据为前提。
+- [repo] 保留真实外部名称与历史记录：GitHub 仓库与发布/更新源、已部署的认证服务地址、第三方名称与许可证、`docs/research` 与 CHANGELOG 历史区段不变；`HISTORY_APPLICATION_ID` 与兼容基线字段保持原值。
+
+- [desktop/agent] 代码审查的自动刷新改为工作区变化停止 60 秒后执行：Git 变化只重置尾部防抖计时器，首次打开、切换来源、手动刷新以及暂存/撤销后的刷新仍立即执行；自动刷新遇到 `REVIEW_REPOSITORY_BUSY` 时保留当前列表与 diff、结束 loading 并在 60 秒后重试且不弹出共享错误，手动刷新继续反馈错误；Agent 侧不再抑制同一项目的后续变化通知。
+
+- [desktop/renderer] 输入框优先对齐 Codex：Plan/Goal 仅开启后显示弱文字退出标记，模式切换等待结果并保留草稿；正文引用按光标位置提交，Skill 保留位置，计划命令同步引用偏移，附件与图片继续独立预览。
+
+- [desktop/renderer] 仓库摘要补齐变更行的 Git 操作菜单及标题操作菜单，复用提交、推送、分支选择、本地环境设置、终端和任务移交流程，变更统计在悬停与键盘焦点时让位给操作入口。
+
+- [desktop/renderer] 摘要使用仓库根目录名称作为标题，折叠仅收起仓库信息并保留来源等区块；非 Git 工作区隐藏仓库操作，展示独立的输出内容空状态及创建需求入口。
+
+- [desktop/review] 审阅新增未提交合并范围和有界完整文件上下文，保留原始 hunk 操作身份；补齐导入过滤、Markdown 渲染/源码切换、基准分支搜索、手动已审阅标记及内置文件标签入口，卡片统计跟随当前分支基准并复用面板摘要，工具栏在 625px 以下收缩到菜单。
+
+- [desktop/renderer] 会话表格参考 Codex 紧凑排版，将复制与 CSV 下载移至表头右侧并预留空间，单元格间距随字号缩放、弱化正文分隔线并移除末行底线，保留横向滚动与导出反馈。
+
+- [desktop/renderer] 工具摘要统一次级字色与图文对齐，完成命令增加“已运行”前缀、弱化耗时，移除工具组底部重复间距并修复分组摘要悬停提亮，保留运行和错误语义。
+
+- [desktop/renderer] 统一工具调用卡片与会话正文代码块规范：工具执行卡片统一为单个带容器圆角（--cpx-sys-radius-container）的代码卡片，输入与输出在卡片内通过轻量分割线连贯展示，避免命令与结果拆散成独立方块；全局 .md-code-surface 补齐容器圆角，消除直角；输入与输出移除 details 折叠截断，支持换行控制与复制；非命令行工具（如 ComputerRead、文件读取等）不再误标 Shell 标签，自动识别 JSON 入参及结果并启用语法高亮；彻底去重避免输出与 resultBlocks 文本块重复展示。
+- [desktop/renderer] 侧栏头部操作与行级悬浮按钮（项目与会话的置顶、归档、更多、新建对话及整理菜单触发器）切换为 Button `variant="text"` 纯文本变体，移除悬停灰底噪块；时间线 ToolCall 条目及处理过程折叠行移除 Hover 灰底，对齐 UI-Design 纯文本墨水加深规范。
+- [desktop/renderer] 外观设置页代码主题选择升级为分层下拉菜单，顶层选项为「Pidex」（映射 Codex(new)），其余代码高亮主题归入「Codex 主题」滚动二级子菜单，并采用圆形主题色徽标。
+
+- [desktop/renderer] 会话导轨按用户输入逐条导航，保留 Codex 细刻度、波峰与预览，增加长导轨虚拟化、完整历史批量加载与重试，并保持阅读锚点和实时队列。
+
+- [desktop/renderer] 底栏模型选择器切换不同长度模型名时平滑过渡宽度，复用布局动画并遵循减少动态效果设置。
+
+- [desktop/renderer] 推理思考、聊天排序及剩余用量弹层统一使用 sm（220px）尺寸。
+
+- [desktop/renderer] 移除输入框底栏工作模式和权限模式右侧的下拉箭头，保留菜单选择功能。
+
+- [desktop/renderer] 右侧工作区默认宽度改为可用工作区的 40%，保留已保存的拖动宽度及现有最小尺寸约束。
+
+- [desktop/renderer] 排查全项目 Dropdown、Popover 与右键菜单，补齐 Portal 动作子菜单的独立行布局，避免 Popover 委派内容及资料状态面板叠加内边距。
+
+- [desktop/renderer] 侧栏「新聊天」改用标准幽灵按钮，头部高度统一为 36px，与左侧首页图标水平对齐。
+- [desktop/renderer] 右侧工作区采用 Codex 标签、变更胶囊工具栏、文件与浏览器导航样式，新增文件选区询问侧边聊天、创建请求去重及文件滚动/选区恢复，保留现有虚拟化、保存冲突和浏览器页面生命周期。
+
+- [desktop/renderer] 图标侧栏头像入口统一为 36×36px 的 MD 幽灵按钮，更新下载入口放在头像上方并使用与导航相同的 4px 间距。
+- [desktop/renderer] 迁入 UI-Design 原生 Dropdown、Popover 与 ContextMenu，统一选择器搜索、子菜单、定位及焦点恢复，移除四个对应 Radix 依赖并保留现有业务动作。
+- [desktop/renderer] 会话归档 Toast 复用 UI-Design 浮层样式，调整为归档图标、「已归档的聊天」、查看、强调撤销与关闭按钮，保留归档列表跳转和撤销行为。
+- [desktop/renderer] 侧边栏导航图标与更多入口统一使用 36×36px 的 MD 纯图标幽灵按钮，保留导航选中状态。
+- [desktop/renderer] 全项目 Dropdown、Select、Popover 与子菜单统一 UI-Design 浮层表面和 sm/md/lg 三档尺寸，移除任意宽度接口与调用处的自定义宽度，保留各类弹层内容及交互功能。
+
+- [desktop/renderer] 侧栏 dropdown 与右键子菜单取消自定义宽度，统一采用 UI-Design 的 sm（220px）、md（280px）尺寸，共用 lg（360px）预设。
+
+- [desktop/renderer] 全面升级 Button 核心视觉与交互契约：对齐 UI-Design 的 7 种设计变体（primary、secondary、outline、ghost、danger、danger-outline、subtle-accent）、4 档标准高宽规格（xs 24px、sm 30px、md 36px、lg 42px）、严谨圆角规范（5px/8px/10px 与 pill 胶囊圆角），全局启用 active:scale-[0.98] 触感微反馈与双层焦点环，并在底层平滑兼容旧版尺寸别名与配色。
+- [desktop/renderer] 统一 Toast 与浮层外壳：在 components/ui 提供基于 40px 基准高度、18px 圆角、8px 水平内边距、6px 间距、玻璃背景、18px 模糊与浮层阴影的共用 Toast 及 ToastDivider；全局错误/状态提示、归档提示与缩放控制接入统一外壳，清理失效样式引用并保留现有定位、无障碍语义与交互行为。
+
+### Removed
+
+- [desktop] 移除 `codepilotx://` 深链解析与 Windows 协议注册、旧环境变量前缀识别与旧安装产物清理逻辑。
+
+- [desktop/renderer] 淘汰独立的 IconButton 组件，全仓 60 处图标按钮调用点统一重构为 <Button isIconOnly ... /> 并彻底移除 IconButton.tsx。
+
+- [desktop/renderer] 移除输入框已无消费者的 `onOpenComputerSettings` 回调及其在两处会话布局中的 `settings/computer` 跳转，电脑控制设置仍经设置导航进入。
+
+- [desktop/agent] 移除 `ComputerUseService` 对旧 `desktop.computerUseEnabled` 的运行时监听与状态跟踪，该键仅保留给首次接入迁移读取，插件状态为唯一启用来源。
+
+### Fixed
+
+- [release] 发布与自动更新源保持 `codepilotx-dev/Pidex` 不变：品牌清理不得改写发布块的 owner／repo，否则打包产物的 `app-update.yml` 会指向不存在的仓库并让自动更新静默失效；新增配置契约测试锁定 `package.json` 发布块、Agent release notes 与打包校验三处一致。
+
+- [agent/desktop] 环境脚本沿用项目文件夹信任，已信任项目不再要求配置版本二次授权；撤销文件夹信任后立即拒绝执行。
+
+- [desktop] 修复模型选择器与「设置 → 供应商」页每次打开都重新请求供应商图标：新增宿主图标缓存（`userData/provider-icons`，按完整图标 URL 存储内容、原始地址与最近成功更新时间），首次加载下载后落盘，命中缓存立即显示，距最近成功更新满 5 小时才在后台刷新并在成功后替换当前显示；运行期只按到期检查本次已使用的图标，刷新失败保留旧图标与旧更新时间并等待下一周期或下次启动重试，同一 URL 的并发加载共用一个请求。两个页面统一经新增的 `desktop-provider-icon` typed bridge 与共享 `ProviderIcon` 入口加载，不再各自直接访问远端图标；Provider 配置、模型目录与共享数据库 schema 不变。
+
+- [desktop/renderer] 修复输入框 `/`、`$` 候选弹层的高度与滚动耦合：按稳定输入框锚点测量可用空间，选中项只滚动候选列表，避免外层页面位移将上下文面板裁成空壳。
+
+- [agent] 修复能力目录完整输出超过 8000 字符、提示词预览遗漏工作区 MCP 工具及普通 Read 未复核插件 Skill 启用状态的问题；补充真实运行时请求与冻结恢复回归验证。
+
+- [agent] 修复模型看不到延迟工具与项目插件 Skill 的能力发现问题：冻结 turn composition 前生成有界能力摘要（延迟工具准确名称、简短描述与 MCP 来源，总额 8000 字符、单条描述 160 字符，超限提示分页），`ToolSearch` 支持 `offset` 与 `query="*"` 并按名称、描述、MCP server 匹配，命中即经既有 `addedToolNames` 激活；插件 Skill 根目录回调接收当前工作区，项目插件进入运行时目录，无项目聊天只加载全局来源，Skill 目录标明插件来源。
+
+- [desktop/renderer] 修复输入框拒绝插入 `plugin` 引用并在提交时丢弃该 token 的问题：插件引用现可在编辑器与草稿中往返保留、参与提交序列化，禁用后仅提示不可用且不阻止普通消息发送。
+
+- [desktop/renderer] 修复激活会话时工作区刷新被滞后的会话标识提前跳过的问题：非 Git 项目不再常驻首屏加载动画，仓库类型检测、文件树与摘要按激活会话正常加载。
+
+- [desktop/renderer] 撤销移除项目后，被重新选中的工作区跟随其他选中入口一并加载，避免只有工作区状态而没有仓库类型检测导致首屏加载动画常驻。
+
+- [desktop/renderer] 将仓库类型检测纳入会话首屏加载动画，首屏就绪后再显示摘要与输入框；Git 类型确认后立即放行页面，分支与变更统计后台补齐，同工作区切换会话复用已加载的仓库状态。
+
+- [desktop/renderer] 工作区仓库检测区分加载、Git、确认非 Git 和失败状态；切换项目及迟到请求不再误显示输出空状态，同项目刷新保留 Git 数据，检测失败提供重试并保留结构化错误分类。
+
+- [desktop/renderer] 修复摘要变更行悬停时 Git 操作按钮与加载图标重叠，将加载状态和统计数字统一为互斥的右侧展示，菜单打开期间保持隐藏。
+
+- [desktop/renderer] 修复仓库摘要将统计加载或失败误判为审阅不可用：审阅入口始终保留，首次加载显示加载状态，同一比较范围刷新保留已有统计，失败时隐藏数字并允许打开审阅查看原因。
+
+- [desktop/renderer] 环境卡片的变更统计接入真实分支审阅摘要，点击打开当前分支相对默认基准分支的差异，并随 Git 事件及窗口重新聚焦刷新。
+
+- [desktop/renderer] 生命周期工具、思考与已回答问题摘要复用普通工具行的字号和几何规则，消除更新计划等条目的额外缩进与高度差，统一 16px 图标并保留状态与展开交互。
+
+- [desktop/renderer] 工具摘要行改用网格布局，消除行内按钮的基线留白；工具组标题到首项与组内条目统一使用 4px 间隔。
+
+- [desktop/renderer] 底栏思考强度标签按当前模型最长选项预留宽度，避免切换或预览不同强度时模型选择器宽度跳动。
+
+- [desktop/renderer] 模型选择胶囊高度从 36px 调整为 28px，与输入框底栏工作模式和权限控件保持一致。
+
+- [desktop/renderer] 修复模型选择器左侧服务商图标缺失尺寸及深色背景下品牌图标不可见的问题，统一继承文字颜色。
+
+- [desktop/renderer] 移除侧栏、右侧工作区和底部终端拖动手柄的附加线，悬停、聚焦和拖动时仅加深原有对应边框。
+
+- [desktop/renderer] 移除右侧工作区顶部与全局工具栏重叠的半透明边框，统一左右横向分隔线的视觉强度，保留底部面板边框。
+
+- [desktop/renderer] 修复空右侧工作区开关直接创建浏览器标签的问题，展开时显示统一面板入口，已有标签仍恢复原选择。
+
+- [desktop/renderer] 工作区 header 底部分隔线贯穿整栏，移除概览与常驻面板按钮之间的竖线，让按钮连续并排。
+
+- [desktop/renderer] 清除工作区 header 伪元素顶部及左右两侧的默认粗边框，保留底部 1px 分隔线。
+
+- [desktop/renderer] 修复二级动作菜单选中项缺少右侧勾图标，统一回收下拉及右键子菜单的空图标占位，移除额外内层缩进并保留真实图标。
+
+- [desktop/renderer] Dropdown 搜索框按浮层可用宽度铺满并包含自身边框与内边距，修复窄尺寸溢出、宽尺寸搜索框过短的问题。
+
+- [desktop/renderer] 修复 Dropdown asChild 强加 flex 布局导致项目、工作流和分支标签居中；恢复可搜索菜单的三列对齐，动作菜单取消选择列表限高与重复滚动、内边距，保留账户菜单原有分隔。
+
+- [desktop/renderer] 模式和推理菜单改用 UI-Design Dropdown 原生选项布局，移除自绘大行与重复勾选；模型选择器取消新增的外层 padding，保留列表自身间距。
+
+- [desktop/renderer] 修复侧边栏出现双重「新聊天」的问题，移除重复的次级新建聊天导航行，并将侧栏头部升级为紧凑胶囊按钮与铃铛/搜索动作栏，对齐参考设计。
+- [desktop/renderer] 活动视图的优先事项与日期分组复用普通侧栏标题和内容样式，移除专用滚动裁切动画，修复首行聊天被遮挡的问题。
+
+- [desktop/renderer] 侧边栏「展开显示」与「折叠显示」操作按钮保留首字与会话标题左边界严格对齐，通过负外边距抵消左内边距并恢复标准紧凑按钮内边距，消除悬浮高亮气泡在文字边缘的裁切感。
+- [desktop/renderer] 侧栏状态对齐 Codex：等待优先、运行覆盖未读，输入与审批分别使用蓝色和绿色胶囊，当前会话隐藏输入胶囊；统一 16px 圆环、20px 视觉槽与 8px 未读点，并预留倒计时及停用 UI，正式列表暂不接入自动回答逻辑。
+- [desktop/renderer] Coding 首页项目标语改为「你想让我们在 CodePilotX 中构建什么?」，保留项目切换入口并同步英文文案。
+
+- [desktop/renderer] 顶部活动视图与搜索按钮改用 24px 尺寸，与侧栏会话、项目及分组操作按钮保持列中心对齐。
+- [desktop/renderer] 移除 Coding 首页四个建议项及其建议请求，图标与标题作为一组居中显示。
+
+- [desktop/renderer] 侧栏分组标题按钮统一为 24px，与项目行操作按钮按列对齐；普通点击会话不再留下拖放选中背景，切换会话或返回首页时清除多选状态。
+- [desktop/renderer] 恢复最近会话列表的顶格布局，移除会话及展开/收起行的左侧图标占位，与分组标题对齐。
+- [desktop/renderer] 项目标题普通点击仅切换会话列表展开与收起，不再触发拖放选中；项目多选高亮限制在标题行，避免项目内会话一起显示为选中。
+- [desktop/renderer] 补齐置顶、项目与自定义分组排序列表的 1px 行间距，修复混排会话与项目标题紧贴的问题，与会话列表保持一致。
+
+- [desktop/renderer] 修复会话页与侧栏小聊天输入框外壳宽度基线与水平对齐规则：移除失效的 Tailwind 复合任意宽度类，输入框外壳宽度统一交由 primitives 几何契约管理；通过 hasCustomWidth 抑制 utilities 层 tw:w-full 覆盖，避免超宽展开与 shift 模式下的左侧出屏裁切；为侧栏聊天补齐 100% 满宽契约，滚动底栏内联边距归零，确保全模式下输入框、变更卡与正文水平对齐。
+- [desktop/renderer] 侧边栏行无图标时统一使用首列占位槽（spacer）对齐，展开与折叠显示行补齐占位槽，确保会话与项目列表文本垂直基线一致。
+- [desktop/renderer] 侧边栏会话与项目行悬浮操作按钮统一使用 24px（compact）尺寸，与常态下时钟、分叉及未读标记等 24px 状态指示器几何中心与边界精确对齐。
+
+### Changed
+
+- [desktop/renderer] 设置页面板改为按 routeId 懒加载并拆分为独立 chunk，加载期间以真实分节标题加骨架卡片占位（aria-busy 语音提示），减小设置路由的首屏包体；面板表以注册表 routeId 为唯一键，消除 if/else 双真源。
+- [desktop/renderer] 设置 section 支持可见性门控：注册表新增 requires 声明（活动工作区/运行时协议能力），侧栏隐藏不满足项、能力查询期间灰显占位，搜索文档同步过滤，落在隐藏 section 的路由自动重定向回「常规」；语音、电脑控制、浏览器按协议能力门控，Local environment 与托管 Worktrees 按活动工作区门控。
+- [desktop/renderer] 设置行组件新增 stacked/nested 变体并支持 control 渲染函数自动绑定 aria-labelledby/describedby（常规页全部开关行完成迁移，可访问名与描述来自行标题和说明）；设置卡片新增 flat 连续表面；设置搜索命中目标后增加 450ms 背景高亮闪烁，遵循系统减少动态效果偏好。
+- [desktop/renderer] 全局 Toast 改为层叠栈设计：多条消息出现时呈现代卡片微缩层叠（最新一条在最前完整显示，后方卡片向下露出边缘并微缩），鼠标悬停平滑向下展开为纵向独立卡片列表；右侧配备同风格伴随徽章按钮显示条数，与最顶层卡片严格垂直居中对齐，鼠标悬停变形为已读图标，点击可一键标记已读所有通知；多条 Toast 同时存在时取消自动消失，手动关闭至仅剩 1 条时恢复 5 秒倒计时，短时间相同内容自动去重。
+- [desktop/renderer] 活动视图按 Codex 行为保留列表顺序与已读项，新增清除已读、独立优先事项与定时任务筛选、助手回复摘要及停止后批量归档，并调整铃铛提醒与首次引导。
+- [项目与侧栏] 对齐项目菜单、分区和排序操作；项目编辑支持多目录与空目录，移除项目保留聊天工作目录并支持限时撤销。
+
+- [desktop/renderer] 全局错误、状态、归档提示与缩放控制统一复用 Toast 玻璃浮层外壳、圆角、阴影和间距；缩放控制下移至标题栏下方，保留现有操作和自动隐藏行为。
+
+- [desktop/renderer] 全局错误、状态与归档 Toast 统一下移至标题栏下方 8px，避免遮挡菜单栏。
+
+- [desktop/renderer] 会话模型不可用提示改为全局 Toast：移除输入框上方内联错误 Alert 节点，模型不可用错误统一通过全局 Toast 提示并透传至发送按钮禁用提示，侧栏聊天同步补齐错误回调。
+
+- [desktop/renderer] 概览面板对齐 Codex 风格并接入目标、Agent、浏览器、来源与产物：摘要模型改为直接消费 canonical 投影，`ThreadSummaryViewModel` 新增 `hasContent`、目标（Goal 暂停/恢复）、Agent（运行/等待计数、行内状态、停止与详情入口）、浏览器（当前聊天创建或控制且仍打开的内置标签，点击激活原面板）、来源（附件/上下文引用/citation/链接/网页搜索与集成工具，按稳定身份去重）与产物（工具声明 Artifact 按 ID 去重、最近优先，图片/文本接入右侧预览）；执行进度与计划不在面板重复展示，沿用输入框上方变更摘要条与右栏计划 tab；分区折叠状态由会话页按聊天与分区持有并内嵌/弹出共用，Agent 全部结束 30 秒后自动折叠且手动选择优先；无内容时隐藏卡片并取消正文让位，移除加号与执行位置下拉等占位控件。
+
+- [desktop/renderer] 对齐 Codex 会话页布局与呈现规则：会话页正文默认宽度限制在 48rem 作用域并统一定位契约；补齐滚动区域底部渐隐与留白契约（48px 渐隐高度、24px 底部留白）及 Chromium/WebKit 细滚动条展示；计划卡片统一 320px 收起高度与伪元素平滑渐变遮罩并消除重复遮罩层；.canonical-turn__plan 纳入会话统一对齐网格。
+
+- [desktop] 合并 UI-Design 外观重建与 Tailwind 样式迁移，保留 dev 的日程文件访问范围与 MCP 交互逻辑。
+
+- [desktop/renderer] 全量迁移 UI-Design 设计 Token：引入 Radix 参考色阶（sRGB 与 Display P3 宽色域覆盖）、MiSans 与 JetBrains Mono 字体资产及排版栈、无单位行高、字符间距角色、7 档基础圆角刻度（5px、8px、10px、14px、18px、24px、9999px）、边缘高光与浮动投影体系以及标准/入场动效缓动（160ms/220ms/340ms）；升级默认浅色/深色主题基线（浅色 `#ffffff`/`#1f1f1f`/对比度 40，深色 `#111111`/`#eeeeee`/对比度 60，默认强调色 `#0169cc`）、双路运行时语义色彩推导与代码高亮对比度保证，保留用户自定义主题、字号 delta 调节、自定义字体与桌面布局几何契约。
+
+- [desktop/renderer] 桌面样式入口统一到 `styles/tailwind.css`：系统 token 与全局 reset 转为原生 CSS（`design-system/tokens.css`、`design-system/codex-semantic-tokens.css`、`base.css`），保留原有 cascade layer 顺序，迁移期继续由 `styles/index.scss` 加载未转换的 SCSS；样式契约检查支持原生 `@import`/Tailwind 指令与并存入口，Stylelint 配置同步覆盖新路径。
+
+- [desktop/renderer] 补齐 Tailwind 设计令牌映射：新增表面、前景、边框、交互状态、状态族、Diff、图表与语法颜色，语义圆角、raised/prominent 阴影、模糊、语义 z-index、页面与面板宽度、标题栏高度与动效缓动映射，并为基础动效补回 `pulse`/`spin`；新增 `tw:type-*` 排版角色与 `tw:type-weight-*` 字重角色替代 `u-type-*`，`transition-*` 默认时长改用 `--cpx-sys-motion-state`，不再回退到 0s。
+
+- [desktop/renderer] 基础组件全面迁移到 Tailwind：Button/IconButton（14 尺寸档、13 配色档、圆角、图标槽与全部交互状态改为模块级静态映射）、复选框/单选组/分段控件/开关、输入框/文本域/搜索框、Select 与菜单行/上下文菜单、日期选择器、Popover/Dropdown/Tooltip/Modal 浮层与对话框，全部删除对应 SCSS；伪元素、`color-mix` 表面、`-webkit-app-region`、forced-colors 关键字与需要被 `getComputedStyle` 读取的值集中到 `styles/primitives/*.css`，`.popover-surface` 等仍被多个 feature 直接消费的共享基座按原样保留。
+
+- [desktop/renderer] 页面骨架迁移到 Tailwind：菜单栏/标题栏/窗口控制区、侧栏（行、导航、分组、悬浮卡、拖放）、工作台与工作区工具栏、右侧工作区与底部面板、标签栏、一级页面布局、项目详情卡片全部改为 `tw:` 类；标题栏保持 36px、透明 Window Controls Overlay 与拖拽区域，拖拽几何与虚拟列表容器沿用运行时变量。
+
+- [desktop/renderer] 聊天与 Review 迁移到 Tailwind：输入区（输入面、工具条、权限/计划芯片、模型与推理菜单、斜杠命令、附件托盘、消息队列 Dock、状态浮层）、会话正文与时间线、审批与提问卡片、置顶摘要、子代理面板、Review 侧栏与 diff、提交与 PR 浮层；ProseMirror、CodeMirror、xterm 等第三方生成 DOM 的样式按所属 feature 保留在 `styles/primitives/*.css`。
+
+- [desktop/renderer] 其余桌面界面迁移到 Tailwind：设置页全部页面（含外观主题色板、用量与成本图表、快捷键、个人资料热力图）、模型中心与模型引导、插件市场、自动化与日历、浏览器面板、终端外壳、宠物目录与浮层、更新提示、404/错误页，以及辅助窗口容器。
+
+- [desktop/renderer] 样式契约与工具链同步改造：契约脚本改为支持原生 `@import` 与 Tailwind 指令、按「谁现在持有这条规则」扫描样式，新增 `tw:` 前缀守卫、`type-*` 与 `tw:type-weight-*` 组合守卫、全源动效（scroll-mask/`will-change`）守卫；浏览器检查脚本改为经 Vite 编译真实 `tailwind.css` 入口（迁移期叠加尚未迁移的 SCSS），Stylelint 覆盖新路径与新残留文件。
+
+- [desktop/renderer] 修复迁移中暴露的既有样式缺陷：多处引用不存在的 Tailwind 类名（`bg-app-surface`、`text-app-text-primary`、`border-border`、`fill-popover` 等）导致样式静默失效、变体前缀顺序错误（`hover:tw:`）不生成规则、`transition-*` 因缺少默认时长而完全不生效、`outline-none` 与 `focus-visible:outline-2` 同用时焦点环被吃掉、`type-*` 角色与 `tw:type-weight-*` 组合时字重被 `font:` 简写重置、侧栏置顶行多出 16px 缩进造成标题提前截断。
+
+- [desktop/renderer] 完成 Tailwind 迁移收尾：删除全部业务 SCSS 与迁移期聚合入口，Sass 依赖、Vite SCSS 配置与 `*.scss` 模块类型声明一并移除，测试 fixture 中引用已删除 SCSS 文件的路径改指迁移后的 CSS 落点；残留 CSS 仅为 token、reset、动画、启动遮罩与第三方/生成 DOM 样式，样式检查、Stylelint 与浏览器检查脚本不再依赖 Sass 编译。
+
+- [desktop] 移除工作区内容全宽与完整视图入口，聊天和内容仅支持并排分屏或隐藏标签页；拖拽拉宽遵守分屏尺寸上限，旧全宽状态恢复为分屏并保留标签、显隐和宽度记忆。
+
+- [desktop] 移除页面宽度的默认/窄/宽手动档位：外观设置与会话工具栏不再提供宽度切换，布局也不再读取该设置；`conversationWidth` 存储字段与往返保存保留，仅作为兼容数据不再影响渲染。会话页与新建聊天页统一改为 736px 正文上限（其他一级页面继续使用 1009px 默认宽度），消息、输入框、审批与状态卡片共用同一对齐规则和左侧 48px、右侧 16px 安全边距。
+
+- [desktop] 置顶摘要改为按聊天区域宽度自动布局：小于 1096px 用工具栏浮层、1096～1535px 置顶并与正文并排、达到 1536px 起固定在右侧留白；正文偏移量改为由摘要宽度与间隙推导，不再写死。置顶偏好改用独立 UI 偏好键 `pidex.desktop.threadSummaryPinned.v1` 保存，浮层开合不持久化，切换会话或进入内容全宽时关闭浮层但保留置顶偏好。
+
+- [desktop] 右侧工作区切换语义收敛：右栏按钮改为「进入内容全宽 / 退出内容全宽」，工具栏在内容全宽时显示「进入分屏视图」；仅聊天且没有保留标签时，入口复用现有浏览器标签创建流程，浏览器不可用时禁用并说明原因。隐藏右侧内容后焦点回到聊天输入框；内容全宽改用 React `Activity` 保留聊天页状态（草稿、折叠与滚动位置），只隐藏聊天区域，主导航与底部面板保持独立。
+
+- [desktop] 右侧工作区迁移到 Codex「进入分屏视图」模型：主 Chat 与右侧内容宿主固定在同一个 React 树位置，隐藏标签页与完整视图只切换几何、可见性与 `inert`，已打开的文件、浏览器与终端不再随布局切换卸载重建；新增 chat/split/full 三态 `workspaceView` 并持久化（缺失时由旧 `right.open`/`rightFullWidth` 推导），标题栏入口按当前布局动态提供新建标签页、显示/隐藏标签页与进入分屏/完整视图，完整视图标签栏同时提供 Chat 与内容入口且 Chat 不可关闭；右栏宽度改用有效区间比例保存（新增可选 `auxiliaryPanelWidthRangeRatio`，旧 `rightDockWidthRatio.v2` 仍按 width/W 同步写入），拖拽越界时原始尺寸小于 160px 隐藏内容、超过上限且主区不足 160px 进入完整视图，单次拖动可拉回，取消或失去指针捕获不写入尺寸；移除按窗口 960px 自动压制右栏与到达阈值即收起右栏的旧分支，`Ctrl+Shift+B` 与 `Ctrl+J` 统一走三态步进，菜单文案与按钮一致。
+
+- [desktop] 侧边栏统一迁移到 Codex 桌面侧栏基准：移除经典/新版双布局与 720px 自动隐藏分支，导航轨固定 52px、内容默认 340px、预览下限 290px；内容标题区 52px、行高 30px、行圆角 10px、图标容器 24px、分组间距 16px，透明度施加于颜色而非整个容器。
+
+- [desktop] 侧栏补齐悬停预览：导航轨入口 100ms 进入、切换 300ms、离开 100ms，斜向移动用指针轨迹三角保留预览（最长 1000ms）；菜单、HoverCard、弹窗与拖放期间注册保持，Escape 在未被子层处理时关闭预览；展开 0.3s、预览进入 0.3s、退出 0.2s、固定后 settle 0.12s，宽度拖动结束后保存、低于 120px 收起、双击恢复 340px。
+
+- [desktop] 侧栏条目改造：置顶区改为聊天与项目混排的单一有序列表，新增自定义分组（创建、重命名、删除、折叠、排序）并保证条目顶层归属唯一；普通列表排序只保留最近更新与手动，历史 priority 按最近更新呈现；聊天与自定义分组默认显示 10 项、项目 5 项，活动条目强制可见。
+
+- [desktop] 侧栏拖放统一为共享上下文：激活距离 6px，支持同组排序、置顶区、自定义分组与默认区域之间移动，提供拖动影子、插入线、边缘自动滚动与无效目标反馈；真实项目目标只接受本项目聊天，其他项目拒绝放置且不修改会话工作目录；支持 Ctrl 多选、Shift 范围选择与批量拖放，父子同时选中时按父项目处理。
+
+- [desktop] 侧栏行菜单补齐移动到分组、复制会话链接与复制工作目录；归档部分失败时只回滚失败条目的分组归属，不覆盖后续侧栏操作。
+
+- [desktop] 修复会话目录只读取首批 100 项的问题：客户端适配层消费 `thread/list` 的 `nextCursor` 并去重，异常或重复游标不会无限翻页。
+
+- [desktop] 新增侧栏插件面板，复用现有插件目录与过滤函数，查询、分类与状态通过 URL 参数与 `/plugins` 页面共享；导航轨按已安排、插件直接入口与“更多”分组，设置与账户固定在底部。
+
+- [desktop] 侧栏设置改为保留式迁移：新增可选 `desktop.sidebarCustomization`（version 1），旧 classic 值仍可读取但运行时统一新布局，宽度、收起状态、置顶记录与手动顺序全部保留，缺失字段补默认值；更高版本原样保留并禁止降级写入，未知条目键不删除，移除基于 `sidebarStateVersion` 的自动清空迁移路径。
+
+- [desktop/renderer] 对齐 Codex 桌面会话视图视觉结构与计划展开交互规范：会话正文采用 48rem 最大宽度（保留 narrow/wide 切换），右侧常驻摘要面板调整为 300px 宽度并在固定且处于 shift 模式时向左平移 154px，同时平移动画覆盖正文与输入框；会话滚动条改为系统细滚动条并在底部添加渐隐遮罩；用户气泡调整为 70% 最大宽度、22px 圆角与 10px 16px 内边距，附件及本地上下文引用右对齐，图片附件保持 160px×80px 宽高比；助手操作栏默认隐藏并在消息或轮次悬停/聚焦时显式展示；计划卡片正文限高调整为 320px 并带底部渐隐遮罩，支持展开/收起切换与持久化状态，并在生成完成后提供复制与 PLAN.md 导出下载操作。
+
+- [desktop/renderer] 将 DatePicker 外观迁移到 Tailwind utility：触发器、日历弹层、月份导航、星期表头与日期格子（选中/今日/禁用/非本月）全部改用 `tw:` 语义色、`type-*` 排版角色与 `tw:py-control-block`/`tw:px-control-inline`/`tw:gap-control-gap` 命名间距令牌；日期文字色按 `disabled > selected > outside > base` 优先级静态映射以保持原 SCSS 层叠结果，`data-outside`/`aria-selected`、ARIA、键盘与焦点行为不变；删除 `styles/components/date-picker.scss`，新增 `styles/primitives/date-picker.css` 保留 forced-colors 下选中日的系统高亮。
+
+- [desktop/renderer] 收尾同步契约测试到 Tailwind 迁移落点：`codex-style-contracts`、`non-color-token-contracts` 以及自动化日历/用户消息测试中原先直读已删除 SCSS 的样式事实断言，改读组件 TSX utility 或迁移后的 `styles/**/*.css`（primitives、components、features）；`&--process` 嵌套、`font-body` 映射、`.thread-summary-inline` 宽度等规则换成等价的新落点断言，ARIA、语义类名与数据属性等行为契约保持不变，测试套件恢复全绿。
+
+### Added
+
+- [desktop] 重排外观页，将字体样式、字号、对比度、交互偏好和 Diff 预览收进可折叠高级区；新增高级设置局部重置，保留基础配色、主题选择、UI 字体家族及侧边栏布局和页面宽度。
+
+- [agent] 补齐上下文准备、模型步骤与首响应耗时、工具和用户交互关联日志，显示安全用量统计与失败分类；RPC 日志记录具体方法及 HTTP 200 内的协议错误，正常长轮询和自动内存收缩降为 debug，开发终端默认使用 info 并支持环境变量覆盖。
+
+- [agent/desktop/protocol] 将本地审批与 Plan 提问接入现有 v4 交互链路：新增聊天命令/文件授权、项目域名/MCP 工具规则及撤销入口，区分浏览器单次、聊天、站点与全站授权；接入 MCP 表单、Guardian 审查记录和 `/approve` 精确单次重试，保留 checkpoint/outbox 恢复。输入区统一卡片结构、文件差异、确认浮层与 Plan 回答编辑器，支持结构化选项 ID、纯文本问题、推荐标记、翻页草稿恢复、键盘/输入法隔离和输入暂停倒计时；history 52→53 迁移仅新增独立交互与审查表。
+
+- [desktop] 简化输入框添加面板：添加组仅保留目标、文件和文件夹、计划模式，插件组仅展示规划任务与电脑操控，引用会话仅显示最近 5 条；移除“查看更多”，文件浏览合并到单一入口的子面板。
+
+- [desktop] 输入建议面板统一 `@`、`/`、`$` 和 `+` 入口，采用 Codex 风格的分组预览、搜索排序、类别展开与键盘选择，补齐来源与加载状态、滚动渐隐和长列表处理；新建与已有聊天的 Goal 首轮原子携带技能、附件、上下文及提交身份，失败保留草稿，运行中等待本轮结束。
+
+- [desktop/browser] 浏览器批注支持网页内元素、文本和区域选择、Shift 多选、目标上下文与可选脱敏 HTML；反馈和截图原子保存到指定聊天草稿，统一发送 JSON 清单及 PNG，聊天中展示批注卡片。导航、接管和文档变化使选择失效，草稿切换保留，截图失败可重试或仅保存文字。
+
+- [agent/desktop/protocol] 新增 CPX-CUA 电脑控制：把 cua-driver 的 Windows UIA、窗口枚举、截图和后台输入源码纳入 `apps/desktop/native/cpx-cua` 并构建为独立 `cpx-cua.exe`（`bun run build:cua`，打包放入 ASAR 外的 `resources/cua`）。调用链为 `ComputerApps`/`ComputerRead`/`ComputerAction` 工具 → `ComputerUseService` → `computer/*` v4 宿主方法 → Electron 宿主 → CPX-CUA，新增 `computer.use.v1`/`computer.host.v1`、`computer/changed` 事件和 `thread-rpc-v4` 兼容的 `computer/*` 方法；宿主发放窗口引用与观察引用，按 AUMID 或规范化可执行文件路径解析应用身份并按应用授权，Plan 模式只发现和读取已授权窗口，同一桌面同时只允许一个聊天回合控制，停止、超时和宿主断连都会使引用与原生进程失效且不重放。设置页新增功能开关与应用授权管理，Composer 显示当前控制状态和停止按钮。
+
+- [agent] 电脑控制提示词按可用状态注入：就绪时告知模型可用 `ToolSearch` 激活 `ComputerApps`/`ComputerRead`/`ComputerAction`，已开启但原生运行时未连接时提示重启桌面应用，未开启时指明「设置 → 集成 → 电脑控制」入口；电脑工具描述补齐「电脑控制」等检索词，避免模型因延迟暴露而否认具备图形界面操作能力。
+
+- [agent/desktop/browser] 补齐页面查找、打印/PDF、网页缩放、设备模拟和可见区域截图；新增下载保存偏好与管理、跨项目浏览历史及分类清理，history 51→52 迁移保留原数据，删除下载记录不删除文件。
+
+- [agent/desktop/browser] 内置浏览器升级为保留登录态的工作台多标签，新增聊天归属、后台 Agent 操作、全局站点授权、页面暂停与恢复；复用 v4 宿主通道和 Artifact 截图链路。
+
+- [desktop] 新增默认启用的常驻图标栏与功能面板式侧栏，支持外观页即时切换新版/经典、独立面板滚动及共享自动化任务列表；经典版保留悬浮预览，保留原有任务、项目状态和侧栏宽度记录。
+
+- [desktop] 外观页强调色新增默认、六种彩色、黑/白与自定义预设，复用主题 seed 初始化自定义颜色并保留 V6/V7 配色；背景、前景和自定义强调色统一使用中性色点胶囊。
+
+- [desktop] 外观主题下拉新增 `Codex(new)` 浅色与深色选项，复用新版默认配色和 Codex 代码高亮，保留原版 Codex 与自定义字体；移除独立的应用新设计主题和恢复升级前外观按钮。
+
+- [dev] 新增 ZCode 忽略规则，排除依赖、构建产物、凭据文件、用户数据和自动化测试输出，减少开发工具索引噪声。
+
+- [agent/desktop] 升级 pi-ai 至 0.99.2 并接入 OpenAI 的 ChatGPT 登录，复用安装级设备 ID 和现有 Provider 凭据仓库；供应商连接入口同时展示支持的 OAuth 与 API Key，保留原有活动凭据、Codex 账号和会话模型引用。
+
+- [desktop/renderer] 新增简体中文与英语界面语言偏好，支持跟随系统、即时切换与现有桌面设置持久化；首批接入设置导航、常规设置、主导航、新任务标题和日期选择器文案。
+
+- [desktop] 全面采用 UI-Design 视觉体系并实现平滑外观迁移：恢复 Apple HIG 风格优雅圆角体系（基础刻度 4px ~ 28px、pill 9999px）与分级轻盈暗部投影（Resting、Raised、Floating、Control、Prominent），毛玻璃模糊重置为 8px/16px/24px；基础组件（Button、Input、Switch、Card、SegmentedControl、Modal、Popover 等）与业务组件（Composer、ModelSelect、Session 消息卡片、Sidebar 等）全面对齐 UI-Design 规范并统一收敛至 `--cpx-sys-*` 与 `--cpx-comp-*` 设计 Token。Electron 外观存储实现原子化平滑迁移（`appearance-migration.json` 记录升级前外观备份），并在设置页“外观”面板提供“恢复升级前外观”与“应用新设计主题”操作。
+
+- [desktop/renderer] 接入新版 ModelSelect 选择器与推理菜单视觉交互规范：完整对齐 UI-Design 布局、尺寸、圆角、阴影与动效；支持胶囊双触发器（模型面板与推理独立唤起并具备完整键盘导航无障碍焦点）、独立供应商侧栏、快速搜索（展开/清空/ESC 复位）、双状态单选指示器、独立 Radix 浮层推理菜单（含深度思考与模型 variant 选项）及 Model Hub 目录视图；私有样式契约集中治理几何与阴影，颜色无缝接入 `--cpx-sys-color-*` 语义主题。
+
+- [docs] 在 Renderer Design Token 规范（`docs/design/renderer-token-system.md`）中记录 ModelSelect 作为首个新版视觉试点组件的接入规范，并确立「基础 Token → 基础组件 → 业务组件」三阶段演进统一路线。
+
+- [desktop/renderer] 演进工作台布局系统第三阶段：实现现代多窗口架构（Auxiliary Window），支持将终端、代码审查、内置浏览器、文件浏览、计划、副会话等视图独立弹出为原生辅助窗口；基于同一 Renderer 上下文的 `window.open` 与 React Portal 架构，零 RPC 序列化开销并无缝复用内部状态机；实现主子窗口样式表与主题 Class 实时深克隆，契约式遵循 Windows 36px 标题栏与 Window Controls Overlay（WCO）；提供一键「停靠回主窗口」与子窗口关闭时安全自动归并机制，确保多窗口交互与状态零丢失。
+
+- [desktop/renderer] 演进工作台布局系统第一阶段：引入复合视图体系（PaneComposite），抽象标准化 ViewLocation 与 CompositeViewDefinition 注册表，打通主侧边栏（Sidebar）、右侧栏（Right Dock）与底部面板（Bottom Panel）三向视图流转与灵活停靠，支持工作区文件树等面板跨区域流转与状态自适应维护。
+
+- [agent/desktop] 补齐 Goal 自动执行闭环：history schema 48 新增幂等 continuation 记录，成功 Turn 在 Goal 仍为 active、无用户排队、任务未归档且队列未暂停时，于终态计量事务内创建下一 Turn；自动输入使用 `goal-continuation` 来源并复用模型、权限与任务模式。Chat 主 Agent 新增 `update_goal` 生命周期工具，Goal 目标、状态、预算及用量注入 Prompt；失败按 Provider 配额或普通阻塞派生 `usage-limited`／`blocked`，运行中禁止清除 Goal，`turn/start.goal` 支持首 Turn 原子附加 Goal。
+
+- [agent/desktop] 新增 `thread.execution.v2` 与 `worktree/eligibility`，`thread/create.workspace.execution` 支持从 working tree 或指定分支创建并绑定托管 Worktree；history schema 49 记录线程创建与 Worktree 子 operation 的阶段。新版 Desktop 对 Git 项目默认请求 working-tree Worktree，非 Git 项目回落 Local，旧客户端省略 execution 时仍保持 Local。
+
+- [agent] 线程创建与 Worktree 子 operation 的启动恢复改为独立可测单元：绑定一致时补记 `thread-published`；从未发布 Thread 的孤立 Worktree 用确定性的 `<worktree-operation>:orphan-cleanup` operation 清理并标记 `cleaned`；Thread 已存在但绑定缺失或不匹配时保留资源并标记 `failed`，避免删除用户可能仍在使用的目录；三种结果均为终态，重复启动恢复不再重复清理。
+
+- [agent/desktop] 新增 canonical `Workflow` 共享类型、`workflow.v1`、完整 `workflow/*` RPC 与 `workflow/changed` 事件，继续复用 `session_group_*` Repository 和 Service；事件投递按协商能力在 Workflow 与一代 SessionGroup 之间投影。Desktop 改用 `/workflows` 与 canonical RPC，旧 `/session-groups` 路由保留选择并重定向。
+
+- [agent/protocol] Workflow 兼容事件投影改为真正移除被取代的字段名（不再保留 `workflowId: undefined`／`groupId: undefined`），使另一代客户端在严格 `exactResult` 解码下不会收到未知字段；canonical 与 legacy 客户端各自只收到一个对应事件。
+
+- [desktop/renderer] 新任务接入执行位置选择：新增只读 `getWorktreeEligibility` 客户端方法与 Composer 执行位置控件，Git 项目默认选中「新 Worktree」并可显式切换「本地项目」，非 Git 项目固定 Local 且禁用 Worktree 选项，projectless 任务不展示该控件；eligibility 探测失败安全回退 Local 并提供重试，创建完成后一律以服务端 `executionEnvironment` 为准。Goal 乐观并发冲突时重新对账 Thread snapshot、刷新缓存并提示重试，不再静默覆盖他人写入；`thread/goal/updated` 与 `thread/goal/cleared` 纳入目录刷新事件集，Goal 状态与用量由事件自身驱动刷新，不再依赖 mutation 后的偶然对账。Renderer 只读写 canonical `workflowId`（`sessionGroupId` 保留为一代读取别名），线程创建选项由 `sessionGroupId` 更名为 `workflowId`。用户可见的「会话组」文案统一为「工作流」，旧 `/session-groups` 重定向保留所选 Workflow 标识与 query。
+
+- [desktop/renderer] 执行位置界面收敛为 Codex 式紧凑控件：Composer 顶部只保留一个执行位置下拉，Git 项目默认 `Worktree` 并可切换 `Local`，非 Git 项目只显示 `Local` 且不解释、不警告，projectless 与探测中不渲染控件；移除常驻的「无法探测执行位置／将使用本地目录／重试」文案与内联错误区域，eligibility 请求失败静默回退 Local 且不阻止发送。阻止发送的创建失败改走现有全局错误通知，只给出简短可行动文案（如「无法创建任务，请重试或选择本地目录。」），再次提交即重新探测与创建，不在 Composer 放置独立重试入口；Goal 版本冲突同样通过全局通知告知已刷新。任务创建后以服务端 `executionEnvironment` 投影为准展示真实执行位置（Local 或 `Worktree · 分支`），不再依据用户选择或分支名推测，同时补齐 `threadGoal` 与执行环境到 Composer 的传递。
+
+- [agent/desktop] 任务执行环境改为自动选择并收敛项目级覆盖：Composer 不再提供任何 Local/Worktree 选择器、检测状态或内联提示，创建项目任务前由客户端调用 `worktree/eligibility` —— Git 项目自动发送 `{ kind: "worktree", startingState: { type: "working-tree" } }`（继承当前 checkout 与 staged/unstaged/untracked 状态），非 Git 项目、探测失败与未协商 `thread.execution.v2` 的旧 Agent 一律使用 Local 且不提示用户。新增项目高级设置「任务执行环境」（`自动（推荐）` 默认 / `本地目录`），按 `projectId` 持久化于 `project_settings.execution_environment`（profile schema 3→4 前向迁移，新增列带 `auto` 默认值，已有项目行为不变），不提供「强制 Worktree」选项；设置只影响之后新建的任务，已有任务的执行绑定不被改写。自动模式下 Worktree 创建、绑定或 setup 失败会阻止任务创建，不静默降级 Local，并通过全局错误通知给出简短文案「无法创建任务，请重试或选择本地目录。」；Composer 不再有独立重试入口，再次提交即重新探测与创建。
+
+- [website] 新增纯静态英文产品官网 workspace (`apps/website`)，采用 1600px 宽幅黑色画布、全宽三段式黏附导航与滚动渐隐背景、深色沉浸首屏、分层景观及嵌入式产品窗口构图，并提供完整功能叙事和响应式媒体占位槽。
+
+- [agent/protocol] Goal 计量真源：新增 schema 47 的 `thread_goal_usage_ledger` 与 `thread_goal_active_intervals`（含 46→47 前向迁移），以 `(goal_id, source_kind, source_entry_id)` 唯一约束记录实测用量，主 Agent 与全部层级子代理通过 `parent_agent_id` 递归归集，重复终结、恢复与重放都不会重复计费；token 按 input+output+cacheRead+cacheWrite 累计（cache 与既有实测口径一致并入 input，reasoning 仅留档不计费），时间按运行区间并集计算，并行子代理不重复计入墙钟时间，等待审批/提问/暂停与离线时段不计时，崩溃恢复先关闭陈旧区间再重新开区间。计量写入、Goal 汇总、派生状态与 `thread/goal/updated` 事件在终态的同一事务内提交，仅在确实变化时才推进版本并发布事件。新增配置 `agent.goal.default_token_budget`（默认 `200000`，key-path 局部读写、保留未知键），未显式指定预算的 Goal 创建时采用该默认值，显式 `null` 表示不限额；达到预算时在机器可管理的状态区间内派生 `budget-limited`，提高预算后回到 `active`，人工设置的 `paused`/`complete` 与其他子系统负责的 `blocked`/`usage-limited` 不会被覆盖。
+
+- [agent/desktop] Plan 模式最终方案升级为结构化提交：主 Agent 通过新的生命周期工具 `submit_plan` 提交固定 schema（标题、摘要、按区域分组的实现变更、接口变化、测试、假设），Agent 以该对象为真源并确定性派生 Markdown 供审批、复制、分叉历史与旧客户端继续消费，未成功提交时仍兼容 `<proposed_plan>` 标签回退且同一回复中的标签计划会被忽略；新增可选 `structured` 字段随计划项与计划审批投影，非法或旧数据只回退 Markdown，桌面计划卡按固定章节渲染结构化内容并隐藏空章节，并新增 `plan.structured.v1` capability 供客户端判断支持情况。
+
+- [agent/protocol] 新增 Thread Goal 真源：新增 `thread_goals`、`thread_goal_history` 与 `thread_goal_operations` 独立表（history schema 46，含 44→45→46 前向迁移，schema 45 的 Goal 行原地回填稳定 `goalId`，已清除行迁入历史表），每个 Goal 实例拥有稳定 `id`；清除会把当前 Goal 归档进历史，之后重新创建会生成新 `goalId` 并重置 token、运行时间与 `createdAt`，不复用旧目标消耗，更新 objective／预算／暂停状态则保留同一 `goalId` 与累计量。新增 `ThreadGoalRepository` 与 `ThreadGoalService`（`operationId` 幂等重放、`expectedVersion` 乐观并发，`blocked`/`usage-limited`/`budget-limited` 由 Agent 派生而用户仅可设置 `active`/`paused`/`complete`）；新增 `thread/goal/get|set|clear` RPC、`thread/goal/updated|cleared` 持久事件与 `thread.goal.v1` capability，并把 `goal` 纳入 Thread snapshot；Goal 完成不归档线程，线程仍可继续启动 Turn。
+
+- [agent/protocol] Thread 与 ThreadListItem 新增 `executionEnvironment` 投影：Local 提供 `cwd`/`revision`，Worktree 另提供 `worktreeId`/`branchName`/`status`，由 `thread_execution_bindings` 与 `managed_worktrees` 组合派生；客户端不再根据 workspace、分支或 standalone 自行猜测执行环境。同时新增 `workflowId` 字段，与保留的历史读取字段 `sessionGroupId` 取同一成员关系值，新客户端只使用 `workflowId`。Desktop Goal 已改为真实 `thread/goal/*` RPC 与共享 `ThreadGoal`，从 Thread snapshot 对账并保留稳定 id、version、completedAt 及连字符状态值。
+
+- [desktop] DeepSeek Provider 支持在 Chat Completions、Responses 与 Anthropic Messages 协议间全局切换。
+
+- [agent/desktop] 新增可回放的结构化结果摘要卡片，主 Agent、子 Agent 及显式 opt-in 的工具结果可通过统一信封展示结论、验证、风险与安全引用；旧客户端继续按 JSON 降级显示。
+
+- [agent/desktop] 新增持久化计划批准：成功完成的 Plan 轮次可实施、反馈或关闭；沿用原有轮次事务、权限及模型，支持幂等重试、过期校验和重启恢复，子代理无合法续跑入口时保持只读。
+
+- [desktop] 新增持久化的“显示日程会话”过滤，统一作用于侧栏项目、最近、置顶和活动；仅隐藏日程新建的独立会话，保留被日程唤醒的普通聊天。
+
+- [desktop] 主会话与侧边聊天在实际切换模型后的新一轮前显示模型切换提示和分割线，历史恢复时按相邻轮次自动还原。
+
+- [desktop] 项目收起时将内部列表的未读状态显示为项目行圆点，排除单独置顶与已归档会话，悬停或聚焦时切换为项目操作。
+
+- [desktop] 侧栏会话右侧显示日程运行与分叉图标，日程图标与“已安排”一级导航统一，悬停或聚焦时替换为置顶、归档操作，统一图标和状态占位以保持列对齐；支持已有会话被日程唤醒、双标记及实时刷新。
+
+- [desktop/renderer] 已安排任务日历支持月视图、周视图与日程列表视图三重视图切换，支持在周/列表视图中按时间轴卡片浏览任务，并支持日期单元格悬停快速新建任务及单项任务直接查看会话或立即运行。
+
+- [agent/desktop/protocol] 上下文统计新增按来源分类拆解：模型请求前实测提示词分段、工具定义（含 MCP）与消息历史的字符量，随 `ModelUsage.breakdown` 可选字段下发。Composer 圆环浮层与 `/status` 弹层共用同一块上下文容量面板——标题行与已用量、分段进度条、按占比降序的圆点分类行（消息、系统提示词、系统工具、MCP 工具、技能、记忆、项目指令、其他）、平均缓存命中率与会话累计缓存读写明细，圆环本身可直接点击打开状态弹层。分类占比为本地字符口径、只用于展示，不改动 provider 总量与压缩阈值。
+
+### Changed
+
+- [agent/desktop] 统一工具权限判定与共享预设，接入调用级临时路径授权；granular 不再强制普通操作审批，完全访问的 never 策略拒绝首次电脑应用授权，保留宿主 Shell、硬拒绝和既有审批恢复。
+
+- [repo] 修复公共代码基线的四项检查：统一 Prettier 格式（当前基线 74 个文件），补齐 12 项过时断言（日历样式改为容忍换行空白、补丁卡对齐 `until-exit` 挂载策略、待回答问题由输入区承载、分叉图标改用 `Split`、订阅事件与设置导航补项、过程摘要对齐中性文案与多活动项汇总）；`@playwright/test` 与 `playwright-core` 统一到 1.59.1，并移除无障碍测试中重复且无导航超时的预热 `beforeAll`；升级 `@xmldom/xmldom` 0.8.15、`brace-expansion` 5.0.11、`fast-uri` 3.1.7、`http-cache-semantics` 4.3.0、`js-yaml` 4.3.2、`sharp` 0.35.4、`smol-toml` 1.7.1、`undici` 8.10.2 与 `electron` 41.10.6；`braces` 经 Stylelint 以固定 glob 引入且上游暂无修复版本，按负责人与到期日登记临时豁免。
+
+- [desktop] 移除工作区内容全宽与完整视图入口，聊天和内容仅支持并排分屏或隐藏标签页；拖拽拉宽遵守分屏尺寸上限，旧全宽状态恢复为分屏并保留标签、显隐和宽度记忆。
+
+- [agent/desktop/protocol] 简化电脑控制授权：开启后从聊天直接使用，完全访问按有效权限直接读取和操作且不保存隐式授权；请求批准和帮我批准首次应用授权均由用户确认，支持对话授权及策略允许时的永久授权。补齐应用审批元数据、独立授权响应与 checkpoint 恢复，保存允许不打断读取，撤销仍停止控制；设置页仅保留任意应用开关、永久允许及已有权限记录管理。
+
+- [agent/desktop/cua] 分离电脑应用访问策略与授权：只读管理员 requirements.toml，跨来源拒绝优先，可禁用永久允许；原生核验注册包、嵌入及目录签名和未签名 SHA-256，操作前重新校验身份，旧路径允许需重新确认。新增可信宿主与策略能力，设置展示限制并支持按当前聊天手动授权。
+
+- [desktop/browser] 截图菜单合并为“获取屏幕截图”，一次捕获同时复制到剪贴板并加入当前聊天草稿，取消根据输入框焦点选择去向及强制恢复输入框焦点；移除与批注图标重复的发送页面入口，保留批注与 AI 对话接管标签能力。
+
+- [desktop] 收敛浏览器相关文件中残留的 2 份 `isRecord` 副本（`register-browser-ipc.ts`、`conversationUiState.ts`）改为引用 `@codepilotx/shared/guards`；`preload.cts` 保留本地实现，因为 preload 契约禁止从 workspace 包引入运行时值。
+
+- [repo] 收敛错误消息提取：新增 `@codepilotx/shared/errors` 的 `errorMessageOf` 与 `errorMessageOr` 作为唯一实现，renderer 与根脚本中 21 份复制实现改为引用它；3 份带硬编码兜底文案与 3 份带 `fallback` 参数的变体保留各自文案、提取逻辑复用共享实现，`useSessionState` 中未被调用的本地实现直接删除。
+
+- [desktop/renderer] 统一上下文窗口数字格式化：3 份口径互相矛盾的 `formatCompactNumber`（千位取整/一位小数、`k`/`K` 大小写不一致）合并为 `usageFormatters` 中一份，按「整数不补小数位、否则保留一位」输出 `K`/`M`；1250 这类数值由 `1K` 变为更精确的 `1.3K`，千位后缀统一为大写 `K`。
+
+- [repo] 根 `package.json` 显式声明 `@codepilotx/shared` 依赖：根目录脚本此前只能对其做 `import type`，运行时导入无法解析，`scripts/security/security-audit.ts` 与 `scripts/integration-test-runner.ts` 会直接加载失败；补上依赖后 CI 的 `security:audit` 才能正常执行脚本。
+
+- [repo] 统一 TypeScript 版本为精确 `5.9.3`：Electron 的 `~5.8.3` 与 `packages/shared` 的 `^5.9.3` 对齐到其余 workspace 的锁定版本，lockfile 随之移除多余的 `typescript@5.8.3` 副本。
+
+- [desktop/renderer] 图标栏收起宽度改用 `SIDEBAR_RAIL_WIDTH` 常量：`DesktopLayout` 的 `--sidebar-w` 回退值不再硬编码 `'52px'`，与 SCSS 侧由既有断言保持一致。
+
+- [material-icon-theme/renderer] 图标包按分层规则拆分：`@codepilotx/material-icon-theme` 只保留纯数据与解析（`resolve.ts`、生成的 `manifest.ts` 与 `names.ts`），去掉 `react` 与 `@types/react` 依赖并收窄 exports；React 组件、`create-icon`、`loaders` 与 16 个图标分片移入 `apps/desktop/renderer/src/features/layout/material-icons/`。同步脚本仍是唯一生成来源，改为同时输出到包内（纯数据）与 renderer（渲染产物），`sync:check` 一并校验两处并接入 CI；`FileTypeIcon` 改为懒加载本地模块，按需加载与分片行为不变。
+
+- [desktop/renderer] 图标栏宽度新增防漂移校验：侧栏测试读取 `layout-sidebar.scss` 的图标栏规则并断言其宽度等于 `SIDEBAR_RAIL_WIDTH`，SCSS 与 TS 任一侧改动不一致时立即失败。
+
+- [repo] 收敛 isRecord 重复实现：新增 `@codepilotx/shared/guards` 作为全仓唯一实现并导出 `./guards` 子路径，Agent、Electron、Renderer、shared 与 scripts 中的 21 份复制实现改为引用它；其中 2 份漏掉数组检查，现统一按「非 null、非数组的对象」判定，既有调用点行为不变。并行开发中的 2 个浏览器相关文件保留原实现，待其提交时一并收敛。
+
+- [repo] 接入 oxlint 静态检查并纳入 CI：补齐 oxlint 依赖与 `lint` 脚本，修复 9 处 error 级发现（`SidebarSessionHoverCard` 在提前 return 之后调用 hooks、`usePrefersReducedMotion` 用 try/catch 包裹 hooks 等真实缺陷），并把 `format:check` 与 `lint` 加入 PR 质量门禁；历史 warning 暂不阻断。
+
+- [repo] 引入 prettier 作为唯一格式化来源：新增 `.prettierrc.json` 与 `.prettierignore`，统一缩进、引号、行宽、尾随逗号与换行处理，并排除生成产物、第三方内嵌内容与构建输出；新增 `format` 与 `format:check` 脚本。为直接断言源码文本的既有契约测试加入 `test/source-contract` 归一化辅助，使断言只依赖契约本身而不依赖代码风格。
+
+- [scripts] version:check 强制校验 Unreleased 分类结构：未知分类由警告改为失败，并新增分类重复与顺序校验（规范顺序 Added → Changed → Fixed → Deprecated → Removed → Security），避免发布归档与 Release 正文的分类错位。
+
+- [desktop] 新版侧栏“新聊天”入口在默认、悬停和选中时均保持透明背景，保留键盘焦点提示与原有导航行为。
+
+- [desktop] 已安排页面改为复用共享自动化控制器，按需激活请求与订阅，并统一详情选中状态和离页草稿清理。
+
+- [desktop] 账户菜单与帮助子菜单改用通用下拉菜单的紧凑尺寸和样式，统一行高、内边距、圆角与账户头像槽位；保留现有功能与弹出方向。
+
+- [desktop] 移除新版图标栏的鼠标靠近与悬停侧栏预览，保留经典版预览和新版导航 Tooltip；移除账户触发头像的尺寸覆盖。
+
+- [desktop] 对齐通用桌面主题的浅深色默认配色、表面与强调色派生，统一链接、焦点、按钮、开关和滚动条着色；保留已保存的 V6/V7 配色、字体与字号，旧 pending 外观迁移仅完成记账，Codex(new) 可主动选用新默认色。
+
+- [desktop/renderer] 将功能图标按职责拆分为 12/16/20px，统一按钮图标与加载态尺寸、菜单前后图标层级及线宽，保留头像、鲸鱼和品牌槽位原有几何，并补充尺寸使用规则。
+
+- [desktop/renderer] 账户弹出菜单头像与侧栏头像统一为 24px，并同步菜单头像槽位和网格列宽。
+
+- [desktop/renderer] 侧栏账户头像改为 24px，使用专用 sidebar-account-avatar 类并同步前导槽位及网格列宽，避免头像挤占文字间距。
+
+- [desktop/renderer] 移除新任务页鲸鱼遮罩的通用图标尺寸限制。
+
+- [desktop/renderer] 将常规设置中的听写拆为独立「语音」设置页，同步侧栏导航与设置搜索，保留本地语音模型、麦克风选择、听写快捷键及隐私设置功能。
+
+- [desktop/renderer] 去掉用户消息内联 Skill 标记前的方块图标，保留强调色与同排正文。
+
+- [agent/desktop] Skills 调用改为结构化多选与正文 `$name` 引用；显式选择在推理前加载，自动选择通过普通 Read 按需读取真实路径，复用现有活动展示。history schema 50 以 nullable 字段保存队列、steer 和重启后的选择，并保留冻结引用校验及回合内只读目录权限。
+
+- [desktop/renderer] 外观设置中字体样式（字重）下拉菜单改为直接展示规范英文样式名（如 ExtraLight、Light、Regular、Medium、Demibold、Heavy 等），隐藏冗余的完整字体名称副标题，并按标准排版字重升序排列；字重下拉框宽度由 80px 微调为 100px 以完整舒展长样式名。
+
+- [desktop/renderer] 侧栏与会话共用工作流归属选择函数，补充加入、移出、取消和无效序号的回归检查。
+
+- [agent/desktop] 移除未使用的 Harness 资源加载器、旧事件与模型目录转换、思考滑块及自动化切页/周视图遗留代码、专属样式和旧测试；删除 ignore 与 react-slot 直接依赖，保留现有技能发现、推理菜单与月历详情交互。
+
+- [desktop/renderer] 文件预览复用现有标签 ID 生成函数，移除未使用的 ChipButton 组件及失效引用，并同步样式注释与交互文档。
+
+- [agent] 删除无消费者的 repository 类型副本，项目、线程与工作区仓库复用现有存储工具，保留原有存储语义。
+
+- [agent/mcp] MCP 运行时客户端迁移至固定版本 pi-mcp 0.99.2，保留 stdio、Streamable HTTP、OAuth 加密凭据与 resource 覆盖、工具审批及连接租约；SDK 仅作为调试服务器的开发依赖。
+
+- [renderer] 整理 ChatGPT 与 OAuth 登录界面为单栏状态流程，去除弹窗重复标题，补齐中英文提示并默认折叠 ChatGPT 手动回调输入；保留其他供应商的授权提示、设备码和输入方式。
+
+- [desktop/renderer] Provider 图标改为按品牌解析 models.dev 在线图标：新增 Renderer 统一图标解析模块维护品牌分组并生成查询映射，每组显式列出完整 Provider ID（OpenAI、OpenAI Codex → `openai`；Z.AI、Z.AI Coding CN → `zai`；MiniMax、MiniMax CN → `minimax`；Moonshot AI、Moonshot AI CN、Kimi Coding → `moonshotai`；Xiaomi 与 AMS/CN/SGP Token Plan → `xiaomi`；Cloudflare AI Gateway、Workers AI → `cloudflare-workers-ai`；Qwen Token Plan 三个入口 → `alibaba`；Azure OpenAI → `azure`），其余内置提供商继续使用自身 ID，自定义 Provider 保持默认图标。`google-vertex` 与 `opencode-go` 在 models.dev 上各有独立图标，因此不并入 `google`／`opencode` 品牌组。此前 `openai-codex`、`zai-coding-cn`、`kimi-coding`、`qwen-token-plan`、`qwen-token-plan-cn`、`qwen-token-plan-individual`、`azure-openai-responses` 在 models.dev 上没有对应图标，而服务端对缺失图标仍返回 HTTP 200 通用占位图，因此不按名称模糊匹配、不做后缀截断、也不通过请求结果推断品牌，未知内置 ID 使用自身地址。仅调整展示映射，各入口的模型、凭据、配置与 Pi 原生目录保持独立，模型中心、提供商详情、首次配置页与模型选择器共用同一条 `logoURL` 数据链路。
+
+- [desktop/renderer] Pi 内置提供商接入 models.dev 在线图标：为 Pi 内置提供商生成 models.dev 官方 SVG URL（`https://models.dev/logos/{providerID}.svg`），取消对 `catalogOrigin === 'models-dev'` 的依赖；自定义 Provider 保持默认图标回退，图标加载失败或网络离线时复用现有 `RemoteImage` 安全回退通用 `Server` 图标，不恢复模型目录接入。
+
+- [provider/catalog] 切回 Pi 原生提供商与模型目录机制：统一使用 @earendil-works/pi-ai 0.85.1 的 builtinModels、原生刷新与本地缓存，继续完整支持现有自定义 Provider、OAuth 凭据仓库与 DeepSeek 协议切换；移除 models.dev 远程拉取、缓存读写、Provider 自动生成与元数据覆盖；模型中心与选择器 Hub 列表改为从 Agent 真实目录动态派生。
+
+- [desktop/renderer] 桌面 UI 去除旧视觉样式，保留完整组件、交互逻辑与布局结构，形成可运行素版基线：将圆角体系统一收敛为 0，阴影与背景模糊重置为 none，清理装饰性渐变、遮罩淡出、高频光扫动效及 JSX 内联圆角；统一为简单表面、文字和必要边框，保留选中、禁用、50% 加载圆环、错误危险与键盘焦点等最小交互反馈；严格保持 Windows 36px 标题栏高度与原生按钮透明透出契约。
+
+- [desktop/renderer] Composer 模型选择器的服务商标识统一改为渲染 Provider 目录的 `logoURL`：`providerModelOptions` 投影补上此前被丢弃的 `logoURL`，轨道与模型中心复用设置页同一个 `RemoteImage`（加载骨架与错误兜底一致），移除本地硬编码的品牌 SVG 与首字母兜底（缺失目录图标时统一回落到通用 Provider 图标）；模型中心目录条目的图标也按其 models.dev id 从同一条 URL 契约解析，`modelsDevLogoURL` 由客户端适配层导出以避免重复实现。修复模型触发胶囊缺少展开态的问题：`ChipButton` 的 `active` 只映射为 `aria-expanded`，而共享 chip 样式仅为 `meta-chip` 定义了展开样式，现为 `.composer .chip-button[aria-expanded='true']` 补上选中背景与 180° 箭头翻转（含状态态动效 token），与参考稿的 `#model-trigger` 行为一致。
+
+- [desktop/renderer] Composer 对齐集成式输入区设计：模型选择器由嵌套下拉菜单重写为单面板双视图（左侧服务商图标轨道 + 右侧模型列表 / 模型中心），面板内提供就地展开的快速搜索、选中行推理强度胶囊与下拉，模型中心按服务商目录展示分类与描述，未配置项改为跳转 Provider 设置页（新增可选 `onOpenModelSettings`，由桌面布局路由到 `/settings/providers`，避免选中未配置服务商后进入空模型列表的死路）；附件由横排小胶囊改为 72px 瓦片（图片封面、按类型着色的文件图标与截断文件名），输入面与上方工具条改为工具条自卡片顶部探出的层叠结构。补齐此前只存在于标记中、没有任何样式规则的 `composer-attachment-*` 与 `composer-provider-logo` 类名，并把模型选择器内缺少 `tw:` 前缀因而完全不生效的 Tailwind 工具类替换为语义类；修复该面板因未纳入 `[data-radix-popper-content-wrapper]` 层级名单而被 Composer 自身 z-index 覆盖、导致模型中心按钮不可点击的问题；推理强度菜单改为锚定在胶囊下方并在空间不足时上翻；恢复重写时丢弃的 provider 服务端搜索（150ms 防抖，清空与关闭时复位目录）、DeepSeek 推理选项解析与推理强度悬停预览；输入面聚焦改用边框表达，以符合「prominent 高度独占」的样式契约。
+
+- [desktop/renderer] 将侧边栏「插件」入口图标由 `Boxes` 换成 `Blocks`，与设置页插件入口保持一致。
+
+- [desktop/renderer] 全面缩短桌面端全局动效时长至 60–100ms：即时反馈、hover 与 focus 统一为 60ms，入场、退场、浮层与页面切换统一为 80ms，面板折叠展开与列表重排统一为 100ms；将无法精确限时的原生平滑滚动调整为即时滚动，保留加载旋转、进度反馈、骨架屏和 Pet 帧动画原有节奏，减少动态效果（reduced-motion）继续保持 0ms。
+
+- [desktop/renderer] 精简已安排任务创建入口与日程空状态：移除日程区域重复的「添加任务」按钮与行内快速创建表单，空状态升级为日历图标配合「当日暂无任务」轻量提示；右上角「+ 创建 ⌵」统一收敛为「使用 CPX 创建」（MessageCircle 图标）与「手动设置」（Settings 图标）唯二入口，手动设置直接唤起右侧创建抽屉并支持在单次执行与周期重复模式间无缝切换，兼顾日历排期与自动化场景并彻底降低多重创建入口的心智负担。
+
+- [desktop/renderer] 侧栏底部的设置图标由 `Settings2` 换成 `Settings`：设置行入口（未登录时的占位图标）、「设置」菜单项与「帮助与设置」菜单项统一使用同一图标，并移除不再使用的 `Settings2` import；帮助按钮继续使用 `HelpCircle`。
+
+- [desktop/renderer] 移除任务会话 Composer 底部重复的 `Local`／`Worktree` 执行环境标识；实际执行位置继续由右侧「环境信息」承载，输入区只保留发送所需控件。
+
+- [desktop/agent] 移除全局与项目「默认模型」：新建任务一级页改为记住用户最近一次选择的模型（`config.json` 的 `desktop.recent_new_thread_model`，只保存 `providerID`、`id` 与可选 `variant`），切换模型立即写回、重新进入仍显示该模型；已有任务继续使用任务级模型，切换不影响最近选择。无记录或记录失效（Provider 被禁用/删除、凭据丢失）时按 Provider/模型目录稳定顺序回退到首个启用且 Provider 可用的模型并覆盖保存。删除环境设置中的项目默认模型控件与文案，首次引导由「选择默认模型」改为「选择模型」，模型门禁只检查是否存在可用于创建任务的模型。Agent 执行不再读取全局或项目默认模型作为 fallback：正常 Turn 必须携带任务模型，辅助与专用模型回退改用最近选择，缺失或不可用时返回清晰配置错误；`model/setDefault` 与 `model/list.defaultModel` 保留 thread-rpc-v4 兼容外壳但语义映射为最近选择，新增带版本标记的一次性迁移把旧全局默认模型导入最近选择（不重复导入、不覆盖用户后续选择），旧 SQLite `project_settings.default_model` 与旧 `config.json` 键原样保留但不再展示、写入或消费。自动化新建草稿优先使用最近模型，不再硬编码 OpenAI/GPT-5。
+
+- [agent/desktop] 精简 Agent 与 Skill 指令加载：外部 Coding Agent 规则改为按需文档，Renderer 设计细则改为按需路由；计划、日历排期、MiniMax 视频等待和文档共创流程仅在相关任务中展开，减少无关询问、阻塞等待与验证范围。
+
+- [desktop/renderer] 任务日历工具栏底端与基线双重对齐：调整工具栏及标题组为底端对齐，精细校准「年月下拉」与「当月任务」按钮内边距与基准线，消除垂直居中造成的悬空高低差，并将右侧导航翻页按钮升级为 compact 等高规格。
+
+- [desktop/renderer] 任务视图拆分为日历与执行记录双页面：将顶层导航提升至窗口 Header 左侧（[日历 | 执行记录]），移除日历页二级分段控制栏以释放月历高度，并在执行记录页提供专属的任务运行历史列表展示与即时搜索过滤。
+
+- [desktop/renderer] 任务日历工具栏交互增强：年月标题升级为支持年份切换与 12 个月网格选择的下拉弹层，当月任务统计升级为紧凑按钮并可点击弹出当月全部任务的浮层清单（点击任务快速定位具体日期），并将翻页导航顺序统一调整为「上个月、今天、下个月」。
+
+- [desktop/renderer] 统一 Agent 与 Thread 基础设施错误为全局提示：首页初始化、Agent RPC 和 Thread 目录错误不再暴露在侧栏、Command Menu 或 Composer 等局部界面，catalogStatus 精简为 loading/ready/unavailable 三态并不再携带或渲染错误正文；RPC 方法名、数据库底层报错与调用堆栈等技术细节统一清洗映射为简短可行动提示；支持初始化周期并发请求防抖去重与后台定时对账失败受控单次告警与成功恢复，创建与发送失败在全局报错的同时完整保留草稿内容与附件。
+
+- [desktop] 重构任务日历为上方全宽紧凑月历与下方所选日期常驻议程，支持最多 4 个状态圆点与溢出徽标，内嵌轻量创建入口并直接预填任务创建面板。
+
+- [agent/protocol] `thread.goal.v1` capability 收紧为全量校验：必须同时存在 `thread_goals`、`thread_goal_history`、`thread_goal_operations` 三张表且 schema 46 必要字段可读、存量 Goal 行全部通过共享 schema 安全校验，否则该 capability 关闭、mutation fail-closed，存储只读降级；Goal 数据从 SQLite 投影前统一校验，未知 status、缺失 `id` 或非法计数的行只被省略，不再破坏 `thread/read`，也不会被 mutation 盲目覆盖。并修正 Goal 清除语义的过时 soft-clear 注释（现行为归档进历史表）。
+
+- [agent/protocol] 托管 Worktree 状态枚举收敛为 `@codepilotx/shared/thread` 的单一 `WorktreeStatusSchema` 来源，`@codepilotx/agent-protocol/worktree` 继续按原名导出，避免线程执行环境投影与 Worktree RPC 的状态枚举漂移。
+
+- [desktop/renderer] 会话运行状态收敛为单一来源：canonical 线程投影的状态随会话 store 一起推送，侧栏、命令面板、系统通知与桌宠统一读取合并后的状态，正文时间线已完成而侧栏仍显示运行中的分歧被消除；canonical 未覆盖的后台会话仍由会话目录与生命周期事件提供同一份值。
+
+- [desktop/renderer] 优化供应商与模型详情页布局：进入详情页时隐藏外层冗余标题并提供面包屑返回导航，将下划线 Tab 升级为 SegmentedControl 分段切换，头部整合刷新、编辑与测试连接等操作，并精简连接面板底部的冗余诊断卡片。
+
+- [desktop/renderer] 供应商卡片 Logo 的图片与远程图片容器改为跟随图标槽位 100% 宽高显示，替代固定图标尺寸，避免 Logo 在槽位内偏小。
+
+- [desktop/renderer] 插件 Logo 与其浅色/深色图片改为跟随所在图标槽位 100% 等比显示；同步调整图标尺寸浏览器测试按槽位校验 Logo，并更新设计文档中品牌/插件 Logo 的尺寸说明。
+
+- [desktop/renderer] 流式输出改为按 50ms 窗口提交 canonical 投影：live delta 进入单一有序有界队列（512 条或 256KiB 立即提交，另有线程切换/卸载兜底），每个窗口只提交一次，durable 与终态事件仍立即提交；`deliverBatch` 的 promise 在对应 checkpoint 提交后才 resolve，因此 `event/ack` 依旧只在该批次进入 canonical 后发出，SSE cursor replay 与历史对账语义不变。未提交的 delta 后缀进入按 item 的独立尾部缓冲并只订阅流式中的尾部 Block，`CanonicalItemRenderer` 按 item 引用 memo 化，streaming 阶段不再整 turn 重渲染。投影层新增按 turn 的增量分组索引（items/agents/approvals 与 subagentRunId），选择器由按条目全量重分组改为按 turn 遍历，100k 条目下选择器 P95 由约 5.5ms 降至 0.5ms；索引与整体重建输出逐项等价的用例已补齐。新增 `streaming-throughput` 性能场景与预算（每帧提交数 ≤1.5、流式 item 每帧渲染数 ≤4、待提交 delta 字符数为 0、流式文本与注入字符数完全一致、长任务 P95 ≤50ms），并把性能 fixture 的 `streamPosition.streamId` 对齐为会话 id，使 live delta 能按真实契约进入投影。
+
+- [desktop/renderer] 计划未生成完成前不得在右侧边栏打开：打开请求新增 `openable`（流式期间为 false），唯一的打开入口 `handleOpenPlanDock` 直接拒绝非 openable 请求，任务摘要也不再选取仍在流式的计划，避免右栏冻结半成品快照。
+
+- [desktop] 集成终端改为端到端输出背压：新增 `desktop-terminal:ack` 通道与 `ackTerminalOutput` 桥接（纯新增，旧版 Electron 缺少该方法时渲染端自动退化为无流量控制），renderer 用 `xterm.write` 回调按 32KiB 或 50ms 合并上报已解析位置；主进程以既有 1MiB 序列缓冲为唯一队列，新增 256KiB/64KiB credit 窗口，窗口打满时 `pty.pause()`、确认降到低水位后 `resume()` 并补发积压，不再把积压转嫁到 IPC 队列。ack 只能单调推进，重复、乱序或非法输入不释放额度；面板隐藏或卸载（无活跃消费者）时不暂停 PTY，避免后台构建被静默卡住，此时积压由有界缓冲明确截断并在终端上方显示「输出已截断，更早内容不可用。」，绝不静默丢弃或重排。
+
+- [desktop] 原生窗口缩放状态收敛为按窗口维度的统一降载信号：新增 `window:resize-activity`（`{ windowId, phase, revision }`，保留旧 `resize-state-changed` 通道）与 `onWindowResizeActivity` 桥接，主进程在 `will-resize`/`resized` 之外增加最后一次 resize 后 300ms 的结算定时器，取消拖拽也能补齐 end，保证 start/end 始终配对；Renderer 用 `resizeActivityCoordinator`（按 windowId + 单调 revision + 5s 看门狗）取代原先的易失布尔 ref，重复或陈旧事件被丢弃，主进程事件丢失时兜底恢复渲染，工作台布局与终端消费同一份状态。终端在拖拽期间把 PTY resize 节流到 150ms，缩放结束后只执行一次 fit 与一次最终尺寸下发，不再逐帧触发 ConPTY 重排；标题栏 36px 契约与既有布局写入语义不变。
+
+- [desktop/renderer] 将侧栏导航、项目前置与行尾状态和操作图标统一为 16px，保持按钮点击区域与侧栏布局不变。
+
+- [desktop/renderer] 保留 Lucide 图形，将功能图标调整为 12/16/20px 与 1.6 轻轮廓，侧栏主要导航使用 20px，并标记品牌、头像及插画占位图以保留原始绘制方式和控件点击区域。
+
+- [agent] 升级 Pi AI 模型与 Responses 适配，加入 GPT-6 Astra 和最新 GPT-5.6 定价／缓存能力；官方 OpenAI 结构化任务强制 strict 单工具提交，长流式请求放宽至 10 分钟，并统一返回安全可操作的 Provider 错误。
+
+- [desktop] 主会话、侧边聊天与子代理统一请求卡外壳及问答表单；权限审批改为详情、允许／拒绝及真实范围菜单，清理重复样式和悬空授权选项，限定快捷键作用于所属卡片并保留失败重试。
+
+- [desktop] 复用间距 token，将侧栏等待审批标签内边距调整为上下 2px、左右 8px。
+
+- [desktop] 将会话分叉菜单、消息操作、快捷命令和分叉弹窗图标统一为 Split，与侧栏分叉标记一致。
+
+- [desktop/renderer] 将 Composer 发送按钮 `.send-button` 的宽高从 `var(--cpx-sys-space-8)` 调整为 `var(--cpx-sys-space-7)`。
+
+- [desktop] 将全界面图标统一为侧边栏标准的 14×14，覆盖菜单、状态、文件图标、空状态与界面内 Logo。
+
+- [desktop] 统一项目与会话的 sidebar-indicator、sidebar-unread-dot 样式，复用项目行已有尾部容器并移除多余包裹。
+
+- [desktop] 侧栏会话右侧常态图标与悬停操作的列间距由 8px 缩至 4px，保持两种状态中心线对齐。
+
+- [desktop] 合并侧栏来源图标与状态占位样式为统一 indicator，保持列对齐、状态颜色与悬停切换行为。
+
+- [desktop] 月视图日期格内边距由 4px 调整为 8px，让日期、任务列表及更多任务入口与边框保持适当留白。
+
+- [desktop/renderer] 优化任务日历交互与排布：点击有任务日期直接展开当日议程，空白日期改用主题色边框高亮并去除灰底；月视图日程项加大尺寸并采用前 5 行展示日程、第 6 行右下角对齐 ghostTertiary +N 项按钮的 6 行排布结构，5 项以内完整平铺；计划任务与自动化详情面板头部重构为左右单行排布，合并返回入口与标题以降低高度；执行时间隐藏生硬时区标签并静默自动对齐系统时区，新建时按当天整点或未来工作时间智能推导。
+
+- [desktop] 任务日历的议程、新建与详情共用固定位置浮卡，单项直达详情、多项支持左右切换及返回确认；统一状态胶囊、更多设置入口和只读表单外观。
+
+- [desktop/renderer] 精简任务浮卡标题，将更多设置改为无箭头胶囊按钮；隐藏空必填项提示并保留按钮禁用、无效排期和实际保存错误。
+
+- [desktop/renderer] 计划任务与自动化浮卡收窄为单列核心表单，次要设置和执行历史默认折叠；只读任务改为状态摘要，底部操作始终可见，保留无动画与退出确认。
+
+- [desktop/renderer] 任务详情浮卡改为关闭按钮二次确认丢弃草稿，Esc 撤销确认，背景点击不关闭；移除草稿丢弃对话框并保留无动画交互。
+
+- [desktop/renderer] 移除任务日历聚焦议程、编辑浮卡和遮罩的进出动画、触发位置缩放及任务卡过渡，改为即时显示和关闭，保留静态模糊与高亮。
+
+- [desktop/renderer] 任务日历复用当前 42 天数据进行本地搜索、筛选与月/周/列表无加载切换；移除常驻议程和详情侧栏，改为日期附近的紧凑议程与编辑浮卡，背景模糊并保持触发位置清晰，支持返回议程、草稿丢弃确认和键盘焦点恢复；修复计划任务草稿携带自动化排期字段而被严格 RPC 校验拒绝的问题。
+
+- [desktop/renderer] 重构已安排页日历栅格布局与容器响应式自适应，移除固定最小宽度，彻底解决周日列在右侧议程存在时被截断挤出视口的问题，并消除外层双滚动条。
+
+- [development] 整理开发工作流指令与本机 Skill、记忆的适用范围；Playwright 测试入口支持聚焦参数转发及中断时清理本次子进程树，并补充真实失败案例回归记录。
+
+- [desktop/renderer] 移除会话回合导航预览卡的淡入淡出与位移动画，使悬停、聚焦和拖动浏览时直接显示预览内容。
+
+- [desktop/renderer] 移除侧栏会话与项目详情弹层的进出场动画，并采用首次延迟、后续连续直切的共享悬停防抖，减少快速浏览时的误触发和弹层闪烁。
+
+- [desktop/renderer] 将查看活动模式筛选菜单收敛为 Codex 风格的单一优先事项开关与紧凑无图标布局。
+
+- [desktop/renderer] 收紧查看活动模式双行会话的重复垂直内距，使标题、工作区与同行操作保持 Codex 风格的紧凑密度。
+
+- [desktop/renderer] 将查看活动模式的会话操作图标对齐到标题行，并保持标题在操作区之前渐隐。
+
+- [desktop/renderer] 移除查看活动模式中分组标题、工作区名称与粘性分组交接的残留渐隐，使活动信息保持清晰可读。
+
+- [desktop/renderer] 统一任务与设置侧栏普通导航项的文字和图标前景色，收紧任务分组间距，使悬停、聚焦与选中只改变背景，并消除导航、项目和会话之间的色阶跳变。
+
+- [desktop/renderer] 统一会话正文、用户消息、轮次导航、输入框、Markdown 富内容与环境信息面板的阅读列线，在不同页面宽度、列表嵌套和右侧面板状态下保持稳定对齐。
+
+- [desktop/renderer] 调整全局页面宽度三档，窄、默认和宽分别使用 768px、1009px 和 1250px。
+
+- [desktop/renderer] 统一任务与设置侧栏的图标、正文、操作和分组列线，在保持现有密度与交互的同时改善跨区域对齐。
+
+- [agent/desktop/renderer] 精简模型目录转发层与未使用依赖，折叠后卸载会话重内容并移除工具卡片独立计时器，同时修复无效懒加载，使 Renderer 首屏 gzip JS 减少约 62 KiB。
+
+### Fixed
+
+- [desktop/renderer] 修复 reduced-motion 下静态启动遮罩无法退场的问题：状态文案未变化时不再重写 DOM，避免 MutationObserver 自触发成死循环、饿死定时器与 `load` 事件。此前开启「减少动态效果」的机器冷启动会停在鲸鱼遮罩，视觉与无障碍测试也因此卡在 `beforeAll` 超时且只能看到 guid 报错。
+
+- [desktop] 修复终端对宽色域 CSS 配色的解析，转为 xterm 可识别的 RGBA，并同步使用代码行高设置。
+
+- [desktop] 修复外观模式卡片在 Tailwind 迁移后遗漏相对定位的问题，将透明 radio 点击区域限制在各自卡片内，恢复鼠标切换系统／浅色／深色模式。
+
+- [desktop/renderer] 修复点击导航轨「插件」即整页崩溃的问题：侧栏插件面板渲染在 DesktopLayout 内部而非路由 Outlet 之下，`useDesktopLayoutOutletContext()` 读不到 outlet context，面板挂载即抛出 `Cannot destructure property 'workspacePath'` 并落入错误页；`workspacePath` 现由 DesktopLayout 直接以 props 传入侧栏插件面板。
+
+- [desktop] 修复右工作区在隐藏状态仍按上次分屏宽度占位的问题：面板宿主保留挂载后，缩放窗口或拖动左侧边栏触发的尺寸提交会把实时宽度写回已提交的分屏宽度，而隐藏的宿主没有动画再收敛到 0，导致聊天区域右侧出现一片与右栏等宽的空白。实时尺寸现在按折叠态收敛到 0，隐藏面板不再占位，重新显示时仍由面板自身的入场动画接管宽度。
+
+- [desktop/renderer] 修复鼠标操作流在浮层关闭后触发器上出现键盘焦点环的问题：下拉、右键菜单、选择器、菜单栏与锚定浮层记录打开方式，指针打开的浮层关闭恢复焦点时以 `focus-visible:false` 重聚焦抑制焦点环，键盘打开的浮层保持焦点环可见（WCAG 2.4.7），Esc 关闭、选择选项和点击外部关闭均不再让鼠标用户看到突兀的 outline。
+
+- [desktop/renderer] 补齐键盘可访问性：侧栏会话/项目列表与设置分类导航支持 ↑/↓ 在条目间移动焦点（保留 Alt+↑/↓ 重排和 Tab 逐项访问），侧栏停靠面板标题可聚焦并用 Enter/空格展开收起，新对话页装饰鲸鱼按钮退出 Tab 序列，代码块编辑框恢复全局聚焦环。
+
+- [agent/desktop/protocol] 修复电脑控制停止被原生调用阻塞、启动握手期间窗口引用失效、拖拽未限定目标窗口及元素 token 未进入模型结果的问题；上下文浮层新增电脑控制、设置授权和权限切换入口，保留 never 不弹框的语义，设置可先发现已运行应用并手动授权。
+- [agent/desktop] 修复浏览器菜单缩放竖排与无图标占位、Host RPC 初始化解析空响应、旧 Agent 缺少浏览管理能力时页面挂载失败及并发恢复标签失效；AI 对话可通过 BrowserTabs 接管已有标签，工具栏仅保留人工接管入口，继续遵守站点授权和聊天控制边界。
+
+- [agent/desktop/browser] 修复 history 50 → 51 迁移重复创建浏览器表导致的升级失败，保留已有记录与未知字段；同步相关 schema 断言和浏览器仅停靠右栏、底栏的能力测试，修正格式并消除启动测试对引号风格的依赖。
+
+- [desktop/renderer] 修复两处条件调用 hooks 的真实缺陷：`SidebarSessionHoverCard` 把提前 return 移到 hooks 之后，`usePrefersReducedMotion` 改用 `useContext` 读取主题并在无 Provider 时回退，避免标题重生成状态翻转时改变 hook 顺序导致渲染失败。
+
+- [desktop] 移除新版侧栏分组标题的独立背景覆盖，使其透出面板底色，避免自定义或调试容器背景时出现异色块。
+
+- [desktop] 新版固定侧栏面板与图标栏改用不同主题区域背景，分组标题跟随面板底色；修正内部列表仍按含图标栏总宽计算最小宽度导致的溢出，经典版保持原样。
+
+- [desktop] 调整新版侧栏导航：首页保留项目分组、移除重复项目及设置导航；账户菜单采用统一头像信息与功能分组，将帮助和更新收进子菜单并保留真实账户、用量及宠物操作。
+
+- [desktop/renderer] 侧栏账户与个人资料页共用 5 分钟内存缓存并合并并发请求；返回资料页先展示缓存、过期后后台更新，手动刷新强制请求，登录及退出清理旧账户资料，失败保留已有内容。
+
+- [desktop/renderer] 修复个人资料页在 GitHub 资料加载及失败后重试期间提前显示连接失败的问题；无资料时保持加载骨架，已有资料时刷新继续展示原内容。
+
+- [desktop/renderer] 用户消息中的 Skill 改为带方块图标和强调色的内联标记，与首段正文同排；复用输入框 Skill 样式，长消息折叠计入标记高度。
+
+- [desktop/renderer] 修复聊天标题含 Skill 而 canonical 用户消息正文不显示的问题；正文、复制与回合导航显示结构化选择，排队编辑和修改后重发保留 Skills。
+
+- [desktop/renderer] 修复 Skill 连续选择与发送后再次选择使用旧输入框状态的问题；从当前草稿追加、去重并提交选择，避免后续消息丢失 Skill。
+
+- [agent/desktop] 补齐历史操作返回的日程与分叉标记，修复标记已读／未读、重命名或归档后侧边栏时钟与分叉图标丢失的问题；复用现有来源查询，不改变图标判定条件。
+
+- [desktop/renderer] 侧边栏任务行的时钟、分叉、未读和运行中状态图标按实际数量右对齐，移除空状态占位；单个图标占最右位置，多个图标向左扩展。
+
+- [dev] 修复 Windows 复用旧开发 Agent 的 PID 时，残留启动锁误判为有效而阻止重启的问题；按进程启动时间识别锁所有者，保留历史连接描述和用户数据。
+
+- [desktop] 修复外观迁移记录读取异常被当作“无记录”导致重复迁移的问题：`appearance-migration.json` 只有确实不存在（ENOENT）时才重跑迁移，读取失败（如 EACCES/EISDIR）、JSON 损坏或内容无法识别时改为原样保留记录、跳过迁移并记录不含路径与内容的诊断事件（`appearance-settings.migration-record-preserved`），不再以用户当前（可能已迁移或已自定义）的外观覆盖唯一备份，也不会把已调整的外观再次重置为默认主题。同时校验记录版本、迁移 ID 与备份结构：版本高于 1、`migrationId` 不属于本次迁移、`pending` 缺备份或备份字段缺失的记录一律按不可识别处理，既不改写自己无法识别的记录，也不再让“恢复升级前外观”按钮对不可用的备份返回可恢复。
+
+- [agent] 文件工具依据真实目标路径统一识别配置、环境文件及 Git 保护路径，修复完全访问模式下绝对路径绕过配置校验与审批规则的问题，覆盖新文件父目录链接及批量补丁。
+
+- [agent] 修复「完全访问权限」下文件工具被工作区边界拦截、又无法申请权限的死结：`WorkspaceService` 新增调用级文件访问上下文（`withFileAccess`，默认仍是 `workspace-write`），工具执行链按有效策略传入由 `danger-full-access` 解释出的 `full-access`，读取、写入预检与实际执行统一放行工作区外的绝对路径（相对路径仍以工作区解析，外部路径返回可识别绝对路径），Glob/Grep 可直接搜索工作区外目录，apply_patch 的授权范围不再把外部目标折叠为 `<workspace-file>`；作用域按调用隔离且共享根目录与授权，不修改共享实例，因此并发调用、子 Agent 与随后切回默认权限都不会继承完全访问。真实路径解析、快照与写入冲突校验、配置文档校验、显式只读目录（`writable: false`）与 Plan 模式禁写规则保持不变。同时把审批策略纳入统一工具暴露计划：`never` 与关闭 `requestPermissions` 的细粒度策略不再向模型暴露 `request_permissions`，Pi 生命周期工具直接复用注册表已有描述与参数 schema（`scope` 枚举、必填 `justification`、可申请路径与网络字段），执行端对禁止的审批请求仍然拒绝。完全访问模式下工作区外文件访问无需再次申请权限。
+
+- [agent/desktop] 修复新增与编辑自定义 Provider 时因 RPC 契约遗漏 INVALID_REQUEST 导致校验失败被屏蔽为“Agent 内部错误”的问题：为 `provider/create` 与 `provider/update` 补齐 `INVALID_REQUEST` 声明，并根据具体校验问题（内置 ID 冲突、Base URL 格式、敏感凭据头等）返回明确的错误原因；放宽 `ProviderModelCostSchema` 支持浮点数 Token 计费；修复预设列表中 `deepseek` 与 `openrouter` 默认 ID 撞库问题；在 Provider 编辑弹窗中增加 Base URL 协议、非本地明文 HTTP、环境变量名格式与模型 ID 唯一性即时校验。
+
+- [agent] 修复标题和任务建议在请求发出前因结构化 schema 无法克隆而失败：直接传入 Zod 生成的纯 JSON Schema，避免 Type.Unsafe 注入函数元数据，并用 DeepSeek 真实请求构造覆盖回归。
+
+- [agent] 补充会话标题生成的安全诊断，区分模型解析、请求、JSON 解析与结构校验阶段，记录可提取的 HTTP 状态码和固定失败类别；不记录模型原始响应、异常正文或凭据，并将无效结果正确归类为输出错误。
+
+- [agent/desktop] 修复显式更新会话标题在未配置模型、超时、Provider 失败或输出无效时静默回退并冒充成功的问题：显式更新失败时保留原标题并返回安全明确的 RPC 错误（MODEL_UNAVAILABLE / INTERNAL_ERROR），界面结束加载状态并触发全局错误通知；自动首条消息标题继续保留本地确定性回退；默认超时提升至 15 秒。
+
+- [desktop/renderer] 修复长回复流式阶段重复完整解析、替换持续增长的单一 Markdown 文本节点，导致 CPU 随消息长度显著上升的问题：未完成文本块超过 4KiB 后暂以可复用的轻量分块展示，只有末块随流式内容更新，完成后恢复完整 Markdown；live delta 的投影提交与尾部通知统一按 50ms 合并，durable 与终态事件仍立即提交。
+
+- [desktop/renderer] 修正最近模型机制：新建任务页不再复用长期缓存，每次进入都重新校验 Provider 已启用且可执行、认证可用、模型 `enabled=true` 与 variant 合法，记录失效时按 Provider 顺序回退到首个启用模型并立即覆盖保存，内存中的选择仍可用时优先保留、目录暂不可读时不清空可选模型。最近模型写入收敛为单一串行队列并 latest-write-wins，快速切换时旧选择即使延迟完成或失败也不会覆盖最新选择，只有最后一次选择保存失败才通过现有全局错误通知提示。自动化草稿改用同一解析流程，不再读取任意历史任务模型，也不接受未经验证的配置记录。首次引导与模型门禁改为跨 Provider 判断可用性，避免当前 Provider 不可用但其他 Provider 可用时误要求重新配置。`resolveFirstAvailableModel` 只返回 `enabled=true` 的模型，当前 Provider 没有启用模型时继续检查下一个 Provider。
+
+- [agent] 修正 Provider 删除保护与专用模型引用：删除自定义 Provider 不再因遗留 `model_provider` 值阻塞，只检查最近模型与真实 `providerID/modelID` 专用模型引用；新增带版本标记的一次性迁移，把仍使用裸模型 ID 的专用模型按 `model_provider` 解析为完整引用，无法确定 Provider 或已是完整引用时保持原值，迁移只运行一次且不覆盖用户后续改动。
+
+- [desktop/renderer] 修复任务日历页面无法垂直滚动的问题：移除外层 `.automation-primary-page` 的 `overflow-y: hidden`、`.automation-page-stage` 的 `overflow: hidden` 与 `.automation-calendar` 的固定 100% 高度限制，使页面内容超出视口时由 `PrimaryPageLayout` 自然滚动，确保日历下方常驻议程完整可达。
+
+- [desktop/renderer] 任务日历移除独立的双列页头覆盖，现与项目、工作流等一级页面共用纵向标题、说明、搜索和筛选布局。
+
+- [agent] 修复 profile schema 4 标记已写入但 `project_settings.execution_environment` 增量列缺失时，首页 `project/list` 与 `thread/list` 返回“Agent 内部错误”的问题；启动时会安全补齐兼容列并保留原项目设置。
+
+- [agent] 修复 `thread-history.test.ts` 计划待审批列表投影失败：该用例此前用 `chat` 模式轮次加裸状态写入构造夹具，而计划审批只从最新 Plan 模式已完成轮次派生并随轮次完成写入 `plan_approvals`，因此断言永远不可能成立。夹具改为按真实语义使用 Plan 模式并通过 `finalizeTurn` 完成轮次，断言本身未弱化；同文件的反向用例也改为 Plan 模式并显式执行同一派生，使“非最新轮次／计划未完成／无计划／存在活动轮次”四个否定断言不再是空跑。
+
+- [agent] 修复执行环境投影缺陷：`thread_execution_bindings` 与 `managed_worktrees` 改为分开探测，部分 schema 不再走不安全查询；Local binding 的投影不再依赖 `managed_worktrees`，Worktree binding 无法完整解析（worktree 表缺失、行不存在或未知状态）时省略该投影而不误报 Local；`kind`、`status`、`revision` 改为运行时校验，遇到更高版本写入的未知枚举值时仅省略该投影，不再让整个 `thread/list`／`thread/read` 解码失败；存在绑定行但数据不可读时省略投影而不再回退成 workspace Local（回退只用于确实没有绑定行的旧 Thread），无绑定行的旧 Thread 才按权威 workspace 投影为 Local；列表改为一次批量读取绑定，消除按行查询的 N+1。同时为迁移失败补充 `N → N+1` 版本上下文，便于定位。
+
+- [agent] 修复 schema 45→46 Goal 迁移：迁移改用先读取、再 `DROP TABLE` 重建而非 `ALTER TABLE ... RENAME`。重命名会重新解析全部 schema 对象，在仍带 workspace 校验触发器但尚未补齐 workspace 列的旧库上会直接报错；重建路径对已是目标形态的库（例如 user_version 被回滚的当前库）为幂等空操作。
+
+- [desktop] 修复结构化计划从主对话打开到右侧栏时丢失正文的问题，计划标签直接保留已投影的 Markdown 内容，并兼容旧标签的数据源回退。
+
+- [agent] 修复 Plan 模式回答提问后恢复同一 Turn 必然失败的问题：运行时组合快照恢复（rebind）改为直接复用生命周期工具的单一清单，`submit_plan` 与 `request_user_input`、`update_plan` 等动态生命周期工具不再被误当作普通工具去查询 `toolCatalog`，因此不再返回 `RUNTIME_COMPOSITION_UNAVAILABLE`（“Runtime composition resources are unavailable”）；真正普通工具缺失时仍保持 fail-closed，模型、工作区、Skill、MCP 与 Prompt 一致性校验不变。
+
+- [desktop/renderer] 后台会话新增限频状态对账：只要有会话处于排队、等待或运行中，就每 30 秒用 `thread/list` 校正一次，因此事件投递缺失导致的“已完成却仍显示运行中”会在下一次对账自愈，空闲时不再产生额外请求。
+
+- [desktop/renderer] 修复一次会话目录对账异常导致侧栏状态长期停在旧值的问题：对账失败不再中断事件投递并触发订阅重建，待处理交互目录或活动会话快照失败时也仍会推送已刷新的会话列表。
+
+- [desktop/renderer] 插件与技能详情页的图标槽位增加 `overflow: hidden`，让铺满槽位的 Logo 按槽位圆角裁切，避免方角溢出圆角边框。
+
+- [agent] 区分主请求与健康检查的超时及未知错误文案，修复主请求误显示“15 秒”或“模型测试失败”，保留健康检查提示与原有超时配置。
+
+- [desktop] 统一正文时间线中工具、思考、提问和等待状态的图标与文字起点，统一工具／思考／回答标题的高度与悬停圆角，修正展开回答及窄面板的重复缩进，保留分组层级。
+
+- [desktop] 请求卡标题栏改为垂直居中对齐，使标题与分页、关闭控件居中排列。
+
+- [desktop] 将问题分页与关闭按钮分为两个独立布局单元，收紧分页箭头和计数之间的间距。
+
+- [desktop] 跳过当前问题后将键盘焦点移至下一题第一项，不触发选择或提交，避免焦点停留在输入区域。
+
+- [desktop/agent] 问答卡将跳过／下一步／提交置于输入区域内，支持 Enter 确认与 Shift+Enter 换行；逐题跳过持久记录为“未提供答案”，保留 Esc 整组忽略和中断语义，并通过能力协商保护旧 Agent。
+
+- [desktop] 单选题点击选项即确认并进入下一题，末题直接提交完整答案；保留箭头确认推荐项、草稿和失败重试，统一数字与铅笔标记垂直居中。
+
+- [agent/shared] 补齐提问契约中可选的答题数量字段，修复待回答会话历史分页严格编码报错、重启后无法打开的问题；保留完整问题说明并兼容缺省字段的旧记录。
+
+- [desktop] 问答选项保留真实说明并在第二行显示，正确识别多选；单题单选及计划实施点击即提交，跳过／关闭与提交按钮互斥，保留自定义反馈、草稿和失败重试。
+
+- [desktop] 问答卡容器与问题区块设置为父容器完整宽度，避免内容收缩。
+
+- [desktop] 侧栏根据实际等待类型显示状态：等待回答问题显示“需要用户输入”，权限审批继续显示“等待审批”。
+
+- [desktop] 微调问答卡标题、选项与底部输入行间距，增加留白并保持原有交互和宽度。
+
+- [desktop] 去掉侧栏等待审批标签的上下内边距，使标签高度等于文字行高。
+
+- [desktop] 问答卡选项说明改为第二行直显，使用右箭头确认翻页、末题整组提交，并新增中断当前对话的关闭按钮。
+
+- [desktop] 侧栏等待审批时仅显示审批标签，移除同时出现的加载转圈及占位，继续运行后恢复加载状态。
+
+- [desktop/agent] 修复多问题提问在实时与历史恢复中被拆分的问题，统一底部分页与整组确认提交；正文等待状态精简为两个节点，回答后默认折叠，并修复自定义回答输入布局。
+
+- [desktop/renderer] 修复窄宽度下设置行控件移到文字下方的问题，保持说明在左、控件在右，并允许说明文字自然换行。
+
+- [desktop] 侧栏整理及活动菜单从“…”按钮左侧始终向右下展开，下方空间不足时限制高度并在菜单内滚动，避免自动翻到按钮上方。
+
+- [desktop] 修复历史模型恢复，读取最近实际轮次的提供商、模型及原始 variant，避免排队轮次覆盖已使用的模型与推理强度。
+
+- [desktop] 修复首次启动时模型选择和提供商目录尚未加载，因空值比较误进入读取分支导致 DesktopLayout 崩溃的问题，并补充首次渲染浏览器回归。
+
+- [desktop] 修复主会话与侧边聊天之间模型、提供商及推理强度串用：未发送选择按会话在内存中保留，重启恢复实际历史模型与 variant，历史加载期间阻止错误发送并支持重试；会话内选择不再改写全局默认。
+
+- [desktop] 修复已有会话切换模型或提供商后被历史状态覆盖的问题，统一选择、目录刷新与后续发送的模型状态，普通发送及主/侧聊天排队消息均携带新模型，并防止迟到的保存结果覆盖新选择。
+
+### Removed
+
+- [desktop/renderer] 移除启动入口及 coding、working、chat 新建页的 JS raw/gzip 体积上限和 CSS 基线增长门禁，保留资源体积报告与首屏模块完整性检查，完整功能和视觉交互效果优先于首屏体积。
+
+- [desktop/renderer] 移除未接入的新聊天标题轮播模块：删除 `chatHomeHero.ts` 与其测试，新任务页标题已由固定文案渲染；`ChatNewSessionView` 仍在使用的 `.chat-home-hero` 样式保留。
+
+- [agent/mcp] 移除旧 HTTP+SSE 客户端回退和调试服务器分支；已有配置原样保留，不受支持的端点连接时返回安全错误。
+
+- [desktop/renderer] 移除 BeUI Scroll Animation 动画与进度指示体系：移除 SmoothScroll 与 ScrollProgress 组件、对应样式、测试用例及 `lenis` 依赖，WhatsNewDialog 恢复使用统一的 ScrollArea 基础组件。
+
+## 0.2.0-beta.5 — 2026-09-04
+
+### Security
+
+- [agent] 结构化结果校验失败时改用固定安全错误，避免非法字段值进入工具结果、事件或持久化记录。
+
+- [security/dependencies] 将存在 symlink 越界风险的 extract-zip 固定为仓库内维护的安全修复版，统一 Agent 与 Electron 的依赖解析，并移除可能在工作树半安装状态下损坏依赖的 Bun 动态补丁。
+
+- [security/dependencies] 升级 React Router 并固定已修复的 fast-uri、browserslist 与 toml 传递依赖，移除过期安全豁免，恢复 High/Critical 依赖审计门禁。
+
+### Added
+
+- [desktop] 将“已安排”升级为任务月历，新增一次性计划任务、规划草案确认卡、自动化未来投影与执行结果议程，并复用现有无人值守执行链。
+
+- [agent] 实施主循环结构化交付：新增 orchestration 共享结果模块，统一 finalize_result 的完整字段 schema、共享领域 schema 校验与确定性可读交付说明（摘要、验证、风险）；运行时校验与宿主 callback 均成功后候选结果才绑定 toolCallID，且仅当最终模型消息即提交消息时才作为本轮交付，后续 steering 或继续执行不复用旧候选；summary 非空约束只作用于新提交；合法独立提交结束循环、不发起收尾模型请求，普通问答仍以文本自然结束。
+
+- [agent] 为 Chat 主 Agent 开放可选 finalize_result 结构化收尾（Plan 模式不暴露、继续以 <proposed_plan> 交付，子 Agent 收尾仍必须提交结构化结果，恢复旧快照不补入未冻结新工具）；工具成功输出同一条可读交付说明并附脱敏 details/structuredContent，经现有 PiEventAdapter 投影为工具卡 output 与 resultBlocks JSON 块，HarnessRunResult.output 在有效交付时使用同一份说明，不新增 ToolItem、RPC、事件或数据库表。
+
+- [agent] 实施 Sidecar 长期高内存与堆外内存治理：限制 SQLite 单库 4MB 页面缓存上限（PRAGMA cache_size = -4000），引入 MemoryManager 核心服务实现 Turn 终态 1.5s 防抖与 60s 静默空闲主动 GC 与 shrink_memory（结合 wal_checkpoint(PASSIVE) 归还未用页面），对 GitReview 文件 Diff 快照（上限 3 项）与 Compaction（上限 10 项）引入 LRU 有界淘汰，并预留 system/shrinkMemory RPC 契约与 system.memory.v1 capability。
+
+- [desktop/renderer] 支持在工作区工具栏单击标题原地编辑会话名称（单次点击即可自动聚焦并全选现有标题，支持 Enter 与失焦保存、Esc 取消、输入法组合防误触与失败保留），并对齐顶部项目图标居中与项目详情卡片首行（图标、名称与置顶按钮）水平中心线。
+
+- [desktop] 聊天 header 项目图标支持打开项目详情，复用侧栏统计、置顶与编辑操作；无项目聊天不再显示图标或占位。
+
+- [desktop] 聊天页右上角新增页面宽度快捷按钮，点击循环切换默认、窄和宽，并与外观设置同步。
+
+- [desktop] 外观设置新增页面宽度选项，支持默认、窄和宽三档，并自动保存用户选择。
+
+- [desktop/renderer] 新增全局页面缩放快捷键与可交互胶囊提示，支持跨窗口同步并记忆缩放比例。
+- [agent/desktop/renderer] 集成官方 MiniMax CLI 的一键安装、更新与卸载，自动跟随 API Key Hub 当前生效的 MiniMax Coding Plan Key，并将 mmx Skills 动态接入 Agent。
+- [desktop] 新增可恢复的本地自动化调度、任务管理与运行收件箱。
+- [agent] 增加兼容 Codex manifest 的内置插件发现、启停与插件 Skill 接入，并明确用户插件缓存随 CodePilotX 数据目录迁移。
+- [desktop/renderer] 接入真实的内置任务规划插件，并将 Browser 等尚未接入能力的 Featured 插件统一显示为暂不可安装。
+- [desktop] 支持独立启动并发现开发 Agent，多个完整桌面窗口可复用同一 Agent，并可将当前聊天在新窗口中打开。
+- [desktop/renderer] 为 Composer 文件变更汇总增加会话级 Diff 文件预览，支持查看逐文件增删统计并点击定位到 Review。
+- [desktop/renderer] 增加侧边栏会话标记为未读及已读切换功能，并持久化同步会话行、Bell 与活动时间线状态。
+- [agent] 新增 HarnessCompositionIdentity、HarnessToolComposition、HarnessTurnComposition、HarnessTurnContext、HarnessStepContext 类型及相关纯函数，实现 Agent Turn 组合身份计算、上下文构建与工具 envelope 校验。
+- [desktop] 新增侧边栏“查看活动”，集中展示进行中、待处理、未读及最近七天会话，并支持来源筛选和增量加载。
+- [Agent/desktop/renderer] 模型目录统一接入 models.dev，在保留 Pi 原生执行、用户自定义 Provider 与加密凭据的同时，自动启用安全的 OpenAI-compatible Provider，并为离线缓存和未适配协议提供明确状态。
+- [desktop/renderer] 支持 GitHub 风格的 Markdown 提示块（Alerts / Callouts，支持 `[!NOTE]`、`[!TIP]`、`[!IMPORTANT]`、`[!WARNING]`、`[!CAUTION]`）：在正文会话时间线与右侧 Markdown 富文本编辑器/预览中统一渲染色彩边框、图标徽标与专属警示色系，富文本编辑中聚焦首行可直接修改围栏标签。
+- [development] 新增 CodePilotX 项目级代码审查、推送前检查、文档规范和简化审计 Skills，使 Agent 按仓库架构与验证契约执行常见工程工作流。
+- [Agent/desktop/renderer] 新增全局模型健康测试，可用活动凭据并发执行真实最小请求、实时查看模型延迟与安全失败分类、取消批次及逐模型重试，并将 Provider 连接测试统一为真实探针。
+- [Agent/desktop/renderer] 新增 Codex 式本地文件与目录上下文：图片按发送时快照保存，普通文件和目录以任务级只读路径引用接入 Agent，并支持安全的应用内预览与目录浏览。
+- [desktop] 新增基于 SenseVoice GGUF 的本地语音听写、麦克风选择和后台模型安装，录音仅临时处理且不会自动发送。
+- [desktop/renderer] 新增历史消息与待发送图片、文本附件的右侧预览，支持图片缩放、按类型美化文本及安全下载到系统 Downloads 目录。
+- [desktop] 支持在主窗口按 F12 切换开发者工具控制台，并避免长按按键导致重复开关。
+- [desktop/renderer] 新增 `/new` 两种真实资源门禁（Renderer 静态入口与 coding/working/chat 交互首屏），以显式模块清单定位首屏必经 chunk，并在优化完成后按实测值收紧上限，防止首屏体积回退。
+- [desktop/renderer] 在入口 JS 与主 CSS 就绪前保持静态启动遮罩（复用 Electron 鲸鱼图标视觉），仅在真实 ProseMirror 编辑器可输入后淡出，并在 reduced-motion、离开 `/new` 与 20 秒超时场景安全退出。
+- [desktop/electron] 在 Electron 性能测试的 cold start 中新增 `new-route-ready` 观测样本（真实 Composer 可输入、建议面板与字体、同源 JS/CSS 解码字节），本轮仅观测不设硬预算。
+- [desktop] 外观设置补齐真实系统字体与字体样式选择：preload 新增类型化 `listSystemFonts()`（Local Font Access 只返回 family/fullName/postscriptName/style，字段限长、去重、稳定排序，不支持/拒绝/失败安全降级为自由文本输入）；主题设置保留式升级为 V7（新增可空 `uiFace`/`codeFace`，清除时显式持久化 `null`，V1–V5 历史重置策略与高版本拒绝覆盖不变）；新增主题字体加载工具，以唯一 alias 注册本地 face 并置于原家族之前，加载失败自动回退；UI 字体展示全部家族、代码字体按 Canvas 等宽检测过滤，默认 face 只保存家族；“偏好设置”顺序对齐 Codex：指针光标、减少动态效果、界面字号、代码字号、差异标记、字体平滑（仅 macOS）。
+- [Agent/desktop/renderer] 统一三种上游协议（OpenAI Responses / OpenAI Completions / Anthropic Messages）的富工具结果：在 shared thread 增加可选 `resultBlocks`（text / citation / json / artifact）与完成元数据 `completion`，PiEventAdapter 将工具结果安全投影为同一 canonical item/event；history schema 前向迁移至 33，新增独立 `item_artifacts` 表与受控 blob 存储，新增 `artifact/read` RPC 与 `artifacts.read.v1` capability（跨 thread / 未知 ID / 非法定位拒绝，缺表环境降级 capability）；renderer 在工具卡片渲染四类结果块，图片 artifact 复用附件预览、其他类型为通用文件项，并按状态展示已取消的会话/轮次。
+- [agent/runtime] 新增 `runtime_composition_plans` 表（history schema 34）与 RuntimeCompositionService/Repository，持久化 Turn 的模型、权限、Skills、MCP、工具和 Prompt 快照；缺表环境 fresh turn 走 ephemeral、恢复时 fail-closed。
+- [agent/desktop] 补齐工作目录、会话 ID 与系统深链复制，支持 CodePilotX Agent 分页读取关联会话，并为外部 Agent 提供按会话 ID 查询的 SQLite 只读语义视图。
+
+### Changed
+
+- [desktop] 移除工作区内容全宽与完整视图入口，聊天和内容仅支持并排分屏或隐藏标签页；拖拽拉宽遵守分屏尺寸上限，旧全宽状态恢复为分屏并保留标签、显隐和宽度记忆。
+
+- [agent] 委派改用指导策略并精简主/子代理 prompt 与生命周期工具描述：小型、强耦合工作由主 Agent 直接完成，只把边界明确、有独立产出、能隔离大量中间信息或适合并行的问题交给子代理，尊重用户与仓库规则的并行要求；task 字符串携带目标、范围、关键背景、约束与预期证据；子代理交付要求（结论、证据引用、必要验证与未决事项、长日志留在任务记录、outcome 如实陈述、不得编造验证成功）写入 profile 提示、子代理任务输入与 finalize_result 描述，主 Agent 复核与最终交付相关的结论且不为总结再造子代理。
+
+- [desktop/renderer] 调整用户消息 Markdown 气泡排版，取消 user-message-markdown 中 md-body 段落 (p) 继承的 margin-block: var(--cpx-sys-space-3) 规则，由基础 Markdown 样式保障首尾外边距清除与段落自然间距。
+
+- [desktop/renderer] 对齐 Codex 项目编辑弹窗与聊天交互：弹窗宽度设为 32rem（20px 内边距、12px 分段与 20px 底部留白）、移除背景模糊并保留暗色遮罩；名称栏采用 40px 高度、40px 图标区与整体边框高亮；源文件夹列表统一容器与 48px 行高，名称单行省略并支持悬停展示完整路径，仅在多文件夹时展示主目录徽章与设为主目录操作；底部操作按钮统一采用 medium 尺寸，并将项目图标选择弹层层级提升至弹窗之上。
+
+- [desktop] 面板开关改用 PanelBottom、PanelRight 图标并保留分隔线伸缩效果，统一右侧面板展开按钮与面板开关尺寸。
+
+- [desktop/renderer] 将聊天宽度选择提升为全局页面宽度，统一覆盖新建聊天、聊天、项目及详情、会话组及详情、插件与技能及详情、自动化、PR、宠物和设置内容，共享内容轴居中并按容器自适应适配。
+
+- [desktop] 恢复工作区 header、文件标签栏与文件工具栏按钮的背景悬停反馈，将聊天 header 外部打开入口移除，并将文件预览入口改为紧凑图标双按钮。
+
+- [desktop/renderer] 统一环境信息摘要面板在内嵌置顶与浮层模式下的宽度为 260px，消除 Portal 跨层级导致的宽度跳变并改善扁平比例。
+
+- [desktop] 恢复页面宽度、置顶摘要及底部/右侧面板按钮的悬停背景，任务完成与文件变更摘要入口改为透明交互反馈。
+
+- [desktop] 移除助手正文独立阅读宽度限制，所有宽度档位下正文均占满外层内容区域。
+
+- [desktop] 页面宽度快捷入口改用 Menu 图标，点击三态轮换，三条横线长度随档位同步变化。
+
+- [desktop/renderer] 合并工具行与分组行公共样式，统一同层级高度、圆角及悬停焦点效果，移除单个工具行重复的原生文字提示。
+
+- [desktop/renderer] 将工作台顶部壳层终端控制更正为「底部面板」概念，并采用与右侧面板成套对称的开合窗格图标；在会话页面操作与工作台壳层面板之间引入垂直分隔线，统一工具栏按钮的微动效与 aria-pressed 高亮反馈。
+
+- [desktop] 全局普通图标按钮统一使用透明背景与图标强调反馈，保留键盘焦点、禁用及切换选中语义。
+
+- [desktop] 移除全界面按钮点击时的 1px 下沉微动效，保留背景色与焦点反馈。
+
+- [desktop] 统一侧栏行内按钮的悬停反馈，仅强调图标并保留键盘焦点框，避免与行背景重复叠加。
+
+- [desktop/renderer] 统一正文与顶层工具展开行之间的垂直间距，消除正文首尾外边距与工具行内边距叠加。
+
+- [desktop/renderer] 执行内容改为同一份正文原地展开，默认保留两行并截断，展开自动换行，移除重复摘要和展开箭头。
+
+- [desktop/renderer] 工具执行内容默认显示单行可展开摘要，保留完整命令复制与横向滚动；复制按钮悬浮于分区右上角，不再占用整列正文空间。
+
+- [desktop/renderer] 精简工具卡片为 Shell 标签与连续输入输出，移除分区标题和分隔线，复制按钮改为各分区独立悬停或焦点浮现。
+
+- [desktop/renderer] 代码块支持独立与嵌入 Surface，工具输入、输出和状态合并为同一底板，操作按钮在悬停或键盘焦点进入时浮现。
+
+- [desktop/renderer] 工具输入与输出复用统一 CodeBlock，保留分区复制、执行状态与输出滚动，移除重复代码块样式。
+
+- [desktop/renderer] 全流程重塑会话执行过程折叠组（Modern Timeline）：引入极简贯通时间轴线，自动剥离机械性目录切换前缀并后置耗时，实现多层结构化进程通信包装（exitCode / exit_code / stdout / stderr / timedOut / truncated 等对象、JSON 字符串及 Markdown 代码块）的深度清洗与阻断，并将展开卡片与文本起始列自然对齐。
+
+- [desktop/renderer] 统一重塑终端执行卡片（canonical-command-shell 与 embedded 模式）：采用深色一体化终端卡片外观，支持 shell 类型动态标签、命令与输出连贯排版、在各内容区域（命令行/输出区）右上角独立悬停浮现复制操作与右下角简明状态展示。
+
+- [desktop] 优化 Composer 命令与上下文面板：统一 `+` 与 `@` 上下文入口，补充会话命令、真实引用和技能作用域展示。
+
+- [desktop/renderer] 调整会话内联摘要开启时工作区主体内容右侧边距（`padding-inline-end`）计算间距。
+
+- [desktop/renderer] 统一会话页用户消息、执行过程、工具摘要与最终回答的连续阅读排版，使中英文内容共享同一字号和行高节奏。
+- [desktop/renderer] 将回合执行过程改为主题自适应的分层路径时间线，运行阶段自动展开并突出当前工具，同时保留历史详情与交互能力。
+- [desktop/renderer] 统一 Review Diff、Markdown 代码块、编辑器与终端的代码行高契约（`--cpx-sys-line-height-code`，字号 + 7px），建立 42rem 会话阅读轴与 48rem/1250px 三级布局宽度规范。
+- [desktop/renderer] 统一三种新会话页的 Composer 主操作轴、紧凑建议布局与缺模型引导，并收敛嵌套圆角、菜单反馈和 Tooltip 延迟行为。
+- [desktop/renderer] 侧栏工作模式标题及“置顶”“项目”“最近”章节标题改为无渐隐的单行裁切，避免 Coding 等短标题边缘出现不必要的透明衰减。
+- [desktop/renderer] 将侧栏底部帮助与更新状态槽改为内容自适应宽度，减少普通状态下的多余留白。
+- [desktop/renderer] 活动视图改为显示会话所属项目文件夹名称，收紧侧栏 footer 与账号菜单行高，使会话标题在操作图标出现时保留悬停滚动并于滚动期间双侧渐隐，同时将 footer、展开及折叠操作设为无渐隐的单行裁切例外。
+- [desktop/renderer] 参考 Oreo Side Bar 规范统一首页与设置侧栏的网格、UI 字号、章节节奏和图标规格，使项目会话与项目名称同线、会话悬浮卡标题贴齐卡片内沿、设备图标与时间组成固定尾部状态组、悬浮卡与触发行顶部对齐且元信息共享文字列，并恢复收起后从标题栏按钮或窗口左缘打开悬浮预览的体验。
+- [desktop/renderer] 重新建立全组件 Typography 内容层级，区分展示、结构、控件、连续阅读、元信息与代码文本，优先使用 Windows Segoe UI Variable 系统字体，并保留界面与代码字号设置。
+- [desktop/renderer] 统一 Browser、Terminal 与文件预览面板的工具栏和内容 inset，为浏览器加载错误补充可恢复说明，并收敛窄面板操作布局。
+- [desktop/renderer] 收敛 Review 工具栏、文件树、文件标题与 Diff 内容列线，确保窄面板和文件树折叠状态保持稳定对齐。
+- [desktop/renderer] 将拉取请求空态接入一级页面框架，统一首次模型设置与路由状态页布局，并将自绘设置标题栏对齐到 Windows 36px 契约。
+- [desktop/renderer] 统一插件、技能目录和宠物商店的一级页面外沿、筛选状态与窄屏布局，宠物商店改为复用共享页面框架。
+- [desktop/renderer] 统一自动化与会话组的一级页面外沿、列表列线、详情区域及窄屏响应式布局。
+- [desktop/renderer] 将供应商、插件、技能、MCP 及相关编辑弹窗统一到设置页的内容基线、连续卡片行与任务导向表单布局。
+- [desktop/renderer] 参考 Oreo Side Bar 规范统一设置导航、页面标题、章节、卡片、行内容与控件列的横向基线，使所有设置页保持严格对齐。
+- [desktop/renderer] 阶段六将设置卡片与模型管理页收敛到 Oreo 式紧凑平面层级，复用共享页面边距并移除重复和失效样式。
+- [desktop/renderer] 阶段五将菜单、Tooltip 与对话框收敛为 Oreo 式不透明浮层，统一 Dialog 表面所有权并移除重复和失效样式。
+- [desktop/renderer] 阶段四将会话轮次、用户消息与 Agent 活动详情收敛为 Oreo 式紧凑不透明层级，为用户和助手 Markdown 接入随界面字号联动的阅读行高及紧凑块间距，并移除不再使用的旧文件变更样式。
+- [desktop/renderer] 阶段三将 Coding、Working 与 Chat 新建页的 Prompt 输入面改为 Oreo 式不透明平面表面，并将常驻建议卡和工具条收敛到容器圆角语义。
+- [desktop/renderer] 阶段二按 Oreo Agentic UI 收敛菜单栏与侧栏密度、平面滚动标题和账号头像入口，同时保持 Windows 标题栏、导航与工作区布局契约。
+- [desktop/renderer] 阶段一将默认明暗主题、首屏回退与基础组件样式收敛到 Oreo Agentic UI 的中性视觉基线，并保留已有用户主题和桌面交互契约。
+- [desktop/renderer] 为独立置顶会话补充会话图标，并将侧栏长标题改为静态渐隐与更舒缓的悬停滚动。
+- [desktop/renderer] 将全局界面收敛为 Codex 式 12/13/14 正文刻度、445/500/600 字重与统一前景色层级，改善会话、侧栏、设置和工作台的信息重点。
+- [agent/desktop/renderer] 将工具执行时间线升级为 Codex 风格的语义活动流：由 Agent 统一分类读取、搜索、文件变更、命令、技能、网页和集成活动，Renderer 使用 `cpx-agent-activity*` 展示稳定聚合、状态文案、可打开文件链接及折叠明细，同时兼容旧历史记录。
+- [desktop/renderer] 将会话组并入 Renderer 静态入口，使全部主窗口一级页面和所有设置页面随桌面启动加载，消除首次导航时的异步分块等待。
+- [desktop/renderer] 在插件示例提示词中展示对应的真实插件图标，使提示词胶囊与 Codex 的身份标识结构一致。
+- [desktop/renderer] 固定插件懒加载样式的级联层顺序，避免 reset 层覆盖示例提示词的毛玻璃按钮背景。
+- [desktop/renderer] 为插件示例提示词增加 Codex 风格的半透明毛玻璃胶囊，使提示内容与图片背景形成清晰层次。
+- [desktop/renderer] 将插件示例提示词横幅改为 Codex 风格的紫色图片背景，并以居中的提示词胶囊保持明暗主题下的可读性。
+- [agent/desktop/renderer] 将插件详情重构为 Codex 风格的宽幅产品页，展示清单长描述、示例提示词、技能与信息，并支持从真实提示词立即试用。
+- [desktop] 将侧边栏项目、置顶项和组内任务排序改为同组 Reorder，拖动时实时让位并在松手后保存新顺序。
+- [desktop/renderer] 将 MiniMax CLI 插件的临时线框图标替换为正式图片资源。
+- [desktop] 将自动化建议区分隔线移至章节顶部并移除标题内边距。
+- [desktop/renderer] 为自动化建议列表增加 5px 项间距，使相邻建议卡片保持清晰分隔。
+- [desktop/renderer] 为自动化建议列表项增加 5px 内边距，避免内容紧贴悬停区域边缘。
+- [desktop/renderer] 移除自动化建议按钮的额外内边距，使建议内容布局更紧凑。
+- [desktop] 恢复自动化建议列表的宽松行距、正文层级与章节分隔。
+- [desktop] 恢复自动化全部页无任务时的空状态指引，并与建议模板同时展示。
+- [desktop] 自动化工作台对齐 Codex 的任务列表、建议区、状态筛选与空状态布局。
+- [desktop/renderer] 让插件与技能首页完整继承统一一级页面的标题、说明、搜索、内容轴和纵向间距，仅在目录业务区域保留 Codex 式专属样式。
+- [desktop/renderer] 收紧插件目录的图标与文字尺寸，将 Computer Use 等方形图片裁剪到图标容器圆角内，并为已安装图标上移动效恢复顶部缓冲。
+- [desktop/renderer] 按 Codex 插件目录结构重做插件与技能主页面，增加真实图标的已安装架、紧凑透明双列目录、分类筛选及可深链的页内详情。
+- [desktop/renderer] 按 Codex 列表式信息架构统一项目、会话组、自动化与插件一级页面，复用共享宽版内容轴并收紧标题、说明与页面留白。
+- [desktop/renderer] 全面重构会话组（Session Groups）工作台视觉与交互：引入现代引导大厅（Hero Banner 与三大核心特性）、统一 SearchInput 搜索过滤与左侧列表卡片元数据、升级成员添加为带搜索的 Select 下拉组件，并优化步骤时间线状态指示、校验徽章与 Diff 折叠预览。
+- [session-group] 将任务看板替换为跨项目会话组，支持组内共享步骤、修改、验证、失败来源和精确 Diff 引用。
+- [desktop/renderer] 将供应商目录、连接、凭据和模型管理从主导航迁入“设置 → 集成 → 供应商”，并保留旧地址重定向。
+- [desktop/renderer] 将全局输入框与多行文本框的基础样式调整为直角边框。
+- [desktop/renderer] 将会话组的“新建”操作从列表标题移至工作区右上角，保持页面级动作位置一致。
+
+- [desktop/renderer] 将 Chat、Working 与 Coding 新建首页按 Codex/ChatGPT 参考逻辑收敛为聚焦布局，恢复 Coding 鲸鱼与四张建议卡边界，并将 Working 建议移出首屏。
+- [desktop/renderer] 将 Renderer CSS 资源门禁改为显式基线、软告警与硬失败分层，并将会话组隔离为独立路由资源预算。
+- [desktop/renderer] 为 Composer 思考强度滑块增加连续拖动与轻磁吸，改用合成层位移和填充缩放消除拖动迟滞，并将 Codex 式弹簧阻尼限制在 Thumb 按压反馈上。
+
+- [desktop/renderer] 建立完整的 2xs–4xl/full 圆角基础刻度并分阶段迁移 Renderer 组件，使普通控件、列表、菜单、消息与高层级浮动表面恢复 Codex 式层级，同时限制大圆角仅用于明确的 prominent 表面。
+- [desktop/renderer] 将 Composer 模型、推理强度与提供商整合为 Codex 风格的简洁/高级选择器，使打开态 Chip 与弹层对齐并居中，按 Switch 语义统一滑杆前景与背景并收紧高级按钮，修复双层 Hover、纵向切换、动态高度空白、悬停 Flyout、Provider 连续选择及拖动档位回跳，同时保留“更高效 / 更智能”端点提示。
+- [desktop/renderer] 建立主题自适应的圆角光学校正与 prominent 曲率语义，使按钮、会话 Composer、用户消息和线程环境摘要在支持环境中使用一致的 Codex 风格超椭圆轮廓，同时保持其他 Renderer 圆角不变。
+- [desktop/renderer] 收紧 Composer 执行计划与 Diff 文件预览卡片的宽度、间距和排版，并统一为主题自适应的 Codex 风格 rich tooltip 层级。
+- [desktop/renderer] 对齐 Codex 的紧凑比例，收窄思考等级弹层及其轨道、滑块和内部留白，避免遮挡会话内容。
+- [desktop/renderer] 按主题语义重塑思考等级弹层，以当前等级、粗轨道、大滑块和离散刻度提供更直观的调节反馈。
+- [desktop/renderer] 将思考等级从模型选择器拆分为独立等级按钮，使模型与推理设置可以分别调整。
+- [development] 重构根与各 workspace 的 AGENTS.md 规则层级，明确全仓红线、局部细则及兼容边界，减少重复和 Agent 误判。
+- [agent/desktop/renderer] 将六项性能分档任务模型收敛为生成、整理、代码和安全四类专用模型，按用途复用任务建议、标题、记忆、上下文、计划执行、代码审查和权限审核能力并迁移旧配置；任务建议生成超时由 8 秒延长至 15 秒，并记录实际模型与耗时。
+- [desktop/renderer] 固化 Workbench 区域颜色归属规范，明确右侧 Dock 与底部 Panel 跟随工作区画布，窗口菜单栏与左侧栏保持应用 Chrome 层级。
+- [desktop/development] 对齐 Codex 的 Windows Window Controls Overlay：原生按钮区改为完全透明并透出 Renderer 菜单栏背景，菜单栏与 Overlay 使用确定的 36px 逻辑高度，移除 DOM 实测颜色/高度回写 IPC 及其缩放反馈环，避免右上角色块断层和标题栏高度自增。
+- [desktop/renderer] 为窗口菜单栏、侧边栏和工作区建立独立区域颜色 token；窗口 Chrome 默认同色，右侧 Dock 与底部 Panel 跟随工作区画布。
+- [development] 将 MiniMax 全系列模型限制为只读文档查阅、代码探索和方案调研，禁止其修改任何工作区内容或承担编码实现；外部编码仅允许使用经确认的 DeepSeek 候选，否则由主 Agent 亲自完成。
+- [desktop/renderer] 建立 UI 交互术语规范并统一普通 Popover、Spinner、长文本展开、文件树语义与拖放反馈，减少重复实现并保持各领域状态边界。
+- [desktop/renderer] 将左侧栏、中央内容、辅助面板与底部面板收敛到统一 Workbench Shell，并保留面板尺寸、显隐及辅助面板最大化前状态的恢复语义。
+- [desktop/renderer] 将 Composer 输入面及其新建会话形态的圆角统一为双倍 `--cpx-sys-radius-xl`，使输入区域保持更明确的圆润层级。
+- [desktop/renderer] 统一排版、间距、圆角、动效、阴影与层级 Token 的语义选择规则，迁移 Feature、lazy 样式和 Tailwind 任意值，并新增可检测组件私有边界、裸值及 stale 精确例外的自动契约。
+- [development] 允许主 Agent 按任务范围和上下文复杂度自主选择 OpenCode 的 DeepSeek 或 MiniMax 模型执行受控小阶段，同时保留文件冻结、同 session 返修和独立验收要求。
+- [desktop/renderer] 统一 Renderer 颜色语义与表面层级，收敛 feature 对组件颜色别名和临时混色的依赖，为后续 Agent 增加可执行的选色规范与样式检查，并增强 Composer、会话摘要、审批及 Review Diff 在明暗和自定义主题下的信息层级。
+- [desktop/renderer] 将消息附件与本地上下文导入改为客户端启动时预热的延迟模块，保持首次发送无需临时加载模块，同时恢复 Renderer 入口体积预算。
+- [desktop/renderer] 将 Skill 选择统一为 Composer 内联 token；内置扩展跳转产品详情，工作区和用户 Skill 在右侧只读打开 SKILL.md。
+- [desktop/renderer] 将主导航、设置与常用工作台界面调整为随桌面端启动加载，减少首次打开页面和面板时由动态分块造成的加载动画与空白，同时继续按需加载终端和编辑器等重量级能力。
+- [agent/desktop/renderer] 将 Material 图标与代码高亮主题收敛为少量按需分片，统一 Repository 公共声明和 Electron 原子 JSON 写入，并简化性能报告为当前指标与预算对比，显著减少源码文件且保持现有运行能力。
+- [docs/agent] 基于当前 CodePilotX 与 OpenAI Codex 固定提交重写 Harness 对标报告，校正已完成能力，并给出以运行组合完整性、Skills/MCP 真按需、Hook、Sandbox/凭据决策和 Durable Goal 为核心的证据化优化路线。
+- [agent] 将 Pi Harness 物理并入 App Agent，并统一 AgentRuntime 执行门面，减少重复编排层。
+- [development] 明确 OpenCode、MiniMax 等外部 Coding Agent 的受控实施边界，要求核心改造采用小任务串行、冻结行为测试、禁止类型绕过并由主 Agent 独立验收。
+- [agent/runtime] 为 Harness 增加不可变 Turn/Step composition 契约，并统一持久化主 Agent 与子 Agent 的模型、权限、Skills、MCP、工具和 Prompt 快照，确保暂停及恢复期间运行配置保持一致。
+- [agent/runtime] 将 schema 34 的持久化 Runtime Composition（快照、rebind、capability probe 与幂等 release 生命周期）整合进 AgentRuntimeService 内部：同一持久化产品 Turn 在首次 Provider sample 前持久化快照，pause/resume 只 rebind，下一产品 Turn 才重新 compose。
+- [build/session-view] 补齐移除 Pi Core workspace 后缺失的共享类型环境：`packages/session-view/tsconfig.json` 的 `lib` 由仅 `ES2022` 对齐为 `ES2022 + DOM`（与 shared、agent-protocol 等包一致），使 session-view 自身声明其传递编译所需的 `URL`/`File` 全局类型，不再依赖被删除 workspace 经根 node_modules 泄漏的 `@types/bun`；干净 frozen install 后 `bun run typecheck` 可全绿。
+- [desktop/renderer] 统一会话区域加载态展示：将鲸鱼闪光效果约束在会话内容主区域（variant="contained"），保留侧边栏、右侧面板与顶部菜单栏正常交互；加载期间隐藏底部 Composer，并在数据就绪后平滑淡入时间线；替换时间线旧有旋转 Spinner，彻底消除会话切换与加载时的重复动画问题。
+- [desktop/renderer] 优化侧边栏顶部活动通知图标：采用 Lucide 嵌套 SVG 规范，统一使用 Bell 图标并将其小圆点收敛为纯未读消息指示器，仅在存在未读会话时显示与会话行一致的主题色小圆点，会话进行中或等待用户操作时不亮起圆点，提示文案固定为“查看活动”。
+
+- [desktop/renderer] 升级「设置 - 用量与成本」页面：将具备实时余额（如 DeepSeek）与套餐额度（如 MiniMax、Kimi Code）的厂商作为正常卡片发起查询与渲染，支持多币种总余额与充值/赠送明细展示；移除顶部全局时间范围切换器，下沉至仅支持分日历史时序（usage / cost）的厂商卡片右上角内嵌独立控制，并在用量页面隐藏无可用接口厂商的不可查区域；顶部工具栏支持「刷新全部」操作，各卡片右上角提供独立「刷新」按钮并精准追踪单卡片 Loading 加载态，互不干扰。
+- [desktop/renderer] 优化侧栏用量浮层与设置用量页面展示：从侧边栏底部设置菜单的「剩余用量」浮层中移除重置时间文字，解决紧凑宽度下标签断行与文本拥挤问题；同时在「设置 - 用量与成本」的远端厂商卡片中新增额度窗口（Quota Windows）明细，完整呈现各周期名称、剩余比例/数量、进度条及重置时间。
+- [desktop/renderer] 体系化重构下拉框与弹出菜单（Dropdown / Popover）设计系统：建立 4 级标准化形态规范（Tier 1 标准单行 32px / Tier 2 双行富文本 44px / Tier 3 可搜索选择器 / Tier 4 表单下拉），统一收敛内外边距、垂直行间隙（`--cpx-comp-row-gap-y: 2px`）与垂直节奏（模式切换由 52px 收敛至 44px），重构三栏网格对齐（16px 图标位 + 弹性标题 + 状态/快捷键），标准化搜索框内衬、深色微投影与 Lucide 箭头图标，彻底解决浮层在各模块间“部分过挤、部分过松”的视觉与交互割裂。
+- [desktop/renderer] 全局收敛单行交互控件与芯片体系的 line-height：在 Token 层引入 `--cpx-sys-line-height-none: 1`，将 `interactive-row` 族系、`MetaChip`、`ChipButton`、`Button` 各尺寸变体、Badge/Pill 及单行 Input 默认行高统一收敛为 1，并为图标补齐 `flex-shrink: 0` 与 `display: block` 规则，彻底消除字体不对称 leading 导致的图标与文本垂直基线偏斜失衡；多行排版（Markdown 正文、CodeMirror/Diff、Textarea）继续保持规范的阅读与代码行高。
+- [desktop/renderer] 对齐侧边栏项目标题与会话行的尾部操作图标样式与布局：项目行更多菜单与新建对话按钮统一复用 `IconButton`（ghostSecondary / iconMd），消除多余背景与边框差异；统一项目行与会话行的 CSS 网格列宽与右侧基线，并将动作按钮间距收紧为紧凑的 4px，使两行图标在尺寸、位置与中心线上像素级完美对齐。
+- [desktop/renderer] 深度对齐 Codex 侧边栏项目与会话悬浮卡片（Hover Card）及运行态交互：项目悬浮卡片重构为紧凑四行结构（标题与图钉、任务与开启统计、项目主路径及齿轮图标编辑入口），移除多余分割线并修复路径在亮暗主题下的样式显示；会话悬浮卡片增加设备图标、相对时间及运行中「· 🔵」蓝色状态指示点，元信息统一为文件夹项目归属与 Git 分支展示；侧边栏运行中会话支持悬停即时展示置顶与归档快捷操作，并统一未读与运行状态圆点使用系统 Accent 主题色。
+
+- [desktop/renderer] 全面对齐 Codex 风格的文件浏览与「打开文件」界面：重构「打开文件」标签页为左右分栏布局（左侧呈现根路径与打开文件居中空状态插图，右侧呈现带宽度拖拽分割条的文件树面板）；文件树目录行改用精简 Chevron 展开折叠箭头，文件行全量接入彩色 Material 图标并修复单色样式覆盖，顶部始终呈现「筛选文件...」搜索框，在单工作区模式下隐藏冗余的主目录分组头，并实现文件树展开状态与宽度的跨面板持久化同步。
+- [desktop/renderer] 统一 Markdown 富文本代码块与正文页组件呈现：富文本编辑与预览中代码块升级为统一的 CodeBlock 结构，对齐语言标签、复制代码与 Shiki 语法高亮；支持在代码块头部直接点击语言标签原地修改语言，且点击代码内容区域直接在代码块内部就地编辑代码（不展开裸露的代码围栏反引号 ```），实时双向同步至底层 Markdown 文档。
+- [desktop/renderer] 现代化重构正文与 Markdown 阅读排版体系：正文行高显著提升至 1.7（--cpx-sys-line-height-reading），段落间距增至 14px，列表项间隙增至 10px~12px，标题字重统一定为 600（Semi-bold）并增大上边距（H1 30px / H2 26px / H3 22px），精细化行内代码与代码块/表格垂直留白，并同步用户提问气泡内衬排版，全面消除拥挤感，大幅提升技术长文阅读舒适度。
+- [desktop/renderer] 深度对齐 Codex 侧边栏视觉与交互体验：全量接入并响应系统「界面字号」设计令牌（--cpx-sys-font-size-ui / --cpx-sys-font-size-sm），统一侧栏字号与字重层级规范（导航/项目/常规会话使用界面主字号 400 字重，时间线主标题 500 字重，分组标题使用次级字号 500 字重，二级摘要使用次级字号弱化灰 400 字重），规范 Windows 平台抗锯齿与字体渲染；时间线模式升级为标准双行卡片模式（高度约 50px），优先提取并展示会话最新消息/摘要预览（Snippet，单行截断省略），无内容时优雅回退显示所属工作区标签。
+- [desktop/renderer] 现代化重构扁平简约微投影与全局深色遮罩体系：彻底消除暗色模式下亮色墨水色（Ink）导致的遮罩白雾与光晕发白问题；亮暗模式遮罩统一为 20%~28% 纯黑低透明度与轻微背景柔化（--cpx-comp-modal-scrim）；全局卡片、常驻面板及审批框彻底去除冗余阴影，纯粹依托 1px 细微边框区隔；浮层（弹窗、下拉菜单、命令面板、Toast、悬浮 Composer）采用纯深色双模适配微投影（亮色 6%~12% 纯黑柔和微投影，暗色 30%~40% 纯黑微投影），达成通透轻盈且层级分明的简约扁平设计。
+- [desktop/renderer] 现代化重构 Composer 模型与推理选择器：推出左右两栏 Master-Detail 弹窗结构、支持全局跨提供商即时搜索、推理强度平滑离散滑块调节（无冗余图标），并优化输入框底部触发 Chip 与胶囊徽标展示。
+
+- [desktop/renderer] 重新设计全局 Design Token 体系与组件交互层：引入动态感知表面多级阶梯与 WCAG 4.5:1 对比度校准、定义克制优雅的微混多色语义阶梯（成功绿/危险红/警告橙/技能紫/信息青/主色微混与对应 Chip 规范），并在悬浮 Composer、Popover、Dropdown、Modal 及 Tooltip 浮层引入精致微透毛玻璃 Token 体系（--cpx-sys-blur-* / --cpx-comp-glass-*），统一全量基础组件视觉与几何交互规范。
+- [desktop/renderer] 全面重构并精简样式 Token 体系：彻底弃用历史多层代理与旧命名遗留，建立「系统语义层（--cpx-sys-_）」与「组件槽位层（--cpx-comp-_）」现代化双层规范；统一收敛色彩、T-Shirt 圆角（xs~xl/full）、排版（xs~3xl）与 4px 间距网格；全仓 76+ 个 SCSS 样式及 TSX 引用统一迁移，同步升级 Theme Token Debugger 并在 CodeMirror/Terminal 局部保留最小必要映射，全量通过样式契约、单测与类型检查。
+- [desktop/renderer] 现代化重构自定义 Provider 新增与编辑弹窗（ProviderEditorDialog）：引入「基本配置 / 模型管理 / 高级与网络」三标签页结构、预设模板一键填入、模型折叠手风琴卡片及底部固定操作栏。
+- [desktop/renderer] 重构供应商与模型中心页面架构：顶层收敛为「供应商」主目录与「全量体检」大盘两级导航；供应商详情页内聚合「连接与凭据」和「模型与测速」双子闭环，在供应商上下文内直接完成 API Key/OAuth 凭据管理、模型目录拉取同步与单模型/批量即时测速，并移除与 Composer 及系统设置冗余的 Router 和默认模型配置。
+- [desktop/renderer] Provider 目录与模型配置界面改用 models.dev 官方图标：仅当 `catalogOrigin === 'models-dev'` 时才生成 `https://models.dev/logos/{encodeURIComponent(providerID)}.svg` 固定域名 SVG，加载失败或用户自定义 Provider 继续安全回退通用图标。
+- [desktop/renderer] 移除 Coding 新建会话中 Composer 区域的 flex 比例与 min-height 限制，使输入区域高度由内容自然决定。
+
+- [architecture/shared/agent/desktop] 执行全仓简化方案：移除废弃共享会话模型与未消费 IPC 通道；收敛 RPC handler 直接 SQL 查询至仓储层；统一 Electron 窗口状态原子写器与 IPC 契约定义；合并 Renderer 跨端路径归一化比较工具；统一 Review 差异面板按钮复用及样式；提炼 Agent Protocol 基础类型与集成测试 Harness，并修正默认推理哨兵及确定性集成 fixture 的现行契约。
+- [desktop/renderer] 对齐 Codex 侧边栏会话悬浮卡（Hover Card）设计：项目图标改用终端图标（SquareTerminal），标题支持多行自然折行展示完整会话名称，右侧顶部对齐相对时间，并优化悬浮卡圆角、内边距与间距排版节奏。
+- [desktop/renderer] 动画体系一次性全优化：骨架屏扫光改为局部渐变伪元素 `transform: translateX` 的 compositor 路径（删除 100vw×100vh `background-attachment: fixed` 重绘）；文件树显示/隐藏、侧栏 section、会话扩展列表与处理过程/活动折叠改为 `AnimatePresence popLayout` + Motion layout projection 的 FLIP 呈现（删除 `width: 0 ↔ auto` 与 `height: 0 ↔ auto` 逐帧布局动画）；进度条填充统一为 `transform: scaleX` + `transform-origin: left` 过渡；滚动边缘渐隐由 scroll-timeline 动态 mask 改为 `useScrollEdgeState` 驱动的静态伪元素渐变 frame（passive scroll listener + rAF 合并 + ResizeObserver，仅边界布尔变化才重渲染）；删除常驻 `will-change`，拖拽实时 reflow、Radix 挂载/焦点语义、reduced-motion 与快捷键行为保持不变。
+- [desktop/renderer] 会话打开与切换期间的整窗加载统一为带真实阶段文案的鲸鱼扫光动画（复用启动遮罩契约），替换原有的“加载对话中”文字加载态。
+- [desktop/renderer] 拆分 live event 订阅过滤器：`provider` 过滤器不再接收 `model/health/updated`，模型健康页改用独立的 `modelHealth` 过滤器，避免 provider 状态消费无关的逐模型事件。
+- [desktop/renderer] 补充 Renderer 样式契约白名单判定规范，明确固定控件几何、语义行高、Tailwind leading 与外部样式契约的准入边界，避免后续检查失败时机械刷新基线。
+- [desktop/renderer] 统一可缩放内容与固定桌面 Chrome 的语义行高，修复大字号代码、设置行、侧栏动作和编辑器排版被局部行高撑高或压缩的问题。
+- [desktop/renderer] 将右栏自动收起改为按整窗 960px 阈值计算并保留 24px 恢复回差，默认宽度改用按主区宽度与工作区高度的动态公式；工作区标题栏不再固定 94% 模糊背景与下边框，仅在会话滚动内容下显示 0.5px 分割线，窄窗口标题始终可见并截断。
+- [docs/agent] 新增 Codex Harness 对标与 Agent 优化报告，明确当前能力基线、关键差距及分阶段实施路线。
+- [desktop/renderer] 按 Codex 证据恢复设置卡片与按钮的主次层级：SettingsSection 默认卡片表面（16px 圆角、fog 背景、inset hairline），移除设置行固定 64px 高度，primary 恢复前景实底反色文字、secondary 使用 5% 弱背景，并新增 canonical pressed token。
+- [desktop/renderer] 补齐 Windows 桌面菜单键盘行为：Alt/F10 聚焦菜单栏、Escape 关闭并恢复焦点、左右键切换菜单、Alt+F/E/V/W/H mnemonic 直接打开对应菜单。
+- [desktop/renderer] 首页建议保留 0.5px ring 并恢复极弱阴影，移除按压位移。
+- [desktop/renderer] 收敛 `/new` 三种首屏依赖：codex-light/codex-dark 主题 token、Browser Mock、Mock 历史投影及未打开的确认框改为按需加载，Electron typed bridge 首屏不再解析冷分支；visual/performance fixture 显式预置 Mock 模型，继续绕过真实 Agent 完成浏览器回归。
+- [desktop/renderer] 以 Codex 式应用栏与工作区工具栏层级、克制表面和首次模型配置向导统一桌面视觉，并在进入工作台前确保存在可用默认模型。
+- [desktop/renderer] 将会话顶栏的环境 Actions 与任务 Handoff 迁入命令菜单，恢复标题菜单“继续到…”的对话派生语义，并收紧 Codex 式标题图标与尾部工具按钮间距。
+- [desktop/renderer] 将会话处理过程改为 Codex 式无框活动流，补齐语义摘要、嵌入命令详情、折叠动效与长列表渐隐滚动。
+- [desktop/renderer] 按 Codex 的尺寸、颜色与上下文契约重构文字及纯图标按钮，统一应用标题栏、工作区、面板、TabStrip、侧栏与 Composer 的点击盒、字级、圆角和主次视觉层级。
+- [desktop/renderer] 将 Coding 首页建议限制为最多四项，并让 Working 根据当前工作区、Git 状态与最近会话生成三条真实建议，同时保留工作模板入口。
+- [desktop/renderer] 对齐 Coding、Working 与 Chat 新建首页的标题、建议层级和 Composer 布局，并为 Chat 增加独立首页。
+- [desktop/renderer] 将桌面开关与对比度滑块的控制点统一为亮暗模式固定白色，并取消主题预览卡的鼠标悬停变色。
+- [desktop/renderer] 将会话轮次、过程与耗时、正文、表格、代码、媒体、用户消息、附件、编辑态、文件变更卡片与 Composer 统一到 48rem 阅读轴，保留编辑重发附件并改善长消息及窄窗口下的折叠、截断和横向溢出表现。
+- [desktop/renderer] 统一全局正文、标题、侧栏与菜单的字号、行高和语义字重，使等宽及非等宽 UI 字体均保持 Codex 式清晰排版节奏。
+- [desktop] 参考 Codex 统一桌面端中性 active、hover 与键盘焦点表现，移除突兀的选中轨道，并仅为 inset 分段控件和裁切焦点保留轻量特殊效果。
+- [desktop] 将桌面端圆角统一为 8/12/16px 嵌套柔和曲率，并限制胶囊圆角只用于状态与选择类控件，使扁平工作台更精致统一。
+- [desktop] 统一桌面端扁平视觉层级、交互状态与动效，使全部工作台页面在用户自定义主题下保持清晰主次。
+- [desktop/renderer] 重建设计系统的表面层级、低强度雾面浮层与统一动效，使工作台、会话概览和 Composer 在保留强调色、背景色与前景色设置的同时获得一致层次。
+- [desktop] 将右侧面板默认宽度调整为 600px，同时保留用户已保存的拖拽宽度和窄窗口夹紧行为。
+- [desktop/renderer] 重建 Codex 式右侧工作台 Frame、46px TabStrip 与统一面板状态，使 Review、文件、Browser、Terminal、Plan、附件、侧边聊天和子智能体共享尺寸、焦点、拖拽、全宽及生命周期契约。
+- [Agent/session-view] 为主任务、侧边聊天和子 Agent 接通自动上下文压缩与单次 Provider 溢出恢复，并持久化可恢复、可投影的压缩检查点和统计。
+- [renderer] 统一线程摘要、下拉菜单、上下文菜单和 Popover 的轻量黑色阴影，提升浮层与背景之间的层次感
+- [renderer] 移除 Composer 外层堆栈的溢出裁剪，避免统一阴影和子面板边框被截断
+- [renderer] 统一 Composer 外层堆栈与输入面板的圆角，避免阴影出现方形边角
+- [renderer] 统一计划更新等生命周期状态与命令摘要的内容宽度和左侧对齐方式
+- [renderer] 隐藏会话主滚动区的滚动条外观，同时保留滚轮、触控板和键盘滚动能力
+- [renderer] 统一会话工作台右栏与底栏的定位占位层级，使拖拽时主区、面板内容、Markdown 与 Composer 实时重排，并补齐宽内容折行和最小尺寸保护
+- [Agent/desktop/renderer] 统一执行与恢复纵切面：history schema 27 增加 durable resume lease，main/subagent 共享 interaction 恢复入口，Renderer 改为 canonical 批量单写者并在应用提交后确认事件位置
+- [Agent/renderer] 统一 thread snapshot、history、queue 的 SQLite read fence 与 SSE cursor authority，事件以 256 条或 50ms 批量提交、1024 条有界积压并在消费失败后从已提交位置重新对账
+- [release/docs] 后续 GitHub Release 统一改为 source-only：标签流水线使用 GitHub-hosted runner，仅发布 CHANGELOG 正文与 GitHub 自动生成的源码归档，不再依赖自托管签名 runner 或上传 Windows 安装包、更新元数据、校验和及 SBOM；README 改为指导 Windows x64 使用者自行打包
+- [desktop/renderer] 将分段选择与插件来源筛选迁移到 Radix Toggle Group，补齐方向键和 roving focus 键盘导航，同时保持现有视觉与必选行为。
+- [Agent] Skills 与可选 MCP server 改为按需发现和加载，单个外部资源故障不再阻断普通对话。
+
+### Fixed
+
+- [desktop] 将分组标题操作纳入侧栏统一的 4px 列间距，修复“项目”分组的更多按钮与会话指示器错位。
+
+- [desktop] 补齐侧栏顶部操作区的行内右侧留白，使搜索、通知按钮与项目和会话的两列指示器对齐。
+
+- [desktop] 统一项目操作与会话状态的列间距为 4px，修复项目“更多”图标与会话时钟图标中心线错位。
+
+- [desktop] 修复侧栏标题操作被鼠标残留焦点或项目子列表悬停保持显示，改用键盘可见焦点并收窄项目 hover 边界，保留菜单打开状态。
+
+- [desktop] 修复任务浮卡长标题及确认按钮撑宽内容、裁剪右侧控件的问题，标题支持单行右端渐隐和完整名称悬停提示。
+
+- [desktop] 月视图压紧任务条并统一六周行高，分离日期与控件 hover；返回和退出分别确认，计划任务的日期与时刻支持同排独立输入。
+
+- [desktop] 修复月视图日期格增加内边距后任务列表与更多入口越过底边的问题，日期行按内容最小高度布局。
+
+- [desktop/renderer] 顶部菜单栏接通已有窗口、退出、设置、帮助页面与浏览器刷新操作，同步菜单快捷键，并将未实现或当前不可用的菜单项置灰。
+
+- [desktop/renderer] 设置 Hook 统一读取现有 Provider，移除条件创建状态的回退；拆分工具卡片展开按钮与文件按钮，修复 Hooks 顺序隐患和按钮嵌套，并保留独立文件预览及键盘操作。
+
+- [desktop] 统一工作区 header 两端 8px 留白，侧栏与右侧面板展开、收起及调整宽度后保持对齐。
+
+- [desktop] 优化主窗口和工作台面板连续调整尺寸时的渲染与持久化开销，并修复重复动画监听及快速关闭文件预览后残留监视资源的问题。
+- [desktop] 修复开发模式下宠物浮窗重复打开造成的导航中止，并阻止宠物窗口调用仅限应用窗口的页面缩放 IPC。
+- [desktop/renderer] 修复侧栏“最近”会话继承项目层级缩进的问题，使一级会话标题与区段标题对齐。
+- [desktop] 修复时间线状态与隐藏内容长期滞留，以及全局设置、编辑命令和 Review 状态广播导致的 Renderer CPU 与内存持续增长。
+- [desktop/renderer] 修复同一批乱序生命周期事件可能让已结束会话继续显示运行状态的问题，确保全局会话目录按最新事件序号同步终态。
+- [desktop/renderer] 修复侧栏账号仅在打开弹层后才恢复 GitHub 登录状态的问题，使桌面启动时自动显示账号头像，并为未登录状态提供设置与登录入口。
+- [desktop] 修复展开状态向时间线、侧栏和表单父级广播导致的高频重渲染，连续展开收缩不再阻塞界面。
+- [desktop/renderer] 修复文件修改摘要卡片在较窄会话区域将审核操作换到第二行的问题，使操作按钮始终保持在标题行右侧。
+- [desktop/renderer] 修复 Composer 思考强度滑块进度层在横向缩放时压扁起始圆角的问题，保留顺滑拖动的同时恢复完整胶囊端帽。
+- [desktop] 统一桌面端展开、收缩与浮层过渡，修复内容脱离布局导致的跳帧和面板卡顿。
+- [desktop/renderer] 修正 Windows 工作区中 `/new` 等路由被误显示为文件引用的问题，校准 Markdown 文件图标基线，并将命令活动统一为带前置完成耗时的“执行”文案。
+- [development/desktop] 修复独立开发 Agent 重启后端口与认证身份变化导致桌面持续连接旧地址的问题，使现有窗口可通过原有重连链路自动恢复。
+- [desktop/renderer] 修复 Composer 会话组菜单无法新建会话组的问题，并将会话数与项目数移至组名下方显示。
+- [desktop/renderer] 统一带勾菜单与下拉项的静止、悬停、按压及输入方式反馈，统一权限 Select 富文本项间距，并修正可搜索 Popover 上下与列表内边距不一致的问题。
+- [desktop/renderer] 将任务规划插件的 Lucide 占位图标替换为正式规划任务图片，并统一应用于已安装架、目录和详情入口。
+- [desktop/renderer] 修复插件管理 capability 未参与桌面初始化握手，导致真实任务规划插件被误报为 Agent 不支持的问题。
+- [desktop/renderer] 恢复 Codex 式侧边栏项目、会话与导航行视觉，并修复产品模式切换器误用通用 Select 后产生的边框和悬停样式回归。
+- [desktop/renderer] 完成交互语义与视觉所有权全量收口，统一剩余选择、披露、实体行和图标动作，并增加静态契约防止动作按钮与复合表面再次串扰。
+- [desktop/renderer] 隔离卡片、附件和复合交互表面与动作按钮样式，修复悬停、尺寸和状态视觉串扰。
+- [desktop/renderer] 将思考强度滑块改为拖动预览、松手单次提交，修复快速拖动时等级文字因受控状态连续回传而乱跳。
+- [agent/desktop] 兼容读取异常任务阶段，区分看板读取与操作错误，并通过非阻断诊断提示保留任务可用性。
+- [desktop/development] 修复多个 Git worktree 启动 Desktop 时争用固定 Renderer 端口和全局 Electron 实例的问题，为各 worktree 隔离动态 Vite、Electron 状态与日志，同时复用唯一开发 Agent。
+- [desktop/renderer] 收紧高频交互动效并取消推理滑杆直接操作时的位置缓动，使模型菜单、浮层、悬停与滑杆反馈更及时。
+- [desktop/renderer] 修复外观设置颜色选择框被拆成色块与空白输入区的问题，使浅色和深色主题的强调色、背景色及前景色恢复为 Codex 风格的一体式颜色控件。
+- [desktop/renderer] 修正新会话首页因页面位置误用胶囊圆角的问题，引入独立的 Composer utility bar、布局和圆角角色语义，使首页与会话页的多行输入面统一使用 prominent 曲率。
+- [desktop] 修复用户主题与系统主题不同时，桌面重新加载期间鲸鱼加载页短暂闪成相反明暗主题的问题。
+- [desktop/renderer] 修正暗色主题细边框强度与 Workbench 结构边界层级，使侧栏、右侧 Dock、底部 Panel 和工作区顶部边界更清晰，同时保留内部卡片与章节分隔的次级语义。
+- [desktop/renderer] 修复 Composer 执行计划预览入场期间因零宽 transform 包含块先显示竖条再展开的问题，预览改为首帧稳定宽度的淡入淡出。
+- [desktop/renderer] 修正用户消息背景过弱、线程环境摘要宽度接线不一致及 Composer 变更汇总误用主按钮造成的黑色胶囊，使会话工作区的信息层级更接近 Codex 且继续适配自定义主题。
+- [Agent/desktop/models] 修复 Provider 模型数量错误依赖 API Key 可用状态的问题；models.dev Provider 现在展示远程目录原始收录数，协议适配与凭据状态不再影响计数。
+- [desktop/renderer] 调整 Provider 目录卡片的垂直与水平内边距，并移除状态徽标前的元信息分隔点，使卡片内容密度与模型中心布局保持一致。
+- [desktop/models] 放宽 Provider 目录卡片的内部留白与图文间距，并移除面向用户展示的 models.dev 缓存来源标签。
+- [desktop/renderer] 修正亮色主题中 control、raised 与 recessed 表面的层级方向，并为浮动 Composer 和线程环境摘要恢复克制的 prominent elevation，常驻 Dock、Panel 与普通卡片继续保持零阴影。
+- [desktop/models] 修复 Provider 远程图标及其固定占位在目录卡片中塌缩、连带破坏图文间距的问题，并改为启动后后台校验 models.dev、失败回退缓存，同时提供页面级手动刷新。
+- [desktop] 修复 Pi OAuth 登录在认证方式选择提示中持续加载、无法提交，以及授权完成后 Provider 模型目录未立即生效的问题，并确保打包后的 Agent sidecar 内置 OAuth 流程可加载。
+
+- [desktop] 修复 Windows 原生窗口控制区未跟随应用标题栏主题与高度，消除浅色和自定义主题下的顶栏颜色断层。
+
+- [desktop/renderer] 修复右侧栏与底部面板拖拽结束时旧比例状态短暂覆盖最终尺寸、导致面板先回跳再落到目标位置的问题。
+- [Agent] 修复图片及文本附件在 input 创建前提前绑定而导致首条发送、排队追问和运行中引导显示“Agent 内部错误”的问题，并将附件绑定纳入 Turn 创建事务。
+- [desktop] 修复可信主窗口的文本剪贴板写入权限，恢复工作目录、会话 ID、深度链接及其他普通复制操作。
+- [desktop/renderer] 图片附件打开控件不再复用通用 Button，避免默认尺寸、背景和边框覆盖缩略图。
+- [desktop/renderer] 修正 Skills 实时更新测试，使其匹配复用的全局事件订阅。
+- [agent] 修复正式提问 checkpoint 使用 `toolCallID` 时被替换为随机标识，导致用户回答后无法恢复原工具调用、Turn 直接失败的问题。
+- [desktop/renderer] 修复正式提问从会话历史恢复后使用交互 ID、却只按内部问题 ID 查找待处理请求，导致回答被误报为已失效的问题。
+- [desktop/renderer] 修复全局事件重复占满浏览器连接、发送消息又等待动态上下文模块和完整模型目录，导致提交长期停留在“正在发送”且未创建 Turn 的问题。
+- [desktop] ConversationEnvironmentControls 在 gitStatus 成功加载前或已确认非 Git 时不调用 local-environment/action/list、worktree/list 与 thread/handoff/pending，清空既有 Git actions/worktrees/遗留错误，请求期间由 Git 变非 Git 时忽略迟到结果与错误；移交等 Git 专属入口保持可发现但禁用并说明“仅 Git 项目可用”，Git 后续成功才加载。
+- [desktop/renderer] canonical 会话批次收到 turn/completed/turn/failed/turn/interrupted 终态事件后，先 deliver 再只读取一次最新历史并 rehydrate 当前 coordinator，用 threadId + generation 双校验拒绝旧结果；对账失败保留实时投影、不设置页面错误、不清空时间线、不循环重连，仅做安全诊断。
+- [desktop] 非 Git 普通项目与无项目会话在 Git status 返回 REPOSITORY_NOT_FOUND（或失败）后跳过 branches 与 Review RPC，避免 review.snapshot/review.summary 因仓库缺失而报错阻断会话，仅投影为 isGitRepo=false、gitStatus=null 与空分支/Review；Git 仓库继续加载 branches 与 unstaged/staged Review。Composer 发送门禁仍仅为空输入、模型未配置、会话未解析、附件错误与正在提交，非 Git 项目仍可正常发送。
+- [desktop/renderer] 还原 Working Composer 内联 Skill 的 Codex 字体比例与透明 mention 样式。
+- [desktop/renderer] 统一对话发送按钮、侧边栏会话行与 Bell 的运行及未读状态来源，修复回复完成后仍显示运行中的问题。
+- [desktop/renderer] 修复侧边栏活动视图引导提示（Coachmark）在每次启动桌面端时重复弹出的问题：补齐桌面设置反序列化中的活动视图字段归一化，确保用户确认关闭后持久化生效且不再弹出。
+
+- [agent/runtime] 固定同一产品 Turn 的 Harness composition 与 deferred 工具边界，确保多步执行和恢复不会重组模型、Prompt 或扩宽 ToolSearch 可见范围。
+- [desktop] 优化 Windows 下 Electron 窗口边框与控制按钮：改用 titleBarStyle: 'hidden' 和 titleBarOverlay 支持原生贴靠布局并精确同步顶栏底色 (surfaceUnder) 与 36px 贴合高度；主内容区对齐简约扁平规范，移除卡片外阴影与冗余边框，彻底消除粗黑边与颜色高度断层。
+- [desktop/renderer] 修复侧边栏在更新/生成会话标题时的骨架屏显示异常：标题生成期间禁用会话悬停卡片（HoverCard）弹出，避免出现大尺寸卡片浮层；同时将骨架屏圆角从全圆角修正为与文字行高贴合的 4px 微圆角长方形（`--cpx-sys-radius-sm`），保持平滑扫光动画。
+
+- [desktop] 修复会话自动追底对齐到 Composer 渐变遮挡区的问题，使最新正文完整停留在可视区并保留底部阅读间距
+- [agent/security] 修复 Skills 扫描静默忽略指向可信根之外 Junction 的问题，改为安全拒绝，同时保留跨已配置 Skills 根别名的去重行为。
+- [desktop] 稳定 AI 流式 Markdown 的分块渲染、增量动效、代码高亮与自动追底，避免回复期间旧内容重复淡入和会话正文往返闪烁
+- [desktop/renderer] 修复新建会话路由切换后复用已消费 inputId、完成任务仍显示运行中及发送错误重复提示的问题。
+- [agent/security] Skills 快照升级为 V2（RuntimeCompositionSnapshotV2）：仅冻结实际引用项，无关 Skill 变化不再阻断暂停恢复；已显式展开到 prompt 或成功 skill_read 的 Skill 变化/缺失 fail-closed，并为成功 skill_read 持久化可用于恢复校验的证据；旧 V1 快照保持兼容并按旧全量 catalog fail-closed。
+- [agent/security] 收紧 Skills 引用证据持久化边界：存在 durable composition storage 时，成功 skill_read 后的引用证据持久化失败即安全失败，不再把工具读取静默当作成功；缺表 ephemeral fresh 场景不受影响。
+- [agent/runtime] 将无凭据的 thinking level 与 modelRef variant 纳入组合 identity hash，仅调整推理强度/变体即改变 composition 身份，凭据、headers、metadata 等不进入 hash 或快照。
+- [desktop/renderer] 修复外观设置中选择字体变体后重新进入页面变体下拉框回退显示全称（如 JetBrains Mono Medium）而非变体名（如中等、半粗体）的问题：增强变体名提取与本地化解析（`faceStyleLabel`），并在组件挂载时自动复用已就绪的系统字体缓存。
+- [desktop/renderer] 修复侧边栏底部的“设置”按钮因 DropdownMenu.Trigger 传递 data-theme-component="dropdown-trigger" 导致常驻控件实色灰底（被误判为永久 hover/active 态）的问题，使侧栏设置按钮在非激活/非悬停态下恢复为透明底色。
+- [Desktop] 修复失败 turn 未显示安全错误原因、界面仅留下"已处理"状态的问题。
+- [agent/protocol] 修复 initialize capability 协商未取客户端与服务端能力交集的问题，确保 RPC 方法、事件订阅和 initialize 返回值只暴露真实协商能力。
+- [desktop/renderer] 修复侧边栏会话项在悬浮或聚焦时未读圆点与置顶/归档操作按钮并存重叠的问题，对标 Codex 实现悬浮态仅展示操作按钮并隐藏未读圆点，并将侧栏会话项与 Hover 详情卡片中的未读圆点统一为主题 Accent 色（var(--cpx-sys-color-accent)）。
+- [Agent/desktop] 修复 models.dev 缓存重载时丢失工具调用等模型能力元数据，恢复 Provider 模型数量、兼容状态和模型选择器中的已配置 Provider。
+- [Agent/desktop/renderer] 修复 Provider 模型数量依赖按需缓存、模型选择器仅显示当前 Provider 的问题；模型中心现在展示准确的可执行模型总数，并在选择器打开时加载全部已配置 Provider 的完整模型目录。
+- [desktop/renderer] 修复字体变体应用逻辑：CSS 变量改用系统原生全称（如 "MiSans VF Semibold"、"JetBrains Mono SemiBold"）替代带连字符与自定义前缀的别名，确保 Windows/macOS/Linux 各字重与字形样式即时生效并兼容历史配置。
+- [desktop/renderer] 全局去除文本透明度混合与文字 Alpha 通道：将底层主题 Token（`--cpx-sys-color-fg-secondary`、`--cpx-sys-color-fg-tertiary`、`--cpx-sys-color-fg-disabled`）由 `rgba()` 全面重构为基于背景表面混合的纯实色 Hex；清理侧边栏、工作流卡片、会话状态与设置面板中所有作用于文本与图标的 `color-mix(..., transparent)` 与 `opacity` hack，彻底消除 Windows Chromium DirectWrite 灰阶抗锯齿降级导致的字体边缘发虚发灰问题，全局文字与图标在各种背景下均呈现极致清晰锐利的纯色对比度。
+- [Agent/usage/renderer] 修复 MiniMax Token Plan 额度状态解析错误：纠正 `status: 2`（已耗尽）被误判为无限额度的 bug，保留重置倒计时并准确标注为“已用尽 · 剩余 0%”；过滤未在套餐内的模型窗口（`status: 3`），并优化重置时间到期或超期时统一提示“即将重置”。
+- [desktop/renderer] 修复多模型套餐（如 MiniMax 同时返回 general 与 video）时侧栏菜单与账户卡片因重复 Quota ID 生成相同 React key 的控制台报错问题。
+- [desktop/renderer] 修复会话任务结束后 Composer 发送按钮、变更摘要与时间线组件状态未即时从运行态更新的问题：在 canonical auxiliary 状态投影中实时派生 active turn 状态，使桌面会话页面组件与流式事件完成精确同步，并在全局会话目录刷新中完整重载活动会话快照。
+- [Agent/Desktop] 修复 Desktop 推理模式被误当成模型 variant，导致已保存模型仍显示“配置模型”的问题。
+- [desktop/renderer] 修复外观 V7 与系统字体接线错误导致 Renderer 解析失败、Electron preload 编译失败及桌面开发环境无法启动的问题，并恢复高版本外观配置的拒绝覆盖保护。
+- [desktop/renderer] 统一外观页主题编辑器与偏好设置卡片的共享表面、圆角、宽度和 16px 内容网格，使标题、控件及分隔线左右对齐；字体家族与样式下拉改为按当前内容自适应宽度，不再截断常规选项。
+- [desktop] 修复外观 V7 在真实启动与 Agent 保存链中可能降级覆盖高版本配置、系统字体权限被麦克风策略误拒绝、字体 family/face 可不一致，以及已保存字体样式首次进入不可操作的问题。
+- [desktop/renderer] 修复动态滚动内容增长后边缘渐隐状态失真、命令输出渐隐层随内容滚动及 reduced-motion 骨架屏残留高亮，并隔离动画性能夹具、补强视觉与样式契约以避免回归测试假绿。
+- [desktop] 修复模型配置判定期间启动鲸鱼过早交接的问题，统一整窗加载为带真实阶段滑动文案的鲸鱼扫光动画，并保留局部加载反馈。
+- [desktop/renderer] 将首次模型配置向导改为由用户 `config.json` 中的 `desktop.firstUseSetupCompleted` 一次性标记控制，已有有效模型的旧用户自动完成迁移，手动改回 `0` 可重新进入完整向导。
+- [Agent/desktop/renderer] 修复只保存 API Key、未显式选择默认模型时，Agent 目录 fallback 被伪装成已配置模型、刷新或重启后绕过首次配置门禁的问题；`model/list.defaultModel` 现在只返回显式配置且当前可用的默认模型（含 variant）。
+- [desktop/renderer] 修复 Provider 目录或模型状态刷新失败时旧 `modelConfigured` 状态继续放行工作台的问题，配置读取失败统一进入安全恢复态；凭据新增、更新、启停、切换、删除与 `catalog/updated` 事件合并为一次配置刷新，避免重复请求与后返回覆盖新状态。
+- [desktop/renderer] 移除不生效的 `fetchProviderModels`/`saveModelProvider` Base URL 死参数与模型中心的不可达内联 Base URL 分支，自定义供应商 Base URL 只通过 ProviderEditor 保存并统一刷新目录。
+- [Agent/desktop] 修复 Windows PowerShell ZIP 安全扫描未正确接收归档与解压路径，导致本地语音模型及托管 ZIP 工具下载后持续报安全校验失败的问题。
+- [Agent/desktop] 修复 v4 会话事件投影不符合协议而触发 Renderer 历史对账的问题，并在任务建议生成超时或 Provider 暂时不可用时缓存本地建议，避免重复等待与告警。
+- [desktop/renderer] 修复右栏拖拽时工作区 Header、主视口、面板外壳与内容使用不同宽度源造成的错位、空白和松手跳变，并保持主会话当前阅读位置稳定。
+- [desktop/renderer] 减少 Review 文件预览和变更树的重复边界，并修复浅色主题下“再显示 N 个文件”文字不可见。
+- [desktop/renderer] 修复 React StrictMode 重放使 Review 刷新协调器提前停止、变更快照永久停留在刷新状态，并确保 fresh 快照 generation 未变化时仍自动加载文件差异。
+- [Agent/desktop/renderer] 修复工作区文件 revision 精确协议遗漏原始摘要与 UTF-8 BOM 信息导致文本文件统一报 Internal RPC error，并让“打开文件”目录树占满面板且不再受固定分组高度截断。
+- [desktop] 修复内置 Browser 仍使用内存 mock、Review/Git 项目身份丢失、文件标签恢复过期作用域、工作区可选数据联动失败以及 Terminal/子智能体能力误判，缺失能力改为明确不可用状态。
+- [desktop/renderer] 修复弹窗、浮层、折叠面板、临时卡片和新建页切换在 React 提前卸载时缺少退出动画的问题，并统一减少动态效果与焦点清理语义。
+- [desktop/renderer] 修正整轮活动流的耗时标题、运行状态和折叠层级，使最终回复前的 commentary、工具活动与 thinking 状态按 Codex 顺序展示。
+- [desktop/renderer] 修复桌面开关控制点因边框计入尺寸错误而偏离轨道中心、在选中端贴边的问题。
+- [desktop/renderer] 修复顶部应用菜单无法通过重复点击和标准关闭操作稳定收起，以及 Composer 统一菜单的导航高亮反复跳回第一项的问题。
+- [desktop] 对齐 Codex 空右栏的启动项顺序、文案、图标与快捷键，在无标签时隐藏冗余加号，并修复侧边聊天入口、添加菜单与标签关闭交互。
+- [renderer] 修复新建会话复合 Composer 被全局外层阴影包围的问题，同时保留主线程和侧边聊天的输入框层次。
+- [desktop] 侧边聊天直接复用主工作区 Composer 的完整布局和样式，同时保持独立草稿、附件及 thread 路由。
+- [desktop] 修复侧边聊天 capability 未随 renderer 初始化握手声明的问题，避免 Agent 重启后入口可见但创建请求被拒绝。
+- [desktop] 对齐 Codex 侧边聊天的临时分叉会话、多标签、关闭销毁与独立时间线，避免侧聊消息写入主任务。
+- [renderer] 调整宽会话中对话导航轨的空间层级，以 48px 左侧导轨通道和 16px 右侧余量保持宽正文，并避免导轨贴附侧栏分隔线
+- [renderer] 修复宽会话布局使对话导航轨因旧空白门槛始终隐藏的问题，并将导轨收进现有正文 gutter
+- [renderer] 修复任务侧栏 Footer 覆盖滚动内容的问题，使设置与状态区域固定在独立布局空间并保证最后一项完整可见
+- [renderer] 优化工作台各类面板在高刷新率下的实时拖拽，消除会话逐像素重渲染、重复滚动测量和 Review 全量行高同步
+- [renderer] 修复 React StrictMode 重放导致 canonical 会话投影协调器提前停止、会话页无法加载的问题
+- [Agent] 修复审批、提问、Hook 信任、子 Agent 等待与启动恢复在崩溃窗口中可能重复执行、永久等待或因 live publish 失败阻断 continuation 的问题
+- [desktop] 修复 owned Agent sidecar 的旧 generation 晚回调、并发退出和残留进程可能污染重连的问题，增加实例身份校验及 shutdown、SIGTERM、进程树确认的严格退出链路
+- [desktop] 修复外观设置 IPC 只广播但未原子落盘，导致桌面重启后主题、字体、动效和指针偏好恢复默认值的问题
 - [renderer/test] 修复性能回归场景在侧栏与工作区同时显示同名会话标题时因全页严格文本定位产生歧义的问题，改用 canonical thread 标记确认当前会话完成切换
+- [Agent] 修复模型健康批量测试的并发与生命周期竞态：同 operationId 并发 start 只构建并启动一次批次，候选构建期间 cancel 产生零请求的终态快照，取消、事件发布失败或服务释放时批次收敛为 cancelled 且计数守恒，dispose 会中止并等待后台批次停止。
+- [Agent] 修复模型健康事件快照可变引用泄漏与发布失败可能产生未处理 rejection 的问题，历史 running 事件的 counts 不再随后续 healthy/failed 更新变化。
+- [Agent/desktop/renderer] 保持旧 `provider/test` 兼容形状（未显式传 model 时结果不含 model，timeout/provider 分类映射为 unknown），Provider 与模型不匹配返回声明过的 `INVALID_REQUEST`；未协商 `model.health.v1` 的事件订阅不再收到 `model/health/updated`。
+- [desktop/renderer] 修复模型健康页断线、离页与重试状态不一致：start 响应丢失后经 read 恢复已接受批次，离页或卸载按 operationId 立即取消，重连与投递恢复后以权威快照对账，单项重试结果不会覆盖新批次，任一重试进行中禁用重复触发。
+- [desktop/renderer] 修复设置等宽文本域、代码块与配置代码预览在 UI/code 字号独立配置时行高小于字体的角色错配，并让样式检查明确拒绝在 `font` shorthand 中通过 `/` 设置行高。
+- [desktop/renderer] 修复侧栏空态行复用交互行样式（指针、hover、active 与禁用选中）的问题，恢复中性 div 行结构并保持合法 block content model。
+- [desktop/renderer] 修复 Radix 单选分段控件继续使用 inset 反向底色的问题，统一为 Codex 默认的透明容器与弱前景色选中态。
+
+### Fixed
+
+- [agent/storage] 修复已标记为 history schema 40 但缺少会话组表的开发数据库无法自动补齐迁移、导致 Agent 启动失败的问题。
+- [desktop/renderer] 修复会话组新建、编辑和删除依赖桌面环境不支持的原生 `prompt/confirm`、点击操作时报错的问题，改用应用内对话框。
+
+### Removed
+
+- [desktop/renderer] 移除供应商页面中的全量模型体检界面，保留单连接测试、单模型测速和 Agent 底层健康检查能力。
+
+- [repository/agent/desktop/renderer] 移除过期排障备忘、历史性能基线、未接入的 Renderer/Agent/Electron 实现、测试孤岛与生成资产逐文件副本，降低目录树和维护噪声；本地性能结果继续按忽略规则按需重建。
+- [desktop/renderer] 移除全组件主题视觉 Token 调试工作台（ThemeTokenDebugger）及配套高保真预览、运行时样式注入与配方生成代码，清理相关 SCSS 样式与测试用例。
+- [desktop/renderer] 移除 Codex Labs 导航、页面及视觉原型，旧 `/labs` 地址改为显示现有 404 页面并不再打包相关代码和样式。
+
+### Security
+
+- [security/dependencies] 升级 js-yaml、nanoid 与 tar 至安全补丁版本，并为暂无上游修复的 extract-zip 增加 symlink 越界防护和限期审计追踪，恢复 High/Critical 依赖门禁。
+- [desktop] 所有普通/富文本剪贴板写入收口到 typed Electron IPC，Provider API Key 仅以 credentialId 请求并在主进程写入及 60 秒条件清理，同时撤销 Renderer 剪贴板权限。
+- [Agent/renderer] 将旧 `sandboxMode` 集中解释为结构化文件访问范围，明确终端命令始终以当前 Windows 用户在宿主机执行并继续经过风险、Hook、审批和临时授权门禁，不再暗示操作系统级沙箱隔离
 
 ## 0.2.0-beta.4 — 2026-08-07
 
@@ -39,6 +1145,8 @@
 - [renderer] 新增可持久化的侧栏优先级聚焦视图，集中展示需关注任务并按最近一周自然日整理其余任务
 
 ### Changed
+
+- [desktop] 移除工作区内容全宽与完整视图入口，聊天和内容仅支持并排分屏或隐藏标签页；拖拽拉宽遵守分屏尺寸上限，旧全宽状态恢复为分屏并保留标签、显隐和宽度记忆。
 
 - [desktop/renderer] 固定侧栏关注任务区并按真实关注状态切换铃铛提示，补齐置顶筛选、批量已读/归档及 Codex 式透明分类标题与列表间距。
 - [Desktop] 侧栏按 Agent 能力动态展示现有入口，并对齐 Codex 的滚动定位、遮罩、粘性分组、悬浮预览与折叠动效。
@@ -284,6 +1392,8 @@
 - [renderer] 修复普通设置下拉框无法显示当前选项文字、控件缩成仅剩箭头的问题，选项标签改为跟随 UI 字号
 
 ### Changed
+
+- [desktop] 移除工作区内容全宽与完整视图入口，聊天和内容仅支持并排分屏或隐藏标签页；拖拽拉宽遵守分屏尺寸上限，旧全宽状态恢复为分屏并保留标签、显隐和宽度记忆。
 
 - [renderer] 会话生命周期状态行改用计划、权限、提问和子代理操作各自的语义图标，并为运行状态增加扫光反馈
 - [renderer] 已完成的命令组标题增加终端语义图标，便于区分处理过程与命令集合
