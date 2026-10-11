@@ -2,14 +2,11 @@
  * Overlay motion residue: floating surfaces, tooltips and dialogs.
  *
  * Why these rules are not Tailwind utilities:
- * - Every portalled surface enters and exits through shared keyframes
- *   (radix-floating-surface-in/out, tooltip-fade-in, ui-dialog-backdrop-in/out)
- *   whose duration and easing come from --cpx-sys-motion-* / --cpx-sys-ease-*.
- *   `tw:animate-*` can only name an existing --animate-* theme entry, and
- *   registering a new keyframe + duration pair would need styles/tailwind.css,
- *   so the animation declarations stay verbatim here.
- * - The slide distance is carried by --cpx-floating-offset-x/y, which only
- *   these keyframes read, so the per-side offsets live next to them.
+ * - Floating surfaces enter through @starting-style transitions; tooltip,
+ *   dialog and exit animations keep shared keyframes. Duration and easing
+ *   come from --cpx-sys-motion-* / --cpx-sys-ease-*.
+ * - Transitions and keyframes share --cpx-floating-offset-x/y, so the
+ *   per-side offsets live next to them.
  * - transform-origin consumes Radix's runtime --radix-*-transform-origin
  *   variables, which exist only on the portalled element at runtime.
  * The semantic class names stay because features and visual tests query them.
@@ -47,12 +44,28 @@
       --cpx-floating-offset-x: calc(var(--cpx-sys-space-1) * -1);
     }
 
-    &[data-state='open'] {
-      animation: radix-floating-surface-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
-    }
-
     &[data-state='closed'] {
       animation: radix-floating-surface-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
+    }
+  }
+
+  :is(
+      .popover-surface,
+      .sidebar-context-menu-content,
+      .settings-dropdown-content,
+      .permission-select-content,
+      .appearance-color-popover,
+      .thread-summary-popover
+    ):not(.ui-dialog-surface)[data-state='open'] {
+    opacity: 1;
+    translate: 0 0;
+    transition:
+      opacity var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out),
+      translate var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
+
+    @starting-style {
+      opacity: 0;
+      translate: var(--cpx-floating-offset-x, 0px) var(--cpx-floating-offset-y, 0px);
     }
   }
 
@@ -76,6 +89,7 @@
     animation: ui-dialog-backdrop-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
   }
 
+  .tooltip-presence[data-state='open'],
   .ui-dialog-surface[data-state='open'] {
     animation: radix-floating-surface-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
   }
@@ -97,12 +111,12 @@
 
   :root[data-reduce-motion='on']
     :is(
-      .popover-surface[data-side],
-      .sidebar-context-menu-content[data-side],
-      .settings-dropdown-content[data-side],
-      .permission-select-content[data-side],
-      .appearance-color-popover[data-side],
-      .thread-summary-popover[data-side],
+      .popover-surface,
+      .sidebar-context-menu-content,
+      .settings-dropdown-content,
+      .permission-select-content,
+      .appearance-color-popover,
+      .thread-summary-popover,
       .popover[data-state],
       .popover-item-tooltip,
       .tooltip-content,
@@ -111,6 +125,7 @@
       .ui-dialog-surface
     ) {
     animation: none;
+    transition: none;
   }
 
   @keyframes radix-floating-surface-in {

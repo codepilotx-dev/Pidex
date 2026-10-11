@@ -248,7 +248,7 @@ export function useFloatingPosition({
     position: portal ? 'fixed' : 'absolute',
     top: coords ? `${coords.top}px` : '-9999px',
     left: coords ? `${coords.left}px` : '-9999px',
-    opacity: coords ? 1 : 0,
+    visibility: coords ? 'visible' : 'hidden',
     pointerEvents: coords ? 'auto' : 'none',
   }
 

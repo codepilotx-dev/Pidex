@@ -211,7 +211,7 @@
     display: inline-block;
   }
 
-  /* The per-side floating offsets, transform-origin and enter/exit keyframes live
+  /* The per-side floating offsets, transform-origin and entry transitions/exit keyframes live
    * with the shared motion residue in styles/primitives/overlays.css. */
   [data-radix-popper-content-wrapper]:has(.menubar-content) {
     z-index: var(--cpx-sys-z-popover) !important;
