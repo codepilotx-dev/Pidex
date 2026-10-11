@@ -51,7 +51,7 @@ export function createSidebarDisclosureStore(
       const unknownCollapsed = external.collapsedSidebarProjectPaths.filter(
         (key) => !knownProjectAliases.has(key),
       )
-      persist({
+      external = {
         collapsedSidebarSections: SIDEBAR_SECTIONS.filter(
           (section) => !expanded.has(sidebarSectionDisclosureKey(section)),
         ),
@@ -61,13 +61,15 @@ export function createSidebarDisclosureStore(
             .filter((project) => !expanded.has(sidebarProjectDisclosureKey(project)))
             .map(sidebarProjectKey),
         ],
-      })
+      }
+      persist(copySnapshot(external))
     },
   })
 
   return {
     store,
     registerProjects: (nextProjects) => {
+      store.flush()
       projects = nextProjects
       knownProjectAliases.clear()
       for (const project of projects) {
