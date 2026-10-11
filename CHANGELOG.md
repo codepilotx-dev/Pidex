@@ -11,6 +11,10 @@
 
 - [release] 准备 0.2.0-beta.6，并允许在标签 Release 创建后上传经打包验证的同版本 Windows x64 安装包；未签名产物明确标注。
 
+### Security
+
+- [release] 升级 MCP SDK、ProseMirror、sharp、proxy-addr 与 source-map-js 至安全修复版本，解除 beta 6 依赖审计阻塞。
+
 ## 0.2.0-beta.6 — 2026-10-11
 
 ### Added

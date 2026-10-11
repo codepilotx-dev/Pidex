@@ -68,10 +68,13 @@
     "ip-address": "10.4.0",
     "js-yaml": "4.3.2",
     "nanoid": "3.3.18",
-    "sharp": "0.35.4",
+    "sharp": "0.35.5",
     "tar": "7.5.21",
     "toml": "4.2.0",
-    "undici": "8.10.2"
+    "undici": "8.10.2",
+    "proxy-addr": "2.0.8",
+    "source-map-js": "1.2.2",
+    "prosemirror-view": "1.42.6"
   },
   "patchedDependencies": {
     "effect@4.0.0-beta.83": "patches/effect@4.0.0-beta.83.patch",
