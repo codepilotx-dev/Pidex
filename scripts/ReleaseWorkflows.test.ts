@@ -6,6 +6,8 @@ const repositoryRoot = resolve(import.meta.dir, '..')
 const packageWorkflow = readWorkflow('windows-x64-package.yml')
 const ciWorkflow = readWorkflow('ci.yml')
 const prRulesWorkflow = readWorkflow('pr-rules.yml')
+const performanceWorkflow = readWorkflow('windows-desktop-performance.yml')
+const scripts = JSON.parse(readFileSync(resolve(repositoryRoot, 'package.json'), 'utf8')).scripts
 
 function readWorkflow(name: string): string {
   return readFileSync(resolve(repositoryRoot, '.github', 'workflows', name), 'utf8')
@@ -25,6 +27,50 @@ function job(workflow: string, name: string): string {
 }
 
 describe('release workflows', () => {
+  test('quality uses the local preflight and leaves builds to package smoke', () => {
+    const quality = job(ciWorkflow, 'quality')
+    expect(quality).toContain('bun run check:quality')
+    expect(quality).not.toContain('RunSuite.ts')
+    expect(quality).not.toContain('build:agent')
+    expect(quality).not.toContain('build:renderer')
+    expect(quality).not.toContain('build:desktop')
+    expect(job(packageWorkflow, 'unsigned-smoke')).toContain('bun run package:win')
+    expect(job(packageWorkflow, 'release-parity')).toContain('test:a11y')
+    for (const command of [
+      'version:check',
+      'typecheck',
+      'format:check',
+      'lint',
+      'sync:check',
+      'desktop:css:check',
+    ]) {
+      expect(scripts['check:quality']).toContain(command)
+    }
+    for (const command of [
+      'check:quality',
+      'test:unit',
+      'security:audit',
+      'test:a11y',
+      'package:win',
+    ]) {
+      expect(scripts['check:release']).toContain(command)
+    }
+  })
+
+  test('performance observation has its own PR job and retains failure evidence', () => {
+    expect(performanceWorkflow).toContain('types: [opened, synchronize, reopened]')
+    const observation = job(performanceWorkflow, 'renderer-observation')
+    expect(observation).toContain('RunSuite.ts --suite=renderer')
+    expect(observation).not.toContain('--enforce')
+    expect(observation).not.toContain('continue-on-error')
+    expect(observation).toContain('if: always()')
+    expect(observation).toContain('performance-results/raw/renderer/')
+    expect(observation).toContain('apps/desktop/renderer/test-results/performance/')
+    expect(job(performanceWorkflow, 'packaged-electron')).toContain(
+      "if: github.event_name != 'pull_request'",
+    )
+  })
+
   test('ordinary pull requests never enter a self-hosted release runner', () => {
     expect(job(packageWorkflow, 'unsigned-smoke')).toContain('runs-on: windows-latest')
     expect(job(packageWorkflow, 'unsigned-smoke')).not.toContain('pidex-release')
@@ -109,7 +155,7 @@ describe('release workflows', () => {
   })
 
   test('all actions are pinned to full commit SHAs', () => {
-    for (const workflow of [packageWorkflow, ciWorkflow, prRulesWorkflow]) {
+    for (const workflow of [packageWorkflow, ciWorkflow, prRulesWorkflow, performanceWorkflow]) {
       for (const reference of actionReferences(workflow)) {
         expect(reference).toMatch(/^[^@\s]+@[0-9a-f]{40}$/)
       }
