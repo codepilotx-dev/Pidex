@@ -52,9 +52,23 @@ export function expandReviewContext(
 }
 
 export function hideImportOnlyHunks(hunks: DesktopReviewDiffHunk[]): DesktopReviewDiffHunk[] {
-  // ponytail: only complete JS/TS import statements; use a syntax parser if other languages are needed.
-  const imports =
-    /^(?:\s*import\s+(?:type\s+)?(?:[\w$*{},\s]+\s+from\s+)?['"][^'"\r\n]+['"]\s*;?\s*)+$/u
+  // shortcut: only complete JS/TS imports; use a syntax parser if other languages are needed.
+  const importsOnly = (text: string) => {
+    let rest = text.trim()
+    while (rest) {
+      if (!/^import\s/u.test(rest)) return false
+      const quoteIndex = rest.search(/['"]/u)
+      if (quoteIndex < 0) return false
+      const clause = rest.slice(6, quoteIndex).trim()
+      if (clause && (!clause.endsWith('from') || !/^[\w$*{},\s]+$/u.test(clause.slice(0, -4))))
+        return false
+      const end = rest.indexOf(rest[quoteIndex]!, quoteIndex + 1)
+      if (end < 0 || !/^[^'"\r\n]+$/u.test(rest.slice(quoteIndex + 1, end))) return false
+      rest = rest.slice(end + 1).trimStart()
+      if (rest.startsWith(';')) rest = rest.slice(1).trimStart()
+    }
+    return true
+  }
   return hunks.filter((hunk) => {
     const changed = hunk.lines.filter((line) => line.type !== 'context')
     if (changed.length === 0) return true
@@ -63,7 +77,7 @@ export function hideImportOnlyHunks(hunks: DesktopReviewDiffHunk[]): DesktopRevi
         .filter((line) => line.type === type)
         .map((line) => line.content)
         .join('\n')
-      return !text.trim() || imports.test(text)
+      return !text.trim() || importsOnly(text)
     })
   })
 }

@@ -174,9 +174,12 @@
   .file-breadcrumb-toolbar__action {
     width: var(--cpx-sys-space-6);
     padding: 0;
-      transition: background var(--cpx-sys-motion-state) var(--cpx-sys-ease-out), color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out), border-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out), box-shadow var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
-  
-}
+    transition:
+      background var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
+      color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
+      border-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
+      box-shadow var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
+  }
 
   .file-breadcrumb-toolbar__view-mode {
     flex: 0 0 auto;
@@ -320,8 +323,18 @@
     min-width: 0;
   }
 
-
-  .file-breadcrumb-toolbar .icon-button[data-color]:where(:enabled:not([aria-disabled="true"]):not([aria-pressed="true"])):hover, .file-breadcrumb-toolbar .icon-button[data-color]:where(:enabled:not([aria-disabled="true"]):not([aria-pressed="true"]))[data-state="open"], .file-breadcrumb-toolbar .icon-button[data-color]:where(:enabled:not([aria-disabled="true"]):not([aria-pressed="true"]))[data-active] {
+  .file-breadcrumb-toolbar
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    ):hover,
+  .file-breadcrumb-toolbar
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    )[data-state='open'],
+  .file-breadcrumb-toolbar
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    )[data-active] {
     background: var(--cpx-sys-color-hover);
     color: var(--cpx-sys-color-fg-primary);
   }

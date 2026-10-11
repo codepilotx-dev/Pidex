@@ -226,16 +226,51 @@ describe('GithubService Device Flow', () => {
 describe('GithubService API', () => {
   test('PR 自动合并重新读取门槛，并以 expectedHeadOid 原子绑定准确 SHA', async () => {
     const { db, credentials } = await repository()
-    await Effect.runPromise(credentials.set({ integrationID: 'github', value: { type: 'oauth', accessToken: 'test-token', tokenType: 'bearer', scope: 'repo' } }))
+    await Effect.runPromise(
+      credentials.set({
+        integrationID: 'github',
+        value: { type: 'oauth', accessToken: 'test-token', tokenType: 'bearer', scope: 'repo' },
+      }),
+    )
     let mutations = 0
-    let state = { id: 'PR_node', state: 'OPEN', isDraft: false, headRefOid: 'a'.repeat(40), headRefName: 'feature', mergeable: 'MERGEABLE', mergeStateStatus: 'CLEAN', reviewDecision: 'APPROVED', headRepository: { name: 'repository', owner: { login: 'owner' } }, statusCheckRollup: { state: 'SUCCESS' }, reviews: { nodes: [] } }
-    const service = new GithubService(credentials, { fetch: async (_input, init) => {
-      const body = JSON.parse(String(init?.body))
-      if (body.query.startsWith('mutation')) { mutations++; expect(body.variables.input).toEqual({ pullRequestId: 'PR_node', expectedHeadOid: 'a'.repeat(40), mergeMethod: 'SQUASH' }); return json({ data: { mergePullRequest: { pullRequest: { merged: true } } } }) }
-      return json({ data: { repository: { pullRequest: state } } })
-    } })
-    const input = { owner: 'owner', repository: 'repository', number: 1, headSha: 'a'.repeat(40), method: 'squash' as const }
-    await expect(service.mergeWatchedPullRequest({ ...input, headSha: 'b'.repeat(40) })).rejects.toMatchObject({ code: 'CONFLICT' })
+    let state = {
+      id: 'PR_node',
+      state: 'OPEN',
+      isDraft: false,
+      headRefOid: 'a'.repeat(40),
+      headRefName: 'feature',
+      mergeable: 'MERGEABLE',
+      mergeStateStatus: 'CLEAN',
+      reviewDecision: 'APPROVED',
+      headRepository: { name: 'repository', owner: { login: 'owner' } },
+      statusCheckRollup: { state: 'SUCCESS' },
+      reviews: { nodes: [] },
+    }
+    const service = new GithubService(credentials, {
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body))
+        if (body.query.startsWith('mutation')) {
+          mutations++
+          expect(body.variables.input).toEqual({
+            pullRequestId: 'PR_node',
+            expectedHeadOid: 'a'.repeat(40),
+            mergeMethod: 'SQUASH',
+          })
+          return json({ data: { mergePullRequest: { pullRequest: { merged: true } } } })
+        }
+        return json({ data: { repository: { pullRequest: state } } })
+      },
+    })
+    const input = {
+      owner: 'owner',
+      repository: 'repository',
+      number: 1,
+      headSha: 'a'.repeat(40),
+      method: 'squash' as const,
+    }
+    await expect(
+      service.mergeWatchedPullRequest({ ...input, headSha: 'b'.repeat(40) }),
+    ).rejects.toMatchObject({ code: 'CONFLICT' })
     state = { ...state, reviewDecision: 'REVIEW_REQUIRED' }
     await expect(service.mergeWatchedPullRequest(input)).rejects.toMatchObject({ code: 'CONFLICT' })
     expect(mutations).toBe(0)

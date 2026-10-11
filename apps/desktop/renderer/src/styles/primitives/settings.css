@@ -794,9 +794,21 @@
    */
   .profile-contribution-grid {
     --profile-contribution-level-0: var(--cpx-sys-color-border-subtle);
-    --profile-contribution-level-1: color-mix(in srgb, var(--cpx-sys-color-accent) 22%, transparent);
-    --profile-contribution-level-2: color-mix(in srgb, var(--cpx-sys-color-accent) 42%, transparent);
-    --profile-contribution-level-3: color-mix(in srgb, var(--cpx-sys-color-accent) 68%, transparent);
+    --profile-contribution-level-1: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 22%,
+      transparent
+    );
+    --profile-contribution-level-2: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 42%,
+      transparent
+    );
+    --profile-contribution-level-3: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 68%,
+      transparent
+    );
     --profile-contribution-level-4: var(--cpx-sys-color-accent);
 
     display: grid;
@@ -1048,7 +1060,8 @@
   .usage-heatmap-cell {
     min-width: 10px;
     aspect-ratio: 1;
-    border: 1px solid color-mix(in srgb, var(--usage-chart-1) 10%, var(--cpx-sys-color-border-subtle));
+    border: 1px solid
+      color-mix(in srgb, var(--usage-chart-1) 10%, var(--cpx-sys-color-border-subtle));
     border-radius: var(--cpx-sys-radius-compact);
     background: color-mix(in srgb, var(--usage-chart-1) 8%, var(--cpx-sys-color-surface-canvas));
   }
@@ -1549,9 +1562,8 @@
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     gap: var(--cpx-sys-space-3);
-      margin: 0;
-  
-}
+    margin: 0;
+  }
 
   .provider-totals > div {
     display: grid;
@@ -1574,7 +1586,6 @@
     font-size: var(--cpx-sys-font-size-md);
     font-variant-numeric: tabular-nums;
   }
-
 
   .provider-series {
     min-width: 0;

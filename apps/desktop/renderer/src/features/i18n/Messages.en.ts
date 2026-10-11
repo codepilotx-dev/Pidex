@@ -99,8 +99,7 @@ export const enUS: Record<string, string> = {
   内置浏览器隔离会话和站点权限: 'Browser sessions and site permissions',
   '管理项目上下文、指令和共享来源': 'Manage project context, instructions, and shared sources',
   '管理 setup、cleanup、Actions 与脚本执行信任': 'Manage setup, cleanup, Actions, and script trust',
-  '创建、恢复、保留和清理 Pidex 工作树':
-    'Create, restore, retain, and clean up Pidex worktrees',
+  '创建、恢复、保留和清理 Pidex 工作树': 'Create, restore, retain, and clean up Pidex worktrees',
   '管理 Node.js、Python、Git Bash 和 ripgrep 运行环境':
     'Manage Node.js, Python, Git Bash, and ripgrep runtimes',
   '分支、拉取请求、工作树和 GitHub 账户': 'Branches, pull requests, worktrees, and GitHub accounts',
@@ -167,8 +166,7 @@ export const enUS: Record<string, string> = {
     'Open Windows microphone permissions for Pidex.',
   通知: 'Notifications',
   轮次完成通知: 'Turn completion notifications',
-  '设置 Pidex 完成任务时是否显示系统通知':
-    'Choose when to notify you when Pidex finishes a task',
+  '设置 Pidex 完成任务时是否显示系统通知': 'Choose when to notify you when Pidex finishes a task',
   启用权限通知: 'Permission notifications',
   在需要额外权限时显示系统通知: 'Notify when additional permission is needed',
   启用问题通知: 'Question notifications',

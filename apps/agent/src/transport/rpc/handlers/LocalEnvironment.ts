@@ -67,7 +67,20 @@ export const localEnvironmentHandlers = {
           }
           case 'local-environment/project/update': {
             const params = Schema.decodeUnknownSync(RpcMethods[method].params)(rawParams)
-            return catalog.update({ projectId: params.projectId, environmentId: params.environmentId, expectedRevision: params.expectedRevision, ...(params.edits ? { edits: params.edits.map((edit) => ({ keyPath: [...edit.keyPath], value: JSON.parse(JSON.stringify(edit.value)) as ConfigValue })) } : {}), ...(params.trust ? { trust: params.trust } : {}) })
+            return catalog.update({
+              projectId: params.projectId,
+              environmentId: params.environmentId,
+              expectedRevision: params.expectedRevision,
+              ...(params.edits
+                ? {
+                    edits: params.edits.map((edit) => ({
+                      keyPath: [...edit.keyPath],
+                      value: JSON.parse(JSON.stringify(edit.value)) as ConfigValue,
+                    })),
+                  }
+                : {}),
+              ...(params.trust ? { trust: params.trust } : {}),
+            })
           }
           case 'local-environment/project/select': {
             const params = Schema.decodeUnknownSync(RpcMethods[method].params)(rawParams)

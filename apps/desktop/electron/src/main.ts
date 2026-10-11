@@ -83,7 +83,10 @@ const configuredUserDataDirectory = process.env.PIDEX_USER_DATA_DIR?.trim()
 // 和浏览器分区失联；显式指定目录的优先级不变。
 const USER_DATA_DIRECTORY_NAME = 'Pidex Desktop'
 const DEFAULT_USER_DATA_DIRECTORY = join(app.getPath('appData'), USER_DATA_DIRECTORY_NAME)
-app.setPath('userData', configuredUserDataDirectory ? resolve(configuredUserDataDirectory) : DEFAULT_USER_DATA_DIRECTORY)
+app.setPath(
+  'userData',
+  configuredUserDataDirectory ? resolve(configuredUserDataDirectory) : DEFAULT_USER_DATA_DIRECTORY,
+)
 
 // Windows toast 归属依赖 AppUserModelID；packaged 使用与 electron-builder
 // appId 一致的稳定 ID，开发态只能用进程路径做功能调试。
@@ -185,10 +188,7 @@ async function startDesktop(): Promise<void> {
     process.env.PIDEX_DATA_DIR?.trim() || null,
   )
   dataLocationLaunch = await dataLocationStore.launch()
-  const logDirectory = resolveDesktopLogDirectory(
-    dataLocationLaunch,
-    process.env.PIDEX_LOG_DIR,
-  )
+  const logDirectory = resolveDesktopLogDirectory(dataLocationLaunch, process.env.PIDEX_LOG_DIR)
   logger = createDesktopLogger(logDirectory)
   logger.info('desktop.starting', {
     version: app.getVersion(),

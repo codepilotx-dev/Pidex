@@ -37,7 +37,7 @@ const outputRoots = [
   {
     directory: rendererIconsDirectory,
     isGenerated: (name: string) =>
-      /^shard-[0-9a-f]+\.ts$/.test(name) || /^(index|loaders)\.ts$/.test(name),
+      /^Shard[0-9A-F]+\.ts$/.test(name) || /^(Index|Loaders)\.ts$/.test(name),
   },
 ] as const
 const check = process.argv.includes('--check')
@@ -193,7 +193,7 @@ async function generateFiles(
   // 包侧只保留纯数据：names 供类型与解析使用，React 部分生成到 renderer。
   generated.push({
     path: join(iconsDirectory, 'index.ts'),
-    content: `${generatedHeader()}export { iconNames, type IconName } from "./names"
+    content: `${generatedHeader()}export { iconNames, type IconName } from "./Names"
 `,
   })
   generated.push({
@@ -213,8 +213,8 @@ export type IconName = (typeof iconNames)[number]
         `  ${JSON.stringify(iconName)}: createMaterialIcon(\n    ${JSON.stringify(componentName)},\n    ${JSON.stringify(viewBox)},\n    ${JSON.stringify(body)},\n  ),`,
     )
     generated.push({
-      path: join(rendererIconsDirectory, `shard-${shardIndex.toString(16)}.ts`),
-      content: `${generatedHeader()}import { createMaterialIcon } from "./create-icon"
+      path: join(rendererIconsDirectory, `Shard${shardIndex.toString(16).toUpperCase()}.ts`),
+      content: `${generatedHeader()}import { createMaterialIcon } from "./CreateIcon"
 
 export const iconComponents = {
 ${entries.join('\n')}
@@ -227,10 +227,10 @@ ${entries.join('\n')}
     content: generatedShardLoaders(),
   })
   generated.push({
-    path: join(rendererIconsDirectory, 'index.ts'),
-    content: `${generatedHeader()}export { createMaterialIcon } from "./create-icon"
-export type { MaterialSvgIconProps } from "./create-icon"
-export { iconShard, loadIconShard, type IconComponent, type IconShard } from "./loaders"
+    path: join(rendererIconsDirectory, 'Index.ts'),
+    content: `${generatedHeader()}export { createMaterialIcon } from "./CreateIcon"
+export type { MaterialSvgIconProps } from "./CreateIcon"
+export { iconShard, loadIconShard, type IconComponent, type IconShard } from "./Loaders"
 `,
   })
   generated.push({
@@ -252,10 +252,10 @@ function iconShard(iconName: string): number {
 function generatedShardLoaders(): string {
   const loaders = Array.from(
     { length: iconShardCount },
-    (_, index) => `  () => import("./shard-${index.toString(16)}"),`,
+    (_, index) => `  () => import("./Shard${index.toString(16).toUpperCase()}"),`,
   )
   return `${generatedHeader()}import type { ComponentType } from "react"
-import type { MaterialSvgIconProps } from "./create-icon"
+import type { MaterialSvgIconProps } from "./CreateIcon"
 import type { IconName } from "@pidex/material-icon-theme"
 
 export type IconComponent = ComponentType<MaterialSvgIconProps>

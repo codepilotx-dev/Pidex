@@ -74,10 +74,14 @@
     padding: var(--cpx-comp-input-padding-block) var(--cpx-comp-input-padding-inline);
     font: var(--cpx-sys-type-control);
     outline: none;
-    transition: background-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard), border-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard), color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard), opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+    transition:
+      background-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      border-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
   }
 
-  .ui-input[aria-invalid="true"] {
+  .ui-input[aria-invalid='true'] {
     border-color: var(--cpx-comp-input-validation-error-border);
   }
 
@@ -109,7 +113,8 @@
   .settings-input-number:focus {
     outline: none;
   }
-  .settings-input-number::-webkit-inner-spin-button, .settings-input-number::-webkit-outer-spin-button {
+  .settings-input-number::-webkit-inner-spin-button,
+  .settings-input-number::-webkit-outer-spin-button {
     -webkit-appearance: none;
     margin: 0;
   }
@@ -124,7 +129,11 @@
     padding: var(--cpx-comp-input-padding-block) var(--cpx-comp-input-padding-inline);
     font: var(--cpx-sys-type-control);
     outline: none;
-    transition: background-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard), border-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard), color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard), opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+    transition:
+      background-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      border-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
   }
 
   .settings-code-textarea {

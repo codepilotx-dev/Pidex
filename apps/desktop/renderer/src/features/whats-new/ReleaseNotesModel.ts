@@ -26,8 +26,7 @@ export function releaseNotesErrorMessage(error: ReleaseNotesViewError): {
   if (error === 'not-public') {
     return {
       title: '更新日志仓库尚未公开',
-      description:
-        'Pidex 仍在调试阶段。仓库公开后，这里会自动显示 GitHub Releases 中的更新记录。',
+      description: 'Pidex 仍在调试阶段。仓库公开后，这里会自动显示 GitHub Releases 中的更新记录。',
     }
   }
   if (error === 'rate-limited') {

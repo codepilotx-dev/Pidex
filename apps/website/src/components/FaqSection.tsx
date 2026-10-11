@@ -24,8 +24,8 @@ export const FaqSection: React.FC = () => {
               Clear answers, zero marketing fluff.
             </h2>
             <p className="mt-4 text-base text-[#55625D] leading-relaxed">
-              Pidex is open source and currently in Beta. Here are the core technical realities
-              of how it operates today.
+              Pidex is open source and currently in Beta. Here are the core technical realities of
+              how it operates today.
             </p>
 
             <div className="mt-8 rounded-2xl border border-[#DCD6CB] bg-[#FCFAF5] p-5">

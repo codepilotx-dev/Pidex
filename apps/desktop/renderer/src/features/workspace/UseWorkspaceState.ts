@@ -55,8 +55,10 @@ export function workspaceIdentity(workspace: DesktopWorkspace): string {
 }
 
 export function shouldApplyWorkspaceGitProjection(
-  currentIdentity: string | null, currentSequence: number,
-  requestIdentity: string, requestSequence: number,
+  currentIdentity: string | null,
+  currentSequence: number,
+  requestIdentity: string,
+  requestSequence: number,
 ): boolean {
   return currentIdentity === requestIdentity && currentSequence === requestSequence
 }
@@ -169,7 +171,8 @@ export async function resolveWorkspaceGitProjection(
   }
 
   if (!gitStatusResult?.ok) {
-    const nonGit = gitStatusResult?.ok === false && gitStatusResult.errorCode === 'REPOSITORY_NOT_FOUND'
+    const nonGit =
+      gitStatusResult?.ok === false && gitStatusResult.errorCode === 'REPOSITORY_NOT_FOUND'
     return {
       detection: nonGit ? 'non-git' : 'error',
       workspace: nonGit ? mergeWorkspaceGitProjection(context, null, []) : context,
@@ -179,8 +182,11 @@ export async function resolveWorkspaceGitProjection(
 
   onDetected?.({
     detection: 'git',
-    workspace: mergeWorkspaceGitProjection(context, gitStatusResult.status,
-      (context.branches ?? []).map((name) => ({ name, remote: false }))),
+    workspace: mergeWorkspaceGitProjection(
+      context,
+      gitStatusResult.status,
+      (context.branches ?? []).map((name) => ({ name, remote: false })),
+    ),
     gitStatus: gitStatusResult.status,
   })
   const [branchesResult, unstagedResult, stagedResult] = await Promise.allSettled([
@@ -288,10 +294,16 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
       setGitStatus(null)
       setGitDetection(nextWorkspace ? 'loading' : 'non-git')
     }
-    setWorkspaceState((previous) => nextWorkspace && previous && workspaceIdentity(previous) === identity
-      ? { ...nextWorkspace, isGitRepo: previous.isGitRepo,
-          branchName: previous.branchName, branches: previous.branches }
-      : nextWorkspace)
+    setWorkspaceState((previous) =>
+      nextWorkspace && previous && workspaceIdentity(previous) === identity
+        ? {
+            ...nextWorkspace,
+            isGitRepo: previous.isGitRepo,
+            branchName: previous.branchName,
+            branches: previous.branches,
+          }
+        : nextWorkspace,
+    )
     appliedWorkspaceIdentityRef.current = identity
     if (!nextWorkspace) {
       refreshCoordinatorRef.current?.reset()
@@ -354,8 +366,11 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
         gitRequestSequenceRef.current += 1
         const requestSequence = ++workspaceRequestSequenceRef.current
         const result = await request
-        if (requestSequence !== workspaceRequestSequenceRef.current ||
-          workspaceIdentity(target) !== appliedWorkspaceIdentityRef.current) return
+        if (
+          requestSequence !== workspaceRequestSequenceRef.current ||
+          workspaceIdentity(target) !== appliedWorkspaceIdentityRef.current
+        )
+          return
         if (
           refreshOptions.expectedSessionId !== undefined &&
           refreshOptions.expectedSessionId !== null &&
@@ -415,10 +430,21 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
     const identity = workspaceIdentity(target)
     if (appliedWorkspaceIdentityRef.current !== identity) return
     const sequence = ++gitRequestSequenceRef.current
-    setGitDetection((previous) => previous === 'error' ? 'loading' : previous)
-    const applyProjection = ({ workspace: projected, gitStatus: nextGitStatus, detection }: WorkspaceGitProjectionResult) => {
-      if (!shouldApplyWorkspaceGitProjection(appliedWorkspaceIdentityRef.current,
-        gitRequestSequenceRef.current, identity, sequence)) return
+    setGitDetection((previous) => (previous === 'error' ? 'loading' : previous))
+    const applyProjection = ({
+      workspace: projected,
+      gitStatus: nextGitStatus,
+      detection,
+    }: WorkspaceGitProjectionResult) => {
+      if (
+        !shouldApplyWorkspaceGitProjection(
+          appliedWorkspaceIdentityRef.current,
+          gitRequestSequenceRef.current,
+          identity,
+          sequence,
+        )
+      )
+        return
       setGitDetection(detection)
       if (detection === 'error') return
       setWorkspaceState(projected)

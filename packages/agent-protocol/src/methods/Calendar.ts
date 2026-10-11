@@ -4,10 +4,7 @@ import {
   SchedulePlanItemDraftSchema,
   SchedulePlanProposalSchema,
 } from '@pidex/shared/schedule-plan'
-import {
-  ScheduledTaskDefinitionSchema,
-  ScheduledTaskSchema,
-} from '@pidex/shared/scheduled-task'
+import { ScheduledTaskDefinitionSchema, ScheduledTaskSchema } from '@pidex/shared/scheduled-task'
 import { Schema } from 'effect'
 import { defineMethod, type MethodMap } from '../wire/Definition'
 import { NonEmptyStringSchema, OpaqueIDSchema } from '../wire/Primitives'

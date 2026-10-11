@@ -77,7 +77,13 @@ export function calculateCardTransform(
     if (index === 2) {
       return { y: 20, scale: 0.9, zIndex: 48, opacity: 0.75, pointerEvents: 'auto' }
     }
-    return { y: 20, scale: 0.85, zIndex: Math.max(1, 47 - index), opacity: 0, pointerEvents: 'none' }
+    return {
+      y: 20,
+      scale: 0.85,
+      zIndex: Math.max(1, 47 - index),
+      opacity: 0,
+      pointerEvents: 'none',
+    }
   }
 
   // 展开状态：计算前置卡片高度累加
@@ -176,8 +182,7 @@ export function createToastStore(options?: {
       }
     }
 
-    const id =
-      toastOptions.id ?? `toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const id = toastOptions.id ?? `toast-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 
     const existingByIdIndex = state.toasts.findIndex((t) => t.id === id)
     const newItem: ToastItem = {

@@ -636,9 +636,10 @@ export function ConversationTurnNavRail({
                     onToggleBookmark &&
                     bookmarkedInputIds
                   ) {
-                    const bookmarkButton = previewCardRef.current?.querySelector<HTMLButtonElement>(
-                      '[data-bookmark-toggle]',
-                    )
+                    const bookmarkButton =
+                      previewCardRef.current?.querySelector<HTMLButtonElement>(
+                        '[data-bookmark-toggle]',
+                      )
                     if (bookmarkButton) {
                       event.preventDefault()
                       bookmarkButton.focus()
@@ -661,7 +662,10 @@ export function ConversationTurnNavRail({
                 }}
                 type="button"
               >
-                <span className="conversation-turn-nav-marker" data-bookmarked={isBookmarked || undefined} />
+                <span
+                  className="conversation-turn-nav-marker"
+                  data-bookmarked={isBookmarked || undefined}
+                />
                 {isBookmarked ? <span className="conversation-turn-nav-bookmark-dot" /> : null}
               </button>
             )

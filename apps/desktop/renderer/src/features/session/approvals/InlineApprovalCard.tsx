@@ -256,11 +256,7 @@ export function InlineApprovalCard({
             }}
           >
             {scopeOptions.map((option) => (
-              <PopoverRadioItem
-                key={option.scope}
-                value={option.scope}
-                disabled={disabled}
-              >
+              <PopoverRadioItem key={option.scope} value={option.scope} disabled={disabled}>
                 {option.label}
               </PopoverRadioItem>
             ))}

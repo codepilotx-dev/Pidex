@@ -20,9 +20,12 @@ const STORAGE_PREFIX = 'conversation.ui-state.'
 export function readFileEditorViewState(value: unknown): FileEditorViewState | null {
   if (!isRecord(value)) return null
   const { scrollTop, scrollLeft, anchor, head } = value
-  if (![scrollTop, scrollLeft, anchor, head].every((field) =>
-    typeof field === 'number' && Number.isFinite(field) && field >= 0,
-  )) return null
+  if (
+    ![scrollTop, scrollLeft, anchor, head].every(
+      (field) => typeof field === 'number' && Number.isFinite(field) && field >= 0,
+    )
+  )
+    return null
   return {
     scrollTop: scrollTop as number,
     scrollLeft: scrollLeft as number,
@@ -346,7 +349,9 @@ function validateReviewTabUiState(value: unknown): ReviewTabUiState {
     fileTreeVisible:
       typeof value.fileTreeVisible === 'boolean' ? value.fileTreeVisible : defaults.fileTreeVisible,
     fileTreeWidth:
-      typeof value.fileTreeWidth === 'number' && Number.isFinite(value.fileTreeWidth) && value.fileTreeWidth > 0
+      typeof value.fileTreeWidth === 'number' &&
+      Number.isFinite(value.fileTreeWidth) &&
+      value.fileTreeWidth > 0
         ? value.fileTreeWidth
         : defaults.fileTreeWidth,
     diffMode:
@@ -358,7 +363,8 @@ function validateReviewTabUiState(value: unknown): ReviewTabUiState {
       typeof value.showWordDiff === 'boolean' ? value.showWordDiff : defaults.showWordDiff,
     hideWhitespace:
       typeof value.hideWhitespace === 'boolean' ? value.hideWhitespace : defaults.hideWhitespace,
-    loadFullFiles: typeof value.loadFullFiles === 'boolean' ? value.loadFullFiles : defaults.loadFullFiles,
+    loadFullFiles:
+      typeof value.loadFullFiles === 'boolean' ? value.loadFullFiles : defaults.loadFullFiles,
     hideImports: typeof value.hideImports === 'boolean' ? value.hideImports : defaults.hideImports,
     richPreview: typeof value.richPreview === 'boolean' ? value.richPreview : defaults.richPreview,
   }
@@ -474,10 +480,7 @@ function validateWorkbenchState(
  * 缺失 workspaceView 时由旧 right.open 推导；旧完整视图恢复为分屏，
  * 保留标签显隐与选中状态。
  */
-function validateWorkspaceView(
-  value: unknown,
-  right: WorkbenchPanelSnapshot,
-): WorkspaceView {
+function validateWorkspaceView(value: unknown, right: WorkbenchPanelSnapshot): WorkspaceView {
   const hasContent = right.tabIds.length > 0
   const inferred = inferWorkspaceView(right.open)
   const raw = isRecord(value) ? value : null

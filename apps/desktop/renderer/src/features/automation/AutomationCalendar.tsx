@@ -446,7 +446,11 @@ export function AutomationCalendar({
       </div>
 
       {/* Compact Month Calendar Grid */}
-      <div className="automation-calendar__month-view tw:flex tw:w-full tw:shrink-0 tw:flex-col">
+      <div
+        className="automation-calendar__month-view tw:flex tw:w-full tw:shrink-0 tw:flex-col"
+        role="grid"
+        aria-label="任务日历"
+      >
         <div
           className="automation-calendar__weekdays tw:grid tw:grid-cols-7 tw:border-b tw:border-app-border-subtle tw:pb-2 tw:text-center"
           role="row"
@@ -463,67 +467,69 @@ export function AutomationCalendar({
         </div>
         <div
           className="automation-calendar__grid tw:grid tw:w-full tw:grid-cols-7 tw:gap-1 tw:pt-1"
-          role="grid"
-          aria-label="任务日历"
+          role="rowgroup"
           onKeyDown={handleGridKeyDown}
         >
-          {monthCells.map((cell) => {
-            const cellOccurrences = occurrencesByDate.get(cell.value) ?? []
-            const visibleDots = cellOccurrences.slice(0, 4)
-            const overflow = cellOccurrences.length - 4
-            const isSelected = cell.value === activeDateValue
-            const isFocused = isSameDate(cell.date, focusedDate)
+          {Array.from({ length: Math.ceil(monthCells.length / 7) }, (_, week) => (
+            <div key={week} role="row" className="tw:contents">
+              {monthCells.slice(week * 7, week * 7 + 7).map((cell) => {
+                const cellOccurrences = occurrencesByDate.get(cell.value) ?? []
+                const visibleDots = cellOccurrences.slice(0, 4)
+                const overflow = cellOccurrences.length - 4
+                const isSelected = cell.value === activeDateValue
+                const isFocused = isSameDate(cell.date, focusedDate)
 
-            return (
-              <button
-                key={cell.value}
-                type="button"
-                role="gridcell"
-                className={cx(
-                  'automation-calendar__day tw:flex tw:min-h-[calc(var(--cpx-sys-space-8)*2)] tw:cursor-pointer tw:flex-col tw:items-start tw:justify-start tw:rounded-control tw:border tw:border-app-border-subtle tw:bg-app-main tw:p-2 tw:text-left tw:text-app-text tw:transition-[background-color,border-color] tw:duration-feedback tw:ease-standard tw:hover:border-app-border tw:hover:bg-app-hover tw:focus-visible:outline-none',
-                  isSelected &&
-                    'tw:aria-selected:border-app-accent-fg tw:aria-selected:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent-fg)_8%,transparent)] tw:aria-selected:outline-solid tw:aria-selected:outline-[1.5px] tw:aria-selected:outline-offset-[-1px] tw:aria-selected:outline-app-accent-fg',
-                  !cell.currentMonth &&
-                    'tw:data-[other-month]:text-app-text-meta tw:data-[other-month]:opacity-50',
-                )}
-                data-calendar-date={cell.value}
-                data-today={cell.today ? '' : undefined}
-                data-selected={isSelected ? '' : undefined}
-                data-other-month={!cell.currentMonth ? '' : undefined}
-                aria-selected={isSelected}
-                aria-label={dayLabel(cell.date, cellOccurrences.length)}
-                tabIndex={isFocused ? 0 : -1}
-                onClick={() => selectDate(cell.date)}
-              >
-                <span
-                  className={cx(
-                    'automation-calendar__day-num tw:text-[length:var(--cpx-sys-font-size-xs)] tw:type-weight-label tw:[line-height:var(--cpx-sys-line-height-none)]',
-                    cell.today &&
-                      'tw:inline-flex tw:h-6 tw:min-w-6 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-accent-fg tw:px-1 tw:text-app-main',
-                  )}
-                >
-                  {cell.day}
-                </span>
-                <div
-                  className="automation-calendar__dots tw:mt-2 tw:flex tw:min-h-2 tw:items-center tw:gap-1"
-                  aria-hidden="true"
-                >
-                  {visibleDots.map((occ, idx) => (
+                return (
+                  <button
+                    key={cell.value}
+                    type="button"
+                    role="gridcell"
+                    className={cx(
+                      'automation-calendar__day tw:flex tw:min-h-[calc(var(--cpx-sys-space-8)*2)] tw:cursor-pointer tw:flex-col tw:items-start tw:justify-start tw:rounded-control tw:border tw:border-app-border-subtle tw:bg-app-main tw:p-2 tw:text-left tw:text-app-text tw:transition-[background-color,border-color] tw:duration-feedback tw:ease-standard tw:hover:border-app-border tw:hover:bg-app-hover tw:focus-visible:outline-none',
+                      isSelected &&
+                        'tw:aria-selected:border-app-accent-fg tw:aria-selected:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent-fg)_8%,transparent)] tw:aria-selected:outline-solid tw:aria-selected:outline-[1.5px] tw:aria-selected:outline-offset-[-1px] tw:aria-selected:outline-app-accent-fg',
+                      !cell.currentMonth && 'tw:data-[other-month]:text-app-text-meta',
+                    )}
+                    data-calendar-date={cell.value}
+                    data-today={cell.today ? '' : undefined}
+                    data-selected={isSelected ? '' : undefined}
+                    data-other-month={!cell.currentMonth ? '' : undefined}
+                    aria-selected={isSelected}
+                    aria-label={dayLabel(cell.date, cellOccurrences.length)}
+                    tabIndex={isFocused ? 0 : -1}
+                    onClick={() => selectDate(cell.date)}
+                  >
                     <span
-                      key={occ.id || idx}
-                      className={calendarDotClass('automation-calendar__dot')}
-                      data-status={occurrenceStatusKind(occ)}
-                    />
-                  ))}
-                  {overflow > 0 ? (
-                    <span className="automation-calendar__dot-overflow tw:text-[length:var(--cpx-sys-font-size-xs)] tw:type-weight-body tw:[line-height:var(--cpx-sys-line-height-none)] tw:text-app-text-meta">
-                      +{overflow}
+                      className={cx(
+                        'automation-calendar__day-num tw:text-[length:var(--cpx-sys-font-size-xs)] tw:type-weight-label tw:[line-height:var(--cpx-sys-line-height-none)]',
+                        cell.today &&
+                          'tw:inline-flex tw:h-6 tw:min-w-6 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-accent-fg tw:px-1 tw:text-app-main',
+                      )}
+                    >
+                      {cell.day}
                     </span>
-                  ) : null}
-                </div>
-              </button>
-            )
-          })}
+                    <div
+                      className="automation-calendar__dots tw:mt-2 tw:flex tw:min-h-2 tw:items-center tw:gap-1"
+                      aria-hidden="true"
+                    >
+                      {visibleDots.map((occ, idx) => (
+                        <span
+                          key={occ.id || idx}
+                          className={calendarDotClass('automation-calendar__dot')}
+                          data-status={occurrenceStatusKind(occ)}
+                        />
+                      ))}
+                      {overflow > 0 ? (
+                        <span className="automation-calendar__dot-overflow tw:text-[length:var(--cpx-sys-font-size-xs)] tw:type-weight-body tw:[line-height:var(--cpx-sys-line-height-none)] tw:text-app-text-meta">
+                          +{overflow}
+                        </span>
+                      ) : null}
+                    </div>
+                  </button>
+                )
+              })}
+            </div>
+          ))}
         </div>
       </div>
 

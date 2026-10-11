@@ -44,7 +44,10 @@ export function renameSidebarSection(
   }
 }
 
-export function deleteSidebarSection(current: SidebarCustomization, id: string): SidebarCustomization {
+export function deleteSidebarSection(
+  current: SidebarCustomization,
+  id: string,
+): SidebarCustomization {
   if (!current.sections.some((section) => section.id === id)) return current
   return {
     ...current,
@@ -73,7 +76,9 @@ export function setSidebarSectionSort(
 ): SidebarCustomization {
   return {
     ...current,
-    sections: current.sections.map((section) => (section.id === id ? { ...section, sort } : section)),
+    sections: current.sections.map((section) =>
+      section.id === id ? { ...section, sort } : section,
+    ),
   }
 }
 
@@ -144,7 +149,12 @@ export function moveItemsToSection(
 ): SidebarCustomization {
   let next = current
   itemKeys.forEach((itemKey, offset) => {
-    next = moveItemToSection(next, sectionId, itemKey, index === undefined ? undefined : index + offset)
+    next = moveItemToSection(
+      next,
+      sectionId,
+      itemKey,
+      index === undefined ? undefined : index + offset,
+    )
   })
   return next
 }

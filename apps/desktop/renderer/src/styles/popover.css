@@ -143,10 +143,7 @@
     max-width: var(--popover-max-width, var(--popover-default-max-width));
     max-height: var(
       --popover-max-height,
-      min(
-        420px,
-        var(--popover-available-height, calc(100vh - 96px))
-      )
+      min(420px, var(--popover-available-height, calc(100vh - 96px)))
     );
     overflow-x: var(--popover-overflow-x, hidden);
     overflow-y: var(--popover-overflow-y, auto);

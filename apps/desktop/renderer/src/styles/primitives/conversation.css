@@ -875,7 +875,8 @@
   }
 
   .cpx-agent-activity__header > svg:not(.cpx-agent-activity__chevron),
-  .cpx-agent-activity__item-header > svg:not(.cpx-agent-activity__chevron, .canonical-process-card__chevron) {
+  .cpx-agent-activity__item-header
+    > svg:not(.cpx-agent-activity__chevron, .canonical-process-card__chevron) {
     flex: 0 0 auto;
     width: var(--cpx-sys-icon-size-md);
     height: var(--cpx-sys-icon-size-md);
@@ -1046,7 +1047,11 @@
     min-width: 0;
     margin-block: var(--cpx-sys-space-2);
     border: 1px solid var(--cpx-sys-color-border-strong);
-    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 5%, var(--cpx-sys-color-surface-canvas));
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 5%,
+      var(--cpx-sys-color-surface-canvas)
+    );
   }
   .canonical-command-card.canonical-command-shell--embedded {
     margin-block: var(--cpx-sys-space-1);
@@ -1115,8 +1120,15 @@
   .canonical-command-card .canonical-command-shell__edge-fade[data-at-end='false'] {
     mask-image: linear-gradient(to top, transparent, black var(--cpx-sys-space-8));
   }
-  .canonical-command-card .canonical-command-shell__edge-fade[data-at-start='false'][data-at-end='false'] {
-    mask-image: linear-gradient(to bottom, transparent, black var(--cpx-sys-space-8), black calc(100% - var(--cpx-sys-space-8)), transparent);
+  .canonical-command-card
+    .canonical-command-shell__edge-fade[data-at-start='false'][data-at-end='false'] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--cpx-sys-space-8),
+      black calc(100% - var(--cpx-sys-space-8)),
+      transparent
+    );
   }
   .canonical-command-card > .canonical-command-shell__footer {
     display: flex;

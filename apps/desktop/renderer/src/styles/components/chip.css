@@ -59,12 +59,12 @@
   /* An open chip trigger exposes aria-expanded and needs the same selected
      background the meta chip already owns, plus a
      flipped chevron that signals the open menu. */
-  .composer .chip-button[aria-expanded="true"] {
+  .composer .chip-button[aria-expanded='true'] {
     background: var(--cpx-sys-color-selected);
     color: var(--cpx-sys-color-fg-primary);
   }
 
-  .composer .chip-button[aria-expanded="true"] > svg:last-child {
+  .composer .chip-button[aria-expanded='true'] > svg:last-child {
     transform: rotate(180deg);
   }
 
@@ -72,7 +72,7 @@
     transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
   }
 
-  .menubar-trigger[data-state="open"] {
+  .menubar-trigger[data-state='open'] {
     background: var(--cpx-sys-color-selected);
     color: var(--cpx-sys-color-fg-primary);
   }

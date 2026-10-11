@@ -86,9 +86,7 @@ async function validateLiveConfiguration(current: NonNullable<typeof runtime>): 
       )
       .get(providerID)
     if (!credential) {
-      throw new Error(
-        `真实模型测试缺少 ${providerID} 的有效凭据，请先在 Pidex 中连接该 Provider`,
-      )
+      throw new Error(`真实模型测试缺少 ${providerID} 的有效凭据，请先在 Pidex 中连接该 Provider`)
     }
   }
 }

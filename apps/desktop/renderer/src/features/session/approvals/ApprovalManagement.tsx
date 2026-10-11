@@ -133,7 +133,10 @@ export function ApprovalRulesDialog({
           {error ? <p role="alert">{error}</p> : null}
           {!busy && !rules.length && !error ? <p>暂无持久授权规则。</p> : null}
           {rules.map((rule) => (
-            <div key={rule.id} className="inline-approval-actions tw:ml-auto tw:flex tw:shrink-0 tw:flex-wrap tw:items-center tw:gap-2">
+            <div
+              key={rule.id}
+              className="inline-approval-actions tw:ml-auto tw:flex tw:shrink-0 tw:flex-wrap tw:items-center tw:gap-2"
+            >
               <span>{rule.target.join(' / ')}</span>
               <Button
                 color="secondary"

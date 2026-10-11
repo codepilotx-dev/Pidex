@@ -115,9 +115,7 @@ function renderRowContent({
   trailing?: ReactNode
 }): ReactNode {
   const hasLeading =
-    leadingMode === 'icon'
-      ? leading !== undefined && leading !== null
-      : leadingMode === 'spacer'
+    leadingMode === 'icon' ? leading !== undefined && leading !== null : leadingMode === 'spacer'
   const hasTrailing = trailing !== undefined && trailing !== null
 
   return (
@@ -135,7 +133,12 @@ function renderRowContent({
           {leadingMode === 'icon' ? leading : null}
         </span>
       ) : null}
-      <span className={cx('sidebar-row-main tw:flex tw:w-full tw:min-w-0 tw:items-center', labelClassName)}>
+      <span
+        className={cx(
+          'sidebar-row-main tw:flex tw:w-full tw:min-w-0 tw:items-center',
+          labelClassName,
+        )}
+      >
         {children}
       </span>
       {hasTrailing ? (

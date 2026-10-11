@@ -48,7 +48,12 @@ export function useBranchReviewSummary(
   }, [activeProjectId])
   useEffect(() => {
     let active = true
-    setRequest({ workspacePath, selectedBase, baseBranch: null, loading: Boolean(workspacePath && gitStatus) })
+    setRequest({
+      workspacePath,
+      selectedBase,
+      baseBranch: null,
+      loading: Boolean(workspacePath && gitStatus),
+    })
     if (workspacePath && gitStatus) {
       void reviewAgentClient
         .branches(workspacePath)
@@ -71,29 +76,43 @@ export function useBranchReviewSummary(
           if (active) setResult(null)
         })
         .finally(() => {
-          if (active) setRequest((previous) => previous ? { ...previous, loading: false } : null)
+          if (active) setRequest((previous) => (previous ? { ...previous, loading: false } : null))
         })
     }
     return () => {
       active = false
     }
   }, [workspacePath, gitStatus, revision, selectedBase])
-  const shared = sharedSummary?.source.kind === 'branch' && sharedSummary.source.baseBranch === selectedBase
-    ? sharedSummary : null
-  const snapshot = shared ?? (result?.workspacePath === workspacePath &&
+  const shared =
+    sharedSummary?.source.kind === 'branch' && sharedSummary.source.baseBranch === selectedBase
+      ? sharedSummary
+      : null
+  const snapshot =
+    shared ??
+    (result?.workspacePath === workspacePath &&
     (!selectedBase ||
       (result.snapshot.source.kind === 'branch' &&
         result.snapshot.source.baseBranch === selectedBase))
-    ? result.snapshot
-    : null)
-  const currentRequest = request?.workspacePath === workspacePath && request.selectedBase === selectedBase
-    ? request : null
-  const baseBranch = selectedBase ?? currentRequest?.baseBranch ??
+      ? result.snapshot
+      : null)
+  const currentRequest =
+    request?.workspacePath === workspacePath && request.selectedBase === selectedBase
+      ? request
+      : null
+  const baseBranch =
+    selectedBase ??
+    currentRequest?.baseBranch ??
     (snapshot?.source.kind === 'branch' ? snapshot.source.baseBranch : null) ??
-    gitStatus?.upstream ?? gitStatus?.branchName ?? 'HEAD'
+    gitStatus?.upstream ??
+    gitStatus?.branchName ??
+    'HEAD'
   return {
-    snapshot: currentRequest?.baseBranch && snapshot?.source.kind === 'branch' &&
-      snapshot.source.baseBranch !== currentRequest.baseBranch ? null : snapshot,
+    snapshot:
+      currentRequest?.baseBranch &&
+      snapshot?.source.kind === 'branch' &&
+      snapshot.source.baseBranch !== currentRequest.baseBranch
+        ? null
+        : snapshot,
     loading: !shared && Boolean(workspacePath && gitStatus) && (currentRequest?.loading ?? true),
     source: { kind: 'branch', baseBranch } as const,
   }

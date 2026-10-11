@@ -27,7 +27,8 @@ export const AuxiliaryTitlebar = memo(function AuxiliaryTitlebar({
 
       {/* 操作按钮区域：右侧预留 Windows 原生控制按钮间隙 */}
       <div className="tw:flex tw:items-center tw:gap-1">
-        <Button isIconOnly
+        <Button
+          isIconOnly
           aria-label="停靠回主窗口"
           color="ghostSecondary"
           onClick={onDockBack}

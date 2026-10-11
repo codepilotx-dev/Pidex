@@ -135,14 +135,14 @@ flowchart TD
 | Subagent                    | 成熟基础         | 父权限 ceiling、容量限制、等待 checkpoint、requestId 幂等  |
 | Forward compatibility       | 成熟策略         | 高 schema 不降级；探测后广告能力                           |
 
-| 旧报告项目                | 当前状态            | 证据                                                   | 新处理                 |
-| ------------------------- | ------------------- | ------------------------------------------------------ | ---------------------- |
+| 旧报告项目                | 当前状态            | 证据                                                  | 新处理                 |
+| ------------------------- | ------------------- | ----------------------------------------------------- | ---------------------- |
 | Capability 交集 P0        | 已完成              | System.ts:113-120`                                    | 移入不变量             |
-| RuntimeCompositionPlan P0 | 已完成并持久化到 v2 | Types.ts:109-148`、Service.ts:57-104`                | 只做完整性/验收        |
-| 同 Turn 组合冻结          | 已完成              | AgentHarness.ts:379-455`                             | 补 descriptor 漂移测试 |
-| Skill referenced identity | 已有基础            | Snapshot V2                                            | 真按需中复用           |
+| RuntimeCompositionPlan P0 | 已完成并持久化到 v2 | Types.ts:109-148`、Service.ts:57-104`                 | 只做完整性/验收        |
+| 同 Turn 组合冻结          | 已完成              | AgentHarness.ts:379-455`                              | 补 descriptor 漂移测试 |
+| Skill referenced identity | 已有基础            | Snapshot V2                                           | 真按需中复用           |
 | Compaction retained tail  | 已实现              | `pi-session/Session.ts:59-78`、Compaction.ts:626-703` | 故障注入，不重建 DTO   |
-| Hook 系统                 | 已存在、部分接线    | `HookService.ts:8-35,184-239`                          | 补声明/触发一致性      |
+| Hook 系统                 | 已存在、部分接线    | `HookService.ts:8-35,184-239`                         | 补声明/触发一致性      |
 | SSE capability gate       | 已完成              | Server.ts:125-193`                                    | 保留回归               |
 
 ---
@@ -249,13 +249,13 @@ Codex 每 root tree 共享容量；spawn 先 reserve，失败释放 slot；wait 
 
 ### G1：Composition 未冻结完整执行语义
 
-| 属性     | 结论                                                                                       |
-| -------- | ------------------------------------------------------------------------------------------ |
-| 类型     | Confirmed correctness gap                                                                  |
-| 影响     | 暂停/升级后旧 Turn 可能绑定同名新语义工具；损坏 hash 防护不完整                            |
+| 属性     | 结论                                                                                     |
+| -------- | ---------------------------------------------------------------------------------------- |
+| 类型     | Confirmed correctness gap                                                                |
+| 影响     | 暂停/升级后旧 Turn 可能绑定同名新语义工具；损坏 hash 防护不完整                          |
 | 证据     | Types.ts:77-82` 只存工具名；Composer.ts:407-443` 只检查同名存在；baseline 字段和值不一致 |
-| 最小实现 | 修 baseline、重算整体 hash、增加 descriptor fingerprint/behaviorVersion                    |
-| 回滚     | 新 snapshot V3；旧 V1/V2 保持读取，不原地改写                                              |
+| 最小实现 | 修 baseline、重算整体 hash、增加 descriptor fingerprint/behaviorVersion                  |
+| 回滚     | 新 snapshot V3；旧 V1/V2 保持读取，不原地改写                                            |
 
 ```ts
 interface ToolDescriptorSnapshot {
@@ -352,7 +352,7 @@ interface StepCompositionSnapshot {
 | -------- | ------------------------------------------------------------------ |
 | 类型     | Architecture/security decision                                     |
 | 影响     | 当前用户权限下可访问宿主资源；错误文案会形成虚假安全预期           |
-| 证据     | System.ts:138-146` unsupported；`HostProcess.ts:159` 直接 spawn   |
+| 证据     | System.ts:138-146` unsupported；`HostProcess.ts:159` 直接 spawn    |
 | 前置决策 | 哪些模式承诺隔离、backend 不可用是否拒绝、是否允许 host-unisolated |
 | 当前动作 | ADR + Windows 原型 + 攻击面矩阵，不直接承诺 M 规模                 |
 
@@ -615,9 +615,9 @@ git diff --check
 | 机制/缺口           | 关键位置                                                                                |
 | ------------------- | --------------------------------------------------------------------------------------- |
 | Capability          | `transport/rpc/handlers/System.ts:113-120`                                              |
-| Runtime Composition | `runtime-composition/Types.ts:109-148`、Service.ts:57-104`                             |
+| Runtime Composition | `runtime-composition/Types.ts:109-148`、Service.ts:57-104`                              |
 | 生产接入            | `orchestration/AgentRuntimeService.ts:849-950`                                          |
-| Agent Loop          | `orchestration/harness/AgentLoop.ts:156-275,412-605`                                   |
+| Agent Loop          | `orchestration/harness/AgentLoop.ts:156-275,412-605`                                    |
 | Tool/Permission     | `tool/ToolExecutor.ts:120-217,295-489`、`permission/PermissionDecisionEngine.ts:52-100` |
 | Skills eager        | `session/ThreadService.ts:371,832`、`subagent/SubagentService.ts:501`                   |
 | MCP eager           | `mcp/McpConnectionManager.ts:188-280,327-392`                                           |

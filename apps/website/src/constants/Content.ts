@@ -2,8 +2,7 @@ export const GITHUB_REPO_URL = 'https://github.com/codepilotx-dev/Pidex'
 export const GITHUB_RELEASES_URL = 'https://github.com/codepilotx-dev/Pidex/releases'
 export const GITHUB_LICENSE_URL = 'https://github.com/codepilotx-dev/Pidex/blob/main/LICENSE'
 export const GITHUB_README_URL = 'https://github.com/codepilotx-dev/Pidex#readme'
-export const GITHUB_SECURITY_URL =
-  'https://github.com/codepilotx-dev/Pidex/blob/main/SECURITY.md'
+export const GITHUB_SECURITY_URL = 'https://github.com/codepilotx-dev/Pidex/blob/main/SECURITY.md'
 
 export interface NavLink {
   label: string

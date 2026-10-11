@@ -35,7 +35,11 @@ import {
   createComposerDocumentWithSkill,
   skillInvocationsFromComposerDocument,
 } from './ComposerSkillToken.js'
-import { planTaskFromInput, skillToComposerCommand, type ComposerSkillCommand } from './ComposerSlashCommands.js'
+import {
+  planTaskFromInput,
+  skillToComposerCommand,
+  type ComposerSkillCommand,
+} from './ComposerSlashCommands.js'
 import { getDesktopComposerBranchName } from './ComposerWorkspacePresentation.js'
 
 type ControllerOptions = {
@@ -610,7 +614,11 @@ export function contextTokensFromDocument(
   tokens: readonly ComposerDocumentToken[],
 ): ComposerDocumentToken[] {
   return tokens.filter(
-    (token) => token.kind === 'skill' || token.kind === 'thread' || token.kind === 'browser' || token.kind === 'plugin',
+    (token) =>
+      token.kind === 'skill' ||
+      token.kind === 'thread' ||
+      token.kind === 'browser' ||
+      token.kind === 'plugin',
   )
 }
 

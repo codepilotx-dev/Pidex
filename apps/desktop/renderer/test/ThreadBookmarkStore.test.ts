@@ -6,7 +6,11 @@ import {
   type ThreadBookmarkUpdateEvent,
 } from '../src/features/session/conversation/UseThreadBookmarks.js'
 
-const paths = (inputIds: string[], version: number, threadId = 'thread-1'): DesktopThreadBookmarkList => ({
+const paths = (
+  inputIds: string[],
+  version: number,
+  threadId = 'thread-1',
+): DesktopThreadBookmarkList => ({
   threadId,
   inputIds,
   version,

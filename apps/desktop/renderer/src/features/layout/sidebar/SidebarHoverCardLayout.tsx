@@ -41,7 +41,10 @@ export function SidebarHoverCardDivider({ className, ...props }: ContainerProps)
     <div
       {...props}
       aria-hidden="true"
-      className={cx('sidebar-hover-card-divider tw:mx-0 tw:my-1 tw:h-px tw:bg-app-border-subtle', className)}
+      className={cx(
+        'sidebar-hover-card-divider tw:mx-0 tw:my-1 tw:h-px tw:bg-app-border-subtle',
+        className,
+      )}
       role="separator"
     />
   )

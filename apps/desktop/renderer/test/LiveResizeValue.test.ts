@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 
-import { normalizeLiveResizeSize, resolveLiveResizeTarget } from '../src/features/layout/UseLiveResizeValue.js'
+import {
+  normalizeLiveResizeSize,
+  resolveLiveResizeTarget,
+} from '../src/features/layout/UseLiveResizeValue.js'
 
 describe('live resize value', () => {
   test('deduplicates preview sizes at the current physical pixel boundary', () => {

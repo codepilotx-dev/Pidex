@@ -17,18 +17,28 @@ import {
 describe('workspace refresh coordination', () => {
   test('publishes repository type before slow Review statistics finish', async () => {
     let finish!: () => void
-    const pending = new Promise<void>((resolve) => { finish = resolve })
+    const pending = new Promise<void>((resolve) => {
+      finish = resolve
+    })
     let detected: string | null = null
     let completed = false
-    const result = resolveWorkspaceGitProjection(workspace(), {
-      loadGitStatus: async () => ({ ok: true, status: gitStatus('dev', []) }),
-      loadBranches: async () => [],
-      loadReviewSummary: async (source) => {
-        await pending
-        return reviewAgentSummaryResult(source.kind, [])
+    const result = resolveWorkspaceGitProjection(
+      workspace(),
+      {
+        loadGitStatus: async () => ({ ok: true, status: gitStatus('dev', []) }),
+        loadBranches: async () => [],
+        loadReviewSummary: async (source) => {
+          await pending
+          return reviewAgentSummaryResult(source.kind, [])
+        },
       },
-    }, (projection) => { detected = projection.detection })
-    void result.then(() => { completed = true })
+      (projection) => {
+        detected = projection.detection
+      },
+    )
+    void result.then(() => {
+      completed = true
+    })
     await Promise.resolve()
     expect(detected).toBe('git')
     expect(completed).toBe(false)
@@ -50,8 +60,12 @@ describe('workspace refresh coordination', () => {
     const original = workspace({ isGitRepo: true })
     const result = await resolveWorkspaceGitProjection(original, {
       loadGitStatus: async () => ({ ok: false, error: 'REPOSITORY_NOT_FOUND' }),
-      loadBranches: async () => { throw new Error('must not load') },
-      loadReviewSummary: async () => { throw new Error('must not load') },
+      loadBranches: async () => {
+        throw new Error('must not load')
+      },
+      loadReviewSummary: async () => {
+        throw new Error('must not load')
+      },
     })
     expect(result.detection).toBe('error')
     expect(result.workspace).toBe(original)

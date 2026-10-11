@@ -82,11 +82,7 @@ export function QuestionItemView({
         }
         type="button"
       >
-        <Check
-          size={APP_ICON_SIZES.sm}
-          strokeWidth={APP_ICON_STROKE_WIDTH}
-          aria-hidden="true"
-        />
+        <Check size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} aria-hidden="true" />
         <span>{label}</span>
         <ChevronDown
           size={APP_ICON_SIZES.sm}

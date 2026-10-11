@@ -134,6 +134,7 @@ export function CodeBlock({
 
   const content = (
     <pre
+      tabIndex={wrapContent ? undefined : 0}
       className={cx(
         'md-code-pre',
         'tw:m-0',
@@ -268,7 +269,8 @@ export function CodeBlock({
           </button>
         ) : null}
         {onChangeCode && !isEditingCode ? (
-          <Button isIconOnly
+          <Button
+            isIconOnly
             color="ghostSecondary"
             size="toolbar"
             title="编辑代码"
@@ -281,7 +283,8 @@ export function CodeBlock({
             <Pencil aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           </Button>
         ) : null}
-        <Button isIconOnly
+        <Button
+          isIconOnly
           className={cx(
             'md-code-action md-code-copy',
             copied && 'is-copied',

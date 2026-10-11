@@ -29,28 +29,35 @@ export function SidebarStatusPill({ kind, progress, onSnooze }: Props): ReactNod
           aria-hidden="true"
           className={cx(
             'sidebar-status-pill-progress tw:pointer-events-none tw:absolute tw:inset-0 tw:origin-left tw:bg-app-chart-blue/25',
-            interactive && 'tw:group-hover:bg-app-text/20 tw:group-focus-visible/status-pill:bg-app-text/20',
+            interactive &&
+              'tw:group-hover:bg-app-text/20 tw:group-focus-visible/status-pill:bg-app-text/20',
           )}
-          style={reducedMotion
-            ? {
-                animation: 'none',
-                transform: `scaleX(${Math.max(0, Math.min(1, (progress.deadlineMs - now) / progress.durationMs))})`,
-              }
-            : {
-                animationDelay: `${progress.deadlineMs - now - progress.durationMs}ms`,
-                animationDuration: `${progress.durationMs}ms`,
-                animationPlayState: progress.nowMs === undefined ? undefined : 'paused',
-              }}
+          style={
+            reducedMotion
+              ? {
+                  animation: 'none',
+                  transform: `scaleX(${Math.max(0, Math.min(1, (progress.deadlineMs - now) / progress.durationMs))})`,
+                }
+              : {
+                  animationDelay: `${progress.deadlineMs - now - progress.durationMs}ms`,
+                  animationDuration: `${progress.durationMs}ms`,
+                  animationPlayState: progress.nowMs === undefined ? undefined : 'paused',
+                }
+          }
         />
       ) : null}
-      <span className={cx(
-        'tw:relative tw:col-start-1 tw:row-start-1 tw:min-w-0 tw:truncate',
-        interactive && 'tw:group-hover:invisible tw:group-focus-visible/status-pill:invisible',
-      )}>
+      <span
+        className={cx(
+          'tw:relative tw:col-start-1 tw:row-start-1 tw:min-w-0 tw:truncate',
+          interactive && 'tw:group-hover:invisible tw:group-focus-visible/status-pill:invisible',
+        )}
+      >
         {label}
       </span>
       {interactive ? (
-        <span className="tw:invisible tw:relative tw:col-start-1 tw:row-start-1 tw:min-w-0 tw:truncate tw:group-hover:visible tw:group-focus-visible/status-pill:visible">停用</span>
+        <span className="tw:invisible tw:relative tw:col-start-1 tw:row-start-1 tw:min-w-0 tw:truncate tw:group-hover:visible tw:group-focus-visible/status-pill:visible">
+          停用
+        </span>
       ) : null}
     </>
   )
@@ -67,6 +74,8 @@ export function SidebarStatusPill({ kind, progress, onSnooze }: Props): ReactNod
       {content}
     </button>
   ) : (
-    <span className={className} title={label}>{content}</span>
+    <span className={className} title={label}>
+      {content}
+    </span>
   )
 }

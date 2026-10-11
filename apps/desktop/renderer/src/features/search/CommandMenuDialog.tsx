@@ -183,14 +183,18 @@ export function CommandMenuDialog({
                         {recommendation.icon}
                       </span>
                       <span className="command-menu-item-copy tw:grid tw:min-w-0">
-                        <span className="command-menu-item-title tw:truncate tw:text-current">{recommendation.label}</span>
+                        <span className="command-menu-item-title tw:truncate tw:text-current">
+                          {recommendation.label}
+                        </span>
                         {recommendation.description ? (
                           <span className="command-menu-item-description tw:truncate tw:type-caption tw:text-app-text-meta">
                             {recommendation.description}
                           </span>
                         ) : null}
                       </span>
-                      <kbd className="command-menu-shortcut tw:min-w-max tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-surface-control)_72%,transparent)] tw:px-2 tw:py-1 tw:type-caption tw:text-app-text-meta tw:forced-colors:border-[CanvasText]">{recommendation.shortcut}</kbd>
+                      <kbd className="command-menu-shortcut tw:min-w-max tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-surface-control)_72%,transparent)] tw:px-2 tw:py-1 tw:type-caption tw:text-app-text-meta tw:forced-colors:border-[CanvasText]">
+                        {recommendation.shortcut}
+                      </kbd>
                     </Command.Item>
                   ))}
                 </Command.Group>
@@ -245,9 +249,13 @@ function CommandMenuActionGroups({
                 )}
               </span>
               <span className="command-menu-item-copy tw:grid tw:min-w-0">
-                <span className="command-menu-item-title tw:truncate tw:text-current">{action.label}</span>
+                <span className="command-menu-item-title tw:truncate tw:text-current">
+                  {action.label}
+                </span>
                 {description ? (
-                  <span className="command-menu-item-description tw:truncate tw:type-caption tw:text-app-text-meta">{description}</span>
+                  <span className="command-menu-item-description tw:truncate tw:type-caption tw:text-app-text-meta">
+                    {description}
+                  </span>
                 ) : null}
               </span>
             </Command.Item>
@@ -296,10 +304,16 @@ export function CommandMenuTaskGroup({
           >
             <TaskStatus task={task} />
             <span className="command-menu-item-copy tw:grid tw:min-w-0">
-              <span className="command-menu-item-title tw:truncate tw:text-current">{task.title}</span>
+              <span className="command-menu-item-title tw:truncate tw:text-current">
+                {task.title}
+              </span>
             </span>
-            <span className="command-menu-workspace tw:max-w-36 tw:truncate tw:type-caption tw:text-app-text-meta tw:@max-[560px]:max-w-24">{task.workspaceName}</span>
-            <kbd className="command-menu-shortcut tw:min-w-max tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-surface-control)_72%,transparent)] tw:px-2 tw:py-1 tw:type-caption tw:text-app-text-meta tw:forced-colors:border-[CanvasText]">{task.shortcutLabel}</kbd>
+            <span className="command-menu-workspace tw:max-w-36 tw:truncate tw:type-caption tw:text-app-text-meta tw:@max-[560px]:max-w-24">
+              {task.workspaceName}
+            </span>
+            <kbd className="command-menu-shortcut tw:min-w-max tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-surface-control)_72%,transparent)] tw:px-2 tw:py-1 tw:type-caption tw:text-app-text-meta tw:forced-colors:border-[CanvasText]">
+              {task.shortcutLabel}
+            </kbd>
           </Command.Item>
         ))
       )}
@@ -341,15 +355,22 @@ function TaskStatus({ task }: { task: CommandMenuTask }): React.ReactNode {
   }
   if (task.visualState === 'unread') {
     return (
-      <span aria-label="任务有待整理更新" className="command-menu-item-status tw:inline-flex tw:size-4 tw:items-center tw:justify-center tw:text-app-text-soft" role="img">
-        <span aria-hidden="true" className="command-menu-unread-dot tw:size-1.5 tw:rounded-full tw:bg-app-accent tw:forced-colors:bg-[Highlight]" />
+      <span
+        aria-label="任务有待整理更新"
+        className="command-menu-item-status tw:inline-flex tw:size-4 tw:items-center tw:justify-center tw:text-app-text-soft"
+        role="img"
+      >
+        <span
+          aria-hidden="true"
+          className="command-menu-unread-dot tw:size-1.5 tw:rounded-full tw:bg-app-accent tw:forced-colors:bg-[Highlight]"
+        />
       </span>
     )
   }
   return (
-      <span
-        aria-hidden="true"
-        className="command-menu-item-status tw:inline-flex tw:size-4 tw:items-center tw:justify-center tw:text-app-text-soft"
-      />
-    )
+    <span
+      aria-hidden="true"
+      className="command-menu-item-status tw:inline-flex tw:size-4 tw:items-center tw:justify-center tw:text-app-text-soft"
+    />
+  )
 }

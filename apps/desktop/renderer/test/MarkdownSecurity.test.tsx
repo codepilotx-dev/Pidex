@@ -98,9 +98,7 @@ describe('Markdown file references', () => {
   })
 
   test('preserves extensionless absolute file references in Unix workspaces', () => {
-    const html = renderToStaticMarkup(
-      <MarkdownMessage cwd="/home/pidex" text={'`/etc/hosts`'} />,
-    )
+    const html = renderToStaticMarkup(<MarkdownMessage cwd="/home/pidex" text={'`/etc/hosts`'} />)
 
     expect(html).toContain('data-file-reference=""')
     expect(html).toContain('/etc/hosts')

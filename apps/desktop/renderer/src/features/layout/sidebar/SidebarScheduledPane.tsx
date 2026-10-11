@@ -72,7 +72,10 @@ export function SidebarScheduledPane(): ReactNode {
         ) : controller.loading ? (
           <SidebarEmptyRow role="status">{t('正在加载任务…')}</SidebarEmptyRow>
         ) : controller.error ? (
-          <div className="sidebar-pane-error tw:p-2 tw:text-app-text-soft tw:type-body-sm" role="alert">
+          <div
+            className="sidebar-pane-error tw:p-2 tw:text-app-text-soft tw:type-body-sm"
+            role="alert"
+          >
             <p>{controller.error}</p>
             <Button size="compact" onClick={() => void controller.refresh()}>
               {t('重试')}
@@ -88,7 +91,8 @@ export function SidebarScheduledPane(): ReactNode {
             return (
               <section key={task.id} className="sidebar-scheduled-task">
                 <div className="sidebar-scheduled-task-heading tw:flex tw:min-w-0 tw:items-center">
-                  <Button isIconOnly
+                  <Button
+                    isIconOnly
                     title={`${t('执行记录')}：${task.name}`}
                     aria-expanded={open}
                     aria-label={`${t('执行记录')}：${task.name}`}

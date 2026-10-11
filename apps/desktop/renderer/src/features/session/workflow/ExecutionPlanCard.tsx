@@ -36,7 +36,10 @@ export function ExecutionPlanCard({ item }: { item: ExecutionPlanItem }): React.
           className="execution-plan-card__steps-scroller tw:max-h-80 tw:overflow-y-auto tw:[scrollbar-gutter:stable]"
           ref={stepsScrollerRef}
         >
-          <ol className="execution-plan-card__steps tw:m-0 tw:grid tw:list-none tw:gap-2 tw:p-0" ref={stepsRef}>
+          <ol
+            className="execution-plan-card__steps tw:m-0 tw:grid tw:list-none tw:gap-2 tw:p-0"
+            ref={stepsRef}
+          >
             {item.steps.map((step, index) => (
               <ExecutionPlanStepView index={index} key={`${index}:${step.step}`} step={step} />
             ))}

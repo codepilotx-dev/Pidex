@@ -70,7 +70,11 @@ export function SidebarPluginsPane({
     [items, query, status],
   )
 
-  function updateParams(patch: { q?: string; status?: PluginStatusFilter; tab?: CatalogTab }): void {
+  function updateParams(patch: {
+    q?: string
+    status?: PluginStatusFilter
+    tab?: CatalogTab
+  }): void {
     const next = catalogBrowseParams(searchParams, patch.tab ?? tab)
     if (patch.q !== undefined) {
       if (patch.q) next.set('q', patch.q)
@@ -116,7 +120,10 @@ export function SidebarPluginsPane({
         {loading ? (
           <SidebarEmptyRow role="status">{t('正在加载插件…')}</SidebarEmptyRow>
         ) : error ? (
-          <div className="sidebar-pane-error tw:p-2 tw:text-app-text-soft tw:type-body-sm" role="status">
+          <div
+            className="sidebar-pane-error tw:p-2 tw:text-app-text-soft tw:type-body-sm"
+            role="status"
+          >
             {error}
           </div>
         ) : visibleItems.length === 0 ? (
@@ -139,8 +146,12 @@ export function SidebarPluginsPane({
                 }}
                 type="button"
               >
-                <span className="sidebar-plugin-name tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">{item.name}</span>
-                <span className="sidebar-plugin-status tw:shrink-0 tw:text-app-text-meta tw:type-caption">{t(pluginStatusLabel(item))}</span>
+                <span className="sidebar-plugin-name tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
+                  {item.name}
+                </span>
+                <span className="sidebar-plugin-status tw:shrink-0 tw:text-app-text-meta tw:type-caption">
+                  {t(pluginStatusLabel(item))}
+                </span>
               </button>
             </SidebarRow>
           ))

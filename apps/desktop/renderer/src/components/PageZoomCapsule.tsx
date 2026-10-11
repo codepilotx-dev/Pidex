@@ -1,9 +1,6 @@
 import type React from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type {
-  DesktopPageZoomAction,
-  DesktopPageZoomState,
-} from '@pidex/shared/desktop-window-ipc'
+import type { DesktopPageZoomAction, DesktopPageZoomState } from '@pidex/shared/desktop-window-ipc'
 import { Minus, Plus } from 'lucide-react'
 import { AnimatePresence, motion } from 'motion/react'
 import { usePrefersReducedMotion } from '../hooks/UsePrefersReducedMotion.js'
@@ -104,7 +101,8 @@ export function PageZoomCapsule(): React.ReactNode {
           <Toast>
             <output aria-live="polite" className="tw:contents">
               <strong>{state.percent}%</strong>
-              <Button isIconOnly
+              <Button
+                isIconOnly
                 color="ghostSecondary"
                 disabled={!state.canZoomOut}
                 onClick={() => changeZoom('out')}
@@ -113,7 +111,8 @@ export function PageZoomCapsule(): React.ReactNode {
               >
                 <Minus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
               </Button>
-              <Button isIconOnly
+              <Button
+                isIconOnly
                 color="ghostSecondary"
                 disabled={!state.canZoomIn}
                 onClick={() => changeZoom('in')}

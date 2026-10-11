@@ -561,15 +561,25 @@ describe('fixed Codex UI themes', () => {
 
     // In default light: sidebar is gray-2, titlebar follows sidebar, main/panel are canvas
     expect(light['--cpx-sys-color-workbench-sidebar-bg']).toBe('var(--cpx-ref-gray-2)')
-    expect(light['--cpx-sys-color-workbench-titlebar-bg']).toBe('var(--cpx-sys-color-workbench-sidebar-bg)')
+    expect(light['--cpx-sys-color-workbench-titlebar-bg']).toBe(
+      'var(--cpx-sys-color-workbench-sidebar-bg)',
+    )
     expect(light['--cpx-sys-color-workbench-main-bg']).toBe('var(--cpx-sys-color-surface-canvas)')
-    expect(light['--cpx-sys-color-workbench-panel-bg']).toBe('var(--cpx-sys-color-workbench-main-bg)')
+    expect(light['--cpx-sys-color-workbench-panel-bg']).toBe(
+      'var(--cpx-sys-color-workbench-main-bg)',
+    )
 
     // In default dark: sidebar is Deep (surface-recessed = #0f0f0f), titlebar follows sidebar
-    expect(dark['--cpx-sys-color-workbench-sidebar-bg']).toBe('var(--cpx-sys-color-surface-recessed)')
-    expect(dark['--cpx-sys-color-workbench-titlebar-bg']).toBe('var(--cpx-sys-color-workbench-sidebar-bg)')
+    expect(dark['--cpx-sys-color-workbench-sidebar-bg']).toBe(
+      'var(--cpx-sys-color-surface-recessed)',
+    )
+    expect(dark['--cpx-sys-color-workbench-titlebar-bg']).toBe(
+      'var(--cpx-sys-color-workbench-sidebar-bg)',
+    )
     expect(dark['--cpx-sys-color-workbench-main-bg']).toBe('var(--cpx-sys-color-surface-canvas)')
-    expect(dark['--cpx-sys-color-workbench-panel-bg']).toBe('var(--cpx-sys-color-workbench-main-bg)')
+    expect(dark['--cpx-sys-color-workbench-panel-bg']).toBe(
+      'var(--cpx-sys-color-workbench-main-bg)',
+    )
 
     // Custom dark theme: sidebar adapts to derived surfaceRecessed
     const customDark = deriveThemeVariables({

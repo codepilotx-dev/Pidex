@@ -81,14 +81,12 @@ export function registerTerminalIpc(dependencies: TerminalIpcDependencies): void
 function requireEnsureInput(value: unknown): EnsureDesktopTerminalInput {
   if (!isRecord(value)) invalidInput()
   const allowedKeys = new Set(['threadId', 'profileId', 'cols', 'rows', 'terminalId', 'cwd'])
-  if (
-    !Object.keys(value).every((key) => allowedKeys.has(key)) ||
-    !isIdentifier(value.threadId)
-  ) {
+  if (!Object.keys(value).every((key) => allowedKeys.has(key)) || !isIdentifier(value.threadId)) {
     invalidInput()
   }
   if (value.terminalId !== undefined && !isIdentifier(value.terminalId)) invalidInput()
-  if (value.cwd !== undefined && (typeof value.cwd !== 'string' || !value.cwd.trim())) invalidInput()
+  if (value.cwd !== undefined && (typeof value.cwd !== 'string' || !value.cwd.trim()))
+    invalidInput()
   if (!(value.profileId === null || isIdentifier(value.profileId))) invalidInput()
   if (!isTerminalSize(value.cols, value.rows)) invalidInput()
   return value as unknown as EnsureDesktopTerminalInput

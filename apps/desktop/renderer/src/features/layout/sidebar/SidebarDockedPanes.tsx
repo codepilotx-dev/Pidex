@@ -143,7 +143,8 @@ export const SidebarDockedPanes = memo(function SidebarDockedPanes({
                     className="tw:flex tw:items-center tw:gap-0.5"
                     onClick={(event) => event.stopPropagation()}
                   >
-                    <Button isIconOnly
+                    <Button
+                      isIconOnly
                       aria-label="移到右侧栏"
                       color="ghostSecondary"
                       size="toolbar"
@@ -152,7 +153,8 @@ export const SidebarDockedPanes = memo(function SidebarDockedPanes({
                     >
                       <MoveRight size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
                     </Button>
-                    <Button isIconOnly
+                    <Button
+                      isIconOnly
                       aria-label="移到底部面板"
                       color="ghostSecondary"
                       size="toolbar"
@@ -161,7 +163,8 @@ export const SidebarDockedPanes = memo(function SidebarDockedPanes({
                     >
                       <MoveDown size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
                     </Button>
-                    <Button isIconOnly
+                    <Button
+                      isIconOnly
                       aria-label="关闭视图"
                       color="ghostSecondary"
                       size="toolbar"

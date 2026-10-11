@@ -84,10 +84,13 @@ const SECTION_ACTIONS_CLASS =
 /* 展开/折叠箭头：随 aria-expanded 旋转，hover 时显现。 */
 const SECTION_CHEVRON_CLASS =
   'sidebar-section-chevron tw:inline-flex tw:flex-none tw:items-center tw:text-app-text-meta tw:opacity-0 tw:pointer-events-none tw:group-hover:opacity-100 tw:[transition:opacity_var(--cpx-sys-motion-feedback)_var(--cpx-sys-ease-out),color_var(--cpx-sys-motion-feedback)_var(--cpx-sys-ease-out),transform_var(--cpx-sys-motion-disclosure)_var(--cpx-sys-ease-disclosure)]'
-const SECTION_LABEL_CLASS = 'sidebar-section-label tw:min-w-0 tw:overflow-hidden tw:whitespace-nowrap tw:text-app-text-meta'
+const SECTION_LABEL_CLASS =
+  'sidebar-section-label tw:min-w-0 tw:overflow-hidden tw:whitespace-nowrap tw:text-app-text-meta'
 const SECTION_MAIN_CLASS = 'sidebar-section-main tw:flex tw:min-w-0 tw:items-center'
-const SECTION_TRAILING_CLASS = 'sidebar-section-trailing tw:flex tw:min-h-4 tw:min-w-0 tw:items-center tw:justify-end'
-const SECTION_CONTENT_CLASS = 'sidebar-section-content tw:grid tw:min-w-0 tw:gap-0.5 tw:overflow-hidden tw:pt-0'
+const SECTION_TRAILING_CLASS =
+  'sidebar-section-trailing tw:flex tw:min-h-4 tw:min-w-0 tw:items-center tw:justify-end'
+const SECTION_CONTENT_CLASS =
+  'sidebar-section-content tw:grid tw:min-w-0 tw:gap-0.5 tw:overflow-hidden tw:pt-0'
 /* 更多/收起操作行：与分组行同一 gutter，1px 行间距。 */
 const SHOW_MORE_ACTIONS_CLASS =
   'sidebar-show-more-actions tw:grid tw:w-full tw:box-border tw:min-h-7 tw:items-center tw:gap-x-2 tw:grid-cols-[var(--sidebar-row-columns)] tw:rounded-md tw:px-2 tw:py-1 tw:text-left tw:text-app-text-meta tw:type-control tw:no-underline tw:transition-[background-color,box-shadow,color] tw:duration-feedback tw:ease-standard'
@@ -384,13 +387,16 @@ function SidebarBodyContent({
       const anchorIndex = allItemKeys.indexOf(selectionAnchorRef.current)
       const targetIndex = allItemKeys.indexOf(key)
       if (anchorIndex >= 0 && targetIndex >= 0) {
-        const [start, end] = anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex]
+        const [start, end] =
+          anchorIndex <= targetIndex ? [anchorIndex, targetIndex] : [targetIndex, anchorIndex]
         setSelectedKeys(allItemKeys.slice(start, end + 1))
         return
       }
     }
     selectionAnchorRef.current = key
-    setSelectedKeys((current) => (current.includes(key) ? current.filter((item) => item !== key) : [...current, key]))
+    setSelectedKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    )
   }
 
   function beginItemDrag(key: string): void {
@@ -436,7 +442,9 @@ function SidebarBodyContent({
 
   function handleSelectionClick(event: React.MouseEvent<HTMLElement>): void {
     if (!(event.target instanceof Element)) return
-    const row = event.target.closest<HTMLElement>('[data-sidebar-session-id], [data-sidebar-project-key]')
+    const row = event.target.closest<HTMLElement>(
+      '[data-sidebar-session-id], [data-sidebar-project-key]',
+    )
     if (!row) return
     const sessionId = row.dataset.sidebarSessionId
     const projectKeyValue = row.dataset.sidebarProjectKey
@@ -447,7 +455,10 @@ function SidebarBodyContent({
         ? `project:${projectKeyValue}`
         : null
     if (!key) return
-    toggleSelection(key, event.shiftKey ? 'range' : event.ctrlKey || event.metaKey ? 'toggle' : 'replace')
+    toggleSelection(
+      key,
+      event.shiftKey ? 'range' : event.ctrlKey || event.metaKey ? 'toggle' : 'replace',
+    )
   }
 
   useEffect(() => {
@@ -537,14 +548,22 @@ function SidebarBodyContent({
   function renderProjectGroup(project: DesktopWorkspace, dropIndex?: number): React.ReactNode {
     return (
       <SidebarProjectGroup
-        currentSectionId={customSections.find((section) => section.entries.some((entry) => entry.key === sidebarPinnedProjectKey(project)))?.id ?? null}
-        onMoveProjectToSection={(target, sectionId) => onMoveItemsToSection([sidebarPinnedProjectKey(target)], sectionId)}
+        currentSectionId={
+          customSections.find((section) =>
+            section.entries.some((entry) => entry.key === sidebarPinnedProjectKey(project)),
+          )?.id ?? null
+        }
+        onMoveProjectToSection={(target, sectionId) =>
+          onMoveItemsToSection([sidebarPinnedProjectKey(target)], sectionId)
+        }
         onMoveProjectToDefault={(target) => onMoveItemsToDefault([sidebarPinnedProjectKey(target)])}
         onCreateSection={onCreateSection}
         customSections={customSectionOptions}
         dropIndex={dropIndex}
         onItemDragEnd={commitItemDrop}
-        onItemDragStart={(sessionId) => beginItemDrag(sidebarPinnedSessionKey({ id: sessionId } as SessionListItem))}
+        onItemDragStart={(sessionId) =>
+          beginItemDrag(sidebarPinnedSessionKey({ id: sessionId } as SessionListItem))
+        }
         onMoveToDefault={onMoveSessionToDefault}
         onMoveToSection={onMoveSessionToSection}
         activeSessionId={activeSessionId}
@@ -873,7 +892,8 @@ function SidebarBodyContent({
                             onOrganizationChange={onOrganizationChange}
                             onSortChange={onProjectSortChange}
                           />
-                          <Button isIconOnly
+                          <Button
+                            isIconOnly
                             variant="text"
                             onClick={onChooseWorkspace}
                             iconSize="md"
@@ -941,7 +961,8 @@ function SidebarBodyContent({
                       onOrganizationChange={onOrganizationChange}
                       onSortChange={onSessionSortChange}
                     />
-                    <Button isIconOnly
+                    <Button
+                      isIconOnly
                       variant="text"
                       onClick={() => onCreateSession(null)}
                       iconSize="md"
@@ -1109,7 +1130,8 @@ function Timeline({
     <div className="tw:flex tw:items-center tw:gap-1">
       <TimelinePriorityMenu {...options} />
       {showPriority && options.hasReadActivity ? (
-        <Button isIconOnly
+        <Button
+          isIconOnly
           aria-label="清除已读聊天"
           title="清除已读聊天"
           color="ghostSecondary"
@@ -1185,7 +1207,8 @@ function TimelinePriorityMenu(options: ActivityMenuProps): React.ReactNode {
       size="sm"
       onOpenChange={setMenuOpen}
       trigger={
-        <Button isIconOnly
+        <Button
+          isIconOnly
           aria-label="活动视图选项"
           title="活动视图选项"
           color="ghostSecondary"
@@ -1357,19 +1380,73 @@ function SidebarOrganizeMenu({
       size="sm"
       onOpenChange={setOpen}
     >
-      <DropdownActions actions={[
-        { kind: 'sub', label: '整理侧边栏', layout: 'grid', children: [
-          { kind: 'item', label: '分项目显示', checked: organization === 'projects', onSelect: () => onOrganizationChange('projects') },
-          { kind: 'item', label: '合并显示', checked: organization === 'flat', onSelect: () => onOrganizationChange('flat') },
-        ] },
-        { kind: 'sub', label: '聊天排序方式', layout: 'grid', children: SIDEBAR_SORT_OPTIONS.map((option) => ({ kind: 'item', label: option.label, checked: sort === option.value || (sort === 'priority' && option.value === 'updated'), onSelect: () => onSortChange(option.value) })) },
-      ]} />
-      {organization === 'projects' && onShowProjectsInRecentsChange ? <>
-        <PopoverSeparator /><PopoverLabel>显示</PopoverLabel>
-        <PopoverCheckboxItem checked={showProjectsInRecents} onCheckedChange={onShowProjectsInRecentsChange}>项目</PopoverCheckboxItem>
-      </> : null}
-      <PopoverCheckboxItem checked={showScheduledSessions} keepOpen onCheckedChange={onShowScheduledSessionsChange}>显示日程会话</PopoverCheckboxItem>
-      {onShowProjectsInRecentsChange ? <><PopoverSeparator /><PopoverItem icon={<Plus size={APP_ICON_SIZE} />} onClick={() => { setOpen(false); onCreateSection() }}>新建分区</PopoverItem></> : null}
+      <DropdownActions
+        actions={[
+          {
+            kind: 'sub',
+            label: '整理侧边栏',
+            layout: 'grid',
+            children: [
+              {
+                kind: 'item',
+                label: '分项目显示',
+                checked: organization === 'projects',
+                onSelect: () => onOrganizationChange('projects'),
+              },
+              {
+                kind: 'item',
+                label: '合并显示',
+                checked: organization === 'flat',
+                onSelect: () => onOrganizationChange('flat'),
+              },
+            ],
+          },
+          {
+            kind: 'sub',
+            label: '聊天排序方式',
+            layout: 'grid',
+            children: SIDEBAR_SORT_OPTIONS.map((option) => ({
+              kind: 'item',
+              label: option.label,
+              checked: sort === option.value || (sort === 'priority' && option.value === 'updated'),
+              onSelect: () => onSortChange(option.value),
+            })),
+          },
+        ]}
+      />
+      {organization === 'projects' && onShowProjectsInRecentsChange ? (
+        <>
+          <PopoverSeparator />
+          <PopoverLabel>显示</PopoverLabel>
+          <PopoverCheckboxItem
+            checked={showProjectsInRecents}
+            onCheckedChange={onShowProjectsInRecentsChange}
+          >
+            项目
+          </PopoverCheckboxItem>
+        </>
+      ) : null}
+      <PopoverCheckboxItem
+        checked={showScheduledSessions}
+        keepOpen
+        onCheckedChange={onShowScheduledSessionsChange}
+      >
+        显示日程会话
+      </PopoverCheckboxItem>
+      {onShowProjectsInRecentsChange ? (
+        <>
+          <PopoverSeparator />
+          <PopoverItem
+            icon={<Plus size={APP_ICON_SIZE} />}
+            onClick={() => {
+              setOpen(false)
+              onCreateSection()
+            }}
+          >
+            新建分区
+          </PopoverItem>
+        </>
+      ) : null}
     </PopoverMenu>
   )
 }
@@ -1697,7 +1774,9 @@ function SidebarCustomSection({
               size="sm"
               onOpenChange={setMenuOpen}
             >
-              <PopoverLabel className="popover-sidebar-organize-heading tw:px-2 tw:py-1 tw:text-app-text-meta tw:type-label">排序方式</PopoverLabel>
+              <PopoverLabel className="popover-sidebar-organize-heading tw:px-2 tw:py-1 tw:text-app-text-meta tw:type-label">
+                排序方式
+              </PopoverLabel>
               <PopoverRadioGroup
                 value={section.sort}
                 onValueChange={(value) => onSetSort(section.id, value as 'manual' | 'updated')}
@@ -1739,7 +1818,13 @@ function SidebarCustomSection({
             data-sidebar-drop-container={`section:${section.id}`}
             values={values}
             onReorder={(nextOrder) => {
-              if (sameStringOrder(section.entries.map((entry) => entry.key), nextOrder)) return
+              if (
+                sameStringOrder(
+                  section.entries.map((entry) => entry.key),
+                  nextOrder,
+                )
+              )
+                return
               onReorderItems(section.id, nextOrder)
             }}
           >

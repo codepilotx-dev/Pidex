@@ -79,8 +79,7 @@ export const Footer: React.FC = () => {
         {/* Bottom copyright */}
         <div className="mt-12 pt-8 border-t border-[#DCD6CB]/60 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs">
           <div>
-            &copy; {new Date().getFullYear()} Pidex Contributors. Released under the MIT
-            License.
+            &copy; {new Date().getFullYear()} Pidex Contributors. Released under the MIT License.
           </div>
           <div className="font-mono text-[11px] text-[#63715A]">Current Version: v0.2.0-beta.5</div>
         </div>

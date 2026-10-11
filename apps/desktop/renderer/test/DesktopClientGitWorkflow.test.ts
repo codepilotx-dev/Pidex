@@ -57,11 +57,19 @@ describe('desktop git workflow client', () => {
         loadProjectForPath: async () => project,
         operationError: () => '检测失败',
         requireAgentCapability: () => {},
-        rpc: { call: async () => { throw new Error('unused') } },
-        withRequiredAgent: async () => { throw new AgentRpcError('安全错误', -32000, { code }) },
+        rpc: {
+          call: async () => {
+            throw new Error('unused')
+          },
+        },
+        withRequiredAgent: async () => {
+          throw new AgentRpcError('安全错误', -32000, { code })
+        },
       })
       expect(await client.getWorkspaceGitStatus(workspacePath)).toEqual({
-        ok: false, error: '检测失败', errorCode: code,
+        ok: false,
+        error: '检测失败',
+        errorCode: code,
       })
     }
   })

@@ -6,7 +6,11 @@ export class LocalEnvironmentWorktreeLifecycle implements WorktreeEnvironmentLif
   constructor(private readonly environments: LocalEnvironmentService) {}
 
   async setup(input: Parameters<WorktreeEnvironmentLifecycle['setup']>[0]) {
-    await this.environments.catalog?.freeze(input.projectId, input.worktreeId, input.sourceWorkspacePath)
+    await this.environments.catalog?.freeze(
+      input.projectId,
+      input.worktreeId,
+      input.sourceWorkspacePath,
+    )
     const operation = await this.environments.runLifecycle({
       cwd: input.workspacePath,
       bindingId: input.worktreeId,

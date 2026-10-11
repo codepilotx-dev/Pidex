@@ -56,7 +56,8 @@ export function ConversationForkDialog({
               <h2 className="tw:m-0 tw:type-title-md tw:text-app-text">在新聊天中继续</h2>
             </Dialog.Title>
             <Dialog.Close asChild>
-              <Button isIconOnly
+              <Button
+                isIconOnly
                 className="tw:shrink-0"
                 color="ghostSecondary"
                 size="toolbar"

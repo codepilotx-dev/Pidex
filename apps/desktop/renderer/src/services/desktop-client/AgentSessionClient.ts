@@ -183,8 +183,7 @@ const CAPABILITY_ALIASES = {
   hookTrust: 'hooks.trust.v1',
 } as const satisfies Record<string, ProtocolCapability>
 type AgentCapabilityName = keyof typeof CAPABILITY_ALIASES | ProtocolCapability
-const CURRENT_APP_VERSION =
-  typeof __PIDEX_VERSION__ === 'string' ? __PIDEX_VERSION__ : '0.0.0-dev'
+const CURRENT_APP_VERSION = typeof __PIDEX_VERSION__ === 'string' ? __PIDEX_VERSION__ : '0.0.0-dev'
 type PendingInteraction = RpcResult<'interaction/listPending'>['interactions'][number]
 
 import {
@@ -1683,20 +1682,19 @@ export function createAgentSessionDesktopClient(
   >
   let agentProviderCredentialApiPromise: Promise<AgentProviderCredentialApi> | null = null
   const loadAgentProviderCredentialApi = (): Promise<AgentProviderCredentialApi> => {
-    agentProviderCredentialApiPromise ??= import('./AgentProviderCredentialApi.js').then(
-      (module) =>
-        module.createAgentProviderCredentialApi({
-          invalidateModelCatalog,
-          loadProviderCredentials,
-          mockClient,
-          providerState,
-          requireAgentCapability,
-          rpc,
-          setProviderCredentialsCache: (credentials) => {
-            providerCredentialsCache = credentials
-          },
-          withAgentOrMock,
-        }),
+    agentProviderCredentialApiPromise ??= import('./AgentProviderCredentialApi.js').then((module) =>
+      module.createAgentProviderCredentialApi({
+        invalidateModelCatalog,
+        loadProviderCredentials,
+        mockClient,
+        providerState,
+        requireAgentCapability,
+        rpc,
+        setProviderCredentialsCache: (credentials) => {
+          providerCredentialsCache = credentials
+        },
+        withAgentOrMock,
+      }),
     )
     return agentProviderCredentialApiPromise
   }
@@ -1950,8 +1948,7 @@ export function createAgentSessionDesktopClient(
         bridge as Required<Pick<typeof bridge, 'readComposerPathGrant'>>,
       )
     },
-    getComposerFilePath: (file) =>
-      environment.window?.DesktopBridge?.getPathForFile?.(file) ?? '',
+    getComposerFilePath: (file) => environment.window?.DesktopBridge?.getPathForFile?.(file) ?? '',
     readAttachment: (attachmentId) =>
       withAgentOrMock(
         () => rpc.call('attachment/read', { attachmentId }),

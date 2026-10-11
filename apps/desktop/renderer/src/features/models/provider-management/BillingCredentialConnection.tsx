@@ -97,7 +97,10 @@ export function BillingCredentialConnection({
       </header>
       <div className="model-center-account-fields tw:grid tw:grid-cols-2 tw:items-end tw:gap-3 tw:@max-[720px]:grid-cols-1">
         {source.connectionMethod.fields.map((field) => (
-          <label className="model-center-account-field tw:grid tw:min-w-0 tw:gap-2" key={field.name}>
+          <label
+            className="model-center-account-field tw:grid tw:min-w-0 tw:gap-2"
+            key={field.name}
+          >
             <span className="tw:text-app-text-soft tw:[font-size:var(--cpx-sys-font-size-xs)] tw:type-weight-label">
               {field.label}
             </span>

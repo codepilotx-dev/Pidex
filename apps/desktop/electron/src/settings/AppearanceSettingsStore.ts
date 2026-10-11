@@ -23,10 +23,7 @@ export type {
   DesktopChromeTheme,
   DesktopThemeSettingsV7,
 } from '@pidex/shared/desktop-theme'
-export {
-  DEFAULT_APPEARANCE_SETTINGS,
-  DEFAULT_CHROME_THEMES,
-} from '@pidex/shared/desktop-theme'
+export { DEFAULT_APPEARANCE_SETTINGS, DEFAULT_CHROME_THEMES } from '@pidex/shared/desktop-theme'
 import { isRecord } from '@pidex/shared/guards'
 
 type HexColor = DesktopHexColor

@@ -355,9 +355,7 @@ export function SchedulePlanCard({ item }: { item: ToolItem }): React.ReactNode 
             {message}
           </span>
         ) : (
-          <span className="tw:type-caption tw:text-app-text-meta">
-            确认前不会创建或执行任务。
-          </span>
+          <span className="tw:type-caption tw:text-app-text-meta">确认前不会创建或执行任务。</span>
         )}
         {!committed ? (
           <Button

@@ -1,8 +1,5 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
-import {
-  createToastStore,
-  calculateCardTransform,
-} from '../src/components/toast/ToastState.js'
+import { createToastStore, calculateCardTransform } from '../src/components/toast/ToastState.js'
 
 describe('toastState & transform calculations', () => {
   describe('calculateCardTransform', () => {
@@ -151,8 +148,18 @@ describe('toastState & transform calculations', () => {
     it('dismissAll 清空全部并触发各自的 onDismiss 回调', () => {
       let dismissed1 = false
       let dismissed2 = false
-      store.show({ message: '一', onDismiss: () => { dismissed1 = true } })
-      store.show({ message: '二', onDismiss: () => { dismissed2 = true } })
+      store.show({
+        message: '一',
+        onDismiss: () => {
+          dismissed1 = true
+        },
+      })
+      store.show({
+        message: '二',
+        onDismiss: () => {
+          dismissed2 = true
+        },
+      })
       expect(store.getState().toasts.length).toBe(2)
 
       store.dismissAll()

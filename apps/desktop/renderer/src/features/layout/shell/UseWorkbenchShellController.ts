@@ -114,9 +114,7 @@ export function useWorkbenchShellController({
   const workspaceView = getWorkspaceView(workbenchPanelState)
   const committedWorkspaceLayout = getWorkbenchWorkspaceLayout(workbenchPanelState)
   const dragWorkspaceLayout =
-    rightDockDragRaw === null
-      ? null
-      : resolveRightDockDragLayout(rightDockDragRaw)
+    rightDockDragRaw === null ? null : resolveRightDockDragLayout(rightDockDragRaw)
   const workspaceLayout = dragWorkspaceLayout ?? committedWorkspaceLayout
 
   const displayedSidebarWidth = Math.max(
@@ -260,19 +258,16 @@ export function useWorkbenchShellController({
     [dispatchPanelAction],
   )
 
-  const togglePanel = useCallback(
-    (target: WorkbenchPanelTarget): void => {
-      setWorkbenchPanelState((current) => {
-        const opening = target === 'right' ? !current.right.open : !current[target].open
-        const next = applyWorkbenchTabsAction(current, { type: 'togglePanel', target })
-        if (opening) {
-          focusPanelController(target)
-        }
-        return next
-      })
-    },
-    [],
-  )
+  const togglePanel = useCallback((target: WorkbenchPanelTarget): void => {
+    setWorkbenchPanelState((current) => {
+      const opening = target === 'right' ? !current.right.open : !current[target].open
+      const next = applyWorkbenchTabsAction(current, { type: 'togglePanel', target })
+      if (opening) {
+        focusPanelController(target)
+      }
+      return next
+    })
+  }, [])
 
   const closePanel = useCallback(
     (target: WorkbenchPanelTarget): void => {
@@ -372,15 +367,18 @@ export function useWorkbenchShellController({
     [dispatchPanelAction],
   )
 
-  const commitRightDockRangeRatio = useCallback((nextRatio: number): void => {
-    setRightDockRangeRatio(nextRatio)
-    const legacyRatio = rightDockWidthToRatio(
-      rightDockWidthFromRangeRatio(nextRatio, workspaceSize.width),
-      workspaceSize.width,
-    )
-    setRightDockWidthRatio(legacyRatio)
-    window.localStorage.setItem(RIGHT_DOCK_WIDTH_RATIO_STORAGE_KEY, String(legacyRatio))
-  }, [workspaceSize.width])
+  const commitRightDockRangeRatio = useCallback(
+    (nextRatio: number): void => {
+      setRightDockRangeRatio(nextRatio)
+      const legacyRatio = rightDockWidthToRatio(
+        rightDockWidthFromRangeRatio(nextRatio, workspaceSize.width),
+        workspaceSize.width,
+      )
+      setRightDockWidthRatio(legacyRatio)
+      window.localStorage.setItem(RIGHT_DOCK_WIDTH_RATIO_STORAGE_KEY, String(legacyRatio))
+    },
+    [workspaceSize.width],
+  )
 
   const commitBottomPanelHeightRatio = useCallback((nextRatio: number): void => {
     setBottomPanelHeightRatio(nextRatio)
@@ -401,18 +399,15 @@ export function useWorkbenchShellController({
   )
 
   /** 拖拽期间只有分屏需要宽度预览；仅聊天时不占宽度。 */
-  const resolveRightDockResizePreview = useCallback(
-    (nextSize: number | null): void => {
-      if (nextSize === null) {
-        rightPanelLiveResizeRef.current.previewSize(null)
-        return
-      }
-      if (dragLayoutRef.current === 'split') {
-        rightPanelLiveResizeRef.current.previewSize(nextSize)
-      }
-    },
-    [],
-  )
+  const resolveRightDockResizePreview = useCallback((nextSize: number | null): void => {
+    if (nextSize === null) {
+      rightPanelLiveResizeRef.current.previewSize(null)
+      return
+    }
+    if (dragLayoutRef.current === 'split') {
+      rightPanelLiveResizeRef.current.previewSize(nextSize)
+    }
+  }, [])
 
   const handleRightDockResizeRaw = useCallback((rawSize: number | null): void => {
     setRightDockDragRaw(rawSize)

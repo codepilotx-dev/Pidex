@@ -5,9 +5,7 @@ import type { DesktopClientEnvironment } from '../src/services/desktop-client/Ty
 
 type Options = Parameters<typeof createAppMenuActions>[0]
 type Actions = ReturnType<typeof createAppMenuActions>
-type ClientBridge = NonNullable<
-  NonNullable<DesktopClientEnvironment['window']>['DesktopBridge']
->
+type ClientBridge = NonNullable<NonNullable<DesktopClientEnvironment['window']>['DesktopBridge']>
 
 function setup(overrides: Partial<Options> = {}) {
   const calls: unknown[] = []
@@ -89,7 +87,7 @@ describe('application menu actions', () => {
     expect(calls).toEqual([
       '/settings/general',
       '/automations',
-      '/settings/local-environment',
+      '/settings/worktrees?tab=environments',
       '/settings/worktrees',
       '/settings/plugins?tab=skills',
       '/settings/plugins?tab=mcps',

@@ -35,7 +35,10 @@ export class ScheduledTaskCoordinator {
       const preparing = this.repository.markPreparing(task.id, this.now())
       await this.changed(preparing)
       const binding = await this.executor.start(preparing, preparing)
-      if (!binding) { await this.finish(task.id, 'completed', null); return }
+      if (!binding) {
+        await this.finish(task.id, 'completed', null)
+        return
+      }
       const queued = this.repository.bindExecution(task.id, binding, this.now())
       await this.changed(queued)
       const turnStatus = this.options.getTurnStatus?.(binding.turnId)

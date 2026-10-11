@@ -71,7 +71,8 @@ export function ConfirmationDialog({
               </h2>
             </AlertDialog.Title>
             <AlertDialog.Cancel asChild>
-              <Button isIconOnly
+              <Button
+                isIconOnly
                 className="tw:shrink-0"
                 color="ghostSecondary"
                 size="toolbar"
@@ -173,7 +174,8 @@ export function InputDialog({
                 </h2>
               </Dialog.Title>
               <Dialog.Close asChild>
-                <Button isIconOnly
+                <Button
+                  isIconOnly
                   className="tw:shrink-0"
                   color="ghostSecondary"
                   size="toolbar"

@@ -662,7 +662,7 @@ function AutomationViewContent(): React.ReactNode {
         )}
       </PrimaryPageLayout>
 
-      <Popover.Root  open={surfaceOpen}>
+      <Popover.Root open={surfaceOpen}>
         <Popover.Anchor virtualRef={detailAnchor} />
         <Popover.Portal>
           <div>

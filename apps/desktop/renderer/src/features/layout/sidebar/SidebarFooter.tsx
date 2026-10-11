@@ -274,44 +274,46 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
         align="end"
         size="sm"
 
-        trigger={compact ? (
-          <Button
-            isIconOnly
-            variant="ghost"
-            size="md"
-            active={settingsActive || menuOpen}
-            ref={accountMenuTriggerRef}
-            aria-label={accountTriggerName}
-            className="sidebar-settings-link tw:data-[active=true]:bg-app-selected tw:data-[active=true]:text-app-text"
-          >
-            {accountAvatar}
-          </Button>
-        ) : (
-          <SidebarRow
-            active={settingsActive || menuOpen}
-            ref={accountMenuTriggerRef}
-            asChild
-            className={cx(
-              'sidebar-settings-link tw:text-app-text tw:type-body tw:focus-visible:outline-2 tw:focus-visible:outline-offset-0 tw:focus-visible:outline-app-focus',
-              'tw:min-h-[var(--sidebar-row-height)] tw:w-full tw:min-w-0 tw:grow tw:shrink tw:basis-auto',
-            )}
-            labelClassName={cx('sidebar-settings-label', 'tw:min-w-0')}
-            layout="flex"
-            leading={accountAvatar}
-          >
-            <button
-              aria-label={
-                updateIndicator.visible
-                  ? `${accountTriggerName}，${t(updateIndicator.ariaLabel)}`
-                  : accountTriggerName
-              }
-              className="sidebar-footer-trigger tw:w-full tw:min-w-0 tw:overflow-hidden tw:border-0 tw:text-left tw:text-inherit tw:whitespace-nowrap tw:cursor-pointer tw:[font:inherit]"
-              type="button"
+        trigger={
+          compact ? (
+            <Button
+              isIconOnly
+              variant="ghost"
+              size="md"
+              active={settingsActive || menuOpen}
+              ref={accountMenuTriggerRef}
+              aria-label={accountTriggerName}
+              className="sidebar-settings-link tw:data-[active=true]:bg-app-selected tw:data-[active=true]:text-app-text"
             >
-              <span>{accountTriggerName}</span>
-            </button>
-          </SidebarRow>
-        )}
+              {accountAvatar}
+            </Button>
+          ) : (
+            <SidebarRow
+              active={settingsActive || menuOpen}
+              ref={accountMenuTriggerRef}
+              asChild
+              className={cx(
+                'sidebar-settings-link tw:text-app-text tw:type-body tw:focus-visible:outline-2 tw:focus-visible:outline-offset-0 tw:focus-visible:outline-app-focus',
+                'tw:min-h-[var(--sidebar-row-height)] tw:w-full tw:min-w-0 tw:grow tw:shrink tw:basis-auto',
+              )}
+              labelClassName={cx('sidebar-settings-label', 'tw:min-w-0')}
+              layout="flex"
+              leading={accountAvatar}
+            >
+              <button
+                aria-label={
+                  updateIndicator.visible
+                    ? `${accountTriggerName}，${t(updateIndicator.ariaLabel)}`
+                    : accountTriggerName
+                }
+                className="sidebar-footer-trigger tw:w-full tw:min-w-0 tw:overflow-hidden tw:border-0 tw:text-left tw:text-inherit tw:whitespace-nowrap tw:cursor-pointer tw:[font:inherit]"
+                type="button"
+              >
+                <span>{accountTriggerName}</span>
+              </button>
+            </SidebarRow>
+          )
+        }
         onOpenChange={setMenuOpen}
       >
         <div className="popover-section">
@@ -369,8 +371,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
                   className="popover-surface popover popover-sub-content popover-usage-submenu tw:p-1 tw:[--popover-overflow-y:hidden]"
                   collisionPadding={6}
                   sideOffset={4}
-                  style={buildPopoverSizingStyle({ size: 'sm',
-                  })}
+                  style={buildPopoverSizingStyle({ size: 'sm' })}
                 >
                   <div className="popover-usage-content tw:flex tw:min-w-0 tw:flex-col tw:gap-1">
                     {usage.loading ? (

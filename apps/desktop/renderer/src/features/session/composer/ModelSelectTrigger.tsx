@@ -117,7 +117,12 @@ export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTr
         </motion.button>
 
         {showThinkingOptions && thinkingLabel && onThinkingChange ? (
-          <motion.div layout="position" transition={transition} className={EFFORT_WRAP_CLASS} onClick={(event) => event.stopPropagation()}>
+          <motion.div
+            layout="position"
+            transition={transition}
+            className={EFFORT_WRAP_CLASS}
+            onClick={(event) => event.stopPropagation()}
+          >
             <ReasoningMenu
               open={effortMenuOpen}
               onOpenChange={setEffortMenuOpen}
@@ -138,11 +143,17 @@ export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTr
                 >
                   <span className="tw:grid tw:text-center tw:whitespace-nowrap">
                     <span className="tw:col-start-1 tw:row-start-1">{thinkingLabel}</span>
-                    {['默认', ...thinkingOptions.map((option) => option.label)].map((label, index) => (
-                      <span key={index} aria-hidden="true" className="tw:invisible tw:col-start-1 tw:row-start-1">
-                        {label}
-                      </span>
-                    ))}
+                    {['默认', ...thinkingOptions.map((option) => option.label)].map(
+                      (label, index) => (
+                        <span
+                          key={index}
+                          aria-hidden="true"
+                          className="tw:invisible tw:col-start-1 tw:row-start-1"
+                        >
+                          {label}
+                        </span>
+                      ),
+                    )}
                   </span>
                 </button>
               }
@@ -150,7 +161,12 @@ export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTr
           </motion.div>
         ) : null}
 
-        <motion.span layout="position" transition={transition} aria-hidden="true" className={CHEVRON_WRAP_CLASS}>
+        <motion.span
+          layout="position"
+          transition={transition}
+          aria-hidden="true"
+          className={CHEVRON_WRAP_CLASS}
+        >
           <ChevronDown
             size={APP_ICON_SIZES.sm}
             strokeWidth={APP_ICON_STROKE_WIDTH}

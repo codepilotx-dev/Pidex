@@ -6,10 +6,7 @@ import {
 } from '@pidex/shared/desktop-theme'
 
 import type { DesktopChromeTheme, DesktopThemeVariant } from '../../../shared/Types.js'
-import {
-  isHighlightThemeSlug,
-  loadHighlightTheme,
-} from '../../../shared/themes/Manifest.js'
+import { isHighlightThemeSlug, loadHighlightTheme } from '../../../shared/themes/Manifest.js'
 
 type ThemeWithChrome = ThemeRegistration & {
   chromeTheme?: Partial<DesktopChromeTheme>

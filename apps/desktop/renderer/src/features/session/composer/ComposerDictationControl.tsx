@@ -53,7 +53,8 @@ export function ComposerDictationControl({
           <span>{dictationStatusText(dictation.phase, dictation.elapsedMs, dictation.error)}</span>
         </span>
       ) : null}
-      <Button isIconOnly
+      <Button
+        isIconOnly
         aria-label={dictation.phase === 'recording' ? '停止语音输入' : '语音输入'}
         aria-pressed={dictation.phase === 'recording'}
         className={`composer-mic-button${dictation.phase === 'recording' ? ' is-recording' : ''}`}

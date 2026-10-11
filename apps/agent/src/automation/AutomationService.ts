@@ -199,7 +199,8 @@ export class AutomationService {
   }
 
   async removeThreadSchedules(threadId: string) {
-    for (const item of this.repository.forThread(threadId)) await this.delete(item.id, item.revision)
+    for (const item of this.repository.forThread(threadId))
+      await this.delete(item.id, item.revision)
   }
 
   async delete(id: string, expectedRevision: number) {

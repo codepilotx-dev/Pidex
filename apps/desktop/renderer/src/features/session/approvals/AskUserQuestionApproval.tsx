@@ -251,10 +251,10 @@ function QuestionAnswerFormInstance({
   if (!questions) {
     return (
       <div
-      ref={approvalRef}
-      className="ask-user-question-approval tw:flex tw:w-full tw:flex-col tw:gap-3 tw:outline-none"
-      tabIndex={-1}
-    >
+        ref={approvalRef}
+        className="ask-user-question-approval tw:flex tw:w-full tw:flex-col tw:gap-3 tw:outline-none"
+        tabIndex={-1}
+      >
         <p className="ask-user-question-error tw:mx-3 tw:my-0 tw:px-3 tw:py-2 tw:border tw:border-app-danger-border tw:rounded-lg tw:bg-app-danger-subtle tw:text-app-danger-fg tw:type-body-sm">
           无法解析 AskUserQuestion 的选项，请拒绝后让 Pidex 重新提问。
         </p>
@@ -695,10 +695,12 @@ function QuestionAnswerFormInstance({
                       <span
                         className={cx(
                           'inline-approval-option-hint tw:type-caption',
-                          variant === 'question' ? 'tw:text-app-text-soft' : 'tw:text-app-text-meta',
+                          variant === 'question'
+                            ? 'tw:text-app-text-soft'
+                            : 'tw:text-app-text-meta',
                         )}
                       >
-                        {" （推荐）"}
+                        {' （推荐）'}
                       </span>
                     ) : null}
                   </span>
@@ -725,9 +727,9 @@ function QuestionAnswerFormInstance({
                 ) : selected ? (
                   <span className="inline-approval-option-trailing tw:inline-flex tw:flex-none tw:items-center tw:gap-2">
                     <span
-                        className="inline-approval-option-arrows tw:inline-flex tw:items-center tw:gap-1 tw:text-app-text-meta"
-                        aria-hidden="true"
-                      >
+                      className="inline-approval-option-arrows tw:inline-flex tw:items-center tw:gap-1 tw:text-app-text-meta"
+                      aria-hidden="true"
+                    >
                       <ArrowRight size={APP_ICON_SIZE} />
                     </span>
                   </span>
@@ -737,7 +739,10 @@ function QuestionAnswerFormInstance({
           })}
         </div>
         {variant === 'question' && !supportsQuestionSkip ? (
-          <p className="ask-user-question-error tw:mx-3 tw:my-0 tw:px-3 tw:py-2 tw:border tw:border-app-danger-border tw:rounded-lg tw:bg-app-danger-subtle tw:text-app-danger-fg tw:type-body-sm" role="status">
+          <p
+            className="ask-user-question-error tw:mx-3 tw:my-0 tw:px-3 tw:py-2 tw:border tw:border-app-danger-border tw:rounded-lg tw:bg-app-danger-subtle tw:text-app-danger-fg tw:type-body-sm"
+            role="status"
+          >
             当前 Agent 尚未提供逐题跳过能力，请升级并重启 Agent。
           </p>
         ) : null}

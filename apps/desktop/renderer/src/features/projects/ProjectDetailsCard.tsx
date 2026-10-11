@@ -82,7 +82,8 @@ export function ProjectDetailsCard({
         >
           {project.name}
         </strong>
-        <Button isIconOnly
+        <Button
+          isIconOnly
           iconSize="sm"
           className="sidebar-project-hover-card-pin tw:inline-flex tw:flex-none tw:items-center tw:justify-center tw:justify-self-end"
           color={isPinned ? 'ghostActive' : 'ghostSecondary'}
@@ -97,7 +98,11 @@ export function ProjectDetailsCard({
         </Button>
       </SidebarHoverCardHeader>
       <SidebarHoverCardRow className="sidebar-project-hover-card-stats tw:text-app-text-meta tw:type-caption">
-        <MessageSquare aria-hidden="true" className="tw:size-icon-sm tw:text-app-text-meta" size={APP_ICON_SIZE} />
+        <MessageSquare
+          aria-hidden="true"
+          className="tw:size-icon-sm tw:text-app-text-meta"
+          size={APP_ICON_SIZE}
+        />
         <span className="sidebar-project-hover-card-stats-content tw:inline-flex tw:flex-wrap tw:items-center tw:gap-1">
           <span>{conversationCount} 个任务</span>
           {unreadCount > 0 ? (
@@ -124,10 +129,7 @@ export function ProjectDetailsCard({
         {folders.map((folder) =>
           folder.path ? (
             <button
-              className={cx(
-                'sidebar-project-hover-card-folder',
-                PROJECT_HOVER_CARD_ACTION_CLASS,
-              )}
+              className={cx('sidebar-project-hover-card-folder', PROJECT_HOVER_CARD_ACTION_CLASS)}
               disabled={isUnavailable || folder.availability === 'missing'}
               key={folder.id}
               type="button"

@@ -107,16 +107,13 @@ export function ToastStack(): React.ReactNode {
       </div>
 
       {/* 卡片列表 */}
-      <div className="toast-stack-body tw:relative tw:w-full" style={{ height: totalExpandedHeight }}>
+      <div
+        className="toast-stack-body tw:relative tw:w-full"
+        style={{ height: totalExpandedHeight }}
+      >
         <AnimatePresence initial={false}>
           {state.toasts.map((toast, index) => {
-            const transform = calculateCardTransform(
-              index,
-              isExpanded,
-              heightArray,
-              8,
-              0,
-            )
+            const transform = calculateCardTransform(index, isExpanded, heightArray, 8, 0)
 
             return (
               <ToastCardWrapper
@@ -206,11 +203,7 @@ function ToastCardWrapper({
               transition: { duration: 0.15 },
             }
       }
-      transition={
-        reducedMotion
-          ? { duration: 0 }
-          : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }
-      }
+      transition={reducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
     >
       <Toast
         appearance={toast.appearance}
@@ -248,7 +241,8 @@ function ToastCardWrapper({
           ) : null}
 
           {toast.showCloseButton !== false ? (
-            <Button isIconOnly
+            <Button
+              isIconOnly
               color="ghostSecondary"
               size={toast.appearance === 'action' ? 'sm' : 'compact'}
               title={isError ? '关闭错误提示' : '关闭'}

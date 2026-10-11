@@ -115,8 +115,7 @@ const MODEL_ROW_SELECTED_CLASS =
   'is-selected tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_6%,transparent)]'
 const MODEL_ROW_MAIN_CLASS =
   'composer-model-row-main tw:flex tw:min-w-0 tw:items-center tw:gap-2.5 tw:pr-0.5'
-const MODEL_ROW_ICON_CLASS =
-  'composer-model-row-icon tw:size-icon-md tw:shrink-0 tw:text-app-text'
+const MODEL_ROW_ICON_CLASS = 'composer-model-row-icon tw:size-icon-md tw:shrink-0 tw:text-app-text'
 const MODEL_ROW_TRAILING_CLASS =
   'composer-model-row-trailing tw:flex tw:shrink-0 tw:items-center tw:gap-2'
 const MODEL_DOT_CLASS = cx(

@@ -1,14 +1,9 @@
-import {
-  HIGHLIGHT_THEMES,
-  isHighlightThemeSlug,
-} from '../../../shared/themes/Manifest.js'
+import { HIGHLIGHT_THEMES, isHighlightThemeSlug } from '../../../shared/themes/Manifest.js'
 import type { HighlightThemeSlug } from '../../../shared/themes/Manifest.js'
 
 export type SyntaxThemeVariant = 'light' | 'dark'
 
-export const DEFAULT_SYNTAX_THEMES: Readonly<
-  Record<SyntaxThemeVariant, HighlightThemeSlug>
-> = {
+export const DEFAULT_SYNTAX_THEMES: Readonly<Record<SyntaxThemeVariant, HighlightThemeSlug>> = {
   light: 'codex-light',
   dark: 'codex-dark',
 }
@@ -19,8 +14,8 @@ export type { HighlightThemeSlug }
 const THEME_LABEL_COLLATOR = new Intl.Collator()
 
 export function getThemesForVariant(variant: SyntaxThemeVariant) {
-  return HIGHLIGHT_THEMES.filter((theme) => theme.variant === variant).toSorted(
-    (left, right) => THEME_LABEL_COLLATOR.compare(left.label, right.label),
+  return HIGHLIGHT_THEMES.filter((theme) => theme.variant === variant).toSorted((left, right) =>
+    THEME_LABEL_COLLATOR.compare(left.label, right.label),
   )
 }
 

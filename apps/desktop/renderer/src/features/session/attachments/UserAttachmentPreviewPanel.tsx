@@ -328,7 +328,8 @@ function ImageAttachmentPreview({ value }: { value: LoadedUserAttachment }): Rea
   return (
     <section style={panelStyle}>
       <AttachmentToolbar value={value}>
-        <Button isIconOnly
+        <Button
+          isIconOnly
           color="ghostSecondary"
           disabled={scale <= MIN_IMAGE_SCALE}
           onClick={() => changeScale(1 / IMAGE_SCALE_STEP)}
@@ -338,10 +339,17 @@ function ImageAttachmentPreview({ value }: { value: LoadedUserAttachment }): Rea
           <Minus size={APP_ICON_SIZE} />
         </Button>
         <small style={zoomStyle}>{Math.round(scale * 100)}%</small>
-        <Button isIconOnly color="ghostSecondary" onClick={fitImage} size="toolbar" title="适应窗口">
+        <Button
+          isIconOnly
+          color="ghostSecondary"
+          onClick={fitImage}
+          size="toolbar"
+          title="适应窗口"
+        >
           <Maximize2 size={APP_ICON_SIZE} />
         </Button>
-        <Button isIconOnly
+        <Button
+          isIconOnly
           color="ghostSecondary"
           disabled={scale >= MAX_IMAGE_SCALE}
           onClick={() => changeScale(IMAGE_SCALE_STEP)}
@@ -350,7 +358,13 @@ function ImageAttachmentPreview({ value }: { value: LoadedUserAttachment }): Rea
         >
           <Plus size={APP_ICON_SIZE} />
         </Button>
-        <Button isIconOnly color="ghostSecondary" onClick={handleDownload} size="toolbar" title="下载">
+        <Button
+          isIconOnly
+          color="ghostSecondary"
+          onClick={handleDownload}
+          size="toolbar"
+          title="下载"
+        >
           <Download size={APP_ICON_SIZE} />
         </Button>
       </AttachmentToolbar>
@@ -429,7 +443,8 @@ function TextAttachmentPreview({ value }: { value: LoadedUserAttachment }): Reac
             value={markdownSource ? 'source' : 'preview'}
           />
         ) : null}
-        <Button isIconOnly
+        <Button
+          isIconOnly
           color="ghostSecondary"
           onClick={() => {
             setMessage('')
@@ -443,7 +458,8 @@ function TextAttachmentPreview({ value }: { value: LoadedUserAttachment }): Reac
         >
           <Copy size={APP_ICON_SIZE} />
         </Button>
-        <Button isIconOnly
+        <Button
+          isIconOnly
           color="ghostSecondary"
           onClick={() => {
             setMessage('')

@@ -1,10 +1,7 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import {
-  getDesktopAccentPresetColor,
-  type DesktopAccentPreset,
-} from '@pidex/shared/desktop-theme'
+import { getDesktopAccentPresetColor, type DesktopAccentPreset } from '@pidex/shared/desktop-theme'
 import {
   AppearanceSettingsStore,
   DEFAULT_APPEARANCE_SETTINGS,

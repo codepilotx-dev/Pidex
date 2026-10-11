@@ -1,9 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
 import type { DesktopThemeSettingsV7 } from './settings/AppearanceSettingsStore.js'
-import type {
-  DesktopSystemFontFace,
-  DesktopSystemFontsResult,
-} from '@pidex/shared/desktop-theme'
+import type { DesktopSystemFontFace, DesktopSystemFontsResult } from '@pidex/shared/desktop-theme'
 import type {
   DesktopPetOverlayBridge,
   DesktopPetPresentation,
@@ -14,10 +11,7 @@ import type {
 } from '@pidex/shared/desktop-settings-ipc'
 import type { DesktopDataLocationIpcBridge } from '@pidex/shared/desktop-data-location-ipc'
 import type { DesktopEditAction, DesktopEditIpcBridge } from '@pidex/shared/desktop-edit-ipc'
-import type {
-  DesktopUpdateIpcBridge,
-  DesktopUpdateStatus,
-} from '@pidex/shared/desktop-update-ipc'
+import type { DesktopUpdateIpcBridge, DesktopUpdateStatus } from '@pidex/shared/desktop-update-ipc'
 import type {
   AckDesktopTerminalOutputInput,
   AttachDesktopTerminalInput,

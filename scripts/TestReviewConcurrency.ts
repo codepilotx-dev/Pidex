@@ -59,22 +59,18 @@ try {
   await waitForHttpReady(rendererOrigin, renderer, 'Renderer dev server')
 
   const token = crypto.randomUUID()
-  const agent = startAgentProcess(
-    'apps/agent/scripts/ReviewConcurrencyServer.ts',
-    activeChildren,
-    {
-      ...process.env,
-      PIDEX_AUTH_TOKEN: token,
-      PIDEX_DATA_DIR: agentDataDir,
-      PIDEX_DOCUMENTS_DIR: join(isolatedRoot, 'documents'),
-      PIDEX_LOG_DIR: join(isolatedRoot, 'agent-logs'),
-      PIDEX_DESKTOP_MANAGED: '1',
-      PIDEX_PORT: '0',
-      PIDEX_RENDERER_DEV_URL: rendererOrigin,
-      NO_PROXY: '127.0.0.1,localhost,::1',
-      no_proxy: '127.0.0.1,localhost,::1',
-    },
-  )
+  const agent = startAgentProcess('apps/agent/scripts/ReviewConcurrencyServer.ts', activeChildren, {
+    ...process.env,
+    PIDEX_AUTH_TOKEN: token,
+    PIDEX_DATA_DIR: agentDataDir,
+    PIDEX_DOCUMENTS_DIR: join(isolatedRoot, 'documents'),
+    PIDEX_LOG_DIR: join(isolatedRoot, 'agent-logs'),
+    PIDEX_DESKTOP_MANAGED: '1',
+    PIDEX_PORT: '0',
+    PIDEX_RENDERER_DEV_URL: rendererOrigin,
+    NO_PROXY: '127.0.0.1,localhost,::1',
+    no_proxy: '127.0.0.1,localhost,::1',
+  })
   const origin = await waitForAgentReady(
     agent,
     'review-concurrency-ready',

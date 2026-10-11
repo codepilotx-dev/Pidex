@@ -566,30 +566,112 @@ export class GithubService {
   }
 
   async readWatch(input: { owner: string; repository: string; number: number }) {
-    const data = await this.graphql(`query($owner:String!,$repository:String!,$number:Int!){repository(owner:$owner,name:$repository){pullRequest(number:$number){id state isDraft headRefOid headRefName mergeable mergeStateStatus reviewDecision headRepository{name owner{login}} statusCheckRollup{state} reviews(last:100){nodes{id state body submittedAt}}}}}`, input)
-    const result = z.object({ repository: z.object({ pullRequest: z.object({ id: z.string(), state: z.enum(['OPEN','MERGED','CLOSED']), isDraft: z.boolean(), headRefOid: z.string().regex(/^[a-f0-9]{40}$/), headRefName: z.string(), mergeable: z.string(), mergeStateStatus: z.string(), reviewDecision: z.string().nullable(), headRepository: z.object({ name: z.string(), owner: z.object({ login: z.string() }) }).nullable(), statusCheckRollup: z.object({ state: z.string() }).nullable(), reviews: z.object({ nodes: z.array(z.object({ id: z.string(), state: z.string(), body: z.string(), submittedAt: z.string().nullable() })) }) }) }) }).safeParse(data)
+    const data = await this.graphql(
+      `query($owner:String!,$repository:String!,$number:Int!){repository(owner:$owner,name:$repository){pullRequest(number:$number){id state isDraft headRefOid headRefName mergeable mergeStateStatus reviewDecision headRepository{name owner{login}} statusCheckRollup{state} reviews(last:100){nodes{id state body submittedAt}}}}}`,
+      input,
+    )
+    const result = z
+      .object({
+        repository: z.object({
+          pullRequest: z.object({
+            id: z.string(),
+            state: z.enum(['OPEN', 'MERGED', 'CLOSED']),
+            isDraft: z.boolean(),
+            headRefOid: z.string().regex(/^[a-f0-9]{40}$/),
+            headRefName: z.string(),
+            mergeable: z.string(),
+            mergeStateStatus: z.string(),
+            reviewDecision: z.string().nullable(),
+            headRepository: z
+              .object({ name: z.string(), owner: z.object({ login: z.string() }) })
+              .nullable(),
+            statusCheckRollup: z.object({ state: z.string() }).nullable(),
+            reviews: z.object({
+              nodes: z.array(
+                z.object({
+                  id: z.string(),
+                  state: z.string(),
+                  body: z.string(),
+                  submittedAt: z.string().nullable(),
+                }),
+              ),
+            }),
+          }),
+        }),
+      })
+      .safeParse(data)
     if (!result.success) throw new AgentError('GITHUB_PR_NOT_FOUND', '无法读取 PR 监控状态', 404)
     return result.data.repository.pullRequest
   }
 
-  async mergeWatchedPullRequest(input: { owner: string; repository: string; number: number; headSha: string; method: 'merge' | 'squash' }) {
+  async mergeWatchedPullRequest(input: {
+    owner: string
+    repository: string
+    number: number
+    headSha: string
+    method: 'merge' | 'squash'
+  }) {
     const current = await this.readWatch(input)
-    if (current.headRefOid !== input.headSha || current.state !== 'OPEN' || current.isDraft || current.mergeable !== 'MERGEABLE' || current.mergeStateStatus !== 'CLEAN' || (current.reviewDecision !== null && current.reviewDecision !== 'APPROVED') || (current.statusCheckRollup !== null && current.statusCheckRollup.state !== 'SUCCESS'))
+    if (
+      current.headRefOid !== input.headSha ||
+      current.state !== 'OPEN' ||
+      current.isDraft ||
+      current.mergeable !== 'MERGEABLE' ||
+      current.mergeStateStatus !== 'CLEAN' ||
+      (current.reviewDecision !== null && current.reviewDecision !== 'APPROVED') ||
+      (current.statusCheckRollup !== null && current.statusCheckRollup.state !== 'SUCCESS')
+    )
       throw new AgentError('CONFLICT', 'PR 当前尚未满足合并条件或 head 已变化', 409)
-    const merged = await this.graphql('mutation($input:MergePullRequestInput!){mergePullRequest(input:$input){pullRequest{merged}}}', { input: { pullRequestId: current.id, expectedHeadOid: input.headSha, mergeMethod: input.method.toUpperCase() } })
+    const merged = await this.graphql(
+      'mutation($input:MergePullRequestInput!){mergePullRequest(input:$input){pullRequest{merged}}}',
+      {
+        input: {
+          pullRequestId: current.id,
+          expectedHeadOid: input.headSha,
+          mergeMethod: input.method.toUpperCase(),
+        },
+      },
+    )
     const mutation = asRecord(merged.mergePullRequest, 'PR merge')
-    if (asRecord(mutation.pullRequest, 'PR merge result').merged !== true) throw new AgentError('CONFLICT', 'PR 未完成合并，请重新检查', 409)
+    if (asRecord(mutation.pullRequest, 'PR merge result').merged !== true)
+      throw new AgentError('CONFLICT', 'PR 未完成合并，请重新检查', 409)
   }
 
-  async watchGit(input: { workspaceRoot: string; owner: string; repository: string; args: string[] }) {
+  async watchGit(input: {
+    workspaceRoot: string
+    owner: string
+    repository: string
+    args: string[]
+  }) {
     const credential = await this.requiredCredential()
     const helperRoot = await mkdtemp(join(tmpdir(), 'pidex-github-askpass-'))
     try {
       const helperPath = await writeAskPassHelper(helperRoot)
-      const result = await this.git(input.workspaceRoot, ['-c', 'credential.helper=', '-c', `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`, ...input.args.map((arg) => arg === '__WATCH_REMOTE__' ? `https://x-access-token@github.com/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}.git` : arg)], { GIT_ASKPASS: helperPath, GIT_TERMINAL_PROMPT: '0', PIDEX_GITHUB_TOKEN: credential.accessToken })
-      if (result.code !== 0) throw new AgentError('GIT_COMMAND_FAILED', 'PR 工作树 Git 操作失败', 409)
+      const result = await this.git(
+        input.workspaceRoot,
+        [
+          '-c',
+          'credential.helper=',
+          '-c',
+          `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`,
+          ...input.args.map((arg) =>
+            arg === '__WATCH_REMOTE__'
+              ? `https://x-access-token@github.com/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}.git`
+              : arg,
+          ),
+        ],
+        {
+          GIT_ASKPASS: helperPath,
+          GIT_TERMINAL_PROMPT: '0',
+          PIDEX_GITHUB_TOKEN: credential.accessToken,
+        },
+      )
+      if (result.code !== 0)
+        throw new AgentError('GIT_COMMAND_FAILED', 'PR 工作树 Git 操作失败', 409)
       return result
-    } finally { await rm(helperRoot, { recursive: true, force: true }).catch(() => undefined) }
+    } finally {
+      await rm(helperRoot, { recursive: true, force: true }).catch(() => undefined)
+    }
   }
 
   async createPullRequest(input: {
@@ -893,16 +975,46 @@ export class GithubService {
       throw new AgentError('GIT_STATUS_FAILED', safeGitError(result.stderr), 409)
     return parseGitStatus(result.stdout)
   }
-  repositoryIdentity(workspaceRoot: string) { return this.githubRemote(workspaceRoot, 'origin') }
+  repositoryIdentity(workspaceRoot: string) {
+    return this.githubRemote(workspaceRoot, 'origin')
+  }
 
-  async readWatchChecks(input: { owner: string; repository: string; number: number; headSha: string }) {
+  async readWatchChecks(input: {
+    owner: string
+    repository: string
+    number: number
+    headSha: string
+  }) {
     const current = await this.readWatch(input)
-    if (current.headRefOid !== input.headSha) throw new AgentError('CONFLICT', 'PR head 已变化', 409)
+    if (current.headRefOid !== input.headSha)
+      throw new AgentError('CONFLICT', 'PR head 已变化', 409)
     const output: unknown[] = []
     for (let page = 1; ; page++) {
-      const result = asRecord(await this.rest('GET', `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/commits/${input.headSha}/check-runs?per_page=100&page=${page}`), 'CI checks')
+      const result = asRecord(
+        await this.rest(
+          'GET',
+          `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/commits/${input.headSha}/check-runs?per_page=100&page=${page}`,
+        ),
+        'CI checks',
+      )
       const checks = Array.isArray(result.check_runs) ? result.check_runs : []
-      for (const check of checks) { const item = asRecord(check,'CI check'); const detail = item.output && typeof item.output === 'object' ? item.output as Record<string, unknown> : {}; output.push({ id: item.id, name: item.name, conclusion: item.conclusion, status: item.status, detailsUrl: item.details_url, completedAt: item.completed_at, summary: detail.summary, text: detail.text }) }
+      for (const check of checks) {
+        const item = asRecord(check, 'CI check')
+        const detail =
+          item.output && typeof item.output === 'object'
+            ? (item.output as Record<string, unknown>)
+            : {}
+        output.push({
+          id: item.id,
+          name: item.name,
+          conclusion: item.conclusion,
+          status: item.status,
+          detailsUrl: item.details_url,
+          completedAt: item.completed_at,
+          summary: detail.summary,
+          text: detail.text,
+        })
+      }
       if (checks.length < 100) break
     }
     return { pullRequest: current, checks: output }

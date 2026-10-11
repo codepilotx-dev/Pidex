@@ -15,7 +15,10 @@ import {
 } from '../config/JsoncDocument'
 import { AgentError } from '../Domain'
 import { LocalEnvironmentConfigError, parseLocalEnvironmentConfig } from './LocalEnvironmentConfig'
-import { LocalEnvironmentDiscovery, localEnvironmentTrustIdentity } from './LocalEnvironmentDiscovery'
+import {
+  LocalEnvironmentDiscovery,
+  localEnvironmentTrustIdentity,
+} from './LocalEnvironmentDiscovery'
 import type { LocalEnvironmentCatalog } from './LocalEnvironmentCatalog'
 import type { LocalEnvironmentRunner } from './LocalEnvironmentRunner'
 import type { ProjectTrustStore } from './ProjectTrustStore'
@@ -93,7 +96,12 @@ export class LocalEnvironmentService {
     configPath?: string
   }) {
     const loaded = await this.load(input.cwd, input.configPath)
-    if (loaded.frozen && input.edits) throw new AgentError('LOCAL_ENVIRONMENT_CONFLICT', '工作树使用创建时的环境快照，请在项目环境页编辑源配置', 409)
+    if (loaded.frozen && input.edits)
+      throw new AgentError(
+        'LOCAL_ENVIRONMENT_CONFLICT',
+        '工作树使用创建时的环境快照，请在项目环境页编辑源配置',
+        409,
+      )
     if (loaded.revision !== input.expectedRevision) {
       throw new AgentError('LOCAL_ENVIRONMENT_CONFLICT', '本地环境配置已被其他操作修改', 409)
     }
@@ -151,7 +159,11 @@ export class LocalEnvironmentService {
     } else if (input.trust?.decision === 'revoke') {
       await this.trust.revokeExecution(loaded.projectIdentity)
     }
-    const executionTrusted = await this.executionTrusted(input.cwd, loaded.projectIdentity, revision)
+    const executionTrusted = await this.executionTrusted(
+      input.cwd,
+      loaded.projectIdentity,
+      revision,
+    )
     return {
       filePath: loaded.filePath,
       revision,
@@ -249,7 +261,9 @@ export class LocalEnvironmentService {
   }
 
   private async executionTrusted(cwd: string, identity: string, revision: string) {
-    return this.folderTrusted ? this.folderTrusted(cwd) : this.trust.isExecutionTrusted(identity, revision)
+    return this.folderTrusted
+      ? this.folderTrusted(cwd)
+      : this.trust.isExecutionTrusted(identity, revision)
   }
 
   private async requireExecutionTrust(cwd: string, identity: string, revision: string) {
@@ -316,9 +330,11 @@ export class LocalEnvironmentService {
   private async load(cwd: string, configPath?: string) {
     const original = await this.discovery.discover(cwd, configPath)
     const discovered = { ...original, projectIdentity: localEnvironmentTrustIdentity(original) }
-    if (!discovered.frozen) await this.assertControlledTarget(discovered.gitRoot, discovered.filePath)
+    if (!discovered.frozen)
+      await this.assertControlledTarget(discovered.gitRoot, discovered.filePath)
     if (!discovered.exists) {
-      if (discovered.frozen) throw new AgentError('LOCAL_ENVIRONMENT_INVALID', '工作树环境快照缺失', 409)
+      if (discovered.frozen)
+        throw new AgentError('LOCAL_ENVIRONMENT_INVALID', '工作树环境快照缺失', 409)
       const raw: ConfigObject = {
         schema_version: 1,
         name: basename(discovered.gitRoot),
@@ -334,7 +350,8 @@ export class LocalEnvironmentService {
     }
     try {
       const source = await readFile(discovered.filePath, 'utf8')
-      if (discovered.frozen && hash(source) !== discovered.frozenRevision) throw new AgentError('LOCAL_ENVIRONMENT_CONFLICT', '环境快照已被修改', 409)
+      if (discovered.frozen && hash(source) !== discovered.frozenRevision)
+        throw new AgentError('LOCAL_ENVIRONMENT_CONFLICT', '环境快照已被修改', 409)
       const raw = parseJsoncObject(source)
       return {
         ...discovered,

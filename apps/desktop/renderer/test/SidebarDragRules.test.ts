@@ -10,7 +10,10 @@ import {
   registerSidebarPreviewHold,
   shouldCloseSidebarPreviewOnEscape,
 } from '../src/features/layout/SidebarShellState.js'
-import { collectAllThreadPages, THREAD_LIST_MAX_PAGES } from '../src/services/desktop-client/AgentSessionClient.js'
+import {
+  collectAllThreadPages,
+  THREAD_LIST_MAX_PAGES,
+} from '../src/services/desktop-client/AgentSessionClient.js'
 
 type FakeRow = { top: number; height: number; index: string }
 
@@ -49,9 +52,9 @@ describe('侧栏拖放规则', () => {
   })
 
   test('容器键映射到具体放置目标', () => {
-    expect(resolveSidebarDropDestination(fakeContainer(rows, { sidebarDropContainer: 'pinned' }), 0)).toEqual(
-      { kind: 'pinned', index: 0 },
-    )
+    expect(
+      resolveSidebarDropDestination(fakeContainer(rows, { sidebarDropContainer: 'pinned' }), 0),
+    ).toEqual({ kind: 'pinned', index: 0 })
     expect(
       resolveSidebarDropDestination(
         fakeContainer(rows, { sidebarDropContainer: 'section:work' }),
@@ -82,7 +85,11 @@ describe('侧栏拖放规则', () => {
       projectKeys: [],
     })
     expect(
-      canDropOnDestination(ownSessions, { kind: 'project', projectKey: 'id:alpha', index: 0 }, container),
+      canDropOnDestination(
+        ownSessions,
+        { kind: 'project', projectKey: 'id:alpha', index: 0 },
+        container,
+      ),
     ).toBeTrue()
 
     const otherProject = resolveSidebarDragSelection({

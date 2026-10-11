@@ -520,11 +520,7 @@ export function ReviewDiffLineContent({
   onSaveDraft: (body: string) => void
 }): React.ReactNode {
   return (
-    <div
-      className="review-codex-diff__line"
-      data-line=""
-      data-line-type={diffLineType(cellTone)}
-    >
+    <div className="review-codex-diff__line" data-line="" data-line-type={diffLineType(cellTone)}>
       {children}
       {readOnly ? null : (
         <LineComments

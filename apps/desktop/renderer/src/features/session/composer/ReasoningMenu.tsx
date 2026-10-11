@@ -47,11 +47,7 @@ export function ReasoningMenu({
   const effectiveCurrentMode = thinkingPreviewMode ?? thinkingMode
 
   return (
-    <Dropdown.Root
-      value={effectiveCurrentMode}
-      open={open}
-      onOpenChange={handleOpenChange}
-    >
+    <Dropdown.Root value={effectiveCurrentMode} open={open} onOpenChange={handleOpenChange}>
       <Dropdown.Trigger asChild>{trigger}</Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content

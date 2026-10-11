@@ -83,7 +83,8 @@ export function PluginDetailsDialog({
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
-              <Button isIconOnly
+              <Button
+                isIconOnly
                 color="ghostSecondary"
                 ref={closeButtonRef}
                 size="toolbar"
@@ -98,7 +99,14 @@ export function PluginDetailsDialog({
             <PluginDetailsMetadata item={item} />
 
             {error ? (
-              <p className={cx('plugin-details-dialog__error', DETAILS_ERROR_CLASS, 'tw:forced-colors:border-double')} role="status">
+              <p
+                className={cx(
+                  'plugin-details-dialog__error',
+                  DETAILS_ERROR_CLASS,
+                  'tw:forced-colors:border-double',
+                )}
+                role="status"
+              >
                 {error}
               </p>
             ) : null}

@@ -1,7 +1,4 @@
-import type {
-  DesktopUpdateIpcBridge,
-  DesktopUpdateStatus,
-} from '@pidex/shared/desktop-update-ipc'
+import type { DesktopUpdateIpcBridge, DesktopUpdateStatus } from '@pidex/shared/desktop-update-ipc'
 
 export type DesktopUpdateIndicatorAction = 'check' | 'download' | 'quit-and-install'
 

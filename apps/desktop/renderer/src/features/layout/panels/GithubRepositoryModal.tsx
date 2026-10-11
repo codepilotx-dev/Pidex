@@ -192,8 +192,12 @@ export function GithubRepositoryModal({
                 {login?.mode === 'device' && login.state === 'awaiting_auth' && login.userCode ? (
                   <div className="github-device-code-card compact tw:flex tw:items-center tw:justify-between tw:gap-4 tw:bg-app-raised tw:[&_p]:mt-2 tw:[&_p]:mb-0 tw:[&_p]:text-app-text-soft tw:[&_p]:type-body-sm tw:[&_p]:leading-[var(--cpx-sys-line-height-tight)] tw:mt-3 tw:rounded-md tw:border tw:border-app-border-subtle tw:p-3">
                     <div>
-                      <div className="github-device-code-label tw:mb-1 tw:text-app-text-soft tw:text-[length:var(--cpx-sys-font-size-xs)]">GitHub 设备验证码</div>
-                      <div className="github-device-code-value tw:font-mono tw:text-[length:var(--cpx-sys-font-size-3xl)] tw:type-weight-heading tw:tracking-[0.08em] tw:text-app-text">{login.userCode}</div>
+                      <div className="github-device-code-label tw:mb-1 tw:text-app-text-soft tw:text-[length:var(--cpx-sys-font-size-xs)]">
+                        GitHub 设备验证码
+                      </div>
+                      <div className="github-device-code-value tw:font-mono tw:text-[length:var(--cpx-sys-font-size-3xl)] tw:type-weight-heading tw:tracking-[0.08em] tw:text-app-text">
+                        {login.userCode}
+                      </div>
                       <p>在 GitHub 设备登录页面输入这个验证码，不是 OAuth Client ID。</p>
                     </div>
                     <div className="github-device-code-actions tw:flex tw:shrink-0 tw:items-center tw:gap-2">
@@ -243,7 +247,9 @@ export function GithubRepositoryModal({
                 variant="standard"
               />
               <div className="github-repository-list-scroll-area">
-                <div className={cx('github-repository-list-scroll-content', 'tw:min-w-0', 'tw:grid')}>
+                <div
+                  className={cx('github-repository-list-scroll-content', 'tw:min-w-0', 'tw:grid')}
+                >
                   {loading ? (
                     <div className={cx('github-repository-empty', 'tw:p-5', 'tw:text-center')}>
                       正在加载仓库...

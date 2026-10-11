@@ -922,7 +922,6 @@ export function normalizeSidebarCustomization(
   }
 }
 
-
 export function upsertRecentWorkspace(
   workspaces: DesktopWorkspace[],
   workspace: DesktopWorkspace,

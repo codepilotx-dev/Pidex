@@ -110,8 +110,7 @@ export function ThemeFontPicker({
 }: ThemeFontPickerProps): React.ReactNode {
   const [bridgeAvailable] = useState(
     () =>
-      typeof window !== 'undefined' &&
-      typeof window.DesktopBridge?.listSystemFonts === 'function',
+      typeof window !== 'undefined' && typeof window.DesktopBridge?.listSystemFonts === 'function',
   )
   const [fontsState, setFontsState] = useState<'idle' | 'loading' | 'ready' | 'unavailable'>('idle')
   const [faces, setFaces] = useState<readonly DesktopSystemFontFace[]>([])

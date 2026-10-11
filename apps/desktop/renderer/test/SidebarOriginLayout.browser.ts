@@ -11,7 +11,8 @@ const css = await compileEntryStyles()
  */
 const INDICATOR_CLASS =
   'sidebar-indicator tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:text-app-text-meta tw:[&>svg]:size-icon-md'
-const UNREAD_DOT_CLASS = 'sidebar-unread-dot tw:size-1.5 tw:flex-none tw:rounded-full tw:bg-app-accent'
+const UNREAD_DOT_CLASS =
+  'sidebar-unread-dot tw:size-1.5 tw:flex-none tw:rounded-full tw:bg-app-accent'
 const SESSION_ACTIONS_CLASS =
   'sidebar-session-actions tw:flex tw:w-full tw:items-center tw:justify-end tw:gap-1'
 const SECTION_ACTIONS_CLASS =

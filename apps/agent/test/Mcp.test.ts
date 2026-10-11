@@ -400,9 +400,7 @@ describe('MCP configuration', () => {
         changed: true,
         generation: 2,
       })
-      expect(saved.servers.filter(({ server }) => server.name === 'pidex-debug')).toHaveLength(
-        1,
-      )
+      expect(saved.servers.filter(({ server }) => server.name === 'pidex-debug')).toHaveLength(1)
       expect(repository.state().operations).toEqual([
         expect.objectContaining({ operationId: 'save-local-debug', generation: 2 }),
       ])

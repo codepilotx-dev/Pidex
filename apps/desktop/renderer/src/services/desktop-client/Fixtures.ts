@@ -29,12 +29,7 @@ import type {
   ThreadSettingsPatch,
   ThreadSnapshot,
 } from '@pidex/shared/thread'
-import type {
-  EventEnvelope,
-  ProtocolCapability,
-  RpcParams,
-  RpcResult,
-} from '@pidex/agent-protocol'
+import type { EventEnvelope, ProtocolCapability, RpcParams, RpcResult } from '@pidex/agent-protocol'
 import {
   DEFAULT_DESKTOP_THEME_SETTINGS,
   normalizeDesktopThemeSettings,

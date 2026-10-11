@@ -63,7 +63,10 @@ import {
 } from './sidebar/SidebarCustomization.js'
 import type { SidebarCustomization } from '../../../shared/Types.js'
 
-import { notifyProjectRestored, subscribeProjectRemovals } from '../projects/ProjectCatalogEvents.js'
+import {
+  notifyProjectRestored,
+  subscribeProjectRemovals,
+} from '../projects/ProjectCatalogEvents.js'
 import { Toast, ToastDivider } from '../../components/ui/Toast.js'
 import { Button } from '../../components/ui/Button.js'
 import { InputDialog } from '../../components/ui/ConfirmationDialog.js'
@@ -235,7 +238,8 @@ export function DesktopSidebar({
         manualOrderByScope: sidebarManualOrder,
         organization: sidebarOrganization,
         showProjectsInRecents: sidebarCustomization.showProjectsInRecents ?? false,
-        showScheduledSessions: pane === 'activity' ? sidebarActivityShowScheduled : sidebarShowScheduledSessions,
+        showScheduledSessions:
+          pane === 'activity' ? sidebarActivityShowScheduled : sidebarShowScheduledSessions,
         pendingPermissionSessionIds,
         recentWorkspaces: mergedProjects,
         removedWorkspaces,
@@ -526,8 +530,14 @@ export function DesktopSidebar({
   function changeChatSort(sort: 'manual' | 'updated' | 'priority'): void {
     if (sort === 'manual' && (sidebarSort !== 'manual' || sidebarProjectSort !== 'manual')) {
       setSidebarManualOrder((current) => {
-        const next = { ...current, recent: sortSessionsByRecency(viewModel.recentSessions).map((session) => session.id) }
-        for (const [key, bucket] of viewModel.projectSessionBuckets) next[`project:${key}`] = sortSessionsByRecency(bucket.displaySessions).map((session) => session.id)
+        const next = {
+          ...current,
+          recent: sortSessionsByRecency(viewModel.recentSessions).map((session) => session.id),
+        }
+        for (const [key, bucket] of viewModel.projectSessionBuckets)
+          next[`project:${key}`] = sortSessionsByRecency(bucket.displaySessions).map(
+            (session) => session.id,
+          )
         return next
       })
     }
@@ -535,35 +545,61 @@ export function DesktopSidebar({
     setSidebarProjectSort(sort)
   }
 
-  const [projectUndo, setProjectUndo] = useState<{ expiresAt: number; restore: () => Promise<void> } | null>(null)
+  const [projectUndo, setProjectUndo] = useState<{
+    expiresAt: number
+    restore: () => Promise<void>
+  } | null>(null)
   const [restoringProject, setRestoringProject] = useState(false)
-  useEffect(() => subscribeProjectRemovals(({ project, removalOperationId, undoExpiresAt }) => {
-    const key = sidebarPinnedProjectKey(project)
-    const assignments = captureSidebarAssignments(sidebarCustomizationRef.current, [key])
-    const orders = Object.entries(sidebarManualOrder).flatMap(([scope, keys]) => {
-      const index = keys.indexOf(scope === 'projects' ? sidebarProjectKey(project) : key)
-      return index < 0 ? [] : [{ scope, index, key: scope === 'projects' ? sidebarProjectKey(project) : key }]
-    })
-    const selected = Boolean(workspace && (project.projectId ? workspace.projectId === project.projectId : workspace.path === project.path))
-    setProjectUndo({ expiresAt: undoExpiresAt, restore: async () => {
-      const restored = await desktopClient.restoreProject(project.projectId!, removalOperationId)
-      const workspaceToRestore = { ...restored, pinnedAt: project.pinnedAt }
-      updateSidebarCustomization((current) => restoreFailedArchiveAssignments(current, [key], assignments))
-      setSidebarManualOrder((current) => {
-        const next = { ...current }
-        for (const entry of orders) {
-          const keys = [...(next[entry.scope] ?? [])]
-          if (!keys.includes(entry.key)) keys.splice(Math.min(entry.index, keys.length), 0, entry.key)
-          next[entry.scope] = keys
-        }
-        return next
-      })
-      notifyProjectRestored(workspaceToRestore, selected)
-    } })
-  }), [sidebarManualOrder, workspace, setSidebarManualOrder, updateSidebarCustomization])
+  useEffect(
+    () =>
+      subscribeProjectRemovals(({ project, removalOperationId, undoExpiresAt }) => {
+        const key = sidebarPinnedProjectKey(project)
+        const assignments = captureSidebarAssignments(sidebarCustomizationRef.current, [key])
+        const orders = Object.entries(sidebarManualOrder).flatMap(([scope, keys]) => {
+          const index = keys.indexOf(scope === 'projects' ? sidebarProjectKey(project) : key)
+          return index < 0
+            ? []
+            : [{ scope, index, key: scope === 'projects' ? sidebarProjectKey(project) : key }]
+        })
+        const selected = Boolean(
+          workspace &&
+          (project.projectId
+            ? workspace.projectId === project.projectId
+            : workspace.path === project.path),
+        )
+        setProjectUndo({
+          expiresAt: undoExpiresAt,
+          restore: async () => {
+            const restored = await desktopClient.restoreProject(
+              project.projectId!,
+              removalOperationId,
+            )
+            const workspaceToRestore = { ...restored, pinnedAt: project.pinnedAt }
+            updateSidebarCustomization((current) =>
+              restoreFailedArchiveAssignments(current, [key], assignments),
+            )
+            setSidebarManualOrder((current) => {
+              const next = { ...current }
+              for (const entry of orders) {
+                const keys = [...(next[entry.scope] ?? [])]
+                if (!keys.includes(entry.key))
+                  keys.splice(Math.min(entry.index, keys.length), 0, entry.key)
+                next[entry.scope] = keys
+              }
+              return next
+            })
+            notifyProjectRestored(workspaceToRestore, selected)
+          },
+        })
+      }),
+    [sidebarManualOrder, workspace, setSidebarManualOrder, updateSidebarCustomization],
+  )
   useEffect(() => {
     if (!projectUndo) return
-    const timer = setTimeout(() => setProjectUndo(null), Math.max(0, projectUndo.expiresAt - Date.now()))
+    const timer = setTimeout(
+      () => setProjectUndo(null),
+      Math.max(0, projectUndo.expiresAt - Date.now()),
+    )
     return () => clearTimeout(timer)
   }, [projectUndo])
 
@@ -677,7 +713,12 @@ export function DesktopSidebar({
       }
       removePinnedManualOrder(itemKeys)
     },
-    [removePinnedManualOrder, setRecentWorkspaces, setSidebarSessionPins, updateSidebarCustomization],
+    [
+      removePinnedManualOrder,
+      setRecentWorkspaces,
+      setSidebarSessionPins,
+      updateSidebarCustomization,
+    ],
   )
 
   const updateManualOrder = useCallback(
@@ -692,21 +733,48 @@ export function DesktopSidebar({
 
   return (
     <div className="sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2">
-      {projectUndo ? <div className="tw:fixed tw:bottom-4 tw:left-1/2 tw:z-50 tw:-translate-x-1/2">
-        <Toast role="status" aria-live="polite">项目已移除<ToastDivider /><Button color="ghostSecondary" size="compact" disabled={restoringProject} onClick={() => {
-          setRestoringProject(true)
-          void projectUndo.restore().then(() => setProjectUndo(null)).catch((error) => onReport(error instanceof Error ? error.message : String(error))).finally(() => setRestoringProject(false))
-        }}>撤销</Button></Toast>
-      </div> : null}
-      <InputDialog open={pendingSectionKeys !== null} title="新建分区" description="将聊天和项目放入分区，按你的习惯整理侧边栏。" actionLabel="创建分区"
-        input={{ value: sectionTitle, onChange: setSectionTitle, maxLength: 120 }} onCancel={() => setPendingSectionKeys(null)}
+      {projectUndo ? (
+        <div className="tw:fixed tw:bottom-4 tw:left-1/2 tw:z-50 tw:-translate-x-1/2">
+          <Toast role="status" aria-live="polite">
+            项目已移除
+            <ToastDivider />
+            <Button
+              color="ghostSecondary"
+              size="compact"
+              disabled={restoringProject}
+              onClick={() => {
+                setRestoringProject(true)
+                void projectUndo
+                  .restore()
+                  .then(() => setProjectUndo(null))
+                  .catch((error) =>
+                    onReport(error instanceof Error ? error.message : String(error)),
+                  )
+                  .finally(() => setRestoringProject(false))
+              }}
+            >
+              撤销
+            </Button>
+          </Toast>
+        </div>
+      ) : null}
+      <InputDialog
+        open={pendingSectionKeys !== null}
+        title="新建分区"
+        description="将聊天和项目放入分区，按你的习惯整理侧边栏。"
+        actionLabel="创建分区"
+        input={{ value: sectionTitle, onChange: setSectionTitle, maxLength: 120 }}
+        onCancel={() => setPendingSectionKeys(null)}
         onAction={() => {
           if (!sectionTitle.trim()) return
           const id = `section-${crypto.randomUUID()}`
-          updateSidebarCustomization((current) => addSidebarSection(current, id, sectionTitle.trim()))
+          updateSidebarCustomization((current) =>
+            addSidebarSection(current, id, sectionTitle.trim()),
+          )
           if (pendingSectionKeys?.length) moveItemsToDestination(pendingSectionKeys, id)
           setPendingSectionKeys(null)
-        }} />
+        }}
+      />
       <SidebarHeader
         showActions={active}
         hasUnread={hasUnread}
@@ -777,7 +845,12 @@ export function DesktopSidebar({
           const key = sidebarPinnedProjectKey(target)
           removePinnedManualOrder([key])
           updateSidebarCustomization((current) => removeItemsFromSections(current, [key]))
-          setSidebarManualOrder((current) => ({ ...current, projects: (current.projects ?? []).filter((value) => value !== sidebarProjectKey(target)) }))
+          setSidebarManualOrder((current) => ({
+            ...current,
+            projects: (current.projects ?? []).filter(
+              (value) => value !== sidebarProjectKey(target),
+            ),
+          }))
           onRemoveWorkspace(target)
         }}
         onSelectSession={onSelectSession}
@@ -828,11 +901,11 @@ export function DesktopSidebar({
         onMoveSessionToSection={(sessionId, sectionId) =>
           moveItemsToDestination([`session:${sessionId}`], sectionId)
         }
-        onMoveSessionToDefault={(sessionId) =>
-          releaseItemsToDefault([`session:${sessionId}`])
-        }
+        onMoveSessionToDefault={(sessionId) => releaseItemsToDefault([`session:${sessionId}`])}
         showProjectsInRecents={sidebarCustomization.showProjectsInRecents ?? false}
-        onShowProjectsInRecentsChange={(showProjectsInRecents) => updateSidebarCustomization((current) => ({ ...current, showProjectsInRecents }))}
+        onShowProjectsInRecentsChange={(showProjectsInRecents) =>
+          updateSidebarCustomization((current) => ({ ...current, showProjectsInRecents }))
+        }
         onOrganizationChange={setSidebarOrganization}
         onProjectSortChange={changeChatSort}
         onSessionSortChange={changeChatSort}
@@ -859,12 +932,22 @@ export function DesktopSidebar({
         <Suspense fallback={null}>
           <ConfirmationDialog
             actionDisabled={archivingAttention}
-            actionLabel={archivingAttention ? '归档中…' : archiveAttentionTargets.some(sessionNeedsStop) ? '停止并归档' : '归档聊天'}
-            description={archiveAttentionTargets.some(sessionNeedsStop)
-              ? `将停止并归档 ${archiveAttentionTargets.length} 个优先事项聊天。你可以稍后恢复聊天；最近的聊天不会被归档。`
-              : `将归档 ${archiveAttentionTargets.length} 个优先事项聊天；最近的聊天不会被归档。`}
+            actionLabel={
+              archivingAttention
+                ? '归档中…'
+                : archiveAttentionTargets.some(sessionNeedsStop)
+                  ? '停止并归档'
+                  : '归档聊天'
+            }
+            description={
+              archiveAttentionTargets.some(sessionNeedsStop)
+                ? `将停止并归档 ${archiveAttentionTargets.length} 个优先事项聊天。你可以稍后恢复聊天；最近的聊天不会被归档。`
+                : `将归档 ${archiveAttentionTargets.length} 个优先事项聊天；最近的聊天不会被归档。`
+            }
             open={archiveAttentionOpen}
-            title={archiveAttentionTargets.some(sessionNeedsStop) ? '停止并归档聊天？' : '归档聊天？'}
+            title={
+              archiveAttentionTargets.some(sessionNeedsStop) ? '停止并归档聊天？' : '归档聊天？'
+            }
             tone="danger"
             onAction={() => void confirmArchiveAttention()}
             onCancel={() => setArchiveAttentionOpen(false)}

@@ -892,8 +892,8 @@ describe('workbench dynamic tab state', () => {
         showWordDiff: false,
         hideWhitespace: true,
         richPreview: false,
-      loadFullFiles: true,
-      hideImports: false,
+        loadFullFiles: true,
+        hideImports: false,
       },
     })
 
@@ -1165,7 +1165,12 @@ describe('workbench dynamic tab state', () => {
     expect(state.right.tabIds).toEqual(['review'])
 
     // 终端标签允许在底部打开
-    const terminal = { id: 'terminal:1', kind: 'terminal' as const, terminalId: '1', title: '终端 1' }
+    const terminal = {
+      id: 'terminal:1',
+      kind: 'terminal' as const,
+      terminalId: '1',
+      title: '终端 1',
+    }
     state = open(state, terminal, 'bottom')
     expect(state.bottom.tabIds).toEqual(['terminal:1'])
   })
@@ -1278,7 +1283,6 @@ describe('workbench dynamic tab state', () => {
 
     state = applyWorkbenchPanelAction(state, { type: 'stepWorkspaceLayout' })
     expect(getWorkbenchWorkspaceLayout(state)).toBe('split')
-
   })
 
   test('hiding tabs keeps mounted tabs, their active selection, and the remembered mode', () => {
@@ -1383,20 +1387,26 @@ describe('workbench dynamic tab state', () => {
     expect(restoredFull.workbench.right.activeTabId).toBe('review')
 
     for (const tabsHidden of [false, true]) {
-      const persistedFull = validateConversationUiState({
-        ...base,
-        workbench: {
-          ...base.workbench,
-          restoreRightFullWidthOnNextOpen: true,
-          workspaceView: {
-            layoutMode: 'full',
-            tabsHidden,
-            selectedSurface: tabsHidden ? 'chat' : 'content',
-            sidePanelSelectedSurface: 'content',
+      const persistedFull = validateConversationUiState(
+        {
+          ...base,
+          workbench: {
+            ...base.workbench,
+            restoreRightFullWidthOnNextOpen: true,
+            workspaceView: {
+              layoutMode: 'full',
+              tabsHidden,
+              selectedSurface: tabsHidden ? 'chat' : 'content',
+              sidePanelSelectedSurface: 'content',
+            },
           },
         },
-      }, { workspacePath: 'F:\\project' })
-      expect(persistedFull.workbench.workspaceView).toMatchObject({ layoutMode: 'split', tabsHidden })
+        { workspacePath: 'F:\\project' },
+      )
+      expect(persistedFull.workbench.workspaceView).toMatchObject({
+        layoutMode: 'split',
+        tabsHidden,
+      })
       expect(persistedFull.workbench.rightFullWidth).toBe(false)
       expect(persistedFull.workbench.restoreRightFullWidthOnNextOpen).toBe(false)
       expect(persistedFull.workbench.right.tabIds).toEqual(['review', fileTab.id])
@@ -1644,7 +1654,6 @@ describe('workbench right panel sizing', () => {
     // 拉宽越界也保持分屏，尺寸由现有上限夹紧。
     expect(resolveRightDockDragLayout(1_450)).toBe('split')
     expect(resolveRightDockDragLayout(1_430)).toBe('split')
-
   })
 
   test('有效区间比例在宽度变化时保留用户在选择区间内的位置', () => {

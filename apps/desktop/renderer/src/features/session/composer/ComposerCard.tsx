@@ -703,7 +703,11 @@ export function ComposerCard({
     Boolean(routedSessionId),
     'interaction.scopedGrants.v1',
   )
-  const { commands: builtinSlashCommands, executeCommand, executingCommandId } = useComposerSlashCommands({
+  const {
+    commands: builtinSlashCommands,
+    executeCommand,
+    executingCommandId,
+  } = useComposerSlashCommands({
     capabilities,
     planModeActive,
     goalModeEnabled,
@@ -1083,8 +1087,12 @@ export function ComposerCard({
       const skill = item.command.skill
       editorRef.current?.replaceTextRangeWithToken(suggestionRequest.start, suggestionRequest.end, {
         id: `skill:${skill.name}:${skill.path}`,
-        kind: 'skill', name: skill.name, label: item.command.title, value: skill.path,
-        from: suggestionRequest.start, to: suggestionRequest.start,
+        kind: 'skill',
+        name: skill.name,
+        label: item.command.title,
+        value: skill.path,
+        from: suggestionRequest.start,
+        to: suggestionRequest.start,
       })
       closeDropdown()
       item.onSelect()
@@ -1095,7 +1103,11 @@ export function ComposerCard({
       const originalInput = input
       closeDropdown()
       void executeCommand(item.command).then((succeeded) => {
-        if (succeeded && requestInputRef.current === originalInput && contextScopeRef.current === contextScope)
+        if (
+          succeeded &&
+          requestInputRef.current === originalInput &&
+          contextScopeRef.current === contextScope
+        )
           editorRef.current?.replaceTextRange(request.start, request.end, '')
       })
       return
@@ -1135,7 +1147,11 @@ export function ComposerCard({
     if (['plan', 'goal'].includes(parsed.command.id)) {
       const originalInput = input
       void executeCommand(parsed.command).then((succeeded) => {
-        if (succeeded && requestInputRef.current === originalInput && contextScopeRef.current === contextScope)
+        if (
+          succeeded &&
+          requestInputRef.current === originalInput &&
+          contextScopeRef.current === contextScope
+        )
           onInputChange('')
       })
     } else {
@@ -1233,7 +1249,9 @@ export function ComposerCard({
           COMPOSER_HIDE_USAGE_CHIP_CLASS,
           COMPOSER_HIDE_PLAN_CHIP_LABEL_CLASS,
         )}
-        inert={submitting || executingCommandId === 'plan' || executingCommandId === 'goal' || undefined}
+        inert={
+          submitting || executingCommandId === 'plan' || executingCommandId === 'goal' || undefined
+        }
       >
         {inlineSubmitFailure ? (
           <div
@@ -1358,7 +1376,10 @@ export function ComposerCard({
                   }
                 }
 
-                if (event.key === 'Backspace' && isComposerInputEmpty(input, composerDocument?.tokens ?? [], attachments)) {
+                if (
+                  event.key === 'Backspace' &&
+                  isComposerInputEmpty(input, composerDocument?.tokens ?? [], attachments)
+                ) {
                   if (goalModeEnabled) {
                     event.preventDefault()
                     onGoalModeChange?.(false)
@@ -1367,7 +1388,8 @@ export function ComposerCard({
                   if (planModeActive) {
                     event.preventDefault()
                     void Promise.resolve(onPlanModeChange?.(false)).catch((error: unknown) =>
-                      onCommandError?.(error instanceof Error ? error.message : '计划模式未更新'))
+                      onCommandError?.(error instanceof Error ? error.message : '计划模式未更新'),
+                    )
                     return true
                   }
                 }
@@ -1584,7 +1606,8 @@ export function ComposerCard({
                   )}
                   onClick={() => {
                     void Promise.resolve(onPlanModeChange(false)).catch((error: unknown) =>
-                      onCommandError?.(error instanceof Error ? error.message : '计划模式未更新'))
+                      onCommandError?.(error instanceof Error ? error.message : '计划模式未更新'),
+                    )
                   }}
                   title="退出计划模式"
                   type="button"

@@ -102,10 +102,7 @@ export function createDefaultWorkbenchLayoutSnapshot(
     visibility,
     primarySidebarWidth: sidebarWidth,
     auxiliaryPanelWidth: auxiliaryWidth,
-    auxiliaryPanelWidthRangeRatio: rightDockWidthToRangeRatio(
-      auxiliaryWidth,
-      input.workspaceWidth,
-    ),
+    auxiliaryPanelWidthRangeRatio: rightDockWidthToRangeRatio(auxiliaryWidth, input.workspaceWidth),
     bottomPanelHeight: bottomHeight,
     auxiliaryMaximized: false,
     beforeAuxiliaryMaximized: null,

@@ -203,7 +203,9 @@ export function ComposerCommandMenu({
       {virtual ? (
         <VList
           className={VLIST_CLASS}
-          style={{ height: 'calc(var(--composer-suggestion-max-height, 320px) - var(--cpx-sys-space-4))' }}
+          style={{
+            height: 'calc(var(--composer-suggestion-max-height, 320px) - var(--cpx-sys-space-4))',
+          }}
           data={rows}
           ref={listRef}
           onScroll={updateMask}

@@ -97,7 +97,8 @@ export function ProviderConnectionDialog({
           <header className="settings-management-dialog-header model-center-key-dialog-header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:p-5">
             <div className="settings-management-dialog-heading model-center-key-dialog-heading tw:flex tw:min-w-0 tw:items-start tw:gap-3">
               {selected ? (
-                <Button isIconOnly
+                <Button
+                  isIconOnly
                   color="ghostSecondary"
                   onClick={() => setSelectedId(null)}
                   size="toolbar"

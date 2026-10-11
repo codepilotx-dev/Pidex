@@ -168,7 +168,10 @@ describe('startup page', () => {
   })
 
   test('pidex-mark-green.svg contains the transparent Pidex brand mark', () => {
-    const svg = readFileSync(resolve(import.meta.dirname, '../../build/pidex-mark-green.svg'), 'utf-8')
+    const svg = readFileSync(
+      resolve(import.meta.dirname, '../../build/pidex-mark-green.svg'),
+      'utf-8',
+    )
 
     expect(svg).toContain('Pidex 启卷')
     expect(svg).toContain('viewBox="0 0 1024 1024"')

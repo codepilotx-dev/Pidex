@@ -139,8 +139,13 @@ export function deriveThreadSummaryViewModel(
   const isGitRepository = input.hasGitRepository
   const environment = normalizedWorkspacePath
     ? {
-        workspaceName: (input.repositoryRoot?.trim() || normalizedWorkspacePath)
-          .replace(/[\\/]+$/, '').split(/[\\/]/).pop() || input.workspaceName?.trim() || null,
+        workspaceName:
+          (input.repositoryRoot?.trim() || normalizedWorkspacePath)
+            .replace(/[\\/]+$/, '')
+            .split(/[\\/]/)
+            .pop() ||
+          input.workspaceName?.trim() ||
+          null,
         workspacePath: normalizedWorkspacePath,
         isGitRepository,
         branchName: normalizedBranchName,
@@ -185,12 +190,13 @@ export function deriveThreadSummaryViewModel(
 
   return {
     hasContent: Boolean(
-      !isGitRepository || environment ||
-        goal ||
-        (agents.length > 0) ||
-        (browserTabs.length > 0) ||
-        (sources.length > 0) ||
-        (artifacts.length > 0),
+      !isGitRepository ||
+      environment ||
+      goal ||
+      agents.length > 0 ||
+      browserTabs.length > 0 ||
+      sources.length > 0 ||
+      artifacts.length > 0,
     ),
     gitDetection: input.gitDetection ?? (isGitRepository ? 'git' : 'non-git'),
     environment,
@@ -371,7 +377,9 @@ const TEXT_ARTIFACT_MEDIA_TYPES = new Set([
   'application/xhtml+xml',
 ])
 
-export function threadSummaryArtifactPreviewKind(mimeType: string): ThreadSummaryArtifactPreviewKind {
+export function threadSummaryArtifactPreviewKind(
+  mimeType: string,
+): ThreadSummaryArtifactPreviewKind {
   const mime = mimeType.toLowerCase()
   if (mime.startsWith('image/')) return 'image'
   if (mime.startsWith('text/')) return 'text'
@@ -383,9 +391,7 @@ export function threadSummaryArtifactPreviewKind(mimeType: string): ThreadSummar
 export const THREAD_SUMMARY_ARTIFACT_PREVIEW_LIMIT = 6
 
 /** 产物分区：工具结果中明确声明的 Artifact，按 artifact ID 去重、最近优先。 */
-export function collectThreadSummaryArtifacts(
-  tools: readonly ToolItem[],
-): ThreadSummaryArtifact[] {
+export function collectThreadSummaryArtifacts(tools: readonly ToolItem[]): ThreadSummaryArtifact[] {
   const byArtifactId = new Map<string, ThreadSummaryArtifact>()
   const orderedTools = [...tools].sort((left, right) => right.createdAt - left.createdAt)
   for (const tool of orderedTools) {

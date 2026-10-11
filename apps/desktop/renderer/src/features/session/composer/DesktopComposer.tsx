@@ -415,87 +415,87 @@ export function DesktopComposer({
       modelConfigured={modelConfigured}
       modelCatalogLoading={modelCatalogLoading}
       submitDisabledReason={unsupportedAttachmentReason ?? modelSelectionError ?? undefined}
-        showThinkingOptions={showThinkingOptions}
-        deepSeekThinkingControls={deepSeekThinkingControls}
-        showContextUsage={showContextUsage}
-        contextUsage={contextUsage}
-        modelPresets={modelPresets}
-        providerOptions={providerOptions}
-        allProviders={allProviders}
-        permissionOptions={permissionOptions}
-        thinkingOptions={THINKING_MODE_OPTIONS}
-        branchName={branchName}
-        branches={workspace?.branches ?? []}
-        recentWorkspaces={recentWorkspaces}
-        contextTasks={contextTasks}
-        browserContext={browserContext}
-        workspace={workspace}
-        attachments={attachments}
-        skillCommands={skillCommands}
-        skillCatalogLoading={skillCatalogLoading}
-        skillCatalogError={skillCatalogError}
-        onReloadSkillCatalog={reloadSkillCatalog}
-        document={composerDocument}
-        selectedSkillToken={activeSkillToken ?? undefined}
-        hasConversationMessages={hasConversationMessages}
-        placeholder={
-          placeholderOverride ??
-          (modelCatalogLoading
-            ? '加载模型列表中……'
-            : hasConversationMessages
-              ? '要求后续变更'
-              : '随心输入')
-        }
-        onChooseWorkspace={() => void onChooseWorkspace()}
-        onInputChange={onInputChange}
-        onDocumentChange={handleComposerDocumentChangeWithInput}
-        onSkillTokenActivate={onSkillTokenActivate}
-        onCompositionStart={handleCompositionStart}
-        onCompositionEnd={handleCompositionEnd}
-        onInterrupt={() =>
-          void onInterrupt().catch((error) =>
-            handleCommandError(error instanceof Error ? error.message : String(error)),
-          )
-        }
-        onProviderModelChange={onProviderModelChange}
-        onProviderOpen={onProviderOpen}
-        onProviderSearch={onProviderSearch}
-        onAddFiles={(files) => void handleAddFiles(files)}
-        onAddFilePaths={handleAddFilePaths}
-        onRemoveAttachment={handleRemoveAttachment}
-        onOpenAttachment={onOpenAttachment}
-        onOpenWorkspace={(workspaceItem) => void onOpenWorkspace(workspaceItem)}
-        onCloneGithub={onCloneGithub}
-        onClearWorkspace={onClearWorkspace}
-        onOpenMcpSettings={onOpenMcpSettings}
-        onOpenModelSettings={onOpenModelSettings}
-        onOpenSideChat={onOpenSideChat}
-        onForkConversation={onForkConversation}
-        canForkConversation={canForkConversation}
-        onArchiveConversation={onArchiveConversation}
-        onBranchSelect={(branch) => void onBranchSelect(branch)}
-        onCreateBranch={onCreateBranch}
-        onStartReview={onStartReview}
-        onPermissionChange={onPermissionChange}
-        onPlanModeChange={handlePlanModeChange}
-        onLocalRouterModeChange={onLocalRouterModeChange}
-        onSubmit={handleSubmit}
-        onCompact={handleCompact}
-        onCommandError={handleCommandError}
-        onThinkingChange={onThinkingChange}
-        onSkillSelect={handleSkillSelectWithWorkingPluginClear}
-        routedSessionId={routedSessionId}
-        contextDropdownSide="top"
-        queuedFollowUps={queuedFollowUps}
-        queuePauseReason={queuePauseReason}
-        onFollowUpEdit={onFollowUpEdit}
-        onFollowUpRemove={onFollowUpRemove}
-        onFollowUpResume={onFollowUpResume}
-        threadGoal={threadGoal}
-        onGoalPause={onGoalPause}
-        onGoalResume={onGoalResume}
-        onGoalComplete={onGoalComplete}
-        onGoalClear={onGoalClear}
-      />
-    )
-  }
+      showThinkingOptions={showThinkingOptions}
+      deepSeekThinkingControls={deepSeekThinkingControls}
+      showContextUsage={showContextUsage}
+      contextUsage={contextUsage}
+      modelPresets={modelPresets}
+      providerOptions={providerOptions}
+      allProviders={allProviders}
+      permissionOptions={permissionOptions}
+      thinkingOptions={THINKING_MODE_OPTIONS}
+      branchName={branchName}
+      branches={workspace?.branches ?? []}
+      recentWorkspaces={recentWorkspaces}
+      contextTasks={contextTasks}
+      browserContext={browserContext}
+      workspace={workspace}
+      attachments={attachments}
+      skillCommands={skillCommands}
+      skillCatalogLoading={skillCatalogLoading}
+      skillCatalogError={skillCatalogError}
+      onReloadSkillCatalog={reloadSkillCatalog}
+      document={composerDocument}
+      selectedSkillToken={activeSkillToken ?? undefined}
+      hasConversationMessages={hasConversationMessages}
+      placeholder={
+        placeholderOverride ??
+        (modelCatalogLoading
+          ? '加载模型列表中……'
+          : hasConversationMessages
+            ? '要求后续变更'
+            : '随心输入')
+      }
+      onChooseWorkspace={() => void onChooseWorkspace()}
+      onInputChange={onInputChange}
+      onDocumentChange={handleComposerDocumentChangeWithInput}
+      onSkillTokenActivate={onSkillTokenActivate}
+      onCompositionStart={handleCompositionStart}
+      onCompositionEnd={handleCompositionEnd}
+      onInterrupt={() =>
+        void onInterrupt().catch((error) =>
+          handleCommandError(error instanceof Error ? error.message : String(error)),
+        )
+      }
+      onProviderModelChange={onProviderModelChange}
+      onProviderOpen={onProviderOpen}
+      onProviderSearch={onProviderSearch}
+      onAddFiles={(files) => void handleAddFiles(files)}
+      onAddFilePaths={handleAddFilePaths}
+      onRemoveAttachment={handleRemoveAttachment}
+      onOpenAttachment={onOpenAttachment}
+      onOpenWorkspace={(workspaceItem) => void onOpenWorkspace(workspaceItem)}
+      onCloneGithub={onCloneGithub}
+      onClearWorkspace={onClearWorkspace}
+      onOpenMcpSettings={onOpenMcpSettings}
+      onOpenModelSettings={onOpenModelSettings}
+      onOpenSideChat={onOpenSideChat}
+      onForkConversation={onForkConversation}
+      canForkConversation={canForkConversation}
+      onArchiveConversation={onArchiveConversation}
+      onBranchSelect={(branch) => void onBranchSelect(branch)}
+      onCreateBranch={onCreateBranch}
+      onStartReview={onStartReview}
+      onPermissionChange={onPermissionChange}
+      onPlanModeChange={handlePlanModeChange}
+      onLocalRouterModeChange={onLocalRouterModeChange}
+      onSubmit={handleSubmit}
+      onCompact={handleCompact}
+      onCommandError={handleCommandError}
+      onThinkingChange={onThinkingChange}
+      onSkillSelect={handleSkillSelectWithWorkingPluginClear}
+      routedSessionId={routedSessionId}
+      contextDropdownSide="top"
+      queuedFollowUps={queuedFollowUps}
+      queuePauseReason={queuePauseReason}
+      onFollowUpEdit={onFollowUpEdit}
+      onFollowUpRemove={onFollowUpRemove}
+      onFollowUpResume={onFollowUpResume}
+      threadGoal={threadGoal}
+      onGoalPause={onGoalPause}
+      onGoalResume={onGoalResume}
+      onGoalComplete={onGoalComplete}
+      onGoalClear={onGoalClear}
+    />
+  )
+}

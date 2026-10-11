@@ -52,8 +52,28 @@ const claimed = {
 describe('AutomationRunCoordinator', () => {
   test('宿主检查无变化时完成 run，不绑定或查询模型 turn', async () => {
     let completed = false
-    const repository = { read: () => automation, markPreparing: () => ({ ...claimed, status: 'preparing' }), completeRun: (_id: string, status: string) => { expect(status).toBe('completed'); completed = true; return { run: { ...claimed, status }, catchUpRun: null } }, markRunRead: () => ({ ...claimed, status: 'completed', readAt: 1 }), bindExecution: () => { throw new Error('不应绑定 turn') } } as unknown as AutomationRepository
-    await new AutomationRunCoordinator(repository, { start: async () => null }, { getTurnStatus: () => { throw new Error('不应读取 turn') } }).startRun(claimed)
+    const repository = {
+      read: () => automation,
+      markPreparing: () => ({ ...claimed, status: 'preparing' }),
+      completeRun: (_id: string, status: string) => {
+        expect(status).toBe('completed')
+        completed = true
+        return { run: { ...claimed, status }, catchUpRun: null }
+      },
+      markRunRead: () => ({ ...claimed, status: 'completed', readAt: 1 }),
+      bindExecution: () => {
+        throw new Error('不应绑定 turn')
+      },
+    } as unknown as AutomationRepository
+    await new AutomationRunCoordinator(
+      repository,
+      { start: async () => null },
+      {
+        getTurnStatus: () => {
+          throw new Error('不应读取 turn')
+        },
+      },
+    ).startRun(claimed)
     expect(completed).toBe(true)
   })
   test('Turn 在绑定前已终态时由 durable 状态补偿完成 run', async () => {

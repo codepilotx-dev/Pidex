@@ -81,7 +81,11 @@ export function PluginCatalogCard({
               </span>
             ) : null}
             {error ? (
-              <span className="plugin-catalog-card__error tw:min-w-0 tw:text-app-danger tw:type-body-sm tw:wrap-anywhere" id={errorId} role="status">
+              <span
+                className="plugin-catalog-card__error tw:min-w-0 tw:text-app-danger tw:type-body-sm tw:wrap-anywhere"
+                id={errorId}
+                role="status"
+              >
                 {error}
               </span>
             ) : null}

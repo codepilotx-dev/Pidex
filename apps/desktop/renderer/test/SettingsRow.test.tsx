@@ -78,9 +78,7 @@ describe('SettingsRow control aria binding', () => {
   })
 
   test('plain node controls keep the existing markup without injected ids', () => {
-    const html = renderToStaticMarkup(
-      <SettingsRow title="语言" control={<span>控件</span>} />,
-    )
+    const html = renderToStaticMarkup(<SettingsRow title="语言" control={<span>控件</span>} />)
 
     expect(html).not.toContain('-label"')
     expect(html).not.toContain('-description"')

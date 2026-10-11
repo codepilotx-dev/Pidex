@@ -123,7 +123,10 @@ export class ManagedProjectlessWorkspaceService {
 
     try {
       const documentsRoot = await this.canonicalDocumentsRoot()
-      const managedRoot = await this.ensureOwnedDirectory(documentsRoot, MANAGED_ROOT_DIRECTORY_NAME)
+      const managedRoot = await this.ensureOwnedDirectory(
+        documentsRoot,
+        MANAGED_ROOT_DIRECTORY_NAME,
+      )
       const dateRoot = await this.ensureOwnedDirectory(managedRoot, dateSegment)
       sessionRoot = await this.reserveSessionRoot(dateRoot, slug)
       const marker: ManagedProjectlessWorkspaceMarker = {
@@ -385,7 +388,10 @@ export class ManagedProjectlessWorkspaceService {
     const documentsRoot = await this.canonicalDocumentsRoot()
     const managedRoot = knownManagedRoot
       ? await this.validateDirectory(knownManagedRoot, documentsRoot)
-      : await this.validateDirectory(resolve(documentsRoot, MANAGED_ROOT_DIRECTORY_NAME), documentsRoot)
+      : await this.validateDirectory(
+          resolve(documentsRoot, MANAGED_ROOT_DIRECTORY_NAME),
+          documentsRoot,
+        )
     const canonical = await this.validateSessionRoot(sessionRoot, managedRoot)
     await rm(canonical, { recursive: true, force: false })
   }

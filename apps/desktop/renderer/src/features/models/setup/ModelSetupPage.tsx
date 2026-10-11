@@ -350,7 +350,9 @@ export function ModelSetupPage(): React.ReactNode {
       data-startup-surface-ready="true"
     >
       <header className="model-setup-titlebar tw:flex tw:h-9 tw:[-webkit-app-region:drag] tw:min-w-0 tw:items-center tw:justify-between tw:border-b-[0.5px] tw:border-b-app-border-subtle">
-        <span className="model-setup-brand tw:ps-4 tw:text-app-text-soft tw:type-control tw:tracking-[0.01em]">Pidex</span>
+        <span className="model-setup-brand tw:ps-4 tw:text-app-text-soft tw:type-control tw:tracking-[0.01em]">
+          Pidex
+        </span>
         <WindowControls
           isMaximized={isMaximized}
           onClose={() => void desktopClient.closeWindow()}
@@ -463,7 +465,9 @@ export function ModelSetupPage(): React.ReactNode {
                         </span>
                       )}
                       <span className="model-setup-provider-copy tw:grid tw:min-w-0 tw:flex-1 tw:gap-1">
-                        <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">{provider.displayName}</strong>
+                        <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">
+                          {provider.displayName}
+                        </strong>
                         <small className="tw:overflow-hidden tw:text-app-text-meta tw:[font-size:var(--cpx-sys-font-size-xs)] tw:text-ellipsis tw:whitespace-nowrap">
                           {provider.providerID} · {provider.defaultModels.length} 个模型
                         </small>
@@ -495,7 +499,9 @@ export function ModelSetupPage(): React.ReactNode {
                 <div className="model-setup-connection tw:grid tw:gap-4 tw:pt-1 tw:pb-4 tw:border-b-[0.5px] tw:border-b-app-border-subtle">
                   <div className="model-setup-connection-heading tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-3 tw:max-[760px]:flex-col tw:max-[760px]:items-stretch">
                     <div>
-                      <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">{selectedProvider.displayName}</strong>
+                      <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">
+                        {selectedProvider.displayName}
+                      </strong>
                       <p className="tw:m-0 tw:text-app-text-soft tw:[line-height:var(--cpx-sys-line-height-normal)]">
                         {providerConnected
                           ? '此供应商已经可以用于模型请求。'
@@ -622,8 +628,12 @@ export function ModelSetupPage(): React.ReactNode {
                       onMouseEnter={() => modelNav.setActive(index)}
                     >
                       <span className="tw:grid tw:min-w-0 tw:flex-1 tw:gap-1">
-                        <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">{metadata?.name ?? id}</strong>
-                        <small className="tw:overflow-hidden tw:text-app-text-meta tw:[font-size:var(--cpx-sys-font-size-xs)] tw:text-ellipsis tw:whitespace-nowrap">{id}</small>
+                        <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">
+                          {metadata?.name ?? id}
+                        </strong>
+                        <small className="tw:overflow-hidden tw:text-app-text-meta tw:[font-size:var(--cpx-sys-font-size-xs)] tw:text-ellipsis tw:whitespace-nowrap">
+                          {id}
+                        </small>
                       </span>
                       <span className="model-setup-model-capabilities tw:inline-flex tw:shrink-0 tw:gap-2 tw:text-app-text-meta tw:[font-size:var(--cpx-sys-font-size-xs)]">
                         {metadata?.reasoning ? '推理' : null}
@@ -637,13 +647,13 @@ export function ModelSetupPage(): React.ReactNode {
                 })}
                 {status === 'loading' ? (
                   <p className="model-setup-empty tw:m-0 tw:px-3 tw:py-5 tw:text-center tw:text-app-text-meta">
-                      正在加载模型目录…
-                    </p>
+                    正在加载模型目录…
+                  </p>
                 ) : null}
                 {status !== 'loading' && filteredModels.length === 0 ? (
                   <p className="model-setup-empty tw:m-0 tw:px-3 tw:py-5 tw:text-center tw:text-app-text-meta">
-                      没有匹配的模型。
-                    </p>
+                    没有匹配的模型。
+                  </p>
                 ) : null}
               </div>
               {selectedVariants.length > 0 ? (
@@ -695,7 +705,9 @@ export function ModelSetupPage(): React.ReactNode {
             className="model-setup-feedback tw:min-h-5 tw:ps-14 tw:[font-size:var(--cpx-sys-font-size-sm)] tw:max-[760px]:ps-0"
             aria-live="polite"
           >
-            {notice ? <p className="model-setup-notice tw:m-0 tw:text-app-text-soft">{notice}</p> : null}
+            {notice ? (
+              <p className="model-setup-notice tw:m-0 tw:text-app-text-soft">{notice}</p>
+            ) : null}
             {error ? <p className="model-setup-error tw:m-0 tw:text-app-danger">{error}</p> : null}
           </div>
         </section>

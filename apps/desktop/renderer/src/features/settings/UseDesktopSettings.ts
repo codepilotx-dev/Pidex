@@ -302,7 +302,8 @@ export function createDesktopSettingsDraft(
       const selected = new Set(keys)
       const snapshot = mergeDesktopSettingsDraft(initialValues, values, selected)
       const saved = await saveValues(snapshot)
-      for (const key of keys) if (JSON.stringify(values[key]) === JSON.stringify(snapshot[key])) dirtyKeys.delete(key)
+      for (const key of keys)
+        if (JSON.stringify(values[key]) === JSON.stringify(snapshot[key])) dirtyKeys.delete(key)
       initialValues = saved ? cloneDesktopSettings(saved) : snapshot
       values = mergeDesktopSettingsDraft(initialValues, values, dirtyKeys)
       dirty = dirtyKeys.size > 0
@@ -1021,24 +1022,29 @@ function useDesktopSettingsState(
   saveDraftRef.current = saveDraft
 
   const fieldSaveQueue = useRef<Promise<unknown>>(Promise.resolve())
-  const saveFields = useCallback((keys: readonly (keyof StoredDesktopSettings)[]) => {
-    if (access !== 'read-write') return Promise.reject(new Error('此窗口不允许保存桌面设置'))
-    const values = cloneDesktopSettings(draftValuesRef.current)
-    const pending = fieldSaveQueue.current.catch(() => undefined).then(async () => {
-      const current = await desktopClient.getDesktopSettings()
-      const saved = await desktopClient.saveDesktopSettings(
-        mergeDesktopSettingsDraft(current, values, new Set(keys)),
-      )
-      for (const key of keys) {
-        if (desktopSettingsValueEqual(draftValuesRef.current[key], values[key]))
-          draftDirtyKeysRef.current.delete(key)
-      }
-      syncExternalSettingsPatch(saved)
-      return saved
-    })
-    fieldSaveQueue.current = pending
-    return pending
-  }, [syncExternalSettingsPatch, access])
+  const saveFields = useCallback(
+    (keys: readonly (keyof StoredDesktopSettings)[]) => {
+      if (access !== 'read-write') return Promise.reject(new Error('此窗口不允许保存桌面设置'))
+      const values = cloneDesktopSettings(draftValuesRef.current)
+      const pending = fieldSaveQueue.current
+        .catch(() => undefined)
+        .then(async () => {
+          const current = await desktopClient.getDesktopSettings()
+          const saved = await desktopClient.saveDesktopSettings(
+            mergeDesktopSettingsDraft(current, values, new Set(keys)),
+          )
+          for (const key of keys) {
+            if (desktopSettingsValueEqual(draftValuesRef.current[key], values[key]))
+              draftDirtyKeysRef.current.delete(key)
+          }
+          syncExternalSettingsPatch(saved)
+          return saved
+        })
+      fieldSaveQueue.current = pending
+      return pending
+    },
+    [syncExternalSettingsPatch, access],
+  )
 
   const autoSave = useCallback(() => {
     setTimeout(() => {
@@ -1057,7 +1063,16 @@ function useDesktopSettingsState(
       reset: resetDraft,
       autoSave,
     }),
-    [draftDirty, draftSaving, draftValues, resetDraft, saveDraft, saveFields, setDraftValue, autoSave],
+    [
+      draftDirty,
+      draftSaving,
+      draftValues,
+      resetDraft,
+      saveDraft,
+      saveFields,
+      setDraftValue,
+      autoSave,
+    ],
   )
 
   const runtime = useMemo<UseDesktopRuntimeSettingsResult>(

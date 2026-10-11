@@ -105,7 +105,8 @@ export function WhatsNewDialog({
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
-              <Button isIconOnly
+              <Button
+                isIconOnly
                 color="ghostSecondary"
                 ref={closeButtonRef}
                 size="toolbar"
@@ -171,7 +172,10 @@ function ReleaseNotesContent({
   if (!selectedRelease) return null
 
   return (
-    <section aria-label="版本更新记录" className="whats-new-release-browser tw:grid tw:h-full tw:min-h-0 tw:grid-cols-[minmax(220px,260px)_minmax(0,1fr)]">
+    <section
+      aria-label="版本更新记录"
+      className="whats-new-release-browser tw:grid tw:h-full tw:min-h-0 tw:grid-cols-[minmax(220px,260px)_minmax(0,1fr)]"
+    >
       <ScrollArea
         aria-label="版本列表"
         className="whats-new-version-scroll tw:min-h-0 tw:overscroll-contain tw:border-r tw:border-app-border-subtle tw:bg-app-panel"
@@ -180,8 +184,8 @@ function ReleaseNotesContent({
         {result.source === 'bundled-changelog' ? (
           <div className="whats-new-notice whats-new-fallback-notice tw:m-0 tw:mb-3 tw:grid tw:gap-3 tw:rounded-lg tw:bg-app-hover tw:p-3 tw:text-[length:var(--cpx-sys-font-size-xs)] tw:text-app-text-meta">
             <p className="tw:m-0 tw:[line-height:var(--cpx-sys-line-height-tight)]">
-                当前仅显示随应用提供的版本记录，在线历史版本暂时不可用。
-              </p>
+              当前仅显示随应用提供的版本记录，在线历史版本暂时不可用。
+            </p>
             <Button
               className="whats-new-fallback-action tw:justify-self-start"
               color="primary"
@@ -194,9 +198,7 @@ function ReleaseNotesContent({
           </div>
         ) : null}
         {result.truncated ? (
-          <p
-            className="whats-new-notice tw:m-0 tw:mb-3 tw:rounded-lg tw:bg-app-hover tw:p-3 tw:text-[length:var(--cpx-sys-font-size-xs)] tw:text-app-text-meta"
-          >
+          <p className="whats-new-notice tw:m-0 tw:mb-3 tw:rounded-lg tw:bg-app-hover tw:p-3 tw:text-[length:var(--cpx-sys-font-size-xs)] tw:text-app-text-meta">
             更新记录较多，当前仅显示最近的一部分历史版本。
           </p>
         ) : null}
@@ -301,9 +303,7 @@ function ReleaseDetails({
           </div>
         ) : null}
       </div>
-      <p
-        className="whats-new-source tw:mt-6 tw:mb-0 tw:text-left tw:text-[length:var(--cpx-sys-font-size-sm)] tw:text-app-text-meta"
-      >
+      <p className="whats-new-source tw:mt-6 tw:mb-0 tw:text-left tw:text-[length:var(--cpx-sys-font-size-sm)] tw:text-app-text-meta">
         {source === 'bundled-changelog'
           ? '随 Pidex 安装包提供'
           : `数据来自 GitHub Releases · 最近获取于 ${formatDateTime(fetchedAt)}`}

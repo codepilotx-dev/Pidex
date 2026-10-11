@@ -21,12 +21,10 @@ describe('Codex Shiki theme catalog', () => {
     ).toBe(45)
     expect(HIGHLIGHT_THEMES.map((theme) => theme.slug)).toContain('codex-light')
     expect(HIGHLIGHT_THEMES.map((theme) => theme.slug)).toContain('codex-dark')
-    expect(HIGHLIGHT_THEME_FAMILIES.find((family) => family.id === 'github')?.themes).toEqual(
-      {
-        light: 'github-light-default',
-        dark: 'github-dark-default',
-      },
-    )
+    expect(HIGHLIGHT_THEME_FAMILIES.find((family) => family.id === 'github')?.themes).toEqual({
+      light: 'github-light-default',
+      dark: 'github-dark-default',
+    })
     expect(HIGHLIGHT_THEME_FAMILIES.find((family) => family.id === 'proof')?.themes).toEqual({
       light: 'proof-light',
       dark: null,

@@ -19,9 +19,7 @@ describe('preload 模块边界', () => {
     const statements = preloadSource
       .split(/\n(?=import\s)/)
       .filter((statement) => statement.startsWith('import '))
-    const workspaceImports = statements.filter((statement) =>
-      /from\s+['"]@pidex\//.test(statement),
-    )
+    const workspaceImports = statements.filter((statement) => /from\s+['"]@pidex\//.test(statement))
     expect(workspaceImports.length).toBeGreaterThan(0)
 
     const offenders = workspaceImports

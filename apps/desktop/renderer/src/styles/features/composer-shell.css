@@ -25,15 +25,15 @@
     --composer-radius: var(--cpx-sys-radius-prominent);
   }
 
-  .composer-stack[data-composer-layout="single-line"][data-composer-radius-variant="default"] {
+  .composer-stack[data-composer-layout='single-line'][data-composer-radius-variant='default'] {
     --composer-radius: var(--cpx-sys-radius-pill);
   }
 
-  .composer-stack[data-composer-radius-variant="single-line"] {
+  .composer-stack[data-composer-radius-variant='single-line'] {
     --composer-radius: var(--cpx-sys-radius-prominent);
   }
 
-  .composer-stack[data-composer-radius-variant="compact"] {
+  .composer-stack[data-composer-radius-variant='compact'] {
     --composer-radius: var(--cpx-sys-radius-container);
   }
 
@@ -48,17 +48,19 @@
 
   /* The home (Working / Coding new-session) bars pin their own corner silhouette:
      they stand in for the missing surface seam instead of nesting. */
-  .composer-stack[data-composer-utility-bar-variant="home"][data-surface="working"] .composer-utility-bar {
+  .composer-stack[data-composer-utility-bar-variant='home'][data-surface='working']
+    .composer-utility-bar {
     border-radius: 0 0 var(--cpx-sys-radius-control) var(--cpx-sys-radius-control);
   }
 
-  .composer-stack[data-composer-utility-bar-variant="home"][data-surface="coding"] .composer-utility-bar {
+  .composer-stack[data-composer-utility-bar-variant='home'][data-surface='coding']
+    .composer-utility-bar {
     border-radius: var(--cpx-sys-radius-control) var(--cpx-sys-radius-control) 0 0;
   }
 
   /* The editor content is mounted by ProseMirror, so the home surfaces clamp its
      resting height through a descendant rule. */
-  .composer-stack[data-composer-utility-bar-variant="home"][data-surface] .composer-editor-content {
+  .composer-stack[data-composer-utility-bar-variant='home'][data-surface] .composer-editor-content {
     min-height: 44px;
     font: var(--cpx-sys-type-reading);
   }
@@ -66,10 +68,11 @@
   /* `corner-shape` has no utility in the design set and needs the modern-syntax
      guard, so the superellipse opt-in stays a stylesheet rule. */
   @supports (corner-shape: superellipse(1.5)) {
-    .composer-stack[data-composer-layout="multiline"][data-composer-radius-variant="default"],
-    .composer-stack[data-composer-layout="multiline"][data-composer-radius-variant="default"] .composer-input-surface,
-    .composer-stack[data-composer-radius-variant="compact"],
-    .composer-stack[data-composer-radius-variant="compact"] .composer-input-surface {
+    .composer-stack[data-composer-layout='multiline'][data-composer-radius-variant='default'],
+    .composer-stack[data-composer-layout='multiline'][data-composer-radius-variant='default']
+      .composer-input-surface,
+    .composer-stack[data-composer-radius-variant='compact'],
+    .composer-stack[data-composer-radius-variant='compact'] .composer-input-surface {
       corner-shape: var(--cpx-sys-corner-shape);
     }
   }

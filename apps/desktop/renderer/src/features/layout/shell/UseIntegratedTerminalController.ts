@@ -19,9 +19,7 @@ export function resolveIntegratedTerminalToggleAction(
   if (!threadId || !available) return 'unavailable'
   const hasTerminalInRight = state.right.tabIds.some(
     (id) =>
-      id === 'terminal' ||
-      id.startsWith('terminal:') ||
-      state.tabsById[id]?.kind === 'terminal',
+      id === 'terminal' || id.startsWith('terminal:') || state.tabsById[id]?.kind === 'terminal',
   )
   if (hasTerminalInRight) return 'move-to-bottom'
   const isTerminalActiveInBottom =
@@ -77,9 +75,7 @@ export function useIntegratedTerminalController({
     if (!effectiveThreadId || !terminalAvailable) return
     const rightTerminalId = state.right.tabIds.find(
       (id) =>
-        id === 'terminal' ||
-        id.startsWith('terminal:') ||
-        state.tabsById[id]?.kind === 'terminal',
+        id === 'terminal' || id.startsWith('terminal:') || state.tabsById[id]?.kind === 'terminal',
     )
     if (rightTerminalId) {
       movePanelTab('right', 'bottom', rightTerminalId)
@@ -109,7 +105,11 @@ export function useIntegratedTerminalController({
   ])
 
   const toggleIntegratedTerminal = useCallback((): void => {
-    const action = resolveIntegratedTerminalToggleAction(effectiveThreadId, state, terminalAvailable)
+    const action = resolveIntegratedTerminalToggleAction(
+      effectiveThreadId,
+      state,
+      terminalAvailable,
+    )
     if (action === 'unavailable') return
     if (action === 'hide-bottom') {
       togglePanel('bottom')

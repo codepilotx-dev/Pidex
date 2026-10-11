@@ -47,7 +47,10 @@
   .page-zoom-capsule {
     position: fixed;
     top: calc(var(--application-menubar-height) + var(--cpx-sys-space-2));
-    right: max(var(--cpx-sys-space-3), 100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + var(--cpx-sys-space-3));
+    right: max(
+      var(--cpx-sys-space-3),
+      100vw - env(titlebar-area-x, 0px) - env(titlebar-area-width, 100vw) + var(--cpx-sys-space-3)
+    );
     z-index: var(--cpx-sys-z-toast);
   }
   .page-zoom-capsule strong {
@@ -72,7 +75,6 @@
     width: 0;
     height: 0;
   }
-
 
   /* --- Permission code scroll --- */
   .permission-code-scroll-content code {
@@ -136,7 +138,8 @@
     justify-content: space-between;
   }
   .git-workflow-files-scroll-content button {
-    padding: var(--cpx-comp-button-padding-block-compact) var(--cpx-comp-button-padding-inline-compact);
+    padding: var(--cpx-comp-button-padding-block-compact)
+      var(--cpx-comp-button-padding-inline-compact);
     border: 1px solid var(--cpx-sys-color-border-subtle);
     border-radius: var(--cpx-comp-button-radius-md);
     background: var(--cpx-sys-color-surface-control);

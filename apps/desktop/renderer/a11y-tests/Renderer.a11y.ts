@@ -23,7 +23,7 @@ const ROUTES = [
   ['settings-appearance', '/?visualCase=empty&visualThemeSeedDelayMs=300#/settings/appearance'],
   ['settings-general', '/?visualCase=empty#/settings/general'],
   ['settings-plugins', '/?visualCase=empty#/settings/plugins'],
-  ['settings-environment', '/?visualCase=empty#/settings/environment/visual-workspace'],
+  ['settings-environment', '/?visualCase=empty#/settings/worktrees?tab=environments'],
   ['not-found', '/?visualCase=empty#/route-that-does-not-exist'],
   ['pet-overlay', '/?visualCase=empty#/pet-overlay'],
 ] as const
@@ -32,23 +32,14 @@ async function preparePage(page: Page, route: string): Promise<void> {
   await page.setViewportSize(DESKTOP_VIEWPORT)
   await prepareVisualTheme(page, 'light')
   await page.goto(route)
+  if (!route.includes('pet-overlay') && !route.includes('route-that-does-not-exist'))
+    await page.getByRole('button', { name: '稍后', exact: true }).click()
   await waitForVisualPage(page, 'light', page.locator('body'))
   if (route.includes('/settings/appearance')) {
     const editors = page.locator('.appearance-theme-editor')
     await expect(editors.first()).toBeVisible()
     await expect(page.locator('.appearance-theme-editor[aria-busy="true"]')).toHaveCount(0)
-    await expect(page.locator('.appearance-theme-seed').first()).toBeVisible()
-    await expect
-      .poll(() =>
-        page
-          .locator('.appearance-theme-seed')
-          .first()
-          .evaluate((element) => {
-            const style = window.getComputedStyle(element)
-            return style.color !== '' && style.backgroundColor !== ''
-          }),
-      )
-      .toBe(true)
+    await expect(page.getByRole('button', { name: '浅色强调色颜色选择器' })).toBeVisible()
     await page.evaluate(
       () =>
         new Promise<void>((resolve) =>
@@ -105,10 +96,10 @@ test('WCAG 2.2 AA: dropdown and menubar open states', async ({ page }, testInfo)
     name: /切换工作模式，当前为/,
   })
   await modeTrigger.click()
-  await expect(page.getByRole('menu')).toBeVisible()
-  const modeOptions = page.getByRole('menuitemradio')
+  await expect(page.getByRole('listbox')).toBeVisible()
+  const modeOptions = page.getByRole('option')
   await expect(modeOptions).toHaveCount(3)
-  await expect(page.getByRole('menuitemradio', { checked: true })).toHaveCount(1)
+  await expect(page.getByRole('option', { selected: true })).toHaveCount(1)
   await expectNoWcagViolations(page, testInfo)
   await page.keyboard.press('Escape')
 
@@ -154,5 +145,5 @@ test('keyboard users can bypass the application chrome', async ({ page }) => {
   await expect(skipLink).toBeFocused()
   await skipLink.press('Enter')
   await expect(page.locator('#desktop-main-content')).toBeFocused()
-  await expect(page).toHaveTitle('新对话 · Pidex')
+  await expect(page).toHaveTitle('新对话 · Pidex Desktop')
 })

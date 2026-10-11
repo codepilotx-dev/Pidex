@@ -593,8 +593,12 @@ export function PluginsSettingsPage({
     <SettingsContentArea className="plugins-settings-page">
       <div className="settings-content-inner plugins-settings-content tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <header className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">插件</h2>
-          <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">管理插件、技能和 MCP</p>
+          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+            插件
+          </h2>
+          <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
+            管理插件、技能和 MCP
+          </p>
         </header>
 
         <div className="settings-management-toolbar plugins-settings-toolbar">
@@ -616,7 +620,8 @@ export function PluginsSettingsPage({
               value={query}
               onChange={setQuery}
             />
-            <Button isIconOnly
+            <Button
+              isIconOnly
               color="ghostSecondary"
               size="toolbar"
               title={`刷新${tabLabel(tab)}`}

@@ -136,9 +136,7 @@ test('sidebar renders only occupied status icon slots in their existing order', 
           ...(state === 'unread' ? ['未读'] : state === 'running' ? ['处理中'] : []),
         ]
         expect(countIndicatorSlots(markup)).toBe(labels.length)
-        expect(markup).not.toMatch(
-          /<span[^>]*class="[^"]*sidebar-indicator[^"]*"[^>]*><\/span>/,
-        )
+        expect(markup).not.toMatch(/<span[^>]*class="[^"]*sidebar-indicator[^"]*"[^>]*><\/span>/)
         const positions = labels.map((label) => markup.indexOf(`aria-label="${label}"`))
         expect(positions.every((position) => position >= 0)).toBe(true)
         expect(positions).toEqual([...positions].sort((a, b) => a - b))
@@ -150,8 +148,10 @@ test('sidebar renders only occupied status icon slots in their existing order', 
 test('running takes precedence over unread and waiting transitions preserve unread', () => {
   const project = mockWorkspace('C:\\sidebar-precedence')
   const base = mockSessionSnapshot('precedence', project, { workspacePath: project.path }).item
-  const render = (status: SessionListItem['status'], latestTurnStatus: SessionListItem['latestTurnStatus']) =>
-    renderSessionRows([{ ...base, status, latestTurnStatus, unreadAt: 1 }])
+  const render = (
+    status: SessionListItem['status'],
+    latestTurnStatus: SessionListItem['latestTurnStatus'],
+  ) => renderSessionRows([{ ...base, status, latestTurnStatus, unreadAt: 1 }])
   const running = render('running', 'running')
   expect(running).toContain('处理中')
   expect(running).not.toContain('sidebar-unread-dot')
@@ -167,10 +167,18 @@ test('running takes precedence over unread and waiting transitions preserve unre
 test('active input request hides its pill without hiding unread or approvals', () => {
   const project = mockWorkspace('C:\\sidebar-active-input')
   const base = mockSessionSnapshot('active-input', project, { workspacePath: project.path }).item
-  const question = { ...base, status: 'running' as const, latestTurnStatus: 'waiting-question' as const }
-  const render = (unreadAt: number | null, pending = false) => renderSessionRows(
-    [{ ...question, unreadAt }], new Set(pending ? [base.id] : []), 'content', base.id,
-  )
+  const question = {
+    ...base,
+    status: 'running' as const,
+    latestTurnStatus: 'waiting-question' as const,
+  }
+  const render = (unreadAt: number | null, pending = false) =>
+    renderSessionRows(
+      [{ ...question, unreadAt }],
+      new Set(pending ? [base.id] : []),
+      'content',
+      base.id,
+    )
   expect(render(null)).not.toContain('sidebar-status-pill')
   expect(render(null)).not.toContain('sidebar-session-spinner')
   expect(render(1)).toContain('sidebar-unread-dot')
@@ -184,11 +192,13 @@ test('status pill progress and snooze are presentation-only opt-ins', () => {
   expect(plain).toContain('tw:truncate')
   expect(plain).not.toContain('<button')
   expect(plain).not.toContain('sidebar-status-pill-progress')
-  const scheduled = renderToStaticMarkup(<SidebarStatusPill
-    kind="input"
-    progress={{ deadlineMs: 60_000, durationMs: 60_000, nowMs: 30_000 }}
-    onSnooze={() => {}}
-  />)
+  const scheduled = renderToStaticMarkup(
+    <SidebarStatusPill
+      kind="input"
+      progress={{ deadlineMs: 60_000, durationMs: 60_000, nowMs: 30_000 }}
+      onSnooze={() => {}}
+    />,
+  )
   expect(scheduled).toContain('<button')
   expect(scheduled).toContain('停用自动回答')
   expect(scheduled).toContain('>停用<')
@@ -197,7 +207,9 @@ test('status pill progress and snooze are presentation-only opt-ins', () => {
   expect(scheduled).toContain('animation-play-state:paused')
   const project = mockWorkspace('C:\\sidebar-no-snooze')
   const base = mockSessionSnapshot('no-snooze', project, { workspacePath: project.path }).item
-  const row = renderSessionRows([{ ...base, status: 'waiting', latestTurnStatus: 'waiting-question' }])
+  const row = renderSessionRows([
+    { ...base, status: 'waiting', latestTurnStatus: 'waiting-question' },
+  ])
   expect(row).not.toContain('sidebar-status-pill-progress')
   expect(row).not.toContain('停用自动回答')
 })

@@ -464,10 +464,16 @@ export function buildSidebarViewModel({
       ? unpinnedSessions.filter(
           (session) => session.standalone || !pinnedProjectKeys.has(sessionProjectKey(session)),
         )
-      : showProjectsInRecents ? unpinnedSessions.filter((session) => session.standalone || !pinnedProjectKeys.has(sessionProjectKey(session))) : standaloneSessions
+      : showProjectsInRecents
+        ? unpinnedSessions.filter(
+            (session) => session.standalone || !pinnedProjectKeys.has(sessionProjectKey(session)),
+          )
+        : standaloneSessions
   const projectWorkspaces = sortProjectsForSidebar(
     allProjects.filter(
-      (project) => !pinnedProjectKeys.has(projectKey(project)) && !claimedKeys.has(sidebarPinnedProjectKey(project)),
+      (project) =>
+        !pinnedProjectKeys.has(projectKey(project)) &&
+        !claimedKeys.has(sidebarPinnedProjectKey(project)),
     ),
     {
       manualOrderByScope,
@@ -753,11 +759,20 @@ function mergeProjectWorkspaces(
   sessions: readonly SessionListItem[],
   removedWorkspaces: readonly DesktopRemovedWorkspace[],
 ): DesktopWorkspace[] {
-  const removedPaths = new Set(removedWorkspaces.filter((item) => !item.projectId && item.path).map((item) => normalizePath(item.path)))
-  const removedProjectIds = new Set(removedWorkspaces.flatMap((item) => item.projectId ? [item.projectId] : []))
+  const removedPaths = new Set(
+    removedWorkspaces
+      .filter((item) => !item.projectId && item.path)
+      .map((item) => normalizePath(item.path)),
+  )
+  const removedProjectIds = new Set(
+    removedWorkspaces.flatMap((item) => (item.projectId ? [item.projectId] : [])),
+  )
   const byProject = new Map<string, DesktopWorkspace>()
   for (const workspace of recentWorkspaces) {
-    if (!removedPaths.has(normalizePath(workspace.path)) && !removedProjectIds.has(workspace.projectId ?? '')) {
+    if (
+      !removedPaths.has(normalizePath(workspace.path)) &&
+      !removedProjectIds.has(workspace.projectId ?? '')
+    ) {
       byProject.set(projectKey(workspace), workspace)
     }
   }

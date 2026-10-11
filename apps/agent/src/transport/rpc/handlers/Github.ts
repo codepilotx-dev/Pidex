@@ -18,7 +18,11 @@ import { ProjectService } from '../../../project/ProjectService'
 export const githubHandlers = {
   name: 'github',
   methods: [
-    'github/watch/start', 'github/watch/list', 'github/watch/read', 'github/watch/update', 'github/watch/stop',
+    'github/watch/start',
+    'github/watch/list',
+    'github/watch/read',
+    'github/watch/update',
+    'github/watch/stop',
     'github/auth/status',
     'github/auth/start',
     'github/auth/poll',
@@ -39,18 +43,36 @@ export const githubHandlers = {
     const { db, projectSources, github } = runtime.dependencies
     const params = optionalRecord(rawParams)
     switch (method) {
-      case 'github/watch/start': case 'github/watch/list': case 'github/watch/read': case 'github/watch/update': case 'github/watch/stop': {
+      case 'github/watch/start':
+      case 'github/watch/list':
+      case 'github/watch/read':
+      case 'github/watch/update':
+      case 'github/watch/stop': {
         const service = runtime.dependencies.prWatches
         if (!service) throw new AgentError('INTERNAL_ERROR', 'PR 监控暂不可用', 503)
-        if (method === 'github/watch/start') { const input = Schema.decodeUnknownSync(RpcMethods[method].params)(rawParams); return service.start({ projectId: input.projectId, url: input.url, model: input.model, permissionConfig: input.permissionConfig, ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}) }) }
+        if (method === 'github/watch/start') {
+          const input = Schema.decodeUnknownSync(RpcMethods[method].params)(rawParams)
+          return service.start({
+            projectId: input.projectId,
+            url: input.url,
+            model: input.model,
+            permissionConfig: input.permissionConfig,
+            ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
+          })
+        }
         if (method === 'github/watch/list') return { watches: service.list() }
         const id = stringParam(params, 'id')
         if (method === 'github/watch/read') return service.read(id)
         if (method === 'github/watch/stop') return service.stop(id)
         const input = Schema.decodeUnknownSync(RpcMethods[method].params)(rawParams)
         const current = service.read(id)
-        if (input.status === 'active') await runtime.dependencies.automation.resume(current.automation.id, input.expectedRevision)
-        else await runtime.dependencies.automation.pause(current.automation.id, input.expectedRevision)
+        if (input.status === 'active')
+          await runtime.dependencies.automation.resume(
+            current.automation.id,
+            input.expectedRevision,
+          )
+        else
+          await runtime.dependencies.automation.pause(current.automation.id, input.expectedRevision)
         return service.read(id)
       }
       case 'github/auth/status':

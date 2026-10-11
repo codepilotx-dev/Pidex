@@ -37,7 +37,9 @@ const insertInput = (
 
 const bookmarkEvents = (db: AgentDatabase) =>
   db.sqlite
-    .query("SELECT method, params FROM events WHERE method = 'thread/bookmarks/updated' ORDER BY id")
+    .query(
+      "SELECT method, params FROM events WHERE method = 'thread/bookmarks/updated' ORDER BY id",
+    )
     .all() as Array<{ method: string; params: string }>
 
 describe('ThreadBookmarkService', () => {
@@ -220,7 +222,9 @@ describe('ThreadBookmarkService', () => {
       }),
     ).rejects.toMatchObject({ code: 'CONFLICT' })
     const rollbackRows = db.sqlite
-      .query("SELECT COUNT(*) AS count FROM thread_bookmark_operations WHERE operation_id = 'bookmark:set:rollback'")
+      .query(
+        "SELECT COUNT(*) AS count FROM thread_bookmark_operations WHERE operation_id = 'bookmark:set:rollback'",
+      )
       .get() as { count: number }
     expect(rollbackRows.count).toBe(0)
     expect(bookmarkEvents(db)).toHaveLength(1)
@@ -301,9 +305,9 @@ describe('ThreadBookmarkService', () => {
       }),
     ).toEqual({ threadId: thread.id, inputIds: ['input-1'], version: 1 })
     expect(
-      reopened.sqlite
-        .query("SELECT value FROM unknown_future_table WHERE id = 'u1'")
-        .get() as { value: string },
+      reopened.sqlite.query("SELECT value FROM unknown_future_table WHERE id = 'u1'").get() as {
+        value: string
+      },
     ).toEqual({ value: 'keep' })
     reopened.close()
   })

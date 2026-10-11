@@ -73,17 +73,24 @@ describe('侧栏自定义分组', () => {
   })
 
   test('重命名、折叠、排序与删除只影响目标分组', () => {
-    expect(renameSidebarSection(sections, 'work', '  深度工作  ').sections[0]?.title).toBe('深度工作')
+    expect(renameSidebarSection(sections, 'work', '  深度工作  ').sections[0]?.title).toBe(
+      '深度工作',
+    )
     expect(renameSidebarSection(sections, 'work', '   ').sections[0]?.title).toBe('工作')
     expect(setSidebarSectionCollapsed(sections, 'work', true).sections[0]?.collapsed).toBeTrue()
     expect(setSidebarSectionSort(sections, 'work', 'updated').sections[0]?.sort).toBe('updated')
-    expect(orderSidebarSections(sections, ['later', 'work']).sectionOrder).toEqual(['later', 'work'])
+    expect(orderSidebarSections(sections, ['later', 'work']).sectionOrder).toEqual([
+      'later',
+      'work',
+    ])
     // 未出现在 order 中的分组保持原有相对位置
     expect(orderSidebarSections(sections, ['later']).sectionOrder).toEqual(['later', 'work'])
     expect(deleteSidebarSection(sections, 'work')).toMatchObject({
       sectionOrder: ['later'],
     })
-    expect(deleteSidebarSection(sections, 'work').sections.map((item) => item.id)).toEqual(['later'])
+    expect(deleteSidebarSection(sections, 'work').sections.map((item) => item.id)).toEqual([
+      'later',
+    ])
     expect(deleteSidebarSection(sections, 'missing')).toBe(sections)
   })
 
@@ -124,7 +131,11 @@ describe('侧栏自定义分组', () => {
     expect(restoreSidebarAssignments(sections, null)).toBe(sections)
     // 分组已删除时保持原样，不重建存储
     expect(
-      restoreSidebarAssignments(afterArchive, { sectionId: 'gone', itemKey: 'session:a', index: 0 }),
+      restoreSidebarAssignments(afterArchive, {
+        sectionId: 'gone',
+        itemKey: 'session:a',
+        index: 0,
+      }),
     ).toBe(afterArchive)
   })
 })
@@ -134,7 +145,13 @@ describe('归档失败回滚', () => {
     const before: SidebarCustomization = {
       ...DEFAULT_SIDEBAR_CUSTOMIZATION,
       sections: [
-        { id: 'work', title: '工作', itemKeys: ['session:a', 'session:b'], sort: 'manual', collapsed: false },
+        {
+          id: 'work',
+          title: '工作',
+          itemKeys: ['session:a', 'session:b'],
+          sort: 'manual',
+          collapsed: false,
+        },
       ],
       sectionOrder: ['work'],
     }
@@ -205,7 +222,14 @@ describe('侧栏自定义分组解析', () => {
         },
       ],
       sessions: [{ ...session('a'), lastMessageAt: '2026-07-18T09:00:00.000Z' }],
-      projects: [{ name: 'Beta', path: 'C:\\beta', projectId: 'beta', lastOpenedAt: '2026-07-18T10:00:00.000Z' }],
+      projects: [
+        {
+          name: 'Beta',
+          path: 'C:\\beta',
+          projectId: 'beta',
+          lastOpenedAt: '2026-07-18T10:00:00.000Z',
+        },
+      ],
     })
     expect(resolved[0]?.entries.map((entry) => entry.key)).toEqual([
       sidebarPinnedProjectKey({ name: 'Beta', path: 'C:\\beta', projectId: 'beta' }),
@@ -218,7 +242,9 @@ describe('侧栏自定义分组解析', () => {
       pinnedItems: [
         { key: 'session:pinned', kind: 'session', pinnedAt: null, session: session('pinned') },
       ],
-      sections: [{ id: 'work', title: '工作', itemKeys: ['session:a'], sort: 'manual', collapsed: false }],
+      sections: [
+        { id: 'work', title: '工作', itemKeys: ['session:a'], sort: 'manual', collapsed: false },
+      ],
     })
     expect([...claimed].sort()).toEqual(['session:a', 'session:pinned'])
 
@@ -227,7 +253,9 @@ describe('侧栏自定义分组解析', () => {
       removedWorkspaces: [],
       sessionPins: {},
       sessions: [session('a'), session('b')],
-      customSections: [{ id: 'work', title: '工作', itemKeys: ['session:a'], sort: 'manual', collapsed: false }],
+      customSections: [
+        { id: 'work', title: '工作', itemKeys: ['session:a'], sort: 'manual', collapsed: false },
+      ],
       pendingPermissionSessionIds: new Set(),
     })
     expect(model.customSections[0]?.entries.map((entry) => entry.key)).toEqual(['session:a'])
@@ -240,7 +268,11 @@ describe('侧栏自定义分组解析', () => {
 describe('普通列表排序语义', () => {
   test('历史 priority 值按最近更新呈现', () => {
     const items = [
-      { ...session('older'), lastMessageAt: '2026-07-18T02:00:00.000Z', status: 'running' as const },
+      {
+        ...session('older'),
+        lastMessageAt: '2026-07-18T02:00:00.000Z',
+        status: 'running' as const,
+      },
       { ...session('newer'), lastMessageAt: '2026-07-18T05:00:00.000Z' },
     ]
     const options = {
@@ -248,14 +280,12 @@ describe('普通列表排序语义', () => {
       unreadSessionIds: new Set<string>(),
       manualOrderByScope: {},
     }
-    expect(sortSessionsForSidebar(items, { ...options, sort: 'priority' }).map((item) => item.id)).toEqual([
-      'newer',
-      'older',
-    ])
-    expect(sortSessionsForSidebar(items, { ...options, sort: 'updated' }).map((item) => item.id)).toEqual([
-      'newer',
-      'older',
-    ])
+    expect(
+      sortSessionsForSidebar(items, { ...options, sort: 'priority' }).map((item) => item.id),
+    ).toEqual(['newer', 'older'])
+    expect(
+      sortSessionsForSidebar(items, { ...options, sort: 'updated' }).map((item) => item.id),
+    ).toEqual(['newer', 'older'])
   })
 })
 
@@ -287,11 +317,7 @@ describe('自定义信息保留式迁移', () => {
     expect(normalizeSidebarCustomization(null)).toEqual(DEFAULT_SIDEBAR_CUSTOMIZATION)
     expect(normalizeSidebarCustomization('nope')).toEqual(DEFAULT_SIDEBAR_CUSTOMIZATION)
     const duplicated = normalizeSidebarCustomization({
-      sections: [
-        { id: 'work' },
-        { id: 'work' },
-        { id: '  ' },
-      ],
+      sections: [{ id: 'work' }, { id: 'work' }, { id: '  ' }],
       sectionOrder: ['work', 'work'],
       destinationOrder: ['plugins', 'plugins', 'unknown'],
     })
@@ -299,16 +325,45 @@ describe('自定义信息保留式迁移', () => {
     expect(duplicated.sectionOrder).toEqual(['work'])
     expect(DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS).toEqual(['sessionGroups'])
     // 未知目的地键保留原值，仅在缺失时补齐默认项。
-    expect(duplicated.destinationOrder).toEqual(['plugins', 'unknown', 'automations', 'sessionGroups'])
+    expect(duplicated.destinationOrder).toEqual([
+      'plugins',
+      'unknown',
+      'automations',
+      'sessionGroups',
+    ])
   })
 })
 
-
 test('最近区显示项目聊天开关保留置顶和分区归属', () => {
   const project = { projectId: 'alpha', path: 'C:\\alpha', name: 'Alpha' }
-  const items = ['a', 'b', 'c'].map((id) => ({ ...session(id), projectId: 'alpha', standalone: false }))
-  const input = { sessions: items, recentWorkspaces: [project], removedWorkspaces: [], sessionPins: { b: '2026-10-06' }, pendingPermissionSessionIds: new Set<string>(), customSections: [{ id: 'work', title: 'Work', itemKeys: ['session:c'], sort: 'manual' as const, collapsed: false }] }
+  const items = ['a', 'b', 'c'].map((id) => ({
+    ...session(id),
+    projectId: 'alpha',
+    standalone: false,
+  }))
+  const input = {
+    sessions: items,
+    recentWorkspaces: [project],
+    removedWorkspaces: [],
+    sessionPins: { b: '2026-10-06' },
+    pendingPermissionSessionIds: new Set<string>(),
+    customSections: [
+      {
+        id: 'work',
+        title: 'Work',
+        itemKeys: ['session:c'],
+        sort: 'manual' as const,
+        collapsed: false,
+      },
+    ],
+  }
   expect(buildSidebarViewModel(input).recentSessions).toEqual([])
-  expect(buildSidebarViewModel({ ...input, showProjectsInRecents: true }).recentSessions.map((entry) => entry.id)).toEqual(['a'])
-  expect(normalizeSidebarCustomization({ showProjectsInRecents: true }).showProjectsInRecents).toBe(true)
+  expect(
+    buildSidebarViewModel({ ...input, showProjectsInRecents: true }).recentSessions.map(
+      (entry) => entry.id,
+    ),
+  ).toEqual(['a'])
+  expect(normalizeSidebarCustomization({ showProjectsInRecents: true }).showProjectsInRecents).toBe(
+    true,
+  )
 })

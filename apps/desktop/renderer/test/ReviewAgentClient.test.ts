@@ -476,20 +476,85 @@ function createReviewApiForBatchTest(supportsReviewBatch: boolean, calls: string
   })
 }
 
-
 test('full context keeps hunk identity and import filtering keeps mixed code edits', async () => {
-  expect(pickDefaultReviewBaseBranch([
-    { name: 'origin/main', sha: 'main', current: false, remote: true },
-    { name: 'origin/release', sha: 'release', current: false, remote: true, default: true },
-  ])).toBe('origin/release')
-  const { unifiedPatchToDesktopHunks, expandReviewContext, hideImportOnlyHunks } = await import('../src/features/review/diff/ReviewDiffAdapter.js')
+  expect(
+    pickDefaultReviewBaseBranch([
+      { name: 'origin/main', sha: 'main', current: false, remote: true },
+      { name: 'origin/release', sha: 'release', current: false, remote: true, default: true },
+    ]),
+  ).toBe('origin/release')
+  const { unifiedPatchToDesktopHunks, expandReviewContext, hideImportOnlyHunks } =
+    await import('../src/features/review/diff/ReviewDiffAdapter.js')
   const patch = '@@ -2,1 +2,1 @@\n-import x from "old"\n+import x from "new"\n'
-  const hunks = unifiedPatchToDesktopHunks(patch, [{ id: 'canonical', header: '@@ -2,1 +2,1 @@', oldStart: 2, oldLines: 1, newStart: 2, newLines: 1, patch }])
-  const full = expandReviewContext(hunks, '@@ -1,3 +1,3 @@\n // before\n-import x from "old"\n+import x from "new"\n // after\n')
+  const hunks = unifiedPatchToDesktopHunks(patch, [
+    {
+      id: 'canonical',
+      header: '@@ -2,1 +2,1 @@',
+      oldStart: 2,
+      oldLines: 1,
+      newStart: 2,
+      newLines: 1,
+      patch,
+    },
+  ])
+  const full = expandReviewContext(
+    hunks,
+    '@@ -1,3 +1,3 @@\n // before\n-import x from "old"\n+import x from "new"\n // after\n',
+  )
   expect(full[0]?.id).toBe('canonical')
   expect(full[0]?.patch).toBe(patch)
-  expect(full[0]?.lines.map((line) => line.content)).toEqual(['// before', 'import x from "old"', 'import x from "new"', '// after'])
+  expect(full[0]?.lines.map((line) => line.content)).toEqual([
+    '// before',
+    'import x from "old"',
+    'import x from "new"',
+    '// after',
+  ])
   expect(hideImportOnlyHunks(full)).toEqual([])
-  const mixed = [{ ...full[0]!, lines: [...full[0]!.lines, { id: 'logic', type: 'added' as const, oldLine: null, newLine: 4, content: 'run()', raw: '+run()' }] }]
+  const mixed = [
+    {
+      ...full[0]!,
+      lines: [
+        ...full[0]!.lines,
+        {
+          id: 'logic',
+          type: 'added' as const,
+          oldLine: null,
+          newLine: 4,
+          content: 'run()',
+          raw: '+run()',
+        },
+      ],
+    },
+  ]
   expect(hideImportOnlyHunks(mixed)).toEqual(mixed)
+})
+
+test('import filtering keeps malformed long imports and handles multiline declarations', async () => {
+  const { hideImportOnlyHunks } = await import('../src/features/review/diff/ReviewDiffAdapter.js')
+  const hunk = (content: string) => ({
+    id: 'import',
+    header: '',
+    oldStart: 1,
+    oldLines: 0,
+    newStart: 1,
+    newLines: 1,
+    patch: '',
+    lines: [
+      {
+        id: 'line',
+        type: 'added' as const,
+        oldLine: null,
+        newLine: 1,
+        content,
+        raw: '+' + content,
+      },
+    ],
+  })
+  expect(
+    hideImportOnlyHunks([hunk('import {\n a, b\n} from "module";\nimport "side-effect"')]),
+  ).toEqual([])
+  const malformed = [hunk('import ' + '\t\tfrom "!"import'.repeat(10000))]
+  expect(hideImportOnlyHunks(malformed)).toEqual(malformed)
+  const logic = [hunk('import x from "module"; run()')]
+  expect(hideImportOnlyHunks(logic)).toEqual(logic)
 })

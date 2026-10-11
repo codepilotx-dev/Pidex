@@ -47,7 +47,8 @@ const SUGGESTION_TONE_CLASS: Record<string, string> = {
 export const SUGGESTION_PANEL_CLASS =
   'new-session-suggestions tw:w-[var(--quick-chat-surface-width)] tw:max-w-full tw:[container-type:inline-size]'
 
-const SUGGESTION_ICON_CLASS = 'new-session-suggestion-icon tw:grid tw:size-icon tw:place-items-center tw:[color:var(--new-session-suggestion-tone)]'
+const SUGGESTION_ICON_CLASS =
+  'new-session-suggestion-icon tw:grid tw:size-icon tw:place-items-center tw:[color:var(--new-session-suggestion-tone)]'
 
 const SUGGESTION_FOCUS_CLASS =
   'tw:border-0 tw:cursor-pointer tw:[font:inherit] tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus'
@@ -98,7 +99,9 @@ export function NewSessionSuggestions({
                 <span className={SUGGESTION_ICON_CLASS}>
                   <Icon aria-hidden size={APP_ICON_SIZE} />
                 </span>
-                <span className="new-session-suggestion-label tw:type-row-title">{suggestion.label}</span>
+                <span className="new-session-suggestion-label tw:type-row-title">
+                  {suggestion.label}
+                </span>
               </button>
             )
           })}
@@ -114,9 +117,7 @@ export function NewSessionSuggestions({
         className={`${SUGGESTION_PANEL_CLASS} is-root is-templates`}
       >
         <div className={`${SUGGESTION_HEADING_CLASS} tw:mb-2`}>
-          <span className={SUGGESTION_HEADING_TITLE_CLASS}>
-            任务模板
-          </span>
+          <span className={SUGGESTION_HEADING_TITLE_CLASS}>任务模板</span>
           <button
             type="button"
             className={SUGGESTION_HEADING_ACTION_CLASS}
@@ -145,7 +146,9 @@ export function NewSessionSuggestions({
                 <span className={SUGGESTION_ICON_CLASS}>
                   <Icon aria-hidden size={APP_ICON_SIZE} />
                 </span>
-                <span className="new-session-suggestion-label tw:type-row-title">{category.label}</span>
+                <span className="new-session-suggestion-label tw:type-row-title">
+                  {category.label}
+                </span>
               </button>
             )
           })}

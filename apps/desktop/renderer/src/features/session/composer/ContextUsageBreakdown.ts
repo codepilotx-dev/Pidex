@@ -1,7 +1,4 @@
-import type {
-  ContextUsageBreakdownEntry,
-  ContextUsageBreakdownSource,
-} from '@pidex/shared/thread'
+import type { ContextUsageBreakdownEntry, ContextUsageBreakdownSource } from '@pidex/shared/thread'
 
 /** 分类展示顺序固定，占比相同的分类之间也保持稳定排序。 */
 export const CONTEXT_USAGE_BREAKDOWN_ORDER: readonly ContextUsageBreakdownSource[] = [

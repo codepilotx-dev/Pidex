@@ -237,7 +237,9 @@ export function ComposerChangeSummary({
                   aria-hidden="true"
                   className="composer-change-summary__diff tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:tabular-nums"
                 >
-                  <strong className="tw:text-app-success tw:type-weight-label">+{formattedAdditions}</strong>
+                  <strong className="tw:text-app-success tw:type-weight-label">
+                    +{formattedAdditions}
+                  </strong>
                   <em className="tw:text-app-danger tw:not-italic">-{formattedDeletions}</em>
                 </span>
               ) : null}

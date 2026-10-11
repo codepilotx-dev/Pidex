@@ -1,8 +1,5 @@
 import { expect, test } from 'bun:test'
-import {
-  parseBrowserAnnotations,
-  type BrowserAnnotation,
-} from '@pidex/shared/browser-annotation'
+import { parseBrowserAnnotations, type BrowserAnnotation } from '@pidex/shared/browser-annotation'
 import { ComposerDraftStore } from '../src/features/session/composer/ComposerDraftStore.js'
 import {
   annotationAttachments,

@@ -5,9 +5,9 @@
 packages/material-icon-theme/src/generated
 packages/material-icon-theme/src/icons
 # material-icons 目录与手写组件共存，只有这三个名字是同步脚本生成的。
-apps/desktop/renderer/src/features/layout/material-icons/shard-*.ts
-apps/desktop/renderer/src/features/layout/material-icons/loaders.ts
-apps/desktop/renderer/src/features/layout/material-icons/index.ts
+apps/desktop/renderer/src/features/layout/material-icons/Shard*.ts
+apps/desktop/renderer/src/features/layout/material-icons/Loaders.ts
+apps/desktop/renderer/src/features/layout/material-icons/Index.ts
 apps/desktop/renderer/shared/codexThemes/themes
 docs/research/codex-webview-style-inventory.md
 docs/research/codex-webview-style-inventory.json
@@ -38,3 +38,7 @@ patches
 bun.lock
 LICENSE
 THIRD_PARTY_NOTICES.md
+
+# 主题生成器与上游字体 CSS 保持原始生成格式。
+apps/desktop/renderer/shared/themes
+apps/desktop/renderer/public/fonts

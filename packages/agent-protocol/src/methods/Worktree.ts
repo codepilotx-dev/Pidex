@@ -85,23 +85,47 @@ const WorktreeResultSchema = Schema.Struct({
 export const WorktreeRpcMethods = {
   'worktree/settings/list': defineMethod({
     params: Schema.Struct({ projectId: Schema.optional(OpaqueIDSchema) }),
-    result: Schema.Struct({ worktrees: Schema.Array(Schema.Struct({
-      worktree: ManagedWorktreeSchema,
-      path: NonEmptyStringSchema,
-      repositoryRoot: NonEmptyStringSchema,
-      conversations: Schema.Array(Schema.Struct({ id: OpaqueIDSchema, title: Schema.String, archived: Schema.Boolean, pinned: Schema.Boolean, active: Schema.Boolean })),
-    })) }),
-    errors: WorktreeErrors, capability: 'worktree.settings.v1', mutation: false, exactParams: true, exactResult: true,
+    result: Schema.Struct({
+      worktrees: Schema.Array(
+        Schema.Struct({
+          worktree: ManagedWorktreeSchema,
+          path: NonEmptyStringSchema,
+          repositoryRoot: NonEmptyStringSchema,
+          conversations: Schema.Array(
+            Schema.Struct({
+              id: OpaqueIDSchema,
+              title: Schema.String,
+              archived: Schema.Boolean,
+              pinned: Schema.Boolean,
+              active: Schema.Boolean,
+            }),
+          ),
+        }),
+      ),
+    }),
+    errors: WorktreeErrors,
+    capability: 'worktree.settings.v1',
+    mutation: false,
+    exactParams: true,
+    exactResult: true,
   }),
   'worktree/settings/delete': defineMethod({
     params: Schema.Struct({ worktreeId: OpaqueIDSchema, operationId: OpaqueIDSchema }),
     result: WorktreeResultSchema,
-    errors: WorktreeErrors, capability: 'worktree.settings.v1', mutation: true, exactParams: true, exactResult: true,
+    errors: WorktreeErrors,
+    capability: 'worktree.settings.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
   }),
   'worktree/settings/new-chat': defineMethod({
     params: Schema.Struct({ worktreeId: OpaqueIDSchema, operationId: OpaqueIDSchema }),
     result: Schema.Struct({ threadId: OpaqueIDSchema }),
-    errors: WorktreeErrors, capability: 'worktree.settings.v1', mutation: true, exactParams: true, exactResult: true,
+    errors: WorktreeErrors,
+    capability: 'worktree.settings.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
   }),
   'worktree/eligibility': defineMethod({
     params: Schema.Struct({ projectId: OpaqueIDSchema }),

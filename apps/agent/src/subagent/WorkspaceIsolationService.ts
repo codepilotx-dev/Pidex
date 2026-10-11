@@ -383,10 +383,7 @@ export class WorkspaceIsolationService {
     if (!WORKSPACE_ID.test(id) || this.baselines.has(id)) {
       throw new AgentError('SUBAGENT_BASELINE_ID_INVALID', '基线 ID 生成器返回了无效或重复 ID', 500)
     }
-    const snapshot = await this.snapshotCurrent(
-      repository.rootPath,
-      `Pidex ${mode} baseline ${id}`,
-    )
+    const snapshot = await this.snapshotCurrent(repository.rootPath, `Pidex ${mode} baseline ${id}`)
     const ref = `refs/pidex/baselines/${id}`
     await this.requireGit(
       repository.rootPath,
@@ -444,10 +441,7 @@ export class WorkspaceIsolationService {
    */
   async captureWorkingTreeSnapshot(): Promise<WorkingTreeSnapshot> {
     const repository = this.gitRepository()
-    const snapshot = await this.snapshotCurrent(
-      repository.rootPath,
-      'Pidex working-tree snapshot',
-    )
+    const snapshot = await this.snapshotCurrent(repository.rootPath, 'Pidex working-tree snapshot')
     const patch = await this.requireGitOutput(
       repository.rootPath,
       [
@@ -733,10 +727,7 @@ export class WorkspaceIsolationService {
     )
     if (applied.code === 0) return { status: 'applied', resultTree: prepared.resultTree }
 
-    const afterFailure = await this.snapshotCurrent(
-      repository.rootPath,
-      'Pidex failed apply check',
-    )
+    const afterFailure = await this.snapshotCurrent(repository.rootPath, 'Pidex failed apply check')
     const diagnostics = trimDiagnostic(applied.stderr)
     return afterFailure.tree === prepared.expectedTree
       ? { status: 'failed', diagnostics, workspaceUnchanged: true }

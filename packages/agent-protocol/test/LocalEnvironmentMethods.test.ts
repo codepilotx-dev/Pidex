@@ -82,6 +82,12 @@ describe('local environment method contracts', () => {
     ).toThrow()
     expect(Object.keys(LocalEnvironmentRpcMethods).sort()).toEqual([
       'local-environment/action/list',
+      'local-environment/project/create',
+      'local-environment/project/delete',
+      'local-environment/project/list',
+      'local-environment/project/read',
+      'local-environment/project/select',
+      'local-environment/project/update',
       'local-environment/read',
       'local-environment/update',
     ])

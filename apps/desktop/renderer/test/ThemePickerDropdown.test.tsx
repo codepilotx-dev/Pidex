@@ -1,9 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
-import {
-  ThemePickerDropdown,
-  ThemeBadge,
-} from '../src/features/settings/ThemePickerDropdown.js'
+import { ThemePickerDropdown, ThemeBadge } from '../src/features/settings/ThemePickerDropdown.js'
 
 const MOCK_THEMES = [
   { slug: 'codex-new-dark', label: 'Codex(new)' },
@@ -78,9 +75,7 @@ describe('ThemePickerDropdown', () => {
   })
 
   test('ThemeBadge renders circular badge with contrast-adjusted color', () => {
-    const html = renderToStaticMarkup(
-      <ThemeBadge seed={MOCK_SEEDS['catppuccin-mocha']} />,
-    )
+    const html = renderToStaticMarkup(<ThemeBadge seed={MOCK_SEEDS['catppuccin-mocha']} />)
 
     expect(html).toContain('appearance-theme-badge')
     expect(html).toContain('tw:rounded-full')

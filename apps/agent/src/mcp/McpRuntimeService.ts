@@ -1,8 +1,4 @@
-import type {
-  McpReloadResultSchema,
-  McpScope,
-  McpServerDeclaration,
-} from '@pidex/agent-protocol'
+import type { McpReloadResultSchema, McpScope, McpServerDeclaration } from '@pidex/agent-protocol'
 import { McpConfigError, McpConfigService, isMcpSettingsConflict } from './McpConfigService'
 import { McpConnectionManager } from './McpConnectionManager'
 import { McpOAuthError, McpOAuthService } from './McpOAuthService'

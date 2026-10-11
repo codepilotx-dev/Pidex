@@ -79,10 +79,7 @@ export function createDefaultWorkbenchLayoutState(
     visibility: createDefaultVisibility(),
     primarySidebarWidth: clampPrimarySidebarWidth(DEFAULT_PRIMARY_SIDEBAR_WIDTH),
     auxiliaryPanelWidth,
-    auxiliaryPanelWidthRangeRatio: rightDockWidthToRangeRatio(
-      auxiliaryPanelWidth,
-      workspaceWidth,
-    ),
+    auxiliaryPanelWidthRangeRatio: rightDockWidthToRangeRatio(auxiliaryPanelWidth, workspaceWidth),
     bottomPanelHeight: clampBottomPanelHeight(BOTTOM_PANEL_DEFAULT_HEIGHT, workspaceHeight),
     auxiliaryMaximized: false,
     beforeAuxiliaryMaximized: null,

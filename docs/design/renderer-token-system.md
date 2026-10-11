@@ -53,23 +53,23 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 
 排版先按内容职责分为展示、结构、交互、阅读和代码五条层级，再通过 `--cpx-sys-type-*` 使用。系统字体优先使用 `MiSans`，并回退到平台系统字体；代码字体优先使用 `JetBrains Mono`，并回退到等宽系统字体。字重遵循稳定的 `400 / 500 / 600`。排版采用无单位行高（如 `1.2 / 1.333 / 1.429 / 1.5` 等）与字符间距角色（`--cpx-sys-letter-spacing-*`）。需要单独设置属性时，复用角色所依赖的 `--cpx-sys-font-size-*`、`--cpx-sys-line-height-*`、`--cpx-sys-letter-spacing-*` 和 `--cpx-sys-font-weight-*`，不得写裸字号或行高。
 
-| 角色         | 默认字号 / 行高 / 字重 / 字距                     | 内容职责                                 | 默认前景色                         |
-| ------------ | ------------------------------------------------- | ---------------------------------------- | ---------------------------------- |
-| `display`    | `28 / 1.14 / 600 / -0.70px`                       | Coding、Working 与 Chat 首页 Hero        | `fg-primary`                       |
-| `caption`    | `12 / 1.40 / 400 / 0px`                           | 时间、路径、计数和辅助状态               | `fg-tertiary`                      |
-| `label`      | `12 / 1.30 / 500 / 0.45px`                        | 分组名、字段标签和短状态标签             | 按上下文选择 secondary 或 tertiary |
-| `body-sm`    | `13 / 1.45 / 400 / 0px`                           | 次级说明、工具活动和侧栏辅助文字         | `fg-secondary`                     |
-| `control`    | `13 / 1.20 / 500 / -0.05px`                       | Button、Input、Menu、紧凑导航和文件行    | `fg-primary`                       |
-| `body`       | `14 / 1.50 / 400 / -0.05px`                       | 普通 UI 正文、评论和表单说明             | `fg-primary`                       |
-| `row-title`  | `14 / 1.50 / 500 / -0.05px`                       | 设置行、卡片行和普通对象名称             | `fg-primary`                       |
-| `reading`    | `14 / 1.50 / 400 / -0.05px`                       | 用户消息、Agent 最终回答和 Markdown 长文 | `fg-primary`                       |
-| `body-lg`    | `16 / 1.50 / 400 / -0.12px`                       | 首页 Prompt 和短引导正文                 | `fg-primary`                       |
-| `heading-sm` | `16 / 1.25 / 600 / -0.25px`                       | Section、Dialog、Popover 和 Markdown H3  | `fg-primary`                       |
-| `heading-md` | `18 / 1.25 / 600 / -0.25px`                       | 重点卡片和详情页局部主标题               | `fg-primary`                       |
-| `heading-lg` | `20 / 1.20 / 600 / -0.45px`                       | Markdown H2 和强信息分区                 | `fg-primary`                       |
-| `heading-xl` | `24 / 1.14 / 600 / -0.70px`                       | 一级页面、Setup 主标题和 Markdown H1     | `fg-primary`                       |
-| `metric`     | `20 / 1.20 / 600 / -0.45px`                       | 金额、用量和统计值；使用 tabular figures | `fg-primary`                       |
-| `code`       | `13 / 1.50 / 400 / 0px`（随代码字号动态更新）     | 代码、命令、Diff 和终端                  | 按语法或上下文选择                 |
+| 角色         | 默认字号 / 行高 / 字重 / 字距                 | 内容职责                                 | 默认前景色                         |
+| ------------ | --------------------------------------------- | ---------------------------------------- | ---------------------------------- |
+| `display`    | `28 / 1.14 / 600 / -0.70px`                   | Coding、Working 与 Chat 首页 Hero        | `fg-primary`                       |
+| `caption`    | `12 / 1.40 / 400 / 0px`                       | 时间、路径、计数和辅助状态               | `fg-tertiary`                      |
+| `label`      | `12 / 1.30 / 500 / 0.45px`                    | 分组名、字段标签和短状态标签             | 按上下文选择 secondary 或 tertiary |
+| `body-sm`    | `13 / 1.45 / 400 / 0px`                       | 次级说明、工具活动和侧栏辅助文字         | `fg-secondary`                     |
+| `control`    | `13 / 1.20 / 500 / -0.05px`                   | Button、Input、Menu、紧凑导航和文件行    | `fg-primary`                       |
+| `body`       | `14 / 1.50 / 400 / -0.05px`                   | 普通 UI 正文、评论和表单说明             | `fg-primary`                       |
+| `row-title`  | `14 / 1.50 / 500 / -0.05px`                   | 设置行、卡片行和普通对象名称             | `fg-primary`                       |
+| `reading`    | `14 / 1.50 / 400 / -0.05px`                   | 用户消息、Agent 最终回答和 Markdown 长文 | `fg-primary`                       |
+| `body-lg`    | `16 / 1.50 / 400 / -0.12px`                   | 首页 Prompt 和短引导正文                 | `fg-primary`                       |
+| `heading-sm` | `16 / 1.25 / 600 / -0.25px`                   | Section、Dialog、Popover 和 Markdown H3  | `fg-primary`                       |
+| `heading-md` | `18 / 1.25 / 600 / -0.25px`                   | 重点卡片和详情页局部主标题               | `fg-primary`                       |
+| `heading-lg` | `20 / 1.20 / 600 / -0.45px`                   | Markdown H2 和强信息分区                 | `fg-primary`                       |
+| `heading-xl` | `24 / 1.14 / 600 / -0.70px`                   | 一级页面、Setup 主标题和 Markdown H1     | `fg-primary`                       |
+| `metric`     | `20 / 1.20 / 600 / -0.45px`                   | 金额、用量和统计值；使用 tabular figures | `fg-primary`                       |
+| `code`       | `13 / 1.50 / 400 / 0px`（随代码字号动态更新） | 代码、命令、Diff 和终端                  | 按语法或上下文选择                 |
 
 普通正文使用 `400`，控件、标签和行标题使用 `500`，结构标题、指标和真正的强调使用 `600`。选中态通过背景和前景色表达，不得为了选中而改变普通列表项字重。UI 文本不得借用 `reading` 获取额外行距，工具活动也不得借用 `body` 与最终回答争夺层级。
 
@@ -111,21 +111,22 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 
 圆角采用“基础刻度 + 语义角色”双层结构。基础刻度是唯一数值来源：
 
-| 基础 Token                          |   数值 | 映射语义角色与使用场景                                    |
-| ----------------------------------- | -----: | --------------------------------------------------------- |
-| `--cpx-sys-radius-2xs` / `xs`       |    5px | `indicator` / `compact`：状态指示点、微型标签、徽标       |
-| `--cpx-sys-radius-sm`               |    8px | `item`：菜单项、侧边栏导航行、Tooltip                     |
-| `--cpx-sys-radius-md`               |   10px | `control` / `item-lg`：普通按钮、输入框、分段控件         |
-| `--cpx-sys-radius-lg`               |   14px | `container` / `floating`：卡片容器、下拉浮层、Popover 面板 |
-| `--cpx-sys-radius-xl` / `2xl`       |   18px | `prominent`：对话框（Modal）、Composer 悬浮容器、消息气泡 |
-| `--cpx-sys-radius-3xl` / `4xl`      |   24px | 大型展示容器、导引面板                                    |
-| `--cpx-sys-radius-full`             | 9999px | `pill`：胶囊按钮、Switch 开关、标签胶囊、药丸触发器       |
+| 基础 Token                     |   数值 | 映射语义角色与使用场景                                     |
+| ------------------------------ | -----: | ---------------------------------------------------------- |
+| `--cpx-sys-radius-2xs` / `xs`  |    5px | `indicator` / `compact`：状态指示点、微型标签、徽标        |
+| `--cpx-sys-radius-sm`          |    8px | `item`：菜单项、侧边栏导航行、Tooltip                      |
+| `--cpx-sys-radius-md`          |   10px | `control` / `item-lg`：普通按钮、输入框、分段控件          |
+| `--cpx-sys-radius-lg`          |   14px | `container` / `floating`：卡片容器、下拉浮层、Popover 面板 |
+| `--cpx-sys-radius-xl` / `2xl`  |   18px | `prominent`：对话框（Modal）、Composer 悬浮容器、消息气泡  |
+| `--cpx-sys-radius-3xl` / `4xl` |   24px | 大型展示容器、导引面板                                     |
+| `--cpx-sys-radius-full`        | 9999px | `pill`：胶囊按钮、Switch 开关、标签胶囊、药丸触发器        |
 
 光学校正统一为 `1.0`（纯净几何圆角，无超椭圆畸变）。`full` 只用于真正的胶囊、圆形控件、Badge、Chip、Toggle track 等，不得用于普通卡片、列表行、Dialog 或矩形表面。嵌套表面优先继承外层半径，或根据 `inner radius = max(outer radius - inset, 0)` 计算并映射到最近的已有 Token。
 
 ### 动效
 
 时长按 `fast (160ms) / normal (220ms) / slow (340ms)` 体系，并搭配 standard 与 entrance 缓动：
+
 - 标准缓动：`--cpx-sys-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);`
 - 入场缓动：`--cpx-sys-ease-entrance: cubic-bezier(0.22, 1, 0.36, 1);`
 - 交互微动效（按钮、列表项、开关状态等）使用 `160ms`。

@@ -46,9 +46,7 @@ export class ThreadBookmarkStore {
     try {
       const result = await desktopClient.listThreadBookmarks(sessionId)
       if (token !== this.#loadToken) return
-      this.#state = result
-        ? { inputIds: new Set(result.inputIds), version: result.version }
-        : null
+      this.#state = result ? { inputIds: new Set(result.inputIds), version: result.version } : null
     } catch {
       if (token !== this.#loadToken) return
       this.#state = null

@@ -61,7 +61,12 @@ export function ProjectManagementDialogs({
               void (
                 project.projectId
                   ? desktopClient.removeProject(project.projectId).then((result) => {
-                      if (result.removalOperationId && result.undoExpiresAt) notifyProjectRemoved({ project, removalOperationId: result.removalOperationId, undoExpiresAt: result.undoExpiresAt })
+                      if (result.removalOperationId && result.undoExpiresAt)
+                        notifyProjectRemoved({
+                          project,
+                          removalOperationId: result.removalOperationId,
+                          undoExpiresAt: result.undoExpiresAt,
+                        })
                       return true
                     })
                   : Promise.resolve(true)

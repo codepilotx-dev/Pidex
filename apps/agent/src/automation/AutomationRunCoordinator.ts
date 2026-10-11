@@ -29,7 +29,10 @@ export type ScheduledWorkDefinition = {
   permissionConfig: PermissionConfig
 }
 export type AutomationRunExecutor = {
-  start(work: ScheduledWorkDefinition, run: { id: string }): Promise<AutomationExecutionBinding | null>
+  start(
+    work: ScheduledWorkDefinition,
+    run: { id: string },
+  ): Promise<AutomationExecutionBinding | null>
 }
 export type AutomationRunCoordinatorOptions = {
   now?: () => number
@@ -62,7 +65,10 @@ export class AutomationRunCoordinator {
       const preparing = this.repository.markPreparing(run.id, this.now())
       await this.changed(preparing)
       const binding = await this.executor.start(automation, preparing)
-      if (!binding) { await this.finish(run.id, 'completed', null); return }
+      if (!binding) {
+        await this.finish(run.id, 'completed', null)
+        return
+      }
       const queued = this.repository.bindExecution(run.id, binding, this.now())
       await this.changed(queued)
       const turnStatus = this.options.getTurnStatus?.(binding.turnId)
@@ -137,7 +143,8 @@ export class AutomationRunCoordinator {
 
   private async finish(runId: string, status: TerminalStatus, safeErrorCode: string | null) {
     const result = this.repository.completeRun(runId, status, this.now(), safeErrorCode)
-    if (status === 'completed' && !result.run.threadId) result.run = this.repository.markRunRead(runId, this.now())
+    if (status === 'completed' && !result.run.threadId)
+      result.run = this.repository.markRunRead(runId, this.now())
     await this.changed(result.run)
     if (result.catchUpRun) {
       await this.changed(result.catchUpRun)

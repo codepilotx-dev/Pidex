@@ -1829,9 +1829,7 @@ function WorkspaceReviewSidebarImpl({
         reviewSource,
         event,
         expectedHeadRevision,
-        event === 'APPROVE'
-          ? undefined
-          : `Pidex 提交了 ${reviewComments.length} 条行内审阅评论。`,
+        event === 'APPROVE' ? undefined : `Pidex 提交了 ${reviewComments.length} 条行内审阅评论。`,
       )
       if (isMutationCurrent(operationToken, operationSummaryIdentity, operationCommentIdentity)) {
         setError(null)

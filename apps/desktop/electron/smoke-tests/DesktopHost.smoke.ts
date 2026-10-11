@@ -98,14 +98,10 @@ test.describe('真实 Electron 宿主', () => {
     })
     await expect(
       page.evaluate(() =>
-        (window.DesktopBridge.performEditAction as (action: string) => Promise<void>)(
-          'invalid',
-        ),
+        (window.DesktopBridge.performEditAction as (action: string) => Promise<void>)('invalid'),
       ),
     ).rejects.toThrow('编辑命令无效')
-    const settings = await page.evaluate(async () =>
-      window.DesktopBridge.getAppearanceSettings(),
-    )
+    const settings = await page.evaluate(async () => window.DesktopBridge.getAppearanceSettings())
     expect(settings.version).toBe(7)
     expect(await page.evaluate(() => window.DesktopBridge.getDataLocation())).toMatchObject({
       currentDataDir: join(userDataDirectory, 'agent-home'),
@@ -114,10 +110,7 @@ test.describe('真实 Electron 宿主', () => {
     })
 
     await page.evaluate(() =>
-      Promise.all([
-        window.DesktopBridge.openPetOverlay(),
-        window.DesktopBridge.openPetOverlay(),
-      ]),
+      Promise.all([window.DesktopBridge.openPetOverlay(), window.DesktopBridge.openPetOverlay()]),
     )
     await expect
       .poll(
@@ -144,8 +137,7 @@ test.describe('真实 Electron 宿主', () => {
         hasDesktopBridge: typeof window.DesktopBridge === 'object',
         hasDragBridge: typeof window.DesktopBridge.beginPetDrag === 'function',
         hasPointerBridge: typeof window.DesktopBridge.setPetPointerPassthrough === 'function',
-        hasPresentationBridge:
-          typeof window.DesktopBridge.onPetPresentationPreview === 'function',
+        hasPresentationBridge: typeof window.DesktopBridge.onPetPresentationPreview === 'function',
         hasGlobalPointerBridge:
           typeof window.DesktopBridge.getPetGlobalPointerPosition === 'function',
       })),
@@ -284,9 +276,7 @@ test.describe('真实 Electron 宿主', () => {
     await page.reload()
     await waitForApplication(page)
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-    const startupThemeSamples = await page.evaluate(
-      () => window.__pidexStartupThemeSamples ?? [],
-    )
+    const startupThemeSamples = await page.evaluate(() => window.__pidexStartupThemeSamples ?? [])
     expect(startupThemeSamples.length).toBeGreaterThan(0)
     expect(
       startupThemeSamples.some(
@@ -360,9 +350,7 @@ test.describe('真实 Electron 宿主', () => {
     page = await application.firstWindow()
     await waitForApplication(page)
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
-    const persisted = await page.evaluate(async () =>
-      window.DesktopBridge.getAppearanceSettings(),
-    )
+    const persisted = await page.evaluate(async () => window.DesktopBridge.getAppearanceSettings())
     expect(persisted).toMatchObject({
       version: 7,
       mode: 'dark',

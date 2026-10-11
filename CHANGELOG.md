@@ -11,6 +11,12 @@
 
 - [release] 准备 0.2.0-beta.6，并允许在标签 Release 创建后上传经打包验证的同版本 Windows x64 安装包；未签名产物明确标注。
 
+### Fixed
+
+- [desktop/renderer] 提升默认次级文字、文件链接与非当前月日期的对比度，补齐日历行语义与代码块键盘访问，并更新外观与键盘无障碍验证入口。
+
+- [release] 修复导入过滤正则回溯风险，更新已变更的权限、环境和面板契约测试，并修正发布检查发现的格式漂移与图标生成器旧文件名；从固定 material-icon-theme@5.37.0 重新生成图标索引与分片。
+
 ### Security
 
 - [release] 升级 MCP SDK、ProseMirror、sharp、proxy-addr 与 source-map-js 至安全修复版本，解除 beta 6 依赖审计阻塞。

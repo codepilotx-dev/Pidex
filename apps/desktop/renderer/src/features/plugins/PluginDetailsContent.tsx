@@ -71,7 +71,9 @@ export function PluginDetailsMetadata({ item }: { item: PluginCatalogItem }): Re
       {item.miniMaxCli ? (
         <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
           <dt className={DETAILS_METADATA_LABEL_CLASS}>认证</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>{miniMaxAuthLabel(item.miniMaxCli.authStatus)}</dd>
+          <dd className={DETAILS_METADATA_VALUE_CLASS}>
+            {miniMaxAuthLabel(item.miniMaxCli.authStatus)}
+          </dd>
         </div>
       ) : null}
       {item.miniMaxCli?.credentialSource ? (
@@ -86,7 +88,9 @@ export function PluginDetailsMetadata({ item }: { item: PluginCatalogItem }): Re
       {item.miniMaxCli?.credentialSource ? (
         <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
           <dt className={DETAILS_METADATA_LABEL_CLASS}>区域</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>{item.miniMaxCli.credentialSource.region === 'cn' ? '中国' : 'Global'}</dd>
+          <dd className={DETAILS_METADATA_VALUE_CLASS}>
+            {item.miniMaxCli.credentialSource.region === 'cn' ? '中国' : 'Global'}
+          </dd>
         </div>
       ) : null}
       {item.miniMaxCli?.quotaLabel ? (

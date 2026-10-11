@@ -86,11 +86,11 @@ export const threadHandlers = {
               : undefined
         const archived = typeof params.archived === 'boolean' ? params.archived : undefined
         return runtime.projection.listPage({
-            ...(projectID !== undefined ? { projectID } : {}),
-            ...(archived !== undefined ? { archived } : {}),
-            limit: typeof params.limit === 'number' ? params.limit : 100,
-            ...(typeof params.cursor === 'string' ? { cursor: params.cursor } : {}),
-          })
+          ...(projectID !== undefined ? { projectID } : {}),
+          ...(archived !== undefined ? { archived } : {}),
+          limit: typeof params.limit === 'number' ? params.limit : 100,
+          ...(typeof params.cursor === 'string' ? { cursor: params.cursor } : {}),
+        })
       }
       case 'thread/create': {
         const workspaceValue = record(params.workspace, 'workspace')

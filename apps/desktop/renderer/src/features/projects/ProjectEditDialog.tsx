@@ -125,10 +125,12 @@ export function ProjectEditDialog({
   }
 
   function setPrimary(folderId: string): void {
-    setDraftFolders((current) => [
-      ...current.filter((folder) => folder.id === folderId),
-      ...current.filter((folder) => folder.id !== folderId),
-    ].map((folder, order) => ({ ...folder, role: order === 0 ? 'primary' : 'secondary', order })))
+    setDraftFolders((current) =>
+      [
+        ...current.filter((folder) => folder.id === folderId),
+        ...current.filter((folder) => folder.id !== folderId),
+      ].map((folder, order) => ({ ...folder, role: order === 0 ? 'primary' : 'secondary', order })),
+    )
   }
 
   function removeFolder(folder: DraftFolder): void {
@@ -139,7 +141,15 @@ export function ProjectEditDialog({
     ) {
       return
     }
-    setDraftFolders((current) => current.filter((candidate) => candidate.id !== folder.id).map((candidate, order) => ({ ...candidate, role: order === 0 ? 'primary' : 'secondary', order })))
+    setDraftFolders((current) =>
+      current
+        .filter((candidate) => candidate.id !== folder.id)
+        .map((candidate, order) => ({
+          ...candidate,
+          role: order === 0 ? 'primary' : 'secondary',
+          order,
+        })),
+    )
   }
 
   async function save(): Promise<void> {
@@ -147,7 +157,9 @@ export function ProjectEditDialog({
     setBusy(true)
     try {
       const current = await desktopClient.editProject({
-        projectId, name: draftName.trim(), paths: projectFolderPaths(draftFolders),
+        projectId,
+        name: draftName.trim(),
+        paths: projectFolderPaths(draftFolders),
         expectedVersion: project.projectVersion ?? 0,
       })
       onProjectChange(current)
@@ -184,9 +196,12 @@ export function ProjectEditDialog({
           }}
         >
           <header className="project-edit-header tw:flex tw:items-center tw:justify-between tw:gap-4">
-            <Dialog.Title className="tw:m-0 tw:type-title-lg tw:text-app-text">编辑项目</Dialog.Title>
+            <Dialog.Title className="tw:m-0 tw:type-title-lg tw:text-app-text">
+              编辑项目
+            </Dialog.Title>
             <Dialog.Close asChild>
-              <Button isIconOnly
+              <Button
+                isIconOnly
                 className="project-edit-close"
                 color="ghostSecondary"
                 disabled={busy}
@@ -230,11 +245,24 @@ export function ProjectEditDialog({
 
               <section className="project-edit-folders tw:flex tw:flex-col tw:gap-2">
                 <h3 className="tw:m-0 tw:type-row-title tw:text-app-text">源文件夹</h3>
-                <div onDragOver={(event) => { if (!busy) { event.preventDefault(); event.dataTransfer.dropEffect = 'copy' } }}
+                <div
+                  onDragOver={(event) => {
+                    if (!busy) {
+                      event.preventDefault()
+                      event.dataTransfer.dropEffect = 'copy'
+                    }
+                  }}
                   onDrop={(event) => {
                     event.preventDefault()
-                    if (!busy) addPaths(Array.from(event.dataTransfer.files).map((file) => desktopClient.getComposerFilePath(file)).filter(Boolean))
-                  }} className="project-edit-folder-list tw:max-h-[15rem] tw:overflow-y-auto tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-canvas">
+                    if (!busy)
+                      addPaths(
+                        Array.from(event.dataTransfer.files)
+                          .map((file) => desktopClient.getComposerFilePath(file))
+                          .filter(Boolean),
+                      )
+                  }}
+                  className="project-edit-folder-list tw:max-h-[15rem] tw:overflow-y-auto tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-canvas"
+                >
                   {draftFolders.map((folder) => (
                     <div
                       className={cx(
@@ -253,12 +281,16 @@ export function ProjectEditDialog({
                         {folder.name}
                       </span>
                       {draftFolders.length > 1 && folder.role === 'primary' ? (
-                        <span title="新聊天使用主目录作为工作目录，并在这里查找 AGENTS.md、config.toml 和技能文件" className="project-edit-primary-badge tw:shrink-0 tw:rounded-full tw:bg-app-hover tw:px-2 tw:py-1 tw:type-caption tw:text-app-text-soft">
+                        <span
+                          title="新聊天使用主目录作为工作目录，并在这里查找 AGENTS.md、config.toml 和技能文件"
+                          className="project-edit-primary-badge tw:shrink-0 tw:rounded-full tw:bg-app-hover tw:px-2 tw:py-1 tw:type-caption tw:text-app-text-soft"
+                        >
                           主目录
                         </span>
                       ) : null}
                       {draftFolders.length > 1 && folder.role !== 'primary' ? (
-                        <Button isIconOnly
+                        <Button
+                          isIconOnly
                           className="project-edit-folder-action tw:w-[1.875rem]"
                           color="ghostSecondary"
                           disabled={busy}
@@ -271,7 +303,8 @@ export function ProjectEditDialog({
                         </Button>
                       ) : null}
                       {folder.availability === 'missing' ? (
-                        <Button isIconOnly
+                        <Button
+                          isIconOnly
                           className="project-edit-folder-action tw:w-[1.875rem]"
                           color="ghostSecondary"
                           disabled={busy}
@@ -283,7 +316,8 @@ export function ProjectEditDialog({
                           <RefreshCw size={APP_ICON_SIZE} />
                         </Button>
                       ) : null}
-                      <Button isIconOnly
+                      <Button
+                        isIconOnly
                         className="project-edit-folder-action tw:w-[1.875rem]"
                         color="ghostSecondary"
                         disabled={busy}

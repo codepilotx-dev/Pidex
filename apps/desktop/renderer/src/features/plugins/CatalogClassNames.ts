@@ -38,7 +38,8 @@ export const DETAILS_METADATA_LABEL_CLASS =
   'tw:m-0 tw:min-w-0 tw:text-app-text-meta tw:type-caption tw:wrap-anywhere'
 
 /** 元数据取值列。 */
-export const DETAILS_METADATA_VALUE_CLASS = 'tw:m-0 tw:min-w-0 tw:text-app-text tw:type-body-sm tw:wrap-anywhere'
+export const DETAILS_METADATA_VALUE_CLASS =
+  'tw:m-0 tw:min-w-0 tw:text-app-text tw:type-body-sm tw:wrap-anywhere'
 
 /** 详情页小节：标题 + 内容的网格。 */
 export const DETAILS_SECTION_CLASS = 'tw:grid tw:min-w-0 tw:gap-4'

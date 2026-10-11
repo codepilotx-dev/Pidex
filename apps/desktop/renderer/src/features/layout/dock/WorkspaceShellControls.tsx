@@ -19,9 +19,10 @@ export type WorkspaceShellControlsProps = {
  * 右侧工作区入口文案与可观察布局同步：
  * chat 显示“显示标签页”，split 显示“隐藏标签页”；空面板使用现有 launcher。
  */
-export function resolveWorkspaceControlPresentation(
-  layout: WorkspaceLayout,
-): { label: string; pressed: boolean } {
+export function resolveWorkspaceControlPresentation(layout: WorkspaceLayout): {
+  label: string
+  pressed: boolean
+} {
   if (layout === 'chat') {
     return { label: '显示标签页', pressed: false }
   }
@@ -44,7 +45,8 @@ export function WorkspaceShellControls({
   return (
     <div className="workspace-shell-controls">
       {showBottomPanel ? (
-        <Button isIconOnly
+        <Button
+          isIconOnly
           aria-label={terminalVisible ? '隐藏底部面板' : '打开底部面板'}
           aria-pressed={terminalVisible}
           className="workspace-shell-control-button"
@@ -64,7 +66,8 @@ export function WorkspaceShellControls({
         </Button>
       ) : null}
       {showRightPanel ? (
-        <Button isIconOnly
+        <Button
+          isIconOnly
           aria-label={workspaceControl.label}
           aria-pressed={workspaceControl.pressed}
           className="workspace-shell-control-button"

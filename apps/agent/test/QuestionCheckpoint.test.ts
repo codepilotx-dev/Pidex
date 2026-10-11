@@ -297,9 +297,7 @@ describe('问题 checkpoint', () => {
   })
 
   test('回复持久化 RunState 并触发恢复回调，不依赖内存 Promise', async () => {
-    const db = new AgentDatabase(
-      join(tmpdir(), `pidex-question-${crypto.randomUUID()}.sqlite`),
-    )
+    const db = new AgentDatabase(join(tmpdir(), `pidex-question-${crypto.randomUUID()}.sqlite`))
     databases.push(db)
     const hub = await Effect.runPromise(EventHub.make)
     const thread = db.createThread()

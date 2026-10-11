@@ -28,10 +28,18 @@ const GitWorkspaceResultSchema = Schema.Struct({
 
 export const GitRpcMethods = {
   'git/message/generate': defineMethod({
-    params: Schema.Struct({ projectId: OpaqueIDSchema, threadId: Schema.optional(OpaqueIDSchema), kind: Schema.Literals(['commit', 'pullRequest']), paths: Schema.optional(Schema.Array(NonEmptyStringSchema)) }),
+    params: Schema.Struct({
+      projectId: OpaqueIDSchema,
+      threadId: Schema.optional(OpaqueIDSchema),
+      kind: Schema.Literals(['commit', 'pullRequest']),
+      paths: Schema.optional(Schema.Array(NonEmptyStringSchema)),
+    }),
     result: Schema.Struct({ title: Schema.String, body: Schema.String }),
     errors: [...GitWorkspaceErrors, 'MODEL_UNAVAILABLE', 'PERMISSION_DENIED', 'THREAD_NOT_FOUND'],
-    capability: 'git.generate.v1', mutation: false, exactParams: true, exactResult: true,
+    capability: 'git.generate.v1',
+    mutation: false,
+    exactParams: true,
+    exactResult: true,
   }),
   'git/branch/create': defineMethod({
     params: Schema.Struct({

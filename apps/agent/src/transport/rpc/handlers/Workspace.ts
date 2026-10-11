@@ -50,7 +50,9 @@ export const workspaceHandlers = {
   ): Promise<unknown> {
     const { db, projectSources } = runtime.dependencies
     const params = optionalRecord(rawParams)
-    const projects = new ProjectService(db, projectSources, async (events) => { for (const event of events) await Effect.runPromise(runtime.dependencies.hub.publish(event)) })
+    const projects = new ProjectService(db, projectSources, async (events) => {
+      for (const event of events) await Effect.runPromise(runtime.dependencies.hub.publish(event))
+    })
     const operationID = () => stringParam(params, 'operationId')
     const expectedVersion = () => {
       if (
@@ -102,11 +104,25 @@ export const workspaceHandlers = {
           operationID: operationID(),
         })
       case 'project/edit': {
-        if (!Array.isArray(params.paths) || !params.paths.every((path) => typeof path === 'string' && path.trim())) throw new AgentError('INVALID_REQUEST', 'paths 参数无效', 400)
-        return projects.edit({ projectID: stringParam(params, 'projectId'), name: stringParam(params, 'name'), paths: params.paths as string[], expectedVersion: expectedVersion(), operationID: operationID() })
+        if (
+          !Array.isArray(params.paths) ||
+          !params.paths.every((path) => typeof path === 'string' && path.trim())
+        )
+          throw new AgentError('INVALID_REQUEST', 'paths 参数无效', 400)
+        return projects.edit({
+          projectID: stringParam(params, 'projectId'),
+          name: stringParam(params, 'name'),
+          paths: params.paths as string[],
+          expectedVersion: expectedVersion(),
+          operationID: operationID(),
+        })
       }
       case 'project/restore':
-        return projects.restore({ projectID: stringParam(params, 'projectId'), removalOperationID: stringParam(params, 'removalOperationId'), operationID: operationID() })
+        return projects.restore({
+          projectID: stringParam(params, 'projectId'),
+          removalOperationID: stringParam(params, 'removalOperationId'),
+          operationID: operationID(),
+        })
       case 'project/remove':
         return projects.remove({
           projectID: stringParam(params, 'projectId'),

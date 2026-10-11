@@ -154,17 +154,21 @@
   .conversation-turn-nav-item[data-running] .conversation-turn-nav-marker {
     opacity: 0.72;
   }
-  .conversation-turn-nav-item[data-neighbor-distance='1'] :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+  .conversation-turn-nav-item[data-neighbor-distance='1']
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
     --marker-progress: 0.7;
   }
-  .conversation-turn-nav-item[data-neighbor-distance='2'] :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+  .conversation-turn-nav-item[data-neighbor-distance='2']
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
     --marker-progress: 0.4;
   }
-  .conversation-turn-nav-item[data-neighbor-distance='3'] :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+  .conversation-turn-nav-item[data-neighbor-distance='3']
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
     --marker-progress: 0.2;
   }
 
-  .conversation-turn-nav-item[data-interaction-target] :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+  .conversation-turn-nav-item[data-interaction-target]
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
     --marker-progress: 1;
 
     opacity: 1;
@@ -185,7 +189,8 @@
     opacity: 1;
   }
 
-  .conversation-turn-nav-list[data-scrubbing] :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+  .conversation-turn-nav-list[data-scrubbing]
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
     transition: none;
   }
 

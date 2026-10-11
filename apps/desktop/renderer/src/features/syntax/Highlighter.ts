@@ -1,8 +1,5 @@
 import type { BundledLanguage, Highlighter, ThemedToken } from 'shiki'
-import {
-  isHighlightThemeSlug,
-  loadHighlightTheme,
-} from '../../../shared/themes/Manifest.js'
+import { isHighlightThemeSlug, loadHighlightTheme } from '../../../shared/themes/Manifest.js'
 import type { HighlightThemeSlug } from '../../../shared/themes/Manifest.js'
 
 import { LruCache } from './LruCache.js'
@@ -159,9 +156,7 @@ async function highlightCodeUncached({
         : highlighter.loadLanguage(shiki.bundledLanguages[language]),
       highlighter.getLoadedThemes().includes(theme)
         ? undefined
-        : loadHighlightTheme(theme).then((registration) =>
-            highlighter.loadTheme(registration),
-          ),
+        : loadHighlightTheme(theme).then((registration) => highlighter.loadTheme(registration)),
     ])
     const highlighted = highlighter.codeToTokens(code, {
       lang: language,

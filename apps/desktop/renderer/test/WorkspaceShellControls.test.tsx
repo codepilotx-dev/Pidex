@@ -1,6 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import type { ReactElement } from 'react'
-import { applyWorkbenchPanelAction, createDefaultWorkbenchTabsState } from '../src/features/layout/dock/RightDockState.js'
+import {
+  applyWorkbenchPanelAction,
+  createDefaultWorkbenchTabsState,
+} from '../src/features/layout/dock/RightDockState.js'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
   BottomPanelToggleIcon,
@@ -42,11 +45,17 @@ describe('WorkspaceShellControls', () => {
   test('empty workspace toggle reveals launcher without creating a browser tab', () => {
     let state = createDefaultWorkbenchTabsState()
     state = applyWorkbenchPanelAction(state, { type: 'setWorkspaceLayout', layout: 'chat' })
-    const toggle = () => { state = applyWorkbenchPanelAction(state, { type: 'stepWorkspaceLayout' }) }
+    const toggle = () => {
+      state = applyWorkbenchPanelAction(state, { type: 'stepWorkspaceLayout' })
+    }
     const element = WorkspaceShellControls({
-      workspaceLayout: 'chat', terminalAvailable: false, terminalVisible: false,
-      showBottomPanel: false, showRightPanel: true,
-      onToggleTerminal: () => {}, onStepWorkspaceLayout: toggle,
+      workspaceLayout: 'chat',
+      terminalAvailable: false,
+      terminalVisible: false,
+      showBottomPanel: false,
+      showRightPanel: true,
+      onToggleTerminal: () => {},
+      onStepWorkspaceLayout: toggle,
     }) as ReactElement<{ children: ReactElement<{ onClick: () => void; disabled?: boolean }>[] }>
     const control = element.props.children[1]!
     expect(control.props.onClick).toBe(toggle)
@@ -55,7 +64,9 @@ describe('WorkspaceShellControls', () => {
     expect(state.right.open).toBe(true)
     expect(state.right.tabIds).toEqual([])
     expect(state.tabsById).toEqual({})
-    expect(renderControls({ terminalAvailable: false, showBottomPanel: false })).not.toContain('disabled=""')
+    expect(renderControls({ terminalAvailable: false, showBottomPanel: false })).not.toContain(
+      'disabled=""',
+    )
   })
 
   test('keeps tab entries hidden while the workspace shows the chat surface', () => {

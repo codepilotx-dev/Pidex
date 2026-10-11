@@ -611,7 +611,8 @@ export function ScheduledTaskDetailPanel(props: Props): React.ReactNode {
               </Button>
             ) : null}
             {editable ? (
-              <Button isIconOnly
+              <Button
+                isIconOnly
                 color="danger"
                 size="toolbar"
                 title="删除计划任务"

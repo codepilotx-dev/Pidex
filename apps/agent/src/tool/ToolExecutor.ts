@@ -506,8 +506,7 @@ export class ToolExecutor {
     }
     const pathValue = typeof input.file_path === 'string' ? input.file_path : input.path
     const fileTool = name === 'Read' || name === 'Write' || name === 'Edit'
-    const targetPath =
-      pathValue === '@pidex/config.json' ? this.options?.userConfigPath : pathValue
+    const targetPath = pathValue === '@pidex/config.json' ? this.options?.userConfigPath : pathValue
     const canonicalTarget =
       fileTool && typeof targetPath === 'string' && !targetPath.startsWith('@')
         ? await resolveProtectionPath(resolve(workspace.rootPath, targetPath))

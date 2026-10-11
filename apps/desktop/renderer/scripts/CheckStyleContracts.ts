@@ -2,10 +2,7 @@ import { readdir, readFile, stat } from 'node:fs/promises'
 import { dirname, extname, isAbsolute, join, relative, resolve } from 'node:path'
 import { gzipSync } from 'node:zlib'
 import ts from 'typescript'
-import {
-  selectorBlock,
-  transitionProperties,
-} from './StyleAnimationContracts.js'
+import { selectorBlock, transitionProperties } from './StyleAnimationContracts.js'
 
 type FeatureTokenException = {
   file: string
@@ -437,7 +434,10 @@ for (const file of featureTokenScriptFiles) {
   if (/<Button\b(?![^>]*\bisIconOnly)[^>]*\baria-(?:pressed|selected)\s*=/s.test(source)) {
     errors.push(`Button must not represent persistent pressed/selected state: ${path}`)
   }
-  if (/PopoverRadioGroup/.test(source) && /trigger=\{?\s*<Button\b(?![^>]*\bisIconOnly)/s.test(source)) {
+  if (
+    /PopoverRadioGroup/.test(source) &&
+    /trigger=\{?\s*<Button\b(?![^>]*\bisIconOnly)/s.test(source)
+  ) {
     errors.push(`Popover radio-group trigger must not use Button: ${path}`)
   }
 }
@@ -1262,7 +1262,8 @@ for (const file of scriptFiles) {
     if (allowedUnprefixedUtility.test(token)) continue
     const lineStart = source.lastIndexOf('\n', index) + 1
     const lineEnd = source.indexOf('\n', index)
-    if (!isClassListLine(source.slice(lineStart, lineEnd === -1 ? source.length : lineEnd))) continue
+    if (!isClassListLine(source.slice(lineStart, lineEnd === -1 ? source.length : lineEnd)))
+      continue
     errors.push(
       `Tailwind utility is missing the tw: prefix: ${path}:${lineNumberAt(source, index)} (${token})`,
     )
@@ -1459,7 +1460,6 @@ for (const [lazyEntrypoint, expectedLayer] of lazyStyleEntrypoints) {
     ),
   ]
   if (layers.length !== 1 || layers[0] !== expectedLayer) {
-
     errors.push(
       `lazy style entrypoint ${workspacePath(lazyEntrypoint)} must declare only @layer ${expectedLayer}`,
     )
@@ -1724,9 +1724,7 @@ for (const [selector, label] of [
   }
   for (const site of sites) {
     if (/will-change\s*[:=]/.test(site.window) || /will-change-/.test(site.window)) {
-      errors.push(
-        `${label} must not carry persistent will-change: ${selector} (${site.path})`,
-      )
+      errors.push(`${label} must not carry persistent will-change: ${selector} (${site.path})`)
     }
   }
 }

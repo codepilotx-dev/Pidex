@@ -218,7 +218,8 @@ function AttachmentRemoveButton({
   onRemove: () => void
 }): React.ReactNode {
   return (
-    <Button isIconOnly
+    <Button
+      isIconOnly
       className={ATTACHMENT_REMOVE_CLASS}
       color="ghostSecondary"
       onClick={(event) => {

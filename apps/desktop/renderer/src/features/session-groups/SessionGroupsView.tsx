@@ -359,7 +359,9 @@ export function SessionGroupsView(): React.ReactNode {
                 <div className="session-group-section__title-row tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:text-app-text tw:[&>h3]:m-0 tw:[&>h3]:type-title-sm">
                   <Users size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
                   <h3>成员任务</h3>
-                  <span className="session-group-section-count tw:inline-flex tw:h-4.5 tw:min-w-4.5 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-control tw:px-1 tw:text-app-text-soft tw:type-label">{detail.members.length}</span>
+                  <span className="session-group-section-count tw:inline-flex tw:h-4.5 tw:min-w-4.5 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-control tw:px-1 tw:text-app-text-soft tw:type-label">
+                    {detail.members.length}
+                  </span>
                 </div>
                 <div className="session-group-member-add tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:@max-[760px]:flex-col tw:@max-[760px]:items-stretch">
                   <div className="session-group-member-select-wrap tw:max-w-[380px] tw:flex-1 tw:@max-[760px]:w-full tw:@max-[760px]:max-w-none">
@@ -405,7 +407,8 @@ export function SessionGroupsView(): React.ReactNode {
                         </span>
                       </Link>
                       <div className="session-group-member-card__actions">
-                        <Button isIconOnly
+                        <Button
+                          isIconOnly
                           aria-label={`移出会话：${member.title || member.threadId}`}
                           color="ghostSecondary"
                           size="toolbar"
@@ -429,7 +432,9 @@ export function SessionGroupsView(): React.ReactNode {
                 <div className="session-group-section__title-row tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:text-app-text tw:[&>h3]:m-0 tw:[&>h3]:type-title-sm">
                   <History size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
                   <h3>步骤时间线</h3>
-                  <span className="session-group-section-count tw:inline-flex tw:h-4.5 tw:min-w-4.5 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-control tw:px-1 tw:text-app-text-soft tw:type-label">{steps.length}</span>
+                  <span className="session-group-section-count tw:inline-flex tw:h-4.5 tw:min-w-4.5 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-control tw:px-1 tw:text-app-text-soft tw:type-label">
+                    {steps.length}
+                  </span>
                 </div>
                 <div className="session-group-timeline tw:flex tw:flex-col">
                   {steps.map((step) => (
@@ -459,12 +464,15 @@ export function SessionGroupsView(): React.ReactNode {
           }
           title="工作流"
         >
-          <main aria-live="polite" className="session-groups-index tw:flex tw:min-w-0 tw:min-h-0 tw:grow tw:shrink tw:basis-auto tw:flex-col">
+          <main
+            aria-live="polite"
+            className="session-groups-index tw:flex tw:min-w-0 tw:min-h-0 tw:grow tw:shrink tw:basis-auto tw:flex-col"
+          >
             {error ? (
               <div
-                  className="session-group-notice tw:mb-4 tw:flex tw:items-center tw:justify-between tw:gap-3 tw:rounded-lg tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:px-4 tw:py-3 tw:text-app-danger-fg tw:type-body-sm"
-                  role="alert"
-                >
+                className="session-group-notice tw:mb-4 tw:flex tw:items-center tw:justify-between tw:gap-3 tw:rounded-lg tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:px-4 tw:py-3 tw:text-app-danger-fg tw:type-body-sm"
+                role="alert"
+              >
                 <AlertCircle size={APP_ICON_SIZE} />
                 <span>{error}</span>
                 <Button color="secondary" size="compact" onClick={() => void refresh()}>
@@ -683,7 +691,11 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
           )}
         </header>
 
-        {step.summary ? <p className="session-group-step__summary tw:mb-2 tw:mt-0 tw:whitespace-pre-wrap tw:text-app-text-soft tw:type-body-sm">{step.summary}</p> : null}
+        {step.summary ? (
+          <p className="session-group-step__summary tw:mb-2 tw:mt-0 tw:whitespace-pre-wrap tw:text-app-text-soft tw:type-body-sm">
+            {step.summary}
+          </p>
+        ) : null}
 
         {step.checkpoints.length ? (
           <ol className="session-group-step__evidence tw:my-2 tw:flex tw:list-none tw:flex-col tw:gap-1 tw:p-0 tw:[&>li]:flex tw:[&>li]:items-baseline tw:[&>li]:gap-2 tw:[&>li]:text-app-text-meta tw:[&>li]:type-caption">
@@ -708,7 +720,9 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
                   >
                     {checkpointLabel}
                   </span>
-                  <span className="session-group-step__checkpoint-text tw:flex-1">{checkpoint.summary}</span>
+                  <span className="session-group-step__checkpoint-text tw:flex-1">
+                    {checkpoint.summary}
+                  </span>
                 </li>
               )
             })}
@@ -754,9 +768,9 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
 
         {step.failure ? (
           <div
-          className="session-group-step__failure tw:mt-2 tw:flex tw:flex-col tw:gap-1 tw:rounded-md tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:px-3 tw:py-2 tw:text-app-danger-fg tw:type-caption"
-          role="alert"
-        >
+            className="session-group-step__failure tw:mt-2 tw:flex tw:flex-col tw:gap-1 tw:rounded-md tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:px-3 tw:py-2 tw:text-app-danger-fg tw:type-caption"
+            role="alert"
+          >
             <div className="session-group-step__failure-title tw:flex tw:items-center tw:gap-1 tw:type-weight-label">
               <AlertCircle size={APP_ICON_SIZE} />
               <strong>失败阶段：{step.failure.stage}</strong>
@@ -794,7 +808,9 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
                 style={diffResize.style}
               >
                 {diffLoading ? (
-                  <div className="session-group-diff-loading tw:p-4 tw:text-center tw:text-app-text-meta tw:type-caption">正在加载 Diff…</div>
+                  <div className="session-group-diff-loading tw:p-4 tw:text-center tw:text-app-text-meta tw:type-caption">
+                    正在加载 Diff…
+                  </div>
                 ) : diff ? (
                   diffFiles.map((file) => (
                     <FileMutationDiffBody diff={file.diff} diffMarkerStyle="color" key={file.key} />

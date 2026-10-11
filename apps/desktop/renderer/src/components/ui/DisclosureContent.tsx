@@ -66,10 +66,7 @@ export function DisclosureContent({
       <div className="ui-disclosure-content__clip tw:min-w-0 tw:min-h-0 tw:overflow-hidden">
         {renderContent ? (
           <div
-            className={joinClassNames(
-              'ui-disclosure-content__body tw:min-w-0',
-              contentClassName,
-            )}
+            className={joinClassNames('ui-disclosure-content__body tw:min-w-0', contentClassName)}
           >
             {children}
           </div>

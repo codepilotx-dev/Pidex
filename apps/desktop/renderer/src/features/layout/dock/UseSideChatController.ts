@@ -49,9 +49,11 @@ export function reusePendingSideChatCreation<T>(
 ): Promise<T> {
   const existing = pending.get(key)
   if (existing) return existing
-  const request = Promise.resolve().then(create).finally(() => {
-    if (pending.get(key) === request) pending.delete(key)
-  })
+  const request = Promise.resolve()
+    .then(create)
+    .finally(() => {
+      if (pending.get(key) === request) pending.delete(key)
+    })
   pending.set(key, request)
   return request
 }

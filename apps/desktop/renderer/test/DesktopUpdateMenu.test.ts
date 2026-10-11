@@ -1,8 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type {
-  DesktopUpdateIpcBridge,
-  DesktopUpdateStatus,
-} from '@pidex/shared/desktop-update-ipc'
+import type { DesktopUpdateIpcBridge, DesktopUpdateStatus } from '@pidex/shared/desktop-update-ipc'
 import {
   buildDesktopUpdateIndicatorModel,
   runDesktopUpdateIndicatorAction,

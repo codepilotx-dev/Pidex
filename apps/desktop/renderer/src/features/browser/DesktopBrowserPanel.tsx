@@ -2,7 +2,15 @@ import type React from 'react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ComposerDraftKey } from '../session/composer/ComposerTypes.js'
 import { useBrowserAnnotations } from './UseBrowserAnnotations.js'
-import { ArrowLeft, ArrowRight, Globe2, MessageSquarePlus, Plus, RefreshCw, Square } from 'lucide-react'
+import {
+  ArrowLeft,
+  ArrowRight,
+  Globe2,
+  MessageSquarePlus,
+  Plus,
+  RefreshCw,
+  Square,
+} from 'lucide-react'
 import type { DesktopBrowserState } from '../../../shared/Types.js'
 import type { DesktopBrowserClient } from '../../services/desktop-client/DesktopBrowserClient.js'
 import { formatBrowserDisplayURL } from './BrowserDisplayURL.js'
@@ -152,7 +160,8 @@ export function DesktopBrowserPanel({
     <section className="right-dock-browser" aria-label="内置浏览器">
       <div className="browser-commandbar tw:grid tw:h-12 tw:min-h-12 tw:min-w-0 tw:shrink-0 tw:grid-cols-[auto_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:border-b tw:border-app-border-subtle tw:bg-app-dock tw:p-2 tw:@max-[440px]:gap-1 tw:@max-[440px]:px-1">
         <div className="browser-navigation tw:flex tw:min-w-0 tw:shrink-0 tw:items-center tw:justify-self-start tw:gap-1 tw:@max-[440px]:gap-0">
-          <Button isIconOnly
+          <Button
+            isIconOnly
             color="ghostSecondary"
             disabled={!state.canGoBack}
             size="toolbar"
@@ -161,7 +170,8 @@ export function DesktopBrowserPanel({
           >
             <ArrowLeft size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           </Button>
-          <Button isIconOnly
+          <Button
+            isIconOnly
             color="ghostSecondary"
             disabled={!state.canGoForward}
             size="toolbar"
@@ -170,7 +180,8 @@ export function DesktopBrowserPanel({
           >
             <ArrowRight size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           </Button>
-          <Button isIconOnly
+          <Button
+            isIconOnly
             className="tw:shrink-0"
             color="ghostSecondary"
             size="toolbar"
@@ -179,7 +190,13 @@ export function DesktopBrowserPanel({
               void runBrowserAction(state.loading ? client.stopBrowser : client.reloadBrowser)
             }
           >
-            <span className="tw:inline-flex">{state.loading ? <Square size={APP_ICON_SIZES.sm} /> : <RefreshCw size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />}</span>
+            <span className="tw:inline-flex">
+              {state.loading ? (
+                <Square size={APP_ICON_SIZES.sm} />
+              ) : (
+                <RefreshCw size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+              )}
+            </span>
           </Button>
         </div>
         <form
@@ -197,7 +214,10 @@ export function DesktopBrowserPanel({
             value={compactAddress}
             onBlur={() => setAddressFocused(false)}
             onChange={(event) => setAddress(event.target.value)}
-            onFocus={(event) => { setAddressFocused(true); event.currentTarget.select() }}
+            onFocus={(event) => {
+              setAddressFocused(true)
+              event.currentTarget.select()
+            }}
             onKeyDown={(event) => {
               if (event.nativeEvent.isComposing) {
                 if (event.key === 'Enter') event.preventDefault()
@@ -241,7 +261,8 @@ export function DesktopBrowserPanel({
               Agent 操作中
             </span>
           ) : null}
-          <Button isIconOnly
+          <Button
+            isIconOnly
             color="ghostSecondary"
             size="toolbar"
             title={annotation.active ? '退出批注' : '选择网页目标并添加批注'}
@@ -252,7 +273,8 @@ export function DesktopBrowserPanel({
           >
             <MessageSquarePlus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           </Button>
-          <Button isIconOnly
+          <Button
+            isIconOnly
             className="tw:@max-[440px]:hidden"
             color="ghostSecondary"
             size="toolbar"

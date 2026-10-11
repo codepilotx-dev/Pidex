@@ -108,7 +108,9 @@ describe('canonical tool item display', () => {
     expect(toolDetailKind(toolItem({ activity: undefined }))).toBe('command')
     expect(toolDetailKind(toolItem({ activity: undefined, command: null }))).toBe('generic')
     expect(toolDetailKind(toolItem({ activity: { type: 'integration' } }))).toBe('generic')
-    expect(toolDetailKind(toolItem({ activity: { type: 'file_change', changes: [] } }))).toBe('generic')
+    expect(toolDetailKind(toolItem({ activity: { type: 'file_change', changes: [] } }))).toBe(
+      'generic',
+    )
   })
 
   test('keeps raw output formatting and explicit exit codes without exposing process envelopes', () => {
@@ -117,15 +119,29 @@ describe('canonical tool item display', () => {
     expect(buildToolItemDisplay(item).resultText).toBe('  indented\n\tfailed\nfailed again')
     expect(readCommandExitCode(output)).toBe(1)
     expect(readCommandExitCode('{"result":{"exit_code":0}}')).toBe(0)
-    for (const value of [null, 'done', '{"exitCode":"0"}', '{"exitCode":0.5}', '{"stdout":"done"}']) {
+    for (const value of [
+      null,
+      'done',
+      '{"exitCode":"0"}',
+      '{"exitCode":0.5}',
+      '{"stdout":"done"}',
+    ]) {
       expect(readCommandExitCode(value)).toBeNull()
     }
-    const html = renderToStaticMarkup(<TooltipProvider><ToolExecutionCard item={item} view={buildToolItemDisplay(item)} /></TooltipProvider>)
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <ToolExecutionCard item={item} view={buildToolItemDisplay(item)} />
+      </TooltipProvider>,
+    )
     expect(html).toContain('退出码 1')
     expect(html).toContain('失败')
     expect(html).not.toContain('exitCode')
-    expect(cleanCommandOutput('{"result":{"exitCode":0,"stdout":"  value\\n","stderr":""}}')).toBe('  value\n')
-    expect(buildToolItemDisplay(toolItem({ output: 'same', error: 'same' })).resultText).toBe('same')
+    expect(cleanCommandOutput('{"result":{"exitCode":0,"stdout":"  value\\n","stderr":""}}')).toBe(
+      '  value\n',
+    )
+    expect(buildToolItemDisplay(toolItem({ output: 'same', error: 'same' })).resultText).toBe(
+      'same',
+    )
   })
 
   test('follows live output until the reader scrolls away, then resumes at the bottom', () => {
@@ -147,8 +163,17 @@ describe('canonical tool item display', () => {
   })
 
   test('keeps read/search details result-only and does not offer empty details', () => {
-    const item = toolItem({ command: null, activity: { type: 'search', query: 'pattern' }, input: { pattern: 'unique-input' }, output: 'found' })
-    const html = renderToStaticMarkup(<TooltipProvider><ToolExecutionCard item={item} view={buildToolItemDisplay(item)} /></TooltipProvider>)
+    const item = toolItem({
+      command: null,
+      activity: { type: 'search', query: 'pattern' },
+      input: { pattern: 'unique-input' },
+      output: 'found',
+    })
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <ToolExecutionCard item={item} view={buildToolItemDisplay(item)} />
+      </TooltipProvider>,
+    )
     expect(html).toContain('found')
     expect(html).not.toContain('unique-input')
     expect(html).not.toContain('aria-label="执行内容"')

@@ -74,13 +74,13 @@ describe('collapsible user Markdown', () => {
   test('shares conversation paragraph rhythm without duplicating the old space-3 override', async () => {
     const fs = await import('node:fs/promises')
     const path = await import('node:path')
-    const scssPath = path.resolve(
-      import.meta.dir,
-      '../src/styles/primitives/conversation.css',
-    )
+    const scssPath = path.resolve(import.meta.dir, '../src/styles/primitives/conversation.css')
     const content = await fs.readFile(scssPath, 'utf-8')
 
-    const markdown = await fs.readFile(path.resolve(import.meta.dir, '../src/styles/markdown.css'), 'utf-8')
+    const markdown = await fs.readFile(
+      path.resolve(import.meta.dir, '../src/styles/markdown.css'),
+      'utf-8',
+    )
     // 会话用户消息与助手回复共享一个字号的段落间距，测量容器同步实际行高。
     const paragraphMarginSelectors = content.match(
       /([^{}]+)\{\s*p\s*\{[^}]*margin-block:\s*var\(--cpx-sys-space-3\);[^}]*\}/,

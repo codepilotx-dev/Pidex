@@ -112,7 +112,13 @@ export function SkillDetailsDialog({
               </Dialog.Description>
             </span>
             <Dialog.Close asChild>
-              <Button isIconOnly color="ghostSecondary" ref={closeRef} size="toolbar" title="关闭技能详情">
+              <Button
+                isIconOnly
+                color="ghostSecondary"
+                ref={closeRef}
+                size="toolbar"
+                title="关闭技能详情"
+              >
                 <X aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
               </Button>
             </Dialog.Close>

@@ -5,10 +5,7 @@ import { join, resolve } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { BrowserCommand } from '@pidex/agent-protocol'
 import { runBrowserOperation } from '../src/browser/BrowserOperations.js'
-import {
-  requireBrowserData,
-  requireBrowserUtility,
-} from '../src/browser/BrowserManagementInput.js'
+import { requireBrowserData, requireBrowserUtility } from '../src/browser/BrowserManagementInput.js'
 import {
   browserDownloadFileName,
   reserveBrowserDownloadPath,

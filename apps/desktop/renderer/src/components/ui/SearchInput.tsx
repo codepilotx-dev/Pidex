@@ -143,7 +143,8 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         value={value}
       />
       {value ? (
-        <Button isIconOnly
+        <Button
+          isIconOnly
           aria-label={clearLabel}
           className="search-input-clear"
           color="ghostSecondary"

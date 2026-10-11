@@ -1,7 +1,18 @@
 import type { ReactNode } from 'react'
 import { createContext, useContext } from 'react'
 import type { ModelPreset } from '../../ModelPresets.js'
-import type { DesktopReviewSource, DesktopUserMessageInput, DesktopGitStatus, DesktopPermissionDecision, DesktopPermissionMode, DesktopPermissionRequest, DesktopSessionStatus, DesktopWorkspace, DesktopThreadGoal, DesktopBrowserState } from '../../../shared/Types.js'
+import type {
+  DesktopReviewSource,
+  DesktopUserMessageInput,
+  DesktopGitStatus,
+  DesktopPermissionDecision,
+  DesktopPermissionMode,
+  DesktopPermissionRequest,
+  DesktopSessionStatus,
+  DesktopWorkspace,
+  DesktopThreadGoal,
+  DesktopBrowserState,
+} from '../../../shared/Types.js'
 import type { OpenPlanInDockRequest } from './workflow/WorkflowPlanCard.js'
 import type { MarkdownFileOpenOptions, MarkdownFileReference } from '../markdown/index.js'
 import type { DesktopComposerProps } from './composer/DesktopComposer.js'

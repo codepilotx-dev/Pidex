@@ -82,8 +82,6 @@ describe('desktop browser client', () => {
   test('reports unavailable instead of succeeding with an Electron mock', async () => {
     const client = createDesktopBrowserClient()
     expect(client.available).toBe(false)
-    await expect(client.openBrowser()).rejects.toThrow(
-      '仅在连接 Agent 的 Pidex 桌面应用中可用',
-    )
+    await expect(client.openBrowser()).rejects.toThrow('仅在连接 Agent 的 Pidex 桌面应用中可用')
   })
 })

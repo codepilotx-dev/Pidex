@@ -75,9 +75,7 @@ export type RightDockDragLayout = 'chat' | 'split'
  * 越界拖拽的布局判定：只读未夹紧的原始指针尺寸，因此 pointer cancel 后
  * 回到已提交布局，不需要额外的回滚状态。拉宽时由现有尺寸上限夹紧。
  */
-export function resolveRightDockDragLayout(
-  rawWidth: number,
-): RightDockDragLayout {
+export function resolveRightDockDragLayout(rawWidth: number): RightDockDragLayout {
   if (!Number.isFinite(rawWidth)) return 'split'
   if (rawWidth < RIGHT_DOCK_HIDE_THRESHOLD) return 'chat'
   return 'split'

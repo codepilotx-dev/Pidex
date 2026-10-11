@@ -63,13 +63,13 @@ test('permissions use independent allow/deny actions and preserve read-only comm
 
 test('plan response uses explicit draft choice, never interprets feedback as execution', () => {
   expect(
-    planResponseFromDraft({ selected: ['是，实施此计划'], custom: '', answered: true }),
+    planResponseFromDraft({ selected: ['在当前聊天实施'], custom: '', answered: true }),
   ).toEqual({ action: 'implement' })
   expect(planResponseFromDraft({ selected: [], custom: '是，实施此计划', answered: true })).toEqual(
     { action: 'feedback', feedback: '是，实施此计划' },
   )
   expect(() =>
-    planResponseFromDraft({ selected: ['是，实施此计划'], custom: '', answered: false }),
+    planResponseFromDraft({ selected: ['在当前聊天实施'], custom: '', answered: false }),
   ).toThrow()
   expect(() => planResponseFromDraft(undefined)).toThrow()
 })

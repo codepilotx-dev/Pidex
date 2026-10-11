@@ -1038,7 +1038,6 @@ describe('GitReviewService', () => {
   }, 30_000)
 })
 
-
 test('uncommitted combines index and working tree; full context preserves canonical hunks', async () => {
   const { root, db, project, review } = await fixture()
   try {
@@ -1048,24 +1047,46 @@ test('uncommitted combines index and working tree; full context preserves canoni
     await writeFile(join(root, 'new.ts'), 'export const added = true\n', 'utf8')
     await git(root, 'update-ref', 'refs/remotes/origin/release', 'HEAD')
     await git(root, 'symbolic-ref', 'refs/remotes/origin/HEAD', 'refs/remotes/origin/release')
-    expect((await review.branches(project.id)).branches.find((branch) => branch.default)?.name).toBe('origin/release')
+    expect(
+      (await review.branches(project.id)).branches.find((branch) => branch.default)?.name,
+    ).toBe('origin/release')
     const snapshot = await review.summary(project.id, { kind: 'uncommitted' })
     expect(snapshot.files.map((file) => file.path).sort()).toEqual(['new.ts', 'src/index.ts'])
-    const diff = await review.fileDiff({ projectId: project.id, source: snapshot.source, generation: snapshot.generation, path: 'src/index.ts' })
+    const diff = await review.fileDiff({
+      projectId: project.id,
+      source: snapshot.source,
+      generation: snapshot.generation,
+      path: 'src/index.ts',
+    })
     expect(diff.patch).toContain('-export const value = 1')
     expect(diff.patch).toContain('+export const value = 3')
-    const text = Array.from({ length: 40 }, (_, line) => `export const value${line} = ${line}\n`).join('')
+    const text = Array.from(
+      { length: 40 },
+      (_, line) => `export const value${line} = ${line}\n`,
+    ).join('')
     await writeFile(join(root, 'src/index.ts'), text, 'utf8')
     await git(root, 'add', 'src/index.ts')
     await git(root, 'commit', '-m', 'context fixture')
-    await writeFile(join(root, 'src/index.ts'), text.replace('value20 = 20', 'value20 = 99'), 'utf8')
+    await writeFile(
+      join(root, 'src/index.ts'),
+      text.replace('value20 = 20', 'value20 = 99'),
+      'utf8',
+    )
     const next = await review.summary(project.id, { kind: 'unstaged' })
-    const input = { projectId: project.id, source: next.source, generation: next.generation, path: 'src/index.ts' }
+    const input = {
+      projectId: project.id,
+      source: next.source,
+      generation: next.generation,
+      path: 'src/index.ts',
+    }
     const partial = await review.fileDiff(input)
     const full = await review.fileDiff({ ...input, loadFullFiles: true })
     expect(full.patch).toBe(partial.patch)
     expect(full.hunks).toEqual(partial.hunks)
     expect(full.contextPatch).toContain('value0 = 0')
     expect(full.contextPatch).toContain('value39 = 39')
-  } finally { review.dispose(); db.close() }
+  } finally {
+    review.dispose()
+    db.close()
+  }
 })

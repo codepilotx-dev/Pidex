@@ -3,11 +3,7 @@ import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
 import { DEFAULT_PERMISSION_CONFIG, FULL_ACCESS_PERMISSION_CONFIG } from '@pidex/shared/thread'
-import type {
-  ApprovalPolicy,
-  GranularApprovalConfig,
-  PermissionConfig,
-} from '@pidex/shared/thread'
+import type { ApprovalPolicy, GranularApprovalConfig, PermissionConfig } from '@pidex/shared/thread'
 import { removeFixturePaths } from './FixtureCleanup'
 import { createLifecycleTools } from '../src/orchestration/pi/PiToolAdapter'
 import { createToolExposurePlan } from '../src/tool/ToolExposurePlan'
@@ -357,7 +353,7 @@ describe('权限申请工具的暴露与审批', () => {
       taskMode: 'chat',
     } as never)
     expect(tool?.name).toBe('request_permissions')
-    expect(tool?.description).toContain('完全访问模式')
+    expect(tool?.description).toContain('never 策略下本工具不可用')
     const parameters = JSON.stringify(tool?.parameters)
     expect(parameters).toContain('"enum":["tool-call","turn","session"]')
     expect(parameters).toContain('"required":["scope","justification"]')

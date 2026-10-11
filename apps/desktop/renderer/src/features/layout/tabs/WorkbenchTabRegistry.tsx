@@ -128,7 +128,9 @@ export type WorkbenchTabRenderContext = {
     sessionStatus: DesktopSessionStatus
     workspacePath: string | null
     onAppendComposerText?: (text: string) => void
-    onReviewSummaryChange?: (summary: import('../../review/source/ReviewAgentClient.js').ReviewSummarySnapshot | null) => void
+    onReviewSummaryChange?: (
+      summary: import('../../review/source/ReviewAgentClient.js').ReviewSummarySnapshot | null,
+    ) => void
     onOpenReviewFile?: (path: string) => void
     onClose: () => void
     onCreateBranch: () => void

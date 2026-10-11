@@ -119,7 +119,11 @@ export function WorkingSuggestionsPanel({
               <LayoutTemplate aria-hidden size={APP_ICON_SIZE} />
               工作模板
             </span>
-            <button type="button" className={SUGGESTION_HEADING_ACTION_CLASS} onClick={onShowSuggestions}>
+            <button
+              type="button"
+              className={SUGGESTION_HEADING_ACTION_CLASS}
+              onClick={onShowSuggestions}
+            >
               <ArrowLeft aria-hidden size={APP_ICON_SIZE} />
               返回建议
             </button>
@@ -168,7 +172,11 @@ export function WorkingSuggestionsPanel({
             <Icon aria-hidden className="tw:shrink-0 tw:text-app-text-soft" size={APP_ICON_SIZE} />
             {category.label}
           </span>
-          <button type="button" className={SUGGESTION_HEADING_ACTION_CLASS} onClick={() => onBack(category)}>
+          <button
+            type="button"
+            className={SUGGESTION_HEADING_ACTION_CLASS}
+            onClick={() => onBack(category)}
+          >
             <ArrowLeft aria-hidden size={APP_ICON_SIZE} />
             返回
           </button>

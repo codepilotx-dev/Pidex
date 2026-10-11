@@ -1172,15 +1172,12 @@ describe('sidebar session hover card projection', () => {
     ).toBe('当前会话回退标题')
   })
 
-  test('项目环境是编码分组中的独立设置入口', () => {
+  test('项目环境归入编码分组的 Worktrees 入口', () => {
     const codingGroup = SETTINGS_GROUPS.find((group) => group.id === 'coding')
-    const environment = SETTINGS_ITEMS.find((item) => item.routeId === 'environment')
-
-    expect(codingGroup?.items.some((item) => item.routeId === 'environment')).toBe(true)
-    expect(environment).toMatchObject({
-      id: 'environment',
-      label: '环境',
-    })
+    const worktrees = SETTINGS_ITEMS.find((item) => item.routeId === 'worktrees')
+    expect(codingGroup?.items.some((item) => item.routeId === 'worktrees')).toBe(true)
+    expect(SETTINGS_ITEMS.some((item) => item.routeId === 'environment')).toBe(false)
+    expect(worktrees?.rows.some((item) => item.title === '多环境')).toBe(true)
   })
 
   test('groups projects by stable project id even when folders share a path', () => {

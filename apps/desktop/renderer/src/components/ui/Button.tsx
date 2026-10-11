@@ -108,102 +108,100 @@ export type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'color'>
  * -----------------------------------------------------------------------------------------------*/
 
 /* Height, padding, gap and min-height */
-const SIZE_BOX_CLASS: Record<
-  ButtonSize,
-  { standard: string; iconOnly: string; iconSize: number }
-> = {
-  xs: {
-    standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
-    iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
-    iconSize: 12,
-  },
-  sm: {
-    standard: 'tw:h-[30px] tw:min-h-[30px] tw:px-2.5 tw:gap-1.5',
-    iconOnly: 'tw:w-[30px] tw:h-[30px] tw:min-h-[30px] tw:p-0',
-    iconSize: 14,
-  },
-  md: {
-    standard: 'tw:h-9 tw:min-h-9 tw:px-3.5 tw:gap-2',
-    iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
-    iconSize: 16,
-  },
-  lg: {
-    standard: 'tw:h-[42px] tw:min-h-[42px] tw:px-4.5 tw:gap-2.5',
-    iconOnly: 'tw:w-[42px] tw:h-[42px] tw:min-h-[42px] tw:p-0',
-    iconSize: 18,
-  },
-  // Legacy aliases
-  compact: {
-    standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
-    iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
-    iconSize: 12,
-  },
-  composer: {
-    standard: 'tw:h-7 tw:min-h-7 tw:px-2 tw:gap-1.5',
-    iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-    iconSize: 16,
-  },
-  composerSm: {
-    standard: 'tw:h-7 tw:min-h-7 tw:px-1.5 tw:gap-1',
-    iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-    iconSize: 12,
-  },
-  composerUtility: {
-    standard: 'tw:h-7 tw:min-h-7 tw:px-1.5 tw:gap-1.5',
-    iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-    iconSize: 16,
-  },
-  default: {
-    standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
-    iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
-    iconSize: 16,
-  },
-  icon: {
-    standard: 'tw:h-7 tw:min-h-7 tw:px-1 tw:gap-1',
-    iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-    iconSize: 16,
-  },
-  iconLarge: {
-    standard: 'tw:h-9 tw:min-h-9 tw:px-0 tw:gap-2',
-    iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
-    iconSize: 20,
-  },
-  iconMd: {
-    standard: 'tw:h-5 tw:min-h-5 tw:px-0.5 tw:gap-1',
-    iconOnly: 'tw:w-5 tw:h-5 tw:min-h-5 tw:p-0',
-    iconSize: 12,
-  },
-  iconSm: {
-    standard: 'tw:h-4 tw:min-h-4 tw:px-0.5 tw:gap-1',
-    iconOnly: 'tw:w-4 tw:h-4 tw:min-h-4 tw:p-0',
-    iconSize: 12,
-  },
-  large: {
-    standard: 'tw:h-9 tw:min-h-9 tw:px-5 tw:gap-2',
-    iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
-    iconSize: 20,
-  },
-  medium: {
-    standard: 'tw:h-8 tw:min-h-8 tw:px-4 tw:gap-1.5',
-    iconOnly: 'tw:w-8 tw:h-8 tw:min-h-8 tw:p-0',
-    iconSize: 16,
-  },
-  tabStripAction: {
-    standard: 'tw:h-9 tw:min-h-9 tw:px-2 tw:gap-1.5',
-    iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
-    iconSize: 16,
-  },
-  toolbar: {
-    standard: 'tw:h-7 tw:min-h-7 tw:px-2 tw:gap-1.5',
-    iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-    iconSize: 16,
-  },
-  toolbarLabel: {
-    standard: 'tw:h-7 tw:min-h-7 tw:px-2.5 tw:gap-1.5',
-    iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-    iconSize: 16,
-  },
-}
+const SIZE_BOX_CLASS: Record<ButtonSize, { standard: string; iconOnly: string; iconSize: number }> =
+  {
+    xs: {
+      standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
+      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
+      iconSize: 12,
+    },
+    sm: {
+      standard: 'tw:h-[30px] tw:min-h-[30px] tw:px-2.5 tw:gap-1.5',
+      iconOnly: 'tw:w-[30px] tw:h-[30px] tw:min-h-[30px] tw:p-0',
+      iconSize: 14,
+    },
+    md: {
+      standard: 'tw:h-9 tw:min-h-9 tw:px-3.5 tw:gap-2',
+      iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
+      iconSize: 16,
+    },
+    lg: {
+      standard: 'tw:h-[42px] tw:min-h-[42px] tw:px-4.5 tw:gap-2.5',
+      iconOnly: 'tw:w-[42px] tw:h-[42px] tw:min-h-[42px] tw:p-0',
+      iconSize: 18,
+    },
+    // Legacy aliases
+    compact: {
+      standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
+      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
+      iconSize: 12,
+    },
+    composer: {
+      standard: 'tw:h-7 tw:min-h-7 tw:px-2 tw:gap-1.5',
+      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
+      iconSize: 16,
+    },
+    composerSm: {
+      standard: 'tw:h-7 tw:min-h-7 tw:px-1.5 tw:gap-1',
+      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
+      iconSize: 12,
+    },
+    composerUtility: {
+      standard: 'tw:h-7 tw:min-h-7 tw:px-1.5 tw:gap-1.5',
+      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
+      iconSize: 16,
+    },
+    default: {
+      standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
+      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
+      iconSize: 16,
+    },
+    icon: {
+      standard: 'tw:h-7 tw:min-h-7 tw:px-1 tw:gap-1',
+      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
+      iconSize: 16,
+    },
+    iconLarge: {
+      standard: 'tw:h-9 tw:min-h-9 tw:px-0 tw:gap-2',
+      iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
+      iconSize: 20,
+    },
+    iconMd: {
+      standard: 'tw:h-5 tw:min-h-5 tw:px-0.5 tw:gap-1',
+      iconOnly: 'tw:w-5 tw:h-5 tw:min-h-5 tw:p-0',
+      iconSize: 12,
+    },
+    iconSm: {
+      standard: 'tw:h-4 tw:min-h-4 tw:px-0.5 tw:gap-1',
+      iconOnly: 'tw:w-4 tw:h-4 tw:min-h-4 tw:p-0',
+      iconSize: 12,
+    },
+    large: {
+      standard: 'tw:h-9 tw:min-h-9 tw:px-5 tw:gap-2',
+      iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
+      iconSize: 20,
+    },
+    medium: {
+      standard: 'tw:h-8 tw:min-h-8 tw:px-4 tw:gap-1.5',
+      iconOnly: 'tw:w-8 tw:h-8 tw:min-h-8 tw:p-0',
+      iconSize: 16,
+    },
+    tabStripAction: {
+      standard: 'tw:h-9 tw:min-h-9 tw:px-2 tw:gap-1.5',
+      iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
+      iconSize: 16,
+    },
+    toolbar: {
+      standard: 'tw:h-7 tw:min-h-7 tw:px-2 tw:gap-1.5',
+      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
+      iconSize: 16,
+    },
+    toolbarLabel: {
+      standard: 'tw:h-7 tw:min-h-7 tw:px-2.5 tw:gap-1.5',
+      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
+      iconSize: 16,
+    },
+  }
 
 /* Radius specification: 5px (xs), 8px (sm), 10px (md/lg), pill (rounded-full) */
 const RADIUS_CLASSES: Record<ButtonShape, Record<ButtonSize, string>> = {
@@ -480,10 +478,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   const resolvedSize = useResolvedButtonSize(rawSize)
   const variant = resolveVariant(propVariant ?? groupContext?.variant, color)
   const shape =
-    propShape ??
-    (radius === 'large' ? 'pill' : undefined) ??
-    groupContext?.shape ??
-    'default'
+    propShape ?? (radius === 'large' ? 'pill' : undefined) ?? groupContext?.shape ?? 'default'
   const isDisabled = disabled || loading || Boolean(groupContext?.disabled)
   const isIcon = isIconOnly || uniform
 
@@ -502,11 +497,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     : SIZE_SPINNER_SIZE[resolvedSize]
 
   const spinner = (
-    <Spinner
-      className="ui-button-spinner tw:shrink-0"
-      size={spinnerSize}
-      aria-hidden="true"
-    />
+    <Spinner className="ui-button-spinner tw:shrink-0" size={spinnerSize} aria-hidden="true" />
   )
 
   const baseClasses = cx(
@@ -578,9 +569,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
       ref={ref}
       aria-busy={loading ? true : undefined}
       aria-label={
-        isIcon && buttonProps.title
-          ? buttonProps.title
-          : (buttonProps['aria-label'] ?? undefined)
+        isIcon && buttonProps.title ? buttonProps.title : (buttonProps['aria-label'] ?? undefined)
       }
       className={baseClasses}
       data-active={active || buttonProps['data-active'] || undefined}

@@ -30,8 +30,8 @@ export const FeatureTabs: React.FC = () => {
             Everything your task needs, organized.
           </h2>
           <p className="mt-4 text-base sm:text-lg text-[#55625D]">
-            Switch between core workflows to inspect how Pidex handles projects, agents,
-            models, diff reviews, and background automations.
+            Switch between core workflows to inspect how Pidex handles projects, agents, models,
+            diff reviews, and background automations.
           </p>
         </div>
 

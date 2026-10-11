@@ -40,7 +40,10 @@ import {
   WorkbenchPanelSurface,
 } from '../panels/WorkbenchPanelSurface.js'
 import type { FileDocumentLoadErrorPhase } from './RightDockPanels.js'
-import { type ResizePhase, useSidebarResizeCollapseConfirm } from '../UseSidebarResizeCollapseConfirm.js'
+import {
+  type ResizePhase,
+  useSidebarResizeCollapseConfirm,
+} from '../UseSidebarResizeCollapseConfirm.js'
 import { useWorkbenchPanelLiveResize } from '../panels/WorkbenchPanelPresence.js'
 
 type Props = {
@@ -341,7 +344,9 @@ export function WorkbenchPanel({
   const stableOnOpenFileFromBrowser = useStableEvent(onOpenFileFromBrowser)
   const stableOnPreviewFile = useStableEvent(onPreviewFile)
   const stableOnAskInSideChat = useStableEvent((text: string) => onAskInSideChat?.(text))
-  const stableOnSetFileViewState = useStableEvent((tabId: WorkbenchTabId, state: FileEditorViewState) => onSetFileViewState?.(tabId, state))
+  const stableOnSetFileViewState = useStableEvent(
+    (tabId: WorkbenchTabId, state: FileEditorViewState) => onSetFileViewState?.(tabId, state),
+  )
   const stableOnAppendComposerText = useStableEvent(onAppendComposerText)
   const stableOnAddComposerFiles = useStableEvent(onAddComposerFiles)
   const stableOnRefreshReview = useStableEvent(onRefreshReview)

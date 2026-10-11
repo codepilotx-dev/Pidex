@@ -77,10 +77,18 @@ describe('Thread execution environment projection', () => {
   test('归档列表 cursor 完整读取同更新时间的多页记录，并明确提供本地来源', async () => {
     const { db, projection } = await fixture()
     const created = Array.from({ length: 5 }, (_, index) => db.createThread(`归档 ${index}`))
-    for (const thread of created) db.sqlite.query('UPDATE threads SET archived_at = 1, updated_at = 100 WHERE id = ?').run(thread.id)
+    for (const thread of created)
+      db.sqlite
+        .query('UPDATE threads SET archived_at = 1, updated_at = 100 WHERE id = ?')
+        .run(thread.id)
     const ids: string[] = []
     let cursor: string | undefined
-    do { const page = projection.listPage({ archived: true, limit: 2, ...(cursor ? { cursor } : {}) }); expect(page.threads.every((thread) => thread.storageSource === 'local')).toBe(true); ids.push(...page.threads.map((thread) => thread.id)); cursor = page.nextCursor ?? undefined } while (cursor)
+    do {
+      const page = projection.listPage({ archived: true, limit: 2, ...(cursor ? { cursor } : {}) })
+      expect(page.threads.every((thread) => thread.storageSource === 'local')).toBe(true)
+      ids.push(...page.threads.map((thread) => thread.id))
+      cursor = page.nextCursor ?? undefined
+    } while (cursor)
     expect(new Set(ids).size).toBe(5)
     expect(ids).toHaveLength(5)
     expect(() => projection.listPage({ cursor: 'invalid' })).toThrow()

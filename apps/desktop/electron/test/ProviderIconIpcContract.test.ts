@@ -58,9 +58,9 @@ describe('供应商图标 IPC 契约', () => {
     ).rejects.toThrow('IPC 调用来源无效')
     expect(received).toEqual([])
 
-    await expect(
-      handler!({ sender: mainWindow } as IpcMainInvokeEvent, input),
-    ).resolves.toEqual({ source: 'data:image/svg+xml;base64,AAA' })
+    await expect(handler!({ sender: mainWindow } as IpcMainInvokeEvent, input)).resolves.toEqual({
+      source: 'data:image/svg+xml;base64,AAA',
+    })
     expect(received).toEqual([input])
   })
 })

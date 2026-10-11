@@ -1,7 +1,4 @@
-import type {
-  DesktopPageZoomAction,
-  DesktopPageZoomState,
-} from '@pidex/shared/desktop-window-ipc'
+import type { DesktopPageZoomAction, DesktopPageZoomState } from '@pidex/shared/desktop-window-ipc'
 
 export const MIN_PAGE_ZOOM_PERCENT = 50
 export const MAX_PAGE_ZOOM_PERCENT = 200

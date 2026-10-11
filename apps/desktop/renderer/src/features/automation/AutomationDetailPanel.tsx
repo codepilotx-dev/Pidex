@@ -51,7 +51,23 @@ export function AutomationDetailPanel({
 }: Props): React.ReactNode {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [watch, setWatch] = useState<RpcResult<'github/watch/read'> | null>(null)
-  useEffect(() => { let active = true; setWatch(null); if (controller.selected) void environmentDomainClient().listPrWatches().then((result) => { if (active) setWatch(result.watches.find((item) => item.automation.id === controller.selected?.id) ?? null) }).catch(() => undefined); return () => { active = false } }, [controller.selected?.id, controller.selected?.updatedAt, controller.runs])
+  useEffect(() => {
+    let active = true
+    setWatch(null)
+    if (controller.selected)
+      void environmentDomainClient()
+        .listPrWatches()
+        .then((result) => {
+          if (active)
+            setWatch(
+              result.watches.find((item) => item.automation.id === controller.selected?.id) ?? null,
+            )
+        })
+        .catch(() => undefined)
+    return () => {
+      active = false
+    }
+  }, [controller.selected?.id, controller.selected?.updatedAt, controller.runs])
   const settingsId = useId()
   useEffect(() => setSettingsOpen(false), [controller.selected?.id, creating])
   const draft = controller.draft
@@ -120,21 +136,27 @@ export function AutomationDetailPanel({
       </header>
 
       <div className="automation-detail-scroll tw:min-h-0 tw:overflow-auto">
-        <section
-          className="automation-form tw:grid tw:gap-2 tw:p-3"
-          aria-label="自动化设置"
-        >
+        <section className="automation-form tw:grid tw:gap-2 tw:p-3" aria-label="自动化设置">
           <FormField label="名称">
             <Input
               value={draft.name}
               onChange={(event) => update({ name: event.currentTarget.value })}
             />
           </FormField>
-          {watch && <div className="tw:grid tw:gap-2 tw:rounded-control tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-3">
-            <span className="tw:type-row-title">PR 监控</span><span className="tw:type-caption tw:break-all tw:text-app-text-soft">{watch.url}</span>
-            {watch.reason && <p className="tw:m-0 tw:type-caption tw:text-app-text-soft">{watch.reason}</p>}
-            <Button color="secondary" onClick={() => onOpenThread(watch.threadId)}>打开关联修复聊天</Button>
-          </div>}
+          {watch && (
+            <div className="tw:grid tw:gap-2 tw:rounded-control tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-3">
+              <span className="tw:type-row-title">PR 监控</span>
+              <span className="tw:type-caption tw:break-all tw:text-app-text-soft">
+                {watch.url}
+              </span>
+              {watch.reason && (
+                <p className="tw:m-0 tw:type-caption tw:text-app-text-soft">{watch.reason}</p>
+              )}
+              <Button color="secondary" onClick={() => onOpenThread(watch.threadId)}>
+                打开关联修复聊天
+              </Button>
+            </div>
+          )}
           <FormField label="任务说明">
             <Textarea
               rows={3}
@@ -162,7 +184,10 @@ export function AutomationDetailPanel({
                     update({
                       schedule: {
                         mode: 'hourly',
-                        intervalMinutes: Math.max(watch ? 5 : 15, Number(event.currentTarget.value) || (watch ? 5 : 15)),
+                        intervalMinutes: Math.max(
+                          watch ? 5 : 15,
+                          Number(event.currentTarget.value) || (watch ? 5 : 15),
+                        ),
                       },
                     })
                   }
@@ -404,7 +429,11 @@ export function AutomationDetailPanel({
               className="automation-risk tw:flex tw:items-start tw:gap-2 tw:rounded-container tw:border tw:border-app-warning-border tw:bg-app-warning-subtle tw:p-3 tw:type-body-sm tw:text-app-warning-fg"
               role="note"
             >
-              <AlertTriangle className="tw:mt-1 tw:flex-none" aria-hidden="true" size={APP_ICON_SIZE} />
+              <AlertTriangle
+                className="tw:mt-1 tw:flex-none"
+                aria-hidden="true"
+                size={APP_ICON_SIZE}
+              />
               <span>任务会在无人值守时获得完全访问权限。请只对可信项目和明确任务使用。</span>
             </div>
           ) : null}
@@ -422,7 +451,9 @@ export function AutomationDetailPanel({
             className="automation-more-settings tw:px-3 tw:py-2"
             key={controller.selected.id}
           >
-            <summary className="tw:cursor-pointer tw:type-control">执行记录（{runs.length}）</summary>
+            <summary className="tw:cursor-pointer tw:type-control">
+              执行记录（{runs.length}）
+            </summary>
             <RunHistory runs={runs} controller={controller} onOpenThread={onOpenThread} />
           </details>
         ) : null}

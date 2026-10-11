@@ -550,9 +550,7 @@ describe('non-color design token contracts', () => {
 
   test('页面宽度不再有手动档位：布局只读会话/一级页面两个固定上限', async () => {
     const desktopLayout = await read('../src/features/layout/shell/DesktopLayout.tsx')
-    const conversationPage = await read(
-      '../src/features/session/conversation/ConversationPage.tsx',
-    )
+    const conversationPage = await read('../src/features/session/conversation/ConversationPage.tsx')
     const workbench = await read('../src/styles/features/layout-workbench.css')
     const canonical = await read('../src/styles/primitives/conversation.css')
 
@@ -622,19 +620,14 @@ describe('non-color design token contracts', () => {
     ]) {
       expect(conversation).toMatch(new RegExp(`${selector}\\s*\\{[\\s\\S]*?font:\\s*inherit;`))
     }
-    // SCSS 的 `&--process` 嵌套在原生 CSS 里展开为显式子选择器：
-    // process 文本项的 md-body 继续 `font: inherit`。
-    expect(conversation).toMatch(
-      /\.canonical-text-item--process > \.md-body\s*\{\s*font:\s*inherit;/,
+    const itemRenderer = await read('../src/features/session/timeline/CanonicalItemRenderer.tsx')
+    expectSourceContains(
+      itemRenderer,
+      'canonical-text-item tw:min-w-0 tw:text-app-text tw:type-reading',
     )
+    expect(markdown).toMatch(/\.md-body\s*\{[\s\S]*?font:\s*var\(--cpx-sys-type-reading\);/)
     expect(conversation).toMatch(
-      /\.canonical-user-message__bubble \.md-body,\s*\.canonical-text-item--process > \.md-body,\s*\.canonical-text-item--result > \.md-body/,
-    )
-    expect(conversation).toMatch(
-      /\.canonical-text-item--process > \.md-body,\s*\.canonical-text-item--result > \.md-body\s*\{\s*p\s*\{\s*margin-block:\s*var\(--cpx-sys-space-3\);/,
-    )
-    expect(conversation).toMatch(
-      /\.canonical-turn__process\s*\{\s*gap:\s*var\(--cpx-sys-space-3\);/,
+      /\.canonical-turn__process\s*\{\s*gap:\s*var\(--cpx-sys-space-4\);/,
     )
     expect(markdown).toMatch(
       /\.md-table-block table\s*\{[\s\S]*?font:\s*var\(--cpx-sys-type-body\);/,

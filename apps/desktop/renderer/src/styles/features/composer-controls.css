@@ -26,10 +26,15 @@
     display: inline-block;
     position: relative;
     border-radius: var(--cpx-sys-radius-full);
-    background: conic-gradient(var(--cpx-sys-color-fg-secondary) calc(var(--context-usage-progress, 0) * 1%), color-mix(in srgb, var(--cpx-sys-color-fg-secondary) 20%, transparent) calc(var(--context-usage-progress, 0) * 1%), color-mix(in srgb, var(--cpx-sys-color-fg-secondary) 20%, transparent) 360deg);
+    background: conic-gradient(
+      var(--cpx-sys-color-fg-secondary) calc(var(--context-usage-progress, 0) * 1%),
+      color-mix(in srgb, var(--cpx-sys-color-fg-secondary) 20%, transparent)
+        calc(var(--context-usage-progress, 0) * 1%),
+      color-mix(in srgb, var(--cpx-sys-color-fg-secondary) 20%, transparent) 360deg
+    );
   }
   .chip-dot::before {
-    content: "";
+    content: '';
     position: absolute;
     inset: 2px;
     border-radius: var(--cpx-sys-radius-full);

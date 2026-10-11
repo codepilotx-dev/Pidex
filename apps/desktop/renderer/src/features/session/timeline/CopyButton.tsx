@@ -22,7 +22,8 @@ export function CopyButton({
   const [copied, setCopied] = React.useState(false)
   return (
     <Tooltip content={copied ? '已复制' : ariaLabel}>
-      <Button isIconOnly
+      <Button
+        isIconOnly
         aria-label={copied ? `${ariaLabel}：已复制` : ariaLabel}
         className={className}
         color="ghostSecondary"

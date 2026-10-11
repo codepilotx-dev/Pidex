@@ -44,9 +44,11 @@
     border: 0;
     background: transparent;
     color: var(--cpx-sys-color-fg-secondary);
-    transition: background var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard), color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard);
+    transition:
+      background var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard);
   }
-  .workspace-shell-control-button[aria-pressed="true"] {
+  .workspace-shell-control-button[aria-pressed='true'] {
     background: var(--cpx-sys-color-selected);
     color: var(--cpx-sys-color-fg-primary);
   }
@@ -54,17 +56,28 @@
     outline-color: color-mix(in srgb, var(--cpx-sys-color-accent) 72%, transparent);
   }
 
-  :root[data-reduce-motion="on"] .workspace-shell-control-button {
+  :root[data-reduce-motion='on'] .workspace-shell-control-button {
     transition: none;
   }
 
   @media (forced-colors: active) {
-    .workspace-shell-control-button[aria-pressed="true"] {
+    .workspace-shell-control-button[aria-pressed='true'] {
       outline: 1px solid CanvasText;
       outline-offset: -1px;
     }
   }
-  .desktop-workspace-header .icon-button[data-color]:where(:enabled:not([aria-disabled="true"]):not([aria-pressed="true"])):hover, .desktop-workspace-header .icon-button[data-color]:where(:enabled:not([aria-disabled="true"]):not([aria-pressed="true"]))[data-state="open"], .desktop-workspace-header .icon-button[data-color]:where(:enabled:not([aria-disabled="true"]):not([aria-pressed="true"]))[data-active] {
+  .desktop-workspace-header
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    ):hover,
+  .desktop-workspace-header
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    )[data-state='open'],
+  .desktop-workspace-header
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    )[data-active] {
     background: var(--cpx-sys-color-hover);
     color: var(--cpx-sys-color-fg-primary);
   }
@@ -75,11 +88,11 @@
     transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
   }
 
-  .workspace-panel-icon--bottom[data-open="false"] > path {
+  .workspace-panel-icon--bottom[data-open='false'] > path {
     transform: scaleX(0.4);
   }
 
-  .workspace-panel-icon--right[data-open="false"] > path {
+  .workspace-panel-icon--right[data-open='false'] > path {
     transform: scaleY(0.4);
   }
 }

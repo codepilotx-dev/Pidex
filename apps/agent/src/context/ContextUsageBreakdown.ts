@@ -1,7 +1,4 @@
-import type {
-  ContextUsageBreakdownEntry,
-  ContextUsageBreakdownSource,
-} from '@pidex/shared/thread'
+import type { ContextUsageBreakdownEntry, ContextUsageBreakdownSource } from '@pidex/shared/thread'
 import type { AgentMessage } from '../orchestration/harness/AgentTypes'
 import type { PromptContextItem, PromptSectionDiagnostic } from '../prompt/Types'
 import { estimateMessageChars } from './harness/Compaction'

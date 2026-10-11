@@ -1,4 +1,7 @@
-import { captureSidebarAssignments, restoreFailedArchiveAssignments } from '../sidebar/SidebarCustomization.js'
+import {
+  captureSidebarAssignments,
+  restoreFailedArchiveAssignments,
+} from '../sidebar/SidebarCustomization.js'
 import { DEFAULT_SIDEBAR_CUSTOMIZATION } from '../../../../shared/SettingsSchema.js'
 import { subscribeProjectRestores } from '../../projects/ProjectCatalogEvents.js'
 import { mergeBrowserWorkbench } from '../../browser/BrowserWorkbenchState.js'
@@ -1355,9 +1358,12 @@ export function DesktopLayout(): React.ReactNode {
     workspacePath: string | null
     snapshot: import('../../review/source/ReviewAgentClient.js').ReviewSummarySnapshot | null
   } | null>(null)
-  const handleReviewSummaryChange = useCallback((snapshot: import('../../review/source/ReviewAgentClient.js').ReviewSummarySnapshot | null) => {
-    setPublishedReviewSummary({ workspacePath: currentWorkspace?.path ?? null, snapshot })
-  }, [currentWorkspace?.path])
+  const handleReviewSummaryChange = useCallback(
+    (snapshot: import('../../review/source/ReviewAgentClient.js').ReviewSummarySnapshot | null) => {
+      setPublishedReviewSummary({ workspacePath: currentWorkspace?.path ?? null, snapshot })
+    },
+    [currentWorkspace?.path],
+  )
   const [reviewTabState, setReviewTabState] = useState<ReviewTabUiState>(
     createDefaultReviewTabUiState,
   )
@@ -1481,9 +1487,7 @@ export function DesktopLayout(): React.ReactNode {
     if (!desktopBrowserClient.available) return
     const synchronize = (tabs: DesktopBrowserState[]) => {
       // 标签快照每次都会产生新数组；按 revision 去重，避免无关快照触发重渲染。
-      const signature = tabs
-        .map((tab) => `${tab.tabId ?? ''}:${tab.revision ?? 0}`)
-        .join('|')
+      const signature = tabs.map((tab) => `${tab.tabId ?? ''}:${tab.revision ?? 0}`).join('|')
       setBrowserTabs((current) =>
         current.map((tab) => `${tab.tabId ?? ''}:${tab.revision ?? 0}`).join('|') === signature
           ? current
@@ -1758,7 +1762,10 @@ export function DesktopLayout(): React.ReactNode {
   )
   const handleArchiveSessions = useCallback(
     async (targetSessionIds: readonly string[]) => {
-      const capturedAssignments = captureSidebarAssignments(settings.values.sidebarCustomization ?? DEFAULT_SIDEBAR_CUSTOMIZATION, targetSessionIds.map((id) => `session:${id}`))
+      const capturedAssignments = captureSidebarAssignments(
+        settings.values.sidebarCustomization ?? DEFAULT_SIDEBAR_CUSTOMIZATION,
+        targetSessionIds.map((id) => `session:${id}`),
+      )
       const capturedPins = { ...sidebarSessionPins }
       const result = await archiveSessions(targetSessionIds)
       if (result.succeededSessionIds.length > 0) {
@@ -1775,15 +1782,32 @@ export function DesktopLayout(): React.ReactNode {
         setArchiveNoticeVisible(true)
         const archivedIdsForUndo = [...result.succeededSessionIds]
         setArchiveUndo(() => async () => {
-          const results = await Promise.all(archivedIdsForUndo.map(async (id) => ({ id, result: await session.updateSessionMetadata(id, { archivedAt: null }) })))
-          const restoredIds = results.filter((entry) => entry.result !== null).map((entry) => entry.id)
-          settings.setSidebarCustomization((current) => restoreFailedArchiveAssignments(current ?? DEFAULT_SIDEBAR_CUSTOMIZATION, restoredIds.map((id) => `session:${id}`), capturedAssignments))
+          const results = await Promise.all(
+            archivedIdsForUndo.map(async (id) => ({
+              id,
+              result: await session.updateSessionMetadata(id, { archivedAt: null }),
+            })),
+          )
+          const restoredIds = results
+            .filter((entry) => entry.result !== null)
+            .map((entry) => entry.id)
+          settings.setSidebarCustomization((current) =>
+            restoreFailedArchiveAssignments(
+              current ?? DEFAULT_SIDEBAR_CUSTOMIZATION,
+              restoredIds.map((id) => `session:${id}`),
+              capturedAssignments,
+            ),
+          )
           setSidebarSessionPins((current) => {
             const next = { ...current }
-            for (const id of restoredIds) if (capturedPins[id] && !next[id]) next[id] = capturedPins[id]!
+            for (const id of restoredIds)
+              if (capturedPins[id] && !next[id]) next[id] = capturedPins[id]!
             return next
           })
-          if (restoredIds.length !== archivedIdsForUndo.length) { setErrorMessage(`已恢复 ${restoredIds.length} 个聊天，部分恢复失败。`); return }
+          if (restoredIds.length !== archivedIdsForUndo.length) {
+            setErrorMessage(`已恢复 ${restoredIds.length} 个聊天，部分恢复失败。`)
+            return
+          }
           setArchiveNoticeVisible(false)
           setArchiveUndo(null)
         })
@@ -1831,7 +1855,8 @@ export function DesktopLayout(): React.ReactNode {
   )
 
   const isConversationLoading =
-    isConversationRoute && (!sessionsHydrated || sessionId !== routedSessionId || gitDetection === 'loading')
+    isConversationRoute &&
+    (!sessionsHydrated || sessionId !== routedSessionId || gitDetection === 'loading')
   const branchName = getDesktopComposerBranchName(currentWorkspace)
   const quickChatRecentTasks = useMemo(() => {
     const workspaceKey = currentWorkspace?.path.replace(/\\/g, '/').toLowerCase() ?? null
@@ -1896,24 +1921,41 @@ export function DesktopLayout(): React.ReactNode {
       [sessionId]: activeSessionFallbackTitle,
     }
   }, [activeSessionFallbackTitle, sessionFallbackTitles, sessionId])
-  useEffect(() => subscribeProjectRestores((project, selected) => {
-    setRemovedWorkspaces((current) => {
-      const next = current.filter((entry) => project.projectId && entry.projectId ? entry.projectId !== project.projectId : entry.path !== project.path)
-      settings.syncExternalSettingsPatch({ removedWorkspaces: next })
-      return next
-    })
-    setRecentWorkspaces((current) => [...current.filter((entry) => project.projectId ? entry.projectId !== project.projectId : entry.path !== project.path), project])
-    if (selected && !currentWorkspace) {
-      setWorkspaceState(project)
-      void refreshWorkspace(project, { force: true })
-    }
-  }), [currentWorkspace, refreshWorkspace, settings, setRecentWorkspaces, setWorkspaceState])
+  useEffect(
+    () =>
+      subscribeProjectRestores((project, selected) => {
+        setRemovedWorkspaces((current) => {
+          const next = current.filter((entry) =>
+            project.projectId && entry.projectId
+              ? entry.projectId !== project.projectId
+              : entry.path !== project.path,
+          )
+          settings.syncExternalSettingsPatch({ removedWorkspaces: next })
+          return next
+        })
+        setRecentWorkspaces((current) => [
+          ...current.filter((entry) =>
+            project.projectId ? entry.projectId !== project.projectId : entry.path !== project.path,
+          ),
+          project,
+        ])
+        if (selected && !currentWorkspace) {
+          setWorkspaceState(project)
+          void refreshWorkspace(project, { force: true })
+        }
+      }),
+    [currentWorkspace, refreshWorkspace, settings, setRecentWorkspaces, setWorkspaceState],
+  )
 
   const handleRemoveWorkspace = useCallback(
     (target: DesktopWorkspace): void => {
       // Record removal so the project doesn't reappear from sessions
       setRemovedWorkspaces((current) => {
-        const next = current.filter((r) => target.projectId && r.projectId ? r.projectId !== target.projectId : r.path !== target.path)
+        const next = current.filter((r) =>
+          target.projectId && r.projectId
+            ? r.projectId !== target.projectId
+            : r.path !== target.path,
+        )
         next.push({
           path: target.path,
           projectId: target.projectId,
@@ -1924,7 +1966,11 @@ export function DesktopLayout(): React.ReactNode {
         return next
       })
       setRecentWorkspaces((current) =>
-        current.filter((workspaceItem) => target.projectId ? workspaceItem.projectId !== target.projectId : workspaceItem.path !== target.path),
+        current.filter((workspaceItem) =>
+          target.projectId
+            ? workspaceItem.projectId !== target.projectId
+            : workspaceItem.path !== target.path,
+        ),
       )
       setUnavailableWorkspacePaths((current) => {
         if (!current.has(target.path)) return current
@@ -1932,7 +1978,12 @@ export function DesktopLayout(): React.ReactNode {
         next.delete(target.path)
         return next
       })
-      if (target.projectId ? currentWorkspace?.projectId !== target.projectId : currentWorkspace?.path !== target.path) return
+      if (
+        target.projectId
+          ? currentWorkspace?.projectId !== target.projectId
+          : currentWorkspace?.path !== target.path
+      )
+        return
       setWorkspaceState(null)
       setDiffState(NO_WORKSPACE_DIFF)
       setSelectedFile(null)
@@ -2825,7 +2876,14 @@ export function DesktopLayout(): React.ReactNode {
         reviewView={reviewView}
         reviewTabState={reviewTabState}
         onReviewSummaryChange={handleReviewSummaryChange}
-        onOpenReviewFile={(path) => handleOpenFileFromBrowser(target, { path, name: path.split(/[\\/]/).pop() ?? path, type: 'file', depth: 0 })}
+        onOpenReviewFile={(path) =>
+          handleOpenFileFromBrowser(target, {
+            path,
+            name: path.split(/[\\/]/).pop() ?? path,
+            type: 'file',
+            depth: 0,
+          })
+        }
         planContentByEventId={planContentByEventId}
         selectedFile={selectedFile}
         sessionId={sessionId}
@@ -2859,7 +2917,9 @@ export function DesktopLayout(): React.ReactNode {
                 tab.terminalId ??
                 (tab.id.startsWith('terminal:') ? tab.id.slice('terminal:'.length) : tab.id)
               void loadDesktopTerminalClient().then((client) => {
-                void client.closeTerminal({ terminalId: termId, reason: 'user-close' }).catch(() => undefined)
+                void client
+                  .closeTerminal({ terminalId: termId, reason: 'user-close' })
+                  .catch(() => undefined)
               })
             }
             closePanelTab(target, tabId)
@@ -2877,7 +2937,9 @@ export function DesktopLayout(): React.ReactNode {
                   tab.terminalId ??
                   (tab.id.startsWith('terminal:') ? tab.id.slice('terminal:'.length) : tab.id)
                 void loadDesktopTerminalClient().then((client) => {
-                  void client.closeTerminal({ terminalId: termId, reason: 'user-close' }).catch(() => undefined)
+                  void client
+                    .closeTerminal({ terminalId: termId, reason: 'user-close' })
+                    .catch(() => undefined)
                 })
               }
             }
@@ -2897,7 +2959,9 @@ export function DesktopLayout(): React.ReactNode {
                   tab.terminalId ??
                   (tab.id.startsWith('terminal:') ? tab.id.slice('terminal:'.length) : tab.id)
                 void loadDesktopTerminalClient().then((client) => {
-                  void client.closeTerminal({ terminalId: termId, reason: 'user-close' }).catch(() => undefined)
+                  void client
+                    .closeTerminal({ terminalId: termId, reason: 'user-close' })
+                    .catch(() => undefined)
                 })
               }
             }
@@ -3003,10 +3067,16 @@ export function DesktopLayout(): React.ReactNode {
         diffMarkerStyle,
         reviewView,
         reviewTabState,
-      handleReviewSummaryChange,
-      handleOpenFileFromBrowser,
+        handleReviewSummaryChange,
+        handleOpenFileFromBrowser,
         onReviewSummaryChange: handleReviewSummaryChange,
-        onOpenReviewFile: (path) => handleOpenFileFromBrowser('right', { path, name: path.split(/[\\/]/).pop() ?? path, type: 'file', depth: 0 }),
+        onOpenReviewFile: (path) =>
+          handleOpenFileFromBrowser('right', {
+            path,
+            name: path.split(/[\\/]/).pop() ?? path,
+            type: 'file',
+            depth: 0,
+          }),
         sessionStatus,
         workspacePath: currentWorkspace?.path ?? null,
         onAppendComposerText: handleAppendComposerText,
@@ -3268,10 +3338,18 @@ export function DesktopLayout(): React.ReactNode {
         {archiveNoticeVisible ? (
           <ArchiveConversationNotice
             undoing={undoingArchive}
-            onUndo={archiveUndo ? () => {
-              setUndoingArchive(true)
-              void archiveUndo().catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error))).finally(() => setUndoingArchive(false))
-            } : undefined}
+            onUndo={
+              archiveUndo
+                ? () => {
+                    setUndoingArchive(true)
+                    void archiveUndo()
+                      .catch((error) =>
+                        setErrorMessage(error instanceof Error ? error.message : String(error)),
+                      )
+                      .finally(() => setUndoingArchive(false))
+                  }
+                : undefined
+            }
             onClose={() => setArchiveNoticeVisible(false)}
             onOpenSettings={() => {
               setArchiveNoticeVisible(false)
@@ -3336,7 +3414,10 @@ export function DesktopLayout(): React.ReactNode {
             gitStatus,
             gitDetection,
             reviewSource: reviewTabState.source,
-            reviewSummary: publishedReviewSummary?.workspacePath === currentWorkspace?.path ? publishedReviewSummary?.snapshot : null,
+            reviewSummary:
+              publishedReviewSummary?.workspacePath === currentWorkspace?.path
+                ? publishedReviewSummary?.snapshot
+                : null,
             recentWorkspaces,
             recentTasks: quickChatRecentTasks,
             onArchiveSession: () => {
@@ -3347,10 +3428,15 @@ export function DesktopLayout(): React.ReactNode {
             onOpenAutomation: () => navigate('/automations'),
             onOpenWorkspacePath: handleOpenWorkspacePath,
             onOpenRightDock: (_tool, source) => {
-              if (source) setReviewTabState((current) => ({
-                ...current, source, selectedFile: null, selectedCommentId: null,
-                scrollTop: 0, diffExpansion: { mode: 'all' },
-              }))
+              if (source)
+                setReviewTabState((current) => ({
+                  ...current,
+                  source,
+                  selectedFile: null,
+                  selectedCommentId: null,
+                  scrollTop: 0,
+                  diffExpansion: { mode: 'all' },
+                }))
               handleOpenReview()
             },
             onOpenPatchReview: handleOpenPatchReview,
@@ -3397,7 +3483,9 @@ export function DesktopLayout(): React.ReactNode {
             },
             onCommitOrPush: handleCommitOrPush,
             onGitOperation: (operation) => setGitWorkflowMode(operation),
-            onOpenTerminal: () => { if (!terminalVisible) toggleIntegratedTerminal() },
+            onOpenTerminal: () => {
+              if (!terminalVisible) toggleIntegratedTerminal()
+            },
             onCreatePullRequest: handleCreatePullRequest,
             onChooseWorkspace: handleChooseWorkspace,
             onCloneGithub: () => setGithubRepositoryModalOpen(true),

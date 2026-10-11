@@ -118,18 +118,32 @@ export class WorktreeRepository {
 
   setOwnedRoot(worktreeId: string, root: string) {
     if (!this.settingsAvailable()) return
-    this.sqlite.query('INSERT INTO worktree_owned_roots (worktree_id, root_path) VALUES (?, ?)').run(worktreeId, root)
+    this.sqlite
+      .query('INSERT INTO worktree_owned_roots (worktree_id, root_path) VALUES (?, ?)')
+      .run(worktreeId, root)
   }
 
   ownedRoot(worktreeId: string): string | null {
     if (!this.settingsAvailable()) return null
-    const row = this.sqlite.query('SELECT root_path FROM worktree_owned_roots WHERE worktree_id = ?').get(worktreeId) as { root_path: string } | null
+    const row = this.sqlite
+      .query('SELECT root_path FROM worktree_owned_roots WHERE worktree_id = ?')
+      .get(worktreeId) as { root_path: string } | null
     return row?.root_path ?? null
   }
-  settingsAvailable() { return Boolean(this.sqlite.query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worktree_owned_roots'").get()) }
+  settingsAvailable() {
+    return Boolean(
+      this.sqlite
+        .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'worktree_owned_roots'")
+        .get(),
+    )
+  }
 
   conversations(worktreeId: string) {
-    return this.sqlite.query('SELECT thread.id, thread.title, thread.archived_at FROM thread_execution_bindings binding JOIN threads thread ON thread.id = binding.thread_id WHERE binding.worktree_id = ? ORDER BY thread.updated_at DESC').all(worktreeId) as Array<{ id: string; title: string; archived_at: number | null }>
+    return this.sqlite
+      .query(
+        'SELECT thread.id, thread.title, thread.archived_at FROM thread_execution_bindings binding JOIN threads thread ON thread.id = binding.thread_id WHERE binding.worktree_id = ? ORDER BY thread.updated_at DESC',
+      )
+      .all(worktreeId) as Array<{ id: string; title: string; archived_at: number | null }>
   }
 
   insertWorktree(value: ManagedWorktree) {

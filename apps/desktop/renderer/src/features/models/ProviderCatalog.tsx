@@ -32,7 +32,8 @@ export type ProviderCatalogItem = {
   }
 }
 
-export type ProviderCatalogProps = {  providers: readonly ProviderCatalogItem[]
+export type ProviderCatalogProps = {
+  providers: readonly ProviderCatalogItem[]
   query: string
   onQueryChange: (query: string) => void
   filter?: ProviderCatalogFilter
@@ -61,10 +62,7 @@ export function ProviderCatalog({
   onManageConnection,
 }: ProviderCatalogProps): React.ReactNode {
   return (
-    <section
-      className="model-center-catalog tw:grid tw:min-w-0 tw:gap-4"
-      aria-label="供应商目录"
-    >
+    <section className="model-center-catalog tw:grid tw:min-w-0 tw:gap-4" aria-label="供应商目录">
       <div className="model-center-catalog-toolbar settings-management-toolbar tw:flex tw:min-w-0 tw:items-center tw:justify-start tw:gap-3 tw:@max-[900px]:items-stretch">
         <SearchInput
           aria-label="搜索 Provider"
@@ -143,17 +141,11 @@ export function ProviderCatalog({
                         {provider.modelCount} 个模型
                       </span>
                       {hasKeys ? (
-                        <span
-                          className={PROVIDER_CARD_BADGE_CLASS}
-                          data-tone="info"
-                        >
+                        <span className={PROVIDER_CARD_BADGE_CLASS} data-tone="info">
                           {provider.keyCount} 个 Key
                         </span>
                       ) : provider.hasOAuth ? (
-                        <span
-                          className={PROVIDER_CARD_BADGE_CLASS}
-                          data-tone="info"
-                        >
+                        <span className={PROVIDER_CARD_BADGE_CLASS} data-tone="info">
                           OAuth 已连接
                         </span>
                       ) : (

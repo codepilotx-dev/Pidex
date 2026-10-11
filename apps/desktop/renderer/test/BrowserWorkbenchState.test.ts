@@ -30,10 +30,10 @@ describe('global browser workbench state', () => {
     const closed = mergeBrowserWorkbench(merged, [record('two')])
     expect(closed.right.tabIds).toEqual(['review', 'browser:two'])
   })
-  test('switching conversation preserves the selected browser and bottom placement', () => {
+  test('switching conversation preserves the selected browser without opening the workspace panel', () => {
     const previous = applyWorkbenchPanelAction(createDefaultWorkbenchTabsState(), {
       type: 'openTab',
-      target: 'bottom',
+      target: 'right',
       tab: { id: 'browser:one', kind: 'browser', tabId: 'one' },
     })
     const restored = mergeBrowserWorkbench(
@@ -41,8 +41,8 @@ describe('global browser workbench state', () => {
       [record('one')],
       previous,
     )
-    expect(restored.bottom).toMatchObject({
-      open: true,
+    expect(restored.right).toMatchObject({
+      open: false,
       activeTabId: 'browser:one',
       tabIds: ['browser:one'],
     })

@@ -21,6 +21,5 @@ export function presentationFromPetSettings(settings: DesktopPetSettings): PetPr
 }
 
 export function getPetPresentationBridge(): PetPresentationBridge | undefined {
-  return window.DesktopBridge as
-    (typeof window.DesktopBridge & PetPresentationBridge) | undefined
+  return window.DesktopBridge as (typeof window.DesktopBridge & PetPresentationBridge) | undefined
 }

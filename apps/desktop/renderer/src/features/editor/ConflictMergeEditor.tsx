@@ -210,9 +210,14 @@ export function ConflictMergeEditor({
         aria-hidden="true"
       >
         <span className="tw:px-3 tw:py-1">磁盘版本</span>
-        <span className="tw:border-l tw:border-app-border tw:px-3 tw:py-1">本地草稿 / 合并结果</span>
+        <span className="tw:border-l tw:border-app-border tw:px-3 tw:py-1">
+          本地草稿 / 合并结果
+        </span>
       </div>
-      <div ref={hostRef} className="conflict-merge-editor-host tw:min-h-0 tw:min-w-0 tw:overflow-hidden" />
+      <div
+        ref={hostRef}
+        className="conflict-merge-editor-host tw:min-h-0 tw:min-w-0 tw:overflow-hidden"
+      />
       {error ? (
         <div
           className="file-editor-status tw:absolute tw:right-4 tw:bottom-4 tw:z-2 tw:flex tw:max-w-[calc(100%-32px)] tw:items-center tw:gap-1 tw:overflow-hidden tw:truncate tw:rounded-lg tw:border tw:border-app-border tw:bg-app-raised tw:px-2 tw:py-1 tw:type-caption tw:text-app-text-soft tw:shadow-none tw:data-[error]:border-[color-mix(in_srgb,var(--cpx-sys-color-danger)_35%,transparent)] tw:data-[error]:text-app-danger"

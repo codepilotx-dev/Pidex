@@ -8,7 +8,9 @@ export const DEFAULT_SIDEBAR_WIDTH = 340
 
 export function clampSidebarWidth(value: number): number {
   const maxAvailable =
-    typeof window !== 'undefined' ? Math.max(SIDEBAR_MIN_WIDTH, window.innerWidth - 240) : SIDEBAR_MAX_WIDTH
+    typeof window !== 'undefined'
+      ? Math.max(SIDEBAR_MIN_WIDTH, window.innerWidth - 240)
+      : SIDEBAR_MAX_WIDTH
   const max = Math.min(SIDEBAR_MAX_WIDTH, maxAvailable)
   return Math.min(max, Math.max(SIDEBAR_MIN_WIDTH, Math.round(value)))
 }

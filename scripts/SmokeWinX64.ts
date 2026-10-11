@@ -132,9 +132,7 @@ async function assertPackagedTerminal(
     ) {
       throw new Error('打包 Electron ConPTY 冒烟结果无效')
     }
-    console.log(
-      '[Pidex] packaged node-pty/ConPTY output, exit and process cleanup smoke passed',
-    )
+    console.log('[Pidex] packaged node-pty/ConPTY output, exit and process cleanup smoke passed')
   } finally {
     if (timer) clearTimeout(timer)
     child.kill()

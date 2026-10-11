@@ -32,7 +32,10 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
       for (const item of group.items) {
         visibility.set(
           item.routeId,
-          resolveSettingsSectionVisibility('requires' in item ? item.requires : undefined, { workspacePath, capabilityState }),
+          resolveSettingsSectionVisibility('requires' in item ? item.requires : undefined, {
+            workspacePath,
+            capabilityState,
+          }),
         )
       }
     }
@@ -175,7 +178,9 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
             return (
               <section className="settings-nav-group tw:grid" key={group.title}>
                 <div className="settings-nav-group-title-row tw:min-w-0 tw:px-2 tw:py-1">
-                  <h2 className="settings-nav-group-title tw:m-0 tw:text-app-text-meta tw:type-row-title">{t(group.title)}</h2>
+                  <h2 className="settings-nav-group-title tw:m-0 tw:text-app-text-meta tw:type-row-title">
+                    {t(group.title)}
+                  </h2>
                 </div>
                 <div className="settings-nav-group-items tw:grid">
                   {visibleItems.map((item) => {
@@ -231,7 +236,9 @@ function SearchResults({
   if (results.length === 0) {
     return (
       <div className="settings-search-results" id="settings-search-results" role="listbox">
-        <p className="settings-search-empty tw:m-0 tw:px-2 tw:py-4 tw:text-app-text-soft tw:type-body-sm">{t('未找到匹配的设置')}</p>
+        <p className="settings-search-empty tw:m-0 tw:px-2 tw:py-4 tw:text-app-text-soft tw:type-body-sm">
+          {t('未找到匹配的设置')}
+        </p>
       </div>
     )
   }
@@ -261,10 +268,14 @@ function SearchResults({
                 {t(result.rowTitle ?? result.pageLabel)}
               </span>
               {result.rowTitle ? (
-                <span className="settings-search-result-page tw:shrink-0 tw:text-app-text-meta tw:type-caption">{t(result.pageLabel)}</span>
+                <span className="settings-search-result-page tw:shrink-0 tw:text-app-text-meta tw:type-caption">
+                  {t(result.pageLabel)}
+                </span>
               ) : null}
             </span>
-            <span className="settings-search-result-description tw:line-clamp-2 tw:text-app-text-soft tw:type-caption">{t(result.description)}</span>
+            <span className="settings-search-result-description tw:line-clamp-2 tw:text-app-text-soft tw:type-caption">
+              {t(result.description)}
+            </span>
           </button>
         )
       })}
@@ -284,22 +295,23 @@ function searchSettings(
 ): readonly SettingsSearchDocument[] {
   if (!query) return []
   const terms = query.split(' ')
-  return documents.map((document) => ({
-    document,
-    score: Math.max(
-      scoreSearchDocument(document, terms),
-      scoreSearchDocument(
-        {
-          ...document,
-          groupTitle: t(document.groupTitle),
-          pageLabel: t(document.pageLabel),
-          rowTitle: document.rowTitle ? t(document.rowTitle) : undefined,
-          description: t(document.description),
-        },
-        terms,
+  return documents
+    .map((document) => ({
+      document,
+      score: Math.max(
+        scoreSearchDocument(document, terms),
+        scoreSearchDocument(
+          {
+            ...document,
+            groupTitle: t(document.groupTitle),
+            pageLabel: t(document.pageLabel),
+            rowTitle: document.rowTitle ? t(document.rowTitle) : undefined,
+            description: t(document.description),
+          },
+          terms,
+        ),
       ),
-    ),
-  }))
+    }))
     .filter((result) => result.score > 0)
     .sort(
       (left, right) =>

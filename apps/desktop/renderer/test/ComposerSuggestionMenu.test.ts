@@ -30,11 +30,20 @@ const item = (key: string, extra: Partial<ComposerMenuItem> = {}): ComposerMenuI
 
 describe('composer suggestion routing and selection', () => {
   test('超过 50 行的候选使用明确的内联视口高度，覆盖 Virtua 的 100% 默认高度', () => {
-    const render = (count: number) => renderToStaticMarkup(createElement(ComposerCommandMenu, {
-      id: 'menu', items: Array.from({ length: count }, (_, index) => item(`item-${index}`)),
-      keyword: '', activeKey: 'item-0', onActiveKeyChange: () => {}, onItemSelect: () => {},
-    }))
-    expect(render(51)).toContain('height:calc(var(--composer-suggestion-max-height, 320px) - var(--cpx-sys-space-4))')
+    const render = (count: number) =>
+      renderToStaticMarkup(
+        createElement(ComposerCommandMenu, {
+          id: 'menu',
+          items: Array.from({ length: count }, (_, index) => item(`item-${index}`)),
+          keyword: '',
+          activeKey: 'item-0',
+          onActiveKeyChange: () => {},
+          onItemSelect: () => {},
+        }),
+      )
+    expect(render(51)).toContain(
+      'height:calc(var(--composer-suggestion-max-height, 320px) - var(--cpx-sys-space-4))',
+    )
     expect(render(51)).not.toContain('height:100%')
     expect(render(50)).toContain('item-49')
     expect(render(50)).not.toContain('chat-input__suggestion-vlist')

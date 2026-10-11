@@ -133,7 +133,8 @@ export function SessionFollowUpDock({
               <div aria-label="队列操作" className={ACTIONS_CLASS}>
                 {isEditing ? (
                   <>
-                    <Button isIconOnly
+                    <Button
+                      isIconOnly
                       aria-label="保存编辑"
                       className="session-follow-up-action"
                       color="ghostSecondary"
@@ -144,7 +145,8 @@ export function SessionFollowUpDock({
                     >
                       <Check size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
                     </Button>
-                    <Button isIconOnly
+                    <Button
+                      isIconOnly
                       aria-label="取消编辑"
                       className="session-follow-up-action"
                       color="ghostSecondary"
@@ -157,7 +159,8 @@ export function SessionFollowUpDock({
                   </>
                 ) : (
                   <>
-                    <Button isIconOnly
+                    <Button
+                      isIconOnly
                       aria-label="移除排队消息"
                       className="session-follow-up-action"
                       color="ghostSecondary"
@@ -167,7 +170,8 @@ export function SessionFollowUpDock({
                     >
                       <Trash2 size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
                     </Button>
-                    <Button isIconOnly
+                    <Button
+                      isIconOnly
                       aria-label="编辑排队消息"
                       className="session-follow-up-action"
                       color="ghostSecondary"

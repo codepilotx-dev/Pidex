@@ -10,15 +10,21 @@ export function notifyProjectRemoved(removal: Removal): void {
 }
 export function subscribeProjectRemovals(listener: (removal: Removal) => void): () => void {
   removalListeners.add(listener)
-  return () => { removalListeners.delete(listener) }
+  return () => {
+    removalListeners.delete(listener)
+  }
 }
 export function notifyProjectRestored(project: DesktopWorkspace, selected: boolean): void {
   for (const listener of restoreListeners) listener(project, selected)
   notifyProjectCatalogChanged()
 }
-export function subscribeProjectRestores(listener: (project: DesktopWorkspace, selected: boolean) => void): () => void {
+export function subscribeProjectRestores(
+  listener: (project: DesktopWorkspace, selected: boolean) => void,
+): () => void {
   restoreListeners.add(listener)
-  return () => { restoreListeners.delete(listener) }
+  return () => {
+    restoreListeners.delete(listener)
+  }
 }
 
 const projectCatalogListeners = new Set<ProjectCatalogListener>()

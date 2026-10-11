@@ -63,12 +63,7 @@ export function ComposerModeSwitcher({
   const CurrentIcon = currentConfig.icon
 
   return (
-    <Dropdown.Root
-      value={mode}
-      disabled={disabled}
-      open={open}
-      onOpenChange={setOpen}
-    >
+    <Dropdown.Root value={mode} disabled={disabled} open={open} onOpenChange={setOpen}>
       <Dropdown.Trigger asChild>
         <button
           aria-expanded={open}

@@ -101,7 +101,9 @@ export class ThreadBookmarkRepository {
     }
     const inputIds = (
       this.db.sqlite
-        .query('SELECT input_id FROM thread_bookmarks WHERE thread_id = ? ORDER BY created_at, input_id')
+        .query(
+          'SELECT input_id FROM thread_bookmarks WHERE thread_id = ? ORDER BY created_at, input_id',
+        )
         .all(threadId) as Array<{ input_id: string }>
     ).map((row) => row.input_id)
     const state = this.hasTable('thread_bookmark_state')

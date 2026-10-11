@@ -12,8 +12,27 @@ import {
   PositiveIntSchema,
 } from '../wire/Primitives'
 
-const PrWatchSchema = Schema.Struct({ id: OpaqueIDSchema, projectId: OpaqueIDSchema, url: Schema.String, automation: AutomationSchema, threadId: OpaqueIDSchema, worktreeId: OpaqueIDSchema, reason: Schema.NullOr(Schema.String) })
-const PrWatchErrors = ['INVALID_REQUEST', 'PROJECT_NOT_FOUND', 'REPOSITORY_NOT_FOUND', 'CONFLICT', 'AUTOMATION_NOT_FOUND', 'PERMISSION_DENIED', 'GITHUB_AUTH_REQUIRED', 'GITHUB_AUTH_INVALID', 'GITHUB_UNAVAILABLE', 'INTERNAL_ERROR'] as const
+const PrWatchSchema = Schema.Struct({
+  id: OpaqueIDSchema,
+  projectId: OpaqueIDSchema,
+  url: Schema.String,
+  automation: AutomationSchema,
+  threadId: OpaqueIDSchema,
+  worktreeId: OpaqueIDSchema,
+  reason: Schema.NullOr(Schema.String),
+})
+const PrWatchErrors = [
+  'INVALID_REQUEST',
+  'PROJECT_NOT_FOUND',
+  'REPOSITORY_NOT_FOUND',
+  'CONFLICT',
+  'AUTOMATION_NOT_FOUND',
+  'PERMISSION_DENIED',
+  'GITHUB_AUTH_REQUIRED',
+  'GITHUB_AUTH_INVALID',
+  'GITHUB_UNAVAILABLE',
+  'INTERNAL_ERROR',
+] as const
 
 export const GithubUserSchema = Schema.Struct({
   login: NonEmptyStringSchema,
@@ -202,11 +221,60 @@ const GithubErrors = [
 ] as const
 
 export const GithubRpcMethods = {
-  'github/watch/start': defineMethod({ params: Schema.Struct({ projectId: OpaqueIDSchema, url: NonEmptyStringSchema, model: ModelRefSchema, permissionConfig: PermissionConfigSchema, reasoningEffort: Schema.optional(NonEmptyStringSchema) }), result: PrWatchSchema, errors: PrWatchErrors, capability: 'github.watch.v1', mutation: true, exactParams: true, exactResult: true }),
-  'github/watch/list': defineMethod({ params: EmptyParamsSchema, result: Schema.Struct({ watches: Schema.Array(PrWatchSchema) }), errors: PrWatchErrors, capability: 'github.watch.v1', mutation: false, exactResult: true }),
-  'github/watch/read': defineMethod({ params: Schema.Struct({ id: OpaqueIDSchema }), result: PrWatchSchema, errors: PrWatchErrors, capability: 'github.watch.v1', mutation: false, exactParams: true, exactResult: true }),
-  'github/watch/stop': defineMethod({ params: Schema.Struct({ id: OpaqueIDSchema }), result: PrWatchSchema, errors: PrWatchErrors, capability: 'github.watch.v1', mutation: true, exactParams: true, exactResult: true }),
-  'github/watch/update': defineMethod({ params: Schema.Struct({ id: OpaqueIDSchema, expectedRevision: PositiveIntSchema, status: Schema.Literals(['active', 'paused']) }), result: PrWatchSchema, errors: PrWatchErrors, capability: 'github.watch.v1', mutation: true, exactParams: true, exactResult: true }),
+  'github/watch/start': defineMethod({
+    params: Schema.Struct({
+      projectId: OpaqueIDSchema,
+      url: NonEmptyStringSchema,
+      model: ModelRefSchema,
+      permissionConfig: PermissionConfigSchema,
+      reasoningEffort: Schema.optional(NonEmptyStringSchema),
+    }),
+    result: PrWatchSchema,
+    errors: PrWatchErrors,
+    capability: 'github.watch.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
+  }),
+  'github/watch/list': defineMethod({
+    params: EmptyParamsSchema,
+    result: Schema.Struct({ watches: Schema.Array(PrWatchSchema) }),
+    errors: PrWatchErrors,
+    capability: 'github.watch.v1',
+    mutation: false,
+    exactResult: true,
+  }),
+  'github/watch/read': defineMethod({
+    params: Schema.Struct({ id: OpaqueIDSchema }),
+    result: PrWatchSchema,
+    errors: PrWatchErrors,
+    capability: 'github.watch.v1',
+    mutation: false,
+    exactParams: true,
+    exactResult: true,
+  }),
+  'github/watch/stop': defineMethod({
+    params: Schema.Struct({ id: OpaqueIDSchema }),
+    result: PrWatchSchema,
+    errors: PrWatchErrors,
+    capability: 'github.watch.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
+  }),
+  'github/watch/update': defineMethod({
+    params: Schema.Struct({
+      id: OpaqueIDSchema,
+      expectedRevision: PositiveIntSchema,
+      status: Schema.Literals(['active', 'paused']),
+    }),
+    result: PrWatchSchema,
+    errors: PrWatchErrors,
+    capability: 'github.watch.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
+  }),
   'github/auth/status': defineMethod({
     params: EmptyParamsSchema,
     result: GithubAuthStatusSchema,

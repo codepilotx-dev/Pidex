@@ -50,11 +50,11 @@
     pointer-events: none;
   }
 
-  .app-shell[data-resize-active="true"] .desktop-workspace-panel--right {
+  .app-shell[data-resize-active='true'] .desktop-workspace-panel--right {
     will-change: width;
   }
-  .app-shell[data-resize-active="true"] .desktop-main-route,
-  .app-shell[data-resize-active="true"] .desktop-workspace-panel--right .workbench-panel-content {
+  .app-shell[data-resize-active='true'] .desktop-main-route,
+  .app-shell[data-resize-active='true'] .desktop-workspace-panel--right .workbench-panel-content {
     pointer-events: none;
   }
 
@@ -97,7 +97,7 @@
     overflow: hidden;
   }
 
-  .desktop-workspace-panel[data-workbench-panel-presence="hidden"] {
+  .desktop-workspace-panel[data-workbench-panel-presence='hidden'] {
     pointer-events: none;
   }
 

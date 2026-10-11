@@ -1211,7 +1211,11 @@ function threadWorkspaceToDesktopWorkspace(
     }
   }
   const current = projectToDesktopWorkspace(project, workspace.projectID)
-  return { ...current, path: workspace.cwd, ...(project ? {} : { name: '无项目会话', isStandalone: true, projectId: undefined }) }
+  return {
+    ...current,
+    path: workspace.cwd,
+    ...(project ? {} : { name: '无项目会话', isStandalone: true, projectId: undefined }),
+  }
 }
 
 function record(value: unknown): Record<string, any> {

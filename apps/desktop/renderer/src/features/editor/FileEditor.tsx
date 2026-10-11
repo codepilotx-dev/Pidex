@@ -109,16 +109,16 @@ export function FileEditor({
       parent: hostRef.current,
       state: EditorState.create({
         doc: value,
-        selection: snapshot ? {
-          anchor: clampEditorSelection(snapshot.anchor, value.length),
-          head: clampEditorSelection(snapshot.head, value.length),
-        } : undefined,
+        selection: snapshot
+          ? {
+              anchor: clampEditorSelection(snapshot.anchor, value.length),
+              head: clampEditorSelection(snapshot.head, value.length),
+            }
+          : undefined,
         extensions: [
           EditorView.updateListener.of((update) => {
             if (update.selectionSet || update.docChanged) {
-              onSelectionChangeRef.current?.(
-                readEditorSelectedText(update.state),
-              )
+              onSelectionChangeRef.current?.(readEditorSelectedText(update.state))
             }
           }),
           ...createCodeMirrorExtensions({
@@ -144,10 +144,13 @@ export function FileEditor({
     })
     viewRef.current = view
     if (snapshot) {
-      view.requestMeasure({ read: () => snapshot, write: () => {
-        view.scrollDOM.scrollTop = snapshot.scrollTop
-        view.scrollDOM.scrollLeft = snapshot.scrollLeft
-      } })
+      view.requestMeasure({
+        read: () => snapshot,
+        write: () => {
+          view.scrollDOM.scrollTop = snapshot.scrollTop
+          view.scrollDOM.scrollLeft = snapshot.scrollLeft
+        },
+      })
       onSelectionChangeRef.current?.(readEditorSelectedText(view.state))
     }
     const unregisterEditTarget = registerTarget(view.contentDOM, {

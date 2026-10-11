@@ -215,17 +215,23 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const localEnvironmentRunner = new LocalEnvironmentRunner(environmentDeltas)
     const environmentRepository = new LocalEnvironmentRepository(db.sqlite)
     const environmentDiscovery = new LocalEnvironmentDiscovery(
-        new GitCommandRunner({
-          maxOutputBytes: 64 * 1024,
-          timeoutMs: 20_000,
-        }),
-        (cwd) => {
-          const frozen = environmentRepository.snapshotForCwd(cwd)
-          if (frozen) return { filePath: frozen.snapshot_path, frozen: true, revision: frozen.revision, trustIdentity: frozen.trust_identity }
-          const selected = environmentRepository.selectedForCwd(cwd)
-          return selected ? { filePath: selected.config_path } : null
-        },
-      )
+      new GitCommandRunner({
+        maxOutputBytes: 64 * 1024,
+        timeoutMs: 20_000,
+      }),
+      (cwd) => {
+        const frozen = environmentRepository.snapshotForCwd(cwd)
+        if (frozen)
+          return {
+            filePath: frozen.snapshot_path,
+            frozen: true,
+            revision: frozen.revision,
+            trustIdentity: frozen.trust_identity,
+          }
+        const selected = environmentRepository.selectedForCwd(cwd)
+        return selected ? { filePath: selected.config_path } : null
+      },
+    )
     const localEnvironment = new LocalEnvironmentService(
       environmentDiscovery,
       new FileProjectTrustStore(config.dataDir),
@@ -245,8 +251,14 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         return root ? (await configService.trustRead(root)).trustLevel === 'trusted' : false
       },
     )
-    if (environmentRepository.available()) localEnvironment.catalog = new LocalEnvironmentCatalog(localEnvironment, environmentDiscovery, environmentRepository,
-      (projectId) => db.getProject(projectId)?.rootPath ?? null, join(config.dataDir, 'managed-worktree-state', 'environments'))
+    if (environmentRepository.available())
+      localEnvironment.catalog = new LocalEnvironmentCatalog(
+        localEnvironment,
+        environmentDiscovery,
+        environmentRepository,
+        (projectId) => db.getProject(projectId)?.rootPath ?? null,
+        join(config.dataDir, 'managed-worktree-state', 'environments'),
+      )
     const worktrees = yield* Effect.promise(() =>
       ManagedWorktreeService.open({
         repository: worktreeRepository,
@@ -254,7 +266,10 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         stateRoot: join(config.dataDir, 'managed-worktree-state'),
         settings: () => {
           const desktop = configService.snapshot().desktop as Record<string, unknown> | undefined
-          return { root: typeof desktop?.worktreeRoot === 'string' ? desktop.worktreeRoot : '', fetchUpstream: desktop?.worktreeFetchUpstream === true }
+          return {
+            root: typeof desktop?.worktreeRoot === 'string' ? desktop.worktreeRoot : '',
+            fetchUpstream: desktop?.worktreeFetchUpstream === true,
+          }
         },
         resolveProjectRoot: (projectId) => db.getProject(projectId)?.rootPath ?? null,
         environment: new LocalEnvironmentWorktreeLifecycle(localEnvironment),
@@ -594,7 +609,13 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     )
     let toolExecutor!: ToolExecutor
     const hostToolAudit = new AutomationHostAuditRepository(db.sqlite)
-    const hostTurnInputs = new Map<string, Pick<NonNullable<ReturnType<AgentDatabase['getTurnInput']>>, 'taskMode' | 'permissionConfig' | 'model'>>()
+    const hostTurnInputs = new Map<
+      string,
+      Pick<
+        NonNullable<ReturnType<AgentDatabase['getTurnInput']>>,
+        'taskMode' | 'permissionConfig' | 'model'
+      >
+    >()
     const hooks = new HookService(
       db,
       {
@@ -659,15 +680,26 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         normalizeShellSecurityLevel(configService.snapshot().shell_security_level),
       authorizeShell: (invocation, signal) => approvals.authorize(invocation, signal),
       recordToolCall: (invocation, status, output, error, startedAt) =>
-        hostTurnInputs.has(invocation.turnID) ? hostToolAudit.record(invocation, status, output, error, startedAt) : db.upsertToolCall(invocation, status, output, error, startedAt),
-      completedToolCall: (toolCallID) => db.completedToolCall(toolCallID) ?? hostToolAudit.completed(toolCallID),
+        hostTurnInputs.has(invocation.turnID)
+          ? hostToolAudit.record(invocation, status, output, error, startedAt)
+          : db.upsertToolCall(invocation, status, output, error, startedAt),
+      completedToolCall: (toolCallID) =>
+        db.completedToolCall(toolCallID) ?? hostToolAudit.completed(toolCallID),
       logger,
       hooks,
       fileSaved: ({ workspaceRoot, filePath }) =>
         configService.notifyFileSaved(workspaceRoot, filePath),
-      recordMutation: (batch) => Promise.resolve(hostTurnInputs.has(batch.turnID) ? hostToolAudit.recordMutation(batch) : db.repositories.turnPatches.recordBatch(batch)),
+      recordMutation: (batch) =>
+        Promise.resolve(
+          hostTurnInputs.has(batch.turnID)
+            ? hostToolAudit.recordMutation(batch)
+            : db.repositories.turnPatches.recordBatch(batch),
+        ),
       discardMutationEvidence: async ({ threadID, turnID }) => {
-        if (hostTurnInputs.has(turnID)) { hostToolAudit.discardMutationEvidence(turnID); return }
+        if (hostTurnInputs.has(turnID)) {
+          hostToolAudit.discardMutationEvidence(turnID)
+          return
+        }
         const events = db.repositories.turnPatches.markIncomplete(threadID, turnID)
         for (const event of events) await Effect.runPromise(hub.publish(event))
       },
@@ -836,23 +868,28 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       threadExecutions,
     )
     let prWatches!: PullRequestWatchService
-    const automationRuns = new AutomationRunCoordinator(automationRepository, { start: (work, run) => prWatches.run(work, run) }, {
-      getTurnStatus: (turnId) => {
-        const status = db.repositories.executions.getTurnStatus(turnId)
-        if (status === 'completed' || status === 'failed' || status === 'interrupted') return status
-        if (status === 'queued' || status === 'running') return status
-        return status ? 'waiting' : null
+    const automationRuns = new AutomationRunCoordinator(
+      automationRepository,
+      { start: (work, run) => prWatches.run(work, run) },
+      {
+        getTurnStatus: (turnId) => {
+          const status = db.repositories.executions.getTurnStatus(turnId)
+          if (status === 'completed' || status === 'failed' || status === 'interrupted')
+            return status
+          if (status === 'queued' || status === 'running') return status
+          return status ? 'waiting' : null
+        },
+        runChanged: async (run) => {
+          await prWatches?.onRunChanged(run)
+          await publishAgentEvent(db, hub, null, run.turnId, 'automation/runChanged', {
+            automationId: run.automationId,
+            runId: run.id,
+            status: run.status,
+            changedAt: Date.now(),
+          })
+        },
       },
-      runChanged: async (run) => {
-        await prWatches?.onRunChanged(run)
-        await publishAgentEvent(db, hub, null, run.turnId, 'automation/runChanged', {
-          automationId: run.automationId,
-          runId: run.id,
-          status: run.status,
-          changedAt: Date.now(),
-        })
-      },
-    })
+    )
     const scheduledTaskRuns = new ScheduledTaskCoordinator(
       scheduledTaskRepository,
       automationExecutor,
@@ -885,15 +922,48 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       claimed: (run) => automationRuns.startRun(run),
       wakeScheduler: () => automationScheduler?.wake(),
     })
-    prWatches = new PullRequestWatchService({ sqlite: db.sqlite, github, automation, repository: automationRepository, worktrees, executions: threadExecutions, threads, executor: automationExecutor,
+    prWatches = new PullRequestWatchService({
+      sqlite: db.sqlite,
+      github,
+      automation,
+      repository: automationRepository,
+      worktrees,
+      executions: threadExecutions,
+      threads,
+      executor: automationExecutor,
       projectRoot: (id) => db.getProject(id)?.rootPath ?? null,
-      preferences: () => { const desktop = configService.snapshot().desktop as Record<string, unknown> | undefined; return { autoMerge: desktop?.prWatchAutoMerge === true, instructions: typeof desktop?.prWatchInstructions === 'string' ? desktop.prWatchInstructions : '', mergeMethod: desktop?.gitPrMergeMethod === 'squash' ? 'squash' : 'merge' } },
+      preferences: () => {
+        const desktop = configService.snapshot().desktop as Record<string, unknown> | undefined
+        return {
+          autoMerge: desktop?.prWatchAutoMerge === true,
+          instructions:
+            typeof desktop?.prWatchInstructions === 'string' ? desktop.prWatchInstructions : '',
+          mergeMethod: desktop?.gitPrMergeMethod === 'squash' ? 'squash' : 'merge',
+        }
+      },
       execute: async (name, input, watch, work, runId) => {
         const runtime = await workspaceResolver.resolve(watch.thread_id)
         const turnID = `automation-host:${runId}`
-        hostTurnInputs.set(turnID, { taskMode: 'chat', permissionConfig: work.permissionConfig, model: work.model })
-        try { return await toolExecutor.execute(name, input, { threadID: watch.thread_id, turnID, taskMode: 'chat', signal: AbortSignal.timeout(120_000), workspace: runtime.workspace, defaultCwd: runtime.cwd, permissionConfig: work.permissionConfig, model: work.model, taskSummary: 'PR 监控宿主操作' }) }
-        finally { hostTurnInputs.delete(turnID) }
+        hostTurnInputs.set(turnID, {
+          taskMode: 'chat',
+          permissionConfig: work.permissionConfig,
+          model: work.model,
+        })
+        try {
+          return await toolExecutor.execute(name, input, {
+            threadID: watch.thread_id,
+            turnID,
+            taskMode: 'chat',
+            signal: AbortSignal.timeout(120_000),
+            workspace: runtime.workspace,
+            defaultCwd: runtime.cwd,
+            permissionConfig: work.permissionConfig,
+            model: work.model,
+            taskSummary: 'PR 监控宿主操作',
+          })
+        } finally {
+          hostTurnInputs.delete(turnID)
+        }
       },
     })
     for (const definition of prWatches.definitions()) tools.register(definition)

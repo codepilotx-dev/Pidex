@@ -161,10 +161,7 @@ export type ThreadSummaryController = ThreadSummaryState & {
 /** Agent 全部结束后延迟自动折叠该分区的等待时间。 */
 export const THREAD_SUMMARY_AGENTS_AUTO_COLLAPSE_DELAY_MS = 30_000
 
-export type ThreadSummaryAgentsCollapseDecision =
-  | 'idle'
-  | 'reset-override'
-  | 'schedule-collapse'
+export type ThreadSummaryAgentsCollapseDecision = 'idle' | 'reset-override' | 'schedule-collapse'
 
 /**
  * Agent 分区自动折叠决策：有活动 Agent 时清除手动覆盖；全部结束后若用户没有
@@ -250,7 +247,9 @@ export function useThreadSummaryController(
   )
 
   const toggle = React.useCallback((): void => {
-    publishThreadSummaryPreference(toggleThreadSummaryPreference(currentPreference(), state.displayMode))
+    publishThreadSummaryPreference(
+      toggleThreadSummaryPreference(currentPreference(), state.displayMode),
+    )
   }, [state.displayMode])
 
   return {

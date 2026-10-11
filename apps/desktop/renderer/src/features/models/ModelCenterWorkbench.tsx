@@ -623,12 +623,16 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
             }}
           >
             <Pencil size={APP_ICON_SIZE} aria-hidden />
-            <span className="model-center-header-action-label tw:max-[479px]:hidden">编辑 Provider</span>
+            <span className="model-center-header-action-label tw:max-[479px]:hidden">
+              编辑 Provider
+            </span>
           </Button>
           {selectedProvider?.providerKind === 'custom' ? (
             <Button color="danger" onClick={() => void deleteCustomProvider()}>
               <Trash2 size={APP_ICON_SIZE} aria-hidden />
-              <span className="model-center-header-action-label tw:max-[479px]:hidden">删除 Provider</span>
+              <span className="model-center-header-action-label tw:max-[479px]:hidden">
+                删除 Provider
+              </span>
             </Button>
           ) : null}
         </>
@@ -694,8 +698,12 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
       {!showingProviderDetail ? (
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">供应商</h2>
-          <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">管理模型服务、账户连接、凭据与可用模型。</p>
+          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+            供应商
+          </h2>
+          <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
+            管理模型服务、账户连接、凭据与可用模型。
+          </p>
         </div>
       ) : null}
 

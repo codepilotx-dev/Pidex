@@ -381,7 +381,9 @@ export function KeyboardShortcutsSettings(): React.ReactNode {
     <SettingsContentArea>
       <div className="settings-content-inner keyboard-shortcuts-settings tw:max-w-wide tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">键盘快捷键</h2>
+          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+            键盘快捷键
+          </h2>
         </div>
         <SearchInput
           aria-label="搜索键盘快捷键"
@@ -403,7 +405,11 @@ export function KeyboardShortcutsSettings(): React.ReactNode {
             {rows.map((row, index) => (
               <ShortcutRowView key={`${row.title}-${row.description}-${index}`} row={row} />
             ))}
-            {rows.length === 0 && <p className="keyboard-shortcuts-empty tw:px-4 tw:py-5 tw:text-app-text-soft tw:type-body-sm">未找到匹配的快捷键。</p>}
+            {rows.length === 0 && (
+              <p className="keyboard-shortcuts-empty tw:px-4 tw:py-5 tw:text-app-text-soft tw:type-body-sm">
+                未找到匹配的快捷键。
+              </p>
+            )}
           </div>
         </section>
       </div>
@@ -419,8 +425,12 @@ function ShortcutRowView({ row }: { row: ShortcutRow }): React.ReactNode {
   return (
     <div className="keyboard-shortcuts-row tw:grid tw:grid-cols-[minmax(260px,1fr)_minmax(170px,0.64fr)_var(--cpx-sys-space-7)] tw:items-center tw:gap-3 tw:border-b tw:border-b-app-border-subtle tw:py-2 tw:pr-3 tw:pl-4 tw:last:border-b-0 tw:hover:bg-app-hover">
       <div className="keyboard-shortcuts-command tw:grid tw:min-w-0 tw:gap-1">
-        <span className="keyboard-shortcuts-title tw:truncate tw:text-app-text tw:type-row-title">{row.title}</span>
-        <span className="keyboard-shortcuts-desc tw:truncate tw:text-app-text-soft tw:type-body-sm">{row.description}</span>
+        <span className="keyboard-shortcuts-title tw:truncate tw:text-app-text tw:type-row-title">
+          {row.title}
+        </span>
+        <span className="keyboard-shortcuts-desc tw:truncate tw:text-app-text-soft tw:type-body-sm">
+          {row.description}
+        </span>
       </div>
       <div className="keyboard-shortcuts-keys tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:gap-1">
         {row.keys.length > 0 ? (
@@ -433,7 +443,9 @@ function ShortcutRowView({ row }: { row: ShortcutRow }): React.ReactNode {
             </span>
           ))
         ) : (
-          <span className="keyboard-shortcut-unbound tw:bg-transparent tw:font-sans tw:text-app-text-soft tw:type-weight-label">未绑定</span>
+          <span className="keyboard-shortcut-unbound tw:bg-transparent tw:font-sans tw:text-app-text-soft tw:type-weight-label">
+            未绑定
+          </span>
         )}
       </div>
       <button

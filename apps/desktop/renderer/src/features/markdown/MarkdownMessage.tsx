@@ -170,11 +170,13 @@ export function MarkdownMessage({
   )
   if (blocks.length === 0) return null
   return (
-    <div className={cx(
-      'md-body',
-      presentation === 'conversation' && 'md-body--conversation',
-      streaming && 'is-streaming',
-    )}>
+    <div
+      className={cx(
+        'md-body',
+        presentation === 'conversation' && 'md-body--conversation',
+        streaming && 'is-streaming',
+      )}
+    >
       {blocks.map((block) => (
         <MemoizedMarkdownBlock block={block} context={context} key={block.id} />
       ))}
@@ -733,7 +735,11 @@ function MarkdownTable({
           </tbody>
         </table>
       </div>
-      {downloadStatus ? <p className="md-table-status" role="status">{downloadStatus}</p> : null}
+      {downloadStatus ? (
+        <p className="md-table-status" role="status">
+          {downloadStatus}
+        </p>
+      ) : null}
     </figure>
   )
 }
@@ -1021,14 +1027,22 @@ function tableCellText(cell: Tokens.TableCell): string {
 
 export function markdownTableToCsv(table: Tokens.Table): string {
   const rows = [table.header, ...table.rows]
-  return '\uFEFF' + rows.map((row) =>
-    row.map((cell) => {
-      const value = tableCellText(cell)
-      // CSV 单元格会被 Excel 解释为公式；沿用 ZCode 的前缀保护，保留原 Markdown。
-      const safeValue = /^[\t\r\n]/u.test(value) || /^[\s]*[=+\-@]/u.test(value) ? `'${value}` : value
-      return /[",\r\n]/u.test(safeValue) ? `"${safeValue.replaceAll('"', '""')}"` : safeValue
-    }).join(','),
-  ).join('\r\n')
+  return (
+    '\uFEFF' +
+    rows
+      .map((row) =>
+        row
+          .map((cell) => {
+            const value = tableCellText(cell)
+            // CSV 单元格会被 Excel 解释为公式；沿用 ZCode 的前缀保护，保留原 Markdown。
+            const safeValue =
+              /^[\t\r\n]/u.test(value) || /^[\s]*[=+\-@]/u.test(value) ? `'${value}` : value
+            return /[",\r\n]/u.test(safeValue) ? `"${safeValue.replaceAll('"', '""')}"` : safeValue
+          })
+          .join(','),
+      )
+      .join('\r\n')
+  )
 }
 
 export function saveMarkdownTableCsv(table: Tokens.Table) {

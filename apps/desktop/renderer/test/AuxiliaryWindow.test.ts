@@ -31,7 +31,7 @@ describe('Auxiliary Window (Phase 3) - View Floating Capabilities', () => {
     }
     expect(canViewFloat('browser')).toBe(false)
     expect(BUILTIN_COMPOSITE_VIEWS.browser.canFloat).toBe(false)
-    expect(BUILTIN_COMPOSITE_VIEWS.browser.allowedLocations).toEqual(['right', 'bottom'])
+    expect(BUILTIN_COMPOSITE_VIEWS.browser.allowedLocations).toEqual(['right'])
   })
 })
 

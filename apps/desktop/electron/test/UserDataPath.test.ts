@@ -12,10 +12,7 @@ describe('desktop data directory stability', () => {
   test('pins the default userData directory to the product name', async () => {
     const source = await readSource('../src/Main.ts')
     expectSourceContains(source, "const USER_DATA_DIRECTORY_NAME = 'Pidex Desktop'")
-    expectSourceContains(
-      source,
-      "join(app.getPath('appData'), USER_DATA_DIRECTORY_NAME)",
-    )
+    expectSourceContains(source, "join(app.getPath('appData'), USER_DATA_DIRECTORY_NAME)")
     expectSourceContains(
       source,
       "app.setPath('userData', configuredUserDataDirectory ? resolve(configuredUserDataDirectory) : DEFAULT_USER_DATA_DIRECTORY)",

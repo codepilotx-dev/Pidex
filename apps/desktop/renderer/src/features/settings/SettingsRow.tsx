@@ -57,10 +57,7 @@ export function SettingsRow({
       id={id}
     >
       <div className="settings-row-info tw:min-w-0">
-        <h4
-          className="settings-row-title tw:m-0 tw:text-app-text tw:type-row-title"
-          id={titleId}
-        >
+        <h4 className="settings-row-title tw:m-0 tw:text-app-text tw:type-row-title" id={titleId}>
           {t(title)}
         </h4>
         {description ? (

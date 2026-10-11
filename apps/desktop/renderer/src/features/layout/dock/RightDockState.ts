@@ -544,7 +544,11 @@ function reduceWorkbenchPanelAction(
         },
       },
       effectiveTarget,
-      { ...insertTab(destPanel, action.tab.id, action.index), open: true, activeTabId: action.tab.id },
+      {
+        ...insertTab(destPanel, action.tab.id, action.index),
+        open: true,
+        activeTabId: action.tab.id,
+      },
       reveal,
     )
   }
@@ -621,7 +625,10 @@ function reduceWorkbenchPanelAction(
   if (action.type === 'setFileViewState') {
     const tab = state.tabsById[action.tabId]
     if (tab?.kind !== 'file-preview') return state
-    return { ...state, tabsById: { ...state.tabsById, [tab.id]: { ...tab, viewState: action.viewState } } }
+    return {
+      ...state,
+      tabsById: { ...state.tabsById, [tab.id]: { ...tab, viewState: action.viewState } },
+    }
   }
 
   if (action.type === 'setFileMarkdownViewMode') {

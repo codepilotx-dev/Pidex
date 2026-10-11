@@ -1,9 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import * as Slider from '@radix-ui/react-slider'
-import {
-  getDesktopAccentPresetColor,
-  type DesktopAccentPreset,
-} from '@pidex/shared/desktop-theme'
+import { getDesktopAccentPresetColor, type DesktopAccentPreset } from '@pidex/shared/desktop-theme'
 
 import { AnchoredPopover } from '../../components/ui/AnchoredPopover.js'
 import { Input } from '../../components/ui/Input.js'
@@ -676,7 +673,6 @@ function VariantThemeEditor({
       cancelled = true
     }
   }, [themes, variant, section])
-
 
   const updateChromeTheme = (patch: Partial<DesktopChromeTheme>): void => {
     onUpdate((current) => {

@@ -377,7 +377,11 @@ export class ManagedWorktreeService {
 
   private async assertNewTarget(target: string, root = this.managedRoot) {
     const directory = await lstat(root)
-    if (!directory.isDirectory() || directory.isSymbolicLink() || (await realpath(root)) !== resolve(root))
+    if (
+      !directory.isDirectory() ||
+      directory.isSymbolicLink() ||
+      (await realpath(root)) !== resolve(root)
+    )
       throw new AgentError('WORKTREE_PATH_UNSAFE', 'worktree 托管根目录已变化', 409)
     if (!contained(root, target))
       throw new AgentError('WORKTREE_PATH_DENIED', 'worktree 目标路径越界', 403)
@@ -416,9 +420,14 @@ export class ManagedWorktreeService {
       const worktreeId = this.id()
       const preference = this.settings()
       const requestedRoot = preference.root?.trim() || this.managedRoot
-      if (requestedRoot !== this.managedRoot && !this.repository.settingsAvailable()) throw new AgentError('WORKTREE_NOT_READY', '当前存储不支持自定义工作树根目录', 409)
-      if (!isAbsolute(requestedRoot)) throw new AgentError('WORKTREE_PATH_UNSAFE', '工作树根目录必须为绝对路径', 400)
-      if (contained(repositoryRoot, resolve(requestedRoot)) || contained(resolve(requestedRoot), repositoryRoot))
+      if (requestedRoot !== this.managedRoot && !this.repository.settingsAvailable())
+        throw new AgentError('WORKTREE_NOT_READY', '当前存储不支持自定义工作树根目录', 409)
+      if (!isAbsolute(requestedRoot))
+        throw new AgentError('WORKTREE_PATH_UNSAFE', '工作树根目录必须为绝对路径', 400)
+      if (
+        contained(repositoryRoot, resolve(requestedRoot)) ||
+        contained(resolve(requestedRoot), repositoryRoot)
+      )
         throw new AgentError('WORKTREE_PATH_UNSAFE', '工作树根目录不能与项目目录相互包含', 409)
       await mkdir(requestedRoot, { recursive: true })
       const rootMetadata = await lstat(requestedRoot)
@@ -429,8 +438,21 @@ export class ManagedWorktreeService {
         throw new AgentError('WORKTREE_PATH_UNSAFE', '工作树根目录不能与项目目录相互包含', 409)
       let fetchWarning: string | null = null
       if (preference.fetchUpstream) {
-        try { await new GitCommandRunner({ timeoutMs: 30_000, maxOutputBytes: 256 * 1024 }).run({ cwd: repositoryRoot, args: ['-c', `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`, 'fetch', '--all', '--prune'], env: { GIT_TERMINAL_PROMPT: '0' } }) }
-        catch { fetchWarning = '上游获取失败，继续使用本地引用' }
+        try {
+          await new GitCommandRunner({ timeoutMs: 30_000, maxOutputBytes: 256 * 1024 }).run({
+            cwd: repositoryRoot,
+            args: [
+              '-c',
+              `core.hooksPath=${process.platform === 'win32' ? 'NUL' : '/dev/null'}`,
+              'fetch',
+              '--all',
+              '--prune',
+            ],
+            env: { GIT_TERMINAL_PROMPT: '0' },
+          })
+        } catch {
+          fetchWarning = '上游获取失败，继续使用本地引用'
+        }
       }
       const target = this.targetPath(repositoryRoot, worktreeId, '', creationRoot)
       await this.assertNewTarget(target, creationRoot)
@@ -600,7 +622,9 @@ export class ManagedWorktreeService {
 
   settingsList(projectId?: string) {
     return this.repository.listWorktrees(projectId).map((worktree) => ({
-      worktree: publicWorktree(worktree), path: worktree.path, repositoryRoot: worktree.repositoryRoot,
+      worktree: publicWorktree(worktree),
+      path: worktree.path,
+      repositoryRoot: worktree.repositoryRoot,
       conversations: this.repository.conversations(worktree.id),
     }))
   }
@@ -830,9 +854,15 @@ export class ManagedWorktreeService {
     })
     if (started.replay) return this.result(worktree.id, input.operationId)
     this.claimWorktreeOperation(started.operation, worktree.id)
-    try { await input.archiveConversations?.() }
-    catch (cause) {
-      this.updateOperation(input.operationId, { step: 'failed', status: 'failed', errorCode: safeCode(cause, 'WORKTREE_NOT_READY'), completedAt: this.now() })
+    try {
+      await input.archiveConversations?.()
+    } catch (cause) {
+      this.updateOperation(input.operationId, {
+        step: 'failed',
+        status: 'failed',
+        errorCode: safeCode(cause, 'WORKTREE_NOT_READY'),
+        completedAt: this.now(),
+      })
       this.output.complete(input.operationId)
       throw cause
     }

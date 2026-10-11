@@ -23,9 +23,7 @@ describe('desktop publish target', () => {
   })
 
   test('agent release notes and packaging verifier agree on the same repository', async () => {
-    const releaseNotes = await read(
-      '../../../agent/src/release-notes/ReleaseNotesService.ts',
-    )
+    const releaseNotes = await read('../../../agent/src/release-notes/ReleaseNotesService.ts')
     expect(releaseNotes).toContain(`${EXPECTED_OWNER}/${EXPECTED_REPO}`)
 
     const verifier = await read('../../../../scripts/VerifyWinX64Package.ts')

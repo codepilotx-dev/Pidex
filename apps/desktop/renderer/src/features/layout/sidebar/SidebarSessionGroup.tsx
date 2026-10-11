@@ -487,7 +487,8 @@ function SidebarSessionGroupComponent({
             ) : showActions ? (
               <div className="sidebar-session-actions tw:flex tw:w-full tw:items-center tw:justify-end tw:gap-1">
                 {session.pinnedAt ? (
-                  <Button isIconOnly
+                  <Button
+                    isIconOnly
                     className="sidebar-session-action-button"
                     variant="text"
                     iconSize="md"
@@ -498,7 +499,8 @@ function SidebarSessionGroupComponent({
                     <PinOff size={APP_ICON_SIZE} />
                   </Button>
                 ) : (
-                  <Button isIconOnly
+                  <Button
+                    isIconOnly
                     className="sidebar-session-action-button"
                     variant="text"
                     iconSize="md"
@@ -509,7 +511,8 @@ function SidebarSessionGroupComponent({
                     <Pin size={APP_ICON_SIZE} />
                   </Button>
                 )}
-                <Button isIconOnly
+                <Button
+                  isIconOnly
                   className="sidebar-session-action-button"
                   variant="text"
                   iconSize="md"

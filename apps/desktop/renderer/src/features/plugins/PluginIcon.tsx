@@ -72,7 +72,11 @@ export function PluginIcon({
       >
         <img
           alt=""
-          className={cx(PLUGIN_LOGO_IMAGE_CLASS, 'plugin-logo__image--light', darkTheme && 'tw:hidden')}
+          className={cx(
+            PLUGIN_LOGO_IMAGE_CLASS,
+            'plugin-logo__image--light',
+            darkTheme && 'tw:hidden',
+          )}
           src={source}
         />
         {darkSource ? (

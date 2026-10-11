@@ -11,10 +11,7 @@ import type {
   ScheduledTaskStatus,
 } from '@pidex/shared/scheduled-task'
 import type { CalendarSourceRef } from '@pidex/shared/calendar'
-import type {
-  AutomationExecution,
-  AutomationNotificationPolicy,
-} from '@pidex/shared/automation'
+import type { AutomationExecution, AutomationNotificationPolicy } from '@pidex/shared/automation'
 import type { ModelRef } from '@pidex/shared/model'
 import type { PermissionConfig } from '@pidex/shared/thread'
 import { AgentError } from '../../Domain'
@@ -150,8 +147,15 @@ export class ScheduledTaskRepository {
   constructor(private readonly db: ScheduleCalendarDatabase) {}
 
   forThread(threadId: string) {
-    const rows = this.db.sqlite.query("SELECT id FROM scheduled_tasks WHERE target_thread_id = ? AND kind = 'thread' AND status IN ('scheduled', 'paused', 'claimed', 'preparing', 'queued', 'running')").all(threadId) as Array<{ id: string }>
-    return rows.flatMap(({ id }) => { const value = this.read(id); return value ? [value] : [] })
+    const rows = this.db.sqlite
+      .query(
+        "SELECT id FROM scheduled_tasks WHERE target_thread_id = ? AND kind = 'thread' AND status IN ('scheduled', 'paused', 'claimed', 'preparing', 'queued', 'running')",
+      )
+      .all(threadId) as Array<{ id: string }>
+    return rows.flatMap(({ id }) => {
+      const value = this.read(id)
+      return value ? [value] : []
+    })
   }
 
   listRange(input: {

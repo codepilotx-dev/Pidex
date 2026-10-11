@@ -42,7 +42,12 @@ export function SkillCatalogCard({
 }: Props): React.ReactNode {
   return (
     <li>
-      <article className={cx('skill-catalog-card tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:min-w-0 tw:items-center tw:gap-3 tw:rounded-2xl tw:border-0 tw:bg-transparent tw:p-2.5 tw:shadow-none tw:transition-[background-color] tw:duration-state tw:ease-standard tw:[&:hover:not(:has(>div:hover))]:bg-app-hover tw:@max-[479px]/plugins-page:grid-cols-1', FORCED_COLORS_SURFACE_CLASS)}>
+      <article
+        className={cx(
+          'skill-catalog-card tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:min-w-0 tw:items-center tw:gap-3 tw:rounded-2xl tw:border-0 tw:bg-transparent tw:p-2.5 tw:shadow-none tw:transition-[background-color] tw:duration-state tw:ease-standard tw:[&:hover:not(:has(>div:hover))]:bg-app-hover tw:@max-[479px]/plugins-page:grid-cols-1',
+          FORCED_COLORS_SURFACE_CLASS,
+        )}
+      >
         <button
           className={cx('skill-catalog-card__main', PLAIN_BUTTON_CLASS, FORCED_COLORS_FOCUS_CLASS)}
           data-catalog-item-id={`skill:${skill.id}`}

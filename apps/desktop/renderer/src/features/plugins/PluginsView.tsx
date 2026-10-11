@@ -517,9 +517,7 @@ export function PluginsView(): React.ReactNode {
         <PrimaryPageLayout
           className="plugins-primary-page tw:@container/plugins-page"
           description={
-            tab === 'plugins'
-              ? '在常用工具中扩展 Pidex 的能力。'
-              : '查找并添加可复用的工作流指令。'
+            tab === 'plugins' ? '在常用工具中扩展 Pidex 的能力。' : '查找并添加可复用的工作流指令。'
           }
           scrollContainerRef={scrollRegionRef}
           search={

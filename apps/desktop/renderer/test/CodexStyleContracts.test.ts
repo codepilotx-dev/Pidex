@@ -339,7 +339,7 @@ describe('Codex CPX design system token contract', () => {
     expectSourceContains(pullRequests, '<PrimaryPageLayout')
     // 模型引导页的两行网格改由 TSX utility 承担（原 `_model-setup.scss` 规则）。
     expectSourceContains(setup, 'tw:grid-rows-[36px_minmax(0,1fr)]')
-    expectSourceContains(review, 'tw:px-4 tw:py-1')
+    expectSourceContains(review, 'tw:px-4 tw:py-4 tw:type-control')
     // 状态行保留语义类名与 alert 角色，迁移只在其上追加 utility。
     expect(browser).toMatch(/className="browser-status-row[^"]*"[\s\S]*?role="alert"/)
   })
@@ -655,7 +655,7 @@ describe('Codex CPX design system token contract', () => {
 
     // Panel and toolbar borders moved out of the dock stylesheet into the
     // components that render them, still on public system semantics.
-    expectSourceContains(tabStrip, 'tw:rounded-control')
+    expectSourceContains(tabStrip, 'tw:rounded-md')
     expectSourceContains(dockFrame, 'tw:border-l tw:border-app-border')
     expectSourceContains(dockFrame, 'tw:border-t tw:border-app-border')
     expectSourceContains(panelSurface, 'tw:border-b tw:border-app-border-subtle')

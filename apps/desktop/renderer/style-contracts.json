@@ -42,10 +42,7 @@
   "literalLineHeightAllowlist": {},
   "tailwindLeadingAllowlist": {},
   "featureColorContract": {
-    "roots": [
-      "src/styles/features",
-      "src/styles/lazy"
-    ],
+    "roots": ["src/styles/features", "src/styles/lazy"],
     "componentTokenExceptions": [
       {
         "file": "src/styles/lazy/terminal.css",
@@ -62,14 +59,8 @@
     "colorMixExceptions": []
   },
   "featureTokenContract": {
-    "roots": [
-      "src/styles/features",
-      "src/styles/lazy"
-    ],
-    "scriptRoots": [
-      "src/features",
-      "src/components"
-    ],
+    "roots": ["src/styles/features", "src/styles/lazy"],
+    "scriptRoots": ["src/features", "src/components"],
     "componentGeometryExceptions": [],
     "inlineStyleExceptions": [],
     "tailwindArbitraryExceptions": [
