@@ -1,0 +1,15 @@
+@layer features {
+  /*
+   * 宠物浮层的文档级表面重置。
+   *
+   * `.pet-overlay-surface` 由 `src/features/pet/PetOverlayPage.tsx` 在挂载时写到
+   * `document.documentElement`、`document.body` 与 `#root` 上，这三者都不是 React
+   * 渲染的元素，因此无法用 Tailwind utility 表达，只能保留为 CSS 规则。其余浮层
+   * 外观已迁移到 `PetOverlayPage.tsx` 与 `PetSprite.tsx` 的 utility。
+   */
+  :where(html.pet-overlay-surface),
+  :where(body.pet-overlay-surface),
+  :where(html.pet-overlay-surface #root) {
+    background: transparent;
+  }
+}

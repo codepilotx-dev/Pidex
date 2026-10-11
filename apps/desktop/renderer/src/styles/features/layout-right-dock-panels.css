@@ -1,0 +1,341 @@
+/*
+ * Application shell residue. Generated from _layout-right-dock-panels.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer shell {
+  @charset "UTF-8";
+
+  /*
+   * Right dock panels residue.
+   *
+   * The dock's own panels — file browser, file preview chrome, editor layout,
+   * editor file tree, workspace file tree, plan/skill scroll areas and their
+   * resize handles — now live as Tailwind utilities in
+   * `src/features/layout/dock/RightDockPanels.tsx`,
+   * `src/features/layout/WorkspaceFileTree.tsx` and
+   * `src/features/layout/panels/FileBreadcrumbToolbar.tsx`.
+   *
+   * What stays here is shared with other feature owners:
+   *
+   * - `.right-dock-file-preview`, `.right-dock-empty-state`,
+   *   `.right-dock-file-preview-scroll-area` and `.attachment-directory-entry`
+   *   are rendered by `src/features/session/attachments/UserAttachmentPreviewPanel.tsx`.
+   * - The `.file-breadcrumb-toolbar*` family is reused by the same attachment
+   *   preview panel (toolbar, `__path`, `__actions`, `__view-mode`), so the whole
+   *   family keeps one owner here.
+   * - `.right-dock-side-chat*` is owned by
+   *   `src/features/session/conversation/SideChatThreadPanel.tsx`.
+   * - `.desktop-main-stage` / `.desktop-main-route` belong to the app shell.
+   *
+   * `src/styles/primitives/right-dock.css` keeps what utilities cannot express:
+   * the editor-tree `::after` resize decoration and the imperative
+   * `document.body` `file-tree-is-resizing` cursor state.
+   */
+  .right-dock-file-preview {
+    container-type: inline-size;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    display: flex;
+    align-items: stretch;
+    justify-content: center;
+    overflow: hidden;
+  }
+
+  .right-dock-empty-state {
+    --right-dock-empty-state-gap: clamp(var(--cpx-sys-space-2), 2vh, var(--cpx-sys-space-5));
+    --right-dock-empty-state-padding: clamp(var(--cpx-sys-space-3), 4vh, var(--cpx-sys-space-6));
+    display: grid;
+    align-content: center;
+    justify-items: center;
+    gap: var(--right-dock-empty-state-gap);
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    height: 100%;
+    padding: var(--right-dock-empty-state-padding);
+    color: var(--cpx-sys-color-fg-tertiary);
+    text-align: center;
+  }
+  .right-dock-empty-state strong {
+    color: var(--cpx-sys-color-fg-primary);
+    font: var(--cpx-sys-type-heading-sm);
+  }
+  .right-dock-empty-state span {
+    color: var(--cpx-sys-color-fg-secondary);
+    max-width: 100%;
+    overflow-wrap: anywhere;
+    font: var(--cpx-sys-type-body-sm);
+  }
+  .right-dock-empty-state svg {
+    width: var(--cpx-sys-icon-size-lg);
+    height: var(--cpx-sys-icon-size-lg);
+  }
+
+  .file-breadcrumb-toolbar {
+    display: flex;
+    height: 40px;
+    min-height: 40px;
+    min-width: 0;
+    flex: 0 0 40px;
+    align-items: center;
+    gap: var(--cpx-sys-space-2);
+    padding: 0 var(--cpx-sys-space-2);
+    border-bottom: 1px solid var(--cpx-sys-color-border-subtle);
+    background: var(--cpx-sys-color-workbench-panel-bg);
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  .file-breadcrumb-toolbar__path {
+    display: flex;
+    min-width: 0;
+    flex: 1 1 auto;
+    align-items: center;
+    overflow: hidden;
+    font: var(--cpx-sys-type-caption);
+    white-space: nowrap;
+  }
+
+  .file-breadcrumb-toolbar--empty .file-breadcrumb-toolbar__path {
+    justify-content: flex-start;
+  }
+
+  .file-breadcrumb-toolbar__root {
+    padding-inline: var(--cpx-sys-space-1);
+    color: var(--cpx-sys-color-fg-primary);
+    font: var(--cpx-sys-type-label);
+  }
+
+  .file-breadcrumb-toolbar__segment {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+  }
+  .file-breadcrumb-toolbar__segment:not(:last-child) {
+    flex: 0 1 auto;
+  }
+  .file-breadcrumb-toolbar__segment:last-child {
+    flex: 0 1 auto;
+  }
+
+  .file-breadcrumb-toolbar__separator {
+    flex: 0 0 auto;
+    color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  /*
+   * `.file-breadcrumb-toolbar__action` stays as a query anchor only: the actions
+   * are IconButtons, so their geometry, disabled treatment, pressed state and
+   * focus ring come from the shared Button utilities instead of a feature-level
+   * override that the utilities layer would outrank anyway.
+   */
+  .file-breadcrumb-toolbar__directory {
+    display: inline-flex;
+    height: var(--cpx-sys-space-6);
+    min-width: 0;
+    max-width: 144px;
+    align-items: center;
+    padding: 0 var(--cpx-sys-space-1);
+    overflow: hidden;
+    color: inherit;
+    cursor: default;
+    font: var(--cpx-sys-type-caption);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-breadcrumb-toolbar__filename {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: var(--cpx-sys-space-1);
+    padding: 0 var(--cpx-sys-space-1);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+  .file-breadcrumb-toolbar__filename strong {
+    min-width: 0;
+    overflow: hidden;
+    font: var(--cpx-sys-type-label);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .file-breadcrumb-toolbar__actions {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    gap: var(--cpx-sys-space-1);
+  }
+  .file-breadcrumb-toolbar__actions small {
+    color: var(--cpx-sys-color-fg-tertiary);
+    font: var(--cpx-sys-type-caption);
+  }
+
+  .file-breadcrumb-toolbar__action {
+    width: var(--cpx-sys-space-6);
+    padding: 0;
+    transition:
+      background var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
+      color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
+      border-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
+      box-shadow var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
+  }
+
+  .file-breadcrumb-toolbar__view-mode {
+    flex: 0 0 auto;
+  }
+
+  .file-breadcrumb-toolbar__open-group {
+    display: inline-flex;
+    min-width: 0;
+    align-items: center;
+    gap: 0;
+  }
+  .file-breadcrumb-toolbar__open-group .icon-button {
+    border: 1px solid var(--cpx-sys-color-border-subtle);
+  }
+
+  .file-breadcrumb-toolbar__open {
+    border-radius: var(--cpx-sys-radius-md) 0 0 var(--cpx-sys-radius-md);
+  }
+
+  .file-breadcrumb-toolbar__open-menu {
+    --file-open-target-seam: -1px;
+    margin-left: var(--file-open-target-seam);
+    border-radius: 0 var(--cpx-sys-radius-md) var(--cpx-sys-radius-md) 0;
+  }
+
+  .file-breadcrumb-open-target-icon {
+    width: var(--cpx-sys-icon-size);
+    height: var(--cpx-sys-icon-size);
+    object-fit: contain;
+  }
+
+  .right-dock-file-preview-scroll-area {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  .attachment-directory-entry {
+    display: flex;
+    width: 100%;
+    min-height: calc(var(--cpx-sys-space-8) + var(--cpx-sys-space-1));
+    align-items: center;
+    gap: var(--cpx-sys-space-2);
+    padding: 0 var(--cpx-sys-space-2);
+    border: 0;
+    border-radius: var(--cpx-sys-radius-compact);
+    background: transparent;
+    color: var(--cpx-sys-color-fg-primary);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .attachment-directory-entry:hover {
+    background: var(--cpx-sys-color-hover);
+  }
+  .attachment-directory-entry:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: -2px;
+  }
+
+  @container (max-width: 440px) {
+    .file-breadcrumb-toolbar {
+      gap: var(--cpx-sys-space-1);
+      padding-inline: var(--cpx-sys-space-1);
+    }
+    .file-breadcrumb-toolbar__directory,
+    .file-breadcrumb-toolbar__actions small {
+      display: none;
+    }
+    .file-breadcrumb-toolbar__actions {
+      gap: 0;
+    }
+  }
+  .right-dock-side-chat {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    background: var(--cpx-sys-color-workbench-panel-bg);
+    overflow: hidden;
+  }
+
+  .right-dock-side-chat__timeline .session-timeline-container {
+    width: min(100%, var(--composer-width));
+    padding: var(--cpx-sys-space-2) var(--cpx-sys-space-4) var(--cpx-sys-space-5);
+  }
+
+  @media (forced-colors: active) {
+    .file-breadcrumb-toolbar__action:focus-visible,
+    .file-breadcrumb-toolbar__open-menu:focus-visible {
+      box-shadow: none;
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+  .right-dock-side-chat__empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100%;
+    padding: var(--cpx-sys-space-8) var(--cpx-sys-space-6);
+    color: var(--cpx-sys-color-fg-tertiary);
+    text-align: center;
+  }
+  .right-dock-side-chat__empty > strong {
+    margin-top: var(--cpx-sys-space-4);
+    color: var(--cpx-sys-color-fg-primary);
+    font: var(--cpx-sys-type-heading-sm);
+  }
+  .right-dock-side-chat__empty > span:not(.right-dock-side-chat__empty-icon) {
+    margin-top: var(--cpx-sys-space-2);
+    font: var(--cpx-sys-type-body-sm);
+  }
+  .right-dock-side-chat__empty > button {
+    margin-top: var(--cpx-sys-space-4);
+  }
+
+  .right-dock-side-chat__empty-icon {
+    display: grid;
+    width: 42px;
+    height: 42px;
+    place-items: center;
+    border-radius: var(--cpx-sys-radius-full);
+    background: var(--cpx-sys-color-surface-recessed);
+  }
+  .right-dock-side-chat__empty-icon > svg {
+    width: var(--cpx-sys-icon-size-lg);
+    height: var(--cpx-sys-icon-size-lg);
+  }
+
+  .desktop-main-stage,
+  .desktop-main-route {
+    width: 100%;
+  }
+
+  .desktop-main-route {
+    min-width: 0;
+  }
+
+  .file-breadcrumb-toolbar
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    ):hover,
+  .file-breadcrumb-toolbar
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    )[data-state='open'],
+  .file-breadcrumb-toolbar
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    )[data-active] {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+}

@@ -1,4 +1,4 @@
-import { AgentError } from "../domain"
+import { AgentError } from '../Domain'
 
 export type GitCommandResult = {
   code: number
@@ -24,9 +24,9 @@ type RunGitCommandOptions = {
 
 const decodeUtf8 = (value: Uint8Array) => {
   try {
-    return new TextDecoder("utf-8", { fatal: true }).decode(value)
+    return new TextDecoder('utf-8', { fatal: true }).decode(value)
   } catch {
-    throw new AgentError("GIT_OUTPUT_ENCODING_INVALID", "Git 输出不是有效 UTF-8", 500)
+    throw new AgentError('GIT_OUTPUT_ENCODING_INVALID', 'Git 输出不是有效 UTF-8', 500)
   }
 }
 
@@ -45,7 +45,7 @@ const readLimited = async (
       size += value.byteLength
       if (size > limit) {
         child.kill()
-        throw new AgentError("GIT_OUTPUT_TOO_LARGE", "Git 输出超过安全上限", 413)
+        throw new AgentError('GIT_OUTPUT_TOO_LARGE', 'Git 输出超过安全上限', 413)
       }
       chunks.push(value)
     }
@@ -76,18 +76,18 @@ export class GitCommandRunner {
   }: RunGitCommandOptions): Promise<GitCommandResult> {
     this.options.onCommand?.(args)
     const child = Bun.spawn(
-      ["git", "-c", "core.quotepath=false", "-c", "core.fsmonitor=false", ...args],
+      ['git', '-c', 'core.quotepath=false', '-c', 'core.fsmonitor=false', ...args],
       {
         cwd,
         env: {
           ...process.env,
-          GIT_OPTIONAL_LOCKS: "0",
-          ...(literalPathspecs ? { GIT_LITERAL_PATHSPECS: "1" } : {}),
+          GIT_OPTIONAL_LOCKS: '0',
+          ...(literalPathspecs ? { GIT_LITERAL_PATHSPECS: '1' } : {}),
           ...env,
         },
-        stdin: input === undefined ? "ignore" : new Blob([input]),
-        stdout: "pipe",
-        stderr: "pipe",
+        stdin: input === undefined ? 'ignore' : new Blob([input]),
+        stdout: 'pipe',
+        stderr: 'pipe',
       },
     )
     let timedOut = false
@@ -102,7 +102,7 @@ export class GitCommandRunner {
         child.exited,
       ])
       if (timedOut) {
-        throw new AgentError("GIT_COMMAND_FAILED", "Git 操作超时", 504)
+        throw new AgentError('GIT_COMMAND_FAILED', 'Git 操作超时', 504)
       }
       const result = {
         code,
@@ -110,7 +110,7 @@ export class GitCommandRunner {
         stderr: decodeUtf8(stderrBytes),
       }
       if (acceptedCodes !== null && !acceptedCodes.includes(code)) {
-        throw new AgentError("GIT_COMMAND_FAILED", "Git 操作失败", 409)
+        throw new AgentError('GIT_COMMAND_FAILED', 'Git 操作失败', 409)
       }
       return result
     } catch (cause) {

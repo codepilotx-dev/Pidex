@@ -1,6 +1,6 @@
 # Prompt engine source provenance
 
-CodePilotX 的 prompt engine v2 参考了以下本地源码快照。实现以 CodePilotX 的 TypeScript 架构、安全不变量和产品决策重新组织；没有引入参考仓库的 TUI、私有服务协议或品牌专属逻辑。
+Pidex 的 prompt engine v2 参考了以下本地源码快照。实现以 Pidex 的 TypeScript 架构、安全不变量和产品决策重新组织；没有引入参考仓库的 TUI、私有服务协议或品牌专属逻辑。
 
 ## OpenAI Codex
 

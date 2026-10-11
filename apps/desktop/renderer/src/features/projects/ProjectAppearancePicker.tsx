@@ -1,4 +1,4 @@
-import * as Popover from '@radix-ui/react-popover'
+import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../components/ui/IconTokens.js'
 import * as RadioGroup from '@radix-ui/react-radio-group'
 import { Check } from 'lucide-react'
 import { useState } from 'react'
@@ -7,24 +7,28 @@ import type {
   ProjectAppearance,
   ProjectAppearanceColor,
   ProjectAppearanceIcon,
-} from '../../../shared/types.js'
+} from '../../../shared/Types.js'
 import { Button } from '../../components/ui/Button.js'
-import { cx } from '../../utils/cx.js'
+import { AnchoredPopover } from '../../components/ui/AnchoredPopover.js'
+import { cx } from '../../utils/Cx.js'
 import {
   PROJECT_APPEARANCE_COLORS,
+  PROJECT_APPEARANCE_COLOR_CLASS,
   PROJECT_APPEARANCE_ICONS,
   ProjectAppearanceGlyph,
-} from './projectAppearance.js'
+} from './ProjectAppearance.js'
 
 type Props = {
   appearance: ProjectAppearance
   disabled?: boolean
+  glyphSize?: number
   onChange: (appearance: ProjectAppearance) => void
 }
 
 export function ProjectAppearancePicker({
   appearance,
   disabled = false,
+  glyphSize = APP_ICON_SIZE,
   onChange,
 }: Props): React.ReactNode {
   const [open, setOpen] = useState(false)
@@ -38,82 +42,77 @@ export function ProjectAppearancePicker({
   }
 
   return (
-    <Popover.Root open={open} onOpenChange={setOpen}>
-      <Popover.Trigger asChild>
+    <AnchoredPopover
+      className="project-appearance-popover tw:z-popover tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-2 tw:text-app-text tw:outline-none"
+      contentLabel="项目图标和颜色"
+      open={open}
+      trigger={
         <button
           aria-label="选择项目图标和颜色"
-          className="project-appearance-trigger"
+          className="project-appearance-trigger tw:inline-flex tw:size-10 tw:shrink-0 tw:grow-0 tw:basis-10 tw:cursor-pointer tw:items-center tw:justify-center tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text-soft tw:enabled:hover:bg-app-hover tw:enabled:hover:text-app-text"
           disabled={disabled}
           type="button"
         >
-          <ProjectAppearanceGlyph appearance={appearance} size={18} />
+          <ProjectAppearanceGlyph appearance={appearance} size={glyphSize} />
         </button>
-      </Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
-          align="start"
-          aria-label="项目图标和颜色"
-          className="project-appearance-popover"
-          collisionPadding={6}
-          side="bottom"
-          sideOffset={4}
-        >
-          <RadioGroup.Root
-            aria-label="项目颜色"
-            className="project-appearance-colors"
-            value={appearance.color}
-            onValueChange={value =>
-              selectColor(value as ProjectAppearanceColor)
-            }
+      }
+      size="md"
+      onOpenChange={setOpen}
+    >
+      <RadioGroup.Root
+        aria-label="项目颜色"
+        className="project-appearance-colors tw:grid tw:grid-cols-[repeat(6,1fr)] tw:gap-2 tw:border-b tw:border-app-border-subtle tw:px-1 tw:pt-1 tw:pb-3"
+        value={appearance.color}
+        onValueChange={(value) => selectColor(value as ProjectAppearanceColor)}
+      >
+        {PROJECT_APPEARANCE_COLORS.map((color) => (
+          <RadioGroup.Item
+            aria-label={colorLabel(color)}
+            className={cx(
+              'project-appearance-color tw:inline-flex tw:size-8 tw:cursor-pointer tw:items-center tw:justify-center tw:rounded-full tw:bg-current tw:shadow-[var(--cpx-sys-focus-ring-inset)]',
+              PROJECT_APPEARANCE_COLOR_CLASS[color] ?? 'tw:text-app-text-soft',
+              appearance.color === color
+                ? 'is-selected tw:border-3 tw:border-app-canvas tw:outline-2 tw:outline-current'
+                : 'tw:border-3 tw:border-transparent',
+            )}
+            data-project-color={color}
+            key={color}
+            value={color}
           >
-            {PROJECT_APPEARANCE_COLORS.map(color => (
-              <RadioGroup.Item
-                aria-label={colorLabel(color)}
-                className={cx(
-                  'project-appearance-color',
-                  appearance.color === color && 'is-selected',
-                )}
-                data-project-color={color}
-                key={color}
-                value={color}
-              >
-                <RadioGroup.Indicator>
-                  <Check aria-hidden="true" size={14} />
-                </RadioGroup.Indicator>
-              </RadioGroup.Item>
-            ))}
-          </RadioGroup.Root>
-          <RadioGroup.Root
-            aria-label="项目图标"
-            className="project-appearance-icons"
-            value={appearance.icon}
-            onValueChange={value =>
-              selectIcon(value as ProjectAppearanceIcon)
-            }
+            <RadioGroup.Indicator>
+              <Check aria-hidden="true" className="tw:text-app-canvas" size={APP_ICON_SIZES.sm} />
+            </RadioGroup.Indicator>
+          </RadioGroup.Item>
+        ))}
+      </RadioGroup.Root>
+      <RadioGroup.Root
+        aria-label="项目图标"
+        className="project-appearance-icons tw:grid tw:grid-cols-[repeat(6,1fr)] tw:gap-1 tw:py-2"
+        value={appearance.icon}
+        onValueChange={(value) => selectIcon(value as ProjectAppearanceIcon)}
+      >
+        {PROJECT_APPEARANCE_ICONS.map((icon) => (
+          <RadioGroup.Item
+            aria-label={iconLabel(icon)}
+            className={cx(
+              'project-appearance-icon tw:inline-flex tw:size-8 tw:cursor-pointer tw:items-center tw:justify-center tw:rounded-md tw:border-0 tw:bg-transparent tw:hover:bg-app-hover tw:hover:text-app-text',
+              appearance.icon === icon
+                ? 'is-selected tw:bg-app-hover tw:text-app-text'
+                : 'tw:text-app-text-soft',
+            )}
+            key={icon}
+            value={icon}
           >
-            {PROJECT_APPEARANCE_ICONS.map(icon => (
-              <RadioGroup.Item
-                aria-label={iconLabel(icon)}
-                className={cx(
-                  'project-appearance-icon',
-                  appearance.icon === icon && 'is-selected',
-                )}
-                key={icon}
-                value={icon}
-              >
-                <ProjectAppearanceGlyph
-                  appearance={{ ...appearance, icon }}
-                  size={19}
-                />
-              </RadioGroup.Item>
-            ))}
-          </RadioGroup.Root>
-          <div className="project-appearance-footer">
-            <Button onClick={() => setOpen(false)}>完成</Button>
-          </div>
-        </Popover.Content>
-      </Popover.Portal>
-    </Popover.Root>
+            <ProjectAppearanceGlyph appearance={{ ...appearance, icon }} size={APP_ICON_SIZE} />
+          </RadioGroup.Item>
+        ))}
+      </RadioGroup.Root>
+      <div className="project-appearance-footer tw:flex tw:justify-end">
+        <Button color="primary" onClick={() => setOpen(false)}>
+          完成
+        </Button>
+      </div>
+    </AnchoredPopover>
   )
 }
 

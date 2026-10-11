@@ -1,0 +1,227 @@
+@layer reset {
+  * {
+    box-sizing: border-box;
+  }
+
+  html,
+  body,
+  :where(#root) {
+    height: 100%;
+  }
+  .app-global-context-menu-trigger {
+    height: 100%;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    margin: 0;
+    overflow: hidden;
+    background: var(--cpx-sys-color-surface-canvas);
+    color: var(--cpx-sys-color-fg-primary);
+    font: var(--cpx-sys-type-body);
+
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    scrollbar-color: var(--cpx-comp-scrollbar-slider-bg) transparent;
+    scrollbar-width: thin;
+  }
+
+  .skip-to-main {
+    position: fixed;
+    z-index: 10000;
+    top: var(--cpx-sys-space-2);
+    left: var(--cpx-sys-space-2);
+    padding: var(--cpx-sys-space-2) var(--cpx-sys-space-3);
+    border: 1px solid var(--cpx-sys-color-border-default);
+    border-radius: var(--cpx-sys-radius-md);
+    background: var(--cpx-sys-color-surface-canvas);
+    color: var(--cpx-sys-color-fg-primary);
+    text-decoration: none;
+    transform: translateY(calc(-100% - var(--cpx-sys-space-4)));
+    transition: transform var(--cpx-sys-motion-micro);
+  }
+
+  .skip-to-main:focus-visible {
+    transform: translateY(0);
+  }
+
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  *::-webkit-scrollbar-thumb {
+    border: 2px solid transparent;
+    border-radius: var(--cpx-sys-radius-full);
+    background: var(--cpx-comp-scrollbar-slider-bg);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--cpx-comp-scrollbar-slider-hover-bg);
+    background-clip: padding-box;
+  }
+
+  *::-webkit-scrollbar-thumb:active {
+    background: var(--cpx-comp-scrollbar-slider-active-bg);
+    background-clip: padding-box;
+  }
+
+  button,
+  input,
+  select,
+  textarea {
+    color: inherit;
+    font: inherit;
+    letter-spacing: inherit;
+  }
+
+  button {
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    cursor: pointer;
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+
+  /* The global cursor preference must override component-level cursor affordances. */
+  :root[data-pointer-cursor='off'] * {
+    cursor: default !important;
+  }
+
+  :root[data-pointer-cursor='off'] button:disabled,
+  :root[data-pointer-cursor='off'] [aria-disabled='true'] {
+    cursor: not-allowed !important;
+  }
+
+  :root[data-pointer-cursor='off'] input,
+  :root[data-pointer-cursor='off'] textarea,
+  :root[data-pointer-cursor='off'] [contenteditable='true'] {
+    cursor: text !important;
+  }
+
+  :root[data-pointer-cursor='off'] [data-resize-handle],
+  :root[data-pointer-cursor='off'] .sidebar-resizer,
+  :root[data-pointer-cursor='off'] .right-dock-resize-handle {
+    cursor: col-resize !important;
+  }
+
+  input,
+  textarea {
+    min-width: 0;
+    border: 1px solid var(--cpx-sys-color-border-default);
+    border-radius: 0;
+    background: var(--cpx-sys-color-surface-canvas);
+    color: var(--cpx-sys-color-fg-primary);
+    outline: none;
+  }
+
+  textarea {
+    resize: none;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role='button']:focus-visible,
+  [tabindex]:not([tabindex='-1']):focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+
+  @media (forced-colors: active) {
+    * {
+      scrollbar-color: auto;
+    }
+
+    *::-webkit-scrollbar-thumb {
+      border-color: Canvas;
+      background: ButtonText;
+    }
+
+    button:focus-visible,
+    a:focus-visible,
+    input:focus-visible,
+    select:focus-visible,
+    textarea:focus-visible,
+    [role='button']:focus-visible,
+    [tabindex]:not([tabindex='-1']):focus-visible {
+      outline-color: Highlight;
+    }
+  }
+
+  h1,
+  h2,
+  h3,
+  p {
+    margin: 0;
+  }
+
+  :root[data-reduce-motion='on'] {
+    --cpx-sys-motion-instant: 0ms;
+    --cpx-sys-motion-micro: 0ms;
+    --cpx-sys-motion-feedback: 0ms;
+    --cpx-sys-motion-exit: 0ms;
+    --cpx-sys-motion-state: 0ms;
+    --cpx-sys-motion-enter: 0ms;
+    --cpx-sys-motion-panel: 0ms;
+    --cpx-sys-motion-disclosure: 0ms;
+    --cpx-sys-motion-page: 0ms;
+    --cpx-sys-motion-loading: 0ms;
+  }
+
+  :root[data-reduce-motion='on'] *:not(.ui-disclosure-content),
+  :root[data-reduce-motion='on'] *::before,
+  :root[data-reduce-motion='on'] *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    scroll-behavior: auto !important;
+    transition-duration: 1ms !important;
+  }
+
+  @media (forced-colors: active) {
+    :root {
+      --cpx-comp-surface-underlay: Canvas;
+      --cpx-comp-surface-canvas: Canvas;
+      --cpx-comp-surface-panel: Canvas;
+      --cpx-comp-surface-raised: Canvas;
+      --cpx-comp-surface-floating: Canvas;
+      --layer-raised-filter: none;
+      --layer-floating-filter: none;
+      --cpx-comp-surface-edge: 1px solid CanvasText;
+      --cpx-comp-surface-edge-strong: 1px solid CanvasText;
+      --cpx-comp-surface-edge-highlight: none;
+      --cpx-sys-color-hover: Highlight;
+      --cpx-sys-color-selected: Highlight;
+      --cpx-sys-color-border-strong: Highlight;
+
+      /* Tailwind utilities cannot name the HighlightText keyword, so the accent
+       foreground resolves through this token instead. */
+      --cpx-sys-color-fg-on-accent: HighlightText;
+      --cpx-comp-switch-thumb-fill: ButtonText;
+      --cpx-sys-focus-ring-inset: none;
+      --cpx-sys-shadow-control: none;
+      --cpx-sys-shadow-floating: none;
+      --cpx-sys-shadow-raised: none;
+      --cpx-sys-shadow-resting: none;
+    }
+  }
+}

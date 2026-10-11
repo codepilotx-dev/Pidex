@@ -1,6 +1,6 @@
 # Codex Webview 全量样式清单
 
-> 本文由 `inventory-codex-styles.ts` 从构建产物确定性生成。扫描源保持只读，报告不记录本机绝对路径。构建产物没有 source map；定位统一使用文件名、selector/binding 与 byte offset。
+> 本文由 `InventoryCodexStyles.ts` 从构建产物确定性生成。扫描源保持只读，报告不记录本机绝对路径。构建产物没有 source map；定位统一使用文件名、selector/binding 与 byte offset。
 
 ## 快照、范围与完整性
 
@@ -665,7 +665,7 @@ className 消费点 14581 次，inline style 消费点 2785 次；它们只用�
 | --- | --- | --- | --- |
 | properties/theme 与设计令牌 | map | `src/styles/design-system/tokens.scss` | 映射到 CodePilotX 的 theme/tokens 层；保留颜色、surface、字体、间距、圆角、阴影、层级与动效语义，--tw-* 仅登记。 |
 | base/reset | adapt | `src/styles/base.scss` | 把 Codex base 层的元素默认值适配到现有 reset/base，不复制构建后的全局选择器。 |
-| runtime theme | map | `src/features/theme/themeVariables.ts` | 对照 Electron 明暗类和根节点 setProperty 证据，动态值不固化为 SCSS 默认值。 |
+| runtime theme | map | `src/features/theme/ThemeVariables.ts` | 对照 Electron 明暗类和根节点 setProperty 证据，动态值不固化为 SCSS 默认值。 |
 | UI primitives | adapt | `src/styles/components` | 复用既有 button、input、chip、switch、menu、scroll-area；不迁移 CSS Modules 哈希类名。 |
 | shell/layout | adapt | `src/styles/shell.scss and src/styles/features/layout-*` | 窗口、侧栏、工作台、面板映射现有 shell/layout 层，并保留 Windows/Electron 边界。 |
 | session/composer/settings/search/review | adapt | `src/styles/features` | 按现有 feature partial 分域适配，不把 CSS Modules 哈希类作为公共接口。 |

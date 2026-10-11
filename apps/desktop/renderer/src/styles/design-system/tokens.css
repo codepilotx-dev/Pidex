@@ -1,0 +1,602 @@
+@layer tokens {
+  /*
+  Pidex Design System - Global System Tokens & Semantic Scales
+  Layer: @layer tokens
+  Layer boundary: --cpx-sys-* = public semantic (any consumer).
+                  --cpx-comp-* = private to the matching base component.
+                  --cpx-ref-*  = internal reference palettes from UI-Design
+*/
+
+  /* Reference Palettes (Radix custom scales from UI-Design, internal only) */
+
+  :root,
+  [data-theme='light'] {
+    /* Radix custom palette: base colors (Light) */
+    --cpx-ref-blue-1: #fcfdff;
+    --cpx-ref-blue-2: #f5f9ff;
+    --cpx-ref-blue-3: #eaf3fe;
+    --cpx-ref-blue-4: #dcecff;
+    --cpx-ref-blue-5: #cae2ff;
+    --cpx-ref-blue-6: #b6d5fd;
+    --cpx-ref-blue-7: #9dc3f5;
+    --cpx-ref-blue-8: #78abed;
+    --cpx-ref-blue-9: #0169cc;
+    --cpx-ref-blue-10: #005abc;
+    --cpx-ref-blue-11: #086cd0;
+    --cpx-ref-blue-12: #0d335e;
+
+    --cpx-ref-blue-a1: #0055ff03;
+    --cpx-ref-blue-a2: #0066ff0a;
+    --cpx-ref-blue-a3: #006ef315;
+    --cpx-ref-blue-a4: #0075ff23;
+    --cpx-ref-blue-a5: #0074ff35;
+    --cpx-ref-blue-a6: #006df949;
+    --cpx-ref-blue-a7: #0063e562;
+    --cpx-ref-blue-a8: #0061dd87;
+    --cpx-ref-blue-a9: #0068ccfe;
+    --cpx-ref-blue-a10: #005abc;
+    --cpx-ref-blue-a11: #0067cef7;
+    --cpx-ref-blue-a12: #002855f2;
+
+    --cpx-ref-blue-contrast: #ffffff;
+    --cpx-ref-blue-surface: #f3f8ffcc;
+    --cpx-ref-blue-indicator: #0169cc;
+    --cpx-ref-blue-track: #0169cc;
+
+    --cpx-ref-gray-1: #fcfcfc;
+    --cpx-ref-gray-2: #f9f9f9;
+    --cpx-ref-gray-3: #f0f0f0;
+    --cpx-ref-gray-4: #e8e8e8;
+    --cpx-ref-gray-5: #e1e1e1;
+    --cpx-ref-gray-6: #d9d9d9;
+    --cpx-ref-gray-7: #cecece;
+    --cpx-ref-gray-8: #bbbbbb;
+    --cpx-ref-gray-9: #8c8c8c;
+    --cpx-ref-gray-10: #828282;
+    --cpx-ref-gray-11: #636363;
+    --cpx-ref-gray-12: #1f1f1f;
+
+    --cpx-ref-gray-a1: #00000003;
+    --cpx-ref-gray-a2: #00000006;
+    --cpx-ref-gray-a3: #0000000f;
+    --cpx-ref-gray-a4: #00000017;
+    --cpx-ref-gray-a5: #0000001e;
+    --cpx-ref-gray-a6: #00000026;
+    --cpx-ref-gray-a7: #00000031;
+    --cpx-ref-gray-a8: #00000044;
+    --cpx-ref-gray-a9: #00000073;
+    --cpx-ref-gray-a10: #0000007d;
+    --cpx-ref-gray-a11: #0000009c;
+    --cpx-ref-gray-a12: #000000e0;
+
+    --cpx-ref-gray-contrast: #ffffff;
+    --cpx-ref-gray-surface: #ffffffcc;
+    --cpx-ref-gray-indicator: #8c8c8c;
+    --cpx-ref-gray-track: #8c8c8c;
+  }
+
+  [data-theme='dark'] {
+    /* Radix custom palette: base colors (Dark) */
+    --cpx-ref-blue-1: #07111f;
+    --cpx-ref-blue-2: #0c1929;
+    --cpx-ref-blue-3: #03264f;
+    --cpx-ref-blue-4: #002f6d;
+    --cpx-ref-blue-5: #003b81;
+    --cpx-ref-blue-6: #004994;
+    --cpx-ref-blue-7: #0458ab;
+    --cpx-ref-blue-8: #0069cc;
+    --cpx-ref-blue-9: #0169cc;
+    --cpx-ref-blue-10: #0d5cb0;
+    --cpx-ref-blue-11: #74b7ff;
+    --cpx-ref-blue-12: #c7e3ff;
+
+    --cpx-ref-blue-a1: #0011ff0f;
+    --cpx-ref-blue-a2: #0060fd1a;
+    --cpx-ref-blue-a3: #0061fd43;
+    --cpx-ref-blue-a4: #005ffe63;
+    --cpx-ref-blue-a5: #006bff78;
+    --cpx-ref-blue-a6: #0076fe8d;
+    --cpx-ref-blue-a7: #007fffa5;
+    --cpx-ref-blue-a8: #0080fec9;
+    --cpx-ref-blue-a9: #0080fec9;
+    --cpx-ref-blue-a10: #0c80feab;
+    --cpx-ref-blue-a11: #74b7ff;
+    --cpx-ref-blue-a12: #c7e3ff;
+
+    --cpx-ref-blue-contrast: #ffffff;
+    --cpx-ref-blue-surface: #08214180;
+    --cpx-ref-blue-indicator: #0169cc;
+    --cpx-ref-blue-track: #0169cc;
+
+    --cpx-ref-gray-1: #111111;
+    --cpx-ref-gray-2: #191919;
+    --cpx-ref-gray-3: #232323;
+    --cpx-ref-gray-4: #2a2a2a;
+    --cpx-ref-gray-5: #313131;
+    --cpx-ref-gray-6: #3a3a3a;
+    --cpx-ref-gray-7: #484848;
+    --cpx-ref-gray-8: #616161;
+    --cpx-ref-gray-9: #6f6f6f;
+    --cpx-ref-gray-10: #7c7c7c;
+    --cpx-ref-gray-11: #b4b4b4;
+    --cpx-ref-gray-12: #eeeeee;
+
+    --cpx-ref-gray-a1: #00000000;
+    --cpx-ref-gray-a2: #ffffff09;
+    --cpx-ref-gray-a3: #ffffff13;
+    --cpx-ref-gray-a4: #ffffff1b;
+    --cpx-ref-gray-a5: #ffffff22;
+    --cpx-ref-gray-a6: #ffffff2c;
+    --cpx-ref-gray-a7: #ffffff3b;
+    --cpx-ref-gray-a8: #ffffff56;
+    --cpx-ref-gray-a9: #ffffff65;
+    --cpx-ref-gray-a10: #ffffff73;
+    --cpx-ref-gray-a11: #ffffffaf;
+    --cpx-ref-gray-a12: #ffffffed;
+
+    --cpx-ref-gray-contrast: #ffffff;
+    --cpx-ref-gray-surface: rgba(0, 0, 0, 0.05);
+    --cpx-ref-gray-indicator: #6f6f6f;
+    --cpx-ref-gray-track: #6f6f6f;
+  }
+
+  @supports (color: color(display-p3 1 1 1)) {
+    @media (color-gamut: p3) {
+      [data-theme='dark'] {
+        --cpx-ref-blue-1: oklch(17.8% 0.0316 255);
+        --cpx-ref-blue-2: oklch(20.9% 0.0371 255);
+        --cpx-ref-blue-3: oklch(27.2% 0.0848 255);
+        --cpx-ref-blue-4: oklch(31.7% 0.1216 255);
+        --cpx-ref-blue-5: oklch(36.3% 0.1334 255);
+        --cpx-ref-blue-6: oklch(41.1% 0.1395 255);
+        --cpx-ref-blue-7: oklch(46.6% 0.1509 255);
+        --cpx-ref-blue-8: oklch(52.7% 0.1734 255);
+        --cpx-ref-blue-9: oklch(52.9% 0.1734 255);
+        --cpx-ref-blue-10: oklch(48.1% 0.1509 255);
+        --cpx-ref-blue-11: oklch(77.1% 0.1612 255);
+        --cpx-ref-blue-12: oklch(90.9% 0.0587 255);
+
+        --cpx-ref-blue-a1: color(display-p3 0 0.0706 0.9961 / 0.055);
+        --cpx-ref-blue-a2: color(display-p3 0 0.3922 1 / 0.097);
+        --cpx-ref-blue-a3: color(display-p3 0.0039 0.3843 1 / 0.248);
+        --cpx-ref-blue-a4: color(display-p3 0.0588 0.3725 1 / 0.37);
+        --cpx-ref-blue-a5: color(display-p3 0.1137 0.4275 1 / 0.45);
+        --cpx-ref-blue-a6: color(display-p3 0.149 0.4745 1 / 0.53);
+        --cpx-ref-blue-a7: color(display-p3 0.1961 0.5098 1 / 0.622);
+        --cpx-ref-blue-a8: color(display-p3 0.2078 0.5137 1 / 0.757);
+        --cpx-ref-blue-a9: color(display-p3 0.2078 0.5137 1 / 0.757);
+        --cpx-ref-blue-a10: color(display-p3 0.2157 0.5176 1 / 0.643);
+        --cpx-ref-blue-a11: color(display-p3 0.5255 0.7294 1 / 0.975);
+        --cpx-ref-blue-a12: color(display-p3 0.8078 0.898 1 / 0.988);
+
+        --cpx-ref-blue-contrast: #ffffff;
+        --cpx-ref-blue-surface: color(display-p3 0.051 0.1176 0.2353 / 0.5);
+        --cpx-ref-blue-indicator: oklch(52.9% 0.1734 255);
+        --cpx-ref-blue-track: oklch(52.9% 0.1734 255);
+
+        --cpx-ref-gray-1: oklch(17.8% 0 none);
+        --cpx-ref-gray-2: oklch(21.5% 0 none);
+        --cpx-ref-gray-3: oklch(25.5% 0 none);
+        --cpx-ref-gray-4: oklch(28.4% 0 none);
+        --cpx-ref-gray-5: oklch(31.4% 0 none);
+        --cpx-ref-gray-6: oklch(35% 0 none);
+        --cpx-ref-gray-7: oklch(40.2% 0 none);
+        --cpx-ref-gray-8: oklch(49.2% 0 none);
+        --cpx-ref-gray-9: oklch(54% 0 none);
+        --cpx-ref-gray-10: oklch(58.6% 0 none);
+        --cpx-ref-gray-11: oklch(77% 0 none);
+        --cpx-ref-gray-12: oklch(94.9% 0 none);
+
+        --cpx-ref-gray-a1: color(display-p3 0 0 0 / 0);
+        --cpx-ref-gray-a2: color(display-p3 1 1 1 / 0.0336);
+        --cpx-ref-gray-a3: color(display-p3 1 1 1 / 0.0756);
+        --cpx-ref-gray-a4: color(display-p3 1 1 1 / 0.105);
+        --cpx-ref-gray-a5: color(display-p3 1 1 1 / 0.1345);
+        --cpx-ref-gray-a6: color(display-p3 1 1 1 / 0.1723);
+        --cpx-ref-gray-a7: color(display-p3 1 1 1 / 0.2311);
+        --cpx-ref-gray-a8: color(display-p3 1 1 1 / 0.3361);
+        --cpx-ref-gray-a9: color(display-p3 1 1 1 / 0.395);
+        --cpx-ref-gray-a10: color(display-p3 1 1 1 / 0.4496);
+        --cpx-ref-gray-a11: color(display-p3 1 1 1 / 0.6849);
+        --cpx-ref-gray-a12: color(display-p3 1 1 1 / 0.9286);
+
+        --cpx-ref-gray-contrast: #ffffff;
+        --cpx-ref-gray-surface: color(display-p3 0 0 0 / 5%);
+        --cpx-ref-gray-indicator: oklch(54% 0 none);
+        --cpx-ref-gray-track: oklch(54% 0 none);
+      }
+
+      :root,
+      [data-theme='light'] {
+        --cpx-ref-blue-1: oklch(99.4% 0.0024 255);
+        --cpx-ref-blue-2: oklch(98.2% 0.0083 255);
+        --cpx-ref-blue-3: oklch(96% 0.0174 255);
+        --cpx-ref-blue-4: oklch(93.7% 0.0332 255);
+        --cpx-ref-blue-5: oklch(90.5% 0.0489 255);
+        --cpx-ref-blue-6: oklch(86.3% 0.0647 255);
+        --cpx-ref-blue-7: oklch(80.8% 0.0816 255);
+        --cpx-ref-blue-8: oklch(73.3% 0.1099 255);
+        --cpx-ref-blue-9: oklch(52.9% 0.1734 255);
+        --cpx-ref-blue-10: oklch(48.1% 0.1734 255);
+        --cpx-ref-blue-11: oklch(53.9% 0.1734 255);
+        --cpx-ref-blue-12: oklch(32% 0.0879 255);
+
+        --cpx-ref-blue-a1: color(display-p3 0.0235 0.349 1 / 0.012);
+        --cpx-ref-blue-a2: color(display-p3 0.0235 0.349 0.8941 / 0.036);
+        --cpx-ref-blue-a3: color(display-p3 0.0078 0.3725 0.898 / 0.075);
+        --cpx-ref-blue-a4: color(display-p3 0.0078 0.3804 0.9412 / 0.126);
+        --cpx-ref-blue-a5: color(display-p3 0.0078 0.3804 0.9412 / 0.189);
+        --cpx-ref-blue-a6: color(display-p3 0.0039 0.3608 0.9137 / 0.263);
+        --cpx-ref-blue-a7: color(display-p3 0.0039 0.3255 0.8471 / 0.353);
+        --cpx-ref-blue-a8: color(display-p3 0.0039 0.3176 0.8157 / 0.487);
+        --cpx-ref-blue-a9: color(display-p3 0 0.2784 0.7255 / 0.828);
+        --cpx-ref-blue-a10: color(display-p3 0 0.2392 0.6667 / 0.855);
+        --cpx-ref-blue-a11: color(display-p3 0 0.2824 0.7412 / 0.816);
+        --cpx-ref-blue-a12: color(display-p3 0 0.1137 0.2902 / 0.906);
+
+        --cpx-ref-blue-contrast: #ffffff;
+        --cpx-ref-blue-surface: color(display-p3 0.9569 0.9725 0.9961 / 0.8);
+        --cpx-ref-blue-indicator: oklch(52.9% 0.1734 255);
+        --cpx-ref-blue-track: oklch(52.9% 0.1734 255);
+
+        --cpx-ref-gray-1: oklch(99.2% 0 none);
+        --cpx-ref-gray-2: oklch(98.1% 0 none);
+        --cpx-ref-gray-3: oklch(95.5% 0 none);
+        --cpx-ref-gray-4: oklch(93.1% 0 none);
+        --cpx-ref-gray-5: oklch(90.9% 0 none);
+        --cpx-ref-gray-6: oklch(88.5% 0 none);
+        --cpx-ref-gray-7: oklch(85.1% 0 none);
+        --cpx-ref-gray-8: oklch(79.2% 0 none);
+        --cpx-ref-gray-9: oklch(63.9% 0 none);
+        --cpx-ref-gray-10: oklch(60.5% 0 none);
+        --cpx-ref-gray-11: oklch(50.1% 0 none);
+        --cpx-ref-gray-12: oklch(24% 0 none);
+
+        --cpx-ref-gray-a1: color(display-p3 0 0 0 / 0.0118);
+        --cpx-ref-gray-a2: color(display-p3 0 0 0 / 0.0235);
+        --cpx-ref-gray-a3: color(display-p3 0 0 0 / 0.0588);
+        --cpx-ref-gray-a4: color(display-p3 0 0 0 / 0.0902);
+        --cpx-ref-gray-a5: color(display-p3 0 0 0 / 0.1176);
+        --cpx-ref-gray-a6: color(display-p3 0 0 0 / 0.149);
+        --cpx-ref-gray-a7: color(display-p3 0 0 0 / 0.1922);
+        --cpx-ref-gray-a8: color(display-p3 0 0 0 / 0.2667);
+        --cpx-ref-gray-a9: color(display-p3 0 0 0 / 0.451);
+        --cpx-ref-gray-a10: color(display-p3 0 0 0 / 0.4902);
+        --cpx-ref-gray-a11: color(display-p3 0 0 0 / 0.6118);
+        --cpx-ref-gray-a12: color(display-p3 0 0 0 / 0.8784);
+
+        --cpx-ref-gray-contrast: #ffffff;
+        --cpx-ref-gray-surface: color(display-p3 1 1 1 / 80%);
+        --cpx-ref-gray-indicator: oklch(63.9% 0 none);
+        --cpx-ref-gray-track: oklch(63.9% 0 none);
+      }
+    }
+  }
+
+  :root {
+    /* System Colors (Light Default) */
+    --cpx-sys-color-surface-canvas: #ffffff;
+    --cpx-sys-color-surface-recessed: var(--cpx-ref-gray-3);
+    --cpx-sys-color-surface-panel: var(--cpx-ref-gray-2);
+    --cpx-sys-color-surface-control: var(--cpx-ref-gray-2);
+    --cpx-sys-color-surface-raised: var(--cpx-ref-gray-2);
+    --cpx-sys-color-surface-secondary: var(--cpx-ref-gray-4);
+    --cpx-sys-color-surface-active: var(--cpx-ref-gray-5);
+    --cpx-sys-color-surface-editor: var(--cpx-ref-gray-2);
+    --cpx-sys-color-scrim: rgba(0, 0, 0, 0.25);
+
+    /* Workbench region surfaces */
+    --cpx-sys-color-workbench-titlebar-bg: var(--cpx-sys-color-workbench-sidebar-bg);
+    --cpx-sys-color-workbench-sidebar-bg: var(--cpx-ref-gray-2);
+    --cpx-sys-color-workbench-main-bg: var(--cpx-sys-color-surface-canvas);
+    --cpx-sys-color-workbench-panel-bg: var(--cpx-sys-color-workbench-main-bg);
+
+    --cpx-sys-color-fg-primary: var(--cpx-ref-gray-12);
+    --cpx-sys-color-fg-secondary: var(--cpx-ref-gray-11);
+    --cpx-sys-color-fg-tertiary: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 58%,
+      transparent
+    );
+    --cpx-sys-color-fg-disabled: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 48%,
+      transparent
+    );
+    --cpx-sys-color-fg-on-accent: var(--cpx-ref-blue-contrast);
+
+    /* Static user-authored message surface. This is not an interaction state. */
+    --cpx-sys-color-message-user-bg: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 5%,
+      transparent
+    );
+
+    --cpx-sys-color-border-subtle: var(--cpx-ref-gray-a6);
+    --cpx-sys-color-border-default: var(--cpx-ref-gray-a7);
+    --cpx-sys-color-border-strong: var(--cpx-ref-gray-a8);
+    --cpx-sys-color-border-focus: color-mix(in srgb, var(--cpx-sys-color-accent) 50%, transparent);
+
+    --cpx-sys-color-hover: var(--cpx-ref-gray-a3);
+    --cpx-sys-color-active: var(--cpx-ref-gray-a5);
+    --cpx-sys-color-selected: var(--cpx-ref-gray-a4);
+
+    --cpx-sys-color-accent: var(--cpx-ref-blue-9);
+    --cpx-sys-color-accent-subtle-bg: var(--cpx-ref-blue-a3);
+    --cpx-sys-color-accent-subtle-hover-bg: var(--cpx-ref-blue-a4);
+    --cpx-sys-color-accent-subtle-active-bg: var(--cpx-ref-blue-a5);
+    --cpx-sys-color-accent-subtle-border: var(--cpx-ref-blue-a7);
+    --cpx-sys-color-accent-fg: var(--cpx-ref-blue-11);
+    --cpx-sys-color-success: #00a240;
+    --cpx-sys-color-success-subtle-bg: #fafdfb;
+    --cpx-sys-color-success-subtle-border: rgba(0, 162, 64, 0.22);
+    --cpx-sys-color-success-fg: #05853a;
+    --cpx-sys-color-warning: #fb6a22;
+    --cpx-sys-color-warning-subtle-bg: #fdfcfa;
+    --cpx-sys-color-warning-subtle-border: rgba(251, 106, 34, 0.22);
+    --cpx-sys-color-warning-fg: #a05a00;
+    --cpx-sys-color-danger: #e02e2a;
+    --cpx-sys-color-danger-subtle-bg: #fefbfb;
+    --cpx-sys-color-danger-subtle-border: rgba(224, 46, 42, 0.22);
+    --cpx-sys-color-danger-fg: #ba2623;
+    --cpx-sys-color-skill: #751ed9;
+    --cpx-sys-color-skill-subtle-bg: #fdfbff;
+    --cpx-sys-color-skill-subtle-border: rgba(117, 30, 217, 0.22);
+    --cpx-sys-color-skill-fg: #8d4dee;
+    --cpx-sys-color-info: #0284c7;
+    --cpx-sys-color-info-subtle-bg: #fafdfe;
+    --cpx-sys-color-info-subtle-border: rgba(2, 132, 199, 0.22);
+    --cpx-sys-color-info-fg: #0479b8;
+
+    --cpx-sys-color-diff-added-line: #fafdfb;
+    --cpx-sys-color-diff-added-text: #f5fbf7;
+    --cpx-sys-color-diff-added-fg: #05853a;
+    --cpx-sys-color-diff-added-indicator: #00a240;
+    --cpx-sys-color-diff-removed-line: #fefbfb;
+    --cpx-sys-color-diff-removed-text: #fcf6f6;
+    --cpx-sys-color-diff-removed-fg: #ba2623;
+    --cpx-sys-color-diff-removed-indicator: #e02e2a;
+
+    /* System Charts Colors */
+    --cpx-sys-color-charts-red: var(--cpx-sys-color-danger);
+    --cpx-sys-color-charts-orange: #ea580c;
+    --cpx-sys-color-charts-yellow: var(--cpx-sys-color-warning);
+    --cpx-sys-color-charts-green: var(--cpx-sys-color-success);
+    --cpx-sys-color-charts-blue: var(--cpx-sys-color-accent);
+    --cpx-sys-color-charts-purple: var(--cpx-sys-color-skill);
+    --cpx-sys-color-charts-cyan: var(--cpx-sys-color-info);
+
+    /* System Blur & Glassmorphism */
+    --cpx-sys-blur-sm: 8px;
+    --cpx-sys-blur-md: 16px;
+    --cpx-sys-blur-lg: 24px;
+    --cpx-sys-glass-filter: blur(var(--cpx-sys-blur-md));
+    --cpx-sys-glass-bg: var(--cpx-ref-gray-surface);
+    --cpx-sys-glass-border: var(--cpx-sys-color-border-subtle);
+    --cpx-sys-glass-shadow: var(--cpx-sys-shadow-floating);
+
+    /* System Radius (Foundational Scale - UI-Design Standards) */
+    --cpx-sys-radius-optical-scale: 1;
+    --cpx-sys-corner-shape: round;
+    --cpx-sys-radius-none: 0px;
+    --cpx-sys-radius-2xs: 5px;
+    --cpx-sys-radius-xs: 5px;
+    --cpx-sys-radius-sm: 8px;
+    --cpx-sys-radius-md: 10px;
+    --cpx-sys-radius-lg: 14px;
+    --cpx-sys-radius-xl: 18px;
+    --cpx-sys-radius-2xl: 18px;
+    --cpx-sys-radius-3xl: 24px;
+    --cpx-sys-radius-4xl: 24px;
+    --cpx-sys-radius-full: 9999px;
+
+    /* System Radius (Semantic Roles) */
+    --cpx-sys-radius-indicator: var(--cpx-sys-radius-xs);
+    --cpx-sys-radius-compact: var(--cpx-sys-radius-xs);
+    --cpx-sys-radius-inline-code: 6px;
+    --cpx-sys-radius-item: var(--cpx-sys-radius-sm);
+    --cpx-sys-radius-control: var(--cpx-sys-radius-md);
+    --cpx-sys-radius-item-lg: var(--cpx-sys-radius-md);
+    --cpx-sys-radius-container: var(--cpx-sys-radius-lg);
+    --cpx-sys-radius-floating: var(--cpx-sys-radius-lg);
+    --cpx-sys-radius-prominent: var(--cpx-sys-radius-xl);
+    --cpx-sys-radius-pill: var(--cpx-sys-radius-full);
+
+    /* System Typography */
+    --cpx-sys-font-family-sans:
+      MiSans, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue',
+      Arial, 'Microsoft YaHei', 'PingFang SC', 'Noto Sans SC', sans-serif, 'Apple Color Emoji',
+      'Segoe UI Emoji', 'Segoe UI Symbol', 'Noto Color Emoji';
+    --cpx-sys-font-family-mono:
+      'JetBrains Mono', 'SF Mono', 'Geist Mono', ui-monospace, 'SFMono-Regular', Menlo, Consolas,
+      monospace;
+
+    --cpx-sys-font-size-ui: 14px;
+    --cpx-sys-font-size-code: 13px;
+    --cpx-sys-font-size-xs: 12px;
+    --cpx-sys-font-size-sm: 13px;
+    --cpx-sys-font-size-md: 14px;
+    --cpx-sys-font-size-lg: 16px;
+    --cpx-sys-font-size-xl: 18px;
+    --cpx-sys-font-size-2xl: 20px;
+    --cpx-sys-font-size-3xl: 24px;
+    --cpx-sys-font-size-4xl: 28px;
+
+    --cpx-sys-line-height-none: 1;
+    --cpx-sys-line-height-caption: 1.4;
+    --cpx-sys-line-height-label: 1.3;
+    --cpx-sys-line-height-control: 1.2;
+    --cpx-sys-line-height-body-sm: 1.45;
+    --cpx-sys-line-height-body: 1.5;
+    --cpx-sys-line-height-body-lg: 1.5;
+    --cpx-sys-line-height-heading-sm: 1.25;
+    --cpx-sys-line-height-heading-md: 1.25;
+    --cpx-sys-line-height-heading-lg: 1.2;
+    --cpx-sys-line-height-heading-xl: 1.14;
+    --cpx-sys-line-height-display: 1.14;
+    --cpx-sys-line-height-tight: var(--cpx-sys-line-height-caption);
+    --cpx-sys-line-height-normal: var(--cpx-sys-line-height-body);
+    --cpx-sys-line-height-relaxed: var(--cpx-sys-line-height-body-lg);
+    --cpx-sys-line-height-reading: var(--cpx-sys-line-height-body);
+    --cpx-sys-line-height-prose: 1.625;
+    --cpx-sys-line-height-code: 1.5;
+
+    --cpx-sys-letter-spacing-caption: 0;
+    --cpx-sys-letter-spacing-label: 0.45px;
+    --cpx-sys-letter-spacing-control: -0.05px;
+    --cpx-sys-letter-spacing-body-sm: 0;
+    --cpx-sys-letter-spacing-body: -0.05px;
+    --cpx-sys-letter-spacing-row-title: -0.05px;
+    --cpx-sys-letter-spacing-body-lg: -0.12px;
+    --cpx-sys-letter-spacing-heading-sm: -0.25px;
+    --cpx-sys-letter-spacing-heading-md: -0.25px;
+    --cpx-sys-letter-spacing-heading-lg: -0.45px;
+    --cpx-sys-letter-spacing-metric: -0.45px;
+    --cpx-sys-letter-spacing-heading-xl: -0.7px;
+    --cpx-sys-letter-spacing-display: -0.7px;
+    --cpx-sys-letter-spacing-code: 0;
+
+    --cpx-sys-font-weight-regular: 400;
+    --cpx-sys-font-weight-body: 400;
+    --cpx-sys-font-weight-medium: 500;
+    --cpx-sys-font-weight-bold: 600;
+
+    /* System Typography Roles (CSS font shorthand, derived from system inputs) */
+    --cpx-sys-type-display: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-4xl) /
+      var(--cpx-sys-line-height-display) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-caption: var(--cpx-sys-font-weight-body) var(--cpx-sys-font-size-xs) /
+      var(--cpx-sys-line-height-caption) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-label: var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-xs) /
+      var(--cpx-sys-line-height-label) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-body-sm: var(--cpx-sys-font-weight-body) var(--cpx-sys-font-size-sm) /
+      var(--cpx-sys-line-height-body-sm) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-body: var(--cpx-sys-font-weight-body) var(--cpx-sys-font-size-md) /
+      var(--cpx-sys-line-height-body) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-body-lg: var(--cpx-sys-font-weight-body) var(--cpx-sys-font-size-lg) /
+      var(--cpx-sys-line-height-body-lg) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-reading: var(--cpx-sys-font-weight-body) var(--cpx-sys-font-size-md) /
+      var(--cpx-sys-line-height-reading) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-row-title: var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-md) /
+      var(--cpx-sys-line-height-body) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-control: var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-sm) /
+      var(--cpx-sys-line-height-control) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-heading-sm: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-lg) /
+      var(--cpx-sys-line-height-heading-sm) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-heading-md: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) /
+      var(--cpx-sys-line-height-heading-md) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-heading-lg: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) /
+      var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-heading-xl: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-3xl) /
+      var(--cpx-sys-line-height-heading-xl) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-metric: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) /
+      var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-code: var(--cpx-sys-font-weight-regular) var(--cpx-sys-font-size-code) /
+      var(--cpx-sys-line-height-code) var(--cpx-sys-font-family-mono);
+
+    /* System Spacing (4px Grid) */
+    --cpx-sys-space-1: 4px;
+    --cpx-sys-space-2: 8px;
+    --cpx-sys-space-3: 12px;
+    --cpx-sys-space-4: 16px;
+    --cpx-sys-space-5: 20px;
+    --cpx-sys-space-6: 24px;
+    --cpx-sys-space-7: 28px;
+    --cpx-sys-space-8: 32px;
+
+    /* System Layout (Sys: public cross-feature roles; comp/selector geometry is NOT here) */
+    --cpx-sys-layout-content-gutter: var(--cpx-sys-space-8);
+    --cpx-sys-layout-page-padding-inline: var(--cpx-sys-space-8);
+    --cpx-sys-layout-page-padding-block: var(--cpx-sys-space-8);
+    --cpx-sys-layout-page-padding-bottom: calc(var(--cpx-sys-space-8) * 2);
+    --cpx-sys-layout-section-gap: var(--cpx-sys-space-3);
+    --cpx-sys-layout-card-gap: var(--cpx-sys-space-4);
+    --cpx-sys-layout-card-padding: var(--cpx-sys-space-6);
+    --cpx-sys-layout-toolbar-gap: var(--cpx-sys-space-3);
+    --cpx-sys-layout-composer-bottom: var(--cpx-sys-space-7);
+    --cpx-sys-layout-composer-safe-inset: calc(var(--cpx-sys-space-8) * 2 + var(--cpx-sys-space-4));
+    --cpx-sys-layout-sidebar-row-padding: var(--cpx-sys-space-1);
+    --cpx-sys-layout-sidebar-session-indent: var(--cpx-sys-space-8);
+    --cpx-sys-layout-sidebar-section-gap: var(--cpx-sys-space-5);
+    --cpx-sys-layout-workspace-fixed-controls-width: 90px;
+    --cpx-sys-layout-content-max-width: 1009px;
+    --cpx-sys-layout-wide-max-width: 1250px;
+
+    /* 会话与新建聊天的正文上限；threadSummaryState 的三段判定以此为基准。 */
+    --cpx-sys-layout-conversation-max-width: 736px;
+
+    /* System Shadows (Light Default: Edge Highlight + Floating) */
+    --cpx-sys-shadow-resting: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    --cpx-sys-shadow-raised: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    --cpx-sys-shadow-prominent: 0 16px 48px rgb(0 0 0 / 24%);
+    --cpx-sys-shadow-floating: 0 16px 48px rgb(0 0 0 / 24%);
+    --cpx-sys-shadow-control: none;
+
+    /* System Motion (Semantic Roles) */
+    --cpx-sys-motion-instant: 0ms;
+    --cpx-sys-motion-feedback: 160ms;
+    --cpx-sys-motion-exit: 160ms;
+    --cpx-sys-motion-state: 160ms;
+    --cpx-sys-motion-enter: 160ms;
+    --cpx-sys-motion-panel: 220ms;
+    --cpx-sys-motion-disclosure: 220ms;
+    --cpx-sys-motion-page: 340ms;
+    --cpx-sys-motion-loading: 900ms;
+
+    /* Legacy alias */
+    --cpx-sys-motion-micro: var(--cpx-sys-motion-feedback);
+    --cpx-sys-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+    --cpx-sys-ease-entrance: cubic-bezier(0.22, 1, 0.36, 1);
+    --cpx-sys-ease-disclosure: cubic-bezier(0.22, 1, 0.36, 1);
+    --cpx-sys-ease-out: ease-out;
+    --cpx-sys-ease-in: ease-in;
+    --cpx-sys-ease-linear: linear;
+
+    /* System Z-Index (Semantic Roles, strictly increasing) */
+    --cpx-sys-z-local: 10;
+    --cpx-sys-z-sticky: 30;
+    --cpx-sys-z-dock: 60;
+    --cpx-sys-z-composer: 95;
+    --cpx-sys-z-modal: 1200;
+    --cpx-sys-z-popover: 1300;
+    --cpx-sys-z-tooltip: 1400;
+    --cpx-sys-z-toast: 10000;
+
+    /* Legacy alias */
+    --cpx-sys-z-right-dock: var(--cpx-sys-z-dock);
+
+    /* System Syntax Colors */
+    --cpx-sys-color-syntax-keyword: #cf222e;
+    --cpx-sys-color-syntax-property: #0550ae;
+    --cpx-sys-color-syntax-string: #0a3069;
+    --cpx-sys-color-syntax-number: #098658;
+    --cpx-sys-color-syntax-comment: #6e7781;
+    --cpx-sys-color-syntax-variable: #953800;
+    --cpx-sys-color-syntax-punctuation: #24292f;
+
+    /* Focus Ring */
+    --cpx-sys-focus-ring: 0 0 0 3px
+      color-mix(in srgb, var(--cpx-sys-color-border-focus) 24%, transparent);
+    --cpx-sys-focus-ring-soft: 0 0 0 2px
+      color-mix(in srgb, var(--cpx-sys-color-border-focus) 18%, transparent);
+    --cpx-sys-focus-ring-inset: inset 0 0 0 1px var(--cpx-sys-color-border-focus);
+
+    /* Button icon and action sizing */
+    --cpx-sys-icon-size-sm: 12px;
+    --cpx-sys-icon-size-md: 16px;
+    --cpx-sys-icon-size-lg: 20px;
+    --cpx-sys-icon-stroke-width: 1.6;
+    --cpx-sys-icon-size: var(--cpx-sys-icon-size-md);
+    --button-icon-size-xs: var(--cpx-sys-icon-size-sm);
+    --button-icon-size-sm: var(--cpx-sys-icon-size);
+    --button-size-icon-large: 36px;
+
+    /* Chrome & workspace sizing */
+    --chrome-h: 36px;
+    --application-menubar-height: 36px;
+    --workspace-toolbar-height: 46px;
+    --pane-toolbar-height: 40px;
+    --floating-composer-h: 142px;
+    --composer-width: 48rem;
+    --context-menu-item-padding: 6px;
+  }
+}

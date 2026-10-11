@@ -1,0 +1,93 @@
+/*
+ * ScrollArea residue: styled scrollbars need vendor pseudo-elements, which
+ * Tailwind utilities cannot target. The semantic class name stays because
+ * features and visual tests query it.
+ */
+
+/* Typed lengths let the gradient settle smoothly as either scroll edge changes. */
+@property --scroll-area-fade-start {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --scroll-area-fade-end {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+
+@layer primitives {
+  .scroll-area[data-scroll-fade='true'] {
+    --scroll-area-fade-start: 0px;
+    --scroll-area-fade-end: 0px;
+
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--scroll-area-fade-start),
+      black calc(100% - var(--scroll-area-fade-end)),
+      transparent
+    );
+    transition:
+      --scroll-area-fade-start var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-out),
+      --scroll-area-fade-end var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-out);
+  }
+
+  .scroll-area[data-scroll-fade='true'][data-scroll-at-start='false'] {
+    --scroll-area-fade-start: var(--cpx-sys-space-4);
+  }
+
+  .scroll-area[data-scroll-fade='true'][data-scroll-at-end='false'] {
+    --scroll-area-fade-end: var(--cpx-sys-space-4);
+  }
+
+  :root[data-reduce-motion='on'] .scroll-area[data-scroll-fade='true'] {
+    transition: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    :root:not([data-reduce-motion='off']) .scroll-area[data-scroll-fade='true'] {
+      transition: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .scroll-area[data-scroll-fade='true'] {
+      mask-image: none;
+    }
+  }
+
+  .scroll-area {
+    scrollbar-color: var(--cpx-comp-scrollbar-slider-bg) transparent;
+    scrollbar-width: thin;
+  }
+
+  .scroll-area::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+
+  .scroll-area::-webkit-scrollbar-track,
+  .scroll-area::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+
+  .scroll-area::-webkit-scrollbar-thumb {
+    min-width: 28px;
+    min-height: 28px;
+    border: 3px solid transparent;
+    border-radius: var(--cpx-sys-radius-full);
+    background: var(--cpx-comp-scrollbar-slider-bg);
+    background-clip: padding-box;
+    transition: background-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard);
+  }
+
+  .scroll-area::-webkit-scrollbar-thumb:hover {
+    background-color: var(--cpx-comp-scrollbar-slider-hover-bg);
+  }
+
+  .scroll-area::-webkit-scrollbar-thumb:active {
+    background-color: var(--cpx-comp-scrollbar-slider-active-bg);
+  }
+}

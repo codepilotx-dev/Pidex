@@ -4,8 +4,8 @@ import {
   SearchablePopoverAction,
   SearchablePopoverContent,
 } from '../../../components/ui/SearchablePopoverContent.js'
-import { APP_ICON_SIZE } from '../../../components/ui/iconTokens.js'
-import type { PopoverSizingProps } from '../../../components/ui/popoverSizing.js'
+import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
+import type { PopoverSizingProps } from '../../../components/ui/PopoverSizing.js'
 
 type BranchSelectPopoverProps = {
   align?: 'start' | 'center' | 'end'
@@ -35,8 +35,7 @@ export function BranchSelectPopover({
   side,
   sideOffset,
   trigger,
-  width,
-  maxWidth,
+  size,
   onBranchSearchChange,
   onBranchSelect,
   onCreateBranch,
@@ -51,15 +50,10 @@ export function BranchSelectPopover({
     ) {
       branchSet.add(currentBranchName)
     }
-    const keyword = branchSearch.trim().toLowerCase()
-    const availableBranches = [...branchSet]
-    if (!keyword) return availableBranches
-    return availableBranches.filter(branch =>
-      branch.toLowerCase().includes(keyword),
-    )
-  }, [branchSearch, branches, currentBranchName])
+    return [...branchSet]
+  }, [branches, currentBranchName])
   const options = React.useMemo(
-    () => visibleBranches.map(branch => ({ value: branch })),
+    () => visibleBranches.map((branch) => ({ value: branch })),
     [visibleBranches],
   )
 
@@ -69,7 +63,7 @@ export function BranchSelectPopover({
       className={className}
       contentLabel="切换 Git 分支"
       emptyLabel="无匹配分支"
-      footer={(
+      footer={
         <SearchablePopoverAction
           icon={<Plus size={APP_ICON_SIZE} />}
           onClick={() => {
@@ -79,8 +73,8 @@ export function BranchSelectPopover({
         >
           创建并检出新分支...
         </SearchablePopoverAction>
-      )}
-      listClassName="branch-popover-list-scroll popover-section"
+      }
+      listClassName="branch-popover-list-scroll"
       listLabel="Git 分支"
       open={open}
       options={options}
@@ -93,16 +87,23 @@ export function BranchSelectPopover({
           </span>
           <span className="popover-item-label">
             {currentBranchDetail && selected ? (
-              <span className="environment-branch-label">
-                <span title={option.value}>{option.value}</span>
-                <small>{currentBranchDetail}</small>
+              <span className="environment-branch-label tw:flex tw:min-w-0 tw:flex-col tw:gap-1">
+                <span
+                  className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap"
+                  title={option.value}
+                >
+                  {option.value}
+                </span>
+                <small className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-app-text-soft tw:type-caption">
+                  {currentBranchDetail}
+                </small>
               </span>
             ) : (
               <span title={option.value}>{option.value}</span>
             )}
           </span>
           <span className="popover-item-trailing">
-            {selected ? <Check size={APP_ICON_SIZE} /> : null}
+            {selected ? <Check size={APP_ICON_SIZES.sm} /> : null}
           </span>
         </>
       )}
@@ -113,11 +114,11 @@ export function BranchSelectPopover({
       side={side}
       sideOffset={sideOffset}
       trigger={trigger}
-      width={width}
-      maxWidth={maxWidth}
+      size={size}
+
       onOpenChange={onOpenChange}
       onSearchChange={onBranchSearchChange}
-      onSelect={option => {
+      onSelect={(option) => {
         void onBranchSelect(option.value)
         onOpenChange(false)
       }}

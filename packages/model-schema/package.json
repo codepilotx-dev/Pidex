@@ -1,5 +1,5 @@
 {
-  "name": "@codepilotx/model-schema",
+  "name": "@pidex/model-schema",
   "version": "0.1.0",
   "private": true,
   "type": "module",

@@ -60,10 +60,7 @@ export class LruCache<Key, Value> {
     this.#weights.set(key, weight)
     this.#weight += weight
 
-    while (
-      this.#entries.size > this.#capacity ||
-      this.#weight > this.#maxWeight
-    ) {
+    while (this.#entries.size > this.#capacity || this.#weight > this.#maxWeight) {
       const oldestKey = this.#entries.keys().next().value as Key | undefined
       if (oldestKey === undefined) break
       this.#entries.delete(oldestKey)

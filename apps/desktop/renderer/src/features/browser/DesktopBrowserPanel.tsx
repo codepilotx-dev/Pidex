@@ -1,26 +1,39 @@
 import type React from 'react'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { ComposerDraftKey } from '../session/composer/ComposerTypes.js'
+import { useBrowserAnnotations } from './UseBrowserAnnotations.js'
 import {
   ArrowLeft,
   ArrowRight,
-  Check,
   Globe2,
   MessageSquarePlus,
-  MoreVertical,
+  Plus,
   RefreshCw,
+  Square,
 } from 'lucide-react'
-import type { DesktopBrowserState } from '../../../shared/types.js'
-import { desktopClient } from '../../services/desktop-client/index.js'
-import { formatBrowserDisplayURL } from './browserDisplayURL.js'
-import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/iconTokens.js'
+import type { DesktopBrowserState } from '../../../shared/Types.js'
+import type { DesktopBrowserClient } from '../../services/desktop-client/DesktopBrowserClient.js'
+import { formatBrowserDisplayURL } from './BrowserDisplayURL.js'
+import {
+  APP_ICON_SIZE,
+  APP_ICON_STROKE_WIDTH,
+  APP_ICON_SIZES,
+} from '../../components/ui/IconTokens.js'
 import { Button } from '../../components/ui/Button.js'
-import { IconButton } from '../../components/ui/IconButton.js'
+import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
+
+import { cx } from '../../utils/Cx.js'
+import { BrowserManagementControls } from './BrowserManagementControls.js'
 
 type Props = {
+  client: DesktopBrowserClient
+  threadId?: string | null
+  onNewTab?: () => void
   state: DesktopBrowserState
-  onAppendAnnotation: (text: string) => void
-  onAppendComposerText?: (text: string) => void
+  draftKey: ComposerDraftKey
   onStateChange: (state: DesktopBrowserState) => void
+  onOpenSettings?: () => void
+  onAppendImage?: (image: { data: string; mimeType: 'image/png' }) => void
 }
 
 type BrowserBounds = {
@@ -32,65 +45,79 @@ type BrowserBounds = {
 
 export function DesktopBrowserPanel({
   state,
-  onAppendAnnotation,
-  onAppendComposerText,
+  client,
+  onNewTab,
+  draftKey,
   onStateChange,
+  onOpenSettings,
+  onAppendImage,
 }: Props): React.ReactNode {
+  const [barsHost, setBarsHost] = useState<HTMLDivElement | null>(null)
   const viewportRef = useRef<HTMLDivElement | null>(null)
   const [address, setAddress] = useState(state.url)
   const [addressFocused, setAddressFocused] = useState(false)
-  const [annotationOpen, setAnnotationOpen] = useState(false)
-  const [annotationTarget, setAnnotationTarget] = useState('')
-  const [annotationBody, setAnnotationBody] = useState('')
+  const annotation = useBrowserAnnotations(client, state, draftKey)
   const lastBoundsRef = useRef<BrowserBounds | null>(null)
+  const syncBrowserBoundsRef = useRef<() => Promise<void>>(async () => undefined)
 
   useEffect(() => {
-    if (state.url) {
-      setAddress(state.url)
-    }
-  }, [state.url])
+    if (!addressFocused) setAddress(state.url)
+  }, [addressFocused, state.url])
+
+  useEffect(() => client.onBrowserStateChange(onStateChange), [client, onStateChange])
+
+  useEffect(() => {
+    if (!client.available || !state.open) return
+    void client
+      .setBrowserVisible(true)
+      .then(onStateChange)
+      .catch(() => undefined)
+  }, [client, onStateChange, state.open])
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current
     if (!viewport || !state.open) return
 
     let animationFrame = 0
-    const setBounds = (bounds: BrowserBounds): void => {
+    const setBounds = async (bounds: BrowserBounds): Promise<void> => {
       const previous = lastBoundsRef.current
       if (previous && sameBrowserBounds(previous, bounds)) {
         return
       }
 
       lastBoundsRef.current = bounds
-      void desktopClient
-        .setBrowserBounds(bounds)
-        .then(onStateChange)
-        .catch(() => undefined)
+      try {
+        const next = await client.setBrowserBounds(bounds)
+        onStateChange(next)
+      } catch {
+        // Bounds synchronization is retried by the next resize or visibility change.
+      }
     }
 
-    const syncBounds = (): void => {
+    const syncBounds = async (): Promise<void> => {
       if (!state.url) {
-        setBounds({ x: 0, y: 0, width: 0, height: 0 })
+        await setBounds({ x: 0, y: 0, width: 0, height: 0 })
         return
       }
       const rect = viewport.getBoundingClientRect()
-      setBounds({
+      await setBounds({
         x: rect.left,
         y: rect.top,
         width: rect.width,
         height: rect.height,
       })
     }
+    syncBrowserBoundsRef.current = syncBounds
 
     const scheduleSyncBounds = (): void => {
       if (animationFrame) return
       animationFrame = window.requestAnimationFrame(() => {
         animationFrame = 0
-        syncBounds()
+        void syncBounds()
       })
     }
 
-    syncBounds()
+    void syncBounds()
     const resizeObserver = new ResizeObserver(scheduleSyncBounds)
     resizeObserver.observe(viewport)
     window.addEventListener('resize', scheduleSyncBounds)
@@ -98,15 +125,14 @@ export function DesktopBrowserPanel({
       if (animationFrame) {
         window.cancelAnimationFrame(animationFrame)
       }
-      setBounds({ x: 0, y: 0, width: 0, height: 0 })
+      syncBrowserBoundsRef.current = async () => undefined
+      void setBounds({ x: 0, y: 0, width: 0, height: 0 })
       resizeObserver.disconnect()
       window.removeEventListener('resize', scheduleSyncBounds)
     }
-  }, [onStateChange, state.open, state.url])
+  }, [client, onStateChange, state.open, state.url])
 
-  async function runBrowserAction(
-    action: () => Promise<DesktopBrowserState>,
-  ): Promise<void> {
+  async function runBrowserAction(action: () => Promise<DesktopBrowserState>): Promise<void> {
     try {
       const next = await action()
       onStateChange(next)
@@ -119,42 +145,11 @@ export function DesktopBrowserPanel({
   }
 
   function handleNavigate(): void {
-    void runBrowserAction(() => desktopClient.navigateBrowser(address))
-  }
-
-  function handleSubmitAnnotation(): void {
-    const body = annotationBody.trim()
-    if (!body) return
-    const target = annotationTarget.trim()
-    const lines = [
-      '浏览器批注：',
-      `- 页面：${state.title || '未命名页面'}`,
-      `- URL：${state.url || address}`,
-      target ? `- 位置：${target}` : null,
-      `- 反馈：${body}`,
-    ].filter(Boolean)
-    onAppendAnnotation(lines.join('\n'))
-    setAnnotationBody('')
-    setAnnotationTarget('')
-    setAnnotationOpen(false)
-  }
-
-  function handleSendPageToComposer(): void {
-    const url = state.url || address
-    if (!url.trim()) return
-    onAppendComposerText?.(
-      [
-        '浏览器页面：',
-        `- 标题：${state.title || '未命名页面'}`,
-        `- URL：${url}`,
-      ].join('\n'),
-    )
+    void runBrowserAction(() => client.navigateBrowser(address))
   }
 
   const compactAddress =
-    !addressFocused && address === state.url
-      ? formatBrowserDisplayURL(address)
-      : address
+    !addressFocused && address === state.url ? formatBrowserDisplayURL(address) : address
   const addressStatus = state.error
     ? state.error
     : state.loading
@@ -163,129 +158,217 @@ export function DesktopBrowserPanel({
 
   return (
     <section className="right-dock-browser" aria-label="内置浏览器">
-      <div className="browser-commandbar">
-        <div className="browser-navigation">
-          <IconButton
+      <div className="browser-commandbar tw:grid tw:h-12 tw:min-h-12 tw:min-w-0 tw:shrink-0 tw:grid-cols-[auto_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:border-b tw:border-app-border-subtle tw:bg-app-dock tw:p-2 tw:@max-[440px]:gap-1 tw:@max-[440px]:px-1">
+        <div className="browser-navigation tw:flex tw:min-w-0 tw:shrink-0 tw:items-center tw:justify-self-start tw:gap-1 tw:@max-[440px]:gap-0">
+          <Button
+            isIconOnly
+            color="ghostSecondary"
             disabled={!state.canGoBack}
-            size="md"
+            size="toolbar"
             title="后退"
-            variant="browser"
-            onClick={() => void runBrowserAction(desktopClient.goBackBrowser)}
+            onClick={() => void runBrowserAction(client.goBackBrowser)}
           >
             <ArrowLeft size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          </IconButton>
-          <IconButton
+          </Button>
+          <Button
+            isIconOnly
+            color="ghostSecondary"
             disabled={!state.canGoForward}
-            size="md"
+            size="toolbar"
             title="前进"
-            variant="browser"
-            onClick={() => void runBrowserAction(desktopClient.goForwardBrowser)}
+            onClick={() => void runBrowserAction(client.goForwardBrowser)}
           >
             <ArrowRight size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          </IconButton>
-          <IconButton
-            size="md"
-            title="重新加载"
-            variant="browser"
-            onClick={() => void runBrowserAction(desktopClient.reloadBrowser)}
+          </Button>
+          <Button
+            isIconOnly
+            className="tw:shrink-0"
+            color="ghostSecondary"
+            size="toolbar"
+            title={state.loading ? '停止加载' : '重新加载'}
+            onClick={() =>
+              void runBrowserAction(state.loading ? client.stopBrowser : client.reloadBrowser)
+            }
           >
-            <RefreshCw size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          </IconButton>
+            <span className="tw:inline-flex">
+              {state.loading ? (
+                <Square size={APP_ICON_SIZES.sm} />
+              ) : (
+                <RefreshCw size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+              )}
+            </span>
+          </Button>
         </div>
         <form
-          className="browser-address-form"
+          className="browser-address-form tw:relative tw:flex tw:h-7 tw:w-full tw:max-w-[770px] tw:min-w-0 tw:items-center tw:justify-self-center tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0"
           title={addressStatus}
-          onSubmit={event => {
+          onSubmit={(event) => {
             event.preventDefault()
             handleNavigate()
           }}
         >
           <input
             aria-label="浏览器地址"
+            className="tw:min-w-0 tw:flex-auto tw:rounded-md tw:border-0 tw:bg-transparent tw:px-4 tw:py-1 tw:text-center tw:text-app-text tw:type-body tw:outline-none tw:focus:bg-app-raised tw:focus:shadow-[var(--cpx-sys-focus-ring-inset)] tw:@max-[440px]:px-2 tw:@max-[440px]:text-left"
             placeholder="输入 URL"
             value={compactAddress}
             onBlur={() => setAddressFocused(false)}
-            onChange={event => setAddress(event.target.value)}
-            onFocus={() => setAddressFocused(true)}
+            onChange={(event) => setAddress(event.target.value)}
+            onFocus={(event) => {
+              setAddressFocused(true)
+              event.currentTarget.select()
+            }}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) {
+                if (event.key === 'Enter') event.preventDefault()
+                return
+              }
+              if (event.key === 'Escape') {
+                event.preventDefault()
+                setAddress(state.url)
+                event.currentTarget.blur()
+              }
+            }}
           />
-          {state.loading ? <span className="browser-address-state">加载中</span> : null}
-          {state.error ? <span className="browser-address-error">!</span> : null}
+          {state.loading ? (
+            <span className="browser-address-state tw:absolute tw:top-1/2 tw:right-0.5 tw:-translate-y-1/2 tw:translate-x-full tw:whitespace-nowrap tw:type-caption tw:text-app-text-meta tw:@max-[440px]:hidden">
+              加载中
+            </span>
+          ) : null}
+          {state.error ? (
+            <span className="browser-address-error tw:absolute tw:top-1/2 tw:right-0.5 tw:inline-grid tw:size-4.5 tw:-translate-y-1/2 tw:translate-x-full tw:place-items-center tw:rounded-full tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-danger)_12%,transparent)] tw:whitespace-nowrap tw:type-caption tw:text-app-danger tw:@max-[440px]:hidden">
+              !
+            </span>
+          ) : null}
         </form>
-        <div className="browser-toolbar-actions">
-          <IconButton
-            disabled={!state.url && !address.trim()}
-            size="md"
-            title="发送当前页面到对话框"
-            variant="browser"
-            onClick={handleSendPageToComposer}
+        <div className="browser-toolbar-actions tw:flex tw:min-w-0 tw:items-center tw:justify-self-end tw:gap-2 tw:@max-[440px]:gap-0">
+          {state.controlThreadId ? (
+            <Button
+              color="secondary"
+              title="停止 Agent 操作，由你控制此标签"
+              onClick={() => void runBrowserAction(() => client.control(null))}
+            >
+              接管
+            </Button>
+          ) : null}
+          {state.busy ? (
+            <span
+              className={cx(
+                'browser-address-state tw:absolute tw:top-1/2 tw:right-0.5 tw:-translate-y-1/2 tw:translate-x-full tw:whitespace-nowrap tw:type-caption tw:text-app-text-meta',
+                state.controlThreadId && 'tw:@max-[440px]:hidden',
+              )}
+            >
+              Agent 操作中
+            </span>
+          ) : null}
+          <Button
+            isIconOnly
+            color="ghostSecondary"
+            size="toolbar"
+            title={annotation.active ? '退出批注' : '选择网页目标并添加批注'}
+            className="browser-annotation-trigger"
+            disabled={!state.features?.annotations || !state.documentId}
+            aria-pressed={annotation.active}
+            onClick={annotation.toggle}
           >
-            <MessageSquarePlus
-              size={APP_ICON_SIZE}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-          </IconButton>
-          <IconButton
-            size="md"
-            title={annotationOpen ? '收起批注' : '添加批注'}
-            variant="browser"
-            onClick={() => setAnnotationOpen(current => !current)}
+            <MessageSquarePlus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+          </Button>
+          <Button
+            isIconOnly
+            className="tw:@max-[440px]:hidden"
+            color="ghostSecondary"
+            size="toolbar"
+            title="新标签页"
+            onClick={onNewTab}
           >
-            <MessageSquarePlus
-              size={APP_ICON_SIZE}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-          </IconButton>
-          <IconButton size="md" title="更多" variant="browser">
-            <MoreVertical size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          </IconButton>
+            <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+          </Button>
+          <BrowserManagementControls
+            client={client}
+            state={state}
+            barsHost={barsHost}
+            onOpenSettings={onOpenSettings}
+            onAppendImage={onAppendImage}
+          />
         </div>
       </div>
+      <div ref={setBarsHost} className="browser-utility-bars" />
+      {annotation.active ? (
+        <div
+          className="browser-annotation-tools tw:flex tw:flex-wrap tw:items-center tw:gap-2 tw:border-b tw:border-app-border-subtle tw:p-2 tw:type-body-sm tw:text-app-text-soft"
+          role="toolbar"
+          aria-label="批注选择模式"
+        >
+          <SegmentedControl
+            value={annotation.mode}
+            onChange={annotation.changeMode}
+            ariaLabel="选择目标类型"
+            options={[
+              { value: 'element', label: '元素' },
+              { value: 'text', label: '文本' },
+              { value: 'region', label: '区域' },
+            ]}
+          />
+          <span className="tw:min-w-0 tw:flex-1">
+            {annotation.invalid.length
+              ? `${annotation.invalid.length} 条目标已失效，反馈仍可发送`
+              : '选择目标后填写反馈；Shift 多选；Esc 取消或退出'}
+          </span>
+          <Button color="secondary" onClick={annotation.toggle}>
+            完成标注
+          </Button>
+        </div>
+      ) : null}
+      {annotation.error ? (
+        <div
+          className="browser-status-row tw:flex tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-app-border-subtle tw:px-4 tw:py-2 tw:type-caption tw:text-app-text-meta tw:@max-[440px]:items-start tw:@max-[440px]:px-2"
+          role="alert"
+        >
+          {annotation.error}
+        </div>
+      ) : null}
 
-      <div className="browser-viewport" ref={viewportRef}>
+      {state.error ? (
+        <div
+          className="browser-status-row tw:flex tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-app-border-subtle tw:px-4 tw:py-2 tw:type-caption tw:text-app-text-meta tw:@max-[440px]:items-start tw:@max-[440px]:px-2"
+          role="alert"
+        >
+          <span className="tw:min-w-0 tw:truncate tw:@max-[440px]:whitespace-normal tw:@max-[440px]:wrap-anywhere">
+            {state.error}
+          </span>
+          <Button
+            className="tw:shrink-0"
+            color="secondary"
+            disabled={!state.url && !address.trim()}
+            type="button"
+            onClick={() =>
+              void runBrowserAction(
+                state.url ? client.reloadBrowser : () => client.navigateBrowser(address),
+              )
+            }
+          >
+            重试
+          </Button>
+        </div>
+      ) : null}
+
+      <div
+        className="browser-viewport tw:relative tw:min-h-0 tw:min-w-0 tw:flex-auto tw:overflow-hidden tw:bg-app-canvas"
+        ref={viewportRef}
+        onPointerDown={() => {
+          if (client.available) {
+            void client.focusBrowser().catch(() => undefined)
+          }
+        }}
+      >
         {!state.url ? (
-          <div className="browser-empty-state">
-            <Globe2 size={86} strokeWidth={1.6} />
-            <strong>开始浏览</strong>
-            <span>输入 URL 以打开页面</span>
+          <div className="browser-empty-state tw:grid tw:size-full tw:min-h-0 tw:min-w-0 tw:content-center tw:items-center tw:justify-center tw:justify-items-center tw:gap-[clamp(var(--cpx-sys-space-2),2vh,var(--cpx-sys-space-5))] tw:p-[clamp(var(--cpx-sys-space-3),4vh,var(--cpx-sys-space-6))] tw:text-center tw:text-app-text-meta">
+            <Globe2 size={APP_ICON_SIZES.lg} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <strong className="tw:type-title-sm tw:text-app-text">开始浏览</strong>
+            <span className="tw:type-body-sm tw:text-app-text-soft">输入 URL 以打开页面</span>
           </div>
         ) : null}
       </div>
-
-      {annotationOpen ? (
-        <div className="browser-annotation-bar">
-          <Button
-            onClick={() => setAnnotationOpen(current => !current)}
-          >
-            <MessageSquarePlus size={APP_ICON_SIZE} />
-            <span>添加批注</span>
-          </Button>
-        </div>
-      ) : null}
-
-      {annotationOpen ? (
-        <div className="browser-annotation-form">
-          <input
-            aria-label="批注位置"
-            placeholder="位置或元素描述，例如 顶部导航按钮"
-            value={annotationTarget}
-            onChange={event => setAnnotationTarget(event.target.value)}
-          />
-          <textarea
-            aria-label="批注内容"
-            placeholder="描述需要调整的视觉问题"
-            rows={3}
-            value={annotationBody}
-            onChange={event => setAnnotationBody(event.target.value)}
-          />
-          <Button
-            disabled={!annotationBody.trim()}
-            onClick={handleSubmitAnnotation}
-          >
-            <Check size={APP_ICON_SIZE} />
-            <span>插入输入框</span>
-          </Button>
-        </div>
-      ) : null}
     </section>
   )
 }

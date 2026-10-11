@@ -1,0 +1,98 @@
+/*
+ * Application shell residue. Generated from _layout-workspace-header.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer shell {
+  /*
+   * Shared workspace header residue.
+   *
+   * - The derived header variables are runtime layout values consumed by the
+   *   route band, the `::before` backdrop and the right dock, so they stay in CSS.
+   * - `z-index: 1` on the route groups is pinned by the
+   *   style-contracts.json literalZIndexExceptions entry for this file.
+   * - `.workspace-shell-controls*` / `.workspace-panel-icon*` and the header
+   *   icon-button hover rule belong to the dock group's controls; they stay here
+   *   until that migration lands.
+   */
+  .desktop-workspace-header {
+    --workspace-header-route-end-inset: max(
+      var(--workspace-header-shell-width, 0px),
+      var(--workspace-right-panel-live-width, 0px)
+    );
+  }
+
+  .desktop-workspace-header-center {
+    --workspace-header-center-padding: calc(
+      var(--workspace-header-center-safe-inset, 0) + var(--cpx-sys-layout-toolbar-gap)
+    );
+  }
+
+  .desktop-workspace-header-route-left,
+  .desktop-workspace-header-route-right {
+    z-index: 1;
+  }
+
+  .workspace-shell-controls {
+    display: flex;
+    height: 100%;
+    align-items: center;
+    gap: var(--cpx-sys-space-1);
+    padding: 0 var(--cpx-sys-space-2) 0 var(--cpx-sys-space-1);
+  }
+
+  .workspace-shell-control-button {
+    border: 0;
+    background: transparent;
+    color: var(--cpx-sys-color-fg-secondary);
+    transition:
+      background var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard);
+  }
+  .workspace-shell-control-button[aria-pressed='true'] {
+    background: var(--cpx-sys-color-selected);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+  .workspace-shell-control-button:focus-visible {
+    outline-color: color-mix(in srgb, var(--cpx-sys-color-accent) 72%, transparent);
+  }
+
+  :root[data-reduce-motion='on'] .workspace-shell-control-button {
+    transition: none;
+  }
+
+  @media (forced-colors: active) {
+    .workspace-shell-control-button[aria-pressed='true'] {
+      outline: 1px solid CanvasText;
+      outline-offset: -1px;
+    }
+  }
+  .desktop-workspace-header
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    ):hover,
+  .desktop-workspace-header
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    )[data-state='open'],
+  .desktop-workspace-header
+    .icon-button[data-color]:where(
+      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
+    )[data-active] {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .workspace-panel-icon > path {
+    transform-box: view-box;
+    transform-origin: center;
+    transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+  }
+
+  .workspace-panel-icon--bottom[data-open='false'] > path {
+    transform: scaleX(0.4);
+  }
+
+  .workspace-panel-icon--right[data-open='false'] > path {
+    transform: scaleY(0.4);
+  }
+}

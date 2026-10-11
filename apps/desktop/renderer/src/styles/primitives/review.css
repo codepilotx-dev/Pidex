@@ -1,0 +1,459 @@
+/*
+ * Review diff renderer residue.
+ *
+ * Why these rules are not Tailwind utilities:
+ *
+ * - The Codex diff body is a virtual-list + subgrid contract. Rows stay aligned
+ *   across the deletions/additions panes through `grid-template-rows: subgrid`,
+ *   and the line-number column is sized in `ch`. docs/design/renderer-token-system.md
+ *   names the diff line-number `ch` alignment as an accepted exception.
+ * - The layout branches on ancestor data attributes
+ *   (`[data-diff-type][data-overflow][data-indicators][data-virtual-layout]`),
+ *   which no single-element utility can express. Keeping the whole block in one
+ *   layer also preserves its original cascade order (for example
+ *   `.review-codex-diff--virtual` intentionally loses to the split/scroll grid
+ *   rule through specificity).
+ * - visual-tests read these values through `getComputedStyle` and
+ *   `getBoundingClientRect` (review diff computed-style parity and split-row
+ *   alignment), and the number/line geometry consumes the `--review-diffs-*`
+ *   scaffold declared below.
+ * - `::before` change indicators, the buffer-line stripe background and the
+ *   resize-handle `::after` hairline are pseudo-element surfaces.
+ * - The error banner and the sticky file-header row are `color-mix` surfaces.
+ *
+ * Colours stay on --cpx-sys-* tokens; only geometry literals remain.
+ */
+@layer primitives {
+  /* Resize handle hairline: `::after` carries the visual line, so the hit area
+   * (8px) and the 1px->2px hover growth cannot be utilities. */
+  .review-file-tree-resize-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: var(--cpx-sys-space-1);
+    width: 1px;
+    background: var(--cpx-sys-color-border-subtle);
+    transition:
+      width var(--cpx-sys-motion-micro) var(--cpx-sys-ease-standard),
+      background-color var(--cpx-sys-motion-micro) var(--cpx-sys-ease-standard);
+  }
+
+  .review-file-tree-resize-handle:hover::after,
+  .review-file-tree-resize-handle:focus-visible::after,
+  .review-file-tree-resize-handle[data-resize-phase]::after {
+    width: 2px;
+    background: var(--cpx-sys-color-border-focus);
+  }
+
+  /* Color-mix surfaces without a palette entry. */
+  .review-error-state {
+    background: color-mix(in srgb, var(--cpx-sys-color-danger) 10%, transparent);
+  }
+
+  .review-file-row.preview-header {
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 2%, transparent);
+  }
+
+  /* "directory changed" dot: the 20px slot is defined by utilities, the dot is
+   * a pseudo-element. */
+  .review-file-tree-directory-status::before {
+    content: '';
+    width: var(--cpx-sys-space-2);
+    height: var(--cpx-sys-space-2);
+    border-radius: var(--cpx-sys-radius-full);
+    background: var(--cpx-sys-color-warning);
+  }
+
+  /* Numeric alignment bundles. The `font:` role shorthand resets
+   * font-variant-numeric, and Tailwind emits `tabular-nums` before the type
+   * roles, so the count/caption pair only survives when both are declared
+   * together. */
+  .review-sidebar-counts,
+  .review-file-counts {
+    font: var(--cpx-sys-type-caption);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .review-comment-badge {
+    font: var(--cpx-sys-type-label);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* --- Codex diff renderer contract --- */
+  .review-codex-diff {
+    --review-diffs-min-number-column-width: 4ch;
+    --review-diffs-code-grid: minmax(min-content, max-content) 1fr;
+    --review-diffs-gap-block: var(--cpx-sys-space-1);
+    --review-diffs-gap-inline: var(--cpx-sys-space-1);
+    --review-diffs-number-padding-inline: 2ch 1ch;
+    --review-diffs-line-padding-inline: 1ch;
+    --review-diffs-indicator-padding-inline-start: 2ch;
+    --review-diffs-comment-padding: 0 2ch 0 1ch;
+    --review-diffs-font-size: var(--cpx-sys-font-size-code, 13px);
+    --review-diffs-line-height: var(--cpx-sys-line-height-code);
+
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: var(--cpx-sys-color-surface-editor);
+    color: var(--cpx-sys-color-fg-primary, var(--cpx-sys-color-fg-primary));
+    font-family: var(--cpx-sys-font-family-mono);
+    font-size: var(--review-diffs-font-size);
+    font-variant-ligatures: none;
+    line-height: var(--cpx-sys-line-height-code);
+    tab-size: 2;
+  }
+
+  .review-codex-diff [data-code] {
+    box-sizing: border-box;
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    font-family: inherit;
+    font-size: inherit;
+    font-weight: inherit;
+    line-height: inherit;
+    grid-auto-flow: dense;
+    grid-template-columns: var(--review-diffs-code-grid);
+    grid-template-rows: repeat(var(--review-diff-row-count), max-content);
+    overflow-x: auto;
+    overflow-y: clip;
+    overscroll-behavior-x: none;
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 22%, transparent)
+      transparent;
+  }
+
+  .review-codex-diff [data-gutter],
+  .review-codex-diff [data-content] {
+    min-width: 0;
+    display: grid;
+    grid-template-rows: subgrid;
+    background: var(--cpx-sys-color-surface-editor);
+  }
+
+  .review-codex-diff [data-gutter] {
+    z-index: 3;
+    grid-column: 1;
+    position: sticky;
+    left: 0;
+  }
+
+  .review-codex-diff [data-content] {
+    grid-column: 2;
+  }
+
+  .review-codex-diff[data-diff-type='split'][data-overflow='scroll'] {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-template-rows: repeat(var(--review-diff-row-count), max-content);
+    overflow: hidden;
+  }
+
+  .review-codex-diff[data-diff-type='split'][data-overflow='scroll'] > [data-code] {
+    grid-row: 1 / -1;
+    grid-template-rows: subgrid;
+  }
+
+  .review-codex-diff[data-diff-type='split'][data-overflow='scroll'] [data-deletions] {
+    grid-column: 1;
+    border-right: 1px solid var(--cpx-sys-color-border-subtle);
+  }
+
+  .review-codex-diff[data-diff-type='split'][data-overflow='scroll'] [data-additions] {
+    grid-column: 2;
+    border-left: 1px solid var(--cpx-sys-color-surface-editor);
+  }
+
+  .review-codex-diff[data-diff-type='split'] [data-code] {
+    overflow-x: hidden;
+  }
+
+  .review-codex-diff[data-diff-type='split'] .review-codex-diff__line-text {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+  }
+
+  .review-codex-diff[data-diff-type='split'][data-overflow='wrap'] {
+    display: grid;
+    grid-auto-flow: dense;
+    grid-template-columns: repeat(2, var(--review-diffs-code-grid));
+    padding-block: var(--review-diffs-gap-block);
+  }
+
+  .review-codex-diff[data-diff-type='split'][data-overflow='wrap'] [data-code] {
+    display: contents;
+  }
+
+  .review-codex-diff[data-overflow='wrap'] [data-deletions] [data-gutter] {
+    grid-column: 1;
+  }
+
+  .review-codex-diff[data-overflow='wrap'] [data-deletions] [data-content] {
+    grid-column: 2;
+    border-right: 1px solid var(--cpx-sys-color-border-subtle);
+  }
+
+  .review-codex-diff[data-overflow='wrap'] [data-additions] [data-gutter] {
+    grid-column: 3;
+  }
+
+  .review-codex-diff[data-overflow='wrap'] [data-additions] [data-content] {
+    grid-column: 4;
+  }
+
+  .review-codex-diff__number,
+  .review-codex-diff__line {
+    box-sizing: border-box;
+    min-height: var(--review-diffs-line-height);
+    position: relative;
+  }
+
+  .review-codex-diff__number {
+    min-width: var(--review-diffs-min-number-column-width);
+    padding-inline: var(--review-diffs-number-padding-inline);
+    border-right: 2px solid var(--cpx-sys-color-surface-editor);
+    color: var(--cpx-sys-color-fg-secondary);
+    text-align: right;
+    user-select: none;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .review-codex-diff__number [data-line-number-content] {
+    z-index: 1;
+    min-width: var(--review-diffs-min-number-column-width);
+    display: inline-block;
+    position: relative;
+  }
+
+  .review-codex-diff__line {
+    min-width: 0;
+    padding-inline: var(--review-diffs-line-padding-inline);
+  }
+
+  .review-codex-diff__line-text {
+    min-width: 0;
+    min-height: var(--review-diffs-line-height);
+    display: block;
+  }
+
+  .review-codex-diff [data-line-type='change-addition'] {
+    background: var(--cpx-sys-color-diff-added-line);
+  }
+
+  .review-codex-diff [data-line-type='change-deletion'] {
+    background: var(--cpx-sys-color-diff-removed-line);
+  }
+
+  .review-codex-diff__number[data-line-type='change-addition'] {
+    color: var(--cpx-sys-color-success);
+  }
+
+  .review-codex-diff__number[data-line-type='change-deletion'] {
+    color: var(--cpx-sys-color-danger);
+  }
+
+  .review-diff-word {
+    /* Inline diff marks deliberately keep a tight code-level curve. */
+    border-radius: var(--cpx-sys-radius-indicator);
+    box-decoration-break: clone;
+    -webkit-box-decoration-break: clone;
+  }
+
+  .review-diff-word[data-tone='added'] {
+    background: var(--cpx-sys-color-diff-added-text);
+  }
+
+  .review-diff-word[data-tone='removed'] {
+    background: var(--cpx-sys-color-diff-removed-text);
+  }
+
+  .review-codex-diff [data-line-type='metadata'] {
+    background: var(--cpx-sys-color-surface-editor);
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  .review-codex-diff [data-line-type='buffer'] {
+    background-position: 5px 0;
+    background-size: var(--cpx-sys-space-2) var(--cpx-sys-space-2);
+    background-image: repeating-linear-gradient(
+      -45deg,
+      transparent,
+      transparent 4.242px,
+      var(--cpx-sys-color-border-subtle) 4.242px,
+      var(--cpx-sys-color-border-subtle) 5.656px
+    );
+  }
+
+  .review-codex-diff[data-indicators='classic'] .review-codex-diff__line {
+    padding-inline-start: var(--review-diffs-indicator-padding-inline-start);
+  }
+
+  .review-codex-diff[data-indicators='classic']
+    .review-codex-diff__line[data-line-type='change-addition']::before,
+  .review-codex-diff[data-indicators='classic']
+    .review-codex-diff__line[data-line-type='change-deletion']::before {
+    width: 1ch;
+    height: var(--review-diffs-line-height);
+    position: absolute;
+    top: 0;
+    left: 0;
+    user-select: none;
+  }
+
+  .review-codex-diff[data-indicators='classic']
+    .review-codex-diff__line[data-line-type='change-addition']::before {
+    content: '+';
+    color: var(--cpx-sys-color-success);
+  }
+
+  .review-codex-diff[data-indicators='classic']
+    .review-codex-diff__line[data-line-type='change-deletion']::before {
+    content: '-';
+    color: var(--cpx-sys-color-danger);
+  }
+
+  .review-codex-diff[data-indicators='bars']
+    .review-codex-diff__number:is(
+      [data-line-type='change-addition'],
+      [data-line-type='change-deletion']
+    )::before {
+    content: '';
+    width: 4px;
+    height: 100%;
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  .review-codex-diff[data-indicators='bars']
+    .review-codex-diff__number[data-line-type='change-addition']::before {
+    background: var(--cpx-sys-color-diff-added-indicator);
+  }
+
+  .review-codex-diff[data-indicators='bars']
+    .review-codex-diff__number[data-line-type='change-deletion']::before {
+    background-image: linear-gradient(
+      0deg,
+      color-mix(in srgb, var(--cpx-sys-color-diff-removed-indicator) 20%, transparent) 50%,
+      var(--cpx-sys-color-diff-removed-indicator) 50%
+    );
+    background-size: 2px 2px;
+  }
+
+  .review-codex-diff[data-overflow='scroll'] .review-codex-diff__line-text {
+    white-space: pre;
+  }
+
+  .review-codex-diff[data-overflow='wrap'] .review-codex-diff__line-text {
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .review-codex-diff__hunk {
+    box-sizing: content-box;
+    height: var(--cpx-sys-space-8);
+    margin-block: var(--review-diffs-gap-block);
+    background: var(--cpx-sys-color-surface-raised);
+    color: var(--cpx-sys-color-fg-tertiary);
+    font: var(--cpx-sys-type-caption);
+    user-select: none;
+  }
+
+  .review-codex-diff__hunk--gutter {
+    padding-left: var(--review-diffs-gap-inline);
+  }
+
+  .review-codex-diff__hunk--content {
+    padding-right: var(--review-diffs-gap-inline);
+  }
+
+  .review-codex-diff__hunk [data-separator-wrapper] {
+    height: 100%;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    background: var(--cpx-sys-color-surface-editor);
+    border-radius: 0 var(--cpx-sys-radius-md) var(--cpx-sys-radius-md) 0;
+  }
+
+  .review-codex-diff__hunk--gutter::after {
+    content: '';
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: var(--cpx-sys-color-surface-editor);
+    border-radius: var(--cpx-sys-radius-md) 0 0 var(--cpx-sys-radius-md);
+  }
+
+  .review-codex-diff__hunk [data-separator-content] {
+    min-width: 0;
+    flex: 1 1 auto;
+    overflow: hidden;
+    padding-inline: var(--review-diffs-line-padding-inline);
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .review-codex-diff [data-additions] .review-codex-diff__hunk--content [data-separator-content] {
+    visibility: hidden;
+  }
+
+  .review-codex-diff .review-line-comments {
+    margin: var(--cpx-sys-space-2) 0 var(--cpx-sys-space-2);
+    padding: var(--review-diffs-comment-padding);
+  }
+
+  /* Inside a virtualized large-workspace file the body fills the pane, so the
+   * split/scroll grid rule above must keep winning over `display: block`. */
+  .review-codex-diff--virtual {
+    height: 100%;
+    min-height: 0;
+    display: block;
+  }
+
+  .review-codex-diff__virtual-row {
+    width: 100%;
+    min-width: 0;
+    display: grid;
+    overflow: hidden;
+  }
+
+  .review-codex-diff__virtual-row[data-virtual-layout='single'],
+  .review-codex-diff__virtual-row[data-virtual-layout='hunk'],
+  .review-codex-diff__virtual-cell {
+    grid-template-columns: var(--review-diffs-code-grid);
+  }
+
+  .review-codex-diff__virtual-row[data-virtual-layout='split'] {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .review-codex-diff__virtual-cell {
+    min-width: 0;
+    display: grid;
+    overflow: hidden;
+  }
+
+  .review-codex-diff__virtual-cell + .review-codex-diff__virtual-cell {
+    border-left: 1px solid var(--cpx-sys-color-border-subtle);
+  }
+
+  .review-codex-diff__virtual-row .review-codex-diff__number {
+    grid-column: 1;
+  }
+
+  .review-codex-diff__virtual-row .review-codex-diff__line {
+    grid-column: 2;
+  }
+
+  .review-codex-diff__virtual-row[data-virtual-layout='hunk'] .review-codex-diff__hunk {
+    margin-block: var(--review-diffs-gap-block);
+  }
+}

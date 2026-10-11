@@ -1,10 +1,10 @@
-import { PubSub, Effect } from "effect"
-import { EventManifest, type EventType } from "@codepilotx/agent-protocol"
-import type { EventEnvelope } from "../../domain"
+import { PubSub, Effect } from 'effect'
+import { EventManifest, type EventType } from '@pidex/agent-protocol'
+import type { EventEnvelope } from '../../Domain'
 
 export type EventHubSignal =
-  | { kind: "live"; event: EventEnvelope & { afterSequence: number } }
-  | { kind: "durable"; sequence: number; event: EventEnvelope }
+  | { kind: 'live'; event: EventEnvelope & { afterSequence: number } }
+  | { kind: 'durable'; sequence: number; event: EventEnvelope }
 
 export class EventHub {
   private readonly pubsub: PubSub.PubSub<EventHubSignal>
@@ -19,15 +19,21 @@ export class EventHub {
   })
 
   publish(event: EventEnvelope) {
-    const definition = event.method in EventManifest ? EventManifest[event.method as EventType] : null
-    if (definition?.durability === "live" && typeof event.afterSequence !== "number") {
+    const definition =
+      event.method in EventManifest ? EventManifest[event.method as EventType] : null
+    if (definition?.durability === 'live' && typeof event.afterSequence !== 'number') {
       throw new Error(`Live event is missing its fixed durable anchor: ${event.method}`)
     }
-    const signal: EventHubSignal = definition?.durability === "live"
-      ? { kind: "live", event: event as EventEnvelope & { afterSequence: number } }
-      : { kind: "durable", sequence: event.id, event }
+    const signal: EventHubSignal =
+      definition?.durability === 'live'
+        ? { kind: 'live', event: event as EventEnvelope & { afterSequence: number } }
+        : { kind: 'durable', sequence: event.id, event }
     for (const listener of this.listeners) {
-      try { listener(signal) } catch { /* one SSE consumer must not block publication */ }
+      try {
+        listener(signal)
+      } catch {
+        /* one SSE consumer must not block publication */
+      }
     }
     return PubSub.publish(this.pubsub, signal)
   }

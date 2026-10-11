@@ -2,10 +2,10 @@ import type {
   TerminalOutputAppendParams,
   TerminalOutputClearParams,
   TerminalOutputResetParams,
-} from "@codepilotx/agent-protocol/terminal"
-import { AgentError } from "../domain"
-import { secretScrubber } from "../security/SecretScrubber"
-import { TerminalControlStripper } from "../security/TerminalControlStripper"
+} from '@pidex/agent-protocol/terminal'
+import { AgentError } from '../Domain'
+import { secretScrubber } from '../security/SecretScrubber'
+import { TerminalControlStripper } from '../security/TerminalControlStripper'
 
 type StoredChunk = {
   sequence: number
@@ -57,9 +57,9 @@ const instanceKey = (threadId: string, terminalId: string, instanceId: string) =
   `${identityKey(threadId, terminalId)}\0${instanceId}`
 
 const utf8Tail = (value: string, maximumBytes: number) => {
-  const encoded = Buffer.from(value, "utf8")
+  const encoded = Buffer.from(value, 'utf8')
   if (encoded.byteLength <= maximumBytes) return value
-  return encoded.subarray(encoded.byteLength - maximumBytes).toString("utf8")
+  return encoded.subarray(encoded.byteLength - maximumBytes).toString('utf8')
 }
 
 /** Volatile, sanitized terminal output for the approval-gated TerminalRead tool. */
@@ -87,18 +87,20 @@ export class TerminalOutputMirror {
     let previousSequence = input.oldestSequence - 1
     for (const chunk of input.chunks) {
       if (
-        chunk.terminalId !== input.terminalId
-        || chunk.instanceId !== input.instanceId
-        || chunk.sequence < input.oldestSequence
-        || chunk.sequence >= input.nextSequence
-        || chunk.sequence <= previousSequence
-      ) this.invalid()
+        chunk.terminalId !== input.terminalId ||
+        chunk.instanceId !== input.instanceId ||
+        chunk.sequence < input.oldestSequence ||
+        chunk.sequence >= input.nextSequence ||
+        chunk.sequence <= previousSequence
+      )
+        this.invalid()
       previousSequence = chunk.sequence
     }
 
     const identity = identityKey(input.threadId, input.terminalId)
     const previousInstance = this.currentInstances.get(identity)
-    if (previousInstance) this.deleteEntry(instanceKey(input.threadId, input.terminalId, previousInstance))
+    if (previousInstance)
+      this.deleteEntry(instanceKey(input.threadId, input.terminalId, previousInstance))
     const sanitizer = new TerminalControlStripper()
     const entry: MirrorEntry = {
       threadId: input.threadId,
@@ -108,9 +110,11 @@ export class TerminalOutputMirror {
       nextSequence: input.nextSequence,
       chunks: [],
       bytes: 0,
-      gap: input.chunks.some((chunk, index) => index === 0
-        ? chunk.sequence !== input.oldestSequence
-        : chunk.sequence !== input.chunks[index - 1]!.sequence + 1),
+      gap: input.chunks.some((chunk, index) =>
+        index === 0
+          ? chunk.sequence !== input.oldestSequence
+          : chunk.sequence !== input.chunks[index - 1]!.sequence + 1,
+      ),
       truncated: input.oldestSequence > 0,
       updatedAt: this.now(),
       sanitizer,
@@ -145,14 +149,25 @@ export class TerminalOutputMirror {
     this.deleteEntry(instanceKey(input.threadId, input.terminalId, input.instanceId))
   }
 
-  read(input: { threadId: string; terminalId?: string; afterSequence?: number; maxBytes?: number }): TerminalOutputReadResult | null {
+  read(input: {
+    threadId: string
+    terminalId?: string
+    afterSequence?: number
+    maxBytes?: number
+  }): TerminalOutputReadResult | null {
     this.pruneExpired()
-    const candidates = [...this.entries.values()].filter((entry) =>
-      entry.threadId === input.threadId && (!input.terminalId || entry.terminalId === input.terminalId))
+    const candidates = [...this.entries.values()].filter(
+      (entry) =>
+        entry.threadId === input.threadId &&
+        (!input.terminalId || entry.terminalId === input.terminalId),
+    )
     const entry = candidates.sort((left, right) => right.updatedAt - left.updatedAt)[0]
     if (!entry) return null
     const afterSequence = input.afterSequence ?? -1
-    const maximumBytes = Math.min(Math.max(input.maxBytes ?? DEFAULT_MAX_READ_BYTES, 1), MAX_READ_BYTES)
+    const maximumBytes = Math.min(
+      Math.max(input.maxBytes ?? DEFAULT_MAX_READ_BYTES, 1),
+      MAX_READ_BYTES,
+    )
     const available = entry.chunks.filter((chunk) => chunk.sequence > afterSequence)
     const selected: StoredChunk[] = []
     let selectedBytes = 0
@@ -160,12 +175,13 @@ export class TerminalOutputMirror {
     for (let index = available.length - 1; index >= 0; index -= 1) {
       const chunk = available[index]!
       if (selected.length > 0 && selectedBytes + chunk.bytes > maximumBytes) break
-      const data = selected.length === 0 && chunk.bytes > maximumBytes
-        ? utf8Tail(chunk.data, maximumBytes)
-        : chunk.data
+      const data =
+        selected.length === 0 && chunk.bytes > maximumBytes
+          ? utf8Tail(chunk.data, maximumBytes)
+          : chunk.data
       if (data !== chunk.data) clippedChunk = true
-      selected.unshift({ sequence: chunk.sequence, data, bytes: Buffer.byteLength(data, "utf8") })
-      selectedBytes += Buffer.byteLength(data, "utf8")
+      selected.unshift({ sequence: chunk.sequence, data, bytes: Buffer.byteLength(data, 'utf8') })
+      selectedBytes += Buffer.byteLength(data, 'utf8')
     }
     const omitted = selected.length < available.length
     return {
@@ -175,7 +191,7 @@ export class TerminalOutputMirror {
       nextSequence: entry.nextSequence,
       gap: entry.gap || afterSequence < entry.oldestSequence - 1 || omitted || clippedChunk,
       truncated: entry.truncated || omitted || clippedChunk,
-      content: selected.map((chunk) => chunk.data).join(""),
+      content: selected.map((chunk) => chunk.data).join(''),
     }
   }
 
@@ -183,12 +199,12 @@ export class TerminalOutputMirror {
     const plainText = entry.sanitizer.write(rawData)
     const scrubbed = secretScrubber.scrubText(plainText)
     const data = utf8Tail(scrubbed, this.maxChunkBytes)
-    const bytes = Buffer.byteLength(data, "utf8")
+    const bytes = Buffer.byteLength(data, 'utf8')
     if (bytes === 0) return
     entry.chunks.push({ sequence, data, bytes })
     entry.bytes += bytes
     this.totalBytes += bytes
-    if (bytes < Buffer.byteLength(scrubbed, "utf8")) entry.truncated = true
+    if (bytes < Buffer.byteLength(scrubbed, 'utf8')) entry.truncated = true
   }
 
   private enforceBounds(entry: MirrorEntry) {
@@ -197,7 +213,9 @@ export class TerminalOutputMirror {
     }
     entry.oldestSequence = entry.chunks[0]?.sequence ?? entry.nextSequence
     while (this.totalBytes > this.maxTotalBytes && this.entries.size > 0) {
-      const oldest = [...this.entries.entries()].sort(([, left], [, right]) => left.updatedAt - right.updatedAt)[0]
+      const oldest = [...this.entries.entries()].sort(
+        ([, left], [, right]) => left.updatedAt - right.updatedAt,
+      )[0]
       if (!oldest) break
       this.currentInstances.delete(identityKey(oldest[1].threadId, oldest[1].terminalId))
       this.deleteEntry(oldest[0])
@@ -230,6 +248,6 @@ export class TerminalOutputMirror {
   }
 
   private invalid(): never {
-    throw new AgentError("TERMINAL_OUTPUT_INVALID", "终端输出镜像序列或身份无效", 409)
+    throw new AgentError('TERMINAL_OUTPUT_INVALID', '终端输出镜像序列或身份无效', 409)
   }
 }

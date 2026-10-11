@@ -1,0 +1,22 @@
+{
+  "name": "task-planning",
+  "version": "1.0.0",
+  "description": "澄清目标、拆解工作并生成可执行的任务规划。",
+  "author": {
+    "name": "Pidex"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "任务规划",
+    "shortDescription": "拆解和规划复杂工作",
+    "longDescription": "澄清目标与约束，将复杂工作拆分为里程碑和可执行任务，并梳理依赖、风险与验收标准。",
+    "developerName": "Pidex",
+    "category": "Productivity",
+    "capabilities": ["Planning"],
+    "defaultPrompt": [
+      "帮我把这个目标拆解成可执行的任务计划。",
+      "梳理这个项目的里程碑、依赖和主要风险。",
+      "为这项工作补充清晰的验收标准。"
+    ]
+  }
+}

@@ -1,30 +1,112 @@
 import type React from 'react'
+import { useContext } from 'react'
 import {
   Eye,
   FileSpreadsheet,
   GitBranch,
   Presentation,
+  ListChecks,
+  Package,
   Sparkles,
 } from 'lucide-react'
-import {
-  APP_ICON_SIZE,
-  APP_ICON_STROKE_WIDTH,
-} from '../../components/ui/iconTokens.js'
-import type { PluginIconName } from './pluginCatalog.js'
+import type { PluginIconName } from './PluginCatalog.js'
+import browserLogo from '../../assets/plugin-icons/browser.png'
+import chromeLogo from '../../assets/plugin-icons/chrome.png'
+import computerUseLogo from '../../assets/plugin-icons/computer-use.png'
+import githubDarkLogo from '../../assets/plugin-icons/github-dark.png'
+import githubLogo from '../../assets/plugin-icons/github.svg'
+import minimaxLogo from '../../assets/plugin-icons/minimax.png'
+import presentationsLogo from '../../assets/plugin-icons/presentations.png'
+import spreadsheetsLogo from '../../assets/plugin-icons/spreadsheets.png'
+import taskPlanningLogo from '../../assets/plugin-icons/task-planning.png'
+import { DesktopThemeContext } from '../theme/ThemeContext.js'
+import { cx } from '../../utils/Cx.js'
 
 type Props = {
   name: PluginIconName
   className?: string
+  logoSource?: string
+  logoDarkSource?: string
 }
-export function PluginIcon({ name, className }: Props): React.ReactNode {
+
+type KnownPluginLogo = {
+  source: string
+  darkSource?: string
+}
+
+/* 插件 Logo 槽位：铺满父级图标框，内部图片等比缩放。 */
+const PLUGIN_LOGO_CLASS =
+  'plugin-logo tw:relative tw:inline-flex tw:size-full tw:shrink-0 tw:items-center tw:justify-center'
+
+/* Logo 图片：吃满槽位；暗色主题下 light / dark 两张图互斥显示。 */
+const PLUGIN_LOGO_IMAGE_CLASS = 'plugin-logo__image tw:size-full tw:shrink-0 tw:object-contain'
+
+const KNOWN_PLUGIN_LOGOS: Partial<Record<PluginIconName, KnownPluginLogo>> = {
+  browser: { source: browserLogo },
+  chrome: { source: chromeLogo },
+  'computer-use': { source: computerUseLogo },
+  github: { source: githubLogo, darkSource: githubDarkLogo },
+  minimax: { source: minimaxLogo },
+  presentations: { source: presentationsLogo },
+  spreadsheets: { source: spreadsheetsLogo },
+  'task-planning': { source: taskPlanningLogo },
+}
+
+export function PluginIcon({
+  name,
+  className,
+  logoDarkSource,
+  logoSource,
+}: Props): React.ReactNode {
+  // 主题变体沿用全局 dark-theme 标记；无 Provider 时按浅色渲染。
+  const darkTheme = useContext(DesktopThemeContext)?.resolvedVariant === 'dark'
+  const knownLogo = KNOWN_PLUGIN_LOGOS[name]
+  const source = logoSource ?? knownLogo?.source
+  const darkSource = logoDarkSource ?? knownLogo?.darkSource
+
+  if (source) {
+    return (
+      <span
+        aria-hidden="true"
+        className={cx(darkSource && 'plugin-logo--themed', PLUGIN_LOGO_CLASS, className)}
+      >
+        <img
+          alt=""
+          className={cx(
+            PLUGIN_LOGO_IMAGE_CLASS,
+            'plugin-logo__image--light',
+            darkTheme && 'tw:hidden',
+          )}
+          src={source}
+        />
+        {darkSource ? (
+          <img
+            alt=""
+            className={cx(
+              PLUGIN_LOGO_IMAGE_CLASS,
+              'plugin-logo__image--dark',
+              darkTheme ? 'tw:block' : 'tw:hidden',
+            )}
+            src={darkSource}
+          />
+        ) : null}
+      </span>
+    )
+  }
+
   const props = {
     'aria-hidden': true,
     className,
-    size: APP_ICON_SIZE,
-    strokeWidth: APP_ICON_STROKE_WIDTH,
+    size: 14,
+    'data-icon-kind': 'artwork',
+    strokeWidth: 2,
   } as const
 
   switch (name) {
+    case 'task-planning':
+      return <ListChecks {...props} />
+    case 'plugin':
+      return <Package {...props} />
     case 'browser':
     case 'chrome':
       return <Eye {...props} />

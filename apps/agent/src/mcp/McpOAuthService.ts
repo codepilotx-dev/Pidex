@@ -1,21 +1,12 @@
-import type {
-  McpRuntimeServerAuth,
-  McpScope,
-} from "@codepilotx/agent-protocol"
-import { McpConfigService } from "./McpConfigService"
-import { McpConnectionManager } from "./McpConnectionManager"
-import {
-  McpOAuthCoordinator,
-  type McpOAuthHttpServer,
-} from "./McpOAuthCoordinator"
+import type { McpRuntimeServerAuth, McpScope } from '@pidex/agent-protocol'
+import { McpConfigService } from './McpConfigService'
+import { McpConnectionManager } from './McpConnectionManager'
+import { McpOAuthCoordinator, type McpOAuthHttpServer } from './McpOAuthCoordinator'
 
 export class McpOAuthError extends Error {
   constructor(
     readonly code:
-      | "MCP_CONFIG_INVALID"
-      | "MCP_SERVER_NOT_FOUND"
-      | "MCP_OAUTH_UNAVAILABLE"
-      | "CONFLICT",
+      'MCP_CONFIG_INVALID' | 'MCP_SERVER_NOT_FOUND' | 'MCP_OAUTH_UNAVAILABLE' | 'CONFLICT',
     message: string,
     readonly status: number,
   ) {
@@ -33,49 +24,38 @@ export class McpOAuthService {
     readonly coordinator: McpOAuthCoordinator,
   ) {}
 
-  async start(input: {
-    workspace?: string
-    scope: McpScope
-    name: string
-    operationId: string
-  }) {
+  async start(input: { workspace?: string; scope: McpScope; name: string; operationId: string }) {
     const fingerprint = JSON.stringify({
-      action: "start",
+      action: 'start',
       workspace: input.workspace ?? null,
       scope: input.scope,
       name: input.name,
     })
     const previous = this.operation(input.operationId, fingerprint)
-    if (previous) return previous as {
-      attemptId: string
-      authorizationUrl: string
-      expiresAt: number
-    }
+    if (previous)
+      return previous as {
+        attemptId: string
+        authorizationUrl: string
+        expiresAt: number
+      }
     const { server, workspaceHash } = await this.server(input, true)
     const result = await this.coordinator.start(server, workspaceHash)
-    this.attempts.set(result.attemptId, input.workspace
-      ? { workspace: input.workspace }
-      : {})
+    this.attempts.set(result.attemptId, input.workspace ? { workspace: input.workspace } : {})
     this.remember(input.operationId, fingerprint, result)
     return result
   }
 
   status(input: { attemptId: string }) {
     const status = this.coordinator.status(input.attemptId)
-    if (status.state !== "pending") {
+    if (status.state !== 'pending') {
       this.attempts.delete(input.attemptId)
     }
     return status
   }
 
-  async logout(input: {
-    workspace?: string
-    scope: McpScope
-    name: string
-    operationId: string
-  }) {
+  async logout(input: { workspace?: string; scope: McpScope; name: string; operationId: string }) {
     const fingerprint = JSON.stringify({
-      action: "logout",
+      action: 'logout',
       workspace: input.workspace ?? null,
       scope: input.scope,
       name: input.name,
@@ -98,22 +78,18 @@ export class McpOAuthService {
   }
 
   async invalidateDeclaration(
-    server: { scope: McpScope; name: string; transport: { type: string } } & Record<string, unknown>,
+    server: { scope: McpScope; name: string; transport: { type: string } } & Record<
+      string,
+      unknown
+    >,
     workspace?: string,
   ) {
-    if (server.transport.type !== "http") return
+    if (server.transport.type !== 'http') return
     const identity = await this.configs.workspace(workspace)
-    await this.coordinator.remove(
-      server as McpOAuthHttpServer,
-      identity?.hash,
-    )
+    await this.coordinator.remove(server as McpOAuthHttpServer, identity?.hash)
   }
 
-  async handleCallback(input: {
-    code?: string
-    state?: string
-    error?: string
-  }) {
+  async handleCallback(input: { code?: string; state?: string; error?: string }) {
     const result = await this.coordinator.handleCallback(input)
     if (!result.attemptId) return false
     const context = this.attempts.get(result.attemptId)
@@ -130,32 +106,17 @@ export class McpOAuthService {
   ) {
     const identity = await this.configs.workspace(input.workspace)
     const list = await this.configs.list(input.workspace)
-    const item = list.servers.find((candidate) =>
-      candidate.server.scope === input.scope
-      && candidate.server.name === input.name)
+    const item = list.servers.find(
+      (candidate) => candidate.server.scope === input.scope && candidate.server.name === input.name,
+    )
     if (!item) {
-      throw new McpOAuthError(
-        "MCP_SERVER_NOT_FOUND",
-        "MCP server 不存在",
-        404,
-      )
+      throw new McpOAuthError('MCP_SERVER_NOT_FOUND', 'MCP server 不存在', 404)
     }
-    if (
-      item.server.transport.type !== "http"
-      || item.server.transport.auth === "none"
-    ) {
-      throw new McpOAuthError(
-        "MCP_OAUTH_UNAVAILABLE",
-        "此 MCP server 不支持 OAuth",
-        400,
-      )
+    if (item.server.transport.type !== 'http' || item.server.transport.auth === 'none') {
+      throw new McpOAuthError('MCP_OAUTH_UNAVAILABLE', '此 MCP server 不支持 OAuth', 400)
     }
     if (requireEffective && (!item.effective || !item.server.enabled)) {
-      throw new McpOAuthError(
-        "MCP_OAUTH_UNAVAILABLE",
-        "只能认证当前生效且已启用的 MCP server",
-        409,
-      )
+      throw new McpOAuthError('MCP_OAUTH_UNAVAILABLE', '只能认证当前生效且已启用的 MCP server', 409)
     }
     return {
       server: item.server as McpOAuthHttpServer,
@@ -167,11 +128,7 @@ export class McpOAuthService {
     const existing = this.operations.get(operationId)
     if (!existing) return null
     if (existing.fingerprint !== fingerprint) {
-      throw new McpOAuthError(
-        "CONFLICT",
-        "operationId 已用于其他 MCP OAuth 请求",
-        409,
-      )
+      throw new McpOAuthError('CONFLICT', 'operationId 已用于其他 MCP OAuth 请求', 409)
     }
     return existing.result
   }

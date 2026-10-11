@@ -1,17 +1,17 @@
-import type { Effect } from "effect"
-import type { AgentError } from "../domain"
+import type { Effect } from 'effect'
+import type { AgentError } from '../Domain'
 import type {
   CredentialErrorCategory,
   CredentialHealthStatus,
   StoredCredentialHealth,
-} from "../storage/database/AgentDatabase"
+} from '../storage/database/AgentDatabase'
 
-export type ProviderCredentialStoreKind = "auth-json" | "encrypted"
+export type ProviderCredentialStoreKind = 'auth-json' | 'encrypted'
 
 export type CredentialSummary = {
   id: string
   integrationID: string
-  kind: "api-key" | "oauth"
+  kind: 'api-key' | 'oauth'
   methodID: string | null
   label: string
   keyVersion: number
@@ -45,7 +45,7 @@ export type ApiKeySummary = {
 export type ProviderCredentialSummary = {
   id: string
   providerID: string
-  kind: "api-key" | "oauth"
+  kind: 'api-key' | 'oauth'
   methodID: string | null
   label: string
   maskedValue: string | null
@@ -60,7 +60,7 @@ export type ProviderCredentialSummary = {
 export type DecryptedCredential<T = unknown> = {
   id: string
   integrationID: string
-  kind: "api-key" | "oauth"
+  kind: 'api-key' | 'oauth'
   methodID: string | null
   label: string
   value: T
@@ -78,42 +78,68 @@ export type PortableProviderCredential = DecryptedCredential & {
 type CredentialEffect<T> = Effect.Effect<T, AgentError>
 
 export const isProviderCredentialIntegration = (integrationID: string) =>
-  integrationID !== "github"
-  && !integrationID.startsWith("mcp-oauth:")
-  && !integrationID.startsWith("usage.")
+  integrationID !== 'github' &&
+  !integrationID.startsWith('mcp-oauth:') &&
+  !integrationID.startsWith('usage.')
 
 export interface ProviderCredentialRepository {
   list(): CredentialSummary[]
   listApiKeys(integrationID?: string): ApiKeySummary[]
   listProviderCredentials(providerID?: string): ProviderCredentialSummary[]
   get<T = unknown>(integrationID: string): CredentialEffect<DecryptedCredential<T> | null>
-  activeCredential<T = unknown>(integrationID: string): CredentialEffect<DecryptedCredential<T> | null>
+  activeCredential<T = unknown>(
+    integrationID: string,
+  ): CredentialEffect<DecryptedCredential<T> | null>
   getById<T = unknown>(credentialID: string): CredentialEffect<DecryptedCredential<T> | null>
-  set(input: { integrationID: string; methodID?: string; label?: string; value: unknown }): CredentialEffect<CredentialSummary>
+  set(input: {
+    integrationID: string
+    methodID?: string
+    label?: string
+    value: unknown
+  }): CredentialEffect<CredentialSummary>
   upsertOAuth(input: {
     providerID: string
     methodID: string
     label?: string
     value: unknown
   }): CredentialEffect<ProviderCredentialSummary>
-  createApiKey(input: { integrationID: string; label: string; key: string }): CredentialEffect<ApiKeySummary>
+  createApiKey(input: {
+    integrationID: string
+    label: string
+    key: string
+  }): CredentialEffect<ApiKeySummary>
   replaceApiKey(credentialID: string, keyInput: string): CredentialEffect<ApiKeySummary>
   renameApiKey(credentialID: string, labelInput: string): CredentialEffect<ApiKeySummary>
   setActive(integrationID: string, credentialID: string): CredentialEffect<ApiKeySummary>
-  compareAndSetActive(integrationID: string, expectedCredentialID: string, credentialID: string): CredentialEffect<boolean>
+  compareAndSetActive(
+    integrationID: string,
+    expectedCredentialID: string,
+    credentialID: string,
+  ): CredentialEffect<boolean>
   setEnabled(credentialID: string, enabled: boolean): CredentialEffect<ApiKeySummary>
-  reorder(integrationID: string, orderedCredentialIDs: readonly string[]): CredentialEffect<ApiKeySummary[]>
+  reorder(
+    integrationID: string,
+    orderedCredentialIDs: readonly string[],
+  ): CredentialEffect<ApiKeySummary[]>
   deleteApiKey(credentialID: string): CredentialEffect<boolean>
-  setProviderCredentialActive(providerID: string, credentialID: string): CredentialEffect<ProviderCredentialSummary>
-  setProviderCredentialEnabled(credentialID: string, enabled: boolean): CredentialEffect<ProviderCredentialSummary>
+  setProviderCredentialActive(
+    providerID: string,
+    credentialID: string,
+  ): CredentialEffect<ProviderCredentialSummary>
+  setProviderCredentialEnabled(
+    credentialID: string,
+    enabled: boolean,
+  ): CredentialEffect<ProviderCredentialSummary>
   deleteProviderCredential(credentialID: string): CredentialEffect<ProviderCredentialSummary[]>
   deleteCredentialByID(credentialID: string): CredentialEffect<boolean>
   updateHealth(
     credentialID: string,
-    patch: Partial<Omit<StoredCredentialHealth, "credentialID" | "updatedAt">>,
+    patch: Partial<Omit<StoredCredentialHealth, 'credentialID' | 'updatedAt'>>,
   ): CredentialEffect<ApiKeyHealth>
   exportProviderCredentials(): CredentialEffect<PortableProviderCredential[]>
-  replaceProviderCredentials(credentials: readonly PortableProviderCredential[]): CredentialEffect<void>
+  replaceProviderCredentials(
+    credentials: readonly PortableProviderCredential[],
+  ): CredentialEffect<void>
   clearProviderCredentials(): CredentialEffect<void>
   validateProviderCredentials(): CredentialEffect<void>
 }

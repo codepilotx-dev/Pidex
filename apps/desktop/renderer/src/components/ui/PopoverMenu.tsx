@@ -1,6 +1,6 @@
 import type React from 'react'
 import { Dropdown } from './Dropdown.js'
-import type { PopoverSizingProps } from './popoverSizing.js'
+import type { PopoverSizingProps } from './PopoverSizing.js'
 
 type Props = {
   children: React.ReactNode
@@ -13,7 +13,6 @@ type Props = {
   avoidCollisions?: boolean
   trigger: React.ReactElement
   textMode?: 'nowrap' | 'wrap'
-  modal?: boolean
   onOpenChange: (open: boolean) => void
 } & PopoverSizingProps
 
@@ -28,9 +27,7 @@ export function PopoverMenu({
   avoidCollisions,
   trigger,
   textMode = 'nowrap',
-  modal = false,
-  width,
-  maxWidth,
+  size,
   onOpenChange,
 }: Props): React.ReactNode {
   return (
@@ -42,11 +39,11 @@ export function PopoverMenu({
       sideOffset={sideOffset}
       collisionPadding={collisionPadding}
       avoidCollisions={avoidCollisions}
-      modal={modal}
+
       textMode={textMode}
       trigger={trigger}
-      width={width}
-      maxWidth={maxWidth}
+      size={size}
+
       onOpenChange={onOpenChange}
     >
       {children}

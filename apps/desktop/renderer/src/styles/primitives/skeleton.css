@@ -1,0 +1,14 @@
+/*
+ * SkeletonBlock residue: the resting surface mixes the secondary foreground into
+ * the panel surface, which is not a palette entry and must stay a colour-mix.
+ * The semantic class name stays because features target it for sizing.
+ */
+@layer primitives {
+  .ui-skeleton-block {
+    background-color: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-secondary) 7%,
+      var(--cpx-sys-color-surface-panel)
+    );
+  }
+}

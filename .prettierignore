@@ -1,0 +1,44 @@
+# Pidex 格式排除清单
+# prettier 不读取 .gitignore，因此这里需要显式列出被忽略的工作目录。
+
+# 生成产物：由脚本产出且有各自的 --check 守卫，重排会让校验脚本误报漂移。
+packages/material-icon-theme/src/generated
+packages/material-icon-theme/src/icons
+# material-icons 目录与手写组件共存，只有这三个名字是同步脚本生成的。
+apps/desktop/renderer/src/features/layout/material-icons/Shard*.ts
+apps/desktop/renderer/src/features/layout/material-icons/Loaders.ts
+apps/desktop/renderer/src/features/layout/material-icons/Index.ts
+apps/desktop/renderer/shared/codexThemes/themes
+docs/research/codex-webview-style-inventory.md
+docs/research/codex-webview-style-inventory.json
+
+# 构建、测试与运行产物
+node_modules
+dist
+/release
+performance-results
+test-results
+playwright-report
+**/__screenshots__
+
+# 被 gitignore 的本地工作目录（含第三方 Skill、外部工具缓存）
+.agents
+.zcode
+.gstack
+.playwright-cli
+.worktrees
+.vscode
+
+# 第三方与内嵌维护内容：保持上游原文，避免后续同步产生无意义冲突。
+# vendor/extract-zip 是仓库内维护的安全修复版上游包，third_party 为许可证
+# 与来源说明，bun.lock 由 Bun 自行维护，THIRD_PARTY_NOTICES 为许可证汇总。
+vendor
+third_party
+patches
+bun.lock
+LICENSE
+THIRD_PARTY_NOTICES.md
+
+# 主题生成器与上游字体 CSS 保持原始生成格式。
+apps/desktop/renderer/shared/themes
+apps/desktop/renderer/public/fonts

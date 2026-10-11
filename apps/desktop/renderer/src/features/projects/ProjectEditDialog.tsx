@@ -1,34 +1,22 @@
 import * as Dialog from '@radix-ui/react-dialog'
-import {
-  Folder,
-  FolderPlus,
-  RefreshCw,
-  Star,
-  Trash2,
-  X,
-} from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { Folder, FolderPlus, RefreshCw, Star, Trash2, X } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import type {
   DesktopProjectFolder,
   DesktopWorkspace,
   ProjectAppearance,
-} from '../../../shared/types.js'
+} from '../../../shared/Types.js'
 import { Button } from '../../components/ui/Button.js'
-import { IconButton } from '../../components/ui/IconButton.js'
-import { useDialogFocusRestore } from '../../components/ui/useDialogFocusRestore.js'
-import {
-  APP_ICON_SIZE,
-  APP_ICON_STROKE_WIDTH,
-} from '../../components/ui/iconTokens.js'
-import { cx } from '../../utils/cx.js'
+
+import { useDialogFocusRestore } from '../../components/ui/UseDialogFocusRestore.js'
+import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
+import { cx } from '../../utils/Cx.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { ProjectAppearancePicker } from './ProjectAppearancePicker.js'
-import {
-  createProjectFolderSavePlan,
-  type ProjectFolderSaveDraft,
-} from './projectEditModel.js'
-import { notifyProjectCatalogChanged } from './projectCatalogEvents.js'
+import { projectFolderPaths, type ProjectFolderSaveDraft } from './ProjectEditModel.js'
+import { notifyProjectCatalogChanged } from './ProjectCatalogEvents.js'
+import { errorMessageOf as errorMessage } from '@pidex/shared/errors'
 
 type DraftFolder = DesktopProjectFolder & ProjectFolderSaveDraft
 
@@ -55,9 +43,7 @@ export function ProjectEditDialog({
 }: Props): React.ReactNode {
   const [draftName, setDraftName] = useState(project.name)
   const [draftAppearance, setDraftAppearance] = useState(appearance)
-  const [draftFolders, setDraftFolders] = useState<DraftFolder[]>(() =>
-    createFolderDraft(project),
-  )
+  const [draftFolders, setDraftFolders] = useState<DraftFolder[]>(() => createFolderDraft(project))
   const [sourceCounts, setSourceCounts] = useState<Record<string, number>>({})
   const [busy, setBusy] = useState(false)
   const closeButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -82,7 +68,7 @@ export function ProjectEditDialog({
     if (!projectId) return
     void desktopClient
       .listProjectSources(projectId)
-      .then(sources => {
+      .then((sources) => {
         const counts: Record<string, number> = {}
         for (const source of sources) {
           if (source.storage !== 'workspace-file') continue
@@ -90,51 +76,44 @@ export function ProjectEditDialog({
         }
         setSourceCounts(counts)
       })
-      .catch(error => onReport(errorMessage(error)))
+      .catch((error) => onReport(errorMessage(error)))
   }, [open, projectId, onReport])
 
-  const primaryDraft = useMemo(
-    () => draftFolders.find(folder => folder.role === 'primary') ?? null,
-    [draftFolders],
-  )
-
   async function addFolder(): Promise<void> {
-    const path = await desktopClient.chooseProjectFolder()
-    if (!path) return
-    if (draftFolders.some(folder => samePath(folder.path, path))) {
-      onReport('该目录已经在项目中。')
-      return
-    }
-    setDraftFolders(current => [
-      ...current,
-      createNewDraftFolder(path, current.length),
-    ])
+    addPaths(await desktopClient.chooseProjectFolders())
+  }
+
+  function addPaths(paths: string[]): void {
+    setDraftFolders((current) => {
+      const next = [...current]
+      for (const path of paths) {
+        if (next.some((folder) => samePath(folder.path, path))) continue
+        const folder = createNewDraftFolder(path, next.length)
+        if (next.length === 0) folder.role = 'primary'
+        next.push(folder)
+      }
+      return next
+    })
   }
 
   async function reselectFolder(folder: DraftFolder): Promise<void> {
     const path = await desktopClient.chooseProjectFolder()
     if (!path) return
     if (
-      draftFolders.some(
-        candidate => candidate.id !== folder.id && samePath(candidate.path, path),
-      )
+      draftFolders.some((candidate) => candidate.id !== folder.id && samePath(candidate.path, path))
     ) {
       onReport('该目录已经在项目中。')
       return
     }
-    const affectedSources = folder.originalId
-      ? sourceCounts[folder.originalId] ?? 0
-      : 0
+    const affectedSources = folder.originalId ? (sourceCounts[folder.originalId] ?? 0) : 0
     if (
-      affectedSources > 0
-      && !window.confirm(
-        `重新选择目录会移除原目录下的 ${affectedSources} 个路径来源，是否继续？`,
-      )
+      affectedSources > 0 &&
+      !window.confirm(`重新选择目录会移除原目录下的 ${affectedSources} 个路径来源，是否继续？`)
     ) {
       return
     }
-    setDraftFolders(current =>
-      current.map(candidate =>
+    setDraftFolders((current) =>
+      current.map((candidate) =>
         candidate.id === folder.id
           ? {
               ...createNewDraftFolder(path, candidate.order),
@@ -146,109 +125,68 @@ export function ProjectEditDialog({
   }
 
   function setPrimary(folderId: string): void {
-    setDraftFolders(current =>
-      current.map(folder => ({
-        ...folder,
-        role: folder.id === folderId ? 'primary' : 'secondary',
-      })),
+    setDraftFolders((current) =>
+      [
+        ...current.filter((folder) => folder.id === folderId),
+        ...current.filter((folder) => folder.id !== folderId),
+      ].map((folder, order) => ({ ...folder, role: order === 0 ? 'primary' : 'secondary', order })),
     )
   }
 
   function removeFolder(folder: DraftFolder): void {
-    if (folder.role === 'primary') return
-    const affectedSources = folder.originalId
-      ? sourceCounts[folder.originalId] ?? 0
-      : 0
+    const affectedSources = folder.originalId ? (sourceCounts[folder.originalId] ?? 0) : 0
     if (
-      affectedSources > 0
-      && !window.confirm(
-        `移除此目录会同时移除 ${affectedSources} 个路径来源，是否继续？`,
-      )
+      affectedSources > 0 &&
+      !window.confirm(`移除此目录会同时移除 ${affectedSources} 个路径来源，是否继续？`)
     ) {
       return
     }
-    setDraftFolders(current =>
-      current.filter(candidate => candidate.id !== folder.id),
+    setDraftFolders((current) =>
+      current
+        .filter((candidate) => candidate.id !== folder.id)
+        .map((candidate, order) => ({
+          ...candidate,
+          role: order === 0 ? 'primary' : 'secondary',
+          order,
+        })),
     )
-  }
-
-  async function refreshProject(): Promise<void> {
-    if (!projectId) return
-    const refreshed = (await desktopClient.listProjects()).find(
-      item => item.projectId === projectId,
-    )
-    if (refreshed) onProjectChange(refreshed)
   }
 
   async function save(): Promise<void> {
-    if (!projectId || busy || !draftName.trim() || !primaryDraft) return
+    if (!projectId || busy || !draftName.trim()) return
     setBusy(true)
-    let current = project
     try {
-      const savePlan = createProjectFolderSavePlan(
-        project.folders ?? [],
-        draftFolders,
-      )
-      for (const path of savePlan.addPaths) {
-        current = await desktopClient.addProjectFolder(projectId, path)
-      }
-
-      const desiredPrimary = current.folders?.find(folder =>
-        samePath(folder.path, savePlan.desiredPrimaryPath),
-      )
-      if (!desiredPrimary) {
-        throw new Error('保存后未找到选定的主目录。')
-      }
-      if (current.primaryFolderId !== desiredPrimary.id) {
-        current = await desktopClient.setPrimaryProjectFolder(
-          projectId,
-          desiredPrimary.id,
-        )
-      }
-
-      for (const folderId of savePlan.removeFolderIds) {
-        const existing = current.folders?.find(folder => folder.id === folderId)
-        if (!existing) continue
-        if (existing.role === 'primary') {
-          throw new Error('必须先选择其他目录作为主目录。')
-        }
-        current = await desktopClient.removeProjectFolder(projectId, folderId)
-      }
-
-      if (draftName.trim() !== current.name) {
-        current = await desktopClient.updateProject({
-          projectId,
-          name: draftName.trim(),
-          expectedVersion: current.projectVersion ?? 0,
-        })
-      }
-
+      const current = await desktopClient.editProject({
+        projectId,
+        name: draftName.trim(),
+        paths: projectFolderPaths(draftFolders),
+        expectedVersion: project.projectVersion ?? 0,
+      })
       onProjectChange(current)
       notifyProjectCatalogChanged()
       onOpenChange(false)
       onReport('项目已保存。')
     } catch (error) {
-      await refreshProject().catch(() => undefined)
-      notifyProjectCatalogChanged()
-      onReport(
-        `部分项目更改可能已经生效，已刷新实际状态。${errorMessage(error)}`,
-      )
+      onReport(errorMessage(error))
     } finally {
       setBusy(false)
     }
   }
 
   return (
-    <Dialog.Root open={open} onOpenChange={nextOpen => {
-      if (!busy) onOpenChange(nextOpen)
-    }}>
+    <Dialog.Root
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!busy) onOpenChange(nextOpen)
+      }}
+    >
       <Dialog.Portal>
-        <Dialog.Overlay className="project-edit-backdrop" />
+        <Dialog.Overlay className="ui-dialog-backdrop project-edit-backdrop tw:backdrop-blur-none" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="project-edit-dialog"
+          className="ui-dialog-surface ui-dialog-surface--centered project-edit-dialog tw:flex tw:flex-col tw:box-border tw:w-[min(32rem,calc(100vw-2rem))] tw:max-w-[calc(100vw-2rem)] tw:max-h-[calc(100vh-2rem)] tw:overflow-y-auto tw:gap-3 tw:p-5 tw:text-app-text tw:outline-none"
           onCloseAutoFocus={onCloseAutoFocus}
-          onOpenAutoFocus={event => {
+          onOpenAutoFocus={(event) => {
             event.preventDefault()
             const initialFocus = nameInputRef.current ?? closeButtonRef.current
             initialFocus?.focus()
@@ -257,140 +195,177 @@ export function ProjectEditDialog({
             }
           }}
         >
-          <header className="project-edit-header">
-            <Dialog.Title>编辑项目</Dialog.Title>
+          <header className="project-edit-header tw:flex tw:items-center tw:justify-between tw:gap-4">
+            <Dialog.Title className="tw:m-0 tw:type-title-lg tw:text-app-text">
+              编辑项目
+            </Dialog.Title>
             <Dialog.Close asChild>
-              <IconButton
+              <Button
+                isIconOnly
                 className="project-edit-close"
+                color="ghostSecondary"
                 disabled={busy}
                 ref={closeButtonRef}
+                size="toolbar"
                 title="关闭编辑项目"
               >
-                <X
-                  size={APP_ICON_SIZE + 2}
-                  strokeWidth={APP_ICON_STROKE_WIDTH}
-                />
-              </IconButton>
+                <X size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+              </Button>
             </Dialog.Close>
           </header>
 
           {!projectId ? (
-            <p className="project-edit-empty">当前任务尚未关联稳定项目。</p>
+            <p className="project-edit-empty tw:m-0 tw:type-body tw:text-app-text-meta">
+              当前任务尚未关联稳定项目。
+            </p>
           ) : (
             <>
-              <div className="project-edit-name-field">
+              <div className="project-edit-name-field tw:flex tw:h-10 tw:min-h-10 tw:items-center tw:overflow-hidden tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-canvas tw:focus-within:border-app-border-strong tw:focus-within:shadow-[var(--cpx-sys-focus-ring-inset)]">
                 <ProjectAppearancePicker
                   appearance={draftAppearance}
                   disabled={busy}
-                  onChange={nextAppearance => {
+                  glyphSize={APP_ICON_SIZE}
+                  onChange={(nextAppearance) => {
                     setDraftAppearance(nextAppearance)
                     onAppearanceChange(nextAppearance)
                   }}
                 />
                 <input
                   aria-label="项目名称"
-                  className="project-edit-name-input"
+                  className="project-edit-name-input tw:min-w-0 tw:flex-1 tw:h-full tw:border-0 tw:bg-transparent tw:px-1 tw:py-0 tw:text-app-text tw:type-body tw:outline-none"
                   maxLength={120}
                   ref={nameInputRef}
                   value={draftName}
-                  onChange={event => setDraftName(event.target.value)}
-                  onKeyDown={event => {
+                  onChange={(event) => setDraftName(event.target.value)}
+                  onKeyDown={(event) => {
                     if (event.key === 'Enter') void save()
                   }}
                 />
               </div>
 
-              <section className="project-edit-folders">
-                <h3>源文件夹</h3>
-                <div className="project-edit-folder-list">
-                  {draftFolders.map(folder => (
+              <section className="project-edit-folders tw:flex tw:flex-col tw:gap-2">
+                <h3 className="tw:m-0 tw:type-row-title tw:text-app-text">源文件夹</h3>
+                <div
+                  onDragOver={(event) => {
+                    if (!busy) {
+                      event.preventDefault()
+                      event.dataTransfer.dropEffect = 'copy'
+                    }
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    if (!busy)
+                      addPaths(
+                        Array.from(event.dataTransfer.files)
+                          .map((file) => desktopClient.getComposerFilePath(file))
+                          .filter(Boolean),
+                      )
+                  }}
+                  className="project-edit-folder-list tw:max-h-[15rem] tw:overflow-y-auto tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-canvas"
+                >
+                  {draftFolders.map((folder) => (
                     <div
                       className={cx(
-                        'project-edit-folder-row',
-                        folder.availability === 'missing' && 'is-missing',
+                        'project-edit-folder-row tw:box-border tw:flex tw:h-12 tw:min-h-12 tw:w-full tw:items-center tw:gap-3 tw:border-0 tw:border-b tw:border-app-border-subtle tw:bg-transparent tw:px-3 tw:text-start',
+                        folder.availability === 'missing'
+                          ? 'is-missing tw:text-app-text-meta'
+                          : 'tw:text-app-text',
                       )}
                       key={folder.id}
                     >
-                      <Folder size={APP_ICON_SIZE + 2} />
-                      <div className="project-edit-folder-copy">
-                        <strong>{folder.name}</strong>
-                        <span title={folder.path}>{folder.path}</span>
-                      </div>
-                      {folder.role === 'primary' ? (
-                        <span className="project-edit-primary-badge">主目录</span>
-                      ) : (
-                        <button
-                          aria-label={`将 ${folder.name} 设为主目录`}
-                          className="project-edit-folder-action"
+                      <Folder size={APP_ICON_SIZE} />
+                      <span
+                        className="project-edit-folder-name tw:min-w-0 tw:flex-1 tw:truncate tw:px-1 tw:type-body"
+                        title={folder.path}
+                      >
+                        {folder.name}
+                      </span>
+                      {draftFolders.length > 1 && folder.role === 'primary' ? (
+                        <span
+                          title="新聊天使用主目录作为工作目录，并在这里查找 AGENTS.md、config.toml 和技能文件"
+                          className="project-edit-primary-badge tw:shrink-0 tw:rounded-full tw:bg-app-hover tw:px-2 tw:py-1 tw:type-caption tw:text-app-text-soft"
+                        >
+                          主目录
+                        </span>
+                      ) : null}
+                      {draftFolders.length > 1 && folder.role !== 'primary' ? (
+                        <Button
+                          isIconOnly
+                          className="project-edit-folder-action tw:w-[1.875rem]"
+                          color="ghostSecondary"
                           disabled={busy}
-                          title="设为主目录"
+                          size="toolbar"
+                          title={`将 ${folder.name} 设为主目录`}
                           type="button"
                           onClick={() => setPrimary(folder.id)}
                         >
                           <Star size={APP_ICON_SIZE} />
-                        </button>
-                      )}
+                        </Button>
+                      ) : null}
                       {folder.availability === 'missing' ? (
-                        <button
-                          aria-label={`重新选择目录 ${folder.name}`}
-                          className="project-edit-folder-action"
+                        <Button
+                          isIconOnly
+                          className="project-edit-folder-action tw:w-[1.875rem]"
+                          color="ghostSecondary"
                           disabled={busy}
-                          title="重新选择目录"
+                          size="toolbar"
+                          title={`重新选择目录 ${folder.name}`}
                           type="button"
                           onClick={() => void reselectFolder(folder)}
                         >
                           <RefreshCw size={APP_ICON_SIZE} />
-                        </button>
+                        </Button>
                       ) : null}
-                      <button
-                        aria-label={`移除目录 ${folder.name}`}
-                        className="project-edit-folder-action"
-                        disabled={busy || folder.role === 'primary'}
-                        title={
-                          folder.role === 'primary'
-                            ? '请先设置其他主目录'
-                            : '从项目移除'
-                        }
+                      <Button
+                        isIconOnly
+                        className="project-edit-folder-action tw:w-[1.875rem]"
+                        color="ghostSecondary"
+                        disabled={busy}
+                        size="toolbar"
+                        title={`移除目录 ${folder.name}`}
                         type="button"
                         onClick={() => removeFolder(folder)}
                       >
                         <X size={APP_ICON_SIZE} />
-                      </button>
+                      </Button>
                     </div>
                   ))}
                   <button
-                    className="project-edit-add-folder"
+                    className="project-edit-add-folder tw:box-border tw:flex tw:h-12 tw:min-h-12 tw:w-full tw:cursor-pointer tw:items-center tw:gap-3 tw:border-0 tw:bg-transparent tw:px-3 tw:text-start tw:text-app-text-soft tw:type-body tw:enabled:hover:bg-app-hover tw:enabled:hover:text-app-text"
                     disabled={busy}
                     type="button"
                     onClick={() => void addFolder()}
                   >
-                    <FolderPlus size={APP_ICON_SIZE + 2} />
-                    添加文件夹
+                    <FolderPlus size={APP_ICON_SIZE} />
+                    <span className="tw:px-1">添加文件夹</span>
                   </button>
                 </div>
               </section>
             </>
           )}
 
-          <footer className="project-edit-footer">
+          <footer className="project-edit-footer tw:mt-2 tw:flex tw:items-center tw:justify-between tw:gap-3">
             <Button
-              className="project-edit-delete"
+              className="project-edit-delete tw:me-auto"
+              color="danger"
               disabled={busy || !projectId}
-              tone="danger"
+              size="medium"
               onClick={onRequestRemove}
             >
               <Trash2 size={APP_ICON_SIZE} />
-              删除项目
+              移除本地项目
             </Button>
-            <div>
+            <div className="project-edit-footer-actions tw:flex tw:items-center tw:gap-3">
               <Dialog.Close asChild>
-                <Button disabled={busy}>取消</Button>
+                <Button color="secondary" disabled={busy} size="medium">
+                  取消
+                </Button>
               </Dialog.Close>
               <Button
-                disabled={
-                  busy || !projectId || !draftName.trim() || !primaryDraft
-                }
+                color="primary"
+                disabled={busy || !projectId || !draftName.trim()}
                 loading={busy}
+                size="medium"
                 onClick={() => void save()}
               >
                 保存
@@ -404,7 +379,7 @@ export function ProjectEditDialog({
 }
 
 function createFolderDraft(project: DesktopWorkspace): DraftFolder[] {
-  return (project.folders ?? []).map(folder => ({
+  return (project.folders ?? []).map((folder) => ({
     ...folder,
     originalId: folder.id,
   }))
@@ -432,8 +407,4 @@ function samePath(left: string, right: string): boolean {
 
 function normalizePath(value: string): string {
   return value.replaceAll('\\', '/').replace(/\/+$/, '').toLocaleLowerCase()
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
 }

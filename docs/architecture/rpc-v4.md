@@ -4,11 +4,11 @@ Status: Accepted
 
 Date: 2026-07-16
 
-Decision owners: CodePilotX Agent, protocol, Electron, and Renderer boundaries
+Decision owners: Pidex Agent, protocol, Electron, and Renderer boundaries
 
 ## Context
 
-CodePilotX v2 already uses HTTP JSON-RPC for commands and SSE for notifications.
+Pidex v2 already uses HTTP JSON-RPC for commands and SSE for notifications.
 It also has a SQLite event table that supports cursor replay. The principal v2
 limitations are contractual and reliability-related rather than a lack of RPC:
 
@@ -40,7 +40,7 @@ requests. Neither transport topology is copied wholesale.
 RPC v4 is split into four layers with one-way dependencies:
 
 ```text
-@codepilotx/agent-protocol
+@pidex/agent-protocol
         |
         v
 Agent typed dispatcher and application services
@@ -52,26 +52,26 @@ HTTP/SSE v2 compatibility | WebSocket v3 | in-process test adapters
 Electron main bridge | browser client | future CLI client
 ```
 
-`@codepilotx/agent-protocol` is browser-safe. It owns schemas, method maps,
+`@pidex/agent-protocol` is browser-safe. It owns schemas, method maps,
 server-request maps, event definitions, envelopes, errors, and capability
 names. It does not import Bun, Electron, SQLite, Hono, React, or Agent services.
 
 Package dependencies remain acyclic:
 
 ```text
-@codepilotx/model-schema
+@pidex/model-schema
         |
         v
-@codepilotx/shared domain schemas
+@pidex/shared domain schemas
         |
         v
-@codepilotx/agent-protocol wire contracts
+@pidex/agent-protocol wire contracts
         |
         v
 Agent and client adapters
 ```
 
-`@codepilotx/shared` owns domain schemas, while `@codepilotx/agent-protocol`
+`@pidex/shared` owns domain schemas, while `@pidex/agent-protocol`
 is the sole owner of v4 wire contracts. Shared must not import or re-export the
 protocol package because that would create a dependency cycle.
 
@@ -84,7 +84,6 @@ encode results. They do not perform business mutations directly.
 - JSON-RPC wire messages keep `jsonrpc: "2.0"`.
 - The product protocol is identified as `thread-rpc-v4`.
 - The v3 WebSocket endpoint is `/rpc/ws`.
-- WebSocket advertises subprotocol `codepilotx.thread-rpc.v4`.
 - Every connection must complete `initialize` and then `initialized` before any
   non-initialization call, subscription, or server request.
 - `initialize` exchanges client identity, supported protocol versions, and
@@ -99,7 +98,7 @@ The protocol package defines:
 
 ```ts
 type RpcMethodMap = {
-  "thread/read": {
+  'thread/read': {
     params: ThreadReadParams
     result: ThreadReadResult
     errors: ThreadReadError
@@ -159,21 +158,21 @@ event envelope:
 type EventEnvelopeBase<E extends EventDefinition> = {
   eventId: string
   streamId: string
-  type: E["type"]
-  version: E["version"]
+  type: E['type']
+  version: E['version']
   occurredAt: number
   threadId?: string
   turnId?: string
-  payload: E["payload"]
+  payload: E['payload']
 }
 
 type DurableEventEnvelope<E extends EventDefinition> = EventEnvelopeBase<E> & {
-  durability: "durable"
+  durability: 'durable'
   sequence: number
 }
 
 type LiveEventEnvelope<E extends EventDefinition> = EventEnvelopeBase<E> & {
-  durability: "live"
+  durability: 'live'
   sequence: null
   afterSequence: number
 }

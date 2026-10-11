@@ -1,7 +1,7 @@
-export type TurnPatchApplyState = "applied" | "undone"
+export type TurnPatchApplyState = 'applied' | 'undone'
 
 export type TurnPatchMutationFile = {
-  operation: "create" | "update" | "delete"
+  operation: 'create' | 'update' | 'delete'
   path: string
   beforeContent: string | null
   afterContent: string | null

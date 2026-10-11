@@ -1,15 +1,11 @@
-import { ArrowLeft, Server } from 'lucide-react'
+import { Server } from 'lucide-react'
 import type React from 'react'
-import { useId, useRef } from 'react'
-import type { ModelProviderID } from '../../../shared/types.js'
-import { IconButton } from '../../components/ui/IconButton.js'
-import { RemoteImage } from '../../components/ui/RemoteImage.js'
-import {
-  APP_ICON_SIZE,
-  APP_ICON_STROKE_WIDTH,
-} from '../../components/ui/iconTokens.js'
+import { useId } from 'react'
+import type { ModelProviderID } from '../../../shared/Types.js'
+import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
+import { ProviderIcon } from './ProviderIcon.js'
 
-export const PROVIDER_DETAIL_TABS = ['connection', 'models', 'router'] as const
+export const PROVIDER_DETAIL_TABS = ['connection', 'models'] as const
 export type ProviderDetailTab = (typeof PROVIDER_DETAIL_TABS)[number]
 export type ProviderDetailStatusTone = 'positive' | 'warning' | 'danger' | 'neutral'
 
@@ -34,125 +30,91 @@ export type ProviderDetailProps = {
   children: React.ReactNode
 }
 
-const TAB_LABELS: Record<ProviderDetailTab, string> = {
-  connection: '连接',
-  models: '模型',
-  router: 'Router',
-}
+const TAB_OPTIONS: ReadonlyArray<{ value: ProviderDetailTab; label: string }> = [
+  { value: 'connection', label: '连接与凭据' },
+  { value: 'models', label: '模型与测速' },
+]
 
 export function ProviderDetail({
   provider,
   activeTab,
   onTabChange,
-  onBack,
   actions,
   feedback,
   children,
 }: ProviderDetailProps): React.ReactNode {
-  const tabRefs = useRef<Array<HTMLButtonElement | null>>([])
-  const titleId = useId()
   const panelId = useId()
 
-  function handleTabKeyDown(
-    event: React.KeyboardEvent<HTMLButtonElement>,
-    currentIndex: number,
-  ): void {
-    let nextIndex: number | null = null
-    if (event.key === 'ArrowRight') nextIndex = (currentIndex + 1) % PROVIDER_DETAIL_TABS.length
-    if (event.key === 'ArrowLeft') {
-      nextIndex = (currentIndex - 1 + PROVIDER_DETAIL_TABS.length) % PROVIDER_DETAIL_TABS.length
-    }
-    if (event.key === 'Home') nextIndex = 0
-    if (event.key === 'End') nextIndex = PROVIDER_DETAIL_TABS.length - 1
-    if (nextIndex === null) return
-    event.preventDefault()
-    const nextTab = PROVIDER_DETAIL_TABS[nextIndex]
-    if (!nextTab) return
-    onTabChange(nextTab)
-    tabRefs.current[nextIndex]?.focus()
-  }
-
   return (
-    <section className="model-center-provider-detail" aria-labelledby={titleId}>
-      <header className="model-center-provider-detail-header">
-        {onBack ? (
-          <IconButton
-            className="model-center-provider-back"
-            title="返回 Provider 列表"
-            onClick={onBack}
-          >
-            <ArrowLeft aria-hidden size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          </IconButton>
-        ) : null}
-
-        <div className="model-center-provider-identity">
+    <section
+      className="model-center-provider-detail tw:grid tw:min-w-0 tw:gap-3"
+      aria-label={`${provider.name} 详情`}
+    >
+      <header className="model-center-provider-detail-header tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-4 tw:p-0 tw:@max-[720px]:flex-col tw:@max-[720px]:items-stretch">
+        <div className="model-center-provider-identity tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:gap-3 tw:@max-[720px]:w-full">
           {provider.logoURL ? (
-            <RemoteImage
-              alt=""
-              className="model-center-provider-identity-logo"
-              fallback={(
-                <Server
-                  aria-hidden
-                  size={APP_ICON_SIZE + 6}
-                  strokeWidth={APP_ICON_STROKE_WIDTH}
-                />
-              )}
-              src={provider.logoURL}
+            <ProviderIcon
+              className="model-center-provider-identity-logo tw:inline-flex tw:size-3.5 tw:shrink-0 tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-md tw:bg-app-editor tw:text-app-text-soft"
+              fallback={<Server aria-hidden size={14} data-icon-kind="artwork" strokeWidth={2} />}
+              logoURL={provider.logoURL}
             />
           ) : (
-            <span className="model-center-provider-identity-logo">
-              <Server
-                aria-hidden
-                size={APP_ICON_SIZE + 6}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
+            <span className="model-center-provider-identity-logo tw:inline-flex tw:size-3.5 tw:shrink-0 tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-md tw:bg-app-editor tw:text-app-text-soft">
+              <Server aria-hidden size={14} data-icon-kind="artwork" strokeWidth={2} />
             </span>
           )}
-          <div className="model-center-provider-identity-copy">
-            <div className="model-center-provider-identity-heading">
-              <h2 id={titleId}>{provider.name}</h2>
+          <div className="model-center-provider-identity-copy tw:grid tw:min-w-0 tw:gap-1">
+            <div className="model-center-provider-identity-heading tw:flex tw:min-w-0 tw:items-center tw:gap-2">
+              <h2 className="tw:m-0 tw:min-w-0 tw:overflow-hidden tw:text-app-text tw:type-title-xl tw:text-ellipsis tw:whitespace-nowrap">
+                {provider.name}
+              </h2>
               <span
-                className="model-center-provider-status"
+                className="model-center-provider-status tw:inline-flex tw:items-center tw:gap-1 tw:text-app-text-soft tw:type-caption tw:whitespace-nowrap tw:data-[tone=positive]:text-app-success tw:data-[tone=healthy]:text-app-success tw:data-[tone=success]:text-app-success tw:data-[tone=warning]:text-app-danger tw:data-[tone=danger]:text-app-danger"
                 data-tone={provider.status.tone}
               >
                 {provider.status.label}
               </span>
             </div>
-            <p>{provider.description ?? provider.id}</p>
+            <p className="tw:m-0 tw:overflow-hidden tw:text-app-text-meta tw:type-caption tw:text-ellipsis tw:whitespace-nowrap">
+              {provider.description ?? provider.id}
+            </p>
           </div>
         </div>
 
-        {actions ? <div className="model-center-provider-context-actions">{actions}</div> : null}
+        {actions ? (
+          <div className="model-center-provider-context-actions tw:inline-flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2 tw:@max-[720px]:w-full tw:@max-[720px]:justify-start tw:@max-[720px]:[&>*]:flex-auto">
+            {actions}
+          </div>
+        ) : null}
       </header>
 
-      <nav className="model-center-provider-tabs" aria-label="Provider 详情" role="tablist">
-        {PROVIDER_DETAIL_TABS.map((tab, index) => (
-          <button
-            aria-controls={panelId}
-            aria-selected={activeTab === tab}
-            className="model-center-provider-tab"
-            id={`${panelId}-tab-${tab}`}
-            key={tab}
-            ref={element => { tabRefs.current[index] = element }}
-            role="tab"
-            tabIndex={activeTab === tab ? 0 : -1}
-            type="button"
-            onClick={() => onTabChange(tab)}
-            onKeyDown={event => handleTabKeyDown(event, index)}
-          >
-            {TAB_LABELS[tab]}
-          </button>
-        ))}
-      </nav>
+      <div className="model-center-provider-tab-bar tw:flex tw:items-center tw:py-1">
+        <SegmentedControl<ProviderDetailTab>
+          ariaLabel="供应商详情功能切换"
+          className="model-center-provider-segmented-tabs"
+          getPanelId={(tab) => `${panelId}-panel-${tab}`}
+          getTabId={(tab) => `${panelId}-tab-${tab}`}
+          onChange={onTabChange}
+          options={TAB_OPTIONS}
+          overflowMode="fit"
+          semantics="tabs"
+          value={activeTab}
+        />
+      </div>
 
       {feedback ? (
-        <div className="model-center-provider-feedback" role="status">{feedback}</div>
+        <div
+          className="model-center-provider-feedback tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-4 tw:py-3 tw:text-app-text-soft tw:type-body-sm"
+          role="status"
+        >
+          {feedback}
+        </div>
       ) : null}
 
       <div
         aria-labelledby={`${panelId}-tab-${activeTab}`}
-        className="model-center-provider-panel"
-        id={panelId}
+        className="model-center-provider-panel tw:grid tw:min-w-0 tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus tw:forced-colors:focus-visible:shadow-none tw:forced-colors:focus-visible:outline-2 tw:forced-colors:focus-visible:outline-offset-[-2px] tw:forced-colors:focus-visible:outline-[color:Highlight]"
+        id={`${panelId}-panel-${activeTab}`}
         role="tabpanel"
         tabIndex={0}
       >

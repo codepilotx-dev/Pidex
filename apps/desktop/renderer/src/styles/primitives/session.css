@@ -1,0 +1,654 @@
+/*
+ * Session residue. Every rule here is one the utility set cannot express, and
+ * each block names its reason. Everything else in the former
+ * `features/_session-*.scss`, `features/thread-summary.scss` and
+ * `features/timeline.scss` moved to `tw:` utilities in the owning components.
+ *
+ * Blocks:
+ * - `::highlight()` is a real pseudo-element selector with no utility form, and
+ *   the same goes for the scrollbar and scroll-fade `::before`/`::after` layers.
+ * - `.popover-branch` / `.popover-thread-summary-branch` style the internals of
+ *   the shared popover surface (`popover.scss`, same layer) from the outside;
+ *   those descendants are rendered by `SearchablePopoverContent` and
+ *   `PopoverMenu`, which no session component owns. `.branch-popover-list-scroll`
+ *   keeps its `listClassName="branch-popover-list-scroll"` string verbatim
+ *   because `test/CodexStyleContracts.test.ts` asserts that exact attribute.
+ * - The turn-navigation marker needs sibling (`+`) and `:has()` relational
+ *   selectors plus a `linear()` easing, none of which exist as variants.
+ * - The preview card rewrites generated markdown DOM (`markdown.css`, same
+ *   layer) from a component that does not own that markup.
+ * - The composer return button and the summary capsule's focus ring pair state
+ *   overrides that must stay in one layer, and `@keyframes` for the workflow
+ *   card and the running-plan spinner that `tw:animate-*` cannot name without
+ *   a new `--animate-*` theme entry in `src/styles/tailwind.css`.
+ * - `test/ExecutionPlanCard.test.tsx` pins the changed-file row class.
+ *
+ * The main Agent must import this file at the end of `src/styles/tailwind.css`
+ * (after `./markdown.css`), so the `.md-body` and popover overrides below keep
+ * outranking the shared primitives they rewrite.
+ */
+@layer primitives {
+  ::highlight(conversation-action-selection) {
+    background: color-mix(in srgb, var(--cpx-sys-color-accent) 32%, transparent);
+    color: inherit;
+  }
+
+  /* --- Branch popover internals ------------------------------------- */
+
+  .popover.popover-thread-summary-branch {
+    width: min(360px, calc(100vw - 32px));
+    max-height: min(320px, calc(100vh - 96px));
+    padding: var(--cpx-sys-space-1);
+  }
+
+  .popover.popover-thread-summary-branch .popover-item,
+  .popover.popover-thread-summary-branch .popover-sub-trigger {
+    gap: var(--cpx-sys-space-2);
+    min-height: 32px;
+    padding: var(--cpx-sys-space-2);
+    border-radius: var(--cpx-sys-radius-md);
+  }
+
+  .popover.popover-thread-summary-branch .popover-section-title {
+    padding: var(--cpx-sys-space-1) var(--cpx-sys-space-3) var(--cpx-sys-space-2);
+    font: var(--cpx-sys-type-label);
+  }
+
+  .popover.popover-thread-summary-branch .popover-empty {
+    padding: var(--cpx-sys-space-3);
+    font: var(--cpx-sys-type-body-sm);
+  }
+
+  .popover.popover-branch,
+  .popover.popover-thread-summary-branch {
+    --popover-overflow-y: hidden;
+  }
+
+  .popover.popover-branch .popover-scroll-content,
+  .popover.popover-thread-summary-branch .popover-scroll-content {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .popover.popover-branch .popover-scroll-content > :not(.branch-popover-list-scroll),
+  .popover.popover-thread-summary-branch
+    .popover-scroll-content
+    > :not(.branch-popover-list-scroll) {
+    flex: 0 0 auto;
+  }
+
+  .popover.popover-branch .popover-scroll-content {
+    max-height: min(420px, calc(100vh - 32px));
+  }
+
+  .popover.popover-thread-summary-branch .popover-scroll-content {
+    max-height: min(320px, calc(100vh - 96px));
+  }
+
+  .branch-popover-list-scroll {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+
+  /* --- Conversation turn navigation --------------------------------- */
+
+  .conversation-turn-nav-list {
+    --rail-fade-start: 0px;
+    --rail-fade-end: 0px;
+
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      var(--cpx-sys-color-fg-primary) var(--rail-fade-start),
+      var(--cpx-sys-color-fg-primary) calc(100% - var(--rail-fade-end)),
+      transparent
+    );
+  }
+
+  .conversation-turn-nav-list[data-fade-start] {
+    --rail-fade-start: 40px;
+  }
+  .conversation-turn-nav-list[data-fade-end] {
+    --rail-fade-end: 40px;
+  }
+
+  .conversation-turn-nav-marker {
+    --marker-progress: 0;
+
+    display: block;
+    width: 26px;
+    height: 2px;
+    border-radius: var(--cpx-sys-radius-indicator);
+    background: var(--cpx-sys-color-fg-tertiary);
+    opacity: 0.4;
+    transform: scaleX(calc(0.2308 + 0.7692 * var(--marker-progress)));
+    transform-origin: left center;
+    transition:
+      transform var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out),
+      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
+      background-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
+  }
+
+  .conversation-turn-nav-bookmark-dot {
+    --marker-progress: 0;
+
+    flex: none;
+    width: 2px;
+    height: 2px;
+    border-radius: var(--cpx-sys-radius-indicator);
+    background: var(--cpx-sys-color-fg-primary);
+
+    /* 刻度布局宽度 26px 不随 scaleX 收缩；圆点沿视觉末端位移。 */
+    transform: translateX(calc((var(--marker-progress) - 1) * 20px));
+    transition: transform var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
+  }
+
+  .conversation-turn-nav-item[aria-current='true'] .conversation-turn-nav-marker {
+    background: var(--cpx-sys-color-fg-primary);
+    opacity: 0.6;
+  }
+
+  .conversation-turn-nav-item[data-running] .conversation-turn-nav-marker {
+    opacity: 0.72;
+  }
+  .conversation-turn-nav-item[data-neighbor-distance='1']
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+    --marker-progress: 0.7;
+  }
+  .conversation-turn-nav-item[data-neighbor-distance='2']
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+    --marker-progress: 0.4;
+  }
+  .conversation-turn-nav-item[data-neighbor-distance='3']
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+    --marker-progress: 0.2;
+  }
+
+  .conversation-turn-nav-item[data-interaction-target]
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+    --marker-progress: 1;
+
+    opacity: 1;
+    background: var(--cpx-sys-color-fg-primary);
+  }
+
+  :where(.conversation-turn-nav-list:has([data-interaction-target]))
+    .conversation-turn-nav-item[aria-current='true']:not([data-interaction-target])
+    .conversation-turn-nav-marker {
+    opacity: 0.4;
+    background: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  /* 已收藏刻度保持全不透明，圆点颜色跟随主前景。 */
+  .conversation-turn-nav-list
+    .conversation-turn-nav-item
+    .conversation-turn-nav-marker[data-bookmarked] {
+    opacity: 1;
+  }
+
+  .conversation-turn-nav-list[data-scrubbing]
+    :is(.conversation-turn-nav-marker, .conversation-turn-nav-bookmark-dot) {
+    transition: none;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .conversation-turn-nav-marker,
+    .conversation-turn-nav-bookmark-dot {
+      transition: none;
+    }
+  }
+
+  /* --- Turn preview markdown ---------------------------------------- */
+
+  .preview-card-assistant-text .md-body {
+    font: inherit;
+    color: inherit;
+  }
+
+  .preview-card-assistant-text .md-body p,
+  .preview-card-assistant-text .md-body li {
+    margin: 0;
+  }
+
+  .preview-card-assistant-text .md-body li + li {
+    margin-top: 0;
+  }
+
+  .preview-card-assistant-text .md-body p + p {
+    margin-top: var(--cpx-sys-space-1);
+  }
+
+  .preview-card-assistant-text .md-body .md-lead-description__detail {
+    margin-top: 0;
+  }
+
+  .preview-card-assistant-text .md-body ul,
+  .preview-card-assistant-text .md-body ol {
+    margin: var(--cpx-sys-space-1) 0;
+    padding-left: var(--cpx-sys-space-4);
+  }
+
+  .preview-card-assistant-text .md-body code {
+    font-size: var(--cpx-sys-font-size-code);
+    padding: 0 var(--cpx-sys-space-1);
+    border-radius: var(--cpx-sys-radius-compact);
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-tertiary) 10%, transparent);
+  }
+
+  .preview-card-assistant-text .md-body a {
+    color: inherit;
+    text-decoration: underline;
+    text-underline-offset: 1px;
+  }
+
+  /* --- MCP elicitation form ---------------------------------------- */
+
+  .mcp-form-field-input::placeholder {
+    color: var(--cpx-sys-color-fg-tertiary);
+    font-size: var(--cpx-sys-font-size-sm);
+  }
+
+  /* --- Workflow plan card scroll fade ------------------------------- */
+
+  .workflow-plan-card__body::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: 64px;
+    background: linear-gradient(
+      to bottom,
+      transparent 0%,
+      color-mix(in srgb, var(--cpx-sys-color-surface-recessed) 90%, transparent) 50%,
+      var(--cpx-sys-color-surface-recessed) 100%
+    );
+    pointer-events: none;
+  }
+
+  .workflow-plan-card__body[data-expanded='true']::after {
+    display: none;
+  }
+
+  /* --- Composer change summary -------------------------------------- */
+
+  /*
+   * The return button and its two glyph layers are one motion pair: the base
+   * state, the `hover`/`focus-visible` swap and the `data-running` override all
+   * animate `transform` and `opacity` together, so they stay in one layer
+   * instead of being split across `tw:` utilities and this file.
+   */
+  .composer-change-summary__return {
+    position: relative;
+    display: inline-flex;
+    width: 32px;
+    height: 32px;
+    flex: 0 0 32px;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
+    overflow: hidden;
+    border: 1px solid var(--cpx-sys-color-border-subtle);
+    border-radius: var(--cpx-sys-radius-full);
+    background: var(--cpx-sys-color-surface-canvas);
+    box-shadow: var(--cpx-sys-shadow-resting);
+    color: var(--cpx-sys-color-fg-primary);
+    cursor: pointer;
+    transition:
+      background var(--cpx-sys-motion-enter) var(--cpx-sys-ease-standard),
+      border-color var(--cpx-sys-motion-enter) var(--cpx-sys-ease-standard),
+      color var(--cpx-sys-motion-enter) var(--cpx-sys-ease-standard),
+      transform var(--cpx-sys-motion-enter) var(--cpx-sys-ease-standard);
+  }
+
+  .composer-change-summary__return:hover {
+    border-color: var(--cpx-sys-color-border-default);
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .composer-change-summary__return:active {
+    transform: scale(0.95);
+  }
+
+  .composer-change-summary__return:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+
+  .composer-change-summary__thinking-dots,
+  .composer-change-summary__down-arrow {
+    position: absolute;
+    transition:
+      opacity var(--cpx-sys-motion-enter) var(--cpx-sys-ease-standard),
+      transform var(--cpx-sys-motion-enter) var(--cpx-sys-ease-standard);
+  }
+
+  .composer-change-summary__thinking-dots {
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--cpx-sys-space-1);
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .composer-change-summary__thinking-dots span {
+    width: 6px;
+    height: 6px;
+    border-radius: var(--cpx-sys-radius-full);
+    background: currentcolor;
+    animation: composer-change-summary-dot-bounce var(--cpx-sys-motion-loading)
+      var(--cpx-sys-ease-standard) infinite;
+  }
+
+  .composer-change-summary__thinking-dots span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+
+  .composer-change-summary__thinking-dots span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+
+  .composer-change-summary__down-arrow {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  .composer-change-summary__return[data-running='true'] .composer-change-summary__down-arrow {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+
+  .composer-change-summary__return[data-running='true']:is(:hover, :focus-visible)
+    .composer-change-summary__thinking-dots {
+    opacity: 0;
+    transform: scale(0.75);
+  }
+
+  .composer-change-summary__return[data-running='true']:is(:hover, :focus-visible)
+    .composer-change-summary__down-arrow {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  /*
+   * The capsule's two action buttons replace the platform focus ring with the
+   * inset ring, and `forced-colors` swaps it back to an outline. Both stay next
+   * to each other so the forced-colors fallback still outranks the ring.
+   */
+  .composer-change-summary__plan:focus-visible,
+  .composer-change-summary__changes:focus-visible {
+    z-index: 2;
+    outline: none;
+    box-shadow: var(--cpx-sys-focus-ring-inset);
+  }
+
+  @media (forced-colors: active) {
+    .composer-change-summary__plan:focus-visible,
+    .composer-change-summary__changes:focus-visible {
+      box-shadow: none;
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+
+  /*
+   * `test/ExecutionPlanCard.test.tsx` pins the changed-file row to its own
+   * class attribute (`className="composer-change-summary__file-row"`), so the
+   * row's appearance cannot be expressed as utilities on that element.
+   */
+  .composer-change-summary__file-row {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    height: auto;
+    min-height: var(--cpx-sys-space-8);
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--cpx-sys-space-4);
+    padding: var(--cpx-sys-space-1) var(--cpx-sys-space-3);
+    border: 0;
+    border-radius: var(--cpx-sys-radius-compact);
+    background: transparent;
+    color: var(--cpx-sys-color-fg-primary);
+    font: var(--cpx-sys-type-body-sm);
+    text-align: start;
+  }
+
+  .composer-change-summary__file-row:hover {
+    background: var(--cpx-sys-color-hover);
+  }
+
+  .composer-change-summary__file-row:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 1px;
+  }
+
+  @keyframes composer-change-summary-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  /* --- Thread summary panel ----------------------------------------- */
+
+  .thread-summary-panel,
+  .thread-summary-error {
+    border-radius: var(--cpx-sys-radius-prominent);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  @supports (corner-shape: superellipse(1.5)) {
+    .thread-summary-panel,
+    .thread-summary-error {
+      corner-shape: var(--cpx-sys-corner-shape);
+    }
+  }
+
+  /*
+   * The panel keeps its base surface and the popover reset in one layer:
+   * `max-height`/`border-radius` resolve through `inherit`, so the override has
+   * to outrank the panel inside the same cascade layer as before.
+   */
+  .thread-summary-panel {
+    max-height: 100%;
+    border: 0;
+    background: var(--cpx-sys-color-surface-raised);
+    box-shadow: var(--cpx-sys-shadow-prominent);
+  }
+
+  .thread-summary-popover .thread-summary-panel,
+  .thread-summary-popover .thread-summary-error {
+    max-height: inherit;
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    backdrop-filter: none;
+    box-shadow: none;
+  }
+
+  /* Section divider and the toggle chevron are pseudo-element/state pairs. */
+  .thread-summary-section::after {
+    content: '';
+    position: absolute;
+    right: 14px;
+    bottom: 0;
+    left: 14px;
+    height: 0.5px;
+    background: var(--cpx-sys-color-border-subtle);
+  }
+
+  .thread-summary-section:last-child::after {
+    display: none;
+  }
+
+  .thread-summary-section__toggle > svg {
+    flex: 0 0 auto;
+    opacity: 0;
+    transition:
+      transform var(--cpx-sys-motion-disclosure) var(--cpx-sys-ease-disclosure),
+      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
+  }
+
+  .thread-summary-section__toggle[aria-expanded='false'] > svg {
+    opacity: 1;
+    transform: rotate(-90deg);
+  }
+
+  .thread-summary-section__toggle:hover > svg,
+  .thread-summary-section__toggle:focus-visible > svg {
+    opacity: 1;
+  }
+
+  .thread-summary-sources-overlay {
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 18%, transparent);
+  }
+
+  /* --- Session timeline scrollers ----------------------------------- */
+
+  /*
+   * Runtime scroll geometry for the thread scroller. ThreadScrollLayout writes
+   * `--thread-scroll-padding-bottom`/`-footer-height`/`-viewport-height` as
+   * inline styles; the two fade values are read by the bottom sentinel and by
+   * the sticky footer's fade pseudo-element in `_canonical-conversation.scss`.
+   */
+  .thread-scroll-layout {
+    --thread-scroll-footer-fade-height: 32px;
+    --thread-scroll-content-bottom-gap: 16px;
+    --thread-scroll-footer-height: 0px;
+    --thread-scroll-padding-bottom: 16px;
+    --thread-scroll-viewport-height: 100%;
+  }
+
+  /* --- Thread summary geometry -------------------------------------- */
+
+  /*
+   * 置顶摘要的共享宽度：内联面板从 `.workflow-page__main` 继承，浮层挂在
+   * Portal 上，必须自己再声明一次。值与迁移前一致（space-1 × 75 = 300px）。
+   */
+  .workflow-page__main,
+  .thread-summary-popover {
+    --thread-summary-inline-width: calc(var(--cpx-sys-space-1) * 75);
+  }
+
+  .workflow-page__main {
+    --thread-summary-inline-edge: var(--cpx-sys-space-4);
+  }
+
+  /* --- Quick chat surface geometry ---------------------------------- */
+
+  .quick-chat-view {
+    --page-content-max-width: var(--cpx-sys-layout-conversation-max-width);
+    --quick-chat-surface-width: min(var(--page-content-max-width), 100%);
+    padding-top: var(--cpx-sys-space-4);
+  }
+
+  /*
+   * 新会话页在窄高度下收紧上内边距与英雄区高度：这两组值一个是 720px 视口
+   * 媒体查询、一个是 min() 混合值，utility 只能覆盖其一，因此保持成对声明。
+   */
+
+  .coding-chat-view .quick-chat-hero-region {
+    min-height: 320px;
+    padding-bottom: var(--cpx-sys-space-6);
+  }
+
+  .chat-home-view .chat-home-region {
+    --chat-home-region-padding-block: min(10vh, calc(var(--cpx-sys-space-1) * 20));
+
+    gap: var(--cpx-sys-space-7);
+    padding-block: var(--chat-home-region-padding-block);
+  }
+
+  @media (max-height: 720px) {
+    .coding-chat-view .quick-chat-hero-region {
+      min-height: 260px;
+      padding-bottom: var(--cpx-sys-space-4);
+    }
+
+    .chat-home-view .chat-home-region {
+      gap: var(--cpx-sys-space-5);
+      padding-block: var(--cpx-sys-space-4);
+    }
+  }
+
+  /* 建议卡片的语气色默认值；`is-*` 覆盖由 TSX 里的静态映射表提供。 */
+  .new-session-suggestions {
+    --new-session-suggestion-tone: var(--cpx-sys-color-accent);
+  }
+
+  .thread-scroll-layout::-webkit-scrollbar,
+  .conversation-turn-nav-list::-webkit-scrollbar {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+
+  .thread-scroll-layout__footer::before {
+    content: '';
+    position: absolute;
+    z-index: -1;
+    inset: calc(0px - var(--thread-scroll-footer-fade-height)) 0 0;
+    pointer-events: none;
+    background: none;
+  }
+
+  /* --- Session timeline entrance ------------------------------------ */
+
+  @keyframes session-timeline-fade-in {
+    from {
+      opacity: 0;
+    }
+
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* --- Forced-colors surfaces --------------------------------------- */
+
+  @media (forced-colors: active) {
+    .thread-summary-panel,
+    .thread-summary-error {
+      outline: 1px solid CanvasText;
+      box-shadow: none;
+    }
+
+    .conversation-turn-nav-marker {
+      background: ButtonText;
+      forced-color-adjust: none;
+    }
+
+    .conversation-turn-nav-bookmark-dot {
+      background: ButtonText;
+      forced-color-adjust: none;
+    }
+
+    .conversation-turn-preview-card {
+      border-color: CanvasText;
+      background: Canvas;
+      color: CanvasText;
+      box-shadow: none;
+      forced-color-adjust: none;
+    }
+  }
+
+  /* --- Workflow entrance animation ---------------------------------- */
+
+  @keyframes workflow-item-in {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}

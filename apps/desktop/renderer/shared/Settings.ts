@@ -1,0 +1,26 @@
+export type {
+  DesktopAuthStatus,
+  DesktopDrawerTab,
+  ProjectAppearance,
+  ProjectAppearanceColor,
+  ProjectAppearanceIcon,
+  DesktopStoredSettings,
+} from './Types.js'
+export {
+  defaultDesktopStoredSettings,
+  DEFAULT_PROJECT_APPEARANCE,
+  DESKTOP_DRAWER_TABS,
+  DESKTOP_PERMISSION_MODES,
+  DESKTOP_THINKING_MODES,
+  isDesktopDrawerTab,
+  isDesktopPermissionMode,
+  isDesktopThinkingMode,
+  isModelProviderID,
+  MAX_RECENT_WORKSPACES,
+  normalizeProjectAppearances,
+  normalizeDesktopStoredSettings,
+  normalizeDesktopWorkspaces,
+  upsertRecentWorkspace,
+  PROJECT_APPEARANCE_COLORS,
+  PROJECT_APPEARANCE_ICONS,
+} from './SettingsSchema.js'

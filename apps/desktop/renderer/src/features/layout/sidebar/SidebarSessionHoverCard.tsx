@@ -3,8 +3,9 @@ import { useEffect, useRef, useState } from 'react'
 import {
   sessionDisplayTitle,
   sessionEditableTitle,
+  sessionResolvedTitle,
   type SessionListItem,
-} from '../../../uiTypes.js'
+} from '../../../UiTypes.js'
 import { SidebarHoverCard } from './SidebarHoverCard.js'
 import { SidebarSessionHoverCardOverlay } from './SidebarSessionHoverCardOverlay.js'
 
@@ -20,6 +21,7 @@ export type SidebarSessionHoverCardModel = {
   projectLabel: string
   gitBranch: string | null
   unread: boolean
+  isRunning: boolean
 }
 
 export function formatSidebarSessionRelativeTime(
@@ -43,19 +45,16 @@ export function buildSidebarSessionHoverCardModel(
   fallbackTitle: string | undefined,
   now: number,
 ): SidebarSessionHoverCardModel {
-  const projectLabel = session.standalone
-    ? '会话'
-    : session.workspaceName.trim() || '会话'
+  const projectLabel = session.standalone ? '会话' : session.workspaceName.trim() || '会话'
   const gitBranch = session.gitBranch?.trim() || null
+  const resolved = sessionResolvedTitle(session, fallbackTitle)?.trim()
   return {
-    title: sessionDisplayTitle(session, fallbackTitle),
-    relativeTime: formatSidebarSessionRelativeTime(
-      session.lastMessageAt ?? session.createdAt,
-      now,
-    ),
+    title: resolved || sessionDisplayTitle(session, fallbackTitle),
+    relativeTime: formatSidebarSessionRelativeTime(session.lastMessageAt ?? session.createdAt, now),
     projectLabel,
     gitBranch,
     unread: Boolean(session.unreadAt),
+    isRunning: session.status === 'running',
   }
 }
 
@@ -76,11 +75,7 @@ export function SidebarSessionHoverCard({
   session,
   onRename,
 }: Props): React.ReactNode {
-  const model = buildSidebarSessionHoverCardModel(
-    session,
-    fallbackTitle,
-    now,
-  )
+  const model = buildSidebarSessionHoverCardModel(session, fallbackTitle, now)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [renameValue, setRenameValue] = useState(model.title)
@@ -93,12 +88,17 @@ export function SidebarSessionHoverCard({
     if (!editing) setRenameValue(model.title)
   }, [editing, model.title])
 
+  // 标题重生成期间不渲染悬浮卡，但 hooks 必须无条件执行，否则标题状态翻转会改变 hook 顺序。
+  if (regeneratingTitle) {
+    return children
+  }
+
   function startRename(): void {
     if (!onRename) return
     setRenameValue(sessionEditableTitle(session, fallbackTitle))
     setEditing(true)
     setOpen(true)
-    setFocusRequest(current => current + 1)
+    setFocusRequest((current) => current + 1)
   }
 
   function cancelRename(): void {
@@ -134,13 +134,13 @@ export function SidebarSessionHoverCard({
     <SidebarHoverCard
       lockOpen={editing}
       open={open}
-      onAnchorKeyDown={event => {
+      onAnchorKeyDown={(event) => {
         if (event.key !== 'F2' || !onRename) return
         event.preventDefault()
         startRename()
       }}
       onOpenChange={setOpen}
-      renderOverlay={interactionProps => (
+      renderOverlay={(interactionProps) => (
         <SidebarSessionHoverCardOverlay
           {...interactionProps}
           editing={editing}
@@ -153,9 +153,7 @@ export function SidebarSessionHoverCard({
           onCancelRename={cancelRename}
           onFocusRequestHandled={() => setFocusRequest(0)}
           onRenameValueChange={setRenameValue}
-          onSaveRename={() => void saveRename(
-            interactionProps.returnFocusToAnchor,
-          )}
+          onSaveRename={() => void saveRename(interactionProps.returnFocusToAnchor)}
           onStartRename={startRename}
         />
       )}
@@ -165,9 +163,7 @@ export function SidebarSessionHoverCard({
   )
 }
 
-function refocusRenameInput(
-  inputRef: React.RefObject<HTMLInputElement | null>,
-): void {
+function refocusRenameInput(inputRef: React.RefObject<HTMLInputElement | null>): void {
   requestAnimationFrame(() => {
     inputRef.current?.focus()
     inputRef.current?.select()

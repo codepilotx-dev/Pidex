@@ -1,4 +1,4 @@
-# CodePilotX v2 stability baseline
+# Pidex v2 stability baseline
 
 Status: Frozen for RPC v4 design
 

@@ -1,0 +1,156 @@
+/*
+ * Primitive residue. Generated from switch.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer primitives {
+  /* ===== Shared Toggle Switch Patterns ===== */
+  .chat-input__dropdown-switch,
+  .context-menu-switch {
+    box-sizing: border-box;
+    border: 1px solid var(--cpx-sys-color-border-default);
+    background: var(--cpx-comp-switch-bg);
+    box-shadow: none;
+    outline: none;
+    transition:
+      background-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard),
+      border-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard),
+      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+  }
+  .chat-input__dropdown-switch:hover:not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'])
+    ),
+  .context-menu-switch:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 20%, transparent);
+  }
+  .chat-input__dropdown-switch:active:not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'])
+    ),
+  .context-menu-switch:active:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: var(--cpx-sys-color-selected);
+  }
+  .chat-input__dropdown-switch:focus-visible,
+  .context-menu-switch:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+  .chat-input__dropdown-switch[data-state='unchecked'],
+  .context-menu-switch[data-state='unchecked'] {
+    background: var(--cpx-comp-switch-bg);
+  }
+  .chat-input__dropdown-switch[data-state='checked'],
+  .chat-input__dropdown-switch[aria-checked='true'],
+  .context-menu-switch[data-state='checked'],
+  .context-menu-switch[aria-checked='true'] {
+    background: var(--cpx-sys-color-accent);
+    border-color: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 72%,
+      var(--cpx-sys-color-border-default)
+    );
+  }
+  .chat-input__dropdown-switch[data-state='checked']:hover:not(:where(:disabled, [data-disabled])),
+  .chat-input__dropdown-switch[aria-checked='true']:hover:not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'])
+    ),
+  .context-menu-switch[data-state='checked']:hover:not(:where(:disabled, [data-disabled])),
+  .context-menu-switch[aria-checked='true']:hover:not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'])
+    ) {
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 8%, var(--cpx-sys-color-accent));
+  }
+  .chat-input__dropdown-switch[data-state='checked']:active:not(:where(:disabled, [data-disabled])),
+  .chat-input__dropdown-switch[aria-checked='true']:active:not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'])
+    ),
+  .context-menu-switch[data-state='checked']:active:not(:where(:disabled, [data-disabled])),
+  .context-menu-switch[aria-checked='true']:active:not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'])
+    ) {
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 14%,
+      var(--cpx-sys-color-accent)
+    );
+  }
+  .chat-input__dropdown-switch:disabled,
+  .chat-input__dropdown-switch[data-disabled],
+  .chat-input__dropdown-switch[aria-disabled='true'],
+  .context-menu-switch:disabled,
+  .context-menu-switch[data-disabled],
+  .context-menu-switch[aria-disabled='true'] {
+    border-color: var(--cpx-sys-color-border-subtle);
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-disabled) 12%,
+      var(--cpx-comp-surface-panel)
+    );
+    color: var(--cpx-sys-color-fg-disabled);
+    outline: none;
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  .chat-input__dropdown-switch-thumb,
+  .context-menu-switch-thumb {
+    box-sizing: border-box;
+    border: 1px solid var(--cpx-sys-color-border-default);
+    background: var(--cpx-comp-switch-thumb-fill);
+    box-shadow: var(--cpx-comp-switch-thumb-shadow);
+  }
+
+  .chat-input__dropdown-switch:is(:disabled, [data-disabled], [aria-disabled='true'])
+    .chat-input__dropdown-switch-thumb,
+  .context-menu-switch:is(:disabled, [data-disabled], [aria-disabled='true'])
+    .context-menu-switch-thumb {
+    border-color: var(--cpx-sys-color-border-subtle);
+    background: var(--cpx-comp-surface-raised);
+    box-shadow: none;
+  }
+
+  /* --- Chat Input Dropdown Switch --- */
+  .chat-input__dropdown-switch {
+    width: 36px;
+    height: 22px;
+    margin-left: auto;
+    flex: 0 0 auto;
+    border-radius: var(--cpx-comp-switch-radius);
+    cursor: pointer;
+  }
+
+  .chat-input__dropdown-switch-thumb {
+    display: block;
+    width: 16px;
+    height: 16px;
+    margin: 3px;
+    border-radius: var(--cpx-sys-radius-full);
+    box-shadow: var(--cpx-comp-switch-thumb-shadow);
+    transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+  }
+
+  .chat-input__dropdown-switch[aria-checked='true'] .chat-input__dropdown-switch-thumb {
+    transform: translateX(14px);
+  }
+
+  :root[data-reduce-motion='on'] .chat-input__dropdown-switch,
+  :root[data-reduce-motion='on'] .context-menu-switch,
+  :root[data-reduce-motion='on'] .chat-input__dropdown-switch-thumb,
+  :root[data-reduce-motion='on'] .context-menu-switch-thumb {
+    transition: none;
+  }
+
+  @media (forced-colors: active) {
+    .chat-input__dropdown-switch-thumb,
+    .context-menu-switch-thumb {
+      border-color: ButtonText;
+      background: ButtonText;
+    }
+    .chat-input__dropdown-switch:is(:disabled, [data-disabled], [aria-disabled='true'])
+      .chat-input__dropdown-switch-thumb,
+    .context-menu-switch:is(:disabled, [data-disabled], [aria-disabled='true'])
+      .context-menu-switch-thumb {
+      border-color: GrayText;
+      background: GrayText;
+      box-shadow: none;
+    }
+  }
+}

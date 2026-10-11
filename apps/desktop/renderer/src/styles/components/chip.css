@@ -1,0 +1,137 @@
+/*
+ * Primitive residue. Generated from chip.scss by
+ * flattening its nesting: the renderer no longer compiles Sass.
+ */
+@layer primitives {
+  /* ===== Shared Chip / Badge Patterns ===== */
+
+  /* --- Chip Button --- */
+  .chip-button {
+    appearance: none;
+    display: inline-flex;
+    width: auto;
+    min-height: var(--cpx-comp-row-height-composer);
+    align-items: center;
+    gap: var(--cpx-comp-row-gap);
+    padding: 0 var(--cpx-comp-row-padding-inline);
+    border: 0;
+    border-radius: var(--cpx-sys-radius-full);
+    background: transparent;
+    box-shadow: none;
+    color: var(--cpx-sys-color-accent-fg);
+    font: var(--cpx-sys-type-control);
+    cursor: pointer;
+    outline: none;
+  }
+  .chip-button.subtle {
+    color: var(--cpx-sys-color-fg-primary);
+  }
+  .chip-button > svg {
+    width: var(--cpx-sys-icon-size);
+    height: var(--cpx-sys-icon-size);
+    display: block;
+    flex-shrink: 0;
+  }
+  .chip-button:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 1px;
+  }
+  .chip-button:disabled {
+    color: var(--cpx-sys-color-fg-disabled);
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  /* --- Chip & Meta-chip Hover / Active --- */
+  .composer .chip-button:hover:not(:disabled),
+  .menubar-trigger:hover:not(:where(:disabled, [data-disabled])),
+  .menubar-trigger[data-highlighted]:not(:where(:disabled, [data-disabled])) {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .composer .chip-button:active:not(:disabled),
+  .menubar-trigger:active:not(:where(:disabled, [data-disabled])) {
+    background: var(--cpx-sys-color-selected);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  /* An open chip trigger exposes aria-expanded and needs the same selected
+     background the meta chip already owns, plus a
+     flipped chevron that signals the open menu. */
+  .composer .chip-button[aria-expanded='true'] {
+    background: var(--cpx-sys-color-selected);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .composer .chip-button[aria-expanded='true'] > svg:last-child {
+    transform: rotate(180deg);
+  }
+
+  .composer .chip-button > svg:last-child:not(.chip-button-spinner) {
+    transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+  }
+
+  .menubar-trigger[data-state='open'] {
+    background: var(--cpx-sys-color-selected);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  /* --- Accent-colored chips --- */
+  .chip-button,
+  .composer-plan-mode-chip.active,
+  .composer-plan-mode-chip:hover,
+  .automation-header-meta a,
+  .profile-repository-row:hover .profile-repository-name,
+  .plugins-hero-command,
+  .chat-input__dropdown-check {
+    color: var(--cpx-sys-color-accent-fg);
+  }
+
+  /* --- Semantic Tinted Chips & Badges --- */
+  .chip-semantic {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cpx-sys-space-1);
+    padding: 2px var(--cpx-sys-space-2);
+    border-radius: var(--cpx-sys-radius-full);
+    font: var(--cpx-sys-type-label);
+    border: 1px solid transparent;
+  }
+  .chip-semantic > svg {
+    width: var(--cpx-sys-icon-size-sm);
+    height: var(--cpx-sys-icon-size-sm);
+    display: block;
+    flex-shrink: 0;
+  }
+  .chip-semantic.success {
+    background: var(--cpx-comp-chip-success-bg);
+    border-color: var(--cpx-comp-chip-success-border);
+    color: var(--cpx-comp-chip-success-fg);
+  }
+  .chip-semantic.danger {
+    background: var(--cpx-comp-chip-danger-bg);
+    border-color: var(--cpx-comp-chip-danger-border);
+    color: var(--cpx-comp-chip-danger-fg);
+  }
+  .chip-semantic.warning {
+    background: var(--cpx-comp-chip-warning-bg);
+    border-color: var(--cpx-comp-chip-warning-border);
+    color: var(--cpx-comp-chip-warning-fg);
+  }
+  .chip-semantic.skill {
+    background: var(--cpx-comp-chip-skill-bg);
+    border-color: var(--cpx-comp-chip-skill-border);
+    color: var(--cpx-comp-chip-skill-fg);
+  }
+  .chip-semantic.info {
+    background: var(--cpx-comp-chip-info-bg);
+    border-color: var(--cpx-comp-chip-info-border);
+    color: var(--cpx-comp-chip-info-fg);
+  }
+  .chip-semantic.accent {
+    background: var(--cpx-comp-chip-accent-bg);
+    border-color: var(--cpx-comp-chip-accent-border);
+    color: var(--cpx-comp-chip-accent-fg);
+  }
+}

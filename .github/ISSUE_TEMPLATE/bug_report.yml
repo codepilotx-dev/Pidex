@@ -1,6 +1,6 @@
 name: 缺陷报告
-description: 提交可复现的 CodePilotX 行为问题
-title: "[Bug] "
+description: 提交可复现的 Pidex 行为问题
+title: '[Bug] '
 labels:
   - bug
 body:
@@ -20,7 +20,7 @@ body:
   - type: input
     id: version
     attributes:
-      label: CodePilotX 版本
+      label: Pidex 版本
       description: 可在应用关于或更新页面查看；源码构建请填写提交 SHA。
       placeholder: 0.2.0-beta.3 或 abc1234
     validations:

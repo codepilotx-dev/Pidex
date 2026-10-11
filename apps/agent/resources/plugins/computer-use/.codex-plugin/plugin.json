@@ -1,0 +1,16 @@
+{
+  "name": "computer-use",
+  "version": "1.0.0",
+  "description": "读取并操作本机 Windows 应用界面。",
+  "author": { "name": "Pidex" },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Computer Use",
+    "shortDescription": "通过 Pidex 控制 Windows 应用",
+    "longDescription": "发现已运行的 Windows 应用与窗口，读取已授权窗口的界面和截图，执行鼠标与键盘操作。插件启停与应用授权分别管理。",
+    "developerName": "Pidex",
+    "category": "Productivity",
+    "capabilities": ["窗口发现", "界面与截图读取", "鼠标与键盘操作"],
+    "defaultPrompt": ["使用电脑控制帮我操作已运行的应用。"]
+  }
+}

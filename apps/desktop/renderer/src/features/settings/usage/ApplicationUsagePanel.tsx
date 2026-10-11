@@ -1,14 +1,10 @@
-import type { RpcParams, RpcResult } from '@codepilotx/agent-protocol'
+import type { RpcParams, RpcResult } from '@pidex/agent-protocol'
 import React, { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button } from '../../../components/ui/Button.js'
 import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
 import { SkeletonBlock, SkeletonRegion } from '../../../components/ui/Skeleton.js'
-import {
-  formatCompactCount,
-  formatCount,
-  formatUsdAmount,
-} from '../../../utils/usageFormatters.js'
+import { formatCompactCount, formatCount, formatUsdAmount } from '../../../utils/UsageFormatters.js'
 
 type LocalRange = RpcParams<'usage/local/get'>['range']
 type LocalUsage = RpcResult<'usage/local/get'>
@@ -52,7 +48,9 @@ export function ApplicationUsagePanel({
       <div className="usage-empty-state" role="status">
         <h3>暂时无法读取应用用量</h3>
         <p>{error ?? '本机还没有可归属到模型的调用记录。'}</p>
-        <Button onClick={onRefresh}>重新读取</Button>
+        <Button color="secondary" onClick={onRefresh}>
+          重新读取
+        </Button>
       </div>
     )
   }
@@ -110,14 +108,20 @@ export function ApplicationUsagePanel({
             options={RANGE_OPTIONS}
             value={range}
           />
-          <Button loading={loading} onClick={onRefresh}>刷新</Button>
+          <Button color="secondary" loading={loading} onClick={onRefresh}>
+            刷新
+          </Button>
         </div>
       </div>
 
-      {error ? <div className="usage-inline-error" role="status">{error}</div> : null}
+      {error ? (
+        <div className="usage-inline-error" role="status">
+          {error}
+        </div>
+      ) : null}
 
       <div className="usage-metric-grid">
-        {metrics.map(metric => (
+        {metrics.map((metric) => (
           <article className="usage-metric-card" key={metric.label}>
             <span>{metric.label}</span>
             <strong>{metric.value}</strong>
@@ -174,18 +178,14 @@ function ApplicationUsageSkeleton(): React.ReactNode {
   )
 }
 
-function UsageHeatmap({
-  points,
-}: {
-  points: LocalUsage['heatmap']
-}): React.ReactNode {
-  const max = Math.max(1, ...points.map(point => point.totalTokens))
+function UsageHeatmap({ points }: { points: LocalUsage['heatmap'] }): React.ReactNode {
+  const max = Math.max(1, ...points.map((point) => point.totalTokens))
   if (points.length === 0) {
     return <p className="usage-chart-empty">所选时间范围内暂无活跃记录。</p>
   }
   return (
     <div aria-label="每日活跃热力图" className="usage-heatmap" role="list">
-      {points.map(point => {
+      {points.map((point) => {
         const intensity = Math.max(1, Math.ceil((point.totalTokens / max) * 4))
         return (
           <span
@@ -217,21 +217,16 @@ function TokenTrendChart({
 }): React.ReactNode {
   const [activeDate, setActiveDate] = useState(daily.at(-1)?.date ?? '')
   const models = useMemo<TrendModel[]>(() => {
-    const leading = modelRanking.slice(0, 5).map(model => ({
+    const leading = modelRanking.slice(0, 5).map((model) => ({
       key: `${model.providerId}/${model.modelId}`,
       label: model.displayName,
     }))
-    return modelRanking.length > 5
-      ? [...leading, { key: 'other', label: '其他' }]
-      : leading
+    return modelRanking.length > 5 ? [...leading, { key: 'other', label: '其他' }] : leading
   }, [modelRanking])
-  const chartData = useMemo(
-    () => daily.map(day => trendDay(day, models)),
-    [daily, models],
-  )
-  const max = Math.max(1, ...chartData.map(day => day.total))
+  const chartData = useMemo(() => daily.map((day) => trendDay(day, models)), [daily, models])
+  const max = Math.max(1, ...chartData.map((day) => day.total))
   const width = Math.max(560, chartData.length * 30)
-  const active = chartData.find(day => day.date === activeDate) ?? chartData.at(-1)
+  const active = chartData.find((day) => day.date === activeDate) ?? chartData.at(-1)
 
   if (daily.length === 0) {
     return <p className="usage-chart-empty">所选时间范围内暂无 Token 记录。</p>
@@ -285,42 +280,51 @@ function TokenTrendChart({
       <div aria-live="polite" className="usage-chart-detail">
         <strong>{active?.date ?? '—'}</strong>
         <span>{formatCount(active?.total)} Token</span>
-        {active?.values.map((value, index) => value > 0 ? (
-          <span key={models[index]?.key}>
-            <i style={{ background: CHART_COLORS[index] }} />
-            {models[index]?.label} {formatCompactCount(value)}
-          </span>
-        ) : null)}
+        {active?.values.map((value, index) =>
+          value > 0 ? (
+            <span key={models[index]?.key}>
+              <i style={{ background: CHART_COLORS[index] }} />
+              {models[index]?.label} {formatCompactCount(value)}
+            </span>
+          ) : null,
+        )}
       </div>
       <div aria-label="图表模型图例" className="usage-chart-legend">
         {models.map((model, index) => (
-          <span key={model.key}><i style={{ background: CHART_COLORS[index] }} />{model.label}</span>
+          <span key={model.key}>
+            <i style={{ background: CHART_COLORS[index] }} />
+            {model.label}
+          </span>
         ))}
       </div>
     </div>
   )
 }
 
-function trendDay(day: DailyUsage, models: TrendModel[]): {
+function trendDay(
+  day: DailyUsage,
+  models: TrendModel[],
+): {
   date: string
   total: number
   values: number[]
 } {
-  const leadingKeys = new Set(models.filter(model => model.key !== 'other').map(model => model.key))
+  const leadingKeys = new Set(
+    models.filter((model) => model.key !== 'other').map((model) => model.key),
+  )
   const byKey = new Map(
-    day.models.map(model => [
-      `${model.providerId}/${model.modelId}`,
-      model.totalTokens,
-    ]),
+    day.models.map((model) => [`${model.providerId}/${model.modelId}`, model.totalTokens]),
   )
   return {
     date: day.date,
     total: day.totals.totalTokens,
-    values: models.map(model => model.key === 'other'
-      ? day.models
-          .filter(item => !leadingKeys.has(`${item.providerId}/${item.modelId}`))
-          .reduce((sum, item) => sum + item.totalTokens, 0)
-      : byKey.get(model.key) ?? 0),
+    values: models.map((model) =>
+      model.key === 'other'
+        ? day.models
+            .filter((item) => !leadingKeys.has(`${item.providerId}/${item.modelId}`))
+            .reduce((sum, item) => sum + item.totalTokens, 0)
+        : (byKey.get(model.key) ?? 0),
+    ),
   }
 }
 
@@ -349,24 +353,34 @@ function ModelDistribution({
         role="img"
         style={{ background: `conic-gradient(${segments.join(',')})` }}
       >
-        <span><strong>{formatCompactCount(total)}</strong><small>Token</small></span>
+        <span>
+          <strong>{formatCompactCount(total)}</strong>
+          <small>Token</small>
+        </span>
       </div>
       <ol className="usage-model-ranking">
-        {models.length === 0 ? <li>暂无模型用量</li> : models.map((model, index) => (
-          <li key={`${model.providerId}/${model.modelId}`}>
-            <i style={{ background: CHART_COLORS[Math.min(index, 5)] }} />
-            <span>
-              <Link
-                className="usage-provider-link"
-                to={`/models?view=providers&provider=${encodeURIComponent(String(model.providerId))}&section=models`}
-              >
-                {model.displayName}
-              </Link>
-              <small>{model.providerId}</small>
-            </span>
-            <span>{model.sharePercent.toFixed(1)}%<small>{formatCompactCount(model.totalTokens)} Token</small></span>
-          </li>
-        ))}
+        {models.length === 0 ? (
+          <li>暂无模型用量</li>
+        ) : (
+          models.map((model, index) => (
+            <li key={`${model.providerId}/${model.modelId}`}>
+              <i style={{ background: CHART_COLORS[Math.min(index, 5)] }} />
+              <span>
+                <Link
+                  className="usage-provider-link"
+                  to={`/settings/providers?provider=${encodeURIComponent(String(model.providerId))}&section=models`}
+                >
+                  {model.displayName}
+                </Link>
+                <small>{model.providerId}</small>
+              </span>
+              <span>
+                {model.sharePercent.toFixed(1)}%
+                <small>{formatCompactCount(model.totalTokens)} Token</small>
+              </span>
+            </li>
+          ))
+        )}
       </ol>
     </div>
   )

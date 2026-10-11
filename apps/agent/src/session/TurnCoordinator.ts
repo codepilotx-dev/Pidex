@@ -1,6 +1,6 @@
-import { AgentError } from "../domain"
+import { AgentError } from '../Domain'
 
-export type TurnTerminalStatus = "completed" | "failed" | "interrupted"
+export type TurnTerminalStatus = 'completed' | 'failed' | 'interrupted'
 
 export type ActiveTurnHandle = {
   threadID: string
@@ -28,7 +28,9 @@ export class TurnCoordinator {
   async exclusive<T>(threadID: string, operation: () => Promise<T> | T): Promise<T> {
     const previous = this.gates.get(threadID) ?? Promise.resolve()
     let release!: () => void
-    const current = new Promise<void>((resolve) => { release = resolve })
+    const current = new Promise<void>((resolve) => {
+      release = resolve
+    })
     const queued = previous.catch(() => undefined).then(() => current)
     this.gates.set(threadID, queued)
     await previous.catch(() => undefined)
@@ -47,11 +49,14 @@ export class TurnCoordinator {
   reserve(threadID: string, turnID: string): ActiveTurnHandle {
     const existing = this.handles.get(threadID)
     if (existing) {
-      if (existing.turnID !== turnID) throw new AgentError("TURN_ACTIVE", "当前 Thread 已有运行中的 Turn", 409)
+      if (existing.turnID !== turnID)
+        throw new AgentError('TURN_ACTIVE', '当前 Thread 已有运行中的 Turn', 409)
       return existing
     }
     let resolveTerminal!: (status: TurnTerminalStatus) => void
-    const terminal = new Promise<TurnTerminalStatus>((resolve) => { resolveTerminal = resolve })
+    const terminal = new Promise<TurnTerminalStatus>((resolve) => {
+      resolveTerminal = resolve
+    })
     const handle: InternalTurnHandle = {
       threadID,
       turnID,
@@ -94,7 +99,7 @@ export class TurnCoordinator {
   private require(threadID: string, turnID: string): InternalTurnHandle {
     const handle = this.handles.get(threadID)
     if (!handle || handle.turnID !== turnID) {
-      throw new AgentError("TURN_ID_MISMATCH", "活动 Turn 已变化，请刷新后重试", 409)
+      throw new AgentError('TURN_ID_MISMATCH', '活动 Turn 已变化，请刷新后重试', 409)
     }
     return handle
   }

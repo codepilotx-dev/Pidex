@@ -1,46 +1,410 @@
+/*
+ * Desktop global style entry.
+ *
+ * The layer order is declared here once and must stay identical to
+ * style-contracts.json#cascadeLayerOrder. Tailwind supplies the theme and
+ * utility layers; reset/tokens are plain CSS so the design system no longer
+ * depends on Sass compilation.
+ */
 @layer theme, vendor, reset, tokens, primitives, shell, features, utilities, overrides;
-@import "tailwindcss/theme.css" layer(theme) prefix(tw);
-@import "tailwindcss/utilities.css" layer(utilities) source("../") prefix(tw);
 
+@import 'tailwindcss/theme.css' layer(theme) prefix(tw);
+@import 'tailwindcss/utilities.css' layer(utilities) source('../') prefix(tw);
+@import './base.css';
+@import './design-system/tokens.css';
+@import './design-system/codex-semantic-tokens.css';
+@import './primitives/scroll-area.css';
+@import './primitives/skeleton.css';
+@import './primitives/search-input.css';
+@import './primitives/date-picker.css';
+@import './primitives/switch.css';
+@import './primitives/chrome.css';
+@import './primitives/right-dock.css';
+@import './primitives/button.css';
+@import './primitives/overlays.css';
+@import './primitives/sidebar.css';
+@import './primitives/review.css';
+@import './primitives/session.css';
+@import './primitives/settings.css';
+@import './primitives/file-editor.css';
+@import './primitives/composer.css';
+@import './primitives/conversation.css';
+@import './components/card.css';
+@import './components/chip.css';
+@import './components/input.css';
+@import './components/interactive-row.css';
+@import './components/menu-item.css';
+@import './components/switch.css';
+@import './popover.css';
+@import './modal.css';
+@import './features/layout-workbench.css';
+@import './features/layout-workspace-header.css';
+@import './features/layout-right-dock.css';
+@import './features/layout-right-dock-panels.css';
+@import './features/composer-shell.css';
+@import './features/composer-controls.css';
+@import './features/composer-status.css';
+@import './features/primary-page.css';
+@import './role-weight.css';
+@import './markdown.css';
+
+/*
+ * Static theme values. `--*: initial` drops Tailwind's default palette so the
+ * design system stays the only source of colour, type and motion scales.
+ */
 @theme {
   --*: initial;
   --spacing: 0.25rem;
 
-  --text-xs: 11px;
-  --text-sm: 12px;
-  --text-base: 14px;
-  --text-lg: 16px;
-  --text-xl: 28px;
+  /*
+   * The design system has no letter-spacing scale, but `tracking-normal` is the
+   * documented reset applied after an inherited-font override, so it stays.
+   */
+  --tracking-normal: normal;
+  --tracking-tighter: -0.05em;
+  --tracking-tight: -0.025em;
+  --tracking-wide: 0.025em;
+  --tracking-wider: 0.05em;
+  --tracking-widest: 0.1em;
 
-  --radius-2xs: 0.125rem;
-  --radius-xs: 0.25rem;
-  --radius-sm: 0.375rem;
-  --radius-md: 0.5rem;
-  --radius-lg: 0.625rem;
-  --radius-xl: 0.75rem;
-  --radius-2xl: 1rem;
+  @keyframes pulse {
+    50% {
+      opacity: 0.5;
+    }
+  }
 
-  --shadow-sm: 0 1px 2px -1px #00000014;
-  --shadow-md: 0 2px 4px -1px #00000014;
-  --shadow-lg: 0 4px 8px -2px #0000001a;
+  @keyframes spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
 }
 
+/*
+ * Runtime design tokens. Each entry references a --cpx-sys-* variable that the
+ * active theme resolves, so the mapping must be inline: utilities need the live
+ * variable reference instead of a duplicated static value.
+ */
 @theme inline {
-  --font-sans: var(--font-family-sans);
-  --font-mono: var(--font-family-mono);
-  --color-app-canvas: var(--color-token-main-surface-primary);
-  --color-app-underlay: var(--color-token-bg-primary);
-  --color-app-chrome: var(--color-token-side-bar-background);
-  --color-app-panel: var(--color-token-bg-secondary);
-  --color-app-raised: var(--color-token-editor-widget-background);
-  --color-app-text: var(--color-token-foreground);
-  --color-app-text-soft: var(--color-token-text-secondary);
-  --color-app-border: var(--color-token-border);
-  --color-app-accent: var(--color-token-text-link-foreground);
-  --color-app-primary-action: var(--color-token-button-background);
-  --color-app-primary-action-foreground: var(--color-token-button-foreground);
-  --color-app-border-subtle: var(--color-token-border-light);
-  --color-app-border-strong: var(--color-token-border-heavy);
-  --color-app-danger: var(--color-token-error-foreground);
-  --color-app-success: var(--color-token-git-decoration-added-resource-foreground);
+  --font-sans: var(--cpx-sys-font-family-sans);
+  --font-mono: var(--cpx-sys-font-family-mono);
+
+  --text-xs: var(--cpx-sys-font-size-xs);
+  --text-xs--line-height: var(--cpx-sys-line-height-caption);
+  --text-sm: var(--cpx-sys-font-size-sm);
+  --text-sm--line-height: var(--cpx-sys-line-height-body-sm);
+  --text-base: var(--cpx-sys-font-size-md);
+  --text-base--line-height: var(--cpx-sys-line-height-body);
+  --text-lg: var(--cpx-sys-font-size-lg);
+  --text-lg--line-height: var(--cpx-sys-line-height-body-lg);
+  --text-xl: var(--cpx-sys-font-size-xl);
+  --text-xl--line-height: var(--cpx-sys-line-height-heading-md);
+  --text-2xl: var(--cpx-sys-font-size-2xl);
+  --text-2xl--line-height: var(--cpx-sys-line-height-heading-lg);
+  --text-3xl: var(--cpx-sys-font-size-3xl);
+  --text-3xl--line-height: var(--cpx-sys-line-height-heading-xl);
+  --text-4xl: var(--cpx-sys-font-size-4xl);
+  --text-4xl--line-height: var(--cpx-sys-line-height-display);
+  --text-code: var(--cpx-sys-font-size-code);
+  --text-code--line-height: var(--cpx-sys-line-height-code);
+
+  --radius-none: var(--cpx-sys-radius-none);
+  --radius-2xs: var(--cpx-sys-radius-2xs);
+  --radius-xs: var(--cpx-sys-radius-xs);
+  --radius-sm: var(--cpx-sys-radius-sm);
+  --radius-md: var(--cpx-sys-radius-md);
+  --radius-lg: var(--cpx-sys-radius-lg);
+  --radius-xl: var(--cpx-sys-radius-xl);
+  --radius-2xl: var(--cpx-sys-radius-2xl);
+  --radius-3xl: var(--cpx-sys-radius-3xl);
+  --radius-4xl: var(--cpx-sys-radius-4xl);
+  --radius-full: var(--cpx-sys-radius-full);
+  --radius-indicator: var(--cpx-sys-radius-indicator);
+  --radius-compact: var(--cpx-sys-radius-compact);
+  --radius-item: var(--cpx-sys-radius-item);
+  --radius-control: var(--cpx-sys-radius-control);
+  --radius-container: var(--cpx-sys-radius-container);
+  --radius-floating: var(--cpx-sys-radius-floating);
+  --radius-prominent: var(--cpx-sys-radius-prominent);
+  --radius-pill: var(--cpx-sys-radius-pill);
+
+  --shadow-sm: var(--cpx-sys-shadow-resting);
+  --shadow-md: var(--cpx-sys-shadow-raised);
+  --shadow-lg: var(--cpx-sys-shadow-floating);
+  --shadow-prominent: var(--cpx-sys-shadow-prominent);
+
+  --blur-sm: var(--cpx-sys-blur-sm);
+  --blur-md: var(--cpx-sys-blur-md);
+  --blur-lg: var(--cpx-sys-blur-lg);
+  --backdrop-blur-sm: var(--cpx-sys-blur-sm);
+  --backdrop-blur-md: var(--cpx-sys-blur-md);
+  --backdrop-blur-lg: var(--cpx-sys-blur-lg);
+
+  --ease-linear: var(--cpx-sys-ease-linear);
+  --ease-in: var(--cpx-sys-ease-in);
+  --ease-out: var(--cpx-sys-ease-out);
+  --ease-standard: var(--cpx-sys-ease-standard);
+  --ease-entrance: var(--cpx-sys-ease-entrance);
+  --ease-disclosure: var(--cpx-sys-ease-disclosure);
+
+  --transition-duration-instant: var(--cpx-sys-motion-instant);
+  --transition-duration-feedback: var(--cpx-sys-motion-feedback);
+  --transition-duration-state: var(--cpx-sys-motion-state);
+  --transition-duration-enter: var(--cpx-sys-motion-enter);
+  --transition-duration-exit: var(--cpx-sys-motion-exit);
+  --transition-duration-panel: var(--cpx-sys-motion-panel);
+  --transition-duration-disclosure: var(--cpx-sys-motion-disclosure);
+  --transition-duration-page: var(--cpx-sys-motion-page);
+  --transition-duration-loading: var(--cpx-sys-motion-loading);
+
+  /*
+   * `transition-*` utilities read these two variables. Without them Tailwind
+   * falls back to a zero duration and every transition is inert.
+   */
+  --default-transition-duration: var(--cpx-sys-motion-state);
+  --default-transition-timing-function: var(--cpx-sys-ease-standard);
+
+  --animate-pulse: pulse var(--cpx-sys-motion-loading) var(--cpx-sys-ease-standard) infinite;
+  --animate-spin: spin var(--cpx-sys-motion-loading) linear infinite;
+
+  --z-index-local: var(--cpx-sys-z-local);
+  --z-index-sticky: var(--cpx-sys-z-sticky);
+  --z-index-dock: var(--cpx-sys-z-dock);
+  --z-index-composer: var(--cpx-sys-z-composer);
+  --z-index-modal: var(--cpx-sys-z-modal);
+  --z-index-popover: var(--cpx-sys-z-popover);
+  --z-index-tooltip: var(--cpx-sys-z-tooltip);
+  --z-index-toast: var(--cpx-sys-z-toast);
+
+  --container-content: var(--cpx-sys-layout-content-max-width);
+  --container-wide: var(--cpx-sys-layout-wide-max-width);
+  --container-conversation: var(--cpx-sys-layout-conversation-max-width);
+  --container-composer: var(--composer-width);
+  --container-md: 28rem;
+
+  --height-chrome: var(--chrome-h);
+  --height-toolbar: var(--workspace-toolbar-height);
+  --height-pane-toolbar: var(--pane-toolbar-height);
+
+  --size-icon-sm: var(--cpx-sys-icon-size-sm);
+  --size-icon-md: var(--cpx-sys-icon-size-md);
+  --size-icon-lg: var(--cpx-sys-icon-size-lg);
+  --size-icon: var(--cpx-sys-icon-size);
+
+  /*
+   * Control geometry is off the 4px grid (input padding is 5px/8px), so it gets
+   * named spacing entries instead of arbitrary pixel values.
+   */
+  --spacing-control-block: var(--cpx-comp-input-padding-block);
+  --spacing-control-inline: var(--cpx-comp-input-padding-inline);
+  --spacing-control-gap: var(--cpx-comp-input-gap);
+
+  /* Composer row geometry: chips, meta chips and composer rows share it. */
+  --spacing-row-inline: var(--cpx-comp-row-padding-inline);
+  --spacing-row-gap: var(--cpx-comp-row-gap);
+  --height-row-composer: var(--cpx-comp-row-height-composer);
+
+  /* Surfaces */
+  --color-app-canvas: var(--cpx-sys-color-surface-canvas);
+  --color-app-underlay: var(--cpx-sys-color-surface-recessed);
+  --color-app-chrome: var(--cpx-sys-color-surface-recessed);
+  --color-app-panel: var(--cpx-sys-color-surface-panel);
+  --color-app-control: var(--cpx-sys-color-surface-control);
+  --color-app-raised: var(--cpx-sys-color-surface-raised);
+  --color-app-editor: var(--cpx-sys-color-surface-editor);
+  --color-app-surface-secondary: var(--cpx-sys-color-surface-secondary);
+  --color-app-surface-active: var(--cpx-sys-color-surface-active);
+  --color-app-scrim: var(--cpx-sys-color-scrim);
+  --color-app-user-message: var(--cpx-sys-color-message-user-bg);
+  --color-app-glass: var(--cpx-sys-glass-bg);
+  --color-app-titlebar: var(--cpx-sys-color-workbench-titlebar-bg);
+  --color-app-sidebar: var(--cpx-sys-color-workbench-sidebar-bg);
+  --color-app-main: var(--cpx-sys-color-workbench-main-bg);
+  --color-app-dock: var(--cpx-sys-color-workbench-panel-bg);
+
+  /* Foreground */
+  --color-app-text: var(--cpx-sys-color-fg-primary);
+  --color-app-text-soft: var(--cpx-sys-color-fg-secondary);
+  --color-app-text-meta: var(--cpx-sys-color-fg-tertiary);
+  --color-app-text-disabled: var(--cpx-sys-color-fg-disabled);
+  --color-app-on-accent: var(--cpx-sys-color-fg-on-accent);
+
+  /* Borders and interaction states */
+  --color-app-border: var(--cpx-sys-color-border-default);
+  --color-app-border-subtle: var(--cpx-sys-color-border-subtle);
+  --color-app-border-strong: var(--cpx-sys-color-border-strong);
+  --color-app-focus: var(--cpx-sys-color-border-focus);
+  --color-app-hover: var(--cpx-sys-color-hover);
+  --color-app-active: var(--cpx-sys-color-active);
+  --color-app-selected: var(--cpx-sys-color-selected);
+
+  /* Accent and status families */
+  --color-app-accent: var(--cpx-sys-color-accent);
+  --color-app-accent-subtle: var(--cpx-sys-color-accent-subtle-bg);
+  --color-app-accent-subtle-hover: var(--cpx-sys-color-accent-subtle-hover-bg);
+  --color-app-accent-subtle-active: var(--cpx-sys-color-accent-subtle-active-bg);
+  --color-app-accent-border: var(--cpx-sys-color-accent-subtle-border);
+  --color-app-accent-fg: var(--cpx-sys-color-accent-fg);
+  --color-app-success: var(--cpx-sys-color-success);
+  --color-app-success-subtle: var(--cpx-sys-color-success-subtle-bg);
+  --color-app-success-border: var(--cpx-sys-color-success-subtle-border);
+  --color-app-success-fg: var(--cpx-sys-color-success-fg);
+  --color-app-warning: var(--cpx-sys-color-warning);
+  --color-app-warning-subtle: var(--cpx-sys-color-warning-subtle-bg);
+  --color-app-warning-border: var(--cpx-sys-color-warning-subtle-border);
+  --color-app-warning-fg: var(--cpx-sys-color-warning-fg);
+  --color-app-danger: var(--cpx-sys-color-danger);
+  --color-app-danger-subtle: var(--cpx-sys-color-danger-subtle-bg);
+  --color-app-danger-border: var(--cpx-sys-color-danger-subtle-border);
+  --color-app-danger-fg: var(--cpx-sys-color-danger-fg);
+  --color-app-skill: var(--cpx-sys-color-skill);
+  --color-app-skill-subtle: var(--cpx-sys-color-skill-subtle-bg);
+  --color-app-skill-border: var(--cpx-sys-color-skill-subtle-border);
+  --color-app-skill-fg: var(--cpx-sys-color-skill-fg);
+  --color-app-info: var(--cpx-sys-color-info);
+  --color-app-info-subtle: var(--cpx-sys-color-info-subtle-bg);
+  --color-app-info-border: var(--cpx-sys-color-info-subtle-border);
+  --color-app-info-fg: var(--cpx-sys-color-info-fg);
+
+  /* Primary action */
+  --color-app-primary-action: var(--cpx-comp-button-primary-bg);
+  --color-app-primary-action-foreground: var(--cpx-comp-button-primary-fg);
+  --color-app-primary-action-hover: var(--cpx-comp-button-primary-hover-bg);
+
+  /* Diffs */
+  --color-app-diff-added-line: var(--cpx-sys-color-diff-added-line);
+  --color-app-diff-added-text: var(--cpx-sys-color-diff-added-text);
+  --color-app-diff-added-fg: var(--cpx-sys-color-diff-added-fg);
+  --color-app-diff-added-indicator: var(--cpx-sys-color-diff-added-indicator);
+  --color-app-diff-removed-line: var(--cpx-sys-color-diff-removed-line);
+  --color-app-diff-removed-text: var(--cpx-sys-color-diff-removed-text);
+  --color-app-diff-removed-fg: var(--cpx-sys-color-diff-removed-fg);
+  --color-app-diff-removed-indicator: var(--cpx-sys-color-diff-removed-indicator);
+
+  /* Charts */
+  --color-app-chart-red: var(--cpx-sys-color-charts-red);
+  --color-app-chart-orange: var(--cpx-sys-color-charts-orange);
+  --color-app-chart-yellow: var(--cpx-sys-color-charts-yellow);
+  --color-app-chart-green: var(--cpx-sys-color-charts-green);
+  --color-app-chart-blue: var(--cpx-sys-color-charts-blue);
+  --color-app-chart-purple: var(--cpx-sys-color-charts-purple);
+  --color-app-chart-cyan: var(--cpx-sys-color-charts-cyan);
+
+  /* Syntax */
+  --color-app-syntax-keyword: var(--cpx-sys-color-syntax-keyword);
+  --color-app-syntax-property: var(--cpx-sys-color-syntax-property);
+  --color-app-syntax-string: var(--cpx-sys-color-syntax-string);
+  --color-app-syntax-number: var(--cpx-sys-color-syntax-number);
+  --color-app-syntax-comment: var(--cpx-sys-color-syntax-comment);
+  --color-app-syntax-variable: var(--cpx-sys-color-syntax-variable);
+  --color-app-syntax-punctuation: var(--cpx-sys-color-syntax-punctuation);
+}
+
+/*
+ * Typography roles. Each utility consumes one complete system font shorthand so
+ * components never rebuild size/weight/line-height per element.
+ */
+
+/*
+ * Standalone weight roles. Tailwind emits these before the `type-*` roles, and a
+ * role's `font:` shorthand resets font-weight, so NEVER combine them with a
+ * role in one class list — the weight is dropped silently. Use a role that
+ * already carries the weight, or see `role-weight.css`.
+ */
+@utility type-weight-body {
+  font-weight: var(--cpx-sys-font-weight-body);
+}
+
+@utility type-weight-label {
+  font-weight: var(--cpx-sys-font-weight-medium);
+}
+
+@utility type-weight-heading {
+  font-weight: var(--cpx-sys-font-weight-bold);
+}
+
+@utility type-display {
+  font: var(--cpx-sys-type-display);
+  letter-spacing: var(--cpx-sys-letter-spacing-display);
+}
+
+@utility type-body {
+  font: var(--cpx-sys-type-body);
+  letter-spacing: var(--cpx-sys-letter-spacing-body);
+}
+
+@utility type-control {
+  font: var(--cpx-sys-type-control);
+  letter-spacing: var(--cpx-sys-letter-spacing-control);
+}
+
+@utility type-secondary {
+  font: var(--cpx-sys-type-body-sm);
+  letter-spacing: var(--cpx-sys-letter-spacing-body-sm);
+}
+
+@utility type-meta {
+  font: var(--cpx-sys-type-caption);
+  letter-spacing: var(--cpx-sys-letter-spacing-caption);
+}
+
+@utility type-caption {
+  font: var(--cpx-sys-type-caption);
+  letter-spacing: var(--cpx-sys-letter-spacing-caption);
+}
+
+@utility type-label {
+  font: var(--cpx-sys-type-label);
+  letter-spacing: var(--cpx-sys-letter-spacing-label);
+}
+
+@utility type-body-sm {
+  font: var(--cpx-sys-type-body-sm);
+  letter-spacing: var(--cpx-sys-letter-spacing-body-sm);
+}
+
+@utility type-body-lg {
+  font: var(--cpx-sys-type-body-lg);
+  letter-spacing: var(--cpx-sys-letter-spacing-body-lg);
+}
+
+@utility type-reading {
+  font: var(--cpx-sys-type-reading);
+  letter-spacing: var(--cpx-sys-letter-spacing-body);
+}
+
+@utility type-row-title {
+  font: var(--cpx-sys-type-row-title);
+  letter-spacing: var(--cpx-sys-letter-spacing-row-title);
+}
+
+@utility type-title-sm {
+  font: var(--cpx-sys-type-heading-sm);
+  letter-spacing: var(--cpx-sys-letter-spacing-heading-sm);
+}
+
+@utility type-title-md {
+  font: var(--cpx-sys-type-heading-md);
+  letter-spacing: var(--cpx-sys-letter-spacing-heading-md);
+}
+
+@utility type-title-lg {
+  font: var(--cpx-sys-type-heading-lg);
+  letter-spacing: var(--cpx-sys-letter-spacing-heading-lg);
+}
+
+@utility type-title-xl {
+  font: var(--cpx-sys-type-heading-xl);
+  letter-spacing: var(--cpx-sys-letter-spacing-heading-xl);
+}
+
+@utility type-metric {
+  font: var(--cpx-sys-type-metric);
+  letter-spacing: var(--cpx-sys-letter-spacing-metric);
+  font-variant-numeric: tabular-nums;
+}
+
+@utility type-code {
+  font: var(--cpx-sys-type-code);
+  letter-spacing: var(--cpx-sys-letter-spacing-code);
 }

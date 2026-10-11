@@ -1,2 +1,1 @@
-export * from "./canonical/index"
-export * from "./thread/index"
+export * from './canonical/index'

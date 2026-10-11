@@ -1,27 +1,17 @@
 import type React from 'react'
-import { useState } from 'react'
-import { GlobalErrorModal } from '../../components/GlobalErrorModal.js'
+
 import { ModelCenterWorkbench } from './ModelCenterWorkbench.js'
 
-export function ModelCenterView(): React.ReactNode {
-  const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
-
+export function ProviderSettings({
+  onError,
+  onNotice,
+}: {
+  onError: (message: string) => void
+  onNotice: (message: string) => void
+}): React.ReactNode {
   return (
-    <div className="model-center-page">
-      <GlobalErrorModal
-        message={errorMessage}
-        onDismiss={() => setErrorMessage(null)}
-      />
-      <GlobalErrorModal
-        message={noticeMessage}
-        onDismiss={() => setNoticeMessage(null)}
-        tone="status"
-      />
-      <ModelCenterWorkbench
-        onError={setErrorMessage}
-        onNotice={setNoticeMessage}
-      />
+    <div className="model-center-page tw:h-full tw:w-full tw:min-h-0 tw:overflow-x-hidden tw:overflow-y-auto tw:bg-app-canvas tw:text-app-text">
+      <ModelCenterWorkbench onError={onError} onNotice={onNotice} />
     </div>
   )
 }

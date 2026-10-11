@@ -1,7 +1,0 @@
-@use 'sass:meta';
-
-@layer vendor {
-  @include meta.load-css('@xterm/xterm/css/xterm.css');
-}
-
-@include meta.load-css('../features/terminal');

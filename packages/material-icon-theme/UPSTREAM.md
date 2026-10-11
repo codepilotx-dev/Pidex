@@ -8,7 +8,7 @@
 - Tarball SHA-256: `fb4aca5932084f2d8112dbfbec40cf8c0fd24da4b90d16845cd2686682816377`
 - License: MIT; preserved in `LICENSE`
 
-`scripts/sync-upstream.ts` reads the pinned package from a local
+`scripts/SyncUpstream.ts` reads the pinned package from a local
 `node_modules/material-icon-theme` when available, otherwise downloads and
 verifies the pinned npm tarball. It derives the VS Code file/folder association
 tables and one monochrome `currentColor` React component for every upstream

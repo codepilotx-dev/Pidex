@@ -1,6 +1,6 @@
 name: 功能建议
 description: 提议一个有明确用户价值的新能力或改进
-title: "[Feature] "
+title: '[Feature] '
 labels:
   - enhancement
 body:

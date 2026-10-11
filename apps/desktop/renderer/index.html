@@ -3,15 +3,208 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#f8f8f6" />
+    <meta name="theme-color" content="#ffffff" />
     <meta
       http-equiv="Content-Security-Policy"
-      content="default-src 'self'; base-uri 'none'; object-src 'none'; frame-ancestors 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:"
+      content="default-src 'self'; base-uri 'none'; object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: http: https:; media-src 'self' data: blob: http: https:; font-src 'self' data:; connect-src 'self' http: https: ws: wss:; worker-src 'self' blob:"
     />
     <link rel="icon" type="image/png" href="/favicon.png" />
-    <title>CodePilotX</title>
+    <link rel="stylesheet" href="/fonts/fonts.css" />
+    <title>Pidex Desktop</title>
+    <script src="/startup-theme.js"></script>
+    <style>
+      /* 全窗鲸鱼加载契约：静态启动遮罩（id="startup-splash"）与 React
+         FullScreenWhaleLoading 共用同一套 DOM/CSS，视觉与
+         electron/src/windows/StartupPage.ts 保持一致。静态阶段在入口 JS 与
+         主 CSS 完成前使用系统主题 fallback；React 接管后由
+         --layer-canvas-fill / --color-token-text-secondary 与
+         html[data-theme] 驱动，支持用户显式主题。由
+         src/startup/StartupSplashHandoff.ts 的控制器移除。 */
+      .full-screen-whale-loader {
+        position: fixed;
+        inset: 0;
+        z-index: 100000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--cpx-sys-color-surface-canvas, var(--startup-splash-background, #ffffff));
+        color: var(
+          --cpx-sys-color-fg-secondary,
+          color-mix(in srgb, var(--startup-splash-foreground, #1f1f1f) 65%, transparent)
+        );
+        transition: opacity 200ms ease-out;
+      }
+
+      .full-screen-whale-loader--contained {
+        position: relative;
+        inset: auto;
+        z-index: 1;
+        width: 100%;
+        height: 100%;
+        min-height: 100%;
+        flex: 1;
+        background: transparent;
+      }
+
+      .full-screen-whale-loader__content {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 24px;
+      }
+
+      .full-screen-whale-loader__logo {
+        position: relative;
+        width: 56px;
+        height: 56px;
+        opacity: 0;
+        animation: full-screen-whale-fade-in 180ms ease-out 60ms forwards;
+      }
+
+      .full-screen-whale-loader__base,
+      .full-screen-whale-loader__overlay {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .full-screen-whale-loader__base {
+        display: block;
+        object-fit: contain;
+        opacity: 0.24;
+        filter: grayscale(1) brightness(0);
+      }
+
+      .full-screen-whale-loader__overlay {
+        background-image: linear-gradient(
+          112deg,
+          transparent 22%,
+          rgb(255 255 255 / 0.04) 38%,
+          rgb(28 28 26 / 0.92) 49%,
+          rgb(255 255 255 / 0.08) 56%,
+          transparent 74%
+        );
+        background-position: 140% 0;
+        background-repeat: no-repeat;
+        background-size: 220% 100%;
+        animation: full-screen-whale-shimmer 2200ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        -webkit-mask-image: url(/pidex-mark-green.svg);
+        mask-image: url(/pidex-mark-green.svg);
+        -webkit-mask-position: center;
+        mask-position: center;
+        -webkit-mask-repeat: no-repeat;
+        mask-repeat: no-repeat;
+        -webkit-mask-size: contain;
+        mask-size: contain;
+      }
+
+      .full-screen-whale-loader__status-viewport {
+        width: min(420px, calc(100vw - 64px));
+        height: 1.5em;
+        overflow: hidden;
+        text-align: center;
+      }
+
+      .full-screen-whale-loader__status-viewport > span {
+        display: block;
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+
+      .full-screen-whale-loader--exiting {
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      html[data-theme='dark'] .full-screen-whale-loader .full-screen-whale-loader__base {
+        filter: grayscale(1) brightness(0) invert(1);
+      }
+
+      html[data-theme='dark'] .full-screen-whale-loader .full-screen-whale-loader__overlay {
+        background-image: linear-gradient(
+          112deg,
+          transparent 22%,
+          rgb(255 255 255 / 0.04) 38%,
+          rgb(255 255 255 / 0.92) 49%,
+          rgb(255 255 255 / 0.08) 56%,
+          transparent 74%
+        );
+      }
+
+      @media (prefers-color-scheme: dark) {
+        html:not([data-theme]) .full-screen-whale-loader {
+          background: #181818;
+          color: rgb(255 255 255 / 65%);
+        }
+
+        html:not([data-theme]) .full-screen-whale-loader .full-screen-whale-loader__base {
+          filter: grayscale(1) brightness(0) invert(1);
+        }
+
+        html:not([data-theme]) .full-screen-whale-loader .full-screen-whale-loader__overlay {
+          background-image: linear-gradient(
+            112deg,
+            transparent 22%,
+            rgb(255 255 255 / 0.04) 38%,
+            rgb(255 255 255 / 0.92) 49%,
+            rgb(255 255 255 / 0.08) 56%,
+            transparent 74%
+          );
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .full-screen-whale-loader__logo {
+          animation: none;
+          opacity: 1;
+        }
+
+        .full-screen-whale-loader__overlay {
+          animation: none;
+        }
+      }
+
+      @keyframes full-screen-whale-fade-in {
+        from {
+          opacity: 0;
+        }
+
+        to {
+          opacity: 1;
+        }
+      }
+
+      @keyframes full-screen-whale-shimmer {
+        from {
+          background-position: 140% 0;
+        }
+
+        to {
+          background-position: -105% 0;
+        }
+      }
+    </style>
   </head>
   <body>
+    <div
+      id="startup-splash"
+      class="full-screen-whale-loader"
+      role="status"
+      aria-busy="true"
+      aria-label="Pidex 正在启动"
+    >
+      <div class="full-screen-whale-loader__content">
+        <div class="full-screen-whale-loader__logo" aria-hidden="true">
+          <img class="full-screen-whale-loader__base" src="/pidex-mark-green.svg" alt="" />
+          <div class="full-screen-whale-loader__overlay"></div>
+        </div>
+        <div class="full-screen-whale-loader__status-viewport">
+          <span class="full-screen-whale-loader__status">正在加载桌面界面…</span>
+        </div>
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>
