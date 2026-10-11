@@ -118,28 +118,42 @@ test('canonical completion clears a stale running indicator', () => {
 test('sidebar renders only occupied status icon slots in their existing order', () => {
   const project = mockWorkspace('C:\\sidebar-icons')
   const base = mockSessionSnapshot('icons', project, { workspacePath: project.path }).item
-  for (const hasScheduledRun of [false, true]) {
-    for (const isFork of [false, true]) {
-      for (const state of ['idle', 'unread', 'running'] as const) {
-        const markup = renderSessionRows([
-          {
-            ...base,
-            hasScheduledRun,
-            isFork,
-            status: state === 'running' ? 'running' : 'done',
-            unreadAt: state === 'unread' ? 1 : null,
-          },
-        ])
-        const labels = [
-          ...(hasScheduledRun ? ['日程运行过的会话'] : []),
-          ...(isFork ? ['分叉会话'] : []),
-          ...(state === 'unread' ? ['未读'] : state === 'running' ? ['处理中'] : []),
-        ]
-        expect(countIndicatorSlots(markup)).toBe(labels.length)
-        expect(markup).not.toMatch(/<span[^>]*class="[^"]*sidebar-indicator[^"]*"[^>]*><\/span>/)
-        const positions = labels.map((label) => markup.indexOf(`aria-label="${label}"`))
-        expect(positions.every((position) => position >= 0)).toBe(true)
-        expect(positions).toEqual([...positions].sort((a, b) => a - b))
+  for (const worktree of [false, true]) {
+    for (const hasScheduledRun of [false, true]) {
+      for (const isFork of [false, true]) {
+        for (const state of ['idle', 'unread', 'running'] as const) {
+          const markup = renderSessionRows([
+            {
+              ...base,
+              executionEnvironment: worktree
+                ? {
+                    kind: 'worktree',
+                    worktreeId: 'wt-1',
+                    cwd: project.path,
+                    branchName: 'feature',
+                    status: 'ready',
+                    revision: 1,
+                  }
+                : { kind: 'local', cwd: project.path, revision: 1 },
+              hasScheduledRun,
+              isFork,
+              status: state === 'running' ? 'running' : 'done',
+              unreadAt: state === 'unread' ? 1 : null,
+            },
+          ])
+          // 尾部标记顺序固定为环境、Fork、日程、PR。
+          const labels = [
+            ...(worktree ? ['工作树会话'] : []),
+            ...(isFork ? ['分叉会话'] : []),
+            ...(hasScheduledRun ? ['日程运行过的会话'] : []),
+            ...(state === 'unread' ? ['未读'] : state === 'running' ? ['处理中'] : []),
+          ]
+          expect(countIndicatorSlots(markup)).toBe(labels.length)
+          expect(markup).not.toMatch(/<span[^>]*class="[^"]*sidebar-indicator[^"]*"[^>]*><\/span>/)
+          const positions = labels.map((label) => markup.indexOf(`aria-label="${label}"`))
+          expect(positions.every((position) => position >= 0)).toBe(true)
+          expect(positions).toEqual([...positions].sort((a, b) => a - b))
+        }
       }
     }
   }

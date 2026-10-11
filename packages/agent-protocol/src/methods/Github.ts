@@ -2,6 +2,7 @@ import { AgentThread } from '@pidex/shared'
 import { AutomationSchema } from '@pidex/shared/automation'
 import { ModelRefSchema } from '@pidex/shared/model'
 import { PermissionConfigSchema } from '@pidex/shared/thread'
+import { ThreadPullRequestListSchema } from '@pidex/shared/thread'
 import { Schema } from 'effect'
 import { defineMethod, type MethodMap } from '../wire/Definition'
 import {
@@ -220,6 +221,16 @@ const GithubErrors = [
   'INTERNAL_ERROR',
 ] as const
 
+const ThreadPullRequestErrors = [...GithubErrors, 'THREAD_NOT_FOUND', 'INVALID_REQUEST'] as const
+
+const ThreadPullRequestBatchResultSchema = Schema.Struct({
+  threads: Schema.Array(ThreadPullRequestListSchema),
+})
+
+const ThreadPullRequestThreadResultSchema = Schema.Struct({
+  thread: ThreadPullRequestListSchema,
+})
+
 export const GithubRpcMethods = {
   'github/watch/start': defineMethod({
     params: Schema.Struct({
@@ -376,6 +387,8 @@ export const GithubRpcMethods = {
       title: NonEmptyStringSchema,
       body: Schema.optional(Schema.String),
       draft: Schema.optional(Schema.Boolean),
+      /** When present the agent resolves the thread's real execution directory. */
+      threadId: Schema.optional(OpaqueIDSchema),
     }),
     result: Schema.Struct({ pullRequest: GithubPullRequestSchema }),
     errors: GithubErrors,
@@ -448,6 +461,8 @@ export const GithubRpcMethods = {
       branch: Schema.optional(NonEmptyStringSchema),
       setUpstream: Schema.optional(Schema.Boolean),
       forceWithLease: Schema.optional(Schema.Boolean),
+      /** When present the agent resolves the thread's real execution directory. */
+      threadId: Schema.optional(OpaqueIDSchema),
     }),
     result: Schema.Struct({
       remote: NonEmptyStringSchema,
@@ -457,6 +472,41 @@ export const GithubRpcMethods = {
     }),
     errors: GithubErrors,
     capability: 'github.pullRequests.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
+  }),
+  'github/thread/pullRequests': defineMethod({
+    params: Schema.Struct({ threadIds: Schema.Array(OpaqueIDSchema) }),
+    result: ThreadPullRequestBatchResultSchema,
+    errors: ThreadPullRequestErrors,
+    capability: 'github.threadPullRequests.v1',
+    mutation: false,
+    exactParams: true,
+    exactResult: true,
+  }),
+  'github/thread/pullRequest/link': defineMethod({
+    params: Schema.Struct({
+      threadId: OpaqueIDSchema,
+      url: NonEmptyStringSchema,
+    }),
+    result: ThreadPullRequestThreadResultSchema,
+    errors: ThreadPullRequestErrors,
+    capability: 'github.threadPullRequests.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
+  }),
+  'github/thread/pullRequest/unlink': defineMethod({
+    params: Schema.Struct({
+      threadId: OpaqueIDSchema,
+      owner: NonEmptyStringSchema,
+      repository: NonEmptyStringSchema,
+      number: PositiveIntSchema,
+    }),
+    result: ThreadPullRequestThreadResultSchema,
+    errors: ThreadPullRequestErrors,
+    capability: 'github.threadPullRequests.v1',
     mutation: true,
     exactParams: true,
     exactResult: true,

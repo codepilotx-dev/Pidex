@@ -14,6 +14,33 @@ import {
 } from '../RpcRouter'
 import type { RpcHandlerGroup } from './Types'
 import { ProjectService } from '../../../project/ProjectService'
+import { watchIdentity } from '../../../github/PullRequestWatchService'
+
+/** Resolves a thread's real execution directory, tolerating threads without one. */
+async function resolveThreadCwd(runtime: RpcRouter, threadId: string): Promise<string | null> {
+  try {
+    return (await runtime.dependencies.terminalContext.resolve(threadId)).target.cwd
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Session-scoped git/PR operations use the thread's real worktree directory;
+ * project-scoped operations without a thread keep the project root semantics.
+ */
+async function resolveOperationRoot(
+  runtime: RpcRouter,
+  projectId: string,
+  threadId: unknown,
+): Promise<string> {
+  const { db } = runtime.dependencies
+  const workspace = await resolveProjectWorkspace(db, projectId)
+  if (typeof threadId !== 'string') return workspace.rootPath
+  if (db.projectMembership(threadId) !== projectId)
+    throw new AgentError('PERMISSION_DENIED', '操作上下文与项目不一致', 403)
+  return (await runtime.dependencies.terminalContext.resolve(threadId)).target.cwd
+}
 
 export const githubHandlers = {
   name: 'github',
@@ -38,6 +65,9 @@ export const githubHandlers = {
     'github/pullRequest/resolveThread',
     'github/pullRequest/submitReview',
     'github/push',
+    'github/thread/pullRequests',
+    'github/thread/pullRequest/link',
+    'github/thread/pullRequest/unlink',
   ],
   async handle(runtime: RpcRouter, method: RpcMethod, rawParams: unknown): Promise<unknown> {
     const { db, projectSources, github } = runtime.dependencies
@@ -52,13 +82,25 @@ export const githubHandlers = {
         if (!service) throw new AgentError('INTERNAL_ERROR', 'PR 监控暂不可用', 503)
         if (method === 'github/watch/start') {
           const input = Schema.decodeUnknownSync(RpcMethods[method].params)(rawParams)
-          return service.start({
+          const started = await service.start({
             projectId: input.projectId,
             url: input.url,
             model: input.model,
             permissionConfig: input.permissionConfig,
             ...(input.reasoningEffort ? { reasoningEffort: input.reasoningEffort } : {}),
           })
+          const identity = watchIdentity(started.url)
+          runtime.dependencies.threadPullRequests.record({
+            threadId: started.threadId,
+            owner: identity.owner,
+            repository: identity.repository,
+            number: identity.number,
+            url: identity.url,
+            title: null,
+            headRef: null,
+            origin: 'watch',
+          })
+          return started
         }
         if (method === 'github/watch/list') return { watches: service.list() }
         const id = stringParam(params, 'id')
@@ -112,13 +154,28 @@ export const githubHandlers = {
           ...(typeof params.draft === 'boolean' ? { draft: params.draft } : {}),
         })
       case 'github/pullRequest/createForProject': {
-        const workspace = await resolveProjectWorkspace(db, stringParam(params, 'projectId'))
-        return github.createPullRequestForProject({
-          workspaceRoot: workspace.rootPath,
+        const projectId = stringParam(params, 'projectId')
+        const workspaceRoot = await resolveOperationRoot(runtime, projectId, params.threadId)
+        const result = await github.createPullRequestForProject({
+          workspaceRoot,
           title: stringParam(params, 'title'),
           ...(typeof params.body === 'string' ? { body: params.body } : {}),
           ...(typeof params.draft === 'boolean' ? { draft: params.draft } : {}),
         })
+        if (typeof params.threadId === 'string') {
+          const identity = watchIdentity(result.pullRequest.htmlUrl)
+          runtime.dependencies.threadPullRequests.record({
+            threadId: params.threadId,
+            owner: identity.owner,
+            repository: identity.repository,
+            number: identity.number,
+            url: identity.url,
+            title: result.pullRequest.title,
+            headRef: result.pullRequest.head.ref,
+            origin: 'created',
+          })
+        }
+        return result
       }
       case 'github/pullRequest/comment':
         return github.createPullRequestComment({
@@ -149,9 +206,13 @@ export const githubHandlers = {
           ...(typeof params.body === 'string' ? { body: params.body } : {}),
         })
       case 'github/push': {
-        const workspace = await resolveProjectWorkspace(db, stringParam(params, 'projectId'))
+        const workspaceRoot = await resolveOperationRoot(
+          runtime,
+          stringParam(params, 'projectId'),
+          params.threadId,
+        )
         return github.push({
-          workspaceRoot: workspace.rootPath,
+          workspaceRoot,
           ...(typeof params.remote === 'string' ? { remote: params.remote } : {}),
           ...(typeof params.branch === 'string' ? { branch: params.branch } : {}),
           ...(typeof params.setUpstream === 'boolean' ? { setUpstream: params.setUpstream } : {}),
@@ -160,6 +221,27 @@ export const githubHandlers = {
             : {}),
         })
       }
+      case 'github/thread/pullRequests': {
+        const threadIds = Array.isArray(params.threadIds)
+          ? params.threadIds.filter((threadId): threadId is string => typeof threadId === 'string')
+          : []
+        return runtime.dependencies.threadPullRequests.read({
+          threadIds,
+          resolveCwd: (threadId) => resolveThreadCwd(runtime, threadId),
+        })
+      }
+      case 'github/thread/pullRequest/link':
+        return runtime.dependencies.threadPullRequests.link({
+          threadId: stringParam(params, 'threadId'),
+          url: stringParam(params, 'url'),
+        })
+      case 'github/thread/pullRequest/unlink':
+        return runtime.dependencies.threadPullRequests.unlink({
+          threadId: stringParam(params, 'threadId'),
+          owner: stringParam(params, 'owner'),
+          repository: stringParam(params, 'repository'),
+          number: positiveIntegerParam(params, 'number'),
+        })
       default:
         throw new AgentError('METHOD_NOT_FOUND', `未知 RPC 方法：${method}`, 404)
     }

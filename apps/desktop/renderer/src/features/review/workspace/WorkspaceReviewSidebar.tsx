@@ -1977,6 +1977,7 @@ function WorkspaceReviewSidebarImpl({
           ...(projectId ? { projectId } : {}),
           workspacePath,
           setUpstream: !gitStatus?.upstream,
+          ...(activeSessionId ? { threadId: activeSessionId } : {}),
         })
         if (pushed.ok === false) throw new Error(pushed.error)
       }
@@ -1986,6 +1987,7 @@ function WorkspaceReviewSidebarImpl({
         title: title.trim(),
         body: body.trim(),
         draft,
+        ...(activeSessionId ? { threadId: activeSessionId } : {}),
       })
       if (result.ok === false) throw new Error(result.error)
       if (

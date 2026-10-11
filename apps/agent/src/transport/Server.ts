@@ -15,6 +15,7 @@ import type { ApprovalService } from '../permission/ApprovalService'
 import type { QuestionService } from '../session/QuestionService'
 import { RpcRouter } from './rpc/RpcRouter'
 import type { PullRequestWatchService } from '../github/PullRequestWatchService'
+import type { ThreadPullRequestService } from '../github/ThreadPullRequestService'
 import { proxyRendererRequest } from './RendererProxy'
 import { buildEventNextNotification } from './EventEnvelope'
 import type { AgentLogger } from '../observability/AgentLogger'
@@ -123,6 +124,7 @@ export interface TransportDependencies {
   sessionGroups: SessionGroupService
   threadGoals: ThreadGoalService
   threadBookmarks: ThreadBookmarkService
+  threadPullRequests: ThreadPullRequestService
   automation: AutomationService
   calendar: CalendarService
   scheduledTasks: ScheduledTaskService
@@ -550,6 +552,7 @@ export const createApp = (dependencies: TransportDependencies) => {
     sessionGroups: dependencies.sessionGroups,
     threadGoals: dependencies.threadGoals,
     threadBookmarks: dependencies.threadBookmarks,
+    threadPullRequests: dependencies.threadPullRequests,
     automation: dependencies.automation,
     ...(dependencies.prWatches ? { prWatches: dependencies.prWatches } : {}),
     calendar: dependencies.calendar,

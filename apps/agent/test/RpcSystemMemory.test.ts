@@ -70,6 +70,7 @@ const fixture = async (overrides: Partial<RpcRouterDependencies> = {}) => {
     sessionGroups: {} as never,
     threadGoals: {} as never,
     threadBookmarks: {} as never,
+    threadPullRequests: {} as never,
     automation: {} as never,
     ...overrides,
   })

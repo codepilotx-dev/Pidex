@@ -146,6 +146,7 @@ export const RENDERER_CAPABILITIES = [
   'ai.review.v1',
   'github.oauth.v1',
   'github.pullRequests.v1',
+  'github.threadPullRequests.v1',
   'context.compact.v1',
   'hooks.trust.v1',
   'subagents.v1',
@@ -2202,6 +2203,12 @@ export function createAgentSessionDesktopClient(
     clearGithubUserStatus: () => loadAgentGitApi().then((api) => api.clearGithubUserStatus()),
     pushWorkspaceBranch: (input) => loadAgentGitApi().then((api) => api.pushWorkspaceBranch(input)),
     createPullRequest: (input) => loadAgentGitApi().then((api) => api.createPullRequest(input)),
+    listThreadPullRequests: (threadIds) =>
+      loadAgentGitApi().then((api) => api.listThreadPullRequests(threadIds)),
+    linkThreadPullRequest: (input) =>
+      loadAgentGitApi().then((api) => api.linkThreadPullRequest(input)),
+    unlinkThreadPullRequest: (input) =>
+      loadAgentGitApi().then((api) => api.unlinkThreadPullRequest(input)),
     getWorkspaceGitStatus: (workspacePath) =>
       loadAgentGitApi().then((api) => api.getWorkspaceGitStatus(workspacePath)),
     checkoutWorkspaceBranch: (workspacePath, branchName) =>

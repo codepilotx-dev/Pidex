@@ -1081,6 +1081,18 @@ export function createBrowserMockDesktopClient(
       ok: false,
       error: '浏览器 mock 模式不会创建 Pull Request。',
     }),
+    listThreadPullRequests: async (threadIds) => ({
+      ok: true,
+      threads: threadIds.map((threadId) => ({ threadId, items: [] })),
+    }),
+    linkThreadPullRequest: async () => ({
+      ok: false,
+      error: '浏览器 mock 模式不会关联 Pull Request。',
+    }),
+    unlinkThreadPullRequest: async () => ({
+      ok: false,
+      error: '浏览器 mock 模式不会解除 Pull Request 关联。',
+    }),
     getWorkspaceReviewDiff: async () => emptyReviewDiff(),
     applyWorkspaceReviewOperation: async () => ({
       ok: false,

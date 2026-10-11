@@ -3,7 +3,7 @@
  * read/write contract of schema 21 so patched older clients can ignore features
  * they do not understand.
  */
-export const SCHEMA_VERSION = 58
+export const SCHEMA_VERSION = 59
 
 /**
  * Stable ownership marker for Pidex history storage. This is not a schema

@@ -1,5 +1,6 @@
 import type React from 'react'
 import { useEffect, useRef, useState } from 'react'
+import type { ThreadPullRequestSummary } from '@pidex/shared/thread'
 import {
   sessionDisplayTitle,
   sessionEditableTitle,
@@ -8,6 +9,7 @@ import {
 } from '../../../UiTypes.js'
 import { SidebarHoverCard } from './SidebarHoverCard.js'
 import { SidebarSessionHoverCardOverlay } from './SidebarSessionHoverCardOverlay.js'
+import { refreshThreadPullRequests } from './ThreadPullRequestStore.js'
 
 const MINUTE_MS = 60_000
 const HOUR_MS = 60 * MINUTE_MS
@@ -15,11 +17,25 @@ const DAY_MS = 24 * HOUR_MS
 const MONTH_MS = 30 * DAY_MS
 const YEAR_MS = 365 * DAY_MS
 
+const WORKTREE_STATUS_LABEL: Record<string, string> = {
+  creating: '创建中',
+  ready: '可用',
+  'ready-with-setup-error': '可用（初始化有错误）',
+  deleting: '清理中',
+  cleaned: '已清理',
+  restoring: '恢复中',
+  'restore-conflict': '恢复冲突',
+}
+
 export type SidebarSessionHoverCardModel = {
   title: string
   relativeTime: string
   projectLabel: string
   gitBranch: string | null
+  /** 会话执行位置说明；无投影信息时为 null。 */
+  environmentLabel: string | null
+  environmentKind: 'local' | 'worktree' | null
+  pullRequests: readonly ThreadPullRequestSummary[]
   unread: boolean
   isRunning: boolean
 }
@@ -44,15 +60,26 @@ export function buildSidebarSessionHoverCardModel(
   session: SessionListItem,
   fallbackTitle: string | undefined,
   now: number,
+  pullRequests: readonly ThreadPullRequestSummary[] = [],
 ): SidebarSessionHoverCardModel {
   const projectLabel = session.standalone ? '会话' : session.workspaceName.trim() || '会话'
   const gitBranch = session.gitBranch?.trim() || null
   const resolved = sessionResolvedTitle(session, fallbackTitle)?.trim()
+  const environment = session.executionEnvironment ?? null
+  const environmentLabel =
+    environment === null
+      ? null
+      : environment.kind === 'local'
+        ? '本地工作区'
+        : `工作树 · ${WORKTREE_STATUS_LABEL[environment.status] ?? environment.status}`
   return {
     title: resolved || sessionDisplayTitle(session, fallbackTitle),
     relativeTime: formatSidebarSessionRelativeTime(session.lastMessageAt ?? session.createdAt, now),
     projectLabel,
     gitBranch,
+    environmentLabel,
+    environmentKind: environment?.kind ?? null,
+    pullRequests,
     unread: Boolean(session.unreadAt),
     isRunning: session.status === 'running',
   }
@@ -62,20 +89,24 @@ type Props = {
   children: React.ReactElement
   fallbackTitle: string | undefined
   now: number
+  pullRequests?: readonly ThreadPullRequestSummary[]
   regeneratingTitle: boolean
   session: SessionListItem
   onRename?: (title: string) => Promise<boolean>
+  onUnlinkPullRequest?: (item: ThreadPullRequestSummary) => void
 }
 
 export function SidebarSessionHoverCard({
   children,
   fallbackTitle,
   now,
+  pullRequests = [],
   regeneratingTitle,
   session,
   onRename,
+  onUnlinkPullRequest,
 }: Props): React.ReactNode {
-  const model = buildSidebarSessionHoverCardModel(session, fallbackTitle, now)
+  const model = buildSidebarSessionHoverCardModel(session, fallbackTitle, now, pullRequests)
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState(false)
   const [renameValue, setRenameValue] = useState(model.title)
@@ -87,6 +118,12 @@ export function SidebarSessionHoverCard({
   useEffect(() => {
     if (!editing) setRenameValue(model.title)
   }, [editing, model.title])
+
+  // 悬浮卡打开时刷新一次过期数据；打开期间不做周期性刷新。
+  useEffect(() => {
+    if (!open) return
+    void refreshThreadPullRequests([session.id])
+  }, [open, session.id])
 
   // 标题重生成期间不渲染悬浮卡，但 hooks 必须无条件执行，否则标题状态翻转会改变 hook 顺序。
   if (regeneratingTitle) {
@@ -155,6 +192,7 @@ export function SidebarSessionHoverCard({
           onRenameValueChange={setRenameValue}
           onSaveRename={() => void saveRename(interactionProps.returnFocusToAnchor)}
           onStartRename={startRename}
+          onUnlinkPullRequest={onUnlinkPullRequest}
         />
       )}
     >

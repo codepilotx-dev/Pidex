@@ -25,6 +25,7 @@ import type {
   ThreadCreationSurface,
   ThreadListItem,
   ThreadExecutionEnvironment,
+  ThreadPullRequestList,
   ThreadSnapshot,
   ThreadGoal,
 } from '@pidex/shared/thread'
@@ -401,6 +402,8 @@ export type PushBranchInput = {
   workspacePath: string
   setUpstream?: boolean
   forceWithLease?: boolean
+  /** When set the agent resolves the thread's real worktree directory. */
+  threadId?: string
 }
 
 export type CreatePullRequestInput = {
@@ -409,6 +412,23 @@ export type CreatePullRequestInput = {
   title: string
   body?: string
   draft?: boolean
+  /** When set the agent resolves the thread's real worktree directory. */
+  threadId?: string
+}
+
+export type DesktopThreadPullRequestsResult =
+  { ok: true; threads: ThreadPullRequestList[] } | { ok: false; error: string; errorCode?: string }
+
+export type DesktopThreadPullRequestMutationResult =
+  { ok: true; thread: ThreadPullRequestList } | { ok: false; error: string; errorCode?: string }
+
+export type LinkThreadPullRequestInput = { threadId: string; url: string }
+
+export type UnlinkThreadPullRequestInput = {
+  threadId: string
+  owner: string
+  repository: string
+  number: number
 }
 
 export type DiscardWorkspaceChangesInput = {
@@ -1913,6 +1933,13 @@ export type DesktopApi = {
     input: RestoreSessionTurnChangesInput,
   ): Promise<DesktopGitOperationResult>
   createPullRequest(input: CreatePullRequestInput): Promise<DesktopPullRequestResult>
+  listThreadPullRequests(threadIds: string[]): Promise<DesktopThreadPullRequestsResult>
+  linkThreadPullRequest(
+    input: LinkThreadPullRequestInput,
+  ): Promise<DesktopThreadPullRequestMutationResult>
+  unlinkThreadPullRequest(
+    input: UnlinkThreadPullRequestInput,
+  ): Promise<DesktopThreadPullRequestMutationResult>
   getWorkspaceReviewDiff(input: DesktopReviewDiffInput): Promise<DesktopReviewDiffResult>
   applyWorkspaceReviewOperation(
     input: DesktopReviewOperationInput,

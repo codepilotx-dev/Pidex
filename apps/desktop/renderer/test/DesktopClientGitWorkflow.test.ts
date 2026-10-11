@@ -73,6 +73,50 @@ describe('desktop git workflow client', () => {
       })
     }
   })
+  test('会话内推送与创建 PR 会把 threadId 透传给 Agent 以解析真实工作树目录', async () => {
+    const calls: Array<{ method: string; params: unknown }> = []
+    const client = createAgentGitApi({
+      environment: {} as never,
+      ensureDesktopProjectTrusted: async (value) => value,
+      invalidateProjectCache: () => {},
+      loadProjectById: async () => project,
+      loadProjectForPath: async () => project,
+      operationError: () => '失败',
+      requireAgentCapability: () => {},
+      rpc: {
+        call: async (method: string, params: unknown) => {
+          calls.push({ method, params })
+          if (method === 'github/push')
+            return { repositoryUrl: 'https://github.com/octocat/fixture', status }
+          if (method === 'github/pullRequest/createForProject')
+            return {
+              pullRequest: { htmlUrl: 'https://github.com/octocat/fixture/pull/7', number: 7 },
+            }
+          throw new Error(`unexpected method ${method}`)
+        },
+      } as never,
+      withRequiredAgent: async (operation) => operation(),
+    })
+
+    await client.pushWorkspaceBranch({ workspacePath, threadId: 'thread-1', setUpstream: true })
+    await client.createPullRequest({ workspacePath, threadId: 'thread-1', title: '标题' })
+
+    expect(calls).toEqual([
+      {
+        method: 'github/push',
+        params: {
+          projectId: project.id,
+          setUpstream: true,
+          forceWithLease: false,
+          threadId: 'thread-1',
+        },
+      },
+      {
+        method: 'github/pullRequest/createForProject',
+        params: { projectId: project.id, title: '标题', threadId: 'thread-1' },
+      },
+    ])
+  })
   test('Electron 克隆、创建分支和切换分支都调用真实 Agent RPC', async () => {
     const requests: Array<{ method: string; params: Record<string, unknown> }> = []
     const client = createDesktopClient({

@@ -10,6 +10,8 @@ import {
   EyeOff,
   Folder,
   FolderInput,
+  GitFork,
+  GitPullRequest,
   Link,
   MessageCircle,
   MessageSquare,
@@ -47,6 +49,15 @@ import { deriveSidebarSessionVisualState } from './SidebarViewModel.js'
 import { desktopClient, desktopClipboard } from '../../../services/desktop-client/index.js'
 import { InputDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { useSidebarActivityPreview } from './UseSidebarActivityPreview.js'
+import type { ThreadPullRequestSummary } from '@pidex/shared/thread'
+import { applyThreadPullRequestList, useThreadPullRequests } from './ThreadPullRequestStore.js'
+import {
+  threadPullRequestIcon,
+  threadPullRequestTitle,
+  threadPullRequestVisual,
+} from './ThreadPullRequestPresentation.js'
+
+const NO_PULL_REQUESTS: readonly ThreadPullRequestSummary[] = []
 
 const SidebarSessionHoverCard = lazy(async () => {
   const module = await import('./SidebarSessionHoverCard.js')
@@ -136,6 +147,12 @@ function SidebarSessionGroupComponent({
   const [renameValue, setRenameValue] = useState('')
   const [renaming, setRenaming] = useState(false)
   const [draggedSessionId, setDraggedSessionId] = useState<string | null>(null)
+  const [linkSessionId, setLinkSessionId] = useState<string | null>(null)
+  const [linkValue, setLinkValue] = useState('')
+  const [linkError, setLinkError] = useState<string | null>(null)
+  const [linking, setLinking] = useState(false)
+  const sessionIds = useMemo(() => sessions.map((session) => session.id), [sessions])
+  const pullRequests = useThreadPullRequests(sessionIds)
   const reducedMotion = usePrefersReducedMotion()
   const needsInputSessionIds = pendingPermissionSessionIds
   const unreadSessionIds = useMemo(
@@ -202,6 +219,38 @@ function SidebarSessionGroupComponent({
       setVisibleLimit((current) => Math.max(current, activeIndex + 1))
     }
   }, [activeSessionId, groupKey, orderedSessions, pagination])
+
+  async function unlinkPullRequest(
+    threadId: string,
+    item: ThreadPullRequestSummary,
+  ): Promise<void> {
+    const result = await desktopClient.unlinkThreadPullRequest({
+      threadId,
+      owner: item.owner,
+      repository: item.repository,
+      number: item.number,
+    })
+    if (result.ok === true) applyThreadPullRequestList(result.thread)
+  }
+
+  async function submitPullRequestLink(): Promise<void> {
+    if (!linkSessionId || linking) return
+    const url = linkValue.trim()
+    if (!url) return
+    setLinking(true)
+    setLinkError(null)
+    try {
+      const result = await desktopClient.linkThreadPullRequest({ threadId: linkSessionId, url })
+      if (result.ok === false) {
+        setLinkError(result.error)
+        return
+      }
+      applyThreadPullRequestList(result.thread)
+      setLinkSessionId(null)
+    } finally {
+      setLinking(false)
+    }
+  }
 
   function persistManualOrder(order: string[]): void {
     if (!onManualOrderChange) return
@@ -286,6 +335,18 @@ function SidebarSessionGroupComponent({
         icon: session.unreadAt ? <Eye size={APP_ICON_SIZE} /> : <EyeOff size={APP_ICON_SIZE} />,
         onSelect: () => onToggleSessionUnread(session),
       },
+      pullRequests.supported === false
+        ? null
+        : {
+            kind: 'item' as const,
+            label: '关联 Pull Request',
+            icon: <GitPullRequest size={APP_ICON_SIZE} />,
+            onSelect: () => {
+              setLinkValue('')
+              setLinkError(null)
+              setLinkSessionId(session.id)
+            },
+          },
       { kind: 'separator' },
       session.pinnedAt
         ? {
@@ -350,6 +411,15 @@ function SidebarSessionGroupComponent({
   function renderSessionRow(session: SessionListItem, rowIndex: number): React.ReactNode {
     const regeneratingTitle = titleLoadingIds.has(session.id)
     const visualState = deriveSidebarSessionVisualState(session, pendingPermissionSessionIds)
+    const pullRequestItems = pullRequests.byThread.get(session.id) ?? NO_PULL_REQUESTS
+    const primaryPullRequest =
+      pullRequestItems.find((item) => item.primary) ?? pullRequestItems[0] ?? null
+    const primaryPullRequestVisual = primaryPullRequest
+      ? threadPullRequestVisual(primaryPullRequest.status)
+      : null
+    const PrimaryPullRequestIcon = primaryPullRequest
+      ? threadPullRequestIcon(primaryPullRequest.status)
+      : null
     const waitingForInput =
       visualState === 'needs-input' &&
       !pendingPermissionSessionIds.has(session.id) &&
@@ -420,9 +490,11 @@ function SidebarSessionGroupComponent({
           <SidebarSessionHoverCard
             fallbackTitle={sessionFallbackTitles[session.id]}
             now={now}
+            pullRequests={pullRequestItems}
             regeneratingTitle={regeneratingTitle}
             session={session}
             onRename={(title) => onRenameSession(session.id, title)}
+            onUnlinkPullRequest={(item) => void unlinkPullRequest(session.id, item)}
           >
             {sessionButton}
           </SidebarSessionHoverCard>
@@ -455,14 +527,14 @@ function SidebarSessionGroupComponent({
         }}
         trailing={
           <div className={metaClassName}>
-            {showIndicators && session.hasScheduledRun && (
+            {showIndicators && session.executionEnvironment?.kind === 'worktree' && (
               <span
                 className="sidebar-indicator tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:text-app-text-meta tw:[&>svg]:size-icon-md"
                 role="img"
-                aria-label="日程运行过的会话"
-                title="日程运行过的会话"
+                aria-label="工作树会话"
+                title="工作树会话"
               >
-                <Clock3 aria-hidden="true" size={APP_ICON_SIZE} />
+                <GitFork aria-hidden="true" size={APP_ICON_SIZE} />
               </span>
             )}
             {showIndicators && session.isFork && (
@@ -474,6 +546,38 @@ function SidebarSessionGroupComponent({
               >
                 <Split aria-hidden="true" size={APP_ICON_SIZE} />
               </span>
+            )}
+            {showIndicators && session.hasScheduledRun && (
+              <span
+                className="sidebar-indicator tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:text-app-text-meta tw:[&>svg]:size-icon-md"
+                role="img"
+                aria-label="日程运行过的会话"
+                title="日程运行过的会话"
+              >
+                <Clock3 aria-hidden="true" size={APP_ICON_SIZE} />
+              </span>
+            )}
+            {showIndicators && primaryPullRequest && PrimaryPullRequestIcon && (
+              <button
+                aria-label={`Pull Request #${primaryPullRequest.number}`}
+                className={cx(
+                  'sidebar-indicator sidebar-pull-request tw:inline-flex tw:size-6 tw:flex-none tw:cursor-pointer tw:items-center tw:justify-center tw:border-0 tw:bg-transparent tw:p-0 tw:[&>svg]:size-icon-md',
+                  primaryPullRequestVisual?.className,
+                )}
+                title={threadPullRequestTitle(
+                  primaryPullRequest.number,
+                  primaryPullRequest.title,
+                  primaryPullRequest.status,
+                )}
+                type="button"
+                onClick={(event) => {
+                  event.preventDefault()
+                  event.stopPropagation()
+                  void desktopClient.openExternalURL(primaryPullRequest.url)
+                }}
+              >
+                <PrimaryPullRequestIcon aria-hidden="true" size={APP_ICON_SIZE} />
+              </button>
             )}
             {confirmArchiveSessionId === session.id ? (
               <button
@@ -684,6 +788,29 @@ function SidebarSessionGroupComponent({
             </div>
           ) : null}
         </>
+      ) : null}
+      {linkSessionId !== null ? (
+        <Suspense fallback={null}>
+          <InputDialog
+            actionDisabled={linking || linkValue.trim().length === 0}
+            actionLabel={linking ? '关联中…' : '关联'}
+            description={linkError ?? '输入 github.com 上的 Pull Request 链接。'}
+            input={{
+              value: linkValue,
+              onChange: setLinkValue,
+              maxLength: 500,
+              placeholder: 'https://github.com/owner/repo/pull/123',
+            }}
+            open
+            title="关联 Pull Request"
+            onAction={() => void submitPullRequestLink()}
+            onCancel={() => {
+              if (linking) return
+              setLinkSessionId(null)
+              setLinkError(null)
+            }}
+          />
+        </Suspense>
       ) : null}
       {renameDialogMounted ? (
         <Suspense fallback={null}>

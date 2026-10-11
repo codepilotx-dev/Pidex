@@ -565,6 +565,23 @@ export class GithubService {
     }
   }
 
+  /** Open pull requests whose head branch lives in the given repository. */
+  async listOpenPullRequestsForBranch(input: {
+    owner: string
+    repository: string
+    branch: string
+  }): Promise<GithubPullRequest[]> {
+    validateRepositoryInput(input)
+    const branch = nonEmpty(input.branch, 'branch')
+    const result = await this.rest(
+      'GET',
+      `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/pulls?state=open&head=${encodeURIComponent(`${input.owner}:${branch}`)}&per_page=100`,
+    )
+    if (!Array.isArray(result))
+      throw new AgentError('GITHUB_RESPONSE_INVALID', 'GitHub Pull Request 列表响应无效', 502)
+    return result.map(pullRequestFromApi)
+  }
+
   async readWatch(input: { owner: string; repository: string; number: number }) {
     const data = await this.graphql(
       `query($owner:String!,$repository:String!,$number:Int!){repository(owner:$owner,name:$repository){pullRequest(number:$number){id state isDraft headRefOid headRefName mergeable mergeStateStatus reviewDecision headRepository{name owner{login}} statusCheckRollup{state} reviews(last:100){nodes{id state body submittedAt}}}}}`,

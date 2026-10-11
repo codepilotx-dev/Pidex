@@ -46,6 +46,7 @@ import { projectMemoryKey, type MemoryService } from '../../memory/MemoryService
 import type { HookService } from '../../hooks/HookService'
 import type { GitReviewService } from '../../review/GitReviewService'
 import type { GithubService } from '../../github/GithubService'
+import type { ThreadPullRequestService } from '../../github/ThreadPullRequestService'
 import type { PullRequestWatchService } from '../../github/PullRequestWatchService'
 import type { GitWorkspaceService } from '../../git/GitWorkspaceService'
 import type { ToolingManager } from '../../tool/ToolingManager'
@@ -183,6 +184,7 @@ export type RpcRouterDependencies = {
   sessionGroups: SessionGroupService
   threadGoals: ThreadGoalService
   threadBookmarks: ThreadBookmarkService
+  threadPullRequests: ThreadPullRequestService
   automation: AutomationService
   prWatches?: PullRequestWatchService
   calendar?: CalendarService

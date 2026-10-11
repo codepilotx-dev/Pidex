@@ -303,6 +303,17 @@ const githubPullRequest = {
   mergeable: true,
 }
 
+const githubThreadPullRequestSummary = {
+  owner: 'octocat',
+  repository: 'fixture',
+  number: 7,
+  url: 'https://github.com/octocat/fixture/pull/7',
+  title: 'Fixture pull request',
+  origin: 'discovered',
+  primary: true,
+  status: { state: 'mergeable', reason: null, stale: false, checkedAt: 1_800_000_000_000 },
+} as const
+
 const githubProfileRepository = {
   id: 'repo:1',
   name: 'fixture',
@@ -3361,6 +3372,25 @@ const fixtures = {
       },
     },
   ),
+  'github/thread/pullRequests': methodFixture(
+    'github/thread/pullRequests',
+    { threadIds: [project.id] },
+    {
+      threads: [{ threadId: project.id, items: [githubThreadPullRequestSummary] }],
+    },
+  ),
+  'github/thread/pullRequest/link': methodFixture(
+    'github/thread/pullRequest/link',
+    { threadId: project.id, url: githubPullRequest.htmlUrl },
+    {
+      thread: { threadId: project.id, items: [githubThreadPullRequestSummary] },
+    },
+  ),
+  'github/thread/pullRequest/unlink': methodFixture(
+    'github/thread/pullRequest/unlink',
+    { threadId: project.id, owner: 'octocat', repository: 'fixture', number: 7 },
+    { thread: { threadId: project.id, items: [] } },
+  ),
   'git/branch/create': methodFixture(
     'git/branch/create',
     {
@@ -5819,7 +5849,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(314)
+    expect(methods).toHaveLength(317)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6187,7 +6217,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(293)
+    expect(Object.keys(RpcMethods)).toHaveLength(296)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })

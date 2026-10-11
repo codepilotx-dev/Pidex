@@ -65,6 +65,7 @@ import { browserToolDefinitions } from './tool/Browser/Definition'
 import { MemoryManager } from './resource/MemoryManager'
 import { GitReviewService } from './review/GitReviewService'
 import { GithubService } from './github/GithubService'
+import { ThreadPullRequestService } from './github/ThreadPullRequestService'
 import { PullRequestWatchService } from './github/PullRequestWatchService'
 import { AutomationHostAuditRepository } from './automation/AutomationHostAuditRepository'
 import { GitWorkspaceService } from './git/GitWorkspaceService'
@@ -480,6 +481,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const releaseNotes = new ReleaseNotesService({
       getAccessToken: () => github.optionalAccessToken(),
     })
+    const threadPullRequests = new ThreadPullRequestService(db, github, hub)
     const review = new GitReviewService(
       db,
       async (projectId) => {
@@ -1197,6 +1199,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       review,
       github,
       prWatches,
+      threadPullRequests,
       git,
       tooling,
       pets,

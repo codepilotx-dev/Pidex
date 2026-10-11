@@ -143,6 +143,7 @@ export function GitWorkflowModal({
         workspacePath: workspace.path,
         setUpstream,
         forceWithLease,
+        ...(threadId ? { threadId } : {}),
       })
       if ('error' in result) {
         throw new Error(result.error)
@@ -161,6 +162,7 @@ export function GitWorkflowModal({
         title: prTitle,
         body: prBody,
         draft: draftPr,
+        ...(threadId ? { threadId } : {}),
       })
       if ('error' in result) {
         throw new Error(result.error)

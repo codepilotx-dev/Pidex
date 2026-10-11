@@ -1107,6 +1107,9 @@ describe('sidebar session hover card projection', () => {
       relativeTime: '19 分',
       projectLabel: 'Pidex',
       gitBranch: 'codex/hover-card',
+      environmentLabel: null,
+      environmentKind: null,
+      pullRequests: [],
       unread: false,
       isRunning: false,
     })

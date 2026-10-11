@@ -1,11 +1,14 @@
 import type React from 'react'
-import { Folder, GitBranch, Laptop } from 'lucide-react'
+import { Folder, GitBranch, GitFork, Laptop, Unlink } from 'lucide-react'
+import type { ThreadPullRequestSummary } from '@pidex/shared/thread'
 import { SkeletonBlock } from '../../../components/ui/Skeleton.js'
 import {
   APP_ICON_SIZE,
   APP_ICON_STROKE_WIDTH,
   APP_ICON_SIZES,
 } from '../../../components/ui/IconTokens.js'
+import { cx } from '../../../utils/Cx.js'
+import { desktopClient } from '../../../services/desktop-client/index.js'
 import type { SidebarHoverCardOverlayRenderProps } from './SidebarHoverCard.js'
 import {
   SidebarHoverCardFrame,
@@ -14,6 +17,11 @@ import {
 } from './SidebarHoverCardLayout.js'
 import { SidebarHoverCardSurface } from './SidebarHoverCardSurface.js'
 import type { SidebarSessionHoverCardModel } from './SidebarSessionHoverCard.js'
+import {
+  threadPullRequestIcon,
+  threadPullRequestTitle,
+  threadPullRequestVisual,
+} from './ThreadPullRequestPresentation.js'
 
 type Props = SidebarHoverCardOverlayRenderProps & {
   editing: boolean
@@ -28,6 +36,52 @@ type Props = SidebarHoverCardOverlayRenderProps & {
   onRenameValueChange: (value: string) => void
   onSaveRename: () => void
   onStartRename: () => void
+  onUnlinkPullRequest?: (item: ThreadPullRequestSummary) => void
+}
+
+function PullRequestRow({
+  item,
+  onUnlink,
+}: {
+  item: ThreadPullRequestSummary
+  onUnlink?: (item: ThreadPullRequestSummary) => void
+}): React.ReactNode {
+  const visual = threadPullRequestVisual(item.status)
+  const Icon = threadPullRequestIcon(item.status)
+  return (
+    <SidebarHoverCardRow className="sidebar-session-hover-card-row tw:grid-cols-[var(--sidebar-hover-leading-width)_minmax(0,1fr)] tw:text-app-text-meta tw:type-caption">
+      <Icon
+        aria-hidden="true"
+        className={cx('tw:size-icon-sm', visual.className)}
+        size={APP_ICON_SIZE}
+        strokeWidth={APP_ICON_STROKE_WIDTH}
+      />
+      <span className="sidebar-session-hover-card-row-content tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1">
+        <button
+          className="sidebar-session-hover-card-pr tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit tw:hover:underline"
+          title={threadPullRequestTitle(item.number, item.title, item.status)}
+          type="button"
+          onClick={() => void desktopClient.openExternalURL(item.url)}
+        >
+          {`#${item.number} ${item.title ?? item.repository}`}
+        </button>
+        <span className={cx('tw:flex-none tw:whitespace-nowrap', visual.className)}>
+          {visual.label}
+        </span>
+        {onUnlink ? (
+          <button
+            aria-label={`解除与 Pull Request #${item.number} 的关联`}
+            className="sidebar-session-hover-card-pr-unlink tw:flex-none tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text-meta tw:hover:text-app-danger"
+            title="解除关联"
+            type="button"
+            onClick={() => onUnlink(item)}
+          >
+            <Unlink aria-hidden="true" size={APP_ICON_SIZES.sm} />
+          </button>
+        ) : null}
+      </span>
+    </SidebarHoverCardRow>
+  )
 }
 
 export function SidebarSessionHoverCardOverlay({
@@ -43,6 +97,7 @@ export function SidebarSessionHoverCardOverlay({
   onRenameValueChange,
   onSaveRename,
   onStartRename,
+  onUnlinkPullRequest,
   ...interactionProps
 }: Props): React.ReactNode {
   return (
@@ -166,6 +221,35 @@ export function SidebarSessionHoverCardOverlay({
               ) : null}
             </span>
           </SidebarHoverCardRow>
+          {model.environmentLabel && model.environmentKind ? (
+            <SidebarHoverCardRow className="sidebar-session-hover-card-row tw:grid-cols-[var(--sidebar-hover-leading-width)_minmax(0,1fr)] tw:text-app-text-meta tw:type-caption">
+              {model.environmentKind === 'worktree' ? (
+                <GitFork
+                  aria-hidden="true"
+                  className="tw:size-icon-sm tw:text-app-text-meta"
+                  size={APP_ICON_SIZE}
+                  strokeWidth={APP_ICON_STROKE_WIDTH}
+                />
+              ) : (
+                <Laptop
+                  aria-hidden="true"
+                  className="tw:size-icon-sm tw:text-app-text-meta"
+                  size={APP_ICON_SIZE}
+                  strokeWidth={APP_ICON_STROKE_WIDTH}
+                />
+              )}
+              <span className="sidebar-session-hover-card-row-content tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
+                {model.environmentLabel}
+              </span>
+            </SidebarHoverCardRow>
+          ) : null}
+          {model.pullRequests.map((item) => (
+            <PullRequestRow
+              key={`${item.owner}/${item.repository}#${item.number}`}
+              item={item}
+              onUnlink={onUnlinkPullRequest}
+            />
+          ))}
         </div>
       </SidebarHoverCardFrame>
     </SidebarHoverCardSurface>

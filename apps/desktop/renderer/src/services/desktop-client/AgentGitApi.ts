@@ -1,12 +1,15 @@
 import type { Project } from '@pidex/shared'
 import { AgentRpcError } from '../AgentRpcClient.js'
 import type { ProtocolCapability } from '@pidex/agent-protocol'
+import type { ThreadPullRequestList } from '@pidex/shared/thread'
 import type {
   DesktopGithubAuthStatus,
   DesktopGithubProfileOverviewResult,
   DesktopGithubRepositoryListResult,
   DesktopGitOperationResult,
   DesktopPullRequestResult,
+  DesktopThreadPullRequestMutationResult,
+  DesktopThreadPullRequestsResult,
 } from '../../../shared/Types.js'
 import { projectToDesktopWorkspace } from '../AgentThreadAdapter.js'
 import type { createAgentRpcClient } from '../AgentRpcClient.js'
@@ -26,6 +29,9 @@ type GitApiMethod =
   | 'clearGithubUserStatus'
   | 'pushWorkspaceBranch'
   | 'createPullRequest'
+  | 'listThreadPullRequests'
+  | 'linkThreadPullRequest'
+  | 'unlinkThreadPullRequest'
   | 'getWorkspaceGitStatus'
   | 'checkoutWorkspaceBranch'
   | 'createWorkspaceBranch'
@@ -43,7 +49,11 @@ type Dependencies = {
   requireAgentCapability: (
     name: Extract<
       ProtocolCapability,
-      'github.oauth.v1' | 'github.pullRequests.v1' | 'git.review.v1' | 'git.workspace.v1'
+      | 'github.oauth.v1'
+      | 'github.pullRequests.v1'
+      | 'github.threadPullRequests.v1'
+      | 'git.review.v1'
+      | 'git.workspace.v1'
     >,
   ) => void
   rpc: Pick<ReturnType<typeof createAgentRpcClient>, 'call'>
@@ -220,6 +230,7 @@ export function createAgentGitApi({
             projectId: project.id,
             setUpstream: input.setUpstream === true,
             forceWithLease: input.forceWithLease === true,
+            ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
           })
           return {
             ok: true,
@@ -243,6 +254,7 @@ export function createAgentGitApi({
             title: input.title,
             ...(input.body === undefined ? {} : { body: input.body }),
             ...(input.draft === undefined ? {} : { draft: input.draft }),
+            ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
           })
           return {
             ok: true,
@@ -252,6 +264,60 @@ export function createAgentGitApi({
         })
       } catch (error) {
         return { ok: false, error: operationError(error) }
+      }
+    },
+    listThreadPullRequests: async (threadIds): Promise<DesktopThreadPullRequestsResult> => {
+      try {
+        return await withRequiredAgent(async () => {
+          requireAgentCapability('github.threadPullRequests.v1')
+          if (threadIds.length === 0) return { ok: true as const, threads: [] }
+          const result = await rpc.call<{ threads: ThreadPullRequestList[] }>(
+            'github/thread/pullRequests',
+            { threadIds },
+          )
+          return { ok: true as const, threads: result.threads }
+        })
+      } catch (error) {
+        return {
+          ok: false as const,
+          error: operationError(error),
+          ...(error instanceof AgentRpcError && error.errorCode
+            ? { errorCode: error.errorCode }
+            : {}),
+        }
+      }
+    },
+    linkThreadPullRequest: async (input): Promise<DesktopThreadPullRequestMutationResult> => {
+      try {
+        return await withRequiredAgent(async () => {
+          requireAgentCapability('github.threadPullRequests.v1')
+          const result = await rpc.call<{ thread: ThreadPullRequestList }>(
+            'github/thread/pullRequest/link',
+            { threadId: input.threadId, url: input.url },
+          )
+          return { ok: true as const, thread: result.thread }
+        })
+      } catch (error) {
+        return { ok: false as const, error: operationError(error) }
+      }
+    },
+    unlinkThreadPullRequest: async (input): Promise<DesktopThreadPullRequestMutationResult> => {
+      try {
+        return await withRequiredAgent(async () => {
+          requireAgentCapability('github.threadPullRequests.v1')
+          const result = await rpc.call<{ thread: ThreadPullRequestList }>(
+            'github/thread/pullRequest/unlink',
+            {
+              threadId: input.threadId,
+              owner: input.owner,
+              repository: input.repository,
+              number: input.number,
+            },
+          )
+          return { ok: true as const, thread: result.thread }
+        })
+      } catch (error) {
+        return { ok: false as const, error: operationError(error) }
       }
     },
     getWorkspaceGitStatus: async (workspacePath, projectId) => {

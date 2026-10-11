@@ -11,6 +11,7 @@ import {
   QueueActionSchema,
   SubagentProjectionSchema,
   ThreadGoalSchema,
+  ThreadPullRequestSummarySchema,
   ThreadSchema,
   ThreadSettingsSchema,
   ToolItemSchema,
@@ -381,6 +382,17 @@ export const EventManifest = {
     stream: 'thread',
     capability: 'thread.bookmarks.v1',
     reconcilesWith: 'thread/bookmarks/list',
+  }),
+  'thread/pull-requests/updated': defineEvent({
+    payload: Schema.Struct({
+      threadId: OpaqueIDSchema,
+      items: Schema.Array(ThreadPullRequestSummarySchema),
+    }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'github.threadPullRequests.v1',
+    reconcilesWith: 'github/thread/pullRequests',
   }),
   'turn/queued': defineEvent({
     payload: Schema.Struct({ turn: TurnSchema, input: InputSchema }),

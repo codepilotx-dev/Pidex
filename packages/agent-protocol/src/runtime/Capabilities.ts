@@ -44,6 +44,7 @@ export const Capabilities = [
   'ai.review.v1',
   'github.oauth.v1',
   'github.pullRequests.v1',
+  'github.threadPullRequests.v1',
   'context.compact.v1',
   'hooks.trust.v1',
   'subagents.v1',

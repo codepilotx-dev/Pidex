@@ -26,6 +26,7 @@ import { ThreadGoalRepository } from '../repositories/ThreadGoalRepository'
 import { ThreadGoalLedgerRepository } from '../repositories/ThreadGoalLedgerRepository'
 import { ThreadGoalContinuationRepository } from '../repositories/ThreadGoalContinuationRepository'
 import { ThreadBookmarkRepository } from '../repositories/ThreadBookmarkRepository'
+import { ThreadPullRequestRepository } from '../repositories/ThreadPullRequestRepository'
 import { ThreadWorktreeOperationRepository } from '../repositories/ThreadWorktreeOperationRepository'
 import { configureConnection, shrinkDatabaseMemory } from './Connection'
 import { backfillProjectThreadWorkspaces, initializeSchema } from './SchemaInitializer'
@@ -91,6 +92,7 @@ export class AgentDatabase extends RepositoryDatabase {
       threadGoalLedger: new ThreadGoalLedgerRepository(this),
       threadGoalContinuations: new ThreadGoalContinuationRepository(this),
       threadBookmarks: new ThreadBookmarkRepository(this),
+      threadPullRequests: new ThreadPullRequestRepository(this),
       threadWorktreeOperations: new ThreadWorktreeOperationRepository(this),
       automations: new AutomationRepository(this),
       scheduledTasks: new ScheduledTaskRepository(this),

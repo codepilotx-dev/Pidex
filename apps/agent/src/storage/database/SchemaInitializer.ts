@@ -10,6 +10,7 @@ import {
 import { THREAD_GOAL_LEDGER_SCHEMA } from '../repositories/ThreadGoalLedgerRepository'
 import { THREAD_GOAL_CONTINUATION_SCHEMA } from '../repositories/ThreadGoalContinuationRepository'
 import { THREAD_BOOKMARK_SCHEMA } from '../repositories/ThreadBookmarkRepository'
+import { THREAD_PULL_REQUEST_SCHEMA } from '../repositories/ThreadPullRequestRepository'
 import { BROWSER_SCHEMA } from '../repositories/BrowserRepository'
 import { BROWSER_DATA_SCHEMA } from '../repositories/BrowserDataRepository'
 import { THREAD_WORKTREE_OPERATION_SCHEMA } from '../repositories/ThreadWorktreeOperationRepository'
@@ -165,6 +166,7 @@ export const FINAL_SCHEMA = [
   ...THREAD_GOAL_LEDGER_SCHEMA,
   ...THREAD_GOAL_CONTINUATION_SCHEMA,
   ...THREAD_BOOKMARK_SCHEMA,
+  ...THREAD_PULL_REQUEST_SCHEMA,
   ...THREAD_WORKTREE_OPERATION_SCHEMA,
   ...WORKTREE_SETTINGS_SCHEMA,
   ...LOCAL_ENVIRONMENT_SELECTION_SCHEMA,
@@ -1568,6 +1570,14 @@ class SchemaInitializer {
                 this.sqlite.exec('ALTER TABLE threads ADD COLUMN workspace_owner_thread_id TEXT')
             },
             57: () => this.sqlite.exec(SUBAGENT_COLLABORATION_SCHEMA.join(';')),
+            58: () =>
+              this.sqlite.exec(
+                THREAD_PULL_REQUEST_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
             56: () =>
               this.sqlite.exec(
                 [
