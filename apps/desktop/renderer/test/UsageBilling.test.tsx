@@ -219,7 +219,7 @@ describe('usage billing renderer', () => {
     expect(html).toContain('总 Token')
     expect(html).toContain('根任务数')
     expect(html).toContain('Provider 调用')
-    expect(html).toContain('/settings/providers?provider=deepseek')
+    expect(html).toContain('/providers?provider=deepseek')
   })
 
   it('renders usage, cost, balance, and quota data with metered warning and repair links', () => {

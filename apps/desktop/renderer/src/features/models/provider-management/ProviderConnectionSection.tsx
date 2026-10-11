@@ -1,18 +1,15 @@
 import {
   ArrowDown,
   ArrowUp,
-  Cable,
-  CheckCircle2,
   Copy,
-  Globe,
+  ExternalLink,
   KeyRound,
   MoreHorizontal,
   Plus,
-  RefreshCw,
-  Server,
 } from 'lucide-react'
 import type React from 'react'
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import type { UsageSourceDescriptor } from '@pidex/agent-protocol'
 import type {
   DesktopApiKeyHealthStatus,
   DesktopApiKeySummary,
@@ -30,11 +27,19 @@ import {
   APP_ICON_SIZES,
 } from '../../../components/ui/IconTokens.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
-import { isExecutableDesktopProvider } from '../../../services/desktop-client/ProviderAdapters.js'
 import { fullErrorMessage } from '../../../utils/Errors.js'
 import {
+  allBalances,
+  formatCheckedAt,
+  usageStatusLabel,
+  type ProviderUsageSource,
+} from '../../../utils/UsageFormatters.js'
+import { ProviderBalanceCards } from '../../settings/usage/ProviderBalanceCards.js'
+import {
   providerManagementStore,
+  useProviderManagementSnapshot,
   type ConfiguredProviderGroup,
+  type ProviderConnection,
 } from '../../provider-management/index.js'
 import { BillingCredentialConnection } from './BillingCredentialConnection.js'
 import { OAuthConnection } from './OAuthConnection.js'
@@ -67,6 +72,86 @@ const HEALTH_LABELS: Record<DesktopApiKeyHealthStatus, string> = {
   error: '异常',
 }
 
+/**
+ * 环境变量推理凭据：只取 credential 来源（当前 Provider 的实际推理 Key）。
+ * 用量来源派生的环境连接留在用量区，避免同一环境变量在两处重复展示。
+ */
+export function envInferenceConnections(
+  connections: readonly ProviderConnection[],
+): ProviderConnection[] {
+  return connections.filter(
+    (connection) => connection.kind === 'env' && connection.origin === 'credential',
+  )
+}
+
+function localTimeZone(): string {
+  return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'
+}
+
+export type ProviderCredentialUsageCardProps = {
+  descriptor: UsageSourceDescriptor
+  result: ProviderUsageSource | undefined
+  loading: boolean
+  onRefresh: () => void
+}
+
+/**
+ * `provider-credential` 用量来源的余额卡片：复用供应商 API Key，
+ * 展示连接状态、实际余额与查询状态；未知余额不显示为 0。
+ */
+export function ProviderCredentialUsageCard({
+  descriptor,
+  result,
+  loading,
+  onRefresh,
+}: ProviderCredentialUsageCardProps): React.ReactNode {
+  const status =
+    result?.status ??
+    (loading ? null : descriptor.connection.kind === 'none' ? 'not-connected' : 'unavailable')
+  const balances = allBalances(result)
+  return (
+    <article className="provider-usage-card" data-status={status ?? undefined}>
+      <header className="provider-usage-header">
+        <div>
+          <div className="provider-usage-title">
+            <h4 className="tw:m-0 tw:text-app-text tw:type-row-title">{descriptor.displayName}</h4>
+            {status ? (
+              <span className="usage-badge" data-status={status}>
+                {usageStatusLabel(status)}
+              </span>
+            ) : null}
+          </div>
+          <p className="tw:m-0 tw:text-app-text-soft tw:type-body-sm">
+            复用供应商 API Key · {formatCheckedAt(result?.checkedAt)}
+          </p>
+        </div>
+        <div className="provider-usage-card-actions">
+          <Button color="secondary" loading={loading} onClick={onRefresh}>
+            刷新余额
+          </Button>
+        </div>
+      </header>
+      {result?.error ? (
+        <div className="usage-source-error" role="status">
+          <strong>{result.error.message}</strong>
+          <span>{result.error.retryable ? '可以稍后重试。' : '查询暂时失败。'}</span>
+        </div>
+      ) : null}
+      {balances.length > 0 ? (
+        <ProviderBalanceCards balances={balances} />
+      ) : (
+        <p className="usage-chart-empty">
+          {loading
+            ? '正在查询余额。'
+            : status === 'not-connected'
+              ? '尚未连接可查询的凭据。'
+              : '暂无可展示的余额。'}
+        </p>
+      )}
+    </article>
+  )
+}
+
 export function ProviderConnectionSection({
   provider,
   providerState,
@@ -94,6 +179,33 @@ export function ProviderConnectionSection({
   const [customBaseUrl, setCustomBaseUrl] = useState(customConfig?.baseUrl ?? '')
   const [savingBaseUrl, setSavingBaseUrl] = useState(false)
 
+  const snapshot = useProviderManagementSnapshot()
+  const timeZone = useMemo(localTimeZone, [])
+  const usageResultById = useMemo(
+    () => new Map(snapshot.usageResults.map((source) => [source.sourceId, source])),
+    [snapshot.usageResults],
+  )
+  // 只查询当前供应商已连接且可查询的来源；不带 force 走共享缓存。
+  const connectedQueryableSourceIds = useMemo(
+    () =>
+      (group?.usageSources ?? [])
+        .filter(
+          (source) => source.connection.kind !== 'none' && source.availability === 'queryable',
+        )
+        .map((source) => source.sourceId),
+    [group],
+  )
+  const connectedQueryableSourceIdsRef = useRef<string[]>([])
+  connectedQueryableSourceIdsRef.current = connectedQueryableSourceIds
+  const connectedQueryableSourceIdsKey = JSON.stringify(connectedQueryableSourceIds)
+  useEffect(() => {
+    const sourceIds = connectedQueryableSourceIdsRef.current
+    if (sourceIds.length === 0) return
+    void providerManagementStore
+      .querySources({ range: 'today', timeZone, sourceIds })
+      .catch(() => undefined)
+  }, [connectedQueryableSourceIdsKey, timeZone])
+
   if (provider.availability?.status === 'unavailable') {
     return (
       <div className="model-center-connection-section tw:grid tw:gap-4">
@@ -114,9 +226,7 @@ export function ProviderConnectionSection({
   const oauthCredentials = (group?.connections ?? []).filter(
     (connection) => connection.kind === 'oauth' && connection.origin === 'credential',
   )
-  const envConnections = (group?.connections ?? []).filter(
-    (connection) => connection.kind === 'env',
-  )
+  const envInference = envInferenceConnections(group?.connections ?? [])
 
   async function handleSaveCustomBaseUrl(): Promise<void> {
     if (!customConfig) return
@@ -133,6 +243,12 @@ export function ProviderConnectionSection({
     } finally {
       setSavingBaseUrl(false)
     }
+  }
+
+  function refreshUsageSource(sourceId: string): void {
+    void providerManagementStore
+      .querySources({ range: 'today', timeZone, sourceIds: [sourceId], force: true })
+      .catch((error) => onError(fullErrorMessage(error)))
   }
 
   return (
@@ -191,7 +307,7 @@ export function ProviderConnectionSection({
           </header>
 
           <div className="model-center-detail-card-body tw:min-w-0">
-            {apiKeys.length > 0 ? (
+            {apiKeys.length > 0 || envInference.length > 0 ? (
               <div className="model-center-key-list tw:grid">
                 {apiKeys.map((key, index) => (
                   <ApiKeyRowItem
@@ -208,6 +324,38 @@ export function ProviderConnectionSection({
                     onTest={() => void onTestKey(key)}
                     onToggleEnabled={() => void onToggleKeyEnabled(key)}
                   />
+                ))}
+                {envInference.map((connection) => (
+                  <article
+                    className="model-center-key-row tw:grid tw:min-w-0 tw:grid-cols-[auto_minmax(0,1fr)] tw:items-center tw:gap-3 tw:px-4 tw:py-3 tw:[&+&]:border-t tw:[&+&]:border-t-app-border-subtle tw:@max-[720px]:grid-cols-1 tw:@max-[720px]:items-stretch tw:@max-[720px]:p-4"
+                    key={connection.id}
+                  >
+                    <span className="model-center-key-order tw:flex tw:items-center tw:justify-center tw:text-app-text-soft">
+                      <KeyRound aria-hidden size={APP_ICON_SIZE} />
+                    </span>
+                    <div className="model-center-key-main tw:grid tw:min-w-0 tw:gap-2">
+                      <div className="model-center-key-title tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:gap-2">
+                        <strong className="tw:min-w-0 tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap tw:[font-size:var(--cpx-sys-font-size-md)] tw:type-weight-label">
+                          {connection.label}
+                        </strong>
+                        <span
+                          className="model-center-key-badge tw:inline-flex tw:min-h-[22px] tw:items-center tw:rounded-full tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-2 tw:py-1 tw:whitespace-nowrap tw:text-app-text-soft tw:[font-size:var(--cpx-sys-font-size-xs)] tw:type-weight-label"
+                          data-tone="neutral"
+                        >
+                          来源：环境变量
+                        </span>
+                        <span
+                          className="model-center-key-badge tw:inline-flex tw:min-h-[22px] tw:items-center tw:rounded-full tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-2 tw:py-1 tw:whitespace-nowrap tw:text-app-text-soft tw:[font-size:var(--cpx-sys-font-size-xs)] tw:type-weight-label tw:data-[tone=healthy]:border-app-success-border tw:data-[tone=healthy]:bg-app-success-subtle tw:data-[tone=healthy]:text-app-success"
+                          data-tone="healthy"
+                        >
+                          已生效
+                        </span>
+                      </div>
+                      <div className="model-center-key-meta tw:flex tw:flex-wrap tw:items-center tw:gap-x-3 tw:gap-y-2 tw:text-app-text-soft tw:[font-size:var(--cpx-sys-font-size-xs)]">
+                        <span>由运行环境提供，只读，不支持编辑、删除或复制。</span>
+                      </div>
+                    </div>
+                  </article>
                 ))}
               </div>
             ) : (
@@ -303,26 +451,38 @@ export function ProviderConnectionSection({
         </section>
       ) : null}
 
-      {/* 4. Billing / Usage Sources */}
+      {/* 4. Usage / balance sources */}
       {(group?.usageSources ?? []).length > 0 ? (
         <section className="model-center-detail-card tw:grid tw:gap-3 tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-4">
           <header className="model-center-detail-card-header tw:flex tw:items-center tw:justify-between tw:gap-3">
             <div>
-              <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">用量与账单凭据</h3>
+              <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">用量与余额</h3>
               <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
-                绑定独立用量凭据以查看实时额度与消耗。
+                按来源查看账户余额、额度与消耗；不同来源的连接方式不同。
               </p>
             </div>
           </header>
-          <div className="model-center-detail-card-body tw:min-w-0">
+          <div className="model-center-detail-card-body tw:grid tw:min-w-0 tw:gap-3">
             {group!.usageSources.map((source) => {
-              if (source.connectionMethod.kind === 'billing-key') {
+              const method = source.connectionMethod
+              if (method.kind === 'provider-credential') {
+                return (
+                  <ProviderCredentialUsageCard
+                    descriptor={source}
+                    key={source.sourceId}
+                    loading={snapshot.refreshingSourceIds.includes(source.sourceId)}
+                    onRefresh={() => refreshUsageSource(source.sourceId)}
+                    result={usageResultById.get(source.sourceId)}
+                  />
+                )
+              }
+              if (method.kind === 'billing-key') {
                 return (
                   <BillingCredentialConnection
                     key={source.sourceId}
                     source={{
                       ...source,
-                      connectionMethod: source.connectionMethod,
+                      connectionMethod: method,
                     }}
                     onChanged={onRefresh}
                     onConnect={(input) => providerManagementStore.connectUsageCredential(input)}
@@ -332,7 +492,7 @@ export function ProviderConnectionSection({
                   />
                 )
               }
-              if (source.connectionMethod.kind === 'oauth') {
+              if (method.kind === 'oauth') {
                 return (
                   <OAuthConnection
                     connected={source.connection.kind !== 'none'}
@@ -348,44 +508,55 @@ export function ProviderConnectionSection({
                   />
                 )
               }
+              if (method.kind === 'external') {
+                return (
+                  <div
+                    className="tw:grid tw:min-w-0 tw:gap-3 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-4"
+                    key={source.sourceId}
+                  >
+                    <div className="tw:flex tw:min-w-0 tw:items-start tw:justify-between tw:gap-3">
+                      <div>
+                        <h4 className="tw:m-0 tw:text-app-text tw:type-row-title">
+                          {source.displayName}
+                        </h4>
+                        <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
+                          在供应商控制台查看用量与余额。
+                        </p>
+                      </div>
+                      <span className="usage-badge">{usageStatusLabel('unsupported')}</span>
+                    </div>
+                    <div>
+                      <Button
+                        color="secondary"
+                        onClick={() => void desktopClient.openExternalURL(method.consoleUrl)}
+                      >
+                        <ExternalLink aria-hidden size={APP_ICON_SIZE} />
+                        打开控制台
+                      </Button>
+                    </div>
+                  </div>
+                )
+              }
+              if (source.availability !== 'queryable') {
+                return (
+                  <div
+                    className="tw:flex tw:min-w-0 tw:items-start tw:justify-between tw:gap-3 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-4"
+                    key={source.sourceId}
+                  >
+                    <div>
+                      <h4 className="tw:m-0 tw:text-app-text tw:type-row-title">
+                        {source.displayName}
+                      </h4>
+                      <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
+                        当前接入方式不支持查询余额或用量，请到供应商控制台查看。
+                      </p>
+                    </div>
+                    <span className="usage-badge">{usageStatusLabel('unsupported')}</span>
+                  </div>
+                )
+              }
               return null
             })}
-          </div>
-        </section>
-      ) : null}
-
-      {/* 5. Environment Connections */}
-      {envConnections.length > 0 ? (
-        <section className="model-center-detail-card tw:grid tw:gap-3 tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-4">
-          <header className="model-center-detail-card-header tw:flex tw:items-center tw:justify-between tw:gap-3">
-            <div>
-              <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">环境变量</h3>
-              <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
-                系统在运行环境中检测到以下可用凭据：
-              </p>
-            </div>
-          </header>
-          <div className="model-center-detail-card-body tw:min-w-0">
-            <div className="model-center-account-readonly-list tw:grid tw:gap-2">
-              {envConnections.map((connection) => (
-                <div
-                  className="tw:grid tw:min-h-10 tw:grid-cols-[auto_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2"
-                  key={connection.id}
-                >
-                  <Cable
-                    className="tw:size-icon tw:text-app-text-soft"
-                    size={APP_ICON_SIZE}
-                    aria-hidden
-                  />
-                  <span className="tw:text-app-text tw:[font-size:var(--cpx-sys-font-size-sm)]">
-                    {connection.label}
-                  </span>
-                  <strong className="tw:text-app-success tw:[font-size:var(--cpx-sys-font-size-xs)] tw:type-weight-label">
-                    已生效
-                  </strong>
-                </div>
-              ))}
-            </div>
           </div>
         </section>
       ) : null}

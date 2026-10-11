@@ -7,6 +7,14 @@ import {
   type ProviderCatalogItem,
 } from '../src/features/models/ProviderCatalog.js'
 import { getProviderConnectionChoices } from '../src/features/models/provider-management/ProviderConnectionDialog.js'
+import {
+  ProviderCredentialUsageCard,
+  envInferenceConnections,
+} from '../src/features/models/provider-management/ProviderConnectionSection.js'
+import type {
+  ProviderConnection,
+  ProviderUsageSource,
+} from '../src/features/provider-management/index.js'
 
 describe('model center account management', () => {
   test('OpenAI 同时提供 ChatGPT 登录和 API Key，选项 ID 独立', () => {
@@ -87,6 +95,127 @@ describe('model center account management', () => {
     expect(source).toContain('const [expanded, setExpanded] = useState(defaultExpanded)')
   })
 })
+
+describe('provider connection environment and balance', () => {
+  test('环境变量推理凭据只取 credential 来源，用量来源环境连接留在用量区', () => {
+    const connections = [
+      connection({
+        id: 'env:deepseek:DEEPSEEK_API_KEY',
+        kind: 'env',
+        origin: 'credential',
+        label: 'DEEPSEEK_API_KEY',
+      }),
+      connection({
+        id: 'usage-source:deepseek-balance',
+        kind: 'env',
+        origin: 'usage-source',
+        label: 'DeepSeek 余额',
+      }),
+      connection({ id: 'credential:oauth', kind: 'oauth', origin: 'credential', label: 'OAuth' }),
+    ]
+
+    expect(envInferenceConnections(connections).map((item) => item.id)).toEqual([
+      'env:deepseek:DEEPSEEK_API_KEY',
+    ])
+  })
+
+  test('复用供应商 API Key 的余额来源渲染实际余额而不是 0', () => {
+    const html = renderToStaticMarkup(
+      <ProviderCredentialUsageCard
+        descriptor={providerCredentialSource()}
+        loading={false}
+        onRefresh={() => {}}
+        result={usageResult()}
+      />,
+    )
+
+    expect(html).toContain('复用供应商 API Key')
+    expect(html).toContain('DeepSeek 余额')
+    expect(html).toContain('CNY 账户余额')
+    expect(html).toContain('123.45')
+  })
+
+  test('余额查询中与查询失败分别展示状态，不把未知余额显示为 0', () => {
+    const loading = renderToStaticMarkup(
+      <ProviderCredentialUsageCard
+        descriptor={providerCredentialSource()}
+        loading
+        onRefresh={() => {}}
+        result={undefined}
+      />,
+    )
+    expect(loading).toContain('正在查询余额。')
+    expect(loading).not.toContain('CNY 账户余额')
+
+    const failed = renderToStaticMarkup(
+      <ProviderCredentialUsageCard
+        descriptor={providerCredentialSource()}
+        loading={false}
+        onRefresh={() => {}}
+        result={usageResult({
+          status: 'unavailable',
+          error: { category: 'network', message: '查询失败', retryable: true },
+        })}
+      />,
+    )
+    expect(failed).toContain('查询失败')
+  })
+})
+
+function connection(input: {
+  id: string
+  kind: ProviderConnection['kind']
+  origin: ProviderConnection['origin']
+  label: string
+}): ProviderConnection {
+  return {
+    id: input.id,
+    kind: input.kind,
+    origin: input.origin,
+    providerIds: ['deepseek'],
+    label: input.label,
+    active: true,
+    enabled: true,
+  }
+}
+
+function providerCredentialSource(): UsageSourceDescriptor {
+  return {
+    sourceId: 'deepseek-balance',
+    canonicalProviderId: 'deepseek',
+    providerIds: ['deepseek'],
+    displayName: 'DeepSeek 余额',
+    scope: 'account',
+    stability: 'official',
+    availability: 'queryable',
+    capabilities: ['balance'],
+    queryPolicy: 'cached',
+    connection: { kind: 'provider-key', disconnectible: false },
+    connectionMethod: { kind: 'provider-credential' },
+  } as UsageSourceDescriptor
+}
+
+function usageResult(overrides: Partial<ProviderUsageSource> = {}): ProviderUsageSource {
+  return {
+    sourceId: 'deepseek-balance',
+    providerIds: ['deepseek'],
+    displayName: 'DeepSeek 余额',
+    scope: 'account',
+    stability: 'official',
+    status: 'available',
+    checkedAt: 1_700_000_000_000,
+    connection: { kind: 'provider-key', disconnectible: false },
+    groups: [
+      {
+        id: 'balance',
+        label: '余额',
+        balances: [{ currency: 'CNY', total: '123.45', components: [] }],
+        quotaWindows: [],
+      },
+    ],
+    ...overrides,
+  } as ProviderUsageSource
+}
 
 function billingSource(): UsageSourceDescriptor {
   return source({

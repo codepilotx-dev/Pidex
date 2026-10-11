@@ -17,6 +17,7 @@ import {
   type ProviderQuotaWindow,
   type ProviderUsageSource,
 } from '../../../utils/UsageFormatters.js'
+import { ProviderBalanceCards } from './ProviderBalanceCards.js'
 
 type ProviderRange = RpcParams<'usage/provider/query'>['range']
 type ProviderUsageResult = RpcResult<'usage/provider/query'>
@@ -156,7 +157,7 @@ export function ProviderUsagePanel({
         <div className="usage-empty-state" role="status">
           <h3>还没有已配置的厂商</h3>
           <p>请先从供应商目录完成连接，这里只展示已配置账户的用量与成本。</p>
-          <Link className="usage-text-link" to="/settings/providers">
+          <Link className="usage-text-link" to="/providers">
             前往供应商
           </Link>
         </div>
@@ -276,7 +277,7 @@ function ProviderUsageCard({
             <h3>
               <Link
                 title="前往账户连接"
-                to={`/settings/providers?provider=${encodeURIComponent(providerId)}`}
+                to={`/providers?provider=${encodeURIComponent(providerId)}`}
               >
                 {descriptor.displayName}
               </Link>
@@ -292,7 +293,7 @@ function ProviderUsageCard({
           <p>
             <Link
               className="usage-text-link"
-              to={`/settings/providers?provider=${encodeURIComponent(providerId)}`}
+              to={`/providers?provider=${encodeURIComponent(providerId)}`}
             >
               {providerName}
             </Link>
@@ -335,7 +336,7 @@ function ProviderUsageCard({
           </span>
           <Link
             className="usage-text-link"
-            to={`/settings/providers?provider=${encodeURIComponent(providerId)}`}
+            to={`/providers?provider=${encodeURIComponent(providerId)}`}
           >
             修复账户连接
           </Link>
@@ -366,30 +367,7 @@ function ProviderUsageGroupCard({
     <section className="provider-usage-group">
       <h4>{group.label}</h4>
       {group.balances && group.balances.length > 0 ? (
-        <div aria-label="账户余额" className="provider-balances" role="group">
-          {group.balances.map((balance) => (
-            <div className="provider-balance-card" key={balance.currency}>
-              <div className="provider-balance-header">
-                <span className="provider-balance-label">{balance.currency} 账户余额</span>
-                <span className="provider-balance-total">
-                  {formatAmount(balance.currency, balance.total)}
-                </span>
-              </div>
-              {balance.components && balance.components.length > 0 ? (
-                <div className="provider-balance-components">
-                  {balance.components.map((component) => (
-                    <span className="provider-balance-component" key={component.label}>
-                      <span className="provider-balance-component-label">{component.label}</span>
-                      <span className="provider-balance-component-amount">
-                        {formatAmount(balance.currency, component.amount)}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
+        <ProviderBalanceCards balances={group.balances} />
       ) : null}
       {group.quotaWindows && group.quotaWindows.length > 0 ? (
         <div aria-label="额度与重置" className="provider-quotas" role="group">
