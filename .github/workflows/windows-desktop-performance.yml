@@ -1,6 +1,8 @@
 name: Windows desktop performance
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   schedule:
     - cron: '0 18 * * *'
   workflow_dispatch:
@@ -9,7 +11,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-desktop-performance
+  group: windows-desktop-performance-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,11 +36,15 @@ jobs:
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: renderer-observation-${{ github.run_attempt }}
-          path: performance-results/renderer/
+          path: |
+            performance-results/renderer/
+            performance-results/raw/renderer/
+            apps/desktop/renderer/test-results/performance/
           if-no-files-found: warn
           retention-days: 30
 
   packaged-electron:
+    if: github.event_name != 'pull_request'
     runs-on: windows-latest
     timeout-minutes: 90
     steps:
