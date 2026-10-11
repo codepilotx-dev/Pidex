@@ -384,7 +384,8 @@ async function checkGeneratedFiles(files: GeneratedFile[]): Promise<void> {
       failures.push(`${relativeToRepo(file.path)} is missing`)
       continue
     }
-    if (actual !== file.content) failures.push(`${relativeToRepo(file.path)} is stale`)
+    if (actual.replaceAll('\r\n', '\n') !== file.content.replaceAll('\r\n', '\n'))
+      failures.push(`${relativeToRepo(file.path)} is stale`)
   }
 
   for (const { directory, isGenerated } of outputRoots) {

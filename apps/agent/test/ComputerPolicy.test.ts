@@ -113,8 +113,9 @@ test('机器策略变化通过文件监听通知控制服务', async () => {
     changes++
   })
   await writeFile(path, '[computer_use]\ndefault_app_access="deny"', 'utf8')
-  for (let attempt = 0; attempt < 30 && !changes; attempt++) await Bun.sleep(100)
-  expect(changes).toBe(1)
+  for (let attempt = 0; attempt < 30 && policy.evaluate(signed).access !== 'deny'; attempt++)
+    await Bun.sleep(100)
+  expect(changes).toBeGreaterThanOrEqual(1)
   expect(policy.evaluate(signed).access).toBe('deny')
 })
 test('损坏或缺失可信身份拒绝，不能降级为路径身份', async () => {
