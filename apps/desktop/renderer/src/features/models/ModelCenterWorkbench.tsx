@@ -20,23 +20,19 @@ import type {
 } from '../../../shared/Types.js'
 import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
 import { fullErrorMessage } from '../../utils/Errors.js'
-import { Cable, ChevronRight, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { Cable, ChevronRight, Pencil, Plus, RefreshCw, Server, Trash2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { useSearchParams } from 'react-router-dom'
-import { ProviderCatalog, type ProviderCatalogItem } from './ProviderCatalog.js'
 import { ProviderDetail } from './ProviderDetail.js'
 import { useModelCenterController } from './UseModelCenterController.js'
 import {
   getApiKeyDeleteConfirmation,
   parseModelCenterSearchParams,
-  projectProviderDirectory,
   updateModelCenterSearchParams,
-  type ProviderCatalogFilter,
 } from './ModelCenterState.js'
 import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
-import { ProviderConnectionDialog } from './provider-management/ProviderConnectionDialog.js'
 import { ProviderEditorDialog } from './provider-management/ProviderEditorDialog.js'
 import { ProviderConnectionSection } from './provider-management/ProviderConnectionSection.js'
 import { ProviderModelsSection } from './provider-management/ProviderModelsSection.js'
@@ -94,10 +90,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const [busy, setBusy] = useState(false)
   const [refreshingProviderData, setRefreshingProviderData] = useState(false)
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null)
-  const [providerSearch, setProviderSearch] = useState('')
-  const [catalogFilter, setCatalogFilter] = useState<ProviderCatalogFilter>('all')
-  const [connectionDialogProviderId, setConnectionDialogProviderId] =
-    useState<ModelProviderID | null>(null)
   const [providerEditorOpen, setProviderEditorOpen] = useState(false)
   const [deepSeekProtocolSupported, setDeepSeekProtocolSupported] = useState(false)
   const [providerEditorProviderId, setProviderEditorProviderId] = useState<ModelProviderID | null>(
@@ -145,14 +137,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   } = controller
 
   const configuredGroups = useMemo(() => selectConfiguredProviderGroups(snapshot), [snapshot])
-  const configuredProviderIds = useMemo(
-    () => new Set(configuredGroups.map((group) => group.provider.providerID)),
-    [configuredGroups],
-  )
-  const configuredGroupByProvider = useMemo(
-    () => new Map(configuredGroups.map((group) => [group.provider.providerID, group])),
-    [configuredGroups],
-  )
 
   const routeState = useMemo(
     () =>
@@ -190,71 +174,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     [apiKeys, providerID],
   )
 
-  const providerDirectory = useMemo(
-    () =>
-      projectProviderDirectory(
-        [...providers].sort((left, right) =>
-          left.displayName.localeCompare(right.displayName, 'zh-CN', {
-            numeric: true,
-            sensitivity: 'base',
-          }),
-        ),
-        {
-          query: providerSearch,
-          filter: catalogFilter,
-          currentProviderId: providerState?.selectedProviderID,
-          currentProviderState: providerState,
-          apiKeys,
-          credentials: snapshot.credentials,
-        },
-      ),
-    [apiKeys, catalogFilter, providerSearch, providerState, providers, snapshot.credentials],
-  )
-
-  const providerCatalogItems = useMemo<ProviderCatalogItem[]>(
-    () =>
-      providerDirectory.map((item) => {
-        const { connectionStatus, current, provider, sources, keyCount, hasOAuth, healthTone } =
-          item
-        const effectiveConnectionStatus =
-          connectionStatus === 'unconfigured' && configuredProviderIds.has(provider.providerID)
-            ? 'configured'
-            : connectionStatus
-        const displayedStatus = providerCatalogConnectionStatus(
-          effectiveConnectionStatus,
-          configuredGroupByProvider.get(provider.providerID),
-        )
-        const unavailableReason =
-          provider.availability?.status === 'unavailable'
-            ? providerAvailabilityLabel(provider.availability.reason)
-            : null
-        return {
-          id: provider.providerID,
-          name: provider.displayName,
-          logoURL: provider.logoURL,
-          source: sources
-            .map((source) =>
-              source === 'gateway' ? 'Gateway' : source === 'custom' ? '自定义' : 'Pi 内置',
-            )
-            .join(' + '),
-          modelCount: provider.modelCount ?? provider.defaultModels.length,
-          current,
-          canAddConnection:
-            unavailableReason === null && effectiveConnectionStatus === 'unconfigured',
-          connectionDisabled: unavailableReason !== null,
-          keyCount,
-          hasOAuth,
-          healthTone,
-          status: unavailableReason
-            ? { label: unavailableReason, tone: 'warning' }
-            : provider.unresolvedMigrationIssues?.length
-              ? { label: '需要人工修复', tone: 'danger' }
-              : displayedStatus,
-        }
-      }),
-    [configuredGroupByProvider, configuredProviderIds, providerDirectory],
-  )
-
   useEffect(() => {
     if (providerID === providerState?.selectedProviderID) return
     const nextSelection = getProviderSelectionState(selectedProvider)
@@ -290,12 +209,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
       },
       { replace },
     )
-  }
-
-  function selectProvider(nextProviderID: ModelProviderID): void {
-    const nextProvider = providers.find((provider) => provider.providerID === nextProviderID)
-    applyProviderSelection(nextProviderID, nextProvider)
-    updateLocation({ provider: nextProviderID, section: 'connection' })
   }
 
   function showProviderCatalog(): void {
@@ -510,28 +423,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     }
   }
 
-  async function createProviderConnection(value: ApiKeyEditorValue): Promise<boolean> {
-    if (!value.key) return false
-    setBusy(true)
-    try {
-      await providerManagementStore.createApiKey({
-        providerId: value.providerId,
-        label: value.label,
-        key: value.key,
-      })
-      onNotice('供应商连接与凭据已保存。')
-      setConnectionDialogProviderId(null)
-      updateLocation({ provider: value.providerId, section: 'connection' })
-      window.dispatchEvent(new Event('desktop:model-provider-changed'))
-      return true
-    } catch (error) {
-      showOperationError(error)
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }
-
   function showOperationError(error: unknown): void {
     const message = fullErrorMessage(error)
     setModelError(message)
@@ -578,14 +469,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
   const selectedConfiguredGroup = configuredGroups.find(
     (group) => group.provider.providerID === providerID,
-  )
-
-  const connectionDialogProvider = connectionDialogProviderId
-    ? (providers.find((provider) => provider.providerID === connectionDialogProviderId) ?? null)
-    : null
-
-  const connectionDialogSources = snapshot.usageSources.filter((source) =>
-    source.providerIds.some((pId) => String(pId) === String(connectionDialogProviderId)),
   )
 
   const editorProvider = editorProviderId
@@ -817,40 +700,12 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           )}
         </ProviderDetail>
       ) : (
-        <ProviderCatalog
-          filter={catalogFilter}
-          onAddConnection={(nextProviderID) => setConnectionDialogProviderId(nextProviderID)}
-          onFilterChange={setCatalogFilter}
-          onManageConnection={(nextProviderID) => {
-            selectProvider(nextProviderID)
-          }}
-          onQueryChange={setProviderSearch}
-          onSelect={selectProvider}
-          providers={providerCatalogItems}
-          query={providerSearch}
-        />
+        <div className="model-center-catalog-empty tw:grid tw:min-h-[220px] tw:content-center tw:place-items-center tw:gap-2 tw:rounded-xl tw:border tw:border-dashed tw:border-app-border tw:bg-app-panel tw:p-7 tw:text-center tw:text-app-text-soft tw:shadow-none tw:[&>svg]:mb-1 tw:[&>svg]:text-app-text-meta tw:[&>strong]:text-app-text tw:[&>strong]:type-title-sm tw:[&>span]:type-body-sm">
+          <Server aria-hidden size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+          <strong>从左侧选择供应商</strong>
+          <span>在左侧供应商列表中选择要配置的连接与模型。</span>
+        </div>
       )}
-
-      {/* Dialogs */}
-      <ProviderConnectionDialog
-        busy={busy}
-        open={connectionDialogProviderId !== null}
-        provider={connectionDialogProvider}
-        sources={connectionDialogSources}
-        onKeySubmit={createProviderConnection}
-        onConnected={() => {
-          setConnectionDialogProviderId(null)
-          if (connectionDialogProvider) {
-            updateLocation({
-              provider: connectionDialogProvider.providerID,
-              section: 'connection',
-            })
-          }
-        }}
-        onOpenChange={(open) => {
-          if (!open) setConnectionDialogProviderId(null)
-        }}
-      />
 
       <ProviderEditorDialog
         deepSeekProtocolSupported={deepSeekProtocolSupported}
@@ -1049,21 +904,4 @@ function providerAvailabilityLabel(
     case 'unsupported-protocol':
       return '协议暂未适配'
   }
-}
-
-function providerCatalogConnectionStatus(
-  status: 'stored-key' | 'oauth' | 'environment' | 'configured' | 'unconfigured',
-  group: ConfiguredProviderGroup | undefined,
-): { label: string; tone: 'positive' | 'warning' | 'neutral' } {
-  if (group?.activeConnection) {
-    if (group.activeConnection.kind === 'oauth') {
-      return { label: 'OAuth 已连接', tone: 'positive' }
-    }
-    return { label: '已保存 Key', tone: 'positive' }
-  }
-  if (status === 'stored-key') return { label: '已保存 Key', tone: 'positive' }
-  if (status === 'oauth') return { label: 'OAuth 已连接', tone: 'positive' }
-  if (status === 'environment') return { label: '环境变量', tone: 'positive' }
-  if (status === 'configured') return { label: '已配置', tone: 'positive' }
-  return { label: '未配置', tone: 'neutral' }
 }

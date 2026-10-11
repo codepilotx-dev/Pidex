@@ -3,7 +3,6 @@ import {
   Archive,
   Blocks,
   Brain,
-  BrainCircuit,
   CreditCard,
   GitBranch,
   Keyboard,
@@ -232,19 +231,6 @@ export const SETTINGS_GROUPS = [
     id: 'integrations',
     title: '集成',
     items: [
-      {
-        id: 'providers',
-        routeId: 'providers',
-        label: '供应商',
-        description: '管理模型供应商、账户连接、凭据和模型目录',
-        icon: BrainCircuit,
-        rows: [
-          row('供应商目录', '查看并筛选可用、已连接和未连接的供应商'),
-          row('账户连接', '管理 API Key、OAuth 和活动凭据'),
-          row('模型目录', '查看、刷新和测试供应商提供的模型'),
-          row('自定义 Provider', '新增、编辑或删除 OpenAI 兼容供应商'),
-        ],
-      },
       {
         id: 'plugins',
         routeId: 'plugins',

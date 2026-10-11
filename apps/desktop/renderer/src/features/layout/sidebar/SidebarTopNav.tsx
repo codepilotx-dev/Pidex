@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import {
   Bell,
   Blocks,
+  BrainCircuit,
   Clock3,
   FolderKanban,
   MessagesSquare,
@@ -105,6 +106,13 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
       kind: 'any-capability',
       capabilities: ['skills.manage.v1', 'mcp.manage.v1'],
     },
+  },
+  {
+    view: 'providers',
+    label: '供应商',
+    icon: <BrainCircuit size={APP_ICON_SIZE} />,
+    path: '/providers',
+    availability: { kind: 'always' },
   },
 ]
 

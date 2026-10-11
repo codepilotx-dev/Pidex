@@ -309,7 +309,12 @@ describe('自定义信息保留式迁移', () => {
     })
     expect(normalized.sectionOrder).toEqual(['work'])
     expect(normalized.pinnedSort).toBe('manual')
-    expect(normalized.destinationOrder).toEqual(['automations', 'plugins', 'sessionGroups'])
+    expect(normalized.destinationOrder).toEqual([
+      'automations',
+      'plugins',
+      'providers',
+      'sessionGroups',
+    ])
     expect(normalized.hiddenDestinationIds).toEqual(['sessionGroups'])
   })
 
@@ -329,6 +334,7 @@ describe('自定义信息保留式迁移', () => {
       'plugins',
       'unknown',
       'automations',
+      'providers',
       'sessionGroups',
     ])
   })

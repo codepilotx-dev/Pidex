@@ -85,7 +85,11 @@ import {
   TOP_NAV_ITEMS,
 } from '../src/features/layout/sidebar/SidebarTopNav.js'
 import { newSessionPath } from '../src/features/session/NewSessionSurface.js'
-import { SETTINGS_GROUPS, SETTINGS_ITEMS } from '../src/features/settings/SettingsRegistry.js'
+import {
+  SETTINGS_GROUPS,
+  SETTINGS_ITEMS,
+  SETTINGS_SEARCH_DOCUMENTS,
+} from '../src/features/settings/SettingsRegistry.js'
 
 const unknownSidebarCapabilities: SidebarCapabilityState = {
   status: 'unknown',
@@ -175,6 +179,7 @@ describe('Codex 侧栏导航', () => {
       { view: 'sessionGroups', label: '工作流', path: '/workflows' },
       { view: 'automations', label: '已安排', path: '/automations' },
       { view: 'plugins', label: '插件', path: '/plugins' },
+      { view: 'providers', label: '供应商', path: '/providers' },
     ])
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/search')).toBeFalse()
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/sites')).toBeFalse()
@@ -236,13 +241,17 @@ describe('Codex 侧栏导航', () => {
   test('普通组织模式下固定分组只包含新建任务', () => {
     const { fixedItems, scrollableItems } = splitSidebarTopNavItems(sidebarNavItems(false))
     expect(fixedItems.map((item) => item.view)).toEqual(['new'])
-    expect(scrollableItems.map((item) => item.view)).toEqual(['automations'])
+    expect(scrollableItems.map((item) => item.view)).toEqual(['automations', 'providers'])
   })
 
   test('扁平组织模式下项目位于可滚动分组首位而不是固定分组', () => {
     const { fixedItems, scrollableItems } = splitSidebarTopNavItems(sidebarNavItems(true))
     expect(fixedItems.map((item) => item.view)).toEqual(['new'])
-    expect(scrollableItems.map((item) => item.view)).toEqual(['projects', 'automations'])
+    expect(scrollableItems.map((item) => item.view)).toEqual([
+      'projects',
+      'automations',
+      'providers',
+    ])
   })
 
   test('可滚动分组不重复包含新建对话，且固定入口跟随 Surface', () => {
@@ -281,13 +290,13 @@ describe('Codex 侧栏导航', () => {
       sidebarNavItems(true, undefined, readySidebarCapabilities('session-group.v1')).map(
         (item) => item.view,
       ),
-    ).toEqual(['new', 'sessionGroups', 'projects', 'automations'])
+    ).toEqual(['new', 'sessionGroups', 'projects', 'automations', 'providers'])
   })
 
   test('明确缺少 GitHub 能力时隐藏拉取请求但保留固定产品入口', () => {
     const items = sidebarNavItems(false, undefined, readySidebarCapabilities())
 
-    expect(items.map((item) => item.view)).toEqual(['new', 'automations'])
+    expect(items.map((item) => item.view)).toEqual(['new', 'automations', 'providers'])
   })
 
   test('插件入口满足 Skills 或 MCP 任一能力即可显示', () => {
@@ -330,19 +339,17 @@ describe('Codex 侧栏导航', () => {
     const integrations = SETTINGS_GROUPS.find((group) => group.id === 'integrations')
 
     expect(integrations?.items.map((item) => item.routeId)).toEqual([
-      'providers',
       'plugins',
       'browser',
       'computer',
     ])
-    const providers = SETTINGS_ITEMS.find((item) => item.routeId === 'providers')
-    expect(providers?.rows.map((row) => row.title)).toEqual([
-      '供应商目录',
-      '账户连接',
-      '模型目录',
-      '自定义 Provider',
-    ])
     expect(SETTINGS_ITEMS.some((item) => item.routeId === 'mcp')).toBeFalse()
+  })
+
+  test('供应商不再作为设置页，改由一级导航承载', () => {
+    expect(SETTINGS_ITEMS.some((item) => item.routeId === 'providers')).toBeFalse()
+    expect(SETTINGS_SEARCH_DOCUMENTS.some((doc) => doc.tabId === 'providers')).toBeFalse()
+    expect(TOP_NAV_ITEMS.find((item) => item.view === 'providers')?.path).toBe('/providers')
   })
 })
 
@@ -414,6 +421,8 @@ describe('sidebar shell modes', () => {
         '/settings/appearance',
         '/plugins',
         '/plugins/detail',
+        '/providers',
+        '/providers/detail',
         '/workflows',
       ].map((path) => sidebarPaneForRoute(path, false)),
     ).toEqual([
@@ -425,6 +434,8 @@ describe('sidebar shell modes', () => {
       'settings',
       'plugins',
       'plugins',
+      'providers',
+      'providers',
       null,
     ])
     expect(sidebarPaneForRoute('/threads/task-1', true)).toBe('activity')

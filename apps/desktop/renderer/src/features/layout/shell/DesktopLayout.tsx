@@ -55,6 +55,7 @@ import { SidebarFrame } from '../SidebarFrame.js'
 import { SidebarNavigationRail } from '../sidebar/SidebarNavigationRail.js'
 import { SidebarScheduledPane } from '../sidebar/SidebarScheduledPane.js'
 import { SidebarPluginsPane } from '../sidebar/SidebarPluginsPane.js'
+import { SidebarProvidersPane } from '../sidebar/SidebarProvidersPane.js'
 import { SIDEBAR_RAIL_WIDTH, sidebarPaneForRoute } from '../sidebar/SidebarNavigation.js'
 import { useSidebarCapabilities } from '../sidebar/SidebarTopNav.js'
 import { AutomationControllerProvider } from '../../automation/AutomationControllerProvider.js'
@@ -251,6 +252,7 @@ function routeAccessibilityLabel(pathname: string): string {
   if (pathname.startsWith('/threads/')) return '会话'
   if (pathname.startsWith('/projects')) return '项目'
   if (pathname === '/plugins') return '插件与技能'
+  if (pathname === '/providers') return '供应商'
   if (pathname === '/pull-requests') return '拉取请求'
   if (pathname === '/automations') return '已安排'
   if (pathname === '/pets') return '宠物'
@@ -2081,6 +2083,7 @@ export function DesktopLayout(): React.ReactNode {
     ) ?? 'chats'
   const scheduledSidebarMounted = useEverOpened(displayedSidebarPane === 'scheduled')
   const pluginsSidebarMounted = useEverOpened(displayedSidebarPane === 'plugins')
+  const providersSidebarMounted = useEverOpened(displayedSidebarPane === 'providers')
 
   const appSidebarContent = (
     <DesktopSidebar
@@ -2201,6 +2204,7 @@ export function DesktopLayout(): React.ReactNode {
           displayedSidebarPane === 'settings' ||
           displayedSidebarPane === 'scheduled' ||
           displayedSidebarPane === 'plugins' ||
+          displayedSidebarPane === 'providers' ||
           displayedSidebarPane === null
         }
       >
@@ -2217,6 +2221,11 @@ export function DesktopLayout(): React.ReactNode {
       {pluginsSidebarMounted ? (
         <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'plugins'}>
           <SidebarPluginsPane workspacePath={currentWorkspace?.path ?? null} />
+        </div>
+      ) : null}
+      {providersSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'providers'}>
+          <SidebarProvidersPane />
         </div>
       ) : null}
     </SidebarFrame>
@@ -2286,7 +2295,7 @@ export function DesktopLayout(): React.ReactNode {
           onCloneGithub: () => setGithubRepositoryModalOpen(true),
           onClearWorkspace: handleClearWorkspace,
           onOpenMcpSettings: () => navigate('/settings/plugins?tab=mcps'),
-          onOpenModelSettings: () => navigate('/settings/providers'),
+          onOpenModelSettings: () => navigate('/providers'),
           onOpenSideChat: sideChatSupported ? handleOpenSideChat : undefined,
           onSkillTokenActivate: (invocation) => {
             void handleActivateComposerSkill(invocation)
@@ -2450,7 +2459,7 @@ export function DesktopLayout(): React.ReactNode {
         onCloneGithub={() => setGithubRepositoryModalOpen(true)}
         onClearWorkspace={handleClearWorkspace}
         onOpenMcpSettings={() => navigate('/settings/plugins?tab=mcps')}
-        onOpenModelSettings={() => navigate('/settings/providers')}
+        onOpenModelSettings={() => navigate('/providers')}
         onSkillTokenActivate={(invocation) => {
           void handleActivateComposerSkill(invocation)
         }}

@@ -2,7 +2,7 @@ import type React from 'react'
 
 import { ModelCenterWorkbench } from './ModelCenterWorkbench.js'
 
-export function ProviderSettings({
+export function ProvidersPage({
   onError,
   onNotice,
 }: {

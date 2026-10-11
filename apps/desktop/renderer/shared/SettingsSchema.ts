@@ -89,6 +89,7 @@ export const SIDEBAR_STATE_VERSION = 2
 export const DEFAULT_SIDEBAR_DESTINATION_ORDER: readonly string[] = [
   'automations',
   'plugins',
+  'providers',
   'sessionGroups',
 ]
 

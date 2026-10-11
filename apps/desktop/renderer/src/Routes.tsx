@@ -16,7 +16,7 @@ import { SettingsLayout } from './features/settings/SettingsLayout.js'
 import { PetCatalogPage } from './features/pet/PetCatalogPage.js'
 import { SessionGroupsView } from './features/session-groups/SessionGroupsView.js'
 import { legacyWorkflowRedirectPath } from './features/routing/WorkflowRoutes.js'
-import { legacyModelCenterSettingsTarget } from './features/models/ModelCenterState.js'
+import { providerWorkspaceTarget } from './features/models/ModelCenterState.js'
 
 const PetOverlayPage = lazy(() =>
   import('./features/pet/PetOverlayPage.js').then((module) => ({
@@ -24,9 +24,20 @@ const PetOverlayPage = lazy(() =>
   })),
 )
 
+const ProvidersView = lazy(() =>
+  import('./features/models/ProvidersView.js').then((module) => ({
+    default: module.ProvidersView,
+  })),
+)
+
 function LegacyModelsRedirect(): ReactNode {
   const location = useLocation()
-  return <Navigate replace to={legacyModelCenterSettingsTarget(location.search)} />
+  return <Navigate replace to={providerWorkspaceTarget(location.search)} />
+}
+
+function LegacySettingsProvidersRedirect(): ReactNode {
+  const location = useLocation()
+  return <Navigate replace to={providerWorkspaceTarget(location.search)} />
 }
 
 function LegacyWorkflowRedirect(): ReactNode {
@@ -79,10 +90,22 @@ const router = createHashRouter([
           { path: 'session-groups', element: <LegacyWorkflowRedirect /> },
           { path: 'session-groups/:groupId', element: <LegacyWorkflowRedirect /> },
           { path: 'models', element: <LegacyModelsRedirect /> },
+          {
+            path: 'providers',
+            element: (
+              <Suspense fallback={null}>
+                <ProvidersView />
+              </Suspense>
+            ),
+          },
           { path: 'plugins', element: <PluginsView /> },
           { path: 'pull-requests', element: <PullRequestsPlaceholder /> },
           { path: 'automations', element: <AutomationView /> },
           { path: 'pets', element: <PetCatalogPage /> },
+          {
+            path: 'settings/providers',
+            element: <LegacySettingsProvidersRedirect />,
+          },
           {
             path: 'settings/environment/:projectId',
             element: <SettingsLayout />,

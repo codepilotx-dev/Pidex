@@ -10,7 +10,14 @@ import type {
 } from '../shared/Types.js'
 
 export type AppView =
-  'new' | 'sessionGroups' | 'projects' | 'search' | 'plugins' | 'pullRequests' | 'automations'
+  | 'new'
+  | 'sessionGroups'
+  | 'projects'
+  | 'search'
+  | 'plugins'
+  | 'providers'
+  | 'pullRequests'
+  | 'automations'
 
 export type DrawerTab = 'files' | 'diff' | 'permissions' | 'toolLog' | 'settings'
 

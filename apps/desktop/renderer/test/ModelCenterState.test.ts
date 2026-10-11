@@ -3,9 +3,9 @@ import type { DesktopApiKeySummary } from '../shared/Types.js'
 import {
   filterApiKeys,
   getApiKeyDeleteConfirmation,
-  legacyModelCenterSettingsTarget,
   parseModelCenterSearchParams,
   projectProviderDirectory,
+  providerWorkspaceTarget,
   updateModelCenterSearchParams,
 } from '../src/features/models/ModelCenterState.js'
 
@@ -37,15 +37,15 @@ const keys: DesktopApiKeySummary[] = [
 ]
 
 describe('model center URL state', () => {
-  test('redirects legacy routes to settings while dropping only the obsolete view', () => {
+  test('redirects legacy routes to the providers workspace while dropping only the obsolete view', () => {
     expect(
-      legacyModelCenterSettingsTarget('?view=health&provider=anthropic&section=models&debug=1'),
+      providerWorkspaceTarget('?view=health&provider=anthropic&section=models&debug=1'),
     ).toEqual({
-      pathname: '/settings/providers',
+      pathname: '/providers',
       search: '?provider=anthropic&section=models&debug=1',
     })
-    expect(legacyModelCenterSettingsTarget('?view=keys')).toEqual({
-      pathname: '/settings/providers',
+    expect(providerWorkspaceTarget('?view=keys')).toEqual({
+      pathname: '/providers',
       search: '',
     })
   })

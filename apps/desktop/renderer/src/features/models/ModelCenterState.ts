@@ -19,15 +19,19 @@ export type ModelCenterRoutePatch = {
   section?: ModelCenterProviderSection | 'router' | null
 }
 
-export function legacyModelCenterSettingsTarget(search: string): {
-  pathname: '/settings/providers'
+/**
+ * 旧入口（/models、/settings/providers）统一收敛到一级供应商页；
+ * 只丢弃废弃的 `view` 参数，保留供应商、详情分区及其他查询参数。
+ */
+export function providerWorkspaceTarget(search: string): {
+  pathname: '/providers'
   search: string
 } {
   const params = new URLSearchParams(search)
   params.delete('view')
   const nextSearch = params.toString()
   return {
-    pathname: '/settings/providers',
+    pathname: '/providers',
     search: nextSearch ? `?${nextSearch}` : '',
   }
 }
