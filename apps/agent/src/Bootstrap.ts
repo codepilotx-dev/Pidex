@@ -2,6 +2,9 @@ import { ComputerUseService } from './computer/ComputerUseService'
 import { LocalEnvironmentRepository } from './local-environment/LocalEnvironmentRepository'
 import { LocalEnvironmentCatalog } from './local-environment/LocalEnvironmentCatalog'
 import { computerToolDefinitions } from './tool/Computer/Definition'
+import { NodeReplService } from './nodeRepl/NodeReplService'
+import { nodeReplToolDefinition } from './nodeRepl/Definition'
+import { NODE_REPL_PLUGIN_ID, NODE_REPL_SERVER_NAME } from './nodeRepl/Association'
 import { Effect } from 'effect'
 import { loadConfig } from './config/Config'
 import { ConfigService } from './config/ConfigService'
@@ -597,7 +600,24 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       mcpOAuthCoordinator,
     )
     const mcpOAuth = new McpOAuthService(mcpConfigs, mcpConnections, mcpOAuthCoordinator)
-    const mcp = new McpRuntimeService(mcpConfigs, mcpConnections, mcpOAuth)
+    const mcp = new McpRuntimeService(mcpConfigs, mcpConnections, mcpOAuth, () => {
+      if (!plugins.isEnabled(NODE_REPL_PLUGIN_ID)) return []
+      const connected = computer.available()
+      return [
+        {
+          name: NODE_REPL_SERVER_NAME,
+          scope: 'host',
+          type: 'stdio',
+          state: connected ? 'connected' : 'starting',
+          auth: { source: 'none', canLogin: false, canLogout: false },
+          toolCount: connected ? 1 : 0,
+          resourceCount: 0,
+          promptCount: 0,
+          managedBy: 'host',
+          pluginId: NODE_REPL_PLUGIN_ID,
+        },
+      ]
+    })
     const reviewer = new ReviewerService(db, piModels, configService)
     const approvals = new ApprovalService(
       db,
@@ -704,6 +724,13 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         for (const event of events) await Effect.runPromise(hub.publish(event))
       },
     })
+    // Host-managed node_repl entry. Registered after the executor exists; it is
+    // never written to user MCP config and only the bundled computer-use plugin
+    // makes it available.
+    const nodeRepl = new NodeReplService()
+    tools.register(
+      nodeReplToolDefinition({ plugins, computer, service: nodeRepl, executor: toolExecutor }),
+    )
     const questions = new QuestionService(db, hub, false)
     const artifacts = yield* Effect.promise(() => ArtifactService.open(config.dataDir, db))
     const orchestrator = new AgentRuntimeService({

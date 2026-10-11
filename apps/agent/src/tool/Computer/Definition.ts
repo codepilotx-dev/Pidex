@@ -71,7 +71,9 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
     available: computer.available,
     allowedProfiles: ['main'],
     approvalStrategy: 'policy',
-    visibility: 'deferred',
+    // Internal: reachable only through the host node_repl bridge, never exposed
+    // to the model. Registration, audit and the permission chain are unchanged.
+    visibility: 'internal',
     executionMode: 'sequential',
     auditResult: (result: ComputerResult) => ({ isError: result.isError, code: result.code }),
     formatResult: (result: ComputerResult) => ({

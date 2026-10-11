@@ -26,6 +26,7 @@ import type { TurnPatchMutationFile } from '../patch/TurnPatchTypes'
 import { diffLines } from 'diff'
 import type { FileAccessProfile } from '../permission/ExecutionPolicy'
 import { fileAccessProfileFromV4 } from '../permission/ExecutionPolicy'
+import type { ComputerOperationRecovery } from '../nodeRepl/Protocol'
 
 export type ToolCapabilities = {
   filesystem: 'none' | 'read' | 'workspace-write' | 'host-write'
@@ -49,6 +50,8 @@ export type ToolStructuredResult = {
   content: string
   details: unknown
   addedToolNames?: string[]
+  /** Stops the agent loop after this batch; used by durable pauses. */
+  terminate?: boolean
 }
 export type PromptFactory = string | ((context: ToolContext) => string)
 export type { ToolAffectedPath, ToolAuthorizationScope, ToolReviewSummary } from '../Domain'
@@ -67,6 +70,18 @@ export type ToolInputInspection = {
     content: string
     scope: 'user' | 'project'
   }[]
+}
+
+/** Minimal structural pause request; the runtime owns durable checkpointing. */
+export type ToolPauseRequest = {
+  kind: 'permission'
+  toolCallID: string
+  checkpoint: {
+    state: string
+    interruption: unknown
+    toolCallID: string
+    authorizationFingerprint?: string
+  }
 }
 export type ToolOrigin =
   | { kind: 'builtin' }
@@ -102,7 +117,7 @@ export interface ToolCatalogEntry<Input = unknown, Output = unknown> {
   inspectInput?: (
     input: Input,
     context: ToolContext,
-  ) => ToolInputInspection | Promise<ToolInputInspection>
+  ) => ToolInputInspection | undefined | Promise<ToolInputInspection | undefined>
   progress?: (input: Input, context: ToolContext) => ToolProgress | undefined
   auditResult?: (output: Output) => unknown
   formatResult?: (output: Output, context: ToolContext) => ToolStructuredResult
@@ -122,6 +137,15 @@ export interface ToolContext {
   fileSnapshots?: ToolFileSnapshots
   /** Host-inspected scope for the exact input being executed. */
   computerGrant?: 'chat' | 'persistent'
+  /**
+   * Host-only: the internal operation recorded in an approval checkpoint. When
+   * present the entry resumes only that operation instead of re-running a script.
+   */
+  computerRecovery?: ComputerOperationRecovery
+  /** Host-only: grant resolved with the approval, consumed by the recovered read. */
+  approvedComputerGrant?: 'chat' | 'persistent'
+  /** Host-only: arrange a durable approval pause from inside tool execution. */
+  requestPause?: (approval: ToolPauseRequest) => Promise<void>
   authorizationScope?: ToolAuthorizationScope
   fileSaved?: (input: { filePath: string; content: string }) => Promise<void>
   /** Persists host-only reversible evidence after a successful managed file mutation. */

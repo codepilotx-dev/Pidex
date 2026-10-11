@@ -11,6 +11,7 @@ export const Capabilities = [
   'computer.policy.v1',
   'computer.host.identity.v1',
   'computer.host.v1',
+  'computer.nodeRepl.v1',
   'browser.data.v1',
   'browser.manage.v1',
   'browser.host.v1',

@@ -16,9 +16,11 @@ import {
   type ToolCatalog,
   type ToolFileSnapshots,
   type ToolInputInspection,
+  type ToolPauseRequest,
   type ToolProgress,
   type ToolRegistry,
 } from './ToolRegistry'
+import type { ComputerOperationRecovery } from '../nodeRepl/Protocol'
 import { createToolExposurePlan, type ToolExposureInput } from './ToolExposurePlan'
 import {
   DEFAULT_PERMISSION_CONFIG,
@@ -118,6 +120,13 @@ export interface ToolExecutionContext {
   /** Host-derived scope fingerprint bound to the claimed approval. */
   approvedAuthorizationFingerprint?: string
   approvedComputerGrant?: 'chat' | 'persistent'
+  /**
+   * Host-only: internal operation recorded in the claimed approval checkpoint.
+   * The node_repl entry resumes only this operation; the script is never replayed.
+   */
+  computerRecovery?: ComputerOperationRecovery
+  /** Host-only: arranges a durable approval pause from inside tool execution. */
+  requestPause?: (approval: ToolPauseRequest) => Promise<void>
   /** Runs normalization, hard-deny, hooks and review without executing the tool. */
   authorizationOnly?: boolean
   /** Optional active Skill ceiling. It can only remove tools from the effective policy. */
@@ -473,24 +482,31 @@ export class ToolExecutor {
       model,
       taskMode: context.taskMode,
     }
-    const inspection = definition.inspectInput
+    const rawInspection = definition.inspectInput
+      ? await definition.inspectInput(input, {
+          signal: context.signal,
+          taskMode: context.taskMode,
+          profile: context.profile ?? 'main',
+          workspace,
+          permissionConfig,
+          model,
+          fileSnapshots,
+          invocation: {
+            threadID: context.threadID,
+            turnID: context.turnID,
+            agentID: baseInvocation.agentID,
+            toolCallID: baseInvocation.id,
+          },
+          ...(context.computerRecovery ? { computerRecovery: context.computerRecovery } : {}),
+          ...(context.approvedComputerGrant
+            ? { approvedComputerGrant: context.approvedComputerGrant }
+            : {}),
+          ...(context.onProgress ? { onProgress: context.onProgress } : {}),
+        })
+      : undefined
+    const inspection = rawInspection
       ? this.validateToolInputInspection(
-          await definition.inspectInput(input, {
-            signal: context.signal,
-            taskMode: context.taskMode,
-            profile: context.profile ?? 'main',
-            workspace,
-            permissionConfig,
-            model,
-            fileSnapshots,
-            invocation: {
-              threadID: context.threadID,
-              turnID: context.turnID,
-              agentID: baseInvocation.agentID,
-              toolCallID: baseInvocation.id,
-            },
-            ...(context.onProgress ? { onProgress: context.onProgress } : {}),
-          }),
+          rawInspection,
           definition.capabilities.filesystem === 'none',
         )
       : undefined
@@ -734,6 +750,11 @@ export class ToolExecutor {
         ...(resumedApproval && invocation.name === 'ComputerRead' && context.approvedComputerGrant
           ? { computerGrant: context.approvedComputerGrant }
           : {}),
+        ...(context.computerRecovery ? { computerRecovery: context.computerRecovery } : {}),
+        ...(context.approvedComputerGrant
+          ? { approvedComputerGrant: context.approvedComputerGrant }
+          : {}),
+        ...(context.requestPause ? { requestPause: context.requestPause } : {}),
         model,
         deferredTools,
         fileSnapshots,

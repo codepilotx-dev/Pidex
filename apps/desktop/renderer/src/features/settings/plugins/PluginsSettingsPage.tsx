@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type {
   DesktopInstalledSkill,
+  DesktopMcpRuntimeServerStatus,
   DesktopMcpServerListItem,
   McpReloadResult,
   SaveDesktopMcpServerOptions,
@@ -93,6 +94,9 @@ export function PluginsSettingsPage({
   const [skillDialogTrigger, setSkillDialogTrigger] = useState<HTMLElement | null>(null)
 
   const [servers, setServers] = useState<DesktopMcpServerListItem[] | undefined>()
+  // Host-managed servers (node_repl) are never user config, so they are shown
+  // read-only from runtime status instead of the editable declaration list.
+  const [hostServers, setHostServers] = useState<DesktopMcpRuntimeServerStatus[]>([])
   const [mcpError, setMcpError] = useState<string | null>(null)
   const [mcpStatus, setMcpStatus] = useState<string | null>(null)
   const [busyMcpKeys, setBusyMcpKeys] = useState<Set<string>>(() => new Set())
@@ -344,6 +348,7 @@ export function PluginsSettingsPage({
       const statuses = new Map(
         runtime.servers.map((status) => [`${status.scope}:${status.name}`, status]),
       )
+      setHostServers(runtime.servers.filter((status) => status.managedBy === 'host'))
       setServers(
         declarations.map((server) => ({
           ...server,
@@ -353,6 +358,7 @@ export function PluginsSettingsPage({
     } catch (error) {
       const message = errorMessageOf(error, 'MCP server 读取失败。')
       setServers([])
+      setHostServers([])
       setMcpError(message)
       onError(message)
     }
@@ -748,43 +754,57 @@ export function PluginsSettingsPage({
             ) : (
               <EmptyState label={query ? '没有匹配的技能。' : '当前范围内没有技能。'} />
             )
-          ) : visibleServers.length ? (
-            visibleServers.map((server) => (
-              <ExtensionManagementRow
-                key={mcpKey(server)}
-                title={server.name}
-                description={
-                  server.runtime?.error?.message || server.summary || '未提供命令或 URL。'
-                }
-                icon={<Server size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />}
-                metadata={mcpMetadata(server)}
-                dimmed={!server.enabled || !server.effective}
-                onActivate={(trigger) => {
-                  setSelectedServer(server)
-                  setMcpDialogTrigger(trigger)
-                  setMcpDialogOpen(true)
-                }}
-                actions={
-                  <>
-                    {mcpAuthAction(
-                      server,
-                      mcpOAuthAttempts[mcpKey(server)],
-                      busyMcpAuthKeys.has(mcpKey(server)),
-                      {
-                        login: () => void startMcpOAuth(server),
-                        logout: () => void logoutMcpOAuth(server),
-                      },
-                    )}
-                    <ToggleSwitch
-                      ariaLabel={server.name}
-                      checked={server.enabled}
-                      disabled={!server.editable || busyMcpKeys.has(mcpKey(server))}
-                      onChange={(enabled) => void toggleServer(server, enabled)}
-                    />
-                  </>
-                }
-              />
-            ))
+          ) : hostServers.length || visibleServers.length ? (
+            <>
+              {hostServers.map((status) => (
+                <ExtensionManagementRow
+                  key={`host:${status.name}`}
+                  title={status.name}
+                  description="由 Computer Use 插件启用，宿主提供，不可编辑。"
+                  icon={<Server size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />}
+                  metadata={
+                    <HostManagedMcpBadge state={status.state} toolCount={status.toolCount} />
+                  }
+                  dimmed={status.state !== 'connected'}
+                />
+              ))}
+              {visibleServers.map((server) => (
+                <ExtensionManagementRow
+                  key={mcpKey(server)}
+                  title={server.name}
+                  description={
+                    server.runtime?.error?.message || server.summary || '未提供命令或 URL。'
+                  }
+                  icon={<Server size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />}
+                  metadata={mcpMetadata(server)}
+                  dimmed={!server.enabled || !server.effective}
+                  onActivate={(trigger) => {
+                    setSelectedServer(server)
+                    setMcpDialogTrigger(trigger)
+                    setMcpDialogOpen(true)
+                  }}
+                  actions={
+                    <>
+                      {mcpAuthAction(
+                        server,
+                        mcpOAuthAttempts[mcpKey(server)],
+                        busyMcpAuthKeys.has(mcpKey(server)),
+                        {
+                          login: () => void startMcpOAuth(server),
+                          logout: () => void logoutMcpOAuth(server),
+                        },
+                      )}
+                      <ToggleSwitch
+                        ariaLabel={server.name}
+                        checked={server.enabled}
+                        disabled={!server.editable || busyMcpKeys.has(mcpKey(server))}
+                        onChange={(enabled) => void toggleServer(server, enabled)}
+                      />
+                    </>
+                  }
+                />
+              ))}
+            </>
           ) : (
             <EmptyState label={query ? '没有匹配的 MCP server。' : '暂无 MCP server。'} />
           )}
@@ -1032,6 +1052,33 @@ function mcpAuthAction(
 function withoutRecordKey<T>(values: Record<string, T>, key: string): Record<string, T> {
   const { [key]: _removed, ...next } = values
   return next
+}
+
+/** Read-only status for a host-managed server such as node_repl. */
+function HostManagedMcpBadge({
+  state,
+  toolCount,
+}: {
+  state: DesktopMcpRuntimeServerStatus['state']
+  toolCount: number
+}): React.ReactNode {
+  const label: Record<typeof state, string> = {
+    connected: '已连接',
+    starting: '正在启动',
+    needs_auth: '需要认证',
+    failed: '不可用',
+    disabled: '已禁用',
+    shadowed: '被覆盖',
+  }
+  return (
+    <span className="tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-1.5 tw:max-[640px]:justify-start">
+      <span className="tw:type-caption tw:inline-flex tw:bg-app-panel tw:px-2 tw:py-0.5 tw:text-app-text-soft">
+        宿主提供
+      </span>
+      <StatusBadge state={state} label={label[state]} />
+      {state === 'connected' ? <span>{toolCount} 工具</span> : null}
+    </span>
+  )
 }
 
 function DiagnosticContextBadge(): React.ReactNode {

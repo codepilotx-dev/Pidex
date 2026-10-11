@@ -19,7 +19,13 @@ import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
 import type { ToolExecutor } from '../tool/ToolExecutor'
 import { PI_LIFECYCLE_TOOLS, type ToolExposureInput } from '../tool/ToolExposurePlan'
-import { toolCatalogSummary, type ToolCatalog, type ToolCatalogEntry } from '../tool/ToolRegistry'
+import {
+  toolCatalogSummary,
+  type ToolCatalog,
+  type ToolCatalogEntry,
+  type ToolPauseRequest,
+} from '../tool/ToolRegistry'
+import { computerOperationRecoveryFrom } from '../nodeRepl/Protocol'
 import { buildCapabilityCatalogSection } from '../prompt/CapabilityCatalog'
 import type { PromptSection } from '../prompt/Types'
 import { resolveEffectivePermissionConfig } from '../permission/EffectivePermissionConfig'
@@ -1165,10 +1171,13 @@ export class AgentRuntimeService implements AgentRuntime {
             : undefined
         if (!assistantEntry || !toolCall || toolCall.type !== 'toolCall')
           throw new Error('Pi checkpoint 中找不到待恢复的 tool call')
-        const alreadySettled = this.options.db.hasPersistedToolResult(
-          request.turnID,
-          request.resume.toolCallID,
-        )
+        // A node_repl approval resumes only the recorded internal operation. The
+        // pause never persisted a script, so the call is re-executed with the
+        // recovery record instead of the stale pause result.
+        const nodeReplRecovery = computerOperationRecoveryFrom(request.resume.interruption)
+        const alreadySettled =
+          !nodeReplRecovery &&
+          this.options.db.hasPersistedToolResult(request.turnID, request.resume.toolCallID)
         if (!alreadySettled) await session.moveTo(assistantEntry.id)
         let resolutionText =
           request.resume.decision === 'deny'
@@ -1234,7 +1243,9 @@ export class AgentRuntimeService implements AgentRuntime {
           request.resume.decision === 'allow' &&
           !lifecycleNames.has(toolCall.name)
         ) {
-          const completed = this.options.db.completedToolCall(request.resume.toolCallID)
+          const completed = nodeReplRecovery
+            ? null
+            : this.options.db.completedToolCall(request.resume.toolCallID)
           if (completed && toolCall.name !== 'Read' && toolCall.name !== 'workspace.read') {
             resolutionDetails = secretScrubber.scrub(completed.output)
             resolutionText = resumedToolResultText(completed.output, completed.name)
@@ -1265,6 +1276,7 @@ export class AgentRuntimeService implements AgentRuntime {
                   ...(request.resume.authorizationFingerprint
                     ? { approvedAuthorizationFingerprint: request.resume.authorizationFingerprint }
                     : {}),
+                  ...(nodeReplRecovery ? { computerRecovery: nodeReplRecovery } : {}),
                 },
               )
               resolutionDetails = secretScrubber.scrub(resolution)
@@ -1346,6 +1358,9 @@ export class AgentRuntimeService implements AgentRuntime {
         permissionConfig: effectivePermissionConfig,
         model: request.fallbackModel,
         taskSummary: request.content,
+        // Lets the node_repl entry arrange the durable application-approval pause
+        // from inside tool execution, without re-running any script.
+        requestPause: (approval: ToolPauseRequest) => pause(approval),
       }
       // 按来源实测的上下文字符量只对本次 run 有意义，用闭包保存，
       // 由 executeHarnessRun 在每次 provider 请求前刷新、由 eventSink 读取。

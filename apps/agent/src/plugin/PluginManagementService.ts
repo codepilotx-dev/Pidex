@@ -8,6 +8,7 @@ import type {
   PluginSummary,
 } from '@pidex/agent-protocol'
 import { parseSkillDocument } from '../prompt/SkillService'
+import { hostManagedMcpDeclarations } from '../nodeRepl/Association'
 import {
   PluginSettingsConflictError,
   PluginSettingsRepository,
@@ -392,7 +393,24 @@ export class PluginManagementService {
         (input.source === 'bundled' || input.source === 'workspace')
       const disabled = new Set(this.settings.state().disabledPluginIds)
       const skills = await this.resolveSkills(input.pluginRoot, stringValue(manifest.skills))
+      const docs = await this.resolveDocs(input.pluginRoot, stringValue(manifest.docs))
+      const declaredHostServers = new Set([
+        ...stringArray(extension?.hostMcpServers),
+        ...Object.keys(record(manifest.mcpServers) ?? {}),
+      ])
+      const mcpComponents = hostManagedMcpDeclarations(id, input.source)
+        .filter((entry) => declaredHostServers.has(entry.server))
+        .map((entry) => ({
+          kind: 'mcp' as const,
+          id: entry.server,
+          name: entry.title,
+          description: entry.description,
+          managedBy: 'host' as const,
+        }))
       const status = policy === 'NOT_AVAILABLE' ? 'unavailable' : 'ready'
+      // Components beyond skills: bundled documentation and host-provided MCP
+      // servers. Skills keep their own `skills` field for older clients.
+      const components = [...mcpComponents, ...docs]
       return {
         summary: {
           id,
@@ -416,6 +434,7 @@ export class PluginManagementService {
           displayCapabilities: stringArray(interfaceMetadata?.capabilities),
           defaultPrompts: stringOrStringArray(interfaceMetadata?.defaultPrompt),
           skills: skills.details,
+          ...(components.length ? { components } : {}),
         },
         skillRoot: skills.root
           ? { pluginId: id, pluginRoot: input.pluginRoot, skillsRoot: skills.root }
@@ -457,6 +476,25 @@ export class PluginManagementService {
       }
     }
     return { root: skillsRoot, names, details }
+  }
+
+  private async resolveDocs(pluginRoot: string, configuredPath: string | null) {
+    if (!configuredPath) return []
+    const candidate = resolve(pluginRoot, configuredPath)
+    if (!contained(pluginRoot, candidate)) return []
+    const docsRoot = await realpath(candidate).catch(() => null)
+    if (!docsRoot || !contained(pluginRoot, docsRoot)) return []
+    const entries = await readdir(docsRoot, { withFileTypes: true }).catch(() => [])
+    return entries
+      .filter((entry) => entry.isFile() && entry.name.toLowerCase().endsWith('.md'))
+      .sort((left, right) => left.name.localeCompare(right.name))
+      .map((entry) => ({
+        kind: 'documentation' as const,
+        id: entry.name.replace(/\.md$/i, ''),
+        name: entry.name,
+        description: '',
+        managedBy: 'plugin' as const,
+      }))
   }
 }
 

@@ -110,6 +110,7 @@ export function adaptToolDefinition(
           details: safe.details,
           structuredContent: safe.details,
           ...(safe.addedToolNames ? { addedToolNames: safe.addedToolNames } : {}),
+          ...(safe.terminate ? { terminate: true } : {}),
         }
       }
       return textResult(output)

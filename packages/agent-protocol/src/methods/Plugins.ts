@@ -40,12 +40,27 @@ export const PluginDetailSkillSchema = Schema.Struct({
   description: Schema.String,
 })
 
+/**
+ * A component a plugin bundles or relies on. `host` components are injected by
+ * the host runtime (for example the `node_repl` MCP server) and are never
+ * user-editable, so clients must not offer edit or launch actions for them.
+ */
+export const PluginComponentSchema = Schema.Struct({
+  kind: Schema.Literals(['skill', 'mcp', 'documentation']),
+  id: NonEmptyStringSchema,
+  name: NonEmptyStringSchema,
+  description: Schema.String,
+  managedBy: Schema.Literals(['plugin', 'host']),
+})
+
 export const PluginDetailsSchema = Schema.Struct({
   pluginId: NonEmptyStringSchema,
   longDescription: Schema.String,
   displayCapabilities: Schema.Array(NonEmptyStringSchema),
   defaultPrompts: Schema.Array(NonEmptyStringSchema),
   skills: Schema.Array(PluginDetailSkillSchema),
+  /** Optional plugin component inventory; older clients can ignore it. */
+  components: Schema.optional(Schema.Array(PluginComponentSchema)),
 })
 
 export const PluginListParamsSchema = Schema.Struct({
@@ -124,4 +139,5 @@ export type PluginInstallationPolicy = typeof PluginInstallationPolicySchema.Typ
 export type PluginStatus = typeof PluginStatusSchema.Type
 export type PluginSummary = typeof PluginSummarySchema.Type
 export type PluginDetailSkill = typeof PluginDetailSkillSchema.Type
+export type PluginComponent = typeof PluginComponentSchema.Type
 export type PluginDetails = typeof PluginDetailsSchema.Type
