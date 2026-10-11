@@ -375,6 +375,7 @@ export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | n
       ).padStart(2, '0')}`,
     )
     const snapshot = mockSessionSnapshot(sessionId, workspace, {
+      workspacePath: search.get('performanceWorkspace') === 'true' ? workspace.path : undefined,
       sessionName: `性能会话 ${String(sessionIndex + 1).padStart(3, '0')}`,
       thinkingMode: 'adaptive',
     })

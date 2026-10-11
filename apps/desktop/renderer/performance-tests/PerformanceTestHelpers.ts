@@ -123,12 +123,13 @@ export async function waitForFixture(
   page: Page,
   turns: number,
   sessions: number,
-  options: { nestedScroll?: boolean } = {},
+  options: { nestedScroll?: boolean; workspace?: boolean } = {},
 ) {
   const search = new URLSearchParams({
     performanceCase: options.nestedScroll ? 'nested-scroll-edge-fade' : 'desktop-ux',
     performanceSessions: String(sessions),
     performanceTurns: String(turns),
+    performanceWorkspace: String(options.workspace ?? false),
   })
   await page.goto(`/?${search.toString()}#/threads/performance-session-001`)
   await waitForPerformanceThread(page, 1, turns)

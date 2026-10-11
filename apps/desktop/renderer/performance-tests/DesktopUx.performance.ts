@@ -75,7 +75,7 @@ test.describe('desktop UX performance', () => {
     })
     await waitForFixture(page, 500, 30)
 
-    await page.getByRole('button', { name: '显示右侧面板' }).click()
+    await page.getByRole('button', { name: '显示标签页' }).click()
     const rightHandle = page.getByRole('separator', {
       name: '调整右侧面板宽度',
     })
@@ -212,10 +212,11 @@ test.describe('desktop UX performance', () => {
       })
     }
 
-    await page.getByRole('button', { name: '显示右侧面板' }).click()
+    await page.getByRole('button', { name: '显示标签页' }).click()
     const rightShell = page.locator('.desktop-workspace-panel--right')
     await expect(rightShell).toBeVisible()
     await page.setViewportSize({ width: 1400, height: 900 })
+    await page.waitForTimeout(600)
     await settlePage(page)
 
     const beforeRightBox = await rightShell.boundingBox()
@@ -224,6 +225,7 @@ test.describe('desktop UX performance', () => {
     }
 
     await performWindowResize(page, 1400, 900, -100, -50, 30)
+    await settlePage(page)
     const duringRightBox = await rightShell.boundingBox()
     if (!duringRightBox) {
       throw new Error('Right panel should remain visible during resize')
@@ -336,10 +338,7 @@ test.describe('desktop UX performance', () => {
 
   test('sidebar drag and drop settles without rebuilding the full catalog', async ({ page }) => {
     await waitForFixture(page, 10, 50)
-    const rows = page.locator('.sidebar-session-row[draggable="true"]')
-    if ((await rows.count()) === 0) {
-      await page.locator('[data-sidebar-section-id="recent"]').click()
-    }
+    const rows = page.locator('.sidebar-session-row')
     await expect(rows.first()).toBeVisible()
     const showMore = page.getByRole('button', { name: '展开显示' })
     while ((await rows.count()) < 50 && (await showMore.count()) > 0) {
@@ -350,8 +349,8 @@ test.describe('desktop UX performance', () => {
     await settlePage(page)
 
     for (let sample = 1; sample <= 3; sample += 1) {
-      const source = rows.nth(sample % 2)
-      const target = rows.nth((sample + 1) % 2)
+      const source = rows.nth(0)
+      const target = rows.nth(1)
       const dropMetrics = await measureSidebarDrop(page, source, target)
       await recordRendererSample(page, 'sidebar-dnd', sample, {
         ...dropMetrics,
@@ -360,18 +359,16 @@ test.describe('desktop UX performance', () => {
   })
 
   test('editor file tree toggle commits width once and FLIPs', async ({ page }) => {
-    await waitForFixture(page, 250, 30)
-    await page.getByRole('button', { name: '显示右侧面板' }).click()
+    await waitForFixture(page, 250, 30, { workspace: true })
+    await page.getByRole('button', { name: '显示标签页' }).click()
     const rightPanel = page.getByRole('complementary', {
       name: '右侧面板',
     })
-    await rightPanel.getByRole('button', { name: '文件 Ctrl+P' }).click()
-    await rightPanel.getByText('README.md', { exact: true }).click()
-    const showTree = rightPanel.getByRole('button', { name: '显示文件树' })
-    await expect(showTree).toBeVisible()
-    await showTree.click()
+    await rightPanel.getByRole('button', { name: '打开文件 Ctrl+P' }).click()
     const hideTree = rightPanel.getByRole('button', { name: '隐藏文件树' })
     await expect(hideTree).toBeVisible()
+    await rightPanel.getByText('README.md', { exact: true }).click()
+    const showTree = rightPanel.getByRole('button', { name: '显示文件树' })
 
     for (let sample = 1; sample <= 3; sample += 1) {
       await settlePage(page)
@@ -396,15 +393,15 @@ test.describe('desktop UX performance', () => {
     if ((await activitySummary.getAttribute('aria-expanded')) === 'false') {
       await activitySummary.click()
     }
-    const processSummary = page.locator('.canonical-process-group__summary')
+    const processSummary = page.locator('.cpx-agent-activity__header')
     await expect(processSummary.first()).toBeVisible()
     await processSummary.first().click()
-    const processItems = page.locator('.canonical-process-group__items')
+    const processItems = page.locator('.cpx-agent-activity__list')
     await expect(processItems.first()).toBeVisible()
-    await expect(
-      processItems.first().locator('.canonical-process-group__items-content > *'),
-    ).toHaveCount(12)
-    const edgeFrame = page.locator('.canonical-process-edge-fade').first()
+    await expect(processItems.first().locator('.cpx-agent-activity__list-content > *')).toHaveCount(
+      12,
+    )
+    const edgeFrame = page.locator('.cpx-agent-activity__edge-fade').first()
     await expect(edgeFrame).toHaveAttribute('data-scrollable', 'true')
 
     for (let sample = 1; sample <= 3; sample += 1) {
@@ -417,7 +414,7 @@ test.describe('desktop UX performance', () => {
     }
   })
 
-  test('skeleton shimmer stays on the compositor path', async ({ page }) => {
+  test('static skeleton keeps loading frames cheap', async ({ page }) => {
     await page.emulateMedia({ reducedMotion: 'no-preference' })
     await waitForFixture(page, 10, 30)
     await expect(page.locator('html')).toHaveAttribute('data-reduce-motion', 'off')
@@ -434,13 +431,11 @@ test.describe('desktop UX performance', () => {
       return {
         animationDuration: style.animationDuration,
         animationName: style.animationName,
-        loadingToken: getComputedStyle(block).getPropertyValue('--motion-loading').trim(),
       }
     })
     expect(shimmer).toEqual({
-      animationDuration: '0.9s',
-      animationName: 'ui-skeleton-sweep',
-      loadingToken: '900ms',
+      animationDuration: '0s',
+      animationName: 'none',
     })
 
     for (let sample = 1; sample <= 3; sample += 1) {
@@ -511,7 +506,17 @@ async function measureSidebarDrop(
   source: import('@playwright/test').Locator,
   target: import('@playwright/test').Locator,
 ): Promise<{ dropReadyMs: number; moveMs: number }> {
-  await target.evaluate((element) => {
+  await source.scrollIntoViewIfNeeded()
+  await target.scrollIntoViewIfNeeded()
+  const sourceBox = await source.boundingBox()
+  const targetBox = await target.boundingBox()
+  if (!sourceBox || !targetBox) throw new Error('Sidebar reorder rows have no bounds')
+  const sourceId = await source.getAttribute('data-sidebar-session-id')
+  const draggedRow = page.locator(`[data-sidebar-session-id="${sourceId}"]`)
+  const orderBefore = await draggedRow.locator('..').innerText()
+  await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2)
+  await page.mouse.down()
+  await page.evaluate(() => {
     const targetWindow = window as typeof window & {
       __pidexDropReady?: Promise<{
         dropReadyMs: number
@@ -525,8 +530,8 @@ async function measureSidebarDrop(
         if (dropReadyMs === null || moveMs === null) return
         resolve({ dropReadyMs, moveMs })
       }
-      element.addEventListener(
-        'dragover',
+      document.addEventListener(
+        'pointermove',
         () => {
           const movedAt = performance.now()
           requestAnimationFrame(() => {
@@ -536,8 +541,8 @@ async function measureSidebarDrop(
         },
         { capture: true, once: true },
       )
-      element.addEventListener(
-        'drop',
+      document.addEventListener(
+        'pointerup',
         () => {
           const droppedAt = performance.now()
           requestAnimationFrame(() =>
@@ -551,7 +556,12 @@ async function measureSidebarDrop(
       )
     })
   })
-  await source.dragTo(target)
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height, {
+    steps: 8,
+  })
+  await expect(draggedRow).toHaveAttribute('data-dragging', 'true')
+  await expect(draggedRow.locator('..')).not.toHaveText(orderBefore)
+  await page.mouse.up()
   return page.evaluate(() => {
     const targetWindow = window as typeof window & {
       __pidexDropReady?: Promise<{

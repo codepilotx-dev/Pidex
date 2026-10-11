@@ -174,7 +174,7 @@ export function createBrowserMockDesktopClient(
   if (visualFixture || performanceFixture) {
     settings = { ...settings, providerID: 'mock', model: 'mock' }
   }
-  if (visualFixture?.item.id === 'visual-scroll-edge') {
+  if (visualFixture?.item.id === 'visual-scroll-edge' || performanceFixture) {
     settings = { ...settings, collapsedSidebarSections: [] }
   }
   let configDocument: Record<string, JsonValue> = {
@@ -249,6 +249,7 @@ export function createBrowserMockDesktopClient(
   const provider = {
     ...mockModelProvider(settings.providerID),
     ...(visualFixture || performanceFixture ? { defaultModels: ['mock'] } : {}),
+    ...(performanceFixture ? { apiKeyConfigured: true } : {}),
     ...(modelPickerVisualFixture
       ? {
           apiKeyConfigured: true,
@@ -289,7 +290,7 @@ export function createBrowserMockDesktopClient(
     provider,
     model: settings.model,
     baseURL: settings.providerBaseURL || provider.baseURL,
-    apiKeyConfigured: false,
+    apiKeyConfigured: Boolean(performanceFixture),
     apiKeySource: null,
     modelConfigured: Boolean(settings.model),
     configurationMessage: '浏览器 mock 模式不会读取真实模型配置。',
