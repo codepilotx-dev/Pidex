@@ -12,9 +12,13 @@
 - [agent/desktop] 电脑控制改为宿主管理的 `node_repl` MCP JavaScript 入口：新增 `mcp__node_repl__js`，在独立子进程中执行 `computer.apps()`/`read()`/`action()`，只暴露 `computer` 与 `nodeRepl` 输出助手，支持顶层 `await`、超时取消与按聊天串行；三个内建电脑工具保留注册身份与审计但不再直接对模型暴露。插件清单与详情新增宿主 MCP／文档组件，MCP 状态页展示服务器归属、插件开关与连接状态；协议仅新增可选字段与 `computer.nodeRepl.v1` 能力，保持 `thread-rpc-v4` 与旧客户端兼容。
 - [agent] node_repl 的每次电脑操作仍回到统一注册、校验、Hook、判权与审批链，Skill 范围与冻结回合能力同时约束外层入口与内部操作；需要应用授权时结束当前脚本，只把被阻塞的读取操作、宿主身份与授权指纹写入审批 checkpoint，批准后仅重新校验并执行该读取并作为本次调用的完成结果，原脚本不继续执行也不重放。
 - [agent/desktop] 安装态新增专用子进程入口：`pidex-agent.exe --pidex-node-repl` 在正式 bootstrap 之前分派并执行单元格，用户无需额外安装 Node 或 Bun。
+- [agent-protocol/agent/desktop] 新增 `github.threadPullRequests.v1` 能力与独立的 `thread_pull_requests` 关联表（history schema 59，前向迁移，不改线程核心表），提供按会话批量读取 PR 关联、显式关联与解除关联，并新增可对账事件 `thread/pull-requests/updated`。读取逐会话返回结果，单条失败不拖累整批；状态由 Agent 单点计算，按 PR 身份去重、缓存 60 秒、最大并发 4，失败或过期只回退为未知，不再保留误导性的绿色。创建 PR、开启 PR 监控和显式关联会记录关联，普通 Fork 不复制父会话关联；侧栏可见的项目会话按实际执行目录的 origin 与分支发现匹配的打开 PR，detached HEAD 与非 GitHub remote 不自动发现。
 
 ### Changed
 
+- [desktop/renderer] 侧栏会话行补齐环境与 PR 表达：尾部标记顺序固定为环境、Fork、日程、PR；`executionEnvironment.kind === 'worktree'` 显示独立的工作树标记（与 `isFork` 分叉标记互不推断），PR 标记按已合并／已关闭／草稿／冲突／检查失败／可合并／检查通过／等待／未知着色并给出原因。悬浮卡新增执行环境说明（含工作树创建中／可用／已清理等状态）与全部关联 PR 行，标题经现有安全外链入口打开、可解除关联；会话右键菜单新增“关联 Pull Request”输入弹窗。PR 数据独立于 `thread/list`，窗口可见时每 60 秒刷新已渲染会话、悬浮卡打开时刷新过期数据，窗口隐藏时暂停，能力缺失时不显示 PR 功能且不影响环境标记。
+
+- [desktop/renderer] 共享菜单与 Popover 入场改用 `@starting-style` 的透明度和位移过渡，复用现有时长与方向；定位前通过 visibility 隐藏，避免内联透明度覆盖过渡起点，并保留减少动画、Dialog、Tooltip 和现有关闭行为。
 - [desktop/renderer] 插件详情页对齐 Codex 的纵向图标头部、内容自适应示例区和类型分组；插件总开关与单个技能开关分离，技能状态通过现有管理接口更新，立即试用携带插件引用并保留已有草稿。
 - [repo] 精简根目录 13 个重复脚本入口，改用 workspace 命令、MCP 调试脚本和 Plan 测试参数；保留底层实现及开发、测试、发布能力，并同步使用说明。
 - [repo/release] 统一日常质量与发布预检命令，将性能观察移出必需质量门禁，Windows 打包作业承担完整构建验证；保留现有必需检查名称、安全、签名、无障碍和安装验证，明确检查归属与失败处理。
@@ -24,6 +28,9 @@
 
 ### Fixed
 
+- [agent] 配置局部编辑跳过不存在项的删除，修复首次保存主题时 nullable 字体项触发 CONFIG_VALIDATION_ERROR、导致无法切换主题的问题。
+- [agent/desktop] 会话内推送与创建 PR 改为携带 `threadId`：Agent 校验会话与项目归属后使用真实工作树目录，没有会话上下文时保留项目根目录语义；创建成功的 PR 自动关联到发起会话。
+- [desktop/renderer] 修复添加项目或刷新项目列表时旧折叠快照覆盖当前状态的问题，保留项目分区和已有项目的展开／折叠选择。
 - [desktop/renderer] 供应商详情图标使用固定尺寸容器，避免图片撑满头部并挤走名称；供应商信息与连接状态、操作按钮恢复横向对齐。
 - [desktop/renderer] 供应商详情操作栏把连接状态与刷新、测试连接放进同一条正常文档流横向容器，垂直居中并保留间距，宽度不足时自然换行，不再出现状态文案与刷新按钮重叠。
 - [desktop/renderer] 供应商连接页补齐 `provider-credential` 余额来源：复用供应商 API Key，展示连接状态与实际余额，并区分加载、未连接与查询失败；未知余额不再渲染为 0。环境变量推理凭据改为只读行归入 API 密钥区，用量来源派生的环境连接不再重复展示，并移除原独立环境变量区。
