@@ -23,10 +23,10 @@
     "diff": "8.0.4",
     "effect": "4.0.0-beta.83",
     "extract-zip": "file:../../vendor/extract-zip",
-    "hono": "4.12.32",
+    "hono": "4.13.7",
     "jsonc-parser": "3.3.1",
     "rrule": "^2.8.1",
-    "smol-toml": "1.7.1",
+    "smol-toml": "1.9.0",
     "typebox": "1.1.38",
     "yaml": "2.9.0",
     "zod": "4"
