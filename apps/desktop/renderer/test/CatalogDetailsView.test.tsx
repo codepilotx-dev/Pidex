@@ -47,7 +47,7 @@ function renderTaskDetails(pluginDetails: PluginDetails | null): string {
 }
 
 describe('Codex-style plugin product details', () => {
-  test('renders real prompts, display capability, Skill metadata, and the plugin-level switch', () => {
+  test('keeps the plugin switch separate from the unavailable skill switch', () => {
     const html = renderTaskDetails(details)
     expect(html).toContain('立即试用')
     expect(html).toContain('aria-label="示例提示词"')
@@ -60,7 +60,11 @@ describe('Codex-style plugin product details', () => {
     expect(html.match(/catalog-plugin-prompts__plugin-icon/g)).toHaveLength(3)
     expect(html).toContain('Planning')
     expect(html).toContain('真实的技能说明。')
-    expect(html).toContain('aria-label="启用插件及其技能"')
+    expect(html).toContain('aria-label="启用 任务规划 插件"')
+    expect(html).toContain('aria-label="启用 task-planning 技能"')
+    expect(html.match(/role="switch"/g)).toHaveLength(2)
+    const skillSwitch = html.match(/<button[^>]*aria-label="启用 task-planning 技能"[^>]*>/)?.[0]
+    expect(skillSwitch).toContain('disabled=""')
     expect(html).not.toContain('<dd>task-planning</dd>')
   })
 
@@ -70,7 +74,42 @@ describe('Codex-style plugin product details', () => {
     expect(html).not.toContain('catalog-plugin-prompts__background')
     expect(html).not.toContain('立即试用')
     expect(html).toContain('拆解和规划复杂工作')
-    expect(html).toContain('aria-label="启用插件及其技能"')
+    expect(html).toContain('aria-label="启用 任务规划 插件"')
+  })
+
+  test('groups actual MCP and documentation components without fabricating hooks or duplicate skills', () => {
+    const html = renderTaskDetails({
+      ...details,
+      components: [
+        { kind: 'mcp', id: 'node_repl', name: 'node_repl', description: '', managedBy: 'host' },
+        {
+          kind: 'documentation',
+          id: 'api',
+          name: 'API.md',
+          description: '电脑控制 API',
+          managedBy: 'plugin',
+        },
+        {
+          kind: 'skill',
+          id: 'task-planning',
+          name: 'task-planning',
+          description: '',
+          managedBy: 'plugin',
+        },
+      ],
+    })
+    expect(html).toContain('MCP 服务器 1')
+    expect(html).toContain('文档 1')
+    expect(html).toContain('由 Pidex 宿主管理')
+    expect(html).not.toContain('catalog-plugin-components')
+    expect(html).not.toContain('钩子')
+    expect(html.match(/catalog-plugin-skill tw:/g)).toHaveLength(1)
+  })
+
+  test('does not render a prompt banner for blank prompts', () => {
+    expect(renderTaskDetails({ ...details, defaultPrompts: ['  '] })).not.toContain(
+      'catalog-plugin-prompts',
+    )
   })
 
   test('keeps MiniMax install metadata and official guidance', () => {

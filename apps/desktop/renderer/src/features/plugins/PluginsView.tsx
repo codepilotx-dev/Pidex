@@ -389,7 +389,10 @@ export function PluginsView(): React.ReactNode {
   }
 
   function tryPluginPrompt(prompt: string): void {
-    composerDraftStore.prefillTextIfEmpty('home', prompt)
+    const text = selectedPlugin
+      ? `[@${selectedPlugin.name.replace(/([\\[\]])/gu, '\\$1')}](plugin://${selectedPlugin.id}) ${prompt}`
+      : prompt
+    composerDraftStore.prefillTextIfEmpty('home', text)
     navigate('/new')
   }
 
@@ -491,6 +494,8 @@ export function PluginsView(): React.ReactNode {
               error={pluginErrors[selectedPlugin.id]}
               item={selectedPlugin}
               kind="plugin"
+              key={selectedPluginDetailsKey}
+              workspacePath={workspacePath}
               onPrimaryAction={(item, trigger, checked) =>
                 void runPluginAction(item, trigger, checked)
               }

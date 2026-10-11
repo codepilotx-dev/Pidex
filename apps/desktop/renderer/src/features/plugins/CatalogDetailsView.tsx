@@ -31,6 +31,7 @@ type PluginProps = {
   onPrimaryAction: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
   onTryPrompt: (prompt: string) => void
   onUninstall?: () => void
+  workspacePath?: string | null
 }
 
 type SkillProps = {
