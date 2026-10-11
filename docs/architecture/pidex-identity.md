@@ -91,7 +91,7 @@ Decision owners: Pidex product and architecture (explicit owner instruction)
 
 ## Verification
 
-- `bun run typecheck`、`build:agent`／`build:renderer`／`build:desktop`／`build:website`、
+- `bun run typecheck`、`build:agent`／`build:renderer`／`build:desktop`、`bun run --cwd apps/website build`、
   `desktop:css:check` 与全量单元测试必须通过，且不新增既有失败。
 - `bun run package:win` 产出 `Pidex-Desktop-${version}-${arch}.exe`，完成后校验安装包与
   打包态 smoke。

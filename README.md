@@ -79,6 +79,21 @@ bun run build:desktop
 
 `bun run package:win` 用于生成 Windows x64 NSIS 安装包，不属于普通开发流程的必跑命令。参与开发前请阅读[贡献指南](CONTRIBUTING.md)。
 
+单独运行 workspace 或专项检查时，直接使用以下命令：
+
+```powershell
+bun run --cwd apps/desktop/renderer dev
+bun run --cwd apps/desktop/electron dev
+bun run --cwd apps/website dev
+bun run --cwd apps/website build
+bun test scripts/performance/Metrics.test.ts
+bun run test:plan -- --rpc
+# 真实模型验收会联网并产生模型费用
+bun run test:plan -- --live
+```
+
+完整桌面开发仍使用 `dev:agent` 与 `dev:desktop`。MCP 调试命令见 [MCP 对话调试实验室](docs/development/mcp-debug-lab.md)。
+
 ## 架构概览
 
 Pidex 是一个 Windows-first TypeScript monorepo，统一使用 Bun 1.3.14。

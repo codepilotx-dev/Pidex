@@ -61,6 +61,32 @@ Git 标签格式：`v<根 package.json 的 version>`。
 
 ## 人工发布步骤
 
+日常开发先运行 `bun run check:quality`；准备版本分支、推送 PR 前，在 Windows 上运行 `bun run check:release`。两者复用 CI 的命令，失败时停止并保留非零退出码。先把本地问题修好，再推送；发布阶段不临时放宽测试或预算。
+
+### 检查归属
+
+| 检查                   | 内容与目的                                                                                                    | 是否阻塞合并 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------- | ------------ |
+| `quality`              | `check:quality`：版本与 lockfile、全仓类型、格式、lint、固定版本图标生成一致性、CSS 策略；另检查 PR diff 空白 | 是           |
+| `unit-tests`           | 全仓单元测试，包含版本、发布工作流和性能统计逻辑测试                                                          | 是           |
+| `dependency-audit`     | 高危/严重依赖漏洞；仅接受有负责人、理由和有效期限的现有豁免                                                   | 是           |
+| `changelog-check`      | 版本一致性与 PR 变更说明；版本归档沿用 `version:prepare`                                                      | 是           |
+| `unsigned-smoke`       | 完整 Windows 构建、打包结构验证、运行 smoke、静默安装后的布局验证                                             | 是           |
+| `release-parity`       | 无障碍检查、临时证书签名后的 Agent 运行验证和证书清理                                                         | 是           |
+| CodeQL                 | 仓库 ruleset 配置的高危安全告警及扫描错误                                                                     | 是           |
+| `renderer-observation` | PR、夜间与手动执行性能场景并保存报告、原始采样和失败截图                                                      | 否           |
+| `packaged-electron`    | 夜间或手动执行打包 Electron 性能预算验证，不在普通 PR 重复打包                                                | 否           |
+
+`quality` 不再重复构建：`unsigned-smoke` 的 `package:win` 已调用完整 `build`，覆盖 Renderer、Agent、原生 CUA 和 Electron。性能统计的单元测试已由 `test:unit` 覆盖。
+
+`check:release` 依次运行质量检查、单元测试、依赖审计、无障碍和 `package:win`。它会生成本地安装包并启动验证进程；不会创建提交、标签、上传或发布。CI 仍需完成 PR diff 检查、临时证书签名、静默安装验证和 CodeQL，本地通过不能替代这些结果。
+
+性能观察独立失败时仍显示失败，不将其伪装为通过；该作业不加入 required checks。超预算和场景执行错误分别处理：前者分析采样，后者先修 fixture、选择器或运行环境。保留当前预算作为历史比较基线；共享 runner 和模拟场景的结果不能证明真实桌面稳定 60 fps，也不能直接制定硬件验收标准。
+
+GitHub 的 `Protect main` 与 `Protect dev` 当前要求上述六个命名作业，并配置 CodeQL。保持这些作业名称和每个 PR 的触发条件稳定，不使用顶层路径过滤跳过必需工作流。若以后增删必需作业，必须同时调整 ruleset；本次配置无需修改远端规则。
+
+### 发布操作
+
 预发布与正式版本都使用同一套人工发布流程。版本文件由 `version:prepare` 生成，提交与 `v*` 标签必须签名，标签必须指向 `main` 历史。推送标签后由 GitHub-hosted runner 创建 GitHub Release；需要 Windows 安装包时，从对应标签运行 `bun run package:win`，验证通过后人工上传同版本 x64 EXE。
 
 1. 确认 `Unreleased` 区段非空。
@@ -116,14 +142,16 @@ Git 标签格式：`v<根 package.json 的 version>`。
 
 ## 常用命令
 
-| 命令                                                               | 说明                                                                                   |
-| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
-| `bun run version:check`                                            | 验证四 manifest 一致、lockfile 一致、CHANGELOG 结构有效                                |
-| `bun run version:check -- --base <git-sha>`                        | 验证 PR 中 `Unreleased` 有新增说明                                                     |
-| `bun run version:check -- --tag <v版本>`                           | 额外验证标签与 manifest 版本一致                                                       |
-| `bun run version:prepare -- <新版本>`                              | 归档 `Unreleased`、同步 manifest、刷新 lockfile                                        |
-| `bun run version:prepare -- <新版本> --stable`                     | 同上，但允许无预发布后缀的稳定版                                                       |
-| `bun scripts/write-release-notes.ts --tag <v版本> --output <文件>` | 从对应的已归档 CHANGELOG 版本区段生成 Release 正文；标签、根版本或归档区段不一致时失败 |
+| 命令                                                             | 说明                                                                                   |
+| ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| `bun run version:check`                                          | 验证四 manifest 一致、lockfile 一致、CHANGELOG 结构有效                                |
+| `bun run version:check -- --base <git-sha>`                      | 验证 PR 中 `Unreleased` 有新增说明                                                     |
+| `bun run version:check -- --tag <v版本>`                         | 额外验证标签与 manifest 版本一致                                                       |
+| `bun run version:prepare -- <新版本>`                            | 归档 `Unreleased`、同步 manifest、刷新 lockfile                                        |
+| `bun run version:prepare -- <新版本> --stable`                   | 同上，但允许无预发布后缀的稳定版                                                       |
+| `bun scripts/WriteReleaseNotes.ts --tag <v版本> --output <文件>` | 从对应的已归档 CHANGELOG 版本区段生成 Release 正文；标签、根版本或归档区段不一致时失败 |
+| `bun run check:quality`                                          | 日常质量检查，与 CI `quality` 复用相同入口                                             |
+| `bun run check:release`                                          | Windows 发布前本地预检，含无障碍与完整打包；不发布                                     |
 
 ## 示例
 
