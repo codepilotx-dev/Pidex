@@ -318,7 +318,7 @@ describe('composer surface variant', () => {
     expect(html).not.toContain('重新加载模型')
   })
 
-  test('ComposerCard 底栏最左侧渲染模式切换胶囊，支持 Coding/Working/Chat', () => {
+  test('ComposerCard 底栏在加号之后渲染模式切换胶囊，支持 Coding/Working/Chat', () => {
     const coding = renderToStaticMarkup(
       <ComposerCard {...composerCardProps({ productMode: 'coding' })} />,
     )

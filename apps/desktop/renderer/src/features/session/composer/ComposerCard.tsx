@@ -73,7 +73,7 @@ import { PopoverItem } from '../../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
 import { SearchablePopoverContent } from '../../../components/ui/SearchablePopoverContent.js'
 import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
-import { ComposerModeSwitcher } from './ComposerModeSwitcher.js'
+import { ComposerModeSwitcher, COMPOSER_CHIP_TRIGGER_CLASS } from './ComposerModeSwitcher.js'
 import { ProjectSwitcherPopover } from './ProjectSwitcherPopover.js'
 import { ChatInputDropdown } from './ChatInputDropdown.js'
 import { BranchSelectPopover } from './BranchSelectPopover.js'
@@ -186,19 +186,12 @@ const PERMISSION_CHIP_CLASS_NAMES: Record<DesktopPermissionMode, string> = {
 }
 
 /*
- * Geometry shared by the permission trigger: the chip keeps the row height and
- * pill radius from `chip-button`, loses its own border/background, animates the
- * permission state on the feedback duration, and reports the open menu as the
- * selected surface. `icon-size`/block/shrink keep the leading permission glyph
- * on the shared icon slot even though the trigger is a Radix Select trigger
- * rather than the shared Button.
+ * The permission trigger reuses the mode switcher's borderless chip silhouette
+ * (see `COMPOSER_CHIP_TRIGGER_CLASS`) so both toolbar triggers render
+ * identically; `permission-select-trigger` stays as the query hook for the
+ * permission menu and its tests.
  */
-const PERMISSION_TRIGGER_CLASS = cx(
-  'permission-select-trigger tw:min-w-0 tw:border tw:border-transparent tw:bg-transparent',
-  'tw:transition-[background,border-color,color] tw:duration-feedback tw:ease-standard',
-  'tw:hover:bg-app-hover tw:data-[state=open]:bg-app-selected',
-  'tw:[&>svg:first-child]:block tw:[&>svg:first-child]:size-icon tw:[&>svg:first-child]:shrink-0',
-)
+const PERMISSION_TRIGGER_CLASS = cx('permission-select-trigger', COMPOSER_CHIP_TRIGGER_CLASS)
 const PERMISSION_TRIGGER_OPEN_CLASS = 'tw:bg-app-selected'
 const PERMISSION_TRIGGER_LABEL_CLASS =
   'permission-select-trigger-label tw:min-w-0 tw:truncate tw:@max-[480px]:hidden'
@@ -1442,7 +1435,6 @@ export function ComposerCard({
 
         <div className={TOOLBAR_CLASS}>
           <div className={TOOLBAR_LEFT_CLASS}>
-            <ComposerModeSwitcher mode={effectiveProductMode} onModeChange={onProductModeChange} />
             <Button
               isIconOnly
               active={buttonContextOpen}
@@ -1459,6 +1451,7 @@ export function ComposerCard({
             >
               <Plus size={APP_ICON_SIZE} />
             </Button>
+            <ComposerModeSwitcher mode={effectiveProductMode} onModeChange={onProductModeChange} />
             <Select.Root
               open={openDropdown === 'permission'}
               value={permissionMode as string}

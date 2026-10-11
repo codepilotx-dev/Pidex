@@ -48,6 +48,21 @@ const MODE_CONFIGS: ModeConfig[] = [
   },
 ]
 
+/*
+ * Silhouette shared by the composer toolbar chip triggers (mode switcher and
+ * permission select): no visible border or background at rest, hover and open
+ * surfaces from `--cpx-sys-color-*`, and the leading glyph pinned to the shared
+ * icon slot. Exported so the permission trigger in `ComposerCard` renders an
+ * identical chip instead of a second copy of these utilities.
+ */
+export const COMPOSER_CHIP_TRIGGER_CLASS = cx(
+  'tw:min-w-0 tw:border tw:border-transparent tw:bg-transparent',
+  'tw:transition-[background,border-color,color] tw:duration-feedback tw:ease-standard',
+  'tw:hover:bg-app-hover tw:hover:border-transparent',
+  'tw:data-[state=open]:bg-app-selected tw:data-[state=open]:border-transparent',
+  'tw:[&>svg:first-child]:block tw:[&>svg:first-child]:size-icon tw:[&>svg:first-child]:shrink-0',
+)
+
 export function ComposerModeSwitcher({
   mode = 'coding',
   onModeChange,
@@ -69,12 +84,8 @@ export function ComposerModeSwitcher({
           aria-expanded={open}
           aria-label={`${t('切换工作模式，当前为')} ${currentConfig.label}`}
           className={cx(
-            'composer-mode-trigger chip-button tw:h-7 tw:px-2.5 tw:py-0',
-            'tw:inline-flex tw:items-center tw:gap-1.5 tw:rounded-full',
-            'tw:border tw:border-app-border-subtle tw:bg-app-panel-soft tw:text-app-text',
-            'tw:type-caption tw:transition-colors tw:duration-feedback tw:ease-standard',
-            'tw:hover:bg-app-hover tw:hover:border-app-border tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1',
-            'tw:focus-visible:outline-app-focus tw:data-[state=open]:bg-app-hover tw:data-[state=open]:border-app-border',
+            'composer-mode-trigger chip-button tw:shrink-0 tw:text-app-text',
+            COMPOSER_CHIP_TRIGGER_CLASS,
             disabled && 'tw:pointer-events-none tw:opacity-60',
             className,
           )}
@@ -83,7 +94,9 @@ export function ComposerModeSwitcher({
           type="button"
         >
           <CurrentIcon className={cx('tw:shrink-0', currentConfig.iconColorClass)} size={13} />
-          <span className="composer-mode-trigger-label tw:truncate">{currentConfig.label}</span>
+          <span className="composer-mode-trigger-label tw:min-w-0 tw:truncate">
+            {currentConfig.label}
+          </span>
         </button>
       </Dropdown.Trigger>
       <Dropdown.Portal>
