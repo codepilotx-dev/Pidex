@@ -45,7 +45,7 @@ function Alignment({ narrow, grouped }) {
   return <section data-alignment style={{ width: narrow ? 360 : 880, containerType: 'inline-size' }}>
     <div className={grouped ? 'cpx-agent-activity__list' : 'canonical-turn__process'}>
       {alignmentItems.map(item => <CanonicalItemRenderer key={item.id} item={item}
-        onOpenPlanInRightDock={noop} onOpenSubagent={noop} rightDockPlanEventId={null} />)}
+        onOpenPlanInRightDock={noop} onOpenSubagent={noop} dockedPlanItemId={null} />)}
     </div>
   </section>;
 }
@@ -61,7 +61,7 @@ function Timeline({ side }) {
       <CanonicalThreadView key={generation} turns={turns} threadId={side ? 'side' : 'main'} active={false} loading={false} loadingOlder={false}
         hasOlder={!older && !side} error={null} listRef={listRef} navigationRef={navigationRef} scrollRef={scrollRef}
         onCanReturnToBottomChange={noop} onLoadOlder={async () => setOlder(true)} onReload={async () => {}}
-        onOpenPlanInRightDock={noop} onOpenSubagent={noop} rightDockPlanEventId={null} />
+        onOpenPlanInRightDock={noop} onOpenSubagent={noop} dockedPlanItemId={null} />
     </div>
   </section>;
 }

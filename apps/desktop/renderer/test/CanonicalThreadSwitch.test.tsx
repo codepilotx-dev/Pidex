@@ -505,7 +505,7 @@ describe('canonical thread switch', () => {
           }
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -640,7 +640,7 @@ describe('canonical thread switch', () => {
           entry={entry}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -651,7 +651,7 @@ describe('canonical thread switch', () => {
           entry={entry}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -668,7 +668,7 @@ describe('canonical thread switch', () => {
           }}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -692,7 +692,7 @@ describe('canonical thread switch', () => {
           }}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -708,7 +708,7 @@ describe('canonical thread switch', () => {
           }}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -726,7 +726,7 @@ describe('canonical thread switch', () => {
           }}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )

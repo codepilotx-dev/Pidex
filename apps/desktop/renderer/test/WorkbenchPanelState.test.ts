@@ -849,7 +849,7 @@ describe('workbench dynamic tab state', () => {
         sideChatAttachments: [],
       },
       {
-        validPlanEventIds: ['event-1'],
+        validPlanItemIds: ['event-1'],
         workspacePath: 'F:\\project',
       },
     )
@@ -859,10 +859,11 @@ describe('workbench dynamic tab state', () => {
     expect(state.workbench.bottom.tabIds).toEqual([])
     expect(state.workbench.bottom.activeTabId).toBeNull()
     expect(state.workbench.tabsById['tool-probe']).toBeUndefined()
+    // 旧版持久化标签只有 eventId：归一化后按计划项身份保留，聊天身份留空。
     expect(state.workbench.tabsById).toEqual({
       review,
       [fileTab.id]: fileTab,
-      [planTab.id]: planTab,
+      [planTab.id]: { id: planTab.id, kind: 'plan', planItemId: 'event-1', threadId: '', title: '实现计划' },
     })
     expect(state.workbench.focusArea).toBe('bottom-panel')
     expect(state.schemaVersion).toBe(4)

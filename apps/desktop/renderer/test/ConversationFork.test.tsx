@@ -241,7 +241,7 @@ function renderItem(item: Extract<Item, { type: 'text' }>): string {
           item={item}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
           showAssistantActions
         />
       </TooltipProvider>

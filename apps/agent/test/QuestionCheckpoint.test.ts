@@ -430,4 +430,106 @@ describe('问题 checkpoint', () => {
       resolvedAt: expect.any(Number),
     })
   })
+
+  test('Plan 轮次不产生倒计时也不参与自动作答，空答案不会被当成用户决定', async () => {
+    const db = new AgentDatabase(
+      join(tmpdir(), `pidex-question-plan-auto-${crypto.randomUUID()}.sqlite`),
+    )
+    databases.push(db)
+    const hub = await Effect.runPromise(EventHub.make)
+    const model = Model.Ref.make({
+      providerID: Provider.ID.make('openai'),
+      id: Model.ID.make('test'),
+    })
+    const permissionConfig = {
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'user',
+    } as const
+    const askQuestions = [
+      {
+        id: 'scope',
+        header: '范围',
+        question: '覆盖哪些客户端？',
+        options: [
+          { label: '仅桌面端', description: '集中完成桌面交互' },
+          { label: '桌面端与 CLI', description: '同时设计共享能力' },
+        ],
+      },
+    ]
+    const admission = (taskMode: 'plan' | 'chat') => {
+      const thread = db.createThread()
+      const input = {
+        content: '规划',
+        model,
+        permissionConfig,
+        strategy: 'queue',
+        taskMode,
+      } as const
+      const turn = db.createTurn(thread.id, input)
+      db.startTurnExecution(turn.turnID, { ...input, id: turn.inputID })
+      return { thread, turn }
+    }
+    const service = new QuestionService(db, hub)
+    const track = spyOn(QuestionAutoResolutionScheduler.prototype, 'track')
+    const reply = spyOn(QuestionService.prototype, 'reply')
+
+    // Plan 轮次：即使模型请求了 autoResolutionMs，也不暴露倒计时、不登记定时器。
+    const plan = admission('plan')
+    const planId = await service.checkpoint(plan.thread.id, plan.turn.turnID, plan.turn.agentID, {
+      kind: 'clarification',
+      questions: askQuestions,
+      autoResolutionMs: 60_000,
+      checkpoint: { state: '{"version":2}', interruption: { name: 'request_user_input' } },
+    })
+    expect(
+      db.repositories.interactions.pendingQuestionPayload(planId)?.autoResolutionMs,
+    ).toBeUndefined()
+    expect(track).not.toHaveBeenCalled()
+    const restoreCandidates = db.repositories.interactions.pendingAutoResolutionQuestions()
+    expect(restoreCandidates.map((row) => row.id)).toContain(planId)
+    expect(
+      restoreCandidates.find((row) => row.id === planId)?.payload.autoResolutionMs,
+    ).toBeUndefined()
+
+    // 旧版本写入的 Plan 倒计时即使已经过期，恢复时也不能自动作答。
+    db.sqlite
+      .query(
+        "UPDATE question_requests SET payload = json_set(payload, '$.autoResolutionMs', 60000), created_at = 1 WHERE id = ?",
+      )
+      .run(planId)
+    expect(
+      db.repositories.interactions.pendingAutoResolutionQuestions().map((row) => row.id),
+    ).toContain(planId)
+    service.restoreAutoResolutions()
+    expect(track).not.toHaveBeenCalled()
+    expect(reply).not.toHaveBeenCalled()
+
+    // 空答案没有变成用户决定：问题仍然待答，也没有写入任何 resolution 事件。
+    expect(db.repositories.interactions.isQuestionPending(planId)).toBe(true)
+    expect(
+      db.sqlite
+        .query(
+          "SELECT COUNT(*) AS count FROM events WHERE method = 'interaction/resolved' AND turn_id = ?",
+        )
+        .get(plan.turn.turnID),
+    ).toEqual({ count: 0 })
+
+    // 对照：Chat 轮次保留倒计时并登记定时器，说明豁免只针对 Plan。
+    const chat = admission('chat')
+    const chatId = await service.checkpoint(chat.thread.id, chat.turn.turnID, chat.turn.agentID, {
+      kind: 'clarification',
+      questions: askQuestions,
+      autoResolutionMs: 60_000,
+      checkpoint: { state: '{"version":2}', interruption: { name: 'request_user_input' } },
+    })
+    expect(db.repositories.interactions.pendingQuestionPayload(chatId)?.autoResolutionMs).toBe(
+      60_000,
+    )
+    expect(track).toHaveBeenCalledTimes(1)
+
+    reply.mockRestore()
+    track.mockRestore()
+    service.dispose()
+  })
 })

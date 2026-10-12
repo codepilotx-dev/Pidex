@@ -6,6 +6,7 @@ import {
   selectCanonicalLatestTurnStatus,
   selectCanonicalSessionLifecycle,
   selectCanonicalSessionStatus,
+  selectCanonicalLatestPlanItemId,
 } from '../src/features/session/conversation/CanonicalConversationSelectors.js'
 import { canRegenerateConversationTitle } from '../src/features/session/conversation/ConversationTitleActions.js'
 
@@ -597,5 +598,83 @@ describe('canonical conversation auxiliary selector', () => {
 
     const emptyState = createCanonicalThreadState({ ...page, turns: [] })
     expect(selectCanonicalSessionLifecycle(emptyState)).toBeNull()
+  })
+})
+
+describe('canonical latest plan identity', () => {
+  const planItem = (
+    id: string,
+    status: 'streaming' | 'completed' | 'interrupted',
+    createdAt: number,
+  ) => ({
+    id,
+    messageID: `message-${id}`,
+    turnId: `turn-${id}`,
+    agentId: 'agent-1',
+    type: 'plan' as const,
+    title: `计划 ${id}`,
+    markdown: `# 计划 ${id}`,
+    status,
+    createdAt,
+  })
+
+  const pageWith = (items: ReturnType<typeof planItem>[]): CanonicalThreadPage => ({
+    thread: {
+      id: 'thread-plan',
+      projectID: null,
+      title: null,
+      gitBranch: null,
+      workspace: {
+        kind: 'projectless',
+        projectID: null,
+        workspaceRoot: 'C:\workspace',
+        cwd: 'C:\workspace',
+        outputDirectory: null,
+      },
+      settings: { taskMode: 'plan', permissionConfig },
+      createdAt: 1,
+      updatedAt: 12,
+    },
+    subagents: [],
+    turns: [
+      {
+        turn: {
+          id: 'turn-plan',
+          threadId: 'thread-plan',
+          sourceInputID: 'input-1',
+          status: 'completed',
+          mode: 'plan',
+          model,
+          permissionConfig,
+          rootAgentId: 'agent-1',
+          mergedInputIDs: [],
+          startedAt: 2,
+          finishedAt: 3,
+          elapsedSeconds: 1,
+          error: null,
+        },
+        inputs: [],
+        messages: [],
+        agents: [],
+        items: items as never,
+        approvals: [],
+        attachments: [],
+      },
+    ],
+    olderCursor: null,
+    hasOlder: false,
+    streamPosition: { streamId: 'thread:thread-plan', sequence: 1 },
+  })
+
+  test('only the newest completed plan item is the current review identity', () => {
+    const items = [
+      planItem('older', 'completed', 2),
+      planItem('newer', 'completed', 5),
+      planItem('draft', 'streaming', 9),
+    ]
+    const state = createCanonicalThreadState(pageWith(items))
+    expect(selectCanonicalLatestPlanItemId(state)).toBe('newer')
+    expect(selectCanonicalLatestPlanItemId(null)).toBeNull()
+    expect(selectCanonicalLatestPlanItemId(createCanonicalThreadState(pageWith([])))).toBeNull()
   })
 })
