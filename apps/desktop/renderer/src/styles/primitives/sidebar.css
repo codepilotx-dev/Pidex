@@ -67,7 +67,7 @@
     --sidebar-icon-size: var(--cpx-sys-icon-size-md);
     --sidebar-icon-button-size: var(--cpx-sys-space-6);
     --sidebar-item-gap: var(--cpx-sys-space-2);
-    --sidebar-row-gap: calc(var(--cpx-sys-space-1) / 2);
+    --sidebar-row-gap: 1px;
     --sidebar-padding-x: var(--sidebar-inline-gutter);
     --sidebar-row-pad-y: var(--cpx-sys-space-1);
     --sidebar-row-height: 30px;

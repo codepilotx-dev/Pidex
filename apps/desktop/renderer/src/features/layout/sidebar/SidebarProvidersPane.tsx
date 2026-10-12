@@ -97,7 +97,10 @@ export function SidebarProvidersPane(): React.ReactNode {
           value={filter}
         />
       </div>
-      <ScrollArea className="sidebar-providers-scroll tw:min-h-0 tw:flex-1 tw:p-2">
+      <ScrollArea
+        className="sidebar-providers-scroll tw:min-h-0 tw:flex-1 tw:p-2"
+        contentClassName="tw:flex tw:flex-col tw:sidebar-row-gap"
+      >
         {loading ? (
           <SidebarEmptyRow role="status">{t('正在加载供应商…')}</SidebarEmptyRow>
         ) : error ? (

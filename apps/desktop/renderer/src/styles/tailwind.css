@@ -408,3 +408,11 @@
   font: var(--cpx-sys-type-code);
   letter-spacing: var(--cpx-sys-letter-spacing-code);
 }
+
+@utility sidebar-row-gap {
+  gap: var(--sidebar-row-gap);
+}
+
+@utility sidebar-row-padding-top {
+  padding-top: var(--sidebar-row-gap);
+}

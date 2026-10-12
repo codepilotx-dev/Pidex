@@ -695,7 +695,7 @@ function SidebarSessionGroupComponent({
     pagination === 'all' ? orderedSessions : [...baseSessions, ...extraSessions]
   const reorderValues = orderedSessions.map((session) => session.id)
   const sessionListClassName =
-    'sidebar-session-list tw:m-0 tw:flex tw:list-none tw:flex-col tw:gap-px tw:p-0'
+    'sidebar-session-list tw:m-0 tw:flex tw:list-none tw:flex-col tw:sidebar-row-gap tw:p-0'
   const sessionRows = visibleSessions.map((session, index) => renderSessionRow(session, index))
   const visibleSessionKey = visibleSessions.map((session) => session.id).join('\u0000')
   const heightTransition = useHeightTransition([

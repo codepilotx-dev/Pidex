@@ -66,7 +66,10 @@ export function SidebarScheduledPane(): ReactNode {
           onChange={controller.setFilter}
         />
       </div>
-      <ScrollArea className="sidebar-scheduled-scroll tw:min-h-0 tw:flex-1 tw:p-2">
+      <ScrollArea
+        className="sidebar-scheduled-scroll tw:min-h-0 tw:flex-1 tw:p-2"
+        contentClassName="tw:flex tw:flex-col tw:sidebar-row-gap"
+      >
         {controller.supported === false ? (
           <SidebarEmptyRow>{t('当前连接不支持已安排任务')}</SidebarEmptyRow>
         ) : controller.loading ? (
@@ -89,7 +92,10 @@ export function SidebarScheduledPane(): ReactNode {
             const runs = runsByTask.get(task.id) ?? []
             const limit = runLimits[task.id] ?? 5
             return (
-              <section key={task.id} className="sidebar-scheduled-task">
+              <section
+                key={task.id}
+                className="sidebar-scheduled-task tw:flex tw:flex-col tw:sidebar-row-gap"
+              >
                 <div className="sidebar-scheduled-task-heading tw:flex tw:min-w-0 tw:items-center">
                   <Button
                     isIconOnly
@@ -129,7 +135,7 @@ export function SidebarScheduledPane(): ReactNode {
                   </SidebarRow>
                 </div>
                 {open ? (
-                  <div className="sidebar-scheduled-runs tw:pl-6">
+                  <div className="sidebar-scheduled-runs tw:flex tw:flex-col tw:sidebar-row-gap tw:pl-6">
                     {runs.length === 0 ? (
                       <SidebarEmptyRow>{t('暂无执行记录')}</SidebarEmptyRow>
                     ) : (

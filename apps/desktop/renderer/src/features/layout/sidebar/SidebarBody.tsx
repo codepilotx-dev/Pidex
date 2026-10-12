@@ -90,7 +90,7 @@ const SECTION_MAIN_CLASS = 'sidebar-section-main tw:flex tw:min-w-0 tw:items-cen
 const SECTION_TRAILING_CLASS =
   'sidebar-section-trailing tw:flex tw:min-h-4 tw:min-w-0 tw:items-center tw:justify-end'
 const SECTION_CONTENT_CLASS =
-  'sidebar-section-content tw:grid tw:min-w-0 tw:gap-0.5 tw:overflow-hidden tw:pt-0'
+  'sidebar-section-content tw:grid tw:min-w-0 tw:sidebar-row-gap tw:overflow-hidden tw:pt-0'
 /* 更多/收起操作行：与分组行同一 gutter，1px 行间距。 */
 const SHOW_MORE_ACTIONS_CLASS =
   'sidebar-show-more-actions tw:grid tw:w-full tw:box-border tw:min-h-7 tw:items-center tw:gap-x-2 tw:grid-cols-[var(--sidebar-row-columns)] tw:rounded-md tw:px-2 tw:py-1 tw:text-left tw:text-app-text-meta tw:type-control tw:no-underline tw:transition-[background-color,box-shadow,color] tw:duration-feedback tw:ease-standard'
@@ -814,7 +814,7 @@ function SidebarBodyContent({
                         <Reorder.Group
                           as="div"
                           axis="y"
-                          className="sidebar-reorder-group tw:flex tw:min-w-0 tw:flex-col tw:gap-px"
+                          className="sidebar-reorder-group tw:flex tw:min-w-0 tw:flex-col tw:sidebar-row-gap"
                           data-sidebar-drop-container="pinned"
                           values={pinnedItemValues}
                           onReorder={(nextOrder) => {
@@ -916,7 +916,7 @@ function SidebarBodyContent({
                           <Reorder.Group
                             as="div"
                             axis="y"
-                            className="sidebar-reorder-group tw:flex tw:min-w-0 tw:flex-col tw:gap-px"
+                            className="sidebar-reorder-group tw:flex tw:min-w-0 tw:flex-col tw:sidebar-row-gap"
                             values={orderedProjects.map(sidebarProjectKey)}
                             onReorder={(nextOrder) => {
                               if (sameStringOrder(projectOrderRef.current, nextOrder)) return
@@ -1814,7 +1814,7 @@ function SidebarCustomSection({
           <Reorder.Group
             as="div"
             axis="y"
-            className="sidebar-reorder-group tw:flex tw:min-w-0 tw:flex-col tw:gap-px"
+            className="sidebar-reorder-group tw:flex tw:min-w-0 tw:flex-col tw:sidebar-row-gap"
             data-sidebar-drop-container={`section:${section.id}`}
             values={values}
             onReorder={(nextOrder) => {

@@ -402,7 +402,7 @@ function SidebarProjectGroupComponent({
       />
       <DisclosureContent
         className="sidebar-project-sessions-disclosure"
-        contentClassName="sidebar-project-sessions-disclosure__content tw:pt-0.5"
+        contentClassName="sidebar-project-sessions-disclosure__content tw:sidebar-row-padding-top"
         expanded={projectSessions.length > 0 && isExpanded}
         id={projectSessionsId}
         mountPolicy="always"
