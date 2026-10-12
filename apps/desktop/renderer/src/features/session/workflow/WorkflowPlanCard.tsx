@@ -30,28 +30,33 @@ export function usePlanExpanded(
 }
 
 export type OpenPlanInDockRequest = {
-  eventId: string
+  /** 计划项身份：与所属聊天一起绑定 canonical projection。 */
+  planItemId: string
+  threadId: string
   title: string
+  /** 打开瞬间的 Markdown 快照，仅作为 canonical 投影不可用时的回退。 */
   content: string
   /**
-   * 计划是否已生成完成。右栏计划 tab 的内容是打开瞬间的快照，因此流式期间
-   * 打开会冻结半成品；打开入口必须据此拒绝，而不是只隐藏按钮。
+   * 计划是否已生成完成。右栏计划 tab 不再以打开瞬间的字符串快照为真源，
+   * 但半成品计划仍然没有可审阅对象；打开入口据此拒绝。
    */
   openable: boolean
 }
 
 /**
- * 构造右栏打开请求。`openable` 只在计划生成完成后为真：右栏 tab 的内容是打开
- * 瞬间的快照，流式期间打开会冻结半成品。打开入口据此拒绝，而不是只隐藏按钮。
+ * 构造右栏打开请求。`openable` 只在计划生成完成后为真：生成期间没有可审阅的
+ * 完整计划，打开会冻结半成品。打开入口据此拒绝，而不是只隐藏按钮。
  */
 export function createPlanDockRequest(input: {
-  eventId: string
+  planItemId: string
+  threadId: string
   title: string
   content: string
   streaming: boolean
 }): OpenPlanInDockRequest {
   return {
-    eventId: input.eventId,
+    planItemId: input.planItemId,
+    threadId: input.threadId,
     title: input.title,
     content: input.content,
     openable: !input.streaming,
@@ -59,26 +64,38 @@ export function createPlanDockRequest(input: {
 }
 
 export function WorkflowPlanCard({
-  eventId,
+  planItemId,
   summary,
   structured,
   streaming,
   isDocked,
+  isLatest = true,
+  isPendingReview = false,
   onOpenInRightDock,
   threadId,
 }: {
-  eventId: string
+  planItemId: string
   summary: string
   structured?: StructuredPlan
   streaming: boolean
   isDocked: boolean
+  /** 是否为该聊天最新的计划项；旧计划只保留阅读、复制和导出。 */
+  isLatest?: boolean
+  /** 是否为当前待审阅计划（待批准或已批准）。 */
+  isPendingReview?: boolean
   onOpenInRightDock: (plan: OpenPlanInDockRequest) => void
   threadId?: string
 }): React.ReactNode {
   const title = structured?.title ?? planTitleFromSummary(summary)
-  const presentation = planCardPresentation({ streaming, isDocked })
-  const plan = createPlanDockRequest({ eventId, title, content: summary, streaming })
-  const [expanded, setExpanded] = usePlanExpanded(threadId, eventId)
+  const presentation = planCardPresentation({ streaming, isDocked, isLatest, isPendingReview })
+  const plan = createPlanDockRequest({
+    planItemId,
+    threadId: threadId ?? '',
+    title,
+    content: summary,
+    streaming,
+  })
+  const [expanded, setExpanded] = usePlanExpanded(threadId, planItemId)
   const { copied, copy: handleCopy, exportMarkdown: handleExport } = usePlanDocumentActions(summary)
 
   if (presentation.compact) {
@@ -269,9 +286,13 @@ export function planTitleFromSummary(summary: string): string {
 export function planCardPresentation({
   streaming,
   isDocked,
+  isLatest = true,
+  isPendingReview = false,
 }: {
   streaming: boolean
   isDocked: boolean
+  isLatest?: boolean
+  isPendingReview?: boolean
 }): {
   compact: boolean
   label: string
@@ -280,8 +301,14 @@ export function planCardPresentation({
 } {
   return {
     compact: isDocked,
-    label: streaming ? '编写计划' : '计划',
-    showOpenInRightDock: !streaming,
+    label: streaming
+      ? '正在形成计划'
+      : !isLatest
+        ? '历史计划'
+        : isPendingReview
+          ? '计划 · 待审阅'
+          : '计划',
+    showOpenInRightDock: !streaming && isLatest,
     showFoldControls: !streaming,
   }
 }

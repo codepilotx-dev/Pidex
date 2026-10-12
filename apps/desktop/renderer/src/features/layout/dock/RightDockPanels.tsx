@@ -22,6 +22,12 @@ import { Button } from '../../../components/ui/Button.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { MarkdownMessage } from '../../markdown/index.js'
 import { usePlanDocumentActions } from '../../session/workflow/PlanDocumentActions.js'
+import {
+  StructuredPlanView,
+  type OpenPlanInDockRequest,
+} from '../../session/workflow/WorkflowPlanCard.js'
+import { useCanonicalThreadConversation } from '../../session/timeline/UseCanonicalThreadConversation.js'
+import { selectCanonicalLatestPlanItemId } from '../../session/conversation/CanonicalConversationSelectors.js'
 import { resolveLanguageFromPath } from '../../syntax/index.js'
 import { cx } from '../../../utils/Cx.js'
 import {
@@ -78,7 +84,18 @@ type FilesPanelProps = {
 }
 
 type PlanPanelProps = {
-  content: string | null
+  /** 计划项身份：与所属聊天一起绑定 canonical projection。 */
+  planItemId: string
+  threadId: string
+  /** canonical 投影不可用时的回退：历史标签只保存了打开瞬间的正文。 */
+  fallbackContent: string | null
+  onOpenPlan?: (request: OpenPlanInDockRequest) => void
+}
+
+function planTitleOf(item: { structured?: { title: string }; markdown: string }): string | null {
+  if (item.structured?.title) return item.structured.title
+  const heading = item.markdown.match(/^\s*#\s+(.+)$/m)?.[1]?.trim()
+  return heading || null
 }
 
 export function RightDockSkillPreviewPanel({ tab }: { tab: SkillPreviewTab }): React.ReactNode {
@@ -136,8 +153,37 @@ export function RightDockSkillPreviewPanel({ tab }: { tab: SkillPreviewTab }): R
   )
 }
 
-export function RightDockPlanPanel({ content }: PlanPanelProps): React.ReactNode {
+export function RightDockPlanPanel({
+  planItemId,
+  threadId,
+  fallbackContent,
+  onOpenPlan,
+}: PlanPanelProps): React.ReactNode {
+  const conversation = useCanonicalThreadConversation(threadId || null)
+  const state = conversation.state
+  const item = state?.itemsById.get(planItemId)
+  const structured = item?.type === 'plan' ? item.structured : undefined
+  const canonicalMarkdown =
+    item?.type === 'plan' && item.markdown.trim() ? item.markdown : null
+  const content = canonicalMarkdown ?? fallbackContent
+  const latestItemId = selectCanonicalLatestPlanItemId(state)
+  const latestItem = latestItemId ? state?.itemsById.get(latestItemId) : undefined
+  const hasNewer = Boolean(latestItemId && latestItemId !== planItemId)
+  const pendingReview = state?.pendingPlanApproval?.planItemId === planItemId
+  const title = (item?.type === 'plan' ? planTitleOf(item) : null) ?? null
   const actions = usePlanDocumentActions(content ?? '')
+
+  const openLatest = (): void => {
+    if (!onOpenPlan || !latestItemId || latestItem?.type !== 'plan') return
+    onOpenPlan({
+      planItemId: latestItemId,
+      threadId,
+      title: planTitleOf(latestItem) ?? '计划',
+      content: latestItem.markdown,
+      openable: true,
+    })
+  }
+
   if (!content) {
     return (
       <ScrollArea
@@ -163,15 +209,30 @@ export function RightDockPlanPanel({ content }: PlanPanelProps): React.ReactNode
       contentClassName="right-dock-plan-scroll-content tw:min-w-0 tw:p-4"
     >
       <article className="right-dock-plan-document tw:mx-auto tw:w-full tw:max-w-[48rem] tw:text-app-text">
-        <div className="tw:flex tw:justify-end tw:gap-2 tw:pb-3">
-          <Button onClick={actions.copy}>{actions.copied ? <Check /> : <Copy />}复制计划</Button>
-          <Button onClick={actions.exportMarkdown}>
-            <Download />
-            导出 PLAN.md
-          </Button>
+        <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2 tw:pb-3">
+          <span className="tw:text-app-text-meta tw:type-label">
+            {hasNewer ? '历史计划' : pendingReview ? '计划 · 待审阅' : '计划'}
+          </span>
+          <div className="tw:flex tw:items-center tw:gap-2">
+            {hasNewer && onOpenPlan && latestItemId ? (
+              <Button color="secondary" onClick={openLatest}>
+                有新版计划
+              </Button>
+            ) : null}
+            <Button onClick={actions.copy}>{actions.copied ? <Check /> : <Copy />}复制计划</Button>
+            <Button onClick={actions.exportMarkdown}>
+              <Download />
+              导出 PLAN.md
+            </Button>
+          </div>
         </div>
         {actions.error ? <p role="alert">{actions.error}</p> : null}
-        <MarkdownMessage text={content} />
+        {title ? (
+          <h2 className="right-dock-plan-title tw:m-0 tw:pb-2 tw:text-app-text tw:type-body-lg">
+            {title}
+          </h2>
+        ) : null}
+        {structured ? <StructuredPlanView plan={structured} /> : <MarkdownMessage text={content} />}
       </article>
     </ScrollArea>
   )

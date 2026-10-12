@@ -103,9 +103,11 @@ export type WorkbenchTabDescriptor =
   | {
       id: `plan:${string}`
       kind: 'plan'
-      eventId: string
+      /** 计划项身份：与所属聊天一起绑定 canonical projection。 */
+      planItemId: string
+      threadId: string
       title: string
-      /** Markdown captured when opened; older persisted tabs may omit it. */
+      /** 打开瞬间的 Markdown 快照；历史标签只有它，仍可阅读。 */
       content?: string
     }
   | {

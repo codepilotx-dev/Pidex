@@ -94,6 +94,7 @@ import { PlanApprovalCard } from '../approvals/PlanApprovalCard.js'
 import { usePlanApprovalResponse } from '../approvals/UsePlanApprovalResponse.js'
 import {
   selectCanonicalConversationAuxiliaryState,
+  selectCanonicalLatestPlanItemId,
   selectCanonicalSessionLifecycle,
 } from './CanonicalConversationSelectors.js'
 import {
@@ -190,7 +191,7 @@ export function ConversationPage(): React.ReactNode {
     permissionMode,
     composerProps,
     layoutResizeActive,
-    rightDockPlanEventId,
+    dockedPlanItemId,
   } = useQuickChatContext()
   const {
     diffMarkerStyle,
@@ -218,11 +219,7 @@ export function ConversationPage(): React.ReactNode {
       action.id === `environment.handoff.${activeSessionId}` && action.availability === 'available',
   )
   const pendingPlanApproval = canonicalConversation.state?.pendingPlanApproval
-  const [dismissedPlan, setDismissedPlan] = React.useState<string | null>(null)
-  const planKey = pendingPlanApproval
-    ? `${pendingPlanApproval.id}:${pendingPlanApproval.version}`
-    : null
-  const showPlanApproval = Boolean(pendingPlanApproval && dismissedPlan !== planKey)
+  const taskMode = canonicalConversation.state?.thread.settings.taskMode
   const planModel =
     composerProps?.selectedModelMetadata?.id ??
     composerProps?.modelPresets.find((preset) => preset.id === composerProps.selectedModelPreset)
@@ -1421,42 +1418,38 @@ export function ConversationPage(): React.ReactNode {
               <InlineApprovalCard
                 request={activePermissionRequest}
                 currentPermissionMode={permissionMode}
+                taskMode={taskMode}
                 onDecide={onDecidePermission}
                 onInterrupt={composerProps.onInterrupt}
               />
             </ComposerFooterPresence>
-          ) : pendingPlanApproval && showPlanApproval ? (
+          ) : pendingPlanApproval ? (
             <ComposerFooterPresence key={pendingPlanApproval.id} reducedMotion={reduceMotion}>
               <PlanApprovalCard
                 approval={pendingPlanApproval}
                 disabledReason={planApproval.disabledReason}
                 onRespond={planApproval.respond}
+                onOpenPlan={onOpenPlanInRightDock}
                 freshAvailable={planApproval.freshAvailable}
-                onContinue={() => setDismissedPlan(planKey)}
               />
             </ComposerFooterPresence>
           ) : null}
         </AnimatePresence>
-        {!activePermissionRequest && (!pendingPlanApproval || !showPlanApproval) ? (
-          <>
-            {pendingPlanApproval ? (
-              <Button onClick={() => setDismissedPlan(null)}>查看计划批准操作</Button>
-            ) : null}
-            <DesktopComposer
-              {...composerProps}
-              canForkConversation={Boolean(
-                conversationFork.onForkFromMessage && latestConversationForkPoint,
-              )}
-              onArchiveConversation={archiveCurrentSession}
-              onForkConversation={continueInNewConversation}
-              sessionStatus={effectiveSessionStatus}
-              contextUsage={canonicalAuxiliary.contextUsage}
-              queuedFollowUps={canonicalAuxiliary.queuedFollowUps}
-              queuePauseReason={canonicalAuxiliary.queuePauseReason}
-              hasConversationMessages={canonicalAuxiliary.hasConversationMessages}
-              messages={[]}
-            />
-          </>
+        {!activePermissionRequest && !pendingPlanApproval ? (
+          <DesktopComposer
+            {...composerProps}
+            canForkConversation={Boolean(
+              conversationFork.onForkFromMessage && latestConversationForkPoint,
+            )}
+            onArchiveConversation={archiveCurrentSession}
+            onForkConversation={continueInNewConversation}
+            sessionStatus={effectiveSessionStatus}
+            contextUsage={canonicalAuxiliary.contextUsage}
+            queuedFollowUps={canonicalAuxiliary.queuedFollowUps}
+            queuePauseReason={canonicalAuxiliary.queuePauseReason}
+            hasConversationMessages={canonicalAuxiliary.hasConversationMessages}
+            messages={[]}
+          />
         ) : null}
       </ThreadComposerDock>
     ) : null
@@ -1516,7 +1509,9 @@ export function ConversationPage(): React.ReactNode {
         onReload={canonicalConversation.reload}
         onScroll={handleTimelineScroll}
         registerTurnRow={registerTurnRow}
-        rightDockPlanEventId={rightDockPlanEventId}
+        dockedPlanItemId={dockedPlanItemId}
+        latestPlanItemId={selectCanonicalLatestPlanItemId(canonicalConversation.state)}
+        pendingPlanItemId={pendingPlanApproval?.planItemId ?? null}
         readThreadPatchDiff={desktopClient.readThreadPatchDiff}
         scrollRef={threadScrollRef}
         threadId={activeSessionId}

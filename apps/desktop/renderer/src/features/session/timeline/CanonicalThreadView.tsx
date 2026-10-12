@@ -101,7 +101,9 @@ export type CanonicalThreadViewProps = {
   onOpenPlanInRightDock: (plan: OpenPlanInDockRequest) => void
   onOpenSubagent: (taskId: string) => void
   registerTurnRow?: RegisterConversationTurnRow
-  rightDockPlanEventId: string | null
+  dockedPlanItemId: string | null
+  latestPlanItemId?: string | null
+  pendingPlanItemId?: string | null
   diffMarkerStyle?: DesktopDiffMarkerStyle
   readThreadPatchDiff?: ReadThreadPatchDiff
 }
@@ -527,7 +529,9 @@ function CanonicalThreadViewComponent({
   onOpenPlanInRightDock,
   onOpenSubagent,
   registerTurnRow,
-  rightDockPlanEventId,
+  dockedPlanItemId,
+  latestPlanItemId = null,
+  pendingPlanItemId = null,
   diffMarkerStyle = 'color',
   readThreadPatchDiff,
 }: CanonicalThreadViewProps): React.ReactNode {
@@ -548,7 +552,9 @@ function CanonicalThreadViewComponent({
         onOpenPlanInRightDock={onOpenPlanInRightDock}
         onOpenSubagent={onOpenSubagent}
         registerTurnRow={registerTurnRow}
-        rightDockPlanEventId={rightDockPlanEventId}
+        dockedPlanItemId={dockedPlanItemId}
+        latestPlanItemId={latestPlanItemId}
+        pendingPlanItemId={pendingPlanItemId}
         readThreadPatchDiff={readThreadPatchDiff}
         threadId={threadId}
       />
@@ -561,7 +567,9 @@ function CanonicalThreadViewComponent({
       onOpenPlanInRightDock,
       onOpenSubagent,
       registerTurnRow,
-      rightDockPlanEventId,
+      dockedPlanItemId,
+      latestPlanItemId,
+      pendingPlanItemId,
       readThreadPatchDiff,
       threadId,
       turns,
@@ -656,7 +664,9 @@ const CanonicalTurnRow = React.memo(function CanonicalTurnRow({
   onOpenPlanInRightDock,
   onOpenSubagent,
   registerTurnRow,
-  rightDockPlanEventId,
+  dockedPlanItemId,
+  latestPlanItemId,
+  pendingPlanItemId,
   readThreadPatchDiff,
   threadId,
 }: {
@@ -669,7 +679,9 @@ const CanonicalTurnRow = React.memo(function CanonicalTurnRow({
   onOpenPlanInRightDock: (plan: OpenPlanInDockRequest) => void
   onOpenSubagent: (taskId: string) => void
   registerTurnRow?: RegisterConversationTurnRow
-  rightDockPlanEventId: string | null
+  dockedPlanItemId: string | null
+  latestPlanItemId?: string | null
+  pendingPlanItemId?: string | null
   readThreadPatchDiff?: ReadThreadPatchDiff
   threadId: string
 }): React.ReactNode {
@@ -690,7 +702,9 @@ const CanonicalTurnRow = React.memo(function CanonicalTurnRow({
           onOpenPatchReview={onOpenPatchReview}
           onOpenPlanInRightDock={onOpenPlanInRightDock}
           onOpenSubagent={onOpenSubagent}
-          rightDockPlanEventId={rightDockPlanEventId}
+          dockedPlanItemId={dockedPlanItemId}
+          latestPlanItemId={latestPlanItemId}
+          pendingPlanItemId={pendingPlanItemId}
           readThreadPatchDiff={readThreadPatchDiff}
           threadId={threadId}
         />
@@ -708,7 +722,9 @@ function CanonicalConversationTurnComponent({
   onOpenPatchReview,
   onOpenPlanInRightDock,
   onOpenSubagent,
-  rightDockPlanEventId,
+  dockedPlanItemId,
+  latestPlanItemId,
+  pendingPlanItemId,
   readThreadPatchDiff,
   threadId,
 }: {
@@ -720,7 +736,9 @@ function CanonicalConversationTurnComponent({
   onOpenPatchReview?: CanonicalThreadViewProps['onOpenPatchReview']
   onOpenPlanInRightDock: (plan: OpenPlanInDockRequest) => void
   onOpenSubagent: (taskId: string) => void
-  rightDockPlanEventId: string | null
+  dockedPlanItemId: string | null
+  latestPlanItemId?: string | null
+  pendingPlanItemId?: string | null
   readThreadPatchDiff?: ReadThreadPatchDiff
   threadId?: string
 }): React.ReactNode {
@@ -748,7 +766,9 @@ function CanonicalConversationTurnComponent({
       onOpenPlanInRightDock={onOpenPlanInRightDock}
       onOpenSubagent={onOpenSubagent}
       presentation={options.presentation}
-      rightDockPlanEventId={rightDockPlanEventId}
+      dockedPlanItemId={dockedPlanItemId}
+      latestPlanItemId={latestPlanItemId}
+      pendingPlanItemId={pendingPlanItemId}
       showAssistantActions={options.showAssistantActions}
       threadId={threadId}
     />

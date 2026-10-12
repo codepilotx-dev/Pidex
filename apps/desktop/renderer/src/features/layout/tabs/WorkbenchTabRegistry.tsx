@@ -173,6 +173,10 @@ export type WorkbenchTabRenderContext = {
     ) => void
   }
   planContentByEventId: Readonly<Record<string, string>>
+  plan: {
+    /** 打开该聊天最新的计划；计划面板据此提供“有新版计划”入口。 */
+    onOpenPlan?: (request: OpenPlanInDockRequest) => void
+  }
   sideChat: {
     activeTabId: WorkbenchTabDescriptor['id'] | null
     available: boolean
@@ -361,15 +365,17 @@ const definitions: readonly WorkbenchTabDefinition[] = [
     launcher: false,
     lifecycle: 'unmount-when-hidden',
     getTitle: (tab) => (tab.kind === 'plan' ? tab.title : '计划'),
-    render: (tab, context) => (
-      <RightDockPlanPanel
-        content={
-          tab.kind === 'plan'
-            ? tab.content?.trim() || context.planContentByEventId[tab.eventId] || null
-            : null
-        }
-      />
-    ),
+    render: (tab, context) =>
+      tab.kind === 'plan' ? (
+        <RightDockPlanPanel
+          planItemId={tab.planItemId}
+          threadId={tab.threadId}
+          fallbackContent={
+            tab.content?.trim() || context.planContentByEventId[tab.planItemId] || null
+          }
+          onOpenPlan={context.plan?.onOpenPlan}
+        />
+      ) : null,
   },
   {
     kind: 'skill-preview',

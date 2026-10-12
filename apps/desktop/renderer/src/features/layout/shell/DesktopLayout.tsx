@@ -2517,13 +2517,13 @@ export function DesktopLayout(): React.ReactNode {
     }
     return result
   }, [events])
-  const rightDockPlanEventId = useMemo(() => {
+  const dockedPlanItemId = useMemo(() => {
     for (const target of ['right', 'bottom'] as const) {
       const panel = workbenchPanelState[target]
       if (target === 'right' && !effectiveRightDockVisible) continue
       if (!panel.open || !panel.activeTabId) continue
       const tab = workbenchPanelState.tabsById[panel.activeTabId]
-      if (tab?.kind === 'plan') return tab.eventId
+      if (tab?.kind === 'plan') return tab.planItemId
     }
     return null
   }, [effectiveRightDockVisible, workbenchPanelState])
@@ -2894,6 +2894,7 @@ export function DesktopLayout(): React.ReactNode {
           })
         }
         planContentByEventId={planContentByEventId}
+        onOpenPlan={handleOpenPlanDock}
         selectedFile={selectedFile}
         sessionId={sessionId}
         sessionStatus={sessionStatus}
@@ -3129,6 +3130,7 @@ export function DesktopLayout(): React.ReactNode {
           handleFileLoadError({ error, phase, tab, target: 'right' }),
       },
       planContentByEventId,
+      plan: { onOpenPlan: handleOpenPlanDock },
       sideChat: {
         activeTabId: null,
         available: sideChatSupported,
@@ -3518,7 +3520,7 @@ export function DesktopLayout(): React.ReactNode {
             onToggleBottomPanel: isHomeOrConversationRoute
               ? toggleBottomPanelVisible
               : () => undefined,
-            rightDockPlanEventId,
+            dockedPlanItemId,
           }}
         >
           <WorkspaceHeaderProvider routeScope={location.pathname}>

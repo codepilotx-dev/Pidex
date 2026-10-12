@@ -65,7 +65,6 @@ export type CanonicalSessionLifecycle = {
   status: DesktopSessionStatus
   latestTurnStatus: Turn['status']
 }
-
 /**
  * Lifecycle published to list surfaces such as the sidebar, which cannot read
  * the canonical projection for every session. Unlike
@@ -97,6 +96,22 @@ export function selectCanonicalSessionStatus(
 ): DesktopSessionStatus | null {
   if (!state) return null
   return agentTurnStatusToDesktopStatus(selectCanonicalLatestTurnStatus(state) ?? undefined)
+}
+
+/**
+ * 该聊天最新的完整计划项：只有它显示右栏打开入口。生成中的计划不作为
+ * “最新”身份，避免把半成品当成可审阅对象。
+ */
+export function selectCanonicalLatestPlanItemId(
+  state: CanonicalThreadState | null,
+): string | null {
+  if (!state) return null
+  let latest: Extract<Item, { type: 'plan' }> | null = null
+  for (const item of state.itemsById.values()) {
+    if (item.type !== 'plan' || item.status !== 'completed') continue
+    if (!latest || item.createdAt >= latest.createdAt) latest = item
+  }
+  return latest?.id ?? null
 }
 
 export function selectCanonicalConversationAuxiliaryState(

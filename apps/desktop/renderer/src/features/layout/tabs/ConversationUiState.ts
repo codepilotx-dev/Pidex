@@ -94,7 +94,7 @@ export type ConversationUiStateV4 = {
 export type ConversationUiState = ConversationUiStateV4
 
 export type ConversationUiValidationOptions = {
-  validPlanEventIds?: readonly string[]
+  validPlanItemIds?: readonly string[]
   validSideTaskIds?: readonly string[]
   workspacePath?: string | null
   fileScopes?: readonly {
@@ -302,7 +302,7 @@ export function transferConversationUiStateForHandoff(input: {
       },
     }
     const transferred = validateConversationUiState(candidate, {
-      validPlanEventIds: [],
+      validPlanItemIds: [],
       validSideTaskIds: [],
     })
     window.localStorage.setItem(STORAGE_PREFIX + input.targetThreadId, JSON.stringify(transferred))
@@ -626,21 +626,27 @@ function validateTabDescriptor(
       ...(isPositiveInteger(tab.endColumn) ? { endColumn: tab.endColumn } : {}),
     }
   }
-  if (
-    tab.kind === 'plan' &&
-    typeof tab.id === 'string' &&
-    tab.id.startsWith('plan:') &&
-    typeof tab.eventId === 'string' &&
-    tab.eventId.length > 0 &&
-    typeof tab.title === 'string' &&
-    (!options.validPlanEventIds || options.validPlanEventIds.includes(tab.eventId))
-  ) {
+  if (tab.kind === 'plan' && typeof tab.id === 'string' && typeof tab.title === 'string') {
+    // 新标签携带聊天与计划项身份；更早持久化的标签只有 eventId 和正文快照。
+    const planItemId =
+      typeof tab.planItemId === 'string'
+        ? tab.planItemId
+        : typeof tab.eventId === 'string'
+          ? tab.eventId
+          : null
+    const threadId = typeof tab.threadId === 'string' && tab.threadId ? tab.threadId : null
+    const content =
+      typeof tab.content === 'string' && tab.content.trim() ? tab.content : undefined
+    // 旧标签可能既没有聊天身份也没有正文快照；保留它，渲染时再按事件回退查找。
+    if (!planItemId) return null
+    if (options.validPlanItemIds && !options.validPlanItemIds.includes(planItemId)) return null
     return {
-      id: tab.id as `plan:${string}`,
+      id: `plan:${planItemId}`,
       kind: 'plan',
-      eventId: tab.eventId,
+      planItemId,
+      threadId: threadId ?? '',
       title: tab.title,
-      ...(typeof tab.content === 'string' && tab.content.trim() ? { content: tab.content } : {}),
+      ...(content ? { content } : {}),
     }
   }
   if (

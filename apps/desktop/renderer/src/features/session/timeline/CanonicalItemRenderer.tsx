@@ -198,7 +198,11 @@ export type CanonicalItemRendererProps = {
   onOpenPatchReview?: (path?: string) => void
   onOpenPlanInRightDock: (plan: OpenPlanInDockRequest) => void
   onOpenSubagent: (taskId: string) => void
-  rightDockPlanEventId: string | null
+  dockedPlanItemId: string | null
+  /** 该聊天最新的计划项；只有它提供右栏打开入口。 */
+  latestPlanItemId?: string | null
+  /** 当前待审阅计划项。 */
+  pendingPlanItemId?: string | null
   showAssistantActions?: boolean
   /** @default "standalone" — "grouped" applies tighter spacing inside a process group. */
   presentation?: 'standalone' | 'grouped'
@@ -485,7 +489,9 @@ function areCanonicalItemRendererPropsEqual(
     previous.item === next.item &&
     previous.threadId === next.threadId &&
     previous.presentation === next.presentation &&
-    previous.rightDockPlanEventId === next.rightDockPlanEventId &&
+    previous.dockedPlanItemId === next.dockedPlanItemId &&
+    previous.latestPlanItemId === next.latestPlanItemId &&
+    previous.pendingPlanItemId === next.pendingPlanItemId &&
     previous.showAssistantActions === next.showAssistantActions &&
     previous.disclosure === next.disclosure &&
     previous.onApplyPatch === next.onApplyPatch &&
@@ -520,7 +526,9 @@ function CanonicalItemRendererContentComponent({
   onOpenPatchReview,
   onOpenPlanInRightDock,
   onOpenSubagent,
-  rightDockPlanEventId,
+  dockedPlanItemId,
+  latestPlanItemId = null,
+  pendingPlanItemId = null,
   showAssistantActions = false,
   presentation = 'standalone',
   threadId,
@@ -547,11 +555,13 @@ function CanonicalItemRendererContentComponent({
     case 'plan':
       return (
         <WorkflowPlanCard
-          eventId={item.id}
+          planItemId={item.id}
           summary={item.markdown}
           structured={item.structured}
           streaming={item.status === 'streaming'}
-          isDocked={rightDockPlanEventId === item.id}
+          isDocked={dockedPlanItemId === item.id}
+          isLatest={latestPlanItemId === null || latestPlanItemId === item.id}
+          isPendingReview={pendingPlanItemId === item.id}
           onOpenInRightDock={onOpenPlanInRightDock}
           threadId={threadId}
         />

@@ -144,6 +144,14 @@ export function initialQuestionState(question: {
   }
 }
 
+/**
+ * Plan 澄清题不预选答案：recommended 只是建议，不等于用户选择，选中必须来自
+ * 用户显式操作。语义与 Chat 提问（预选首项）分开。
+ */
+export function initialPlanQuestionState(): QuestionState {
+  return { selected: [], custom: '', answered: false }
+}
+
 export function toggleMultiSelectOption(current: QuestionState, label: string): QuestionState {
   const selected = current.selected.includes(label)
     ? current.selected.filter((item) => item !== label)

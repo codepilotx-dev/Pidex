@@ -12,6 +12,7 @@ import type {
   DesktopWorkspace,
 } from '../../../../shared/Types.js'
 import type { ReviewTabUiState } from '../tabs/ConversationUiState.js'
+import type { OpenPlanInDockRequest } from '../../session/workflow/WorkflowPlanCard.js'
 import { TabStripButtonProvider } from '../../../components/ui/TabStripButtonContext.js'
 import type {
   MarkdownFileViewMode,
@@ -86,6 +87,7 @@ type Props = {
   onOpenFileFromBrowser: (file: DesktopFileEntry) => void
   onPreviewFile: (file: DesktopFileEntry) => void
   onAskInSideChat?: (text: string) => void
+  onOpenPlan?: (request: OpenPlanInDockRequest) => void
   onSetFileViewState?: (tabId: WorkbenchTabId, viewState: FileEditorViewState) => void
   onAppendComposerText: (text: string) => void
   onAddComposerFiles: (filePaths: string[]) => void
@@ -289,6 +291,7 @@ export function WorkbenchPanel({
   onOpenWorkspacePath,
   onOpenFileFromBrowser,
   onPreviewFile,
+  onOpenPlan,
   onAppendComposerText,
   onAskInSideChat,
   onSetFileViewState,
@@ -344,6 +347,7 @@ export function WorkbenchPanel({
   const stableOnOpenFileFromBrowser = useStableEvent(onOpenFileFromBrowser)
   const stableOnPreviewFile = useStableEvent(onPreviewFile)
   const stableOnAskInSideChat = useStableEvent((text: string) => onAskInSideChat?.(text))
+  const stableOnOpenPlan = useStableEvent((request: OpenPlanInDockRequest) => onOpenPlan?.(request))
   const stableOnSetFileViewState = useStableEvent(
     (tabId: WorkbenchTabId, state: FileEditorViewState) => onSetFileViewState?.(tabId, state),
   )
@@ -401,6 +405,7 @@ export function WorkbenchPanel({
         onLoadError: (tab, error, phase) => stableOnFileLoadError({ error, phase, tab, target }),
       },
       planContentByEventId,
+      plan: { onOpenPlan: onOpenPlan ? stableOnOpenPlan : undefined },
       sideChat: {
         ...sideChat,
         activeTabId: state.activeTabId,
@@ -445,6 +450,8 @@ export function WorkbenchPanel({
       sideChat,
       onAskInSideChat,
       stableOnAskInSideChat,
+      onOpenPlan,
+      stableOnOpenPlan,
       stableOnSetFileViewState,
       activeSideTaskId,
       sideTaskContent,

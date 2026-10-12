@@ -465,13 +465,14 @@ export function useWorkbenchShellController({
 
   const handleOpenPlanDock = useCallback(
     (plan: OpenPlanInDockRequest): void => {
-      // 计划未生成完成时不允许在右栏打开：tab 内容取自打开瞬间的快照，流式
-      // 期间打开会冻结半成品。这是所有 renderer 打开路径的唯一汇聚点。
+      // 计划未生成完成时不允许在右栏打开：生成期间没有完整可审阅的计划。
+      // 这是所有 renderer 打开路径的唯一汇聚点。
       if (!plan.openable) return
       openRightDockTab({
-        id: `plan:${plan.eventId}`,
+        id: `plan:${plan.planItemId}`,
         kind: 'plan',
-        eventId: plan.eventId,
+        planItemId: plan.planItemId,
+        threadId: plan.threadId,
         title: plan.title,
         content: plan.content,
       })

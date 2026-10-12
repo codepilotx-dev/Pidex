@@ -114,7 +114,7 @@ export type QuickChatContextValue = {
   /** 右工作区处于内容全宽：聊天区域被隐藏，摘要浮层需要随之关闭。 */
   layoutResizeActive: boolean
   onToggleBottomPanel: () => void
-  rightDockPlanEventId: string | null
+  dockedPlanItemId: string | null
 }
 
 export const QuickChatContext = createContext<QuickChatContextValue | null>(null)

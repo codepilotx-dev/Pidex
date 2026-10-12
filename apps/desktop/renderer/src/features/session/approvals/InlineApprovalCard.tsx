@@ -89,6 +89,8 @@ export type InlineApprovalCardProps = {
   onInterrupt?: () => void | Promise<void>
   request: DesktopPermissionRequest
   currentPermissionMode?: DesktopPermissionMode
+  /** 所属 Turn 的 canonical 模式：Plan 澄清走逐题显式确认。 */
+  taskMode?: 'chat' | 'plan'
   onDecide: (
     request: DesktopPermissionRequest,
     behavior: 'allow' | 'deny',
@@ -106,6 +108,7 @@ const COMMAND_HINT_MAX_LENGTH = 56
 export function InlineApprovalCard({
   request,
   currentPermissionMode,
+  taskMode,
   onDecide,
   onInterrupt,
   identity,
@@ -369,6 +372,7 @@ export function InlineApprovalCard({
     return (
       <AskUserQuestionApproval
         supportsQuestionSkip={supportsQuestionSkip}
+        taskMode={taskMode}
         identity={identity}
         disabledReason={disabledReason}
         onInterrupt={onInterrupt}

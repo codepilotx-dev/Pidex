@@ -1405,6 +1405,26 @@ export class ThreadService {
           ].join('\n'),
         })
       }
+      // 计划修改轮次：用户消息是修改意见原文，完整源计划按 next_turn_id 关联
+      // 重建为 prompt context，不写入用户消息文本，也不新增数据库字段。
+      const planFeedbackSource =
+        input.taskMode === 'plan'
+          ? this.db.repositories.planApprovals.feedbackSource(turnID)
+          : null
+      if (planFeedbackSource?.markdown.trim()) {
+        promptSections.splice(promptSections.length - 1, 0, {
+          id: 'thread.plan-feedback-source',
+          role: 'contextual-user',
+          cache: 'dynamic',
+          authority: 'user',
+          source: { type: 'runtime', name: 'plan-feedback-source' },
+          content: [
+            '用户要求修改下面这份计划。请依据本轮的用户消息（修改意见）继续调查并更新计划，不要实施。',
+            '原计划：',
+            planFeedbackSource.markdown,
+          ].join('\n'),
+        })
+      }
       const projectSettingsInstructions = project?.settings?.instructions?.trim()
       if (projectSettingsInstructions) {
         const projectInstructionIndex = promptSections.findIndex(({ id }) =>
