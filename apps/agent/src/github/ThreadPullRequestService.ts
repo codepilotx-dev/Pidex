@@ -114,6 +114,7 @@ export class ThreadPullRequestService {
   private readonly statusCache = new Map<string, ResolvedStatus>()
   private readonly statusInFlight = new Map<string, Promise<ResolvedStatus>>()
   private readonly environmentCache = new Map<string, { at: number; value: ThreadEnvironment }>()
+  private readonly discoveryCache = new Map<string, number>()
 
   constructor(
     private readonly db: AgentDatabase,
@@ -187,7 +188,7 @@ export class ThreadPullRequestService {
     }
     const environment = await this.resolveEnvironment(threadId, resolveCwd)
     let records = this.repository().list(threadId)
-    if (records.length === 0 && environment.repo && environment.branch) {
+    if (environment.repo && environment.branch) {
       await this.discover(threadId, environment)
       records = this.repository().list(threadId)
     }
@@ -243,28 +244,55 @@ export class ThreadPullRequestService {
 
   private async discover(threadId: string, environment: ThreadEnvironment): Promise<void> {
     if (!environment.repo || !environment.branch) return
+    const repo = environment.repo
+    const key = JSON.stringify([threadId, repo, environment.branch])
+    const cached = this.discoveryCache.get(key)
+    if (cached !== undefined && this.now() - cached < CACHE_TTL_MS) return
+    this.discoveryCache.set(key, this.now())
     let pullRequests: Awaited<ReturnType<GithubService['listOpenPullRequestsForBranch']>>
     try {
       pullRequests = await this.github.listOpenPullRequestsForBranch({
-        owner: environment.repo.owner,
-        repository: environment.repo.repository,
+        owner: repo.owner,
+        repository: repo.repository,
         branch: environment.branch,
       })
     } catch {
       return
     }
-    for (const pullRequest of pullRequests) {
-      this.repository().upsert({
-        threadId,
-        owner: environment.repo.owner,
-        repository: environment.repo.repository,
-        number: pullRequest.number,
-        url: pullRequest.htmlUrl,
-        title: pullRequest.title,
-        headRef: pullRequest.head.ref,
-        origin: 'discovered',
-      })
-    }
+    const event = this.db.transaction(() => {
+      const records = this.repository().list(threadId)
+      let changed = false
+      for (const pullRequest of pullRequests) {
+        const existing = records.find(
+          (record) =>
+            identityKey(record) ===
+            identityKey({
+              ...repo,
+              number: pullRequest.number,
+            }),
+        )
+        if (
+          existing &&
+          existing.url === pullRequest.htmlUrl &&
+          existing.title === pullRequest.title &&
+          existing.headRef === pullRequest.head.ref
+        )
+          continue
+        this.repository().upsert({
+          threadId,
+          owner: repo.owner,
+          repository: repo.repository,
+          number: pullRequest.number,
+          url: pullRequest.htmlUrl,
+          title: pullRequest.title,
+          headRef: pullRequest.head.ref,
+          origin: 'discovered',
+        })
+        changed = true
+      }
+      return changed ? this.publish(threadId) : null
+    })
+    if (event) await this.publishStored([event]).catch(() => undefined)
   }
 
   private async refresh(

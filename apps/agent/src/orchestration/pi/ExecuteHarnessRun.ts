@@ -4,6 +4,7 @@ import { type AssistantMessage, type ImageContent } from '@earendil-works/pi-ai'
 import { AgentError } from '../../Domain'
 import type { SubagentResult } from '../../Domain'
 import { providerFailureCategory, providerFailureMessage } from '../../provider/ModelHealthService'
+import { normalizePiProviderPayload } from '../../provider/pi/PiProviderPayload'
 import { PromptComposer } from '../../prompt/PromptComposer'
 import { inferPromptCacheRuntimePolicy } from '../../prompt/PromptCache'
 import {
@@ -169,7 +170,9 @@ export async function executeHarnessRun(
   harness.on('before_provider_payload', (event) => {
     const policy = inferPromptCacheRuntimePolicy(event.model, bundle.cacheKey)
     const applied = applyPromptCacheRuntimePolicy(event.payload, policy, bundle.stableContextText)
-    return { payload: secretScrubber.scrub(applied.payload) }
+    return {
+      payload: normalizePiProviderPayload(secretScrubber.scrub(applied.payload), event.model.api),
+    }
   })
   // 上下文字符量统计是给面板看的旁路数据：任何失败都不得影响模型请求，
   // 因此这里吞掉异常，只更新快照。
