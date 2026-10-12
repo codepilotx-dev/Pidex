@@ -1,26 +1,11 @@
 import type React from 'react'
 import type { PluginDetails } from '@pidex/agent-protocol'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  AlertOctagon,
-  ArrowLeft,
-  ChevronRight,
-  Clock,
-  ListFilter,
-  RefreshCw,
-  Settings,
-  Settings2,
-} from 'lucide-react'
+import { AlertOctagon, ArrowLeft, ChevronRight, Clock, RefreshCw, Settings2 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 
-import {
-  PopoverLabel,
-  PopoverRadioGroup,
-  PopoverRadioItem,
-} from '../../components/ui/PopoverItem.js'
-import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
@@ -32,19 +17,16 @@ import {
 import { desktopClient } from '../../services/desktop-client/index.js'
 import type { DesktopSkillCatalogItem, DesktopSkillOwnerFilter } from '../../../shared/Types.js'
 import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
-import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutletContext.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
 import { CatalogDetailsView } from './CatalogDetailsView.js'
 import { PluginCatalogCard } from './PluginCatalogCard.js'
-import { PluginIcon } from './PluginIcon.js'
 import { SkillCatalogCard } from './SkillCatalogCard.js'
 import {
   catalogBrowseParams,
   catalogDetailsParams,
   parseCatalogLocation,
   type CatalogDetailsTarget,
-  type CatalogTab,
 } from './CatalogDetailsDeepLink.js'
 import {
   PLUGIN_CATALOG_DESCRIPTORS,
@@ -52,10 +34,8 @@ import {
   groupPluginCatalogBySource,
   mergePluginCatalog,
   pluginPrimaryAction,
-  selectInstalledPluginOverview,
   type PluginCatalogItem,
   type PluginCategoryFilter,
-  type PluginStatusFilter,
 } from './PluginCatalog.js'
 import { groupSkillsForDisplay } from './SkillCatalog.js'
 import { usePluginCatalog } from './UsePluginCatalog.js'
@@ -78,23 +58,11 @@ const PLUGINS_EMPTY_BASE =
 const PLUGINS_CALLOUT_BASE =
   'tw:flex tw:min-w-0 tw:items-start tw:gap-3 tw:rounded-container tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:p-4 tw:shadow-none tw:@max-[479px]/plugins-page:items-stretch tw:@max-[479px]/plugins-page:flex-wrap'
 
-const TAB_OPTIONS: ReadonlyArray<{ value: CatalogTab; label: string }> = [
-  { value: 'plugins', label: '插件' },
-  { value: 'skills', label: '技能' },
-]
-
 const CATEGORY_OPTIONS: ReadonlyArray<{ value: PluginCategoryFilter; label: string }> = [
   { value: 'all', label: '全部' },
   { value: 'included', label: 'Featured' },
   { value: 'manageable', label: '可管理' },
   { value: 'external', label: '外部' },
-]
-
-const STATUS_OPTIONS: ReadonlyArray<{ value: PluginStatusFilter; label: string }> = [
-  { value: 'all', label: '全部状态' },
-  { value: 'enabled', label: '已启用' },
-  { value: 'disabled', label: '已禁用' },
-  { value: 'unavailable', label: '当前不可用' },
 ]
 
 const SKILL_OWNER_OPTIONS: ReadonlyArray<{ value: DesktopSkillOwnerFilter; label: string }> = [
@@ -112,9 +80,7 @@ export function PluginsView(): React.ReactNode {
   const [pluginQuery, setPluginQuery] = useState('')
   const [skillQuery, setSkillQuery] = useState('')
   const [pluginCategory, setPluginCategory] = useState<PluginCategoryFilter>('all')
-  const [pluginStatus, setPluginStatus] = useState<PluginStatusFilter>('all')
   const [skillOwner, setSkillOwner] = useState<DesktopSkillOwnerFilter>('official')
-  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [announcement, setAnnouncement] = useState('')
   const [busyPluginIds, setBusyPluginIds] = useState<Set<string>>(() => new Set())
   const [pluginErrors, setPluginErrors] = useState<Record<string, string>>({})
@@ -192,12 +158,8 @@ export function PluginsView(): React.ReactNode {
     ],
   )
   const visiblePlugins = useMemo(
-    () => filterPluginCatalog(pluginItems, pluginQuery, pluginCategory, pluginStatus),
-    [pluginCategory, pluginItems, pluginQuery, pluginStatus],
-  )
-  const installedPluginOverview = useMemo(
-    () => selectInstalledPluginOverview(pluginItems),
-    [pluginItems],
+    () => filterPluginCatalog(pluginItems, pluginQuery, pluginCategory, 'all'),
+    [pluginCategory, pluginItems, pluginQuery],
   )
   const pluginGroups = useMemo(() => groupPluginCatalogBySource(visiblePlugins), [visiblePlugins])
   const skillGroups = useMemo(() => groupSkillsForDisplay(skills ?? []), [skills])
@@ -250,8 +212,9 @@ export function PluginsView(): React.ReactNode {
     lastTargetRef.current = null
     window.requestAnimationFrame(() => {
       const selector = `[data-catalog-item-id="${previousTarget.kind}:${CSS.escape(previousTarget.id)}"]`
-      document.querySelector<HTMLButtonElement>(selector)?.focus() ??
-        searchInputRef.current?.focus()
+      const item = document.querySelector<HTMLButtonElement>(selector)
+      if (item) item.focus()
+      else searchInputRef.current?.focus()
     })
   }, [target])
 
@@ -272,11 +235,6 @@ export function PluginsView(): React.ReactNode {
     tab,
     target,
   ])
-
-  function showTab(nextTab: CatalogTab): void {
-    setSearchParams(catalogBrowseParams(searchParams, nextTab))
-    scrollRegionRef.current?.scrollTo({ top: 0 })
-  }
 
   function openDetails(nextTarget: CatalogDetailsTarget): void {
     setSearchParams(catalogDetailsParams(searchParams, nextTarget))
@@ -398,90 +356,44 @@ export function PluginsView(): React.ReactNode {
 
   return (
     <>
-      <WorkspaceHeaderItem align="start" id="plugins.navigation" order={0} slot="left">
-        {target?.kind === 'plugin' ? (
-          <div className={cx('plugins-detail-breadcrumb', DETAILS_BREADCRUMB_CLASS)}>
+      {target ? (
+        <WorkspaceHeaderItem align="start" id="plugins.navigation" order={0} slot="left">
+          {target.kind === 'plugin' ? (
+            <div className={cx('plugins-detail-breadcrumb', DETAILS_BREADCRUMB_CLASS)}>
+              <Button
+                color="ghostSecondary"
+                onClick={closeDetails}
+                ref={backButtonRef}
+                size="toolbar"
+              >
+                插件
+              </Button>
+              <ChevronRight
+                aria-hidden="true"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+              <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>
+                {selectedPlugin?.name ?? target.id}
+              </span>
+            </div>
+          ) : (
             <Button
               color="ghostSecondary"
               onClick={closeDetails}
               ref={backButtonRef}
               size="toolbar"
             >
-              插件
-            </Button>
-            <ChevronRight
-              aria-hidden="true"
-              size={APP_ICON_SIZES.sm}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-            <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>
-              {selectedPlugin?.name ?? target.id}
-            </span>
-          </div>
-        ) : target ? (
-          <Button color="ghostSecondary" onClick={closeDetails} ref={backButtonRef} size="toolbar">
-            <ArrowLeft
-              aria-hidden="true"
-              size={APP_ICON_SIZE}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-            返回{tab === 'plugins' ? '插件' : '技能'}
-          </Button>
-        ) : (
-          <SegmentedControl
-            ariaLabel="扩展类型"
-            className="plugins-segmented-tabs"
-            getPanelId={(value) => `${value}-panel`}
-            getTabId={(value) => `${value}-tab`}
-            onChange={showTab}
-            overflowMode="fit"
-            options={TAB_OPTIONS}
-            semantics="tabs"
-            value={tab}
-          />
-        )}
-      </WorkspaceHeaderItem>
-      {target?.kind === 'plugin' ? null : (
-        <WorkspaceHeaderItem align="end" id="plugins.actions" order={100} slot="right">
-          <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
-            <Button
-              isIconOnly
-              aria-busy={activeLoading}
-              color="ghostSecondary"
-              disabled={activeLoading}
-              onClick={() => {
-                if (tab === 'plugins') {
-                  refreshPlugins()
-                  miniMaxCli.refresh()
-                } else {
-                  setSkillsReloadKey((value) => value + 1)
-                }
-              }}
-              size="toolbar"
-              title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
-            >
-              <RefreshCw
+              <ArrowLeft
                 aria-hidden="true"
                 size={APP_ICON_SIZE}
                 strokeWidth={APP_ICON_STROKE_WIDTH}
               />
+              返回{tab === 'plugins' ? '插件' : '技能'}
             </Button>
-            <Button
-              isIconOnly
-              color="ghostSecondary"
-              onClick={() => navigate('/settings/plugins')}
-              size="toolbar"
-              title="管理插件设置"
-            >
-              <Settings2
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            </Button>
-          </div>
+          )}
         </WorkspaceHeaderItem>
-      )}
+      ) : null}
 
       {target ? (
         <main className="plugins-details-page tw:h-full tw:w-full tw:min-w-0 tw:overflow-auto tw:bg-app-canvas tw:p-5 tw:@container/plugins-page">
@@ -519,74 +431,118 @@ export function PluginsView(): React.ReactNode {
           )}
         </main>
       ) : (
-        <PrimaryPageLayout
-          className="plugins-primary-page tw:@container/plugins-page"
-          description={
-            tab === 'plugins' ? '在常用工具中扩展 Pidex 的能力。' : '查找并添加可复用的工作流指令。'
-          }
-          scrollContainerRef={scrollRegionRef}
-          search={
-            <SearchInput
-              aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
-              onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
-              placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}
-              ref={searchInputRef}
-              value={tab === 'plugins' ? pluginQuery : skillQuery}
-            />
-          }
-          title={tab === 'plugins' ? '插件' : '技能'}
+        <section
+          ref={scrollRegionRef}
+          className="plugins-primary-page tw:flex tw:h-full tw:min-h-0 tw:w-full tw:min-w-0 tw:flex-col tw:overflow-x-hidden tw:overflow-y-auto tw:p-5 tw:text-app-text tw:scrollbar-gutter-stable tw:@container/plugins-page"
         >
-          <div aria-live="polite" className="plugins-sr-status tw:sr-only">
-            {announcement}
+          <header className="tw:mx-auto tw:w-[min(var(--page-content-max-width),100%)] tw:min-w-0 tw:shrink-0">
+            <div className="tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-6">
+              <h1 className="tw:m-0 tw:text-app-text tw:type-title-xl">
+                {tab === 'plugins' ? '插件' : '技能'}
+              </h1>
+              <div className="tw:flex tw:min-w-0 tw:items-center tw:gap-2">
+                <div className="tw:w-60 tw:min-w-0">
+                  <SearchInput
+                    aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
+                    onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
+                    placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}
+                    ref={searchInputRef}
+                    value={tab === 'plugins' ? pluginQuery : skillQuery}
+                  />
+                </div>
+                <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
+                  <Button
+                    isIconOnly
+                    aria-busy={activeLoading}
+                    color="ghostSecondary"
+                    disabled={activeLoading}
+                    onClick={() => {
+                      if (tab === 'plugins') {
+                        refreshPlugins()
+                        miniMaxCli.refresh()
+                      } else {
+                        setSkillsReloadKey((value) => value + 1)
+                      }
+                    }}
+                    size="toolbar"
+                    title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
+                  >
+                    <RefreshCw
+                      aria-hidden="true"
+                      size={APP_ICON_SIZE}
+                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                    />
+                  </Button>
+                  <Button
+                    isIconOnly
+                    color="ghostSecondary"
+                    onClick={() => navigate('/settings/plugins')}
+                    size="toolbar"
+                    title="管理插件设置"
+                  >
+                    <Settings2
+                      aria-hidden="true"
+                      size={APP_ICON_SIZE}
+                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                    />
+                  </Button>
+                </div>
+              </div>
+            </div>
+            <p className="tw:mt-2 tw:text-app-text-soft tw:type-body">
+              {tab === 'plugins'
+                ? '在常用工具中扩展 Pidex 的能力。'
+                : '查找并添加可复用的工作流指令。'}
+            </p>
+          </header>
+          <div className="tw:mx-auto tw:mt-6 tw:w-[min(var(--page-content-max-width),100%)] tw:min-w-0">
+            <div aria-live="polite" className="plugins-sr-status tw:sr-only">
+              {announcement}
+            </div>
+            {tab === 'plugins' ? (
+              <PluginDirectory
+                busyPluginIds={busyPluginIds}
+                clearFilters={() => {
+                  setPluginQuery('')
+                  setPluginCategory('all')
+                }}
+                groups={pluginGroups}
+                loadError={pluginLoadError}
+                loading={pluginsLoading}
+                onOpenDetails={(item) =>
+                  openDetails({ kind: 'plugin', id: item.id, tab: 'plugins' })
+                }
+                onPrimaryAction={(item, trigger, checked) =>
+                  void runPluginAction(item, trigger, checked)
+                }
+                pluginErrors={pluginErrors}
+                pluginCategory={pluginCategory}
+                query={pluginQuery}
+                refresh={refreshPlugins}
+                setPluginCategory={setPluginCategory}
+                total={visiblePlugins.length}
+              />
+            ) : (
+              <SkillDirectory
+                clearFilters={() => {
+                  setSkillQuery('')
+                  setSkillOwner('official')
+                }}
+                error={skillsError}
+                groups={skillGroups}
+                installingSkillIds={installingSkillIds}
+                loading={skillsLoading}
+                onInstall={(item) => void installSkill(item)}
+                onOpenDetails={(item) => openDetails({ kind: 'skill', id: item.id, tab: 'skills' })}
+                query={skillQuery}
+                refresh={() => setSkillsReloadKey((value) => value + 1)}
+                setSkillOwner={setSkillOwner}
+                skillOwner={skillOwner}
+                skillsLoaded={skills !== undefined}
+              />
+            )}
           </div>
-          {tab === 'plugins' ? (
-            <PluginDirectory
-              busyPluginIds={busyPluginIds}
-              clearFilters={() => {
-                setPluginQuery('')
-                setPluginCategory('all')
-                setPluginStatus('all')
-              }}
-              groups={pluginGroups}
-              installed={installedPluginOverview}
-              loadError={pluginLoadError}
-              loading={pluginsLoading}
-              manage={() => navigate('/settings/plugins')}
-              onOpenDetails={(item) => openDetails({ kind: 'plugin', id: item.id, tab: 'plugins' })}
-              onPrimaryAction={(item, trigger, checked) =>
-                void runPluginAction(item, trigger, checked)
-              }
-              onFilterMenuOpenChange={setFilterMenuOpen}
-              pluginErrors={pluginErrors}
-              pluginCategory={pluginCategory}
-              pluginStatus={pluginStatus}
-              query={pluginQuery}
-              refresh={refreshPlugins}
-              setPluginCategory={setPluginCategory}
-              setPluginStatus={setPluginStatus}
-              filterMenuOpen={filterMenuOpen}
-              total={visiblePlugins.length}
-            />
-          ) : (
-            <SkillDirectory
-              clearFilters={() => {
-                setSkillQuery('')
-                setSkillOwner('official')
-              }}
-              error={skillsError}
-              groups={skillGroups}
-              installingSkillIds={installingSkillIds}
-              loading={skillsLoading}
-              onInstall={(item) => void installSkill(item)}
-              onOpenDetails={(item) => openDetails({ kind: 'skill', id: item.id, tab: 'skills' })}
-              query={skillQuery}
-              refresh={() => setSkillsReloadKey((value) => value + 1)}
-              setSkillOwner={setSkillOwner}
-              skillOwner={skillOwner}
-              skillsLoaded={skills !== undefined}
-            />
-          )}
-        </PrimaryPageLayout>
+        </section>
       )}
       <ConfirmationDialog
         actionDisabled={miniMaxCli.busy}
@@ -602,129 +558,25 @@ export function PluginsView(): React.ReactNode {
   )
 }
 
-type CatalogStatusMenuProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  pluginStatus: PluginStatusFilter
-  setPluginStatus: (value: PluginStatusFilter) => void
-}
-
-function CatalogStatusMenu(props: CatalogStatusMenuProps): React.ReactNode {
-  return (
-    <PopoverMenu
-      align="end"
-      onOpenChange={props.onOpenChange}
-      open={props.open}
-      trigger={
-        <Button isIconOnly color="secondary" size="toolbar" title="筛选目录">
-          <ListFilter aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-        </Button>
-      }
-      size="md"
-    >
-      <PopoverLabel>状态</PopoverLabel>
-      <PopoverRadioGroup
-        onValueChange={(value) => props.setPluginStatus(value as PluginStatusFilter)}
-        value={props.pluginStatus}
-      >
-        {STATUS_OPTIONS.map((option) => (
-          <PopoverRadioItem key={option.value} value={option.value}>
-            {option.label}
-          </PopoverRadioItem>
-        ))}
-      </PopoverRadioGroup>
-    </PopoverMenu>
-  )
-}
-
 type PluginDirectoryProps = {
   busyPluginIds: Set<string>
   clearFilters: () => void
-  filterMenuOpen: boolean
   groups: ReturnType<typeof groupPluginCatalogBySource>
-  installed: PluginCatalogItem[]
   loadError: string | null
   loading: boolean
-  manage: () => void
-  onFilterMenuOpenChange: (open: boolean) => void
   onOpenDetails: (item: PluginCatalogItem) => void
   onPrimaryAction: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
   pluginCategory: PluginCategoryFilter
   pluginErrors: Record<string, string>
-  pluginStatus: PluginStatusFilter
   query: string
   refresh: () => void
   setPluginCategory: (value: PluginCategoryFilter) => void
-  setPluginStatus: (value: PluginStatusFilter) => void
   total: number
 }
 
 function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
   return (
-    <div
-      aria-labelledby="plugins-tab"
-      className="plugins-panel tw:grid tw:min-w-0 tw:gap-8"
-      id="plugins-panel"
-      role="tabpanel"
-    >
-      <section
-        aria-labelledby="included-plugins-title"
-        className="plugins-included-overview tw:grid tw:gap-1"
-      >
-        <header className="plugins-section-heading tw:flex tw:min-h-8 tw:min-w-0 tw:items-center tw:justify-between tw:gap-3 tw:border-b tw:border-b-app-border-subtle tw:pb-2">
-          <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm" id="included-plugins-title">
-            已安装
-          </h2>
-          <span className="plugins-sr-status tw:sr-only">共 {props.installed.length} 个插件</span>
-          <Button
-            isIconOnly
-            color="ghostSecondary"
-            onClick={props.manage}
-            size="toolbar"
-            title="管理插件设置"
-          >
-            <Settings aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          </Button>
-        </header>
-        <ul className="plugins-included-overview__list tw:m-0 tw:flex tw:h-11 tw:min-w-0 tw:list-none tw:flex-nowrap tw:gap-1 tw:overflow-hidden tw:p-0">
-          {props.installed.length === 0 ? (
-            <li className="plugins-included-overview__empty tw:inline-flex tw:items-center tw:text-app-text-soft tw:type-body-sm">
-              暂无已启用插件
-            </li>
-          ) : null}
-          {props.installed.map((item) => (
-            <li key={item.id}>
-              <button
-                aria-label={`查看 ${item.name} 详情`}
-                className={cx(
-                  'plugins-included-overview__item tw:group tw:inline-flex tw:size-11 tw:cursor-pointer tw:items-center tw:justify-center tw:rounded-xl tw:border-0 tw:bg-transparent tw:p-1 tw:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-solid tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus',
-                  FORCED_COLORS_SURFACE_CLASS,
-                  FORCED_COLORS_FOCUS_CLASS,
-                )}
-                data-catalog-item-id={`plugin:${item.id}`}
-                data-plugin-tone={item.tone}
-                onClick={() => props.onOpenDetails(item)}
-                title={item.name}
-                type="button"
-              >
-                <span
-                  className={cx(
-                    'plugins-included-overview__logo tw:inline-flex tw:size-9 tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-lg tw:border-[0.5px] tw:border-app-border-subtle tw:bg-app-raised tw:shadow-lg tw:transition-transform tw:duration-feedback tw:ease-standard tw:group-hover:-translate-y-1',
-                    FORCED_COLORS_SURFACE_CLASS,
-                  )}
-                >
-                  <PluginIcon
-                    logoDarkSource={item.logoDarkSource}
-                    logoSource={item.logoSource}
-                    name={item.iconName}
-                  />
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
+    <div className="plugins-panel tw:grid tw:min-w-0 tw:gap-8" id="plugins-panel">
       <div className="plugins-directory-navigation tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3 tw:@max-[479px]/plugins-page:items-stretch">
         <SegmentedControl
           ariaLabel="插件来源"
@@ -732,12 +584,6 @@ function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
           options={CATEGORY_OPTIONS}
           overflowMode="fit"
           value={props.pluginCategory}
-        />
-        <CatalogStatusMenu
-          onOpenChange={props.onFilterMenuOpenChange}
-          open={props.filterMenuOpen}
-          pluginStatus={props.pluginStatus}
-          setPluginStatus={props.setPluginStatus}
         />
       </div>
 
@@ -754,9 +600,7 @@ function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
       ) : props.total === 0 ? (
         <CatalogEmpty
           actionLabel="清除筛选"
-          message={
-            props.query ? `没有找到与“${props.query}”匹配的插件。` : '清除来源或状态筛选后再试。'
-          }
+          message={props.query ? `没有找到与“${props.query}”匹配的插件。` : '清除来源筛选后再试。'}
           onAction={props.clearFilters}
           title={props.query ? '没有匹配的插件' : '当前筛选没有结果'}
         />
@@ -811,10 +655,8 @@ function SkillDirectory(props: SkillDirectoryProps): React.ReactNode {
   return (
     <div
       aria-busy={props.loading || undefined}
-      aria-labelledby="skills-tab"
       className="plugins-panel tw:grid tw:min-w-0 tw:gap-8"
       id="skills-panel"
-      role="tabpanel"
     >
       <div className="plugins-directory-navigation tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3 tw:@max-[479px]/plugins-page:items-stretch">
         <SegmentedControl

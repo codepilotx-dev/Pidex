@@ -1,18 +1,20 @@
 import type React from 'react'
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Blocks, Search } from 'lucide-react'
+import { Blocks, Box, Search } from 'lucide-react'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { Input } from '../../../components/ui/Input.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
-import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
+import { Button } from '../../../components/ui/Button.js'
+import { PluginActionsMenu } from '../../plugins/PluginActionsMenu.js'
+import { PluginIcon } from '../../plugins/PluginIcon.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import {
   PLUGIN_CATALOG_DESCRIPTORS,
   filterPluginCatalog,
   mergePluginCatalog,
   pluginStatusLabel,
-  type PluginStatusFilter,
+  type PluginCatalogItem,
 } from '../../plugins/PluginCatalog.js'
 import { catalogBrowseParams, type CatalogTab } from '../../plugins/CatalogDetailsDeepLink.js'
 import { useMiniMaxCli } from '../../plugins/UseMiniMaxCli.js'
@@ -24,16 +26,6 @@ const CATALOG_TABS: ReadonlyArray<{ value: CatalogTab; label: string }> = [
   { value: 'skills', label: '技能' },
 ]
 
-const STATUS_FILTERS: ReadonlyArray<{ value: PluginStatusFilter; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'enabled', label: '已启用' },
-  { value: 'disabled', label: '已禁用' },
-]
-
-/**
- * 侧栏插件面板：复用现有插件目录与过滤函数，目录只加载一次，
- * 查询、分类、状态通过 URL 参数与 /plugins 页面共享。
- */
 export function SidebarPluginsPane({
   workspacePath,
 }: {
@@ -41,11 +33,14 @@ export function SidebarPluginsPane({
 }): React.ReactNode {
   const { t } = useLocale()
   const navigate = useNavigate()
-  const [searchParams, setSearchParams] = useSearchParams()
-  const [query, setQuery] = useState(() => searchParams.get('q') ?? '')
+  const [searchParams] = useSearchParams()
+  const [query, setQuery] = useState('')
+  const [searchOpen, setSearchOpen] = useState(false)
+  const searchButtonRef = useRef<HTMLButtonElement>(null)
   const tab: CatalogTab = searchParams.get('tab') === 'skills' ? 'skills' : 'plugins'
-  const status = (searchParams.get('status') as PluginStatusFilter | null) ?? 'all'
-  const { plugins, error, loading } = usePluginCatalog(workspacePath)
+  const { plugins, error, loading, refresh, setEnabled } = usePluginCatalog(workspacePath)
+  const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
+  const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
   const miniMaxCli = useMiniMaxCli()
 
   const items = useMemo(
@@ -66,57 +61,127 @@ export function SidebarPluginsPane({
     ],
   )
   const visibleItems = useMemo(
-    () => filterPluginCatalog(items, query, 'all', status),
-    [items, query, status],
+    () =>
+      filterPluginCatalog(
+        items.filter((item) => item.installed),
+        query,
+        'all',
+        'all',
+      ),
+    [items, query],
   )
 
-  function updateParams(patch: {
-    q?: string
-    status?: PluginStatusFilter
-    tab?: CatalogTab
-  }): void {
-    const next = catalogBrowseParams(searchParams, patch.tab ?? tab)
-    if (patch.q !== undefined) {
-      if (patch.q) next.set('q', patch.q)
-      else next.delete('q')
+  function browse(nextTab: CatalogTab): void {
+    navigate(`/plugins?${catalogBrowseParams(searchParams, nextTab).toString()}`)
+  }
+
+  function openPlugin(item: PluginCatalogItem): void {
+    const next = catalogBrowseParams(searchParams, 'plugins')
+    next.set('plugin', item.id)
+    navigate(`/plugins?${next.toString()}`)
+  }
+
+  async function togglePlugin(item: PluginCatalogItem, checked?: boolean): Promise<void> {
+    if (
+      busyIds.has(item.id) ||
+      item.actionKind !== 'toggle-plugin' ||
+      (item.status !== 'enabled' && item.status !== 'disabled')
+    )
+      return
+    setBusyIds((current) => new Set(current).add(item.id))
+    setActionErrors((current) => ({ ...current, [item.id]: '' }))
+    try {
+      await setEnabled(item.id, checked ?? !item.enabled)
+    } catch (cause) {
+      setActionErrors((current) => ({
+        ...current,
+        [item.id]: cause instanceof Error ? cause.message : t('无法更新插件状态'),
+      }))
+    } finally {
+      setBusyIds((current) => {
+        const next = new Set(current)
+        next.delete(item.id)
+        return next
+      })
     }
-    if (patch.status !== undefined) {
-      if (patch.status === 'all') next.delete('status')
-      else next.set('status', patch.status)
-    }
-    setSearchParams(next, { replace: true })
   }
 
   return (
     <div className="sidebar-plugins-pane tw:flex tw:h-full tw:min-h-0 tw:flex-col">
       <div className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
-        <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('插件')}</h2>
-      </div>
-      <div className="sidebar-pane-filters tw:flex tw:flex-col tw:gap-2 tw:p-2">
-        <Input
-          aria-label={t('搜索插件')}
-          placeholder={t('搜索插件与技能')}
-          size="sm"
-          value={query}
-          onChange={(event) => {
-            setQuery(event.target.value)
-            updateParams({ q: event.target.value })
+        <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('自定义')}</h2>
+        <Button
+          ref={searchButtonRef}
+          isIconOnly
+          color="ghostSecondary"
+          size="toolbar"
+          title={t('搜索已安装插件')}
+          aria-expanded={searchOpen}
+          aria-controls="sidebar-installed-plugin-search"
+          onClick={() => {
+            setSearchOpen(!searchOpen)
+            setQuery('')
           }}
-        />
-        <SegmentedControl
-          ariaLabel={t('目录类型')}
-          options={CATALOG_TABS.map((option) => ({ ...option, label: t(option.label) }))}
-          value={tab}
-          onChange={(next) => updateParams({ tab: next })}
-        />
-        <SegmentedControl
-          ariaLabel={t('插件状态')}
-          options={STATUS_FILTERS.map((option) => ({ ...option, label: t(option.label) }))}
-          value={status}
-          onChange={(next) => updateParams({ status: next })}
-        />
+        >
+          <Search size={APP_ICON_SIZE} />
+        </Button>
       </div>
-      <ScrollArea className="sidebar-scheduled-scroll tw:min-h-0 tw:flex-1 tw:p-2">
+      <div className="tw:flex tw:flex-col tw:sidebar-row-gap tw:p-2">
+        {searchOpen ? (
+          <Input
+            id="sidebar-installed-plugin-search"
+            autoFocus
+            aria-label={t('搜索已安装插件')}
+            placeholder={t('搜索已安装插件')}
+            size="sm"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
+                event.preventDefault()
+                event.stopPropagation()
+                setSearchOpen(false)
+                setQuery('')
+                searchButtonRef.current?.focus()
+              }
+            }}
+          />
+        ) : null}
+        {CATALOG_TABS.map((option) => (
+          <SidebarRow
+            asChild
+            key={option.value}
+            active={
+              tab === option.value && !searchParams.has('plugin') && !searchParams.has('skill')
+            }
+            layout="flex"
+            leading={
+              option.value === 'plugins' ? (
+                <Blocks size={APP_ICON_SIZE} />
+              ) : (
+                <Box size={APP_ICON_SIZE} />
+              )
+            }
+          >
+            <button
+              type="button"
+              aria-current={
+                tab === option.value && !searchParams.has('plugin') && !searchParams.has('skill')
+                  ? 'page'
+                  : undefined
+              }
+              onClick={() => browse(option.value)}
+            >
+              {t(option.label)}
+            </button>
+          </SidebarRow>
+        ))}
+      </div>
+      <h3 className="tw:m-0 tw:px-4 tw:py-2 tw:text-app-text-meta tw:type-label">{t('已安装')}</h3>
+      <ScrollArea
+        className="sidebar-scheduled-scroll tw:min-h-0 tw:flex-1 tw:p-2"
+        contentClassName="tw:flex tw:flex-col tw:sidebar-row-gap"
+      >
         {loading ? (
           <SidebarEmptyRow role="status">{t('正在加载插件…')}</SidebarEmptyRow>
         ) : error ? (
@@ -125,35 +190,82 @@ export function SidebarPluginsPane({
             role="status"
           >
             {error}
+            <Button color="secondary" size="toolbar" onClick={refresh}>
+              {t('重试')}
+            </Button>
           </div>
         ) : visibleItems.length === 0 ? (
-          <SidebarEmptyRow>{t('没有匹配的插件')}</SidebarEmptyRow>
+          <SidebarEmptyRow role="status">
+            {t(query.trim() ? '没有匹配的插件' : '暂无已安装插件')}
+          </SidebarEmptyRow>
         ) : (
           visibleItems.map((item) => (
-            <SidebarRow
-              asChild
-              className="sidebar-nav-link tw:type-row-title tw:focus-visible:outline-2 tw:focus-visible:outline-offset-0 tw:focus-visible:outline-app-focus"
-              key={item.id}
-              labelClassName="sidebar-item-label tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap"
-              layout="flex"
-              leading={<Blocks size={APP_ICON_SIZE} />}
-            >
-              <button
-                onClick={() => {
-                  const next = catalogBrowseParams(searchParams, 'plugins')
-                  next.set('plugin', item.id)
-                  navigate(`/plugins?${next.toString()}`)
-                }}
-                type="button"
+            <div key={item.id}>
+              <SidebarRow
+                active={searchParams.get('plugin') === item.id}
+                className="sidebar-nav-link tw:group tw:active:bg-app-active tw:type-row-title"
+                labelClassName="sidebar-item-label tw:min-w-0"
+                layout="flex"
+                leading={
+                  <span
+                    className={
+                      item.status === 'disabled'
+                        ? 'tw:size-4 tw:opacity-60'
+                        : item.status === 'unavailable' || item.status === 'error'
+                          ? 'tw:size-4 tw:opacity-40'
+                          : 'tw:size-4'
+                    }
+                  >
+                    <PluginIcon
+                      name={item.iconName}
+                      logoSource={item.logoSource}
+                      logoDarkSource={item.logoDarkSource}
+                    />
+                  </span>
+                }
+                trailing={
+                  <span className="tw:relative tw:z-1 tw:inline-flex tw:opacity-0 tw:pointer-events-none tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-focus-within:opacity-100 tw:group-focus-within:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto">
+                    <PluginActionsMenu
+                      item={item}
+                      busy={busyIds.has(item.id)}
+                      onOpenDetails={() => openPlugin(item)}
+                      onPrimaryAction={
+                        item.actionKind === 'toggle-plugin'
+                          ? (plugin, _trigger, checked) => {
+                              void togglePlugin(plugin, checked)
+                            }
+                          : undefined
+                      }
+                    />
+                  </span>
+                }
               >
-                <span className="sidebar-plugin-name tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
+                <button
+                  type="button"
+                  className="tw:absolute tw:inset-0 tw:rounded-item tw:border-0 tw:bg-transparent tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus"
+                  title={`${item.name} · ${t(pluginStatusLabel(item))}`}
+                  aria-label={`${item.name} · ${t(pluginStatusLabel(item))}`}
+                  aria-current={searchParams.get('plugin') === item.id ? 'page' : undefined}
+                  onClick={() => openPlugin(item)}
+                />
+                <span
+                  className={
+                    item.status === 'disabled'
+                      ? 'tw:truncate tw:opacity-60'
+                      : item.status === 'unavailable' || item.status === 'error'
+                        ? 'tw:truncate tw:text-app-text-soft'
+                        : 'tw:truncate'
+                  }
+                >
                   {item.name}
                 </span>
-                <span className="sidebar-plugin-status tw:shrink-0 tw:text-app-text-meta tw:type-caption">
-                  {t(pluginStatusLabel(item))}
-                </span>
-              </button>
-            </SidebarRow>
+              </SidebarRow>
+              {actionErrors[item.id] ? (
+                <p role="status" className="tw:m-0 tw:px-2 tw:text-app-danger tw:type-body-sm">
+                  {actionErrors[item.id]}
+                </p>
+              ) : null}
+            </div>
           ))
         )}
       </ScrollArea>

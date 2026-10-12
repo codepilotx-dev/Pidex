@@ -44,12 +44,16 @@ export function SkillCatalogCard({
     <li>
       <article
         className={cx(
-          'skill-catalog-card tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:min-w-0 tw:items-center tw:gap-3 tw:rounded-2xl tw:border-0 tw:bg-transparent tw:p-2.5 tw:shadow-none tw:transition-[background-color] tw:duration-state tw:ease-standard tw:[&:hover:not(:has(>div:hover))]:bg-app-hover tw:@max-[479px]/plugins-page:grid-cols-1',
+          'skill-catalog-card tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:min-w-0 tw:items-center tw:gap-3 tw:rounded-item tw:border-0 tw:bg-transparent tw:p-3 tw:shadow-none tw:transition-[background-color] tw:duration-state tw:ease-standard tw:hover:bg-app-hover tw:active:bg-app-active',
           FORCED_COLORS_SURFACE_CLASS,
         )}
       >
         <button
-          className={cx('skill-catalog-card__main', PLAIN_BUTTON_CLASS, FORCED_COLORS_FOCUS_CLASS)}
+          className={cx(
+            'skill-catalog-card__main tw:grid-cols-[auto_minmax(0,1fr)] tw:gap-3',
+            PLAIN_BUTTON_CLASS,
+            FORCED_COLORS_FOCUS_CLASS,
+          )}
           data-catalog-item-id={`skill:${skill.id}`}
           onClick={(event) => onOpenDetails(skill, event.currentTarget)}
           type="button"
@@ -89,7 +93,7 @@ export function SkillCatalogCard({
           </span>
         </button>
 
-        <div className="skill-catalog-card__actions tw:flex tw:items-center tw:justify-end tw:@max-[479px]/plugins-page:justify-start">
+        <div className="skill-catalog-card__actions tw:flex tw:items-center tw:justify-end">
           {skill.installed ? (
             <span className="skill-catalog-card__installed tw:flex tw:items-center tw:gap-2 tw:text-app-text-meta tw:type-caption tw:whitespace-nowrap">
               <Check aria-hidden="true" size={APP_ICON_SIZES.sm} />

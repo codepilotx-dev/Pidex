@@ -75,7 +75,7 @@ export function PluginIcon({
           className={cx(
             PLUGIN_LOGO_IMAGE_CLASS,
             'plugin-logo__image--light',
-            darkTheme && 'tw:hidden',
+            darkTheme && darkSource && 'tw:hidden',
           )}
           src={source}
         />
