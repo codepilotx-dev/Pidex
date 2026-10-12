@@ -13,9 +13,14 @@
 - [agent] node_repl 的每次电脑操作仍回到统一注册、校验、Hook、判权与审批链，Skill 范围与冻结回合能力同时约束外层入口与内部操作；需要应用授权时结束当前脚本，只把被阻塞的读取操作、宿主身份与授权指纹写入审批 checkpoint，批准后仅重新校验并执行该读取并作为本次调用的完成结果，原脚本不继续执行也不重放。
 - [agent/desktop] 安装态新增专用子进程入口：`pidex-agent.exe --pidex-node-repl` 在正式 bootstrap 之前分派并执行单元格，用户无需额外安装 Node 或 Bun。
 - [agent-protocol/agent/desktop] 新增 `github.threadPullRequests.v1` 能力与独立的 `thread_pull_requests` 关联表（history schema 59，前向迁移，不改线程核心表），提供按会话批量读取 PR 关联、显式关联与解除关联，并新增可对账事件 `thread/pull-requests/updated`。读取逐会话返回结果，单条失败不拖累整批；状态由 Agent 单点计算，按 PR 身份去重、缓存 60 秒、最大并发 4，失败或过期只回退为未知，不再保留误导性的绿色。创建 PR、开启 PR 监控和显式关联会记录关联，普通 Fork 不复制父会话关联；侧栏可见的项目会话按实际执行目录的 origin 与分支发现匹配的打开 PR，detached HEAD 与非 GitHub remote 不自动发现。
+- [desktop/renderer] 新增插件管理动作菜单 `PluginActionsMenu`：已安装插件改用右侧菜单承载查看详情与主操作，替代原开关按钮。
 
 ### Changed
 
+- [agent/desktop] Plan 澄清与审阅拆分：Composer 上方的提问区按所属 Turn 的 canonical `taskMode` 分流，Plan 问题逐题显式确认——不预选答案、`recommended` 只作为建议徽标、点击选项不再自动跳题、无「跳过」、结束等待走「停止本轮」中断链路，方向键只移动焦点；计划审批改为独立的阅读与动作卡，提供「修改计划」反馈输入、「开始实施」（新聊天选项在同一动作菜单内，按 capability 显示）与「退出 Plan」，移除仅隐藏面板的「继续规划」入口。
+- [agent] Plan 反馈轮次把用户原话保存为该轮用户消息，完整源计划改由既有 prompt context 注入（复用 `plan_approvals.next_turn_id` 关联，恢复与压缩采样仍可重建，不新增数据库字段）；同步调整 Plan 提示词的内容要求：`summary` 说明目标、问题与范围，`changes` 说明实现逻辑与必要的 UI 行为，空章节不展示。
+- [desktop/renderer] 计划卡片区分「正在形成计划」「计划 · 待审阅」「历史计划」，历史计划只保留阅读、复制与导出；右栏计划标签携带聊天与计划项身份并绑定 canonical projection（正文与有效性不再以打开瞬间的字符串快照为真源，历史标签仍可读其保存内容），复用同一结构化正文组件，并在存在更新版本时显示「有新版计划」入口而不静默覆盖正在阅读的旧版本。
+- [desktop/renderer] 左侧导航列表统一复用首页的 1px 行间距，覆盖项目与会话分组、供应商、插件/技能、定时任务与运行记录及设置导航，保留现有行样式与层级交互。
 - [desktop/renderer] 侧栏会话行补齐环境与 PR 表达：尾部标记顺序固定为环境、Fork、日程、PR；`executionEnvironment.kind === 'worktree'` 显示独立的工作树标记（与 `isFork` 分叉标记互不推断），PR 标记按已合并／已关闭／草稿／冲突／检查失败／可合并／检查通过／等待／未知着色并给出原因。悬浮卡新增执行环境说明（含工作树创建中／可用／已清理等状态）与全部关联 PR 行，标题经现有安全外链入口打开、可解除关联；会话右键菜单新增“关联 Pull Request”输入弹窗。PR 数据独立于 `thread/list`，窗口可见时每 60 秒刷新已渲染会话、悬浮卡打开时刷新过期数据，窗口隐藏时暂停，能力缺失时不显示 PR 功能且不影响环境标记。
 
 - [desktop/renderer] 共享菜单与 Popover 入场改用 `@starting-style` 的透明度和位移过渡，复用现有时长与方向；定位前通过 visibility 隐藏，避免内联透明度覆盖过渡起点，并保留减少动画、Dialog、Tooltip 和现有关闭行为。
@@ -27,6 +32,14 @@
 - [desktop/renderer] 供应商从设置移出为左导航一级入口（`/providers`）：侧栏新增供应商面板承载搜索、已配置筛选与选择，主区域只保留所选供应商的连接、凭据与模型详情，未选择时显示空态；`/models` 与 `/settings/providers` 统一重定向到 `/providers` 并保留其余查询参数，模型配置入口与用量页链接同步改指新路由。
 
 ### Fixed
+
+- [agent] 模型请求发送前清理空正文与 assistant 历史中的独立协议占位文本，Chat Completions 的纯工具调用使用 null 正文；保留工具结果、签名推理与非文本内容，避免兼容中转将空正文补成可见的 System 占位消息。
+
+- [agent] PR 自动发现不再因已有会话关联而跳过，按执行仓库与分支缓存 60 秒，仅关联新增或信息变化时事务写入 outbox 通知；补充推送与创建 PR 使用真实工作树目录及项目目录回退的后端测试。
+
+- [desktop/renderer] 插件目录改为左图标、中间文案、右侧操作的横向条目；插件与技能使用侧栏导航，搜索按需展开，移除状态筛选并以样式表达状态，已安装列表保留禁用项，修复深色主题无替代图时 Logo 消失。
+- [desktop/renderer] 补齐技能目录横向布局及 token 间距、插件侧栏悬浮与键盘快捷菜单、空态与失败重试；不可用动作增加可聚焦提示，状态弱化不再影响错误和焦点环，修复详情返回焦点。
+- [desktop/renderer] 修复逐题提交校验时错误提示被随后的输入框聚焦清空的问题：缺答与未输入现在先聚焦再提示，错误可稳定显示。
 
 - [agent] 配置局部编辑跳过不存在项的删除，修复首次保存主题时 nullable 字体项触发 CONFIG_VALIDATION_ERROR、导致无法切换主题的问题。
 - [agent/desktop] 会话内推送与创建 PR 改为携带 `threadId`：Agent 校验会话与项目归属后使用真实工作树目录，没有会话上下文时保留项目根目录语义；创建成功的 PR 自动关联到发起会话。
