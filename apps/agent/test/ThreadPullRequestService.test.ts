@@ -48,7 +48,7 @@ const restPullRequest = {
   mergeable: true,
 }
 
-const fixture = async (options: { openPullRequests?: unknown[] } = {}) => {
+const fixture = async (options: { openPullRequests?: unknown[]; now?: () => number } = {}) => {
   const root = await mkdtemp(join(tmpdir(), 'pidex-thread-pr-'))
   paths.push(root)
   const historyPath = join(root, 'history.sqlite')
@@ -69,7 +69,10 @@ const fixture = async (options: { openPullRequests?: unknown[] } = {}) => {
     },
   } as never
   const git = { run: async () => ({ code: 0, stdout: 'feature\n', stderr: '' }) }
-  const service = new ThreadPullRequestService(db, github, hub, { git })
+  const service = new ThreadPullRequestService(db, github, hub, {
+    git,
+    ...(options.now ? { now: options.now } : {}),
+  })
   return { db, historyPath, profilePath, thread, published, service, git }
 }
 
@@ -125,6 +128,55 @@ describe('thread pull request status', () => {
 })
 
 describe('thread pull request associations', () => {
+  test('discovers new PRs alongside existing links and emits only changed associations', async () => {
+    let now = 0
+    const openPullRequests = [restPullRequest]
+    const { db, thread, service, published, git } = await fixture({
+      openPullRequests,
+      now: () => now,
+    })
+    await service.link({ threadId: thread.id, url: restPullRequest.htmlUrl })
+    const read = () => service.read({ threadIds: [thread.id], resolveCwd: async () => 'C:\\repo' })
+    await read()
+    expect(published).toHaveLength(1)
+    openPullRequests.push({
+      ...restPullRequest,
+      number: 8,
+      htmlUrl: 'https://github.com/octocat/fixture/pull/8',
+    })
+    expect((await read()).threads[0]!.items).toHaveLength(1)
+    now = 60_000
+    expect((await read()).threads[0]!.items).toHaveLength(2)
+    expect(published).toHaveLength(2)
+    expect(
+      db.repositories.threadPullRequests.list(thread.id).find((pr) => pr.number === 7)?.origin,
+    ).toBe('manual')
+    now += 60_000
+    await read()
+    expect(published).toHaveLength(2)
+    expect(
+      db.sqlite
+        .query("SELECT method FROM events WHERE method = 'thread/pull-requests/updated'")
+        .all(),
+    ).toHaveLength(2)
+    git.run = async () => ({ code: 0, stdout: 'next-feature\n', stderr: '' })
+    openPullRequests.splice(0, openPullRequests.length, {
+      ...restPullRequest,
+      number: 9,
+      htmlUrl: 'https://github.com/octocat/fixture/pull/9',
+      head: { ...restPullRequest.head, ref: 'next-feature' },
+    })
+    now += 60_000
+    const switched = (await read()).threads[0]!.items
+    expect(switched).toHaveLength(3)
+    expect(switched[0]).toMatchObject({ number: 9, primary: true })
+    expect(published).toHaveLength(3)
+    openPullRequests[0] = { ...openPullRequests[0]!, title: 'Updated title' }
+    now += 60_000
+    expect((await read()).threads[0]!.items[0]!.title).toBe('Updated title')
+    expect(published).toHaveLength(4)
+    db.close()
+  })
   test('persists links, prefers explicit origins and survives reopen', async () => {
     const { db, historyPath, profilePath, thread } = await fixture()
     const repository = db.repositories.threadPullRequests
