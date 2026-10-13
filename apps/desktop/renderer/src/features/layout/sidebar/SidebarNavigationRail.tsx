@@ -1,11 +1,11 @@
 import { useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Ellipsis, Home } from 'lucide-react'
+import { Ellipsis, Home, Pin, PinOff } from 'lucide-react'
 import { Button } from '../../../components/ui/Button.js'
 import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
-import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
-import { PopoverItem } from '../../../components/ui/PopoverItem.js'
+import { Popover } from '../../../components/ui/floating/Popover.js'
+import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
@@ -13,7 +13,9 @@ import { newSessionPath } from '../../session/NewSessionSurface.js'
 import { canShowSidebarTooltip, type SidebarShellController } from '../SidebarShellState.js'
 import { SidebarFooter } from './SidebarFooter.js'
 import { getSidebarTopNavItems, type SidebarCapabilityState } from './SidebarTopNav.js'
-import { sidebarPaneForRoute, type SidebarPane } from './SidebarNavigation.js'
+import type { SidebarPane } from './SidebarNavigation.js'
+import { SidebarRow } from './SidebarRow.js'
+import { setSidebarDestinationHidden } from './SidebarCustomization.js'
 
 type Props = {
   shell: SidebarShellController
@@ -36,6 +38,10 @@ const RAIL_DESTINATION_PANES: Record<SidebarRailDestinationId, SidebarPane | nul
   sessionGroups: null,
 }
 
+const OTHER_RAIL_DESTINATION_IDS = new Set<SidebarRailDestinationId>([
+  'sessionGroups', 'providers', 'pets',
+])
+
 export function SidebarNavigationRail({
   shell,
   activePane,
@@ -44,7 +50,12 @@ export function SidebarNavigationRail({
   onReport,
   onPinPanel,
 }: Props): ReactNode {
-  const { sidebarProductMode, sidebarTimelineEnabled, sidebarCustomization } = useDesktopSettings()
+  const {
+    sidebarProductMode,
+    sidebarTimelineEnabled,
+    sidebarCustomization,
+    setSidebarCustomization,
+  } = useDesktopSettings()
   const { t } = useLocale()
   const navigate = useNavigate()
   const location = useLocation()
@@ -71,8 +82,6 @@ export function SidebarNavigationRail({
       (id): id is SidebarRailDestinationId => typeof id === 'string',
     ),
   )
-  // 宠物市场统一收进“更多”，已有的侧栏配置也保留原值。
-  hiddenDestinationIds.add('pets')
   const orderedDestinationIds = [
     ...sidebarCustomization.destinationOrder,
     ...Object.keys(RAIL_DESTINATION_PANES),
@@ -86,12 +95,29 @@ export function SidebarNavigationRail({
       const item = itemByDestinationId.get(id)
       return item ? [item] : []
     })
-  const moreItems = orderedDestinationIds
-    .filter((id) => hiddenDestinationIds.has(id))
-    .flatMap((id) => {
-      const item = itemByDestinationId.get(id)
-      return item ? [item] : []
-    })
+  const moreItems = orderedDestinationIds.flatMap((id) => {
+    const item = itemByDestinationId.get(id)
+    return item ? [item] : []
+  })
+  const fixedItems = directItems.filter((item) => !OTHER_RAIL_DESTINATION_IDS.has(item.view as SidebarRailDestinationId))
+  const otherItems = directItems.filter((item) => OTHER_RAIL_DESTINATION_IDS.has(item.view as SidebarRailDestinationId))
+
+  const toggleDestination = (id: SidebarRailDestinationId, fromRail = false) => {
+    const hidden = !hiddenDestinationIds.has(id)
+    setSidebarCustomization((current) => setSidebarDestinationHidden(current, id, hidden))
+    setTooltipId(null)
+    if (hidden && fromRail) requestAnimationFrame(() => moreTriggerRef.current?.focus())
+  }
+  const destinationActions = (id: SidebarRailDestinationId, fromRail = false) => [
+    {
+      kind: 'item' as const,
+      label: t(hiddenDestinationIds.has(id) ? '固定到侧栏' : '取消固定，收进更多'),
+      icon: hiddenDestinationIds.has(id)
+        ? <Pin size={APP_ICON_SIZE} />
+        : <PinOff size={APP_ICON_SIZE} />,
+      onSelect: () => toggleDestination(id, fromRail),
+    },
+  ]
 
   const button = (
     id: string,
@@ -130,6 +156,34 @@ export function SidebarNavigationRail({
     </Tooltip>
   )
 
+  const destinationButton = (item: (typeof directItems)[number]): ReactNode => {
+    const pane = RAIL_DESTINATION_PANES[item.view as SidebarRailDestinationId]
+    const selected = pane
+      ? activePane === pane
+      : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
+    return (
+      <AppContextMenu
+        key={item.view}
+        layout="grid"
+        includeEditActions={false}
+        actions={destinationActions(item.view as SidebarRailDestinationId, true)}
+        trigger={
+          <span className="tw:flex">{button(
+            item.view,
+            item.label,
+            item.icon,
+            () => {
+              navigate(item.path)
+              if (pane) onPinPanel()
+            },
+            pane,
+            selected,
+          )}</span>
+        }
+      />
+    )
+  }
+
   return (
     <nav
       className="sidebar-navigation-rail tw:flex tw:h-full tw:flex-col tw:items-center tw:py-2"
@@ -150,32 +204,10 @@ export function SidebarNavigationRail({
           sidebarTimelineEnabled ? 'activity' : 'chats',
           activePane === 'chats' || activePane === 'activity',
         )}
-        {directItems.map((item) => {
-          const pane = RAIL_DESTINATION_PANES[item.view as SidebarRailDestinationId]
-          const selected = pane
-            ? activePane === pane
-            : location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
-          return button(
-            item.view,
-            item.label,
-            item.icon,
-            () => {
-              navigate(item.path)
-              if (pane) onPinPanel()
-            },
-            pane,
-            selected,
-          )
-        })}
+        {fixedItems.map(destinationButton)}
         {moreItems.length > 0 ? (
-          <PopoverMenu
-            align="start"
-            open={moreOpen}
-            side="right"
-            size="sm"
-
-            onOpenChange={setMoreOpen}
-            trigger={
+          <Popover.Root open={moreOpen} onOpenChange={setMoreOpen}>
+            <Popover.Trigger asChild>
               <Button
                 isIconOnly
                 ref={moreTriggerRef}
@@ -189,25 +221,82 @@ export function SidebarNavigationRail({
               >
                 <Ellipsis size={APP_ICON_SIZE} />
               </Button>
-            }
-          >
-            {moreItems.map((item) => (
-              <PopoverItem
-                active={
-                  location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)
-                }
-                icon={item.icon}
-                key={item.view}
-                onClick={() => {
-                  setMoreOpen(false)
-                  navigate(item.path)
-                  if (RAIL_DESTINATION_PANES[item.view as SidebarRailDestinationId]) onPinPanel()
-                }}
+            </Popover.Trigger>
+            <Popover.Portal>
+              <Popover.Content
+                asChild
+                side="right"
+                align="start"
+                size="sm"
+                aria-label={t('更多')}
+                className="tw:p-1"
               >
-                {t(item.label)}
-              </PopoverItem>
-            ))}
-          </PopoverMenu>
+                <div className="desktop-sidebar tw:flex tw:flex-col tw:sidebar-row-gap">
+                  {moreItems.map((item) => {
+                    const id = item.view as SidebarRailDestinationId
+                    const pinned = !hiddenDestinationIds.has(id)
+                    const pinLabel = t(pinned ? '取消固定' : '固定到侧栏')
+                    return (
+                      <AppContextMenu
+                        key={id}
+                        layout="grid"
+                        includeEditActions={false}
+                        actions={destinationActions(id)}
+                        trigger={
+                          <SidebarRow
+                            tabIndex={-1}
+                            layout="grid"
+                            leading={item.icon}
+                            active={location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)}
+                            className="tw:group tw:[&>.sidebar-row-trailing]:w-auto tw:focus-within:bg-app-hover"
+                            onClick={() => {
+                              setMoreOpen(false)
+                              navigate(item.path)
+                              if (RAIL_DESTINATION_PANES[id]) onPinPanel()
+                            }}
+                            trailing={
+                              <Tooltip content={pinLabel}>
+                                <Button
+                                  isIconOnly
+                                  variant="text"
+                                  size="compact"
+                                  iconSize="md"
+                                  nativeTitle={false}
+                                  aria-label={`${pinLabel}: ${t(item.label)}`}
+                                  className={`tw:shrink-0 ${pinned ? '' : 'tw:opacity-0 tw:group-hover:opacity-100 tw:group-focus-within:opacity-100'}`}
+                                  onClick={(event) => {
+                                    event.stopPropagation()
+                                    toggleDestination(id)
+                                  }}
+                                >
+                                  <Pin className="tw:rotate-45" size={APP_ICON_SIZE} fill={pinned ? 'currentColor' : 'none'} />
+                                </Button>
+                              </Tooltip>
+                            }
+                          >
+                            <button
+                              type="button"
+                              className="tw:flex tw:w-full tw:min-w-0 tw:items-center tw:gap-2 tw:bg-transparent tw:py-1 tw:text-left tw:text-inherit tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-app-accent tw:rounded-sm"
+                            >
+                              <span className="tw:min-w-0 tw:truncate">{t(item.label)}</span>
+                            </button>
+                          </SidebarRow>
+                        }
+                      />
+                    )
+                  })}
+                </div>
+              </Popover.Content>
+            </Popover.Portal>
+          </Popover.Root>
+        ) : null}
+        {otherItems.length > 0 ? (
+          <>
+            <div role="separator" className="tw:my-1 tw:w-6 tw:border-t tw:border-app-border" />
+            <div role="group" aria-label={t('其他入口')} className="tw:flex tw:flex-col tw:items-center tw:gap-1">
+              {otherItems.map(destinationButton)}
+            </div>
+          </>
         ) : null}
       </ScrollArea>
       <div className="sidebar-rail-bottom tw:flex tw:w-full tw:flex-col tw:items-center tw:gap-1">

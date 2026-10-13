@@ -4,6 +4,8 @@ import {
   DEFAULT_SIDEBAR_CUSTOMIZATION,
   DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS,
   normalizeSidebarCustomization,
+  defaultDesktopStoredSettings,
+  normalizeDesktopStoredSettings,
 } from '../shared/SettingsSchema.js'
 import {
   addSidebarSection,
@@ -20,6 +22,7 @@ import {
   setSidebarSectionCollapsed,
   setSidebarSectionItems,
   setSidebarSectionSort,
+  setSidebarDestinationHidden,
 } from '../src/features/layout/sidebar/SidebarCustomization.js'
 import {
   buildSidebarCustomSections,
@@ -53,6 +56,27 @@ const sections: SidebarCustomization = {
 }
 
 describe('侧栏自定义分组', () => {
+  test('入口固定与收纳保留分组、顺序和未知入口，并在设置往返后恢复', () => {
+    const current = {
+      ...sections,
+      destinationOrder: ['sessionGroups', 'pets', 'future', 'automations'],
+      hiddenDestinationIds: ['pets', 'home', 'future'],
+    }
+    const pinned = setSidebarDestinationHidden(current, 'pets', false)
+    expect(pinned.hiddenDestinationIds).toEqual(['home', 'future'])
+    expect(pinned.sections).toBe(current.sections)
+    expect(pinned.destinationOrder).toBe(current.destinationOrder)
+    const restored = normalizeDesktopStoredSettings(JSON.parse(JSON.stringify({
+      ...defaultDesktopStoredSettings(),
+      sidebarCustomization: pinned,
+    }))).sidebarCustomization
+    expect(restored.hiddenDestinationIds).toEqual(pinned.hiddenDestinationIds)
+    expect(restored.destinationOrder.slice(0, 4)).toEqual(current.destinationOrder)
+    const hidden = setSidebarDestinationHidden(restored, 'pets', true)
+    expect(hidden.hiddenDestinationIds).toEqual(['home', 'future', 'pets'])
+    expect(setSidebarDestinationHidden(hidden, 'pets', true)).toEqual(hidden)
+  })
+
   test('创建分组补默认值并保持在 order 末尾', () => {
     const created = addSidebarSection(DEFAULT_SIDEBAR_CUSTOMIZATION, 'section-1')
     expect(created.sections).toHaveLength(1)

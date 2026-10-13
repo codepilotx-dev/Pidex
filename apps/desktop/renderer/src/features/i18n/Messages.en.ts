@@ -1,4 +1,8 @@
 export const enUS: Record<string, string> = {
+  其他入口: 'Other destinations',
+  固定到侧栏: 'Pin to sidebar',
+  取消固定: 'Unpin',
+  '取消固定，收进更多': 'Unpin and move to More',
   视觉样式: 'Visual style',
   界面布局: 'Interface layout',
   模式: 'Mode',
@@ -184,7 +188,7 @@ export const enUS: Record<string, string> = {
   在对话框底部栏显示上下文窗口使用量: 'Show context window usage below the conversation',
   新建任务: 'New task',
   新建对话: 'New chat',
-  工作流: 'Workflows',
+  工作组: 'Workgroups',
   已安排: 'Scheduled',
   项目: 'Projects',
   主要导航: 'Main navigation',

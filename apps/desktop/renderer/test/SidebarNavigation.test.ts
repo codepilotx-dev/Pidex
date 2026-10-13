@@ -13,7 +13,8 @@ import {
 import { resolveConversationProject } from '../src/features/projects/ProjectDetailsModel.js'
 import { expectSourceContains, expectSourceNotContains } from './SourceContract.js'
 import { isSidebarPreviewHeld as isSidebarPreviewHeldForTest } from '../src/features/layout/SidebarShellState.js'
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
+import * as settingsStorage from '../src/features/settings/SettingsStorage.js'
 import { readFileSync } from 'node:fs'
 import type { ProtocolCapability } from '@pidex/agent-protocol'
 import type { DesktopRemovedWorkspace, DesktopWorkspace } from '../shared/Types.js'
@@ -113,6 +114,46 @@ function sidebarNavItems(
 }
 
 describe('Codex 侧栏导航', () => {
+  test('全部固定后更多仍可用，首页忽略隐藏配置，宠物可固定且能力过滤保持生效', () => {
+    const settings = settingsStorage.defaultDesktopSettings()
+    const stored = spyOn(settingsStorage, 'readStoredDesktopSettings').mockReturnValue({
+      ...settings,
+      sidebarCustomization: {
+        ...settings.sidebarCustomization,
+        hiddenDestinationIds: ['home'],
+        destinationOrder: ['pets', 'plugins', 'providers', 'automations', 'sessionGroups'],
+      },
+    })
+    try {
+      const render = (capabilityState: SidebarCapabilityState) => renderToStaticMarkup(
+        createElement(MemoryRouter, null,
+          createElement(DesktopSettingsProvider, null,
+            createElement(TooltipProvider, null,
+              createElement(SidebarNavigationRail, {
+                shell: { mode: 'docked' } as unknown as SidebarShellController,
+                activePane: 'chats', capabilityState,
+                onOpenWhatsNew: () => {}, onReport: () => {}, onPinPanel: () => {},
+              }),
+            ),
+          ),
+        ),
+      )
+      const pinned = render(readySidebarCapabilities('pets.management.v1', 'skills.manage.v1', 'session-group.v1'))
+      expect(pinned).toContain('aria-label="首页"')
+      expect(pinned).toContain('aria-label="宠物市场"')
+      expect(pinned).toContain('aria-label="更多"')
+      const moreIndex = pinned.indexOf('aria-label="更多"')
+      expect(pinned.indexOf('aria-label="插件"')).toBeLessThan(pinned.indexOf('aria-label="已安排"'))
+      expect(pinned.indexOf('aria-label="已安排"')).toBeLessThan(moreIndex)
+      expect(pinned.indexOf('aria-label="宠物市场"')).toBeGreaterThan(moreIndex)
+      expect(pinned.indexOf('aria-label="供应商"')).toBeGreaterThan(pinned.indexOf('aria-label="宠物市场"'))
+      expect(pinned.indexOf('aria-label="工作组"')).toBeGreaterThan(pinned.indexOf('aria-label="供应商"'))
+      expect(render(unknownSidebarCapabilities)).not.toContain('aria-label="宠物市场"')
+    } finally {
+      stored.mockRestore()
+    }
+  })
+
   test('宠物市场收进更多且路由激活宠物侧栏', () => {
     const rail = renderToStaticMarkup(
       createElement(
@@ -204,7 +245,7 @@ describe('Codex 侧栏导航', () => {
       TOP_NAV_ITEMS.map((item) => ({ view: item.view, label: item.label, path: item.path })),
     ).toEqual([
       { view: 'new', label: '新建任务', path: '/new' },
-      { view: 'sessionGroups', label: '工作流', path: '/workflows' },
+      { view: 'sessionGroups', label: '工作组', path: '/workflows' },
       { view: 'automations', label: '已安排', path: '/automations' },
       { view: 'plugins', label: '插件', path: '/plugins' },
       { view: 'providers', label: '供应商', path: '/providers' },
@@ -314,7 +355,7 @@ describe('Codex 侧栏导航', () => {
     )
   })
 
-  test('协商 session-group.v1 后会话组位于新建对话之后、项目之前', () => {
+  test('协商 session-group.v1 后工作组位于新建对话之后、项目之前', () => {
     expect(
       sidebarNavItems(true, undefined, readySidebarCapabilities('session-group.v1')).map(
         (item) => item.view,

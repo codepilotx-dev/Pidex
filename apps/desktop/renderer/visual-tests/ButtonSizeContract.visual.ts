@@ -169,8 +169,8 @@ for (const uiFontSize of [11, 16]) {
     await expect(productModeTrigger).not.toHaveClass(/settings-dropdown/)
     expect(await productModeTrigger.evaluate((element) => element.tagName)).toBe('BUTTON')
 
-    await expectBox(page.getByRole('button', { name: '搜索任务' }), 28)
-    await expectBox(page.locator('.sidebar-timeline-toggle-button'), 28)
+    await expectBox(page.getByRole('button', { name: '搜索任务' }), 36)
+    await expectBox(page.locator('.sidebar-timeline-toggle-button'), 36)
     await expectBox(page.getByRole('button', { name: '帮助' }), 28)
     await expectBox(page.getByRole('button', { name: /集成终端/u }), 28)
     await expectBox(page.getByRole('button', { name: /右侧面板/u }), 28)

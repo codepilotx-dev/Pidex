@@ -83,7 +83,7 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
   },
   {
     view: 'sessionGroups',
-    label: '工作流',
+    label: '工作组',
     icon: <MessagesSquare size={APP_ICON_SIZE} />,
     path: '/workflows',
     availability: {
@@ -324,7 +324,7 @@ export function SidebarHeader({
                     className="sidebar-timeline-toggle-button tw:text-app-text-meta tw:hover:text-app-text tw:data-[active=true]:bg-app-selected tw:data-[active=true]:text-app-text"
                     color="ghost"
                     iconSize="md"
-                    size="compact"
+                    size="md"
                     onClick={() => {
                       if (!sidebarActivityCoachmarkDismissed) {
                         setSidebarActivityCoachmarkDismissed(true)
@@ -384,7 +384,7 @@ export function SidebarHeader({
             className="sidebar-search-button tw:text-app-text-meta tw:hover:text-app-text"
             color="ghost"
             iconSize="md"
-            size="compact"
+            size="md"
             onClick={onOpenCommandMenu}
             title={t('搜索任务')}
           >
