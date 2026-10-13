@@ -107,8 +107,8 @@ export function SidebarPluginsPane({
   }
 
   return (
-    <div className="sidebar-plugins-pane tw:flex tw:h-full tw:min-h-0 tw:flex-col">
-      <div className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
+    <div className="sidebar-plugins-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
+      <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
         <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('自定义')}</h2>
         <Button
           ref={searchButtonRef}
@@ -125,7 +125,7 @@ export function SidebarPluginsPane({
         >
           <Search size={APP_ICON_SIZE} />
         </Button>
-      </div>
+      </header>
       <div className="tw:flex tw:flex-col tw:sidebar-row-gap tw:p-2">
         {searchOpen ? (
           <Input

@@ -55,8 +55,8 @@ export function SidebarProvidersPane(): React.ReactNode {
   const browsing = onProvidersRoute && !selectedProviderId && !creatingProvider
 
   return (
-    <div className="sidebar-providers-pane tw:flex tw:h-full tw:min-h-0 tw:flex-col">
-      <div className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
+    <div className="sidebar-providers-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
+      <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
         <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('供应商')}</h2>
         <Button
           color="ghostSecondary"
@@ -67,7 +67,7 @@ export function SidebarProvidersPane(): React.ReactNode {
         >
           <Plus aria-hidden size={APP_ICON_SIZE} />
         </Button>
-      </div>
+      </header>
       <div className="tw:px-2">
         <SidebarRow
           active={browsing}
