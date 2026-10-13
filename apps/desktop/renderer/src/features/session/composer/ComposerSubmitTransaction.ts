@@ -7,7 +7,10 @@ import type {
   PreparedComposerSubmission,
 } from './ComposerTypes.js'
 import { cloneDraft } from './ComposerDraftStore.js'
-import { skillInvocationsFromComposerDocument } from './ComposerSkillToken.js'
+import {
+  hasTaskPlanningInvocation,
+  skillInvocationsFromComposerDocument,
+} from './ComposerSkillToken.js'
 import { planTaskFromInput } from './ComposerSlashCommands.js'
 import {
   annotationAttachments,
@@ -66,6 +69,8 @@ export function prepareComposerSubmission(
       ? [snapshot.skillInvocation]
       : skillInvocationsFromComposerDocument(snapshot.document))
   const hasContent = Boolean(text.trim()) || attachments.length > 0 || skills.length > 0
+  const planning = hasTaskPlanningInvocation(snapshot.document, skills)
+  if (planning) snapshot.goalModeEnabled = false
 
   if (!hasContent) {
     return failed('prepare', '请输入消息或添加附件')
@@ -78,7 +83,8 @@ export function prepareComposerSubmission(
     clientId: snapshot.clientId,
     input: {
       text,
-      taskMode: planTask !== null || snapshot.collaborationMode === 'plan' ? 'plan' : 'chat',
+      taskMode:
+        planning || planTask !== null || snapshot.collaborationMode === 'plan' ? 'plan' : 'chat',
       attachments,
       ...(skills.length ? { skills } : {}),
     },

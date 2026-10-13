@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { hasTaskPlanningInvocation } from '../src/features/session/composer/ComposerSkillToken.js'
 import {
   buildDesktopUserMessageContent,
   desktopUserMessageInputToPreviewText,
@@ -24,6 +25,40 @@ function draft(overrides: Partial<ComposerDraft> = {}): ComposerDraft {
     ...overrides,
   }
 }
+
+test('引用任务规划自动提交 Plan，普通插件仍为 Chat，且不同时创建 Goal', () => {
+  const document = {
+    text: '安排下周执行',
+    tokens: [
+      {
+        id: 'planner',
+        kind: 'plugin' as const,
+        label: '任务规划',
+        value: 'plugin://task-planning',
+        from: 0,
+        to: 0,
+      },
+    ],
+  }
+  expect(hasTaskPlanningInvocation(document)).toBe(true)
+  const prepared = prepareComposerSubmission(draft({ document, goalModeEnabled: true }))
+  expect('input' in prepared && prepared.input.taskMode).toBe('plan')
+  expect('goal' in prepared).toBe(false)
+  const skill = prepareComposerSubmission(
+    draft({
+      skills: [
+        { name: 'task-planning', path: 'plugin://task-planning/skills/task-planning/SKILL.md' },
+      ],
+    }),
+  )
+  expect('input' in skill && skill.input.taskMode).toBe('plan')
+  const other = prepareComposerSubmission(
+    draft({
+      document: { ...document, tokens: [{ ...document.tokens[0]!, value: 'plugin://other' }] },
+    }),
+  )
+  expect('input' in other && other.input.taskMode).toBe('chat')
+})
 
 describe('composer submit transaction', () => {
   test('引用保留正文位置与同位置顺序，计划前缀移除不修改源草稿', () => {

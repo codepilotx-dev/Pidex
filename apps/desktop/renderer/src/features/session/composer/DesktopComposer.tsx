@@ -40,6 +40,7 @@ import type {
 } from './ComposerTypes.js'
 import { useDesktopComposerController } from './UseDesktopComposerController.js'
 import { resolveAvailableCodingModel } from './CodingModelSelection.js'
+import { hasTaskPlanningInvocation } from './ComposerSkillToken.js'
 
 export { loadCachedRuntimeSkills } from './UseDesktopComposerController.js'
 export { getDesktopComposerBranchName } from './ComposerWorkspacePresentation.js'
@@ -336,6 +337,23 @@ export function DesktopComposer({
   useEffect(() => {
     onWorkingPluginAvailabilityChange?.(taskPlanningAvailable)
   }, [onWorkingPluginAvailabilityChange, taskPlanningAvailable])
+
+  const taskPlanningSelected = hasTaskPlanningInvocation(composerDocument)
+  useEffect(() => {
+    if (!taskPlanningSelected) return
+    if (goalModeEnabled) setGoalModeEnabled(false)
+    if (!planModeActive)
+      void Promise.resolve(onPlanModeChange(true)).catch((error: unknown) =>
+        onError?.(error instanceof Error ? error.message : '计划模式未更新'),
+      )
+  }, [
+    taskPlanningSelected,
+    planModeActive,
+    goalModeEnabled,
+    onPlanModeChange,
+    setGoalModeEnabled,
+    onError,
+  ])
 
   useEffect(() => {
     if (workingPlugin && planModeActive)

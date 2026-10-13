@@ -5,6 +5,20 @@ import type {
 } from './ComposerTypes.js'
 import { BUILTIN_SKILL_PRESENTATIONS } from '../../plugins/BuiltinSkillPresentation.js'
 
+export function hasTaskPlanningInvocation(
+  document: ComposerDocument,
+  skills: readonly ComposerSkillInvocation[] = [],
+): boolean {
+  return (
+    skills.some((skill) => skill.name === 'task-planning') ||
+    document.tokens.some(
+      (token) =>
+        (token.kind === 'plugin' && token.value === 'plugin://task-planning') ||
+        (token.kind === 'skill' && token.name === 'task-planning'),
+    )
+  )
+}
+
 /**
  * Keep existing inline positions; externally selected skills start at offset zero.
  */
