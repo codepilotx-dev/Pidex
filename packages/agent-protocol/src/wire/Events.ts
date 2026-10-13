@@ -8,6 +8,7 @@ import {
   ExecutionPlanItemSchema,
   InputSchema,
   ItemSchema,
+  TextItemSchema,
   QueueActionSchema,
   SubagentProjectionSchema,
   ThreadGoalSchema,
@@ -480,6 +481,13 @@ export const EventManifest = {
     durability: 'durable',
     stream: 'thread',
     capability: 'events.replay.v1',
+  }),
+  'item/agentMessage/phaseChanged': defineEvent({
+    payload: Schema.Struct({ item: TextItemSchema }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'thread.message-phase.v1',
   }),
   'item/completed': defineEvent({
     payload: Schema.Struct({ item: ItemSchema }),

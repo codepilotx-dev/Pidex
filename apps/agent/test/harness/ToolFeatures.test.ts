@@ -328,3 +328,45 @@ describe('AgentHarness live steering', () => {
     expect(consumed).toEqual([['input:steer:first'], ['input:steer:second']])
   })
 })
+
+test('Harness 将 Provider 阶段归一化后按 SDK 更新顺序送入 adapter', async () => {
+  const setup = setupProvider([fauxAssistantMessage('回答')])
+  const original = setup.models.streamSimple.bind(setup.models)
+  setup.models.streamSimple = (model, context, options) => {
+    const stream = original(model, context, options)
+    const iterate = stream[Symbol.asyncIterator].bind(stream)
+    stream[Symbol.asyncIterator] = async function* () {
+      await options?.onProviderStreamEvent?.({ type: 'response.created' }, model)
+      await options?.onProviderStreamEvent?.(
+        {
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: {
+            type: 'message',
+            phase: 'final_answer',
+            id: 'provider-only-id',
+            content: 'provider-only-content',
+          },
+        },
+        model,
+      )
+      yield* { [Symbol.asyncIterator]: iterate }
+    }
+    return stream
+  }
+  const repo = new InMemorySessionRepo()
+  const session = await repo.create({ id: crypto.randomUUID() })
+  const harness = new AgentHarness({ session, models: setup.models, model: setup.faux.getModel() })
+  const events: unknown[] = []
+  harness.subscribe((event) => {
+    if (event.type === 'provider_text_reset' || event.type === 'provider_text_phase')
+      events.push(event)
+  })
+  await harness.prompt('回答')
+  expect(events).toContainEqual({
+    type: 'provider_text_phase',
+    contentIndex: 0,
+    phase: 'final_answer',
+  })
+  expect(JSON.stringify(events)).not.toContain('provider-only')
+})

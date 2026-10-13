@@ -8,6 +8,8 @@ import {
   RpcMethods,
   type EventEnvelope as WireEventEnvelope,
 } from '@pidex/agent-protocol'
+import { AgentRuntimeService } from '../src/orchestration/AgentRuntimeService'
+import type { PiRuntimeEventSink } from '../src/orchestration/pi/Types'
 import { Model, Provider } from '@pidex/model-schema'
 import type { EventEnvelope } from '../src/Domain'
 import { removeFixturePaths } from './FixtureCleanup'
@@ -15,6 +17,7 @@ import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import { EventHub } from '../src/storage/events/EventHub'
 import { buildEventNextNotification } from '../src/transport/EventEnvelope'
 import { ThreadHistoryService } from '../src/session/ThreadHistoryService'
+import { eventDeliveryAllowed } from '../src/transport/Server'
 import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { SubagentRepository } from '../src/subagent/SubagentRepository'
 import { interactionQuestions } from '../src/session/QuestionInput'
@@ -784,5 +787,99 @@ describe('v4 会话事件投影契约', () => {
     expect(itemChat?.creationSurface).toBe('chat')
     const itemLegacy = list.find((t) => t.id === threadLegacy.id)
     expect(itemLegacy?.creationSurface).toBeUndefined()
+  })
+})
+
+test('阶段变更使用持久事件原位更新，实时、重放与数据库恢复分类一致', async () => {
+  const { db, projection } = await fixture()
+  const thread = db.createThread()
+  const turn = seedTurn(db, thread.id)
+  db.startTurnExecution(turn.turnID, { ...turn.input, id: turn.inputID })
+  const agent = db.agentForTurn(turn.turnID)!
+  const context = { threadID: thread.id, turnID: turn.turnID, agentID: agent.id }
+  const events: EventEnvelope[] = []
+  const runtime = new AgentRuntimeService({
+    db,
+    hub: {} as never,
+    models: {} as never,
+    toolExecutor: {} as never,
+    contextCompaction: {} as never,
+  })
+  const internals = runtime as unknown as {
+    publish(event: EventEnvelope): Promise<void>
+    eventSink(
+      storage: unknown,
+      session: unknown,
+      model: unknown,
+      sessionID: string,
+    ): PiRuntimeEventSink
+  }
+  internals.publish = async (event) => {
+    events.push(event)
+  }
+  const sink = internals.eventSink(
+    { flush() {} },
+    {},
+    { provider: 'openai', id: 'model', contextWindow: 1000 },
+    'session',
+  )
+  const ids = {
+    textItemID: 'phase-text',
+    reasoningItemID: 'phase-reasoning',
+    planItemID: 'phase-plan',
+  }
+  await sink.assistantMessageStarted!(context, { ...ids, placement: 'process' })
+  await sink.textDelta!(context, { itemID: ids.textItemID, delta: '回答' })
+  await sink.assistantMessagePhaseChanged!(context, {
+    itemID: ids.textItemID,
+    phase: 'final_answer',
+    text: '回答',
+  })
+  const phaseEvent = events.find((event) => event.method === 'item/agentMessage/phaseChanged')!
+  const phaseEnvelope = decodeFromStorage(phaseEvent, projection)
+  expect(phaseEnvelope.type).toBe('item/agentMessage/phaseChanged')
+  expect(eventDeliveryAllowed(phaseEvent, { capabilities: new Set(['events.replay.v1']) })).toBe(
+    false,
+  )
+  expect(
+    eventDeliveryAllowed(phaseEvent, { capabilities: new Set(['thread.message-phase.v1']) }),
+  ).toBe(true)
+  expect(db.getItem(ids.textItemID)!.data).toMatchObject({
+    phase: 'final_answer',
+    text: '回答',
+    placement: 'result',
+  })
+  if (phaseEnvelope.type !== 'item/agentMessage/phaseChanged') throw new Error('阶段事件缺失')
+  expect(phaseEnvelope.payload.item).toMatchObject({
+    phase: 'final_answer',
+    text: '回答',
+    status: 'streaming',
+  })
+  await sink.assistantMessageCompleted!(context, {
+    ...ids,
+    placement: 'result',
+    phase: 'final_answer',
+    text: '回答',
+    content: [],
+    provider: 'openai',
+    api: 'openai-responses',
+    model: 'model',
+    usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
+  })
+  await sink.savePoint!(context, { hadPendingMutations: true })
+  const completedEvent = decodeFromStorage(
+    events.find((event) => event.method === 'item/completed')!,
+    projection,
+  )
+  if (completedEvent.type !== 'item/completed') throw new Error('完成事件缺失')
+  const restored = new ThreadReadViewRepository(db).history(thread.id, { limit: 10 })
+  const items = restored.turns.flatMap((turn) => turn.items).filter((item) => item.type === 'text')
+  expect(items).toHaveLength(1)
+  expect(completedEvent.payload.item).toEqual(items[0]!)
+  expect(items[0]).toMatchObject({
+    id: ids.textItemID,
+    phase: 'final_answer',
+    text: '回答',
+    status: 'completed',
   })
 })

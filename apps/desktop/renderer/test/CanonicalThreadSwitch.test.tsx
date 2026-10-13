@@ -48,6 +48,64 @@ function CanonicalTestProviders({ children }: { children: React.ReactNode }): Re
 }
 
 describe('canonical thread switch', () => {
+  test('historical delivery remains visible outside collapsed main activity', () => {
+    const delivery: Item = {
+      id: 'delivery',
+      messageID: 'message',
+      turnId: 'turn',
+      agentId: 'agent',
+      type: 'tool',
+      callID: 'call',
+      tool: 'finalize_result',
+      title: '提交结果',
+      state: 'completed',
+      input: null,
+      command: null,
+      error: null,
+      output: '历史完整交付',
+      startedAt: 1,
+      finishedAt: 2,
+    }
+    const entry = {
+      id: 'turn',
+      turn: { id: 'turn', status: 'completed', elapsedSeconds: 1, error: null },
+      items: [delivery],
+      userItems: [],
+      attachments: [],
+      contextReferences: [],
+      processItems: [delivery],
+      assistantResultItems: [],
+      patchItems: [],
+      postAssistantItems: [],
+      planItem: null,
+      executionPlanItems: [],
+      blockers: [],
+      contentBlocks: [],
+    } as unknown as RenderTurnEntry
+    const render = (isSubagent = false) =>
+      renderToStaticMarkup(
+        <CanonicalTestProviders>
+          <CanonicalConversationTurn
+            isSubagent={isSubagent}
+            disclosureState={disclosureStore('turn-activity:turn')}
+            entry={entry}
+            onOpenPlanInRightDock={() => undefined}
+            onOpenSubagent={() => undefined}
+            dockedPlanItemId={null}
+          />
+        </CanonicalTestProviders>,
+      )
+    const main = render()
+    expect(main).toContain('canonical-turn__result')
+    expect(main).toContain('历史完整交付')
+    expect(main).not.toContain('已提交子代理结果')
+    expect(main).not.toContain('canonical-result-card')
+    const child = render(true)
+    expect(child).toContain('已提交子代理结果')
+    expect(child).not.toContain('历史完整交付')
+    expect(child).not.toContain('canonical-turn__result')
+  })
+
   test('Skill 在 canonical 用户消息正文中展示，不依赖聊天标题', () => {
     const input = {
       id: 'input-skill',
@@ -167,7 +225,7 @@ describe('canonical thread switch', () => {
     )
 
     expect(completed).not.toContain('expensive-tool-card')
-    expect(completed).toContain('data-mount-policy="until-exit"')
+    expect(completed).toContain('data-state="closed"')
     expect(completed).toContain('aria-hidden="true"')
     expect(completed).toContain('inert')
     expect(completed).not.toContain('lucide-check')
@@ -511,7 +569,7 @@ describe('canonical thread switch', () => {
     )
 
     expect(markup).not.toContain('折叠后不可见的处理说明')
-    expect(markup).toContain('data-mount-policy="until-exit"')
+    expect(markup).toContain('data-state="closed"')
     expect(markup).toContain('aria-hidden="true"')
     // 折叠活动外仍展示询问与等待状态；问题正文由输入区域承载，时间线不再回显。
     expect(markup).toContain('canonical-turn__blockers')
@@ -866,4 +924,82 @@ describe('canonical thread switch', () => {
     expect(processItemPathState(cmdTool)).toBe('running')
     expect(processItemPathState({ ...cmdTool, state: 'error' })).toBe('failed')
   })
+})
+
+test('Radix 强制展开不覆盖保存选择，结束后恢复且内层分组共用 keyed store', () => {
+  const store = disclosureStore()
+  const process = {
+    id: 'process',
+    messageID: 'm',
+    turnId: 'turn',
+    agentId: 'agent',
+    type: 'text',
+    placement: 'process',
+    phase: 'commentary',
+    text: '过程标记',
+    status: 'completed',
+    createdAt: 1,
+  } as const
+  const final = {
+    ...process,
+    id: 'final',
+    placement: 'result',
+    phase: 'final_answer',
+    text: '回答标记',
+    status: 'streaming',
+  } as const
+  const render = (force: boolean) =>
+    renderToStaticMarkup(
+      <CanonicalTestProviders>
+        <CanonicalConversationTurn
+          disclosureState={store}
+          entry={
+            {
+              id: 'turn',
+              turn: { id: 'turn', status: 'running', elapsedSeconds: 2, error: null },
+              items: [process, final],
+              userItems: [],
+              attachments: [],
+              processItems: [process],
+              assistantResultItems: [final],
+              patchItems: [],
+              postAssistantItems: [],
+              planItem: null,
+              executionPlanItems: [],
+              blockers: [],
+              contentBlocks: [],
+              forceExpandActivity: force,
+            } as unknown as RenderTurnEntry
+          }
+          onOpenPlanInRightDock={() => undefined}
+          onOpenSubagent={() => undefined}
+          dockedPlanItemId={null}
+        />
+      </CanonicalTestProviders>,
+    )
+  expect(render(false)).not.toContain('过程标记')
+  expect(render(false)).toContain('回答标记')
+  expect(render(true)).toContain('过程标记')
+  expect(store.getSnapshot('turn-activity:turn')).toBe(false)
+  expect(render(false)).not.toContain('过程标记')
+  store.setExpanded('turn-activity:turn', true)
+  expect(render(false)).toContain('过程标记')
+  const group = (active: boolean) =>
+    renderToStaticMarkup(
+      <CanonicalProcessGroup
+        active={active}
+        failed={false}
+        kind="command"
+        label="运行命令"
+        summaryKey="group"
+        disclosure={{ store, id: 'process-group:turn:group' }}
+      >
+        <span>内层标记</span>
+      </CanonicalProcessGroup>,
+    )
+  expect(group(false)).not.toContain('内层标记')
+  expect(group(true)).toContain('内层标记')
+  expect(store.getSnapshot('process-group:turn:group')).toBe(false)
+  store.setExpanded('process-group:turn:group', true)
+  expect(group(false)).toContain('内层标记')
 })

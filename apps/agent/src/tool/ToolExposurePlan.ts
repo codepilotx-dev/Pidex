@@ -83,11 +83,11 @@ export function createToolExposurePlan(
     // Plan 主 Agent 以结构化 submit_plan 交付最终方案；<proposed_plan> 仅作兼容回退。
     if (input.taskMode === 'plan') lifecycle.push('submit_plan')
     if (input.taskMode === 'chat') {
-      // Chat 主 Agent 可选用结构化交付收尾；Plan 的最终方案由 submit_plan 负责。
+      // Chat 主 Agent 以普通文本收尾；Plan 的最终方案由 submit_plan 负责。
       // 权限申请工具只在审批策略真的能应答时暴露。
       if (approvalAllowsPermissionRequests(input.approvalPolicy))
         lifecycle.push('request_permissions')
-      lifecycle.push('update_plan', 'finalize_result')
+      lifecycle.push('update_plan')
       if (input.hasActiveGoal) lifecycle.push('update_goal')
     }
   }
@@ -111,8 +111,7 @@ export function createToolExposurePlan(
   const explicitlyAllowedDeferred = allowlist
     ? deferredCandidates.filter((name) => allowlist.has(name))
     : []
-  // 子 Agent 无论 allowlist 收紧都必须能够收尾提交；主 Agent 的 finalize_result
-  // 与其他生命周期工具一样服从 Skill allowlist。
+  // 子 Agent 无论 allowlist 收紧都必须能够收尾提交。
   const finalizers = new Set(['finalize_result'])
   const lifecycleExemption =
     profile !== 'main' ? (name: string) => finalizers.has(name) : () => false

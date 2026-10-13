@@ -222,6 +222,35 @@ const fullCapabilities = {
 } as const
 
 describe('subagent thread panel', () => {
+  test('shows complete submitted details in the sidebar without a result card', () => {
+    const markup = renderPanel({
+      currentRun: run({
+        result: {
+          outcome: 'partial',
+          summary: '侧栏交付摘要',
+          findings: [{ title: '发现', detail: '完整结论', severity: 'warning' }],
+          changedFiles: [{ path: 'src/fixture.ts', summary: '修复问题' }],
+          validation: [{ command: 'bun test', status: 'failed', output: '验证失败详情' }],
+          risks: ['仍需确认风险'],
+          references: [{ kind: 'url', value: 'https://example.com/evidence', label: '证据' }],
+        },
+      }),
+      snapshot: snapshot(),
+      capabilities: fullCapabilities,
+    })
+    for (const text of [
+      '侧栏交付摘要',
+      '完整结论',
+      'src/fixture.ts',
+      '验证失败详情',
+      '仍需确认风险',
+      'https://example.com/evidence',
+    ]) {
+      expect(markup).toContain(text)
+    }
+    expect(markup).not.toContain('canonical-result-card')
+  })
+
   test('renders a read-only workbench thread for a completed subagent', () => {
     const text: Item = {
       id: 'text:child:1',

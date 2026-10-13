@@ -200,7 +200,7 @@ export async function executeHarnessRun(
   // can reject a submission mixed with other tool calls; every other tool in
   // the batch keeps following the existing execution rules.
   const singleToolCallReasons = new Map<string, string>()
-  if (options.lifecycle?.finalizeResult) {
+  if (options.lifecycle?.finalizeResult && request.exposedTools.includes('finalize_result')) {
     singleToolCallReasons.set(
       'finalize_result',
       'finalize_result 必须是该条回复中唯一的工具调用；先完成并验证其他工作，然后在单独一条回复中提交。',
@@ -210,6 +210,12 @@ export async function executeHarnessRun(
     singleToolCallReasons.set(
       'submit_plan',
       'submit_plan 必须是该条回复中唯一的工具调用；先完成调查，然后在单独一条回复中提交方案。',
+    )
+  }
+  if (options.lifecycle?.submitSchedulePlan) {
+    singleToolCallReasons.set(
+      'submit_schedule_plan',
+      'submit_schedule_plan 必须是该条回复中唯一的工具调用；先完成调查与澄清，然后在单独一条回复中提交草案。',
     )
   }
   if (singleToolCallReasons.size > 0 || options.beforeToolCall)

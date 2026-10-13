@@ -97,6 +97,7 @@ export interface VisibleTurnEntry {
   approvals: ApprovalRequest[]
   attachments: Attachment[]
   contextReferences: LocalContextReference[]
+  answerAgentIds?: readonly string[]
 }
 
 export type RenderItem = Item
@@ -129,6 +130,7 @@ export interface RenderTurnEntry extends VisibleTurnEntry {
   contentBlocks: RenderContentBlock[]
   blockers: RenderBlocker[]
   systemItems: RenderItem[]
+  forceExpandActivity?: boolean
 }
 
 export function pageFromThreadSnapshot(
@@ -376,6 +378,7 @@ export function selectVisibleTurnEntries(
     entries.push({
       id: turn.id,
       turn,
+      ...(allowedAgentIds ? { answerAgentIds: [...allowedAgentIds] } : {}),
       userInputs,
       agents,
       items,
@@ -464,7 +467,7 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
   const contentBlocks: RenderContentBlock[] = []
   let planItem: Extract<Item, { type: 'plan' }> | null = null
   const lastProcessItemIndex = findLastProcessItemIndex(entry.items)
-  const assistantResultIndex = findAssistantResultIndex(entry.items, lastProcessItemIndex)
+  const assistantResultIndex = findAssistantResultIndex(entry, lastProcessItemIndex)
 
   for (const [itemIndex, item] of entry.items.entries()) {
     if (item.type === 'text') {
@@ -537,6 +540,14 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
     contentBlocks,
     blockers,
     systemItems: [],
+    forceExpandActivity:
+      entry.turn.status === 'interrupted' ||
+      entry.turn.status === 'failed' ||
+      entry.turn.status === 'cancelled' ||
+      entry.turn.status === 'stopped' ||
+      (entry.turn.status !== 'completed' &&
+        assistantResultIndex >= 0 &&
+        entry.items.slice(assistantResultIndex + 1).some(isUnfinishedWork)),
   }
 }
 
@@ -546,7 +557,13 @@ function findLastProcessItemIndex(items: readonly Item[]): number {
     if (!item) continue
     if (isContextCompressionActivity(item)) continue
     if (item.type === 'text') {
-      if (item.placement === 'process' && item.text.trim()) return index
+      if (
+        (item.phase === 'commentary' ||
+          item.phase === 'partial_answer' ||
+          (!item.phase && item.placement === 'process')) &&
+        item.text.trim()
+      )
+        return index
       continue
     }
     if (
@@ -565,14 +582,55 @@ function isContextCompressionActivity(item: Item): item is Extract<Item, { type:
   return item.type === 'activity' && item.activity === 'context-compression'
 }
 
-function findAssistantResultIndex(items: readonly Item[], lastProcessItemIndex: number): number {
-  for (let index = items.length - 1; index > lastProcessItemIndex; index -= 1) {
-    const item = items[index]
-    if (item?.type === 'text' && item.placement === 'result' && item.text.trim()) {
+function findAssistantResultIndex(entry: VisibleTurnEntry, lastProcessItemIndex: number): number {
+  const eligible = (item: Item): item is Extract<Item, { type: 'text' }> =>
+    item.type === 'text' &&
+    Boolean(item.text.trim()) &&
+    (entry.answerAgentIds
+      ? entry.answerAgentIds.includes(item.agentId)
+      : item.agentId === entry.turn.rootAgentId ||
+        entry.agents.some(
+          (agent) =>
+            agent.id === item.agentId &&
+            agent.parentAgentId === null &&
+            agent.subagentRunId === null,
+        ))
+  for (let index = entry.items.length - 1; index >= 0; index--) {
+    const item = entry.items[index]!
+    if (eligible(item) && item.phase === 'final_answer') return index
+  }
+  for (let index = entry.items.length - 1; index >= 0; index--) {
+    const item = entry.items[index]!
+    if (!eligible(item)) continue
+    if (
+      item.phase === 'partial_answer' &&
+      entry.turn.status === 'completed' &&
+      !entry.items.slice(index + 1).some(isUnfinishedWork)
+    )
       return index
-    }
+    if (index > lastProcessItemIndex && !item.phase && item.placement === 'result') return index
+    break
   }
   return -1
+}
+
+function isUnfinishedWork(item: Item): boolean {
+  switch (item.type) {
+    case 'text':
+      return Boolean(item.text.trim()) && item.phase !== 'final_answer'
+    case 'reasoning':
+      return item.status === 'streaming'
+    case 'tool':
+      return (
+        item.state === 'pending' || item.state === 'running' || item.state === 'waiting-permission'
+      )
+    case 'activity':
+      return item.activity !== 'context-compression' && item.status === 'running'
+    case 'subagent':
+      return ['queued', 'preparing', 'running', 'steering'].includes(item.status)
+    default:
+      return false
+  }
 }
 
 function appendProcessBlock(blocks: RenderContentBlock[], item: RenderItem): void {
@@ -637,6 +695,7 @@ function applyEnvelopePayload(
       reconcileSubagentItems(state)
       return
     case 'item/started':
+    case 'item/agentMessage/phaseChanged':
     case 'item/completed':
       upsertItem(state, envelope.payload.item)
       return

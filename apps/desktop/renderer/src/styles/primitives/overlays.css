@@ -17,8 +17,7 @@
   .settings-dropdown-content[data-side],
   .permission-select-content[data-side],
   .appearance-color-popover[data-side],
-  .thread-summary-popover[data-side],
-  .tooltip-presence[data-side] {
+  .thread-summary-popover[data-side] {
     --cpx-floating-offset-x: 0px;
     --cpx-floating-offset-y: 0px;
 
@@ -69,18 +68,6 @@
     }
   }
 
-  .tooltip-content {
-    transform-origin: var(--radix-tooltip-content-transform-origin, center);
-  }
-
-  .tooltip-presence:is([data-state='delayed-open'], [data-state='instant-open']) {
-    animation: tooltip-fade-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
-  }
-
-  .tooltip-presence[data-state='closed'] {
-    animation: radix-floating-surface-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
-  }
-
   .ui-dialog-backdrop[data-state='open'] {
     animation: ui-dialog-backdrop-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
   }
@@ -89,7 +76,6 @@
     animation: ui-dialog-backdrop-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
   }
 
-  .tooltip-presence[data-state='open'],
   .ui-dialog-surface[data-state='open'] {
     animation: radix-floating-surface-in var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
   }
@@ -119,8 +105,6 @@
       .thread-summary-popover,
       .popover[data-state],
       .popover-item-tooltip,
-      .tooltip-content,
-      .tooltip-presence,
       .ui-dialog-backdrop,
       .ui-dialog-surface
     ) {
@@ -152,17 +136,6 @@
     }
   }
 
-  @keyframes tooltip-fade-in {
-    from {
-      opacity: 0;
-      transform: translate(var(--cpx-floating-offset-x, 0), var(--cpx-floating-offset-y, 0));
-    }
-
-    to {
-      opacity: 1;
-      transform: translate(0, 0);
-    }
-  }
 
   @keyframes ui-dialog-backdrop-in {
     from {
@@ -183,4 +156,43 @@
       opacity: 0;
     }
   }
+
+  /* Radix supplies the measured content height and retains closing content until animation ends. */
+  .ui-collapsible-content[data-reduced-motion='false'] {
+    animation-duration: var(--cpx-sys-motion-disclosure);
+    animation-timing-function: var(--cpx-sys-ease-disclosure);
+
+    &[data-state='open'] {
+      animation-name: ui-collapsible-open;
+    }
+
+    &[data-state='closed'] {
+      animation-name: ui-collapsible-close;
+    }
+  }
+
+  @keyframes ui-collapsible-open {
+    from {
+      height: 0;
+      opacity: 0;
+    }
+
+    to {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+    }
+  }
+
+  @keyframes ui-collapsible-close {
+    from {
+      height: var(--radix-collapsible-content-height);
+      opacity: 1;
+    }
+
+    to {
+      height: 0;
+      opacity: 0;
+    }
+  }
+
 }

@@ -1,5 +1,5 @@
 import { Model } from '@pidex/model-schema'
-import { Option, Schema } from 'effect'
+import { Option, Schema, SchemaGetter } from 'effect'
 import {
   RESULT_CARD_ENVELOPE_KIND,
   RESULT_CARD_ENVELOPE_VERSION,
@@ -235,6 +235,15 @@ export const ModelUsageSchema = Schema.Struct({
 })
 export type ModelUsage = typeof ModelUsageSchema.Type
 
+export const MessagePhaseSchema = Schema.Literals(['commentary', 'partial_answer', 'final_answer'])
+export type MessagePhase = typeof MessagePhaseSchema.Type
+
+export function readMessagePhase(value: unknown): MessagePhase | undefined {
+  return value === 'commentary' || value === 'partial_answer' || value === 'final_answer'
+    ? value
+    : undefined
+}
+
 export const TextItemSchema = Schema.Struct({
   id: Schema.String,
   messageID: Schema.String,
@@ -242,6 +251,14 @@ export const TextItemSchema = Schema.Struct({
   agentId: Schema.String,
   type: Schema.Literal('text'),
   placement: Schema.Literals(['process', 'result']),
+  phase: Schema.optional(
+    Schema.Unknown.pipe(
+      Schema.decodeTo(Schema.UndefinedOr(MessagePhaseSchema), {
+        decode: SchemaGetter.transform(readMessagePhase),
+        encode: SchemaGetter.transform((phase) => phase),
+      }),
+    ),
+  ),
   text: Schema.String,
   status: Schema.Literals(['streaming', 'completed', 'interrupted']),
   usage: Schema.optional(ModelUsageSchema),

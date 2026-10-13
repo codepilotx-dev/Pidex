@@ -21,6 +21,7 @@ import type { ToolCatalog } from '../../tool/ToolRegistry'
 import type { WorkspaceService } from '../../workspace/WorkspaceService'
 import type { ExecutionPlanInput } from '../plan/ExecutionPlanInput'
 import type { StructuredPlan } from '@pidex/shared/thread'
+import type { ScheduleDraftSubmission } from '../plan/ScheduleDraft'
 import type { RequestUserInput } from '../../session/QuestionInput'
 
 export type HarnessRunResult =
@@ -120,6 +121,7 @@ export interface PiRuntimeEventSink {
       textItemID: string
       reasoningItemID: string
       placement: PiAssistantMessagePlacement
+      phase?: import('@pidex/shared/thread').MessagePhase
     },
   ): void | Promise<void>
   assistantMessageCompleted?(
@@ -129,6 +131,7 @@ export interface PiRuntimeEventSink {
       reasoningItemID: string
       planItemID: string
       placement: PiAssistantMessagePlacement
+      phase?: import('@pidex/shared/thread').MessagePhase
       content: unknown
       text?: string
       plan?: string | null
@@ -147,6 +150,10 @@ export interface PiRuntimeEventSink {
       /** Safe completion metadata projected from the provider response. */
       completion?: PiToolCompletionMetadata
     },
+  ): void | Promise<void>
+  assistantMessagePhaseChanged?(
+    context: PiRuntimeEventContext,
+    input: { itemID: string; phase: import('@pidex/shared/thread').MessagePhase; text: string },
   ): void | Promise<void>
   textDelta?(
     context: PiRuntimeEventContext,
@@ -257,6 +264,11 @@ export interface PiLifecycleCallbacks {
     signal?: AbortSignal,
   ): Promise<unknown>
   submitPlan?(input: StructuredPlan, toolCallID: string, signal?: AbortSignal): Promise<unknown>
+  submitSchedulePlan?(
+    input: ScheduleDraftSubmission,
+    toolCallID: string,
+    signal?: AbortSignal,
+  ): Promise<unknown>
   spawnAgents?(
     input: Record<string, unknown>,
     toolCallID: string,

@@ -1679,3 +1679,138 @@ describe('canonical thread state', () => {
     expect(reconciled.turnsById.has(cachedTurn.id)).toBe(false)
   })
 })
+
+test('消息阶段优先选择主任务最终回答，后续活动控制展开且完成恢复默认', () => {
+  const activeTurn = turn('turn-phases')
+  const root = agent(activeTurn.rootAgentId, activeTurn.id)
+  const child = { ...agent('child-phases', activeTurn.id, 'child-run'), parentAgentId: root.id }
+  const commentary = {
+    ...textItem('commentary', activeTurn.id, '检查中'),
+    phase: 'commentary' as const,
+    ordinal: 0,
+  }
+  const first = {
+    ...textItem('first-final', activeTurn.id, '前一个结果'),
+    phase: 'final_answer' as const,
+    ordinal: 1,
+  }
+  const final = {
+    ...textItem('final', activeTurn.id, '最终回答'),
+    phase: 'final_answer' as const,
+    ordinal: 2,
+  }
+  const childFinal = { ...final, id: 'child-final', agentId: child.id, ordinal: 3 }
+  const tool: Extract<Item, { type: 'tool' }> = {
+    id: 'after-final',
+    messageID: 'tool-message',
+    turnId: activeTurn.id,
+    agentId: root.id,
+    type: 'tool',
+    callID: 'call',
+    tool: 'Read',
+    title: 'Read',
+    state: 'completed',
+    input: {},
+    command: null,
+    output: 'ok',
+    error: null,
+    startedAt: 1,
+    finishedAt: 2,
+    durationMs: 1,
+    ordinal: 4,
+    createdAt: 30,
+  }
+  const make = (items: Item[], status: Turn['status'] = 'running') =>
+    createCanonicalThreadState(
+      page([
+        {
+          turn: { ...activeTurn, status },
+          inputs: [],
+          messages: [],
+          agents: [root, child],
+          items,
+          approvals: [],
+        },
+      ]),
+    )
+  const state = make([commentary, first, final, childFinal, tool])
+  const [entry] = selectRenderTurnEntries(state)
+  expect(entry!.assistantResultItems.map((item) => item.id)).toEqual(['final'])
+  expect(entry!.processItems.map((item) => item.id)).toEqual([
+    'commentary',
+    'first-final',
+    'child-final',
+    'after-final',
+  ])
+  expect(entry!.forceExpandActivity).toBe(false)
+  expect(
+    selectRenderTurnEntries(state, { type: 'subagent', runId: 'child-run' })[0]!
+      .assistantResultItems[0]!.id,
+  ).toBe('child-final')
+  expect(
+    selectRenderTurnEntries(make([commentary, final, { ...tool, state: 'running' }]))[0]!
+      .forceExpandActivity,
+  ).toBe(true)
+  expect(
+    selectRenderTurnEntries(
+      make([commentary, final, { ...commentary, id: 'new-work', ordinal: 5 }]),
+    )[0]!.forceExpandActivity,
+  ).toBe(true)
+  expect(
+    selectRenderTurnEntries(
+      make([commentary, final, { ...commentary, id: 'new-work', ordinal: 5 }], 'completed'),
+    )[0]!.forceExpandActivity,
+  ).toBe(false)
+  for (const status of ['interrupted', 'failed', 'cancelled', 'stopped'] as const)
+    expect(selectRenderTurnEntries(make([commentary, final], status))[0]!.forceExpandActivity).toBe(
+      true,
+    )
+  expect(selectRenderTurnEntries(make([commentary], 'completed'))[0]!.assistantResultItems).toEqual(
+    [],
+  )
+  const partial = { ...final, id: 'partial', phase: 'partial_answer' as const }
+  expect(selectRenderTurnEntries(make([commentary, partial]))[0]!.assistantResultItems).toEqual([])
+  expect(
+    selectRenderTurnEntries(make([commentary, partial], 'completed'))[0]!.assistantResultItems[0]!
+      .id,
+  ).toBe('partial')
+})
+
+test('流式阶段更新、持久重放和快照得到同一回答且不重复 delta', () => {
+  const activeTurn = turn('turn-phase-replay')
+  const root = agent(activeTurn.rootAgentId, activeTurn.id)
+  const bundle = {
+    turn: activeTurn,
+    inputs: [],
+    messages: [],
+    agents: [root],
+    items: [] as Item[],
+    approvals: [],
+  }
+  const initial = createCanonicalThreadState(page([bundle], 0))
+  const text = { ...textItem('phase-replay', activeTurn.id, ''), placement: 'process' as const }
+  const started = durable(1, 'item/started', { item: text })
+  const delta = live(
+    'phase-delta',
+    'item/agentMessage/delta',
+    { itemId: text.id, turnId: activeTurn.id, agentId: root.id, itemType: 'text', delta: '回答' },
+    1,
+  )
+  const phased = {
+    ...text,
+    phase: 'final_answer' as const,
+    placement: 'result' as const,
+    text: '回答',
+  }
+  const changed = durable(2, 'item/agentMessage/phaseChanged', { item: phased })
+  const completed = { ...phased, status: 'completed' as const }
+  const ended = durable(3, 'item/completed', { item: completed })
+  const realtime = applyThreadEnvelopes(initial, [started, delta, changed])
+  expect(selectRenderTurnEntries(realtime)[0]!.assistantResultItems[0]!.text).toBe('回答')
+  const terminal = applyThreadEnvelopes(realtime, [ended])
+  const replay = applyThreadEnvelopes(initial, [started, changed, ended])
+  const snapshot = createCanonicalThreadState(page([{ ...bundle, items: [completed] }], 3))
+  const result = (state: typeof initial) => selectRenderTurnEntries(state)[0]!.assistantResultItems
+  expect(result(terminal)).toEqual(result(replay))
+  expect(result(terminal)).toEqual(result(snapshot))
+})

@@ -674,7 +674,11 @@ export class AgentRuntimeService implements AgentRuntime {
             agentID: context.agentID,
             type: 'text',
             status: 'running',
-            data: { placement: input.placement, text: '' },
+            data: {
+              placement: input.placement,
+              text: '',
+              ...(input.phase ? { phase: input.phase } : {}),
+            },
             createdAt: timestamp,
             updatedAt: timestamp,
           },
@@ -697,6 +701,25 @@ export class AgentRuntimeService implements AgentRuntime {
             updatedAt: timestamp,
           },
           'item/started',
+        )
+        await this.publish(persisted.event)
+      },
+      assistantMessagePhaseChanged: async (context, input) => {
+        const current = this.options.db.getItem(input.itemID)
+        if (!current) return
+        const persisted = this.options.db.upsertItemWithEvent(
+          context.threadID,
+          {
+            ...current,
+            data: {
+              ...current.data,
+              phase: input.phase,
+              placement: input.phase === 'final_answer' ? 'result' : 'process',
+              text: input.text,
+            },
+            updatedAt: Date.now(),
+          },
+          'item/agentMessage/phaseChanged',
         )
         await this.publish(persisted.event)
       },
@@ -759,16 +782,20 @@ export class AgentRuntimeService implements AgentRuntime {
           reasoning: input.usage.reasoning,
           ...(contextUsageBreakdown?.length ? { breakdown: [...contextUsageBreakdown] } : {}),
         }
-        if (input.text === undefined || text) {
+        if (input.text === undefined || text || this.options.db.getItem(input.textItemID)) {
           const currentText = this.options.db.getItem(input.textItemID)
           pending.items.set(input.textItemID, {
             id: input.textItemID,
             turnID: context.turnID,
             agentID: context.agentID,
             type: 'text',
-            status: 'completed',
+            status:
+              input.completion?.stopReason === 'aborted' || input.completion?.stopReason === 'error'
+                ? 'interrupted'
+                : 'completed',
             data: {
               placement: input.placement,
+              ...(input.phase ? { phase: input.phase } : {}),
               text,
               usage,
               ...(input.completion ? { completion: input.completion } : {}),

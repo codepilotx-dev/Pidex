@@ -21,6 +21,7 @@ import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   ContextUsageBreakdownSourceSchema,
+  readMessagePhase,
   decodeApprovalPolicy,
   decodeStructuredPlan,
   InteractionQuestionSchema,
@@ -1276,6 +1277,7 @@ export class ThreadProjection {
         agentId,
         type: 'text',
         placement: item.data.placement === 'process' ? 'process' : 'result',
+        ...(readMessagePhase(item.data.phase) ? { phase: readMessagePhase(item.data.phase) } : {}),
         text: asText(item.data.text) ?? '',
         status,
         ...(usage ? { usage } : {}),

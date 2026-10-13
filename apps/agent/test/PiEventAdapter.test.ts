@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { AgentHarnessEvent } from '../src/orchestration/harness/Types'
 import { EventManifest } from '@pidex/agent-protocol'
 import { Schema } from 'effect'
+import { createProviderMessagePhaseReader } from '../src/orchestration/harness/ProviderMessagePhase'
 import { PiEventAdapter, piToolResultText } from '../src/orchestration/pi/PiEventAdapter'
 import {
   finishedPiToolItem,
@@ -1107,4 +1108,229 @@ describe('PiEventAdapter', () => {
       delta: 'partial',
     })
   })
+})
+
+describe('消息阶段', () => {
+  test('原始事件索引与 SDK 文本索引一致，重试清除旧阶段且只传递必要元数据', () => {
+    const read = createProviderMessagePhaseReader()
+    expect(read({ type: 'response.created' })).toEqual({ type: 'provider_text_reset' })
+    expect(
+      read({ type: 'response.output_item.added', output_index: 0, item: { type: 'reasoning' } }),
+    ).toBeUndefined()
+    expect(
+      read({
+        type: 'response.output_item.added',
+        output_index: 1,
+        item: {
+          type: 'message',
+          id: 'private-id',
+          phase: 'final_answer',
+          content: 'private-content',
+        },
+      }),
+    ).toEqual({ type: 'provider_text_phase', contentIndex: 1, phase: 'final_answer' })
+    expect(
+      read({
+        type: 'response.output_item.done',
+        output_index: 1,
+        item: { type: 'message', phase: 'commentary' },
+      }),
+    ).toEqual({ type: 'provider_text_phase', contentIndex: 1, phase: 'commentary' })
+    read({ type: 'response.created' })
+    expect(
+      read({
+        type: 'response.output_item.added',
+        output_index: 0,
+        item: { type: 'message', phase: 'partial_answer' },
+      }),
+    ).toEqual({ type: 'provider_text_phase', contentIndex: 0, phase: 'partial_answer' })
+    expect(
+      read({
+        type: 'response.output_item.added',
+        output_index: 1,
+        item: { type: 'message', phase: 'future' },
+      }),
+    ).toBeUndefined()
+  })
+
+  test.each([false, true])(
+    '同响应按阶段分段，签名补充不重复正文或使用量，工具调用不覆盖 final（Plan：%s）',
+    async (plan) => {
+      const completed: Array<
+        Parameters<NonNullable<PiRuntimeEventSink['assistantMessageCompleted']>>[1]
+      > = []
+      const changes: unknown[] = []
+      const deltas: Array<{ itemID: string; delta: string }> = []
+      const adapter = new PiEventAdapter(
+        { threadID: 't', turnID: 'turn', agentID: 'a' },
+        {
+          assistantMessageCompleted: (_ctx, value) => {
+            completed.push(value)
+          },
+          assistantMessagePhaseChanged: (_ctx, value) => {
+            changes.push(value)
+          },
+          textDelta: (_ctx, value) => {
+            deltas.push(value)
+          },
+        },
+        { parseProposedPlan: plan, resolveSessionEntryID: () => 'entry' },
+      )
+      const send = (event: unknown) => adapter.handle(event as AgentHarnessEvent)
+      const blocks = [
+        {
+          type: 'text',
+          text: '正在检查',
+          textSignature: JSON.stringify({ v: 1, id: 'first', phase: 'commentary' }),
+        },
+        {
+          type: 'text',
+          text: plan ? '完成\n<proposed_plan>\n实施计划\n</proposed_plan>\n' : '完成',
+          textSignature: JSON.stringify({ v: 1, id: 'last', phase: 'final_answer' }),
+        },
+        { type: 'toolCall', id: 'call', name: 'Read', arguments: {} },
+      ]
+      await send({ type: 'provider_text_reset' })
+      await send({ type: 'message_start', message: { role: 'assistant', content: [] } })
+      for (let index = 0; index < 2; index++) {
+        await send({
+          type: 'provider_text_phase',
+          contentIndex: index,
+          phase: index ? 'final_answer' : 'commentary',
+        })
+        await send({
+          type: 'message_update',
+          assistantMessageEvent: {
+            type: 'text_delta',
+            contentIndex: index,
+            delta: blocks[index]!.text,
+            partial: { content: blocks },
+          },
+        })
+      }
+      await send({
+        type: 'message_end',
+        message: {
+          role: 'assistant',
+          content: blocks,
+          usage: { input: 3, output: 4 },
+          stopReason: 'stop',
+        },
+      })
+      expect(completed.map(({ phase, placement, text }) => ({ phase, placement, text }))).toEqual([
+        { phase: 'commentary', placement: 'process', text: '正在检查' },
+        { phase: 'final_answer', placement: 'result', text: '完成' },
+      ])
+      expect(new Set(completed.map((item) => item.textItemID)).size).toBe(2)
+      expect(completed.reduce((sum, item) => sum + item.usage.input, 0)).toBe(3)
+      expect(completed[1]!.sessionEntryID).toBe('entry')
+      expect(deltas.map((item) => item.delta).join('')).toBe(
+        plan ? '正在检查完成\n' : '正在检查完成',
+      )
+      expect(changes.length).toBeLessThanOrEqual(1)
+      if (plan) expect(completed[1]!.plan).toBe('实施计划')
+    },
+  )
+
+  test('无早期阶段的签名在 text_end 更新原 Item；下一请求不继承阶段', async () => {
+    const phases: unknown[] = []
+    const completed: unknown[] = []
+    const adapter = new PiEventAdapter(
+      { threadID: 't', turnID: 'turn', agentID: 'a' },
+      {
+        assistantMessagePhaseChanged: (_ctx, value) => {
+          phases.push(value)
+        },
+        assistantMessageCompleted: (_ctx, value) => {
+          completed.push(value)
+        },
+      },
+    )
+    const send = (event: unknown) => adapter.handle(event as AgentHarnessEvent)
+    const block = { type: 'text', text: '回答' }
+    await send({
+      type: 'message_update',
+      assistantMessageEvent: {
+        type: 'text_delta',
+        delta: block.text,
+        contentIndex: 0,
+        partial: { content: [block] },
+      },
+    })
+    const signed = {
+      ...block,
+      textSignature: JSON.stringify({ v: 1, id: 'answer', phase: 'final_answer' }),
+    }
+    await send({
+      type: 'message_update',
+      assistantMessageEvent: { type: 'text_end', contentIndex: 0, partial: { content: [signed] } },
+    })
+    await send({
+      type: 'message_end',
+      message: { role: 'assistant', content: [signed], stopReason: 'aborted' },
+    })
+    expect(phases).toHaveLength(1)
+    expect(phases[0]).toMatchObject({ phase: 'final_answer', text: '回答' })
+    expect(completed[0]).toMatchObject({
+      phase: 'final_answer',
+      text: '回答',
+      completion: { stopReason: 'aborted' },
+    })
+    await send({ type: 'provider_text_reset' })
+    await send({ type: 'message_start', message: { role: 'assistant', content: [] } })
+    await send({
+      type: 'message_end',
+      message: { role: 'assistant', content: [{ ...block, textSignature: 'legacy-id' }] },
+    })
+    expect(completed[1]).not.toHaveProperty('phase')
+  })
+})
+
+test.each([false, true])('阶段签名仅在完成时出现仍拆分流式文本（Plan：%s）', async (plan) => {
+  const completed: Array<
+    Parameters<NonNullable<PiRuntimeEventSink['assistantMessageCompleted']>>[1]
+  > = []
+  const adapter = new PiEventAdapter(
+    { threadID: 't', turnID: 'turn', agentID: 'a' },
+    {
+      assistantMessageCompleted: (_ctx, value) => {
+        completed.push(value)
+      },
+    },
+    { parseProposedPlan: plan },
+  )
+  const send = (event: unknown) => adapter.handle(event as AgentHarnessEvent)
+  const blocks = [
+    { type: 'text', text: '过程' },
+    { type: 'text', text: '回答' },
+  ]
+  await send({ type: 'message_start', message: { role: 'assistant', content: [] } })
+  for (let index = 0; index < blocks.length; index++)
+    await send({
+      type: 'message_update',
+      assistantMessageEvent: {
+        type: 'text_delta',
+        contentIndex: index,
+        delta: blocks[index]!.text,
+        partial: { content: blocks },
+      },
+    })
+  await send({
+    type: 'message_end',
+    message: {
+      role: 'assistant',
+      content: blocks.map((block, index) => ({
+        ...block,
+        textSignature: JSON.stringify({
+          v: 1,
+          id: String(index),
+          phase: index ? 'final_answer' : 'commentary',
+        }),
+      })),
+    },
+  })
+  expect(completed.map(({ phase, text }) => ({ phase, text }))).toEqual([
+    { phase: 'commentary', text: '过程' },
+    { phase: 'final_answer', text: '回答' },
+  ])
 })

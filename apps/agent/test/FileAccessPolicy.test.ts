@@ -334,9 +334,9 @@ describe('权限申请工具的暴露与审批', () => {
     expect(exposure(granular({ requestPermissions: true })).allows('request_permissions')).toBe(
       true,
     )
-    // 其他生命周期工具不受审批策略影响。
+    // 进度工具不受审批策略影响，主 Agent 不再暴露结构化收尾工具。
     expect(exposure('never').allows('update_plan')).toBe(true)
-    expect(exposure('never').allows('finalize_result')).toBe(true)
+    expect(exposure('never').allows('finalize_result')).toBe(false)
   })
 
   test('Pi 生命周期工具按统一暴露结果注册，并复用注册表参数约束', () => {

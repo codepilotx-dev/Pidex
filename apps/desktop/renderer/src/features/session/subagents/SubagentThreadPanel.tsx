@@ -47,6 +47,11 @@ import {
 import { SessionTimelineView } from '../timeline/SessionTimelineView.js'
 import { normalizePatchActionError } from '../timeline/PatchActionError.js'
 import { subagentStatusLabel } from './SubagentStatusLabel.js'
+import { ConversationItemContext } from '../timeline/ConversationItemContext.js'
+import {
+  StructuredDeliveryText,
+  subagentResultMarkdown,
+} from '../timeline/StructuredDeliveryText.js'
 
 export interface SubagentThreadCapabilities {
   canFollowup?: boolean
@@ -162,6 +167,7 @@ export function SubagentThreadPanel({
         key={turn.id}
       >
         <CanonicalConversationTurn
+          isSubagent
           disclosureState={disclosureState}
           entry={turn}
           onApplyPatch={async (itemId, action, expectedVersion) => {
@@ -446,34 +452,8 @@ function BlockedNotice({
 }
 
 function RunResult({ result }: { result: NonNullable<SubagentRun['result']> }): React.ReactNode {
-  return (
-    <article
-      className="subagent-thread-panel__result tw:grid tw:gap-3 tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-3"
-      data-outcome={result.outcome}
-    >
-      <header className="tw:flex tw:items-center tw:gap-2">
-        {result.outcome === 'succeeded' ? (
-          <Check className="tw:text-app-success" size={APP_ICON_SIZES.sm} />
-        ) : (
-          <AlertCircle size={APP_ICON_SIZE} />
-        )}
-        <strong>{result.summary}</strong>
-      </header>
-      {result.findings.length > 0 ? (
-        <ul className="tw:m-0 tw:grid tw:list-none tw:gap-2 tw:p-0">
-          {result.findings.map((finding, index) => (
-            <li
-              className="tw:grid tw:gap-1 tw:border-t tw:border-app-border-subtle tw:pt-2"
-              key={`${finding.title}:${index}`}
-            >
-              <strong>{finding.title}</strong>
-              <span className="tw:text-app-text-meta tw:type-body">{finding.detail}</span>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-    </article>
-  )
+  const context = React.useContext(ConversationItemContext)
+  return <StructuredDeliveryText text={subagentResultMarkdown(result, context?.workspacePath)} />
 }
 
 function StatusBadge({ status }: { status: SubagentRun['status'] }): React.ReactNode {

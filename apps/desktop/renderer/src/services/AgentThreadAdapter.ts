@@ -330,7 +330,11 @@ export function agentEventsFromNotification(notification: AgentNotification): De
     const status = statusFromNotification(params)
     return status ? [{ ...base, type: 'status', status }] : []
   }
-  if (notification.method === 'item/started' || notification.method === 'item/completed') {
+  if (
+    notification.method === 'item/started' ||
+    notification.method === 'item/completed' ||
+    notification.method === 'item/agentMessage/phaseChanged'
+  ) {
     return isItem(params.item) ? itemToAgentEvents(threadId, params.item) : []
   }
   if (notification.method === 'item/agentMessage/delta') {

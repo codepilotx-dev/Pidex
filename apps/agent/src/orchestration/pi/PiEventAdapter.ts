@@ -1,5 +1,5 @@
 import type { AgentHarnessEvent } from '../harness/Types'
-import type { ToolResultBlock } from '@pidex/shared/thread'
+import { readMessagePhase, type MessagePhase, type ToolResultBlock } from '@pidex/shared/thread'
 import { decodeResultCardEnvelope } from '@pidex/shared/thread-result-card'
 import { ProposedPlanStreamParser, type ProposedPlanChunk } from '../plan/ProposedPlanStreamParser'
 import type {
@@ -166,6 +166,18 @@ export const piToolResultBlocks = (
   return { blocks, artifacts }
 }
 
+const signaturePhase = (signature: string | undefined): MessagePhase | undefined => {
+  if (!signature) return undefined
+  try {
+    const value = JSON.parse(signature)
+    return value?.v === 1 && typeof value.id === 'string'
+      ? readMessagePhase(value.phase)
+      : undefined
+  } catch {
+    return undefined
+  }
+}
+
 const usageNumber = (value: unknown) =>
   typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0
 
@@ -218,6 +230,17 @@ export const piToolResultText = (
 
 /** Converts Pi's protocol into stable semantic callbacks used by the Agent persistence layer. */
 export class PiEventAdapter {
+  private phases = new Map<number, MessagePhase>()
+  private textSegments: Array<{
+    textItemID: string
+    phase?: MessagePhase
+    text: string
+    started: boolean
+  }> = []
+  private segmentByContentIndex = new Map<number, number>()
+  private segmentIndex = 0
+  private contentIndex = 0
+  private blockTexts = new Map<number, string>()
   private beforeCompactionCount: number | undefined
   private assistantItems: {
     textItemID: string
@@ -258,6 +281,11 @@ export class PiEventAdapter {
   private resetAssistantMessage() {
     const items = this.newAssistantItems()
     this.assistantItems = items
+    this.textSegments = [{ textItemID: items.textItemID, text: '', started: false }]
+    this.segmentByContentIndex.clear()
+    this.segmentIndex = 0
+    this.contentIndex = 0
+    this.blockTexts.clear()
     this.parser = this.options.parseProposedPlan ? new ProposedPlanStreamParser() : null
     this.receivedTextDelta = false
     this.textStarted = false
@@ -277,12 +305,56 @@ export class PiEventAdapter {
 
   private async startText() {
     const items = this.assistantItems ?? this.resetAssistantMessage()
-    if (this.textStarted) return
+    const segment = this.textSegments[this.segmentIndex]!
+    if (segment.started) return
+    segment.started = true
     this.textStarted = true
     await this.sink.assistantMessageStarted?.(this.context, {
       ...items,
-      placement: 'process',
+      textItemID: segment.textItemID,
+      placement: segment.phase === 'final_answer' ? 'result' : 'process',
+      ...(segment.phase ? { phase: segment.phase } : {}),
     })
+  }
+
+  private async selectTextSegment(contentIndex: number, phase = this.phases.get(contentIndex)) {
+    await this.ensureAssistantItems(false)
+    const knownIndex = this.segmentByContentIndex.get(contentIndex)
+    if (knownIndex !== undefined) this.segmentIndex = knownIndex
+    else {
+      const previous = this.textSegments[this.segmentIndex]!
+      if (this.parser && this.segmentByContentIndex.size > 0)
+        await this.routeChunks(this.parser.flushBoundary(), true)
+      if (previous.text && previous.phase !== phase) {
+        this.textSegments.push({
+          textItemID: this.newAssistantItems().textItemID,
+          ...(phase ? { phase } : {}),
+          text: '',
+          started: false,
+        })
+        this.segmentIndex = this.textSegments.length - 1
+      }
+      this.segmentByContentIndex.set(contentIndex, this.segmentIndex)
+    }
+    this.contentIndex = contentIndex
+    const segment = this.textSegments[this.segmentIndex]!
+    if (phase && segment.phase !== phase) {
+      segment.phase = phase
+      if (segment.started)
+        await this.sink.assistantMessagePhaseChanged?.(this.context, {
+          itemID: segment.textItemID,
+          phase,
+          text: segment.text,
+        })
+    }
+  }
+
+  private async emitText(delta: string) {
+    await this.startText()
+    const segment = this.textSegments[this.segmentIndex]!
+    segment.text += delta
+    this.blockTexts.set(this.contentIndex, (this.blockTexts.get(this.contentIndex) ?? '') + delta)
+    await this.sink.textDelta?.(this.context, { itemID: segment.textItemID, delta })
   }
 
   private async routeChunks(chunks: readonly ProposedPlanChunk[], deferPlan = false) {
@@ -292,10 +364,7 @@ export class PiEventAdapter {
         this.pendingText += chunk.delta
         if (!this.textStarted && /\S/.test(this.pendingText)) await this.startText()
         if (this.textStarted && this.pendingText) {
-          await this.sink.textDelta?.(this.context, {
-            itemID: items.textItemID,
-            delta: this.pendingText,
-          })
+          await this.emitText(this.pendingText)
           this.pendingText = ''
         }
         continue
@@ -362,6 +431,13 @@ export class PiEventAdapter {
   async handle(event: AgentHarnessEvent) {
     await this.sink.event?.(this.context, event)
     switch (event.type) {
+      case 'provider_text_reset':
+        this.phases.clear()
+        break
+      case 'provider_text_phase': {
+        this.phases.set(event.contentIndex, event.phase)
+        break
+      }
       case 'message_start':
         if (event.message.role === 'assistant') {
           this.resetAssistantMessage()
@@ -378,14 +454,20 @@ export class PiEventAdapter {
       case 'message_update': {
         const update = event.assistantMessageEvent
         const items = await this.ensureAssistantItems()
+        if (
+          update.type === 'text_start' ||
+          update.type === 'text_delta' ||
+          update.type === 'text_end'
+        ) {
+          const block = update.partial?.content[update.contentIndex]
+          let phase = this.phases.get(update.contentIndex)
+          if (!phase && block?.type === 'text') phase = signaturePhase(block.textSignature)
+          await this.selectTextSegment(update.contentIndex ?? 0, phase)
+        }
         if (update.type === 'text_delta') {
           this.receivedTextDelta = true
           if (this.parser) await this.routeChunks(this.parser.push(update.delta), true)
-          else
-            await this.sink.textDelta?.(this.context, {
-              itemID: items.textItemID,
-              delta: update.delta,
-            })
+          else await this.emitText(update.delta)
         }
         if (update.type === 'thinking_delta')
           await this.sink.reasoningDelta?.(this.context, {
@@ -420,39 +502,121 @@ export class PiEventAdapter {
             },
           }
           const safeCompletion = this.completionMetadata(event.message)
+          let plan: string | null | undefined
+          if (this.parser) {
+            if (!this.receivedTextDelta) {
+              for (const [index, block] of event.message.content.entries()) {
+                if (block.type !== 'text') continue
+                await this.selectTextSegment(
+                  index,
+                  this.phases.get(index) ?? signaturePhase(block.textSignature),
+                )
+                await this.routeChunks(this.parser.push(block.text), true)
+              }
+            }
+            const parsed = this.parser.finish()
+            await this.routeChunks(parsed.chunks, true)
+            const structuredSubmission = hasStructuredPlanSubmission(event.message.content)
+            if (!structuredSubmission) await this.flushDeferredPlan()
+            this.completedText = parsed.text
+            plan = structuredSubmission ? null : parsed.plan
+          } else {
+            this.completedText = textContent(event.message.content)
+            if (!this.receivedTextDelta) {
+              for (const [index, block] of event.message.content.entries()) {
+                if (block.type !== 'text') continue
+                let phase = this.phases.get(index)
+                phase ??= signaturePhase(block.textSignature)
+                await this.selectTextSegment(index, phase)
+                await this.emitText(block.text)
+              }
+            }
+          }
+          const blocks = event.message.content.flatMap((block, index) =>
+            block.type === 'text'
+              ? [{ index, phase: this.phases.get(index) ?? signaturePhase(block.textSignature) }]
+              : [],
+          )
+          const phaseBySegment = new Map<number, MessagePhase | undefined>()
+          const needsSplit = blocks.some(({ index, phase }) => {
+            const segment = this.segmentByContentIndex.get(index)
+            if (segment === undefined) return false
+            const conflict = phaseBySegment.has(segment) && phaseBySegment.get(segment) !== phase
+            phaseBySegment.set(segment, phase)
+            return conflict
+          })
+          if (needsSplit) {
+            // Late signatures may distinguish blocks previously streamed as one unknown phase.
+            const original = this.textSegments
+            this.textSegments = []
+            this.segmentByContentIndex.clear()
+            for (const block of blocks) {
+              let segment = this.textSegments[this.textSegments.length - 1]
+              if (!segment || segment.phase !== block.phase) {
+                const reused = original[this.textSegments.length]
+                segment = {
+                  textItemID: reused?.textItemID ?? this.newAssistantItems().textItemID,
+                  ...(block.phase ? { phase: block.phase } : {}),
+                  text: '',
+                  started: reused?.started ?? false,
+                }
+                this.textSegments.push(segment)
+              }
+              segment.text += this.blockTexts.get(block.index) ?? ''
+              this.segmentByContentIndex.set(block.index, this.textSegments.length - 1)
+            }
+          }
+          for (const block of blocks) {
+            if (this.segmentByContentIndex.has(block.index)) {
+              await this.selectTextSegment(block.index, block.phase)
+              if (needsSplit) {
+                const segment = this.textSegments[this.segmentIndex]!
+                const wasStarted = segment.started
+                await this.startText()
+                if (wasStarted && segment.phase)
+                  await this.sink.assistantMessagePhaseChanged?.(this.context, {
+                    itemID: segment.textItemID,
+                    phase: segment.phase,
+                    text: segment.text,
+                  })
+              }
+            }
+          }
+          let finalSegmentIndex = -1
+          for (const [index, segment] of this.textSegments.entries())
+            if (segment.phase === 'final_answer') finalSegmentIndex = index
+          const boundaryIndex =
+            finalSegmentIndex >= 0 ? finalSegmentIndex : this.textSegments.length - 1
           const resolvedEntryID =
-            completion.placement === 'result' ? await this.options.resolveSessionEntryID?.() : null
+            finalSegmentIndex >= 0 || completion.placement === 'result'
+              ? await this.options.resolveSessionEntryID?.()
+              : null
           const sessionEntry =
             typeof resolvedEntryID === 'string' && resolvedEntryID
               ? { sessionEntryID: resolvedEntryID }
               : {}
-          if (this.parser) {
-            if (!this.receivedTextDelta)
-              await this.routeChunks(this.parser.push(textContent(event.message.content)), true)
-            const parsed = this.parser.finish()
-            await this.routeChunks(parsed.chunks, true)
-            // A successful structured submission makes the tag block redundant:
-            // drop the buffered tag plan instead of persisting a second source.
-            const structuredSubmission = hasStructuredPlanSubmission(event.message.content)
-            if (!structuredSubmission) await this.flushDeferredPlan()
-            this.completedText = parsed.text
+          for (const [index, segment] of this.textSegments.entries()) {
+            const last = index === this.textSegments.length - 1
+            const placement = segment.phase
+              ? segment.phase === 'final_answer'
+                ? ('result' as const)
+                : ('process' as const)
+              : completion.placement
             await this.sink.assistantMessageCompleted?.(this.context, {
               ...items,
-              content: event.message.content,
-              text: parsed.text,
-              plan: structuredSubmission ? null : parsed.plan,
-              ...(safeCompletion ? { completion: safeCompletion } : {}),
-              ...sessionEntry,
               ...completion,
-            })
-          } else {
-            this.completedText = textContent(event.message.content)
-            await this.sink.assistantMessageCompleted?.(this.context, {
-              ...items,
+              textItemID: segment.textItemID,
               content: event.message.content,
-              ...(safeCompletion ? { completion: safeCompletion } : {}),
-              ...sessionEntry,
-              ...completion,
+              text: segment.text.trim(),
+              placement,
+              ...(segment.phase ? { phase: segment.phase } : {}),
+              ...(index === boundaryIndex ? sessionEntry : {}),
+              ...(last
+                ? {
+                    ...(plan === undefined ? {} : { plan }),
+                    ...(safeCompletion ? { completion: safeCompletion } : {}),
+                  }
+                : { usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 } }),
             })
           }
           this.assistantItems = null

@@ -330,7 +330,7 @@ export function createLifecycleTools(
     add(
       lifecycleTool(
         'update_goal',
-        '更新当前 Goal 的终态。只有目标确实完成时使用 complete；只有必须等待用户输入或外部状态变化时使用 blocked。调用后再用 finalize_result 收尾。',
+        '更新当前 Goal 的终态。只有目标确实完成时使用 complete；只有必须等待用户输入或外部状态变化时使用 blocked。调用后以普通 Markdown 回答说明结果。',
         Type.Object({ status: Type.Union([Type.Literal('complete'), Type.Literal('blocked')]) }),
         async (input, id, signal) =>
           callbacks.updateGoal!({ status: input.status as 'complete' | 'blocked' }, id, signal),
@@ -459,7 +459,7 @@ export function createLifecycleTools(
         '任务收尾时提交结构化交付结果并结束当前轮。先完成实际操作和必要验证再单独调用；summary 必须非空并说明做了什么与结果如何，没有内容的列表提交空数组。',
         'outcome 是对任务结果的如实陈述：succeeded=已完成；partial=部分完成；blocked=受阻或无法继续。提交部分完成或受阻结果也是合法交付；validation 只能记录实际执行过的验证及其结果，不得编造验证成功。',
         '提交本身不批准未决操作、不应用修改，也不替用户处理未决问题。本工具必须是该条回复中唯一的工具调用：先执行并验证其他工作，然后在单独一条回复中提交。',
-        '子 Agent 收尾必须提交结构化结果；主 Agent 仅在任务式工作收尾时使用本工具，普通问答直接以文本结束。',
+        '子 Agent 收尾必须提交结构化结果，供父任务复核并在子代理侧栏查看；主 Agent 以普通文本回答收尾。',
       ].join('\n'),
       parameters: structuredResultParameters,
       executionMode: 'sequential',

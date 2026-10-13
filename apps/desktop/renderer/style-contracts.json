@@ -23,7 +23,7 @@
   "customPropertyReferenceAllowlist": [
     "--radix-menubar-content-transform-origin",
     "--radix-menubar-content-available-height",
-    "--radix-tooltip-content-transform-origin",
+    "--radix-collapsible-content-height",
     "--sidebar-collapse-target-size"
   ],
   "forbiddenCustomPropertyPatterns": [

@@ -1,3 +1,4 @@
+import { createProviderMessagePhaseReader } from './ProviderMessagePhase'
 import {
   type AssistantMessage,
   contentText,
@@ -523,7 +524,13 @@ export class AgentHarness<
         turnState.sessionId,
         snapshotOptions,
       )
+      const readPhase = createProviderMessagePhaseReader()
+      await this.emitOwn({ type: 'provider_text_reset' }, streamOptions?.signal)
       return this.models.streamSimple(model, context, {
+        onProviderStreamEvent: async (value) => {
+          const event = readPhase(value)
+          if (event) await this.emitOwn(event, streamOptions?.signal)
+        },
         ...(requestOptions.cacheRetention !== undefined
           ? { cacheRetention: requestOptions.cacheRetention }
           : {}),

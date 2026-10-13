@@ -1,5 +1,6 @@
 import { ModelSwitchDivider } from './ModelSwitchDivider.js'
 import { cx } from '../../../utils/Cx.js'
+import { historicalDeliveryText } from './StructuredDeliveryText.js'
 import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import React from 'react'
 import { ChevronRight, CircleAlert, LoaderCircle, RotateCcw, type LucideIcon } from 'lucide-react'
@@ -8,7 +9,7 @@ import type { Item } from '@pidex/shared/thread'
 import type { DesktopDiffMarkerStyle } from '../../../../shared/Types.js'
 import type { VirtualizerHandle } from 'virtua'
 import { FullScreenWhaleLoading } from '../../../components/ui/FullScreenWhaleLoading.js'
-import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../components/ui/Collapsible.js'
 import {
   type KeyedDisclosureStore,
   useDisclosureExpanded,
@@ -76,6 +77,7 @@ export type TimelineDisclosureProps = ProcessSummary & {
   canExpand?: boolean
   children?: React.ReactNode
   defaultExpanded?: boolean
+  disclosure?: { store: KeyedDisclosureStore; id: string }
 }
 
 export type CanonicalThreadViewProps = {
@@ -115,20 +117,36 @@ export function CanonicalProcessGroup({
   canExpand = true,
   children,
   defaultExpanded = false,
+  disclosure,
   failed,
   kind,
   label,
   summaryKey,
 }: TimelineDisclosureProps): React.ReactNode {
-  const [expanded, setExpanded] = React.useState(defaultExpanded || active)
+  const [localExpanded, setLocalExpanded] = React.useState(defaultExpanded || active)
+  const subscribe = React.useCallback(
+    (listener: () => void) =>
+      disclosure ? disclosure.store.subscribe(disclosure.id, listener) : () => {},
+    [disclosure?.store, disclosure?.id],
+  )
+  const getSnapshot = React.useCallback(
+    () => (disclosure ? disclosure.store.getSnapshot(disclosure.id) : localExpanded),
+    [disclosure?.store, disclosure?.id, localExpanded],
+  )
+  const storedExpanded = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const expanded = active || storedExpanded
+  const setExpanded = (value: boolean) => {
+    if (disclosure) disclosure.store.setExpanded(disclosure.id, value)
+    else setLocalExpanded(value)
+  }
   const previousActive = React.useRef(active)
 
   React.useEffect(() => {
     if (previousActive.current !== active) {
-      setExpanded(active)
+      if (!disclosure) setLocalExpanded(active)
       previousActive.current = active
     }
-  }, [active])
+  }, [active, disclosure?.store])
   const contentId = React.useId()
   const itemsRef = React.useRef<HTMLDivElement | null>(null)
   const itemsContentRef = React.useRef<HTMLDivElement | null>(null)
@@ -160,58 +178,60 @@ export function CanonicalProcessGroup({
   )
 
   return (
-    <div
-      className="cpx-agent-activity"
-      data-expandable={canExpand ? 'true' : 'false'}
-      data-expanded={expanded ? 'true' : 'false'}
-      data-state={datastate}
-    >
-      {canExpand ? (
-        <button
-          aria-controls={contentId}
-          aria-expanded={expanded}
-          aria-label={visibleLabel || '处理过程'}
-          className="cpx-agent-activity__header"
-          onClick={() => setExpanded((current) => !current)}
-          type="button"
-        >
-          {summaryContent}
-        </button>
-      ) : (
-        <div
-          aria-live={active ? 'polite' : undefined}
-          className="cpx-agent-activity__header"
-          role={active ? 'status' : undefined}
-        >
-          {summaryContent}
-        </div>
-      )}
-      <DisclosureContent
-        contentClassName="cpx-agent-activity__content"
-        expanded={canExpand && expanded}
-        id={contentId}
-        mountPolicy="until-exit"
+    <Collapsible open={canExpand && expanded} onOpenChange={setExpanded} asChild>
+      <div
+        className="cpx-agent-activity"
+        data-expandable={canExpand ? 'true' : 'false'}
+        data-expanded={expanded ? 'true' : 'false'}
+        data-state={datastate}
       >
-        <div
-          className="cpx-agent-activity__edge-fade"
-          data-at-end={edge.atEnd}
-          data-at-start={edge.atStart}
-          data-scrollable={edge.scrollable}
+        {canExpand ? (
+          <CollapsibleTrigger asChild>
+            <button
+              aria-controls={contentId}
+              aria-expanded={expanded}
+              aria-label={visibleLabel || '处理过程'}
+              className="cpx-agent-activity__header"
+              type="button"
+            >
+              {summaryContent}
+            </button>
+          </CollapsibleTrigger>
+        ) : (
+          <div
+            aria-live={active ? 'polite' : undefined}
+            className="cpx-agent-activity__header"
+            role={active ? 'status' : undefined}
+          >
+            {summaryContent}
+          </div>
+        )}
+        <CollapsibleContent
+          expanded={canExpand && expanded}
+          contentClassName="cpx-agent-activity__content"
+          id={contentId}
         >
           <div
-            className="cpx-agent-activity__list tw:max-h-56 tw:overflow-x-hidden tw:overflow-y-auto tw:[overflow-anchor:none] tw:[scrollbar-gutter:stable]"
-            ref={itemsRef}
+            className="cpx-agent-activity__edge-fade"
+            data-at-end={edge.atEnd}
+            data-at-start={edge.atStart}
+            data-scrollable={edge.scrollable}
           >
             <div
-              className="cpx-agent-activity__list-content tw:relative tw:grid tw:gap-[var(--conversation-grouped-item-gap,var(--cpx-sys-space-1))]"
-              ref={itemsContentRef}
+              className="cpx-agent-activity__list tw:max-h-56 tw:overflow-x-hidden tw:overflow-y-auto tw:[overflow-anchor:none] tw:[scrollbar-gutter:stable]"
+              ref={itemsRef}
             >
-              {children}
+              <div
+                className="cpx-agent-activity__list-content tw:relative tw:grid tw:gap-[var(--conversation-grouped-item-gap,var(--cpx-sys-space-1))]"
+                ref={itemsContentRef}
+              >
+                {children}
+              </div>
             </div>
           </div>
-        </div>
-      </DisclosureContent>
-    </div>
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   )
 }
 
@@ -394,44 +414,46 @@ export function CanonicalTurnActivity({
   )
 
   return (
-    <section
-      className="canonical-turn-activity"
-      data-expandable={disclosureEnabled ? 'true' : 'false'}
-      data-expanded={contentVisible ? 'true' : 'false'}
-      data-state={summary.kind}
-    >
-      {disclosureEnabled ? (
-        <button
-          aria-controls={contentId}
-          aria-expanded={expanded}
-          aria-label={`${expanded ? '收起' : '展开'}处理过程：${summary.label}`}
-          className={cx(
-            'canonical-turn-activity__summary tw:inline-flex tw:min-h-8 tw:w-fit tw:max-w-full tw:items-center tw:gap-2 tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit',
-            'tw:cursor-pointer tw:transition-colors tw:duration-state tw:ease-out tw:hover:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus',
-          )}
-          onClick={() => onExpandedChange(!expanded)}
-          type="button"
-        >
-          {summaryContent}
-        </button>
-      ) : (
-        <div className="canonical-turn-activity__summary tw:inline-flex tw:min-h-8 tw:w-fit tw:max-w-full tw:items-center tw:gap-2 tw:p-0 tw:text-left tw:text-inherit">
-          {summaryContent}
-        </div>
-      )}
-      <div
-        aria-hidden="true"
-        className="canonical-turn-activity__divider tw:w-full tw:border-t tw:border-app-border-subtle"
-      />
-      <DisclosureContent
-        contentClassName="canonical-turn-activity__content"
-        expanded={contentVisible}
-        id={contentId}
-        mountPolicy="until-exit"
+    <Collapsible open={contentVisible} onOpenChange={onExpandedChange} asChild>
+      <section
+        className="canonical-turn-activity"
+        data-expandable={disclosureEnabled ? 'true' : 'false'}
+        data-expanded={contentVisible ? 'true' : 'false'}
+        data-state={summary.kind}
       >
-        {children}
-      </DisclosureContent>
-    </section>
+        {disclosureEnabled ? (
+          <CollapsibleTrigger asChild>
+            <button
+              aria-controls={contentId}
+              aria-expanded={expanded}
+              aria-label={`${expanded ? '收起' : '展开'}处理过程：${summary.label}`}
+              className={cx(
+                'canonical-turn-activity__summary tw:inline-flex tw:min-h-8 tw:w-fit tw:max-w-full tw:items-center tw:gap-2 tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit',
+                'tw:cursor-pointer tw:transition-colors tw:duration-state tw:ease-out tw:hover:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus',
+              )}
+              type="button"
+            >
+              {summaryContent}
+            </button>
+          </CollapsibleTrigger>
+        ) : (
+          <div className="canonical-turn-activity__summary tw:inline-flex tw:min-h-8 tw:w-fit tw:max-w-full tw:items-center tw:gap-2 tw:p-0 tw:text-left tw:text-inherit">
+            {summaryContent}
+          </div>
+        )}
+        <div
+          aria-hidden="true"
+          className="canonical-turn-activity__divider tw:w-full tw:border-t tw:border-app-border-subtle"
+        />
+        <CollapsibleContent
+          expanded={contentVisible}
+          contentClassName="canonical-turn-activity__content"
+          id={contentId}
+        >
+          {children}
+        </CollapsibleContent>
+      </section>
+    </Collapsible>
   )
 }
 
@@ -467,6 +489,7 @@ export function resolveTurnElapsedSeconds(
 const CanonicalTurnActivityController = React.memo(function CanonicalTurnActivityController({
   active,
   canCollapse,
+  forceExpanded,
   children,
   disclosureId,
   hasWork,
@@ -477,6 +500,7 @@ const CanonicalTurnActivityController = React.memo(function CanonicalTurnActivit
   canCollapse: boolean
   children?: React.ReactNode
   disclosureId: string
+  forceExpanded?: boolean
   hasWork: boolean
   store: KeyedDisclosureStore
   turn: RenderTurnEntry['turn']
@@ -488,8 +512,10 @@ const CanonicalTurnActivityController = React.memo(function CanonicalTurnActivit
   return (
     <CanonicalTurnActivity
       canCollapse={canCollapse}
-      expanded={!canCollapse || storedExpanded}
-      onExpandedChange={(expanded) => store.setExpanded(disclosureId, expanded)}
+      expanded={!canCollapse || forceExpanded === true || storedExpanded}
+      onExpandedChange={(expanded) => {
+        if (!forceExpanded) store.setExpanded(disclosureId, expanded)
+      }}
       summary={summary}
     >
       {children}
@@ -714,6 +740,7 @@ const CanonicalTurnRow = React.memo(function CanonicalTurnRow({
 })
 
 function CanonicalConversationTurnComponent({
+  isSubagent = false,
   disclosureState,
   diffMarkerStyle = 'color',
   entry,
@@ -728,6 +755,7 @@ function CanonicalConversationTurnComponent({
   readThreadPatchDiff,
   threadId,
 }: {
+  isSubagent?: boolean
   disclosureState: KeyedDisclosureStore
   entry: RenderTurnEntry
   registerInputRow?: RegisterConversationTurnRow
@@ -790,7 +818,7 @@ function CanonicalConversationTurnComponent({
       )
     }
     if (item.type === 'tool' && isStandaloneLifecycleTool(item)) {
-      return <LifecycleToolItemView item={item} key={item.id} />
+      return <LifecycleToolItemView item={item} isSubagent={isSubagent} key={item.id} />
     }
     return renderItem(item, {
       disclosureId: `process-item:${item.id}`,
@@ -798,10 +826,18 @@ function CanonicalConversationTurnComponent({
     })
   }
   const active = isActiveTurn(entry.turn.status)
-  const hasAssistantResult = entry.assistantResultItems.length > 0
-  const activitySliceClosed = hasAssistantResult
+  const historicalDeliveries = !isSubagent
+    ? entry.processItems.filter(
+        (item) => item.type === 'tool' && historicalDeliveryText(item) !== null,
+      )
+    : []
+  const historicalDeliveryIds = new Set(historicalDeliveries.map((item) => item.id))
+  const processItems = entry.processItems.filter((item) => !historicalDeliveryIds.has(item.id))
+  const hasAssistantResult =
+    entry.assistantResultItems.length > 0 || historicalDeliveries.length > 0
+  const activitySliceClosed = hasAssistantResult && !entry.forceExpandActivity
   const processActivity = buildProcessActivityModel(
-    questionTimelineItems(entry.processItems, entry.items),
+    questionTimelineItems(processItems, entry.items),
     {
       activitySliceClosed,
       hasBlockingRequest: entry.blockers.length > 0,
@@ -836,7 +872,12 @@ function CanonicalConversationTurnComponent({
           unit.key === processActivity.activeGroupKey ? entry.turn.status : 'completed',
         )
         return (
-          <CanonicalProcessGroup {...summary} canExpand={unit.items.length > 0} key={unit.key}>
+          <CanonicalProcessGroup
+            {...summary}
+            canExpand={unit.items.length > 0}
+            disclosure={disclosure(`process-group:${entry.turn.id}:${unit.key}`)}
+            key={unit.key}
+          >
             {unit.items.map((item) => (
               <div
                 className="cpx-agent-activity__path-step"
@@ -879,7 +920,8 @@ function CanonicalConversationTurnComponent({
       ) : null}
       <CanonicalTurnActivityController
         active={active}
-        canCollapse={canCollapseTurnActivity}
+        canCollapse={canCollapseTurnActivity && !entry.forceExpandActivity}
+        forceExpanded={entry.forceExpandActivity}
         disclosureId={turnActivityDisclosureId}
         hasWork={
           entry.turn.startedAt != null || entry.processItems.length > 0 || hasAssistantResult
@@ -899,12 +941,15 @@ function CanonicalConversationTurnComponent({
       {entry.planItem ? (
         <section className="canonical-turn__plan">{renderItem(entry.planItem)}</section>
       ) : null}
-      {entry.assistantResultItems.length > 0 ? (
+      {hasAssistantResult ? (
         <section className="canonical-turn__result" aria-label="助手回复">
           {entry.assistantResultItems.map((item) =>
             renderItem(item, {
               showAssistantActions: true,
             }),
+          )}
+          {historicalDeliveries.map((item) =>
+            item.type === 'tool' ? <LifecycleToolItemView item={item} key={item.id} /> : null,
           )}
         </section>
       ) : null}

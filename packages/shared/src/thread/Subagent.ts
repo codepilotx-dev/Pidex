@@ -71,6 +71,7 @@ export const SubagentResultSchema = Schema.Struct({
   references: Schema.Array(SubagentReferenceSchema),
 })
 export type SubagentResult = typeof SubagentResultSchema.Type
+export const decodeSubagentResult = Schema.decodeUnknownSync(SubagentResultSchema)
 
 export const SubagentRunSchema = Schema.Struct({
   id: Schema.String,

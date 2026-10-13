@@ -28,6 +28,10 @@ import {
   ToolExecutionCard,
 } from '../src/features/session/timeline/CanonicalItemRenderer.js'
 import { ResultCardView } from '../src/features/session/timeline/ResultCardView.js'
+import {
+  historicalDeliveryText,
+  subagentResultMarkdown,
+} from '../src/features/session/timeline/StructuredDeliveryText.js'
 import { CodeBlock } from '../src/features/syntax/CodeBlock.js'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
 import { AttachmentFilePill } from '../src/features/session/attachments/AttachmentRowPrimitives.js'
@@ -674,7 +678,9 @@ describe('canonical tool item display', () => {
       expect(isStandaloneLifecycleTool(completed)).toBe(true)
 
       const runningMarkup = renderToStaticMarkup(<LifecycleToolItemView item={running} />)
-      const completedMarkup = renderToStaticMarkup(<LifecycleToolItemView item={completed} />)
+      const completedMarkup = renderToStaticMarkup(
+        <LifecycleToolItemView item={completed} isSubagent />,
+      )
       const failedMarkup = renderToStaticMarkup(
         <LifecycleToolItemView
           item={toolItem({
@@ -1363,7 +1369,7 @@ describe('canonical tool item display', () => {
     }
   })
 
-  test('reuses the same card under the finalize_result lifecycle row', () => {
+  test('renders historical main delivery as text and keeps child submission compact', () => {
     const item = toolItem({
       command: null,
       input: {},
@@ -1377,11 +1383,90 @@ describe('canonical tool item display', () => {
       </TooltipProvider>,
     )
 
-    expect(markup).toContain('canonical-lifecycle-entry')
-    expect(markup).toContain('已提交子代理结果')
-    expect(markup).toContain('canonical-result-card')
+    expect(markup).toContain('canonical-text-item--result')
+    expect(markup).not.toContain('已提交子代理结果')
+    expect(markup).not.toContain('canonical-result-card')
     expect(markup).toContain('回归通过并修复了参数校验')
+    expect(markup).toContain('空参数不再通过')
+    expect(markup).toContain('https://example.com/report')
     expect(markup).not.toContain('canonical-tool-result-block--json')
+    const childMarkup = renderToStaticMarkup(<LifecycleToolItemView item={item} isSubagent />)
+    expect(childMarkup).toContain('已提交子代理结果')
+    expect(childMarkup).not.toContain('回归通过并修复了参数校验')
+    expect(childMarkup).not.toContain('canonical-result-card')
+    for (const state of ['running', 'error', 'interrupted'] as const) {
+      const statusMarkup = renderToStaticMarkup(<LifecycleToolItemView item={{ ...item, state }} />)
+      expect(statusMarkup).toContain(`data-state="${state}"`)
+      expect(statusMarkup).not.toContain('canonical-result-card')
+    }
+  })
+
+  test('keeps every result field and unknown historical payload without rewriting data', () => {
+    const result = {
+      outcome: 'partial' as const,
+      summary: '仍有未决问题',
+      findings: [{ title: '发现', detail: '结论证据', severity: 'warning' as const }],
+      changedFiles: [{ path: 'src/tool.ts', summary: '修复边界' }],
+      validation: [{ command: 'bun test', status: 'failed' as const, output: '失败详情' }],
+      risks: ['需进一步确认'],
+      references: [{ kind: 'file' as const, value: 'src/tool.ts', label: '实现' }],
+    }
+    const item = toolItem({
+      tool: 'finalize_result',
+      resultBlocks: [{ type: 'json', value: result }],
+    })
+    const before = JSON.stringify(item)
+    const text = historicalDeliveryText(item, 'C:\\workspace')!
+    expect(text).toBe(subagentResultMarkdown(result, 'C:\\workspace'))
+    for (const value of [
+      '部分完成',
+      '结论证据',
+      '修复边界',
+      'bun test（失败）',
+      '失败详情',
+      '需进一步确认',
+      '[实现](<src/tool.ts>)',
+    ]) {
+      expect(text).toContain(value)
+    }
+    expect(JSON.stringify(item)).toBe(before)
+    const mirrored = historicalDeliveryText(
+      {
+        ...item,
+        input: { ...result, summary: '未经脱敏的输入内容' },
+        output: '已提交结构化结果（outcome: succeeded · 已完成）\n摘要：回归通过并修复了参数校验',
+        resultBlocks: [
+          {
+            type: 'text',
+            text: '已提交结构化结果（outcome: succeeded · 已完成）\n摘要：回归通过并修复了参数校验',
+          },
+          { type: 'json', value: resultCardEnvelope() },
+        ],
+      },
+      'C:\\workspace',
+    )!
+    expect(mirrored.match(/回归通过并修复了参数校验/gu)).toHaveLength(1)
+    expect(mirrored).not.toContain('已提交结构化结果')
+    expect(mirrored).not.toContain('未经脱敏的输入内容')
+    const fullOutput = '已提交结构化结果（outcome: succeeded · 已完成）\n摘要：未截短的完整摘要'
+    expect(
+      historicalDeliveryText({
+        ...item,
+        resultBlocks: [
+          { type: 'text', text: fullOutput },
+          { type: 'json', value: resultCardEnvelope() },
+        ],
+      }),
+    ).toContain('未截短的完整摘要')
+    expect(
+      historicalDeliveryText({
+        ...item,
+        resultBlocks: [{ type: 'json', value: { future: '未知内容' } }],
+      }),
+    ).toContain('未知内容')
+    expect(historicalDeliveryText({ ...item, resultBlocks: [], output: '原始交付' })).toBe(
+      '原始交付',
+    )
   })
 
   test('only opens workspace-relative file references', () => {

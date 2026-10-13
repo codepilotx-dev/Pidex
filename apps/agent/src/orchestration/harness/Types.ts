@@ -639,6 +639,15 @@ export interface AfterProviderResponseEvent {
   headers: Record<string, string>
 }
 
+export interface ProviderTextResetEvent {
+  type: 'provider_text_reset'
+}
+export interface ProviderTextPhaseEvent {
+  type: 'provider_text_phase'
+  contentIndex: number
+  phase: 'commentary' | 'partial_answer' | 'final_answer'
+}
+
 export interface ToolCallEvent {
   type: 'tool_call'
   toolCallId: string
@@ -754,6 +763,8 @@ export type AgentHarnessOwnEvent<
   | BeforeProviderRequestEvent
   | BeforeProviderPayloadEvent
   | AfterProviderResponseEvent
+  | ProviderTextResetEvent
+  | ProviderTextPhaseEvent
   | ToolCallEvent
   | ToolResultEvent
   | SessionBeforeCompactEvent
@@ -829,6 +840,8 @@ export type AgentHarnessEventResultMap = {
   before_provider_request: BeforeProviderRequestResult | undefined
   before_provider_payload: BeforeProviderPayloadResult | undefined
   after_provider_response: undefined
+  provider_text_reset: undefined
+  provider_text_phase: undefined
   tool_call: ToolCallResult | undefined
   tool_result: ToolResultPatch | undefined
   session_before_compact: SessionBeforeCompactResult | undefined

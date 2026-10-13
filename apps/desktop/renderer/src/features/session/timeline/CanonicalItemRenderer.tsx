@@ -29,7 +29,7 @@ import type {
   LocalContextReference,
   ToolResultBlock,
 } from '@pidex/shared/thread'
-import { decodeResultCardEnvelope, type ResultCard } from '@pidex/shared/thread-result-card'
+import { decodeResultCardEnvelope } from '@pidex/shared/thread-result-card'
 import type { RpcParams, RpcResult } from '@pidex/agent-protocol'
 import type { DesktopDiffMarkerStyle } from '../../../../shared/Types.js'
 import { desktopUserMessageInputToPreviewText } from '../../../../shared/DesktopUserMessage.js'
@@ -54,7 +54,7 @@ import { ConversationMarkdownErrorBoundary } from '../conversation/ConversationT
 import { CollapsibleUserMarkdown } from '../conversation/CollapsibleUserMarkdown.js'
 import { subagentStatusLabel } from '../subagents/SubagentStatusLabel.js'
 import { useScrollEdgeState } from '../../../hooks/UseScrollEdgeState.js'
-import { useConversationItemContext } from './ConversationItemContext.js'
+import { ConversationItemContext, useConversationItemContext } from './ConversationItemContext.js'
 import { useLiveItemTail } from '../state/UseLiveItemTail.js'
 import { countStreamingItemRender } from '../state/StreamingPerfCounters.js'
 import { WorkflowPlanCard, type OpenPlanInDockRequest } from '../workflow/WorkflowPlanCard.js'
@@ -76,6 +76,7 @@ import { isShellTool, ToolCommandCard, toolDetailKind } from './ToolCommandCard.
 export { isShellTool } from './ToolCommandCard.js'
 import { cx } from '../../../utils/Cx.js'
 import { ResultCardView } from './ResultCardView.js'
+import { historicalDeliveryText, StructuredDeliveryText } from './StructuredDeliveryText.js'
 import { safeCitationUrl } from './CitationUrl.js'
 
 export {
@@ -1553,7 +1554,6 @@ function SubagentItemView({
   item: ItemOf<'subagent'>
   onOpen: (taskId: string) => void
 }): React.ReactNode {
-  const changedFiles = item.result?.changedFiles ?? []
   return (
     <button
       className="canonical-subagent-card"
@@ -1570,13 +1570,6 @@ function SubagentItemView({
           </small>
         ) : null}
         {item.waitingForDescendants ? <small>等待后代结算</small> : null}
-        {item.latestReport ? <small>{item.latestReport}</small> : null}
-        {changedFiles.length > 0 ? (
-          <small className="canonical-subagent-card__files">
-            修改 {changedFiles.length} 个文件：
-            {changedFiles.map((file) => file.path).join('、')}
-          </small>
-        ) : null}
       </span>
       <em>{subagentStatusLabel(item.status)}</em>
     </button>
@@ -2046,11 +2039,19 @@ export function isStandaloneLifecycleTool(item: ToolItem): boolean {
   return buildLifecycleToolDisplay(item) !== null
 }
 
-export function LifecycleToolItemView({ item }: { item: ToolItem }): React.ReactNode {
+export function LifecycleToolItemView({
+  item,
+  isSubagent = false,
+}: {
+  item: ToolItem
+  isSubagent?: boolean
+}): React.ReactNode {
+  const context = React.useContext(ConversationItemContext)
   const display = buildLifecycleToolDisplay(item)
   if (!display) return null
+  const text = !isSubagent ? historicalDeliveryText(item, context?.workspacePath) : null
+  if (text) return <StructuredDeliveryText text={text} />
   const LifecycleIcon = display.icon
-  const card = lifecycleResultCard(item)
   return (
     <div className="canonical-lifecycle-entry tw:flex tw:min-w-0 tw:flex-col tw:gap-2">
       <div
@@ -2074,24 +2075,8 @@ export function LifecycleToolItemView({ item }: { item: ToolItem }): React.React
         )}
         <span>{display.label}</span>
       </div>
-      {card ? <ResultCardView card={card} /> : null}
     </div>
   )
-}
-
-/**
- * Lifecycle rows keep their compact status line; a delivery submitted by
- * finalize_result reuses the ordinary result card below it instead of the raw
- * JSON block.
- */
-function lifecycleResultCard(item: ToolItem): ResultCard | null {
-  if (toolLeafName(item.tool) !== 'finalize_result') return null
-  for (const block of item.resultBlocks ?? []) {
-    if (block.type !== 'json') continue
-    const envelope = decodeResultCardEnvelope(block.value)
-    if (envelope) return envelope.card
-  }
-  return null
 }
 
 export function isFileMutationTool(item: ToolItem): boolean {
