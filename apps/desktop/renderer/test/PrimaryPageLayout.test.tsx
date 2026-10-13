@@ -34,4 +34,19 @@ describe('PrimaryPageLayout', () => {
     expect(html).not.toContain('primary-page-layout__search')
     expect(html).not.toContain('primary-page-layout__navigation')
   })
+
+  test('applies custom headerClassName to header element', () => {
+    const html = renderToStaticMarkup(
+      <PrimaryPageLayout
+        description="页面说明"
+        headerClassName="custom-header-class"
+        title="页面标题"
+      >
+        内容
+      </PrimaryPageLayout>,
+    )
+
+    expect(html).toContain('primary-page-layout__header')
+    expect(html).toContain('custom-header-class')
+  })
 })
