@@ -20,6 +20,8 @@
 
 ### Changed
 
+- [desktop/renderer] 统一一级页面头部与布局对齐基准：插件与供应商侧边栏面板容器补齐 `py-2` 内边距与语义化 header，对齐左侧导航轨图标和“已安排”面板高度；插件与供应商主视图迁移至标准 PrimaryPageLayout，操作按钮统一挂载到右上角窗口工具栏（WorkspaceHeaderItem），对齐“已安排”主页面的大标题与边距规范。
+
 - [agent/shared/session-view/desktop] 会话文本保留消息阶段与流式分段，实时、重放和历史统一识别过程与最终回答；轮次与工具活动改用 Radix Collapsible，保留展开选择并在错误、中断和后续执行时展开过程。
 
 - [desktop/renderer] 供应商“已配置”和插件“已安装”分组对齐项目侧栏的标题行高与列表顶部间距，去掉叠加的垂直留白。
