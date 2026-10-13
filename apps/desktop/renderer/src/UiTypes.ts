@@ -16,6 +16,7 @@ export type AppView =
   | 'search'
   | 'plugins'
   | 'providers'
+  | 'pets'
   | 'pullRequests'
   | 'automations'
 

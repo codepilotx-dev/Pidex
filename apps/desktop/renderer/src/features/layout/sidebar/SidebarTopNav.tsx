@@ -10,6 +10,7 @@ import {
   Clock3,
   FolderKanban,
   MessagesSquare,
+  PawPrint,
   Search,
   SquarePen,
   X,
@@ -113,6 +114,16 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
     icon: <BrainCircuit size={APP_ICON_SIZE} />,
     path: '/providers',
     availability: { kind: 'always' },
+  },
+  {
+    view: 'pets',
+    label: '宠物市场',
+    icon: <PawPrint size={APP_ICON_SIZE} />,
+    path: '/pets',
+    availability: {
+      kind: 'any-capability',
+      capabilities: ['pets.management.v1'],
+    },
   },
 ]
 

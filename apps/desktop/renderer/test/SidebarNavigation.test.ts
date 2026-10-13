@@ -113,6 +113,27 @@ function sidebarNavItems(
 }
 
 describe('Codex 侧栏导航', () => {
+  test('宠物市场在一级图标栏直接显示并按路由高亮', () => {
+    const rail = renderToStaticMarkup(
+      createElement(MemoryRouter, { initialEntries: ['/pets'] },
+        createElement(DesktopSettingsProvider, null,
+          createElement(TooltipProvider, null,
+            createElement(SidebarNavigationRail, {
+              shell: { mode: 'docked' } as unknown as SidebarShellController,
+              activePane: null,
+              capabilityState: readySidebarCapabilities('pets.management.v1'),
+              onOpenWhatsNew: () => {},
+              onReport: () => {},
+              onPinPanel: () => {},
+            }),
+          ),
+        ),
+      ),
+    )
+    expect(rail).toMatch(/aria-label="宠物市场"[^>]*aria-current="page"/)
+    expect(rail).not.toContain('aria-label="更多"')
+  })
+
   test('新版图标栏只放页面入口，聊天操作保留在首页面板', () => {
     const shell = { mode: 'docked' } as unknown as SidebarShellController
     const render = (child: ReturnType<typeof createElement>) =>
@@ -180,6 +201,7 @@ describe('Codex 侧栏导航', () => {
       { view: 'automations', label: '已安排', path: '/automations' },
       { view: 'plugins', label: '插件', path: '/plugins' },
       { view: 'providers', label: '供应商', path: '/providers' },
+      { view: 'pets', label: '宠物市场', path: '/pets' },
     ])
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/search')).toBeFalse()
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/sites')).toBeFalse()
@@ -354,11 +376,14 @@ describe('Codex 侧栏导航', () => {
 })
 
 describe('设置导航', () => {
-  test('宠物设置保留商店入口但主侧栏不增加商店项', () => {
+  test('宠物设置保留市场入口且一级导航按宠物管理能力显示', () => {
     const pets = SETTINGS_ITEMS.find((item) => item.routeId === 'pets')
 
-    expect(pets?.rows.some((row) => row.title === '社区宠物商店')).toBeTrue()
-    expect(TOP_NAV_ITEMS.some((item) => item.path === '/pets')).toBeFalse()
+    expect(pets?.rows.some((row) => row.title === '宠物市场')).toBeTrue()
+    expect(TOP_NAV_ITEMS.find((item) => item.view === 'pets')?.path).toBe('/pets')
+    expect(sidebarNavItems(false).some((item) => item.view === 'pets')).toBeFalse()
+    expect(sidebarNavItems(false, undefined, readySidebarCapabilities()).some((item) => item.view === 'pets')).toBeFalse()
+    expect(sidebarNavItems(false, undefined, readySidebarCapabilities('pets.management.v1')).some((item) => item.view === 'pets')).toBeTrue()
   })
 
   test('工作空间依赖项是编码分组中的独立页面', () => {

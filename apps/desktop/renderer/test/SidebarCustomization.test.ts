@@ -313,6 +313,7 @@ describe('自定义信息保留式迁移', () => {
       'automations',
       'plugins',
       'providers',
+      'pets',
       'sessionGroups',
     ])
     expect(normalized.hiddenDestinationIds).toEqual(['sessionGroups'])
@@ -335,9 +336,19 @@ describe('自定义信息保留式迁移', () => {
       'unknown',
       'automations',
       'providers',
+      'pets',
       'sessionGroups',
     ])
   })
+})
+
+test('旧导航配置补齐宠物市场并保留已有排序和隐藏设置', () => {
+  const destinationOrder = ['providers', 'plugins', 'automations', 'sessionGroups']
+  const hiddenDestinationIds = ['plugins', 'sessionGroups']
+  const normalized = normalizeSidebarCustomization({ destinationOrder, hiddenDestinationIds })
+  expect(normalized.destinationOrder).toEqual([...destinationOrder, 'pets'])
+  expect(normalized.hiddenDestinationIds).toEqual(hiddenDestinationIds)
+  expect(normalized.version).toBe(1)
 })
 
 test('最近区显示项目聊天开关保留置顶和分区归属', () => {

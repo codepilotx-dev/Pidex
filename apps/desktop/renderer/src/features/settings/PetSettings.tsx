@@ -13,6 +13,7 @@ import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { usePetSettingsController } from '../pet/UsePetSettingsController.js'
+import { useLocale } from '../i18n/LocaleProvider.js'
 
 type Props = {
   onError: (message: string) => void
@@ -21,6 +22,7 @@ type Props = {
 
 export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
   const navigate = useNavigate()
+  const { t } = useLocale()
   const [sourceUrl, setSourceUrl] = useState('')
   const [preview, setPreview] = useState<PetInstallPreview | null>(null)
   const [operationBusy, setOperationBusy] = useState(false)
@@ -215,13 +217,13 @@ export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
           />
         </SettingsSection>
 
-        <SettingsSection title="社区宠物商店">
+        <SettingsSection title={t('宠物市场')}>
           <SettingsRow
             title="浏览社区宠物"
             description="搜索并一键安装社区提供的桌面伙伴"
             control={
               <Button color="secondary" onClick={() => navigate('/pets')} type="button">
-                打开宠物商店
+                {t('打开宠物市场')}
               </Button>
             }
           />

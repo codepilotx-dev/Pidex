@@ -90,10 +90,11 @@ export const DEFAULT_SIDEBAR_DESTINATION_ORDER: readonly string[] = [
   'automations',
   'plugins',
   'providers',
+  'pets',
   'sessionGroups',
 ]
 
-/** 默认直接显示的入口是“已安排”与“插件”，其余可用入口先收进“更多”。 */
+/** 默认只将工作流入口收进“更多”，其余可用入口直接显示。 */
 export const DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS: readonly string[] = ['sessionGroups']
 
 export const DEFAULT_SIDEBAR_CUSTOMIZATION: SidebarCustomization = {

@@ -9,9 +9,11 @@ import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { PetCatalogSection } from './PetCatalogSection.js'
 import { usePetSettingsController } from './UsePetSettingsController.js'
+import { useLocale } from '../i18n/LocaleProvider.js'
 
 export function PetCatalogPage(): React.ReactNode {
   const navigate = useNavigate()
+  const { t } = useLocale()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
   const { busy, pets, refreshPets, selectPet, setEnabled, settings } = usePetSettingsController({
@@ -30,7 +32,7 @@ export function PetCatalogPage(): React.ReactNode {
       type="button"
     >
       <PawPrint size={APP_ICON_SIZE} />
-      <span>宠物设置</span>
+      <span>{t('宠物设置')}</span>
     </Button>
   )
 
@@ -46,7 +48,7 @@ export function PetCatalogPage(): React.ReactNode {
         actions={headerActions}
         className="pet-catalog-primary-page tw:@container/pet-catalog-page"
         description="浏览并一键安装 awesome-codex-pet 社区中的桌面伙伴。"
-        title="宠物商店"
+        title={t('宠物市场')}
       >
         <PetCatalogSection
           installedPets={pets}
