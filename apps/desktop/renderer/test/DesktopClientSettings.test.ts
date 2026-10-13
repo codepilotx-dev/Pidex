@@ -1324,6 +1324,110 @@ describe('desktop thread settings client', () => {
     expect(pendingInteractionThreadIds).toEqual(['session-2', 'session-1'])
   })
 
+  test('会话专用订阅在内容错误且无可恢复游标时停止并回调 onSubscriptionError', async () => {
+    const sources: Array<{
+      onmessage: ((event: MessageEvent) => void) | null
+      onerror: (() => void) | null
+      close: () => void
+    }> = []
+    let subscriptionCount = 0
+    const fetcher = subscriptionFetcher(() => {
+      subscriptionCount += 1
+      return { subscriptionId: `subscription-${subscriptionCount}` }
+    })
+    const client = createDesktopClient({
+      fetch: fetcher,
+      eventSourceFactory: () => {
+        const source = { onmessage: null, onerror: null, close: () => {} }
+        sources.push(source)
+        return source as unknown as EventSource
+      },
+    })
+    const errors: unknown[] = []
+    const unsubscribe = client.subscribeAgentEventEnvelopes(
+      {
+        threadId: 'session-1',
+        after: 12,
+        liveEventTypes: [],
+        onDeliveryError: () => undefined,
+        onSubscriptionError: (error) => errors.push(error),
+      },
+      () => {},
+    )
+    for (let index = 0; index < 40 && !sources[0]?.onmessage; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    expect(subscriptionCount).toBe(1)
+
+    sources[0]?.onmessage?.(malformedEventMessage('subscription-1') as MessageEvent)
+    for (let index = 0; index < 40 && errors.length === 0; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    for (let index = 0; index < 10; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toBeInstanceOf(Error)
+    // No usable snapshot cursor means no resubscribe for this thread stream.
+    expect(subscriptionCount).toBe(1)
+    unsubscribe()
+  })
+
+  test('共享全局订阅停止恢复时向各监听器分发 onSubscriptionError', async () => {
+    const sources: Array<{
+      onmessage: ((event: MessageEvent) => void) | null
+      onerror: (() => void) | null
+      close: () => void
+    }> = []
+    let subscriptionCount = 0
+    const fetcher = subscriptionFetcher(() => {
+      subscriptionCount += 1
+      return { subscriptionId: `subscription-${subscriptionCount}` }
+    })
+    const client = createDesktopClient({
+      fetch: fetcher,
+      eventSourceFactory: () => {
+        const source = { onmessage: null, onerror: null, close: () => {} }
+        sources.push(source)
+        return source as unknown as EventSource
+      },
+    })
+    const errors: unknown[] = []
+    const unsubscribeShared = client.subscribeAgentEventEnvelopes({ liveEventTypes: [] }, () => {})
+    const unsubscribeReporting = client.subscribeAgentEventEnvelopes(
+      { liveEventTypes: [], onSubscriptionError: (error) => errors.push(error) },
+      () => {},
+    )
+    for (let index = 0; index < 40 && !sources[0]?.onmessage; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    // Listeners stay on the single shared global subscription.
+    expect(subscriptionCount).toBe(1)
+    expect(sources[1]).toBeUndefined()
+
+    sources[0]?.onmessage?.(malformedEventMessage('subscription-1') as MessageEvent)
+    for (let index = 0; index < 60 && subscriptionCount < 2; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    expect(subscriptionCount).toBe(2)
+
+    sources[1]?.onmessage?.(malformedEventMessage('subscription-2') as MessageEvent)
+    for (let index = 0; index < 40 && errors.length === 0; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    for (let index = 0; index < 10; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toBeInstanceOf(Error)
+    // Recovery stopped: the shared subscription is not resubscribed again.
+    expect(subscriptionCount).toBe(2)
+    unsubscribeReporting()
+    unsubscribeShared()
+  })
+
   test('reconciles the active thread after event replay completes', async () => {
     let completed = false
     const readThreadIds: string[] = []
@@ -2006,6 +2110,60 @@ function rpc(id: string | number, result: unknown): Response {
   return new Response(JSON.stringify({ jsonrpc: '2.0', id, result }), {
     headers: { 'content-type': 'application/json' },
   })
+}
+
+/** Minimal event-stream RPC fetcher: handshake, subscribe, ack and unsubscribe. */
+function subscriptionFetcher(subscribe: () => { subscriptionId: string }) {
+  return async (path: string, init?: RequestInit): Promise<Response> => {
+    const body = init?.body ? JSON.parse(String(init.body)) : null
+    const params = body?.params ?? {}
+    if (path !== '/rpc') throw new Error(`Unhandled request: ${path}`)
+    if (body?.method === 'initialize') return rpc(body.id, initializedResult())
+    if (body?.method === 'initialized') return new Response(null, { status: 204 })
+    if (body?.method === 'event/subscribe') {
+      return rpc(body.id, {
+        ...subscribe(),
+        highWatermarks: [{ streamId: 'global', sequence: 12 }],
+      })
+    }
+    if (body?.method === 'event/unsubscribe') return rpc(body.id, { ok: true })
+    if (body?.method === 'event/ack') {
+      return rpc(body.id, {
+        subscriptionId: params.subscriptionId,
+        acknowledged: params.positions,
+      })
+    }
+    if (body?.method === 'project/list') return rpc(body.id, { projects: [], nextCursor: null })
+    if (body?.method === 'thread/list') return rpc(body.id, { threads: [], nextCursor: null })
+    if (body?.method === 'interaction/listPending') {
+      return rpc(body.id, { interactions: [], nextCursor: null })
+    }
+    throw new Error(`Unhandled RPC method: ${body?.method}`)
+  }
+}
+
+/** A frame the client can never project: unsupported envelope version. */
+function malformedEventMessage(subscriptionId: string) {
+  return {
+    data: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'event/next',
+      params: {
+        subscriptionId,
+        event: {
+          eventId: 'event-malformed',
+          streamId: 'global',
+          type: 'catalog/updated',
+          version: 2,
+          occurredAt: now,
+          durability: 'live',
+          sequence: null,
+          afterSequence: 12,
+          payload: {},
+        },
+      },
+    }),
+  }
 }
 
 function initializedResult() {

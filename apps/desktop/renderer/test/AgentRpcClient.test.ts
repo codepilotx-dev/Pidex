@@ -623,11 +623,11 @@ describe('agent RPC v4 client', () => {
     overflow.unsubscribe()
   })
 
-  test('malformed 与 wrong-scope 通知都停止当前代次并重新 hydration', async () => {
+  test('内容错误在单次快照恢复后仍出现时停止自动恢复且不 ACK', async () => {
     const requests: Array<Record<string, unknown>> = []
     const sources: FakeEventSource[] = []
-    let deliveries = 0
     let recoveries = 0
+    const subscriptionErrors: unknown[] = []
     const client = createAgentRpcClient({
       handshake: automaticHandshake('renderer-invalid-events'),
       fetch: createSubscriptionFetcher(requests),
@@ -646,10 +646,11 @@ describe('agent RPC v4 client', () => {
           recoveries += 1
           return 7
         },
+        onSubscriptionError: (error) => {
+          subscriptionErrors.push(error)
+        },
       },
-      () => {
-        deliveries += 1
-      },
+      () => {},
     )
     await waitFor(() => sources.length === 1)
     sources[0]?.emit(eventNext('subscription-1', liveDeltaEnvelope('wrong-scope', 'thread-2')))
@@ -660,10 +661,104 @@ describe('agent RPC v4 client', () => {
         version: 2,
       }),
     )
+    await waitFor(() => subscriptionErrors.length === 1)
+
+    expect(recoveries).toBe(1)
+    expect(sources).toHaveLength(2)
+    expect(requests.filter((request) => request.method === 'event/subscribe')).toHaveLength(2)
+    expect(requests.some((request) => request.method === 'event/ack')).toBe(false)
+    // 错误信息不得携带出错通知的原始内容。
+    expect(subscriptionErrors[0]).toBeInstanceOf(Error)
+    expect((subscriptionErrors[0] as Error).message).toBe('会话事件内容无法解析或与当前订阅不匹配')
+    unsubscribe()
+  })
+
+  test('历史重读失败时停止内容错误恢复并保留当前内容', async () => {
+    const requests: Array<Record<string, unknown>> = []
+    const sources: FakeEventSource[] = []
+    let deliveries = 0
+    let subscriptionErrors = 0
+    const client = createAgentRpcClient({
+      handshake: automaticHandshake('renderer-content-error-hydrate-failure'),
+      fetch: createSubscriptionFetcher(requests),
+      eventReconnectDelay: () => 0,
+      eventSourceFactory: (url) => {
+        const source = new FakeEventSource(url)
+        sources.push(source)
+        return source as unknown as EventSource
+      },
+    })
+    const unsubscribe = client.subscribeEnvelope(
+      {
+        threadId: 'thread-1',
+        after: 7,
+        onDeliveryError: () => {
+          throw new Error('history hydration failed')
+        },
+        onSubscriptionError: () => {
+          subscriptionErrors += 1
+        },
+      },
+      () => {
+        deliveries += 1
+      },
+    )
+    await waitFor(() => sources.length === 1)
+    sources[0]?.emit(eventNext('subscription-1', liveDeltaEnvelope('wrong-scope', 'thread-2')))
+    await waitFor(() => subscriptionErrors === 1)
+
+    expect(sources).toHaveLength(1)
+    expect(deliveries).toBe(0)
+    expect(requests.filter((request) => request.method === 'event/subscribe')).toHaveLength(1)
+    expect(requests.some((request) => request.method === 'event/ack')).toBe(false)
+    unsubscribe()
+  })
+
+  test('提交有效事件批次后内容错误才重新获得一次恢复机会', async () => {
+    const requests: Array<Record<string, unknown>> = []
+    const sources: FakeEventSource[] = []
+    let deliveries = 0
+    let recoveries = 0
+    let subscriptionErrors = 0
+    const client = createAgentRpcClient({
+      handshake: automaticHandshake('renderer-content-error-strike-reset'),
+      fetch: createSubscriptionFetcher(requests),
+      eventReconnectDelay: () => 0,
+      eventSourceFactory: (url) => {
+        const source = new FakeEventSource(url)
+        sources.push(source)
+        return source as unknown as EventSource
+      },
+    })
+    const unsubscribe = client.subscribeEnvelope(
+      {
+        threadId: 'thread-1',
+        after: 7,
+        onDeliveryError: () => {
+          recoveries += 1
+          return 7
+        },
+        onSubscriptionError: () => {
+          subscriptionErrors += 1
+        },
+      },
+      () => {
+        deliveries += 1
+      },
+    )
+    await waitFor(() => sources.length === 1)
+    sources[0]?.emit(eventNext('subscription-1', liveDeltaEnvelope('wrong-scope', 'thread-2')))
+    await waitFor(() => sources.length === 2)
+    sources[1]?.emit(eventNext('subscription-2', liveDeltaEnvelope('event-8')))
+    await waitFor(() => deliveries === 1)
+    sources[1]?.emit(eventNext('subscription-2', liveDeltaEnvelope('wrong-scope-2', 'thread-2')))
     await waitFor(() => sources.length === 3)
     expect(recoveries).toBe(2)
-    expect(deliveries).toBe(0)
-    expect(requests.some((request) => request.method === 'event/ack')).toBe(false)
+    sources[2]?.emit(eventNext('subscription-3', liveDeltaEnvelope('wrong-scope-3', 'thread-2')))
+    await waitFor(() => subscriptionErrors === 1)
+
+    expect(sources).toHaveLength(3)
+    expect(recoveries).toBe(2)
     unsubscribe()
   })
 

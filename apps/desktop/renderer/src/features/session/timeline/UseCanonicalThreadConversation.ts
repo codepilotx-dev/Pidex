@@ -64,6 +64,17 @@ export function hasTerminalTurnEvent(envelopes: readonly EventEnvelope[]): boole
   return envelopes.some(isTerminalTurnEnvelope)
 }
 
+/**
+ * 事件订阅放弃自动恢复时展示的既有错误横幅。文案固定，绝不携带出错通知的
+ * 原始内容；threadId 用当前请求的会话，旧代次由 isCurrent 守卫先行拦截。
+ */
+export function subscriptionStoppedErrorState(threadId: string): {
+  threadId: string
+  message: string
+} {
+  return { threadId, message: '会话事件流已停止自动恢复，请重新加载会话。' }
+}
+
 export type DeliverCanonicalBatchOptions = {
   coordinator: CanonicalThreadIngestionCoordinator
   readLatest: () => Promise<ThreadHistoryPageLike | null>
@@ -215,6 +226,12 @@ export function useCanonicalThreadConversation(
           liveEventTypes: AGENT_LIVE_EVENT_FILTERS.canonical,
           onCursorExpired: () => rehydrate(),
           onDeliveryError: (error) => rehydrate(error),
+          // The client already gave up on auto-recovery: keep the projection and
+          // surface the existing error banner until the user reloads.
+          onSubscriptionError: () => {
+            if (!isCurrent()) return
+            setErrorState(subscriptionStoppedErrorState(requestedThreadId))
+          },
         },
         async (envelopes: readonly EventEnvelope[]) => {
           if (!isCurrent()) {

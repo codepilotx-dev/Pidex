@@ -316,6 +316,7 @@ export function createAgentSessionDesktopClient(
   const sharedGlobalEventListeners = new Set<{
     liveEventTypes: ReadonlySet<LiveEventType>
     callback: (events: readonly EventEnvelope[]) => void | Promise<void>
+    onSubscriptionError?: (error: unknown) => void | Promise<void>
   }>()
   const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const confirmedReadThroughBySessionId = new Map<string, number>()
@@ -1795,6 +1796,7 @@ export function createAgentSessionDesktopClient(
     const entry = {
       liveEventTypes: new Set(options.liveEventTypes ?? []),
       callback,
+      ...(options.onSubscriptionError ? { onSubscriptionError: options.onSubscriptionError } : {}),
     }
     sharedGlobalEventListeners.add(entry)
     startSessionCatalogSubscription()
@@ -1871,6 +1873,14 @@ export function createAgentSessionDesktopClient(
       {
         liveEventTypes: sharedGlobalLiveEventTypes,
         onReplayComplete: () => reconcileAgentSessionStore(),
+        onSubscriptionError: (error) => {
+          notifyReconciliationError(error)
+          for (const entry of [...sharedGlobalEventListeners]) {
+            void Promise.resolve(entry.onSubscriptionError?.(error)).catch((cause) => {
+              console.error('共享全局事件订阅错误处理失败：', cause)
+            })
+          }
+        },
       },
       async (events) => {
         await catalogCoordinator.deliverBatch(events)

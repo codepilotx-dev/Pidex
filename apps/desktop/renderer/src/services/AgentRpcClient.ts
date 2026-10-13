@@ -43,6 +43,12 @@ export type AgentRpcSubscription = {
   onReplayComplete?: () => void | Promise<void>
   onCursorExpired?: () => number | void | Promise<number | void>
   onDeliveryError?: (error: unknown) => number | void | Promise<number | void>
+  /**
+   * Called when the client stops auto-recovering this subscription because the
+   * event stream carries content it cannot decode or match. The payload never
+   * includes the offending frame; a manual reload starts a new recovery cycle.
+   */
+  onSubscriptionError?: (error: unknown) => void | Promise<void>
 }
 
 export type EventBatchDelivery = (events: readonly EventEnvelope[]) => void | Promise<void>
@@ -50,6 +56,17 @@ export type EventBatchDelivery = (events: readonly EventEnvelope[]) => void | Pr
 const MAX_EVENTS_PER_DELIVERY = 256
 const EVENT_DELIVERY_DELAY_MS = 50
 const MAX_BUFFERED_EVENTS = 1_024
+
+/**
+ * Undecodable frames and frames from another subscription or stream. Recovery
+ * must not resubscribe from the same cursor, or the same frame replays forever.
+ */
+class EventContentError extends Error {
+  constructor() {
+    super('会话事件内容无法解析或与当前订阅不匹配')
+    this.name = 'EventContentError'
+  }
+}
 
 export class AgentRpcError extends Error {
   readonly code: number
@@ -236,6 +253,8 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
     let pendingEvents: EventEnvelope[] = []
     let inFlightEventCount = 0
     let drainPromise: Promise<void> | null = null
+    /** A content error already triggered one recovery without a committed batch. */
+    let contentRecoveryAttempted = false
     const pendingPositions = new Map<string, number>()
     const acknowledgedPositions = new Map<string, number>()
     if (options.after !== undefined) {
@@ -297,6 +316,31 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
       }, delay)
     }
 
+    /**
+     * Stops reconnecting for good and hands the failure to the consumer, which
+     * keeps whatever it already projected and shows its own error state. Pending
+     * positions are dropped so a bad frame is never acknowledged.
+     */
+    const stopAutoRecovery = (error: unknown): void => {
+      const currentSubscriptionId = subscriptionId
+      disposed = true
+      generation += 1
+      subscriptionId = null
+      source?.close()
+      source = null
+      clearAckTimer()
+      clearDeliveryTimer()
+      if (retryTimer !== null) {
+        clearTimeout(retryTimer)
+        retryTimer = null
+      }
+      pendingEvents = []
+      drainPromise = null
+      pendingPositions.clear()
+      unsubscribeBestEffort(currentSubscriptionId)
+      void Promise.resolve(options.onSubscriptionError?.(error)).catch(() => undefined)
+    }
+
     const handleDeliveryFailure = (error: unknown, expectedGeneration: number): void => {
       if (
         disposed ||
@@ -310,8 +354,17 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
       source = null
       clearDeliveryTimer()
       pendingEvents = []
-      void Promise.resolve(options.onDeliveryError?.(error))
-        .then((recoveredAfter) => {
+      const contentError = error instanceof EventContentError
+      if (contentError && contentRecoveryAttempted) {
+        stopAutoRecovery(error)
+        return
+      }
+      if (contentError) contentRecoveryAttempted = true
+      void (async (): Promise<void> => {
+        let recovered = false
+        try {
+          // A throwing re-read counts as no snapshot cursor, so it stops recovery too.
+          const recoveredAfter = await options.onDeliveryError?.(error)
           if (
             typeof recoveredAfter === 'number' &&
             Number.isSafeInteger(recoveredAfter) &&
@@ -319,12 +372,21 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
           ) {
             acknowledgedPositions.set(streamId, recoveredAfter)
             forceLatest = false
+            recovered = true
           }
-        })
-        .catch(() => undefined)
-        .finally(() => {
-          scheduleReconnect(expectedGeneration)
-        })
+        } catch {
+          recovered = false
+        }
+        if (disposed || generation !== expectedGeneration) return
+        // A content error may only resume on a usable snapshot cursor: without
+        // one the same frame would replay, and without a history re-read there
+        // is no cursor to resume from beyond the single existing retry.
+        if (contentError && options.onDeliveryError && !recovered) {
+          stopAutoRecovery(error)
+          return
+        }
+        scheduleReconnect(expectedGeneration)
+      })()
     }
 
     const drainEvents = (expectedGeneration: number): Promise<void> => {
@@ -354,6 +416,8 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
           ) {
             return
           }
+          // A committed batch proves the stream is readable again.
+          contentRecoveryAttempted = false
           for (const event of batch) {
             const sequence = event.durability === 'durable' ? event.sequence : event.afterSequence
             recordCommittedPosition(event.streamId, sequence)
@@ -440,12 +504,12 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
         try {
           const notification = decodeServerNotification(JSON.parse(message.data))
           if (notification.params.subscriptionId !== subscription.subscriptionId) {
-            throw new Error('事件通知与当前订阅不匹配。')
+            throw new EventContentError()
           }
           if (notification.method === 'event/next') {
             const event = decodeEventEnvelope(notification.params.event)
             if (event.streamId !== streamId) {
-              throw new Error('事件通知与当前 stream scope 不匹配。')
+              throw new EventContentError()
             }
             if (pendingEvents.length + inFlightEventCount >= MAX_BUFFERED_EVENTS) {
               handleDeliveryFailure(
@@ -483,8 +547,10 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
             scheduleReconnect(expectedGeneration)
             return
           }
-        } catch (error) {
-          handleDeliveryFailure(error, expectedGeneration)
+        } catch {
+          // Decoding and scope-matching failures are content errors: the same
+          // frame would replay from the same cursor on every reconnect.
+          handleDeliveryFailure(new EventContentError(), expectedGeneration)
         }
       }
       nextSource.onerror = () => {

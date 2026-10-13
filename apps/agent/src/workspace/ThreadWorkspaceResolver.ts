@@ -10,6 +10,7 @@ import type {
   ManagedProjectlessWorkspaceAllocation,
 } from './ManagedProjectlessWorkspaceService'
 import { WorkspaceService } from './WorkspaceService'
+import type { WorkspaceRoot } from './WorkspaceService'
 
 type ResolvedWorkspaceBase = {
   workspaceRoot: string
@@ -41,12 +42,6 @@ type RuntimeProject = {
   rootPath?: string
   removedAt?: number | null
   primaryFolderId?: string
-  folders?: Array<{
-    id: string
-    path: string
-    role: 'primary' | 'secondary'
-    availability?: 'available' | 'missing'
-  }>
 }
 
 type ProjectWorkspaceDescriptor = {
@@ -103,10 +98,13 @@ export class ThreadWorkspaceResolver {
       const executionBinding = this.resolveExecutionBinding(threadID, descriptor)
       const project = this.db.getProject(descriptor.projectID) as RuntimeProject | null
       if (!project) throw new AgentError('PROJECT_NOT_FOUND', '当前项目不存在', 404)
-      const folders =
-        descriptor.runtimeWorkspaceRoots.length > 0
-          ? descriptor.runtimeWorkspaceRoots.map((root) => ({ ...root, id: root.folderId }))
-          : (project.folders?.filter((folder) => folder.availability !== 'missing') ?? [])
+      // Persisted roots are the source of the execution scope. Explicitly empty
+      // roots stay on the persisted cwd instead of widening to every project
+      // folder, so project edits never grow an existing thread's permissions.
+      const folders = descriptor.runtimeWorkspaceRoots.map((root) => ({
+        ...root,
+        id: root.folderId,
+      }))
       const primary =
         folders.find((folder) => folder.role === 'primary') ??
         folders.find((folder) => folder.id === project.primaryFolderId)
@@ -114,16 +112,20 @@ export class ThreadWorkspaceResolver {
       if (!primaryPath) throw new AgentError('PROJECT_FOLDER_NOT_FOUND', '项目主目录不存在', 409)
       const executionPrimary =
         executionBinding.kind === 'worktree' ? executionBinding.cwd : primaryPath
+      // Missing secondary roots only drop out of this execution view. The
+      // unfiltered list is what callers persist, so a recovered directory stays
+      // usable in later turns.
+      const requestedRoots: WorkspaceRoot[] =
+        folders.length > 0
+          ? folders.map((folder) => ({
+              folderId: folder.id,
+              path: folder.id === primary?.id ? executionPrimary : folder.path,
+              role: folder.role,
+            }))
+          : [{ path: executionPrimary, role: 'primary' }]
       const workspace = await WorkspaceService.openRoots({
         primaryRoot: executionPrimary,
-        roots:
-          folders.length > 0
-            ? folders.map((folder) => ({
-                folderId: folder.id,
-                path: folder.id === primary?.id ? executionPrimary : folder.path,
-                role: folder.role,
-              }))
-            : [{ path: executionPrimary, role: 'primary' }],
+        roots: requestedRoots,
       })
       const saved = descriptor as typeof descriptor & ProjectWorkspaceDescriptor
       const requestedCwd =
@@ -153,11 +155,16 @@ export class ThreadWorkspaceResolver {
         projectID: descriptor.projectID,
         workspaceRoot: workspace.rootPath,
         cwd,
-        runtimeWorkspaceRoots: workspace.workspaceRoots.map((root) => ({
-          folderId: root.folderId ?? root.path,
-          path: root.path,
-          role: root.role,
-        })),
+        runtimeWorkspaceRoots: requestedRoots.map((root) => {
+          const opened =
+            workspace.workspaceRoots.find((candidate) => candidate.folderId === root.folderId) ??
+            workspace.workspaceRoots.find((candidate) => candidate.path === root.path)
+          return {
+            folderId: root.folderId ?? root.path,
+            path: opened?.path ?? root.path,
+            role: root.role,
+          }
+        }),
         instructionSources,
         outputDirectory: null,
         workspace,
