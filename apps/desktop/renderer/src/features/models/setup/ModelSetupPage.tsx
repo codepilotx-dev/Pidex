@@ -714,6 +714,7 @@ export function ModelSetupPage(): React.ReactNode {
       </main>
 
       <ProviderEditorDialog
+        existingProviderIds={snapshot.providers.map((provider) => provider.providerID)}
         open={providerEditorOpen}
         onOpenChange={setProviderEditorOpen}
         onSaved={async (savedProviderId) => {

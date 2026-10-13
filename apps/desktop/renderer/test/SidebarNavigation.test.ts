@@ -1,7 +1,7 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { Provider as TooltipProvider } from '@radix-ui/react-tooltip'
+import { TooltipProvider } from '../src/components/ui/Tooltip.js'
 import { DesktopSettingsProvider } from '../src/features/settings/UseDesktopSettings.js'
 import { SidebarNavigationRail } from '../src/features/layout/sidebar/SidebarNavigationRail.js'
 import { SidebarHeader, SidebarNewTaskNav } from '../src/features/layout/sidebar/SidebarTopNav.js'

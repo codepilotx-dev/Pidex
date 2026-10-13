@@ -177,9 +177,11 @@ export function SidebarPluginsPane({
           </SidebarRow>
         ))}
       </div>
-      <h3 className="tw:m-0 tw:px-4 tw:py-2 tw:text-app-text-meta tw:type-label">{t('已安装')}</h3>
+      <h3 className="tw:m-0 tw:flex tw:min-h-[var(--sidebar-row-height)] tw:shrink-0 tw:items-center tw:px-4 tw:text-app-text-meta tw:type-body">
+        {t('已安装')}
+      </h3>
       <ScrollArea
-        className="sidebar-scheduled-scroll tw:min-h-0 tw:flex-1 tw:p-2"
+        className="sidebar-scheduled-scroll tw:min-h-0 tw:flex-1 tw:px-2 tw:pb-2 tw:pt-0"
         contentClassName="tw:flex tw:flex-col tw:sidebar-row-gap"
       >
         {loading ? (

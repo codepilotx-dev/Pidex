@@ -54,17 +54,18 @@ describe('model center account management', () => {
           { ...catalogItem('openai', false), logoURL: '/favicon.png' },
           catalogItem('anthropic', true),
         ]}
-        query=""
         onAddConnection={() => {}}
         onManageConnection={() => {}}
-        onQueryChange={() => {}}
         onSelect={() => {}}
       />,
     )
     expect(html).not.toContain('<h2>供应商</h2>')
     expect(html).not.toContain('浏览完整目录')
     expect(html).not.toContain('model-center-catalog-source')
-    expect(html).toContain('2 个')
+    expect(html.match(/class="provider-card /g)).toHaveLength(2)
+    expect(html).not.toContain('搜索 Provider')
+    expect(html).not.toContain('供应商筛选')
+    expect(html).toContain('供应商市场')
     expect(html).toContain('>查看<')
     expect(html).toContain('>连接<')
     expect(html).toMatch(
@@ -76,10 +77,7 @@ describe('model center account management', () => {
 
   test('模型卡标题仅由独立 disclosure button 控制展开', async () => {
     const source = await Bun.file(
-      new URL(
-        '../src/features/models/provider-management/ProviderEditorDialog.tsx',
-        import.meta.url,
-      ),
+      new URL('../src/features/models/provider-management/ProviderEditorForm.tsx', import.meta.url),
     ).text()
 
     // 外观已迁到 Tailwind utility，断言只锁定“标题按钮独立于头部”这一结构契约。
@@ -92,7 +90,9 @@ describe('model center account management', () => {
     )
     expect(source).not.toContain('onClick={event => event.stopPropagation()}')
     expect(source).toContain('mountPolicy="always"')
-    expect(source).toContain('const [expanded, setExpanded] = useState(defaultExpanded)')
+    expect(source).toContain(
+      'const [expanded, setExpanded] = useState(dialog ? !model.id : defaultExpanded)',
+    )
   })
 })
 
@@ -276,10 +276,6 @@ function catalogItem(id: string, canAddConnection: boolean): ProviderCatalogItem
     modelCount: 1,
     current: false,
     canAddConnection,
-    status: {
-      label: canAddConnection ? '未配置' : '已配置',
-      tone: canAddConnection ? 'neutral' : 'positive',
-    },
   }
 }
 

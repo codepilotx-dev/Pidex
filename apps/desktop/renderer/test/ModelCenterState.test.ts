@@ -1,10 +1,11 @@
 import { describe, expect, test } from 'bun:test'
-import type { DesktopApiKeySummary } from '../shared/Types.js'
+import type { DesktopApiKeySummary, DesktopModelProviderSummary } from '../shared/Types.js'
 import {
   filterApiKeys,
   getApiKeyDeleteConfirmation,
   parseModelCenterSearchParams,
   projectProviderDirectory,
+  isConfiguredProviderDirectoryItem,
   providerWorkspaceTarget,
   updateModelCenterSearchParams,
 } from '../src/features/models/ModelCenterState.js'
@@ -221,6 +222,27 @@ describe('model center Provider directory', () => {
       'environment',
       'configured',
     ])
+  })
+})
+
+describe('provider marketplace sidebar', () => {
+  test('only configured connections and saved custom configurations enter the sidebar', () => {
+    const items = projectProviderDirectory(
+      [
+        provider({ providerID: 'unconfigured' }),
+        provider({ providerID: 'environment', apiKeyConfigured: true }),
+        provider({ providerID: 'stored' }),
+        provider({
+          providerID: 'custom',
+          providerKind: 'custom',
+          config: { kind: 'custom' } as DesktopModelProviderSummary['config'],
+        }),
+      ],
+      { apiKeys: [apiKey({ providerId: 'stored', enabled: false })] },
+    )
+    expect(
+      items.filter(isConfiguredProviderDirectoryItem).map((item) => item.provider.providerID),
+    ).toEqual(['environment', 'stored', 'custom'])
   })
 })
 

@@ -64,6 +64,11 @@ export type ProviderDirectoryItem = {
   healthTone: 'healthy' | 'warning' | 'neutral'
 }
 
+/** 自定义配置保存后即可管理凭据；尚未添加 Key 时也保留在已配置列表。 */
+export function isConfiguredProviderDirectoryItem(item: ProviderDirectoryItem): boolean {
+  return item.connectionStatus !== 'unconfigured' || item.provider.config?.kind === 'custom'
+}
+
 export type ProviderDirectoryOptions = {
   query?: string
   filter?: ProviderCatalogFilter
@@ -148,6 +153,7 @@ export function updateModelCenterSearchParams(
   patch: ModelCenterRoutePatch,
 ): URLSearchParams {
   const next = new URLSearchParams(current)
+  if (patch.providerId !== undefined) next.delete('newProvider')
   updateParam(next, 'provider', patch.providerId)
   if (patch.section === 'router') {
     updateParam(next, 'section', 'connection')

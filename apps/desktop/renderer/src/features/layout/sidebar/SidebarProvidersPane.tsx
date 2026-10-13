@@ -1,70 +1,45 @@
 import type React from 'react'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { BrainCircuit } from 'lucide-react'
+import { BrainCircuit, Plus, Server, Store } from 'lucide-react'
+import { Button } from '../../../components/ui/Button.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
-import { SearchInput } from '../../../components/ui/SearchInput.js'
-import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import {
+  isConfiguredProviderDirectoryItem,
   projectProviderDirectory,
   updateModelCenterSearchParams,
-  type ProviderCatalogFilter,
-  type ProviderConnectionStatus,
 } from '../../models/ModelCenterState.js'
 import { ProviderIcon } from '../../models/ProviderIcon.js'
 import { useProviderManagementSnapshot } from '../../provider-management/index.js'
 import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
 
-const FILTERS: ReadonlyArray<{ value: ProviderCatalogFilter; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'configured', label: '已配置' },
-  { value: 'unconfigured', label: '未配置' },
-]
-
-const CONNECTION_STATUS_LABELS: Record<ProviderConnectionStatus, string> = {
-  'stored-key': '已保存 Key',
-  oauth: 'OAuth',
-  environment: '环境变量',
-  configured: '已配置',
-  unconfigured: '未配置',
-}
-
-/**
- * 侧栏供应商面板：复用供应商 store 与目录投影函数，
- * 只负责搜索、筛选和选择；搜索与筛选保持本地状态，不写入 URL、不影响默认聊天模型。
- */
 export function SidebarProvidersPane(): React.ReactNode {
   const { t } = useLocale()
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const snapshot = useProviderManagementSnapshot()
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<ProviderCatalogFilter>('all')
   const onProvidersRoute = location.pathname === '/providers'
   const selectedProviderId = onProvidersRoute ? searchParams.get('provider') : null
-
+  const creatingProvider = onProvidersRoute && searchParams.get('newProvider') === '1'
   const items = useMemo(
     () =>
-      projectProviderDirectory(
-        [...snapshot.providers].sort((left, right) =>
-          left.displayName.localeCompare(right.displayName, 'zh-CN', {
+      projectProviderDirectory(snapshot.providers, {
+        currentProviderId: snapshot.currentProviderState?.selectedProviderID,
+        currentProviderState: snapshot.currentProviderState,
+        apiKeys: snapshot.apiKeys,
+        credentials: snapshot.credentials,
+      })
+        .filter(isConfiguredProviderDirectoryItem)
+        .sort((left, right) =>
+          left.provider.displayName.localeCompare(right.provider.displayName, 'zh-CN', {
             numeric: true,
             sensitivity: 'base',
           }),
         ),
-        {
-          query,
-          filter,
-          currentProviderId: snapshot.currentProviderState?.selectedProviderID,
-          currentProviderState: snapshot.currentProviderState,
-          apiKeys: snapshot.apiKeys,
-          credentials: snapshot.credentials,
-        },
-      ),
-    [filter, query, snapshot],
+    [snapshot],
   )
 
   function selectProvider(providerId: string): void {
@@ -77,30 +52,57 @@ export function SidebarProvidersPane(): React.ReactNode {
 
   const loading = !snapshot.loaded && snapshot.loading
   const error = snapshot.error && snapshot.providers.length === 0 ? snapshot.error : null
+  const browsing = onProvidersRoute && !selectedProviderId && !creatingProvider
 
   return (
     <div className="sidebar-providers-pane tw:flex tw:h-full tw:min-h-0 tw:flex-col">
       <div className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
         <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('供应商')}</h2>
+        <Button
+          color="ghostSecondary"
+          isIconOnly
+          size="toolbar"
+          title={t('新增自定义供应商')}
+          onClick={() => navigate('/providers?newProvider=1')}
+        >
+          <Plus aria-hidden size={APP_ICON_SIZE} />
+        </Button>
       </div>
-      <div className="sidebar-pane-filters tw:flex tw:flex-col tw:gap-2 tw:p-2">
-        <SearchInput
-          aria-label={t('搜索供应商')}
-          onChange={setQuery}
-          placeholder={t('搜索供应商名称或 ID')}
-          value={query}
-        />
-        <SegmentedControl<ProviderCatalogFilter>
-          ariaLabel={t('供应商筛选')}
-          onChange={setFilter}
-          options={FILTERS.map((option) => ({ ...option, label: t(option.label) }))}
-          value={filter}
-        />
+      <div className="tw:px-2">
+        <SidebarRow
+          active={browsing}
+          asChild
+          layout="flex"
+          leading={<Store aria-hidden size={APP_ICON_SIZE} />}
+        >
+          <button
+            type="button"
+            aria-current={browsing ? 'page' : undefined}
+            onClick={() => navigate('/providers')}
+          >
+            {t('供应商市场')}
+          </button>
+        </SidebarRow>
       </div>
+      <h3 className="tw:m-0 tw:flex tw:min-h-[var(--sidebar-row-height)] tw:shrink-0 tw:items-center tw:px-4 tw:text-app-text-meta tw:type-body">
+        {t('已配置')}
+      </h3>
       <ScrollArea
-        className="sidebar-providers-scroll tw:min-h-0 tw:flex-1 tw:p-2"
+        className="sidebar-providers-scroll tw:min-h-0 tw:flex-1 tw:px-2 tw:pb-2 tw:pt-0"
         contentClassName="tw:flex tw:flex-col tw:sidebar-row-gap"
       >
+        {creatingProvider ? (
+          <SidebarRow
+            active
+            asChild
+            layout="flex"
+            leading={<Server aria-hidden size={APP_ICON_SIZE} />}
+          >
+            <button type="button" aria-current="page">
+              {t('新供应商')}
+            </button>
+          </SidebarRow>
+        ) : null}
         {loading ? (
           <SidebarEmptyRow role="status">{t('正在加载供应商…')}</SidebarEmptyRow>
         ) : error ? (
@@ -111,11 +113,10 @@ export function SidebarProvidersPane(): React.ReactNode {
             {error}
           </div>
         ) : items.length === 0 ? (
-          <SidebarEmptyRow>{t('没有匹配的供应商')}</SidebarEmptyRow>
+          <SidebarEmptyRow>{t('暂无已配置供应商')}</SidebarEmptyRow>
         ) : (
-          items.map((item) => {
-            const provider = item.provider
-            const selected = provider.providerID === selectedProviderId
+          items.map(({ provider }) => {
+            const selected = !creatingProvider && provider.providerID === selectedProviderId
             return (
               <SidebarRow
                 active={selected}
@@ -141,9 +142,6 @@ export function SidebarProvidersPane(): React.ReactNode {
                 >
                   <span className="sidebar-provider-name tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
                     {provider.displayName}
-                  </span>
-                  <span className="sidebar-provider-status tw:shrink-0 tw:text-app-text-meta tw:type-caption">
-                    {t(CONNECTION_STATUS_LABELS[item.connectionStatus])}
                   </span>
                 </button>
               </SidebarRow>

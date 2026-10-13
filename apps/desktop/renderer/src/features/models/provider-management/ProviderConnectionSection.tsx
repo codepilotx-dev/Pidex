@@ -45,6 +45,7 @@ import { BillingCredentialConnection } from './BillingCredentialConnection.js'
 import { OAuthConnection } from './OAuthConnection.js'
 
 export type ProviderConnectionSectionProps = {
+  hideEndpoint?: boolean
   provider: DesktopModelProviderSummary
   providerState: DesktopModelProviderState | null
   group: ConfiguredProviderGroup | undefined
@@ -153,6 +154,7 @@ export function ProviderCredentialUsageCard({
 }
 
 export function ProviderConnectionSection({
+  hideEndpoint = false,
   provider,
   providerState,
   group,
@@ -254,7 +256,7 @@ export function ProviderConnectionSection({
   return (
     <div className="model-center-connection-section tw:grid tw:gap-4">
       {/* 1. Base URL / Custom Endpoint (if custom) */}
-      {isCustom && customConfig ? (
+      {!hideEndpoint && isCustom && customConfig ? (
         <section className="model-center-detail-card tw:grid tw:gap-3 tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-4">
           <header className="model-center-detail-card-header tw:flex tw:items-center tw:justify-between tw:gap-3">
             <div>

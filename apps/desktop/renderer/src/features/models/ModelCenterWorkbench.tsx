@@ -20,19 +20,24 @@ import type {
 } from '../../../shared/Types.js'
 import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
 import { fullErrorMessage } from '../../utils/Errors.js'
-import { Cable, ChevronRight, Pencil, Plus, RefreshCw, Server, Trash2 } from 'lucide-react'
+import { Cable, ChevronRight, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { useSearchParams } from 'react-router-dom'
+import { ProviderCatalog } from './ProviderCatalog.js'
+import { ProviderConnectionDialog } from './provider-management/ProviderConnectionDialog.js'
 import { ProviderDetail } from './ProviderDetail.js'
 import { useModelCenterController } from './UseModelCenterController.js'
 import {
   getApiKeyDeleteConfirmation,
+  projectProviderDirectory,
+  isConfiguredProviderDirectoryItem,
   parseModelCenterSearchParams,
   updateModelCenterSearchParams,
 } from './ModelCenterState.js'
 import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
+import { ProviderEditorForm } from './provider-management/ProviderEditorForm.js'
 import { ProviderEditorDialog } from './provider-management/ProviderEditorDialog.js'
 import { ProviderConnectionSection } from './provider-management/ProviderConnectionSection.js'
 import { ProviderModelsSection } from './provider-management/ProviderModelsSection.js'
@@ -90,6 +95,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const [busy, setBusy] = useState(false)
   const [refreshingProviderData, setRefreshingProviderData] = useState(false)
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null)
+  const [marketConnectionId, setMarketConnectionId] = useState<ModelProviderID | null>(null)
   const [providerEditorOpen, setProviderEditorOpen] = useState(false)
   const [deepSeekProtocolSupported, setDeepSeekProtocolSupported] = useState(false)
   const [providerEditorProviderId, setProviderEditorProviderId] = useState<ModelProviderID | null>(
@@ -137,6 +143,30 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   } = controller
 
   const configuredGroups = useMemo(() => selectConfiguredProviderGroups(snapshot), [snapshot])
+
+  const marketProviders = useMemo(
+    () =>
+      projectProviderDirectory(providers, {
+        currentProviderId: snapshot.currentProviderState?.selectedProviderID,
+        currentProviderState: snapshot.currentProviderState,
+        apiKeys: snapshot.apiKeys,
+        credentials: snapshot.credentials,
+      })
+        .filter((item) => item.provider.providerKind !== 'custom')
+        .map((item) => ({
+          id: item.provider.providerID,
+          name: item.provider.displayName,
+          logoURL: item.provider.logoURL,
+          source: '内置',
+          modelCount: item.provider.modelCount ?? item.provider.defaultModels.length,
+          current: item.current,
+          canAddConnection: !isConfiguredProviderDirectoryItem(item),
+          connectionDisabled: item.provider.availability?.status === 'unavailable',
+        })),
+    [providers, snapshot],
+  )
+  const marketConnectionProvider =
+    providers.find((provider) => provider.providerID === marketConnectionId) ?? null
 
   const routeState = useMemo(
     () =>
@@ -295,7 +325,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     }
   }
 
-  async function testConnection(): Promise<void> {
+  async function testConnection(modelId = model): Promise<void> {
     const executionError = desktopProviderExecutionError(selectedProvider)
     if (executionError) {
       onError(executionError)
@@ -305,10 +335,10 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     setModelError(null)
     onNotice('正在测试连接与鉴权有效性...')
     try {
-      const testRef: DesktopModelRef | undefined = model
+      const testRef: DesktopModelRef | undefined = modelId
         ? ({
             providerID,
-            id: model,
+            id: modelId,
             ...(variant ? { variant } : {}),
           } as DesktopModelRef)
         : undefined
@@ -463,7 +493,10 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     }
   }
 
-  const showingProviderDetail = routeState.providerId !== null
+  const creatingCustomProvider = searchParams.get('newProvider') === '1'
+  const showingProviderDetail = !creatingCustomProvider && routeState.providerId !== null
+  const showingCustomEditor =
+    creatingCustomProvider || (showingProviderDetail && selectedProvider?.providerKind === 'custom')
 
   const showInitialSkeleton = initialLoadState === 'loading' && providers.length === 0
 
@@ -482,6 +515,64 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         snapshot.providers.find((p) => p.providerID === deleteKey.providerId)?.displayName,
       )
     : null
+
+  const connectionSection = selectedProvider ? (
+    <ProviderConnectionSection
+      hideEndpoint={Boolean(showingCustomEditor)}
+      apiKeys={providerApiKeys}
+      busy={busy || busyKeyId !== null}
+      group={selectedConfiguredGroup}
+      onCopyKey={copyApiKey}
+      onDeleteKey={setDeleteKey}
+      onEditKey={(key) => {
+        setEditingKey(key)
+        setEditorProviderId(key.providerId)
+      }}
+      onError={onError}
+      onMoveKey={moveApiKey}
+      onNotice={onNotice}
+      onOpenNewKey={() => {
+        setEditingKey(null)
+        setEditorProviderId(providerID)
+      }}
+      onRefresh={async () => {
+        await providerManagementStore.refresh()
+      }}
+      onSetActiveKey={(key) =>
+        mutateKey(
+          key.id,
+          () => providerManagementStore.setActiveCredential(key.providerId, key.id),
+          '当前活动 API Key 已切换。',
+        ).then(() => undefined)
+      }
+      onTestConnection={testConnection}
+      onTestKey={testSingleApiKey}
+      onToggleKeyEnabled={(key) =>
+        mutateKey(
+          key.id,
+          () => providerManagementStore.setCredentialEnabled(key.id, !key.enabled),
+          key.enabled ? 'API Key 已停用。' : 'API Key 已启用。',
+        ).then(() => undefined)
+      }
+      provider={selectedProvider}
+      providerState={selectedProviderState}
+    />
+  ) : null
+
+  async function saveCustomProvider(
+    savedProviderId: string,
+    select = true,
+  ): Promise<DesktopModelProviderSummary | undefined> {
+    const refreshed = await providerManagementStore.refresh()
+    const savedProvider = refreshed.providers.find((item) => item.providerID === savedProviderId)
+    if (!savedProvider) throw new Error('供应商已保存，但刷新结果中没有找到该供应商，请重试。')
+    if (select) {
+      applyProviderSelection(savedProvider.providerID, savedProvider)
+      updateLocation({ provider: savedProviderId, section: 'connection' })
+    }
+    onNotice('自定义供应商配置已保存。')
+    return savedProvider
+  }
 
   const detailActions = selectedProvider ? (
     <>
@@ -555,7 +646,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
   return (
     <div className="model-center-shell tw:@container tw:mx-auto tw:min-w-0 tw:w-[min(calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2),100%)] tw:max-w-[calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2)] tw:p-5">
-      {showingProviderDetail && selectedProvider ? (
+      {(showingProviderDetail && selectedProvider) || creatingCustomProvider ? (
         <WorkspaceHeaderItem align="start" id="models.navigation" order={0} slot="left">
           <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-1 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
             <Button
@@ -573,24 +664,24 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
             <span className="model-center-breadcrumb-current tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap">
-              {selectedProvider.displayName}
+              {creatingCustomProvider ? '新供应商' : selectedProvider?.displayName}
             </span>
           </div>
         </WorkspaceHeaderItem>
       ) : null}
 
-      {!showingProviderDetail ? (
+      {!showingProviderDetail && !creatingCustomProvider ? (
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
           <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
-            供应商
+            供应商市场
           </h2>
           <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
-            管理模型服务、账户连接、凭据与可用模型。
+            浏览模型供应商，连接后可在左侧管理凭据与模型。
           </p>
         </div>
       ) : null}
 
-      {!showingProviderDetail ? (
+      {!showingProviderDetail && !creatingCustomProvider ? (
         <WorkspaceHeaderItem align="end" id="models.actions" order={100} slot="right">
           <div className="model-center-header-actions tw:inline-flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-3">
             {!showInitialSkeleton ? (
@@ -606,13 +697,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
                     刷新
                   </span>
                 </Button>
-                <Button
-                  color="primary"
-                  onClick={() => {
-                    setProviderEditorProviderId(null)
-                    setProviderEditorOpen(true)
-                  }}
-                >
+                <Button color="primary" onClick={() => setSearchParams({ newProvider: '1' })}>
                   <Plus size={APP_ICON_SIZE} aria-hidden />
                   <span className="model-center-header-action-label tw:max-[479px]:hidden">
                     新增自定义 Provider
@@ -628,6 +713,22 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         <ModelCenterInitialSkeleton
           view={showingProviderDetail ? 'detail' : 'catalog'}
           section={providerSection}
+        />
+      ) : showingCustomEditor ? (
+        <ProviderEditorForm
+          key={creatingCustomProvider ? 'new-provider' : selectedProvider?.providerID}
+          embedded
+          open
+          existingProviderIds={providers.map((item) => item.providerID)}
+          provider={creatingCustomProvider ? undefined : selectedProvider}
+          connectionSection={connectionSection}
+          operationBusy={busy || busyKeyId !== null}
+          onTestConnection={testConnection}
+          onTestModel={testConnection}
+          onRefreshModels={fetchModels}
+          onDelete={deleteCustomProvider}
+          onOpenChange={() => {}}
+          onSaved={saveCustomProvider}
         />
       ) : showingProviderDetail && selectedProvider ? (
         <ProviderDetail
@@ -648,45 +749,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           }}
         >
           {providerSection === 'connection' ? (
-            <ProviderConnectionSection
-              apiKeys={providerApiKeys}
-              busy={busy || busyKeyId !== null}
-              group={selectedConfiguredGroup}
-              onCopyKey={copyApiKey}
-              onDeleteKey={setDeleteKey}
-              onEditKey={(key) => {
-                setEditingKey(key)
-                setEditorProviderId(key.providerId)
-              }}
-              onError={onError}
-              onMoveKey={moveApiKey}
-              onNotice={onNotice}
-              onOpenNewKey={() => {
-                setEditingKey(null)
-                setEditorProviderId(providerID)
-              }}
-              onRefresh={async () => {
-                await providerManagementStore.refresh()
-              }}
-              onSetActiveKey={(key) =>
-                mutateKey(
-                  key.id,
-                  () => providerManagementStore.setActiveCredential(key.providerId, key.id),
-                  '当前活动 API Key 已切换。',
-                ).then(() => undefined)
-              }
-              onTestConnection={testConnection}
-              onTestKey={testSingleApiKey}
-              onToggleKeyEnabled={(key) =>
-                mutateKey(
-                  key.id,
-                  () => providerManagementStore.setCredentialEnabled(key.id, !key.enabled),
-                  key.enabled ? 'API Key 已停用。' : 'API Key 已启用。',
-                ).then(() => undefined)
-              }
-              provider={selectedProvider}
-              providerState={selectedProviderState}
-            />
+            connectionSection
           ) : (
             <ProviderModelsSection
               busy={busy}
@@ -700,12 +763,32 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           )}
         </ProviderDetail>
       ) : (
-        <div className="model-center-catalog-empty tw:grid tw:min-h-[220px] tw:content-center tw:place-items-center tw:gap-2 tw:rounded-xl tw:border tw:border-dashed tw:border-app-border tw:bg-app-panel tw:p-7 tw:text-center tw:text-app-text-soft tw:shadow-none tw:[&>svg]:mb-1 tw:[&>svg]:text-app-text-meta tw:[&>strong]:text-app-text tw:[&>strong]:type-title-sm tw:[&>span]:type-body-sm">
-          <Server aria-hidden size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          <strong>从左侧选择供应商</strong>
-          <span>在左侧供应商列表中选择要配置的连接与模型。</span>
-        </div>
+        <ProviderCatalog
+          providers={marketProviders}
+          onSelect={(id) => updateLocation({ provider: id, section: 'connection' })}
+          onManageConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
+          onAddConnection={(id) => {
+            setEditingKey(null)
+            setMarketConnectionId(id)
+          }}
+        />
       )}
+
+      <ProviderConnectionDialog
+        open={marketConnectionId !== null}
+        provider={marketConnectionProvider}
+        busy={busyKeyId !== null}
+        sources={snapshot.usageSources.filter((source) =>
+          source.providerIds.some((id) => id === marketConnectionId),
+        )}
+        onOpenChange={(open) => {
+          if (!open) setMarketConnectionId(null)
+        }}
+        onKeySubmit={saveApiKeyEditor}
+        onConnected={async () => {
+          await providerManagementStore.refresh()
+        }}
+      />
 
       <ProviderEditorDialog
         deepSeekProtocolSupported={deepSeekProtocolSupported}
@@ -828,10 +911,6 @@ function ModelCenterInitialSkeleton({
       <div className="model-center-heading model-center-skeleton-heading tw:grid tw:gap-2">
         <SkeletonBlock className="model-center-skeleton-page-title tw:h-7 tw:w-[min(190px,52%)] tw:rounded-md" />
         <SkeletonBlock className="model-center-skeleton-page-copy tw:h-[18px] tw:w-[min(460px,78%)] tw:rounded-md" />
-      </div>
-      <div className="model-center-catalog-toolbar tw:flex tw:min-w-0 tw:items-center tw:justify-start tw:gap-3 tw:@max-[900px]:items-stretch">
-        <SkeletonBlock className="model-center-skeleton-search tw:h-9 tw:w-[min(360px,100%)] tw:rounded-md" />
-        <SkeletonBlock className="model-center-skeleton-count tw:h-6 tw:w-[46px] tw:rounded-full" />
       </div>
       <div className="model-center-skeleton-provider-grid tw:grid tw:min-w-0 tw:grid-cols-2 tw:gap-4 tw:@max-[900px]:grid-cols-1">
         {Array.from({ length: 6 }, (_, index) => (
