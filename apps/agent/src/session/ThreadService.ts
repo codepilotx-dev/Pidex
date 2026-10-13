@@ -2,7 +2,9 @@ import { Effect } from 'effect'
 import type { PluginManagementService } from '../plugin/PluginManagementService'
 import { pluginReferenceData } from '../plugin/PluginReferences'
 import { Model } from '@pidex/model-schema'
+import { formatStructuredPlanMarkdown } from '@pidex/shared/thread'
 import type { Thread, ThreadSettings } from '@pidex/shared/thread'
+import { summarizeAcceptance } from '../calendar/SchedulePlanService'
 import type { AgentModelCatalog } from '../provider/AgentModelCatalog'
 import { AgentError, type AgentExecution, type EventEnvelope, type SubmitMessage } from '../Domain'
 import type { AgentDatabase, QueueMutationMeta } from '../storage/database/AgentDatabase'
@@ -1401,7 +1403,7 @@ export class ThreadService {
           content: [
             `当前 Goal：${currentGoal.objective}`,
             `状态：${currentGoal.status}；token：${currentGoal.tokensUsed}/${currentGoal.tokenBudget ?? '不限额'}；实际运行：${currentGoal.timeUsedSeconds} 秒。`,
-            '只有真正完成时先调用 update_goal(complete)，必须等待用户或外部状态变化时调用 update_goal(blocked)，然后再用 finalize_result 收尾。',
+            '只有真正完成时先调用 update_goal(complete)，必须等待用户或外部状态变化时调用 update_goal(blocked)，然后以普通 Markdown 回答说明结果。',
           ].join('\n'),
         })
       }
@@ -1422,6 +1424,32 @@ export class ThreadService {
             '用户要求修改下面这份计划。请依据本轮的用户消息（修改意见）继续调查并更新计划，不要实施。',
             '原计划：',
             planFeedbackSource.markdown,
+          ].join('\n'),
+        })
+      }
+      // 任务规划草案反馈：用户消息是修改意见原文，源草案（固定任务计划 + 执行安排）
+      // 按 feedback_turn_id 关联重建为上下文，不写入用户消息文本。
+      const scheduleDraftSource =
+        input.taskMode === 'plan'
+          ? this.db.repositories.scheduleDrafts.feedbackSource(turnID)
+          : null
+      if (scheduleDraftSource) {
+        promptSections.splice(promptSections.length - 1, 0, {
+          id: 'thread.schedule-draft-feedback-source',
+          role: 'contextual-user',
+          cache: 'dynamic',
+          authority: 'user',
+          source: { type: 'runtime', name: 'schedule-draft-feedback-source' },
+          content: [
+            '用户要求修改下面这份「任务计划 + 执行安排」草案。请依据本轮的用户消息继续调查并更新草案，不要创建或确认任何任务。',
+            '固定任务计划：',
+            formatStructuredPlanMarkdown(scheduleDraftSource.taskPlan.structured),
+            '执行安排：',
+            `- 任务名称：${scheduleDraftSource.name}`,
+            `- 执行提示：${scheduleDraftSource.prompt}`,
+            `- 触发：${JSON.stringify(scheduleDraftSource.trigger)}`,
+            `- 条件：${JSON.stringify(scheduleDraftSource.conditions)}，条件不满足时 ${scheduleDraftSource.conditionFallback === 'skip' ? '跳过本次' : '等待并重新检查'}`,
+            `- 验收：${summarizeAcceptance(scheduleDraftSource.acceptance)}`,
           ].join('\n'),
         })
       }

@@ -118,6 +118,7 @@ const SESSION_STATUS_RECONCILE_INTERVAL_MS = 30_000
 export const RENDERER_CAPABILITIES = [
   'rpc.typed.v1',
   'events.replay.v1',
+  'thread.message-phase.v1',
   'events.live.v1',
   'interactions.serverRequests.v1',
   'interaction.recovery.v1',
@@ -173,6 +174,7 @@ export const RENDERER_CAPABILITIES = [
   'speech.transcription.v1',
   'automation.manage.v1',
   'calendar.manage.v1',
+  'schedule.draft.v1',
   'session-group.v1' as ProtocolCapability,
   'computer.use.v1' as ProtocolCapability,
   'computer.policy.v1' as ProtocolCapability,
@@ -2172,6 +2174,14 @@ export function createAgentSessionDesktopClient(
     readSchedulePlan: (input) => loadAgentCalendarApi().then((api) => api.readSchedulePlan(input)),
     commitSchedulePlan: (input) =>
       loadAgentCalendarApi().then((api) => api.commitSchedulePlan(input)),
+    readScheduleDraft: (input) =>
+      loadAgentCalendarApi().then((api) => api.readScheduleDraft(input)),
+    commitScheduleDraft: (input) =>
+      loadAgentCalendarApi().then((api) => api.commitScheduleDraft(input)),
+    cancelScheduleDraft: (input) =>
+      loadAgentCalendarApi().then((api) => api.cancelScheduleDraft(input)),
+    feedbackScheduleDraft: (input) =>
+      loadAgentCalendarApi().then((api) => api.feedbackScheduleDraft(input)),
     listSessionGroups: () => loadAgentSessionGroupApi().then((api) => api.listSessionGroups()),
     readSessionGroup: (groupId) =>
       loadAgentSessionGroupApi().then((api) => api.readSessionGroup(groupId)),

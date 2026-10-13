@@ -20,6 +20,7 @@ export const Capabilities = [
   'rpc.typed.v1',
   'events.replay.v1',
   'events.live.v1',
+  'thread.message-phase.v1',
   'interactions.serverRequests.v1',
   'interaction.recovery.v1',
   'interaction.questionSkip.v1',
@@ -91,6 +92,7 @@ export const Capabilities = [
   'workflow.v1',
   'automation.manage.v1',
   'calendar.manage.v1',
+  'schedule.draft.v1',
   'system.memory.v1',
 ] as const
 

@@ -6,6 +6,7 @@ import { secretScrubber } from '../../security/SecretScrubber'
 import { requestPermissionsDefinition, type ToolDefinition } from '../../tool/ToolRegistry'
 import { executionPlanInputSchema } from '../plan/ExecutionPlanInput'
 import { parseStructuredPlan, structuredPlanParameters } from '../plan/StructuredPlan'
+import { parseScheduleDraft, scheduleDraftParameters } from '../plan/ScheduleDraft'
 import type {
   HarnessRuntimeRequest,
   PiLifecycleCallbacks,
@@ -367,6 +368,37 @@ export function createLifecycleTools(
       ),
     )
   }
+  if (
+    callbacks.submitSchedulePlan &&
+    request.taskMode === 'plan' &&
+    (request.profile ?? 'main') === 'main'
+  ) {
+    add(
+      lifecycleTool(
+        'submit_schedule_plan',
+        [
+          '提交「任务计划 + 执行安排」草案并结束当前轮。必须先完成调查与澄清，再单独调用本工具；本工具必须是该条回复中唯一的工具调用。',
+          '用户已给出明确 Plan 时，把该 Plan 作为固定快照提交（source 指明来源），不要重新规划任务。',
+          '只提交可以确定的信息：触发时间、条件、执行环境与验收方式都必须来自用户回答或可确认的上下文。',
+          '本工具只保存待审阅草案，不会安排或执行任何任务；不要调用 schedule_plan_propose 或 automation_create。',
+          '信息不足时不要调用本工具：继续用普通文本提问，或用 request_user_input 逐题确认。',
+        ].join('\n'),
+        scheduleDraftParameters,
+        async (input, id, signal) => {
+          if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main') {
+            throw new AgentError(
+              'TOOL_NOT_ALLOWED_IN_MODE',
+              'submit_schedule_plan 仅允许 Plan 模式的主 Agent 使用',
+              403,
+            )
+          }
+          const parsed = parseScheduleDraft(input)
+          return callbacks.submitSchedulePlan!(parsed, id, signal)
+        },
+        true,
+      ),
+    )
+  }
   if (callbacks.spawnAgents)
     add(
       lifecycleTool(
@@ -496,6 +528,7 @@ export function createPiTools(
     'update_plan',
     'update_goal',
     'submit_plan',
+    'submit_schedule_plan',
     'spawn_agents',
     'wait_agents',
     'send_agent',

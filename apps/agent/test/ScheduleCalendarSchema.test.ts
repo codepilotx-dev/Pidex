@@ -6,7 +6,9 @@ import { AgentDatabase, SCHEMA_VERSION } from '../src/storage/database/AgentData
 import {
   probeAutomationStorageCapabilities,
   probeScheduleCalendarStorageCapabilities,
+  probeScheduleDraftStorageCapabilities,
 } from '../src/storage/database/StorageCapabilities'
+import { filterAdvertisedCapabilities } from '../src/transport/rpc/handlers/SystemCapabilities'
 import { removeFixturePaths } from './FixtureCleanup'
 
 const paths: string[] = []
@@ -83,6 +85,68 @@ describe('schedule calendar schema', () => {
     expect(
       reopened.sqlite.query("SELECT value FROM future_schedule_owner WHERE id = 'kept'").get(),
     ).toEqual({ value: 'future' })
+    reopened.close()
+  })
+})
+
+describe('task planning draft schema', () => {
+  test('schema 59 前向迁移到 60 只新增任务规划扩展表', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-schedule-draft-schema-'))
+    paths.push(root)
+    const databasePaths = {
+      historyPath: join(root, 'history.sqlite'),
+      profilePath: join(root, 'profile.sqlite'),
+    }
+    const seeded = new AgentDatabase(databasePaths)
+    seeded.sqlite.exec(`
+      DROP TABLE schedule_acceptances;
+      DROP TABLE schedule_trigger_records;
+      DROP TABLE schedule_draft_operations;
+      DROP TABLE schedule_drafts;
+      CREATE TABLE future_schema_59_extension (id TEXT PRIMARY KEY, value TEXT NOT NULL);
+      INSERT INTO future_schema_59_extension VALUES ('kept', 'unknown');
+      PRAGMA user_version = 59;
+    `)
+    seeded.close()
+
+    const migrated = new AgentDatabase(databasePaths)
+    expect(migrated.sqlite.query('PRAGMA user_version').get()).toEqual({
+      user_version: SCHEMA_VERSION,
+    })
+    expect(probeScheduleDraftStorageCapabilities(migrated.sqlite)).toEqual({ scheduleDrafts: true })
+    // 旧数据与未知对象原样保留，日历与自动化能力不受影响。
+    expect(
+      migrated.sqlite.query("SELECT value FROM future_schema_59_extension WHERE id = 'kept'").get(),
+    ).toEqual({ value: 'unknown' })
+    expect(probeScheduleCalendarStorageCapabilities(migrated.sqlite)).toEqual({
+      scheduledTasks: true,
+      schedulePlanProposals: true,
+    })
+    expect(filterAdvertisedCapabilities(migrated)).toContain('schedule.draft.v1')
+    expect(filterAdvertisedCapabilities(migrated)).toContain('calendar.manage.v1')
+    migrated.close()
+  })
+
+  test('缺少任务规划扩展表时不广告新能力，旧日历能力保持可用', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-schedule-draft-missing-'))
+    paths.push(root)
+    const databasePaths = {
+      historyPath: join(root, 'history.sqlite'),
+      profilePath: join(root, 'profile.sqlite'),
+    }
+    const seeded = new AgentDatabase(databasePaths)
+    seeded.sqlite.exec(`
+      DROP TABLE schedule_acceptances;
+      DROP TABLE schedule_trigger_records;
+      DROP TABLE schedule_draft_operations;
+      DROP TABLE schedule_drafts;
+    `)
+    seeded.close()
+
+    const reopened = new AgentDatabase(databasePaths)
+    expect(probeScheduleDraftStorageCapabilities(reopened.sqlite)).toEqual({ scheduleDrafts: false })
+    expect(filterAdvertisedCapabilities(reopened)).not.toContain('schedule.draft.v1')
+    expect(filterAdvertisedCapabilities(reopened)).toContain('calendar.manage.v1')
     reopened.close()
   })
 })

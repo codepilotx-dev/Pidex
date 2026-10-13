@@ -4,7 +4,9 @@ import type { DesktopCalendarApi } from './Types.js'
 
 type Dependencies = {
   mockClient: DesktopCalendarApi
-  requireAgentCapability: (name: Extract<ProtocolCapability, 'calendar.manage.v1'>) => void
+  requireAgentCapability: (
+    name: Extract<ProtocolCapability, 'calendar.manage.v1' | 'schedule.draft.v1'>,
+  ) => void
   rpc: Pick<ReturnType<typeof createAgentRpcClient>, 'call'>
   withAgentOrMock: <T>(agent: () => Promise<T>, mock: () => Promise<T>) => Promise<T>
 }
@@ -18,6 +20,12 @@ export function createAgentCalendarApi({
   const execute = <T>(operation: () => Promise<T>, mock: () => Promise<T>): Promise<T> =>
     withAgentOrMock(() => {
       requireAgentCapability('calendar.manage.v1')
+      return operation()
+    }, mock)
+  // 任务规划草案有独立能力：缺失时确认整体失败，不退回创建普通自动化。
+  const executeDraft = <T>(operation: () => Promise<T>, mock: () => Promise<T>): Promise<T> =>
+    withAgentOrMock(() => {
+      requireAgentCapability('schedule.draft.v1')
       return operation()
     }, mock)
   return {
@@ -72,6 +80,34 @@ export function createAgentCalendarApi({
             operationId: crypto.randomUUID(),
           }),
         () => mockClient.commitSchedulePlan(input),
+      ),
+    readScheduleDraft: (input) =>
+      executeDraft(
+        () => rpc.call('schedule-draft/read', input),
+        () => mockClient.readScheduleDraft(input),
+      ),
+    commitScheduleDraft: (input) =>
+      executeDraft(
+        () =>
+          rpc.call('schedule-draft/commit', {
+            ...input,
+            operationId: crypto.randomUUID(),
+          }),
+        () => mockClient.commitScheduleDraft(input),
+      ),
+    cancelScheduleDraft: (input) =>
+      executeDraft(
+        () => rpc.call('schedule-draft/cancel', input),
+        () => mockClient.cancelScheduleDraft(input),
+      ),
+    feedbackScheduleDraft: (input) =>
+      executeDraft(
+        () =>
+          rpc.call('schedule-draft/feedback', {
+            ...input,
+            operationId: crypto.randomUUID(),
+          }),
+        () => mockClient.feedbackScheduleDraft(input),
       ),
   }
 }

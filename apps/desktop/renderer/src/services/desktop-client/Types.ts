@@ -426,6 +426,18 @@ export type DesktopCalendarApi = {
   commitSchedulePlan(
     input: Omit<RpcParams<'schedule-plan/commit'>, 'operationId'>,
   ): Promise<RpcResult<'schedule-plan/commit'>>
+  readScheduleDraft(
+    input: RpcParams<'schedule-draft/read'>,
+  ): Promise<RpcResult<'schedule-draft/read'>>
+  commitScheduleDraft(
+    input: Omit<RpcParams<'schedule-draft/commit'>, 'operationId'>,
+  ): Promise<RpcResult<'schedule-draft/commit'>>
+  cancelScheduleDraft(
+    input: RpcParams<'schedule-draft/cancel'>,
+  ): Promise<RpcResult<'schedule-draft/cancel'>>
+  feedbackScheduleDraft(
+    input: Omit<RpcParams<'schedule-draft/feedback'>, 'operationId'>,
+  ): Promise<RpcResult<'schedule-draft/feedback'>>
 }
 
 export type DesktopPluginApi = {

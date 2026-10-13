@@ -36,8 +36,12 @@ import { proposedPlanTitle } from './plan/ProposedPlanStreamParser'
 import {
   formatStructuredPlanMarkdown,
   type ContextUsageBreakdownEntry,
+  type PermissionConfig,
   type StructuredPlan,
 } from '@pidex/shared/thread'
+import type { ScheduleDraft } from '@pidex/shared/schedule-draft'
+import type { ScheduleDraftSubmitInput } from '../calendar/SchedulePlanService'
+import type { ScheduleDraftSubmission } from './plan/ScheduleDraft'
 import { parseApplyPatch } from '../tool/ApplyPatch/ParseApplyPatch'
 import { TurnPiBoundaryRepository } from '../storage/repositories/TurnPiBoundaryRepository'
 import {
@@ -380,6 +384,12 @@ export interface AgentRuntimeServiceOptions {
   artifacts?: ArtifactService
   memoryManager?: MemoryManager | undefined
   observeHarnessEvent?: (context: PiRuntimeEventContext, event: AgentHarnessEvent) => void
+  /**
+   * 任务规划草案服务是后置构造的（依赖调度器就绪），所以用惰性取值器：
+   * 返回 undefined 表示当前 Agent 存储不支持任务规划扩展表，此时
+   * submit_schedule_plan 不暴露也不可执行。
+   */
+  scheduleDrafts?: () => { submitDraft(input: ScheduleDraftSubmitInput): Promise<ScheduleDraft> } | undefined
 }
 
 /** Adapts the existing product lifecycle to Pi without exposing Pi types to RPC. */
@@ -1027,6 +1037,58 @@ export class AgentRuntimeService implements AgentRuntime {
     return { status: 'submitted', itemID }
   }
 
+  /**
+   * 保存 submit_schedule_plan 提交的「任务计划 + 执行安排」草案。只落盘待审阅
+   * 内容并发布草案事件，不创建任务、不激活调度器——确认由 schedule-draft/commit 负责。
+   * 项目、模型与权限来自当前会话与已解析权限，模型参数不能携带这些事实。
+   */
+  private async persistScheduleDraft(input: {
+    threadID: string
+    turnID: string
+    submission: ScheduleDraftSubmission
+    model: AgentRuntimeRequest['fallbackModel']
+    permissionConfig: PermissionConfig
+  }): Promise<{ status: 'submitted'; draftId: string; draft: ScheduleDraft }> {
+    const service = this.options.scheduleDrafts?.()
+    if (!service)
+      throw new AgentError('TOOL_NOT_AVAILABLE', '当前 Agent 存储不支持任务规划草案', 409)
+    const projectId = this.options.db.threadProjectID(input.threadID) ?? null
+    const draft = await service.submitDraft({
+      threadId: input.threadID,
+      turnId: input.turnID,
+      toolCallId: `${input.turnID}:schedule-draft`,
+      name: input.submission.name,
+      prompt: input.submission.prompt,
+      taskPlan: input.submission.taskPlan,
+      trigger: input.submission.trigger,
+      conditions: input.submission.conditions,
+      conditionFallback: input.submission.conditionFallback,
+      acceptance: input.submission.acceptance,
+      notificationPolicy: input.submission.notificationPolicy,
+      missedRuns: input.submission.missedRuns,
+      execution: projectId
+        ? {
+            kind: 'standalone',
+            projectId,
+            targetThreadId: null,
+            environment: input.submission.environment ?? { kind: 'local' },
+            model: input.model,
+            reasoningEffort: input.model.variant ?? null,
+            permissionConfig: input.permissionConfig,
+          }
+        : {
+            kind: 'thread',
+            projectId: null,
+            targetThreadId: input.threadID,
+            environment: null,
+            model: input.model,
+            reasoningEffort: input.model.variant ?? null,
+            permissionConfig: input.permissionConfig,
+          },
+    })
+    return { status: 'submitted', draftId: draft.id, draft }
+  }
+
   async run(request: AgentRuntimeRequest) {
     this.options.memoryManager?.notifyTurnStarted()
     // Serialized OpenAI RunState cannot be replayed safely. Continue only from
@@ -1578,6 +1640,21 @@ export class AgentRuntimeService implements AgentRuntime {
               plan: input,
             })
           },
+          submitSchedulePlan: async (input) => {
+            if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main')
+              throw new AgentError(
+                'TOOL_NOT_ALLOWED_IN_MODE',
+                'submit_schedule_plan 仅允许 Plan 模式的主 Agent 使用',
+                403,
+              )
+            return this.persistScheduleDraft({
+              threadID: request.threadID,
+              turnID: request.turnID,
+              submission: input,
+              model: request.fallbackModel,
+              permissionConfig: effectivePermissionConfig,
+            })
+          },
           spawnAgents: async (input, toolCallID) =>
             executeSubagentTool('spawn_agents', input, toolCallID, async (input) => {
               const agents = Array.isArray(input.agents) ? input.agents : []
@@ -1795,6 +1872,7 @@ export class AgentRuntimeService implements AgentRuntime {
         ...(request.activeDeferredTools
           ? { activeDeferredTools: request.activeDeferredTools }
           : {}),
+        ...(this.options.scheduleDrafts?.() ? { hasScheduleDrafts: true } : {}),
       },
       runtime.toolCatalog,
     )

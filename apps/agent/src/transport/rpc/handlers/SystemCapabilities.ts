@@ -6,6 +6,7 @@ import {
   probeAutomationStorageCapabilities,
   probeArtifactsStorageCapabilities,
   probeScheduleCalendarStorageCapabilities,
+  probeScheduleDraftStorageCapabilities,
   probeThreadsStorageCapabilities,
 } from '../../../storage/database/StorageCapabilities'
 
@@ -36,6 +37,7 @@ export function filterAdvertisedCapabilities(
       }>
     ).map((row) => row.name),
   )
+  const { scheduleDrafts } = probeScheduleDraftStorageCapabilities(db.sqlite)
   const { scheduledTasks, schedulePlanProposals } = probeScheduleCalendarStorageCapabilities(
     db.sqlite,
   )
@@ -78,7 +80,10 @@ export function filterAdvertisedCapabilities(
           tables.has('pr_watches') &&
           tables.has('automation_host_tool_calls'))) &&
       (capability !== 'calendar.manage.v1' ||
-        (automations && automationRuns && scheduledTasks && schedulePlanProposals)),
+        (automations && automationRuns && scheduledTasks && schedulePlanProposals)) &&
+      // 任务规划草案确认依赖独立扩展表；缺失时不得退回创建普通自动化。
+      (capability !== 'schedule.draft.v1' ||
+        (scheduleDrafts && automations && automationRuns && scheduledTasks)),
   )
 }
 

@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { Credential, Model, Provider } from '@pidex/model-schema'
 import { Schema } from 'effect'
+import { TextItemSchema } from '@pidex/shared/thread'
 import { RpcMethods, type RpcMethod, type RpcParams, type RpcResult } from '../src/methods/index'
 import { AllRpcMethods } from '../src/methods/Host'
 import { Capabilities, ProtocolCapabilitySchema } from '../src/runtime/Capabilities'
@@ -684,6 +685,49 @@ const schedulePlanProposal = {
   committedAt: null,
 } as const
 
+const scheduleDraft = {
+  id: 'schedule-draft:1',
+  revision: 1,
+  threadId: 'thread:1',
+  turnId: 'turn:1',
+  toolCallId: 'tool-call:1',
+  status: 'pending',
+  name: '登录页面改进',
+  prompt: '按已确认的计划改进登录页面',
+  taskPlan: {
+    source: 'current-plan-item',
+    sourceRef: 'turn:1:plan',
+    contentHash: 'a'.repeat(64),
+    structured: {
+      title: '登录页面改进',
+      summary: '改善登录页的可用性与错误提示。',
+      changes: [{ area: '桌面展示', items: ['调整登录表单布局'] }],
+      interfaceChanges: [],
+      tests: ['人工验收登录流程'],
+      assumptions: [],
+    },
+  },
+  trigger: { kind: 'once', at: 2_000, timeZone: scheduledTask.timeZone },
+  conditions: { dependsOn: [], requireEnvironment: true, notBefore: null, deadline: null },
+  conditionFallback: 'skip',
+  acceptance: { kind: 'manual' },
+  notificationPolicy: 'failures',
+  missedRuns: 'catch-up',
+  execution: {
+    kind: scheduledTask.kind,
+    projectId: scheduledTask.projectId,
+    targetThreadId: scheduledTask.targetThreadId,
+    environment: scheduledTask.execution,
+    model: scheduledTask.model,
+    reasoningEffort: scheduledTask.reasoningEffort,
+    permissionConfig: scheduledTask.permissionConfig,
+  },
+  createdRefs: [],
+  createdAt: 1_000,
+  updatedAt: 1_000,
+  committedAt: null,
+} as const
+
 const browserTab = {
   tabId: 'browser:1',
   windowId: 'window:1',
@@ -1227,6 +1271,51 @@ const fixtures = {
         committedAt: 1_100,
       },
     },
+  ),
+  'schedule-draft/read': methodFixture(
+    'schedule-draft/read',
+    { id: scheduleDraft.id },
+    { draft: scheduleDraft },
+  ),
+  'schedule-draft/commit': methodFixture(
+    'schedule-draft/commit',
+    {
+      id: scheduleDraft.id,
+      expectedRevision: scheduleDraft.revision,
+      operationId: 'operation:schedule-draft-commit',
+      trigger: scheduleDraft.trigger,
+      conditions: scheduleDraft.conditions,
+      conditionFallback: scheduleDraft.conditionFallback,
+      acceptance: scheduleDraft.acceptance,
+      notificationPolicy: scheduleDraft.notificationPolicy,
+      missedRuns: scheduleDraft.missedRuns,
+      execution: scheduleDraft.execution,
+    },
+    {
+      draft: {
+        ...scheduleDraft,
+        revision: 2,
+        status: 'committed',
+        createdRefs: [{ kind: 'scheduled-task', id: scheduledTask.id }],
+        updatedAt: 1_100,
+        committedAt: 1_100,
+      },
+    },
+  ),
+  'schedule-draft/cancel': methodFixture(
+    'schedule-draft/cancel',
+    { id: scheduleDraft.id, expectedRevision: scheduleDraft.revision },
+    { draft: { ...scheduleDraft, revision: 2, status: 'cancelled', updatedAt: 1_100 } },
+  ),
+  'schedule-draft/feedback': methodFixture(
+    'schedule-draft/feedback',
+    {
+      id: scheduleDraft.id,
+      expectedRevision: scheduleDraft.revision,
+      operationId: 'operation:schedule-draft-feedback',
+      feedback: '先完成提问交互',
+    },
+    { draft: { ...scheduleDraft, revision: 2, status: 'cancelled', updatedAt: 1_100 } },
   ),
   'automation/list': methodFixture(
     'automation/list',
@@ -5849,7 +5938,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(317)
+    expect(methods).toHaveLength(321)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6217,7 +6306,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(296)
+    expect(Object.keys(RpcMethods)).toHaveLength(300)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })
@@ -6752,4 +6841,18 @@ describe('RPC method schema contracts', () => {
     expect(decodeResult(validResult)).toEqual(validResult)
     expect(() => decodeResult({ ...validResult, extra: 1 })).toThrow()
   })
+})
+
+
+test('消息阶段为可选字段，未知阶段降级且事件按独立能力协商', () => {
+  const item = { id: 'text', messageID: 'message', turnId: 'turn', agentId: 'agent', type: 'text', placement: 'result', text: '回答', status: 'streaming', createdAt: 1 }
+  const decode = Schema.decodeUnknownSync(TextItemSchema)
+  expect(decode(item)).not.toHaveProperty('phase')
+  expect(decode({ ...item, phase: 'future_phase' }).phase).toBeUndefined()
+  for (const phase of ['commentary', 'partial_answer', 'final_answer'] as const)
+    expect(decode({ ...item, phase }).phase).toBe(phase)
+  const event = EventManifest['item/agentMessage/phaseChanged']
+  expect(event.capability).toBe('thread.message-phase.v1')
+  expect(event.durability).toBe('durable')
+  expect(Schema.decodeUnknownSync(event.payload)({ item: { ...item, phase: 'final_answer' } }).item.id).toBe('text')
 })

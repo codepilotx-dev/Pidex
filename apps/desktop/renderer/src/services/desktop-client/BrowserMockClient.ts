@@ -463,6 +463,18 @@ export function createBrowserMockDesktopClient(
     commitSchedulePlan: async () => {
       throw new Error('浏览器模拟环境不保存规划草案。')
     },
+    readScheduleDraft: async () => {
+      throw new Error('浏览器模拟环境中不存在该任务规划草案。')
+    },
+    commitScheduleDraft: async () => {
+      throw new Error('浏览器模拟环境不保存任务规划草案。')
+    },
+    cancelScheduleDraft: async () => {
+      throw new Error('浏览器模拟环境不保存任务规划草案。')
+    },
+    feedbackScheduleDraft: async () => {
+      throw new Error('浏览器模拟环境不保存任务规划草案。')
+    },
     getAuthStatus: async () => mockAuthStatus(),
     getRuntimeStatus: async () => mockRuntimeStatus(),
     diagnoseDesktopToolchain: async () => {

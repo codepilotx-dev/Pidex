@@ -20,12 +20,12 @@ const exposure = (input: {
   })
 
 describe('ToolExposurePlan finalize_result exposure', () => {
-  test('Chat 主 Agent 暴露 finalize_result 结构化交付工具', () => {
+  test('Chat 主 Agent 以文本收尾，不暴露 finalize_result', () => {
     const plan = exposure({ taskMode: 'chat', profile: 'main' })
-    expect(plan.allows('finalize_result')).toBe(true)
+    expect(plan.allows('finalize_result')).toBe(false)
     expect(plan.allows('update_plan')).toBe(true)
     expect(plan.allows('request_permissions')).toBe(true)
-    expect(plan.exposed).toContain('finalize_result')
+    expect(plan.exposed).not.toContain('finalize_result')
   })
 
   test('Plan 主 Agent 不暴露 finalize_result，改以 submit_plan 交付', () => {
@@ -69,11 +69,11 @@ describe('ToolExposurePlan finalize_result exposure', () => {
     expect(plan.allows('wait_agents')).toBe(true)
   })
 
-  test('主 Agent 的 finalize_result 服从 Skill allowlist，子 Agent 的收尾工具不被剥离', () => {
+  test('Skill allowlist 不恢复主 Agent 收尾工具，子 Agent 的收尾工具不被剥离', () => {
     const main = exposure({
       taskMode: 'chat',
       profile: 'main',
-      allowedTools: ['Read'],
+      allowedTools: ['Read', 'finalize_result'],
     })
     expect(main.allows('Read')).toBe(true)
     expect(main.allows('finalize_result')).toBe(false)

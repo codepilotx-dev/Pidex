@@ -32,6 +32,10 @@ export type ScheduleCalendarStorageCapabilities = {
   schedulePlanProposals: boolean
 }
 
+export type ScheduleDraftStorageCapabilities = {
+  scheduleDrafts: boolean
+}
+
 const cache = new WeakMap<Database, ThreadsStorageCapabilities>()
 
 const artifactsCache = new WeakMap<Database, ArtifactsStorageCapabilities>()
@@ -41,6 +45,8 @@ const runtimeCompositionCache = new WeakMap<Database, RuntimeCompositionStorageC
 const automationCache = new WeakMap<Database, AutomationStorageCapabilities>()
 
 const scheduleCalendarCache = new WeakMap<Database, ScheduleCalendarStorageCapabilities>()
+
+const scheduleDraftCache = new WeakMap<Database, ScheduleDraftStorageCapabilities>()
 
 export function probeThreadsStorageCapabilities(sqlite: Database): ThreadsStorageCapabilities {
   const cached = cache.get(sqlite)
@@ -139,5 +145,19 @@ export function probeScheduleCalendarStorageCapabilities(
     schedulePlanProposals: names.has('schedule_plan_proposals'),
   }
   scheduleCalendarCache.set(sqlite, capabilities)
+  return capabilities
+}
+
+/** Read-only probe for the additive schema 60 task-planning draft tables. */
+export function probeScheduleDraftStorageCapabilities(
+  sqlite: Database,
+): ScheduleDraftStorageCapabilities {
+  const cached = scheduleDraftCache.get(sqlite)
+  if (cached) return cached
+  const row = sqlite
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schedule_drafts'")
+    .get()
+  const capabilities = { scheduleDrafts: Boolean(row) }
+  scheduleDraftCache.set(sqlite, capabilities)
   return capabilities
 }

@@ -70,6 +70,7 @@ import {
   type ToolSemanticSummary,
 } from './ToolActivityPresentation.js'
 import { isSchedulePlanTool, SchedulePlanCard } from './SchedulePlanCard.js'
+import { scheduleDraftFromTool, ScheduleDraftCard } from './ScheduleDraftCard.js'
 import { QuestionItemView } from './QuestionItemView.js'
 import { CopyButton } from './CopyButton.js'
 import { isShellTool, ToolCommandCard, toolDetailKind } from './ToolCommandCard.js'
@@ -543,7 +544,9 @@ function CanonicalItemRendererContentComponent({
       return <ReasoningItemView disclosure={disclosure} item={item} threadId={threadId} />
     case 'activity':
       return <ActivityItemView disclosure={disclosure} item={item} />
-    case 'tool':
+    case 'tool': {
+      const scheduleDraft = scheduleDraftFromTool(item)
+      if (scheduleDraft) return <ScheduleDraftCard initial={scheduleDraft} />
       if (isSchedulePlanTool(item)) return <SchedulePlanCard item={item} />
       return (
         <ToolItemView
@@ -553,6 +556,7 @@ function CanonicalItemRendererContentComponent({
           threadId={threadId}
         />
       )
+    }
     case 'plan':
       return (
         <WorkflowPlanCard

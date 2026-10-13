@@ -3,6 +3,7 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { RepositoryDatabase } from '../repositories/RepositoryDatabase'
 import { PlanApprovalRepository } from '../repositories/PlanApprovalRepository'
+import { ScheduleDraftRepository } from '../repositories/ScheduleDraftRepository'
 import { credentialRepositoryDatabase } from '../repositories/CredentialRepository'
 import { ContextRepository } from '../repositories/ContextRepository'
 import { executionRepository } from '../repositories/ExecutionRepository'
@@ -97,6 +98,7 @@ export class AgentDatabase extends RepositoryDatabase {
       automations: new AutomationRepository(this),
       scheduledTasks: new ScheduledTaskRepository(this),
       schedulePlanProposals: new SchedulePlanProposalRepository(this),
+      scheduleDrafts: new ScheduleDraftRepository(this),
     }
     this.artifacts = new ArtifactRepository(sqlite)
     this.repositories.planApprovals.recover()

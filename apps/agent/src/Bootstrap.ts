@@ -70,6 +70,10 @@ import { PullRequestWatchService } from './github/PullRequestWatchService'
 import { AutomationHostAuditRepository } from './automation/AutomationHostAuditRepository'
 import { GitWorkspaceService } from './git/GitWorkspaceService'
 import type { Models } from '@earendil-works/pi-ai'
+import type { Automation } from '@pidex/shared/automation'
+import type { ScheduledTask } from '@pidex/shared/scheduled-task'
+import type { SchedulePlanProposal } from '@pidex/shared/schedule-plan'
+import type { ScheduleDraft } from '@pidex/shared/schedule-draft'
 import { registerBunOAuthFlows } from '@earendil-works/pi-ai/bun-oauth'
 import { builtinModels } from '@earendil-works/pi-ai/providers/all'
 import { ManagedProjectlessWorkspaceService } from './workspace/ManagedProjectlessWorkspaceService'
@@ -743,6 +747,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       contextCompaction: new ContextCompactionService(db),
       artifacts,
       memoryManager,
+      scheduleDrafts: () => schedulePlans,
       observeHarnessEvent: (context, event) =>
         harnessLogs.observe(
           {
@@ -940,6 +945,9 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       },
     )
     let automationScheduler: AutomationScheduler | null = null
+    // 草案服务在后置构造（依赖调度器与日历存储）；运行时通过惰性取值器使用它，
+    // 因此 submit_schedule_plan 只在扩展表真实可用时才暴露。
+    let schedulePlans: SchedulePlanService | undefined
     const automation = new AutomationService(automationRepository, {
       changed: (value) =>
         publishAgentEvent(db, hub, null, null, 'automation/changed', {
@@ -1008,32 +1016,45 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         }).then(() => undefined),
     })
     const calendar = new CalendarService(automationRepository, scheduledTaskRepository)
-    const schedulePlans = new SchedulePlanService(
+    schedulePlans = new SchedulePlanService(
       db,
       db.repositories.schedulePlanProposals,
+      db.repositories.scheduleDrafts,
       scheduledTaskRepository,
       automationRepository,
       {
         wakeScheduler: () => automationScheduler?.wake(),
-        automationChanged: (value) =>
+        automationChanged: (value: Automation) =>
           publishAgentEvent(db, hub, null, null, 'automation/changed', {
             automationId: value.id,
             revision: value.revision,
             status: value.status,
             changedAt: Date.now(),
           }).then(() => undefined),
-        scheduledTaskChanged: (task) =>
+        scheduledTaskChanged: (task: ScheduledTask) =>
           publishAgentEvent(db, hub, null, task.turnId, 'scheduled-task/changed', {
             scheduledTaskId: task.id,
             revision: task.revision,
             status: task.status,
             changedAt: Date.now(),
           }).then(() => undefined),
-        proposalChanged: (proposal) =>
+        proposalChanged: (proposal: SchedulePlanProposal) =>
           publishAgentEvent(db, hub, null, proposal.turnId, 'schedule-plan/changed', {
             proposalId: proposal.id,
             revision: proposal.revision,
             status: proposal.status,
+            changedAt: Date.now(),
+          }).then(() => undefined),
+        threads: threads as never,
+        threadSettings: (threadId) => {
+          const settings = db.getThreadSettings(threadId)
+          return settings ? { permissionConfig: settings.permissionConfig } : null
+        },
+        draftChanged: (draft: ScheduleDraft) =>
+          publishAgentEvent(db, hub, null, draft.turnId, 'schedule-draft/changed', {
+            draftId: draft.id,
+            revision: draft.revision,
+            status: draft.status,
             changedAt: Date.now(),
           }).then(() => undefined),
       },
