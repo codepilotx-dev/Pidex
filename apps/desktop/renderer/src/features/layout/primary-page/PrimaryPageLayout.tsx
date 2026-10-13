@@ -4,6 +4,7 @@ import { cx } from '../../../utils/Cx.js'
 export type PrimaryPageLayoutProps = {
   title: React.ReactNode
   description: React.ReactNode
+  actions?: React.ReactNode
   search?: React.ReactNode
   navigation?: React.ReactNode
   children: React.ReactNode
@@ -16,6 +17,7 @@ export type PrimaryPageLayoutProps = {
 export function PrimaryPageLayout({
   title,
   description,
+  actions,
   search,
   navigation,
   children,
@@ -38,10 +40,19 @@ export function PrimaryPageLayout({
           headerClassName,
         )}
       >
-        <h1 className="primary-page-layout__title tw:text-app-text tw:type-title-xl">{title}</h1>
-        <p className="primary-page-layout__description tw:mt-2 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body tw:[&_a]:ml-1 tw:[&_a]:text-app-text tw:[&_a]:underline tw:[&_a]:underline-offset-2">
-          {description}
-        </p>
+        <div className="primary-page-layout__header-top tw:flex tw:w-full tw:min-w-0 tw:items-start tw:justify-between tw:gap-4">
+          <div className="primary-page-layout__header-main tw:flex tw:min-w-0 tw:flex-1 tw:flex-col">
+            <h1 className="primary-page-layout__title tw:text-app-text tw:type-title-xl">{title}</h1>
+            <p className="primary-page-layout__description tw:mt-2 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body tw:[&_a]:ml-1 tw:[&_a]:text-app-text tw:[&_a]:underline tw:[&_a]:underline-offset-2">
+              {description}
+            </p>
+          </div>
+          {actions ? (
+            <div className="primary-page-layout__actions tw:flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2 tw:pt-1">
+              {actions}
+            </div>
+          ) : null}
+        </div>
         {search ? (
           <div className="primary-page-layout__search tw:mt-6 tw:w-full tw:min-w-0 tw:[&_.search-input]:w-full">
             {search}

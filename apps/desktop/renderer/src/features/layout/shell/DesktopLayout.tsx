@@ -3537,21 +3537,23 @@ export function DesktopLayout(): React.ReactNode {
                 } as React.CSSProperties
               }
               workspaceHeader={
-                <DesktopWorkspaceHeader
-                  divider={isConversationRoute}
-                  rightDockOpen={effectiveRightDockVisible}
-                  shellControls={
-                    <WorkspaceShellControls
-                      terminalAvailable={terminalAvailable}
-                      terminalVisible={terminalVisible}
-                      workspaceLayout={workspaceLayout}
-                      showBottomPanel={isHomeOrConversationRoute}
-                      showRightPanel={isHomeOrConversationRoute}
-                      onStepWorkspaceLayout={stepWorkspaceLayout}
-                      onToggleTerminal={toggleIntegratedTerminal}
-                    />
-                  }
-                />
+                isHomeOrConversationRoute ? (
+                  <DesktopWorkspaceHeader
+                    divider={isConversationRoute}
+                    rightDockOpen={effectiveRightDockVisible}
+                    shellControls={
+                      <WorkspaceShellControls
+                        terminalAvailable={terminalAvailable}
+                        terminalVisible={terminalVisible}
+                        workspaceLayout={workspaceLayout}
+                        showBottomPanel={isHomeOrConversationRoute}
+                        showRightPanel={isHomeOrConversationRoute}
+                        onStepWorkspaceLayout={stepWorkspaceLayout}
+                        onToggleTerminal={toggleIntegratedTerminal}
+                      />
+                    }
+                  />
+                ) : null
               }
               mainContent={
                 <div
@@ -3562,10 +3564,12 @@ export function DesktopLayout(): React.ReactNode {
                   tabIndex={-1}
                   role="region"
                 >
-                  <div
-                    aria-hidden="true"
-                    className="desktop-main-route__header-spacer tw:h-[var(--workspace-header-height)] tw:min-h-[var(--workspace-header-height)] tw:w-full tw:shrink-0 tw:grow-0 tw:basis-[var(--workspace-header-height)] tw:pointer-events-none"
-                  />
+                  {isHomeOrConversationRoute ? (
+                    <div
+                      aria-hidden="true"
+                      className="desktop-main-route__header-spacer tw:h-[var(--workspace-header-height)] tw:min-h-[var(--workspace-header-height)] tw:w-full tw:shrink-0 tw:grow-0 tw:basis-[var(--workspace-header-height)] tw:pointer-events-none"
+                    />
+                  ) : null}
                   <div className="desktop-main-route__body tw:flex tw:w-full tw:min-w-0 tw:min-h-0 tw:flex-auto tw:justify-center tw:overflow-hidden">
                     <Outlet context={outletContext} />
                   </div>
