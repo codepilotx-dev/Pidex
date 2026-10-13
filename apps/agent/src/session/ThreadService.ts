@@ -295,7 +295,7 @@ export class ThreadService {
           input.sessionGroupID &&
           !this.db.repositories.sessionGroups.read(input.sessionGroupID)
         ) {
-          throw new AgentError('SESSION_GROUP_NOT_FOUND', '会话组不存在', 404)
+          throw new AgentError('SESSION_GROUP_NOT_FOUND', '工作组不存在', 404)
         }
         const record = this.db.createThread({
           creationSurface: input.creationSurface,
@@ -338,7 +338,7 @@ export class ThreadService {
           input.sessionGroupID &&
           !this.db.repositories.sessionGroups.read(input.sessionGroupID)
         ) {
-          throw new AgentError('SESSION_GROUP_NOT_FOUND', '会话组不存在', 404)
+          throw new AgentError('SESSION_GROUP_NOT_FOUND', '工作组不存在', 404)
         }
         const record = this.db.createThread({
           id: threadID,
