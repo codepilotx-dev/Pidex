@@ -2,6 +2,7 @@ import { subagentToolDefinitions } from '../../subagent/ToolDefinitions'
 import type { AgentToolResult } from '../harness/AgentTypes'
 import { Type, type TSchema } from '@earendil-works/pi-ai'
 import { AgentError } from '../../Domain'
+import { taskArrangementInput } from '../../tool/TaskSchedule/Definitions'
 import { secretScrubber } from '../../security/SecretScrubber'
 import { requestPermissionsDefinition, type ToolDefinition } from '../../tool/ToolRegistry'
 import { executionPlanInputSchema } from '../plan/ExecutionPlanInput'
@@ -399,6 +400,24 @@ export function createLifecycleTools(
       ),
     )
   }
+  if (callbacks.submitTaskSchedule && request.exposedTools.includes('submit_task_schedule'))
+    add(
+      lifecycleTool(
+        'submit_task_schedule',
+        '仅提交时间安排草案并结束本轮；不要求执行方案、项目或模型，也不会创建任务或开始执行。先读取任务与日历，已有任务引用 taskId 和 revision，新任务填写 name 和 owner；无法安排的任务说明原因。必须是该条回复中唯一的工具调用。用户在自动化页面确认后生效。',
+        Type.Unsafe(taskArrangementInput.toJSONSchema()),
+        async (input, id, signal) => {
+          if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main')
+            throw new AgentError(
+              'TOOL_NOT_ALLOWED_IN_MODE',
+              '仅允许 Plan 主 Agent 提交时间草案',
+              403,
+            )
+          return callbacks.submitTaskSchedule!(taskArrangementInput.parse(input), id, signal)
+        },
+        true,
+      ),
+    )
   if (callbacks.spawnAgents)
     add(
       lifecycleTool(
@@ -529,6 +548,7 @@ export function createPiTools(
     'update_goal',
     'submit_plan',
     'submit_schedule_plan',
+    'submit_task_schedule',
     'spawn_agents',
     'wait_agents',
     'send_agent',

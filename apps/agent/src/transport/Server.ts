@@ -127,6 +127,7 @@ export interface TransportDependencies {
   threadPullRequests: ThreadPullRequestService
   automation: AutomationService
   calendar: CalendarService
+  taskSchedules?: import('../calendar/TaskScheduleService').TaskScheduleService
   scheduledTasks: ScheduledTaskService
   schedulePlans: SchedulePlanService
   memoryManager?: MemoryManager | undefined
@@ -556,6 +557,7 @@ export const createApp = (dependencies: TransportDependencies) => {
     automation: dependencies.automation,
     ...(dependencies.prWatches ? { prWatches: dependencies.prWatches } : {}),
     calendar: dependencies.calendar,
+    ...(dependencies.taskSchedules ? { taskSchedules: dependencies.taskSchedules } : {}),
     scheduledTasks: dependencies.scheduledTasks,
     schedulePlans: dependencies.schedulePlans,
     memoryManager: dependencies.memoryManager,

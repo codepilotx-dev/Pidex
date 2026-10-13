@@ -20,6 +20,37 @@ const exposure = (input: {
   })
 
 describe('ToolExposurePlan finalize_result exposure', () => {
+  test('纯时间草案仅由支持该能力的 Plan 主 Agent 提交，allowlist 仍有效', () => {
+    const input = {
+      taskMode: 'plan' as const,
+      sandboxMode: 'read-only' as const,
+      approvalPolicy: 'never' as const,
+      hasTaskSchedules: true,
+    }
+    expect(createToolExposurePlan(new ToolCatalog(), input).allows('submit_task_schedule')).toBe(
+      true,
+    )
+    expect(
+      createToolExposurePlan(new ToolCatalog(), { ...input, hasTaskSchedules: false }).allows(
+        'submit_task_schedule',
+      ),
+    ).toBe(false)
+    expect(
+      createToolExposurePlan(new ToolCatalog(), { ...input, profile: 'explorer' }).allows(
+        'submit_task_schedule',
+      ),
+    ).toBe(false)
+    expect(
+      createToolExposurePlan(new ToolCatalog(), { ...input, taskMode: 'chat' }).allows(
+        'submit_task_schedule',
+      ),
+    ).toBe(false)
+    expect(
+      createToolExposurePlan(new ToolCatalog(), { ...input, allowedTools: ['Read'] }).allows(
+        'submit_task_schedule',
+      ),
+    ).toBe(false)
+  })
   test('Chat 主 Agent 以文本收尾，不暴露 finalize_result', () => {
     const plan = exposure({ taskMode: 'chat', profile: 'main' })
     expect(plan.allows('finalize_result')).toBe(false)

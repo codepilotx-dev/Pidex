@@ -2,12 +2,17 @@ import { Schema } from 'effect'
 
 const NonEmptyStringSchema = Schema.String.check(Schema.isMinLength(1))
 
-export const CalendarSourceKindSchema = Schema.Literals(['scheduled-task', 'automation'])
+export const CalendarSourceKindSchema = Schema.Literals([
+  'scheduled-task',
+  'automation',
+  'task-schedule',
+])
 export type CalendarSourceKind = typeof CalendarSourceKindSchema.Type
 
 export const CalendarSourceRefSchema = Schema.Union([
   Schema.Struct({ kind: Schema.Literal('scheduled-task'), id: NonEmptyStringSchema }),
   Schema.Struct({ kind: Schema.Literal('automation'), id: NonEmptyStringSchema }),
+  Schema.Struct({ kind: Schema.Literal('task-schedule'), id: NonEmptyStringSchema }),
 ])
 export type CalendarSourceRef = typeof CalendarSourceRefSchema.Type
 
@@ -21,6 +26,11 @@ export const CalendarOccurrenceStatusSchema = Schema.Literals([
   'completed',
   'failed',
   'interrupted',
+  'needs-plan',
+  'human',
+  'awaiting-acceptance',
+  'rework',
+  'skipped',
 ])
 export type CalendarOccurrenceStatus = typeof CalendarOccurrenceStatusSchema.Type
 
@@ -30,6 +40,7 @@ export const CalendarOccurrenceSchema = Schema.Struct({
   definitionKind: Schema.Literals(['one-off', 'recurring']),
   title: NonEmptyStringSchema,
   scheduledFor: Schema.Number,
+  durationMinutes: Schema.optional(Schema.Number),
   status: CalendarOccurrenceStatusSchema,
   runId: Schema.NullOr(NonEmptyStringSchema),
   threadId: Schema.NullOr(NonEmptyStringSchema),

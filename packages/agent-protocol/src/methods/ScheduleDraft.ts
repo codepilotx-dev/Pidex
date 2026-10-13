@@ -29,6 +29,7 @@ export const ScheduleDraftCommitParamsSchema = Schema.Struct({
   conditions: ScheduleDraftSchema.fields.conditions,
   conditionFallback: ScheduleDraftSchema.fields.conditionFallback,
   acceptance: ScheduleDraftSchema.fields.acceptance,
+  requireManualAcceptance: Schema.optional(Schema.Boolean),
   notificationPolicy: ScheduleDraftSchema.fields.notificationPolicy,
   missedRuns: ScheduleDraftSchema.fields.missedRuns,
   execution: ScheduleDraftSchema.fields.execution,

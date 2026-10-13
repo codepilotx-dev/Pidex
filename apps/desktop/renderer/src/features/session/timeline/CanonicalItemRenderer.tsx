@@ -70,6 +70,10 @@ import {
   type ToolSemanticSummary,
 } from './ToolActivityPresentation.js'
 import { isSchedulePlanTool, SchedulePlanCard } from './SchedulePlanCard.js'
+import {
+  TaskArrangementCard,
+  taskArrangementFromTool,
+} from '../../automation/TaskArrangementCard.js'
 import { scheduleDraftFromTool, ScheduleDraftCard } from './ScheduleDraftCard.js'
 import { QuestionItemView } from './QuestionItemView.js'
 import { CopyButton } from './CopyButton.js'
@@ -545,6 +549,8 @@ function CanonicalItemRendererContentComponent({
     case 'activity':
       return <ActivityItemView disclosure={disclosure} item={item} />
     case 'tool': {
+      const arrangement = taskArrangementFromTool(item)
+      if (arrangement) return <TaskArrangementCard initial={arrangement} />
       const scheduleDraft = scheduleDraftFromTool(item)
       if (scheduleDraft) return <ScheduleDraftCard initial={scheduleDraft} />
       if (isSchedulePlanTool(item)) return <SchedulePlanCard item={item} />

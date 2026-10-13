@@ -218,6 +218,11 @@ export async function executeHarnessRun(
       'submit_schedule_plan 必须是该条回复中唯一的工具调用；先完成调查与澄清，然后在单独一条回复中提交草案。',
     )
   }
+  if (options.lifecycle?.submitTaskSchedule)
+    singleToolCallReasons.set(
+      'submit_task_schedule',
+      '时间安排草案必须在调查和澄清完成后单独提交。',
+    )
   if (singleToolCallReasons.size > 0 || options.beforeToolCall)
     harness.on('tool_call', async (event) => {
       const singleCallReason = singleToolCallReasons.get(event.toolName)

@@ -5,6 +5,7 @@ import { automationOccurrencesBetween } from '../automation/Schedule'
 import { AgentError } from '../Domain'
 import type { AutomationRepository } from '../storage/repositories/AutomationRepository'
 import type { ScheduledTaskRepository } from '../storage/repositories/ScheduledTaskRepository'
+import type { TaskScheduleService } from './TaskScheduleService'
 
 const MAX_OCCURRENCES = 2_000
 
@@ -21,6 +22,7 @@ export class CalendarService {
     private readonly automations: AutomationRepository,
     private readonly scheduledTasks: ScheduledTaskRepository,
     private readonly now: () => number = Date.now,
+    private readonly taskSchedules?: TaskScheduleService,
   ) {}
 
   range(input: CalendarRangeInput): { occurrences: CalendarOccurrence[]; truncated: boolean } {
@@ -28,6 +30,74 @@ export class CalendarService {
     const sources = new Set(input.sourceKinds ?? ['scheduled-task', 'automation'])
     const occurrences: CalendarOccurrence[] = []
     let truncated = false
+
+    if (sources.has('task-schedule') && this.taskSchedules?.available()) {
+      const { tasks, occurrences: taskOccurrences } = this.taskSchedules.list()
+      for (const task of tasks) {
+        if (
+          task.status === 'cancelled' ||
+          (input.query && !task.name.toLocaleLowerCase().includes(input.query.toLocaleLowerCase()))
+        )
+          continue
+        const actual = taskOccurrences.filter(
+          (o) => o.taskId === task.id && o.scheduledFor >= input.from && o.scheduledFor < input.to,
+        )
+        for (const occurrence of actual)
+          occurrences.push({
+            id: occurrence.id,
+            source: { kind: 'task-schedule', id: task.id },
+            definitionKind: task.trigger?.kind === 'recurring' ? 'recurring' : 'one-off',
+            title: task.name,
+            scheduledFor: occurrence.scheduledFor,
+            durationMinutes: occurrence.snapshot.durationMinutes,
+            status:
+              occurrence.status === 'waiting'
+                ? 'scheduled'
+                : occurrence.status === 'dispatching'
+                  ? 'preparing'
+                  : occurrence.status === 'checking'
+                    ? 'running'
+                    : occurrence.status === 'cancelled'
+                      ? 'interrupted'
+                      : occurrence.status,
+            runId: occurrence.id,
+            threadId:
+              occurrence.snapshot.execution?.targetThreadId ??
+              occurrence.snapshot.plan?.threadId ??
+              null,
+            proposalId: null,
+          })
+        const projected =
+          task.trigger?.kind === 'once'
+            ? [task.trigger.at]
+            : task.trigger?.kind === 'recurring'
+              ? automationOccurrencesBetween(
+                  task.trigger.schedule,
+                  task.trigger.timeZone,
+                  Math.max(input.from, this.now()),
+                  input.to - 1,
+                  MAX_OCCURRENCES,
+                )
+              : []
+        for (const at of projected) {
+          if (at < input.from || at >= input.to || actual.some((o) => o.scheduledFor === at))
+            continue
+          occurrences.push({
+            id: `task-calendar:${task.id}:${at}`,
+            source: { kind: 'task-schedule', id: task.id },
+            definitionKind: task.trigger?.kind === 'recurring' ? 'recurring' : 'one-off',
+            title: task.name,
+            scheduledFor: at,
+            durationMinutes: task.durationMinutes,
+            status: task.status === 'paused' ? 'paused' : 'scheduled',
+            runId: null,
+            threadId: task.execution?.targetThreadId ?? task.plan?.threadId ?? null,
+            proposalId: null,
+          })
+        }
+      }
+      truncated ||= occurrences.length > MAX_OCCURRENCES
+    }
 
     if (sources.has('scheduled-task')) {
       const tasks = this.scheduledTasks.listRange({
@@ -38,6 +108,7 @@ export class CalendarService {
       })
       truncated ||= tasks.length > MAX_OCCURRENCES
       for (const task of tasks.slice(0, MAX_OCCURRENCES)) {
+        if (sources.has('task-schedule') && task.id.startsWith('scheduled:task-')) continue
         occurrences.push(this.taskOccurrence(task))
       }
     }

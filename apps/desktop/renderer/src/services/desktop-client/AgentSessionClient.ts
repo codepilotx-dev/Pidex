@@ -2170,6 +2170,13 @@ export function createAgentSessionDesktopClient(
       loadAgentAutomationApi().then((api) => api.markAllAutomationRunsRead(input)),
     previewAutomationSchedule: (input) =>
       loadAgentAutomationApi().then((api) => api.previewAutomationSchedule(input)),
+    taskSchedule: (method, input) =>
+      withRequiredAgent(async () => {
+        requireAgentCapability('task.schedule.v1')
+        return rpc.call(method as never, input as never) as Promise<
+          import('@pidex/agent-protocol').RpcResult<typeof method>
+        >
+      }),
     listCalendarOccurrences: (input) =>
       loadAgentCalendarApi().then((api) => api.listCalendarOccurrences(input)),
     readScheduledTask: (input) =>

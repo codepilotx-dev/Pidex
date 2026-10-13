@@ -36,6 +36,7 @@ import { sessionGroupHandlers } from './handlers/SessionGroup'
 import { workflowHandlers } from './handlers/Workflow'
 import { automationHandlers } from './handlers/Automation'
 import { calendarHandlers } from './handlers/Calendar'
+import { taskScheduleHandlers } from './handlers/TaskSchedule'
 import { scheduleDraftHandlers } from './handlers/ScheduleDraft'
 import { planApprovalHandlers } from './handlers/PlanApproval'
 import type { RpcHandlerGroup } from './handlers/Types'
@@ -84,6 +85,7 @@ const groups: readonly RpcHandlerGroup[] = [
   workflowHandlers,
   automationHandlers,
   calendarHandlers,
+  taskScheduleHandlers,
   scheduleDraftHandlers,
   planApprovalHandlers,
 ]

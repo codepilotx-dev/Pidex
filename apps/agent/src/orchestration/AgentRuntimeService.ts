@@ -389,7 +389,9 @@ export interface AgentRuntimeServiceOptions {
    * 返回 undefined 表示当前 Agent 存储不支持任务规划扩展表，此时
    * submit_schedule_plan 不暴露也不可执行。
    */
-  scheduleDrafts?: () => { submitDraft(input: ScheduleDraftSubmitInput): Promise<ScheduleDraft> } | undefined
+  scheduleDrafts?: () =>
+    { submitDraft(input: ScheduleDraftSubmitInput): Promise<ScheduleDraft> } | undefined
+  taskSchedules?: () => import('../calendar/TaskScheduleService').TaskScheduleService | undefined
 }
 
 /** Adapts the existing product lifecycle to Pi without exposing Pi types to RPC. */
@@ -1655,6 +1657,22 @@ export class AgentRuntimeService implements AgentRuntime {
               permissionConfig: effectivePermissionConfig,
             })
           },
+          submitTaskSchedule: async (input, toolCallID) => {
+            if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main')
+              throw new AgentError(
+                'TOOL_NOT_ALLOWED_IN_MODE',
+                '仅允许 Plan 主 Agent 提交时间草案',
+                403,
+              )
+            const service = this.options.taskSchedules?.()
+            if (!service?.available())
+              throw new AgentError('TOOL_NOT_AVAILABLE', '时间安排草案能力不可用', 409)
+            const proposal = service.propose({
+              ...input,
+              operationId: `task-arrangement:${toolCallID}`,
+            })
+            return { status: 'submitted', proposal, reviewUrl: '/automations' }
+          },
           spawnAgents: async (input, toolCallID) =>
             executeSubagentTool('spawn_agents', input, toolCallID, async (input) => {
               const agents = Array.isArray(input.agents) ? input.agents : []
@@ -1873,6 +1891,7 @@ export class AgentRuntimeService implements AgentRuntime {
           ? { activeDeferredTools: request.activeDeferredTools }
           : {}),
         ...(this.options.scheduleDrafts?.() ? { hasScheduleDrafts: true } : {}),
+        ...(this.options.taskSchedules?.()?.available() ? { hasTaskSchedules: true } : {}),
       },
       runtime.toolCatalog,
     )

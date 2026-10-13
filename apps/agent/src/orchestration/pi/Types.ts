@@ -269,6 +269,13 @@ export interface PiLifecycleCallbacks {
     toolCallID: string,
     signal?: AbortSignal,
   ): Promise<unknown>
+  submitTaskSchedule?(
+    input: import('zod').infer<
+      typeof import('../../tool/TaskSchedule/Definitions').taskArrangementInput
+    >,
+    toolCallID: string,
+    signal?: AbortSignal,
+  ): Promise<unknown>
   spawnAgents?(
     input: Record<string, unknown>,
     toolCallID: string,

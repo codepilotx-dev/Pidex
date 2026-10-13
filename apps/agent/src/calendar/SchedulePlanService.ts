@@ -36,6 +36,8 @@ import type {
   ScheduledTaskRepository,
 } from '../storage/repositories/ScheduledTaskRepository'
 import { prepareScheduledTaskDefinition } from './ScheduledTaskService'
+import { defaultTaskSchedule } from '@pidex/shared/task-schedule'
+import type { TaskScheduleService } from './TaskScheduleService'
 
 export type SchedulePlanProposalInput = {
   threadId: string
@@ -55,6 +57,7 @@ export type SchedulePlanCommitInput = {
 }
 
 export type SchedulePlanServiceOptions = {
+  taskSchedules?: TaskScheduleService
   now?: () => number
   proposalChanged?: (proposal: SchedulePlanProposal) => void | Promise<void>
   draftChanged?: (draft: ScheduleDraft) => void | Promise<void>
@@ -110,6 +113,7 @@ export type ScheduleDraftSubmitInput = {
 }
 
 export type ScheduleDraftCommitInput = {
+  requireManualAcceptance?: boolean | undefined
   id: string
   expectedRevision: number
   operationId: string
@@ -460,6 +464,49 @@ export class SchedulePlanService {
       execution: input.execution,
       taskPlan: draft.taskPlan,
     })
+    if (this.options.taskSchedules?.available()) {
+      const service = this.options.taskSchedules
+      const now = this.now()
+      const committed = this.db.transaction(() => {
+        const content = composeExecutionPrompt(prepared)
+        const task = service.save({
+          name: prepared.name,
+          operationId: `draft-task:${input.operationId}`,
+          definition: {
+            ...defaultTaskSchedule(prepared.name),
+            trigger: prepared.trigger,
+            conditions: prepared.conditions,
+            conditionFallback: prepared.conditionFallback,
+            missedRuns: prepared.missedRuns,
+            notificationPolicy: prepared.notificationPolicy,
+            plan: {
+              content,
+              contentHash: prepared.taskPlan.contentHash,
+              threadId: draft.threadId,
+              itemId: null,
+            },
+            execution: prepared.execution,
+            autoExecute: true,
+            requireManualAcceptance:
+              input.requireManualAcceptance ?? prepared.acceptance.kind === 'manual',
+            checks: prepared.acceptance.kind === 'automatic' ? prepared.acceptance.checks : [],
+          },
+        })
+        return this.drafts.commit(
+          draft.id,
+          {
+            ...prepared,
+            expectedRevision: draft.revision,
+            operationId: input.operationId,
+            createdRefs: [{ kind: 'task-schedule', id: task.id }],
+          },
+          now,
+        )
+      })
+      await this.options.draftChanged?.(committed)
+      await this.options.wakeScheduler?.()
+      return committed
+    }
     this.assertSupportedTrigger(prepared.trigger)
     this.assertSupportedAcceptance(prepared.acceptance)
     const conditions = prepared.conditions

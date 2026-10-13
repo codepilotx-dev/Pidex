@@ -141,7 +141,14 @@ describe('desktop notification service', () => {
       focusMainWindow: () => undefined,
       publishActivation: () => undefined,
     })
-    const kinds = ['permission', 'question', 'completed', 'failed'] as const
+    const kinds = [
+      'permission',
+      'question',
+      'completed',
+      'failed',
+      'task-due',
+      'task-acceptance',
+    ] as const
     for (const kind of kinds) {
       service.show(
         request({
@@ -155,19 +162,53 @@ describe('desktop notification service', () => {
       question: '需要你的回答',
       completed: '任务已完成',
       failed: '任务执行失败',
+      'task-due': '任务到时间了，需要处理',
+      'task-acceptance': '任务等待你的验收',
     })
     expect(created.map((item) => item.title)).toEqual([
       '需要你的授权',
       '需要你的回答',
       '任务已完成',
       '任务执行失败',
+      '任务到时间了，需要处理',
+      '任务等待你的验收',
     ])
-    expect(created.map((item) => item.icon)).toEqual(Array(4).fill('C:\\app\\build\\icon.ico'))
+    expect(created.map((item) => item.icon)).toEqual(Array(6).fill('C:\\app\\build\\icon.ico'))
     for (const kind of kinds) {
       expect(desktopNotificationTitleFor(kind)).toBe(DESKTOP_NOTIFICATION_TITLES[kind])
     }
   })
 
+  test('任务到期与人工验收支持无会话导航目标，并使用同等级 always 通知', () => {
+    const notification = new FakeNotification()
+    const activations: unknown[] = []
+    const service = new DesktopNotificationService({
+      logger: fakeLogger([]),
+      factory: { isSupported: () => true, create: () => notification },
+      resolveIconPath: () => 'icon.ico',
+      isMainWindowFocused: () => true,
+      focusMainWindow: () => undefined,
+      publishActivation: (value) => activations.push(value),
+    })
+    const input = {
+      notificationId: 'task-attention:1',
+      taskId: 'task:1',
+      occurrenceId: 'run:1',
+      kind: 'task-acceptance' as const,
+      body: '需要验收',
+      visibility: 'always' as const,
+    }
+    expect(normalizeDesktopNotificationRequest(input)).toEqual(input)
+    expect(service.show(input)).toEqual({ status: 'shown' })
+    notification.click()
+    expect(activations).toEqual([
+      {
+        notificationId: input.notificationId,
+        taskId: input.taskId,
+        occurrenceId: input.occurrenceId,
+      },
+    ])
+  })
   test('点击通知恢复主窗口并发布 thread activation', () => {
     const activations: Array<{ notificationId: string; threadId: string }> = []
     const focusedCalls: boolean[] = []

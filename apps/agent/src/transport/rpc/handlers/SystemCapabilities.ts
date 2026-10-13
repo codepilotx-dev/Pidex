@@ -81,6 +81,11 @@ export function filterAdvertisedCapabilities(
           tables.has('automation_host_tool_calls'))) &&
       (capability !== 'calendar.manage.v1' ||
         (automations && automationRuns && scheduledTasks && schedulePlanProposals)) &&
+      (capability !== 'task.schedule.v1' ||
+        (automations &&
+          automationRuns &&
+          scheduledTasks &&
+          db.repositories.taskSchedules.available())) &&
       // 任务规划草案确认依赖独立扩展表；缺失时不得退回创建普通自动化。
       (capability !== 'schedule.draft.v1' ||
         (scheduleDrafts && automations && automationRuns && scheduledTasks)),

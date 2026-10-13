@@ -4,6 +4,7 @@ import { dirname } from 'node:path'
 import { RepositoryDatabase } from '../repositories/RepositoryDatabase'
 import { PlanApprovalRepository } from '../repositories/PlanApprovalRepository'
 import { ScheduleDraftRepository } from '../repositories/ScheduleDraftRepository'
+import { TaskScheduleRepository } from '../repositories/TaskScheduleRepository'
 import { credentialRepositoryDatabase } from '../repositories/CredentialRepository'
 import { ContextRepository } from '../repositories/ContextRepository'
 import { executionRepository } from '../repositories/ExecutionRepository'
@@ -99,6 +100,7 @@ export class AgentDatabase extends RepositoryDatabase {
       scheduledTasks: new ScheduledTaskRepository(this),
       schedulePlanProposals: new SchedulePlanProposalRepository(this),
       scheduleDrafts: new ScheduleDraftRepository(this),
+      taskSchedules: new TaskScheduleRepository(this),
     }
     this.artifacts = new ArtifactRepository(sqlite)
     this.repositories.planApprovals.recover()

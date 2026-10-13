@@ -71,6 +71,8 @@ import {
 import { resolveModelPresetId } from '../../../ModelPresets.js'
 import { useDesktopRuntimeSettings } from '../../settings/UseDesktopSettings.js'
 import { useSystemNotifications } from '../../notifications/UseSystemNotifications.js'
+import { Button } from '../../../components/ui/Button.js'
+import { TaskConversationLinks } from '../../automation/TaskConversationLinks.js'
 import { NO_WORKSPACE_DIFF } from '../../workspace/UseWorkspaceState.js'
 import { shouldRestoreLastWorkspace } from '../../workspace/LastWorkspaceRestore.js'
 import { useSessionState } from '../../session/state/UseSessionState.js'
@@ -255,7 +257,7 @@ function routeAccessibilityLabel(pathname: string): string {
   if (pathname === '/providers') return '供应商'
   if (pathname === '/pull-requests') return '拉取请求'
   if (pathname === '/automations') return '已安排'
-  if (pathname === '/pets') return '宠物'
+  if (pathname === '/pets') return '宠物市场'
   if (pathname.startsWith('/settings/')) return '设置'
   return 'Pidex Desktop'
 }
@@ -315,7 +317,9 @@ export function DesktopLayout(): React.ReactNode {
     setSidebarTimelineEnabled,
     setSidebarProductMode,
   } = settings
-  useSystemNotifications(settingsLoaded ? settings.values.notifications : undefined)
+  const taskNotificationState = useSystemNotifications(
+    settingsLoaded ? settings.values.notifications : undefined,
+  )
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
   const [archiveNoticeVisible, setArchiveNoticeVisible] = useState(false)
@@ -593,7 +597,11 @@ export function DesktopLayout(): React.ReactNode {
     return bridge.onDesktopNotificationActivated((activation) => {
       // 点击已解决的权限通知只打开任务，不直接执行授权；页面会重新读取
       // pending interaction，避免对失效请求提交响应。
-      navigate(sessionPath(activation.threadId))
+      if (activation.taskId)
+        navigate(
+          `/automations?taskId=${encodeURIComponent(activation.taskId)}${activation.occurrenceId ? `&occurrenceId=${encodeURIComponent(activation.occurrenceId)}` : ''}`,
+        )
+      else if (activation.threadId) navigate(sessionPath(activation.threadId))
     })
   }, [navigate])
   useEffect(() => {
@@ -3571,6 +3579,41 @@ export function DesktopLayout(): React.ReactNode {
                     />
                   ) : null}
                   <div className="desktop-main-route__body tw:flex tw:w-full tw:min-w-0 tw:min-h-0 tw:flex-auto tw:justify-center tw:overflow-hidden">
+                    {taskNotificationState.attention.length ? (
+                      <div
+                        role="status"
+                        aria-label="任务强提醒"
+                        className="tw:flex tw:flex-wrap tw:gap-2 tw:border-b tw:border-app-border-subtle tw:p-2"
+                      >
+                        <Button color="secondary" onClick={() => navigate('/automations')}>
+                          需要你处理 · {taskNotificationState.attention.length}
+                        </Button>
+                        {taskNotificationState.attention.slice(0, 3).map((occurrence) => (
+                          <Button
+                            key={occurrence.id}
+                            color="secondary"
+                            onClick={() =>
+                              navigate(
+                                `/automations?taskId=${encodeURIComponent(occurrence.taskId)}&occurrenceId=${encodeURIComponent(occurrence.id)}`,
+                              )
+                            }
+                          >
+                            {occurrence.snapshot.name} ·{' '}
+                            {occurrence.attention === 'awaiting-acceptance'
+                              ? '待验收'
+                              : '到期待处理'}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null}
+                    <TaskConversationLinks
+                      threadId={
+                        location.pathname.startsWith('/threads/')
+                          ? (activeSessionItem?.appServerThreadId ?? activeSessionItem?.id ?? null)
+                          : null
+                      }
+                      state={taskNotificationState}
+                    />
                     <Outlet context={outletContext} />
                   </div>
                 </div>

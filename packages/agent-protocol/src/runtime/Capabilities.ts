@@ -92,6 +92,7 @@ export const Capabilities = [
   'workflow.v1',
   'automation.manage.v1',
   'calendar.manage.v1',
+  'task.schedule.v1',
   'schedule.draft.v1',
   'system.memory.v1',
 ] as const

@@ -52,7 +52,7 @@ export function resolveNotificationIconPath(): string {
 
 export function publishNotificationActivation(
   windows: WindowManager | undefined,
-  activation: { notificationId: string; threadId: string },
+  activation: import('@pidex/shared/desktop-notification-ipc').DesktopNotificationActivation,
 ): void {
   windows?.sendToFocused(DESKTOP_NOTIFICATION_IPC_CHANNELS.activated, activation)
 }

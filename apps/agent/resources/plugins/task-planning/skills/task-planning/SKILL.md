@@ -1,42 +1,32 @@
 ---
 name: task-planning
-description: Clarify goals and constraints, then turn complex work into an actionable plan with milestones, dependencies, risks, and acceptance criteria; optionally arrange the plan to run on a schedule.
+description: Arrange task time before execution details are known, develop fixed plans, and associate existing conversations for execution and acceptance.
 ---
 
 # Task Planning
 
-Clarify the intended outcome, audience, constraints, and success criteria before finalizing a plan. Resolve discoverable facts from available context and ask only about choices that materially change the result.
+Resolve discoverable facts first; ask only about missing information that materially changes the result. Choose between arranging time, developing a plan, and preparing execution. Reuse an existing task identity instead of creating a second task or automation.
 
-Break the work into concrete milestones and tasks. Make dependencies and ordering explicit, identify meaningful risks or blockers, and give each deliverable observable acceptance criteria. Keep the plan proportional to the request and avoid inventing requirements or capabilities.
+## Arrange time first
 
-## Arranging a plan to run later
+Task names are enough. Do not demand a plan, project, model or permissions before arranging time. Discover task_schedule_view and read existing tasks, arrangements, dependencies and proposals. Read the calendar too, including task-schedule sources only when task.schedule.v1 is advertised.
 
-When the user asks to arrange this work on a schedule, on a recurring cadence, or after another task finishes, treat it as a two-part draft: a **task plan** and an **execution arrangement**.
+In Chat mode, task_schedule_create creates requested tasks without running them. task_schedule_propose saves a reviewable batch arrangement; the user confirms it in the automation page. Preserve existing arrangements unless the user requested changing them. Use available hours, estimates, priority, deadlines and dependencies. Missing estimates use explicitly labeled provisional 30-minute blocks. Do not overlap work or force it past deadlines; include unscheduled tasks and reasons.
 
-First decide which entry applies, and say which one you took:
+In Plan mode, Chat-only mutation tools remain unavailable. Use submit_task_schedule to save a time-only draft for confirmation in the automation page; it may contain existing task IDs or new task names. It must be the only tool call in that reply and ends the planning turn. For a complete plan and execution arrangement, investigate and clarify first, then submit_schedule_plan as the only tool call in the reply; it ends planning and does not activate execution. Do not also submit another plan or create an automation for the same work.
 
-1. **The user already gave a definite Plan** (a plan item in this chat, pasted text, or a file they pointed at). Reuse that content as the fixed task plan and only fill in the missing execution arrangement. Do not re-plan the task or rewrite its scope. When several plans are plausible and the reference is ambiguous, ask which one instead of guessing the latest.
-2. **There is no definite Plan yet.** Investigate what is discoverable from the repository and context first, then form the task plan, then fill in the execution arrangement.
+## Develop and select a plan
 
-Then settle the arrangement with the fewest questions that actually change the result:
+A task can own multiple planning and execution conversations. Association alone never sends a message or starts execution. Reuse an already definite plan without rewriting its scope. The task page lets the user open a planning conversation, associate an existing one, and select a completed plan item or paste a plan. Selection fixes the exact content; later conversation edits do not replace it.
 
-- Resolve trigger, target project or chat, time zone, execution environment, unattended permission boundary, acceptance method, and notification needs from the request and context.
-- Ask only about what is still missing and materially changes the arrangement. Use the ordinary question flow: one question at a time by default, at most three independent questions in one batch, two or three options with concrete trade-offs, or a free-text question when no reasonable options exist.
-- Ask what should happen when a condition is not met (skip this run, or wait and re-check), and how the result is accepted: human acceptance, or the checks the host can actually verify (a file exists and is not empty, a document section exists, a command's exit code).
-- Appearance, experience, or subjective quality standards are human acceptance. Never present them as automatic checks.
+Prepared tasks added before their execution time default to executing then, with a visible option to only remind. At the scheduled time, missing plans generate a strong reminder. Plans or conversations added after that time default to no automatic execution: the user starts them or arranges a future time. Execution sends “开始执行” with the selected plan through the ordinary conversation queue and permission chain. Never expand permissions or claim a task is arranged before confirmation succeeds.
 
-Submit one complete draft with `submit_schedule_plan`:
+## Rules, results and acceptance
 
-- It is the only tool call in that reply and ends the planning turn. Complete the investigation and clarification first.
-- It saves a reviewable draft only. It does not schedule, create, or execute anything, and it does not start the scheduler.
-- Do not also call `submit_plan` for the same work, and do not call `automation_create` or `schedule_plan_propose`: the user confirms the draft once, in the card, and that single confirmation arranges the task.
-- Never claim a task is arranged, scheduled, automated, or running before the user confirms the card. After confirmation the card shows the real state; report that state, not your expectation.
+Use host rules for time and recurring schedules, internal task success and acceptance triggers, dependencies, environment readiness, start windows, waiting or skipping, and missed-run policy. Skill prose cannot enforce these rules.
 
-## What this version does not support yet
+“需要人工验收” is independent and defaults to enabled for new tasks. Automatic checks can coexist with human acceptance. Supported checks are nonempty files, Markdown sections and command exit codes; subjective quality requires human acceptance.
 
-- Only one-off times and recurring rules can currently activate a run. Internal events ("an upstream task finished successfully", "an upstream task passed acceptance") can be saved in drafts but cannot activate a run yet.
-- External events (GitHub, mail, file changes) are not connected. If the user asks for one, say plainly that this version cannot watch external events, and offer a supported alternative (a recurring check the host runs, or human acceptance) instead of silently turning it into polling.
-- Drafts that depend on automatic acceptance or event triggers cannot be confirmed yet. Keep such a draft unconfirmed and tell the user the arrangement is not yet activatable, rather than dropping the condition and creating a plain automation.
-- Execution dependencies, environment conditions, time windows, waiting and re-checking, and skipping missed runs can also be saved in drafts but cannot be confirmed yet. For an activatable time-based draft, use empty conditions, `requireEnvironment: false`, null time-window bounds, `conditionFallback: skip`, and `missedRuns: catch-up`; never replace the user's requested rules without their agreement.
+Successful execution does not complete a task that requires human acceptance. It enters 待验收 and creates the same priority of strong reminder as a due task missing its plan. Viewing results, opening conversations, dismissing notifications and snoozing do not accept results. Only explicit acceptance completes the task. Returning feedback does not restart execution; sending feedback to a conversation requires an explicit user action. Each recurring run is accepted separately. Acceptance-dependent tasks wait for actual acceptance.
 
-For ordinary planning requests that do not ask for scheduling, keep returning planning guidance only. Never claim that tasks were persisted, scheduled, automated, or executed unless those actions completed through the corresponding capability and were authorized by the user.
+External GitHub, mail and file-change triggers are outside this version. Local scheduling and reminders require the host to run. If a capability is absent, explain the limitation without discarding rules or pretending the task is scheduled.

@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { Credential, Model, Provider } from '@pidex/model-schema'
 import { Schema } from 'effect'
 import { TextItemSchema } from '@pidex/shared/thread'
+import { defaultTaskSchedule } from '@pidex/shared/task-schedule'
 import { RpcMethods, type RpcMethod, type RpcParams, type RpcResult } from '../src/methods/index'
 import { AllRpcMethods } from '../src/methods/Host'
 import { Capabilities, ProtocolCapabilitySchema } from '../src/runtime/Capabilities'
@@ -819,7 +820,106 @@ const watch = {
   worktreeId: 'worktree:1',
   reason: null,
 }
+function taskScheduleFixtures() {
+  const task = {
+    ...defaultTaskSchedule('任务'),
+    id: 'task:1',
+    revision: 1,
+    readyAt: null,
+    nextRunAt: null,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const occurrence = {
+    id: 'occurrence:1',
+    taskId: task.id,
+    revision: 1,
+    scheduledFor: 1,
+    status: 'awaiting-acceptance' as const,
+    executionSucceeded: true,
+    resultVersion: 1,
+    result: '完成结果',
+    feedback: '',
+    snapshot: task,
+    scheduledTaskId: null,
+    threadId: null,
+    attention: 'awaiting-acceptance' as const,
+    reminderAt: 1,
+    reminderVersion: 1,
+    notifiedVersion: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const proposal = {
+    id: 'proposal:1',
+    revision: 1,
+    status: 'pending' as const,
+    items: [{ taskId: task.id, expectedRevision: 1, at: 1, durationMinutes: 30 }],
+    unscheduled: [],
+    createdAt: 1,
+  }
+  const versioned = { id: task.id, expectedRevision: 1, operationId: 'operation:1' }
+  return {
+    'task-schedule/list': methodFixture(
+      'task-schedule/list',
+      {},
+      { tasks: [task], occurrences: [occurrence], links: [], proposals: [proposal] },
+    ),
+    'task-schedule/plans': methodFixture(
+      'task-schedule/plans',
+      { threadId: 'thread:1' },
+      { plans: [{ itemId: 'item:1', title: '方案', content: '方案正文' }] },
+    ),
+    'task-schedule/save': methodFixture(
+      'task-schedule/save',
+      { name: '任务', operationId: 'operation:1' },
+      { task },
+    ),
+    'task-schedule/link': methodFixture(
+      'task-schedule/link',
+      { ...versioned, threadId: 'thread:1', role: 'planning' },
+      { task },
+    ),
+    'task-schedule/plan': methodFixture(
+      'task-schedule/plan',
+      { ...versioned, content: '方案正文' },
+      { task },
+    ),
+    'task-schedule/start': methodFixture('task-schedule/start', versioned, { occurrence }),
+    'task-schedule/result': methodFixture(
+      'task-schedule/result',
+      { ...versioned, id: occurrence.id, resultVersion: 1, result: '结果' },
+      { occurrence },
+    ),
+    'task-schedule/accept': methodFixture(
+      'task-schedule/accept',
+      { ...versioned, id: occurrence.id, resultVersion: 1, decision: 'pass' },
+      { occurrence },
+    ),
+    'task-schedule/snooze': methodFixture(
+      'task-schedule/snooze',
+      { ...versioned, id: occurrence.id, until: 2 },
+      { occurrence },
+    ),
+    'task-schedule/notify': methodFixture(
+      'task-schedule/notify',
+      { id: occurrence.id, reminderVersion: 1 },
+      { occurrence },
+    ),
+    'task-schedule/propose': methodFixture(
+      'task-schedule/propose',
+      { operationId: 'operation:1', items: proposal.items, unscheduled: [] },
+      { proposal },
+    ),
+    'task-schedule/arrange': methodFixture(
+      'task-schedule/arrange',
+      { ...versioned, id: proposal.id },
+      { proposal },
+    ),
+  }
+}
 const fixtures = {
+  ...taskScheduleFixtures(),
   'git/message/generate': methodFixture(
     'git/message/generate',
     { projectId: project.id, kind: 'commit', paths: ['src/index.ts'] },
@@ -5938,7 +6038,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(321)
+    expect(methods).toHaveLength(333)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6306,7 +6406,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(300)
+    expect(Object.keys(RpcMethods)).toHaveLength(312)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })
@@ -6843,9 +6943,18 @@ describe('RPC method schema contracts', () => {
   })
 })
 
-
 test('消息阶段为可选字段，未知阶段降级且事件按独立能力协商', () => {
-  const item = { id: 'text', messageID: 'message', turnId: 'turn', agentId: 'agent', type: 'text', placement: 'result', text: '回答', status: 'streaming', createdAt: 1 }
+  const item = {
+    id: 'text',
+    messageID: 'message',
+    turnId: 'turn',
+    agentId: 'agent',
+    type: 'text',
+    placement: 'result',
+    text: '回答',
+    status: 'streaming',
+    createdAt: 1,
+  }
   const decode = Schema.decodeUnknownSync(TextItemSchema)
   expect(decode(item)).not.toHaveProperty('phase')
   expect(decode({ ...item, phase: 'future_phase' }).phase).toBeUndefined()
@@ -6854,5 +6963,7 @@ test('消息阶段为可选字段，未知阶段降级且事件按独立能力�
   const event = EventManifest['item/agentMessage/phaseChanged']
   expect(event.capability).toBe('thread.message-phase.v1')
   expect(event.durability).toBe('durable')
-  expect(Schema.decodeUnknownSync(event.payload)({ item: { ...item, phase: 'final_answer' } }).item.id).toBe('text')
+  expect(
+    Schema.decodeUnknownSync(event.payload)({ item: { ...item, phase: 'final_answer' } }).item.id,
+  ).toBe('text')
 })

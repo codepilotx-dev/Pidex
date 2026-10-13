@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import type { ScheduleDraft } from '@pidex/shared/schedule-draft'
 import type { Item } from '@pidex/shared/thread'
 import { Button } from '../../../components/ui/Button.js'
+import { Checkbox } from '../../../components/ui/Checkbox.js'
 import { Textarea } from '../../../components/ui/Textarea.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import { toUserErrorMessage } from '../../../utils/Errors.js'
@@ -29,13 +30,18 @@ export function ScheduleDraftCard({ initial }: { initial: ScheduleDraft }) {
   const [message, setMessage] = useState<string | null>(null)
   const [editing, setEditing] = useState<'任务计划' | '执行安排' | null>(null)
   const [feedback, setFeedback] = useState('')
+  const [taskSupported, setTaskSupported] = useState(false)
+  const [requireManualAcceptance, setRequireManualAcceptance] = useState(true)
   useEffect(() => {
     let active = true
     setReady(false)
-    void desktopClient
-      .readScheduleDraft({ id: initial.id })
-      .then(({ draft: current }) => {
+    void Promise.all([
+      desktopClient.readScheduleDraft({ id: initial.id }),
+      desktopClient.getRuntimeCapabilities(),
+    ])
+      .then(([{ draft: current }, capabilities]) => {
         if (active) {
+          setTaskSupported(capabilities.includes('task.schedule.v1'))
           setDraft(current)
           setReady(true)
           setMessage(null)
@@ -64,6 +70,7 @@ export function ScheduleDraftCard({ initial }: { initial: ScheduleDraft }) {
               conditions: draft.conditions,
               conditionFallback: draft.conditionFallback,
               acceptance: draft.acceptance,
+              ...(taskSupported ? { requireManualAcceptance } : {}),
               notificationPolicy: draft.notificationPolicy,
               missedRuns: draft.missedRuns,
               execution: draft.execution,
@@ -102,7 +109,15 @@ export function ScheduleDraftCard({ initial }: { initial: ScheduleDraft }) {
   function openScheduled() {
     const ref = draft.createdRefs[0]
     const params = new URLSearchParams()
-    if (ref) params.set(ref.kind === 'automation' ? 'automationId' : 'scheduledTaskId', ref.id)
+    if (ref)
+      params.set(
+        ref.kind === 'task-schedule'
+          ? 'taskId'
+          : ref.kind === 'automation'
+            ? 'automationId'
+            : 'scheduledTaskId',
+        ref.id,
+      )
     if (trigger.kind === 'once') {
       const date = new Date(trigger.at)
       params.set(
@@ -130,6 +145,15 @@ export function ScheduleDraftCard({ initial }: { initial: ScheduleDraft }) {
       </section>
       <section aria-label="执行安排" className="tw:grid tw:gap-2">
         <strong>执行安排</strong>
+        {draft.status === 'pending' && taskSupported ? (
+          <Checkbox
+            checked={requireManualAcceptance}
+            onCheckedChange={(value) => setRequireManualAcceptance(value === true)}
+            disabled={busy}
+          >
+            需要人工验收（执行结束后强提醒，验收通过才完成）
+          </Checkbox>
+        ) : null}
         <p>
           {trigger.kind === 'once'
             ? `执行时间：${new Intl.DateTimeFormat('zh-CN', { timeZone: trigger.timeZone, dateStyle: 'medium', timeStyle: 'short' }).format(trigger.at)}（${trigger.timeZone}）`

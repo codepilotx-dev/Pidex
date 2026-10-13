@@ -59,6 +59,14 @@ const ToolTerminalPayloadSchema = Schema.Struct({
 })
 
 export const EventManifest = {
+  'task-schedule/changed': defineEvent({
+    payload: Schema.Struct({ taskId: OpaqueIDSchema, changedAt: TimestampSchema }),
+    version: 1,
+    durability: 'durable',
+    stream: 'global',
+    capability: 'task.schedule.v1',
+    reconcilesWith: 'task-schedule/list',
+  }),
   'mcp/elicitationRequested': defineEvent({
     payload: Schema.Struct({
       interactionId: OpaqueIDSchema,

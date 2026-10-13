@@ -123,6 +123,13 @@ import { SessionGroupService } from './session-group/SessionGroupService'
 import { DEFAULT_GOAL_TOKEN_BUDGET, ThreadGoalService } from './session/ThreadGoalService'
 import { ThreadBookmarkService } from './session/ThreadBookmarkService'
 import { createAutomationDefinitions } from './tool/Automation/Definitions'
+import { TaskScheduleService } from './calendar/TaskScheduleService'
+import { AgentError } from './Domain'
+import {
+  taskScheduleDefinitions,
+  taskScheduleCheckDefinition,
+} from './tool/TaskSchedule/Definitions'
+import { normalizeScheduledPermission } from './automation/AutomationService'
 import { createSchedulePlanDefinition } from './tool/SchedulePlan/Definition'
 import {
   AutomationRunCoordinator,
@@ -748,6 +755,8 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       artifacts,
       memoryManager,
       scheduleDrafts: () => schedulePlans,
+      taskSchedules: (): TaskScheduleService | undefined =>
+        taskSchedules.available() ? taskSchedules : undefined,
       observeHarnessEvent: (context, event) =>
         harnessLogs.observe(
           {
@@ -948,6 +957,81 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     // 草案服务在后置构造（依赖调度器与日历存储）；运行时通过惰性取值器使用它，
     // 因此 submit_schedule_plan 只在扩展表真实可用时才暴露。
     let schedulePlans: SchedulePlanService | undefined
+    const taskSchedules: TaskScheduleService = new TaskScheduleService(db, scheduledTaskRuns, {
+      wake: () => automationScheduler?.wake(),
+      prepareExecution: async (task) => {
+        if (!task.execution) throw new AgentError('INVALID_REQUEST', '执行设置不完整', 400)
+        await providers.getModel(task.execution.model)
+        if (task.execution.targetThreadId)
+          await workspaceResolver.resolve(task.execution.targetThreadId)
+      },
+      check: async (check, occurrence, run) => {
+        const threadId = run?.threadId ?? occurrence.snapshot.execution?.targetThreadId
+        const turnId =
+          run?.turnId ?? (threadId ? db.repositories.taskSchedules.latestTurnId(threadId) : null)
+        const execution = run ?? occurrence.snapshot.execution
+        if (!threadId || !turnId || !execution) return false
+        const runtime = await workspaceResolver.resolve(threadId)
+        const context = {
+          threadID: threadId,
+          turnID: turnId,
+          toolCallID: `task-check:${occurrence.id}:${occurrence.resultVersion}:${occurrence.snapshot.checks.indexOf(check)}`,
+          taskMode: 'chat' as const,
+          signal: AbortSignal.timeout(120_000),
+          workspace: runtime.workspace,
+          defaultCwd: runtime.cwd,
+          permissionConfig: normalizeScheduledPermission(execution.permissionConfig),
+          model: execution.model,
+          taskSummary: '任务自动验收',
+        }
+        if (check.kind === 'command-exit-code') {
+          const result = await toolExecutor.execute<{ exitCode: number }>(
+            'PowerShell',
+            { command: check.command, timeout: 120_000, description: '任务自动验收' },
+            context,
+          )
+          return result.exitCode === check.expectedExitCode
+        }
+        return await toolExecutor.execute<boolean>(
+          'task_schedule_check',
+          {
+            file_path: check.path,
+            ...(check.kind === 'document-section' ? { section: check.section } : {}),
+          },
+          context,
+        )
+      },
+      feedback: async (occurrence, feedback) => {
+        const run = occurrence.scheduledTaskId
+          ? scheduledTaskRepository.read(occurrence.scheduledTaskId, true)
+          : null
+        const threadId =
+          run?.threadId ??
+          occurrence.snapshot.execution?.targetThreadId ??
+          occurrence.snapshot.plan?.threadId
+        const execution = occurrence.snapshot.execution
+        if (!threadId || !execution)
+          throw new AgentError('THREAD_NOT_FOUND', '没有可接收反馈的执行会话', 404)
+        await threads.enqueueFollowUp(
+          threadId,
+          {
+            content: `人工验收退回，需要修改：\n${feedback}`,
+            model: execution.model,
+            taskMode: 'plan',
+            permissionConfig: execution.permissionConfig,
+            strategy: 'queue',
+          },
+          `task-feedback:${occurrence.id}:${occurrence.resultVersion}`,
+        )
+      },
+    })
+    db.repositories.taskSchedules.publish = (event) => {
+      void Effect.runPromise(hub.publish(event))
+    }
+    if (taskSchedules.available()) {
+      tools.register(taskScheduleCheckDefinition)
+      for (const definition of taskScheduleDefinitions(taskSchedules)) tools.register(definition)
+    }
     const automation = new AutomationService(automationRepository, {
       changed: (value) =>
         publishAgentEvent(db, hub, null, null, 'automation/changed', {
@@ -1015,7 +1099,12 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
           changedAt: Date.now(),
         }).then(() => undefined),
     })
-    const calendar = new CalendarService(automationRepository, scheduledTaskRepository)
+    const calendar = new CalendarService(
+      automationRepository,
+      scheduledTaskRepository,
+      Date.now,
+      taskSchedules,
+    )
     schedulePlans = new SchedulePlanService(
       db,
       db.repositories.schedulePlanProposals,
@@ -1023,6 +1112,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       scheduledTaskRepository,
       automationRepository,
       {
+        taskSchedules,
         wakeScheduler: () => automationScheduler?.wake(),
         automationChanged: (value: Automation) =>
           publishAgentEvent(db, hub, null, null, 'automation/changed', {
@@ -1060,6 +1150,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       },
     )
     automationScheduler = new AutomationScheduler(automationRepository, {
+      taskSchedules,
       onClaimed: (runs) => automationRuns.startRuns(runs),
       ...(calendarEnabled
         ? {
@@ -1083,6 +1174,12 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       )
     }
     const unsubscribeAutomationEvents = hub.listen((signal) => {
+      if (
+        signal.kind === 'durable' &&
+        (signal.event.method === 'task-schedule/changed' ||
+          signal.event.method === 'scheduled-task/changed')
+      )
+        void automationScheduler?.wake()
       if (!automationEnabled || signal.kind !== 'durable' || !signal.event.turnId) return
       if (signal.event.method === 'turn/started')
         void automationRuns.handleTurnRunning(signal.event.turnId)
@@ -1251,6 +1348,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       threadBookmarks,
       automation,
       calendar,
+      taskSchedules,
       scheduledTasks,
       schedulePlans,
       memoryManager,

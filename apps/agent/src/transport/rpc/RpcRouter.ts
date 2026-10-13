@@ -75,6 +75,7 @@ import type { ThreadGoalService } from '../../session/ThreadGoalService'
 import type { ThreadBookmarkService } from '../../session/ThreadBookmarkService'
 import type { AutomationService } from '../../automation'
 import type { CalendarService, SchedulePlanService, ScheduledTaskService } from '../../calendar'
+import type { TaskScheduleService } from '../../calendar/TaskScheduleService'
 import type { ThreadMessageForkService } from '../../session/fork/ThreadMessageForkService'
 import type { SideChatService } from '../../session/side-chat/SideChatService'
 import type { MemoryManager } from '../../resource/MemoryManager'
@@ -188,6 +189,7 @@ export type RpcRouterDependencies = {
   automation: AutomationService
   prWatches?: PullRequestWatchService
   calendar?: CalendarService
+  taskSchedules?: TaskScheduleService
   scheduledTasks?: ScheduledTaskService
   schedulePlans?: SchedulePlanService
   memoryManager?: MemoryManager | undefined

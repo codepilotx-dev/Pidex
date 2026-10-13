@@ -36,6 +36,7 @@ import { desktopClient } from '../../services/desktop-client/index.js'
 import { resolveRecentNewThreadModel } from '../models/RecentNewThreadModel.js'
 import { AutomationDetailPanel } from './AutomationDetailPanel.js'
 import { AutomationCalendar } from './AutomationCalendar.js'
+import { TaskSchedulePanel } from './TaskSchedulePanel.js'
 import { ScheduledTaskDetailPanel, taskDefinition } from './ScheduledTaskDetailPanel.js'
 import {
   AUTOMATION_TEMPLATES,
@@ -378,8 +379,13 @@ function AutomationViewContent(): React.ReactNode {
       next.delete('scheduledTaskId')
       next.delete('scheduledTaskMode')
       next.set('date', localDateValue(new Date(occurrence.scheduledFor)))
+      next.delete('taskId'); next.delete('occurrenceId')
       next.set(
-        occurrence.source.kind === 'automation' ? 'automationId' : 'scheduledTaskId',
+        occurrence.source.kind === 'task-schedule'
+          ? 'taskId'
+          : occurrence.source.kind === 'automation'
+            ? 'automationId'
+            : 'scheduledTaskId',
         occurrence.source.id,
       )
       return next
@@ -475,6 +481,7 @@ function AutomationViewContent(): React.ReactNode {
           />
         }
       >
+        <TaskSchedulePanel query={controller.query} />
         {controller.supported === false ? (
           <StatePanel
             title="当前 Agent 不支持自动化"

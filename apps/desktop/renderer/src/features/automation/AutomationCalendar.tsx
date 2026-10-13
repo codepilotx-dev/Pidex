@@ -577,6 +577,9 @@ export function AutomationCalendar({
                 <div className="automation-calendar__agenda-time tw:flex tw:w-16 tw:shrink-0 tw:items-center tw:gap-2">
                   <span className="automation-calendar__agenda-time-text tw:tabular-nums tw:type-label tw:text-app-text-soft">
                     {timeLabel(occurrence.scheduledFor)}
+                    {occurrence.durationMinutes
+                      ? `–${timeLabel(occurrence.scheduledFor + occurrence.durationMinutes * 60_000)}`
+                      : ''}
                   </span>
                   <span
                     className={calendarDotClass('automation-calendar__agenda-dot')}
@@ -684,6 +687,7 @@ export function timeLabel(value: number): string {
 }
 
 export function sourceLabel(occurrence: CalendarOccurrence): string {
+  if (occurrence.source.kind === 'task-schedule') return '任务安排'
   if (occurrence.source.kind === 'automation') return '自动化执行'
   return occurrence.definitionKind === 'recurring' ? '重复计划' : '计划任务'
 }
@@ -706,6 +710,9 @@ export function occurrenceStatusKind(occurrence: CalendarOccurrence): CalendarSt
     return 'info'
   }
   switch (occurrence.status) {
+    case 'needs-plan':
+    case 'awaiting-acceptance':
+      return 'warning'
     case 'completed':
       return 'success'
     case 'failed':

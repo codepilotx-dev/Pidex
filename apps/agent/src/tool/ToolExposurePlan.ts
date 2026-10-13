@@ -14,6 +14,7 @@ export const PI_LIFECYCLE_TOOLS = [
   'update_plan',
   'submit_plan',
   'submit_schedule_plan',
+  'submit_task_schedule',
   'spawn_agents',
   'wait_agents',
   'send_agent',
@@ -46,6 +47,7 @@ export interface ToolExposureInput {
   hasActiveGoal?: boolean
   /** 任务规划扩展表可用时，Plan 主 Agent 可以提交「任务计划 + 执行安排」草案。 */
   hasScheduleDrafts?: boolean
+  hasTaskSchedules?: boolean
 }
 
 /**
@@ -86,8 +88,8 @@ export function createToolExposurePlan(
     // Plan 主 Agent 以结构化 submit_plan 交付最终方案；<proposed_plan> 仅作兼容回退。
     if (input.taskMode === 'plan') lifecycle.push('submit_plan')
     // 需要按时间或上游事件安排的请求改用 submit_schedule_plan；两者都是独占单次调用。
-    if (input.taskMode === 'plan' && input.hasScheduleDrafts)
-      lifecycle.push('submit_schedule_plan')
+    if (input.taskMode === 'plan' && input.hasScheduleDrafts) lifecycle.push('submit_schedule_plan')
+    if (input.taskMode === 'plan' && input.hasTaskSchedules) lifecycle.push('submit_task_schedule')
     if (input.taskMode === 'chat') {
       // Chat 主 Agent 以普通文本收尾；Plan 的最终方案由 submit_plan 负责。
       // 权限申请工具只在审批策略真的能应答时暴露。

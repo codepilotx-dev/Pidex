@@ -70,7 +70,11 @@ export function filterCalendarOccurrences(
     if (needle && !occurrence.title.toLocaleLowerCase().includes(needle)) return false
     if (filter === 'execution') return occurrence.runId !== null
     if (filter === 'scheduled-task') {
-      return occurrence.source.kind === 'scheduled-task' && occurrence.runId === null
+      return (
+        (occurrence.source.kind === 'scheduled-task' ||
+          occurrence.source.kind === 'task-schedule') &&
+        occurrence.runId === null
+      )
     }
     if (filter === 'automation') {
       return occurrence.source.kind === 'automation' && occurrence.runId === null
@@ -91,5 +95,10 @@ export function calendarStatusLabel(status: CalendarOccurrence['status'] | 'canc
     failed: '失败',
     interrupted: '已中断',
     cancelled: '已取消',
+    'needs-plan': '待补方案',
+    human: '人工处理',
+    'awaiting-acceptance': '待验收',
+    rework: '需要修改',
+    skipped: '已跳过',
   }[status]
 }

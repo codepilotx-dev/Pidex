@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { PLAN_APPROVAL_SCHEMA } from '../repositories/PlanApprovalRepository'
 import { SCHEDULE_DRAFT_SCHEMA } from '../repositories/ScheduleDraftRepository'
+import { TASK_SCHEDULE_SCHEMA } from '../repositories/TaskScheduleRepository'
 import {
   THREAD_GOAL_SCHEMA,
   THREAD_GOAL_SCHEMA_V45,
@@ -163,6 +164,7 @@ export const FINAL_SCHEMA = [
   ...AUTOMATION_SCHEMA,
   ...SCHEDULE_CALENDAR_SCHEMA,
   ...SCHEDULE_DRAFT_SCHEMA,
+  ...TASK_SCHEDULE_SCHEMA,
   ...PLAN_APPROVAL_SCHEMA,
   ...THREAD_GOAL_SCHEMA,
   ...THREAD_GOAL_LEDGER_SCHEMA,
@@ -1583,6 +1585,14 @@ class SchemaInitializer {
               ),
             // 任务规划扩展表：计划快照与执行规则、触发去重记录、验收记录。
             // 只新增独立表，不触碰 automations/scheduled_tasks 的既有列与状态。
+            60: () =>
+              this.sqlite.exec(
+                TASK_SCHEDULE_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
             59: () =>
               this.sqlite.exec(
                 SCHEDULE_DRAFT_SCHEMA.map((statement) =>

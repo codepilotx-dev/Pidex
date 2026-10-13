@@ -440,6 +440,13 @@ export type DesktopCalendarApi = {
   ): Promise<RpcResult<'schedule-draft/feedback'>>
 }
 
+export type DesktopTaskScheduleApi = {
+  taskSchedule<M extends keyof typeof import('@pidex/agent-protocol').TaskScheduleRpcMethods>(
+    method: M,
+    input: RpcParams<M>,
+  ): Promise<RpcResult<M>>
+}
+
 export type DesktopPluginApi = {
   listPlugins(
     workspacePath?: string | null,
@@ -600,6 +607,7 @@ export type DesktopClient = DesktopApi &
   DesktopRuntimeCapabilityApi &
   DesktopAutomationApi &
   DesktopCalendarApi &
+  DesktopTaskScheduleApi &
   DesktopPluginApi &
   DesktopMiniMaxCliApi &
   DesktopComputerApi &
