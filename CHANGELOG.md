@@ -14,8 +14,24 @@
 - [agent/desktop] 安装态新增专用子进程入口：`pidex-agent.exe --pidex-node-repl` 在正式 bootstrap 之前分派并执行单元格，用户无需额外安装 Node 或 Bun。
 - [agent-protocol/agent/desktop] 新增 `github.threadPullRequests.v1` 能力与独立的 `thread_pull_requests` 关联表（history schema 59，前向迁移，不改线程核心表），提供按会话批量读取 PR 关联、显式关联与解除关联，并新增可对账事件 `thread/pull-requests/updated`。读取逐会话返回结果，单条失败不拖累整批；状态由 Agent 单点计算，按 PR 身份去重、缓存 60 秒、最大并发 4，失败或过期只回退为未知，不再保留误导性的绿色。创建 PR、开启 PR 监控和显式关联会记录关联，普通 Fork 不复制父会话关联；侧栏可见的项目会话按实际执行目录的 origin 与分支发现匹配的打开 PR，detached HEAD 与非 GitHub remote 不自动发现。
 - [desktop/renderer] 新增插件管理动作菜单 `PluginActionsMenu`：已安装插件改用右侧菜单承载查看详情与主操作，替代原开关按钮。
+- [agent-protocol/shared/agent] 新增任务规划扩展：`@pidex/shared/schedule-draft` 定义「任务计划 + 执行安排」草案（固定计划快照与内容 hash、触发、条件、条件不满足策略、验收、通知与错过执行处理），history schema 60 前向迁移新增独立表 `schedule_drafts`／`schedule_trigger_records`／`schedule_acceptances`／`schedule_draft_operations`（只新增表，不改 automations/scheduled_tasks 的既有列与状态语义，「待验收」不写入旧运行表状态）；新增 `schedule.draft.v1` capability 与 `schedule-draft/read|commit|cancel|feedback` RPC，扩展表缺失时不广告该能力。
+- [agent] 新增主 Agent 生命周期工具 `submit_schedule_plan`：一次提交完整草案，必须是该条回复中唯一的工具调用并结束规划回合；`SchedulePlanService.submitDraft` 只落盘待审阅草案，确认前不创建任务、不激活调度器；`commitDraft` 在一个事务里校验版本与依赖、创建任务或自动化并标记已确认，重试同一 operationId 不会产生第二组任务；`feedbackDraft` 把用户意见作为真实用户消息开启新的 Plan 回合，并按 `feedback_turn_id` 关联把源草案重建为固定上下文。
+- [agent] 任务规划插件指令重写：先判断用户是否已提供明确 Plan（当前计划项／粘贴正文／指定文件，指代不清时询问而不是猜“最新计划”），再补齐执行安排；默认一次一题、独立问题最多三题；一次提交完整草案，不在卡片确认前宣称已安排或执行；明确说明首版不接外部事件（GitHub、邮件、文件变化）以及自动验收与事件触发尚未接入，不把外部条件降级成轮询或普通自动化。
 
 ### Changed
+
+- [agent/shared/session-view/desktop] 会话文本保留消息阶段与流式分段，实时、重放和历史统一识别过程与最终回答；轮次与工具活动改用 Radix Collapsible，保留展开选择并在错误、中断和后续执行时展开过程。
+
+- [desktop/renderer] 供应商“已配置”和插件“已安装”分组对齐项目侧栏的标题行高与列表顶部间距，去掉叠加的垂直留白。
+
+- [desktop/renderer] 供应商页改为左侧已配置列表与右侧供应商市场，移除搜索、配置筛选和行尾状态列，市场卡片复用插件页布局及现有连接弹窗。
+
+- [desktop/renderer] 自定义供应商改为侧栏选择与连续配置表单，新建使用本地草稿和自动 ID；连接、模型与高级配置统一显式保存，离开前提示未保存修改，多密钥继续独立管理。
+
+- [agent/desktop] 主 Agent 以普通 Markdown 回答收尾，不再暴露 `finalize_result`；历史主聊天结果卡片改为完整文本展示，子代理入口仅保留任务与状态，详细结果集中在现有侧栏并补齐改动、验证、风险与引用，不改写历史数据。
+
+- [desktop/renderer] 全局 Tooltip 彻底切除箭头指示器：根据设计规范要求所有 Tooltip 均不带箭头指示，Tooltip 与 InfoTooltip 均不再渲染三角指示箭头，底层 Tooltip.Arrow 统一置为空实现，废弃 showArrow 配置并确保全站所有 Tooltip 均呈现纯粹利落的无箭头悬浮卡片外观。
+- [desktop/renderer] 完整迁入 UI-Design 自定义 Tooltip 底层、四种外观变体（default、contrast、glass、accent）与动画，新增 InfoTooltip 组件，移除 @radix-ui/react-tooltip 依赖；保留现有包装 API 与 unstyled 能力，优化延迟预热、方向翻转与内容悬停体验。
 
 - [agent/desktop] Plan 澄清与审阅拆分：Composer 上方的提问区按所属 Turn 的 canonical `taskMode` 分流，Plan 问题逐题显式确认——不预选答案、`recommended` 只作为建议徽标、点击选项不再自动跳题、无「跳过」、结束等待走「停止本轮」中断链路，方向键只移动焦点；计划审批改为独立的阅读与动作卡，提供「修改计划」反馈输入、「开始实施」（新聊天选项在同一动作菜单内，按 capability 显示）与「退出 Plan」，移除仅隐藏面板的「继续规划」入口。
 - [agent] Plan 反馈轮次把用户原话保存为该轮用户消息，完整源计划改由既有 prompt context 注入（复用 `plan_approvals.next_turn_id` 关联，恢复与压缩采样仍可重建，不新增数据库字段）；同步调整 Plan 提示词的内容要求：`summary` 说明目标、问题与范围，`changes` 说明实现逻辑与必要的 UI 行为，空章节不展示。
@@ -33,6 +49,8 @@
 
 ### Fixed
 
+- [agent/desktop] 在输入框引用任务规划插件或技能时自动进入 Plan，提交时冻结正确模式并关闭 Goal；新任务安排草案接入聊天确认卡，支持分别反馈修改计划与执行安排、确认与取消，确认成功显示已安排并链接真实任务，避免只生成普通计划或停留在文本草案。执行权限取宿主会话配置并展示，不继承 Plan 调查时临时收紧的只读上限。
+- [agent] 任务规划允许保存事件触发、自动验收与条件安排草案，仅在确认时拒绝尚未实现的触发、验收、执行条件、等待与错过执行跳过策略，避免规则被普通调度静默忽略。
 - [agent] 模型请求发送前清理空正文与 assistant 历史中的独立协议占位文本，Chat Completions 的纯工具调用使用 null 正文；保留工具结果、签名推理与非文本内容，避免兼容中转将空正文补成可见的 System 占位消息。
 
 - [agent] PR 自动发现不再因已有会话关联而跳过，按执行仓库与分支缓存 60 秒，仅关联新增或信息变化时事务写入 outbox 通知；补充推送与创建 PR 使用真实工作树目录及项目目录回退的后端测试。
