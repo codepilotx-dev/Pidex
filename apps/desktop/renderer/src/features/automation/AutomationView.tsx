@@ -27,7 +27,6 @@ import { Button } from '../../components/ui/Button.js'
 import { PopoverItem } from '../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
-import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../components/ui/IconTokens.js'
@@ -63,7 +62,7 @@ import { useCalendarController } from './UseCalendarController.js'
 
 export type AutomationTab = 'calendar' | 'runs'
 
-const TAB_OPTIONS = [
+export const TAB_OPTIONS = [
   { value: 'calendar', label: '日历' },
   { value: 'runs', label: '执行记录' },
 ] as const
@@ -289,22 +288,6 @@ function AutomationViewContent(): React.ReactNode {
       else fallback?.focus()
     })
   }
-  function showTab(nextTab: AutomationTab): void {
-    controller.setQuery('')
-    setParams((current) => {
-      const next = new URLSearchParams(current)
-      if (nextTab === 'calendar') {
-        next.delete('tab')
-      } else {
-        next.set('tab', nextTab)
-        next.delete('automationId')
-        next.delete('automationMode')
-        next.delete('scheduledTaskId')
-        next.delete('scheduledTaskMode')
-      }
-      return next
-    })
-  }
   function openManualCreate(): void {
     openScheduledTask(selectedDate)
   }
@@ -448,19 +431,6 @@ function AutomationViewContent(): React.ReactNode {
 
   return (
     <>
-      <WorkspaceHeaderItem align="start" id="automation.navigation" order={0} slot="left">
-        <SegmentedControl<AutomationTab>
-          ariaLabel="任务视图"
-          className="automation-segmented-tabs"
-          getPanelId={(value) => `automation-${value}-panel`}
-          getTabId={(value) => `automation-${value}-tab`}
-          onChange={showTab}
-          options={TAB_OPTIONS}
-          semantics="tabs"
-          value={tab}
-        />
-      </WorkspaceHeaderItem>
-
       <WorkspaceHeaderItem align="end" id="automation.actions" order={100} slot="right">
         <PopoverMenu
           align="end"

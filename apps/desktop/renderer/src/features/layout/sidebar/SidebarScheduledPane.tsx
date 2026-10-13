@@ -1,8 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Calendar, ChevronDown, ChevronRight, History, Plus } from 'lucide-react'
 import { useSharedAutomationController } from '../../automation/AutomationControllerProvider.js'
 import { formatAutomationTime, runStatusLabel } from '../../automation/AutomationModel.js'
+import { TAB_OPTIONS, type AutomationTab } from '../../automation/AutomationView.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
 
@@ -12,14 +13,40 @@ import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 
+const TAB_ICONS: Record<AutomationTab, typeof Calendar> = {
+  calendar: Calendar,
+  runs: History,
+}
+
 export function SidebarScheduledPane(): ReactNode {
   const controller = useSharedAutomationController()
   const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { t } = useLocale()
-  const selectedId = new URLSearchParams(location.search).get('automationId')
-  const selectedRunId = new URLSearchParams(location.search).get('automationRunId')
+  const onAutomationsRoute = location.pathname === '/automations'
+  const tab: AutomationTab =
+    onAutomationsRoute && searchParams.get('tab') === 'runs' ? 'runs' : 'calendar'
+  const selectedId = onAutomationsRoute ? searchParams.get('automationId') : null
+  const selectedRunId = onAutomationsRoute ? searchParams.get('automationRunId') : null
+  const hasDetailTarget =
+    Boolean(selectedId) ||
+    Boolean(selectedRunId) ||
+    Boolean(searchParams.get('scheduledTaskId')) ||
+    searchParams.get('automationMode') === 'create' ||
+    searchParams.get('scheduledTaskMode') === 'create'
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [runLimits, setRunLimits] = useState<Record<string, number>>({})
+
+  function browse(nextTab: AutomationTab): void {
+    controller.setQuery('')
+    if (nextTab === 'calendar') {
+      navigate('/automations')
+    } else {
+      navigate('/automations?tab=runs')
+    }
+  }
+
   const runsByTask = useMemo(() => {
     const groups = new Map<string, (typeof controller.runs)[number][]>()
     for (const run of controller.runs) {
@@ -48,7 +75,30 @@ export function SidebarScheduledPane(): ReactNode {
           <Plus size={APP_ICON_SIZE} />
         </Link>
       </header>
-      <div className="sidebar-pane-filters tw:flex tw:flex-col tw:gap-2 tw:p-2">
+      <div className="tw:flex tw:flex-col tw:sidebar-row-gap tw:p-2">
+        {TAB_OPTIONS.map((option) => {
+          const Icon = TAB_ICONS[option.value]
+          const active = onAutomationsRoute && tab === option.value && !hasDetailTarget
+          return (
+            <SidebarRow
+              active={active}
+              asChild
+              key={option.value}
+              layout="flex"
+              leading={<Icon aria-hidden size={APP_ICON_SIZE} />}
+            >
+              <button
+                type="button"
+                aria-current={active ? 'page' : undefined}
+                onClick={() => browse(option.value)}
+              >
+                {t(option.label)}
+              </button>
+            </SidebarRow>
+          )
+        })}
+      </div>
+      <div className="sidebar-pane-filters tw:flex tw:flex-col tw:gap-2 tw:px-2 tw:pb-2">
         <SearchInput
           aria-label={t('搜索已安排任务')}
           placeholder={t('搜索已安排任务')}
