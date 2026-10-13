@@ -14,6 +14,7 @@ import {
   useTooltipContext,
 } from '../src/components/ui/Tooltip.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../src/components/ui/IconTokens.js'
+import { expectSourceContains } from './SourceContract.js'
 
 describe('Tooltip positioning geometry & auto-flip', () => {
   const baseViewport = {
@@ -258,6 +259,17 @@ describe('Tooltip empty content & number 0 handling', () => {
 })
 
 describe('Tooltip variants and visual styling', () => {
+  test('resets native popover centering so fixed coordinates stay anchored to the trigger', () => {
+    const html = renderToStaticMarkup(
+      <Tooltip content="固定到侧栏" defaultOpen>
+        <button>图钉</button>
+      </Tooltip>,
+    )
+    expect(html).toContain('margin:0')
+    expect(html).toContain('inset:auto')
+    expect(html).toContain('position:fixed')
+  })
+
   test('default variant includes CPX raised surface, subtle border and floating shadow', () => {
     const html = renderToStaticMarkup(
       <Tooltip content="帮助文本" defaultOpen variant="default">
@@ -463,6 +475,12 @@ describe('Controlled state and events contract', () => {
 })
 
 describe('Tooltip interaction & lifecycle regressions', () => {
+  test('exit animation retains the native top layer until presence completes', async () => {
+    const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
+    expectSourceContains(source, 'useTopLayer(contentRef, context.open || present)')
+    expectSourceContains(source, '<AnimatePresence onExitComplete={() => setPresent(false)}>')
+  })
+
   test('delay priority: delayDuration overrides delay, delay overrides provider, fallback to 120', () => {
     let capturedDelay: number | undefined
     function DelaySpy() {

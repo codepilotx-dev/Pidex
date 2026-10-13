@@ -649,7 +649,12 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
     const [actualSide, setActualSide] = useState<TooltipSide>(side)
     const [arrowOffset, setArrowOffset] = useState<number>(10)
     const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
-    const popover = useTopLayer(contentRef, context.open)
+    const [present, setPresent] = useState(context.open)
+    useLayoutEffect(() => {
+      if (context.open) setPresent(true)
+    }, [context.open])
+    // 退出动画结束前留在顶层，避免落回浮层内部撑大滚动范围。
+    const popover = useTopLayer(contentRef, context.open || present)
     const reducedMotion = usePrefersReducedMotion()
     const sideOffset = propSideOffset ?? offset ?? 7
 
@@ -777,7 +782,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
     }
 
     return (
-      <AnimatePresence>
+      <AnimatePresence onExitComplete={() => setPresent(false)}>
         {context.open && (
           <motion.div
             {...(props as any)}
@@ -801,6 +806,9 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
                 : { duration: 0.15, ease: [0.16, 1, 0.3, 1] }
             }
             style={{
+              // 原生 popover 的默认居中不能覆盖按锚点计算的坐标。
+              margin: 0,
+              inset: 'auto',
               position: 'fixed',
               top: position ? `${position.top}px` : '-9999px',
               left: position ? `${position.left}px` : '-9999px',
