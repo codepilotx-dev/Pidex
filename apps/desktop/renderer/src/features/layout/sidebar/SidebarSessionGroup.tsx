@@ -283,8 +283,8 @@ function SidebarSessionGroupComponent({
           session.status === 'queued'
             ? '当前 Turn 结束后可切换'
             : (session.workflowId ?? session.sessionGroupId)
-              ? '切换或移出工作流'
-              : '加入工作流',
+              ? '切换或移出工作组'
+              : '加入工作组',
         disabled:
           session.status === 'running' ||
           session.status === 'waiting' ||

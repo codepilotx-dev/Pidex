@@ -567,7 +567,7 @@ export function ComposerCard({
       setSessionGroupEditorOpen(false)
     } catch (cause) {
       setSessionGroupCreateError(
-        cause instanceof Error ? cause.message : '工作流创建失败，请重试。',
+        cause instanceof Error ? cause.message : '工作组创建失败，请重试。',
       )
     } finally {
       setSessionGroupSaving(false)
@@ -1911,11 +1911,11 @@ export function ComposerCard({
               <MetaChip
                 active={openDropdown === 'session-group'}
                 icon={<MessagesSquare size={APP_ICON_SIZE} />}
-                label={selectedSessionGroup?.name ?? '工作流'}
+                label={selectedSessionGroup?.name ?? '工作组'}
                 title={
                   selectedSessionGroup
-                    ? `使用工作流：${selectedSessionGroup.name}`
-                    : '选择工作流（可不使用）'
+                    ? `使用工作组：${selectedSessionGroup.name}`
+                    : '选择工作组（可不使用）'
                 }
               />
             }

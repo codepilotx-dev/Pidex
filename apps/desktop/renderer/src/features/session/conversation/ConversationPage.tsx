@@ -1141,7 +1141,7 @@ export function ConversationPage(): React.ReactNode {
             effectiveSessionStatus === 'waiting' ||
             effectiveSessionStatus === 'queued'
               ? '当前 Turn 结束后可切换'
-              : '加入或切换工作流'}
+              : '加入或切换工作组'}
           </PopoverItem>
           <PopoverSeparator />
           <PopoverItem

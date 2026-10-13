@@ -118,7 +118,7 @@ export function SessionGroupsView(): React.ReactNode {
         setSteps([])
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '工作流加载失败')
+      setError(cause instanceof Error ? cause.message : '工作组加载失败')
     } finally {
       setLoading(false)
     }
@@ -190,7 +190,7 @@ export function SessionGroupsView(): React.ReactNode {
         await refresh()
       }
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '工作流保存失败')
+      setError(cause instanceof Error ? cause.message : '工作组保存失败')
     } finally {
       setSaving(false)
     }
@@ -205,7 +205,7 @@ export function SessionGroupsView(): React.ReactNode {
       setDeleteDialogOpen(false)
       navigate('/workflows')
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '工作流删除失败')
+      setError(cause instanceof Error ? cause.message : '工作组删除失败')
     } finally {
       setSaving(false)
     }
@@ -227,9 +227,9 @@ export function SessionGroupsView(): React.ReactNode {
   }
 
   const createWorkflowAction = (
-    <Button aria-label="新建工作流" color="primary" onClick={openCreateDialog}>
+    <Button aria-label="新建工作组" color="primary" onClick={openCreateDialog}>
       <Plus size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
-      <span>新建工作流</span>
+      <span>新建工作组</span>
     </Button>
   )
 
@@ -249,7 +249,7 @@ export function SessionGroupsView(): React.ReactNode {
       <ConfirmationDialog
         actionDisabled={saving}
         actionLabel={saving ? '删除中…' : '删除组'}
-        description="聊天、Turn 和 Diff 不会被删除，但工作流上下文将无法恢复。"
+        description="聊天、Turn 和 Diff 不会被删除，但工作组上下文将无法恢复。"
         open={deleteDialogOpen}
         title={`删除“${detail?.group.name ?? ''}”？`}
         tone="danger"
@@ -267,7 +267,7 @@ export function SessionGroupsView(): React.ReactNode {
               role="alert"
             >
               <AlertCircle size={APP_ICON_SIZE} />
-              <h1>无法打开工作流</h1>
+              <h1>无法打开工作组</h1>
               <p>{error}</p>
               <div>
                 <Button color="secondary" size="compact" onClick={() => void refresh()}>
@@ -275,7 +275,7 @@ export function SessionGroupsView(): React.ReactNode {
                   <span>重试</span>
                 </Button>
                 <Button color="secondary" size="compact" onClick={() => navigate('/workflows')}>
-                  返回工作流
+                  返回工作组
                 </Button>
               </div>
             </div>
@@ -283,7 +283,7 @@ export function SessionGroupsView(): React.ReactNode {
           {loading && !detail ? (
             <div className="session-group-loading tw:flex tw:min-h-[40vh] tw:flex-col tw:items-center tw:justify-center tw:gap-3 tw:text-app-text-soft tw:type-body-sm">
               <Spinner size="medium" />
-              <span>正在加载工作流…</span>
+              <span>正在加载工作组…</span>
             </div>
           ) : null}
           {detail ? (
@@ -294,7 +294,7 @@ export function SessionGroupsView(): React.ReactNode {
                   to="/workflows"
                 >
                   <ArrowLeft aria-hidden="true" size={APP_ICON_SIZE} />
-                  <span>返回工作流</span>
+                  <span>返回工作组</span>
                 </Link>
               </div>
               <header className="session-group-detail__header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:pb-6 tw:@max-[760px]:flex-col tw:@max-[760px]:items-stretch">
@@ -356,20 +356,23 @@ export function SessionGroupsView(): React.ReactNode {
               <section className="session-group-section tw:border-b tw:border-b-app-border-subtle tw:py-6 tw:last:border-b-0">
                 <div className="session-group-section__title-row tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:text-app-text tw:[&>h3]:m-0 tw:[&>h3]:type-title-sm">
                   <Users size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                  <h3>成员任务</h3>
+                  <h3>成员会话</h3>
                   <span className="session-group-section-count tw:inline-flex tw:h-4.5 tw:min-w-4.5 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-control tw:px-1 tw:text-app-text-soft tw:type-label">
                     {detail.members.length}
                   </span>
                 </div>
+                <p className="session-group-member-hint tw:m-0 tw:mb-4 tw:text-app-text-soft tw:type-body-sm">
+                  成员可以来自不同项目；组内会共享各自的设计、计划和成果，打开成员会话可查看完整历史。
+                </p>
                 <div className="session-group-member-add tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:@max-[760px]:flex-col tw:@max-[760px]:items-stretch">
                   <div className="session-group-member-select-wrap tw:max-w-[380px] tw:flex-1 tw:@max-[760px]:w-full tw:@max-[760px]:max-w-none">
                     <Select
-                      ariaLabel="选择已有任务"
-                      emptyText="没有可添加的任务"
+                      ariaLabel="选择已有会话"
+                      emptyText="没有可添加的会话"
                       onValueChange={setSessionToAdd}
                       options={sessionSelectOptions}
-                      placeholder="选择已有任务并加入工作流…"
-                      searchPlaceholder="搜索任务名称或项目…"
+                      placeholder="选择已有会话并加入工作组…"
+                      searchPlaceholder="搜索会话名称或项目…"
                       searchable
                       value={sessionToAdd}
                     />
@@ -420,7 +423,7 @@ export function SessionGroupsView(): React.ReactNode {
                   ))}
                   {detail.members.length === 0 ? (
                     <p className="session-group-empty-subtle tw:m-0 tw:py-4 tw:text-app-text-meta tw:type-body-sm">
-                      当前工作流暂无成员任务，请在上方选择已有任务加入。
+                      当前工作组暂无成员会话，请在上方选择已有会话加入。
                     </p>
                   ) : null}
                 </div>
@@ -455,13 +458,13 @@ export function SessionGroupsView(): React.ReactNode {
           description="组织相关任务，共享修复上下文、决策摘要和验证记录。"
           search={
             <SearchInput
-              aria-label="搜索工作流"
+              aria-label="搜索工作组"
               onChange={setSearch}
               placeholder="搜索名称或说明…"
               value={search}
             />
           }
-          title="工作流"
+          title="工作组"
         >
           <main
             aria-live="polite"
@@ -483,7 +486,7 @@ export function SessionGroupsView(): React.ReactNode {
             {loading ? (
               <div className="session-group-loading tw:flex tw:min-h-[40vh] tw:flex-col tw:items-center tw:justify-center tw:gap-3 tw:text-app-text-soft tw:type-body-sm">
                 <Spinner size="medium" />
-                <span>正在加载工作流…</span>
+                <span>正在加载工作组…</span>
               </div>
             ) : null}
             {!loading && !error && filtered.length > 0 ? (
@@ -492,7 +495,7 @@ export function SessionGroupsView(): React.ReactNode {
                   aria-hidden="true"
                   className="session-groups-table__header tw:grid tw:grid-cols-[minmax(0,1fr)_minmax(120px,160px)_minmax(112px,auto)] tw:items-center tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:px-3 tw:py-2 tw:text-app-text-meta tw:type-caption tw:@max-[760px]:grid-cols-[minmax(0,1fr)_auto]"
                 >
-                  <span>工作流</span>
+                  <span>工作组</span>
                   <span>项目</span>
                   <span>最近更新</span>
                 </div>
@@ -506,7 +509,7 @@ export function SessionGroupsView(): React.ReactNode {
                       <span className="session-group-row__main tw:flex tw:min-w-0 tw:flex-col tw:gap-1 tw:[&>small]:overflow-hidden tw:[&>small]:text-ellipsis tw:[&>small]:whitespace-nowrap tw:[&>small]:text-app-text-soft tw:[&>small]:type-body-sm tw:[&>strong]:overflow-hidden tw:[&>strong]:text-ellipsis tw:[&>strong]:whitespace-nowrap tw:[&>strong]:text-app-text tw:[&>strong]:type-row-title">
                         <strong>{group.name}</strong>
                         <small>
-                          {group.memberCount} 个任务
+                          {group.memberCount} 个会话
                           {group.description ? ` · ${group.description}` : ''}
                         </small>
                       </span>
@@ -531,10 +534,10 @@ export function SessionGroupsView(): React.ReactNode {
                   size={APP_ICON_SIZES.lg}
                   strokeWidth={APP_ICON_STROKE_WIDTH}
                 />
-                <h2>暂无工作流</h2>
+                <h2>暂无工作组</h2>
                 <p>将相关任务组织在一起，共享上下文并追踪每一步验证。</p>
                 <Button color="secondary" onClick={openCreateDialog}>
-                  创建新工作流
+                  创建新工作组
                 </Button>
               </div>
             ) : null}
@@ -545,8 +548,8 @@ export function SessionGroupsView(): React.ReactNode {
                   size={APP_ICON_SIZES.lg}
                   strokeWidth={APP_ICON_STROKE_WIDTH}
                 />
-                <h2>未找到工作流</h2>
-                <p>没有与“{search}”匹配的工作流。</p>
+                <h2>未找到工作组</h2>
+                <p>没有与“{search}”匹配的工作组。</p>
                 <Button color="secondary" size="compact" onClick={() => setSearch('')}>
                   清除搜索
                 </Button>

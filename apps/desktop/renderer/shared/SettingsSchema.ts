@@ -94,7 +94,7 @@ export const DEFAULT_SIDEBAR_DESTINATION_ORDER: readonly string[] = [
   'sessionGroups',
 ]
 
-/** 宠物市场和工作流入口收进“更多”，其余可用入口直接显示。 */
+/** 宠物市场和工作组入口收进“更多”，其余可用入口直接显示。 */
 export const DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS: readonly string[] = ['pets', 'sessionGroups']
 
 export const DEFAULT_SIDEBAR_CUSTOMIZATION: SidebarCustomization = {

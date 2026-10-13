@@ -182,23 +182,23 @@ describe('composer surface variant', () => {
     expect(html).not.toContain('选择文件夹')
   })
 
-  test('Coding 选中 workspace 后显示会话组、分支与项目行为', () => {
+  test('Coding 选中 workspace 后显示工作组、分支与项目行为', () => {
     const html = renderToStaticMarkup(
       <ComposerCard {...composerCardProps({ surface: 'coding', workspace: WORKSPACE })} />,
     )
     expect(html).toContain('Alpha 工作区')
-    expect(html).toContain('工作流')
+    expect(html).toContain('工作组')
     expect(html).toContain('feature/working-surface')
     expect(html).toContain('选择分支')
   })
 
-  test('Chat 不渲染项目选择，但保留会话组、输入与提交结构', () => {
+  test('Chat 不渲染项目选择，但保留工作组、输入与提交结构', () => {
     const html = renderToStaticMarkup(
       <ComposerCard {...composerCardProps({ surface: 'chat', workspace: WORKSPACE })} />,
     )
     expect(html).toContain('class="composer-bottom composer-utility-bar')
     expect(html).not.toContain('Alpha 工作区')
-    expect(html).toContain('工作流')
+    expect(html).toContain('工作组')
     expect(html).toContain('composer-input-surface')
     expect(html).toContain('aria-label="发送"')
   })
