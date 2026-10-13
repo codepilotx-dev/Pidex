@@ -81,11 +81,11 @@ export class PetCatalogService {
 
   async previewAsset(slug: string): Promise<{
     bytes: Uint8Array
-    contentType: 'image/gif'
+    contentType: 'image/webp'
     etag: string
   }> {
     const item = await this.requireCatalogItem(slug)
-    const url = new URL(`${encodeURIComponent(item.slug)}/gifs/idle.gif`, PREVIEW_BASE_URL)
+    const url = new URL(`${encodeURIComponent(item.slug)}/webp/idle.webp`, PREVIEW_BASE_URL)
     if (
       url.protocol !== 'https:' ||
       url.hostname !== 'codexpet.top' ||
@@ -95,11 +95,11 @@ export class PetCatalogService {
     }
     const response = await this.fetchNoRedirect(url, '宠物预览')
     const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
-    if (contentType !== 'image/gif') {
-      throw new AgentError('PET_INVALID', '宠物预览只支持 GIF', 400)
+    if (contentType !== 'image/webp') {
+      throw new AgentError('PET_INVALID', '宠物预览只支持 WebP', 400)
     }
     const bytes = await readLimitedBody(response, MAX_PREVIEW_BYTES, '宠物预览超过大小限制')
-    if (!isGif(bytes)) {
+    if (!isWebp(bytes)) {
       throw new AgentError('PET_INVALID', '宠物预览文件签名无效', 400)
     }
     return {
@@ -412,10 +412,12 @@ async function readLimitedBody(
   return bytes
 }
 
-function isGif(bytes: Uint8Array): boolean {
-  if (bytes.length < 6) return false
-  const signature = String.fromCharCode(...bytes.slice(0, 6))
-  return signature === 'GIF87a' || signature === 'GIF89a'
+function isWebp(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 16 &&
+    String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
+    String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP'
+  )
 }
 
 function record(value: unknown, name: string): Record<string, unknown> {

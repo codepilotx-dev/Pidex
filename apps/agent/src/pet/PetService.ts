@@ -87,7 +87,7 @@ export class PetService {
 
   async previewAsset(slug: string): Promise<{
     bytes: Uint8Array
-    contentType: 'image/gif'
+    contentType: 'image/webp'
     etag: string
   }> {
     return this.catalogService.previewAsset(slug)

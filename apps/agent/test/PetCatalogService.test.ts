@@ -122,18 +122,18 @@ describe('PetCatalogService', () => {
     })
   })
 
-  test('proxies only a bounded GIF preview for a catalog slug', async () => {
+  test('proxies only a bounded WebP preview for a catalog slug', async () => {
     const root = await temporaryRoot()
-    const gif = new TextEncoder().encode('GIF89a-preview')
+    const webp = new TextEncoder().encode('RIFF0000WEBPVP8 preview')
     const service = new PetCatalogService(root, {
       fetch: mockFetch({
         ...catalogResponses(),
-        'https://codexpet.top/assets/previews/firefly--lingxiaotian/gifs/idle.gif': new Response(
-          gif,
+        'https://codexpet.top/assets/previews/firefly--lingxiaotian/webp/idle.webp': new Response(
+          webp,
           {
             headers: {
-              'Content-Type': 'image/gif',
-              'Content-Length': String(gif.byteLength),
+              'Content-Type': 'image/webp',
+              'Content-Length': String(webp.byteLength),
             },
           },
         ),
@@ -142,9 +142,26 @@ describe('PetCatalogService', () => {
     await service.list(new Set(), true)
 
     const preview = await service.previewAsset('firefly--lingxiaotian')
-    expect(preview.contentType).toBe('image/gif')
-    expect(new TextDecoder().decode(preview.bytes)).toBe('GIF89a-preview')
+    expect(preview.contentType).toBe('image/webp')
+    expect(preview.bytes).toEqual(webp)
     await expect(service.previewAsset('not-in-catalog')).rejects.toThrow('社区宠物不存在')
+  })
+
+  test('rejects preview responses with an invalid WebP signature or content type', async () => {
+    for (const [contentType, body, message] of [
+      ['image/webp', 'GIF89a-preview', '文件签名无效'],
+      ['text/html', '<html>not an image</html>', '只支持 WebP'],
+    ] as const) {
+      const service = new PetCatalogService(await temporaryRoot(), {
+        fetch: mockFetch({
+          ...catalogResponses(),
+          'https://codexpet.top/assets/previews/firefly--lingxiaotian/webp/idle.webp': new Response(body, {
+            headers: { 'Content-Type': contentType },
+          }),
+        }),
+      })
+      await expect(service.previewAsset('firefly--lingxiaotian')).rejects.toThrow(message)
+    }
   })
 
   test('classifies supported, attributed, restricted and unknown licenses', () => {
