@@ -11,7 +11,6 @@ import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { Spinner } from '../../components/ui/Spinner.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import { SettingsDropdown } from '../settings/SettingsDropdown.js'
 import { PetSprite } from './PetSprite.js'
 import {
@@ -144,7 +143,7 @@ export function PetCatalogSection({
 
   return (
     <>
-      <WorkspaceHeaderItem align="start" id="pets.tabs" order={0} slot="left">
+      <div className="pet-catalog-toolbar-row tw:mb-4 tw:flex tw:items-center tw:justify-between tw:gap-2">
         <SegmentedControl<PetCatalogTab>
           ariaLabel="宠物商店分组"
           className="pet-catalog-workspace-tabs tw:[&_.segmented-control-item_span]:type-caption tw:[&_.segmented-control-item_span]:text-app-text-meta"
@@ -173,20 +172,17 @@ export function PetCatalogSection({
           semantics="tabs"
           value={tab}
         />
-      </WorkspaceHeaderItem>
-      <WorkspaceHeaderItem align="end" id="pets.refresh" order={100} slot="right">
         <Button
           isIconOnly
           aria-busy={loading}
-          color="ghostSecondary"
+          color="secondary"
           disabled={loading}
           onClick={() => void loadCatalog(true)}
-          size="toolbar"
           title="刷新社区宠物目录"
         >
           <RefreshCw aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
         </Button>
-      </WorkspaceHeaderItem>
+      </div>
 
       <section aria-label="社区宠物目录" className="pet-catalog-browser tw:min-w-0">
         <div className="pet-catalog-panel tw:rounded-xl tw:border tw:border-app-border tw:bg-app-panel tw:p-4 tw:shadow-none">

@@ -43,7 +43,6 @@ import type {
   DesktopSessionGroupStep,
 } from '../../services/desktop-client/Types.js'
 import { cx } from '../../utils/Cx.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { FileMutationDiffBody } from '../session/timeline/FileMutationDiffBody.js'
 import { SessionGroupEditorDialog } from './SessionGroupEditorDialog.js'
@@ -227,25 +226,15 @@ export function SessionGroupsView(): React.ReactNode {
     await refresh()
   }
 
+  const createWorkflowAction = (
+    <Button aria-label="新建工作流" color="primary" onClick={openCreateDialog}>
+      <Plus size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+      <span>新建工作流</span>
+    </Button>
+  )
+
   return (
     <>
-      {groupId ? (
-        <WorkspaceHeaderItem align="start" id="session-groups.back" order={0} slot="left">
-          <Link
-            className="session-groups-back tw:inline-flex tw:items-center tw:gap-2 tw:rounded-md tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-label tw:no-underline tw:hover:bg-app-hover tw:hover:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus"
-            to="/workflows"
-          >
-            <ArrowLeft aria-hidden="true" size={APP_ICON_SIZE} />
-            <span>工作流</span>
-          </Link>
-        </WorkspaceHeaderItem>
-      ) : null}
-      <WorkspaceHeaderItem align="end" id="session-groups.actions" order={100} slot="right">
-        <Button aria-label="新建工作流" color="primary" size="compact" onClick={openCreateDialog}>
-          <Plus size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          <span>新建工作流</span>
-        </Button>
-      </WorkspaceHeaderItem>
       <SessionGroupEditorDialog
         description={draftDescription}
         mode={editorMode ?? 'create'}
@@ -299,6 +288,15 @@ export function SessionGroupsView(): React.ReactNode {
           ) : null}
           {detail ? (
             <div className="session-group-detail__inner tw:mx-auto tw:flex tw:w-[min(var(--page-content-max-width),100%)] tw:flex-col">
+              <div className="tw:mb-3 tw:flex tw:items-center">
+                <Link
+                  className="session-groups-back tw:inline-flex tw:items-center tw:gap-2 tw:rounded-md tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-label tw:no-underline tw:hover:bg-app-hover tw:hover:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus"
+                  to="/workflows"
+                >
+                  <ArrowLeft aria-hidden="true" size={APP_ICON_SIZE} />
+                  <span>返回工作流</span>
+                </Link>
+              </div>
               <header className="session-group-detail__header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:pb-6 tw:@max-[760px]:flex-col tw:@max-[760px]:items-stretch">
                 <div className="session-group-detail__info tw:flex tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:flex-col tw:gap-1 tw:[&>h1]:mt-1 tw:[&>h1]:text-app-text tw:[&>h1]:type-title-xl tw:[&>p]:m-0 tw:[&>p]:text-app-text-soft tw:[&>p]:type-body">
                   <span className="chip-semantic accent session-group-eyebrow tw:self-start">
@@ -452,6 +450,7 @@ export function SessionGroupsView(): React.ReactNode {
         </main>
       ) : (
         <PrimaryPageLayout
+          actions={createWorkflowAction}
           className="session-groups-primary-page"
           description="组织相关任务，共享修复上下文、决策摘要和验证记录。"
           search={

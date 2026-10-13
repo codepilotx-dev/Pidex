@@ -7,7 +7,6 @@ import { GlobalErrorModal } from '../../components/GlobalErrorModal.js'
 import { Button } from '../../components/ui/Button.js'
 import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import { PetCatalogSection } from './PetCatalogSection.js'
 import { usePetSettingsController } from './UsePetSettingsController.js'
 
@@ -24,6 +23,17 @@ export function PetCatalogPage(): React.ReactNode {
     await selectPet(installed.id)
   }
 
+  const headerActions = (
+    <Button
+      color="secondary"
+      onClick={() => navigate('/settings/pets')}
+      type="button"
+    >
+      <PawPrint size={APP_ICON_SIZE} />
+      <span>宠物设置</span>
+    </Button>
+  )
+
   return (
     <>
       <GlobalErrorModal message={errorMessage} onDismiss={() => setErrorMessage(null)} />
@@ -32,18 +42,8 @@ export function PetCatalogPage(): React.ReactNode {
         onDismiss={() => setNoticeMessage(null)}
         tone="status"
       />
-      <WorkspaceHeaderItem align="end" id="pets.settings" order={90} slot="right">
-        <Button
-          color="ghostSecondary"
-          onClick={() => navigate('/settings/pets')}
-          size="toolbar"
-          type="button"
-        >
-          <PawPrint size={APP_ICON_SIZE} />
-          宠物设置
-        </Button>
-      </WorkspaceHeaderItem>
       <PrimaryPageLayout
+        actions={headerActions}
         className="pet-catalog-primary-page tw:@container/pet-catalog-page"
         description="浏览并一键安装 awesome-codex-pet 社区中的桌面伙伴。"
         title="宠物商店"

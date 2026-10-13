@@ -16,7 +16,6 @@ import {
 } from '../../components/ui/IconTokens.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import type { DesktopSkillCatalogItem, DesktopSkillOwnerFilter } from '../../../shared/Types.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutletContext.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
@@ -355,91 +354,84 @@ export function PluginsView(): React.ReactNode {
     navigate('/new')
   }
 
+  const headerActions = (
+    <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
+      <Button
+        isIconOnly
+        aria-busy={activeLoading}
+        color="secondary"
+        disabled={activeLoading}
+        onClick={() => {
+          if (tab === 'plugins') {
+            refreshPlugins()
+            miniMaxCli.refresh()
+          } else {
+            setSkillsReloadKey((value) => value + 1)
+          }
+        }}
+        title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
+      >
+        <RefreshCw
+          aria-hidden="true"
+          size={APP_ICON_SIZE}
+          strokeWidth={APP_ICON_STROKE_WIDTH}
+        />
+      </Button>
+      <Button
+        isIconOnly
+        color="secondary"
+        onClick={() => navigate('/settings/plugins')}
+        title="管理插件设置"
+      >
+        <Settings2
+          aria-hidden="true"
+          size={APP_ICON_SIZE}
+          strokeWidth={APP_ICON_STROKE_WIDTH}
+        />
+      </Button>
+    </div>
+  )
+
   return (
     <>
       {target ? (
-        <WorkspaceHeaderItem align="start" id="plugins.navigation" order={0} slot="left">
-          {target.kind === 'plugin' ? (
-            <div className={cx('plugins-detail-breadcrumb', DETAILS_BREADCRUMB_CLASS)}>
+        <main className="plugins-details-page tw:h-full tw:w-full tw:min-w-0 tw:overflow-auto tw:bg-app-canvas tw:p-5 tw:@container/plugins-page">
+          <div className="tw:mx-auto tw:mb-4 tw:flex tw:w-[min(var(--page-content-max-width),100%)] tw:min-w-0 tw:items-center">
+            {target.kind === 'plugin' ? (
+              <div className={cx('plugins-detail-breadcrumb', DETAILS_BREADCRUMB_CLASS)}>
+                <Button
+                  color="ghostSecondary"
+                  onClick={closeDetails}
+                  ref={backButtonRef}
+                  size="toolbar"
+                >
+                  插件
+                </Button>
+                <ChevronRight
+                  aria-hidden="true"
+                  size={APP_ICON_SIZES.sm}
+                  strokeWidth={APP_ICON_STROKE_WIDTH}
+                />
+                <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>
+                  {selectedPlugin?.name ?? target.id}
+                </span>
+              </div>
+            ) : (
               <Button
                 color="ghostSecondary"
                 onClick={closeDetails}
                 ref={backButtonRef}
                 size="toolbar"
               >
-                插件
+                <ArrowLeft
+                  aria-hidden="true"
+                  size={APP_ICON_SIZE}
+                  strokeWidth={APP_ICON_STROKE_WIDTH}
+                />
+                返回{tab === 'plugins' ? '插件' : '技能'}
               </Button>
-              <ChevronRight
-                aria-hidden="true"
-                size={APP_ICON_SIZES.sm}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-              <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>
-                {selectedPlugin?.name ?? target.id}
-              </span>
-            </div>
-          ) : (
-            <Button
-              color="ghostSecondary"
-              onClick={closeDetails}
-              ref={backButtonRef}
-              size="toolbar"
-            >
-              <ArrowLeft
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-              返回{tab === 'plugins' ? '插件' : '技能'}
-            </Button>
-          )}
-        </WorkspaceHeaderItem>
-      ) : null}
-
-      {!target ? (
-        <WorkspaceHeaderItem align="end" id="plugins.actions" order={100} slot="right">
-          <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
-            <Button
-              isIconOnly
-              aria-busy={activeLoading}
-              color="ghostSecondary"
-              disabled={activeLoading}
-              onClick={() => {
-                if (tab === 'plugins') {
-                  refreshPlugins()
-                  miniMaxCli.refresh()
-                } else {
-                  setSkillsReloadKey((value) => value + 1)
-                }
-              }}
-              size="toolbar"
-              title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
-            >
-              <RefreshCw
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            </Button>
-            <Button
-              isIconOnly
-              color="ghostSecondary"
-              onClick={() => navigate('/settings/plugins')}
-              size="toolbar"
-              title="管理插件设置"
-            >
-              <Settings2
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            </Button>
+            )}
           </div>
-        </WorkspaceHeaderItem>
-      ) : null}
-
-      {target ? (
-        <main className="plugins-details-page tw:h-full tw:w-full tw:min-w-0 tw:overflow-auto tw:bg-app-canvas tw:p-5 tw:@container/plugins-page">
           {selectedPlugin ? (
             <CatalogDetailsView
               busy={busyPluginIds.has(selectedPlugin.id)}
@@ -475,6 +467,7 @@ export function PluginsView(): React.ReactNode {
         </main>
       ) : (
         <PrimaryPageLayout
+          actions={headerActions}
           className="plugins-primary-page tw:@container/plugins-page"
           scrollContainerRef={scrollRegionRef}
           title={tab === 'plugins' ? '插件' : '技能'}

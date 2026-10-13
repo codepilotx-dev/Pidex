@@ -31,7 +31,6 @@ import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../components/ui/IconTokens.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { resolveRecentNewThreadModel } from '../models/RecentNewThreadModel.js'
@@ -429,36 +428,37 @@ function AutomationViewContent(): React.ReactNode {
       ?.focus({ preventScroll: true })
   }
 
+  const createActions = (
+    <PopoverMenu
+      align="end"
+      open={createMenuOpen}
+      size="md"
+      onOpenChange={setCreateMenuOpen}
+      trigger={
+        <Button ref={createButtonRef} color="primary">
+          <Plus aria-hidden="true" size={APP_ICON_SIZE} />
+          <span>创建</span>
+          <ChevronDown aria-hidden="true" size={APP_ICON_SIZES.sm} />
+        </Button>
+      }
+    >
+      <PopoverItem
+        icon={<MessageCircle size={APP_ICON_SIZE} />}
+        onClick={() => void planThroughChat()}
+      >
+        使用 CPX 创建
+      </PopoverItem>
+      <PopoverItem icon={<Settings size={APP_ICON_SIZE} />} onClick={() => openManualCreate()}>
+        手动设置
+      </PopoverItem>
+    </PopoverMenu>
+  )
+
   return (
     <>
-      <WorkspaceHeaderItem align="end" id="automation.actions" order={100} slot="right">
-        <PopoverMenu
-          align="end"
-          open={createMenuOpen}
-          size="md"
-          onOpenChange={setCreateMenuOpen}
-          trigger={
-            <Button ref={createButtonRef} color="primary">
-              <Plus aria-hidden="true" size={APP_ICON_SIZE} />
-              <span>创建</span>
-              <ChevronDown aria-hidden="true" size={APP_ICON_SIZES.sm} />
-            </Button>
-          }
-        >
-          <PopoverItem
-            icon={<MessageCircle size={APP_ICON_SIZE} />}
-            onClick={() => void planThroughChat()}
-          >
-            使用 CPX 创建
-          </PopoverItem>
-          <PopoverItem icon={<Settings size={APP_ICON_SIZE} />} onClick={() => openManualCreate()}>
-            手动设置
-          </PopoverItem>
-        </PopoverMenu>
-      </WorkspaceHeaderItem>
-
       <PrimaryPageLayout
         className="automation-primary-page"
+        actions={createActions}
         title={tab === 'runs' ? '执行记录' : '任务日历'}
         description={
           tab === 'runs'

@@ -29,7 +29,6 @@ import { arrayBufferToBase64 } from '../../utils/BinaryEncoding.js'
 import { cx } from '../../utils/Cx.js'
 import { WorkspaceFileTree } from '../layout/WorkspaceFileTree.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import {
   DEFAULT_PROJECT_APPEARANCE,
   PROJECT_APPEARANCE_COLOR_CLASS,
@@ -188,26 +187,25 @@ function EnvironmentList({
 
   if (routeBase === '/projects') {
     return (
-      <>
-        <WorkspaceHeaderItem align="end" id="projects.add" order={100} slot="right">
+      <PrimaryPageLayout
+        actions={
           <Button color="primary" loading={adding} onClick={() => void addProject()}>
             <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
             添加项目
           </Button>
-        </WorkspaceHeaderItem>
-        <PrimaryPageLayout
-          className="projects-primary-page"
-          description="管理项目环境、项目指令和共享来源。"
-          search={
-            <SearchInput
-              aria-label="搜索项目"
-              onChange={setQuery}
-              placeholder="搜索项目名称或路径…"
-              value={query}
-            />
-          }
-          title="项目"
-        >
+        }
+        className="projects-primary-page"
+        description="管理项目环境、项目指令和共享来源。"
+        search={
+          <SearchInput
+            aria-label="搜索项目"
+            onChange={setQuery}
+            placeholder="搜索项目名称或路径…"
+            value={query}
+          />
+        }
+        title="项目"
+      >
           <div className="environment-settings environment-primary-content tw:min-h-0 tw:min-w-0">
             {loading ? (
               <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
@@ -243,7 +241,6 @@ function EnvironmentList({
             )}
           </div>
         </PrimaryPageLayout>
-      </>
     )
   }
 

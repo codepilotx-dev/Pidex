@@ -36,7 +36,6 @@ import {
   parseModelCenterSearchParams,
   updateModelCenterSearchParams,
 } from './ModelCenterState.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { ProviderEditorForm } from './provider-management/ProviderEditorForm.js'
 import { ProviderEditorDialog } from './provider-management/ProviderEditorDialog.js'
@@ -645,62 +644,34 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     </>
   ) : null
 
+  const marketActions =
+    !showInitialSkeleton && !showingProviderDetail && !creatingCustomProvider ? (
+      <div className="model-center-header-actions tw:inline-flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2">
+        <Button
+          color="secondary"
+          disabled={refreshingProviderData}
+          loading={refreshingProviderData}
+          onClick={() => void refreshProviderData()}
+        >
+          {!refreshingProviderData ? <RefreshCw size={APP_ICON_SIZE} aria-hidden /> : null}
+          <span className="model-center-header-action-label tw:max-[479px]:hidden">
+            刷新
+          </span>
+        </Button>
+        <Button color="primary" onClick={() => setSearchParams({ newProvider: '1' })}>
+          <Plus size={APP_ICON_SIZE} aria-hidden />
+          <span className="model-center-header-action-label tw:max-[479px]:hidden">
+            新增自定义 Provider
+          </span>
+        </Button>
+      </div>
+    ) : null
+
   return (
     <>
-      {(showingProviderDetail && selectedProvider) || creatingCustomProvider ? (
-        <WorkspaceHeaderItem align="start" id="models.navigation" order={0} slot="left">
-          <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-1 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
-            <Button
-              color="ghostSecondary"
-              onClick={showProviderCatalog}
-              size="toolbar"
-              title="返回供应商列表"
-            >
-              供应商
-            </Button>
-            <ChevronRight
-              aria-hidden="true"
-              className="model-center-breadcrumb-separator tw:shrink-0 tw:text-app-text-meta tw:opacity-60"
-              size={APP_ICON_SIZES.sm}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-            <span className="model-center-breadcrumb-current tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap">
-              {creatingCustomProvider ? '新供应商' : selectedProvider?.displayName}
-            </span>
-          </div>
-        </WorkspaceHeaderItem>
-      ) : null}
-
-      {!showingProviderDetail && !creatingCustomProvider ? (
-        <WorkspaceHeaderItem align="end" id="models.actions" order={100} slot="right">
-          <div className="model-center-header-actions tw:inline-flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-3">
-            {!showInitialSkeleton ? (
-              <>
-                <Button
-                  color="secondary"
-                  disabled={refreshingProviderData}
-                  loading={refreshingProviderData}
-                  onClick={() => void refreshProviderData()}
-                >
-                  {!refreshingProviderData ? <RefreshCw size={APP_ICON_SIZE} aria-hidden /> : null}
-                  <span className="model-center-header-action-label tw:max-[479px]:hidden">
-                    刷新
-                  </span>
-                </Button>
-                <Button color="primary" onClick={() => setSearchParams({ newProvider: '1' })}>
-                  <Plus size={APP_ICON_SIZE} aria-hidden />
-                  <span className="model-center-header-action-label tw:max-[479px]:hidden">
-                    新增自定义 Provider
-                  </span>
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </WorkspaceHeaderItem>
-      ) : null}
-
       {!showingProviderDetail && !creatingCustomProvider ? (
         <PrimaryPageLayout
+          actions={marketActions}
           className="model-center-shell model-center-primary-page tw:@container"
           headerClassName="settings-page-header"
           title="供应商市场"
@@ -726,6 +697,25 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
       ) : (
         <div className="model-center-shell tw:@container tw:h-full tw:w-full tw:min-w-0 tw:overflow-x-hidden tw:overflow-y-auto tw:p-5">
           <div className="tw:mx-auto tw:min-w-0 tw:w-[min(calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2),100%)] tw:max-w-[calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2)]">
+            <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-4 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
+              <Button
+                color="ghostSecondary"
+                onClick={showProviderCatalog}
+                size="toolbar"
+                title="返回供应商列表"
+              >
+                供应商
+              </Button>
+              <ChevronRight
+                aria-hidden="true"
+                className="model-center-breadcrumb-separator tw:shrink-0 tw:text-app-text-meta tw:opacity-60"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+              <span className="model-center-breadcrumb-current tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap">
+                {creatingCustomProvider ? '新供应商' : selectedProvider?.displayName}
+              </span>
+            </div>
             {showInitialSkeleton ? (
               <ModelCenterInitialSkeleton
                 view="detail"
