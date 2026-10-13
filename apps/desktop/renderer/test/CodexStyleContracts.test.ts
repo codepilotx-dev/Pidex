@@ -952,7 +952,7 @@ describe('UI-Design native floating behavior', () => {
     expect(menus).toContain('next ? 120 : 140')
     expect(menus).toContain('sub.triggerRef.current?.focus()')
     expect(overlays).toContain(":root[data-reduce-motion='on']")
-    for (const name of ['dropdown-menu', 'popover', 'context-menu', 'select'])
+    for (const name of ['dropdown-menu', 'popover', 'context-menu', 'select', 'tooltip'])
       expect(manifest).not.toContain(`@radix-ui/react-${name}`)
   })
 })

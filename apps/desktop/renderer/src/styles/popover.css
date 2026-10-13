@@ -467,7 +467,7 @@
     color: var(--cpx-sys-color-fg-tertiary);
   }
 
-  /* Tooltip surface, arrow fill and the floating enter/exit keyframes are
+  /* Tooltip surface and the floating enter/exit keyframes are
    * expressed in components/ui/Tooltip.tsx and styles/primitives/overlays.css. */
   @media (forced-colors: active) {
     :is(
