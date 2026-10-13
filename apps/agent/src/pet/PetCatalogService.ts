@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PetCatalogItem, PetCatalogResult, PetLicenseKind } from '@pidex/agent-protocol'
 import { AgentError } from '../Domain'
@@ -15,6 +15,7 @@ const CACHE_VERSION = 1
 const CACHE_TTL_MS = 6 * 60 * 60 * 1_000
 const MAX_CATALOG_BYTES = 2 * 1024 * 1024
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024
+const PREVIEW_CACHE_TTL_MS = 5 * 60 * 60 * 1_000
 const MAX_CATALOG_ITEMS = 1_000
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 const PET_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -36,6 +37,8 @@ export class PetCatalogService {
   private readonly fetch: typeof globalThis.fetch
   private readonly now: () => number
   private refreshPromise: Promise<CatalogCache> | null = null
+  private readonly previewDownloads = new Map<string, Promise<Uint8Array>>()
+  private readonly previewFailedAt = new Map<string, number>()
 
   constructor(
     private readonly rootDirectory: string,
@@ -85,7 +88,71 @@ export class PetCatalogService {
     etag: string
   }> {
     const item = await this.requireCatalogItem(slug)
-    const url = new URL(`${encodeURIComponent(item.slug)}/webp/idle.webp`, PREVIEW_BASE_URL)
+    const cached = await this.readPreviewCache(item.slug)
+    let bytes: Uint8Array
+    if (cached) {
+      bytes = cached.bytes
+      if (
+        this.now() - cached.updatedAt >= PREVIEW_CACHE_TTL_MS &&
+        this.now() - (this.previewFailedAt.get(item.slug) ?? -Infinity) >= PREVIEW_CACHE_TTL_MS
+      ) {
+        void this.downloadPreview(item.slug).catch(() => undefined)
+      }
+    } else {
+      bytes = await this.downloadPreview(item.slug)
+    }
+    return {
+      bytes,
+      contentType: 'image/webp',
+      etag: `"${createHash('sha256').update(bytes).digest('hex')}"`,
+    }
+  }
+
+  private async readPreviewCache(slug: string): Promise<{
+    bytes: Uint8Array
+    updatedAt: number
+  } | null> {
+    try {
+      const path = join(this.rootDirectory, '.preview-cache', `${slug}.webp`)
+      const metadata = await stat(path)
+      if (metadata.size > MAX_PREVIEW_BYTES) return null
+      const bytes = await readFile(path)
+      if (!isWebp(bytes) || bytes.byteLength > MAX_PREVIEW_BYTES) return null
+      return { bytes, updatedAt: metadata.mtimeMs }
+    } catch {
+      return null
+    }
+  }
+
+  private downloadPreview(slug: string): Promise<Uint8Array> {
+    const pending = this.previewDownloads.get(slug)
+    if (pending) return pending
+    const request = this.fetchPreview(slug)
+      .then(async (bytes) => {
+        this.previewFailedAt.delete(slug)
+        const directory = join(this.rootDirectory, '.preview-cache')
+        const temporary = join(directory, `${slug}.${crypto.randomUUID()}.tmp`)
+        try {
+          await mkdir(directory, { recursive: true })
+          await writeFile(temporary, bytes)
+          await rename(temporary, join(directory, `${slug}.webp`))
+        } catch {
+          // 磁盘缓存失败不阻断本次预览，也不改动已安装宠物。
+          await rm(temporary, { force: true }).catch(() => undefined)
+        }
+        return bytes
+      })
+      .catch((error) => {
+        this.previewFailedAt.set(slug, this.now())
+        throw error
+      })
+      .finally(() => this.previewDownloads.delete(slug))
+    this.previewDownloads.set(slug, request)
+    return request
+  }
+
+  private async fetchPreview(slug: string): Promise<Uint8Array> {
+    const url = new URL(`${encodeURIComponent(slug)}/webp/idle.webp`, PREVIEW_BASE_URL)
     if (
       url.protocol !== 'https:' ||
       url.hostname !== 'codexpet.top' ||
@@ -102,11 +169,7 @@ export class PetCatalogService {
     if (!isWebp(bytes)) {
       throw new AgentError('PET_INVALID', '宠物预览文件签名无效', 400)
     }
-    return {
-      bytes,
-      contentType,
-      etag: `"${createHash('sha256').update(bytes).digest('hex')}"`,
-    }
+    return bytes
   }
 
   private async requireCatalogItem(slug: string): Promise<CatalogPet> {
