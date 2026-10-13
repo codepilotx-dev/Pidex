@@ -17,6 +17,7 @@ import {
 import { desktopClient } from '../../services/desktop-client/index.js'
 import type { DesktopSkillCatalogItem, DesktopSkillOwnerFilter } from '../../../shared/Types.js'
 import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
+import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutletContext.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
 import { CatalogDetailsView } from './CatalogDetailsView.js'
@@ -395,6 +396,48 @@ export function PluginsView(): React.ReactNode {
         </WorkspaceHeaderItem>
       ) : null}
 
+      {!target ? (
+        <WorkspaceHeaderItem align="end" id="plugins.actions" order={100} slot="right">
+          <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
+            <Button
+              isIconOnly
+              aria-busy={activeLoading}
+              color="ghostSecondary"
+              disabled={activeLoading}
+              onClick={() => {
+                if (tab === 'plugins') {
+                  refreshPlugins()
+                  miniMaxCli.refresh()
+                } else {
+                  setSkillsReloadKey((value) => value + 1)
+                }
+              }}
+              size="toolbar"
+              title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
+            >
+              <RefreshCw
+                aria-hidden="true"
+                size={APP_ICON_SIZE}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            </Button>
+            <Button
+              isIconOnly
+              color="ghostSecondary"
+              onClick={() => navigate('/settings/plugins')}
+              size="toolbar"
+              title="管理插件设置"
+            >
+              <Settings2
+                aria-hidden="true"
+                size={APP_ICON_SIZE}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            </Button>
+          </div>
+        </WorkspaceHeaderItem>
+      ) : null}
+
       {target ? (
         <main className="plugins-details-page tw:h-full tw:w-full tw:min-w-0 tw:overflow-auto tw:bg-app-canvas tw:p-5 tw:@container/plugins-page">
           {selectedPlugin ? (
@@ -431,118 +474,71 @@ export function PluginsView(): React.ReactNode {
           )}
         </main>
       ) : (
-        <section
-          ref={scrollRegionRef}
-          className="plugins-primary-page tw:flex tw:h-full tw:min-h-0 tw:w-full tw:min-w-0 tw:flex-col tw:overflow-x-hidden tw:overflow-y-auto tw:p-5 tw:text-app-text tw:scrollbar-gutter-stable tw:@container/plugins-page"
+        <PrimaryPageLayout
+          className="plugins-primary-page tw:@container/plugins-page"
+          scrollContainerRef={scrollRegionRef}
+          title={tab === 'plugins' ? '插件' : '技能'}
+          description={
+            tab === 'plugins'
+              ? '在常用工具中扩展 Pidex 的能力。'
+              : '查找并添加可复用的工作流指令。'
+          }
+          search={
+            <SearchInput
+              aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
+              onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
+              placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}
+              ref={searchInputRef}
+              value={tab === 'plugins' ? pluginQuery : skillQuery}
+            />
+          }
         >
-          <header className="tw:mx-auto tw:w-[min(var(--page-content-max-width),100%)] tw:min-w-0 tw:shrink-0">
-            <div className="tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-6">
-              <h1 className="tw:m-0 tw:text-app-text tw:type-title-xl">
-                {tab === 'plugins' ? '插件' : '技能'}
-              </h1>
-              <div className="tw:flex tw:min-w-0 tw:items-center tw:gap-2">
-                <div className="tw:w-60 tw:min-w-0">
-                  <SearchInput
-                    aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
-                    onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
-                    placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}
-                    ref={searchInputRef}
-                    value={tab === 'plugins' ? pluginQuery : skillQuery}
-                  />
-                </div>
-                <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
-                  <Button
-                    isIconOnly
-                    aria-busy={activeLoading}
-                    color="ghostSecondary"
-                    disabled={activeLoading}
-                    onClick={() => {
-                      if (tab === 'plugins') {
-                        refreshPlugins()
-                        miniMaxCli.refresh()
-                      } else {
-                        setSkillsReloadKey((value) => value + 1)
-                      }
-                    }}
-                    size="toolbar"
-                    title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
-                  >
-                    <RefreshCw
-                      aria-hidden="true"
-                      size={APP_ICON_SIZE}
-                      strokeWidth={APP_ICON_STROKE_WIDTH}
-                    />
-                  </Button>
-                  <Button
-                    isIconOnly
-                    color="ghostSecondary"
-                    onClick={() => navigate('/settings/plugins')}
-                    size="toolbar"
-                    title="管理插件设置"
-                  >
-                    <Settings2
-                      aria-hidden="true"
-                      size={APP_ICON_SIZE}
-                      strokeWidth={APP_ICON_STROKE_WIDTH}
-                    />
-                  </Button>
-                </div>
-              </div>
-            </div>
-            <p className="tw:mt-2 tw:text-app-text-soft tw:type-body">
-              {tab === 'plugins'
-                ? '在常用工具中扩展 Pidex 的能力。'
-                : '查找并添加可复用的工作流指令。'}
-            </p>
-          </header>
-          <div className="tw:mx-auto tw:mt-6 tw:w-[min(var(--page-content-max-width),100%)] tw:min-w-0">
-            <div aria-live="polite" className="plugins-sr-status tw:sr-only">
-              {announcement}
-            </div>
-            {tab === 'plugins' ? (
-              <PluginDirectory
-                busyPluginIds={busyPluginIds}
-                clearFilters={() => {
-                  setPluginQuery('')
-                  setPluginCategory('all')
-                }}
-                groups={pluginGroups}
-                loadError={pluginLoadError}
-                loading={pluginsLoading}
-                onOpenDetails={(item) =>
-                  openDetails({ kind: 'plugin', id: item.id, tab: 'plugins' })
-                }
-                onPrimaryAction={(item, trigger, checked) =>
-                  void runPluginAction(item, trigger, checked)
-                }
-                pluginErrors={pluginErrors}
-                pluginCategory={pluginCategory}
-                query={pluginQuery}
-                refresh={refreshPlugins}
-                setPluginCategory={setPluginCategory}
-                total={visiblePlugins.length}
-              />
-            ) : (
-              <SkillDirectory
-                clearFilters={() => {
-                  setSkillQuery('')
-                  setSkillOwner('official')
-                }}
-                error={skillsError}
-                groups={skillGroups}
-                installingSkillIds={installingSkillIds}
-                loading={skillsLoading}
-                onInstall={(item) => void installSkill(item)}
-                onOpenDetails={(item) => openDetails({ kind: 'skill', id: item.id, tab: 'skills' })}
-                query={skillQuery}
-                refresh={() => setSkillsReloadKey((value) => value + 1)}
-                setSkillOwner={setSkillOwner}
-                skillOwner={skillOwner}
-                skillsLoaded={skills !== undefined}
-              />
-            )}
+          <div aria-live="polite" className="plugins-sr-status tw:sr-only">
+            {announcement}
           </div>
-        </section>
+          {tab === 'plugins' ? (
+            <PluginDirectory
+              busyPluginIds={busyPluginIds}
+              clearFilters={() => {
+                setPluginQuery('')
+                setPluginCategory('all')
+              }}
+              groups={pluginGroups}
+              loadError={pluginLoadError}
+              loading={pluginsLoading}
+              onOpenDetails={(item) =>
+                openDetails({ kind: 'plugin', id: item.id, tab: 'plugins' })
+              }
+              onPrimaryAction={(item, trigger, checked) =>
+                void runPluginAction(item, trigger, checked)
+              }
+              pluginErrors={pluginErrors}
+              pluginCategory={pluginCategory}
+              query={pluginQuery}
+              refresh={refreshPlugins}
+              setPluginCategory={setPluginCategory}
+              total={visiblePlugins.length}
+            />
+          ) : (
+            <SkillDirectory
+              clearFilters={() => {
+                setSkillQuery('')
+                setSkillOwner('official')
+              }}
+              error={skillsError}
+              groups={skillGroups}
+              installingSkillIds={installingSkillIds}
+              loading={skillsLoading}
+              onInstall={(item) => void installSkill(item)}
+              onOpenDetails={(item) => openDetails({ kind: 'skill', id: item.id, tab: 'skills' })}
+              query={skillQuery}
+              refresh={() => setSkillsReloadKey((value) => value + 1)}
+              setSkillOwner={setSkillOwner}
+              skillOwner={skillOwner}
+              skillsLoaded={skills !== undefined}
+            />
+          )}
+        </PrimaryPageLayout>
       )}
       <ConfirmationDialog
         actionDisabled={miniMaxCli.busy}

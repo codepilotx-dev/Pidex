@@ -37,6 +37,7 @@ import {
   updateModelCenterSearchParams,
 } from './ModelCenterState.js'
 import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
+import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { ProviderEditorForm } from './provider-management/ProviderEditorForm.js'
 import { ProviderEditorDialog } from './provider-management/ProviderEditorDialog.js'
 import { ProviderConnectionSection } from './provider-management/ProviderConnectionSection.js'
@@ -645,7 +646,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   ) : null
 
   return (
-    <div className="model-center-shell tw:@container tw:mx-auto tw:min-w-0 tw:w-[min(calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2),100%)] tw:max-w-[calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2)] tw:p-5">
+    <>
       {(showingProviderDetail && selectedProvider) || creatingCustomProvider ? (
         <WorkspaceHeaderItem align="start" id="models.navigation" order={0} slot="left">
           <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-1 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
@@ -668,17 +669,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
             </span>
           </div>
         </WorkspaceHeaderItem>
-      ) : null}
-
-      {!showingProviderDetail && !creatingCustomProvider ? (
-        <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
-            供应商市场
-          </h2>
-          <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
-            浏览模型供应商，连接后可在左侧管理凭据与模型。
-          </p>
-        </div>
       ) : null}
 
       {!showingProviderDetail && !creatingCustomProvider ? (
@@ -709,69 +699,89 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         </WorkspaceHeaderItem>
       ) : null}
 
-      {showInitialSkeleton ? (
-        <ModelCenterInitialSkeleton
-          view={showingProviderDetail ? 'detail' : 'catalog'}
-          section={providerSection}
-        />
-      ) : showingCustomEditor ? (
-        <ProviderEditorForm
-          key={creatingCustomProvider ? 'new-provider' : selectedProvider?.providerID}
-          embedded
-          open
-          existingProviderIds={providers.map((item) => item.providerID)}
-          provider={creatingCustomProvider ? undefined : selectedProvider}
-          connectionSection={connectionSection}
-          operationBusy={busy || busyKeyId !== null}
-          onTestConnection={testConnection}
-          onTestModel={testConnection}
-          onRefreshModels={fetchModels}
-          onDelete={deleteCustomProvider}
-          onOpenChange={() => {}}
-          onSaved={saveCustomProvider}
-        />
-      ) : showingProviderDetail && selectedProvider ? (
-        <ProviderDetail
-          actions={detailActions}
-          activeTab={providerSection}
-          onBack={showProviderCatalog}
-          onTabChange={(tab) => updateLocation({ provider: providerID, section: tab })}
-          provider={{
-            id: selectedProvider.providerID,
-            name: selectedProvider.displayName,
-            logoURL: selectedProvider.logoURL,
-            description: providerDescription(selectedProvider),
-            status: providerDetailStatus(
-              selectedProvider,
-              selectedProviderState,
-              selectedConfiguredGroup,
-            ),
-          }}
+      {!showingProviderDetail && !creatingCustomProvider ? (
+        <PrimaryPageLayout
+          className="model-center-shell model-center-primary-page tw:@container"
+          headerClassName="settings-page-header"
+          title="供应商市场"
+          description="浏览模型供应商，连接后可在左侧管理凭据与模型。"
         >
-          {providerSection === 'connection' ? (
-            connectionSection
+          {showInitialSkeleton ? (
+            <ModelCenterInitialSkeleton
+              view="catalog"
+              section={providerSection}
+            />
           ) : (
-            <ProviderModelsSection
-              busy={busy}
-              modelMetadata={modelMetadata}
-              models={providerModels}
-              onError={onError}
-              onFetchModels={fetchModels}
-              onNotice={onNotice}
-              provider={selectedProvider}
+            <ProviderCatalog
+              providers={marketProviders}
+              onSelect={(id) => updateLocation({ provider: id, section: 'connection' })}
+              onManageConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
+              onAddConnection={(id) => {
+                setEditingKey(null)
+                setMarketConnectionId(id)
+              }}
             />
           )}
-        </ProviderDetail>
+        </PrimaryPageLayout>
       ) : (
-        <ProviderCatalog
-          providers={marketProviders}
-          onSelect={(id) => updateLocation({ provider: id, section: 'connection' })}
-          onManageConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
-          onAddConnection={(id) => {
-            setEditingKey(null)
-            setMarketConnectionId(id)
-          }}
-        />
+        <div className="model-center-shell tw:@container tw:h-full tw:w-full tw:min-w-0 tw:overflow-x-hidden tw:overflow-y-auto tw:p-5">
+          <div className="tw:mx-auto tw:min-w-0 tw:w-[min(calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2),100%)] tw:max-w-[calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2)]">
+            {showInitialSkeleton ? (
+              <ModelCenterInitialSkeleton
+                view="detail"
+                section={providerSection}
+              />
+            ) : showingCustomEditor ? (
+              <ProviderEditorForm
+                key={creatingCustomProvider ? 'new-provider' : selectedProvider?.providerID}
+                embedded
+                open
+                existingProviderIds={providers.map((item) => item.providerID)}
+                provider={creatingCustomProvider ? undefined : selectedProvider}
+                connectionSection={connectionSection}
+                operationBusy={busy || busyKeyId !== null}
+                onTestConnection={testConnection}
+                onTestModel={testConnection}
+                onRefreshModels={fetchModels}
+                onDelete={deleteCustomProvider}
+                onOpenChange={() => {}}
+                onSaved={saveCustomProvider}
+              />
+            ) : showingProviderDetail && selectedProvider ? (
+              <ProviderDetail
+                actions={detailActions}
+                activeTab={providerSection}
+                onBack={showProviderCatalog}
+                onTabChange={(tab) => updateLocation({ provider: providerID, section: tab })}
+                provider={{
+                  id: selectedProvider.providerID,
+                  name: selectedProvider.displayName,
+                  logoURL: selectedProvider.logoURL,
+                  description: providerDescription(selectedProvider),
+                  status: providerDetailStatus(
+                    selectedProvider,
+                    selectedProviderState,
+                    selectedConfiguredGroup,
+                  ),
+                }}
+              >
+                {providerSection === 'connection' ? (
+                  connectionSection
+                ) : (
+                  <ProviderModelsSection
+                    busy={busy}
+                    modelMetadata={modelMetadata}
+                    models={providerModels}
+                    onError={onError}
+                    onFetchModels={fetchModels}
+                    onNotice={onNotice}
+                    provider={selectedProvider}
+                  />
+                )}
+              </ProviderDetail>
+            ) : null}
+          </div>
+        </div>
       )}
 
       <ProviderConnectionDialog
@@ -850,7 +860,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         }}
         onCancel={() => setDeleteKey(null)}
       />
-    </div>
+    </>
   )
 }
 
