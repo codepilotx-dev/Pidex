@@ -25,13 +25,14 @@ type Props = {
 }
 
 /** 导航轨目的地键：与 sidebarCustomization.destinationOrder 中的 id 一一对应。 */
-export type SidebarRailDestinationId = 'automations' | 'plugins' | 'providers' | 'pets' | 'sessionGroups'
+export type SidebarRailDestinationId =
+  'automations' | 'plugins' | 'providers' | 'pets' | 'sessionGroups'
 
 const RAIL_DESTINATION_PANES: Record<SidebarRailDestinationId, SidebarPane | null> = {
   automations: 'scheduled',
   plugins: 'plugins',
   providers: 'providers',
-  pets: null,
+  pets: 'pets',
   sessionGroups: null,
 }
 
@@ -70,6 +71,8 @@ export function SidebarNavigationRail({
       (id): id is SidebarRailDestinationId => typeof id === 'string',
     ),
   )
+  // 宠物市场统一收进“更多”，已有的侧栏配置也保留原值。
+  hiddenDestinationIds.add('pets')
   const orderedDestinationIds = [
     ...sidebarCustomization.destinationOrder,
     ...Object.keys(RAIL_DESTINATION_PANES),
@@ -198,6 +201,7 @@ export function SidebarNavigationRail({
                 onClick={() => {
                   setMoreOpen(false)
                   navigate(item.path)
+                  if (RAIL_DESTINATION_PANES[item.view as SidebarRailDestinationId]) onPinPanel()
                 }}
               >
                 {t(item.label)}

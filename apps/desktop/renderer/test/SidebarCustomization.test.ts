@@ -316,7 +316,7 @@ describe('自定义信息保留式迁移', () => {
       'pets',
       'sessionGroups',
     ])
-    expect(normalized.hiddenDestinationIds).toEqual(['sessionGroups'])
+    expect(normalized.hiddenDestinationIds).toEqual(['pets', 'sessionGroups'])
   })
 
   test('非法输入回退到默认值而不是清空', () => {
@@ -329,7 +329,7 @@ describe('自定义信息保留式迁移', () => {
     })
     expect(duplicated.sections).toHaveLength(1)
     expect(duplicated.sectionOrder).toEqual(['work'])
-    expect(DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS).toEqual(['sessionGroups'])
+    expect(DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS).toEqual(['pets', 'sessionGroups'])
     // 未知目的地键保留原值，仅在缺失时补齐默认项。
     expect(duplicated.destinationOrder).toEqual([
       'plugins',

@@ -56,6 +56,7 @@ import { SidebarNavigationRail } from '../sidebar/SidebarNavigationRail.js'
 import { SidebarScheduledPane } from '../sidebar/SidebarScheduledPane.js'
 import { SidebarPluginsPane } from '../sidebar/SidebarPluginsPane.js'
 import { SidebarProvidersPane } from '../sidebar/SidebarProvidersPane.js'
+import { SidebarPetsPane } from '../sidebar/SidebarPetsPane.js'
 import { SIDEBAR_RAIL_WIDTH, sidebarPaneForRoute } from '../sidebar/SidebarNavigation.js'
 import { useSidebarCapabilities } from '../sidebar/SidebarTopNav.js'
 import { AutomationControllerProvider } from '../../automation/AutomationControllerProvider.js'
@@ -2092,6 +2093,7 @@ export function DesktopLayout(): React.ReactNode {
   const scheduledSidebarMounted = useEverOpened(displayedSidebarPane === 'scheduled')
   const pluginsSidebarMounted = useEverOpened(displayedSidebarPane === 'plugins')
   const providersSidebarMounted = useEverOpened(displayedSidebarPane === 'providers')
+  const petsSidebarMounted = useEverOpened(displayedSidebarPane === 'pets')
 
   const appSidebarContent = (
     <DesktopSidebar
@@ -2213,6 +2215,7 @@ export function DesktopLayout(): React.ReactNode {
           displayedSidebarPane === 'scheduled' ||
           displayedSidebarPane === 'plugins' ||
           displayedSidebarPane === 'providers' ||
+          displayedSidebarPane === 'pets' ||
           displayedSidebarPane === null
         }
       >
@@ -2234,6 +2237,11 @@ export function DesktopLayout(): React.ReactNode {
       {providersSidebarMounted ? (
         <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'providers'}>
           <SidebarProvidersPane />
+        </div>
+      ) : null}
+      {petsSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'pets'}>
+          <SidebarPetsPane />
         </div>
       ) : null}
     </SidebarFrame>

@@ -14,6 +14,7 @@ import { PullRequestsPlaceholder } from './features/pull-requests/PullRequestsPl
 import { ModelSetupPage } from './features/models/setup/ModelSetupPage.js'
 import { SettingsLayout } from './features/settings/SettingsLayout.js'
 import { PetCatalogPage } from './features/pet/PetCatalogPage.js'
+import { PetCatalogProvider } from './features/pet/PetCatalogProvider.js'
 import { SessionGroupsView } from './features/session-groups/SessionGroupsView.js'
 import { legacyWorkflowRedirectPath } from './features/routing/WorkflowRoutes.js'
 import { providerWorkspaceTarget } from './features/models/ModelCenterState.js'
@@ -78,7 +79,11 @@ const router = createHashRouter([
     ),
     children: [
       {
-        element: <DesktopLayout />,
+        element: (
+          <PetCatalogProvider>
+            <DesktopLayout />
+          </PetCatalogProvider>
+        ),
         children: [
           { index: true, element: <Navigate to="/new" replace /> },
           { path: 'new', element: <QuickChatView /> },

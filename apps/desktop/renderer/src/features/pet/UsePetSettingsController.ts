@@ -13,9 +13,10 @@ const PET_SIZE_SAVE_DEBOUNCE_MS = 100
 
 type Options = {
   onError: (message: string) => void
+  enabled?: boolean
 }
 
-export function usePetSettingsController({ onError }: Options): {
+export function usePetSettingsController({ onError, enabled = true }: Options): {
   busy: boolean
   flushPendingSize: () => void
   pets: readonly PetDescriptor[]
@@ -160,8 +161,8 @@ export function usePetSettingsController({ onError }: Options): {
   )
 
   useEffect(() => {
-    void refreshPets()
-  }, [refreshPets])
+    if (enabled) void refreshPets()
+  }, [enabled, refreshPets])
 
   useEffect(() => {
     return desktopClient.onDesktopSettingsChange((change) => {

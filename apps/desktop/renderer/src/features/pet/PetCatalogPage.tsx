@@ -8,7 +8,7 @@ import { Button } from '../../components/ui/Button.js'
 import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { PetCatalogSection } from './PetCatalogSection.js'
-import { usePetSettingsController } from './UsePetSettingsController.js'
+import { usePetCatalogController } from './PetCatalogProvider.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
 
 export function PetCatalogPage(): React.ReactNode {
@@ -16,9 +16,7 @@ export function PetCatalogPage(): React.ReactNode {
   const { t } = useLocale()
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
-  const { busy, pets, refreshPets, selectPet, setEnabled, settings } = usePetSettingsController({
-    onError: setErrorMessage,
-  })
+  const { busy, pets, refreshPets, selectPet, setEnabled, settings } = usePetCatalogController()
 
   const installAndSelect = async (installed: PetDescriptor): Promise<void> => {
     await refreshPets()
@@ -26,11 +24,7 @@ export function PetCatalogPage(): React.ReactNode {
   }
 
   const headerActions = (
-    <Button
-      color="secondary"
-      onClick={() => navigate('/settings/pets')}
-      type="button"
-    >
+    <Button color="secondary" onClick={() => navigate('/settings/pets')} type="button">
       <PawPrint size={APP_ICON_SIZE} />
       <span>{t('宠物设置')}</span>
     </Button>
