@@ -1,7 +1,7 @@
 import type React from 'react'
 import { useMemo } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { BrainCircuit, Plus, Server, Store } from 'lucide-react'
+import { BrainCircuit, Plus, Server } from 'lucide-react'
 import { Button } from '../../../components/ui/Button.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
@@ -52,7 +52,6 @@ export function SidebarProvidersPane(): React.ReactNode {
 
   const loading = !snapshot.loaded && snapshot.loading
   const error = snapshot.error && snapshot.providers.length === 0 ? snapshot.error : null
-  const browsing = onProvidersRoute && !selectedProviderId && !creatingProvider
 
   return (
     <div className="sidebar-providers-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
@@ -68,22 +67,6 @@ export function SidebarProvidersPane(): React.ReactNode {
           <Plus aria-hidden size={APP_ICON_SIZE} />
         </Button>
       </header>
-      <div className="tw:px-2">
-        <SidebarRow
-          active={browsing}
-          asChild
-          layout="flex"
-          leading={<Store aria-hidden size={APP_ICON_SIZE} />}
-        >
-          <button
-            type="button"
-            aria-current={browsing ? 'page' : undefined}
-            onClick={() => navigate('/providers')}
-          >
-            {t('供应商市场')}
-          </button>
-        </SidebarRow>
-      </div>
       <h3 className="tw:m-0 tw:flex tw:min-h-[var(--sidebar-row-height)] tw:shrink-0 tw:items-center tw:px-4 tw:text-app-text-meta tw:type-body">
         {t('已配置')}
       </h3>
