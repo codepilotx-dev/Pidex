@@ -1,8 +1,36 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PrimaryPageLayout } from '../src/features/layout/primary-page/index.js'
+import { SearchInput } from '../src/components/ui/SearchInput.js'
 
 describe('PrimaryPageLayout', () => {
+  test('keeps expandable search in the title row and initially out of keyboard navigation', () => {
+    const html = renderToStaticMarkup(
+      <PrimaryPageLayout
+        title="插件"
+        description="页面说明"
+        expandableSearch
+        search={
+          <SearchInput
+            variant="outlined"
+            aria-label="搜索插件"
+            placeholder="搜索插件"
+            value=""
+            onChange={() => undefined}
+          />
+        }
+      >
+        内容
+      </PrimaryPageLayout>,
+    )
+
+    expect(html).toContain('search-heading')
+    expect(html).toContain('aria-expanded="false"')
+    expect(html).toContain('inert="" aria-hidden="true"')
+    expect(html).toContain('清除并关闭搜索')
+    expect(html).not.toContain('primary-page-layout__search')
+    expect(html.indexOf('search-heading')).toBeLessThan(html.indexOf('页面说明'))
+  })
   test('renders title, description, search, navigation, and body in order', () => {
     const html = renderToStaticMarkup(
       <PrimaryPageLayout
