@@ -1,9 +1,11 @@
 import { describe, expect, test } from 'bun:test'
 import type { PetCatalogItem, PetDescriptor } from '@pidex/agent-protocol'
 import {
+  buildPetCatalogCards,
   buildPetCatalogGroups,
   DEFAULT_PET_CATALOG_TAB,
   filterPetCatalogCards,
+  groupPetsByCategory,
   listPetCatalogCategories,
   petLicenseNeedsConfirmation,
 } from '../src/features/pet/PetCatalogModel.js'
@@ -142,6 +144,32 @@ describe('pet catalog groups', () => {
     ).toEqual(['private-pet'])
     expect(listPetCatalogCategories(groups.installed)).toEqual([
       { id: 'custom', label: '自定义来源' },
+    ])
+  })
+
+  test('builds all cards and groups them by category sorted alphabetically', () => {
+    const firefly = descriptor({
+      id: 'firefly--lingxiaotian',
+      displayName: '本地流萤',
+    })
+    const cards = buildPetCatalogCards(PETS, [firefly])
+    expect(cards.map((c) => ({ id: c.id, installed: c.installed }))).toEqual([
+      { id: 'firefly--lingxiaotian', installed: true },
+      { id: 'hami--tat', installed: false },
+    ])
+
+    const grouped = groupPetsByCategory(cards)
+    expect(grouped).toEqual([
+      {
+        id: 'games',
+        label: '游戏',
+        items: [expect.objectContaining({ id: 'firefly--lingxiaotian', installed: true })],
+      },
+      {
+        id: 'original',
+        label: '原创',
+        items: [expect.objectContaining({ id: 'hami--tat', installed: false })],
+      },
     ])
   })
 })
