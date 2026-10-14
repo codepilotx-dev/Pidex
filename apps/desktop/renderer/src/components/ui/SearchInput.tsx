@@ -5,7 +5,7 @@ import { APP_ICON_SIZE, APP_ICON_SIZES } from './IconTokens.js'
 import { Button } from './Button.js'
 import { cx } from '../../utils/Cx.js'
 
-export type SearchInputVariant = 'standard' | 'compact' | 'embedded'
+export type SearchInputVariant = 'standard' | 'compact' | 'embedded' | 'outlined'
 
 type SearchInputFilterMode = { mode?: 'filter' }
 
@@ -23,6 +23,7 @@ export type SearchInputProps = {
   clearLabel?: string
   onChange: (value: string) => void
   onEscapeEmpty?: () => void
+  onClose?: () => void
   placeholder: string
   value: string
   variant?: SearchInputVariant
@@ -42,6 +43,8 @@ function stripModeFields(props: Record<string, unknown>): Record<string, unknown
  * class stays as a query hook, and never carries the Tailwind classes itself.
  */
 const VARIANT_CLASSES: Record<SearchInputVariant, string> = {
+  outlined:
+    'search-input--outlined tw:h-7 tw:px-2.5 tw:rounded-control tw:bg-app-control tw:type-secondary tw:has-[:focus-visible]:outline-none',
   standard:
     'search-input--standard tw:py-control-block tw:px-control-inline tw:rounded-md tw:type-control',
   compact: 'search-input--compact tw:py-1 tw:px-control-inline tw:rounded-md tw:type-control',
@@ -55,6 +58,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
     clearLabel = '清除搜索',
     onChange,
     onEscapeEmpty,
+    onClose,
     onKeyDown,
     placeholder,
     value,
@@ -81,13 +85,24 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
 
   const handleClear = useCallback((): void => {
     onChange('')
+    if (onClose) {
+      onClose()
+      return
+    }
     inputRef.current?.focus()
-  }, [onChange])
+  }, [onChange, onClose])
 
   const handleKeyDown = useCallback(
     (event: React.KeyboardEvent<HTMLInputElement>): void => {
       if (!isComposing && !event.nativeEvent.isComposing && event.nativeEvent.keyCode !== 229) {
         if (event.key === 'Escape') {
+          if (onClose) {
+            event.preventDefault()
+            event.stopPropagation()
+            onChange('')
+            onClose()
+            return
+          }
           if (value.length > 0) {
             event.preventDefault()
             event.stopPropagation()
@@ -99,7 +114,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
       }
       onKeyDown?.(event)
     },
-    [isComposing, value, onChange, onEscapeEmpty, onKeyDown],
+    [isComposing, value, onChange, onEscapeEmpty, onClose, onKeyDown],
   )
 
   const comboboxProps = isCombobox
@@ -142,15 +157,15 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         type="search"
         value={value}
       />
-      {value ? (
+      {value || variant === 'outlined' ? (
         <Button
           isIconOnly
-          aria-label={clearLabel}
-          className="search-input-clear"
+          aria-label={onClose ? '清除并关闭搜索' : clearLabel}
+          className={cx('search-input-clear', variant === 'outlined' && 'tw:size-5 tw:text-app-text-meta')}
           color="ghostSecondary"
           onClick={handleClear}
           size="iconMd"
-          title={clearLabel}
+          title={onClose ? '清除并关闭搜索' : clearLabel}
         >
           <X size={APP_ICON_SIZES.sm} />
         </Button>

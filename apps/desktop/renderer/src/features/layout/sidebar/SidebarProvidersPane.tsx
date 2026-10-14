@@ -1,5 +1,7 @@
 import type React from 'react'
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
+import { SearchInput } from '../../../components/ui/SearchInput.js'
+import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { BrainCircuit, Plus, Server } from 'lucide-react'
 import { Button } from '../../../components/ui/Button.js'
@@ -21,12 +23,14 @@ export function SidebarProvidersPane(): React.ReactNode {
   const location = useLocation()
   const [searchParams] = useSearchParams()
   const snapshot = useProviderManagementSnapshot()
+  const [query, setQuery] = useState('')
   const onProvidersRoute = location.pathname === '/providers'
   const selectedProviderId = onProvidersRoute ? searchParams.get('provider') : null
   const creatingProvider = onProvidersRoute && searchParams.get('newProvider') === '1'
   const items = useMemo(
     () =>
       projectProviderDirectory(snapshot.providers, {
+        query,
         currentProviderId: snapshot.currentProviderState?.selectedProviderID,
         currentProviderState: snapshot.currentProviderState,
         apiKeys: snapshot.apiKeys,
@@ -39,7 +43,7 @@ export function SidebarProvidersPane(): React.ReactNode {
             sensitivity: 'base',
           }),
         ),
-    [snapshot],
+    [snapshot, query],
   )
 
   function selectProvider(providerId: string): void {
@@ -55,8 +59,19 @@ export function SidebarProvidersPane(): React.ReactNode {
 
   return (
     <div className="sidebar-providers-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
-      <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
-        <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('供应商')}</h2>
+      <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:gap-2 tw:px-3">
+        <SearchHeading
+          title={<h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('供应商')}</h2>}
+          search={
+            <SearchInput
+              variant="outlined"
+              aria-label={t('搜索已配置供应商')}
+              placeholder={t('搜索已配置供应商')}
+              value={query}
+              onChange={setQuery}
+            />
+          }
+        />
         <Button
           color="ghostSecondary"
           isIconOnly

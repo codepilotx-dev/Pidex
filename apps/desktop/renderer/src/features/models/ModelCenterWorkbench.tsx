@@ -22,6 +22,7 @@ import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
 import { fullErrorMessage } from '../../utils/Errors.js'
 import { Cable, ChevronRight, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
+import { SearchInput } from '../../components/ui/SearchInput.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { useSearchParams } from 'react-router-dom'
@@ -96,6 +97,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const [refreshingProviderData, setRefreshingProviderData] = useState(false)
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null)
   const [marketConnectionId, setMarketConnectionId] = useState<ModelProviderID | null>(null)
+  const [providerQuery, setProviderQuery] = useState('')
   const [providerEditorOpen, setProviderEditorOpen] = useState(false)
   const [deepSeekProtocolSupported, setDeepSeekProtocolSupported] = useState(false)
   const [providerEditorProviderId, setProviderEditorProviderId] = useState<ModelProviderID | null>(
@@ -147,6 +149,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const marketProviders = useMemo(
     () =>
       projectProviderDirectory(providers, {
+        query: providerQuery,
         currentProviderId: snapshot.currentProviderState?.selectedProviderID,
         currentProviderState: snapshot.currentProviderState,
         apiKeys: snapshot.apiKeys,
@@ -163,7 +166,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           canAddConnection: !isConfiguredProviderDirectoryItem(item),
           connectionDisabled: item.provider.availability?.status === 'unavailable',
         })),
-    [providers, snapshot],
+    [providers, snapshot, providerQuery],
   )
   const marketConnectionProvider =
     providers.find((provider) => provider.providerID === marketConnectionId) ?? null
@@ -676,12 +679,26 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           headerClassName="settings-page-header"
           title="供应商市场"
           description="浏览模型供应商，连接后可在左侧管理凭据与模型。"
+          expandableSearch
+          search={
+            <SearchInput
+              variant="outlined"
+              aria-label="搜索供应商"
+              placeholder="搜索供应商"
+              value={providerQuery}
+              onChange={setProviderQuery}
+            />
+          }
         >
           {showInitialSkeleton ? (
             <ModelCenterInitialSkeleton
               view="catalog"
               section={providerSection}
             />
+          ) : providerQuery.trim() && marketProviders.length === 0 ? (
+            <p className="tw:py-8 tw:text-center tw:text-app-text-meta tw:type-body-sm">
+              没有匹配的供应商
+            </p>
           ) : (
             <ProviderCatalog
               providers={marketProviders}

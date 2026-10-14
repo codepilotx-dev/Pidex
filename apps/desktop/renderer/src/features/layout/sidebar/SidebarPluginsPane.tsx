@@ -1,9 +1,10 @@
 import type React from 'react'
-import { useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Blocks, Box, Search } from 'lucide-react'
+import { Blocks, Box } from 'lucide-react'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
-import { Input } from '../../../components/ui/Input.js'
+import { SearchInput } from '../../../components/ui/SearchInput.js'
+import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { Button } from '../../../components/ui/Button.js'
 import { PluginActionsMenu } from '../../plugins/PluginActionsMenu.js'
@@ -35,8 +36,6 @@ export function SidebarPluginsPane({
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const [query, setQuery] = useState('')
-  const [searchOpen, setSearchOpen] = useState(false)
-  const searchButtonRef = useRef<HTMLButtonElement>(null)
   const tab: CatalogTab = searchParams.get('tab') === 'skills' ? 'skills' : 'plugins'
   const { plugins, error, loading, refresh, setEnabled } = usePluginCatalog(workspacePath)
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
@@ -109,44 +108,20 @@ export function SidebarPluginsPane({
   return (
     <div className="sidebar-plugins-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
       <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
-        <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('自定义')}</h2>
-        <Button
-          ref={searchButtonRef}
-          isIconOnly
-          color="ghostSecondary"
-          size="toolbar"
-          title={t('搜索已安装插件')}
-          aria-expanded={searchOpen}
-          aria-controls="sidebar-installed-plugin-search"
-          onClick={() => {
-            setSearchOpen(!searchOpen)
-            setQuery('')
-          }}
-        >
-          <Search size={APP_ICON_SIZE} />
-        </Button>
+        <SearchHeading
+          title={<h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('自定义')}</h2>}
+          search={
+            <SearchInput
+              variant="outlined"
+              aria-label={t('搜索已安装插件')}
+              placeholder={t('搜索已安装插件')}
+              value={query}
+              onChange={setQuery}
+            />
+          }
+        />
       </header>
       <div className="tw:flex tw:flex-col tw:sidebar-row-gap tw:p-2">
-        {searchOpen ? (
-          <Input
-            id="sidebar-installed-plugin-search"
-            autoFocus
-            aria-label={t('搜索已安装插件')}
-            placeholder={t('搜索已安装插件')}
-            size="sm"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Escape' && !event.nativeEvent.isComposing) {
-                event.preventDefault()
-                event.stopPropagation()
-                setSearchOpen(false)
-                setQuery('')
-                searchButtonRef.current?.focus()
-              }
-            }}
-          />
-        ) : null}
         {CATALOG_TABS.map((option) => (
           <SidebarRow
             asChild

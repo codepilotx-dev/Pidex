@@ -476,8 +476,10 @@ export function PluginsView(): React.ReactNode {
               ? '在常用工具中扩展 Pidex 的能力。'
               : '查找并添加可复用的工作流指令。'
           }
+          expandableSearch
           search={
             <SearchInput
+              variant="outlined"
               aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
               onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
               placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}

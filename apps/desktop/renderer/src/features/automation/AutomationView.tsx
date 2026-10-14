@@ -472,8 +472,10 @@ function AutomationViewContent(): React.ReactNode {
             : '规划任务、安排执行，并在同一日历查看运行结果。'
         }
         bodyClassName="automation-view tw:min-h-120 tw:max-[48rem]:min-h-128 tw:text-app-text"
+        expandableSearch
         search={
           <SearchInput
+            variant="outlined"
             aria-label={tab === 'runs' ? '搜索执行记录' : '搜索已安排任务'}
             placeholder={tab === 'runs' ? '搜索执行记录' : '搜索已安排任务'}
             value={controller.query}

@@ -5,6 +5,7 @@ import { useSharedAutomationController } from '../../automation/AutomationContro
 import { formatAutomationTime, runStatusLabel } from '../../automation/AutomationModel.js'
 import { TAB_OPTIONS, type AutomationTab } from '../../automation/AutomationView.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
+import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
 
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
@@ -60,20 +61,31 @@ export function SidebarScheduledPane(): ReactNode {
 
   return (
     <div className="sidebar-scheduled-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
-      <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
-        <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('已安排')}</h2>
-        <Link
+      <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:gap-2 tw:px-3">
+        <SearchHeading
+          title={<h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('已安排')}</h2>}
+          search={
+            <SearchInput
+              variant="outlined"
+              aria-label={t('搜索已安排任务')}
+              placeholder={t('搜索已安排任务')}
+              value={controller.query}
+              onChange={controller.setQuery}
+            />
+          }
+        />
+        <Button
+          asChild
+          isIconOnly
+          color="ghostSecondary"
+          size="toolbar"
           aria-label={t('新建任务')}
           title={t('新建任务')}
-          className="ui-button icon-button"
-          data-color="ghost"
-          data-size="icon"
-          data-uniform="true"
-          onClick={controller.cancelDraft}
-          to="/automations?automationMode=create"
         >
-          <Plus size={APP_ICON_SIZE} />
-        </Link>
+          <Link onClick={controller.cancelDraft} to="/automations?automationMode=create">
+            <Plus aria-hidden size={APP_ICON_SIZE} />
+          </Link>
+        </Button>
       </header>
       <div className="tw:flex tw:flex-col tw:sidebar-row-gap tw:p-2">
         {TAB_OPTIONS.map((option) => {
@@ -99,12 +111,6 @@ export function SidebarScheduledPane(): ReactNode {
         })}
       </div>
       <div className="sidebar-pane-filters tw:flex tw:flex-col tw:gap-2 tw:px-2 tw:pb-2">
-        <SearchInput
-          aria-label={t('搜索已安排任务')}
-          placeholder={t('搜索已安排任务')}
-          value={controller.query}
-          onChange={controller.setQuery}
-        />
         <SegmentedControl
           ariaLabel={t('任务状态')}
           options={[
