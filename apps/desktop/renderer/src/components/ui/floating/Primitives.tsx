@@ -87,13 +87,16 @@ export interface PortalProps {
   anchor?: HTMLElement | null
 }
 export function Portal({ children, container, anchor }: PortalProps) {
-  if (typeof document === 'undefined') return null
-  const host =
-    container ??
-    (anchor ?? document.activeElement)?.closest<HTMLElement>(
-      '[role="dialog"], [role="alertdialog"]',
-    ) ??
-    document.body
+  // Focus entering this portal must not make its own content the next host.
+  const [defaultHost] = useState(() =>
+    typeof document === 'undefined'
+      ? null
+      : (anchor ?? document.activeElement)?.closest<HTMLElement>(
+          '[role="dialog"], [role="alertdialog"]',
+        ) ?? document.body,
+  )
+  const host = container ?? defaultHost
+  if (!host) return null
   return createPortal(
     <PortalContext.Provider value={host}>{children}</PortalContext.Provider>,
     host,
