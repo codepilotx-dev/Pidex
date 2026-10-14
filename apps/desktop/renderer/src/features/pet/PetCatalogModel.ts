@@ -27,6 +27,12 @@ export type PetCatalogGroups = {
   available: PetCatalogCardItem[]
 }
 
+export type PetCategoryGroup = {
+  id: string
+  label: string
+  items: PetCatalogCardItem[]
+}
+
 export type PetCatalogCategoryOption = {
   id: string
   label: string
@@ -36,6 +42,52 @@ export type PetCatalogFilters = {
   query: string
   category: string
   version: PetCatalogVersionFilter
+}
+
+export function buildPetCatalogCards(
+  catalogPets: readonly PetCatalogItem[],
+  installedPets: readonly PetDescriptor[],
+): PetCatalogCardItem[] {
+  const installedById = new Map<string, PetDescriptor>()
+  for (const pet of installedPets) {
+    if (!installedById.has(pet.id)) installedById.set(pet.id, pet)
+  }
+
+  const catalogIds = new Set<string>()
+  const cards: PetCatalogCardItem[] = []
+  for (const pet of catalogPets) {
+    if (catalogIds.has(pet.slug)) continue
+    catalogIds.add(pet.slug)
+    const localPet = installedById.get(pet.slug)
+    cards.push(communityCard(pet, localPet))
+  }
+
+  for (const pet of installedById.values()) {
+    if (catalogIds.has(pet.id)) continue
+    cards.push(customCard(pet))
+  }
+
+  return cards
+}
+
+export function groupPetsByCategory(
+  pets: readonly PetCatalogCardItem[],
+): PetCategoryGroup[] {
+  const map = new Map<string, { label: string; items: PetCatalogCardItem[] }>()
+  for (const pet of pets) {
+    const key = pet.category || 'other'
+    const label = pet.categoryLabel || '其他'
+    let group = map.get(key)
+    if (!group) {
+      group = { label, items: [] }
+      map.set(key, group)
+    }
+    group.items.push(pet)
+  }
+
+  return [...map.entries()]
+    .map(([id, group]) => ({ id, label: group.label, items: group.items }))
+    .sort((left, right) => left.label.localeCompare(right.label, 'zh-CN'))
 }
 
 export function buildPetCatalogGroups(

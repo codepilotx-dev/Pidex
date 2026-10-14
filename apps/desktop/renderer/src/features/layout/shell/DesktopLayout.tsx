@@ -258,7 +258,7 @@ function routeAccessibilityLabel(pathname: string): string {
   if (pathname === '/providers') return '供应商'
   if (pathname === '/pull-requests') return '拉取请求'
   if (pathname === '/automations') return '已安排'
-  if (pathname === '/pets') return '宠物市场'
+  if (pathname === '/pets') return '宠物'
   if (pathname.startsWith('/settings/')) return '设置'
   return 'Pidex Desktop'
 }

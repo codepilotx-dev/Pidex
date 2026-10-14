@@ -16,7 +16,7 @@ export function SidebarPetsPane(): ReactNode {
   return (
     <div className="sidebar-pets-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
       <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
-        <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('宠物市场')}</h2>
+        <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('宠物')}</h2>
         <Button
           color="ghostSecondary"
           isIconOnly
