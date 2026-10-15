@@ -12,6 +12,10 @@ export function toUserErrorMessage(error: unknown, context?: ErrorContext): stri
   const numericCode = extractNumericCode(error)
   const message = rawErrorMessage(error).trim()
 
+  if (/No handler registered for ['"]desktop-[^'"]+['"]/u.test(message)) {
+    return '桌面主进程尚未加载此功能，请完全退出并重新启动 Pidex；刷新页面不会更新主进程。'
+  }
+
   // 1. Internal Error (Highest priority for server-side exceptions)
   if (
     numericCode === -32603 ||
