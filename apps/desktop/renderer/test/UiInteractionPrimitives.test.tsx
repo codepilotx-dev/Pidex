@@ -67,4 +67,47 @@ describe('loading interaction primitives', () => {
     expect(textButtonHtml).toContain('tw:px-0')
     expect(textButtonHtml).not.toContain('tw:px-2')
   })
+
+  test('button and control primitives do not trim text-box metrics to avoid clipping CJK glyphs', async () => {
+    const { readFile } = await import('node:fs/promises')
+    const { resolve } = await import('node:path')
+
+    const buttonHtml = renderToStaticMarkup(<Button>确认</Button>)
+    expect(buttonHtml).not.toContain('tw:text-trim')
+
+    const buttonCss = await readFile(resolve(import.meta.dir, '../src/styles/primitives/button.css'), 'utf8')
+    expect(buttonCss).not.toContain('text-box-trim')
+    expect(buttonCss).not.toContain('text-box:')
+
+    const chipCss = await readFile(resolve(import.meta.dir, '../src/styles/components/chip.css'), 'utf8')
+    // Ensure .chip-button does not apply to child > span which causes nested double padding
+    expect(chipCss).not.toMatch(/\.chip-button\s*,\s*\.chip-button\s*>\s*span/)
+    expect(chipCss).not.toContain('text-box-trim')
+    expect(chipCss).not.toContain('text-box:')
+
+    const interactiveRowCss = await readFile(resolve(import.meta.dir, '../src/styles/components/interactive-row.css'), 'utf8')
+    expect(interactiveRowCss).not.toContain('text-box-trim')
+    expect(interactiveRowCss).not.toContain('text-box:')
+
+    const sidebarCss = await readFile(resolve(import.meta.dir, '../src/styles/primitives/sidebar.css'), 'utf8')
+    expect(sidebarCss).not.toContain('text-box-trim')
+    expect(sidebarCss).not.toContain('text-box:')
+
+    const menuItemCss = await readFile(resolve(import.meta.dir, '../src/styles/components/menu-item.css'), 'utf8')
+    expect(menuItemCss).not.toContain('text-box-trim')
+    expect(menuItemCss).not.toContain('text-box:')
+
+    const inputCss = await readFile(resolve(import.meta.dir, '../src/styles/components/input.css'), 'utf8')
+    expect(inputCss).not.toContain('text-box-trim')
+    expect(inputCss).not.toContain('text-box:')
+
+    const popoverCss = await readFile(resolve(import.meta.dir, '../src/styles/popover.css'), 'utf8')
+    expect(popoverCss).not.toContain('text-box-trim')
+    expect(popoverCss).not.toContain('text-box:')
+
+    const tailwindCss = await readFile(resolve(import.meta.dir, '../src/styles/tailwind.css'), 'utf8')
+    expect(tailwindCss).not.toContain('text-box-trim')
+    expect(tailwindCss).not.toContain('text-box:')
+    expect(tailwindCss).not.toContain('text-trim')
+  })
 })
