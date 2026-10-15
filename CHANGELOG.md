@@ -17,7 +17,23 @@
 
 - [desktop/renderer] 全局 Dialog 内的文字操作按钮统一采用 MD（36px）尺寸预设，替换原先 24px 的默认小按钮；图标按钮与已有显式尺寸的按钮保持不变。
 
+### Changed
+
+- [desktop/renderer] 修改文件卡片的「撤销／重新应用」与「审核」按钮改用 Button 的 SM（30px）尺寸与默认 10px 圆角形态，删除 `conversation.css` 中重复声明的 `canonical-patch-card__action` 高度与内边距，几何统一由组件尺寸档提供。
+
+- [desktop/renderer] 宠物功能图标由爪印（PawPrint）统一替换为蛋形（Egg）：侧栏宠物市场入口、显示/隐藏宠物菜单项、宠物设置页与设置搜索项、宠物市场卡片占位图与空状态、设置内预览条目。项目外观的自定义「爪印」图标选项为用户数据枚举，保持不变。
+
+- [desktop/renderer] 提供商市场改版为按已配置和未配置分组展示；操作按钮改为纯图标配合 Tooltip，移除文字标签；点击连接直接跳转至提供商详细配置页而不再弹出连接模态框；在左侧供应商侧栏顶部新增「市场」导航入口并联动高亮激活状态；移除包裹分组的大卡片背景框，条目直接平铺在界面上。
+
+- [desktop/renderer] 主页面布局（PrimaryPageLayout）通过 primary-page.css 统一补充底部内边距（--cpx-sys-space-8），供应商市场与宠物市场等一级页面滚动到底部时保留正常间隙避免内容贴底，并避免与子页面 utility 内边距产生层叠覆盖冲突。
+
 ### Fixed
+
+- [desktop/renderer] 统一工作流页、自动化页与插件页（含列表与详情页）在滚动到底部时的留白间距规范：修复工作流列表容器与自动化页子舞台（含任务日程面板 TaskSchedulePanel 与执行面板）中因 tw:min-h-0 与 flex-shrink 引起的高度收缩与溢出贴底隐患，插件目录增加 tw:shrink-0 防范收缩；在工作流详情页与插件/技能详情页内层容器中统一补充 tw:pb-8（32px）底部留白，消除滚动触底贴边问题。
+
+- [desktop/renderer] 修复主页面布局（PrimaryPageLayout）中 body 元素因携带 tw:min-h-0 与 flex-shrink 导致高度被视口约束、子内容溢出而使底部内边距（padding-bottom）无法生效触底贴边的问题，调整为 flex-auto 与 shrink-0，确保供应商市场、宠物市场等一级页面滚动到底部时呈现正常的留白与内边距。
+
+- [desktop/renderer] 修复 Dropdown 弹层、侧边栏标题与行条目、按钮及全局控件文字笔画裁切问题，彻底清除并禁止引入切除汉字顶部与底部笔画的 CSS Text Box Trim（text-box-trim / text-box-edge: cap alphabetic）及 `tw:text-trim` 工具类；确认并保证输入框底栏 Coding 模式与权限选择按钮复用标准胶囊 `.chip-button` 统一的 8px 内边距规范与单层盒模型，防范嵌套子级选择器造成间距异常。
 
 - [desktop/renderer] 刷新余额按钮改为位于整个用量 header 右侧，与标题和说明文字组成的区域垂直居中。
 
