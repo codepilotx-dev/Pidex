@@ -4,24 +4,21 @@ import {
   APP_ICON_SIZES,
 } from '../../components/ui/IconTokens.js'
 import { desktopClient, desktopClipboard } from '../../services/desktop-client/index.js'
-import {
-  desktopProviderExecutionError,
-  isExecutableDesktopProvider,
-} from '../../services/desktop-client/ProviderAdapters.js'
-import { withModelCatalogLoading } from '../../hooks/UseModelCatalogLoading.js'
+import { isExecutableDesktopProvider } from '../../services/desktop-client/ProviderAdapters.js'
 import React, { useEffect, useMemo, useState } from 'react'
 import type {
   DesktopApiKeySummary,
-  DesktopModelMetadata,
   DesktopModelProviderState,
   DesktopModelProviderSummary,
-  DesktopModelRef,
+  DesktopProviderDefinition,
   ModelProviderID,
 } from '../../../shared/Types.js'
 import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
 import { fullErrorMessage } from '../../utils/Errors.js'
-import { Cable, ChevronRight, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { ChevronRight, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
+import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutletContext.js'
+import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
@@ -35,24 +32,21 @@ import {
   projectProviderDirectory,
   isConfiguredProviderDirectoryItem,
   parseModelCenterSearchParams,
+  providerDetailStatus,
   updateModelCenterSearchParams,
 } from './ModelCenterState.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { ProviderEditorForm } from './provider-management/ProviderEditorForm.js'
-import { ProviderEditorDialog } from './provider-management/ProviderEditorDialog.js'
 import { ProviderConnectionSection } from './provider-management/ProviderConnectionSection.js'
 import { ProviderModelsSection } from './provider-management/ProviderModelsSection.js'
 import {
-  canEditProviderConfig,
   deepSeekManagedProvider,
   deepSeekProtocolOf,
-  deepSeekProtocolOption,
 } from './provider-management/DeepseekProtocol.js'
-import { ApiKeyEditorDialog, type ApiKeyEditorValue } from './ApiKeyEditorDialog.js'
+import { type ApiKeyEditorValue } from './ApiKeyEditorDialog.js'
 import {
   providerManagementStore,
   selectConfiguredProviderGroups,
-  type ConfiguredProviderGroup,
 } from '../provider-management/index.js'
 
 const NO_MODEL_OPTION = '__no_models_available__'
@@ -87,51 +81,21 @@ export function getProviderConnectionState({
 
 export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactNode {
   const settings = useDesktopSettings()
+  const providerPanel = useDesktopLayoutOutletContext()?.providerManagement
   const [searchParams, setSearchParams] = useSearchParams()
   const [providerID, setProviderID] = useState<ModelProviderID>(settings.providerID)
   const [model, setModel] = useState(settings.model)
-  const [variant, setVariant] = useState('')
-  const [, setModelError] = useState<string | null>(null)
-  const [, setStatus] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [refreshingProviderData, setRefreshingProviderData] = useState(false)
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null)
   const [marketConnectionId, setMarketConnectionId] = useState<ModelProviderID | null>(null)
   const [providerQuery, setProviderQuery] = useState('')
-  const [providerEditorOpen, setProviderEditorOpen] = useState(false)
   const [deepSeekProtocolSupported, setDeepSeekProtocolSupported] = useState(false)
-  const [providerEditorProviderId, setProviderEditorProviderId] = useState<ModelProviderID | null>(
-    null,
-  )
-
-  useEffect(() => {
-    let active = true
-    void desktopClient
-      .getRuntimeCapabilities()
-      .then((capabilities) => {
-        if (active) {
-          setDeepSeekProtocolSupported(capabilities.includes('provider.deepseekProtocol.v1'))
-        }
-      })
-      .catch(() => {
-        if (active) setDeepSeekProtocolSupported(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-
-  // Key editing & deletion state
-  const [editorProviderId, setEditorProviderId] = useState<ModelProviderID | null>(null)
-  const [editingKey, setEditingKey] = useState<DesktopApiKeySummary | null>(null)
+  const [connectionDraftDirty, setConnectionDraftDirty] = useState(false)
   const [deleteKey, setDeleteKey] = useState<DesktopApiKeySummary | null>(null)
 
   const controller = useModelCenterController({
     onInitialProviderState: (nextState) => applyProviderState(nextState),
-    onError: (message) => {
-      setModelError(message)
-      onError(message)
-    },
+    onError,
+    onNotice,
   })
 
   const {
@@ -140,9 +104,15 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     providerState,
     apiKeys,
     snapshot,
-    setProviderState,
-    refreshAllProviderData,
+    busyProviderIds,
+    modelTestResults,
+    refreshingProviderData,
+    refreshProviderData,
+    saveProviderDefinition,
+    deleteProvider,
   } = controller
+
+  const busy = busyProviderIds.includes(providerID)
 
   const configuredGroups = useMemo(() => selectConfiguredProviderGroups(snapshot), [snapshot])
 
@@ -176,6 +146,9 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
       parseModelCenterSearchParams(
         searchParams,
         providers.map((provider) => provider.providerID),
+        providers
+          .filter((provider) => provider.providerKind === 'custom')
+          .map((provider) => provider.providerID),
       ),
     [providers, searchParams],
   )
@@ -190,14 +163,26 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const selectedProviderState =
     providerState?.selectedProviderID === providerID ? providerState : null
 
+  useEffect(() => {
+    if (
+      routeState.providerId !== selectedProvider?.providerID ||
+      selectedProvider?.providerKind === 'custom'
+    )
+      return
+    if (selectedProvider)
+      void controller.loadProviderModels(selectedProvider.providerID).catch(showOperationError)
+  }, [routeState.providerId, selectedProvider?.providerID, controller.loadProviderModels])
+
   const providerModels = (
-    selectedProviderState?.models ??
     selectedProvider?.defaultModels ??
+    selectedProviderState?.models ??
     []
   ).filter((item) => item && item !== NO_MODEL_OPTION)
 
-  const modelMetadata =
-    selectedProviderState?.modelMetadata ?? selectedProvider?.modelMetadata ?? {}
+  const modelMetadata = {
+    ...selectedProviderState?.modelMetadata,
+    ...selectedProvider?.modelMetadata,
+  }
 
   const providerApiKeys = useMemo(
     () =>
@@ -211,9 +196,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     if (providerID === providerState?.selectedProviderID) return
     const nextSelection = getProviderSelectionState(selectedProvider)
     setModel(nextSelection.model)
-    setVariant('')
-    setStatus(null)
-    setModelError(null)
   }, [providerID, providerState, selectedProvider])
 
   useEffect(() => {
@@ -230,6 +212,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     patch: {
       provider?: string | null
       section?: 'connection' | 'models' | null
+      editing?: boolean
     },
     replace = false,
   ): void {
@@ -238,6 +221,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         return updateModelCenterSearchParams(current, {
           providerId: patch.provider,
           section: patch.section,
+          editing: patch.editing,
         })
       },
       { replace },
@@ -248,6 +232,11 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     updateLocation({ provider: null, section: null })
   }
 
+  function showProviderDetail(): void {
+    if (creatingCustomProvider) showProviderCatalog()
+    else updateLocation({ provider: routeState.providerId, section: providerSection })
+  }
+
   function applyProviderSelection(
     nextProviderID: ModelProviderID,
     nextProvider: DesktopModelProviderSummary | undefined,
@@ -255,111 +244,25 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     const nextSelection = getProviderSelectionState(nextProvider)
     setProviderID(nextProviderID)
     setModel(nextSelection.model)
-    setVariant('')
-    setStatus(null)
-    setModelError(null)
   }
 
   function applyProviderState(nextState: DesktopModelProviderState): void {
     const nextModel =
       nextState.model || nextState.models[0] || nextState.provider.defaultModels[0] || ''
-    setProviderState(nextState)
     setProviderID(nextState.selectedProviderID)
     setModel(nextModel)
-    setVariant(nextState.variant ?? '')
-  }
-
-  function applyFetchedModels(
-    models: string[],
-    error?: string,
-    fetchedMetadata?: Record<string, DesktopModelMetadata>,
-  ): void {
-    const cleanModels = models.filter(Boolean)
-    setProviderState((current) => {
-      if (current && current.selectedProviderID === providerID) {
-        return {
-          ...current,
-          models: cleanModels,
-          modelMetadata: { ...current.modelMetadata, ...fetchedMetadata },
-          error,
-        }
-      }
-      if (!selectedProvider) return current
-      return {
-        selectedProviderID: providerID,
-        provider: selectedProvider,
-        model,
-        apiKeyConfigured: false,
-        apiKeySource: null,
-        modelConfigured: false,
-        configurationMessage: '未配置模型，请先在设置中配置模型。',
-        models: cleanModels,
-        modelMetadata: { ...modelMetadata, ...fetchedMetadata },
-        error,
-      }
-    })
-    if (!model && cleanModels[0]) setModel(cleanModels[0])
   }
 
   async function fetchModels(): Promise<void> {
-    if (!selectedProvider || !isExecutableDesktopProvider(selectedProvider)) {
-      onError('此 Provider 当前没有可执行模型，无法刷新目录。')
-      return
-    }
-    setBusy(true)
-    setModelError(null)
-    onNotice('正在从供应商刷新模型目录...')
-    try {
-      const result = await withModelCatalogLoading(() =>
-        desktopClient.fetchProviderModels({
-          providerID,
-        }),
-      )
-      applyFetchedModels(result.models, result.error, result.modelMetadata)
-      if (result.error) {
-        onError(`模型目录刷新异常：${result.error}`)
-      } else {
-        onNotice(`模型目录已同步，共加载 ${result.models.length} 个可用模型。`)
-      }
-    } catch (error) {
-      showOperationError(error)
-    } finally {
-      setBusy(false)
-    }
+    if (selectedProvider) await controller.fetchModels(selectedProvider)
   }
 
   async function testConnection(modelId = model): Promise<void> {
-    const executionError = desktopProviderExecutionError(selectedProvider)
-    if (executionError) {
-      onError(executionError)
-      return
-    }
-    setBusy(true)
-    setModelError(null)
-    onNotice('正在测试连接与鉴权有效性...')
-    try {
-      const testRef: DesktopModelRef | undefined = modelId
-        ? ({
-            providerID,
-            id: modelId,
-            ...(variant ? { variant } : {}),
-          } as DesktopModelRef)
-        : undefined
-      const testResult = await desktopClient.testModelProvider(providerID, testRef)
-      if (testResult.status === 'reachable') {
-        onNotice(
-          `“${selectedProvider?.displayName ?? providerID}”连接正常（响应延迟 ${testResult.latencyMs} ms）。`,
-        )
-      } else {
-        const msg = testResult.message ?? '连接测试失败。'
-        setModelError(msg)
-        onError(`连接测试失败：${msg}`)
-      }
-    } catch (error) {
-      showOperationError(error)
-    } finally {
-      setBusy(false)
-    }
+    if (selectedProvider)
+      await controller.testModels(
+        selectedProvider,
+        modelId ? [modelId] : providerModels.slice(0, 1),
+      )
   }
 
   async function mutateKey(
@@ -381,15 +284,18 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     }
   }
 
-  async function saveApiKeyEditor(value: ApiKeyEditorValue): Promise<boolean> {
-    if (editingKey) {
+  async function saveApiKeyEditor(
+    value: ApiKeyEditorValue,
+    keyToEdit: DesktopApiKeySummary | null = null,
+  ): Promise<boolean> {
+    if (keyToEdit) {
       const replacement = value.key?.trim()
       return mutateKey(
-        editingKey.id,
+        keyToEdit.id,
         () =>
           providerManagementStore.updateApiKey({
-            credentialId: editingKey.id,
-            ...(value.label !== editingKey.label ? { label: value.label } : {}),
+            credentialId: keyToEdit.id,
+            ...(value.label !== keyToEdit.label ? { label: value.label } : {}),
             ...(replacement ? { key: replacement } : {}),
           }),
         replacement ? 'API Key 已更换，健康状态已重置。' : 'API Key 名称已更新。',
@@ -458,21 +364,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
   function showOperationError(error: unknown): void {
     const message = fullErrorMessage(error)
-    setModelError(message)
     onError(message)
-  }
-
-  async function refreshProviderData(): Promise<void> {
-    if (refreshingProviderData) return
-    setRefreshingProviderData(true)
-    try {
-      await refreshAllProviderData()
-      onNotice('供应商与模型数据已刷新。')
-    } catch (error) {
-      showOperationError(error)
-    } finally {
-      setRefreshingProviderData(false)
-    }
   }
 
   async function deleteCustomProvider(): Promise<void> {
@@ -483,33 +375,37 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
       )
     )
       return
-    setBusy(true)
     try {
-      await desktopClient.deleteProvider(selectedProvider.providerID)
-      await providerManagementStore.refresh()
+      await deleteProvider(selectedProvider.providerID)
       showProviderCatalog()
       onNotice('自定义供应商已删除。')
     } catch (error) {
       showOperationError(error)
-    } finally {
-      setBusy(false)
     }
   }
 
   const creatingCustomProvider = searchParams.get('newProvider') === '1'
   const showingProviderDetail = !creatingCustomProvider && routeState.providerId !== null
   const showingCustomEditor =
-    creatingCustomProvider || (showingProviderDetail && selectedProvider?.providerKind === 'custom')
+    creatingCustomProvider || (showingProviderDetail && routeState.editing)
 
   const showInitialSkeleton = initialLoadState === 'loading' && providers.length === 0
+
+  useEffect(() => {
+    providerPanel?.claimProvider(
+      showingProviderDetail && !showingCustomEditor ? (selectedProvider?.providerID ?? null) : null,
+    )
+    return () => providerPanel?.claimProvider(null)
+  }, [
+    providerPanel?.claimProvider,
+    showingProviderDetail,
+    showingCustomEditor,
+    selectedProvider?.providerID,
+  ])
 
   const selectedConfiguredGroup = configuredGroups.find(
     (group) => group.provider.providerID === providerID,
   )
-
-  const editorProvider = editorProviderId
-    ? snapshot.providers.find((p) => p.providerID === editorProviderId)
-    : undefined
 
   const deleteConfirmation = deleteKey
     ? getApiKeyDeleteConfirmation(
@@ -521,23 +417,20 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
   const connectionSection = selectedProvider ? (
     <ProviderConnectionSection
-      hideEndpoint={Boolean(showingCustomEditor)}
+      key={selectedProvider.providerID}
       apiKeys={providerApiKeys}
       busy={busy || busyKeyId !== null}
       group={selectedConfiguredGroup}
       onCopyKey={copyApiKey}
       onDeleteKey={setDeleteKey}
-      onEditKey={(key) => {
-        setEditingKey(key)
-        setEditorProviderId(key.providerId)
-      }}
       onError={onError}
       onMoveKey={moveApiKey}
       onNotice={onNotice}
-      onOpenNewKey={() => {
-        setEditingKey(null)
-        setEditorProviderId(providerID)
-      }}
+      onSubmitKey={saveApiKeyEditor}
+      onDeleteProvider={
+        selectedProvider.providerKind === 'custom' ? deleteCustomProvider : undefined
+      }
+      onTestConnection={testConnection}
       onRefresh={async () => {
         await providerManagementStore.refresh()
       }}
@@ -548,7 +441,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           '当前活动 API Key 已切换。',
         ).then(() => undefined)
       }
-      onTestConnection={testConnection}
       onTestKey={testSingleApiKey}
       onToggleKeyEnabled={(key) =>
         mutateKey(
@@ -558,7 +450,8 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         ).then(() => undefined)
       }
       provider={selectedProvider}
-      providerState={selectedProviderState}
+      onDraftChange={setConnectionDraftDirty}
+      onSaveDefinition={(definition) => saveProviderDefinition(definition, selectedProvider.providerID)}
     />
   ) : null
 
@@ -566,12 +459,13 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     savedProviderId: string,
     select = true,
   ): Promise<DesktopModelProviderSummary | undefined> {
-    const refreshed = await providerManagementStore.refresh()
-    const savedProvider = refreshed.providers.find((item) => item.providerID === savedProviderId)
-    if (!savedProvider) throw new Error('供应商已保存，但刷新结果中没有找到该供应商，请重试。')
+    const savedProvider = await controller.readSavedProvider(savedProviderId)
     if (select) {
       applyProviderSelection(savedProvider.providerID, savedProvider)
-      updateLocation({ provider: savedProviderId, section: 'connection' })
+      updateLocation({
+        provider: savedProviderId,
+        section: creatingCustomProvider ? 'connection' : providerSection,
+      })
     }
     onNotice('自定义供应商配置已保存。')
     return savedProvider
@@ -579,70 +473,18 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
   const detailActions = selectedProvider ? (
     <>
-      <Button
-        color="secondary"
-        disabled={refreshingProviderData}
-        loading={refreshingProviderData}
-        onClick={() => void refreshProviderData()}
-        title="刷新供应商信息"
-      >
-        {!refreshingProviderData ? <RefreshCw size={APP_ICON_SIZE} aria-hidden /> : null}
-        <span className="model-center-header-action-label tw:max-[479px]:hidden">刷新</span>
-      </Button>
-
-      {canEditProviderConfig(selectedProvider, deepSeekProtocolSupported) ? (
-        <>
-          <Button
-            color="secondary"
-            onClick={() => {
-              setProviderEditorProviderId(selectedProvider.providerID)
-              setProviderEditorOpen(true)
-            }}
-          >
-            <Pencil size={APP_ICON_SIZE} aria-hidden />
-            <span className="model-center-header-action-label tw:max-[479px]:hidden">
-              编辑 Provider
-            </span>
-          </Button>
-          {selectedProvider?.providerKind === 'custom' ? (
-            <Button color="danger" onClick={() => void deleteCustomProvider()}>
-              <Trash2 size={APP_ICON_SIZE} aria-hidden />
-              <span className="model-center-header-action-label tw:max-[479px]:hidden">
-                删除 Provider
-              </span>
-            </Button>
-          ) : null}
-        </>
-      ) : null}
-
-      {providerSection === 'connection' ? (
-        <Button
-          color="secondary"
-          aria-label="测试连接"
-          disabled={busy || !selectedProvider || !isExecutableDesktopProvider(selectedProvider)}
-          onClick={() => void testConnection()}
-          title="测试当前连接"
-        >
-          <Cable size={APP_ICON_SIZE} aria-hidden />
-          <span className="model-center-header-action-label tw:max-[479px]:hidden">测试连接</span>
-        </Button>
-      ) : null}
-
-      {providerSection === 'models' ? (
-        <Button
-          color="secondary"
-          aria-label="刷新目录"
-          disabled={busy || !selectedProvider || !isExecutableDesktopProvider(selectedProvider)}
-          onClick={() => void fetchModels()}
-          title="刷新模型目录"
-        >
-          <RefreshCw
-            size={APP_ICON_SIZE}
-            aria-hidden
-            className={busy ? 'tw:animate-spin' : undefined}
-          />
-          <span className="model-center-header-action-label tw:max-[479px]:hidden">刷新目录</span>
-        </Button>
+      {selectedProvider.config ? (
+        <ToggleSwitch
+          ariaLabel="启用供应商"
+          checked={selectedProvider.config.enabled}
+          disabled={busy}
+          onChange={(enabled) => {
+            void saveProviderDefinition(
+              { ...selectedProvider.config!, enabled },
+              selectedProvider.providerID,
+            ).catch((error) => onError(fullErrorMessage(error)))
+          }}
+        />
       ) : null}
     </>
   ) : null
@@ -657,9 +499,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           onClick={() => void refreshProviderData()}
         >
           {!refreshingProviderData ? <RefreshCw size={APP_ICON_SIZE} aria-hidden /> : null}
-          <span className="model-center-header-action-label tw:max-[479px]:hidden">
-            刷新
-          </span>
+          <span className="model-center-header-action-label tw:max-[479px]:hidden">刷新</span>
         </Button>
         <Button color="primary" onClick={() => setSearchParams({ newProvider: '1' })}>
           <Plus size={APP_ICON_SIZE} aria-hidden />
@@ -691,10 +531,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           }
         >
           {showInitialSkeleton ? (
-            <ModelCenterInitialSkeleton
-              view="catalog"
-              section={providerSection}
-            />
+            <ModelCenterInitialSkeleton view="catalog" />
           ) : providerQuery.trim() && marketProviders.length === 0 ? (
             <p className="tw:py-8 tw:text-center tw:text-app-text-meta tw:type-body-sm">
               没有匹配的供应商
@@ -705,7 +542,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
               onSelect={(id) => updateLocation({ provider: id, section: 'connection' })}
               onManageConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
               onAddConnection={(id) => {
-                setEditingKey(null)
                 setMarketConnectionId(id)
               }}
             />
@@ -713,31 +549,46 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         </PrimaryPageLayout>
       ) : (
         <div className="model-center-shell tw:@container tw:h-full tw:w-full tw:min-w-0 tw:overflow-x-hidden tw:overflow-y-auto tw:p-5">
-          <div className="tw:mx-auto tw:min-w-0 tw:w-[min(calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2),100%)] tw:max-w-[calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2)]">
-            <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-4 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
-              <Button
-                color="ghostSecondary"
-                onClick={showProviderCatalog}
-                size="toolbar"
-                title="返回供应商列表"
-              >
-                供应商
-              </Button>
-              <ChevronRight
-                aria-hidden="true"
-                className="model-center-breadcrumb-separator tw:shrink-0 tw:text-app-text-meta tw:opacity-60"
-                size={APP_ICON_SIZES.sm}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-              <span className="model-center-breadcrumb-current tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap">
-                {creatingCustomProvider ? '新供应商' : selectedProvider?.displayName}
-              </span>
-            </div>
+          <div className="tw:mx-auto tw:min-w-0 tw:w-full tw:max-w-[var(--page-content-max-width)]">
+            {showingCustomEditor ? (
+              <>
+                <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-4 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
+                  <Button
+                    color="ghostSecondary"
+                    onClick={
+                      showingCustomEditor && !creatingCustomProvider
+                        ? showProviderDetail
+                        : showProviderCatalog
+                    }
+                    size="toolbar"
+                    title={
+                      showingCustomEditor && !creatingCustomProvider
+                        ? '返回供应商详情'
+                        : '返回供应商列表'
+                    }
+                  >
+                    {showingCustomEditor && !creatingCustomProvider
+                      ? selectedProvider?.displayName
+                      : '供应商'}
+                  </Button>
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="model-center-breadcrumb-separator tw:shrink-0 tw:text-app-text-meta tw:opacity-60"
+                    size={APP_ICON_SIZES.sm}
+                    strokeWidth={APP_ICON_STROKE_WIDTH}
+                  />
+                  <span className="model-center-breadcrumb-current tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap">
+                    {creatingCustomProvider
+                      ? '新供应商'
+                      : showingCustomEditor
+                        ? '编辑配置'
+                        : selectedProvider?.displayName}
+                  </span>
+                </div>
+              </>
+            ) : null}
             {showInitialSkeleton ? (
-              <ModelCenterInitialSkeleton
-                view="detail"
-                section={providerSection}
-              />
+              <ModelCenterInitialSkeleton view="detail" />
             ) : showingCustomEditor ? (
               <ProviderEditorForm
                 key={creatingCustomProvider ? 'new-provider' : selectedProvider?.providerID}
@@ -745,26 +596,21 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
                 open
                 existingProviderIds={providers.map((item) => item.providerID)}
                 provider={creatingCustomProvider ? undefined : selectedProvider}
-                connectionSection={connectionSection}
                 operationBusy={busy || busyKeyId !== null}
-                onTestConnection={testConnection}
                 onTestModel={testConnection}
-                onRefreshModels={fetchModels}
                 onDelete={deleteCustomProvider}
-                onOpenChange={() => {}}
+                onOpenChange={showProviderDetail}
+                onSaveDefinition={saveProviderDefinition}
                 onSaved={saveCustomProvider}
               />
             ) : showingProviderDetail && selectedProvider ? (
               <ProviderDetail
                 actions={detailActions}
-                activeTab={providerSection}
-                onBack={showProviderCatalog}
-                onTabChange={(tab) => updateLocation({ provider: providerID, section: tab })}
+                section={providerSection}
                 provider={{
                   id: selectedProvider.providerID,
                   name: selectedProvider.displayName,
                   logoURL: selectedProvider.logoURL,
-                  description: providerDescription(selectedProvider),
                   status: providerDetailStatus(
                     selectedProvider,
                     selectedProviderState,
@@ -772,10 +618,11 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
                   ),
                 }}
               >
-                {providerSection === 'connection' ? (
-                  connectionSection
-                ) : (
+                <div data-provider-section="connection">{connectionSection}</div>
+                <div data-provider-section="models">
                   <ProviderModelsSection
+                    editingBlocked={connectionDraftDirty}
+                    key={selectedProvider.providerID}
                     busy={busy}
                     modelMetadata={modelMetadata}
                     models={providerModels}
@@ -783,8 +630,12 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
                     onFetchModels={fetchModels}
                     onNotice={onNotice}
                     provider={selectedProvider}
+                    testResults={modelTestResults}
+                    onTestModels={(ids) => controller.testModels(selectedProvider, ids)}
+                    onSaveDefinition={saveProviderDefinition}
+                    onRefresh={() => providerManagementStore.refresh().then(() => undefined)}
                   />
-                )}
+                </div>
               </ProviderDetail>
             ) : null}
           </div>
@@ -805,46 +656,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         onConnected={async () => {
           await providerManagementStore.refresh()
         }}
-      />
-
-      <ProviderEditorDialog
-        deepSeekProtocolSupported={deepSeekProtocolSupported}
-        open={providerEditorOpen}
-        provider={
-          providerEditorProviderId
-            ? providers.find((item) => item.providerID === providerEditorProviderId)
-            : undefined
-        }
-        onOpenChange={setProviderEditorOpen}
-        onSaved={async (savedProviderId) => {
-          await providerManagementStore.refresh()
-          const nextId = savedProviderId as ModelProviderID
-          setProviderEditorProviderId(null)
-          const savedProvider = providerManagementStore
-            .getSnapshot()
-            .providers.find((item) => item.providerID === nextId)
-          applyProviderSelection(nextId, savedProvider)
-          updateLocation({ provider: nextId, section: 'connection' })
-          onNotice(
-            deepSeekManagedProvider(savedProvider)
-              ? 'DeepSeek API 协议已保存，将从下一次请求开始生效。'
-              : '自定义 Provider 配置已保存。',
-          )
-        }}
-      />
-
-      <ApiKeyEditorDialog
-        apiKey={editingKey}
-        busy={busyKeyId !== null}
-        initialProviderId={editorProviderId ?? providerID}
-        open={editorProviderId !== null}
-        providers={editorProvider ? [editorProvider] : []}
-        onOpenChange={(open) => {
-          if (open) return
-          setEditorProviderId(null)
-          setEditingKey(null)
-        }}
-        onSubmit={saveApiKeyEditor}
       />
 
       <ConfirmationDialog
@@ -873,13 +684,9 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
 type ModelCenterInitialSkeletonProps = {
   view: 'catalog' | 'detail'
-  section: 'connection' | 'models'
 }
 
-function ModelCenterInitialSkeleton({
-  view,
-  section,
-}: ModelCenterInitialSkeletonProps): React.ReactNode {
+function ModelCenterInitialSkeleton({ view }: ModelCenterInitialSkeletonProps): React.ReactNode {
   if (view === 'detail') {
     return (
       <SkeletonRegion
@@ -894,28 +701,13 @@ function ModelCenterInitialSkeleton({
             <SkeletonBlock className="model-center-skeleton-provider-copy tw:h-3.5 tw:w-[min(210px,88%)]" />
           </div>
         </header>
-        <div className="model-center-skeleton-tabs tw:flex tw:gap-5 tw:border-b tw:border-b-app-border-subtle tw:px-1">
-          <SkeletonBlock className="model-center-skeleton-tab tw:h-10 tw:w-14 tw:rounded-md" />
-          <SkeletonBlock className="model-center-skeleton-tab tw:h-10 tw:w-14 tw:rounded-md" />
+        <SkeletonBlock className="tw:h-24 tw:rounded-md" />
+        <SkeletonBlock className="tw:h-9 tw:w-[min(360px,100%)] tw:rounded-md" />
+        <div className="tw:grid tw:min-w-0 tw:gap-2">
+          {Array.from({ length: 6 }, (_, index) => (
+            <SkeletonBlock className="tw:h-14 tw:rounded-md" key={index} />
+          ))}
         </div>
-        {section === 'models' ? (
-          <>
-            <SkeletonBlock className="model-center-skeleton-search tw:h-9 tw:w-[min(360px,100%)] tw:rounded-md" />
-            <div className="model-center-skeleton-model-grid tw:grid tw:min-w-0 tw:grid-cols-2 tw:gap-4 tw:@max-[900px]:grid-cols-1">
-              {Array.from({ length: 6 }, (_, index) => (
-                <SkeletonBlock
-                  className="model-center-skeleton-model-card tw:min-h-[116px] tw:rounded-lg"
-                  key={index}
-                />
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="model-center-skeleton-detail-sections tw:grid tw:gap-4">
-            <SkeletonBlock className="tw:min-h-[154px] tw:rounded-xl" />
-            <SkeletonBlock className="tw:min-h-[154px] tw:rounded-xl" />
-          </div>
-        )}
       </SkeletonRegion>
     )
   }
@@ -946,58 +738,4 @@ function ModelCenterInitialSkeleton({
       </div>
     </SkeletonRegion>
   )
-}
-
-function providerDescription(provider: DesktopModelProviderSummary | undefined): string {
-  if (!provider) return '管理供应商凭据与模型目录。'
-  const parts = [provider.providerID]
-  parts.push(provider.providerKind === 'custom' ? '自定义 Provider · Pi 执行' : 'Pi 内置')
-  const managed = deepSeekManagedProvider(provider)
-  if (managed) {
-    const protocol = deepSeekProtocolOption(deepSeekProtocolOf(managed.config))
-    parts.push(`${protocol.label} · ${protocol.endpoint}`)
-  }
-  return parts.join(' · ')
-}
-
-function providerDetailStatus(
-  provider: DesktopModelProviderSummary,
-  providerState: DesktopModelProviderState | null,
-  group: ConfiguredProviderGroup | undefined,
-): { label: string; tone: 'positive' | 'warning' | 'neutral' } {
-  if (provider.availability?.status === 'unavailable') {
-    return {
-      label: providerAvailabilityLabel(provider.availability.reason),
-      tone: 'warning',
-    }
-  }
-  if (group?.activeConnection) {
-    return { label: '已连接', tone: 'positive' }
-  }
-  if (providerState?.apiKeyConfigured) {
-    return { label: '已配置', tone: 'positive' }
-  }
-  return { label: '未配置', tone: 'neutral' }
-}
-
-function providerAvailabilityLabel(
-  reason:
-    | 'unsupported-protocol'
-    | 'missing-api'
-    | 'unsafe-endpoint'
-    | 'unresolved-endpoint'
-    | 'no-compatible-models',
-): string {
-  switch (reason) {
-    case 'missing-api':
-      return '缺少 API 地址'
-    case 'unsafe-endpoint':
-      return 'Endpoint 不安全'
-    case 'unresolved-endpoint':
-      return 'Endpoint 尚未配置'
-    case 'no-compatible-models':
-      return '没有兼容模型'
-    case 'unsupported-protocol':
-      return '协议暂未适配'
-  }
 }

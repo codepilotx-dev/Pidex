@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs'
+import { installVisualizationIsolation } from '../security/VisualizationIsolation.js'
 import { join, resolve } from 'node:path'
 import {
   DESKTOP_WINDOW_IPC_CHANNELS,
@@ -308,6 +309,7 @@ export class WindowManager {
       },
     })
     window.webContents.setZoomFactor(this.#pageZoomPercent / 100)
+    installVisualizationIsolation(window.webContents)
     window.webContents.on('did-start-navigation', (_event, _url, _isInPlace, isMainFrame) => {
       if (isMainFrame) {
         window.webContents.setZoomFactor(this.#pageZoomPercent / 100)

@@ -1,6 +1,8 @@
 import type { AgentHarnessEvent } from '../harness/Types'
 import { readMessagePhase, type MessagePhase, type ToolResultBlock } from '@pidex/shared/thread'
 import { decodeResultCardEnvelope } from '@pidex/shared/thread-result-card'
+import { VISUALIZATION_TOOL } from '@pidex/shared/visualization'
+import { visualizationPreview } from '../../tool/IntelligentUi/Preview'
 import { ProposedPlanStreamParser, type ProposedPlanChunk } from '../plan/ProposedPlanStreamParser'
 import type {
   PiRuntimeEventContext,
@@ -110,6 +112,28 @@ export const piToolResultBlocks = (
   }
   const result = value as ToolResultLike
   const content = Array.isArray(result.content) ? result.content : []
+  // Host-produced library artifacts are not provider image content.
+  const hosted = (
+    value as { artifacts?: import('../../storage/ArtifactService').ArtifactBlobInput[] }
+  ).artifacts
+  for (const artifact of Array.isArray(hosted) ? hosted.slice(0, 3) : []) {
+    if (
+      !artifact ||
+      typeof artifact.artifactId !== 'string' ||
+      typeof artifact.name !== 'string' ||
+      typeof artifact.mimeType !== 'string' ||
+      typeof artifact.data !== 'string' ||
+      artifact.data.length > 3 * 1024 * 1024
+    )
+      continue
+    artifacts.push(artifact)
+    blocks.push({
+      type: 'artifact',
+      artifactId: artifact.artifactId,
+      name: artifact.name,
+      mimeType: artifact.mimeType,
+    })
+  }
   for (const part of content) {
     if (!part || typeof part !== 'object' || Array.isArray(part)) continue
     const record = part as Record<string, unknown>
@@ -255,6 +279,10 @@ export class PiEventAdapter {
   private pendingPlan = ''
   private deferredPlan = ''
   private completedText = ''
+  private readonly previewEmissions = new Map<
+    string,
+    { at: number; revision: number; visible: boolean }
+  >()
 
   constructor(
     private readonly context: PiRuntimeEventContext,
@@ -453,6 +481,35 @@ export class PiEventAdapter {
         break
       case 'message_update': {
         const update = event.assistantMessageEvent
+        if (
+          update.type === 'toolcall_start' ||
+          update.type === 'toolcall_delta' ||
+          update.type === 'toolcall_end'
+        ) {
+          const call = update.partial.content[update.contentIndex]
+          if (call?.type === 'toolCall' && call.name === VISUALIZATION_TOOL) {
+            const preview = visualizationPreview(call.arguments)
+            const previous = this.previewEmissions.get(call.id)
+            const visible = Boolean(preview?.cssComplete && preview.html)
+            if (
+              preview &&
+              (!previous ||
+                (visible && !previous.visible) ||
+                update.type === 'toolcall_end' ||
+                Date.now() - previous.at >= 1000)
+            ) {
+              const revision = (previous?.revision ?? 0) + 1
+              this.previewEmissions.set(call.id, { at: Date.now(), revision, visible })
+              await this.sink.visualizationPreview?.(this.context, {
+                ...preview,
+                toolCallId: call.id,
+                turnId: this.context.turnID,
+                agentId: this.context.agentID,
+                revision,
+              })
+            }
+          }
+        }
         const items = await this.ensureAssistantItems()
         if (
           update.type === 'text_start' ||

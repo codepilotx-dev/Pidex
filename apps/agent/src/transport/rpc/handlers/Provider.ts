@@ -2,6 +2,7 @@ import type { RpcMethod } from '@pidex/agent-protocol'
 import { Provider } from '@pidex/model-schema'
 import {
   PiProviderConfigValidationError,
+  PiModelServiceError,
   serializePiProviderDefinition,
 } from '../../../provider/pi'
 import type { PiProviderDefinitionInput } from '../../../provider/pi'
@@ -164,7 +165,18 @@ export const providerHandlers = {
       case 'model/list':
         return runtime.modelCatalog(params)
       case 'model/refresh':
-        await providers.refresh(true)
+        try {
+          await providers.refresh(true)
+        } catch (cause) {
+          if (cause instanceof PiModelServiceError && cause.code === 'CATALOG_REFRESH_FAILED') {
+            throw new AgentError(
+              'PROVIDER_UNAVAILABLE',
+              '模型目录刷新失败，请检查提供商连接、凭据和模型接口后重试。',
+              502,
+            )
+          }
+          throw cause
+        }
         return runtime.publishCatalogUpdated()
       case 'model/setDefault': {
         const model = modelRefOrNull(params.model)
@@ -326,10 +338,55 @@ export const providerHandlers = {
           }
           throw cause
         }
+        const previous = configured[providerID]
+        const previousModels =
+          previous && typeof previous === 'object' && 'models' in previous
+            ? previous.models
+            : undefined
+        if (
+          previousModels &&
+          typeof previousModels === 'object' &&
+          !Array.isArray(previousModels)
+        ) {
+          const knownModelFields = new Set([
+            'id',
+            'api',
+            'name',
+            'enabled',
+            'contextWindow',
+            'context_window',
+            'maxTokens',
+            'max_tokens',
+            'reasoning',
+            'input',
+            'cost',
+            'headers',
+            'thinkingLevelMap',
+            'thinking_level_map',
+            'compat',
+          ])
+          const models = serialized.value.models as Record<string, Record<string, unknown>>
+          for (const [id, model] of Object.entries(models)) {
+            const previousModel = (previousModels as Record<string, unknown>)[id]
+            if (!previousModel || typeof previousModel !== 'object') continue
+            models[id] = {
+              ...Object.fromEntries(
+                Object.entries(previousModel).filter(([key]) => !knownModelFields.has(key)),
+              ),
+              ...model,
+            }
+          }
+        }
         await config.batchWrite({
           edits: [
             { keyPath: ['model_catalog', 'schema_version'], value: 2 },
-            { keyPath: ['model_providers', providerID], value: serialized.value as never },
+            ...Object.entries(serialized.value).map(([key, value]) => ({
+              keyPath: ['model_providers', providerID, key],
+              value: value as never,
+            })),
+            ...(definition.kind === 'builtin' && !definition.protocol
+              ? [{ keyPath: ['model_providers', providerID, 'protocol'], value: null }]
+              : []),
           ],
         })
         await providers.reload()

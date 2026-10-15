@@ -1,4 +1,5 @@
 import { computerHandlers } from './handlers/Computer'
+import { visualizationHandlers } from './handlers/Visualization'
 import { type RpcHandlers, type RpcMethod } from '@pidex/agent-protocol'
 import { AllRpcMethods as RpcMethods } from '@pidex/agent-protocol/host'
 import { browserHandlers } from './handlers/Browser'
@@ -48,6 +49,7 @@ import type { RpcRouter } from './RpcRouter'
 type MapRpcError = (method: RpcMethod, cause: unknown) => Error
 
 const groups: readonly RpcHandlerGroup[] = [
+  visualizationHandlers,
   computerHandlers,
   browserHandlers,
   configHandlers,

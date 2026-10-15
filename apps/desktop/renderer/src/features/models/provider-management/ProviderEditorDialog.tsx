@@ -3,7 +3,7 @@ import { ProviderEditorForm, type ProviderEditorFormProps } from './ProviderEdit
 
 export type ProviderEditorDialogProps = Omit<
   ProviderEditorFormProps,
-  'embedded' | 'connectionSection' | 'onDelete'
+  'embedded' | 'onDelete'
 >
 
 export function ProviderEditorDialog(props: ProviderEditorDialogProps): React.ReactNode {

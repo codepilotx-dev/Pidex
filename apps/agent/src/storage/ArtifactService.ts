@@ -49,6 +49,15 @@ export class ArtifactService {
     return this.repo.hasArtifactsTable()
   }
 
+  async readCachedBlob(sha256: string): Promise<Uint8Array | null> {
+    try {
+      return await this.blobs.read(sha256)
+    } catch (cause) {
+      if (cause instanceof Error && 'code' in cause && cause.code === 'ENOENT') return null
+      throw cause
+    }
+  }
+
   insertArtifact(record: NewArtifactRecord): void {
     this.repo.insert(record)
   }

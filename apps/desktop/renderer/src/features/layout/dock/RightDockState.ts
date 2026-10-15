@@ -58,6 +58,7 @@ export type SkillPreviewTab = {
 }
 
 export type WorkbenchTabKind =
+  | 'provider-management'
   | 'review'
   | 'browser'
   | 'file-browser'
@@ -70,6 +71,7 @@ export type WorkbenchTabKind =
   | 'terminal'
 
 export type WorkbenchTabDescriptor =
+  | ProviderManagementTab
   | { id: 'review'; kind: 'review' }
   | {
       id: `browser:${string}`
@@ -134,6 +136,14 @@ export type WorkbenchTabDescriptor =
     }
 
 export type WorkbenchTabId = WorkbenchTabDescriptor['id']
+
+export type ProviderManagementSection = 'credentials' | 'request'
+export type ProviderManagementTab = {
+  id: 'provider-management'
+  kind: 'provider-management'
+  providerId: string
+  section: ProviderManagementSection
+}
 
 export function createSkillPreviewTab(input: {
   name: string

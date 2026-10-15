@@ -68,7 +68,8 @@ export function filterAdvertisedCapabilities(
       (capability !== 'thread.bookmarks.v1' || db.repositories.threadBookmarks.available()) &&
       (capability !== 'github.threadPullRequests.v1' ||
         db.repositories.threadPullRequests.available()) &&
-      (capability !== 'artifacts.read.v1' || itemArtifactsTable) &&
+      ((capability !== 'artifacts.read.v1' && capability !== 'visualizations.v1') ||
+        itemArtifactsTable) &&
       (capability !== 'automation.manage.v1' || (automations && automationRuns)) &&
       (capability !== 'worktree.settings.v1' || tables.has('worktree_owned_roots')) &&
       (capability !== 'local-environment.multiple.v1' ||

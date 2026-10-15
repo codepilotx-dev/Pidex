@@ -106,6 +106,9 @@ export const ProviderModelDefinitionSchema = Schema.Struct({
   contextWindow: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
   ),
+  maxInputTokens: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
+  ),
   maxTokens: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
   ),
@@ -128,18 +131,20 @@ export const BuiltinProviderDefinitionSchema = Schema.Struct({
   enabled: Schema.Boolean,
   allowModels: Schema.Array(Model.ID),
   denyModels: Schema.Array(Model.ID),
+  baseUrl: Schema.optional(NonEmptyStringSchema),
+  endpoints: Schema.optional(Schema.Record(NonEmptyStringSchema, NonEmptyStringSchema)),
+  allowInsecureHttp: Schema.optional(Schema.Boolean),
   models: Schema.Array(
     Schema.Struct({
+      ...ProviderModelDefinitionSchema.fields,
+      api: Schema.optional(PiProviderApiSchema),
       id: Model.ID,
       enabled: Schema.Boolean,
     }),
   ),
-  /**
-   * Optional global wire protocol for builtin providers that expose more than
-   * one endpoint. Only DeepSeek accepts it; the Agent rejects other builtin
-   * providers that carry the field.
-   */
-  protocol: Schema.optional(PiProviderApiSchema),
+  protocol: Schema.optional(NonEmptyStringSchema.check(Schema.isPattern(
+    /^(?:openai-completions|openai-responses|anthropic-messages|google-generative-ai|google-vertex|azure-openai-responses|bedrock-converse-stream|mistral-conversations|openai-codex-responses|pi-messages)$/,
+  ))),
 })
 
 export const CustomProviderDefinitionSchema = Schema.Struct({
@@ -148,6 +153,11 @@ export const CustomProviderDefinitionSchema = Schema.Struct({
   name: NonEmptyStringSchema,
   enabled: Schema.Boolean,
   baseUrl: NonEmptyStringSchema,
+  endpoints: Schema.optional(Schema.Struct({
+    'openai-completions': Schema.optional(NonEmptyStringSchema),
+    'openai-responses': Schema.optional(NonEmptyStringSchema),
+    'anthropic-messages': Schema.optional(NonEmptyStringSchema),
+  })),
   auth: Schema.Literals(['api-key', 'none']),
   env: Schema.Array(NonEmptyStringSchema),
   allowInsecureHttp: Schema.Boolean,

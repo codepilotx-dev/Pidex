@@ -22,11 +22,12 @@ const toPiModel = (
   name: model.name,
   api: model.api,
   provider: providerID,
-  baseUrl: provider.baseUrl,
+  baseUrl: provider.endpoints?.[model.api] ?? provider.baseUrl,
   reasoning: model.reasoning,
   input: [...model.input],
   cost: { ...model.cost },
   contextWindow: model.contextWindow,
+  ...(model.maxInputTokens !== undefined ? { maxInputTokens: model.maxInputTokens } : {}),
   maxTokens: model.maxTokens,
   ...(Object.keys(model.headers).length ? { headers: { ...model.headers } } : {}),
   ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
@@ -127,27 +128,25 @@ export const discoverOpenAIModels = async (
   const document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown
   if (
     typeof document !== 'object' ||
-    document === null ||
-    !('data' in document) ||
-    !Array.isArray(document.data)
+    document === null
   ) {
     throw new Error('Model discovery returned an invalid OpenAI catalog')
   }
+  const codex = !('data' in document)
+  const entries = 'data' in document ? document.data : 'models' in document ? document.models : null
+  if (!Array.isArray(entries)) {
+    throw new Error('Model discovery returned an invalid OpenAI catalog')
+  }
   const models = new Map<string, DiscoveredOpenAIModel>()
-  for (const candidate of document.data) {
-    if (
-      typeof candidate === 'object' &&
-      candidate !== null &&
-      'id' in candidate &&
-      typeof candidate.id === 'string' &&
-      candidate.id.trim()
-    ) {
-      models.set(candidate.id, {
-        id: candidate.id,
-        name:
-          'name' in candidate && typeof candidate.name === 'string' && candidate.name.trim()
-            ? candidate.name
-            : candidate.id,
+  for (const candidate of entries) {
+    if (typeof candidate !== 'object' || candidate === null) continue
+    const record = candidate as Record<string, unknown>
+    const id = codex ? record.slug : record.id
+    const name = codex ? record.display_name : record.name
+    if (typeof id === 'string' && id.trim()) {
+      models.set(id, {
+        id,
+        name: typeof name === 'string' && name.trim() ? name : id,
       })
     }
   }

@@ -137,7 +137,7 @@ export class UsageService {
     const providers = await this.providers.list()
     const providerTargeted = Boolean(input.providerIds?.length)
     const sourceTargeted = Boolean(input.sourceIds?.length)
-    const selected = this.adapters
+    const selected = this.credentialAdapters(input.sourceIds)
       .filter((adapter) => !sourceTargeted || input.sourceIds!.includes(adapter.sourceId))
       .filter(
         (adapter) =>
@@ -189,7 +189,7 @@ export class UsageService {
         this.billingConnection(sourceId, envNames),
     }
     const sources = await Promise.all(
-      this.adapters.map(async (adapter): Promise<UsageSourceDescriptor> =>
+      this.credentialAdapters().map(async (adapter): Promise<UsageSourceDescriptor> =>
         decodeUsageSourceDescriptor({
           sourceId: adapter.sourceId,
           canonicalProviderId: Provider.ID.make(adapter.canonicalProviderId),
@@ -276,6 +276,37 @@ export class UsageService {
       throw new AgentError('CONFLICT', 'operationId 已用于其他计费凭据操作', 409)
     }
     return existing.result
+  }
+
+  private credentialAdapters(sourceIds?: readonly string[]): readonly ProviderUsageAdapter[] {
+    return this.adapters.flatMap((adapter) => {
+      if (adapter.connectionMethod.kind !== 'provider-credential' || adapter.availability !== 'queryable')
+        return [adapter]
+      const keys = adapter.providerIds.flatMap((providerId) =>
+        this.providerCredentials.listApiKeys(providerId),
+      )
+      if (keys.length < 2 || sourceIds?.includes(adapter.sourceId)) return [adapter]
+      return keys.map((key): ProviderUsageAdapter => {
+        const connection: ProviderUsageSource['connection'] = {
+          kind: 'provider-key', credentialId: Credential.ID.make(key.id),
+          maskedValue: key.maskedValue, disconnectible: false,
+        }
+        const resolveCredential = async (): Promise<ResolvedUsageCredential | null> => {
+          const stored = await Effect.runPromise(this.providerCredentials.getById<Credential.Value>(key.id))
+          return stored?.integrationID === key.integrationID && Schema.is(Credential.Key)(stored.value)
+            ? { value: stored.value, connection } : null
+        }
+        return {
+          ...adapter,
+          sourceId: `${adapter.sourceId}:${key.id}:${key.updatedAt}`,
+          resolveCredential,
+          resolveConnection: async () => connection,
+          query(context) {
+            return adapter.query.call(this, { ...context, credential: resolveCredential })
+          },
+        }
+      })
+    })
   }
 
   private async queryAdapter(adapter: ProviderUsageAdapter, context: UsageQueryContext) {

@@ -17,7 +17,7 @@ export const CUSTOM_PROVIDER_APIS = [
 
 export type CustomProviderApi = (typeof CUSTOM_PROVIDER_APIS)[number]
 
-/** The only builtin provider whose wire protocol is user selectable. */
+/** DeepSeek keeps its existing three-protocol catalog mapping. */
 export const DEEPSEEK_PROVIDER_ID = 'deepseek'
 
 export type DeepSeekProtocol = CustomProviderApi
@@ -31,13 +31,40 @@ export const DEEPSEEK_PROTOCOL_ENDPOINTS: Readonly<Record<DeepSeekProtocol, stri
   'anthropic-messages': 'https://api.deepseek.com/anthropic',
 }
 
+// Additional wire protocols verified in the vendors' API documentation.
+const extraBuiltinEndpoints: Readonly<Record<string, Readonly<Record<string, string>>>> = {
+  deepseek: DEEPSEEK_PROTOCOL_ENDPOINTS,
+  openai: { 'openai-completions': 'https://api.openai.com/v1' },
+  google: { 'openai-completions': 'https://generativelanguage.googleapis.com/v1beta/openai' },
+  xai: { 'openai-completions': 'https://api.x.ai/v1' },
+  mistral: { 'openai-completions': 'https://api.mistral.ai/v1' },
+  openrouter: { 'openai-responses': 'https://openrouter.ai/api/v1' },
+  zai: { 'anthropic-messages': 'https://api.z.ai/api/anthropic' },
+  minimax: { 'openai-completions': 'https://api.minimax.io/v1' },
+  'minimax-cn': { 'openai-completions': 'https://api.minimax.cn/v1' },
+}
+const nativeBuiltinEndpoints = new Map(builtinProviders().map((provider) => [provider.id,
+  Object.fromEntries(provider.getModels().map((model) => [model.api, model.baseUrl || provider.baseUrl || ''])),
+]))
+export const builtinProviderEndpoints = (id: string): Readonly<Record<string, string>> => ({
+  ...nativeBuiltinEndpoints.get(id), ...extraBuiltinEndpoints[id],
+})
+
 export interface PiBuiltinProviderConfig {
   readonly kind: 'builtin'
   readonly enabled: boolean
   readonly allowModels: readonly string[]
   readonly denyModels: readonly string[]
-  readonly models: Readonly<Record<string, { readonly enabled: boolean }>>
-  readonly protocol?: DeepSeekProtocol
+  readonly models: Readonly<Record<string, PiBuiltinModelConfig>>
+  readonly baseUrl?: string
+  readonly endpoints?: Readonly<Record<string, string>>
+  readonly allowInsecureHttp?: boolean
+  readonly protocol?: string
+}
+
+export type PiBuiltinModelConfig = Partial<Omit<PiCustomModelConfig, 'id' | 'cost'>> & {
+  readonly enabled: boolean
+  readonly cost?: Partial<PiCustomModelConfig['cost']>
 }
 
 export interface PiCustomModelConfig {
@@ -46,6 +73,7 @@ export interface PiCustomModelConfig {
   readonly name: string
   readonly enabled: boolean
   readonly contextWindow: number
+  readonly maxInputTokens?: number
   readonly maxTokens: number
   readonly reasoning: boolean
   readonly input: readonly ('text' | 'image')[]
@@ -56,7 +84,7 @@ export interface PiCustomModelConfig {
     readonly cacheWrite: number
   }
   readonly headers: Readonly<Record<string, string>>
-  readonly thinkingLevelMap?: PiModel<Api>['thinkingLevelMap']
+  readonly thinkingLevelMap?: NonNullable<PiModel<Api>['thinkingLevelMap']>
   readonly compat?: OpenAICompletionsCompat | OpenAIResponsesCompat | AnthropicMessagesCompat
 }
 
@@ -65,6 +93,7 @@ export interface PiCustomProviderConfig {
   readonly name: string
   readonly enabled: boolean
   readonly baseUrl: string
+  readonly endpoints?: Partial<Record<CustomProviderApi, string>>
   readonly auth: 'api-key' | 'none'
   readonly env: readonly string[]
   readonly allowInsecureHttp: boolean
@@ -104,11 +133,15 @@ export type PiProviderDefinitionInput =
       readonly enabled: boolean
       readonly allowModels: readonly string[]
       readonly denyModels: readonly string[]
-      readonly models: readonly {
+      readonly models: readonly (Partial<Omit<PiCustomModelConfig, 'id' | 'cost'>> & {
         readonly id: string
         readonly enabled: boolean
-      }[]
-      readonly protocol?: DeepSeekProtocol
+        readonly cost?: Partial<PiCustomModelConfig['cost']>
+      })[]
+      readonly baseUrl?: string
+      readonly endpoints?: Readonly<Record<string, string>>
+      readonly allowInsecureHttp?: boolean
+      readonly protocol?: string
     }
   | {
       readonly kind: 'custom'
@@ -116,6 +149,7 @@ export type PiProviderDefinitionInput =
       readonly name: string
       readonly enabled: boolean
       readonly baseUrl: string
+      readonly endpoints?: Partial<Record<CustomProviderApi, string>>
       readonly auth: 'api-key' | 'none'
       readonly env: readonly string[]
       readonly allowInsecureHttp: boolean
@@ -297,6 +331,8 @@ const parseCustomModel = (
     name: typeof value.name === 'string' && value.name.trim() ? value.name : configuredID,
     enabled: bool(value.enabled, true),
     contextWindow: positiveInteger(value.context_window ?? value.contextWindow, 32_768),
+    ...((value.max_input_tokens ?? value.maxInputTokens) !== undefined
+      ? { maxInputTokens: positiveInteger(value.max_input_tokens ?? value.maxInputTokens, 32_768) } : {}),
     maxTokens: positiveInteger(value.max_tokens ?? value.maxTokens, 8_192),
     reasoning: bool(value.reasoning, false),
     input: input.length ? input : ['text'],
@@ -312,33 +348,96 @@ const parseCustomModel = (
   }
 }
 
-const parseBuiltinProtocol = (providerID: string, value: unknown): DeepSeekProtocol | undefined => {
+const parseEndpoints = (value: unknown, allowHttp: boolean, supported: readonly string[] = CUSTOM_PROVIDER_APIS) => {
+  if (!isObject(value)) throw new Error('Provider endpoints must be an object')
+  return Object.fromEntries(Object.entries(value).map(([api, address]) => {
+    if (!supported.includes(api))
+      throw new Error('Unsupported provider endpoint protocol')
+    return [api, validateCustomProviderBaseUrl(address, allowHttp)]
+  })) as Partial<Record<CustomProviderApi, string>>
+}
+
+const parseBuiltinProtocol = (providerID: string, value: unknown): string | undefined => {
   if (value === undefined) return undefined
-  if (providerID !== DEEPSEEK_PROVIDER_ID) {
-    throw new Error('Builtin provider protocol is only configurable for the DeepSeek provider')
-  }
-  if (typeof value !== 'string' || !(CUSTOM_PROVIDER_APIS as readonly string[]).includes(value)) {
+  if (typeof value !== 'string' || !(value in builtinProviderEndpoints(providerID)))
     throw new Error('Builtin provider protocol is unsupported')
-  }
-  return value as DeepSeekProtocol
+  return value
 }
 
 const parseBuiltin = (providerID: string, value: Record<string, unknown>) => {
   const modelDeclarations = isObject(value.models) ? value.models : {}
   const models = Object.fromEntries(
-    Object.entries(modelDeclarations).flatMap(([id, model]) =>
-      isObject(model) ? [[id, { enabled: bool(model.enabled, true) }]] : [],
-    ),
+    Object.entries(modelDeclarations).map(([id, model]) => {
+      if (!isObject(model)) throw new Error('Builtin model override must be an object')
+      return [id, parseBuiltinModel(providerID, id, model)]
+    }),
   )
   const protocol = parseBuiltinProtocol(providerID, value.protocol)
+
   return {
     kind: 'builtin' as const,
+    ...(value.endpoints !== undefined ? { endpoints: parseEndpoints(value.endpoints, bool(value.allow_insecure_http ?? value.allowInsecureHttp, false), Object.keys(builtinProviderEndpoints(providerID))) } : {}),
     enabled: bool(value.enabled, !bool(value.disabled, false)),
     allowModels: strings(value.allow_models ?? value.allowModels),
     denyModels: strings(value.deny_models ?? value.denyModels),
     models,
+    ...(value.base_url !== undefined || value.baseUrl !== undefined
+      ? {
+          baseUrl: validateCustomProviderBaseUrl(
+            value.base_url ?? value.baseUrl,
+            bool(value.allow_insecure_http ?? value.allowInsecureHttp, false),
+          ),
+        }
+      : {}),
+    ...(value.allow_insecure_http !== undefined || value.allowInsecureHttp !== undefined
+      ? { allowInsecureHttp: bool(value.allow_insecure_http ?? value.allowInsecureHttp, false) }
+      : {}),
     ...(protocol ? { protocol } : {}),
   }
+}
+
+const parseBuiltinModel = (
+  providerID: string,
+  id: string,
+  raw: Record<string, unknown>,
+): PiBuiltinModelConfig => {
+  const allowed = new Set([
+    'id',
+    'enabled',
+    'api',
+    'name',
+    'contextWindow',
+    'context_window',
+    'maxInputTokens',
+    'max_input_tokens',
+    'maxTokens',
+    'max_tokens',
+    'reasoning',
+    'input',
+    'cost',
+    'headers',
+    'thinkingLevelMap',
+    'thinking_level_map',
+    'compat',
+  ])
+  if (Object.keys(raw).some((key) => !allowed.has(key)))
+    throw new Error('Builtin model override is unsupported')
+  const parsed = parseCustomModel(providerID, id, { ...raw, api: raw.api ?? 'openai-completions' })
+  const result: Record<string, unknown> = { enabled: parsed.enabled }
+  for (const [key, value] of Object.entries(parsed)) {
+    const snake = key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`)
+    if (key !== 'id' && (key in raw || snake in raw)) result[key] = value
+  }
+  const rawCost = raw.cost
+  if (isObject(rawCost))
+    result.cost = Object.fromEntries(
+      Object.entries(parsed.cost).filter(
+        ([key]) =>
+          key in rawCost ||
+          key.replace(/[A-Z]/g, (letter) => `_${letter.toLowerCase()}`) in rawCost,
+      ),
+    )
+  return result as PiBuiltinModelConfig
 }
 
 /**
@@ -355,7 +454,7 @@ export const resolveDeepSeekProtocol = (
   }
   const provider = catalog.providers[DEEPSEEK_PROVIDER_ID]
   if (provider?.kind !== 'builtin') return DEFAULT_DEEPSEEK_PROTOCOL
-  return provider.protocol ?? DEFAULT_DEEPSEEK_PROTOCOL
+  return (provider.protocol as DeepSeekProtocol | undefined) ?? DEFAULT_DEEPSEEK_PROTOCOL
 }
 
 const parseCustom = (
@@ -377,6 +476,7 @@ const parseCustom = (
   const auth = value.auth === 'none' ? 'none' : 'api-key'
   return {
     kind: 'custom',
+    ...(value.endpoints !== undefined ? { endpoints: parseEndpoints(value.endpoints, allowInsecureHttp) } : {}),
     name: typeof value.name === 'string' && value.name.trim() ? value.name : providerID,
     enabled: bool(value.enabled, true),
     baseUrl: validateCustomProviderBaseUrl(value.base_url ?? value.baseUrl, allowInsecureHttp),
@@ -446,13 +546,14 @@ export const parsePiProviderCatalog = (config: PiModelCatalogConfig): ParsedPiPr
           'deny_models',
           'denyModels',
           'models',
-          ...(providerID === DEEPSEEK_PROVIDER_ID ? ['protocol'] : []),
+          'baseUrl',
+          'base_url',
+          'endpoints',
+          'allowInsecureHttp',
+          'allow_insecure_http',
+          'protocol',
         ])
-        const modelOverrides = isObject(raw.models) ? raw.models : {}
-        const hasUnsupportedModelOverride = Object.values(modelOverrides).some(
-          (model) => !isObject(model) || Object.keys(model).some((key) => key !== 'enabled'),
-        )
-        if (Object.keys(raw).some((key) => !allowed.has(key)) || hasUnsupportedModelOverride) {
+        if (Object.keys(raw).some((key) => !allowed.has(key))) {
           issues.push({
             providerID,
             path: `model_providers.${providerID}`,
@@ -513,17 +614,21 @@ export const serializePiProviderDefinition = (
       ? {
           kind: 'builtin',
           enabled: definition.enabled,
+          ...(definition.endpoints ? { endpoints: definition.endpoints } : {}),
           allow_models: [...definition.allowModels],
           deny_models: [...definition.denyModels],
-          models: Object.fromEntries(
-            definition.models.map((model) => [model.id, { enabled: model.enabled }]),
-          ),
+          models: Object.fromEntries(definition.models.map(({ id, ...model }) => [id, model])),
           ...(definition.protocol ? { protocol: definition.protocol } : {}),
+          ...(definition.baseUrl ? { base_url: definition.baseUrl } : {}),
+          ...(definition.allowInsecureHttp !== undefined
+            ? { allow_insecure_http: definition.allowInsecureHttp }
+            : {}),
         }
       : {
           kind: 'custom',
           name: definition.name,
           enabled: definition.enabled,
+          ...(definition.endpoints ? { endpoints: definition.endpoints } : {}),
           base_url: definition.baseUrl,
           auth: definition.auth,
           env: [...definition.env],
@@ -540,6 +645,7 @@ export const serializePiProviderDefinition = (
                 ...(model.contextWindow !== undefined
                   ? { context_window: model.contextWindow }
                   : {}),
+                ...(model.maxInputTokens !== undefined ? { max_input_tokens: model.maxInputTokens } : {}),
                 ...(model.maxTokens !== undefined ? { max_tokens: model.maxTokens } : {}),
                 ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
                 ...(model.input !== undefined ? { input: [...model.input] } : {}),
@@ -581,20 +687,23 @@ export const serializePiProviderDefinition = (
         ? {
             kind: 'builtin',
             enabled: provider.enabled,
+            ...(provider.endpoints ? { endpoints: provider.endpoints } : {}),
             allow_models: [...provider.allowModels],
             deny_models: [...provider.denyModels],
             models: Object.fromEntries(
-              Object.entries(provider.models).map(([id, model]) => [
-                id,
-                { enabled: model.enabled },
-              ]),
+              Object.entries(provider.models).map(([id, model]) => [id, { ...model }]),
             ),
             ...(provider.protocol ? { protocol: provider.protocol } : {}),
+            ...(provider.baseUrl ? { base_url: provider.baseUrl } : {}),
+            ...(provider.allowInsecureHttp !== undefined
+              ? { allow_insecure_http: provider.allowInsecureHttp }
+              : {}),
           }
         : {
             kind: 'custom',
             name: provider.name,
             enabled: provider.enabled,
+            ...(provider.endpoints ? { endpoints: provider.endpoints } : {}),
             base_url: provider.baseUrl,
             auth: provider.auth,
             env: [...provider.env],
@@ -609,6 +718,7 @@ export const serializePiProviderDefinition = (
                   name: model.name,
                   enabled: model.enabled,
                   context_window: model.contextWindow,
+                  ...(model.maxInputTokens !== undefined ? { max_input_tokens: model.maxInputTokens } : {}),
                   max_tokens: model.maxTokens,
                   reasoning: model.reasoning,
                   input: [...model.input],

@@ -389,6 +389,9 @@ export function createBrowserMockDesktopClient(
     onSpeechStatusUpdated: () => () => {},
     openMicrophonePrivacySettings: async () => {},
     readAttachment: async (attachmentId) => readBrowserFixtureAttachment(attachmentId),
+    submitVisualizationFollowUp: async () => {
+      throw new Error('浏览器模拟环境不支持可视化追问。')
+    },
     readArtifact: async () => {
       throw new Error('浏览器模拟环境不支持 artifact 读取。')
     },

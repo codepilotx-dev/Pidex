@@ -27,6 +27,8 @@ import {
   type PiProviderDefinitionInput,
 } from './PiProviderConfig'
 import { createPiDeepSeekProvider } from './PiDeepSeekProvider'
+import { withPiOpenAIModelDiscovery } from './PiOpenAIModelDiscovery'
+import { withPiBuiltinProviderOverrides } from './PiBuiltinProviderOverrides'
 import {
   createPiCustomProvider,
   discoverOpenAIModels,
@@ -58,6 +60,8 @@ export class PiModelServiceError extends Error {
   }
 }
 
+import { builtinProviderEndpoints } from './PiProviderConfig'
+
 const clone = <T>(value: T): T => structuredClone(value)
 
 const piProviderToInfo = (
@@ -75,6 +79,10 @@ const piProviderToInfo = (
     type: 'pi',
     kind,
     apis: [...new Set(apis)],
+    ...(kind === 'builtin' ? {
+      endpoints: builtinProviderEndpoints(provider.id),
+      defaultApi: configured?.kind === 'builtin' && configured.protocol ? configured.protocol : apis[0],
+    } : {}),
     ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
   },
   catalogOrigin,
@@ -178,6 +186,19 @@ export class PiModelService {
         },
       })
     this.mutablePi = isMutableModels(this.pi) ? this.pi : undefined
+    for (const provider of this.pi.getProviders()) {
+      const discovered = withPiOpenAIModelDiscovery(
+        provider,
+        (signal) => this.pi.getAuth(provider.id, { signal }),
+        () => {
+          const config = this.parsedConfig.providers[provider.id]
+          return config?.kind === 'builtin'
+            ? (config.baseUrl ?? provider.baseUrl)
+            : provider.baseUrl
+        },
+      )
+      if (discovered !== provider) this.mutablePi?.setProvider(discovered)
+    }
     this.baseProviders = new Map(this.pi.getProviders().map((provider) => [provider.id, provider]))
     this.builtinProviderIDs = new Set(this.pi.getProviders().map((provider) => provider.id))
     this.configSource = options.config
@@ -225,6 +246,7 @@ export class PiModelService {
           name: configured.name,
           enabled: configured.enabled,
           baseUrl: configured.baseUrl,
+          ...(configured.endpoints ? { endpoints: configured.endpoints } : {}),
           auth: configured.auth,
           env: [...configured.env],
           allowInsecureHttp: configured.allowInsecureHttp,
@@ -235,6 +257,7 @@ export class PiModelService {
             name: model.name,
             enabled: model.enabled,
             contextWindow: model.contextWindow,
+            ...(model.maxInputTokens !== undefined ? { maxInputTokens: model.maxInputTokens } : {}),
             maxTokens: model.maxTokens,
             reasoning: model.reasoning,
             input: [...model.input],
@@ -254,8 +277,13 @@ export class PiModelService {
         denyModels: [...(builtin?.denyModels ?? [])],
         models: Object.entries(builtin?.models ?? {}).map(([id, model]) => ({
           id,
-          enabled: model.enabled,
+          ...model,
         })),
+        ...(builtin?.endpoints ? { endpoints: builtin.endpoints } : {}),
+        ...(builtin?.baseUrl ? { baseUrl: builtin.baseUrl } : {}),
+        ...(builtin?.allowInsecureHttp !== undefined
+          ? { allowInsecureHttp: builtin.allowInsecureHttp }
+          : {}),
         ...(builtin?.protocol ? { protocol: builtin.protocol } : {}),
       }
     })
@@ -322,8 +350,15 @@ export class PiModelService {
 
   async refresh(force = false): Promise<void> {
     this.assertActive()
-    await this.syncProviders()
-    const result = await this.pi.refresh({ allowNetwork: true, force })
+    const config = await this.syncProviders()
+    const result = await this.pi.refresh({
+      allowNetwork: true,
+      force,
+      providers: this.pi
+        .getProviders()
+        .filter((provider) => this.providerEnabled(provider.id, config))
+        .map((provider) => provider.id),
+    })
     if (result.errors.size > 0) {
       throw new PiModelServiceError(
         'CATALOG_REFRESH_FAILED',
@@ -443,6 +478,18 @@ export class PiModelService {
       }
       this.configuredCustomProviderIDs = nextCustomProviderIDs
       this.applyProviderProtocolOverride(parsed)
+      for (const [id, base] of this.baseProviders) {
+        const configured = parsed.providers[id]
+        if (id === DEEPSEEK_PROVIDER_ID && parsed.issues.some((issue) => issue.providerID === id))
+          continue
+        const source =
+          id === DEEPSEEK_PROVIDER_ID ? (this.deepSeekProtocol?.provider ?? base) : base
+        this.mutablePi?.setProvider(
+          configured?.kind === 'builtin'
+            ? withPiBuiltinProviderOverrides(source, configured)
+            : source,
+        )
+      }
       this.parsedConfig = parsed
       this.configFingerprint = fingerprint
       return parsed
@@ -460,7 +507,7 @@ export class PiModelService {
     const base = this.baseProviders.get(DEEPSEEK_PROVIDER_ID)
     if (!base) return
     const active = this.deepSeekProtocol
-    const current = this.pi.getProvider(DEEPSEEK_PROVIDER_ID) ?? base
+    const current = base
     const protocol = resolveDeepSeekProtocol(config)
     // A rejected DeepSeek block keeps the provider that is already running.
     if (!protocol) return

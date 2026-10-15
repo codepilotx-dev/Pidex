@@ -27,7 +27,7 @@ import { listRuntimeSkills } from '../../settings/plugins/SkillClientAdapter.js'
 import type { ComposerDraftKey } from '../../session/composer/ComposerTypes.js'
 import { deriveWorkflowSessionState } from '../../../../shared/WorkflowReducer.js'
 import type { WorkbenchFileLoadErrorEvent } from '../dock/RightDock.js'
-import { WorkspaceShellControls } from '../dock/WorkspaceShellControls.js'
+import { WorkspaceShellControls, RightPanelToggleIcon } from '../dock/WorkspaceShellControls.js'
 import { DesktopWorkspaceHeader, WorkspaceHeaderProvider } from '../workspace-header/index.js'
 import {
   applyWorkbenchPanelAction,
@@ -107,6 +107,11 @@ import {
   useWorkbenchRouteController,
 } from './UseWorkbenchRouteController.js'
 import type { DesktopLayoutOutletContextValue } from './DesktopLayoutOutletContext.js'
+import type { ProviderManagementTab, ProviderManagementSection } from '../dock/RightDockState.js'
+import {
+  providerManagementRouteId,
+  scopedProviderManagementTab,
+} from '../../models/provider-management/ProviderManagementPanelState.js'
 import { useWorkbenchShellController } from './UseWorkbenchShellController.js'
 import {
   isTerminalKeyboardTarget,
@@ -272,6 +277,42 @@ let directoryProbeRequestId = 0
 
 export function DesktopLayout(): React.ReactNode {
   const location = useLocation()
+  const [providerManagementTab, setProviderManagementTab] = useState<ProviderManagementTab | null>(
+    null,
+  )
+  const [providerManagementHost, setProviderManagementHost] = useState<HTMLElement | null>(null)
+  const [providerManagementOwner, setProviderManagementOwner] = useState<string | null>(null)
+  const providerBeforeChange = useRef<(() => Promise<boolean>) | null>(null)
+  const providerRouteId = providerManagementRouteId(location.pathname, location.search)
+  const isProviderDetailRoute =
+    providerRouteId !== null && providerManagementOwner === providerRouteId
+  const visibleProviderTab =
+    providerManagementOwner === providerRouteId
+      ? scopedProviderManagementTab(providerManagementTab, location.pathname, location.search)
+      : null
+  useEffect(() => {
+    if (!providerRouteId || !providerManagementOwner) setProviderManagementTab(null)
+  }, [providerRouteId, providerManagementOwner])
+  const openProviderManagement = useCallback(
+    (providerId: string, section: ProviderManagementSection) => {
+      if (providerRouteId !== providerId || providerManagementOwner !== providerId) return
+      void (providerBeforeChange.current?.() ?? Promise.resolve(true)).then((allowed) => {
+        if (allowed)
+          setProviderManagementTab({
+            id: 'provider-management',
+            kind: 'provider-management',
+            providerId,
+            section,
+          })
+      })
+    },
+    [providerRouteId, providerManagementOwner, providerManagementTab],
+  )
+  const closeProviderManagement = useCallback(() => {
+    void (providerBeforeChange.current?.() ?? Promise.resolve(true)).then((allowed) => {
+      if (allowed) setProviderManagementTab(null)
+    })
+  }, [])
   const routeLabel = routeAccessibilityLabel(location.pathname)
   const settings = useDesktopRuntimeSettings()
   const activeSidebarPane = sidebarPaneForRoute(
@@ -345,6 +386,21 @@ export function DesktopLayout(): React.ReactNode {
   const commandMenuDialogMounted = useEverOpened(commandMenuOpen)
   const globalMessageModalMounted = useEverOpened(errorMessage !== null || noticeMessage !== null)
   const {
+    navigate,
+    canNavigateBack,
+    canNavigateForward,
+    navigateBack,
+    navigateForward,
+    routedSessionId,
+    isQuickChatPage,
+    isConversationRoute,
+    isSettingsRoute,
+    settingsActiveTab,
+    handleSettingsTabChange,
+    handleSettingsBack,
+  } = useWorkbenchRouteController()
+  const isHomeOrConversationRoute = isQuickChatPage || isConversationRoute
+  const {
     sidebarCollapsed,
     sidebarWidth,
     setSidebarWidth,
@@ -400,7 +456,11 @@ export function DesktopLayout(): React.ReactNode {
     pinTab,
     setFileMarkdownViewMode,
     setFileViewState,
-  } = useWorkbenchShellController({ activePane: activeSidebarPane })
+  } = useWorkbenchShellController({
+    activePane: activeSidebarPane,
+    panelRouteActive: isHomeOrConversationRoute,
+    temporaryRightPanelOpen: visibleProviderTab !== null,
+  })
   const [rightResizePhase, setRightResizePhase] = useState<ResizePhase>('idle')
   const mainRouteRef = useRef<HTMLDivElement>(null)
   const commandMenuInputRef = useRef<HTMLInputElement>(null)
@@ -542,22 +602,8 @@ export function DesktopLayout(): React.ReactNode {
   const isBrowserMockSession = sessionId?.startsWith('browser-mock-') === true
   const localRouterAvailable = !sessionId || isBrowserMockSession
 
-  const {
-    navigate,
-    canNavigateBack,
-    canNavigateForward,
-    navigateBack,
-    navigateForward,
-    routedSessionId,
-    isQuickChatPage,
-    isConversationRoute,
-    isSettingsRoute,
-    settingsActiveTab,
-    handleSettingsTabChange,
-    handleSettingsBack,
-  } = useWorkbenchRouteController()
-  const isHomeOrConversationRoute = isQuickChatPage || isConversationRoute
-  const effectiveRightDockVisible = isHomeOrConversationRoute && rightDockVisible
+  const effectiveRightDockVisible =
+    (isHomeOrConversationRoute && rightDockVisible) || visibleProviderTab !== null
   const effectiveBottomPanelVisible = isHomeOrConversationRoute && bottomPanelVisible
 
   const { terminalAvailable, terminalVisible, toggleIntegratedTerminal } =
@@ -1340,8 +1386,25 @@ export function DesktopLayout(): React.ReactNode {
       workspacePath: currentWorkspace?.path ?? null,
       useSkill: handleUseSkill,
       openSkillPreview: handleOpenSkillPreview,
+      providerManagement: {
+        tab: visibleProviderTab,
+        host: providerManagementHost,
+        open: openProviderManagement,
+        close: closeProviderManagement,
+        beforeChange: providerBeforeChange,
+        claimProvider: setProviderManagementOwner,
+      },
     }),
-    [currentWorkspace?.path, handleOpenSkillPreview, handleUseSkill],
+    [
+      currentWorkspace?.path,
+      handleOpenSkillPreview,
+      handleUseSkill,
+      visibleProviderTab?.providerId,
+      visibleProviderTab?.section,
+      providerManagementHost,
+      openProviderManagement,
+      closeProviderManagement,
+    ],
   )
 
   useDesktopCommands({
@@ -2870,7 +2933,17 @@ export function DesktopLayout(): React.ReactNode {
   }, [openPanelTab, workbenchPanelState.bottom.tabIds, workbenchPanelState.tabsById])
 
   const renderWorkbenchPanel = (target: WorkbenchPanelTarget): React.ReactNode => {
-    const state = target === 'right' ? rightDockState : bottomPanelState
+    const providerMode = target === 'right' && visibleProviderTab !== null
+    const state = providerMode
+      ? {
+          ...rightDockState,
+          open: true,
+          activeTabId: 'provider-management' as const,
+          tabIds: ['provider-management' as const],
+        }
+      : target === 'right'
+        ? rightDockState
+        : bottomPanelState
     if (target === 'bottom' && !state.open) {
       return null
     }
@@ -2878,7 +2951,19 @@ export function DesktopLayout(): React.ReactNode {
       <WorkbenchPanel
         target={target}
         state={state}
-        tabsById={workbenchPanelState.tabsById}
+        tabsById={
+          providerMode
+            ? { 'provider-management': visibleProviderTab! }
+            : workbenchPanelState.tabsById
+        }
+        providerManagement={
+          providerMode ? (
+            <div
+              ref={setProviderManagementHost}
+              className="tw:flex tw:h-full tw:w-full tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:overflow-hidden"
+            />
+          ) : undefined
+        }
         onCreateTerminal={target === 'bottom' ? handleCreateTerminal : undefined}
         browserAvailability={{
           status: browserAvailability,
@@ -2923,6 +3008,10 @@ export function DesktopLayout(): React.ReactNode {
         onAddComposerFiles={handleAddComposerFiles}
         onBrowserStateChange={setBrowserState}
         onClose={() => {
+          if (providerMode) {
+            closeProviderManagement()
+            return
+          }
           void saveTabsBeforeClose(state.tabIds, {
             discardSideChats: false,
           }).then((saved) => {
@@ -2930,6 +3019,10 @@ export function DesktopLayout(): React.ReactNode {
           })
         }}
         onCloseTab={(tabId) => {
+          if (providerMode) {
+            closeProviderManagement()
+            return
+          }
           void saveTabsBeforeClose([tabId]).then(async (saved) => {
             if (!saved) return
             const tab = workbenchPanelState.tabsById[tabId]
@@ -2952,6 +3045,7 @@ export function DesktopLayout(): React.ReactNode {
           })
         }}
         onCloseOtherTabs={(tabId) => {
+          if (providerMode) return
           const closing = state.tabIds.filter((id) => id !== tabId)
           void saveTabsBeforeClose(closing).then(async (saved) => {
             if (!saved) return
@@ -2973,6 +3067,7 @@ export function DesktopLayout(): React.ReactNode {
           })
         }}
         onCloseTabsToRight={(tabId) => {
+          if (providerMode) return
           const index = state.tabIds.indexOf(tabId)
           const closing = index < 0 ? [] : state.tabIds.slice(index + 1)
           void saveTabsBeforeClose(closing).then(async (saved) => {
@@ -2997,6 +3092,7 @@ export function DesktopLayout(): React.ReactNode {
         onCreateBranch={handleCreateBranch}
         onFileLoadError={handleFileLoadError}
         onOpenTab={(tab) => {
+          if (providerMode) return
           if (tab.kind === 'browser') {
             if (browserAvailability !== 'available') {
               setErrorMessage('当前桌面运行环境没有提供内置浏览器能力。')
@@ -3019,19 +3115,29 @@ export function DesktopLayout(): React.ReactNode {
         onReviewTabStateChange={setReviewTabState}
         onResetHeight={handleResetBottomPanelHeight}
         onResetWidth={handleResetRightDockWidth}
-        onSelectTab={(tabId) => handleSelectPanelTab(target, tabId)}
-        onMoveTab={movePanelTab}
-        onPopOutTab={popOutPanelTab}
-        onReorderTab={reorderPanelTab}
-        onPinTab={pinTab}
+        onSelectTab={(tabId) => {
+          if (!providerMode) handleSelectPanelTab(target, tabId)
+        }}
+        onMoveTab={providerMode ? () => {} : movePanelTab}
+        onPopOutTab={providerMode ? undefined : popOutPanelTab}
+        onReorderTab={providerMode ? () => {} : reorderPanelTab}
+        onPinTab={providerMode ? () => {} : pinTab}
         onSetFileMarkdownViewMode={setFileMarkdownViewMode}
         onSetFileViewState={setFileViewState}
         onAskInSideChat={sideChatSupported ? handleAppendSideChatText : undefined}
         onSetHeight={handleSetBottomPanelHeight}
         onSetWidth={handleSetRightDockWidth}
-        onResizeRawSize={target === 'right' ? handleRightDockResizeRaw : undefined}
-        onResizePreview={target === 'right' ? handleRightDockResizePreview : undefined}
-        shouldCommitResizeSize={target === 'right' ? shouldCommitRightDockResize : undefined}
+        onResizeRawSize={target === 'right' && !providerMode ? handleRightDockResizeRaw : undefined}
+        onResizePreview={
+          target === 'right'
+            ? providerMode
+              ? rightPanelLiveResize.previewSize
+              : handleRightDockResizePreview
+            : undefined
+        }
+        shouldCommitResizeSize={
+          target === 'right' ? (providerMode ? () => true : shouldCommitRightDockResize) : undefined
+        }
         onToggleReviewView={() => setReviewView(reviewView === 'inline' ? 'split' : 'inline')}
         onCreateSideChat={() => void createSideChat()}
         sideChat={{
@@ -3553,20 +3659,40 @@ export function DesktopLayout(): React.ReactNode {
                 } as React.CSSProperties
               }
               workspaceHeader={
-                isHomeOrConversationRoute ? (
+                isHomeOrConversationRoute || isProviderDetailRoute ? (
                   <DesktopWorkspaceHeader
                     divider={isConversationRoute}
                     rightDockOpen={effectiveRightDockVisible}
                     shellControls={
-                      <WorkspaceShellControls
-                        terminalAvailable={terminalAvailable}
-                        terminalVisible={terminalVisible}
-                        workspaceLayout={workspaceLayout}
-                        showBottomPanel={isHomeOrConversationRoute}
-                        showRightPanel={isHomeOrConversationRoute}
-                        onStepWorkspaceLayout={stepWorkspaceLayout}
-                        onToggleTerminal={toggleIntegratedTerminal}
-                      />
+                      isHomeOrConversationRoute ? (
+                        <WorkspaceShellControls
+                          terminalAvailable={terminalAvailable}
+                          terminalVisible={terminalVisible}
+                          workspaceLayout={workspaceLayout}
+                          showBottomPanel={isHomeOrConversationRoute}
+                          showRightPanel={isHomeOrConversationRoute}
+                          onStepWorkspaceLayout={stepWorkspaceLayout}
+                          onToggleTerminal={toggleIntegratedTerminal}
+                        />
+                      ) : (
+                        <div className="workspace-shell-controls">
+                          <Button
+                            isIconOnly
+                            aria-pressed={visibleProviderTab !== null}
+                            className="workspace-shell-control-button"
+                            color="ghostSecondary"
+                            size="toolbar"
+                            title={visibleProviderTab ? '隐藏右侧边栏' : '显示右侧边栏'}
+                            onClick={() => {
+                              if (visibleProviderTab) closeProviderManagement()
+                              else if (providerRouteId)
+                                openProviderManagement(providerRouteId, 'credentials')
+                            }}
+                          >
+                            <RightPanelToggleIcon open={visibleProviderTab !== null} />
+                          </Button>
+                        </div>
+                      )
                     }
                   />
                 ) : null
@@ -3580,7 +3706,7 @@ export function DesktopLayout(): React.ReactNode {
                   tabIndex={-1}
                   role="region"
                 >
-                  {isHomeOrConversationRoute ? (
+                  {isHomeOrConversationRoute || isProviderDetailRoute ? (
                     <div
                       aria-hidden="true"
                       className="desktop-main-route__header-spacer tw:h-[var(--workspace-header-height)] tw:min-h-[var(--workspace-header-height)] tw:w-full tw:shrink-0 tw:grow-0 tw:basis-[var(--workspace-header-height)] tw:pointer-events-none"

@@ -1,4 +1,5 @@
 import { Model } from '@pidex/model-schema'
+import { VisualizationPreviewSchema } from '../Visualization'
 import { Option, Schema, SchemaGetter } from 'effect'
 import {
   RESULT_CARD_ENVELOPE_KIND,
@@ -369,6 +370,7 @@ export const ToolActivityDescriptorSchema = Schema.Union([
 export type ToolActivityDescriptor = typeof ToolActivityDescriptorSchema.Type
 
 export const ToolItemSchema = Schema.Struct({
+  visualizationPreview: Schema.optional(VisualizationPreviewSchema),
   id: Schema.String,
   messageID: Schema.String,
   turnId: Schema.String,

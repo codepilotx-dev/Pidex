@@ -5,6 +5,7 @@ import { SkeletonBlock } from './Skeleton.js'
 type RemoteImageState = 'loading' | 'ready' | 'error'
 
 export type RemoteImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, 'src'> & {
+  foreground?: boolean
   src: string
   className?: string
   imageClassName?: string
@@ -13,6 +14,7 @@ export type RemoteImageProps = Omit<React.ImgHTMLAttributes<HTMLImageElement>, '
 
 export function RemoteImage({
   src,
+  foreground = false,
   className,
   imageClassName,
   fallback,
@@ -42,6 +44,18 @@ export function RemoteImage({
       {state === 'loading' ? (
         <SkeletonBlock className="ui-remote-image-skeleton tw:absolute tw:inset-0 tw:size-full" />
       ) : null}
+      {foreground && state === 'ready' ? (
+        <span
+          aria-hidden="true"
+          className="tw:absolute tw:inset-0 tw:bg-current"
+          style={{
+            maskImage: `url(${JSON.stringify(src)})`,
+            maskSize: 'contain',
+            maskPosition: 'center',
+            maskRepeat: 'no-repeat',
+          }}
+        />
+      ) : null}
       {state === 'error' ? (
         <span
           aria-hidden={alt === '' ? 'true' : undefined}
@@ -55,7 +69,7 @@ export function RemoteImage({
           alt={alt}
           className={cx(
             'ui-remote-image-content tw:absolute tw:inset-0 tw:size-full tw:opacity-0 tw:transition-opacity tw:duration-enter tw:ease-standard',
-            state === 'ready' && 'tw:opacity-100',
+            state === 'ready' && !foreground && 'tw:opacity-100',
             imageClassName,
           )}
           onError={(event) => {

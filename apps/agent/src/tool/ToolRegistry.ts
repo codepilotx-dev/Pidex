@@ -46,6 +46,7 @@ export type ToolProgress = {
   details?: unknown
 }
 export type ToolStructuredResult = {
+  artifacts?: Array<{ artifactId: string; name: string; mimeType: string; data: string }>
   images?: Array<{ type: 'image'; data: string; mimeType: string }>
   content: string
   details: unknown

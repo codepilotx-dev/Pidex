@@ -4,6 +4,7 @@ import { RemoteImage } from '../../components/ui/RemoteImage.js'
 import { useProviderIconSource } from '../../services/desktop-client/ProviderIconClient.js'
 
 export type ProviderIconProps = {
+  foreground?: boolean
   logoURL?: string
   /**
    * 图标槽容器类。宿主缓存未命中时用同一个类渲染占位图标，保证尺寸、圆角和
@@ -21,6 +22,7 @@ export type ProviderIconProps = {
  */
 export function ProviderIcon({
   logoURL,
+  foreground = false,
   className,
   imageClassName,
   fallback,
@@ -37,6 +39,7 @@ export function ProviderIcon({
   return (
     <RemoteImage
       alt=""
+      foreground={foreground}
       className={className}
       fallback={placeholder}
       imageClassName={imageClassName}

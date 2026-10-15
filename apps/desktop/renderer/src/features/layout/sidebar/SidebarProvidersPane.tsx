@@ -3,8 +3,7 @@ import { useMemo, useState } from 'react'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { BrainCircuit, Plus, Server } from 'lucide-react'
-import { Button } from '../../../components/ui/Button.js'
+import { BrainCircuit, Plus } from 'lucide-react'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
@@ -35,14 +34,12 @@ export function SidebarProvidersPane(): React.ReactNode {
         currentProviderState: snapshot.currentProviderState,
         apiKeys: snapshot.apiKeys,
         credentials: snapshot.credentials,
-      })
-        .filter(isConfiguredProviderDirectoryItem)
-        .sort((left, right) =>
-          left.provider.displayName.localeCompare(right.provider.displayName, 'zh-CN', {
-            numeric: true,
-            sensitivity: 'base',
-          }),
-        ),
+      }).sort((left, right) =>
+        left.provider.displayName.localeCompare(right.provider.displayName, 'zh-CN', {
+          numeric: true,
+          sensitivity: 'base',
+        }),
+      ),
     [snapshot, query],
   )
 
@@ -65,42 +62,34 @@ export function SidebarProvidersPane(): React.ReactNode {
           search={
             <SearchInput
               variant="outlined"
-              aria-label={t('搜索已配置供应商')}
-              placeholder={t('搜索已配置供应商')}
+              aria-label={t('搜索供应商')}
+              placeholder={t('搜索供应商')}
               value={query}
               onChange={setQuery}
             />
           }
         />
-        <Button
-          color="ghostSecondary"
-          isIconOnly
-          size="toolbar"
-          title={t('新增自定义供应商')}
-          onClick={() => navigate('/providers?newProvider=1')}
-        >
-          <Plus aria-hidden size={APP_ICON_SIZE} />
-        </Button>
       </header>
-      <h3 className="tw:m-0 tw:flex tw:min-h-[var(--sidebar-row-height)] tw:shrink-0 tw:items-center tw:px-4 tw:text-app-text-meta tw:type-body">
-        {t('已配置')}
-      </h3>
+      <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:p-2">
+        <SidebarRow
+          active={creatingProvider}
+          asChild
+          layout="flex"
+          leading={<Plus aria-hidden size={APP_ICON_SIZE} />}
+        >
+          <button
+            type="button"
+            aria-current={creatingProvider ? 'page' : undefined}
+            onClick={() => navigate('/providers?newProvider=1')}
+          >
+            {t('新建供应商')}
+          </button>
+        </SidebarRow>
+      </div>
       <ScrollArea
         className="sidebar-providers-scroll tw:min-h-0 tw:flex-1 tw:px-2 tw:pb-2 tw:pt-0"
-        contentClassName="tw:flex tw:flex-col tw:sidebar-row-gap"
+        contentClassName="tw:flex tw:flex-col tw:gap-4"
       >
-        {creatingProvider ? (
-          <SidebarRow
-            active
-            asChild
-            layout="flex"
-            leading={<Server aria-hidden size={APP_ICON_SIZE} />}
-          >
-            <button type="button" aria-current="page">
-              {t('新供应商')}
-            </button>
-          </SidebarRow>
-        ) : null}
         {loading ? (
           <SidebarEmptyRow role="status">{t('正在加载供应商…')}</SidebarEmptyRow>
         ) : error ? (
@@ -111,40 +100,49 @@ export function SidebarProvidersPane(): React.ReactNode {
             {error}
           </div>
         ) : items.length === 0 ? (
-          <SidebarEmptyRow>{t('暂无已配置供应商')}</SidebarEmptyRow>
+          <SidebarEmptyRow>{t('暂无供应商')}</SidebarEmptyRow>
         ) : (
-          items.map(({ provider }) => {
-            const selected = !creatingProvider && provider.providerID === selectedProviderId
-            return (
-              <SidebarRow
-                active={selected}
-                asChild
-                className="sidebar-nav-link tw:type-row-title tw:focus-visible:outline-2 tw:focus-visible:outline-offset-0 tw:focus-visible:outline-app-focus"
-                key={provider.providerID}
-                labelClassName="sidebar-item-label tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap"
-                layout="flex"
-                leading={
-                  <span className="tw:flex tw:size-4 tw:shrink-0 tw:items-center tw:justify-center">
-                    <ProviderIcon
-                      fallback={<BrainCircuit aria-hidden size={APP_ICON_SIZE} />}
-                      imageClassName="tw:object-contain tw:[.dark-theme_&]:invert tw:[.dark-theme_&]:hue-rotate-180"
-                      logoURL={provider.logoURL}
-                    />
-                  </span>
-                }
-              >
-                <button
-                  aria-current={selected ? 'page' : undefined}
-                  onClick={() => selectProvider(provider.providerID)}
-                  type="button"
-                >
-                  <span className="sidebar-provider-name tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
-                    {provider.displayName}
-                  </span>
-                </button>
-              </SidebarRow>
-            )
-          })
+          [true, false].map((configured) => (
+            <div key={String(configured)} className="tw:flex tw:flex-col tw:sidebar-row-gap">
+              <h3 className="tw:m-0 tw:flex tw:min-h-[var(--sidebar-row-height)] tw:items-center tw:px-2 tw:text-app-text-meta tw:type-body">
+                {t(configured ? '已配置' : '未配置')}
+              </h3>
+              {items
+                .filter((item) => isConfiguredProviderDirectoryItem(item) === configured)
+                .map(({ provider }) => {
+                  const selected = !creatingProvider && provider.providerID === selectedProviderId
+                  return (
+                    <SidebarRow
+                      active={selected}
+                      asChild
+                      className="sidebar-nav-link tw:type-row-title tw:focus-visible:outline-2 tw:focus-visible:outline-offset-0 tw:focus-visible:outline-app-focus"
+                      key={provider.providerID}
+                      labelClassName="sidebar-item-label tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap"
+                      layout="flex"
+                      leading={
+                        <span className="tw:flex tw:size-4 tw:shrink-0 tw:items-center tw:justify-center">
+                          <ProviderIcon
+                            fallback={<BrainCircuit aria-hidden size={APP_ICON_SIZE} />}
+                            imageClassName="tw:object-contain tw:[.dark-theme_&]:invert tw:[.dark-theme_&]:hue-rotate-180"
+                            logoURL={provider.logoURL}
+                          />
+                        </span>
+                      }
+                    >
+                      <button
+                        aria-current={selected ? 'page' : undefined}
+                        onClick={() => selectProvider(provider.providerID)}
+                        type="button"
+                      >
+                        <span className="sidebar-provider-name tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
+                          {provider.displayName}
+                        </span>
+                      </button>
+                    </SidebarRow>
+                  )
+                })}
+            </div>
+          ))
         )}
       </ScrollArea>
     </div>

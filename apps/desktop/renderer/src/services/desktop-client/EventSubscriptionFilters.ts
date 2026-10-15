@@ -2,6 +2,7 @@ import type { LiveEventType } from '@pidex/agent-protocol'
 
 export const AGENT_LIVE_EVENT_FILTERS = {
   canonical: [
+    'visualization/preview',
     'item/agentMessage/delta',
     'reasoning/textDelta',
     'reasoning/summaryPartAdded',

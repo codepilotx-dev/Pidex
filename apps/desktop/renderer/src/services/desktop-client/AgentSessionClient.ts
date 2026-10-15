@@ -116,6 +116,8 @@ const RENDERER_PROTOCOL = 'thread-rpc-v4' as const
  */
 const SESSION_STATUS_RECONCILE_INTERVAL_MS = 30_000
 export const RENDERER_CAPABILITIES = [
+  'visualizations.v1',
+  'artifacts.read.v1',
   'rpc.typed.v1',
   'events.replay.v1',
   'thread.message-phase.v1',
@@ -158,6 +160,7 @@ export const RENDERER_CAPABILITIES = [
   'model.catalog.paged.v1',
   'model.health.v1',
   'provider.config.pi.v1',
+  'provider.builtinOverrides.v1',
   'provider.auth.pi.v1',
   'tooling.management.v1',
   'skills.manage.v1',
@@ -176,6 +179,7 @@ export const RENDERER_CAPABILITIES = [
   'calendar.manage.v1',
   'schedule.draft.v1',
   'session-group.v1' as ProtocolCapability,
+  'workflow.v1',
   'computer.use.v1' as ProtocolCapability,
   'computer.policy.v1' as ProtocolCapability,
 ] as const satisfies ReadonlyArray<ProtocolCapability>
@@ -1967,6 +1971,11 @@ export function createAgentSessionDesktopClient(
         () => rpc.call('attachment/read', { attachmentId }),
         () => mockClient.readAttachment(attachmentId),
       ),
+    submitVisualizationFollowUp: (input) =>
+      withRequiredAgent(() => {
+        requireAgentCapability('visualizations.v1')
+        return rpc.call('visualization/submitFollowUp', input)
+      }),
     readArtifact: (threadId, artifactId) =>
       withRequiredAgent(() => {
         requireAgentCapability('artifacts.read.v1')

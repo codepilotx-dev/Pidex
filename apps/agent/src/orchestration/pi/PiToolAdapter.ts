@@ -106,11 +106,12 @@ export function adaptToolDefinition(
       })
       if (definition.formatResult) {
         const formatted = definition.formatResult(output, toolContext)
-        const safe = secretScrubber.scrub({ ...formatted, images: undefined })
+        const safe = secretScrubber.scrub({ ...formatted, images: undefined, artifacts: undefined })
         return {
           content: [{ type: 'text', text: safe.content }, ...(formatted.images ?? [])],
           details: safe.details,
           structuredContent: safe.details,
+          ...(formatted.artifacts ? { artifacts: formatted.artifacts } : {}),
           ...(safe.addedToolNames ? { addedToolNames: safe.addedToolNames } : {}),
           ...(safe.terminate ? { terminate: true } : {}),
         }

@@ -574,6 +574,9 @@ export type DesktopAttachmentApi = {
   getComposerFilePath(file: File): string
   readAttachment(attachmentId: string): Promise<RpcResult<'attachment/read'>>
   readArtifact(threadId: string, artifactId: string): Promise<RpcResult<'artifact/read'>>
+  submitVisualizationFollowUp(
+    input: RpcParams<'visualization/submitFollowUp'>,
+  ): Promise<RpcResult<'visualization/submitFollowUp'>>
   saveAttachmentToDownloads(input: DesktopAttachmentSaveInput): Promise<DesktopAttachmentSaveResult>
   readDraftComposerPath(input: DesktopComposerPathReadInput): Promise<DesktopComposerPathPreview>
   listDraftComposerPath(input: DesktopComposerPathListInput): Promise<DesktopComposerPathListResult>

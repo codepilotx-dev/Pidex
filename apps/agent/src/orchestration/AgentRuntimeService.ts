@@ -857,6 +857,17 @@ export class AgentRuntimeService implements AgentRuntime {
           })
         }
       },
+      visualizationPreview: async (context, preview) => {
+        await this.publish(
+          createLiveEvent(
+            this.options.db,
+            context.threadID,
+            context.turnID,
+            'visualization/preview',
+            secretScrubber.scrub(preview),
+          ),
+        )
+      },
       toolStarted: async (context, input) => {
         const timestamp = Date.now()
         const timelineInput = piToolTimelineInput(input.tool, input.input)
@@ -990,7 +1001,7 @@ export class AgentRuntimeService implements AgentRuntime {
             afterCount: afterContext.messages.length,
             items: afterContext.messages,
             promptText: input.promptText,
-            contextWindowTokens: Math.max(1, Number(runtimeModel.contextWindow) || 1),
+            contextWindowTokens: Math.max(1, Math.min(Number(runtimeModel.contextWindow) || 1, (runtimeModel as typeof runtimeModel & { maxInputTokens?: number }).maxInputTokens ?? Infinity)),
             trigger: input.trigger,
           })
         })
@@ -1985,7 +1996,7 @@ export class AgentRuntimeService implements AgentRuntime {
         afterCount: afterContext.messages.length,
         items: afterContext.messages,
         promptText: promptText ?? '',
-        contextWindowTokens: Math.max(1, Number(model.contextWindow) || 1),
+        contextWindowTokens: Math.max(1, Math.min(Number(model.contextWindow) || 1, (model as typeof model & { maxInputTokens?: number }).maxInputTokens ?? Infinity)),
         trigger: 'manual',
       })
     })

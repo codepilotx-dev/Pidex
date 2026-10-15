@@ -47,6 +47,7 @@ import { SubagentService } from './subagent/SubagentService'
 import { SubagentWorkspaceCoordinator } from './subagent/SubagentWorkspaceCoordinator'
 import { AttachmentService } from './subagent/AttachmentService'
 import { ArtifactService } from './storage/ArtifactService'
+import { intelligentUiDefinition } from './tool/IntelligentUi/Definition'
 import { SpeechTranscriptionService } from './speech/SpeechTranscriptionService'
 import { SqliteAttachmentCatalog } from './subagent/SqliteAttachmentCatalog'
 import { LocalContextPathRepository } from './storage/repositories/LocalContextPathRepository'
@@ -748,6 +749,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     )
     const questions = new QuestionService(db, hub, false)
     const artifacts = yield* Effect.promise(() => ArtifactService.open(config.dataDir, db))
+    tools.register(intelligentUiDefinition(artifacts))
     const orchestrator = new AgentRuntimeService({
       db,
       hub,

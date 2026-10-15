@@ -3,13 +3,18 @@ import { cx } from '../../../utils/Cx.js'
 import { historicalDeliveryText } from './StructuredDeliveryText.js'
 import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import React from 'react'
+import { VisualizationView } from '../../visualization/VisualizationView.js'
 import { ChevronRight, CircleAlert, LoaderCircle, RotateCcw, type LucideIcon } from 'lucide-react'
 import type { RenderBlocker, RenderTurnEntry } from '@pidex/session-view'
 import type { Item } from '@pidex/shared/thread'
 import type { DesktopDiffMarkerStyle } from '../../../../shared/Types.js'
 import type { VirtualizerHandle } from 'virtua'
 import { FullScreenWhaleLoading } from '../../../components/ui/FullScreenWhaleLoading.js'
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../components/ui/Collapsible.js'
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from '../../../components/ui/Collapsible.js'
 import {
   type KeyedDisclosureStore,
   useDisclosureExpanded,
@@ -834,7 +839,9 @@ function CanonicalConversationTurnComponent({
   const historicalDeliveryIds = new Set(historicalDeliveries.map((item) => item.id))
   const processItems = entry.processItems.filter((item) => !historicalDeliveryIds.has(item.id))
   const hasAssistantResult =
-    entry.assistantResultItems.length > 0 || historicalDeliveries.length > 0
+    entry.assistantResultItems.length > 0 ||
+    historicalDeliveries.length > 0 ||
+    entry.contentBlocks.some((block) => block.kind === 'visualization')
   const activitySliceClosed = hasAssistantResult && !entry.forceExpandActivity
   const processActivity = buildProcessActivityModel(
     questionTimelineItems(processItems, entry.items),
@@ -943,10 +950,12 @@ function CanonicalConversationTurnComponent({
       ) : null}
       {hasAssistantResult ? (
         <section className="canonical-turn__result" aria-label="助手回复">
-          {entry.assistantResultItems.map((item) =>
-            renderItem(item, {
-              showAssistantActions: true,
-            }),
+          {entry.contentBlocks.map((block) =>
+            block.kind === 'visualization' ? (
+              <VisualizationView item={block.item} threadId={threadId} key={block.id} />
+            ) : block.kind === 'assistant' ? (
+              block.items.map((item) => renderItem(item, { showAssistantActions: true }))
+            ) : null,
           )}
           {historicalDeliveries.map((item) =>
             item.type === 'tool' ? <LifecycleToolItemView item={item} key={item.id} /> : null,

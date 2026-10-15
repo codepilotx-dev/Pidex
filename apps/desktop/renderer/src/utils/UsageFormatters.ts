@@ -131,6 +131,17 @@ export function formatCheckedAt(checkedAt: number | undefined): string {
   }).format(checkedAt)
 }
 
+/**
+ * 余额来源标题旁的次级说明：只到分钟，作为「刷新于 HH:mm」的短说明，
+ * 与用量页仍在使用的秒级 `formatCheckedAt` 刻意区分。
+ */
+export function formatRefreshedAt(checkedAt: number): string {
+  return `刷新于 ${new Intl.DateTimeFormat('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(checkedAt)}`
+}
+
 export function quotaRemainingPercent(quota: ProviderQuotaWindow): number {
   if (quota.state === 'unlimited') return 100
   if (quota.state === 'exhausted') return 0

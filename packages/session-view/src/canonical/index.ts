@@ -13,6 +13,7 @@ import type {
   Turn,
 } from '@pidex/shared/thread'
 import type { EventEnvelope, RpcResult } from '@pidex/agent-protocol'
+import { VISUALIZATION_TOOL, visualizationFromBlocks } from '@pidex/shared/visualization'
 
 export type ThreadEventEnvelopeLike = EventEnvelope
 
@@ -103,6 +104,7 @@ export interface VisibleTurnEntry {
 export type RenderItem = Item
 
 export type RenderContentBlock =
+  | { kind: 'visualization'; id: string; item: Extract<Item, { type: 'tool' }> }
   | { kind: 'assistant'; id: string; items: Array<Extract<Item, { type: 'text' }>> }
   | { kind: 'process'; id: string; items: RenderItem[] }
   | { kind: 'plan'; id: string; item: Extract<Item, { type: 'plan' }> }
@@ -178,6 +180,29 @@ export function reconcileLatestThreadPage(
   page: CanonicalThreadPage,
 ): CanonicalThreadState {
   const fresh = createCanonicalThreadState(page)
+  if (cached.stream.streamId === fresh.stream.streamId) {
+    for (const item of cached.itemsById.values()) {
+      if (item.type !== 'tool' || !item.visualizationPreview) continue
+      const currentTurn = fresh.turnsById.get(item.turnId)
+      const current = fresh.itemsById.get(item.id)
+      if (
+        currentTurn &&
+        ['running', 'waiting-permission', 'waiting-question', 'waiting-subagents'].includes(
+          currentTurn.status,
+        ) &&
+        (!current ||
+          (current.type === 'tool' &&
+            ['pending', 'running', 'waiting-permission'].includes(current.state)))
+      ) {
+        upsertItem(
+          fresh,
+          current?.type === 'tool'
+            ? { ...current, visualizationPreview: item.visualizationPreview }
+            : item,
+        )
+      }
+    }
+  }
   fresh.history.generation = cached.history.generation + 1
   if (
     cached.thread.id !== page.thread.id ||
@@ -481,6 +506,23 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
         processItems.push(item)
         appendProcessBlock(contentBlocks, item)
       }
+    } else if (
+      item.type === 'tool' &&
+      item.tool === VISUALIZATION_TOOL &&
+      ((item.state !== 'completed' && item.visualizationPreview) ||
+        visualizationFromBlocks(item.resultBlocks))
+    ) {
+      contentBlocks.push({ kind: 'visualization', id: `visualization:${item.id}`, item })
+      const activity: typeof item = {
+        ...item,
+        title: '生成交互界面',
+        input: {},
+        output: null,
+        resultBlocks: undefined,
+        visualizationPreview: undefined,
+      }
+      processItems.push(activity)
+      appendProcessBlock(contentBlocks, activity)
     } else if (item.type === 'patch') {
       patchItems.push(item)
       contentBlocks.push({ kind: 'patch', id: `patch:${item.id}`, item })
@@ -671,6 +713,14 @@ function applyEnvelopePayload(
       upsertTurn(state, envelope.payload.turn)
       for (const item of state.itemsById.values()) {
         if (
+          item.type === 'tool' &&
+          item.visualizationPreview &&
+          item.turnId === envelope.payload.turn.id &&
+          ['pending', 'running', 'waiting-permission'].includes(item.state)
+        ) {
+          upsertItem(state, { ...item, state: 'interrupted' })
+        }
+        if (
           item.type === 'question' &&
           item.turnId === envelope.payload.turn.id &&
           item.status === 'pending'
@@ -735,6 +785,48 @@ function applyEnvelopePayload(
     case 'turn/plan/updated':
       upsertItem(state, envelope.payload.item)
       return
+    case 'visualization/preview': {
+      const preview = envelope.payload
+      const turn = state.turnsById.get(preview.turnId)
+      if (
+        !turn ||
+        ['completed', 'failed', 'interrupted', 'cancelled', 'stopped'].includes(turn.status)
+      )
+        return
+      const previous = state.itemsById.get(preview.toolCallId)
+      if (
+        previous &&
+        (previous.type !== 'tool' ||
+          previous.turnId !== preview.turnId ||
+          ['completed', 'error', 'interrupted'].includes(previous.state) ||
+          (previous.visualizationPreview?.revision ?? 0) >= preview.revision)
+      )
+        return
+      const item: Extract<Item, { type: 'tool' }> =
+        previous?.type === 'tool'
+          ? previous
+          : {
+              id: preview.toolCallId,
+              messageID: preview.toolCallId,
+              callID: preview.toolCallId,
+              turnId: preview.turnId,
+              agentId: preview.agentId,
+              type: 'tool',
+              tool: VISUALIZATION_TOOL,
+              title: preview.title || '生成交互界面',
+              state: 'pending',
+              input: {},
+              command: null,
+              output: null,
+              error: null,
+              startedAt: null,
+              finishedAt: null,
+              durationMs: null,
+              createdAt: envelope.occurredAt,
+            }
+      upsertItem(state, { ...item, visualizationPreview: preview })
+      return
+    }
     case 'tool/callStarted':
     case 'tool/callCompleted':
     case 'tool/error':
@@ -1375,6 +1467,16 @@ function insertSortedGrouped<T>(
 
 function upsertItem(state: CanonicalThreadState, item: Item): void {
   const previous = state.itemsById.get(item.id)
+  if (
+    item.type === 'tool' &&
+    item.tool === VISUALIZATION_TOOL &&
+    item.state !== 'completed' &&
+    previous?.type === 'tool' &&
+    previous.visualizationPreview &&
+    !item.visualizationPreview
+  ) {
+    item = { ...item, visualizationPreview: previous.visualizationPreview }
+  }
   state.itemsById.set(item.id, item)
   upsertGrouped(state.groups.itemsByTurnId, previous, item, compareOrdinal)
 }

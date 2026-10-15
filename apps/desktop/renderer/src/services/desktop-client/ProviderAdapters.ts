@@ -36,6 +36,7 @@ export function catalogProviderToDesktop(
         tags: [model.status],
         variants: model.variants.map((variant) => variant.id),
         providerApi: isProviderApi(model.api.name) ? model.api.name : undefined,
+        nativeApi: model.api.name,
       }
       return [model.id, metadata]
     }),
@@ -47,6 +48,9 @@ export function catalogProviderToDesktop(
     availability: extendedProvider.availability,
     logoURL: provider.source.kind === 'builtin' ? modelsDevLogoURL(provider.id) : undefined,
     providerApis: provider.source.apis.filter(isProviderApi),
+    nativeApis: [...provider.source.apis],
+    ...(provider.source.endpoints ? { endpointDefaults: provider.source.endpoints } : {}),
+    ...(provider.source.defaultApi ? { defaultApi: provider.source.defaultApi } : {}),
     enabled: provider.disabled !== true,
     authMethods: [
       provider.auth.apiKey ? ('api-key' as const) : null,

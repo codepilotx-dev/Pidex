@@ -792,6 +792,10 @@ export const createApp = (dependencies: TransportDependencies) => {
       // Capture the durable high-watermarks only after live delivery is
       // subscribed so commits racing replay are buffered rather than lost.
       const replayTarget = globalEventSequence(db)
+      for (const event of hub.visualizationSnapshots(replayTarget)) {
+        if (appliesToAnyStream(event) && liveEventDeliveryAllowed(event, subscription))
+          buffered.push(event)
+      }
       const deliverDurableThrough = async (streamId: string, target: number) => {
         let cursor = cursors.get(streamId) ?? 0
         let delivered = 0

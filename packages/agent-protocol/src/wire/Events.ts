@@ -20,6 +20,7 @@ import {
   TurnStatusSchema,
 } from '@pidex/shared/thread'
 import { Schema } from 'effect'
+import { VisualizationPreviewSchema } from '@pidex/shared/visualization'
 import { defineEvent, type EventPayloadOf } from './Definition'
 import {
   ApprovalRequestParamsSchema,
@@ -59,6 +60,14 @@ const ToolTerminalPayloadSchema = Schema.Struct({
 })
 
 export const EventManifest = {
+  'visualization/preview': defineEvent({
+    payload: VisualizationPreviewSchema,
+    version: 1,
+    durability: 'live',
+    stream: 'thread',
+    capability: 'visualizations.v1',
+    reconcilesWith: 'tool/callCompleted',
+  }),
   'task-schedule/changed': defineEvent({
     payload: Schema.Struct({ taskId: OpaqueIDSchema, changedAt: TimestampSchema }),
     version: 1,

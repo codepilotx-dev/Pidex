@@ -1,3 +1,4 @@
+import { estimateContextTokens } from '../../context/ContextManager'
 import { createProviderMessagePhaseReader } from './ProviderMessagePhase'
 import {
   type AssistantMessage,
@@ -517,6 +518,16 @@ export class AgentHarness<
     getTurnState: () => AgentHarnessTurnState<TContext, TSkill, TPromptTemplate, TTool>,
   ): StreamFn {
     return async (model, context, streamOptions) => {
+      const maxInputTokens = (model as typeof model & { maxInputTokens?: number }).maxInputTokens
+      if (
+        maxInputTokens !== undefined &&
+        estimateContextTokens({
+          items: context.messages,
+          promptText: JSON.stringify({ systemPrompt: context.systemPrompt, tools: context.tools }),
+        }) > maxInputTokens
+      ) {
+        throw new Error('输入上下文超过模型最大输入 Token，请压缩上下文或提高输入上限。')
+      }
       const turnState = getTurnState()
       const snapshotOptions: AgentHarnessStreamOptions = { ...turnState.streamOptions }
       const requestOptions = await this.emitBeforeProviderRequest(

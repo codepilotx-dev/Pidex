@@ -589,6 +589,7 @@ export type ModelProviderID = CoreModelProviderID
 export type DesktopModelProviderKind = ModelProviderKind
 
 export type DesktopModelMetadata = ModelMetadata & {
+  nativeApi?: string
   variants?: string[]
   providerApi?: 'openai-completions' | 'openai-responses' | 'anthropic-messages'
 }
@@ -615,6 +616,9 @@ export type DesktopModelProviderSummary = Omit<ModelProviderSummary, 'modelMetad
   enabled?: boolean
   authMethods?: readonly ('api-key' | 'oauth')[]
   providerApis?: readonly ('openai-completions' | 'openai-responses' | 'anthropic-messages')[]
+  nativeApis?: readonly string[]
+  endpointDefaults?: Readonly<Record<string, string>>
+  defaultApi?: string
   config?: DesktopListedProviderDefinition
   unresolvedMigrationIssues?: readonly string[]
   modelMetadata?: Record<string, DesktopModelMetadata>

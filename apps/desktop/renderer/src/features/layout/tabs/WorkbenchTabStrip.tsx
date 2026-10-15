@@ -73,6 +73,9 @@ export function WorkbenchTabStrip({
 }: WorkbenchTabStripProps): React.ReactNode {
   const tabRefs = useRef(new Map<WorkbenchTabId, HTMLButtonElement>())
   const [menuOpen, setMenuOpen] = useState(false)
+  const providerManagementOnly = state.tabIds.some(
+    (id) => tabsById[id]?.kind === 'provider-management',
+  )
   const launchers = useMemo(
     () =>
       getWorkbenchLauncherDefinitions().filter(
@@ -212,7 +215,7 @@ export function WorkbenchTabStrip({
                         hasDivider && 'has-divider',
                       )}
                       data-panel-tab={tab.id}
-                      draggable
+                      draggable={!providerManagementOnly}
                       onDragEnd={(event) => event.currentTarget.classList.remove('dragging')}
                       onDragOver={(event) => event.preventDefault()}
                       onDragStart={(event) => {
@@ -318,7 +321,7 @@ export function WorkbenchTabStrip({
             >
               <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
             </Button>
-          ) : state.tabIds.length > 0 ? (
+          ) : state.tabIds.length > 0 && !providerManagementOnly ? (
             <PopoverMenu
               align="end"
               avoidCollisions={false}

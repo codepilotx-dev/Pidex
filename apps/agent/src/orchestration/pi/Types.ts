@@ -114,6 +114,10 @@ export type PiToolCompletionMetadata = {
  * after the transaction commits.
  */
 export interface PiRuntimeEventSink {
+  visualizationPreview?(
+    context: PiRuntimeEventContext,
+    preview: import('@pidex/shared/visualization').VisualizationPreview,
+  ): void | Promise<void>
   event?(context: PiRuntimeEventContext, event: AgentHarnessEvent): void | Promise<void>
   assistantMessageStarted?(
     context: PiRuntimeEventContext,

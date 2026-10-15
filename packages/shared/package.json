@@ -39,6 +39,7 @@
     "./thread": "./src/thread/index.ts",
     "./thread-reference": "./src/ThreadReference.ts",
     "./thread-result-card": "./src/ThreadResultCard.ts",
+    "./visualization": "./src/Visualization.ts",
     "./guards": "./src/Guards.ts"
   },
   "scripts": {

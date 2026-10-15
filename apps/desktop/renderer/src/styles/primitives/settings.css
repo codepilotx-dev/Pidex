@@ -1345,6 +1345,18 @@
     border-color: var(--cpx-sys-color-danger-subtle-border);
   }
 
+  /*
+   * 供应商连接页的用量来源：不再包一层来源卡片，只保留标题行与实际的余额卡片，
+   * 避免同一份余额在卡片里再嵌一张卡片。
+   */
+  .provider-usage-source {
+    padding-top: var(--cpx-sys-space-1);
+  }
+
+  .provider-usage-source-title h4 {
+    margin: 0;
+  }
+
   .provider-usage-title {
     display: flex;
     align-items: center;
@@ -1434,14 +1446,18 @@
     min-width: 0;
     overflow: hidden;
     color: var(--cpx-sys-color-fg-secondary);
-    font: var(--cpx-sys-type-label);
+    font-size: var(--cpx-sys-font-size-lg);
+    font-weight: var(--cpx-sys-font-weight-medium);
+    line-height: var(--cpx-sys-line-height-body);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
 
   .provider-balance-total {
     color: var(--cpx-sys-color-fg-primary);
-    font: var(--cpx-sys-type-metric);
+    font-size: var(--cpx-sys-font-size-lg);
+    font-weight: var(--cpx-sys-font-weight-bold);
+    line-height: var(--cpx-sys-line-height-body);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
@@ -1450,6 +1466,7 @@
     display: flex;
     flex-wrap: wrap;
     align-items: center;
+    justify-content: flex-end;
     gap: var(--cpx-sys-space-2) var(--cpx-sys-space-3);
     padding-top: var(--cpx-sys-space-2);
     border-top: 1px solid var(--cpx-sys-color-border-subtle);

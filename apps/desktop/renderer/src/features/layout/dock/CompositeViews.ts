@@ -18,6 +18,17 @@ export interface CompositeViewDefinition {
  * 内置视图注册清单（按 VS Code PaneComposite 规范抽象）
  */
 export const BUILTIN_COMPOSITE_VIEWS: Record<WorkbenchTabKind, CompositeViewDefinition> = {
+  'provider-management': {
+    id: 'workbench.view.providerManagement',
+    kind: 'provider-management',
+    title: '供应商设置',
+    defaultLocation: 'right',
+    allowedLocations: ['right'],
+    canMove: false,
+    canClose: true,
+    isSingleton: true,
+    canFloat: false,
+  },
   'file-browser': {
     id: 'workbench.view.fileBrowser',
     kind: 'file-browser',

@@ -13,6 +13,7 @@ import {
   Server,
   Sparkles,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-react'
 import type React from 'react'
@@ -20,6 +21,8 @@ import { memo, useEffect, useId, useMemo, useRef, useState } from 'react'
 import type {
   DesktopCustomProviderDefinition,
   DesktopModelProviderSummary,
+  DesktopProviderDefinition,
+  ModelProviderID,
   DesktopProviderModelDefinition,
 } from '../../../../shared/Types.js'
 import { Dropdown } from '../../../components/ui/Dropdown.js'
@@ -104,7 +107,7 @@ const BUILTIN_PROVIDER_IDS: ReadonlySet<string> = new Set([
 
 type Api = DesktopProviderModelDefinition['api']
 
-type EditableModel = {
+export type EditableModel = {
   original?: DesktopProviderModelDefinition
   editorKey: string
   id: string
@@ -112,6 +115,7 @@ type EditableModel = {
   api: Api
   enabled: boolean
   contextWindow: number
+  maxInputTokens?: number
   maxTokens: number
   reasoning: boolean
   imageInput: boolean
@@ -127,13 +131,14 @@ type EditableModel = {
 type DialogTab = 'basic' | 'models' | 'advanced'
 
 export type ProviderEditorFormProps = {
+  onSaveDefinition?: (
+    definition: DesktopProviderDefinition,
+    providerId?: ModelProviderID,
+  ) => Promise<void>
   operationBusy?: boolean
-  onTestConnection?: () => Promise<void>
   onTestModel?: (modelId: string) => Promise<void>
-  onRefreshModels?: () => Promise<void>
   embedded?: boolean
   existingProviderIds?: readonly string[]
-  connectionSection?: React.ReactNode
   onDelete?: () => Promise<void>
   open: boolean
   provider?: DesktopModelProviderSummary
@@ -164,17 +169,18 @@ const PROVIDER_EDITOR_MODEL_ADVANCED_CONTENT_CLASS =
 export function ProviderEditorForm({
   embedded = false,
   operationBusy = false,
-  onTestConnection,
   onTestModel,
-  onRefreshModels,
   existingProviderIds = [],
-  connectionSection,
   onDelete,
   open,
   provider: currentProvider,
   deepSeekProtocolSupported = false,
   onOpenChange,
   onSaved,
+  onSaveDefinition = async (definition, providerId) => {
+    if (providerId) await desktopClient.updateProvider(providerId, definition)
+    else if (definition.kind === 'custom') await desktopClient.createProvider(definition)
+  },
 }: ProviderEditorFormProps): React.ReactNode {
   const retainedProvider = useLastNonNull(currentProvider)
   const provider = open ? currentProvider : (retainedProvider ?? undefined)
@@ -307,37 +313,9 @@ export function ProviderEditorForm({
     if (headerEntries instanceof Error) return headerEntries
     const normalizedModels: DesktopProviderModelDefinition[] = []
     for (const model of models.filter((item) => item.id.trim())) {
-      const modelHeaders = parseHeaders(model.headers)
-      if (modelHeaders instanceof Error) {
-        return new Error(`模型 ${model.id || '(未命名)'}：${modelHeaders.message}`)
-      }
-      const thinkingLevelMap = parseJsonObject(model.thinkingLevelMap, 'thinkingLevelMap')
-      if (thinkingLevelMap instanceof Error) return thinkingLevelMap
-      const compat = parseJsonObject(model.compat, 'compat')
-      if (compat instanceof Error) return compat
-      normalizedModels.push({
-        ...model.original,
-        id: model.id.trim(),
-        name: model.name.trim() || model.id.trim(),
-        api: model.api,
-        enabled: model.enabled,
-        contextWindow: model.contextWindow || 32_768,
-        maxTokens: model.maxTokens || 8_192,
-        reasoning: model.reasoning,
-        input: [
-          ...(model.original?.input ?? ['text']).filter((value) => value !== 'image'),
-          ...(model.imageInput ? ['image' as const] : []),
-        ],
-        cost: {
-          input: model.inputCost || 0,
-          output: model.outputCost || 0,
-          cacheRead: model.cacheReadCost || 0,
-          cacheWrite: model.cacheWriteCost || 0,
-        },
-        headers: modelHeaders,
-        thinkingLevelMap: thinkingLevelMap ? (thinkingLevelMap as never) : undefined,
-        compat: compat ?? undefined,
-      } as unknown as DesktopProviderModelDefinition)
+      const normalized = normalizeEditableModel(model)
+      if (normalized instanceof Error) return normalized
+      normalizedModels.push(normalized)
     }
     const trimmedId = id.trim()
     const trimmedName = name.trim()
@@ -391,13 +369,35 @@ export function ProviderEditorForm({
       name: trimmedName,
       enabled,
       baseUrl: trimmedBaseUrl,
+      ...(provider?.config?.endpoints
+        ? {
+            endpoints: Object.fromEntries(
+              Object.entries(provider.config.endpoints).map(([api, address]) => [
+                api,
+                address === provider.config?.baseUrl ? trimmedBaseUrl : address,
+              ]),
+            ),
+          }
+        : {}),
       auth,
       env: envList,
       allowInsecureHttp,
       headers: headerEntries,
       models: normalizedModels,
     } as unknown as DesktopCustomProviderDefinition
-  }, [allowInsecureHttp, auth, baseUrl, editing, enabled, env, headers, id, models, name])
+  }, [
+    allowInsecureHttp,
+    auth,
+    baseUrl,
+    editing,
+    enabled,
+    env,
+    headers,
+    id,
+    models,
+    name,
+    provider?.config,
+  ])
 
   const signature = draftSignature({
     id,
@@ -422,9 +422,9 @@ export function ProviderEditorForm({
       setBusy(true)
       setError(null)
       try {
-        await desktopClient.updateProvider(
-          managed.provider.providerID,
+        await onSaveDefinition(
           buildDeepSeekProtocolDefinition(managed.config, protocol),
+          managed.provider.providerID,
         )
         await onSaved(String(managed.provider.providerID))
         onOpenChange(false)
@@ -453,13 +453,13 @@ export function ProviderEditorForm({
     setError(null)
     try {
       if (editing || createdProviderId.current) {
-        await desktopClient.updateProvider(
+        await onSaveDefinition(
+          definition,
           (provider?.providerID ??
             createdProviderId.current!) as DesktopModelProviderSummary['providerID'],
-          definition,
         )
       } else {
-        await desktopClient.createProvider(definition)
+        await onSaveDefinition(definition)
         createdProviderId.current = definition.id
       }
       allowNavigation.current = true
@@ -582,7 +582,9 @@ export function ProviderEditorForm({
           <div>
             <Title id={titleId} className="tw:m-0 tw:text-app-text tw:type-title-lg">
               {embedded
-                ? name || '新供应商'
+                ? editing
+                  ? `编辑 ${name || provider.displayName}`
+                  : '新供应商'
                 : managed
                   ? `编辑 ${managed.provider.displayName}`
                   : editing
@@ -719,8 +721,15 @@ export function ProviderEditorForm({
                     )}
                   >
                     <span>Endpoint</span>
-                    <Input readOnly value={deepSeekProtocolOption(protocol).endpoint} />
-                    <p>端点由所选协议决定，由系统自动管理。</p>
+                    <Input
+                      readOnly
+                      value={managed.config.baseUrl ?? deepSeekProtocolOption(protocol).endpoint}
+                    />
+                    <p>
+                      {managed.config.baseUrl
+                        ? '已使用供应商详情中保存的 API 地址。'
+                        : '端点由所选协议决定，可在供应商详情中修改。'}
+                    </p>
                   </label>
                 </div>
               ) : null}
@@ -838,27 +847,6 @@ export function ProviderEditorForm({
                   }}
                 />
               </label>
-              <section className="tw:grid tw:gap-3">
-                <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
-                  <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">API Key 管理</h3>
-                  {editing && onTestConnection ? (
-                    <Button
-                      color="secondary"
-                      disabled={busy || dirty}
-                      onClick={() => void onTestConnection()}
-                    >
-                      <Cable aria-hidden size={APP_ICON_SIZE} />
-                      测试已保存连接
-                    </Button>
-                  ) : null}
-                </header>
-                <p className="tw:m-0 tw:text-app-text-soft tw:type-body-sm">
-                  {editing
-                    ? '密钥操作独立保存，不随下方供应商配置一起提交。'
-                    : '保存供应商后可配置 API Key。'}
-                </p>
-                {editing ? connectionSection : null}
-              </section>
             </>
           ) : null}
           {embedded || activeTab === 'models' ? (
@@ -874,18 +862,9 @@ export function ProviderEditorForm({
                 </div>
                 {!managed ? (
                   <div className="provider-editor-models-actions tw:flex tw:items-center tw:gap-2">
-                    {editing && onRefreshModels ? (
-                      <Button
-                        color="secondary"
-                        disabled={busy || dirty}
-                        onClick={() => void onRefreshModels()}
-                      >
-                        <RefreshCw aria-hidden size={APP_ICON_SIZE} />
-                        刷新目录
-                      </Button>
-                    ) : null}
                     {editing ? (
                       <Button
+                        size="md"
                         color="secondary"
                         disabled={busy || (embedded && dirty)}
                         onClick={() => void discover()}
@@ -894,6 +873,7 @@ export function ProviderEditorForm({
                       </Button>
                     ) : null}
                     <Button
+                      size="md"
                       color="secondary"
                       onClick={() => {
                         setModels((current) => [...current, { ...emptyModel(), api: defaultApi }])
@@ -913,6 +893,7 @@ export function ProviderEditorForm({
                       发现 {candidates.length} 个候选模型
                     </strong>
                     <Button
+                      size="md"
                       color="primary"
                       disabled={selectedCandidates.size === 0}
                       onClick={importSelected}
@@ -992,6 +973,7 @@ export function ProviderEditorForm({
 
           {embedded ? (
             <Button
+              size="md"
               color="ghostSecondary"
               aria-expanded={advancedOpen}
               onClick={() => setAdvancedOpen((value) => !value)}
@@ -1084,7 +1066,13 @@ export function ProviderEditorForm({
         </div>
       </fieldset>
 
-      <footer className="settings-management-dialog-footer provider-editor-footer tw:flex-none tw:justify-between tw:max-[720px]:flex-col tw:max-[720px]:items-stretch tw:max-[720px]:gap-2">
+      <footer
+        className={cx(
+          'settings-management-dialog-footer provider-editor-footer tw:flex-none tw:justify-between tw:max-[720px]:flex-col tw:max-[720px]:items-stretch tw:max-[720px]:gap-2',
+          embedded &&
+            'tw:sticky tw:bottom-0 tw:z-10 tw:border-t tw:border-app-border-subtle tw:bg-app-panel tw:py-3',
+        )}
+      >
         <div className="provider-editor-footer-status tw:min-w-0 tw:flex-1">
           {embedded ? (
             <span className="tw:text-app-text-soft tw:type-body-sm" role="status">
@@ -1102,18 +1090,17 @@ export function ProviderEditorForm({
           ) : null}
         </div>
         <div className="provider-editor-footer-actions tw:flex tw:shrink-0 tw:items-center tw:gap-2 tw:max-[720px]:justify-end">
-          {!embedded ? (
-            <Button color="secondary" disabled={busy} onClick={() => onOpenChange(false)}>
-              取消
-            </Button>
-          ) : null}
+          <Button size="md" color="secondary" disabled={busy} onClick={() => onOpenChange(false)}>
+            取消
+          </Button>
           <Button
+            size="md"
             color="primary"
             loading={busy}
             disabled={busy || (embedded && editing && !dirty)}
             onClick={() => void save()}
           >
-            保存 Provider
+            {embedded ? '保存配置' : '保存 Provider'}
           </Button>
         </div>
       </footer>
@@ -1248,10 +1235,12 @@ const ProviderModelCard = memo(function ProviderModelCard({
             <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
             <Dialog.Content className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:w-[min(680px,calc(100vw_-_32px))] tw:max-h-[85vh]">
               <header className="settings-management-dialog-header">
-                <Dialog.Title>编辑模型</Dialog.Title>
-                <Dialog.Description>
-                  模型修改进入供应商草稿，点击保存供应商后生效。
-                </Dialog.Description>
+                <div className="settings-management-dialog-heading">
+                  <Dialog.Title>编辑模型</Dialog.Title>
+                  <Dialog.Description>
+                    模型修改进入供应商草稿，点击保存供应商后生效。
+                  </Dialog.Description>
+                </div>
               </header>
               <fieldset
                 disabled={disabled}
@@ -1261,7 +1250,9 @@ const ProviderModelCard = memo(function ProviderModelCard({
               </fieldset>
               <footer className="settings-management-dialog-footer">
                 <Dialog.Close asChild>
-                  <Button color="primary">完成</Button>
+                  <Button size="md" color="primary">
+                    完成
+                  </Button>
                 </Dialog.Close>
               </footer>
             </Dialog.Content>
@@ -1281,25 +1272,66 @@ const ProviderModelCard = memo(function ProviderModelCard({
   )
 })
 
-function ModelEditor({
+export function ModelEditor({
   model,
   onChange,
+  nativeApi,
+  lockId = false,
 }: {
   model: EditableModel
   onChange: (model: EditableModel) => void
+  nativeApi?: string
+  lockId?: boolean
 }): React.ReactNode {
+  const advancedValues = (value: EditableModel) => {
+    const { id, name, api, editorKey, original, headers, thinkingLevelMap, compat, ...values } = value
+    return { ...values, maxInputTokens: value.maxInputTokens }
+  }
+  const initialAdvanced = useRef(advancedValues(model)).current
+  const [history, setHistory] = useState<Array<typeof initialAdvanced>>([])
+  const advancedDirty = JSON.stringify(advancedValues(model)) !== JSON.stringify(initialAdvanced)
+  function changeAdvanced(next: EditableModel) {
+    if (JSON.stringify(advancedValues(next)) === JSON.stringify(advancedValues(model))) return
+    setHistory((current) => [...current, advancedValues(model)])
+    onChange(next)
+  }
+  function undoAdvanced() {
+    const previous = history.at(-1)
+    if (!previous) return
+    setHistory((current) => current.slice(0, -1))
+    onChange({ ...model, ...previous })
+  }
   const [advanced, setAdvanced] = useState(false)
   const advancedId = useId()
+  const parametersId = useId()
+  const [parametersOpen, setParametersOpen] = useState(false)
   const number = (key: keyof EditableModel, value: string) =>
-    onChange({ ...model, [key]: Math.max(0, Number(value) || 0) })
+    changeAdvanced({ ...model, [key]: Math.max(0, Number(value) || 0) })
+
+  const chip = (label: string, selected: boolean, onClick: () => void, disabled = false) => (
+    <button type="button" aria-pressed={selected} disabled={disabled} onClick={onClick}
+      className={cx('tw:inline-flex tw:items-center tw:justify-center tw:rounded-full tw:border tw:border-app-border tw:px-3 tw:py-1 tw:type-body-sm tw:focus-visible:outline-app-focus', selected ? 'tw:bg-app-selected tw:text-app-text' : 'tw:bg-transparent tw:text-app-text-soft tw:hover:bg-app-hover')}>
+      {label}
+    </button>
+  )
+  const tokenField = (key: 'contextWindow' | 'maxInputTokens' | 'maxTokens', label: string, values: number[]) => (
+    <div className={PROVIDER_EDITOR_FIELD_CLASS}>
+      <span>{label}</span>
+      <div className="tw:flex tw:flex-wrap tw:gap-2">{values.map((value) => <span key={value}>
+        {chip(value >= 1000000 ? `${value / 1000000}M` : `${(value === 32768 || value === 8192 ? value / 1024 : value / 1000)}K`, model[key] === value, () => number(key, String(value)))}
+      </span>)}</div>
+      <Input type="number" min={1} aria-label={label} value={model[key] === undefined || model[key] === 0 ? "" : String(model[key])} onChange={(event) => number(key, event.target.value)} />
+    </div>
+  )
 
   return (
     <div className="provider-editor-tab-panel tw:grid tw:gap-4">
-      <div className="provider-editor-grid tw:grid tw:grid-cols-2 tw:gap-4">
+      <div className="provider-editor-grid tw:grid tw:grid-cols-1 tw:gap-4">
         <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
           <span>模型 ID</span>
           <Input
             placeholder="如：llama3.2 或 gpt-4o"
+            readOnly={lockId}
             value={model.id}
             onChange={(event) => onChange({ ...model, id: event.target.value })}
           />
@@ -1314,94 +1346,57 @@ function ModelEditor({
         </label>
       </div>
 
-      <div className="provider-editor-grid tw:grid tw:grid-cols-2 tw:gap-4">
-        <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-          <span>模型 API 协议</span>
-          <SettingsDropdown
-            ariaLabel="模型 API"
-            options={[...API_OPTIONS]}
-            value={model.api}
-            size="lg"
-            onChange={(value) => onChange({ ...model, api: value as Api })}
-          />
-        </label>
-        <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-          <span>
-            Context Window
-            <small>默认 32,768</small>
-          </span>
-          <Input
-            type="number"
-            value={String(model.contextWindow)}
-            onChange={(event) => number('contextWindow', event.target.value)}
-          />
-        </label>
-      </div>
-
-      <div className="provider-editor-grid tw:grid tw:grid-cols-2 tw:gap-4">
-        <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-          <span>
-            Max Output Tokens
-            <small>默认 8,192</small>
-          </span>
-          <Input
-            type="number"
-            value={String(model.maxTokens)}
-            onChange={(event) => number('maxTokens', event.target.value)}
-          />
-        </label>
-      </div>
-
-      <div className="provider-editor-model-toggles-row tw:grid tw:grid-cols-3 tw:gap-2 tw:max-[720px]:grid-cols-1">
-        <div className="provider-editor-model-toggle-pill tw:flex tw:items-center tw:justify-between tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel tw:px-3 tw:py-2 tw:[&>span]:text-app-text tw:[&>span]:[font-size:var(--cpx-sys-font-size-xs)] tw:[&>span]:type-weight-label">
-          <span>启用此模型</span>
-          <ToggleSwitch
-            ariaLabel="启用模型"
-            checked={model.enabled}
-            onChange={(enabled) => onChange({ ...model, enabled })}
-          />
-        </div>
-        <div className="provider-editor-model-toggle-pill tw:flex tw:items-center tw:justify-between tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel tw:px-3 tw:py-2 tw:[&>span]:text-app-text tw:[&>span]:[font-size:var(--cpx-sys-font-size-xs)] tw:[&>span]:type-weight-label">
-          <span>推理思考 (Reasoning)</span>
-          <ToggleSwitch
-            ariaLabel="推理模型"
-            checked={model.reasoning}
-            onChange={(reasoning) => onChange({ ...model, reasoning })}
-          />
-        </div>
-        <div className="provider-editor-model-toggle-pill tw:flex tw:items-center tw:justify-between tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel tw:px-3 tw:py-2 tw:[&>span]:text-app-text tw:[&>span]:[font-size:var(--cpx-sys-font-size-xs)] tw:[&>span]:type-weight-label">
-          <span>图像输入 (Vision)</span>
-          <ToggleSwitch
-            ariaLabel="图片输入"
-            checked={model.imageInput}
-            onChange={(imageInput) => onChange({ ...model, imageInput })}
-          />
-        </div>
-      </div>
-
       <div
-        className="provider-editor-model-advanced-details tw:overflow-hidden tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel tw:data-[expanded=true]:[&_svg]:rotate-90"
+        className="provider-editor-model-advanced-details tw:overflow-hidden tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel"
         data-expanded={advanced ? 'true' : 'false'}
       >
+        <div className="tw:flex tw:items-center tw:gap-2 tw:pr-3">
         <button
           aria-controls={advancedId}
           aria-expanded={advanced}
-          className="provider-editor-model-advanced-summary tw:flex tw:w-full tw:cursor-pointer tw:select-none tw:items-center tw:gap-1 tw:rounded-none tw:border-0 tw:bg-transparent tw:px-3 tw:py-2 tw:text-left tw:text-app-text-soft tw:type-caption tw:hover:text-app-text tw:focus-visible:outline-none tw:focus-visible:shadow-[var(--cpx-sys-focus-ring-inset)] tw:[&_svg]:size-icon-sm tw:[&_svg]:transition-transform tw:[&_svg]:duration-disclosure tw:[&_svg]:ease-disclosure"
+          className="provider-editor-model-advanced-summary tw:flex tw:flex-1 tw:cursor-pointer tw:select-none tw:items-center tw:gap-1 tw:rounded-none tw:border-0 tw:bg-transparent tw:px-3 tw:py-2 tw:text-left tw:text-app-text-soft tw:type-caption tw:hover:text-app-text tw:focus-visible:outline-none tw:focus-visible:shadow-[var(--cpx-sys-focus-ring-inset)] tw:[&_svg]:size-icon-sm tw:[&_svg]:transition-transform tw:[&_svg]:duration-disclosure tw:[&_svg]:ease-disclosure"
           onClick={() => setAdvanced((current) => !current)}
           type="button"
         >
-          <ChevronRight size={APP_ICON_SIZES.sm} aria-hidden="true" />
-          高级配置与 Token 计费
+          <ChevronRight size={APP_ICON_SIZES.sm} aria-hidden="true" className={advanced ? 'tw:rotate-90' : undefined} />
+          高级设置
         </button>
+          <div className="tw:flex tw:items-center tw:gap-1">
+            <Button variant="ghost" size="xs" shape="default" isIconOnly className="tw:[&&]:rounded-md" aria-label="回退高级配置" title="回退高级配置" disabled={!history.length} onClick={undoAdvanced}>
+              <Undo2 size={APP_ICON_SIZES.sm} aria-hidden="true" />
+            </Button>
+            <Button variant="ghost" size="xs" shape="default" isIconOnly className="tw:[&&]:rounded-md" aria-label="重置高级配置" title="重置高级配置" disabled={!advancedDirty} onClick={() => changeAdvanced({ ...model, ...initialAdvanced })}>
+              <RefreshCw size={APP_ICON_SIZES.sm} aria-hidden="true" />
+            </Button>
+          </div>
+        </div>
         <DisclosureContent
           contentClassName={PROVIDER_EDITOR_MODEL_ADVANCED_CONTENT_CLASS}
           expanded={advanced}
           id={advancedId}
           mountPolicy="always"
         >
+          <div className="tw:grid tw:gap-4">
+            <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型类型</h4>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('文本', true, () => {}, true)}</div>
+            </div>
+            <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型能力</h4>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('推理', model.reasoning, () => changeAdvanced({ ...model, reasoning: !model.reasoning }))}</div>
+            </div>
+            <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">输入模态</h4>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('文本输入', true, () => {}, true)}{chip('视觉', model.imageInput, () => changeAdvanced({ ...model, imageInput: !model.imageInput }))}</div>
+            </div>
+            <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型状态</h4>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('启用模型', model.enabled, () => changeAdvanced({ ...model, enabled: !model.enabled }))}</div>
+            </div>
+          </div>
+          {tokenField('contextWindow', '上下文窗口（Token）', [32768, 128000, 200000, 256000, 400000, 512000, 1000000])}
+          {tokenField('maxInputTokens', '最大输入 Token', [128000, 200000, 256000, 512000, 1000000])}
+            {tokenField('maxTokens', '最大输出（Token）', [8192, 16000, 32000, 64000, 128000, 256000])}
+          <h4 className="tw:m-0 tw:type-label">价格（USD／百万 Token）</h4>
           <div className="provider-editor-grid tw:grid tw:grid-cols-2 tw:gap-4">
             <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-              <span>输入成本 ($ / 1M tokens)</span>
+              <span>输入价格</span>
               <Input
                 type="number"
                 value={String(model.inputCost)}
@@ -1409,7 +1404,7 @@ function ModelEditor({
               />
             </label>
             <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-              <span>输出成本 ($ / 1M tokens)</span>
+              <span>输出价格</span>
               <Input
                 type="number"
                 value={String(model.outputCost)}
@@ -1417,10 +1412,9 @@ function ModelEditor({
               />
             </label>
           </div>
-
           <div className="provider-editor-grid tw:grid tw:grid-cols-2 tw:gap-4">
             <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-              <span>缓存读取成本 ($ / 1M tokens)</span>
+              <span>缓存读取价格</span>
               <Input
                 type="number"
                 value={String(model.cacheReadCost)}
@@ -1428,7 +1422,7 @@ function ModelEditor({
               />
             </label>
             <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-              <span>缓存写入成本 ($ / 1M tokens)</span>
+              <span>缓存写入价格</span>
               <Input
                 type="number"
                 value={String(model.cacheWriteCost)}
@@ -1436,43 +1430,54 @@ function ModelEditor({
               />
             </label>
           </div>
-
-          <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-            <span>
-              模型专属 Headers
-              <small>每行 name: value</small>
-            </span>
-            <textarea
-              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
-              placeholder="X-Model-Specific: value"
-              rows={3}
-              value={model.headers}
-              onChange={(event) => onChange({ ...model, headers: event.target.value })}
-            />
-          </label>
-
-          <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
-            <span>Thinking Level Map (JSON)</span>
-            <textarea
-              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
-              placeholder='{"high": "high"}'
-              rows={3}
-              value={model.thinkingLevelMap}
-              onChange={(event) => onChange({ ...model, thinkingLevelMap: event.target.value })}
-            />
-          </label>
-
-          <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
-            <span>API Compat (JSON)</span>
-            <textarea
-              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
-              placeholder="{}"
-              rows={3}
-              value={model.compat}
-              onChange={(event) => onChange({ ...model, compat: event.target.value })}
-            />
-          </label>
         </DisclosureContent>
+      </div>
+      <div className="tw:overflow-hidden tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel">
+          <button type="button" className="tw:flex tw:w-full tw:items-center tw:gap-1 tw:border-0 tw:bg-transparent tw:px-3 tw:py-2 tw:text-left tw:text-app-text-soft tw:type-caption" aria-expanded={parametersOpen} aria-controls={parametersId} onClick={() => setParametersOpen(!parametersOpen)}>
+            <ChevronRight aria-hidden size={APP_ICON_SIZES.sm} className={parametersOpen ? 'tw:rotate-90' : ''} />协议参数
+          </button>
+          <DisclosureContent
+            id={parametersId}
+            expanded={parametersOpen}
+            mountPolicy="always"
+            contentClassName="tw:grid tw:gap-3 tw:p-3"
+          >
+            <label className={PROVIDER_EDITOR_FIELD_CLASS}>
+              <span>
+                模型专属 Headers
+                <small>每行 name: value</small>
+              </span>
+              <textarea
+                className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+                placeholder="X-Model-Specific: value"
+                rows={3}
+                value={model.headers}
+                onChange={(event) => onChange({ ...model, headers: event.target.value })}
+              />
+            </label>
+
+            <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
+              <span>Thinking Level Map (JSON)</span>
+              <textarea
+                className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+                placeholder='{"high": "high"}'
+                rows={3}
+                value={model.thinkingLevelMap}
+                onChange={(event) => onChange({ ...model, thinkingLevelMap: event.target.value })}
+              />
+            </label>
+
+            <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
+              <span>API Compat (JSON)</span>
+              <textarea
+                className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+                placeholder="{}"
+                rows={3}
+                value={model.compat}
+                onChange={(event) => onChange({ ...model, compat: event.target.value })}
+              />
+            </label>
+          </DisclosureContent>
       </div>
     </div>
   )
@@ -1499,7 +1504,7 @@ function emptyModel(): EditableModel {
   }
 }
 
-function editableModel(model: DesktopProviderModelDefinition): EditableModel {
+export function editableModel(model: DesktopProviderModelDefinition): EditableModel {
   return {
     original: model,
     editorKey: createEditorKey(),
@@ -1508,6 +1513,7 @@ function editableModel(model: DesktopProviderModelDefinition): EditableModel {
     api: model.api,
     enabled: model.enabled ?? true,
     contextWindow: model.contextWindow ?? 32_768,
+    maxInputTokens: model.maxInputTokens,
     maxTokens: model.maxTokens ?? 8_192,
     reasoning: model.reasoning ?? false,
     imageInput: model.input?.includes('image') ?? false,
@@ -1528,7 +1534,7 @@ function createEditorKey(): string {
   return `provider-model-${nextEditorKey}`
 }
 
-function parseHeaders(value: string): Record<string, string> | Error {
+export function parseHeaders(value: string): Record<string, string> | Error {
   const result: Record<string, string> = {}
   for (const [index, line] of value.split(/\r?\n/).entries()) {
     if (!line.trim()) continue
@@ -1543,7 +1549,7 @@ function parseHeaders(value: string): Record<string, string> | Error {
   return result
 }
 
-function headersToText(headers: Readonly<Record<string, string>>): string {
+export function headersToText(headers: Readonly<Record<string, string>>): string {
   return Object.entries(headers)
     .map(([name, value]) => `${name}: ${value}`)
     .join('\n')
@@ -1591,4 +1597,41 @@ function draftSignature(value: {
     ...value,
     models: value.models.map(({ editorKey: _key, ...model }) => model),
   })
+}
+
+export function normalizeEditableModel(
+  model: EditableModel,
+): DesktopProviderModelDefinition | Error {
+  const modelHeaders = parseHeaders(model.headers)
+  if (modelHeaders instanceof Error) {
+    return new Error(`模型 ${model.id || '(未命名)'}：${modelHeaders.message}`)
+  }
+  const thinkingLevelMap = parseJsonObject(model.thinkingLevelMap, 'thinkingLevelMap')
+  if (thinkingLevelMap instanceof Error) return thinkingLevelMap
+  const compat = parseJsonObject(model.compat, 'compat')
+  if (compat instanceof Error) return compat
+  return {
+    ...model.original,
+    id: model.id.trim(),
+    name: model.name.trim() || model.id.trim(),
+    api: model.api,
+    enabled: model.enabled,
+    contextWindow: model.contextWindow || 32_768,
+    maxInputTokens: model.maxInputTokens || undefined,
+    maxTokens: model.maxTokens || 8_192,
+    reasoning: model.reasoning,
+    input: [
+      ...(model.original?.input ?? ['text']).filter((value) => value !== 'image'),
+      ...(model.imageInput ? ['image' as const] : []),
+    ],
+    cost: {
+      input: model.inputCost || 0,
+      output: model.outputCost || 0,
+      cacheRead: model.cacheReadCost || 0,
+      cacheWrite: model.cacheWriteCost || 0,
+    },
+    headers: modelHeaders,
+    thinkingLevelMap: thinkingLevelMap ? (thinkingLevelMap as never) : undefined,
+    compat: compat ?? undefined,
+  } as unknown as DesktopProviderModelDefinition
 }

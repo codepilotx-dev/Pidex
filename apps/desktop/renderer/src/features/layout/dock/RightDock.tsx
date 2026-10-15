@@ -71,6 +71,7 @@ type Props = {
   sessionStatus: DesktopSessionStatus
   terminalAvailable: boolean
   planContentByEventId: Readonly<Record<string, string>>
+  providerManagement?: React.ReactNode
   width: number
   height?: number
   workspace: DesktopWorkspace | null
@@ -276,6 +277,7 @@ export function WorkbenchPanel({
   sessionStatus,
   terminalAvailable,
   planContentByEventId,
+  providerManagement,
   width,
   height,
   workspace,
@@ -428,9 +430,11 @@ export function WorkbenchPanel({
         cwd: workspace?.path ?? null,
         onDisplayPathChange: handleTerminalDisplayPathChange,
       },
+      providerManagement,
     }),
     [
       browserState,
+      providerManagement,
       browserAvailability,
       defaultBranch,
       diffMarkerStyle,

@@ -369,6 +369,8 @@ export interface AgentState {
 
 /** Final or partial result produced by a tool. */
 export interface AgentToolResult<T> {
+  /** Host-created blobs, excluded from model content and persisted with the result item. */
+  artifacts?: Array<{ artifactId: string; name: string; mimeType: string; data: string }>
   /** Text or image content returned to the model. */
   content?: (TextContent | ImageContent)[]
   /** Arbitrary structured details for logs or UI rendering. */

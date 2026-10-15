@@ -13,6 +13,7 @@ import {
   Paperclip,
   SquarePlus,
   SquareTerminal,
+  Settings2,
 } from 'lucide-react'
 import type {
   DesktopBrowserState,
@@ -116,6 +117,7 @@ function BrowserTabContent({
 }
 
 export type WorkbenchTabRenderContext = {
+  providerManagement?: ReactNode
   review: {
     activeSessionId: string | null
     projectId: string | null
@@ -264,6 +266,15 @@ export function getWorkbenchLauncherPresentation(definition: WorkbenchTabDefinit
 }
 
 const definitions: readonly WorkbenchTabDefinition[] = [
+  {
+    kind: 'provider-management',
+    label: '供应商设置',
+    icon: <Settings2 size={iconSize} />,
+    launcher: false,
+    lifecycle: 'unmount-when-hidden',
+    getTitle: () => '供应商设置',
+    render: (_tab, context) => context.providerManagement ?? null,
+  },
   {
     kind: 'review',
     label: '变更',

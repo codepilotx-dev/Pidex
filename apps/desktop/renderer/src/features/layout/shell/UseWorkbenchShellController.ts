@@ -72,7 +72,13 @@ const NON_NATIVE_RESIZE_SETTLE_MS = 500
 
 export function useWorkbenchShellController({
   activePane,
-}: { activePane?: SidebarPane | null } = {}) {
+  panelRouteActive = true,
+  temporaryRightPanelOpen = false,
+}: {
+  activePane?: SidebarPane | null
+  panelRouteActive?: boolean
+  temporaryRightPanelOpen?: boolean
+} = {}) {
   const railWidth = SIDEBAR_RAIL_WIDTH
   const layout = useDesktopLayout(MODERN_SIDEBAR_DEFAULT_WIDTH)
   const {
@@ -143,7 +149,10 @@ export function useWorkbenchShellController({
   const bottomPanelHeight = workbenchLayoutState?.bottomPanelHeight ?? responsiveBottomPanelHeight
 
   // 右栏隐藏时宿主仍保留挂载：实时尺寸必须收敛到 0，否则空白按分屏宽度占位。
-  const rightPanelLiveResize = useLiveResizeValue(rightPanelCommittedSize, !rightDockVisible)
+  const rightPanelLiveResize = useLiveResizeValue(
+    rightPanelCommittedSize,
+    !((panelRouteActive && rightDockVisible) || temporaryRightPanelOpen),
+  )
   const bottomPanelLiveResize = useLiveResizeValue(bottomPanelHeight)
 
   const latestWorkspaceSizeRef = useRef<WorkbenchSize>(workspaceSize)
