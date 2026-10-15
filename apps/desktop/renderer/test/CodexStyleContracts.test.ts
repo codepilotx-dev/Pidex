@@ -299,9 +299,10 @@ describe('Codex CPX design system token contract', () => {
 
     expectSourceContains(settings, '.settings-management-list')
     expectSourceContains(settings, '.settings-management-dialog-row')
-    expectSourceContains(providerCatalog, 'settings-management-list')
+    expectSourceNotContains(providerCatalog, 'settings-management-list')
+    expectSourceContains(providerCatalog, 'model-center-catalog-list')
     expectSourceContains(extensionRow, 'settings-management-row')
-    // 供应商目录不再用 auto-fill 卡片网格，改走共享管理列表几何。
+    // 供应商目录按平铺网格展示，不再包裹大卡片管理列表外框。
     expectSourceNotContains(providerCatalog, 'repeat(auto-fill')
     expectSourceContains(plugins, 'settings-content-inner plugins-settings-content')
     expect(plugins).not.toMatch(/tw:(?:max-w-\[60rem\]|px-8|py-16)/)
@@ -319,7 +320,7 @@ describe('Codex CPX design system token contract', () => {
   })
 
   test('keeps primary routes and workbench panels on their shared alignment axes', async () => {
-    const [automationView, pets, pullRequests, setup, review, browser] = await Promise.all([
+    const [automationView, pets, pullRequests, setup, review, browser, primaryPageCss] = await Promise.all([
       Bun.file(new URL('../src/features/automation/AutomationView.tsx', import.meta.url)).text(),
       Bun.file(new URL('../src/features/pet/PetCatalogPage.tsx', import.meta.url)).text(),
       Bun.file(
@@ -330,6 +331,7 @@ describe('Codex CPX design system token contract', () => {
         new URL('../src/features/review/workspace/WorkspaceReviewSidebar.tsx', import.meta.url),
       ).text(),
       Bun.file(new URL('../src/features/browser/DesktopBrowserPanel.tsx', import.meta.url)).text(),
+      Bun.file(new URL('../src/styles/features/primary-page.css', import.meta.url)).text(),
     ])
 
     // 自动化页只通过共享 PrimaryPageLayout 渲染，不再覆盖其内部结构类名。
@@ -337,6 +339,7 @@ describe('Codex CPX design system token contract', () => {
     expect(automationView).not.toMatch(/primary-page-layout__(?:header|body)/)
     expectSourceContains(pets, '<PrimaryPageLayout')
     expectSourceContains(pullRequests, '<PrimaryPageLayout')
+    expectSourceContains(primaryPageCss, 'padding-bottom: var(--cpx-sys-space-8);')
     // 模型引导页的两行网格改由 TSX utility 承担（原 `_model-setup.scss` 规则）。
     expectSourceContains(setup, 'tw:grid-rows-[36px_minmax(0,1fr)]')
     expectSourceContains(review, 'tw:px-4 tw:py-4 tw:type-control')

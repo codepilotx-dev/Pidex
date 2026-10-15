@@ -24,7 +24,6 @@ import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { useSearchParams } from 'react-router-dom'
 import { ProviderCatalog } from './ProviderCatalog.js'
-import { ProviderConnectionDialog } from './provider-management/ProviderConnectionDialog.js'
 import { ProviderDetail } from './ProviderDetail.js'
 import { useModelCenterController } from './UseModelCenterController.js'
 import {
@@ -86,7 +85,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const [providerID, setProviderID] = useState<ModelProviderID>(settings.providerID)
   const [model, setModel] = useState(settings.model)
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null)
-  const [marketConnectionId, setMarketConnectionId] = useState<ModelProviderID | null>(null)
   const [providerQuery, setProviderQuery] = useState('')
   const [deepSeekProtocolSupported, setDeepSeekProtocolSupported] = useState(false)
   const [connectionDraftDirty, setConnectionDraftDirty] = useState(false)
@@ -138,8 +136,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         })),
     [providers, snapshot, providerQuery],
   )
-  const marketConnectionProvider =
-    providers.find((provider) => provider.providerID === marketConnectionId) ?? null
 
   const routeState = useMemo(
     () =>
@@ -541,15 +537,13 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
               providers={marketProviders}
               onSelect={(id) => updateLocation({ provider: id, section: 'connection' })}
               onManageConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
-              onAddConnection={(id) => {
-                setMarketConnectionId(id)
-              }}
+              onAddConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
             />
           )}
         </PrimaryPageLayout>
       ) : (
         <div className="model-center-shell tw:@container tw:h-full tw:w-full tw:min-w-0 tw:overflow-x-hidden tw:overflow-y-auto tw:p-5">
-          <div className="tw:mx-auto tw:min-w-0 tw:w-full tw:max-w-[var(--page-content-max-width)]">
+          <div className="tw:mx-auto tw:min-w-0 tw:w-full tw:max-w-[var(--page-content-max-width)] tw:pb-8">
             {showingCustomEditor ? (
               <>
                 <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-4 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
@@ -641,22 +635,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           </div>
         </div>
       )}
-
-      <ProviderConnectionDialog
-        open={marketConnectionId !== null}
-        provider={marketConnectionProvider}
-        busy={busyKeyId !== null}
-        sources={snapshot.usageSources.filter((source) =>
-          source.providerIds.some((id) => id === marketConnectionId),
-        )}
-        onOpenChange={(open) => {
-          if (!open) setMarketConnectionId(null)
-        }}
-        onKeySubmit={saveApiKeyEditor}
-        onConnected={async () => {
-          await providerManagementStore.refresh()
-        }}
-      />
 
       <ConfirmationDialog
         actionDisabled={busyKeyId !== null}

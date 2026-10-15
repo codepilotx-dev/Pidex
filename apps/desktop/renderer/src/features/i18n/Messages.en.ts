@@ -76,6 +76,7 @@ export const enUS: Record<string, string> = {
   用量与成本: 'Usage and cost',
   集成: 'Integrations',
   供应商: 'Providers',
+  市场: 'Marketplace',
   插件: 'Plugins',
   浏览器: 'Browser',
   编码: 'Coding',

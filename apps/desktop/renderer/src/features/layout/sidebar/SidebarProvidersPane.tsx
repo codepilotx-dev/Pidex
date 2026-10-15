@@ -3,7 +3,7 @@ import { useMemo, useState } from 'react'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
-import { BrainCircuit, Plus } from 'lucide-react'
+import { BrainCircuit, Plus, Store } from 'lucide-react'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
@@ -26,6 +26,7 @@ export function SidebarProvidersPane(): React.ReactNode {
   const onProvidersRoute = location.pathname === '/providers'
   const selectedProviderId = onProvidersRoute ? searchParams.get('provider') : null
   const creatingProvider = onProvidersRoute && searchParams.get('newProvider') === '1'
+  const onMarketRoute = onProvidersRoute && !selectedProviderId && !creatingProvider
   const items = useMemo(
     () =>
       projectProviderDirectory(snapshot.providers, {
@@ -71,6 +72,20 @@ export function SidebarProvidersPane(): React.ReactNode {
         />
       </header>
       <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:p-2">
+        <SidebarRow
+          active={onMarketRoute}
+          asChild
+          layout="flex"
+          leading={<Store aria-hidden size={APP_ICON_SIZE} />}
+        >
+          <button
+            type="button"
+            aria-current={onMarketRoute ? 'page' : undefined}
+            onClick={() => navigate('/providers')}
+          >
+            {t('市场')}
+          </button>
+        </SidebarRow>
         <SidebarRow
           active={creatingProvider}
           asChild

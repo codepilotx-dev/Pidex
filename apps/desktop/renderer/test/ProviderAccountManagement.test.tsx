@@ -68,8 +68,12 @@ describe('model center account management', () => {
     expect(html).not.toContain('搜索 Provider')
     expect(html).not.toContain('供应商筛选')
     expect(html).toContain('供应商市场')
-    expect(html).toContain('>查看<')
-    expect(html).toContain('>连接<')
+    expect(html).toContain('已配置')
+    expect(html).toContain('未配置')
+    expect(html).toContain('title="查看 openai"')
+    expect(html).toContain('title="连接 anthropic"')
+    expect(html).not.toContain('>查看<')
+    expect(html).not.toContain('>连接<')
     expect(html).toMatch(
       /<span class="provider-card-logo settings-management-row-icon"><span class="ui-remote-image\b/,
     )
