@@ -148,7 +148,7 @@ export interface AgentRuntimeRequest {
   checkSafeBoundary?: () => Promise<boolean>
   attachments?: Array<
     | { kind: 'text'; name: string; text: string }
-    | { kind: 'image'; name: string; mediaType: string; base64: string }
+    | { kind: 'image' | 'audio' | 'video'; name: string; mediaType: string; base64: string }
   >
 }
 
@@ -158,7 +158,7 @@ export type AgentRuntimeResult =
 
 export interface AgentRuntime {
   run(request: AgentRuntimeRequest): Promise<AgentRuntimeResult>
-  steer(threadID: string, content: string, images?: RuntimeImage[], inputID?: string): Promise<void>
+  steer(threadID: string, content: string, images?: RuntimeImage[], inputID?: string, media?: import('../provider/pi/MediaInput').MediaInput[]): Promise<void>
   followUp(threadID: string, content: string): Promise<void>
   abort(threadID: string): Promise<void>
   compact(threadID: string, instructions?: string, promptText?: string): Promise<ContextCompaction>

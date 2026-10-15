@@ -1,3 +1,7 @@
+import { ModelRecommendationStore } from './ModelRecommendationStore'
+import type { RecommendationInput } from './ModelRecommendations'
+import { AgentError } from '../../Domain'
+import { requestModelOperation, operationInputTokens, type ModelOperationOptions } from './PiModelOperations'
 import type {
   Api,
   Model as PiModel,
@@ -36,6 +40,7 @@ import {
 } from './PiCustomProvider'
 
 export interface PiModelServiceOptions extends EncryptedCredentialStoreOptions {
+  readonly recommendations?: ModelRecommendationStore
   readonly models?: Models
   readonly modelsStore?: ModelsStore
   readonly config?:
@@ -113,12 +118,25 @@ const cost = (model: PiModel<Api>): Model.Cost[] => [
 const thinkingLevels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
 const supportedThinkingLevels = (model: PiModel<Api>) =>
-  model.reasoning ? thinkingLevels.filter((level) => model.thinkingLevelMap?.[level] !== null) : []
+  (!(model as ConfiguredPiModel).modelType || (model as ConfiguredPiModel).modelType === 'chat') && model.reasoning ? thinkingLevels.filter((level) => model.thinkingLevelMap?.[level] !== null) : []
+
+type ConfiguredPiModel = PiModel<Api> & { maxInputTokens?: number; inputExplicit?: boolean; modelType?: 'chat' | 'embedding' | 'rerank'; tools?: boolean }
+
+const effectiveInput = (model: PiModel<Api>): string[] => {
+  const kind = (model as ConfiguredPiModel).modelType
+  if (kind === 'embedding' || kind === 'rerank') return ['text']
+  const gemini = model.api === 'google-generative-ai' || model.api === 'google-vertex'
+  const nativeMedia = gemini && !(model as ConfiguredPiModel).inputExplicit && model.id.includes('gemini')
+  return [...new Set<string>([...model.input, ...(nativeMedia ? ['audio', 'video'] : [])])].filter(
+    (input) => (input !== 'audio' || gemini || model.api === 'openai-completions') && (input !== 'video' || gemini),
+  )
+}
 
 const piModelToInfo = (model: PiModel<Api>, enabled: boolean, variant?: string): Model.Info => ({
   id: Model.ID.make(model.id),
   providerID: Provider.ID.make(model.provider),
   name: model.name,
+  ...((model as ConfiguredPiModel).modelType && (model as ConfiguredPiModel).modelType !== 'chat' ? { modelType: (model as ConfiguredPiModel).modelType! } : {}),
   api: {
     id: Model.ID.make(model.id),
     type: 'pi',
@@ -127,9 +145,9 @@ const piModelToInfo = (model: PiModel<Api>, enabled: boolean, variant?: string):
   },
   ...(variant ? { variant } : {}),
   capabilities: {
-    tools: true,
-    input: [...model.input],
-    output: ['text'],
+    tools: (!(model as ConfiguredPiModel).modelType || (model as ConfiguredPiModel).modelType === 'chat') && (model as ConfiguredPiModel).tools !== false,
+    input: effectiveInput(model),
+    output: [(model as ConfiguredPiModel).modelType === 'embedding' ? 'embedding' : (model as ConfiguredPiModel).modelType === 'rerank' ? 'rerank' : 'text'],
   },
   variants: supportedThinkingLevels(model).map((level) => ({
     id: Model.VariantID.make(level),
@@ -140,6 +158,7 @@ const piModelToInfo = (model: PiModel<Api>, enabled: boolean, variant?: string):
   enabled,
   limit: {
     context: model.contextWindow,
+    ...((model as ConfiguredPiModel).maxInputTokens !== undefined ? { input: (model as ConfiguredPiModel).maxInputTokens! } : {}),
     output: model.maxTokens,
   },
 })
@@ -148,7 +167,9 @@ export type ProviderDefinition = PiProviderDefinitionInput
 
 /** Pi-backed model catalog with the existing Pidex catalog shape. */
 export class PiModelService {
+  readonly recommendations: ModelRecommendationStore
   readonly pi: Models
+  private readonly mediaModels = new WeakMap<PiModel<Api>, PiModel<Api>>()
   readonly credentials: EncryptedCredentialStore
   private readonly mutablePi: MutableModels | undefined
   private readonly configSource: PiModelServiceOptions['config']
@@ -173,6 +194,7 @@ export class PiModelService {
   private disposed = false
 
   constructor(repository: ProviderCredentialRepository, options: PiModelServiceOptions = {}) {
+    this.recommendations = options.recommendations ?? new ModelRecommendationStore()
     this.credentials = new EncryptedCredentialStore(repository, options)
     this.pi =
       options.models ??
@@ -202,6 +224,7 @@ export class PiModelService {
     this.baseProviders = new Map(this.pi.getProviders().map((provider) => [provider.id, provider]))
     this.builtinProviderIDs = new Set(this.pi.getProviders().map((provider) => provider.id))
     this.configSource = options.config
+    options.recommendations?.startAutoRefresh()
   }
 
   async list(): Promise<readonly Provider.Info[]> {
@@ -259,6 +282,8 @@ export class PiModelService {
             contextWindow: model.contextWindow,
             ...(model.maxInputTokens !== undefined ? { maxInputTokens: model.maxInputTokens } : {}),
             maxTokens: model.maxTokens,
+            ...(model.modelType ? { modelType: model.modelType } : {}),
+            ...(model.tools !== undefined ? { tools: model.tools } : {}),
             reasoning: model.reasoning,
             input: [...model.input],
             cost: { ...model.cost },
@@ -345,7 +370,65 @@ export class PiModelService {
         'PROVIDER_NOT_CONFIGURED',
         `Provider ${providerID} is not configured`,
       )
-    return model
+    const input = effectiveInput(model)
+    if (input.length === model.input.length && input.every((kind, index) => kind === model.input[index])) return model
+    let extended = this.mediaModels.get(model)
+    if (!extended) {
+      extended = { ...model, input: input as PiModel<Api>['input'] }
+      this.mediaModels.set(model, extended)
+    }
+    return extended
+  }
+
+  private async operationRequest(ref: Model.Ref, kind: 'embedding' | 'rerank', body: Record<string, unknown>, options: ModelOperationOptions) {
+    const model = await this.getPiModel(ref) as ConfiguredPiModel & { maxInputTokens?: number }
+    if (model.modelType !== kind) throw new AgentError('INVALID_REQUEST', '模型类型与请求操作不匹配', 400)
+    const texts = kind === 'embedding' ? body.input as string[] : [String(body.query), ...(body.documents as string[])]
+    if (texts.some((text) => new TextEncoder().encode(text).length / 4 > (model.maxInputTokens ?? model.contextWindow)))
+      throw new AgentError('INVALID_REQUEST', '输入超过模型最大输入 Token 预算', 400)
+    const config = (await this.syncProviders()).providers[model.provider]
+    const endpointKey = kind === 'embedding' ? 'openai-embeddings' : 'jina-rerank'
+    const explicitEndpoint = config?.endpoints?.[endpointKey]
+    if (!explicitEndpoint && !['openai-completions', 'openai-responses'].includes(model.api)) throw new AgentError('INVALID_REQUEST', '请先为该模型类型添加对应端点', 400)
+    const base = explicitEndpoint ?? model.baseUrl
+    const suffix = kind === 'embedding' ? '/embeddings' : '/rerank'
+    const endpoint = base.replace(/\/$/, '').endsWith(suffix) ? base : `${base.replace(/\/$/, '')}${suffix}`
+    const auth = await this.pi.getAuth(model.provider)
+    const headers = new Headers({ ...(config?.kind === 'custom' ? config.headers : {}), ...model.headers })
+    for (const [key, value] of Object.entries(auth?.auth.headers ?? {})) if (typeof value === 'string') headers.set(key, value)
+    const apiKey = options.apiKey ?? auth?.auth.apiKey
+    if (apiKey) headers.set('Authorization', `Bearer ${apiKey}`)
+    headers.set('Content-Type', 'application/json')
+    return requestModelOperation(endpoint, headers, { ...body, model: model.id }, options)
+  }
+
+  async embed(ref: Model.Ref, input: readonly string[], dimensions?: number, options: ModelOperationOptions = {}) {
+    const result = await this.operationRequest(ref, 'embedding', { input, ...(dimensions ? { dimensions } : {}) }, options)
+    const data = result.data
+    if (!Array.isArray(data) || data.length !== input.length) throw new AgentError('PROVIDER_UNAVAILABLE', '嵌入响应数量无效', 502)
+    const vectors: number[][] = new Array(input.length)
+    for (const item of data) {
+      if (!item || !Number.isInteger(item.index) || item.index < 0 || item.index >= input.length || vectors[item.index] || !Array.isArray(item.embedding) || !item.embedding.length || !item.embedding.every((value: unknown) => typeof value === 'number' && Number.isFinite(value)))
+        throw new AgentError('PROVIDER_UNAVAILABLE', '嵌入响应格式无效', 502)
+      vectors[item.index] = item.embedding
+    }
+    const dimension = dimensions ?? vectors[0]!.length
+    if (vectors.some((vector) => vector.length !== dimension)) throw new AgentError('PROVIDER_UNAVAILABLE', '嵌入向量维度不一致', 502)
+    return { vectors, inputTokens: operationInputTokens(result) }
+  }
+
+  async rerank(ref: Model.Ref, query: string, documents: readonly string[], topN?: number, options: ModelOperationOptions = {}) {
+    if (topN !== undefined && topN > documents.length) throw new AgentError('INVALID_REQUEST', '重排数量不能超过文档数量', 400)
+    const result = await this.operationRequest(ref, 'rerank', { query, documents, ...(topN ? { top_n: topN } : {}) }, options)
+    if (!Array.isArray(result.results) || result.results.length > (topN ?? documents.length)) throw new AgentError('PROVIDER_UNAVAILABLE', '重排响应数量无效', 502)
+    const indices = new Set<number>()
+    const results = result.results.map((item) => {
+      if (!item || !Number.isInteger(item.index) || item.index < 0 || item.index >= documents.length || indices.has(item.index) || typeof item.relevance_score !== 'number' || !Number.isFinite(item.relevance_score))
+        throw new AgentError('PROVIDER_UNAVAILABLE', '重排响应格式无效', 502)
+      indices.add(item.index)
+      return { index: item.index as number, score: item.relevance_score as number }
+    })
+    return { results, inputTokens: operationInputTokens(result) }
   }
 
   async refresh(force = false): Promise<void> {
@@ -444,6 +527,15 @@ export class PiModelService {
 
   async dispose(): Promise<void> {
     this.disposed = true
+    this.recommendations.dispose()
+  }
+
+  previewRecommendation(input: RecommendationInput) {
+    return this.recommendations.resolve(input)
+  }
+
+  refreshRecommendations() {
+    return this.recommendations.refresh()
   }
 
   private async rawConfig(): Promise<PiModelCatalogConfig> {

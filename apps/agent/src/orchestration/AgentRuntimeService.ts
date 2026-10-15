@@ -2010,11 +2010,13 @@ export class AgentRuntimeService implements AgentRuntime {
     content: string,
     images?: import('@earendil-works/pi-ai').ImageContent[],
     inputID?: string,
+    media?: import('../provider/pi/MediaInput').MediaInput[],
   ) {
     const runtime = this.active.get(threadID)
     if (!runtime) throw new Error('Pi Harness 尚未启动')
     await runtime.harness.steer(content, {
       ...(images ? { images } : {}),
+      ...(media ? { media } : {}),
       ...(inputID ? { inputId: inputID } : {}),
     })
   }

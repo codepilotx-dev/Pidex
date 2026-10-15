@@ -903,7 +903,7 @@ export const githubPullRequestIdentity = (params: Record<string, unknown>) => ({
 
 export const attachmentView = (record: {
   id: string
-  kind: 'text' | 'image'
+  kind: 'text' | 'image' | 'audio' | 'video'
   name: string
   mimeType: string
   size: number

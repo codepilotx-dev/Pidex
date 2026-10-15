@@ -1,3 +1,4 @@
+import { ModelRecommendationStore } from './provider/pi/ModelRecommendationStore'
 import { ComputerUseService } from './computer/ComputerUseService'
 import { LocalEnvironmentRepository } from './local-environment/LocalEnvironmentRepository'
 import { LocalEnvironmentCatalog } from './local-environment/LocalEnvironmentCatalog'
@@ -60,7 +61,7 @@ import { HookService } from './hooks/HookService'
 import { z } from 'zod'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { BrowserService } from './browser/BrowserService'
 import { browserToolDefinitions } from './tool/Browser/Definition'
 import { MemoryManager } from './resource/MemoryManager'
@@ -514,6 +515,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const piModels = new PiModelService(providerCredentialStore, {
       ...(options.models ? { models: options.models } : {}),
       modelsStore: new PiModelsFileStore(config.piModelCachePath),
+      recommendations: new ModelRecommendationStore(join(dirname(config.piModelCachePath), 'model-recommendations.json')),
       config: () => {
         const snapshot = configService.snapshot()
         const modelCatalog = snapshot.model_catalog as Record<string, unknown> | undefined

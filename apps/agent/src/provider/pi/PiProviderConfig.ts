@@ -13,14 +13,18 @@ export const CUSTOM_PROVIDER_APIS = [
   'openai-completions',
   'openai-responses',
   'anthropic-messages',
+  'google-generative-ai',
 ] as const
+
+export const PROVIDER_ENDPOINT_APIS = [...CUSTOM_PROVIDER_APIS, 'openai-embeddings', 'jina-rerank'] as const
+export type ProviderEndpointApi = (typeof PROVIDER_ENDPOINT_APIS)[number]
 
 export type CustomProviderApi = (typeof CUSTOM_PROVIDER_APIS)[number]
 
 /** DeepSeek keeps its existing three-protocol catalog mapping. */
 export const DEEPSEEK_PROVIDER_ID = 'deepseek'
 
-export type DeepSeekProtocol = CustomProviderApi
+export type DeepSeekProtocol = Exclude<CustomProviderApi, 'google-generative-ai'>
 
 export const DEFAULT_DEEPSEEK_PROTOCOL: DeepSeekProtocol = 'openai-completions'
 
@@ -74,9 +78,11 @@ export interface PiCustomModelConfig {
   readonly enabled: boolean
   readonly contextWindow: number
   readonly maxInputTokens?: number
+  readonly modelType?: 'chat' | 'embedding' | 'rerank'
+  readonly tools?: boolean
   readonly maxTokens: number
   readonly reasoning: boolean
-  readonly input: readonly ('text' | 'image')[]
+  readonly input: readonly ('text' | 'image' | 'audio' | 'video')[]
   readonly cost: {
     readonly input: number
     readonly output: number
@@ -93,7 +99,7 @@ export interface PiCustomProviderConfig {
   readonly name: string
   readonly enabled: boolean
   readonly baseUrl: string
-  readonly endpoints?: Partial<Record<CustomProviderApi, string>>
+  readonly endpoints?: Partial<Record<ProviderEndpointApi, string>>
   readonly auth: 'api-key' | 'none'
   readonly env: readonly string[]
   readonly allowInsecureHttp: boolean
@@ -149,7 +155,7 @@ export type PiProviderDefinitionInput =
       readonly name: string
       readonly enabled: boolean
       readonly baseUrl: string
-      readonly endpoints?: Partial<Record<CustomProviderApi, string>>
+      readonly endpoints?: Partial<Record<ProviderEndpointApi, string>>
       readonly auth: 'api-key' | 'none'
       readonly env: readonly string[]
       readonly allowInsecureHttp: boolean
@@ -317,11 +323,13 @@ const parseCustomModel = (
   const id = typeof value.id === 'string' && value.id.trim() ? value.id : configuredID
   if (
     value.input !== undefined &&
-    (!Array.isArray(value.input) || value.input.some((item) => item !== 'text' && item !== 'image'))
+    (!Array.isArray(value.input) || value.input.some((item) => !['text', 'image', 'audio', 'video'].includes(item)))
   ) {
     throw new Error('Custom model input must contain text or image')
   }
-  const input = strings(value.input) as readonly ('text' | 'image')[]
+  if (value.modelType !== undefined && !['chat', 'embedding', 'rerank'].includes(String(value.modelType))) throw new Error('Unsupported model type')
+  if (value.tools !== undefined && typeof value.tools !== 'boolean') throw new Error('Invalid tools capability')
+  const input = strings(value.input) as readonly ('text' | 'image' | 'audio' | 'video')[]
   const cost = isObject(value.cost) ? value.cost : {}
   const thinkingLevelMap = parseThinkingLevelMap(value.thinking_level_map ?? value.thinkingLevelMap)
   const compat = parseCompat(value.compat)
@@ -330,6 +338,8 @@ const parseCustomModel = (
     api: api as CustomProviderApi,
     name: typeof value.name === 'string' && value.name.trim() ? value.name : configuredID,
     enabled: bool(value.enabled, true),
+    ...(value.modelType !== undefined ? { modelType: value.modelType as NonNullable<PiCustomModelConfig['modelType']> } : {}),
+    ...(value.tools !== undefined ? { tools: value.tools as boolean } : {}),
     contextWindow: positiveInteger(value.context_window ?? value.contextWindow, 32_768),
     ...((value.max_input_tokens ?? value.maxInputTokens) !== undefined
       ? { maxInputTokens: positiveInteger(value.max_input_tokens ?? value.maxInputTokens, 32_768) } : {}),
@@ -348,18 +358,18 @@ const parseCustomModel = (
   }
 }
 
-const parseEndpoints = (value: unknown, allowHttp: boolean, supported: readonly string[] = CUSTOM_PROVIDER_APIS) => {
+const parseEndpoints = (value: unknown, allowHttp: boolean, supported: readonly string[] = PROVIDER_ENDPOINT_APIS) => {
   if (!isObject(value)) throw new Error('Provider endpoints must be an object')
   return Object.fromEntries(Object.entries(value).map(([api, address]) => {
     if (!supported.includes(api))
       throw new Error('Unsupported provider endpoint protocol')
     return [api, validateCustomProviderBaseUrl(address, allowHttp)]
-  })) as Partial<Record<CustomProviderApi, string>>
+  })) as Partial<Record<ProviderEndpointApi, string>>
 }
 
-const parseBuiltinProtocol = (providerID: string, value: unknown): string | undefined => {
+const parseBuiltinProtocol = (providerID: string, value: unknown, endpoints: unknown): string | undefined => {
   if (value === undefined) return undefined
-  if (typeof value !== 'string' || !(value in builtinProviderEndpoints(providerID)))
+  if (typeof value !== 'string' || !(value in builtinProviderEndpoints(providerID)) && !((CUSTOM_PROVIDER_APIS as readonly string[]).filter((api) => api !== 'google-generative-ai').includes(value) && isObject(endpoints) && typeof endpoints[value] === 'string'))
     throw new Error('Builtin provider protocol is unsupported')
   return value
 }
@@ -372,11 +382,11 @@ const parseBuiltin = (providerID: string, value: Record<string, unknown>) => {
       return [id, parseBuiltinModel(providerID, id, model)]
     }),
   )
-  const protocol = parseBuiltinProtocol(providerID, value.protocol)
+  const protocol = parseBuiltinProtocol(providerID, value.protocol, value.endpoints)
 
   return {
     kind: 'builtin' as const,
-    ...(value.endpoints !== undefined ? { endpoints: parseEndpoints(value.endpoints, bool(value.allow_insecure_http ?? value.allowInsecureHttp, false), Object.keys(builtinProviderEndpoints(providerID))) } : {}),
+    ...(value.endpoints !== undefined ? { endpoints: parseEndpoints(value.endpoints, bool(value.allow_insecure_http ?? value.allowInsecureHttp, false), [...Object.keys(builtinProviderEndpoints(providerID)), ...PROVIDER_ENDPOINT_APIS]) } : {}),
     enabled: bool(value.enabled, !bool(value.disabled, false)),
     allowModels: strings(value.allow_models ?? value.allowModels),
     denyModels: strings(value.deny_models ?? value.denyModels),
@@ -408,6 +418,8 @@ const parseBuiltinModel = (
     'name',
     'contextWindow',
     'context_window',
+    'modelType',
+    'tools',
     'maxInputTokens',
     'max_input_tokens',
     'maxTokens',
@@ -645,6 +657,8 @@ export const serializePiProviderDefinition = (
                 ...(model.contextWindow !== undefined
                   ? { context_window: model.contextWindow }
                   : {}),
+                ...(model.modelType !== undefined ? { modelType: model.modelType } : {}),
+                ...(model.tools !== undefined ? { tools: model.tools } : {}),
                 ...(model.maxInputTokens !== undefined ? { max_input_tokens: model.maxInputTokens } : {}),
                 ...(model.maxTokens !== undefined ? { max_tokens: model.maxTokens } : {}),
                 ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
@@ -718,7 +732,9 @@ export const serializePiProviderDefinition = (
                   name: model.name,
                   enabled: model.enabled,
                   context_window: model.contextWindow,
-                  ...(model.maxInputTokens !== undefined ? { max_input_tokens: model.maxInputTokens } : {}),
+                  ...(model.modelType !== undefined ? { modelType: model.modelType } : {}),
+                ...(model.tools !== undefined ? { tools: model.tools } : {}),
+                ...(model.maxInputTokens !== undefined ? { max_input_tokens: model.maxInputTokens } : {}),
                   max_tokens: model.maxTokens,
                   reasoning: model.reasoning,
                   input: [...model.input],

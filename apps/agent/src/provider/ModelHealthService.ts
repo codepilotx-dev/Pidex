@@ -679,6 +679,13 @@ export class ModelHealthService {
     }
     const startedAt = performance.now()
     try {
+      const modelType = (piModel as typeof piModel & { modelType?: string }).modelType
+      if (modelType === 'embedding' || modelType === 'rerank') {
+        const options = { ...(opts.explicitApiKey ? { apiKey: opts.explicitApiKey } : {}), signal: AbortSignal.any([AbortSignal.timeout(15000), ...(opts.signal ? [opts.signal] : [])]) }
+        if (modelType === 'embedding') await this.piModels.embed(ref, ['health check'], undefined, options)
+        else await this.piModels.rerank(ref, 'health check', ['health check'], 1, options)
+        return { ok: true, latencyMs: Math.max(0, Math.round(performance.now() - startedAt)) }
+      }
       const response = await this.piModels.pi.completeSimple(
         piModel,
         {

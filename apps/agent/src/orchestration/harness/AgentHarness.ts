@@ -1,3 +1,4 @@
+import { prepareMediaInput, type MediaInput } from '../../provider/pi/MediaInput'
 import { estimateContextTokens } from '../../context/ContextManager'
 import { createProviderMessagePhaseReader } from './ProviderMessagePhase'
 import {
@@ -69,10 +70,10 @@ import {
   type HarnessTurnComposition,
 } from './TurnComposition.ts'
 
-function createUserMessage(text: string, images?: ImageContent[]): UserMessage {
+function createUserMessage(text: string, images?: ImageContent[], media?: MediaInput[]): UserMessage {
   const content: Array<{ type: 'text'; text: string } | ImageContent> = [{ type: 'text', text }]
   if (images) content.push(...images)
-  return { role: 'user', content, timestamp: Date.now() }
+  return { role: 'user', content, timestamp: Date.now(), ...(media?.length ? { media } : {}) }
 }
 
 function createFailureMessage(
@@ -425,6 +426,9 @@ export class AgentHarness<
     AgentHarnessTurnState<TContext, TSkill, TPromptTemplate, TTool>
   > {
     const context = await this.session.buildContext()
+    const configuredModel = this.model as typeof this.model & { tools?: boolean; modelType?: string }
+    if (configuredModel.modelType && configuredModel.modelType !== 'chat') throw new AgentHarnessError('invalid_argument', '嵌入与重排模型不能用于聊天')
+    const toolsEnabled = configuredModel.tools !== false
     if (!this.restoredActiveTools) {
       const restoredNames = context.activeToolNames ?? this.activeToolNames
       await this.loadDeferredTools(restoredNames)
@@ -454,8 +458,8 @@ export class AgentHarness<
     if (!composition) {
       const resources = this.getResources()
       const toolContext = await this.resolveToolContext()
-      const tools = [...this.tools.values()]
-      const activeTools = this.activeToolNames
+      const tools = toolsEnabled ? [...this.tools.values()] : []
+      const activeTools = (toolsEnabled ? this.activeToolNames : [])
         .map((name) => this.tools.get(name))
         .filter((tool): tool is TTool => tool !== undefined)
       let systemPrompt = 'You are a helpful assistant.'
@@ -475,8 +479,8 @@ export class AgentHarness<
         thinkingLevel: this.thinkingLevel,
         systemPrompt,
         tools,
-        initialActiveToolNames: this.activeToolNames,
-        deferredToolNames: (this.deferredToolCatalog?.names() ?? []).filter(
+        initialActiveToolNames: toolsEnabled ? this.activeToolNames : [],
+        deferredToolNames: (toolsEnabled ? this.deferredToolCatalog?.names() ?? [] : []).filter(
           (name) => !this.tools.has(name),
         ),
         resources,
@@ -485,7 +489,7 @@ export class AgentHarness<
       })
       this.currentTurnComposition = composition
     }
-    const activeTools = this.activeToolNames
+    const activeTools = (toolsEnabled ? this.activeToolNames : [])
       .map((name) => this.tools.get(name))
       .filter((tool): tool is TTool => tool !== undefined)
     return {
@@ -537,7 +541,8 @@ export class AgentHarness<
       )
       const readPhase = createProviderMessagePhaseReader()
       await this.emitOwn({ type: 'provider_text_reset' }, streamOptions?.signal)
-      return this.models.streamSimple(model, context, {
+      const mediaInput = prepareMediaInput(model, context)
+      return this.models.streamSimple(model, mediaInput.context, {
         onProviderStreamEvent: async (value) => {
           const event = readPhase(value)
           if (event) await this.emitOwn(event, streamOptions?.signal)
@@ -553,7 +558,7 @@ export class AgentHarness<
           ? { maxRetryDelayMs: requestOptions.maxRetryDelayMs }
           : {}),
         ...(requestOptions.metadata !== undefined ? { metadata: requestOptions.metadata } : {}),
-        onPayload: async (payload) => await this.emitBeforeProviderPayload(model, payload),
+        onPayload: async (payload) => mediaInput.applyPayload(await this.emitBeforeProviderPayload(model, payload)),
         onResponse: async (response) => {
           const headers = { ...(response.headers as Record<string, string>) }
           await this.emitOwn(
@@ -798,7 +803,7 @@ export class AgentHarness<
   private async executeTurn(
     turnState: AgentHarnessTurnState<TContext, TSkill, TPromptTemplate, TTool>,
     text: string,
-    options?: { images?: ImageContent[] },
+    options?: { images?: ImageContent[]; media?: MediaInput[] },
   ): Promise<AssistantMessage> {
     let activeTurnState = turnState
     this.activeComposition = turnState.composition
@@ -809,11 +814,11 @@ export class AgentHarness<
       const turnContext = buildTurnContext({
         composition: state.composition,
         stepIndex,
-        currentActiveToolNames: this.activeToolNames,
+        currentActiveToolNames: state.activeTools.map((tool) => tool.name),
       })
       const stepContext = buildStepContext({
         stepIndex,
-        currentActiveNames: this.activeToolNames,
+        currentActiveNames: state.activeTools.map((tool) => tool.name),
         toolPolicy: state.composition.toolPolicy,
       })
       await this.emitOwn({
@@ -825,7 +830,7 @@ export class AgentHarness<
       })
     }
     await emitComposition(turnState)
-    let messages: AgentMessage[] = [createUserMessage(text, options?.images)]
+    let messages: AgentMessage[] = [createUserMessage(text, options?.images, options?.media)]
     if (this.nextTurnQueue.length > 0) {
       const queuedMessages = this.nextTurnQueue.splice(0)
       try {
@@ -905,7 +910,7 @@ export class AgentHarness<
     }
   }
 
-  async prompt(text: string, options?: { images?: ImageContent[] }): Promise<AssistantMessage> {
+  async prompt(text: string, options?: { images?: ImageContent[]; media?: MediaInput[] }): Promise<AssistantMessage> {
     if (this.phase !== 'idle') throw new AgentHarnessError('busy', 'AgentHarness is busy')
     this.phase = 'turn'
     const finishRunPromise = this.startRunPromise()
@@ -962,11 +967,11 @@ export class AgentHarness<
 
   async steer(
     text: string,
-    options?: { images?: ImageContent[]; inputId?: string },
+    options?: { images?: ImageContent[]; media?: MediaInput[]; inputId?: string },
   ): Promise<void> {
     if (this.phase === 'idle')
       throw new AgentHarnessError('invalid_state', 'Cannot steer while idle')
-    const message = createUserMessage(text, options?.images)
+    const message = createUserMessage(text, options?.images, options?.media)
     if (options?.inputId) this.queuedInputIds.set(message, options.inputId)
     this.steerQueue.push(message)
     await this.emitQueueUpdate()
@@ -974,11 +979,11 @@ export class AgentHarness<
 
   async followUp(
     text: string,
-    options?: { images?: ImageContent[]; inputId?: string },
+    options?: { images?: ImageContent[]; media?: MediaInput[]; inputId?: string },
   ): Promise<void> {
     if (this.phase === 'idle')
       throw new AgentHarnessError('invalid_state', 'Cannot follow up while idle')
-    const message = createUserMessage(text, options?.images)
+    const message = createUserMessage(text, options?.images, options?.media)
     if (options?.inputId) this.queuedInputIds.set(message, options.inputId)
     this.followUpQueue.push(message)
     await this.emitQueueUpdate()
@@ -986,9 +991,9 @@ export class AgentHarness<
 
   async nextTurn(
     text: string,
-    options?: { images?: ImageContent[]; inputId?: string },
+    options?: { images?: ImageContent[]; media?: MediaInput[]; inputId?: string },
   ): Promise<void> {
-    const message = createUserMessage(text, options?.images)
+    const message = createUserMessage(text, options?.images, options?.media)
     if (options?.inputId) this.queuedInputIds.set(message, options.inputId)
     this.nextTurnQueue.push(message)
     await this.emitQueueUpdate()

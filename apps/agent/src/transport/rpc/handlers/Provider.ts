@@ -180,7 +180,10 @@ export const providerHandlers = {
         return runtime.publishCatalogUpdated()
       case 'model/setDefault': {
         const model = modelRefOrNull(params.model)
-        if (model) await providers.resolve(model)
+        if (model) {
+          const selected = await providers.resolve(model)
+          if (selected.modelType && selected.modelType !== 'chat') throw new AgentError('INVALID_REQUEST', '嵌入与重排模型不能设为聊天模型', 400)
+        }
         // 兼容外壳：旧客户端的“默认模型”语义现在映射为新建任务最近选择。
         await config.batchWrite({
           edits: [
@@ -201,7 +204,10 @@ export const providerHandlers = {
       }
       case 'model/setReviewer': {
         const model = modelRefOrNull(params.model)
-        if (model) await providers.resolve(model)
+        if (model) {
+          const selected = await providers.resolve(model)
+          if (selected.modelType && selected.modelType !== 'chat') throw new AgentError('INVALID_REQUEST', '嵌入与重排模型不能设为聊天模型', 400)
+        }
         await config.batchWrite({
           edits: [
             {

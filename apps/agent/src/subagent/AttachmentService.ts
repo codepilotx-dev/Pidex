@@ -6,6 +6,7 @@ export const ATTACHMENT_LIMITS = {
   maxCount: 8,
   maxTextBytes: 1 * 1024 * 1024,
   maxImageBytes: 10 * 1024 * 1024,
+  maxMediaBytes: 20 * 1024 * 1024,
   maxTotalBytes: 25 * 1024 * 1024,
 } as const
 
@@ -19,7 +20,7 @@ const TEXT_APPLICATION_MIME_TYPES = new Set([
 ])
 const WINDOWS_RESERVED_NAME = /^(?:CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(?:\.|$)/i
 
-export type AttachmentKind = 'text' | 'image'
+export type AttachmentKind = 'text' | 'image' | 'audio' | 'video'
 
 export interface AttachmentUpload {
   readonly kind: AttachmentKind
@@ -195,6 +196,7 @@ export const normalizeAttachmentMimeType = (kind: AttachmentKind, value: string)
   if (charset && charset !== 'utf-8' && charset !== 'utf8') {
     throw new AgentError('ATTACHMENT_CHARSET_UNSUPPORTED', '文本附件只支持 UTF-8', 400)
   }
+  if ((kind === 'audio' && !['audio/wav', 'audio/mpeg', 'audio/mp3', 'audio/ogg', 'audio/flac', 'audio/mp4', 'audio/webm'].includes(mimeType)) || (kind === 'video' && !['video/mp4', 'video/webm'].includes(mimeType))) throw new AgentError('INVALID_REQUEST', '不支持的音视频文件类型', 400)
   if (kind === 'image' && !IMAGE_MIME_TYPES.has(mimeType)) {
     throw new AgentError(
       'ATTACHMENT_IMAGE_TYPE_UNSUPPORTED',
@@ -237,6 +239,7 @@ const hasImageSignature = (mimeType: string, data: Uint8Array) => {
 }
 
 export const attachmentUploadBytes = (upload: AttachmentUpload, mimeType: string) => {
+  if ((upload.kind === 'audio' || upload.kind === 'video') && typeof upload.data === 'string') throw new AgentError('INVALID_REQUEST', '音视频附件必须使用二进制数据', 400)
   if (upload.kind === 'image' && typeof upload.data === 'string') {
     throw new AgentError('ATTACHMENT_IMAGE_BYTES_REQUIRED', '图片附件必须使用二进制数据', 400)
   }
@@ -250,18 +253,28 @@ export const attachmentUploadBytes = (upload: AttachmentUpload, mimeType: string
     } catch {
       throw new AgentError('ATTACHMENT_UTF8_INVALID', '文本附件不是有效 UTF-8', 400)
     }
-  } else if (!hasImageSignature(mimeType, data)) {
+  } else if (upload.kind === 'image' && !hasImageSignature(mimeType, data)) {
     throw new AgentError('ATTACHMENT_IMAGE_INVALID', '图片内容与 MIME 类型不匹配', 400)
+  }
+  if (upload.kind === 'audio' || upload.kind === 'video') {
+    const prefix = (offset: number, text: string) => new TextDecoder().decode(data.subarray(offset, offset + text.length)) === text
+    const valid = mimeType === 'audio/wav' ? prefix(0, 'RIFF') && prefix(8, 'WAVE')
+      : mimeType === 'audio/mpeg' || mimeType === 'audio/mp3' ? prefix(0, 'ID3') || data[0] === 255 && ((data[1] ?? 0) & 224) === 224
+      : mimeType === 'audio/flac' ? prefix(0, 'fLaC')
+      : mimeType === 'audio/ogg' ? prefix(0, 'OggS')
+      : mimeType.endsWith('/webm') ? [26, 69, 223, 163].every((byte, index) => data[index] === byte)
+      : prefix(4, 'ftyp')
+    if (!valid) throw new AgentError('INVALID_REQUEST', '音视频内容与 MIME 类型不匹配', 400)
   }
   return data
 }
 
-export const prepareAttachmentUpload = (upload: AttachmentUpload) => {
+export const prepareAttachmentUpload = <T extends AttachmentUpload>(upload: T) => {
   validateName(upload.name)
   const mimeType = normalizeAttachmentMimeType(upload.kind, upload.mimeType)
   const data = attachmentUploadBytes(upload, mimeType)
   const limit =
-    upload.kind === 'text' ? ATTACHMENT_LIMITS.maxTextBytes : ATTACHMENT_LIMITS.maxImageBytes
+    upload.kind === 'text' ? ATTACHMENT_LIMITS.maxTextBytes : upload.kind === 'image' ? ATTACHMENT_LIMITS.maxImageBytes : ATTACHMENT_LIMITS.maxMediaBytes
   if (data.byteLength > limit) {
     throw new AgentError(
       'ATTACHMENT_FILE_TOO_LARGE',

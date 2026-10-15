@@ -286,7 +286,7 @@ export async function executeHarnessRun(
     const images = promptImages(request)
     let message: AssistantMessage = await harness.prompt(
       promptContext(request, bundle.contextItems),
-      images.length > 0 ? { images } : undefined,
+      { images, media: request.attachments?.flatMap((attachment) => attachment.kind === 'audio' || attachment.kind === 'video' ? [{ kind: attachment.kind, data: attachment.base64, mimeType: attachment.mediaType }] : []) ?? [] },
     )
     if (message.stopReason === 'error' && isProviderContextOverflow(message.errorMessage)) {
       try {

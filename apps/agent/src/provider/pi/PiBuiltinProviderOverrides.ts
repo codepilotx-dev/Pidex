@@ -26,8 +26,9 @@ export function withPiBuiltinProviderOverrides(
         result = {
           ...model,
           ...override,
+          ...(override.input ? { inputExplicit: true } : {}),
           ...(config.protocol ? { api: config.protocol as Api } : {}),
-          input: [...(override.input ?? model.input)],
+          input: [...(override.input ?? model.input)] as Model<Api>['input'],
           cost: { ...model.cost, ...override.cost },
           ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
         }
@@ -57,8 +58,9 @@ export function withPiBuiltinProviderOverrides(
         const model = {
           ...template,
           ...override,
+          ...(override.input ? { inputExplicit: true } : {}),
           ...(config.protocol ? { api: config.protocol as Api } : {}),
-          input: [...(override.input ?? template.input)],
+          input: [...(override.input ?? template.input)] as Model<Api>['input'],
           cost: { ...template.cost, ...override.cost },
           id,
           name: override.name ?? id,

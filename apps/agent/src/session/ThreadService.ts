@@ -623,10 +623,10 @@ export class ThreadService {
     ) {
       throw new AgentError('ATTACHMENT_ALREADY_BOUND', '附件已绑定到其他 Turn', 409)
     }
-    if (records.some((record) => record.kind === 'image')) {
+    if (records.some((record) => record.kind !== 'text')) {
       const selected = await this.providers.resolve(model)
-      if (!selected.capabilities.input.includes('image'))
-        throw new AgentError('MODEL_IMAGE_UNSUPPORTED', '当前模型不支持图片输入', 409)
+      if (records.some((record) => record.kind !== 'text' && !selected.capabilities.input.includes(record.kind)))
+        throw new AgentError('INVALID_REQUEST', '当前模型不支持所选媒体输入', 409)
     }
   }
 
@@ -1046,7 +1046,7 @@ export class ThreadService {
           : [],
       )
       try {
-        await this.orchestrator.steer(threadID, content, images, input.id)
+        await this.orchestrator.steer(threadID, content, images, input.id, attachments.flatMap((attachment) => attachment.kind === 'audio' || attachment.kind === 'video' ? [{ kind: attachment.kind, data: attachment.base64, mimeType: attachment.mediaType }] : []))
         handle.dispatchedSteerIDs.add(input.id)
       } catch (cause) {
         const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : ''
@@ -1103,10 +1103,10 @@ export class ThreadService {
       )
     )
       throw new AgentError('ATTACHMENT_ALREADY_BOUND', '附件已绑定到其他 Turn', 409)
-    if (records.some((record) => record.kind === 'image')) {
+    if (records.some((record) => record.kind !== 'text')) {
       const model = await this.providers.resolve(JSON.parse(queued.model_ref) as Model.Ref)
-      if (!model.capabilities.input.includes('image'))
-        throw new AgentError('MODEL_IMAGE_UNSUPPORTED', '当前模型不支持图片输入', 409)
+      if (records.some((record) => record.kind !== 'text' && !model.capabilities.input.includes(record.kind)))
+        throw new AgentError('INVALID_REQUEST', '当前模型不支持所选媒体输入', 409)
     }
     const removed = currentIDs.filter((id) => !nextIDs.includes(id))
     const added = nextIDs.filter((id) => !currentIDs.includes(id))
@@ -1832,7 +1832,7 @@ export class ThreadService {
               text: new TextDecoder('utf-8', { fatal: true }).decode(value.data),
             }
           : {
-              kind: 'image' as const,
+              kind: record.kind as 'image' | 'audio' | 'video',
               name: record.name,
               mediaType: record.mimeType,
               base64: Buffer.from(value.data).toString('base64'),
@@ -1850,7 +1850,9 @@ export class ThreadService {
       if (seen.has(key)) continue
       seen.add(key)
       try {
-        return await this.providers.resolve(candidate)
+        const resolved = await this.providers.resolve(candidate)
+        if (resolved.modelType && resolved.modelType !== 'chat') continue
+        return resolved
       } catch (cause) {
         lastError = cause
       }

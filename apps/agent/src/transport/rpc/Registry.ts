@@ -1,3 +1,5 @@
+import { modelRecommendationHandlers } from './handlers/ModelRecommendations'
+import { modelOperationHandlers } from './handlers/ModelOperations'
 import { computerHandlers } from './handlers/Computer'
 import { visualizationHandlers } from './handlers/Visualization'
 import { type RpcHandlers, type RpcMethod } from '@pidex/agent-protocol'
@@ -49,6 +51,8 @@ import type { RpcRouter } from './RpcRouter'
 type MapRpcError = (method: RpcMethod, cause: unknown) => Error
 
 const groups: readonly RpcHandlerGroup[] = [
+  modelRecommendationHandlers,
+  modelOperationHandlers,
   visualizationHandlers,
   computerHandlers,
   browserHandlers,

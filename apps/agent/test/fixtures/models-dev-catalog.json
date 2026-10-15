@@ -1,0 +1,409 @@
+{
+  "providers": {
+    "deepinfra": {
+      "id": "deepinfra",
+      "models": {
+        "tencent/Hy3": {
+          "id": "tencent/Hy3",
+          "name": "Hy3",
+          "description": "Tencent Hy reasoning model for coding, instruction following, and agent tasks",
+          "family": "Hy",
+          "attachment": false,
+          "reasoning": true,
+          "reasoning_options": [],
+          "tool_call": true,
+          "structured_output": true,
+          "temperature": true,
+          "release_date": "2026-07-06",
+          "last_updated": "2026-07-06",
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "open_weights": true,
+          "limit": {
+            "context": 262144,
+            "input": 192000,
+            "output": 128000
+          },
+          "status": "deprecated",
+          "cost": {
+            "input": 0.13,
+            "output": 0.53,
+            "cache_read": 0.033
+          },
+          "canonical_model_id": "tencent/hy3"
+        }
+      },
+      "api": null
+    },
+    "nano-gpt": {
+      "id": "nano-gpt",
+      "models": {
+        "tencent/hy3": {
+          "id": "tencent/hy3",
+          "name": "Tencent Hy3",
+          "description": "Tencent Hy reasoning model for coding, instruction following, and agent tasks",
+          "family": "Hy",
+          "attachment": false,
+          "reasoning": true,
+          "reasoning_options": [
+            {
+              "type": "effort",
+              "values": ["none", "low", "high"]
+            }
+          ],
+          "tool_call": true,
+          "structured_output": true,
+          "temperature": true,
+          "release_date": "2026-07-06",
+          "last_updated": "2026-07-06",
+          "modalities": {
+            "input": ["text"],
+            "output": ["text"]
+          },
+          "open_weights": true,
+          "limit": {
+            "context": 262144,
+            "input": 262144,
+            "output": 128000
+          },
+          "cost": {
+            "input": 0.066,
+            "output": 0.26,
+            "cache_read": 0.029
+          },
+          "canonical_model_id": "tencent/hy3"
+        }
+      },
+      "api": "https://nano-gpt.com/api/v1"
+    }
+  },
+  "models": {
+    "baai/bge-m3": {
+      "id": "baai/bge-m3",
+      "type": "embedding",
+      "name": "BGE M3",
+      "description": "Multilingual embedding model combining dense, sparse, and multi-vector retrieval",
+      "family": "bge",
+      "attachment": false,
+      "reasoning": false,
+      "tool_call": false,
+      "temperature": false,
+      "release_date": "2024-01-30",
+      "last_updated": "2024-01-30",
+      "modalities": {
+        "input": ["text"],
+        "output": ["text"]
+      },
+      "open_weights": true,
+      "limit": {
+        "context": 8192,
+        "output": 0
+      },
+      "license": "MIT",
+      "weights": [
+        {
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/BAAI/bge-m3"
+        }
+      ]
+    },
+    "baai/bge-reranker-v2-m3": {
+      "id": "baai/bge-reranker-v2-m3",
+      "type": "reranking",
+      "name": "BGE Reranker V2 M3",
+      "description": "Lightweight multilingual cross-encoder that scores query-document relevance",
+      "family": "bge",
+      "attachment": false,
+      "reasoning": false,
+      "tool_call": false,
+      "temperature": false,
+      "release_date": "2024-03-15",
+      "last_updated": "2024-03-15",
+      "modalities": {
+        "input": ["text"],
+        "output": ["text"]
+      },
+      "open_weights": true,
+      "limit": {
+        "context": 8192,
+        "output": 0
+      },
+      "license": "Apache-2.0",
+      "weights": [
+        {
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/BAAI/bge-reranker-v2-m3"
+        }
+      ]
+    },
+    "tencent/hy3": {
+      "id": "tencent/hy3",
+      "name": "Hy3",
+      "description": "Tencent Hy reasoning model for coding, instruction following, and agent tasks",
+      "family": "Hy",
+      "attachment": false,
+      "reasoning": true,
+      "tool_call": true,
+      "temperature": true,
+      "release_date": "2026-07-06",
+      "last_updated": "2026-07-06",
+      "modalities": {
+        "input": ["text"],
+        "output": ["text"]
+      },
+      "open_weights": true,
+      "limit": {
+        "context": 256000,
+        "input": 192000,
+        "output": 128000
+      },
+      "weights": [
+        {
+          "label": "Hugging Face",
+          "url": "https://huggingface.co/tencent/Hy3"
+        }
+      ],
+      "benchmarks": [
+        {
+          "name": "SWE-Bench Verified",
+          "score": 78,
+          "metric": "resolved",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "SWE-Bench Multilingual",
+          "score": 75.8,
+          "metric": "score",
+          "harness": "SWE-agent",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "SWE-Bench Pro",
+          "score": 57.9,
+          "metric": "score",
+          "harness": "SWE-agent",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "Terminal-Bench",
+          "score": 71.7,
+          "metric": "score",
+          "harness": "Terminus 2",
+          "variant": "highest reasoning effort; 4h timeout; 500 episodes",
+          "version": "2.1",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "NL2Repo",
+          "score": 45.6,
+          "metric": "score",
+          "harness": "Claude Code",
+          "variant": "highest reasoning effort; 250 turns; 12000s timeout",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "DeepSWE",
+          "score": 28,
+          "metric": "score",
+          "harness": "mini-swe-agent",
+          "variant": "highest reasoning effort; 2h timeout",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "BrowseComp",
+          "score": 84.2,
+          "metric": "score",
+          "harness": "Tencent internal search harness",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "WideSearch",
+          "score": 76.4,
+          "metric": "score",
+          "harness": "Tencent internal search harness",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "DeepSearchQA",
+          "score": 91,
+          "metric": "score",
+          "harness": "Tencent internal search harness",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "MCP Atlas",
+          "score": 79.1,
+          "metric": "score",
+          "harness": "Scale AI",
+          "variant": "highest reasoning effort; April 2026; 100 tool calls",
+          "dataset": "500 public tasks",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "Toolathlon",
+          "score": 48.5,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "APEX-Agents",
+          "score": 25.6,
+          "metric": "pass@1",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "ClawEval",
+          "score": 68.5,
+          "metric": "pass@3",
+          "harness": "Tencent internal harness",
+          "variant": "highest reasoning effort",
+          "dataset": "105 queries",
+          "version": "20260325",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "WildClawBench",
+          "score": 53.6,
+          "metric": "score",
+          "harness": "OpenClaw",
+          "variant": "highest reasoning effort",
+          "dataset": "35 text-only tasks",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "SkillsBench",
+          "score": 55.3,
+          "metric": "average over 3 runs",
+          "harness": "Claude Code",
+          "variant": "highest reasoning effort",
+          "dataset": "79 text-only tasks",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "Humanity's Last Exam",
+          "score": 53.2,
+          "metric": "score",
+          "variant": "highest reasoning effort; with tools",
+          "dataset": "text-only",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "Humanity's Last Exam",
+          "score": 37,
+          "metric": "score",
+          "variant": "highest reasoning effort; without tools",
+          "dataset": "text-only",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "GPQA Diamond",
+          "score": 90.4,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "FrontierScience",
+          "score": 21.3,
+          "metric": "score",
+          "variant": "highest reasoning effort; research",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "FrontierScience",
+          "score": 74.8,
+          "metric": "score",
+          "variant": "highest reasoning effort; olympiad",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "USAMO",
+          "score": 72,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "version": "2026",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "MathArena Apex",
+          "score": 38.7,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "ArxivMath",
+          "score": 52.2,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "HorizonMath",
+          "score": 7.1,
+          "metric": "pass@12",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "PHYBench",
+          "score": 77.4,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "CMT Benchmark",
+          "score": 37.8,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "IMOAnswerBench",
+          "score": 90,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "SuperChem",
+          "score": 54.9,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "CL-bench",
+          "score": 23.8,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "CL-bench-life",
+          "score": 17,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        },
+        {
+          "name": "AA-LCR",
+          "score": 73.4,
+          "metric": "score",
+          "variant": "highest reasoning effort",
+          "source": "https://huggingface.co/tencent/Hy3"
+        }
+      ]
+    }
+  }
+}

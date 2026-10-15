@@ -283,7 +283,10 @@ export class ProjectSourceService {
         413,
       )
     }
-    const prepared = uploads.map(prepareAttachmentUpload)
+    const prepared = uploads.map((upload) => {
+      if (upload.kind !== 'text' && upload.kind !== 'image') throw new AgentError('INVALID_REQUEST', '项目来源只支持文本与图片', 400)
+      return prepareAttachmentUpload({ ...upload, kind: upload.kind })
+    })
     const totalBytes = prepared.reduce((sum, item) => sum + item.data.byteLength, 0)
     if (totalBytes > ATTACHMENT_LIMITS.maxTotalBytes) {
       throw new AgentError(

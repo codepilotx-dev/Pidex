@@ -57,7 +57,7 @@ export interface HarnessRuntimeRequest {
   bundle?: PromptBundle
   attachments?: Array<
     | { kind: 'text'; name: string; text: string }
-    | { kind: 'image'; name: string; mediaType: string; base64: string }
+    | { kind: 'image' | 'audio' | 'video'; name: string; mediaType: string; base64: string }
   >
   allowedTools?: readonly string[]
   toolCatalog?: ToolCatalog

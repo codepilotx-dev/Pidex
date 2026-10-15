@@ -474,14 +474,14 @@ export const threadHandlers = {
           throw new AgentError('INVALID_REQUEST', 'uploads 参数无效', 400)
         const uploads = params.uploads.map((entry) => {
           const value = record(entry, 'attachment')
-          const kind = enumValue(value.kind, ['text', 'image'] as const, 'kind')
+          const kind = enumValue(value.kind, ['text', 'image', 'audio', 'video'] as const, 'kind')
           const data = stringParam(value, 'data')
           return {
             kind,
             name: stringParam(value, 'name'),
             mimeType: stringParam(value, 'mediaType', 'mimeType'),
             data:
-              kind === 'image' || value.encoding === 'base64'
+              kind !== 'text' || value.encoding === 'base64'
                 ? new Uint8Array(Buffer.from(data, 'base64'))
                 : data,
           }
