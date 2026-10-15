@@ -91,14 +91,14 @@ export class ComposerPathGrantService {
       mediaType,
       sizeBytes: info.size,
     }
-    if (mediaType.startsWith('image/') && !request.range) {
-      if (info.size > MAX_IMAGE_PREVIEW_BYTES) {
+    if ((mediaType.startsWith('image/') || mediaType.startsWith('audio/') || mediaType.startsWith('video/')) && !request.range) {
+      if (info.size > (mediaType.startsWith('image/') ? MAX_IMAGE_PREVIEW_BYTES : 20 * 1024 * 1024)) {
         return { ...base, kind: 'binary' }
       }
       const content = await readBytes(target.path, 0, info.size)
       return {
         ...base,
-        kind: 'image',
+        kind: mediaType.startsWith('audio/') ? 'audio' : mediaType.startsWith('video/') ? 'video' : 'image',
         encoding: 'base64',
         data: content.toString('base64'),
         truncated: false,
@@ -365,6 +365,13 @@ function publicGrant(grant: StoredGrant): DesktopComposerPathGrant {
 }
 
 const MEDIA_TYPE_BY_EXTENSION: Readonly<Record<string, string>> = {
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.ogg': 'audio/ogg',
+  '.flac': 'audio/flac',
+  '.m4a': 'audio/mp4',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
   '.bmp': 'image/bmp',
   '.css': 'text/css',
   '.csv': 'text/csv',
