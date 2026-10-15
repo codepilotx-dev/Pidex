@@ -1,3 +1,5 @@
+export * from './methods/ModelRecommendations'
+export * from './methods/ModelOperations'
 export * from './runtime/Capabilities'
 export * from './methods/Visualization'
 export * from './runtime/Client'

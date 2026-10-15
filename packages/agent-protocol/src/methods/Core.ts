@@ -1122,7 +1122,7 @@ export const AttachmentUploadSchema = Schema.Union([
     data: Schema.String,
   }),
   Schema.Struct({
-    kind: Schema.Literal('image'),
+    kind: Schema.Literals(['image', 'audio', 'video']),
     name: NonEmptyStringSchema,
     mediaType: NonEmptyStringSchema,
     encoding: Schema.Literal('base64'),

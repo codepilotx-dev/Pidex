@@ -919,6 +919,15 @@ function taskScheduleFixtures() {
   }
 }
 const fixtures = {
+  'model/recommendation/preview': {
+    params: { providerId: 'relay', modelId: 'example', modelType: 'chat' },
+    result: { status: 'matched', recommended: { contextWindow: 128000 }, updatedAt: 1 },
+  },
+  'model/recommendation/refresh': {
+    params: { operationId: 'recommendations:1' }, result: { updatedAt: 1 },
+  },
+  'model/embed': methodFixture('model/embed', { model: { providerID: providerId, id: modelId }, input: ['hello'] }, { vectors: [[1, 2]], inputTokens: 1 }),
+  'model/rerank': methodFixture('model/rerank', { model: { providerID: providerId, id: modelId }, query: 'hello', documents: ['hello'] }, { results: [{ index: 0, score: 0.9 }], inputTokens: 1 }),
   'visualization/submitFollowUp': methodFixture(
     'visualization/submitFollowUp',
     {
@@ -6054,7 +6063,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(334)
+    expect(methods).toHaveLength(338)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6422,7 +6431,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(313)
+    expect(Object.keys(RpcMethods)).toHaveLength(317)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })

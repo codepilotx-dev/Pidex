@@ -20,6 +20,25 @@ export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Family = Schema.String.pipe(Schema.brand('Model.Family'))
 export type Family = typeof Family.Type
 
+export const ReasoningLevels = Schema.Array(Schema.Literals(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']))
+export const Recommendation = Schema.Struct({
+  name: Schema.optional(Schema.String),
+  contextWindow: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 }))),
+  maxInputTokens: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 }))),
+  maxTokens: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 }))),
+  reasoning: Schema.optional(Schema.Boolean),
+  tools: Schema.optional(Schema.Boolean),
+  input: Schema.optional(Schema.Array(Schema.Literals(['text', 'image', 'audio', 'video']))),
+  reasoningLevels: Schema.optional(ReasoningLevels),
+  cost: Schema.optional(Schema.Struct({
+    input: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    output: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    cacheRead: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    cacheWrite: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+  })),
+})
+export type Recommendation = typeof Recommendation.Type
+
 export interface Capabilities extends Schema.Schema.Type<typeof Capabilities> {}
 export const Capabilities = Schema.Struct({
   tools: Schema.Boolean,
@@ -61,6 +80,7 @@ export const Info = Schema.Struct({
   providerID: Provider.ID,
   family: optional(Family),
   name: Schema.String,
+  modelType: optional(Schema.Literals(['chat', 'embedding', 'rerank'])),
   api: Api,
   variant: optional(Schema.String),
   capabilities: Capabilities,

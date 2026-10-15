@@ -77,6 +77,7 @@ export const PiProviderApiSchema = Schema.Literals([
   'openai-completions',
   'openai-responses',
   'anthropic-messages',
+  'google-generative-ai',
 ])
 
 const NonNegativeNumberSchema = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0))
@@ -103,6 +104,8 @@ export const ProviderModelDefinitionSchema = Schema.Struct({
   name: Schema.optional(NonEmptyStringSchema),
   api: PiProviderApiSchema,
   enabled: Schema.optional(Schema.Boolean),
+  modelType: Schema.optional(Schema.Literals(['chat', 'embedding', 'rerank'])),
+  tools: Schema.optional(Schema.Boolean),
   contextWindow: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
   ),
@@ -114,9 +117,9 @@ export const ProviderModelDefinitionSchema = Schema.Struct({
   ),
   reasoning: Schema.optional(Schema.Boolean),
   input: Schema.optional(
-    Schema.Array(Schema.Literals(['text', 'image'])).check(
+    Schema.Array(Schema.Literals(['text', 'image', 'audio', 'video'])).check(
       Schema.isMinLength(1),
-      Schema.isMaxLength(2),
+      Schema.isMaxLength(4),
     ),
   ),
   cost: Schema.optional(ProviderModelCostSchema),
@@ -157,6 +160,9 @@ export const CustomProviderDefinitionSchema = Schema.Struct({
     'openai-completions': Schema.optional(NonEmptyStringSchema),
     'openai-responses': Schema.optional(NonEmptyStringSchema),
     'anthropic-messages': Schema.optional(NonEmptyStringSchema),
+    'google-generative-ai': Schema.optional(NonEmptyStringSchema),
+    'openai-embeddings': Schema.optional(NonEmptyStringSchema),
+    'jina-rerank': Schema.optional(NonEmptyStringSchema),
   })),
   auth: Schema.Literals(['api-key', 'none']),
   env: Schema.Array(NonEmptyStringSchema),

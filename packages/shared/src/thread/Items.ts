@@ -640,7 +640,7 @@ export type ApprovalRequest = typeof ApprovalRequestSchema.Type
 
 export const AttachmentSchema = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literals(['text', 'image']),
+  kind: Schema.Literals(['text', 'image', 'audio', 'video']),
   name: Schema.String,
   mediaType: Schema.String,
   sizeBytes: Schema.Number,

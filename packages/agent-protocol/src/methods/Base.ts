@@ -1,3 +1,5 @@
+import { ModelRecommendationRpcMethods } from './ModelRecommendations'
+import { ModelOperationsRpcMethods } from './ModelOperations'
 import { ConfigRpcMethods } from './Config'
 import { VisualizationRpcMethods } from './Visualization'
 import { CoreRpcMethods } from './Core'
@@ -21,6 +23,8 @@ import { SpeechRpcMethods } from './Speech'
  * environment/worktree/Handoff schemas are resolved lazily by runtime/client.
  */
 export const BaseRpcMethods = {
+  ...ModelRecommendationRpcMethods,
+  ...ModelOperationsRpcMethods,
   ...VisualizationRpcMethods,
   ...CoreRpcMethods,
   ...ConfigRpcMethods,

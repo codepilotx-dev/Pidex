@@ -43,7 +43,7 @@ export type DesktopComposerPathPreview = {
   relativePath: string
   mediaType: string
   sizeBytes: number
-  kind: 'image' | 'text' | 'binary'
+  kind: 'image' | 'text' | 'audio' | 'video' | 'binary'
   encoding?: 'base64' | 'utf8'
   data?: string
   truncated?: boolean
