@@ -1,7 +1,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { PetInstallPreview } from '@pidex/agent-protocol'
-import { PawPrint, RefreshCw, Trash2 } from 'lucide-react'
+import { Egg, RefreshCw, Trash2 } from 'lucide-react'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { Button } from '../../components/ui/Button.js'
 
@@ -254,7 +254,7 @@ export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
           </div>
           {preview ? (
             <div className="pet-settings-preview tw:mx-4 tw:mt-0 tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-3">
-              <PawPrint size={APP_ICON_SIZE} />
+              <Egg size={APP_ICON_SIZE} />
               <div className="tw:flex-1">
                 <strong>{preview.pet.displayName}</strong>
                 <p className="tw:mt-1 tw:mb-0 tw:text-app-text-meta tw:type-body-sm">

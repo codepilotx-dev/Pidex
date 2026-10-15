@@ -15,11 +15,11 @@ import {
   ChevronRight,
   CircleUser,
   Download,
+  Egg,
   Gauge,
   HelpCircle,
   Keyboard,
   LogOut,
-  PawPrint,
   Settings,
   Sparkles,
 } from 'lucide-react'
@@ -455,7 +455,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
           ) : null}
           <PopoverItem
             disabled={petToggleBusy}
-            icon={<PawPrint size={APP_ICON_SIZE} />}
+            icon={<Egg size={APP_ICON_SIZE} />}
             onClick={() => {
               void togglePet()
             }}

@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from 'react'
 import type { PetCatalogItem, PetCatalogResult, PetDescriptor } from '@pidex/agent-protocol'
-import { ArrowLeft, ChevronRight, PawPrint, SearchX } from 'lucide-react'
+import { ArrowLeft, ChevronRight, Egg, SearchX } from 'lucide-react'
 import { useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
@@ -209,7 +209,7 @@ export function PetCatalogSection({
               }}
               type="button"
             >
-              <PawPrint size={APP_ICON_SIZE} />
+              <Egg size={APP_ICON_SIZE} />
               立即唤醒
             </Button>
           </div>
@@ -250,7 +250,7 @@ export function PetCatalogSection({
 
           {!catalogLoading && catalog.cacheState === 'unavailable' ? (
             <div className="pet-catalog-empty tw:grid tw:justify-items-center tw:gap-2 tw:px-4 tw:py-12 tw:text-center tw:text-app-text-meta">
-              <PawPrint size={APP_ICON_SIZE} />
+              <Egg size={APP_ICON_SIZE} />
               <strong className="tw:text-app-text">暂时无法获取社区目录</strong>
               <span>请检查网络连接；已安装的宠物仍可正常使用。</span>
               <Button color="secondary" onClick={onRefreshCatalog} type="button">

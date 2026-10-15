@@ -1,5 +1,5 @@
 import React, { useState } from 'react'
-import { AlertTriangle, Check, MoreHorizontal, PawPrint, Plus, Trash2 } from 'lucide-react'
+import { AlertTriangle, Check, Egg, MoreHorizontal, Plus, Trash2 } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
 import { PopoverItem } from '../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
@@ -54,13 +54,13 @@ export function PetCatalogCard({
             alt=""
             className="tw:flex tw:size-full tw:items-center tw:justify-center"
             decoding="async"
-            fallback={<PawPrint aria-hidden="true" size={APP_ICON_SIZE} />}
+            fallback={<Egg aria-hidden="true" size={APP_ICON_SIZE} />}
             imageClassName="tw:block tw:m-auto tw:h-auto tw:max-h-full tw:w-auto tw:max-w-full tw:object-scale-down"
             loading="lazy"
             src={pet.previewUrl}
           />
         ) : (
-          <PawPrint aria-hidden="true" size={APP_ICON_SIZE} />
+          <Egg aria-hidden="true" size={APP_ICON_SIZE} />
         )}
       </div>
 

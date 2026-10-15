@@ -15,7 +15,7 @@ import {
   Square,
   User,
   Gauge,
-  PawPrint,
+  Egg,
   Trees,
   type LucideIcon,
 } from 'lucide-react'
@@ -135,7 +135,7 @@ export const SETTINGS_GROUPS = [
         routeId: 'pets',
         label: '宠物',
         description: '让桌面伙伴管理任务并提醒需要你处理的事项',
-        icon: PawPrint,
+        icon: Egg,
         rows: [
           row('唤醒宠物', '显示或收起桌面宠物'),
           row('选择宠物', '选择已安装的自定义宠物'),

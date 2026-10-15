@@ -8,9 +8,9 @@ import {
   Blocks,
   BrainCircuit,
   Clock3,
+  Egg,
   FolderKanban,
   MessagesSquare,
-  PawPrint,
   Search,
   SquarePen,
   X,
@@ -118,7 +118,7 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
   {
     view: 'pets',
     label: '宠物市场',
-    icon: <PawPrint size={APP_ICON_SIZE} />,
+    icon: <Egg size={APP_ICON_SIZE} />,
     path: '/pets',
     availability: {
       kind: 'any-capability',
