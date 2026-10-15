@@ -171,6 +171,17 @@ describe('AgentHarness deferred activation', () => {
 })
 
 describe('AgentHarness turn composition', () => {
+  test('blocks provider requests beyond the configured maximum input budget', async () => {
+    const setup = setupProvider([fauxAssistantMessage('should not be requested')])
+    const repo = new InMemorySessionRepo()
+    const session = await repo.create({ id: crypto.randomUUID() })
+    const harness = new AgentHarness({ session, models: setup.models,
+      model: Object.assign(setup.faux.getModel(), { maxInputTokens: 1 }) })
+    const result = await harness.prompt('a message exceeding the configured one-token input budget')
+    expect(result.stopReason).toBe('error')
+    expect(result.errorMessage).toContain('最大输入 Token')
+  })
+
   test('resolves an async system prompt at each turn boundary, never in the constructor', async () => {
     let resolutions = 0
     const setup = setupProvider([fauxAssistantMessage('first'), fauxAssistantMessage('second')])

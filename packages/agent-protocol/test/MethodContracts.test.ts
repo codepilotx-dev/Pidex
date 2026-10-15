@@ -919,6 +919,22 @@ function taskScheduleFixtures() {
   }
 }
 const fixtures = {
+  'visualization/submitFollowUp': methodFixture(
+    'visualization/submitFollowUp',
+    {
+      threadId: 'thread-1',
+      itemId: 'ui-1',
+      inputId: 'input-1',
+      text: '继续分析',
+      selection: { count: 4 },
+    },
+    {
+      inputId: 'input-1',
+      turnId: 'turn-2',
+      disposition: 'accepted',
+      streamPosition: { streamId: 'thread-1', sequence: 1 },
+    },
+  ),
   ...taskScheduleFixtures(),
   'git/message/generate': methodFixture(
     'git/message/generate',
@@ -6038,7 +6054,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(333)
+    expect(methods).toHaveLength(334)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6406,7 +6422,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(312)
+    expect(Object.keys(RpcMethods)).toHaveLength(313)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })
@@ -6781,6 +6797,35 @@ describe('RPC method schema contracts', () => {
         providerId,
         definition: { ...definition, protocol: 'openai-beta-fim' },
         operationId: 'operation:deepseek-protocol-invalid',
+      }),
+    ).toThrow()
+  })
+
+  test('accepts optional builtin overrides while retaining old builtin definitions', () => {
+    expect(Capabilities).toContain('provider.builtinOverrides.v1')
+    const decode = Schema.decodeUnknownSync(RpcMethods['provider/update'].params, {
+      onExcessProperty: 'error',
+    })
+    const definition = {
+      kind: 'builtin' as const,
+      id: providerId,
+      enabled: true,
+      allowModels: [],
+      denyModels: [],
+      baseUrl: 'https://gateway.example/v1',
+      models: [{ id: modelId, enabled: true, name: 'Renamed', maxTokens: 65536 }],
+    }
+    expect(
+      decode({ providerId, definition, operationId: 'operation:builtin-overrides' }).definition,
+    ).toEqual(definition)
+    expect(decode({ providerId, definition: { ...definition, protocol: 'google-generative-ai',
+      endpoints: { 'google-generative-ai': 'https://gateway.example/v1' } },
+      operationId: 'operation:native-endpoint' }).definition).toMatchObject({ protocol: 'google-generative-ai' })
+    expect(() =>
+      decode({
+        providerId,
+        definition: { ...definition, models: [{ id: modelId, enabled: true, maxTokens: -1 }] },
+        operationId: 'operation:builtin-invalid',
       }),
     ).toThrow()
   })

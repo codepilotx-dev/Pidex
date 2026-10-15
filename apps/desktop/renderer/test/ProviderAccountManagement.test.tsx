@@ -1,7 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import type { UsageSourceDescriptor } from '@pidex/agent-protocol'
+import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { DesktopModelProviderSummary } from '../shared/Types.js'
+import type { DesktopApiKeySummary, DesktopModelProviderSummary } from '../shared/Types.js'
 import {
   ProviderCatalog,
   type ProviderCatalogItem,
@@ -10,6 +11,7 @@ import { getProviderConnectionChoices } from '../src/features/models/provider-ma
 import {
   ProviderCredentialUsageCard,
   envInferenceConnections,
+  usageCredentialName,
 } from '../src/features/models/provider-management/ProviderConnectionSection.js'
 import type {
   ProviderConnection,
@@ -119,20 +121,29 @@ describe('provider connection environment and balance', () => {
     ])
   })
 
-  test('复用供应商 API Key 的余额来源渲染实际余额而不是 0', () => {
+  test('余额卡片展示凭据名称与紧凑金额，不重复来源标题、时间和币种标签', () => {
     const html = renderToStaticMarkup(
       <ProviderCredentialUsageCard
+        credentialName="DeepSeek Key"
         descriptor={providerCredentialSource()}
         loading={false}
-        onRefresh={() => {}}
         result={usageResult()}
       />,
     )
 
-    expect(html).toContain('复用供应商 API Key')
-    expect(html).toContain('DeepSeek 余额')
-    expect(html).toContain('CNY 账户余额')
+    expect(html).not.toContain('DeepSeek 余额')
+    expect(html).not.toContain('刷新于')
+    expect(html).toContain('DeepSeek Key')
+    expect(html).toContain('账户余额')
+    expect(html).not.toContain('CNY')
     expect(html).toContain('123.45')
+    expect(html).toContain('余额明细')
+    expect(html).not.toContain('（含')
+    expect(html).not.toContain('充值余额')
+    expect(html).not.toContain('赠送余额')
+    expect(html).not.toContain('provider-balance-components')
+    expect(html).not.toContain('复用供应商 API Key')
+    expect(html).not.toContain('usage-badge')
   })
 
   test('余额查询中与查询失败分别展示状态，不把未知余额显示为 0', () => {
@@ -140,18 +151,17 @@ describe('provider connection environment and balance', () => {
       <ProviderCredentialUsageCard
         descriptor={providerCredentialSource()}
         loading
-        onRefresh={() => {}}
         result={undefined}
       />,
     )
     expect(loading).toContain('正在查询余额。')
     expect(loading).not.toContain('CNY 账户余额')
+    expect(loading).not.toContain('刷新于')
 
     const failed = renderToStaticMarkup(
       <ProviderCredentialUsageCard
         descriptor={providerCredentialSource()}
         loading={false}
-        onRefresh={() => {}}
         result={usageResult({
           status: 'unavailable',
           error: { category: 'network', message: '查询失败', retryable: true },
@@ -159,6 +169,32 @@ describe('provider connection environment and balance', () => {
       />,
     )
     expect(failed).toContain('查询失败')
+  })
+
+  test('余额来源的凭据名称优先按凭据 ID 匹配 API Key，否则回退到脱敏值', () => {
+    const apiKeys = [apiKey('credential:1', 'DeepSeek Key')]
+
+    expect(
+      usageCredentialName(
+        providerCredentialSource({ kind: 'provider-key', credentialId: 'credential:2' }),
+        undefined,
+        apiKeys,
+      ),
+    ).toBeUndefined()
+    expect(
+      usageCredentialName(
+        providerCredentialSource({ kind: 'provider-key', maskedValue: '••••1234' }),
+        undefined,
+        apiKeys,
+      ),
+    ).toBe('••••1234')
+    expect(
+      usageCredentialName(
+        providerCredentialSource({ kind: 'none', maskedValue: undefined }),
+        undefined,
+        apiKeys,
+      ),
+    ).toBeUndefined()
   })
 })
 
@@ -179,7 +215,9 @@ function connection(input: {
   }
 }
 
-function providerCredentialSource(): UsageSourceDescriptor {
+function providerCredentialSource(
+  connection: UsageSourceDescriptor['connection'] = { kind: 'provider-key', disconnectible: false },
+): UsageSourceDescriptor {
   return {
     sourceId: 'deepseek-balance',
     canonicalProviderId: 'deepseek',
@@ -190,9 +228,22 @@ function providerCredentialSource(): UsageSourceDescriptor {
     availability: 'queryable',
     capabilities: ['balance'],
     queryPolicy: 'cached',
-    connection: { kind: 'provider-key', disconnectible: false },
+    connection,
     connectionMethod: { kind: 'provider-credential' },
   } as UsageSourceDescriptor
+}
+
+function apiKey(id: string, label: string): DesktopApiKeySummary {
+  return {
+    id,
+    providerId: 'deepseek',
+    label,
+    maskedValue: '••••1234',
+    enabled: true,
+    active: true,
+    priority: 0,
+    health: { status: 'untested' },
+  }
 }
 
 function usageResult(overrides: Partial<ProviderUsageSource> = {}): ProviderUsageSource {
@@ -209,7 +260,16 @@ function usageResult(overrides: Partial<ProviderUsageSource> = {}): ProviderUsag
       {
         id: 'balance',
         label: '余额',
-        balances: [{ currency: 'CNY', total: '123.45', components: [] }],
+        balances: [
+          {
+            currency: 'CNY',
+            total: '123.45',
+            components: [
+              { label: '充值余额', amount: '123.45' },
+              { label: '赠送余额', amount: '0' },
+            ],
+          },
+        ],
         quotaWindows: [],
       },
     ],

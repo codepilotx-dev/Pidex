@@ -198,6 +198,39 @@ describe('UsageService', () => {
     expect(calls).toBe(2)
   })
 
+  test('多 Key 独立查询余额、缓存和活动凭据不变', async () => {
+    const { db, credentials } = await repository()
+    const first = await Effect.runPromise(credentials.createApiKey({ integrationID: 'deepseek', label: 'First', key: 'fixture-first' }))
+    const second = await Effect.runPromise(credentials.createApiKey({ integrationID: 'deepseek', label: 'Second', key: 'fixture-second' }))
+    const active = (await Effect.runPromise(credentials.get('deepseek')))?.id
+    let calls = 0
+    const service = new UsageService(new UsageRepository(db), {
+      ...catalog, list: async () => [{ id: 'deepseek' }],
+    } as never, integrations as never, credentials, {
+      adapters: providerUsageAdapters.filter((adapter) => adapter.sourceId === 'deepseek'),
+      env: {}, now: () => 100,
+      fetch: async (_url, init) => {
+        calls += 1
+        const firstKey = new Headers(init?.headers).get('authorization') === 'Bearer fixture-first'
+        return Response.json({ is_available: true, balance_infos: [{ currency: 'CNY', total_balance: firstKey ? '10' : '20', topped_up_balance: firstKey ? '10' : '20', granted_balance: '0' }] })
+      },
+    })
+    const list = await service.sourceList()
+    expect(list.sources.map((source) => source.connection.credentialId)).toEqual([Credential.ID.make(first.id), Credential.ID.make(second.id)])
+    const params = { range: 'today' as const, timeZone: 'UTC', sourceIds: list.sources.map((source) => source.sourceId) }
+    const result = await service.providerUsage(params)
+    expect(result.sources.map((source) => source.groups[0]?.balances?.[0]?.total)).toEqual(['10', '20'])
+    expect(result.sources.map((source) => source.connection.credentialId)).toEqual([Credential.ID.make(first.id), Credential.ID.make(second.id)])
+    await service.providerUsage(params)
+    expect(calls).toBe(2)
+    await Effect.runPromise(credentials.replaceApiKey(second.id, 'fixture-replaced'))
+    const nextList = await service.sourceList()
+    expect(nextList.sources[1]?.sourceId).not.toBe(list.sources[1]?.sourceId)
+    await service.providerUsage({ ...params, sourceIds: nextList.sources.map((source) => source.sourceId) })
+    expect(calls).toBe(3)
+    expect((await Effect.runPromise(credentials.get('deepseek')))?.id).toBe(active)
+  })
+
   test('sourceIds 与 providerIds 同时存在时取交集', async () => {
     const { db, credentials } = await repository()
     const selected = providerUsageAdapters.filter((adapter) =>

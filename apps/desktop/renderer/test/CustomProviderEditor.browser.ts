@@ -1,4 +1,5 @@
 // Run: bun apps/desktop/renderer/test/CustomProviderEditor.browser.ts
+// Layout regression: bun run build:renderer, then run this file with --layout
 import { strict as assert } from 'node:assert'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -10,7 +11,16 @@ const source = (path: string) =>
 
 const clientMock = `
 window.__calls = [];
+window.__releaseTests = [];
+window.__modelPages = [];
 export const desktopClient = {
+  discoverProviderModels: async (providerID, api) => {window.__discoveries = (window.__discoveries ?? 0) + 1; return [{id: 'remote-only', name: 'Remote', api, enabled: true}];},
+  fetchProviderModels: async options => {window.__modelPages.push(options); return {models: ['chat', 'messages', 'remote-only']};},
+  testModelProvider: async (providerID, model) => {
+    window.__calls.push({kind: 'test', providerID, id: model.id});
+    if (window.__holdTests) await new Promise(resolve => window.__releaseTests.push(resolve));
+    return {status: 'reachable', latencyMs: 42};
+  },
   createProvider: async definition => {
     window.__calls.push({ kind: 'create', definition });
     if (window.__failNext) { window.__failNext = false; throw new Error('模拟保存失败'); }
@@ -23,17 +33,29 @@ export const desktopClient = {
   },
 };
 function summary(config) {
-  return { providerID: config.id, displayName: config.name, providerKind: 'custom',
+  return { ...window.__providers[config.id], providerID: config.id, displayName: config.name ?? config.id, providerKind: config.kind,
     baseURL: config.baseUrl, enabled: config.enabled, defaultModels: config.models.map(model => model.id),
     config, authMethods: ['api-key'] };
 }
 `
 
+const storeMock = `
+const snapshot = {loaded: true, providers: [], currentProviderState: null, apiKeys: [], credentials: [], usageSources: [], usageResults: [], refreshingSourceIds: []};
+export const useProviderManagementSnapshot = () => snapshot;
+export const providerManagementStore = {refresh: async () => ({...snapshot, providers: Object.values(window.__providers), configurationError: window.__failRefresh ? (window.__failRefresh = false, '模拟刷新失败') : null}), refreshAllProviderData: async () => {window.__catalogRefreshes = (window.__catalogRefreshes ?? 0) + 1; return snapshot;}, querySources: async () => {window.__queries = (window.__queries ?? 0) + 1; return {};}};
+`
+
 const harness = `
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
-import { createMemoryRouter, RouterProvider, Link, useSearchParams, useNavigate } from 'react-router-dom';
+import { createMemoryRouter, RouterProvider, Link, Outlet, useLocation, useSearchParams, useNavigate } from 'react-router-dom';
 import { ProviderEditorForm } from ${source('features/models/provider-management/ProviderEditorForm.tsx')};
+import { useModelCenterController } from ${source('features/models/UseModelCenterController.ts')};
+import { ProviderConnectionSection } from ${source('features/models/provider-management/ProviderConnectionSection.tsx')};
+import { ProviderModelsSection } from ${source('features/models/provider-management/ProviderModelsSection.tsx')};
+import { ProviderDetail } from ${source('features/models/ProviderDetail.tsx')};
+import { WorkspaceHeaderProvider, DesktopWorkspaceHeader } from ${source('features/layout/workspace-header/index.ts')};
+import { parseModelCenterSearchParams, updateModelCenterSearchParams } from ${source('features/models/ModelCenterState.ts')};
 const model = (id, api) => ({ id, name: id, api, enabled: true, contextWindow: 32768,
   maxTokens: 8192, reasoning: false, input: ['text'], cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } });
 const config = { kind: 'custom', id: 'mixed', name: 'Mixed', enabled: true,
@@ -43,30 +65,71 @@ const config = { kind: 'custom', id: 'mixed', name: 'Mixed', enabled: true,
       compat: { supportsStore: false }, thinkingLevelMap: { high: 'high' } },
     model('messages', 'anthropic-messages') ] };
 window.__providers = { mixed: { providerID: 'mixed', displayName: 'Mixed', baseURL: config.baseUrl,
-  providerKind: 'custom', defaultModels: ['chat', 'messages'], enabled: true, config } };
+  logoURL: 'data:image/svg+xml,%3Csvg%20xmlns=%22http://www.w3.org/2000/svg%22%20width=%22512%22%20height=%22512%22%3E%3Crect%20width=%22512%22%20height=%22512%22/%3E%3C/svg%3E', providerKind: 'custom', defaultModels: ['chat', 'messages'], enabled: true, config } };
+window.__providers.google = {nativeApis: ['google-generative-ai'], defaultApi: 'google-generative-ai', endpointDefaults: {'google-generative-ai': 'https://native.example/v1', 'openai-completions': 'https://compatible.example/v1'}, providerID: 'google', displayName: 'Google', providerKind: 'builtin', enabled: true, baseURL: 'https://native.example/v1', defaultModels: ['native'], modelMetadata: {native: {name: 'Native', nativeApi: 'google-generative-ai', contextWindow: 131072, outputTokens: 32768, reasoning: true}}, config: {kind: 'builtin', id: 'google', enabled: true, allowModels: [], denyModels: [], models: []}};
+function PanelHarness() {
+  const [tab, setTab] = useState(null);
+  const [host, setHost] = useState(null);
+  const beforeChange = useRef(null);
+  const location = useLocation();
+  const params = new URLSearchParams(location.search);
+  const providerId = location.pathname === '/providers' && !params.has('newProvider') && !params.has('edit') ? params.get('provider') : null;
+  const visibleTab = providerId && tab ? {...tab, providerId} : null;
+  const panel = {tab: visibleTab, host, beforeChange, claimProvider: () => {},
+    open: (id, section) => {void (visibleTab ? Promise.resolve(true) : (beforeChange.current?.() ?? Promise.resolve(true))).then(ok => {if(ok) setTab({id: 'provider-management', kind: 'provider-management', providerId: id, section});});},
+    close: () => {void (beforeChange.current?.() ?? Promise.resolve(true)).then(ok => {if(ok) setTab(null);});}};
+  return <WorkspaceHeaderProvider routeScope={location.pathname + location.search}><DesktopWorkspaceHeader rightDockOpen={!!visibleTab} shellControls={<button aria-label='显示右侧边栏' onClick={() => panel.open(providerId, 'credentials')}>显示右侧边栏</button>}/><Outlet context={{providerManagement: panel}}/>{visibleTab ? <aside aria-label='供应商设置'><button onClick={panel.close}>关闭供应商设置</button><div ref={setHost}/></aside> : null}</WorkspaceHeaderProvider>;
+}
 function Harness() {
   const [params] = useSearchParams();
   const navigate = useNavigate();
   const [, refresh] = useState(0);
+  const controller = useModelCenterController({onInitialProviderState: () => {}, onNotice: () => {}, onError: () => {}});
+  const [testProvider, setTestProvider] = useState(params.get('provider') ?? 'mixed');
+  useEffect(() => {setTestProvider(params.get('provider') ?? 'mixed')}, [params.get('provider')]);
+  const testSummary = window.__providers[testProvider] ?? {...window.__providers.mixed, providerID: testProvider};
+  const usageSource = {sourceId: 'balance', canonicalProviderId: 'mixed', providerIds: ['mixed'], displayName: '测试余额', scope: 'account', stability: 'official', availability: 'queryable', capabilities: ['balance'], queryPolicy: 'cached', connection: {kind: 'provider-key', disconnectible: false}, connectionMethod: {kind: 'provider-credential'}};
+  const keys = [{id: 'saved', label: 'Primary', maskedValue: '••••1111', enabled: true, active: true, health: {status: 'untested'}}, {id: 'backup', label: 'Backup', maskedValue: '••••2222', enabled: true, active: false, health: {status: 'untested'}}];
+  const connection = {id: 'saved', kind: params.get('auth') ?? 'inference-key', origin: 'credential', active: true, enabled: true, label: '已保存凭据', credentialId: 'saved'};
+  const group = {provider: testSummary, connections: testProvider === 'mixed' ? [connection] : [], activeConnection: testProvider === 'mixed' ? connection : null, apiKeys: [], usageSources: [usageSource], oauthAvailable: false};
   const isNew = params.get('newProvider') === '1';
   const provider = isNew ? undefined : window.__providers[params.get('provider')];
+  const route = parseModelCenterSearchParams(params, Object.keys(window.__providers), Object.keys(window.__providers));
+  const returnToDetail = () => navigate('/providers?' + updateModelCenterSearchParams(params, {providerId: route.providerId, section: route.section}));
   return <div>
-    <nav><Link to='/providers'>返回供应商</Link><Link to='/providers?provider=mixed'>Mixed</Link><Link to='/elsewhere'>离开页面</Link>
+    <nav><Link to='/providers'>返回供应商</Link><Link to='/providers?provider=mixed'>Mixed</Link><Link to='/elsewhere'>离开页面</Link><Link to='/providers?provider=google&controller=1'>Google</Link><button onClick={() => navigate(-1)}>历史后退</button><button onClick={() => navigate(1)}>历史前进</button>
       <button onClick={() => { if (provider) window.__providers[provider.providerID] = {...provider}; refresh(n => n+1); }}>模拟密钥刷新</button>
     </nav>
     <output id='location'>{params.toString()}</output>
-    {isNew || provider ? <ProviderEditorForm key={isNew ? 'new' : provider.providerID}
+    {params.has('controller') ? <div>
+      <button onClick={() => controller.testModels(testSummary, ['chat'])}>单模型测试</button>
+      <button onClick={() => controller.testModels(testSummary, ['chat', 'messages'])}>批量模型测试</button>
+      <button onClick={() => setTestProvider(testProvider === 'mixed' ? 'second' : 'mixed')}>切换测试供应商</button>
+      <ProviderConnectionSection key={testProvider} provider={testSummary} group={group} apiKeys={testProvider === 'mixed' ? keys : []} busy={false}
+        onSubmitKey={async () => {if(window.__failNext){window.__failNext=false; return false;} return true;}} onSaveDefinition={definition => controller.saveProviderDefinition(definition, testSummary.providerID)} onRefresh={async () => {refresh(n => n+1);}} onNotice={() => {}} onError={() => {}} />
+      <ProviderModelsSection key={'models-' + testProvider} provider={testSummary} models={testSummary.defaultModels} modelMetadata={testSummary.modelMetadata}
+        busy={controller.busyProviderIds.includes(testProvider)} testResults={controller.modelTestResults}
+        onTestModels={ids => controller.testModels(testSummary, ids)} onFetchModels={() => controller.fetchModels(testSummary)}
+        onSaveDefinition={controller.saveProviderDefinition} onRefresh={async () => {refresh(n => n+1);}} onNotice={() => {}} onError={() => {}} />
+      <output id='test-status'>{controller.modelTestResults[testProvider + '/chat']?.state ?? 'idle'}</output>
+    </div> : null}
+    {isNew || route.editing ? <ProviderEditorForm key={isNew ? 'new' : provider.providerID}
+      onSaveDefinition={controller.saveProviderDefinition}
       embedded open provider={provider} existingProviderIds={['custom-provider', ...Object.keys(window.__providers)]}
-      connectionSection={<div>多密钥入口</div>} onOpenChange={() => {}}
+      onOpenChange={() => isNew ? navigate('/providers') : returnToDetail()}
       onSaved={async (id, select = true) => {
-        if (window.__failRefresh) { window.__failRefresh = false; throw new Error('模拟刷新失败'); }
+        const saved = await controller.readSavedProvider(id);
         refresh(n => n+1);
-        if (select) navigate('/providers?provider=' + id);
-        return window.__providers[id];
-      }} /> : <div>供应商目录</div>}
+        if (select) navigate('/providers?' + updateModelCenterSearchParams(params, {providerId: id, section: isNew ? 'connection' : route.section}));
+        return saved;
+      }} /> : provider ? <ProviderDetail section={route.section}
+        provider={{id: provider.providerID, name: provider.displayName, logoURL: provider.logoURL, status: {label: '已配置', tone: 'positive'}}}
+        actions={<button onClick={() => navigate('/providers?' + updateModelCenterSearchParams(params, {providerId: route.providerId, section: route.section, editing: true}))}>编辑配置</button>}>
+        <div data-provider-section="connection">多密钥入口</div><div data-provider-section="models">模型测试入口</div>
+      </ProviderDetail> : <div>供应商目录</div>}
   </div>;
 }
-const router = createMemoryRouter([{ path: '*', element: <Harness /> }], { initialEntries: [window.__entry] });
+const router = createMemoryRouter([{element: <PanelHarness />, children: [{path: '*', element: <Harness />}]}], { initialEntries: [window.__entry] });
 createRoot(document.getElementById('root')).render(<RouterProvider router={router} />);
 `
 
@@ -75,7 +138,7 @@ async function buildHarness(): Promise<string> {
     entrypoints: ['custom-provider-editor-harness'],
     target: 'browser',
     format: 'iife',
-    define: { 'process.env.NODE_ENV': '"development"' },
+    define: { 'process.env.NODE_ENV': '"development"', 'import.meta.env.DEV': 'false' },
     plugins: [
       {
         name: 'custom-provider-editor-harness',
@@ -97,6 +160,14 @@ async function buildHarness(): Promise<string> {
             loader: 'jsx',
             resolveDir: rendererRoot,
           }))
+          builder.onResolve({ filter: /provider-management\/index\.js$/ }, () => ({
+            path: 'store',
+            namespace: 'custom-provider-editor',
+          }))
+          builder.onLoad({ filter: /^store$/, namespace: 'custom-provider-editor' }, () => ({
+            contents: storeMock,
+            loader: 'js',
+          }))
           builder.onResolve(
             { filter: /(?:desktop-client\/index\.js$|^custom-provider-editor-client$)/ },
             () => ({ path: 'client', namespace: 'custom-provider-editor' }),
@@ -110,16 +181,30 @@ async function buildHarness(): Promise<string> {
     ],
   })
   assert.ok(build.success, build.logs.map(String).join('\n'))
-  return build.outputs[0]!.text()
+  const script = await build.outputs[0]!.text()
+  if (!process.argv.includes('--layout')) return script
+  const assets = resolve(rendererRoot, '../../../dist/renderer/assets')
+  const cssFiles = [...new Bun.Glob('index-*.css').scanSync({ cwd: assets })]
+  assert.equal(cssFiles.length, 1, '布局检查前请先运行 bun run build:renderer')
+  const css = await Bun.file(resolve(assets, cssFiles[0]!)).text()
+  return 'window.__rendererCss = ' + JSON.stringify(css) + ';' + script
 }
 
 if (process.versions.bun) {
   // Playwright's Chrome pipe transport needs Node on Windows; Bun only bundles the harness.
-  const child = Bun.spawn(['node', '--experimental-strip-types', fileURLToPath(import.meta.url)], {
-    stdin: new Blob([await buildHarness()]),
-    stdout: 'inherit',
-    stderr: 'inherit',
-  })
+  const child = Bun.spawn(
+    [
+      'node',
+      '--experimental-strip-types',
+      fileURLToPath(import.meta.url),
+      ...process.argv.slice(2),
+    ],
+    {
+      stdin: new Blob([await buildHarness()]),
+      stdout: 'inherit',
+      stderr: 'inherit',
+    },
+  )
   process.exit(await child.exited)
 }
 
@@ -128,7 +213,7 @@ for await (const chunk of process.stdin) script += chunk.toString('utf8')
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   const errors: string[] = []
-  async function mount(entry: string) {
+  async function mount(entry: string, editing = true) {
     const page = await browser.newPage()
     page.on('pageerror', (error) => {
       errors.push(error.message)
@@ -140,7 +225,9 @@ try {
     }, entry)
     await page.addScriptTag({ content: script })
     try {
-      await expect(page.getByRole('button', { name: '保存 Provider', exact: true })).toBeVisible()
+      await expect(
+        page.getByRole('button', { name: editing ? '保存配置' : '编辑配置', exact: true }),
+      ).toBeVisible()
     } catch (error) {
       console.error(await page.locator('body').innerText())
       throw error
@@ -152,7 +239,7 @@ try {
   const page = await mount('/providers?newProvider=1')
   await expect(page.getByText('当前没有配置模型，添加并保存后可在聊天中使用。')).toBeVisible()
   assert.equal(await page.evaluate(() => (window as any).__calls.length), 0)
-  await page.getByRole('button', { name: '保存 Provider', exact: true }).click()
+  await page.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(page.getByText('Provider ID、名称和 Base URL 不能为空。')).toBeVisible()
   await page.getByPlaceholder('如：Ollama 本地服务').fill('My Provider')
   await page.getByPlaceholder('https://example.com/v1').fill('https://example.com/v1')
@@ -162,19 +249,46 @@ try {
   await page.evaluate(() => {
     ;(window as any).__failNext = true
   })
-  await page.getByRole('button', { name: '保存 Provider', exact: true }).click()
+  await page.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(page.getByText('模拟保存失败')).toBeVisible()
   await expect(page.getByPlaceholder('如：Ollama 本地服务')).toHaveValue('My Provider')
   await expect(page.locator('#location')).toHaveText('newProvider=1')
-  await page.getByRole('button', { name: '保存 Provider', exact: true }).click()
-  await expect(page.locator('#location')).toHaveText('provider=custom-provider-2')
+  await page.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(page.locator('#location')).toHaveText(
+    'provider=custom-provider-2&section=connection',
+  )
   await expect(page.getByText('多密钥入口')).toBeVisible()
   const created = await page.evaluate(() => (window as any).__calls.at(-1).definition)
   assert.equal(created.models[0].api, 'anthropic-messages')
   await page.close()
 
   // 混合协议与隐藏扩展字段保留；凭据刷新不覆盖草稿；离开选择能保存或放弃。
-  const mixed = await mount('/providers?provider=mixed')
+  const mixed = await mount('/providers?provider=mixed&section=models', false)
+  await expect(mixed.getByText('模型测试入口')).toBeVisible()
+  const headingIcon = mixed.locator('.model-center-provider-identity-logo .ui-remote-image')
+  await expect(headingIcon).toHaveAttribute('data-state', 'ready')
+  await expect(headingIcon.locator('[style*="mask-image"]')).toHaveCount(1)
+  await headingIcon.locator('img').dispatchEvent('error')
+  await expect(headingIcon).toHaveAttribute('data-state', 'error')
+  await expect(headingIcon.locator('.ui-remote-image-fallback svg')).toHaveCount(1)
+  await expect(
+    mixed
+      .getByRole('toolbar', { name: '工作区工具栏' })
+      .locator('.desktop-workspace-header-route-left'),
+  ).toContainText('Mixed')
+  await expect(
+    mixed.locator('.model-center-provider-detail .model-center-provider-detail-header'),
+  ).toHaveCount(0)
+  await expect(
+    mixed.getByRole('toolbar').locator('.desktop-workspace-header-route-right'),
+  ).toContainText('编辑配置')
+  await expect(
+    mixed.getByRole('toolbar').locator('.desktop-workspace-header-route-left'),
+  ).not.toContainText('编辑配置')
+  await expect(mixed.getByRole('button', { name: '保存配置', exact: true })).toHaveCount(0)
+  await mixed.getByRole('button', { name: '编辑配置', exact: true }).click()
+  await expect(mixed.locator('#location')).toHaveText('provider=mixed&section=models&edit=1')
+  await expect(mixed.getByText('多密钥入口')).toHaveCount(0)
   await expect(mixed.locator('[aria-label="默认 API 格式"]')).toContainText('按模型设置')
   await mixed.getByPlaceholder('如：Ollama 本地服务').fill('Renamed')
   await mixed.getByRole('button', { name: '模拟密钥刷新' }).click()
@@ -189,7 +303,7 @@ try {
   })
   await mixed.getByRole('button', { name: '保存后离开' }).click()
   await expect(mixed.getByText('模拟保存失败')).toBeVisible()
-  await expect(mixed.locator('#location')).toHaveText('provider=mixed')
+  await expect(mixed.locator('#location')).toHaveText('provider=mixed&section=models&edit=1')
   await mixed.getByRole('button', { name: '保存后离开' }).click()
   await expect(mixed.getByText('供应商目录')).toBeVisible()
   const updated = await mixed.evaluate(() => (window as any).__calls.at(-1).definition)
@@ -203,7 +317,7 @@ try {
   assert.deepEqual(updated.models[0].thinkingLevelMap, { high: 'high' })
   await mixed.close()
 
-  const discard = await mount('/providers?provider=mixed')
+  const discard = await mount('/providers?provider=mixed&edit=1')
   await discard.getByPlaceholder('https://example.com/v1').fill('https://changed.example/v1')
   await discard.getByRole('link', { name: '返回供应商', exact: true }).click()
   await discard.getByRole('button', { name: '放弃修改' }).click()
@@ -212,7 +326,7 @@ try {
   await discard.close()
 
   // 明确选择统一协议才修改全部模型，并成为后续新增模型的默认值。
-  const uniform = await mount('/providers?provider=mixed')
+  const uniform = await mount('/providers?provider=mixed&section=models&edit=1')
   await uniform.locator('[aria-label="默认 API 格式"]').click()
   await uniform
     .locator('.settings-dropdown-item')
@@ -221,14 +335,21 @@ try {
   await uniform.getByRole('button', { name: '新增模型', exact: true }).click()
   await uniform.getByPlaceholder('如：llama3.2 或 gpt-4o').fill('new-responses-model')
   await uniform.getByRole('button', { name: '完成', exact: true }).click()
-  await uniform.getByRole('button', { name: '保存 Provider', exact: true }).click()
-  await expect(uniform.getByRole('button', { name: '保存 Provider', exact: true })).toBeDisabled()
+  await uniform.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(uniform.locator('#location')).toHaveText('provider=mixed&section=models')
+  await expect(uniform.getByText('模型测试入口')).toBeVisible()
   assert.deepEqual(
     await uniform.evaluate(() =>
       (window as any).__calls.at(-1).definition.models.map((model: any) => model.api),
     ),
     ['openai-responses', 'openai-responses', 'openai-responses'],
   )
+  await uniform.getByRole('button', { name: '编辑配置', exact: true }).click()
+  await uniform.getByPlaceholder('如：Ollama 本地服务').fill('Discarded name')
+  await uniform.getByRole('button', { name: '取消', exact: true }).click()
+  await uniform.getByRole('button', { name: '放弃修改', exact: true }).click()
+  await expect(uniform.locator('#location')).toHaveText('provider=mixed&section=models')
+  assert.equal(await uniform.evaluate(() => (window as any).__providers.mixed.displayName), 'Mixed')
   await uniform.close()
 
   // 创建成功但刷新失败时，重试更新同一身份，不重复创建。
@@ -237,15 +358,416 @@ try {
   await retry.evaluate(() => {
     ;(window as any).__failRefresh = true
   })
-  await retry.getByRole('button', { name: '保存 Provider', exact: true }).click()
+  await retry.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(retry.getByText('模拟刷新失败')).toBeVisible()
-  await retry.getByRole('button', { name: '保存 Provider', exact: true }).click()
-  await expect(retry.locator('#location')).toHaveText('provider=custom-ollama')
+  await retry.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(retry.locator('#location')).toHaveText('provider=custom-ollama&section=connection')
   assert.deepEqual(
     await retry.evaluate(() => (window as any).__calls.map((call: any) => call.kind)),
     ['create', 'update'],
   )
   await retry.close()
+  const tests = await mount('/providers?provider=mixed&controller=1', false)
+  await expect(tests.getByText('多密钥入口')).toBeVisible()
+  await expect(tests.getByText('模型测试入口')).toBeVisible()
+  await expect(tests.getByRole('tab')).toHaveCount(0)
+  await expect(tests.locator('.model-center-model-row')).toHaveCount(2)
+  await tests.getByRole('button', { name: '搜索模型', exact: true }).click()
+  await tests.getByRole('searchbox', { name: '搜索模型', exact: true }).fill('chat')
+  await expect(tests.locator('.model-center-model-row')).toHaveCount(1)
+  await tests.getByRole('searchbox', { name: '搜索模型', exact: true }).fill('')
+  await expect(tests.getByRole('dialog')).toHaveCount(0)
+  assert.equal(await tests.evaluate(() => (window as any).__queries ?? 0), 0)
+  await tests.clock.install()
+  await tests.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  await expect(tests.getByRole('complementary')).toContainText('Primary')
+  await expect(tests.getByRole('complementary')).toContainText('Backup')
+  await expect(
+    tests.getByRole('complementary').getByRole('heading', { name: '认证与密钥', exact: true }),
+  ).toBeVisible()
+  await expect(tests.getByRole('complementary').getByRole('radio')).toHaveCount(0)
+  // 「用量与余额」与认证、请求配置同级且不折叠：打开侧栏即展示并查询已连接来源。
+  await expect(
+    tests.getByRole('complementary').getByRole('heading', { name: '用量与余额', exact: true }),
+  ).toBeVisible()
+  await expect(
+    tests.getByRole('complementary').getByRole('heading', { name: '请求配置', exact: true }),
+  ).toBeVisible()
+  await expect.poll(() => tests.evaluate(() => (window as any).__queries)).toBe(1)
+  await tests.getByRole('button', { name: '刷新余额', exact: true }).click()
+  await expect.poll(() => tests.evaluate(() => (window as any).__queries)).toBe(2)
+  await tests.clock.runFor(60_000)
+  assert.equal(await tests.evaluate(() => (window as any).__queries), 3)
+  await tests.getByRole('button', { name: '关闭供应商设置', exact: true }).click()
+  await tests.clock.runFor(60_000)
+  assert.equal(await tests.evaluate(() => (window as any).__queries), 3)
+  await tests.clock.resume()
+
+  await tests.evaluate(() => {
+    ;(window as any).__holdTests = true
+  })
+  await tests.getByRole('button', { name: '批量模型测试', exact: true }).click()
+  await expect(tests.locator('#test-status')).toHaveText('testing')
+  await expect(tests.getByRole('button', { name: '测试模型 chat', exact: true })).toBeDisabled()
+  await tests.getByRole('button', { name: '单模型测试', exact: true }).click()
+  assert.equal(
+    await tests.evaluate(
+      () => (window as any).__calls.filter((call: any) => call.kind === 'test').length,
+    ),
+    1,
+  )
+  await tests.getByRole('button', { name: '切换测试供应商', exact: true }).click()
+  await expect(tests.locator('#test-status')).toHaveText('idle')
+  await expect(tests.getByRole('dialog')).toHaveCount(0)
+  await tests.evaluate(() => {
+    ;(window as any).__holdTests = false
+    ;(window as any).__releaseTests.splice(0).forEach((resolve: any) => resolve())
+  })
+  await expect
+    .poll(() =>
+      tests.evaluate(
+        () => (window as any).__calls.filter((call: any) => call.kind === 'test').length,
+      ),
+    )
+    .toBe(2)
+  await expect(tests.locator('#test-status')).toHaveText('idle')
+  await tests.getByRole('button', { name: '切换测试供应商', exact: true }).click()
+  await expect(tests.locator('#test-status')).toHaveText('reachable')
+  assert.deepEqual(
+    await tests.evaluate(() =>
+      (window as any).__calls
+        .filter((call: any) => call.kind === 'test')
+        .map((call: any) => call.providerID),
+    ),
+    ['mixed', 'mixed'],
+  )
+  await tests.getByRole('button', { name: '同步模型', exact: true }).click()
+  await expect.poll(() => tests.evaluate(() => (window as any).__discoveries)).toBe(1)
+  await expect(tests.getByRole('dialog')).toContainText('remote-only')
+  await tests.getByRole('button', { name: '关闭模型发现' }).click()
+  assert.equal(
+    await tests.evaluate(() => (window as any).__providers.mixed.config.models.length),
+    2,
+  )
+  assert.deepEqual(await tests.evaluate(() => (window as any).__modelPages), [])
+  assert.equal(
+    await tests.evaluate(
+      () =>
+        (window as any).__calls.filter(
+          (call: any) => call.kind === 'create' || call.kind === 'update',
+        ).length,
+    ),
+    0,
+  )
+  await tests.close()
+
+  const modelPage = await mount('/providers?provider=mixed&controller=1', false)
+  await modelPage.getByRole('button', { name: '添加模型', exact: true }).click()
+  const modelDialog = modelPage.getByRole('dialog', { name: '添加模型', exact: true })
+  await expect(modelDialog.getByRole('button', { name: '高级设置', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  )
+  await modelDialog.getByPlaceholder('如：llama3.2 或 gpt-4o').fill('new-model')
+  await modelPage
+    .locator('nav button')
+    .last()
+    .evaluate((button) => (button as HTMLButtonElement).click())
+  await expect(modelDialog.getByPlaceholder('如：llama3.2 或 gpt-4o')).toHaveValue('new-model')
+  await modelPage.evaluate(() => {
+    ;(window as any).__failNext = true
+  })
+  await modelDialog.getByRole('button', { name: '添加模型', exact: true }).click()
+  await expect(modelDialog.getByRole('alert')).toContainText('模拟保存失败')
+  await modelDialog.getByRole('button', { name: '添加模型', exact: true }).click()
+  await expect(modelPage.getByRole('dialog')).toHaveCount(0)
+  await expect(modelPage.locator('.model-center-model-row')).toHaveCount(3)
+  await modelPage.getByRole('button', { name: '编辑模型 chat', exact: true }).click()
+  const editDialog = modelPage.getByRole('dialog', { name: '编辑模型', exact: true })
+  await expect(editDialog.getByPlaceholder('如：llama3.2 或 gpt-4o')).toHaveAttribute(
+    'readonly',
+    '',
+  )
+  await editDialog.getByRole('button', { name: '高级设置', exact: true }).click()
+  const inputLimit = editDialog.getByRole('spinbutton', { name: '最大输入 Token', exact: true })
+  await inputLimit.locator('..').getByRole('button', { name: '128K', exact: true }).click()
+  await expect(inputLimit).toHaveValue('128000')
+  await inputLimit.fill('125000')
+  await expect(inputLimit).toHaveValue('125000')
+  const reasoningChip = editDialog.getByRole('button', { name: '推理', exact: true })
+  const originalReasoning = await reasoningChip.getAttribute('aria-pressed')
+  await reasoningChip.click()
+  const back = editDialog.getByRole('button', { name: '回退高级配置', exact: true })
+  const reset = editDialog.getByRole('button', { name: '重置高级配置', exact: true })
+  await back.click()
+  await expect(reasoningChip).toHaveAttribute('aria-pressed', originalReasoning!)
+  await expect(inputLimit).toHaveValue('125000')
+  await editDialog.getByRole('spinbutton', { name: '输入价格', exact: true }).fill('9')
+  await reset.click()
+  await expect(inputLimit).toHaveValue('')
+  await expect(editDialog.getByRole('spinbutton', { name: '输入价格', exact: true })).toHaveValue('0')
+  await expect(reset).toBeDisabled()
+  await back.click()
+  await expect(inputLimit).toHaveValue('125000')
+  await expect(editDialog.getByRole('spinbutton', { name: '输入价格', exact: true })).toHaveValue('9')
+  await expect(reasoningChip).toHaveAttribute('aria-pressed', originalReasoning!)
+  await editDialog.getByRole('button', { name: '高级设置', exact: true }).click()
+  await editDialog.getByRole('button', { name: '协议参数', exact: true }).click()
+  await expect(editDialog.getByPlaceholder('X-Model-Specific: value')).toBeVisible()
+  await editDialog.getByPlaceholder('默认使用模型 ID').fill('Changed')
+  await editDialog.getByRole('button', { name: '取消', exact: true }).click()
+  await modelPage.getByRole('button', { name: '放弃修改', exact: true }).click()
+  assert.equal(
+    await modelPage.evaluate(
+      () =>
+        (window as any).__providers.mixed.config.models.find((model: any) => model.id === 'chat')
+          .name,
+    ),
+    'chat',
+  )
+  await modelPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  await modelPage
+    .getByRole('complementary')
+    .getByRole('textbox', { name: 'API 地址', exact: true })
+    .fill('https://changed.example/v1')
+  await modelPage.getByRole('link', { name: '离开页面', exact: true }).click()
+  await modelPage.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await expect(
+    modelPage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }),
+  ).toHaveValue('https://changed.example/v1')
+  await modelPage.getByRole('button', { name: '关闭供应商设置', exact: true }).click()
+  await modelPage.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await modelPage.getByRole('button', { name: '模拟密钥刷新', exact: true }).click()
+  await expect(
+    modelPage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }),
+  ).toHaveValue('https://changed.example/v1')
+  await modelPage.getByRole('button', { name: '关闭供应商设置', exact: true }).click()
+  await modelPage.evaluate(() => {
+    ;(window as any).__failNext = true
+  })
+  await modelPage.getByRole('button', { name: '保存后离开', exact: true }).click()
+  await expect(modelPage.getByRole('alert', { includeHidden: true })).toContainText('模拟保存失败')
+  await modelPage.getByRole('button', { name: '保存后离开', exact: true }).click()
+  await expect(modelPage.getByRole('complementary')).toHaveCount(0)
+  await modelPage.getByRole('button', { name: '显示右侧边栏', exact: true }).last().click()
+  await expect(modelPage.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
+  assert.equal(
+    await modelPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl),
+    'https://changed.example/v1',
+  )
+  await modelPage.close()
+  const endpointPage = await mount('/providers?provider=mixed&controller=1', false)
+  await endpointPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  const endpointPanel = endpointPage.getByRole('complementary')
+  await expect(endpointPanel).not.toContainText('Responses')
+  await expect(endpointPanel.getByRole('combobox', { name: '请求协议' })).toHaveCount(0)
+  await endpointPanel.getByRole('textbox', { name: 'API 地址', exact: true }).fill('https://chat.example/v1')
+  await endpointPanel.getByRole('textbox', { name: 'Anthropic Messages API 地址', exact: true }).fill('https://messages.example')
+  await endpointPanel.getByRole('button', { name: '设为默认', exact: true }).last().click()
+  await endpointPanel.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(endpointPanel.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
+  const endpointsSaved = await endpointPage.evaluate(() => (window as any).__providers.mixed.config)
+  assert.equal(endpointsSaved.baseUrl, 'https://messages.example')
+  assert.deepEqual(endpointsSaved.endpoints, { 'openai-completions': 'https://chat.example/v1', 'anthropic-messages': 'https://messages.example' })
+  assert.ok(endpointsSaved.models.every((model: any) => model.api === 'anthropic-messages'))
+  await endpointPage.close()
+  const builtinPage = await mount('/providers?provider=google&controller=1', false)
+  await builtinPage.getByRole('button', { name: '编辑模型 native', exact: true }).click()
+  const builtinDialog = builtinPage.getByRole('dialog', { name: '编辑模型', exact: true })
+  await builtinDialog.getByPlaceholder('默认使用模型 ID').fill('Renamed native')
+  await builtinDialog.getByRole('button', { name: '高级设置', exact: true }).click()
+  await expect(builtinDialog.getByText('模型 API 协议', { exact: true })).toHaveCount(0)
+  await builtinDialog.getByRole('spinbutton', { name: '最大输入 Token', exact: true }).fill('100000')
+  await builtinDialog.getByRole('button', { name: '保存模型', exact: true }).click()
+  assert.deepEqual(
+    await builtinPage.evaluate(() => (window as any).__providers.google.config.models),
+    [{ id: 'native', enabled: true, name: 'Renamed native', maxInputTokens: 100000 }],
+  )
+  await builtinPage.getByRole('button', { name: '添加模型', exact: true }).click()
+  await builtinPage
+    .getByRole('dialog')
+    .getByPlaceholder('如：llama3.2 或 gpt-4o')
+    .fill('private-model')
+  await builtinPage
+    .getByRole('dialog')
+    .getByRole('button', { name: '添加模型', exact: true })
+    .click()
+  assert.equal(
+    await builtinPage.evaluate(() => (window as any).__providers.google.config.models.at(-1).api),
+    undefined,
+  )
+  const addedNative = await builtinPage.evaluate(() =>
+    (window as any).__providers.google.config.models.at(-1),
+  )
+  assert.equal(addedNative.contextWindow, 32768)
+  assert.equal(addedNative.maxTokens, 8192)
+  assert.equal(addedNative.reasoning, false)
+  assert.deepEqual(addedNative.input, ['text'])
+  assert.deepEqual(addedNative.cost, { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 })
+  await builtinPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  await builtinPage
+    .getByRole('complementary')
+    .getByRole('textbox', { name: 'API 地址', exact: true })
+    .fill('https://override.example/v1')
+  await builtinPage.getByRole('button', { name: '保存配置', exact: true }).click()
+  assert.equal(
+    await builtinPage.evaluate(() => (window as any).__providers.google.config.baseUrl),
+    'https://override.example/v1',
+  )
+  await builtinPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  const builtinPanel = builtinPage.getByRole('complementary')
+  await expect(builtinPanel).not.toContainText('当前提供商配置只读')
+  await expect(builtinPanel).not.toContainText('Responses')
+  await builtinPanel.getByRole('button', { name: '高级与网络设置', exact: true }).click()
+  await builtinPanel.getByRole('textbox', { name: '允许模型（逗号分隔，留空表示全部）', exact: true }).fill('native, private-model')
+  await builtinPanel.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(builtinPanel.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
+  assert.deepEqual(await builtinPage.evaluate(() => (window as any).__providers.google.config.allowModels), ['native', 'private-model'])
+  assert.equal(await builtinPage.evaluate(() => (window as any).__providers.google.config.protocol), undefined)
+
+  await builtinPanel.getByRole('textbox', { name: 'Chat Completions API 地址', exact: true }).fill('https://custom-compatible.example/v1')
+  await builtinPanel.getByRole('button', { name: '设为默认', exact: true }).click()
+  await builtinPanel.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect(builtinPanel.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
+  assert.equal(await builtinPage.evaluate(() => (window as any).__providers.google.config.protocol), 'openai-completions')
+  assert.equal(await builtinPage.evaluate(() => (window as any).__providers.google.config.baseUrl), 'https://custom-compatible.example/v1')
+  await builtinPage.close()
+  const navigationPage = await mount('/providers?provider=mixed&controller=1', false)
+  await navigationPage.getByRole('button', { name: '添加模型', exact: true }).click()
+  await navigationPage
+    .getByRole('dialog')
+    .getByPlaceholder('如：llama3.2 或 gpt-4o')
+    .fill('navigation-model')
+  await navigationPage
+    .locator('nav a')
+    .filter({ hasText: '离开页面' })
+    .evaluate((link) => (link as HTMLAnchorElement).click())
+  await navigationPage.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await expect(
+    navigationPage.getByRole('dialog').getByPlaceholder('如：llama3.2 或 gpt-4o'),
+  ).toHaveValue('navigation-model')
+  await navigationPage
+    .locator('nav a')
+    .filter({ hasText: '离开页面' })
+    .evaluate((link) => (link as HTMLAnchorElement).click())
+  await navigationPage.getByRole('button', { name: '保存后离开', exact: true }).click()
+  await expect(navigationPage.getByText('供应商目录')).toBeVisible()
+  assert.ok(
+    await navigationPage.evaluate(() =>
+      (window as any).__providers.mixed.config.models.some(
+        (model: any) => model.id === 'navigation-model',
+      ),
+    ),
+  )
+  await navigationPage.close()
+  const keyPage = await mount('/providers?provider=mixed&controller=1', false)
+  await keyPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  await keyPage.getByRole('button', { name: '操作 Primary', exact: true }).click()
+  await keyPage.getByText('编辑 Key', { exact: true }).click()
+  await keyPage.getByPlaceholder('例如：个人主账号').fill('Changed key')
+  await keyPage
+    .getByRole('complementary')
+    .getByRole('textbox', { name: 'API 地址', exact: true })
+    .fill('https://key-draft.example/v1')
+  await keyPage.getByRole('button', { name: '模拟密钥刷新', exact: true }).click()
+  await expect(keyPage.getByPlaceholder('例如：个人主账号')).toHaveValue('Changed key')
+  await keyPage.getByRole('button', { name: '关闭供应商设置', exact: true }).click()
+  await keyPage.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await keyPage.getByRole('button', { name: '关闭供应商设置', exact: true }).click()
+  await keyPage.evaluate(() => {
+    ;(window as any).__failNext = true
+  })
+  await keyPage.getByRole('button', { name: '保存后离开', exact: true }).click()
+  await expect(keyPage.getByRole('alert', { includeHidden: true })).toContainText('密钥未保存')
+  await keyPage.getByRole('button', { name: '保存后离开', exact: true }).click()
+  await expect(keyPage.getByRole('complementary')).toHaveCount(0)
+  assert.equal(
+    await keyPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl),
+    'https://key-draft.example/v1',
+  )
+  await keyPage.close()
+  const routePage = await mount('/providers?provider=mixed&controller=1', false)
+  await routePage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  await routePage.getByRole('link', { name: 'Google', exact: true }).click()
+  await expect(
+    routePage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }),
+  ).toHaveValue('https://native.example/v1')
+  await routePage
+    .getByRole('complementary')
+    .getByRole('textbox', { name: 'API 地址', exact: true })
+    .fill('https://draft.example/v1')
+  await routePage.getByRole('button', { name: '历史后退', exact: true }).click()
+  await routePage.getByRole('button', { name: '继续编辑', exact: true }).click()
+  await expect(routePage.locator('#location')).toHaveText('provider=google&controller=1')
+  await routePage.getByRole('button', { name: '历史后退', exact: true }).click()
+  await routePage.getByRole('button', { name: '放弃修改', exact: true }).click()
+  await expect(
+    routePage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }),
+  ).toHaveValue('https://example.com/v1')
+  await routePage.getByRole('button', { name: '历史前进', exact: true }).click()
+  await expect(
+    routePage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }),
+  ).toHaveValue('https://native.example/v1')
+  await routePage.getByRole('link', { name: '返回供应商', exact: true }).click()
+  await expect(routePage.getByRole('complementary')).toHaveCount(0)
+  await routePage.close()
+  for (const auth of ['oauth', 'env']) {
+    const authPage = await mount('/providers?provider=mixed&controller=1&auth=' + auth, false)
+    await expect(
+      authPage.getByRole('heading', {
+        name: auth === 'oauth' ? '账号授权' : '环境凭据',
+        exact: true,
+      }),
+    ).toBeVisible()
+    await expect(authPage.getByRole('textbox', { name: '当前 API 密钥', exact: true })).toHaveCount(
+      0,
+    )
+    await authPage.close()
+  }
+  if (process.argv.includes('--layout')) {
+    const layoutPage = await mount('/providers?provider=mixed&controller=1', false)
+    await layoutPage.addStyleTag({
+      content: await layoutPage.evaluate(() => (window as any).__rendererCss),
+    })
+    const geometry = await layoutPage
+      .locator('.model-center-model-row')
+      .first()
+      .evaluate((row) => {
+        const bounds = row.getBoundingClientRect()
+        const icon = row.querySelector('.ui-remote-image')!.getBoundingClientRect()
+        const name = row.querySelector('button')!.getBoundingClientRect()
+        const actions = row.lastElementChild!.getBoundingClientRect()
+        return {
+          rowWidth: bounds.width,
+          iconWidth: icon.width,
+          nameWidth: name.width,
+          nameLeft: name.left,
+          iconRight: icon.right,
+          actionsRight: actions.right,
+          rowRight: bounds.right,
+        }
+      })
+    assert.ok(geometry.iconWidth > 0 && geometry.iconWidth < 32, JSON.stringify(geometry))
+    assert.ok(
+      geometry.nameWidth > 0 && geometry.nameLeft >= geometry.iconRight,
+      JSON.stringify(geometry),
+    )
+    assert.ok(geometry.actionsRight <= geometry.rowRight, JSON.stringify(geometry))
+    await layoutPage.getByRole('button', { name: '编辑模型 chat', exact: true }).click()
+    const scrollDialog = layoutPage.getByRole('dialog', { name: '编辑模型', exact: true })
+    await scrollDialog.getByRole('button', { name: '高级设置', exact: true }).click()
+    for (const name of ['回退高级配置', '重置高级配置']) {
+      const buttonGeometry = await scrollDialog.getByRole('button', { name, exact: true }).evaluate((element) => ({ height: element.getBoundingClientRect().height, width: element.getBoundingClientRect().width, radius: getComputedStyle(element).borderRadius }))
+      assert.deepEqual(buttonGeometry, { height: 24, width: 24, radius: '10px' })
+    }
+
+    await scrollDialog.getByRole('button', { name: '协议参数', exact: true }).click()
+    await scrollDialog.getByPlaceholder('X-Model-Specific: value').scrollIntoViewIfNeeded()
+    await scrollDialog.getByText('API Compat (JSON)', { exact: true }).scrollIntoViewIfNeeded()
+    const scrolling = await scrollDialog.locator('.settings-management-dialog-body').evaluate((element) => ({ height: element.clientHeight, content: element.scrollHeight, top: element.scrollTop }))
+    assert.ok(scrolling.content > scrolling.height && scrolling.top > 0, JSON.stringify(scrolling))
+    await layoutPage.close()
+  }
   assert.deepEqual(errors, [])
   console.log('custom-provider-editor browser checks passed')
 } finally {

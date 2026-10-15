@@ -2,8 +2,10 @@ import { describe, expect, test } from 'bun:test'
 import type { DesktopApiKeySummary, DesktopModelProviderSummary } from '../shared/Types.js'
 import {
   filterApiKeys,
+  groupProviderModels,
   getApiKeyDeleteConfirmation,
   parseModelCenterSearchParams,
+  providerDetailStatus,
   projectProviderDirectory,
   isConfiguredProviderDirectoryItem,
   providerWorkspaceTarget,
@@ -57,7 +59,7 @@ describe('model center URL state', () => {
       ['openai', 'anthropic'],
     )
 
-    expect(state).toEqual({ providerId: 'anthropic', section: 'models' })
+    expect(state).toEqual({ providerId: 'anthropic', section: 'models', editing: false })
   })
 
   test('ignores legacy view while preserving provider details', () => {
@@ -66,7 +68,7 @@ describe('model center URL state', () => {
       ['openai', 'anthropic'],
     )
 
-    expect(state).toEqual({ providerId: 'anthropic', section: 'models' })
+    expect(state).toEqual({ providerId: 'anthropic', section: 'models', editing: false })
   })
 
   test('falls back for invalid parameters and provider', () => {
@@ -75,13 +77,14 @@ describe('model center URL state', () => {
       ['openai', 'anthropic'],
     )
 
-    expect(state).toEqual({ providerId: null, section: 'connection' })
+    expect(state).toEqual({ providerId: null, section: 'connection', editing: false })
   })
 
   test('keeps the provider catalog open when provider is missing', () => {
     expect(parseModelCenterSearchParams(new URLSearchParams(), ['openai'])).toEqual({
       providerId: null,
       section: 'connection',
+      editing: false,
     })
     expect(parseModelCenterSearchParams(new URLSearchParams(), []).providerId).toBeNull()
   })
@@ -95,6 +98,58 @@ describe('model center URL state', () => {
 
     expect(next.toString()).toBe('debug=1&provider=openai')
     expect(current.toString()).toBe('debug=1&section=connection')
+  })
+
+  test('opens editing only for a valid custom provider and retains its detail section', () => {
+    const params = new URLSearchParams('provider=custom&edit=1&section=models')
+    expect(parseModelCenterSearchParams(params, ['custom', 'openai'], ['custom'])).toEqual({
+      providerId: 'custom',
+      section: 'models',
+      editing: true,
+    })
+    expect(parseModelCenterSearchParams(params, ['openai'], ['custom']).editing).toBe(false)
+    params.set('provider', 'openai')
+    expect(parseModelCenterSearchParams(params, ['custom', 'openai'], ['custom']).editing).toBe(
+      false,
+    )
+  })
+
+  test('clears editing when switching provider or returning to details and the catalog', () => {
+    const params = new URLSearchParams('provider=custom&edit=1&section=models&debug=1')
+    expect(updateModelCenterSearchParams(params, { providerId: 'openai' }).toString()).toBe(
+      'provider=openai&section=models&debug=1',
+    )
+    expect(updateModelCenterSearchParams(params, { editing: false }).toString()).toBe(
+      'provider=custom&section=models&debug=1',
+    )
+    expect(
+      updateModelCenterSearchParams(params, { providerId: null, section: null }).toString(),
+    ).toBe('debug=1')
+    expect(
+      updateModelCenterSearchParams(new URLSearchParams('newProvider=1'), {
+        providerId: 'custom',
+        section: 'models',
+        editing: true,
+      }).toString(),
+    ).toBe('edit=1&provider=custom&section=models')
+  })
+})
+
+describe('provider detail configuration status', () => {
+  test('credentials mean configured, not tested; disabled and unavailable states take precedence', () => {
+    const p = provider({ providerID: 'custom', apiKeyConfigured: true })
+    expect(providerDetailStatus(p, null, undefined).label).toBe('已配置')
+    expect(providerDetailStatus({ ...p, enabled: false }, null, undefined).label).toBe('已停用')
+    expect(
+      providerDetailStatus(
+        { ...p, availability: { status: 'unavailable', reason: 'unsupported-protocol' } },
+        null,
+        undefined,
+      ).label,
+    ).toBe('暂不可用')
+    expect(providerDetailStatus({ ...p, apiKeyConfigured: false }, null, undefined).label).toBe(
+      '未配置',
+    )
   })
 })
 
@@ -225,8 +280,8 @@ describe('model center Provider directory', () => {
   })
 })
 
-describe('provider marketplace sidebar', () => {
-  test('only configured connections and saved custom configurations enter the sidebar', () => {
+describe('provider sidebar grouping', () => {
+  test('groups configured connections and saved custom configurations separately from unconfigured providers', () => {
     const items = projectProviderDirectory(
       [
         provider({ providerID: 'unconfigured' }),
@@ -307,3 +362,12 @@ function provider(overrides: {
     ...overrides,
   }
 }
+
+test('模型按 ID 前缀分组，不修改模型数据和顺序', () => {
+  const models = [{ id: 'chat' }, { id: 'remote/a' }, { id: 'remote/b' }, { id: 'other/c' }]
+  expect(groupProviderModels(models, 'magpie')).toEqual([
+    { id: 'magpie', models: [models[0]] },
+    { id: 'remote', models: [models[1], models[2]] },
+    { id: 'other', models: [models[3]] },
+  ])
+})

@@ -30,6 +30,106 @@ import {
 } from '../src/canonical/index'
 
 const model = { providerID: 'openai', id: 'gpt-test' }
+
+test('可视化预览按 revision 收敛，完成与历史结果独立于折叠过程，迟到事件不能恢复脚本预览', () => {
+  const active = turn('visualization-turn')
+  let state = createCanonicalThreadState(
+    page([
+      {
+        turn: active,
+        inputs: [],
+        messages: [],
+        agents: [],
+        items: [],
+        approvals: [],
+        attachments: [],
+        contextReferences: [],
+      },
+    ]),
+  )
+  const preview = {
+    toolCallId: 'ui-stream',
+    turnId: active.id,
+    agentId: active.rootAgentId,
+    revision: 2,
+    title: '计算器',
+    summary: '调整参数',
+    initialHeight: 240,
+    css: '',
+    html: '<p>预览',
+    cssComplete: true,
+  }
+  state = applyThreadEnvelope(state, live('preview-2', 'visualization/preview', preview))
+  state = applyThreadEnvelope(
+    state,
+    live('preview-1', 'visualization/preview', { ...preview, revision: 1 }),
+  )
+  const streamed = state.itemsById.get(preview.toolCallId)
+  if (streamed?.type !== 'tool') throw new Error('Missing preview')
+  expect(streamed.visualizationPreview?.revision).toBe(2)
+  expect(selectRenderTurnEntries(state)[0].contentBlocks[0].kind).toBe('visualization')
+  expect(selectRenderTurnEntries(state)[0].processItems).toHaveLength(1)
+  expect(selectRenderTurnEntries(state)[0].processItems[0]).toMatchObject({
+    input: {},
+    resultBlocks: undefined,
+  })
+  const reconciled = reconcileLatestThreadPage(
+    state,
+    page([{ turn: active, inputs: [], messages: [], agents: [], items: [], approvals: [] }]),
+  )
+  expect(reconciled.itemsById.get(preview.toolCallId)).toMatchObject({
+    visualizationPreview: { revision: 2 },
+  })
+  const final = {
+    ...streamed,
+    state: 'completed' as const,
+    visualizationPreview: undefined,
+    resultBlocks: [
+      {
+        type: 'json' as const,
+        value: {
+          kind: 'pidex.visualization',
+          version: 1,
+          document: {
+            title: '计算器',
+            summary: '调整参数',
+            libraries: [],
+            initialHeight: 240,
+            css: '',
+            html: '<p>完成</p>',
+            jsFunctions: '',
+            jsExpressions: [],
+          },
+          resources: [],
+        },
+      },
+    ],
+  }
+  state = applyThreadEnvelope(state, durable(11, 'tool/callCompleted', { item: final }))
+  state = applyThreadEnvelope(
+    state,
+    live('late-preview', 'visualization/preview', { ...preview, revision: 3 }, 11),
+  )
+  expect(state.itemsById.get(preview.toolCallId)).toMatchObject({ state: 'completed' })
+  expect(
+    (state.itemsById.get(preview.toolCallId) as typeof streamed).visualizationPreview,
+  ).toBeUndefined()
+  const history = createCanonicalThreadState(
+    page([
+      {
+        turn: { ...active, status: 'completed' },
+        inputs: [],
+        messages: [],
+        agents: [],
+        items: [final],
+        approvals: [],
+        attachments: [],
+        contextReferences: [],
+      },
+    ]),
+  )
+  expect(selectRenderTurnEntries(history)[0].contentBlocks[0].kind).toBe('visualization')
+})
 const permissionConfig = {
   sandboxMode: 'workspace-write',
   approvalPolicy: 'on-request',

@@ -9,6 +9,7 @@ import { Model, Provider } from '@pidex/model-schema'
 import { Capabilities, type ProtocolCapability } from '@pidex/agent-protocol'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import { AgentError } from '../src/Domain'
+import { PiModelServiceError } from '../src/provider/pi/PiModelService'
 import { RpcRouter, type RpcRouterDependencies } from '../src/transport/rpc/RpcRouter'
 import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { TerminalOutputMirror } from '../src/terminal/TerminalOutputMirror'
@@ -1404,6 +1405,29 @@ describe('RPC v4 Router', () => {
     db.close()
   })
 
+  test('model refresh failures use the declared provider error without exposing causes', async () => {
+    const { db, call, initialize } = await fixture({
+      providers: {
+        refresh: async () => {
+          throw new PiModelServiceError('CATALOG_REFRESH_FAILED', 'private upstream failure', {
+            cause: new Error('private credential or endpoint'),
+          })
+        },
+      } as unknown as RpcRouterDependencies['providers'],
+    })
+    try {
+      await initialize()
+      const result = await call('model/refresh', { operationId: 'operation:failed-refresh' })
+      expect(result.error).toMatchObject({
+        message: '模型目录刷新失败，请检查提供商连接、凭据和模型接口后重试。',
+        data: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
+      })
+      expect(JSON.stringify(result)).not.toContain('private')
+    } finally {
+      db.close()
+    }
+  })
+
   test('model mutations and refresh return their declared versioned results', async () => {
     let refreshCalls = 0
     const { db, call, initialize } = await fixture({
@@ -1504,6 +1528,55 @@ describe('RPC v4 Router', () => {
     expect((configDocument.model_providers as Record<string, unknown>)[provider.id]).toMatchObject({
       name: 'Fixture provider',
       base_url: 'https://example.com/v1',
+    })
+    const stored = (configDocument.model_providers as Record<string, Record<string, unknown>>)[
+      provider.id
+    ]!
+    stored.future_setting = { keep: true }
+    ;(stored.models as Record<string, Record<string, unknown>>)['fixture-model']!.future_parameter =
+      42
+    const updated = await call('provider/update', {
+      providerId: provider.id,
+      definition: {
+        kind: 'custom',
+        id: provider.id,
+        name: 'Updated',
+        enabled: true,
+        baseUrl: 'https://updated.example/v1',
+        auth: 'none',
+        env: [],
+        allowInsecureHttp: false,
+        headers: {},
+        models: [{ id: 'fixture-model', api: 'openai-completions' }],
+      },
+      operationId: 'operation:provider-update',
+    })
+    expect(updated.error).toBeUndefined()
+    expect(stored.future_setting).toEqual({ keep: true })
+    expect(
+      (stored.models as Record<string, Record<string, unknown>>)['fixture-model']!.future_parameter,
+    ).toBe(42)
+    expect(stored.base_url).toBe('https://updated.example/v1')
+    const builtin = await call('provider/update', {
+      providerId: 'nvidia',
+      definition: {
+        kind: 'builtin',
+        id: 'nvidia',
+        enabled: true,
+        allowModels: [],
+        denyModels: [],
+        baseUrl: 'https://gateway.example/v1',
+        models: [
+          { id: 'private-model', enabled: true, api: 'openai-completions', maxTokens: 65536 },
+        ],
+      },
+      operationId: 'operation:builtin-update',
+    })
+    expect(builtin.error).toBeUndefined()
+    expect((configDocument.model_providers as Record<string, unknown>).nvidia).toMatchObject({
+      kind: 'builtin',
+      base_url: 'https://gateway.example/v1',
+      models: { 'private-model': { enabled: true, api: 'openai-completions', maxTokens: 65536 } },
     })
 
     const invalidCreate = await call('provider/create', {
