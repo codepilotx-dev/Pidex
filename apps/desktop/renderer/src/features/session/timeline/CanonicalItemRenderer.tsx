@@ -1384,8 +1384,11 @@ export function PatchSummaryView({
           {canApplyPatch ? (
             <Button
               color="primary"
-              className="canonical-patch-card__action"
+              className="canonical-patch-card__action tw:[&&]:rounded-md"
+              iconSize="md"
               loading={pendingAction === patchAction}
+              shape="default"
+              size="sm"
               onClick={() => void applyPatch()}
             >
               <RotateCcw aria-hidden="true" size={APP_ICON_SIZE} />
@@ -1395,7 +1398,9 @@ export function PatchSummaryView({
           {onOpenReview ? (
             <Button
               color="secondary"
-              className="canonical-patch-card__action"
+              className="canonical-patch-card__action tw:[&&]:rounded-md"
+              shape="default"
+              size="sm"
               onClick={() =>
                 onOpenReview(patch.files.length === 1 ? patch.files[0]?.path : undefined)
               }

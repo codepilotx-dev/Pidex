@@ -1533,13 +1533,6 @@
     gap: var(--cpx-sys-space-2);
   }
 
-  .canonical-patch-card__action {
-    min-height: 30px;
-    padding-inline: var(--cpx-sys-space-3);
-    gap: var(--cpx-sys-space-1);
-    white-space: nowrap;
-  }
-
   .canonical-patch-card__file {
     display: flex;
     align-items: center;
