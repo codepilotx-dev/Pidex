@@ -1,5 +1,38 @@
 # Third-Party Notices
 
+Pidex's interactive visualization preview includes a partial-HTML layout helper
+adapted from CopilotKit/OpenIntelligentUI at commit
+`8391a94c1c3939c679e40ddd7bfc08a9ef690e70`, under the MIT License.
+Copyright (c) Atai Barkai. The complete license is retained in
+`apps/desktop/renderer/src/features/visualization/UPSTREAM.md`.
+Optional visualization libraries are downloaded as version-pinned,
+checksum-verified artifacts: Chart.js 4.4.8 (MIT), D3 7.9.0 (ISC), and
+Three.js 0.158.0 (MIT). Their distributed source retains its license notices.
+
+### OpenIntelligentUI MIT License
+
+Copyright (c) Atai Barkai
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+### Other adapted sources
+
 Pidex includes task workflow, optimistic concurrency, column ordering,
 conversation prioritization, and agent lifecycle semantics adapted from
 dashi-taskboard at commit `9b2aeb53bfe8d40eb5d65feecdfc2cc235928066`.
