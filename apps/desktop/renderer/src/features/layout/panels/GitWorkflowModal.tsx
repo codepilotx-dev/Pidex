@@ -218,6 +218,7 @@ export function GitWorkflowModal({
           {localError ? <div className="git-workflow-error">{localError}</div> : null}
           {(mode === 'commit' || mode === 'commitPush' || mode === 'pullRequest') && (
             <Button
+              size="md"
               color="secondary"
               title="清空已有内容后可以重新生成"
               disabled={
@@ -347,12 +348,15 @@ export function GitWorkflowModal({
             )}
           >
             <Dialog.Close asChild>
-              <Button color="secondary">取消</Button>
+              <Button size="md" color="secondary">
+                取消
+              </Button>
             </Dialog.Close>
             {mode === 'commitPush' || mode === 'commit' || mode === 'push' ? (
               <>
                 {mode !== 'push' ? (
                   <Button
+                    size="md"
                     color="secondary"
                     disabled={isSubmitting || changedFiles.length === 0}
                     type="button"
@@ -363,6 +367,7 @@ export function GitWorkflowModal({
                 ) : null}
                 {mode !== 'commit' ? (
                   <Button
+                    size="md"
                     color="primary"
                     disabled={isSubmitting}
                     type="button"
@@ -374,6 +379,7 @@ export function GitWorkflowModal({
               </>
             ) : (
               <Button
+                size="md"
                 color="primary"
                 disabled={isSubmitting}
                 type="button"

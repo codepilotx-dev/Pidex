@@ -151,7 +151,7 @@ export function SkillDetailsDialog({
 
           <footer className="settings-management-dialog-footer tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-2">
             {!builtin ? (
-              <Button color="secondary" onClick={() => onOpenSkill(skill)}>
+              <Button size="md" color="secondary" onClick={() => onOpenSkill(skill)}>
                 <FolderOpen
                   aria-hidden="true"
                   size={APP_ICON_SIZE}
@@ -160,7 +160,12 @@ export function SkillDetailsDialog({
                 打开
               </Button>
             ) : null}
-            <Button color="primary" disabled={!skill.enabled} onClick={() => onUseSkill(skill)}>
+            <Button
+              size="md"
+              color="primary"
+              disabled={!skill.enabled}
+              onClick={() => onUseSkill(skill)}
+            >
               <Play aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
               立即使用
             </Button>

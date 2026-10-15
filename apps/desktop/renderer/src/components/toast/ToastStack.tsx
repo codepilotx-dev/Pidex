@@ -1,12 +1,13 @@
 import type React from 'react'
 import { useSyncExternalStore, useState, useRef, useLayoutEffect, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { CheckCheck, X } from 'lucide-react'
+import { CheckCheck, CircleAlert, X } from 'lucide-react'
 import { toastStore, calculateCardTransform, type ToastItem } from './ToastState.js'
 import { usePrefersReducedMotion } from '../../hooks/UsePrefersReducedMotion.js'
 import { Button } from '../ui/Button.js'
 
 import { Toast } from '../ui/Toast.js'
+import { ToastContent } from './ToastContent.js'
 
 export function ToastStack(): React.ReactNode {
   const state = useSyncExternalStore(toastStore.subscribe, toastStore.getState, toastStore.getState)
@@ -211,11 +212,12 @@ function ToastCardWrapper({
         aria-live={isError ? 'assertive' : 'polite'}
         className={`toast-card tw:justify-between tw:max-h-[min(70vh,520px)] ${toast.appearance === 'action' ? 'tw:w-fit tw:max-w-full tw:mx-auto' : 'tw:w-full'}`}
       >
-        <div className="toast-content tw:flex-1 tw:min-w-0 tw:max-h-[calc(min(70vh,520px)-12px)] tw:overflow-y-auto tw:text-left tw:whitespace-pre-wrap tw:break-words [overflow-wrap:anywhere]">
-          {toast.message}
-        </div>
+        {isError ? (
+          <CircleAlert aria-hidden="true" className="tw:mt-1 tw:size-4 tw:shrink-0 tw:self-start tw:text-app-danger-fg" />
+        ) : null}
+        <ToastContent message={toast.message} isError={isError} />
 
-        <div className="toast-actions tw:flex tw:items-center tw:gap-1.5 tw:shrink-0">
+        <div className="toast-actions tw:flex tw:items-center tw:gap-1.5 tw:shrink-0 tw:self-start">
           {toast.action ? (
             <Button
               variant={toast.appearance === 'action' ? 'secondary' : 'ghost'}
@@ -250,7 +252,7 @@ function ToastCardWrapper({
               onClick={() => toastStore.dismiss(toast.id)}
               type="button"
             >
-              {toast.appearance === 'action' ? <X aria-hidden="true" /> : '×'}
+              <X aria-hidden="true" />
             </Button>
           ) : null}
         </div>

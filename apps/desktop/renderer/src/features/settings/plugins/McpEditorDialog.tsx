@@ -324,7 +324,7 @@ export function McpEditorDialog({
               <Dialog.Description className="tw:type-body-sm tw:mt-1 tw:mb-0 tw:text-app-text-soft">
                 使用结构化字段配置 stdio 或 Streamable HTTP；HTTP 会在协议不兼容时自动回退 SSE。
               </Dialog.Description>
-              <Button color="secondary" className="tw:mt-1" onClick={onOpenDocumentation}>
+              <Button size="md" color="secondary" className="tw:mt-1" onClick={onOpenDocumentation}>
                 官方 MCP 文档
                 <ExternalLink aria-hidden="true" size={APP_ICON_SIZE} />
               </Button>
@@ -667,7 +667,7 @@ export function McpEditorDialog({
           <footer className="settings-management-dialog-footer tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
             <span>
               {server?.removable ? (
-                <Button color="danger" disabled={busy} onClick={() => onRemove(server)}>
+                <Button size="md" color="danger" disabled={busy} onClick={() => onRemove(server)}>
                   <Trash2
                     aria-hidden="true"
                     size={APP_ICON_SIZE}
@@ -679,9 +679,17 @@ export function McpEditorDialog({
             </span>
             <span className="tw:flex tw:items-center tw:gap-2">
               <Dialog.Close asChild>
-                <Button color="secondary">关闭</Button>
+                <Button size="md" color="secondary">
+                  关闭
+                </Button>
               </Dialog.Close>
-              <Button color="primary" disabled={busy} loading={busy} onClick={() => void save()}>
+              <Button
+                size="md"
+                color="primary"
+                disabled={busy}
+                loading={busy}
+                onClick={() => void save()}
+              >
                 保存
               </Button>
             </span>

@@ -141,11 +141,12 @@ function ModelSetupGuideDialog({
           </header>
           <div className="tw:mt-2 tw:flex tw:items-center tw:justify-end tw:gap-3">
             <Dialog.Close asChild>
-              <Button color="secondary" onClick={() => onOpenChange(false)}>
+              <Button size="md" color="secondary" onClick={() => onOpenChange(false)}>
                 稍后
               </Button>
             </Dialog.Close>
             <Button
+              size="md"
               color="primary"
               onClick={() => {
                 onOpenChange(false)

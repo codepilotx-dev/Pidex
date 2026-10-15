@@ -107,11 +107,12 @@ export function SessionGroupEditorDialog({
 
             <div className="permission-modal-actions confirmation-dialog-actions tw:mt-1 tw:flex tw:items-center tw:justify-between tw:gap-3">
               <Dialog.Close asChild disabled={saving}>
-                <Button className="tw:min-w-19" color="secondary">
+                <Button size="md" className="tw:min-w-19" color="secondary">
                   取消
                 </Button>
               </Dialog.Close>
               <Button
+                size="md"
                 className="tw:min-w-19"
                 color="primary"
                 disabled={submitDisabled}

@@ -201,10 +201,16 @@ export function GithubRepositoryModal({
                       <p>在 GitHub 设备登录页面输入这个验证码，不是 OAuth Client ID。</p>
                     </div>
                     <div className="github-device-code-actions tw:flex tw:shrink-0 tw:items-center tw:gap-2">
-                      <Button color="secondary" onClick={() => void copyGithubCode()} type="button">
+                      <Button
+                        size="md"
+                        color="secondary"
+                        onClick={() => void copyGithubCode()}
+                        type="button"
+                      >
                         复制验证码
                       </Button>
                       <Button
+                        size="md"
                         color="secondary"
                         onClick={() => void openGithubDevicePage()}
                         type="button"
@@ -217,6 +223,7 @@ export function GithubRepositoryModal({
               </div>
               <div className="settings-inline-actions tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-2 tw:max-[900px]:justify-start">
                 <Button
+                  size="md"
                   color="primary"
                   disabled={loading}
                   onClick={() => void startLogin('browser')}
@@ -226,6 +233,7 @@ export function GithubRepositoryModal({
                 </Button>
                 {login?.state === 'failed' ? (
                   <Button
+                    size="md"
                     color="secondary"
                     disabled={loading}
                     onClick={() => void startLogin('device')}
@@ -286,6 +294,7 @@ export function GithubRepositoryModal({
                           </small>
                         </div>
                         <Button
+                          size="md"
                           color="primary"
                           disabled={Boolean(cloningRepo)}
                           onClick={() => void cloneRepository(repository)}
@@ -311,10 +320,17 @@ export function GithubRepositoryModal({
             )}
           >
             <Dialog.Close asChild>
-              <Button color="secondary">关闭</Button>
+              <Button size="md" color="secondary">
+                关闭
+              </Button>
             </Dialog.Close>
             {auth?.authenticated ? (
-              <Button color="secondary" onClick={() => void loadRepositories()} type="button">
+              <Button
+                size="md"
+                color="secondary"
+                onClick={() => void loadRepositories()}
+                type="button"
+              >
                 刷新
               </Button>
             ) : null}

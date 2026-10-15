@@ -27,6 +27,7 @@ import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens
 import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
 import { Button } from '../../../components/ui/Button.js'
 import { RemoteImage } from '../../../components/ui/RemoteImage.js'
+import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import type { DesktopUpdateStatus, ModelProviderID } from '../../../../shared/Types.js'
 import { PopoverItem, PopoverSeparator } from '../../../components/ui/PopoverItem.js'
@@ -87,6 +88,8 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
   const { draft, model, providerID: configuredProviderID } = useDesktopSettings()
   const [menuOpen, setMenuOpen] = useState(false)
   const accountMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [logoutBusy, setLogoutBusy] = useState(false)
   const [usage, setUsage] = useState<ProviderUsageState>(EMPTY_USAGE)
   const { auth: githubAuth } = useSyncExternalStore(
     desktopClient.onGithubAccountChange,
@@ -161,10 +164,14 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
   }, [menuOpen, refreshGithubAuth])
 
   const logoutGithub = useCallback(async (): Promise<void> => {
+    setLogoutBusy(true)
     try {
       await desktopClient.logoutGithub()
     } catch (error) {
       onReport(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLogoutBusy(false)
+      setLogoutConfirmOpen(false)
     }
   }, [onReport])
 
@@ -526,7 +533,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
               icon={<LogOut size={APP_ICON_SIZE} />}
               onClick={() => {
                 setMenuOpen(false)
-                void logoutGithub()
+                setLogoutConfirmOpen(true)
               }}
             >
               {t('退出登录')}
@@ -537,6 +544,19 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
       <span aria-atomic="true" aria-live="polite" className="tw:sr-only">
         {t(updateIndicator.announcement)}
       </span>
+      <ConfirmationDialog
+        open={logoutConfirmOpen}
+        title={t('退出登录')}
+        description={t('确定要退出 GitHub 登录吗？')}
+        cancelLabel={t('取消')}
+        actionLabel={t('退出登录')}
+        tone="danger"
+        actionDisabled={logoutBusy}
+        onCancel={() => {
+          if (!logoutBusy) setLogoutConfirmOpen(false)
+        }}
+        onAction={() => void logoutGithub()}
+      />
     </footer>
   )
 })

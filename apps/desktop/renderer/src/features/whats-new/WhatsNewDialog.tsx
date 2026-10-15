@@ -187,6 +187,7 @@ function ReleaseNotesContent({
               当前仅显示随应用提供的版本记录，在线历史版本暂时不可用。
             </p>
             <Button
+              size="md"
               className="whats-new-fallback-action tw:justify-self-start"
               color="primary"
               loading={refreshing}
@@ -293,6 +294,7 @@ function ReleaseDetails({
         {canOpenRelease ? (
           <div className="whats-new-release-actions tw:mt-5 tw:flex tw:justify-end">
             <Button
+              size="md"
               color="secondary"
               onClick={() => {
                 void desktopClient.openExternalURL(release.htmlUrl)
@@ -372,7 +374,7 @@ function ReleaseNotesError({
       <p className="tw:m-0 tw:mb-2 tw:max-w-[620px] tw:text-app-text-meta tw:[line-height:var(--cpx-sys-line-height-normal)]">
         {message.description}
       </p>
-      <Button color="secondary" onClick={onRetry}>
+      <Button size="md" color="secondary" onClick={onRetry}>
         <RefreshCw size={APP_ICON_SIZE} />
         重试
       </Button>

@@ -228,6 +228,7 @@ export const enUS: Record<string, string> = {
   隐藏宠物: 'Hide pet',
   显示宠物: 'Show pet',
   退出登录: 'Sign out',
+  '确定要退出 GitHub 登录吗？': 'Sign out of GitHub?',
   帮助: 'Help',
   新特性: 'What’s new',
   帮助与设置: 'Help and settings',

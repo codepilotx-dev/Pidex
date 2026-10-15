@@ -114,7 +114,9 @@ export function PluginDetailsDialog({
 
           <footer className="settings-management-dialog-footer plugin-details-dialog__actions tw:flex tw:flex-wrap tw:justify-end tw:gap-2 tw:border-t tw:border-t-app-border-subtle tw:px-5 tw:py-4">
             <Dialog.Close asChild>
-              <Button color="secondary">关闭</Button>
+              <Button size="md" color="secondary">
+                关闭
+              </Button>
             </Dialog.Close>
             <PluginDetailsPrimaryAction busy={busy} item={item} onPrimaryAction={onPrimaryAction} />
           </footer>

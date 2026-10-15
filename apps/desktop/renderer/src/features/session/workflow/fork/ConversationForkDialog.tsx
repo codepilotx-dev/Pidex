@@ -105,13 +105,13 @@ export function ConversationForkDialog({
 
           {awaitingSetup ? (
             <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-2">
-              <Button color="danger" disabled={busy} onClick={onAbandon}>
+              <Button size="md" color="danger" disabled={busy} onClick={onAbandon}>
                 放弃并删除
               </Button>
-              <Button color="secondary" disabled={busy} onClick={onContinueWithoutSetup}>
+              <Button size="md" color="secondary" disabled={busy} onClick={onContinueWithoutSetup}>
                 跳过并继续
               </Button>
-              <Button color="primary" disabled={busy} onClick={onRetrySetup}>
+              <Button size="md" color="primary" disabled={busy} onClick={onRetrySetup}>
                 重新尝试
               </Button>
             </div>

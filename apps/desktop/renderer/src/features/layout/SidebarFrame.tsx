@@ -190,12 +190,14 @@ export function SidebarFrame({
         aria-label={labels.sidebar}
         aria-hidden={hidden || undefined}
         className={cx(
-          'desktop-sidebar tw:absolute tw:inset-y-0 tw:flex tw:h-full tw:flex-none tw:flex-col tw:overflow-hidden tw:select-none tw:type-body tw:text-app-text tw:antialiased tw:[text-rendering:optimizeLegibility]',
+          'desktop-sidebar tw:absolute tw:flex tw:flex-none tw:flex-col tw:overflow-hidden tw:select-none tw:type-body tw:text-app-text tw:antialiased tw:[text-rendering:optimizeLegibility]',
           // Modern 布局：面板起点与宽度按图标栏宽度让位。
-          'tw:left-[var(--sidebar-rail-width)] tw:w-[calc(var(--sidebar-current-width)-var(--sidebar-rail-width))]',
+          floating
+            ? 'tw:inset-y-2 tw:left-[calc(var(--sidebar-rail-width)+8px)] tw:w-[calc(var(--sidebar-current-width)-var(--sidebar-rail-width)-16px)]'
+            : 'tw:inset-y-0 tw:h-full tw:left-[var(--sidebar-rail-width)] tw:w-[calc(var(--sidebar-current-width)-var(--sidebar-rail-width))]',
           `is-${shell.mode}`,
           floating
-            ? 'is-floating tw:[&.is-resizing]:border-r-app-border-strong tw:has-[.sidebar-resizer:hover]:border-r-app-border-strong tw:has-[.sidebar-resizer:focus-visible]:border-r-app-border-strong tw:z-composer tw:rounded-xl tw:border-r tw:border-app-border tw:bg-app-raised tw:shadow-lg'
+            ? 'is-floating tw:[&.is-resizing]:border-r-app-border-strong tw:has-[.sidebar-resizer:hover]:border-r-app-border-strong tw:has-[.sidebar-resizer:focus-visible]:border-r-app-border-strong tw:z-[calc(var(--cpx-sys-z-composer)+1)] tw:rounded-xl tw:border-r tw:border-app-border tw:bg-app-raised tw:shadow-lg'
             : 'tw:z-dock',
           !floating && docked ? 'is-docked tw:bg-app-main' : undefined,
           !floating && !docked ? 'tw:bg-app-sidebar' : undefined,
