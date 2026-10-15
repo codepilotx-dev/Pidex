@@ -40,12 +40,12 @@ export async function buildAgentAttachmentUploads(
     retainedAttachmentIds.map(async (attachmentId) => {
       const result = await readAttachment(attachmentId)
       const { attachment, data, encoding } = result
-      if (attachment.kind === 'image') {
+      if (attachment.kind === 'image' || attachment.kind === 'audio' || attachment.kind === 'video') {
         if (encoding !== 'base64' || !data) {
           throw new Error(`图片附件 ${attachment.name} 缺少内容。`)
         }
         return {
-          kind: 'image' as const,
+          kind: attachment.kind,
           name: attachment.name,
           mediaType: attachment.mediaType,
           data,
@@ -65,12 +65,12 @@ export async function buildAgentAttachmentUploads(
     if (attachment.status !== 'ready') {
       throw new Error(`附件 ${attachment.name} 尚未准备完成。`)
     }
-    if (attachment.kind === 'image') {
+    if (attachment.kind === 'image' || attachment.kind === 'audio' || attachment.kind === 'video') {
       const data =
         attachment.contentBase64 ?? attachment.previewDataUrl?.replace(/^data:[^;]+;base64,/, '')
       if (!data) throw new Error(`图片附件 ${attachment.name} 缺少内容。`)
       return {
-        kind: 'image',
+        kind: attachment.kind,
         name: attachment.name,
         mediaType: attachment.mediaType,
         data,

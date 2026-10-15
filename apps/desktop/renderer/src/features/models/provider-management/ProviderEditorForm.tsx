@@ -1,3 +1,4 @@
+import { useSmartModelConfig } from './UseSmartModelConfig.js'
 import * as Dialog from '@radix-ui/react-dialog'
 import {
   AlertTriangle,
@@ -119,6 +120,10 @@ export type EditableModel = {
   maxTokens: number
   reasoning: boolean
   imageInput: boolean
+  audioInput?: boolean
+  videoInput?: boolean
+  tools?: boolean
+  modelType?: 'chat' | 'embedding' | 'rerank'
   inputCost: number
   outputCost: number
   cacheReadCost: number
@@ -949,6 +954,8 @@ export function ProviderEditorForm({
                   ) : null}
                   {models.map((model, index) => (
                     <ProviderModelCard
+                      providerId={id}
+                      baseUrl={baseUrl}
                       canRemove={embedded || models.length > 1}
                       dialog={embedded}
                       defaultExpanded={index === 0}
@@ -1142,6 +1149,8 @@ export function ProviderEditorForm({
 }
 
 const ProviderModelCard = memo(function ProviderModelCard({
+  providerId,
+  baseUrl,
   canRemove,
   dialog = false,
   disabled = false,
@@ -1151,6 +1160,8 @@ const ProviderModelCard = memo(function ProviderModelCard({
   onChange,
   onRemove,
 }: {
+  providerId: string
+  baseUrl: string
   canRemove: boolean
   dialog?: boolean
   disabled?: boolean
@@ -1246,7 +1257,7 @@ const ProviderModelCard = memo(function ProviderModelCard({
                 disabled={disabled}
                 className="settings-management-dialog-body tw:m-0 tw:border-0"
               >
-                <ModelEditor model={model} onChange={onChange} />
+                <ModelEditor model={model} onChange={onChange} providerId={providerId} baseUrl={baseUrl} />
               </fieldset>
               <footer className="settings-management-dialog-footer">
                 <Dialog.Close asChild>
@@ -1265,7 +1276,7 @@ const ProviderModelCard = memo(function ProviderModelCard({
           id={contentId}
           mountPolicy="always"
         >
-          <ModelEditor model={model} onChange={onChange} />
+          <ModelEditor model={model} onChange={onChange} providerId={providerId} baseUrl={baseUrl} />
         </DisclosureContent>
       )}
     </div>
@@ -1274,7 +1285,9 @@ const ProviderModelCard = memo(function ProviderModelCard({
 
 export function ModelEditor({
   model,
-  onChange,
+  onChange: rawOnChange,
+  providerId = '',
+  baseUrl = '',
   nativeApi,
   lockId = false,
 }: {
@@ -1282,7 +1295,11 @@ export function ModelEditor({
   onChange: (model: EditableModel) => void
   nativeApi?: string
   lockId?: boolean
+  providerId?: string
+  baseUrl?: string
 }): React.ReactNode {
+  const smart = useSmartModelConfig(model, rawOnChange, providerId, baseUrl)
+  const onChange = smart.change
   const advancedValues = (value: EditableModel) => {
     const { id, name, api, editorKey, original, headers, thinkingLevelMap, compat, ...values } = value
     return { ...values, maxInputTokens: value.maxInputTokens }
@@ -1326,6 +1343,7 @@ export function ModelEditor({
 
   return (
     <div className="provider-editor-tab-panel tw:grid tw:gap-4">
+      {smart.controls}
       <div className="provider-editor-grid tw:grid tw:grid-cols-1 tw:gap-4">
         <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
           <span>模型 ID</span>
@@ -1378,21 +1396,23 @@ export function ModelEditor({
         >
           <div className="tw:grid tw:gap-4">
             <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型类型</h4>
-              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('文本', true, () => {}, true)}</div>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('文本', !model.modelType || model.modelType === 'chat', () => changeAdvanced({ ...model, modelType: 'chat' }))}{chip('嵌入', model.modelType === 'embedding', () => changeAdvanced({ ...model, modelType: 'embedding' }))}{chip('重排', model.modelType === 'rerank', () => changeAdvanced({ ...model, modelType: 'rerank' }))}</div>
             </div>
+            {!model.modelType || model.modelType === 'chat' ? <>
             <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型能力</h4>
-              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('推理', model.reasoning, () => changeAdvanced({ ...model, reasoning: !model.reasoning }))}</div>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('推理', model.reasoning, () => changeAdvanced({ ...model, reasoning: !model.reasoning }))}{chip('工具', model.tools !== false, () => changeAdvanced({ ...model, tools: model.tools === false }), model.modelType === 'embedding' || model.modelType === 'rerank')}</div>
             </div>
             <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">输入模态</h4>
-              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('文本输入', true, () => {}, true)}{chip('视觉', model.imageInput, () => changeAdvanced({ ...model, imageInput: !model.imageInput }))}</div>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('文本输入', true, () => {}, true)}{chip('视觉', model.imageInput, () => changeAdvanced({ ...model, imageInput: !model.imageInput }))}{['openai-completions', 'google-generative-ai', 'google-vertex'].includes(nativeApi ?? model.api) ? chip('音频', model.audioInput ?? false, () => changeAdvanced({ ...model, audioInput: !model.audioInput })) : null}{['google-generative-ai', 'google-vertex'].includes(nativeApi ?? model.api) ? chip('视频', model.videoInput ?? false, () => changeAdvanced({ ...model, videoInput: !model.videoInput })) : null}</div>
             </div>
+            </> : null}
             <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型状态</h4>
               <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('启用模型', model.enabled, () => changeAdvanced({ ...model, enabled: !model.enabled }))}</div>
             </div>
           </div>
           {tokenField('contextWindow', '上下文窗口（Token）', [32768, 128000, 200000, 256000, 400000, 512000, 1000000])}
           {tokenField('maxInputTokens', '最大输入 Token', [128000, 200000, 256000, 512000, 1000000])}
-            {tokenField('maxTokens', '最大输出（Token）', [8192, 16000, 32000, 64000, 128000, 256000])}
+          {!model.modelType || model.modelType === 'chat' ? tokenField('maxTokens', '最大输出（Token）', [8192, 16000, 32000, 64000, 128000, 256000]) : null}
           <h4 className="tw:m-0 tw:type-label">价格（USD／百万 Token）</h4>
           <div className="provider-editor-grid tw:grid tw:grid-cols-2 tw:gap-4">
             <label className={PROVIDER_EDITOR_FIELD_CLASS}>
@@ -1494,6 +1514,10 @@ function emptyModel(): EditableModel {
     maxTokens: 8_192,
     reasoning: false,
     imageInput: false,
+    audioInput: false,
+    videoInput: false,
+    tools: true,
+    modelType: 'chat',
     inputCost: 0,
     outputCost: 0,
     cacheReadCost: 0,
@@ -1517,6 +1541,10 @@ export function editableModel(model: DesktopProviderModelDefinition): EditableMo
     maxTokens: model.maxTokens ?? 8_192,
     reasoning: model.reasoning ?? false,
     imageInput: model.input?.includes('image') ?? false,
+    audioInput: model.input?.includes('audio') ?? false,
+    videoInput: model.input?.includes('video') ?? false,
+    tools: model.tools ?? true,
+    modelType: model.modelType ?? 'chat',
     inputCost: model.cost?.input ?? 0,
     outputCost: model.cost?.output ?? 0,
     cacheReadCost: model.cost?.cacheRead ?? 0,
@@ -1619,10 +1647,14 @@ export function normalizeEditableModel(
     contextWindow: model.contextWindow || 32_768,
     maxInputTokens: model.maxInputTokens || undefined,
     maxTokens: model.maxTokens || 8_192,
-    reasoning: model.reasoning,
-    input: [
-      ...(model.original?.input ?? ['text']).filter((value) => value !== 'image'),
+    reasoning: (!model.modelType || model.modelType === 'chat') && model.reasoning,
+    modelType: model.modelType ?? 'chat',
+    tools: model.modelType === 'embedding' || model.modelType === 'rerank' ? false : model.tools ?? true,
+    input: model.modelType === 'embedding' || model.modelType === 'rerank' ? ['text'] : [
+      ...(model.original?.input ?? ['text']).filter((value) => !['image', 'audio', 'video'].includes(value)),
       ...(model.imageInput ? ['image' as const] : []),
+      ...(model.audioInput ? ['audio' as const] : []),
+      ...(model.videoInput ? ['video' as const] : []),
     ],
     cost: {
       input: model.inputCost || 0,

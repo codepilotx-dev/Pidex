@@ -76,3 +76,13 @@ describe('composer local path attachments', () => {
     expect(uploads).toEqual([])
   })
 })
+
+
+test('音视频路径按授权快照为托管附件，并以 base64 上传', async () => {
+  const attachments = await composerAttachmentsFromPathGrants([{ grantId: 'audio-grant', name: 'clip.wav', path: 'C:\\media\\clip.wav', pathKind: 'file', mediaType: 'audio/wav', sizeBytes: 12 }], {
+    readComposerPathGrant: async () => ({ name: 'clip.wav', relativePath: '', mediaType: 'audio/wav', sizeBytes: 12, kind: 'audio', encoding: 'base64', data: 'fixture-audio' }),
+  })
+  expect(attachments[0]).toMatchObject({ kind: 'audio', storage: 'managed', contentBase64: 'fixture-audio' })
+  const uploads = await buildAgentAttachmentUploads({ text: '', attachments }, async () => { throw new Error('Not a retained attachment') })
+  expect(uploads[0]).toMatchObject({ kind: 'audio', encoding: 'base64', data: 'fixture-audio' })
+})

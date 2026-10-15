@@ -1003,6 +1003,34 @@ describe('desktop provider client', () => {
     )
   })
 
+  test('智能配置通过 capability 协商、typed RPC 预览和手动刷新', async () => {
+    const requests: string[] = []
+    const client = createDesktopClient({ fetch: async (_path: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      requests.push(body.method)
+      if (body.method === 'initialize') return rpc(body.id, initializedResult(['rpc.typed.v1', 'model.recommendations.v1']))
+      if (body.method === 'initialized') return new Response(null, { status: 204 })
+      if (body.method === 'model/recommendation/preview') return rpc(body.id, { status: 'no-cache', recommended: {} })
+      if (body.method === 'model/recommendation/refresh') {
+        expect(body.params.operationId).toBeString()
+        return rpc(body.id, { updatedAt: 123 })
+      }
+      throw new Error(`Unexpected RPC: ${body.method}`)
+    } })
+    expect(await client.modelRecommendations!.supported()).toBe(true)
+    expect(requests).not.toContain('model/recommendation/refresh')
+    expect(await client.modelRecommendations!.preview({ providerId: 'relay', modelId: 'example', modelType: 'chat' })).toMatchObject({ status: 'no-cache' })
+    expect(await client.modelRecommendations!.refresh()).toEqual({ updatedAt: 123 })
+    const older = createDesktopClient({ fetch: async (_path: string, init?: RequestInit) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.method === 'initialize') return rpc(body.id, initializedResult())
+      if (body.method === 'initialized') return new Response(null, { status: 204 })
+      throw new Error('Old service must not receive recommendation RPC')
+    } })
+    expect(await older.modelRecommendations!.supported()).toBe(false)
+    await expect(older.modelRecommendations!.refresh()).rejects.toThrow('AGENT_OPERATION_UNSUPPORTED')
+  })
+
   test('模型健康 RPC 通过 typed RPC 调用并受 capability 门禁', async () => {
     const requests: Array<{ method: string; params?: Record<string, unknown> }> = []
     const runSnapshot = {

@@ -29,7 +29,7 @@ import { modelsDevLogoURL } from '../../../services/desktop-client/ProviderLogoB
 import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
-import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { fullErrorMessage } from '../../../utils/Errors.js'
 import { formatCompactNumber } from '../../../utils/UsageFormatters.js'
 import { isExecutableDesktopProvider } from '../../../services/desktop-client/ProviderAdapters.js'
@@ -190,6 +190,7 @@ export function ProviderModelsSection({
       : undefined
     const api =
       configured?.api ??
+      (customConfig?.models.find((model) => !model.modelType || model.modelType === 'chat')?.api) ??
       protocolMetadata?.providerApi ??
       provider.providerApis?.[0] ??
       'openai-completions'
@@ -206,9 +207,12 @@ export function ProviderModelsSection({
       api,
       enabled: true,
       contextWindow: metadata?.contextWindow ?? 32_768,
+      maxInputTokens: metadata?.inputTokens,
       maxTokens: metadata?.outputTokens ?? 8_192,
       reasoning: metadata?.reasoning ?? false,
-      input: metadata?.vision ? ['text', 'image'] : ['text'],
+      tools: metadata?.toolCall ?? true,
+      modelType: metadata?.modelType === 'embedding' || metadata?.modelType === 'rerank' ? metadata.modelType : 'chat',
+      input: metadata?.modalities?.input ?? (metadata?.vision ? ['text', 'image'] : ['text']),
       ...configured,
       cost: {
         input: metadata?.inputCost ?? 0,
@@ -353,24 +357,26 @@ export function ProviderModelsSection({
           </Button>
           <Button
             color="outline"
+            size="sm"
             disabled={
               busy || saving || editingBlocked || provider.availability?.status === 'unavailable'
             }
             onClick={() => void fetchModels()}
           >
-            <RefreshCw aria-hidden size={APP_ICON_SIZE} />
+            <RefreshCw aria-hidden size={APP_ICON_SIZES.sm} />
             同步模型
           </Button>
           {provider.config && editable ? (
             <Button
               color="outline"
               isIconOnly
+              size="sm"
               aria-label="添加模型"
               title="添加模型"
               disabled={busy || saving || editingBlocked}
               onClick={() => openModel()}
             >
-              <Plus aria-hidden size={APP_ICON_SIZE} />
+              <Plus aria-hidden size={APP_ICON_SIZES.sm} />
             </Button>
           ) : null}
         </div>
@@ -405,6 +411,8 @@ export function ProviderModelsSection({
       </div>
       {editingModel ? (
         <ProviderModelDialog
+          providerId={provider.providerID}
+          baseUrl={provider.baseURL ?? ''}
           model={editingModel.model}
           creating={editingModel.creating}
           {...(editingModel.nativeApi ? { nativeApi: editingModel.nativeApi } : {})}

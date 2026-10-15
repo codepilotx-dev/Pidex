@@ -18,6 +18,7 @@ export function catalogProviderToDesktop(
         id: model.id,
         name: model.name,
         contextWindow: model.limit.context,
+        inputTokens: model.limit.input,
         outputTokens: model.limit.output,
         inputCost: cost?.input,
         outputCost: cost?.output,
@@ -32,7 +33,7 @@ export function catalogProviderToDesktop(
           input: [...model.capabilities.input],
           output: [...model.capabilities.output],
         },
-        modelType: model.family,
+        modelType: model.modelType ?? model.family,
         tags: [model.status],
         variants: model.variants.map((variant) => variant.id),
         providerApi: isProviderApi(model.api.name) ? model.api.name : undefined,
@@ -98,8 +99,8 @@ export function desktopProviderExecutionError(
 
 function isProviderApi(
   value: string,
-): value is 'openai-completions' | 'openai-responses' | 'anthropic-messages' {
+): value is 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai' {
   return (
-    value === 'openai-completions' || value === 'openai-responses' || value === 'anthropic-messages'
+    value === 'openai-completions' || value === 'openai-responses' || value === 'anthropic-messages' || value === 'google-generative-ai'
   )
 }

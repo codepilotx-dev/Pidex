@@ -18,23 +18,24 @@ async function composerAttachmentFromPathGrant(
   grant: DesktopComposerPathGrant,
   bridge: Pick<DesktopAttachmentIpcBridge, 'readComposerPathGrant'>,
 ): Promise<DesktopComposerAttachment> {
-  if (grant.pathKind === 'file' && SNAPSHOT_IMAGE_MEDIA_TYPES.has(grant.mediaType)) {
-    if (grant.sizeBytes > MAX_IMAGE_BYTES) {
+  const mediaKind = grant.mediaType.startsWith('audio/') ? 'audio' : grant.mediaType.startsWith('video/') ? 'video' : 'image'
+  if (grant.pathKind === 'file' && (SNAPSHOT_IMAGE_MEDIA_TYPES.has(grant.mediaType) || mediaKind !== 'image')) {
+    if (grant.sizeBytes > (mediaKind === 'image' ? MAX_IMAGE_BYTES : 20 * 1024 * 1024)) {
       return {
         id: crypto.randomUUID(),
         name: grant.name,
         path: grant.path,
         mediaType: grant.mediaType,
         sizeBytes: grant.sizeBytes,
-        kind: 'image',
+        kind: mediaKind,
         status: 'error',
         storage: 'managed',
-        error: '图片超过 10 MiB 限制。',
+        error: mediaKind === 'image' ? '图片超过 10 MiB 限制。' : '音视频超过 20 MiB 限制。',
       }
     }
     try {
       const preview = await bridge.readComposerPathGrant({ grantId: grant.grantId })
-      if (preview.kind !== 'image' || preview.encoding !== 'base64' || !preview.data) {
+      if (preview.kind !== mediaKind || preview.encoding !== 'base64' || !preview.data) {
         throw new Error('图片内容不可用')
       }
       return {
@@ -43,11 +44,11 @@ async function composerAttachmentFromPathGrant(
         path: grant.path,
         mediaType: grant.mediaType,
         sizeBytes: grant.sizeBytes,
-        kind: 'image',
+        kind: mediaKind,
         status: 'ready',
         storage: 'managed',
         contentBase64: preview.data,
-        previewDataUrl: `data:${grant.mediaType};base64,${preview.data}`,
+        ...(mediaKind === 'image' ? { previewDataUrl: `data:${grant.mediaType};base64,${preview.data}` } : {}),
       }
     } catch {
       return {
@@ -56,10 +57,10 @@ async function composerAttachmentFromPathGrant(
         path: grant.path,
         mediaType: grant.mediaType,
         sizeBytes: grant.sizeBytes,
-        kind: 'image',
+        kind: mediaKind,
         status: 'error',
         storage: 'managed',
-        error: '图片读取失败，请重新添加。',
+        error: mediaKind === 'image' ? '图片读取失败，请重新添加。' : '音视频读取失败，请重新添加。',
       }
     }
   }

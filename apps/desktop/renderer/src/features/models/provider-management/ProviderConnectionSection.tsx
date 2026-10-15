@@ -204,6 +204,7 @@ export function ProviderConnectionSection({
   const section = panel?.tab?.providerId === provider.providerID ? panel.tab.section : null
   const credentialsRef = useRef<HTMLElement>(null)
   const requestRef = useRef<HTMLElement>(null)
+  const [requestFooterHost, setRequestFooterHost] = useState<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!section || !panel?.host) return
     const frame = requestAnimationFrame(() =>
@@ -408,6 +409,7 @@ export function ProviderConnectionSection({
       ) : null}
       {panel?.host && section
         ? createPortal(
+            <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col">
             <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-6 tw:overflow-y-auto tw:p-4 tw:[&_.model-center-oauth-flow]:p-0">
               <section ref={credentialsRef} className="tw:grid tw:gap-4" aria-label="认证与密钥">
                 <h3 className="tw:m-0 tw:type-title-sm">认证与密钥</h3>
@@ -449,11 +451,12 @@ export function ProviderConnectionSection({
                       </div>
                       <Button
                         color="secondary"
-                        size="md" shape="default"
+                        size="sm"
+                        shape="default"
                         disabled={busy || keyEditor !== null}
                         onClick={() => setKeyEditor('new')}
                       >
-                        <Plus aria-hidden size={APP_ICON_SIZE} />
+                        <Plus aria-hidden size={APP_ICON_SIZES.sm} />
                         新增 API Key
                       </Button>{' '}
                     </header>
@@ -615,6 +618,7 @@ export function ProviderConnectionSection({
                     {connectedQueryableSourceIds.length > 0 ? (
                       <Button
                         color="secondary"
+                        size="sm"
                         loading={refreshingUsage}
                         onClick={refreshUsageSources}
                       >
@@ -730,8 +734,8 @@ export function ProviderConnectionSection({
                 className="tw:grid tw:gap-4 tw:border-t tw:border-app-border-subtle tw:pt-6"
                 aria-label="请求配置"
               >
-                <h3 className="tw:m-0 tw:type-title-sm">请求配置</h3>
                 <ProviderRequestSettingsForm
+                    footerHost={requestFooterHost}
                     key={provider.providerID}
                     provider={provider}
                     saveRef={requestSave}
@@ -744,6 +748,8 @@ export function ProviderConnectionSection({
                     {...(onDeleteProvider ? { onDelete: onDeleteProvider } : {})}
                 />
               </section>
+            </div>
+            <div ref={setRequestFooterHost} className="tw:relative tw:z-10 tw:shrink-0 tw:bg-app-panel" />
             </div>,
             panel.host,
           )

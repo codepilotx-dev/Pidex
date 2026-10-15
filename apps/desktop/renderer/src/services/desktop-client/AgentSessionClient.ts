@@ -159,6 +159,9 @@ export const RENDERER_CAPABILITIES = [
   'prompt.preview.sensitive.v1',
   'model.catalog.paged.v1',
   'model.health.v1',
+  'model.operations.v1',
+  'model.recommendations.v1',
+  'model.media-input.v1',
   'provider.config.pi.v1',
   'provider.builtinOverrides.v1',
   'provider.auth.pi.v1',
@@ -1295,6 +1298,7 @@ export function createAgentSessionDesktopClient(
     const payload = await buildAgentAttachmentUploads(input, (attachmentId) =>
       rpc.call('attachment/read', { attachmentId }),
     )
+    if (payload.some((attachment) => attachment.kind === 'audio' || attachment.kind === 'video')) requireAgentCapability('model.media-input.v1')
     if (!payload.length) return []
     const response = await rpc.call('attachment/import', {
       uploads: payload,
@@ -3368,6 +3372,18 @@ export function createAgentSessionDesktopClient(
         operationId: crypto.randomUUID(),
       })
       invalidateModelCatalog()
+    },
+    modelRecommendations: {
+      supported: async () => (await isAgentAvailable()) && agentCapabilities.has('model.recommendations.v1'),
+      preview: async (input) => {
+        requireAgentCapability('model.recommendations.v1')
+        return rpc.call('model/recommendation/preview', input)
+      },
+      refresh: async () => {
+        requireAgentCapability('model.recommendations.v1')
+        const result = await rpc.call('model/recommendation/refresh', { operationId: crypto.randomUUID() })
+        return result
+      },
     },
     discoverProviderModels: async (providerId, api) => {
       const result = await rpc.call('provider/model/discover', {

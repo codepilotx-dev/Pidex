@@ -589,9 +589,10 @@ export type ModelProviderID = CoreModelProviderID
 export type DesktopModelProviderKind = ModelProviderKind
 
 export type DesktopModelMetadata = ModelMetadata & {
+  inputTokens?: number
   nativeApi?: string
   variants?: string[]
-  providerApi?: 'openai-completions' | 'openai-responses' | 'anthropic-messages'
+  providerApi?: 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai'
 }
 
 export type DesktopProviderAvailability =
@@ -615,7 +616,7 @@ export type DesktopModelProviderSummary = Omit<ModelProviderSummary, 'modelMetad
   protocol?: 'pi-native' | 'openai-compatible' | 'unsupported'
   enabled?: boolean
   authMethods?: readonly ('api-key' | 'oauth')[]
-  providerApis?: readonly ('openai-completions' | 'openai-responses' | 'anthropic-messages')[]
+  providerApis?: readonly ('openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai')[]
   nativeApis?: readonly string[]
   endpointDefaults?: Readonly<Record<string, string>>
   defaultApi?: string
@@ -1845,6 +1846,11 @@ export type DesktopApi = {
   createProvider(definition: DesktopCustomProviderDefinition): Promise<void>
   updateProvider(providerId: ModelProviderID, definition: DesktopProviderDefinition): Promise<void>
   deleteProvider(providerId: ModelProviderID): Promise<void>
+  modelRecommendations?: {
+    supported(): Promise<boolean>
+    preview(input: RpcParams<'model/recommendation/preview'>): Promise<RpcResult<'model/recommendation/preview'>>
+    refresh(): Promise<RpcResult<'model/recommendation/refresh'>>
+  }
   discoverProviderModels(
     providerId: ModelProviderID,
     api: DesktopProviderModelDefinition['api'],

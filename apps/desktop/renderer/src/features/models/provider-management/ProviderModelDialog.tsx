@@ -14,12 +14,16 @@ export function ProviderModelDialog({
   model,
   creating,
   nativeApi,
+  providerId,
+  baseUrl,
   onSave,
   onClose,
 }: {
   model: DesktopProviderModelDefinition
   creating: boolean
   nativeApi?: string
+  providerId: string
+  baseUrl: string
   onSave: (model: DesktopProviderModelDefinition) => Promise<void>
   onClose: () => void
 }): ReactNode {
@@ -89,6 +93,8 @@ export function ProviderModelDialog({
             <div className="settings-management-dialog-body tw:min-h-0 tw:overflow-y-auto">
             <fieldset disabled={busy} className="tw:m-0 tw:grid tw:min-w-0 tw:gap-4 tw:border-0 tw:p-0">
               <ModelEditor
+                providerId={providerId}
+                baseUrl={baseUrl}
                 model={draft}
                 lockId={!creating}
                 onChange={setDraft}

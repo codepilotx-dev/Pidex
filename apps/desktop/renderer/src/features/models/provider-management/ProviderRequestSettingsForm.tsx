@@ -1,4 +1,5 @@
-import { ChevronRight } from 'lucide-react'
+import { ChevronRight, Plus } from 'lucide-react'
+import { createPortal } from 'react-dom'
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../../components/ui/IconTokens.js'
 import { useEffect, useRef, useState, useId, type RefObject, type ReactNode } from 'react'
 import type {
@@ -22,17 +23,17 @@ const commonProtocols = DEEPSEEK_PROTOCOL_OPTIONS.map((option) => ({
 }))
 function providerProtocols(provider: DesktopModelProviderSummary) {
   const apis = provider.config?.kind === 'custom'
-    ? [...new Set([...provider.config.models.map((model) => model.api), ...Object.keys(provider.config.endpoints ?? {})])]
+    ? [...new Set([...provider.config.models.filter((model) => !model.modelType || model.modelType === 'chat').map((model) => model.api), ...Object.keys(provider.config.endpoints ?? {})])]
     : Object.keys(provider.endpointDefaults ?? {}).length > 0
       ? Object.keys(provider.endpointDefaults!)
       : provider.nativeApis ?? provider.providerApis ?? []
-  return apis.map((value) => ({ value, label: commonProtocols.find((option) => option.value === value)?.label ?? ({ 'google-generative-ai': 'Gemini', 'google-vertex': 'Vertex AI', 'bedrock-converse-stream': 'Bedrock Converse', 'azure-openai-responses': 'Azure Responses', 'openai-codex-responses': 'Codex Responses', 'mistral-conversations': 'Mistral Conversations' } as Record<string, string>)[value] ?? value }))
+  return [...new Set([...apis, ...Object.keys(provider.config?.endpoints ?? {})])].map((value) => ({ value, label: commonProtocols.find((option) => option.value === value)?.label ?? ({ 'openai-embeddings': 'Embeddings', 'jina-rerank': 'Rerank', 'google-generative-ai': 'Gemini', 'google-vertex': 'Vertex AI', 'bedrock-converse-stream': 'Bedrock Converse', 'azure-openai-responses': 'Azure Responses', 'openai-codex-responses': 'Codex Responses', 'mistral-conversations': 'Mistral Conversations' } as Record<string, string>)[value] ?? value }))
 }
 function requestDraft(provider: DesktopModelProviderSummary) {
   const config = provider.config
   const apis =
     config?.kind === 'custom'
-      ? [...new Set(config.models.map((model) => model.api))]
+      ? [...new Set(config.models.filter((model) => !model.modelType || model.modelType === 'chat').map((model) => model.api))]
       : (provider.providerApis ?? [])
   const protocols = providerProtocols(provider)
   const endpoints: Record<string, string> = { ...(provider.endpointDefaults ?? {}), ...(config?.endpoints ?? {}) }
@@ -58,6 +59,7 @@ function requestDraft(provider: DesktopModelProviderSummary) {
 }
 
 export function ProviderRequestSettingsForm({
+  footerHost,
   provider,
   saveRef,
   resetRef,
@@ -68,6 +70,7 @@ export function ProviderRequestSettingsForm({
   onCancel,
   onDelete,
 }: {
+  footerHost?: HTMLElement | null
   provider: DesktopModelProviderSummary
   saveRef: RefObject<(() => Promise<boolean>) | null>
   resetRef: RefObject<(() => void) | null>
@@ -78,7 +81,13 @@ export function ProviderRequestSettingsForm({
   onCancel: () => void
   onDelete?: () => Promise<void>
 }): ReactNode {
+  const formId = useId()
   const protocols = providerProtocols(provider)
+  const endpointOptions = [...new Map([...protocols, ...commonProtocols, ...(provider.config?.kind === 'custom' ? [{ value: 'google-generative-ai', label: 'Gemini' }] : []),
+    { value: 'openai-embeddings', label: 'Embeddings' }, { value: 'jina-rerank', label: 'Rerank' }].map((option) => [option.value, option])).values()]
+  const [addingEndpoint, setAddingEndpoint] = useState(false)
+  const [endpointProtocol, setEndpointProtocol] = useState('')
+  const [endpointAddress, setEndpointAddress] = useState('')
   const source = requestDraft(provider)
   const signature = JSON.stringify(source)
   const initial = useRef(source)
@@ -87,7 +96,8 @@ export function ProviderRequestSettingsForm({
   const [error, setError] = useState<string | null>(null)
   const [advanced, setAdvanced] = useState(false)
   const advancedId = useId()
-  const dirty = JSON.stringify(draft) !== JSON.stringify(initial.current)
+  const availableEndpoints = endpointOptions.filter((option) => !(option.value in draft.endpoints))
+  const dirty = JSON.stringify(draft) !== JSON.stringify(initial.current) || addingEndpoint && endpointAddress.trim().length > 0
   useEffect(() => {
     if (!dirty && !saving) {
       initial.current = source
@@ -108,6 +118,8 @@ export function ProviderRequestSettingsForm({
     initial.current = source
     setDraft(source)
     setError(null)
+    setAddingEndpoint(false)
+    setEndpointAddress('')
   }
   async function save(): Promise<boolean> {
     if (saving) return false
@@ -117,7 +129,8 @@ export function ProviderRequestSettingsForm({
     setSaving(true)
     setError(null)
     try {
-      let next: DesktopProviderDefinition = { ...config, allowInsecureHttp: draft.allowHttp, endpoints: draft.endpoints }
+      const endpoints = { ...draft.endpoints, ...(addingEndpoint && endpointAddress.trim() ? { [endpointProtocol]: endpointAddress.trim() } : {}) }
+      let next: DesktopProviderDefinition = { ...config, allowInsecureHttp: draft.allowHttp, endpoints }
       if (draft.address !== initial.current.address || config.baseUrl)
         next = { ...next, baseUrl: draft.address.trim() }
       if (config.kind === 'custom') {
@@ -125,7 +138,7 @@ export function ProviderRequestSettingsForm({
         if (headers instanceof Error) throw headers
         next = {
           ...config,
-          endpoints: draft.endpoints,
+          endpoints,
           name: draft.name.trim(),
           baseUrl: draft.address.trim(),
           allowInsecureHttp: draft.allowHttp,
@@ -136,7 +149,7 @@ export function ProviderRequestSettingsForm({
             .filter(Boolean),
           headers,
           models: config.models.map((model) => {
-            if (draft.protocol === 'mixed' || draft.protocol === initial.current.protocol) return model
+            if (model.modelType && model.modelType !== 'chat' || draft.protocol === 'mixed' || draft.protocol === initial.current.protocol) return model
             const { compat: _, ...rest } = model
             return { ...rest, api: draft.protocol as typeof model.api }
           }),
@@ -149,13 +162,15 @@ export function ProviderRequestSettingsForm({
         }
       }
       next = { ...next, endpoints: Object.fromEntries(Object.entries({
-        ...draft.endpoints,
+        ...endpoints,
         ...(draft.protocol !== 'mixed' ? { [draft.protocol]: draft.address.trim() } : {}),
       }).filter(([, address]) => address.trim())) }
       await onSaveDefinition(next)
       await onSaved()
-      initial.current = { ...draft, address: draft.address.trim(), name: draft.name.trim() }
+      initial.current = { ...draft, endpoints, address: draft.address.trim(), name: draft.name.trim() }
       setDraft(initial.current)
+      setAddingEndpoint(false)
+      setEndpointAddress('')
       onDraftChange(false)
       return true
     } catch (error) {
@@ -183,8 +198,16 @@ export function ProviderRequestSettingsForm({
     })
   }
 
+  const footer = (
+      <footer className="tw:flex tw:shrink-0 tw:justify-end tw:gap-2 tw:border-t tw:border-app-border-subtle tw:px-4 tw:py-4">
+        <Button color="secondary" size="sm" shape="default" disabled={saving} onClick={onCancel}>取消</Button>
+        <Button color="primary" size="sm" shape="default" disabled={saving || !dirty} loading={saving} type="submit" form={formId}>保存配置</Button>
+        {onDelete ? <Button variant="danger" size="sm" shape="default" disabled={saving || dirty} onClick={() => void onDelete()}>删除供应商</Button> : null}
+      </footer>
+  )
   return (
     <form
+      id={formId}
       className="tw:grid tw:min-w-0 tw:gap-4"
       onSubmit={(event) => {
         event.preventDefault()
@@ -195,6 +218,13 @@ export function ProviderRequestSettingsForm({
         disabled={saving}
         className="tw:m-0 tw:grid tw:min-h-0 tw:min-w-0 tw:content-start tw:gap-4 tw:border-0 tw:p-0"
       >
+        <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
+          <h3 className="tw:m-0 tw:type-title-sm">请求配置</h3>
+          {!addingEndpoint ? <Button size="sm" shape="default" variant="outline" disabled={!availableEndpoints.length} onClick={() => {
+            setEndpointProtocol(availableEndpoints[0]!.value)
+            setAddingEndpoint(true)
+          }}><Plus aria-hidden="true" size={APP_ICON_SIZES.sm} />添加端点</Button> : null}
+        </header>
         {provider.config?.kind === 'custom' ? (
           <label className="tw:grid tw:gap-2 tw:type-label">
             供应商名称
@@ -204,18 +234,18 @@ export function ProviderRequestSettingsForm({
             />
           </label>
         ) : null}
-        {Object.keys(draft.endpoints).length > 0 ? protocols.filter((option) => option.value in draft.endpoints).map((option) => (
+        {Object.keys(draft.endpoints).length > 0 ? endpointOptions.filter((option) => option.value in draft.endpoints).map((option) => (
           <div key={option.value} className="tw:grid tw:gap-2 tw:type-label">
             <span className="tw:flex tw:items-center tw:gap-2">
               {option.label}
-              <Button
+              {!['openai-embeddings', 'jina-rerank'].includes(option.value) ? <Button
                 variant="outline"
-                size="md" shape="default"
+                size="sm" shape="default"
                 disabled={draft.protocol === option.value}
                 onClick={() => changeProtocol(option.value)}
               >
                 {draft.protocol === option.value ? '默认' : '设为默认'}
-              </Button>
+              </Button> : null}
             </span>
             <Input
               aria-label={draft.protocol === option.value ? 'API 地址' : `${option.label} API 地址`}
@@ -230,7 +260,21 @@ export function ProviderRequestSettingsForm({
           API 地址
           <Input aria-label="API 地址" value={draft.address} onChange={(event) => setDraft({ ...draft, address: event.target.value })} />
         </label>}
-        <div className="tw:grid tw:gap-3 tw:border-t tw:border-app-border-subtle tw:pt-4">
+        {addingEndpoint ? (
+          <div className="tw:grid tw:gap-3">
+            <SettingsDropdown ariaLabel="新端点协议" value={endpointProtocol} options={availableEndpoints} onChange={setEndpointProtocol} />
+            <Input aria-label="新端点 API 地址" placeholder="https://example.com/v1" value={endpointAddress} onChange={(event) => setEndpointAddress(event.target.value)} />
+            <div className="tw:flex tw:justify-end tw:gap-2">
+              <Button size="sm" shape="default" color="secondary" onClick={() => { setAddingEndpoint(false); setEndpointAddress('') }}>取消添加端点</Button>
+              <Button size="sm" shape="default" color="primary" disabled={!endpointProtocol || !endpointAddress.trim()} onClick={() => {
+                setDraft({ ...draft, endpoints: { ...draft.endpoints, [endpointProtocol]: endpointAddress.trim() } })
+                setAddingEndpoint(false)
+                setEndpointAddress('')
+              }}>添加</Button>
+            </div>
+          </div>
+        ) : null}
+        <div className="tw:grid tw:gap-3">
           <button
             type="button"
             className="tw:flex tw:items-center tw:justify-start tw:gap-2 tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-app-text-soft tw:type-body-sm tw:hover:text-app-text tw:focus-visible:outline-app-focus"
@@ -285,8 +329,6 @@ export function ProviderRequestSettingsForm({
                 </label>
               </>
             ) : null}
-          </DisclosureContent>
-        </div>
         {provider.config?.kind === 'custom' ? (
           <label className="tw:grid tw:gap-2 tw:type-label">
             自定义请求头
@@ -299,25 +341,15 @@ export function ProviderRequestSettingsForm({
             />
           </label>
         ) : null}
+          </DisclosureContent>
+        </div>
         {error ? (
           <p role="alert" className="tw:m-0 tw:text-app-danger tw:type-body-sm">
             {error}
           </p>
         ) : null}
       </fieldset>
-      <footer className="tw:flex tw:shrink-0 tw:justify-end tw:gap-2 tw:border-t tw:border-app-border-subtle tw:pt-4">
-        <Button color="secondary" size="md" shape="default" disabled={saving} onClick={onCancel}>
-          取消
-        </Button>
-        <Button color="primary" size="md" shape="default" disabled={saving || !dirty} loading={saving} type="submit">
-          保存配置
-        </Button>
-        {onDelete ? (
-          <Button variant="danger" size="md" shape="default" disabled={saving || dirty} onClick={() => void onDelete()}>
-            删除供应商
-          </Button>
-        ) : null}
-      </footer>
+      {footerHost ? createPortal(footer, footerHost) : footer}
     </form>
   )
 }

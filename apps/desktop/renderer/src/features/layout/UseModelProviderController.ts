@@ -40,7 +40,7 @@ export function useModelProviderController({
   const [modelProviders, setModelProviders] = useState<DesktopModelProviderSummary[]>([])
   const modelCatalogLoading = useModelCatalogLoading()
   const modelPresets = useMemo(
-    () => buildModelPresets(providerState?.models ?? providerState?.provider.defaultModels ?? []),
+    () => buildModelPresets((providerState?.models ?? providerState?.provider.defaultModels ?? []).filter((id) => !['embedding', 'rerank'].includes(providerState?.provider.modelMetadata?.[id]?.modelType ?? 'chat'))),
     [providerState],
   )
   const providerIDRef = useRef(providerID)
@@ -67,7 +67,7 @@ export function useModelProviderController({
         return {
           providerID: provider.providerID,
           displayName: provider.displayName,
-          modelPresets: buildModelPresets(models),
+          modelPresets: buildModelPresets(models.filter((id) => !['embedding', 'rerank'].includes(provider.modelMetadata?.[id]?.modelType ?? 'chat'))),
           baseURL: provider.baseURL,
           logoURL: provider.logoURL,
         }

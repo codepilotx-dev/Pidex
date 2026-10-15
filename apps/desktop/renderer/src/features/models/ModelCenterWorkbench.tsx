@@ -89,6 +89,8 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const [deepSeekProtocolSupported, setDeepSeekProtocolSupported] = useState(false)
   const [connectionDraftDirty, setConnectionDraftDirty] = useState(false)
   const [deleteKey, setDeleteKey] = useState<DesktopApiKeySummary | null>(null)
+  const [providerToDelete, setProviderToDelete] = useState<DesktopModelProviderSummary | null>(null)
+  const [deletingProvider, setDeletingProvider] = useState(false)
 
   const controller = useModelCenterController({
     onInitialProviderState: (nextState) => applyProviderState(nextState),
@@ -365,18 +367,21 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
   async function deleteCustomProvider(): Promise<void> {
     if (!selectedProvider || selectedProvider.providerKind !== 'custom') return
-    if (
-      !window.confirm(
-        `确定删除自定义供应商“${selectedProvider.displayName}”？历史会话引用与已保存凭据将保留。`,
-      )
-    )
-      return
+    setProviderToDelete(selectedProvider)
+  }
+
+  async function confirmDeleteProvider(): Promise<void> {
+    if (!providerToDelete || deletingProvider) return
+    setDeletingProvider(true)
     try {
-      await deleteProvider(selectedProvider.providerID)
+      await deleteProvider(providerToDelete.providerID)
+      setProviderToDelete(null)
       showProviderCatalog()
       onNotice('自定义供应商已删除。')
     } catch (error) {
       showOperationError(error)
+    } finally {
+      setDeletingProvider(false)
     }
   }
 
@@ -636,6 +641,16 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         </div>
       )}
 
+      <ConfirmationDialog
+        open={providerToDelete !== null}
+        title="删除自定义供应商？"
+        description={`确定删除自定义供应商“${providerToDelete?.displayName ?? ''}”？历史会话引用与已保存凭据将保留。`}
+        actionLabel="删除供应商"
+        tone="danger"
+        actionDisabled={deletingProvider}
+        onAction={() => void confirmDeleteProvider()}
+        onCancel={() => { if (!deletingProvider) setProviderToDelete(null) }}
+      />
       <ConfirmationDialog
         actionDisabled={busyKeyId !== null}
         actionLabel="删除"

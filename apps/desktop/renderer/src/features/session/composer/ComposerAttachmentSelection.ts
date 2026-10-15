@@ -10,11 +10,11 @@ export async function selectDroppedComposerAttachments(
   for (const file of Array.from(files)) {
     const path = pathForFile(file)
     if (path) paths.push(path)
-    else if (file.type.startsWith('image/')) clipboardImages.push(file)
+    else if (/^(image|audio|video)\//.test(file.type)) clipboardImages.push(file)
   }
   const [pathAttachments, images] = await Promise.all([
     grantPaths(paths),
-    Promise.all(clipboardImages.map(readClipboardImageAttachment)),
+    Promise.all(clipboardImages.map(readManagedMediaAttachment)),
   ])
   return [...pathAttachments, ...images]
 }
@@ -47,9 +47,9 @@ export function mergeComposerAttachments(
   return { accepted, error: available === 0 ? error : null }
 }
 
-async function readClipboardImageAttachment(file: File): Promise<DesktopComposerAttachment> {
-  if (file.size > 10 * 1024 * 1024) {
-    return errorAttachment('clipboard-image-size', '图片超过 10 MiB 限制。', file)
+async function readManagedMediaAttachment(file: File): Promise<DesktopComposerAttachment> {
+  if (file.size > (file.type.startsWith('image/') ? 10 : 20) * 1024 * 1024) {
+    return errorAttachment('clipboard-image-size', file.type.startsWith('image/') ? '图片超过 10 MiB 限制。' : '音视频超过 20 MiB 限制。', file)
   }
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -61,15 +61,15 @@ async function readClipboardImageAttachment(file: File): Promise<DesktopComposer
   if (!dataUrl.startsWith(prefix)) throw new Error('剪贴板图片格式不受支持')
   return {
     id: crypto.randomUUID(),
-    name: file.name || 'clipboard-image.png',
+    name: file.name || (file.type.startsWith('image/') ? 'clipboard-image.png' : 'media-file'),
     path: '',
     mediaType: file.type,
     sizeBytes: file.size,
-    kind: 'image',
+    kind: file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'image',
     status: 'ready',
     storage: 'managed',
     contentBase64: dataUrl.slice(prefix.length),
-    previewDataUrl: dataUrl,
+    ...(file.type.startsWith('image/') ? { previewDataUrl: dataUrl } : {}),
   }
 }
 
