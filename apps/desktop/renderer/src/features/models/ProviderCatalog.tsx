@@ -89,6 +89,7 @@ export function ProviderCatalog({
                             }
                             imageClassName="tw:object-contain tw:[.dark-theme_&]:invert tw:[.dark-theme_&]:hue-rotate-180"
                             logoURL={provider.logoURL}
+                            providerID={provider.id}
                           />
                         </span>
                         <span className="tw:grid tw:min-w-0 tw:gap-1">

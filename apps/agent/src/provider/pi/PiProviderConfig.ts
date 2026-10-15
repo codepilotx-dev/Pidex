@@ -73,6 +73,7 @@ export type PiBuiltinModelConfig = Partial<Omit<PiCustomModelConfig, 'id' | 'cos
 
 export interface PiCustomModelConfig {
   readonly id: string
+  readonly group?: string
   readonly api: CustomProviderApi
   readonly name: string
   readonly enabled: boolean
@@ -329,6 +330,7 @@ const parseCustomModel = (
   }
   if (value.modelType !== undefined && !['chat', 'embedding', 'rerank'].includes(String(value.modelType))) throw new Error('Unsupported model type')
   if (value.tools !== undefined && typeof value.tools !== 'boolean') throw new Error('Invalid tools capability')
+  if (value.group !== undefined && (typeof value.group !== 'string' || value.group.length > 128)) throw new Error('Invalid model group')
   const input = strings(value.input) as readonly ('text' | 'image' | 'audio' | 'video')[]
   const cost = isObject(value.cost) ? value.cost : {}
   const thinkingLevelMap = parseThinkingLevelMap(value.thinking_level_map ?? value.thinkingLevelMap)
@@ -336,6 +338,7 @@ const parseCustomModel = (
   return {
     id,
     api: api as CustomProviderApi,
+    ...(typeof value.group === 'string' ? { group: value.group.trim() } : {}),
     name: typeof value.name === 'string' && value.name.trim() ? value.name : configuredID,
     enabled: bool(value.enabled, true),
     ...(value.modelType !== undefined ? { modelType: value.modelType as NonNullable<PiCustomModelConfig['modelType']> } : {}),
@@ -416,6 +419,7 @@ const parseBuiltinModel = (
     'enabled',
     'api',
     'name',
+    'group',
     'contextWindow',
     'context_window',
     'modelType',
@@ -652,6 +656,7 @@ export const serializePiProviderDefinition = (
               {
                 id: model.id,
                 api: model.api,
+                ...(model.group !== undefined ? { group: model.group } : {}),
                 ...(model.name !== undefined ? { name: model.name } : {}),
                 ...(model.enabled !== undefined ? { enabled: model.enabled } : {}),
                 ...(model.contextWindow !== undefined
@@ -730,6 +735,7 @@ export const serializePiProviderDefinition = (
                   id: model.id,
                   api: model.api,
                   name: model.name,
+                  ...(model.group !== undefined ? { group: model.group } : {}),
                   enabled: model.enabled,
                   context_window: model.contextWindow,
                   ...(model.modelType !== undefined ? { modelType: model.modelType } : {}),

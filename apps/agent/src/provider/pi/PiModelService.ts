@@ -278,6 +278,7 @@ export class PiModelService {
             id: model.id,
             api: model.api,
             name: model.name,
+            ...(model.group !== undefined ? { group: model.group } : {}),
             enabled: model.enabled,
             contextWindow: model.contextWindow,
             ...(model.maxInputTokens !== undefined ? { maxInputTokens: model.maxInputTokens } : {}),

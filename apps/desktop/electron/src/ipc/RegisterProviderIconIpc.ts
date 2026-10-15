@@ -12,6 +12,11 @@ interface ProviderIconIpcDependencies {
 }
 
 export function registerProviderIconIpc(dependencies: ProviderIconIpcDependencies): void {
+  dependencies.ipc.handle(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.website, async (event, input: unknown) => {
+    if (!dependencies.isMainWindowSender(event.sender)) throw new Error('IPC 调用来源无效')
+    try { return await dependencies.providerIcons.setWebsiteIcon(input) }
+    catch { throw new Error('无法获取或保存网站图标，请确认公网 HTTPS 地址；原图标已保留') }
+  })
   dependencies.ipc.handle(
     DESKTOP_PROVIDER_ICON_IPC_CHANNELS.resolve,
     async (event, input: DesktopProviderIconResolveInput) => {

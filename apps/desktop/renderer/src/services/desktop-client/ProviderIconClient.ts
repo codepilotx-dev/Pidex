@@ -5,14 +5,14 @@ import type {
 } from '@pidex/shared/desktop-provider-icon-ipc'
 
 export type ProviderIconBridge = {
-  resolveProviderIcon(input: { url: string }): Promise<DesktopProviderIconResolution>
+  resolveProviderIcon(input: { url: string; providerID?: string }): Promise<DesktopProviderIconResolution>
   onProviderIconChange?(listener: (change: DesktopProviderIconChange) => void): () => void
 }
 
 export type ProviderIconStore = {
   subscribe(listener: () => void): () => void
   getSource(url: string): string | undefined
-  load(url: string): Promise<void>
+  load(url: string, providerID?: string): Promise<void>
 }
 
 /**
@@ -31,8 +31,10 @@ export function createProviderIconStore(bridge: ProviderIconBridge): ProviderIco
 
   // 订阅与 React 挂载无关：宿主后台刷新发生在页面关闭期间也不能丢失。
   bridge.onProviderIconChange?.((change) => {
-    if (sources.get(change.url) === change.source) return
-    sources.set(change.url, change.source)
+    const key = change.providerID ? providerIconKey(change.providerID) : change.url
+    if (sources.get(key) === (change.source ?? undefined)) return
+    if (change.source) sources.set(key, change.source)
+    else sources.delete(key)
     notify()
   })
 
@@ -42,23 +44,24 @@ export function createProviderIconStore(bridge: ProviderIconBridge): ProviderIco
       return () => listeners.delete(listener)
     },
     getSource: (url) => sources.get(url),
-    load(url) {
-      const pending = inFlight.get(url)
+    load(url, providerID) {
+      const key = providerID ? providerIconKey(providerID) : url
+      const pending = inFlight.get(key)
       if (pending) return pending
-      if (sources.has(url) || requested.has(url)) return Promise.resolve()
-      requested.add(url)
+      if (sources.has(key) || requested.has(key)) return Promise.resolve()
+      requested.add(key)
       let request: Promise<void>
       request = bridge
-        .resolveProviderIcon({ url })
+        .resolveProviderIcon({ url, ...(providerID ? { providerID } : {}) })
         .then((resolution) => {
-          if (resolution.source) sources.set(url, resolution.source)
+          if (resolution.source) sources.set(key, resolution.source)
         })
         .catch(() => undefined)
         .finally(() => {
-          if (inFlight.get(url) === request) inFlight.delete(url)
+          if (inFlight.get(key) === request) inFlight.delete(key)
           notify()
         })
-      inFlight.set(url, request)
+      inFlight.set(key, request)
       return request
     },
   }
@@ -92,22 +95,24 @@ export function getProviderIconStore(): ProviderIconStore | undefined {
  * 失败时返回 `undefined`，由调用方继续展示占位图标。没有桌面桥（browser-mock）
  * 或旧版桥时回退为原始远端地址，保持既有行为。
  */
-export function useProviderIconSource(logoURL?: string): string | undefined {
+const providerIconKey = (providerID: string): string => `provider:${providerID}`
+
+export function useProviderIconSource(logoURL?: string, providerID?: string): string | undefined {
   const activeStore = getProviderIconStore()
   const subscribe = useMemo(
     () => (activeStore ? activeStore.subscribe : EMPTY_SUBSCRIBE),
     [activeStore],
   )
   const getSnapshot = useMemo(
-    () => (activeStore && logoURL ? () => activeStore.getSource(logoURL) : EMPTY_GET_SOURCE),
-    [activeStore, logoURL],
+    () => (activeStore ? () => (providerID ? activeStore.getSource(providerIconKey(providerID)) : undefined) ?? (logoURL ? activeStore.getSource(logoURL) : undefined) : EMPTY_GET_SOURCE),
+    [activeStore, logoURL, providerID],
   )
   const source = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
 
   useEffect(() => {
     if (activeStore && logoURL) void activeStore.load(logoURL)
-  }, [activeStore, logoURL])
+    if (activeStore && providerID) void activeStore.load('', providerID)
+  }, [activeStore, logoURL, providerID])
 
-  if (!logoURL) return undefined
   return activeStore ? source : logoURL
 }

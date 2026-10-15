@@ -25,7 +25,7 @@ import type { ModelTestStatus } from '../UseModelCenterController.js'
 import { Button } from '../../../components/ui/Button.js'
 import { groupProviderModels } from '../ModelCenterState.js'
 import { ProviderIcon } from '../ProviderIcon.js'
-import { modelsDevLogoURL } from '../../../services/desktop-client/ProviderLogoBrands.js'
+import { modelLogoURL } from '../../../services/desktop-client/ModelLogo.js'
 import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
@@ -136,6 +136,7 @@ export function ProviderModelsSection({
       customConfig
         ? customConfig.models.map((model) => ({
             id: model.id,
+            group: model.group,
             enabled: model.enabled !== false,
             metadata: {
               ...modelMetadata[model.id],
@@ -165,6 +166,7 @@ export function ProviderModelsSection({
               const override = builtinConfig?.models.find((model) => model.id === id)
               return {
                 id,
+                group: override?.group,
                 enabled:
                   override?.enabled !== false && !builtinConfig?.denyModels.includes(id as never),
                 metadata: {
@@ -396,9 +398,8 @@ export function ProviderModelsSection({
                 onEdit={() => openModel(row.id)}
                 onRemove={() => setDeletingModel(row.id)}
                 editingDisabled={busy || saving || editingBlocked || !provider.config || !editable}
-                logoURL={
-                  group.id === provider.providerID ? provider.logoURL : modelsDevLogoURL(group.id)
-                }
+                logoURL={modelLogoURL(row.id, row.metadata?.name) ?? provider.logoURL}
+                providerID={modelLogoURL(row.id, row.metadata?.name) ? undefined : provider.providerID}
               />
             ))}
           </ModelGroup>
@@ -411,6 +412,7 @@ export function ProviderModelsSection({
       </div>
       {editingModel ? (
         <ProviderModelDialog
+          groups={groupProviderModels(rows, provider.providerID).map((group) => group.id)}
           providerId={provider.providerID}
           baseUrl={provider.baseURL ?? ''}
           model={editingModel.model}
@@ -568,6 +570,7 @@ function ModelRowItem({
   onRemove,
   editingDisabled,
   logoURL,
+  providerID,
 }: {
   modelId: string
   metadata?: DesktopModelMetadata
@@ -579,6 +582,7 @@ function ModelRowItem({
   onRemove: () => void
   editingDisabled: boolean
   logoURL?: string
+  providerID?: string
 }): React.ReactNode {
   const details = `${modelId} · 上下文 ${metadata?.contextWindow ? formatCompactNumber(metadata.contextWindow) : '未知'} / 输出 ${metadata?.outputTokens ? formatCompactNumber(metadata.outputTokens) : '未知'}${enabled ? '' : ' · 已停用'}`
   return (
@@ -588,6 +592,7 @@ function ModelRowItem({
     >
       <span className="tw:flex tw:size-5 tw:shrink-0 tw:items-center tw:justify-center">
         <ProviderIcon
+          providerID={providerID}
           logoURL={logoURL}
           className="tw:size-full"
           imageClassName="tw:object-contain tw:[.dark-theme_&]:invert tw:[.dark-theme_&]:hue-rotate-180"

@@ -355,6 +355,7 @@ export const providerHandlers = {
           !Array.isArray(previousModels)
         ) {
           const knownModelFields = new Set([
+            'group',
             'id',
             'api',
             'name',

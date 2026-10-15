@@ -6,6 +6,7 @@ import { useProviderIconSource } from '../../services/desktop-client/ProviderIco
 export type ProviderIconProps = {
   foreground?: boolean
   logoURL?: string
+  providerID?: string
   /**
    * 图标槽容器类。宿主缓存未命中时用同一个类渲染占位图标，保证尺寸、圆角和
    * 背景与已加载状态一致。
@@ -22,12 +23,14 @@ export type ProviderIconProps = {
  */
 export function ProviderIcon({
   logoURL,
+  providerID,
   foreground = false,
   className,
   imageClassName,
   fallback,
 }: ProviderIconProps): React.ReactNode {
-  const source = useProviderIconSource(logoURL)
+  const source = useProviderIconSource(logoURL, providerID)
+  const override = useProviderIconSource(undefined, providerID)
   const placeholder = fallback ?? (
     <Server aria-hidden="true" size={14} data-icon-kind="artwork" strokeWidth={2} />
   )
@@ -39,10 +42,10 @@ export function ProviderIcon({
   return (
     <RemoteImage
       alt=""
-      foreground={foreground}
+      foreground={foreground && !override}
       className={className}
       fallback={placeholder}
-      imageClassName={imageClassName}
+      imageClassName={override ? imageClassName?.replace(/tw:\[\.dark-theme_&\]:(?:invert|hue-rotate-180)/g, '') : imageClassName}
       src={source}
     />
   )

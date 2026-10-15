@@ -140,6 +140,7 @@ export function SidebarProvidersPane(): React.ReactNode {
                             fallback={<BrainCircuit aria-hidden size={APP_ICON_SIZE} />}
                             imageClassName="tw:object-contain tw:[.dark-theme_&]:invert tw:[.dark-theme_&]:hue-rotate-180"
                             logoURL={provider.logoURL}
+                            providerID={provider.providerID}
                           />
                         </span>
                       }

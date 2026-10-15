@@ -11,7 +11,7 @@ import type {
 } from '../../../../shared/Types.js'
 import { AgentRpcError } from '../../../services/AgentRpcClient.js'
 import { Button } from '../../../components/ui/Button.js'
-import { RemoteImage } from '../../../components/ui/RemoteImage.js'
+import { ProviderIcon } from '../ProviderIcon.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import { isExecutableDesktopProvider } from '../../../services/desktop-client/ProviderAdapters.js'
@@ -452,18 +452,12 @@ export function ModelSetupPage(): React.ReactNode {
                       onClick={() => chooseProvider(provider)}
                       onMouseEnter={() => providerNav.setActive(index)}
                     >
-                      {provider.logoURL ? (
-                        <RemoteImage
-                          alt=""
+                        <ProviderIcon
                           className="model-setup-provider-logo tw:grid tw:size-3.5 tw:shrink-0 tw:place-items-center tw:rounded-md tw:object-contain tw:[&_svg]:size-3.5 tw:[&_svg]:text-app-text-meta"
                           fallback={<Server data-icon-kind="artwork" size={14} aria-hidden />}
-                          src={provider.logoURL}
+                          logoURL={provider.logoURL}
+                          providerID={provider.providerID}
                         />
-                      ) : (
-                        <span className="model-setup-provider-logo tw:grid tw:size-3.5 tw:shrink-0 tw:place-items-center tw:rounded-md tw:object-contain tw:[&_svg]:size-3.5 tw:[&_svg]:text-app-text-meta">
-                          <Server data-icon-kind="artwork" size={14} aria-hidden />
-                        </span>
-                      )}
                       <span className="model-setup-provider-copy tw:grid tw:min-w-0 tw:flex-1 tw:gap-1">
                         <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">
                           {provider.displayName}

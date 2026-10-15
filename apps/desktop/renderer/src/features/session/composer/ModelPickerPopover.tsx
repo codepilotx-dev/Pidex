@@ -15,6 +15,7 @@ import {
 } from './ThinkingLevelPopover.js'
 import { cx } from '../../../utils/Cx.js'
 import { ProviderLogo } from './ProviderLogos.js'
+import { modelLogoURL } from '../../../services/desktop-client/ModelLogo.js'
 import { ReasoningMenu } from './ReasoningMenu.js'
 
 /*
@@ -443,7 +444,7 @@ export function ModelPickerPopover({
                         )}
                         title={provider.displayName || provider.providerID}
                       >
-                        <ProviderLogo logoURL={provider.logoURL} />
+                        <ProviderLogo logoURL={provider.logoURL} providerID={provider.providerID} />
                       </button>
                     )
                   })
@@ -453,7 +454,7 @@ export function ModelPickerPopover({
                     className={cx(PROVIDER_BUTTON_CLASS, PROVIDER_BUTTON_ACTIVE_CLASS)}
                     title={activeProviderID}
                   >
-                    <ProviderLogo logoURL={providerLogoURL(activeProviderID)} />
+                    <ProviderLogo logoURL={providerLogoURL(activeProviderID)} providerID={activeProviderID} />
                   </button>
                 )}
               </div>
@@ -524,7 +525,7 @@ export function ModelPickerPopover({
                           >
                             <div className={HUB_ROW_MAIN_CLASS}>
                               <div className={HUB_ROW_LOGO_CLASS}>
-                                <ProviderLogo logoURL={providerLogoURL(provider.id)} />
+                                <ProviderLogo logoURL={providerLogoURL(provider.id)} providerID={provider.id} />
                               </div>
                               <div className={HUB_ROW_TEXT_CLASS}>
                                 <div className={HUB_ROW_TITLE_CLASS}>
@@ -624,7 +625,10 @@ export function ModelPickerPopover({
                           >
                             <div className={MODEL_ROW_MAIN_CLASS}>
                               <span className={MODEL_ROW_ICON_CLASS}>
-                                <ProviderLogo logoURL={currentProvider.logoURL} />
+                                <ProviderLogo
+                                  logoURL={modelLogoURL(preset.id, preset.label) ?? currentProvider.logoURL}
+                                  providerID={modelLogoURL(preset.id, preset.label) ? undefined : currentProvider.providerID}
+                                />
                               </span>
                               <span className="composer-model-name tw:truncate tw:tracking-[-0.01em] tw:text-app-text">
                                 {preset.label || preset.id}

@@ -16,6 +16,7 @@ export function ProviderModelDialog({
   nativeApi,
   providerId,
   baseUrl,
+  groups,
   onSave,
   onClose,
 }: {
@@ -24,6 +25,7 @@ export function ProviderModelDialog({
   nativeApi?: string
   providerId: string
   baseUrl: string
+  groups?: readonly string[]
   onSave: (model: DesktopProviderModelDefinition) => Promise<void>
   onClose: () => void
 }): ReactNode {
@@ -93,6 +95,7 @@ export function ProviderModelDialog({
             <div className="settings-management-dialog-body tw:min-h-0 tw:overflow-y-auto">
             <fieldset disabled={busy} className="tw:m-0 tw:grid tw:min-w-0 tw:gap-4 tw:border-0 tw:p-0">
               <ModelEditor
+                groups={groups}
                 providerId={providerId}
                 baseUrl={baseUrl}
                 model={draft}

@@ -109,6 +109,7 @@ const BUILTIN_PROVIDER_IDS: ReadonlySet<string> = new Set([
 type Api = DesktopProviderModelDefinition['api']
 
 export type EditableModel = {
+  group?: string
   original?: DesktopProviderModelDefinition
   editorKey: string
   id: string
@@ -1290,6 +1291,7 @@ export function ModelEditor({
   baseUrl = '',
   nativeApi,
   lockId = false,
+  groups = [],
 }: {
   model: EditableModel
   onChange: (model: EditableModel) => void
@@ -1297,11 +1299,12 @@ export function ModelEditor({
   lockId?: boolean
   providerId?: string
   baseUrl?: string
+  groups?: readonly string[]
 }): React.ReactNode {
   const smart = useSmartModelConfig(model, rawOnChange, providerId, baseUrl)
   const onChange = smart.change
   const advancedValues = (value: EditableModel) => {
-    const { id, name, api, editorKey, original, headers, thinkingLevelMap, compat, ...values } = value
+    const { id, name, group, api, editorKey, original, headers, thinkingLevelMap, compat, ...values } = value
     return { ...values, maxInputTokens: value.maxInputTokens }
   }
   const initialAdvanced = useRef(advancedValues(model)).current
@@ -1362,6 +1365,13 @@ export function ModelEditor({
             onChange={(event) => onChange({ ...model, name: event.target.value })}
           />
         </label>
+        <div className={PROVIDER_EDITOR_FIELD_CLASS}>
+          <label htmlFor={`${model.editorKey}-group`}>分组名称</label>
+          <div className="tw:flex tw:min-w-0 tw:items-center tw:gap-2">
+            <Input id={`${model.editorKey}-group`} placeholder="输入新分组，或选择已有分组" maxLength={128} value={model.group ?? ''} onChange={(event) => onChange({ ...model, group: event.target.value })} />
+            {groups.length > 0 ? <SettingsDropdown ariaLabel="选择已有分组" searchable size="sm" value={model.group ?? ''} options={groups.map((group) => ({ value: group, label: group }))} onChange={(group) => onChange({ ...model, group })} /> : null}
+          </div>
+        </div>
       </div>
 
       <div
@@ -1530,6 +1540,7 @@ function emptyModel(): EditableModel {
 
 export function editableModel(model: DesktopProviderModelDefinition): EditableModel {
   return {
+    group: model.group ?? '',
     original: model,
     editorKey: createEditorKey(),
     id: String(model.id),
@@ -1642,6 +1653,7 @@ export function normalizeEditableModel(
     ...model.original,
     id: model.id.trim(),
     name: model.name.trim() || model.id.trim(),
+    group: model.group?.trim() ?? '',
     api: model.api,
     enabled: model.enabled,
     contextWindow: model.contextWindow || 32_768,

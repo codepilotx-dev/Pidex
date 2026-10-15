@@ -57,7 +57,6 @@ export function ProviderDetail({
         <div className="model-center-provider-detail-header tw:flex tw:min-w-0 tw:items-center tw:gap-2">
           <div className="model-center-provider-identity tw:flex tw:min-w-0 tw:items-center tw:gap-2">
             <span className="model-center-provider-identity-logo tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-md tw:text-app-text">
-              {provider.logoURL ? (
                 <ProviderIcon
                   foreground
                   className="tw:size-full"
@@ -66,10 +65,8 @@ export function ProviderDetail({
                     <Server aria-hidden size={14} data-icon-kind="artwork" strokeWidth={2} />
                   }
                   logoURL={provider.logoURL}
+                  providerID={provider.id}
                 />
-              ) : (
-                <Server aria-hidden size={14} data-icon-kind="artwork" strokeWidth={2} />
-              )}
             </span>
             <div className="model-center-provider-identity-copy tw:grid tw:min-w-0 tw:gap-1">
               <h2 className="tw:m-0 tw:min-w-0 tw:overflow-hidden tw:text-app-text tw:type-row-title tw:text-ellipsis tw:whitespace-nowrap">

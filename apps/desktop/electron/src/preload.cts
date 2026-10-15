@@ -184,6 +184,7 @@ const DESKTOP_MICROPHONE_IPC_CHANNELS = {
 
 const DESKTOP_PROVIDER_ICON_IPC_CHANNELS = {
   resolve: 'desktop-provider-icon:resolve',
+  website: 'desktop-provider-icon:website',
   changed: 'desktop-provider-icon:changed',
 } as const satisfies typeof import('@pidex/shared/desktop-provider-icon-ipc').DESKTOP_PROVIDER_ICON_IPC_CHANNELS
 
@@ -387,6 +388,10 @@ const desktop = {
   },
   openMicrophonePrivacySettings: (): Promise<void> =>
     ipcRenderer.invoke(DESKTOP_MICROPHONE_IPC_CHANNELS.openPrivacySettings),
+  setProviderWebsiteIcon: (
+    input: import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderWebsiteIconInput,
+  ): Promise<import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderIconResolution> =>
+    ipcRenderer.invoke(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.website, input),
   resolveProviderIcon: (
     input: import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderIconResolveInput,
   ): Promise<import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderIconResolution> =>

@@ -101,6 +101,7 @@ const ThinkingLevelMapSchema = Schema.Struct({
 
 export const ProviderModelDefinitionSchema = Schema.Struct({
   id: Model.ID,
+  group: Schema.optional(Schema.String.check(Schema.isMaxLength(128))),
   name: Schema.optional(NonEmptyStringSchema),
   api: PiProviderApiSchema,
   enabled: Schema.optional(Schema.Boolean),

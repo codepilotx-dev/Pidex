@@ -23,6 +23,7 @@ import { ToggleSwitch } from '../../../components/ui/ToggleSwitch.js'
 import { useDesktopLayoutOutletContext } from '../../layout/shell/DesktopLayoutOutletContext.js'
 import { ApiKeyEditorForm, type ApiKeyEditorValue } from '../ApiKeyEditorDialog.js'
 import { ProviderRequestSettingsForm } from './ProviderRequestSettingsForm.js'
+import { ProviderWebsiteIconSettings } from './ProviderWebsiteIconSettings.js'
 import { ProviderEditorNavigationGuard } from './ProviderEditorNavigationGuard.js'
 import { Dropdown } from '../../../components/ui/Dropdown.js'
 import { PopoverItem } from '../../../components/ui/PopoverItem.js'
@@ -411,7 +412,11 @@ export function ProviderConnectionSection({
         ? createPortal(
             <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col">
             <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-6 tw:overflow-y-auto tw:p-4 tw:[&_.model-center-oauth-flow]:p-0">
-              <section ref={credentialsRef} className="tw:grid tw:gap-4" aria-label="认证与密钥">
+              <section className="tw:grid tw:gap-4" aria-label="供应商图标">
+                <h3 className="tw:m-0 tw:type-title-sm">供应商图标</h3>
+                <ProviderWebsiteIconSettings key={provider.providerID} providerID={provider.providerID} logoURL={provider.logoURL} address={provider.config?.baseUrl ?? provider.baseURL ?? ''} onNotice={onNotice} onError={onError} />
+              </section>
+              <section ref={credentialsRef} className="tw:grid tw:gap-4 tw:border-t tw:border-app-border-subtle tw:pt-6" aria-label="认证与密钥">
                 <h3 className="tw:m-0 tw:type-title-sm">认证与密钥</h3>
                 {keyEditor ? (
                   <section className="tw:grid tw:gap-3">

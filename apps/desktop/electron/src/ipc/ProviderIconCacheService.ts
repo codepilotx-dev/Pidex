@@ -7,6 +7,7 @@ import type {
 } from '@pidex/shared/desktop-provider-icon-ipc'
 import { isRecord } from '@pidex/shared/guards'
 import { writeJsonAtomically } from '../windows/DebouncedAtomicJsonWriter.js'
+import { discoverWebsiteIcon } from './ProviderWebsiteIcon.js'
 
 /**
  * 供应商图标本地缓存：命中即立即显示，只有距最近一次成功更新满 5 小时才在后台
@@ -58,6 +59,7 @@ export type ProviderIconCacheLogger = {
 }
 
 export type ProviderIconCacheDependencies = {
+  discoverWebsiteIcon?: (website: string) => Promise<string>
   /** 独立图标缓存目录，位于宿主应用数据目录下。 */
   rootDirectory: string
   publish: (change: DesktopProviderIconChange) => void
@@ -72,6 +74,7 @@ export class ProviderIconCacheService {
   readonly #fetch: typeof fetch
   readonly #now: () => number
   readonly #logger: ProviderIconCacheLogger | undefined
+  readonly #discoverWebsiteIcon: (website: string) => Promise<string>
   readonly #memory = new Map<string, CachedProviderIcon>()
   readonly #usedURLs = new Set<string>()
   readonly #inFlight = new Map<string, Promise<CachedProviderIcon | null>>()
@@ -84,6 +87,7 @@ export class ProviderIconCacheService {
     this.#fetch = dependencies.fetch ?? globalThis.fetch
     this.#now = dependencies.now ?? Date.now
     this.#logger = dependencies.logger
+    this.#discoverWebsiteIcon = dependencies.discoverWebsiteIcon ?? discoverWebsiteIcon
   }
 
   /**
@@ -91,6 +95,12 @@ export class ProviderIconCacheService {
    * 首次加载且尚无缓存时等待下载结果，失败返回 `null` 由客户端保留占位图标。
    */
   async resolve(input: unknown): Promise<DesktopProviderIconResolution> {
+    if (isRecord(input) && input.providerID !== undefined) {
+      const providerID = requireProviderID(input.providerID)
+      const override = await this.#readOverride(providerID)
+      if (override.source) return { source: override.source }
+      if (input.url === '') return { source: null }
+    }
     const url = requireProviderIconURL(input)
     this.#usedURLs.add(url)
 
@@ -104,6 +114,31 @@ export class ProviderIconCacheService {
     this.#memory.set(url, cached)
     if (this.#isExpired(cached) && this.#canAttempt(url)) void this.#download(url, true)
     return { source: cached.source }
+  }
+
+  async setWebsiteIcon(input: unknown): Promise<DesktopProviderIconResolution> {
+    if (!isRecord(input)) throw new Error('供应商图标参数无效')
+    const providerID = requireProviderID(input.providerID)
+    if (input.website !== undefined && (typeof input.website !== 'string' || !input.website.trim() || input.website.length > 2048)) throw new Error('网站地址无效')
+    // Refuse to overwrite a newer appearance record.
+    await this.#readOverride(providerID)
+    const source = typeof input.website === 'string' ? await this.#discoverWebsiteIcon(input.website) : null
+    await writeJsonAtomically(this.#recordPath(`provider:${providerID}`), { version: 1, providerID, source })
+    this.#publish({ url: '', providerID, source })
+    return { source }
+  }
+
+  async #readOverride(providerID: string): Promise<{ source: string | null }> {
+    let raw: string
+    try { raw = await readFile(this.#recordPath(`provider:${providerID}`), 'utf8') }
+    catch (error) {
+      if (isRecord(error) && error.code === 'ENOENT') return { source: null }
+      throw new Error('无法读取供应商图标')
+    }
+    if (raw.length > 1_500_000) throw new Error('供应商图标记录无效')
+    const record: unknown = JSON.parse(raw)
+    if (!isRecord(record) || record.version !== 1 || record.providerID !== providerID || record.source !== null && (typeof record.source !== 'string' || !/^data:image\/(?:png|jpeg|gif|webp|x-icon|svg\+xml);base64,[A-Za-z0-9+/]+=*$/.test(record.source))) throw new Error('供应商图标记录不受支持')
+    return { source: record.source as string | null }
   }
 
   startExpirySweep(): void {
@@ -220,6 +255,11 @@ export class ProviderIconCacheService {
   #recordPath(url: string): string {
     return join(this.#rootDirectory, `${createHash('sha256').update(url).digest('hex')}.json`)
   }
+}
+
+function requireProviderID(input: unknown): string {
+  if (typeof input !== 'string' || !input.trim() || input.length > 256 || /[\u0000-\u001f]/.test(input)) throw new Error('供应商标识无效')
+  return input
 }
 
 /** 只接受 models.dev 的绝对 https 图标地址；地址原样保留作为缓存键。 */
