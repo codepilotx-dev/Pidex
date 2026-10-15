@@ -15,6 +15,7 @@ describe('供应商图标 IPC 契约', () => {
   test('preload literal 与共享通道保持一致', async () => {
     expect(DESKTOP_PROVIDER_ICON_IPC_CHANNELS).toEqual({
       resolve: 'desktop-provider-icon:resolve',
+      website: 'desktop-provider-icon:website',
       changed: 'desktop-provider-icon:changed',
     })
 
@@ -61,6 +62,23 @@ describe('供应商图标 IPC 契约', () => {
     await expect(handler!({ sender: mainWindow } as IpcMainInvokeEvent, input)).resolves.toEqual({
       source: 'data:image/svg+xml;base64,AAA',
     })
+    expect(received).toEqual([input])
+  })
+
+  test('网站获取校验窗口来源，失败不透出内部网络错误', async () => {
+    const handlers = new Map<string, (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>>()
+    const mainWindow = {} as WebContents
+    const received: unknown[] = []
+    registerProviderIconIpc({
+      ipc: { handle: (channel, handler) => handlers.set(channel, handler as never) } as unknown as Pick<IpcMain, 'handle'>,
+      isMainWindowSender: (sender) => sender === mainWindow,
+      providerIcons: { setWebsiteIcon: async (input: unknown) => { received.push(input); throw new Error('internal DNS detail') } } as never,
+    })
+    const handler = handlers.get(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.website)!
+    const input = { providerID: 'relay', website: 'https://example.com' }
+    await expect(handler({ sender: {} } as IpcMainInvokeEvent, input)).rejects.toThrow('IPC 调用来源无效')
+    expect(received).toHaveLength(0)
+    await expect(handler({ sender: mainWindow } as IpcMainInvokeEvent, input)).rejects.toThrow('原图标已保留')
     expect(received).toEqual([input])
   })
 })

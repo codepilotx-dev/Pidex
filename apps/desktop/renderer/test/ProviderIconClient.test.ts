@@ -6,6 +6,22 @@ const ICON_URL = 'https://models.dev/logos/openai.svg'
 const CACHED_SOURCE = 'data:image/svg+xml;base64,PHN2Zy8+'
 
 describe('供应商图标客户端缓存', () => {
+  test('提供商覆盖图标独立加载并响应获取与恢复默认', async () => {
+    let publish: ((change: DesktopProviderIconChange) => void) | undefined
+    const store = createProviderIconStore({
+      resolveProviderIcon: async ({ providerID }) => ({ source: providerID ? null : CACHED_SOURCE }),
+      onProviderIconChange: (listener) => { publish = listener; return () => undefined },
+    })
+    await store.load(ICON_URL)
+    await store.load('', 'relay')
+    publish?.({ url: '', providerID: 'relay', source: 'data:image/png;base64,AAA=' })
+    expect(store.getSource('provider:relay')).toBe('data:image/png;base64,AAA=')
+    expect(store.getSource(ICON_URL)).toBe(CACHED_SOURCE)
+    publish?.({ url: '', providerID: 'relay', source: null })
+    expect(store.getSource('provider:relay')).toBeUndefined()
+    expect(store.getSource(ICON_URL)).toBe(CACHED_SOURCE)
+  })
+
   test('同一地址只解析一次，重复读取直接命中缓存', async () => {
     const calls: string[] = []
     const store = createProviderIconStore({

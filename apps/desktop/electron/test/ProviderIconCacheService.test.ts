@@ -63,6 +63,34 @@ async function settle(): Promise<void> {
 }
 
 describe('供应商图标缓存服务', () => {
+  test('网站图标跨重启保留，失败不覆盖，恢复默认不影响目录缓存', async () => {
+    const root = await createCacheRoot()
+    const changes: DesktopProviderIconChange[] = []
+    let fail = false
+    const dependencies = {
+      rootDirectory: root,
+      publish: (change: DesktopProviderIconChange) => changes.push(change),
+      fetch: createFetchStub([SVG_BODY]).fetch,
+      discoverWebsiteIcon: async () => {
+        if (fail) throw new Error('unavailable')
+        return dataURL(UPDATED_SVG_BODY)
+      },
+    }
+    const service = new ProviderIconCacheService(dependencies)
+    const input = { providerID: 'custom-relay', url: '' }
+    await expect(service.resolve(input)).resolves.toEqual({ source: null })
+    await service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' })
+    const restarted = new ProviderIconCacheService(dependencies)
+    await expect(restarted.resolve(input)).resolves.toEqual({ source: dataURL(UPDATED_SVG_BODY) })
+    fail = true
+    await expect(service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' })).rejects.toThrow()
+    await expect(service.resolve(input)).resolves.toEqual({ source: dataURL(UPDATED_SVG_BODY) })
+    await service.setWebsiteIcon({ providerID: input.providerID })
+    await expect(restarted.resolve(input)).resolves.toEqual({ source: null })
+    await expect(service.resolve({ ...input, url: ICON_URL })).resolves.toEqual({ source: dataURL(SVG_BODY) })
+    expect(changes.map((change) => change.source)).toEqual([dataURL(UPDATED_SVG_BODY), null])
+  })
+
   test('首次加载下载图标并写入独立缓存文件', async () => {
     const root = await createCacheRoot()
     const { fetch, calls } = createFetchStub([SVG_BODY])

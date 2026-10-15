@@ -12,6 +12,12 @@ import { Command } from 'cmdk'
 import { CommandMenuTaskGroup } from '../src/features/search/CommandMenuDialog.js'
 
 describe('toUserErrorMessage sanitization and mapping', () => {
+  test('桌面 IPC 处理器未加载时提示完整重启，而非展示底层错误', () => {
+    const message = toUserErrorMessage(new Error("Error invoking remote method 'desktop-provider-icon:website': Error: No handler registered for 'desktop-provider-icon:website'"))
+    expect(message).toContain('完全退出并重新启动 Pidex')
+    expect(message).not.toContain('No handler')
+  })
+
   test('maps internal errors and SQLite errors to safe user message without leaking technical details', () => {
     expect(
       toUserErrorMessage({

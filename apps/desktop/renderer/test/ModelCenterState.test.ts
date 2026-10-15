@@ -371,3 +371,13 @@ test('模型按 ID 前缀分组，不修改模型数据和顺序', () => {
     { id: 'other', models: [models[3]] },
   ])
 })
+
+test('自定义分组优先，清空后恢复 ID 分组，品牌与 ID 不受影响', () => {
+  const models = [{ id: 'remote/deepseek', group: '常用' }, { id: 'remote/claude', group: '常用' }, { id: 'chat', group: ' ' }]
+  expect(groupProviderModels(models, 'magpie')).toEqual([
+    { id: '常用', models: [models[0], models[1]] },
+    { id: 'magpie', models: [models[2]] },
+  ])
+  expect(groupProviderModels([{ ...models[0], group: '' }], 'magpie')[0]?.id).toBe('remote')
+  expect(models[0]?.id).toBe('remote/deepseek')
+})

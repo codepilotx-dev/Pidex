@@ -32,6 +32,22 @@ const repository = {
 } as unknown as EncryptedCredentialRepository
 
 describe('Pi provider v2 config', () => {
+  test('内置与自定义模型保存分组名称，支持清空且不改变请求 ID', () => {
+    const custom = serializePiProviderDefinition({ kind: 'custom', id: 'grouped', name: 'Grouped', enabled: true,
+      baseUrl: 'https://example.com/v1', auth: 'none', env: [], allowInsecureHttp: false, headers: {},
+      models: [{ id: 'remote/model', api: 'openai-completions', group: ' 常用 ' }] })
+    const builtin = serializePiProviderDefinition({ kind: 'builtin', id: 'google', enabled: true,
+      allowModels: [], denyModels: [], models: [{ id: 'native', enabled: true, group: '常用' }, { id: 'cleared', enabled: true, group: '' }] })
+    const parsed = parsePiProviderCatalog({ providers: { grouped: custom.value, google: builtin.value } })
+    expect(parsed.issues).toEqual([])
+    expect(parsed.providers.grouped?.models['remote/model']?.group).toBe('常用')
+    expect(parsed.providers.google?.models.native?.group).toBe('常用')
+    expect(parsed.providers.google?.models.cleared?.group).toBe('')
+    expect(Object.keys(parsed.providers.grouped?.models ?? {})).toEqual(['remote/model'])
+    expect(() => serializePiProviderDefinition({ kind: 'builtin', id: 'google', enabled: true,
+      allowModels: [], denyModels: [], models: [{ id: 'native', enabled: true, group: 'x'.repeat(129) }] })).toThrow()
+  })
+
   test('最大输入 Token 在配置与运行时模型中保留，旧模型不添加限制', () => {
     const saved = serializePiProviderDefinition({ kind: 'custom', id: 'input-limit', name: 'Input limit', enabled: true,
       baseUrl: 'https://example.com/v1', auth: 'none', env: [], allowInsecureHttp: false, headers: {},

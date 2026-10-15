@@ -106,7 +106,7 @@ function Harness() {
       <button onClick={() => controller.testModels(testSummary, ['chat', 'messages'])}>批量模型测试</button>
       <button onClick={() => setTestProvider(testProvider === 'mixed' ? 'second' : 'mixed')}>切换测试供应商</button>
       <ProviderConnectionSection key={testProvider} provider={testSummary} group={group} apiKeys={testProvider === 'mixed' ? keys : []} busy={false}
-        onSubmitKey={async () => {if(window.__failNext){window.__failNext=false; return false;} return true;}} onSaveDefinition={definition => controller.saveProviderDefinition(definition, testSummary.providerID)} onRefresh={async () => {refresh(n => n+1);}} onNotice={() => {}} onError={() => {}} />
+        onSubmitKey={async () => {if(window.__failNext){window.__failNext=false; return false;} return true;}} onSaveDefinition={definition => controller.saveProviderDefinition(definition, testSummary.providerID)} onRefresh={async () => {refresh(n => n+1);}} onNotice={message => (window.__notices ??= []).push(message)} onError={message => (window.__noticeErrors ??= []).push(message)} />
       <ProviderModelsSection key={'models-' + testProvider} provider={testSummary} models={testSummary.defaultModels} modelMetadata={testSummary.modelMetadata}
         busy={controller.busyProviderIds.includes(testProvider)} testResults={controller.modelTestResults}
         onTestModels={ids => controller.testModels(testSummary, ids)} onFetchModels={() => controller.fetchModels(testSummary)}
@@ -222,6 +222,15 @@ try {
     await page.setContent('<div id="root"></div>')
     await page.evaluate((value) => {
       ;(window as any).__entry = value
+      if (value.includes('icons=1')) {
+        ;(window as any).DesktopBridge = {
+          resolveProviderIcon: async () => ({ source: null }),
+          setProviderWebsiteIcon: async () => {
+            if ((window as any).__iconFailure) throw new Error("No handler registered for 'desktop-provider-icon:website'")
+            return { source: null }
+          },
+        }
+      }
     }, entry)
     await page.addScriptTag({ content: script })
     try {
@@ -234,6 +243,18 @@ try {
     }
     return page
   }
+
+  const iconsPage = await mount('/providers?provider=mixed&controller=1&icons=1', false)
+  await iconsPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  await iconsPage.getByRole('button', { name: '从网站获取', exact: true }).click()
+  await expect.poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1))).toBe('网站图标已保存')
+  await iconsPage.evaluate(() => { (window as any).__iconFailure = true })
+  await iconsPage.getByRole('button', { name: '从网站获取', exact: true }).click()
+  await expect.poll(() => iconsPage.evaluate(() => (window as any).__noticeErrors?.at(-1))).toContain('完全退出并重新启动 Pidex')
+  await iconsPage.evaluate(() => { (window as any).__iconFailure = false })
+  await iconsPage.getByRole('button', { name: '恢复默认图标', exact: true }).click()
+  await expect.poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1))).toBe('已恢复默认图标')
+  await iconsPage.close()
 
   // 新建只保留草稿；校验失败、保存失败均不离开。首次保存选中真实身份。
   const page = await mount('/providers?newProvider=1')
@@ -484,6 +505,10 @@ try {
   await expect(modelPage.locator('.model-center-model-row')).toHaveCount(3)
   await modelPage.getByRole('button', { name: '编辑模型 chat', exact: true }).click()
   const editDialog = modelPage.getByRole('dialog', { name: '编辑模型', exact: true })
+  await editDialog.getByLabel('选择已有分组', { exact: true }).click()
+  await modelPage.getByRole('option', { name: 'mixed', exact: true }).click()
+  await expect(editDialog.getByLabel('分组名称', { exact: true })).toHaveValue('mixed')
+  await editDialog.getByLabel('分组名称', { exact: true }).fill('常用模型')
   await expect(editDialog.getByPlaceholder('如：llama3.2 或 gpt-4o')).toHaveAttribute(
     'readonly',
     '',
@@ -504,6 +529,7 @@ try {
   await expect(inputLimit).toHaveValue('125000')
   await editDialog.getByRole('spinbutton', { name: '输入价格', exact: true }).fill('9')
   await reset.click()
+  await expect(editDialog.getByLabel('分组名称', { exact: true })).toHaveValue('常用模型')
   await expect(inputLimit).toHaveValue('')
   await expect(editDialog.getByRole('spinbutton', { name: '输入价格', exact: true })).toHaveValue('0')
   await expect(reset).toBeDisabled()
@@ -586,13 +612,14 @@ try {
   await builtinPage.getByRole('button', { name: '编辑模型 native', exact: true }).click()
   const builtinDialog = builtinPage.getByRole('dialog', { name: '编辑模型', exact: true })
   await builtinDialog.getByPlaceholder('默认使用模型 ID').fill('Renamed native')
+  await builtinDialog.getByLabel('分组名称', { exact: true }).fill('常用')
   await builtinDialog.getByRole('button', { name: '高级设置', exact: true }).click()
   await expect(builtinDialog.getByText('模型 API 协议', { exact: true })).toHaveCount(0)
   await builtinDialog.getByRole('spinbutton', { name: '最大输入 Token', exact: true }).fill('100000')
   await builtinDialog.getByRole('button', { name: '保存模型', exact: true }).click()
   assert.deepEqual(
     await builtinPage.evaluate(() => (window as any).__providers.google.config.models),
-    [{ id: 'native', enabled: true, name: 'Renamed native', maxInputTokens: 100000 }],
+    [{ id: 'native', enabled: true, name: 'Renamed native', group: '常用', maxInputTokens: 100000 }],
   )
   await builtinPage.getByRole('button', { name: '添加模型', exact: true }).click()
   await builtinPage
