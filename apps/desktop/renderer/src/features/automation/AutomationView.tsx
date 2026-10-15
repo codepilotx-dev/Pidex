@@ -509,9 +509,9 @@ function AutomationViewContent(): React.ReactNode {
             }
           />
         ) : calendar.supported !== false ? (
-          <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:grid-cols-[minmax(0,1fr)]">
+          <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:shrink-0 tw:grid-cols-[minmax(0,1fr)]">
             <main
-              className="automation-page-content tw:flex tw:min-h-0 tw:min-w-0 tw:flex-col"
+              className="automation-page-content tw:flex tw:min-w-0 tw:shrink-0 tw:flex-col"
               id="automation-calendar-panel"
               role="tabpanel"
               aria-labelledby="automation-calendar-tab"
@@ -566,9 +566,9 @@ function AutomationViewContent(): React.ReactNode {
             </main>
           </div>
         ) : (
-          <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:grid-cols-[minmax(0,1fr)]">
+          <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:shrink-0 tw:grid-cols-[minmax(0,1fr)]">
             <main
-              className="automation-page-content tw:flex tw:min-h-0 tw:min-w-0 tw:flex-col"
+              className="automation-page-content tw:flex tw:min-w-0 tw:shrink-0 tw:flex-col"
               id={`automation-${controller.filter}-panel`}
               role="tabpanel"
               aria-labelledby={`automation-${controller.filter}-tab`}
@@ -832,9 +832,9 @@ function AutomationRunsList({
   }, [sortedRuns, needle, automationNameMap])
 
   return (
-    <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:grid-cols-[minmax(0,1fr)]">
+    <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:shrink-0 tw:grid-cols-[minmax(0,1fr)]">
       <main
-        className="automation-page-content tw:flex tw:min-h-0 tw:min-w-0 tw:flex-col"
+        className="automation-page-content tw:flex tw:min-w-0 tw:shrink-0 tw:flex-col"
         id="automation-runs-panel"
         role="tabpanel"
         aria-labelledby="automation-runs-tab"

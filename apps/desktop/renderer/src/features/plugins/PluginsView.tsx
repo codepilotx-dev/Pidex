@@ -396,74 +396,76 @@ export function PluginsView(): React.ReactNode {
     <>
       {target ? (
         <main className="plugins-details-page tw:h-full tw:w-full tw:min-w-0 tw:overflow-auto tw:bg-app-canvas tw:p-5 tw:@container/plugins-page">
-          <div className="tw:mx-auto tw:mb-4 tw:flex tw:w-[min(var(--page-content-max-width),100%)] tw:min-w-0 tw:items-center">
-            {target.kind === 'plugin' ? (
-              <div className={cx('plugins-detail-breadcrumb', DETAILS_BREADCRUMB_CLASS)}>
+          <div className="tw:mx-auto tw:min-w-0 tw:w-[min(var(--page-content-max-width),100%)] tw:pb-8">
+            <div className="tw:mb-4 tw:flex tw:min-w-0 tw:items-center">
+              {target.kind === 'plugin' ? (
+                <div className={cx('plugins-detail-breadcrumb', DETAILS_BREADCRUMB_CLASS)}>
+                  <Button
+                    color="ghostSecondary"
+                    onClick={closeDetails}
+                    ref={backButtonRef}
+                    size="toolbar"
+                  >
+                    插件
+                  </Button>
+                  <ChevronRight
+                    aria-hidden="true"
+                    size={APP_ICON_SIZES.sm}
+                    strokeWidth={APP_ICON_STROKE_WIDTH}
+                  />
+                  <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>
+                    {selectedPlugin?.name ?? target.id}
+                  </span>
+                </div>
+              ) : (
                 <Button
                   color="ghostSecondary"
                   onClick={closeDetails}
                   ref={backButtonRef}
                   size="toolbar"
                 >
-                  插件
+                  <ArrowLeft
+                    aria-hidden="true"
+                    size={APP_ICON_SIZE}
+                    strokeWidth={APP_ICON_STROKE_WIDTH}
+                  />
+                  返回{tab === 'plugins' ? '插件' : '技能'}
                 </Button>
-                <ChevronRight
-                  aria-hidden="true"
-                  size={APP_ICON_SIZES.sm}
-                  strokeWidth={APP_ICON_STROKE_WIDTH}
-                />
-                <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>
-                  {selectedPlugin?.name ?? target.id}
-                </span>
-              </div>
+              )}
+            </div>
+            {selectedPlugin ? (
+              <CatalogDetailsView
+                busy={busyPluginIds.has(selectedPlugin.id)}
+                details={
+                  selectedPluginDetailsKey ? (pluginDetails[selectedPluginDetailsKey] ?? null) : null
+                }
+                error={pluginErrors[selectedPlugin.id]}
+                item={selectedPlugin}
+                kind="plugin"
+                key={selectedPluginDetailsKey}
+                workspacePath={workspacePath}
+                onPrimaryAction={(item, trigger, checked) =>
+                  void runPluginAction(item, trigger, checked)
+                }
+                onTryPrompt={tryPluginPrompt}
+                onUninstall={
+                  selectedPlugin.id === 'minimax' ? () => setConfirmMiniMaxUninstall(true) : undefined
+                }
+              />
+            ) : selectedSkill ? (
+              <CatalogDetailsView
+                installing={installingSkillIds.has(selectedSkill.id)}
+                item={selectedSkill}
+                kind="skill"
+                onInstall={(item) => void installSkill(item)}
+                onOpenSource={(item) => item.url && void desktopClient.openExternalURL(item.url)}
+              />
             ) : (
-              <Button
-                color="ghostSecondary"
-                onClick={closeDetails}
-                ref={backButtonRef}
-                size="toolbar"
-              >
-                <ArrowLeft
-                  aria-hidden="true"
-                  size={APP_ICON_SIZE}
-                  strokeWidth={APP_ICON_STROKE_WIDTH}
-                />
-                返回{tab === 'plugins' ? '插件' : '技能'}
-              </Button>
+              <div className="catalog-details-view tw:grid tw:mx-auto tw:w-[min(var(--page-content-max-width),100%)] tw:gap-7">
+                <CatalogSkeleton label={`正在加载${tab === 'plugins' ? '插件' : '技能'}详情`} />
+              </div>
             )}
           </div>
-          {selectedPlugin ? (
-            <CatalogDetailsView
-              busy={busyPluginIds.has(selectedPlugin.id)}
-              details={
-                selectedPluginDetailsKey ? (pluginDetails[selectedPluginDetailsKey] ?? null) : null
-              }
-              error={pluginErrors[selectedPlugin.id]}
-              item={selectedPlugin}
-              kind="plugin"
-              key={selectedPluginDetailsKey}
-              workspacePath={workspacePath}
-              onPrimaryAction={(item, trigger, checked) =>
-                void runPluginAction(item, trigger, checked)
-              }
-              onTryPrompt={tryPluginPrompt}
-              onUninstall={
-                selectedPlugin.id === 'minimax' ? () => setConfirmMiniMaxUninstall(true) : undefined
-              }
-            />
-          ) : selectedSkill ? (
-            <CatalogDetailsView
-              installing={installingSkillIds.has(selectedSkill.id)}
-              item={selectedSkill}
-              kind="skill"
-              onInstall={(item) => void installSkill(item)}
-              onOpenSource={(item) => item.url && void desktopClient.openExternalURL(item.url)}
-            />
-          ) : (
-            <div className="catalog-details-view tw:grid tw:mx-auto tw:w-[min(var(--page-content-max-width),100%)] tw:gap-7">
-              <CatalogSkeleton label={`正在加载${tab === 'plugins' ? '插件' : '技能'}详情`} />
-            </div>
-          )}
         </main>
       ) : (
         <PrimaryPageLayout
@@ -567,7 +569,7 @@ type PluginDirectoryProps = {
 
 function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
   return (
-    <div className="plugins-panel tw:grid tw:min-w-0 tw:gap-8" id="plugins-panel">
+    <div className="plugins-panel tw:grid tw:min-w-0 tw:shrink-0 tw:gap-8" id="plugins-panel">
       <div className="plugins-directory-navigation tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3 tw:@max-[479px]/plugins-page:items-stretch">
         <SegmentedControl
           ariaLabel="插件来源"
@@ -646,7 +648,7 @@ function SkillDirectory(props: SkillDirectoryProps): React.ReactNode {
   return (
     <div
       aria-busy={props.loading || undefined}
-      className="plugins-panel tw:grid tw:min-w-0 tw:gap-8"
+      className="plugins-panel tw:grid tw:min-w-0 tw:shrink-0 tw:gap-8"
       id="skills-panel"
     >
       <div className="plugins-directory-navigation tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3 tw:@max-[479px]/plugins-page:items-stretch">

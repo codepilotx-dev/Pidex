@@ -115,7 +115,7 @@ export function TaskSchedulePanel({ query = '' }: { query?: string }) {
   const selected = data.tasks.find((task) => task.id === params.get('taskId'))
   const attention = data.occurrences.filter((o) => o.attention)
   return (
-    <section aria-label="任务与待处理" className="tw:grid tw:gap-2">
+    <section aria-label="任务与待处理" className="tw:grid tw:shrink-0 tw:gap-2">
       <div className={sectionClass}>
         <form
           className="tw:flex tw:gap-2"

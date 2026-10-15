@@ -287,7 +287,7 @@ export function SessionGroupsView(): React.ReactNode {
             </div>
           ) : null}
           {detail ? (
-            <div className="session-group-detail__inner tw:mx-auto tw:flex tw:w-[min(var(--page-content-max-width),100%)] tw:flex-col">
+            <div className="session-group-detail__inner tw:mx-auto tw:flex tw:w-[min(var(--page-content-max-width),100%)] tw:flex-col tw:pb-8">
               <div className="tw:mb-3 tw:flex tw:items-center">
                 <Link
                   className="session-groups-back tw:inline-flex tw:items-center tw:gap-2 tw:rounded-md tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-label tw:no-underline tw:hover:bg-app-hover tw:hover:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus"
@@ -468,7 +468,7 @@ export function SessionGroupsView(): React.ReactNode {
         >
           <main
             aria-live="polite"
-            className="session-groups-index tw:flex tw:min-w-0 tw:min-h-0 tw:grow tw:shrink tw:basis-auto tw:flex-col"
+            className="session-groups-index tw:flex tw:min-w-0 tw:flex-auto tw:shrink-0 tw:flex-col"
           >
             {error ? (
               <div

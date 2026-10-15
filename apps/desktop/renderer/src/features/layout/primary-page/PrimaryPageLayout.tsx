@@ -80,10 +80,10 @@ export function PrimaryPageLayout({
           <nav className="primary-page-layout__navigation tw:mt-5 tw:min-w-0">{navigation}</nav>
         ) : null}
       </header>
-      {/* body 的 margin-top 留在 _primary-page.scss：pull-requests 在 features 层覆盖它。 */}
+      {/* body 的 margin-top 与 padding-bottom 留在 primary-page.css：pull-requests 等在 features 层覆盖它。 */}
       <div
         className={cx(
-          'primary-page-layout__body tw:flex tw:w-[min(var(--page-content-max-width),100%)] tw:min-w-0 tw:min-h-0 tw:flex-auto tw:flex-col tw:mx-auto',
+          'primary-page-layout__body tw:flex tw:w-[min(var(--page-content-max-width),100%)] tw:min-w-0 tw:flex-auto tw:shrink-0 tw:flex-col tw:mx-auto',
           bodyClassName,
         )}
       >

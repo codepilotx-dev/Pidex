@@ -13,5 +13,6 @@
    */
   .primary-page-layout__body {
     margin-top: var(--cpx-sys-space-6);
+    padding-bottom: var(--cpx-sys-space-8);
   }
 }
