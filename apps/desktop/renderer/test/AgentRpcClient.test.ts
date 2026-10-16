@@ -3,6 +3,51 @@ import { AgentRpcError, createAgentRpcClient } from '../src/services/AgentRpcCli
 import { AgentRpcTimeoutError } from '../src/services/RpcFetch.js'
 
 describe('agent RPC v4 client', () => {
+  test('连接恢复期间的新请求等待 initialized 完成', async () => {
+    let generation = 0
+    let expired = false
+    let initializedConnection: string | null = null
+    let releaseHandshake!: () => void
+    let handshakeStarted!: () => void
+    const pendingHandshake = new Promise<void>((resolve) => { releaseHandshake = resolve })
+    const recovering = new Promise<void>((resolve) => { handshakeStarted = resolve })
+    const prematureRequests: string[] = []
+    const client = createAgentRpcClient({
+      handshake: automaticHandshake('renderer-concurrent-recovery'),
+      fetch: async (_input, init) => {
+        const body = JSON.parse(String(init?.body))
+        const connection = new Headers(init?.headers).get('x-pidex-connection-id')
+        if (body.method === 'initialize') {
+          return rpcResult(body.id, initializeResult(`connection-${++generation}`))
+        }
+        if (body.method === 'initialized') {
+          if (generation === 2) {
+            handshakeStarted()
+            await pendingHandshake
+          }
+          initializedConnection = connection
+          return new Response(null, { status: 204 })
+        }
+        if (expired && connection === 'connection-1') return rpcError(body.id, 'UNAUTHORIZED')
+        if (connection !== initializedConnection) {
+          prematureRequests.push(body.method)
+          return rpcError(body.id, 'UNAUTHORIZED')
+        }
+        return rpcResult(body.id, { projects: [], nextCursor: null })
+      },
+    })
+    await client.call('project/list', {})
+    expired = true
+    const first = client.call('project/list', {})
+    await recovering
+    const second = client.call('project/list', {})
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    releaseHandshake()
+    await Promise.all([first, second])
+    expect(prematureRequests).toEqual([])
+    expect(generation).toBe(2)
+  })
+
   test('并发业务请求统一等待首次 initialized 握手完成', async () => {
     const methods: string[] = []
     let initialized = false

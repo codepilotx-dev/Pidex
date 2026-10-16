@@ -178,6 +178,7 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
   }
 
   async function ensureInitialized(): Promise<PublicRpcResult<'initialize'>> {
+    if (recoveryPromise) await recoveryPromise
     if (initializeResult && initializedParams && connectionId) {
       return initializeResult
     }
@@ -212,6 +213,7 @@ export function createAgentRpcClient(environment: AgentRpcClientEnvironment) {
 
   async function recoverConnection(failedConnectionId: string | null): Promise<boolean> {
     if (!initializeParams || !initializedParams) return false
+    if (recoveryPromise) await recoveryPromise
     if (connectionId !== null && connectionId !== failedConnectionId) {
       return true
     }
