@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import type { MiniMaxCliStatus, PluginSummary } from '@pidex/agent-protocol'
+import type { PluginSummary } from '@pidex/agent-protocol'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
 import { SkillCatalogCard } from '../src/features/plugins/SkillCatalogCard.js'
@@ -9,10 +9,7 @@ import {
   type DesktopThemeContextValue,
 } from '../src/features/theme/ThemeContext.js'
 import { PluginCatalogCard } from '../src/features/plugins/PluginCatalogCard.js'
-import {
-  PLUGIN_CATALOG_DESCRIPTORS,
-  mergePluginCatalog,
-} from '../src/features/plugins/PluginCatalog.js'
+import { mergePluginCatalog } from '../src/features/plugins/PluginCatalog.js'
 
 const taskPlanning: PluginSummary = {
   id: 'task-planning',
@@ -31,17 +28,24 @@ const taskPlanning: PluginSummary = {
 }
 
 function renderCard(
-  id: 'task-planning' | 'browser' | 'minimax',
-  miniMax?: MiniMaxCliStatus,
+  id: 'task-planning' | 'pidex-demo',
+  _unused?: undefined,
   enabled = true,
   error?: string,
 ): string {
-  const item = mergePluginCatalog(
-    PLUGIN_CATALOG_DESCRIPTORS,
-    [{ ...taskPlanning, enabled }],
-    null,
-    miniMax ? { status: miniMax } : undefined,
-  ).find((candidate) => candidate.id === id)
+  const plugin =
+    id === 'pidex-demo'
+      ? {
+          ...taskPlanning,
+          id,
+          name: 'Pidex Demo',
+          installed: false,
+          enabled: false,
+          source: 'installed' as const,
+          canInstall: true,
+        }
+      : { ...taskPlanning, enabled }
+  const item = mergePluginCatalog([plugin]).find((candidate) => candidate.id === id)
   if (!item) throw new Error(`Missing plugin fixture: ${id}`)
   return renderToStaticMarkup(
     <TooltipProvider>
@@ -131,39 +135,11 @@ describe('plugin catalog controls', () => {
     expect(themed).toContain('plugin-logo__image--dark tw:block')
   })
 
-  test('renders Browser as a disabled upcoming install plus', () => {
-    const html = renderCard('browser')
-    expect(html).toContain('<img')
-    expect(html).toContain('即将推出')
-    expect(html).toContain('安装 Browser')
-    expect(html).toContain('lucide-plus')
-    expect(html).toContain('disabled=""')
-    expect(html).toContain('tabindex="0"')
-    expect(html).not.toContain('role="switch"')
-    expect(html.match(/<button/g)).toHaveLength(2)
-  })
-
-  test('keeps external installation guidance as a text action button', () => {
-    const html = renderCard('minimax')
-    expect(html).toContain('查看安装说明')
-    expect(html).toContain('<svg')
-    expect(html).not.toContain('role="switch"')
-  })
-
-  test('renders MiniMax CLI as an install action when supported but not installed', () => {
-    const html = renderCard('minimax', {
-      installationStatus: 'not-installed',
-      updateAvailable: false,
-      nodeVersion: 'v22.0.0',
-      npmVersion: '10.0.0',
-      authStatus: 'not-authenticated',
-      generation: 1,
-      updatedAt: 1,
-    })
-    expect(html).toContain('安装')
+  test('renders a downloadable demo with an enabled install action', () => {
+    const html = renderCard('pidex-demo')
     expect(html).toContain('未安装')
+    expect(html).toContain('安装 Pidex Demo')
     expect(html).toContain('lucide-plus')
-    expect(html).toContain('<img')
-    expect(html).not.toContain('role="switch"')
+    expect(html).not.toContain('disabled=""')
   })
 })

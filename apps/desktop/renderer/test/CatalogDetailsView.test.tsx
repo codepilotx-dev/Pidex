@@ -1,11 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import type { MiniMaxCliStatus, PluginDetails, PluginSummary } from '@pidex/agent-protocol'
+import type { PluginDetails, PluginSummary } from '@pidex/agent-protocol'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { PluginProductDetailsView } from '../src/features/plugins/PluginProductDetailsView.js'
-import {
-  PLUGIN_CATALOG_DESCRIPTORS,
-  mergePluginCatalog,
-} from '../src/features/plugins/PluginCatalog.js'
+import { mergePluginCatalog } from '../src/features/plugins/PluginCatalog.js'
 
 const taskPlanning: PluginSummary = {
   id: 'task-planning',
@@ -32,7 +29,7 @@ const details: PluginDetails = {
 }
 
 function renderTaskDetails(pluginDetails: PluginDetails | null): string {
-  const item = mergePluginCatalog(PLUGIN_CATALOG_DESCRIPTORS, [taskPlanning]).find(
+  const item = mergePluginCatalog([taskPlanning]).find(
     (candidate) => candidate.id === 'task-planning',
   )!
   return renderToStaticMarkup(
@@ -112,35 +109,55 @@ describe('Codex-style plugin product details', () => {
     )
   })
 
-  test('keeps MiniMax install metadata and official guidance', () => {
-    const miniMax: MiniMaxCliStatus = {
-      installationStatus: 'installed',
-      installedVersion: '1.2.3',
-      latestVersion: '1.2.3',
-      updateAvailable: false,
-      nodeVersion: 'v22.0.0',
-      npmVersion: '10.0.0',
-      authStatus: 'not-authenticated',
-      generation: 1,
-      updatedAt: 1,
-    }
-    const item = mergePluginCatalog(PLUGIN_CATALOG_DESCRIPTORS, [], null, { status: miniMax }).find(
-      (candidate) => candidate.id === 'minimax',
-    )!
+  test('offers management for a removable installed plugin', () => {
+    const item = mergePluginCatalog([
+      { ...taskPlanning, source: 'installed', canUninstall: true },
+    ])[0]!
     const html = renderToStaticMarkup(
       <PluginProductDetailsView
         busy={false}
-        details={null}
+        details={details}
         item={item}
         onPrimaryAction={() => undefined}
         onTryPrompt={() => undefined}
         onUninstall={() => undefined}
       />,
     )
-    expect(html).toContain('已安装')
-    expect(html).toContain('最新版本')
-    expect(html).toContain('尚未登录，实际使用时再登录')
-    expect(html).toContain('查看官方说明')
     expect(html).toContain('aria-label="更多插件操作"')
+    expect(html).not.toContain('MiniMax')
   })
+})
+
+test('uninstalled and disabled plugins can prepare a prompt and optional metadata remains conditional', () => {
+  const item = mergePluginCatalog([
+    {
+      ...taskPlanning,
+      id: 'demo',
+      source: 'installed',
+      installed: false,
+      enabled: false,
+      canInstall: true,
+    },
+  ])[0]!
+  const html = renderToStaticMarkup(
+    <PluginProductDetailsView
+      busy={false}
+      item={item}
+      details={{
+        ...details,
+        longDescription: item.description,
+        websiteURL: 'https://example.com',
+        privacyPolicyURL: 'https://example.com/privacy',
+      }}
+      onPrimaryAction={() => undefined}
+      onTryPrompt={() => undefined}
+    />,
+  )
+  const prompt = html.match(/<button[^>]*class="catalog-plugin-prompts__item[^>]*>/)?.[0]
+  expect(prompt).toBeDefined()
+  expect(prompt).not.toContain('disabled=""')
+  expect(html).toContain('隐私政策')
+  expect(html).not.toContain('服务条款')
+  expect(html).not.toContain('catalog-plugin-details__description')
+  expect(html).not.toContain('>task-planning</dd>')
 })

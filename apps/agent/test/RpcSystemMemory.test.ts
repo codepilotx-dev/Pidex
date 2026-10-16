@@ -52,7 +52,6 @@ const fixture = async (overrides: Partial<RpcRouterDependencies> = {}) => {
     tooling: {} as never,
     pets: {} as never,
     releaseNotes: {} as never,
-    minimaxCli: {} as never,
     usage: {} as never,
     turnPatches: {} as never,
     terminalContext: {} as never,

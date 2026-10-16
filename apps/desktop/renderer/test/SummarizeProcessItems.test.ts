@@ -197,7 +197,7 @@ describe('summarizeTurnProcessItems', () => {
       text: '分析下一步',
       status: 'completed',
     } as unknown as Item
-    // 纯思考不产生聚合标签，思考态由时间线的 thinking fallback 承载。
+    // 纯思考不产生工具聚合标签，思考态由时间线的 thinking fallback 承载。
     expect(summarizeTurnProcessItems([completedReasoning], 'running')).toMatchObject({
       active: true,
       kind: 'tool',

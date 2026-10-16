@@ -12,7 +12,10 @@ import {
 } from '../src/features/session/timeline/CanonicalThreadView.js'
 import { QuickChatContext } from '../src/features/session/QuickChatContext.js'
 import { ConversationItemContext } from '../src/features/session/timeline/ConversationItemContext.js'
-import { CanonicalUserInput } from '../src/features/session/timeline/CanonicalItemRenderer.js'
+import {
+  CanonicalItemRenderer,
+  CanonicalUserInput,
+} from '../src/features/session/timeline/CanonicalItemRenderer.js'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
 import { createKeyedDisclosureStore } from '../src/components/ui/KeyedDisclosureStore.js'
 import {
@@ -27,6 +30,30 @@ import {
 function disclosureStore(...expandedKeys: string[]) {
   return createKeyedDisclosureStore({ initialExpandedKeys: expandedKeys })
 }
+
+test('ordinary reasoning never renders an activity row, including historical items', () => {
+  for (const status of ['streaming', 'completed', 'interrupted'] as const) {
+    const item: Extract<Item, { type: 'reasoning' }> = {
+      id: 'reasoning-hidden',
+      messageID: 'message',
+      turnId: 'turn',
+      agentId: 'agent',
+      type: 'reasoning',
+      text: '不应出现在活动列表中的内容',
+      status,
+    }
+    expect(
+      renderToStaticMarkup(
+        <CanonicalItemRenderer
+          item={item}
+          dockedPlanItemId={null}
+          onOpenPlanInRightDock={() => {}}
+          onOpenSubagent={() => {}}
+        />,
+      ),
+    ).toBe('')
+  }
+})
 
 function CanonicalTestProviders({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
@@ -48,6 +75,33 @@ function CanonicalTestProviders({ children }: { children: React.ReactNode }): Re
 }
 
 describe('canonical thread switch', () => {
+  test('historical assistant action rows show their original timestamp after completion', () => {
+    const item: Extract<Item, { type: 'text' }> = {
+      id: 'reply-time',
+      messageID: 'reply',
+      turnId: 'turn',
+      agentId: 'agent',
+      type: 'text',
+      placement: 'result',
+      status: 'completed',
+      text: '回复正文',
+      createdAt: 1234,
+    }
+    const render = (status: typeof item.status) =>
+      renderToStaticMarkup(
+        <CanonicalTestProviders>
+          <CanonicalItemRenderer
+            item={{ ...item, status }}
+            showAssistantActions
+            dockedPlanItemId={null}
+            onOpenPlanInRightDock={() => {}}
+            onOpenSubagent={() => {}}
+          />
+        </CanonicalTestProviders>,
+      )
+    expect(render('completed')).toContain('dateTime="1970-01-01T00:00:01.234Z"')
+    expect(render('streaming')).not.toContain('<time')
+  })
   test('historical delivery remains visible outside collapsed main activity', () => {
     const delivery: Item = {
       id: 'delivery',
@@ -138,6 +192,7 @@ describe('canonical thread switch', () => {
     expect(markup).not.toContain('lucide-box')
     expect(markup).toContain('user-message-markdown__measurement has-inline-prefix')
     expect(markup).toContain('你好')
+    expect(markup).toContain('dateTime="1970-01-01T00:00:00.001Z"')
     expect(markup).not.toContain('skills/mmx-cli/SKILL.md')
   })
   test('does not expose state from the previous thread', () => {
@@ -331,7 +386,7 @@ describe('canonical thread switch', () => {
     })
   })
 
-  test('uses commentary as a hard boundary and keeps reasoning only with exploration', () => {
+  test('uses commentary as a hard boundary and excludes reasoning even with exploration', () => {
     const tool = (
       id: string,
       state: 'completed' | 'error' = 'completed',
@@ -403,7 +458,7 @@ describe('canonical thread switch', () => {
       units: [
         {
           kind: 'group',
-          items: [{ id: 'read-1' }, { id: 'reasoning-1' }, { id: 'command-after-read' }],
+          items: [{ id: 'read-1' }, { id: 'command-after-read' }],
         },
       ],
     })
@@ -558,7 +613,7 @@ describe('canonical thread switch', () => {
                   question,
                 },
               ],
-              contentBlocks: [],
+              contentBlocks: [{ kind: 'assistant', id: `assistant:${answer.id}`, items: [answer] }],
             } as unknown as RenderTurnEntry
           }
           onOpenPlanInRightDock={() => undefined}
@@ -689,7 +744,7 @@ describe('canonical thread switch', () => {
       planItem: null,
       executionPlanItems: [],
       blockers: [],
-      contentBlocks: [],
+      contentBlocks: [{ kind: 'assistant', id: `assistant:${answer.id}`, items: [answer] }],
     } as unknown as RenderTurnEntry
     const markup = renderToStaticMarkup(
       <CanonicalTestProviders>
@@ -720,6 +775,7 @@ describe('canonical thread switch', () => {
           entry={{
             ...entry,
             assistantResultItems: [],
+            contentBlocks: [],
             items: [processText, planTool, tool],
             patchItems: [],
             turn: { ...entry.turn, status: 'running' },
@@ -967,7 +1023,7 @@ test('Radix 强制展开不覆盖保存选择，结束后恢复且内层分组�
               planItem: null,
               executionPlanItems: [],
               blockers: [],
-              contentBlocks: [],
+              contentBlocks: [{ kind: 'assistant', id: `assistant:${final.id}`, items: [final] }],
               forceExpandActivity: force,
             } as unknown as RenderTurnEntry
           }

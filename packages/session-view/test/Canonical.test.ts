@@ -1914,3 +1914,25 @@ test('流式阶段更新、持久重放和快照得到同一回答且不重复 d
   expect(result(terminal)).toEqual(result(replay))
   expect(result(terminal)).toEqual(result(snapshot))
 })
+
+test('编辑事件移除旧轮，重放和迟到历史页不会恢复失活记录', () => {
+  const old = turn('edit-old')
+  const user = input('edit-input', old.id, 1)
+  const original = page([
+    { turn: old, inputs: [user], messages: [], agents: [], items: [], approvals: [] },
+  ])
+  const cut = durable(11, 'thread/history/edited', { removedTurnIds: [old.id], historyRevision: 1 })
+  let state = applyThreadEnvelope(createCanonicalThreadState(original), cut)
+  expect(selectRenderTurnEntries(state)).toHaveLength(0)
+  state = prependOlderThreadPage(state, original)
+  expect(selectRenderTurnEntries(state)).toHaveLength(0)
+  expect(state.inputsById.has(user.id)).toBe(false)
+  expect(applyThreadEnvelope(state, cut)).toBe(state)
+  const refreshed = reconcileLatestThreadPage(createCanonicalThreadState(original), {
+    ...original,
+    turns: [],
+    historyRevision: 1,
+    streamPosition: { ...original.streamPosition, sequence: 11 },
+  })
+  expect(selectRenderTurnEntries(refreshed)).toHaveLength(0)
+})

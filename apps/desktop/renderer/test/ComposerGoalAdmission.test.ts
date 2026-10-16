@@ -48,6 +48,27 @@ function harness(status?: string) {
 }
 
 describe('goal and first-turn admission', () => {
+  test('start, steering and queued messages keep authored brackets and send attachments separately', async () => {
+    for (const delivery of ['start', 'steer', 'follow-up'] as const) {
+      const { client, calls } = harness('running')
+      const input = {
+        text: '保留 [image.png] 和 [用户原文]',
+        attachments: [
+          { id: 'image', name: 'image.png', kind: 'image' as const, status: 'ready' as const },
+        ],
+        skills: [{ name: 'review', path: 'skills/review' }],
+      }
+      await client.submitMessage('thread:1', input, delivery)
+      const request = calls.find((call) =>
+        ['turn/start', 'turn/steer', 'queue/add'].includes(call.method),
+      )
+      expect(request?.params).toMatchObject({
+        content: input.text,
+        attachmentIds: ['attachment:1'],
+        skills: input.skills,
+      })
+    }
+  })
   test('显式 Plan 覆盖尚未更新的 Chat 设置，活动 Chat 不接受 Plan steer', async () => {
     const { client, calls } = harness()
     await client.submitMessage('thread', { text: '规划', taskMode: 'plan' }, 'start')

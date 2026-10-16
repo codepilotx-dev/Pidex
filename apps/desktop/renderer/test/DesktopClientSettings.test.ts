@@ -355,7 +355,7 @@ describe('desktop thread settings client', () => {
       operationId: expect.any(String),
     })
     expect(calls.find((call) => call.method === 'turn/start')?.params).toMatchObject({
-      content: '读取目录 [docs]',
+      content: '读取目录',
       skills: selectedSkills,
       contextReferenceIds: ['context-docs'],
     })
@@ -592,7 +592,6 @@ describe('desktop thread settings client', () => {
         'model/health/updated',
         'skill/updated',
         'plugins/updated',
-        'minimaxCli/updated',
         'tooling/updated',
         'mcp/updated',
         'speech/statusChanged',
@@ -1476,7 +1475,6 @@ describe('desktop thread settings client', () => {
             'model/health/updated',
             'skill/updated',
             'plugins/updated',
-            'minimaxCli/updated',
             'tooling/updated',
             'mcp/updated',
             'speech/statusChanged',

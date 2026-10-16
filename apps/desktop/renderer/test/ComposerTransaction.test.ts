@@ -449,6 +449,19 @@ describe('composer submit transaction', () => {
     expect('input' in prepared && prepared.input.skills?.[0]?.name).toBe('review')
   })
 
+  test('message content preserves authored brackets without appending attachment summaries', () => {
+    const input = {
+      text: '保留 [image.png] 和 [用户原文]',
+      attachments: [
+        { id: 'image', name: 'image.png', kind: 'image' as const, status: 'ready' as const },
+      ],
+      skills: [{ name: 'review', path: 'skills/review' }],
+    }
+    expect(buildDesktopUserMessageContent(input).text).toBe(input.text)
+    expect(buildDesktopUserMessageContent(input).attachments).toHaveLength(1)
+    expect(desktopUserMessageInputToPreviewText(input)).toContain('[image.png]')
+  })
+
   test('serializes visible task and browser references and allows reference-only submission', () => {
     const prepared = prepareComposerSubmission(
       draft({

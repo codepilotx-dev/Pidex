@@ -111,9 +111,14 @@ describe('Markdown tables and accessibility', () => {
     const markdown = '| Col A | Col B |\n| :--- | :--- |\n| Val 1 | Val 2 |\n'
     const html = renderToStaticMarkup(<MarkdownMessage text={markdown} />)
 
-    expect(html).toContain('class="md-table-block md-wide-block"')
+    expect(html).toContain('class="md-table-block tw:group/table md-wide-block"')
     expect(html).toContain('class="md-table-scroll" tabindex="0"')
     expect(html).toContain('<th scope="col"')
     expect(html).toContain('Val 1')
+    expect(html).toContain('aria-label="展开表格"')
+    expect(html).toContain('aria-haspopup="dialog"')
+    expect(
+      renderToStaticMarkup(<MarkdownMessage text={markdown} allowWideBlocks={false} />),
+    ).not.toContain('aria-label="展开表格"')
   })
 })

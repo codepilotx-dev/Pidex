@@ -924,10 +924,19 @@ const fixtures = {
     result: { status: 'matched', recommended: { contextWindow: 128000 }, updatedAt: 1 },
   },
   'model/recommendation/refresh': {
-    params: { operationId: 'recommendations:1' }, result: { updatedAt: 1 },
+    params: { operationId: 'recommendations:1' },
+    result: { updatedAt: 1 },
   },
-  'model/embed': methodFixture('model/embed', { model: { providerID: providerId, id: modelId }, input: ['hello'] }, { vectors: [[1, 2]], inputTokens: 1 }),
-  'model/rerank': methodFixture('model/rerank', { model: { providerID: providerId, id: modelId }, query: 'hello', documents: ['hello'] }, { results: [{ index: 0, score: 0.9 }], inputTokens: 1 }),
+  'model/embed': methodFixture(
+    'model/embed',
+    { model: { providerID: providerId, id: modelId }, input: ['hello'] },
+    { vectors: [[1, 2]], inputTokens: 1 },
+  ),
+  'model/rerank': methodFixture(
+    'model/rerank',
+    { model: { providerID: providerId, id: modelId }, query: 'hello', documents: ['hello'] },
+    { results: [{ index: 0, score: 0.9 }], inputTokens: 1 },
+  ),
   'visualization/submitFollowUp': methodFixture(
     'visualization/submitFollowUp',
     {
@@ -2228,6 +2237,23 @@ const fixtures = {
       },
     },
   ),
+  'thread/editUserMessage': {
+    params: {
+      operationId: 'edit-1',
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      inputId: 'input-1',
+      content: 'edited',
+      attachmentIds: [],
+      contextReferenceIds: [],
+    },
+    result: {
+      inputId: 'input-2',
+      turnId: 'turn-2',
+      disposition: 'accepted',
+      streamPosition: { streamId: 'thread-1', sequence: 1 },
+    },
+  },
   'turn/start': methodFixture(
     'turn/start',
     {
@@ -2447,6 +2473,13 @@ const fixtures = {
       updatedAt: 2,
     },
   ),
+  'plugin/readAsset': methodFixture('plugin/readAsset', { pluginId: 'pidex-demo', kind: 'logo' }, { mimeType: 'image/png', base64: 'aGVsbG8=' }),
+  'plugin/install': methodFixture('plugin/install',
+    { pluginId: 'pidex-demo', operationId: 'install-demo' },
+    { pluginId: 'pidex-demo', generation: 2, updatedAt: 2 }),
+  'plugin/uninstall': methodFixture('plugin/uninstall',
+    { pluginId: 'pidex-demo', operationId: 'uninstall-demo' },
+    { pluginId: 'pidex-demo', generation: 3, updatedAt: 3 }),
   'plugin/list': methodFixture(
     'plugin/list',
     {
@@ -6063,7 +6096,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(338)
+    expect(methods).toHaveLength(342)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6431,7 +6464,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(317)
+    expect(Object.keys(RpcMethods)).toHaveLength(321)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })
@@ -6439,6 +6472,9 @@ describe('RPC method schema contracts', () => {
   test('插件管理使用精确契约并由独立能力保护', () => {
     expect(Capabilities).toContain('plugins.manage.v1')
     expect(Capabilities).toContain('plugins.details.v1')
+    expect(Capabilities).toContain('plugins.assets.v1')
+    expect(RpcMethods['plugin/readAsset']).toMatchObject({ capability: 'plugins.assets.v1', mutation: false, exactParams: true })
+    expect(() => Schema.decodeUnknownSync(RpcMethods['plugin/readAsset'].params, { onExcessProperty: 'error' })({ pluginId: 'pidex-demo', kind: 'logo', path: '../secret' })).toThrow()
     expect(Schema.decodeUnknownSync(ProtocolCapabilitySchema)('plugins.manage.v1')).toBe(
       'plugins.manage.v1',
     )
@@ -6827,9 +6863,17 @@ describe('RPC method schema contracts', () => {
     expect(
       decode({ providerId, definition, operationId: 'operation:builtin-overrides' }).definition,
     ).toEqual(definition)
-    expect(decode({ providerId, definition: { ...definition, protocol: 'google-generative-ai',
-      endpoints: { 'google-generative-ai': 'https://gateway.example/v1' } },
-      operationId: 'operation:native-endpoint' }).definition).toMatchObject({ protocol: 'google-generative-ai' })
+    expect(
+      decode({
+        providerId,
+        definition: {
+          ...definition,
+          protocol: 'google-generative-ai',
+          endpoints: { 'google-generative-ai': 'https://gateway.example/v1' },
+        },
+        operationId: 'operation:native-endpoint',
+      }).definition,
+    ).toMatchObject({ protocol: 'google-generative-ai' })
     expect(() =>
       decode({
         providerId,

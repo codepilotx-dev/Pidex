@@ -74,6 +74,32 @@ describe('PetCatalogService', () => {
     })
   })
 
+  test('catalog cache expires after five hours while allowing manual refresh before expiry', async () => {
+    const root = await temporaryRoot()
+    let now = Date.parse('2026-10-16T00:00:00Z')
+    let catalogRequests = 0
+    const fetch = mockFetch(catalogResponses())
+    const service = new PetCatalogService(root, {
+      now: () => now,
+      fetch: (async (input, init) => {
+        if (input.toString() === catalogUrl) catalogRequests++
+        return fetch(input, init)
+      }) as typeof globalThis.fetch,
+    })
+    await service.list(new Set())
+    now += 4 * 60 * 60 * 1_000
+    expect((await service.list(new Set())).cacheState).toBe('fresh')
+    expect(catalogRequests).toBe(1)
+    await service.list(new Set(), true)
+    expect(catalogRequests).toBe(2)
+    now += 5 * 60 * 60 * 1_000 - 1
+    expect((await service.list(new Set())).cacheState).toBe('fresh')
+    now++
+    expect((await service.list(new Set())).cacheState).toBe('stale')
+    await service.list(new Set(), true)
+    expect(catalogRequests).toBe(3)
+  })
+
   test('atomically replaces an existing cache during explicit refresh', async () => {
     const root = await temporaryRoot()
     let displayName = '流萤'

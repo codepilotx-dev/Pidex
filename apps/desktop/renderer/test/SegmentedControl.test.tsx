@@ -40,4 +40,25 @@ describe('SegmentedControl tabs', () => {
     expect(segmentedTabIndexAfterKey('End', 0, 2)).toBe(1)
     expect(segmentedTabIndexAfterKey('Enter', 0, 2)).toBeNull()
   })
+
+  test('supports size="lg" and shape="pill" presets', () => {
+    const html = renderToStaticMarkup(
+      <SegmentedControl
+        ariaLabel="插件来源"
+        onChange={() => {}}
+        options={[
+          { value: 'public', label: '公开' },
+          { value: 'personal', label: '个人' },
+        ]}
+        shape="pill"
+        size="lg"
+        value="public"
+      />,
+    )
+
+    expect(html).toContain('data-size="lg"')
+    expect(html).toContain('data-shape="pill"')
+    expect(html).toContain('tw:h-[42px]')
+    expect(html).toContain('tw:rounded-full')
+  })
 })
