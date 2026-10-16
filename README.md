@@ -34,7 +34,7 @@ _Open-source, Windows-first desktop workspace for AI-assisted coding._
 - **Agent 编程流程**：执行结构化文件读取与修改、Shell 命令和计划，在关键节点处理权限审批、结构化提问、中断恢复与上下文管理。
 - **代码审阅与 Git**：提供统一或分离 Diff、文件树、行级评论、暂存、取消暂存、还原、提交、推送与 Pull Request 操作。
 - **模型与供应商**：通过 Pi Provider 目录管理 API Key、OAuth、自定义 Endpoint、自定义模型和推理等级。
-- **扩展与工具**：统一管理 Skills、Plugins 与 MCP，并提供内置浏览器、集成终端、Actions 和工作空间依赖。
+- **扩展与工具**：统一管理 Skills、Plugins 与 MCP，并提供内置浏览器、集成终端、Actions 和工作空间依赖。非自带插件从 [Pidex-Plugins 官方仓库](https://github.com/codepilotx-dev/Pidex-Plugins) 获取；展示资料随插件分发，创建与发布步骤见[插件作者指南](https://github.com/codepilotx-dev/Pidex-Plugins#创建插件)。
 - **并行与隔离工作流**：支持子智能体、托管 worktree、任务 Handoff、项目记忆和 Profile 配置。
 
 ## 下载与安装
