@@ -67,6 +67,7 @@ bun run dev:desktop
 
 `bun run dev` 仅显示上述分步启动提示。关闭 Desktop 不会停止开发 Agent；结束终端 A 才会停止它。
 多个 Git worktree 可以分别运行 `bun run dev:desktop`：每个 worktree 自动使用独立的 Renderer 端口、Electron 实例与开发状态目录，但继续共享终端 A 中的 Agent 和用户数据。同一 worktree 重复启动时只聚焦已有实例；Agent 代码以运行 `dev:agent` 的 worktree 为准。
+每个 worktree 首次运行 `bun run dev:desktop` 会自动构建缺失的 CPX-CUA 原生运行时（Rust release，耗时较长）；产物已就绪或想跳过构建时使用 `bun run dev:desktop --no-build`，此时若缺少 `apps/desktop/native/cpx-cua/dist/cpx-cua.exe` 会直接提示先运行 `bun run build:cua`。启动参数只接受 `--no-build`，其他参数会立即报错。
 
 常用验证命令：
 

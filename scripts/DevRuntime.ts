@@ -341,6 +341,13 @@ export function configuredRendererPort(value = process.env.PIDEX_DEV_RENDERER_PO
   return port
 }
 
+export function parseDevDesktopArgs(argv: readonly string[] = []) {
+  // 未知参数必须报错：静默忽略会让 `--no-build` 这类开关看似生效，实际仍在执行对应步骤。
+  if (argv.some((argument) => argument !== '--no-build'))
+    throw new Error('invalid dev desktop argument')
+  return { noBuild: argv.includes('--no-build') }
+}
+
 export async function allocateLoopbackPort(configured?: number) {
   const { createServer } = await import('node:net')
   return await new Promise<number>((resolvePort, reject) => {
@@ -353,6 +360,22 @@ export async function allocateLoopbackPort(configured?: number) {
       server.close((error) => (error ? reject(error) : resolvePort(address.port)))
     })
   })
+}
+
+export async function allocateDevAgentPort(
+  connection: DevAgentLaunchConnection,
+  previous: DevAgentRuntimeV2 | undefined,
+  configuredPort: number | undefined,
+) {
+  try {
+    return await allocateLoopbackPort(connection.port)
+  } catch {
+    if (
+      connection.reused && configuredPort === undefined && previous &&
+      !isProcessAlive(previous.ownerPid) && !isProcessAlive(previous.agentPid)
+    ) return await allocateLoopbackPort()
+    throw new Error(connection.reused ? 'AGENT_RECONNECT_PORT_UNAVAILABLE' : 'AGENT_PORT_UNAVAILABLE')
+  }
 }
 
 export function localNoProxy(value: string | undefined) {
