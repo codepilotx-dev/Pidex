@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import type { Project } from '@pidex/shared'
 import { createDesktopClient } from '../src/services/desktop-client/index.js'
+import { createAgentReviewApi } from '../src/services/desktop-client/AgentReviewApi.js'
 import { createAgentGitApi } from '../src/services/desktop-client/AgentGitApi.js'
 import { AgentRpcError } from '../src/services/AgentRpcClient.js'
 
@@ -175,6 +176,7 @@ describe('desktop git workflow client', () => {
         if (body.method === 'project/open') {
           return rpc(body.id, { project })
         }
+        if (body.method === 'review/commits') return rpc(body.id, { commits: [] })
         if (body.method === 'review/status') {
           return rpc(body.id, { status })
         }
@@ -225,6 +227,14 @@ describe('desktop git workflow client', () => {
     })
     const checkedOut = await client.checkoutWorkspaceBranch(workspacePath, 'feature/desktop-rpc')
     expect(checkedOut.branchName).toBe(status.branchName)
+
+    const beforeHistory = requests.length
+    expect(await client.getAgentReviewCommits('F:\\not-the-selected-project', project.id)).toEqual(
+      [],
+    )
+    expect(
+      requests.slice(beforeHistory).filter((request) => request.method !== 'project/list'),
+    ).toEqual([{ method: 'review/commits', params: { projectId: project.id, limit: 20 } }])
 
     expect(
       requests.filter(
@@ -325,4 +335,34 @@ describe('desktop git workflow client', () => {
     ])
     expect(requests).not.toContain('project/remove')
   })
+})
+
+test('按引用查询提交需要协商能力，并透传引用参数', async () => {
+  const calls: unknown[] = []
+  let capabilities = ['git.review.v1']
+  const api = createAgentReviewApi({
+    rpc: {
+      ensureInitialized: async () => ({ capabilities }),
+      call: async (_method: string, params: unknown) => {
+        calls.push(params)
+        return { commits: [] }
+      },
+    } as never,
+    loadProjectById: async () => project,
+    loadProjectForPath: async () => project,
+    preparePullRequestReview: async () => {},
+    requireGithubPullRequestCapability: () => {},
+    requireReviewCapability: () => {},
+    unsupportedReviewOperation: () => {
+      throw new Error('unsupported')
+    },
+    withAgentOrMock: (operation) => operation(),
+  })
+  await expect(api.getAgentReviewCommits(workspacePath, project.id, 'other')).rejects.toThrow(
+    'unsupported',
+  )
+  expect(calls).toEqual([])
+  capabilities = [...capabilities, 'git.review.commit-ref.v1']
+  await api.getAgentReviewCommits(workspacePath, project.id, 'other')
+  expect(calls).toEqual([{ projectId: project.id, limit: 20, ref: 'other' }])
 })

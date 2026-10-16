@@ -3920,7 +3920,7 @@ const fixtures = {
   ),
   'review/commits': methodFixture(
     'review/commits',
-    { projectId: project.id, limit: 50 },
+    { projectId: project.id, limit: 50, ref: 'main' },
     {
       commits: [
         {

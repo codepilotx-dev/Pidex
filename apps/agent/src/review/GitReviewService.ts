@@ -1733,16 +1733,41 @@ export class GitReviewService {
     return { current, branches }
   }
 
-  async commits(projectId: string, limit = 50) {
+  async commits(projectId: string, limit = 50, ref?: string) {
     const { rootPath } = await this.repository(projectId)
     const safeLimit = Math.max(1, Math.min(200, Math.trunc(limit)))
+    let commit: string | undefined
+    if (ref !== undefined) {
+      if (!ref || ref.startsWith('-') || /[\x00-\x20]/.test(ref)) {
+        throw new AgentError('INVALID_REQUEST', '无效的分支引用', 400)
+      }
+      const resolved = await this.git(
+        rootPath,
+        ['rev-parse', '--verify', '--end-of-options', `${ref}^{commit}`],
+        undefined,
+        [0, 128],
+      )
+      if (resolved.code !== 0)
+        throw new AgentError('REVIEW_SOURCE_UNAVAILABLE', '指定分支或提交不存在，请刷新后重试', 404)
+      commit = resolved.stdout.trim()
+    }
     const output = await this.git(
       rootPath,
-      ['log', `-${safeLimit}`, '--format=%H%x00%h%x00%s%x00%an%x00%at'],
+      [
+        'log',
+        `-${safeLimit}`,
+        '--format=%H%x00%h%x00%s%x00%an%x00%at',
+        ...(commit ? [commit] : []),
+        '--',
+      ],
       undefined,
       [0, 128],
     )
-    if (output.code !== 0) return { commits: [] }
+    if (output.code !== 0) {
+      if (commit)
+        throw new AgentError('REVIEW_SOURCE_UNAVAILABLE', '提交历史暂不可用，请刷新后重试', 409)
+      return { commits: [] }
+    }
     return {
       commits: output.stdout
         .split(/\r?\n/)

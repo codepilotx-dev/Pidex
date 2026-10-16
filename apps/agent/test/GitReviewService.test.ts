@@ -414,6 +414,27 @@ describe('GitReviewService', () => {
     db.close()
   }, 30_000)
 
+  test('提交历史按引用只读查询并拒绝无效引用', async () => {
+    const { root, db, project, review } = await fixture()
+    try {
+      await git(root, 'branch', 'other')
+      await git(root, 'commit', '--allow-empty', '-m', 'main only')
+      expect((await review.commits(project.id)).commits[0]?.subject).toBe('main only')
+      expect((await review.commits(project.id, 20, 'other')).commits[0]?.subject).toBe('initial')
+      expect(await git(root, 'branch', '--show-current')).toBe('main')
+      for (const ref of ['missing-branch', '--all', 'main --all', 'main\0']) {
+        await expect(review.commits(project.id, 20, ref)).rejects.toBeDefined()
+      }
+      await git(root, 'checkout', '--orphan', 'empty')
+      expect((await review.commits(project.id)).commits).toEqual([])
+      await expect(review.commits(project.id, 20, 'empty')).rejects.toMatchObject({
+        code: 'REVIEW_SOURCE_UNAVAILABLE',
+      })
+    } finally {
+      db.close()
+    }
+  }, 30_000)
+
   test('Git 暂态不会生成相互矛盾的 Review generation', async () => {
     const { root, db, project, review } = await fixture()
     const mergeHead = await git(root, 'rev-parse', '--git-path', 'MERGE_HEAD')

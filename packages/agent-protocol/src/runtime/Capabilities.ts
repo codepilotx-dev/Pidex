@@ -43,6 +43,7 @@ export const Capabilities = [
   'git.review.batch.v1',
   'git.review.context.v1',
   'git.review.uncommitted.v1',
+  'git.review.commit-ref.v1',
   'git.workspace.v1',
   'ai.review.v1',
   'github.oauth.v1',

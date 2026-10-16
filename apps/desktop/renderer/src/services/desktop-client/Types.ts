@@ -242,6 +242,7 @@ export type DesktopAgentReviewApi = {
   getAgentReviewCommits(
     workspacePath: string,
     projectId?: string,
+    ref?: string,
   ): Promise<
     Array<{
       sha: string

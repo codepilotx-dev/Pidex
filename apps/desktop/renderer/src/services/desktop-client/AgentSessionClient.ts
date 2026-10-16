@@ -146,6 +146,7 @@ export const RENDERER_CAPABILITIES = [
   'git.review.batch.v1',
   'git.review.context.v1',
   'git.review.uncommitted.v1',
+  'git.review.commit-ref.v1',
   'git.workspace.v1',
   'ai.review.v1',
   'github.oauth.v1',
@@ -2240,8 +2241,8 @@ export function createAgentSessionDesktopClient(
       loadAgentReviewApi().then((api) => api.applyAgentReviewBatch(input)),
     getAgentReviewBranches: (workspacePath) =>
       loadAgentReviewApi().then((api) => api.getAgentReviewBranches(workspacePath)),
-    getAgentReviewCommits: (workspacePath) =>
-      loadAgentReviewApi().then((api) => api.getAgentReviewCommits(workspacePath)),
+    getAgentReviewCommits: (workspacePath, projectId, ref) =>
+      loadAgentReviewApi().then((api) => api.getAgentReviewCommits(workspacePath, projectId, ref)),
     listAgentReviewComments: (input) =>
       loadAgentReviewApi().then((api) => api.listAgentReviewComments(input)),
     saveAgentReviewComment: (input) =>

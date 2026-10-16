@@ -209,12 +209,18 @@ export function createAgentReviewApi({
             },
             async () => unsupportedReviewOperation(),
           ),
-    getAgentReviewCommits: (workspacePath, projectId) =>
+    getAgentReviewCommits: (workspacePath, projectId, ref) =>
       isBrowserVisualReviewCase()
         ? Promise.resolve([])
         : withAgentOrMock(
             async () => {
               requireReviewCapability()
+              if (
+                ref !== undefined &&
+                !(await rpc.ensureInitialized()).capabilities.includes('git.review.commit-ref.v1')
+              ) {
+                return unsupportedReviewOperation()
+              }
               const project = await loadProject(workspacePath, projectId)
               const result = await rpc.call<{
                 commits: Array<{
@@ -224,7 +230,11 @@ export function createAgentReviewApi({
                   author: string
                   authoredAt: string
                 }>
-              }>('review/commits', { projectId: project.id, limit: 20 })
+              }>('review/commits', {
+                projectId: project.id,
+                limit: 20,
+                ...(ref !== undefined ? { ref } : {}),
+              })
               return result.commits
             },
             async () => unsupportedReviewOperation(),
