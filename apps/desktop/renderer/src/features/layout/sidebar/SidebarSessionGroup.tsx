@@ -29,6 +29,7 @@ import {
   type SessionListItem,
 } from '../../../UiTypes.js'
 import { Button } from '../../../components/ui/Button.js'
+import { useDisclosureContentExpanded } from '../../../components/ui/DisclosureContent.js'
 
 import { Spinner } from '../../../components/ui/Spinner.js'
 import { SkeletonBlock } from '../../../components/ui/Skeleton.js'
@@ -38,6 +39,11 @@ import { sortSessionsForSidebar } from '../../session/state/SessionSorting.js'
 import { SidebarRow } from './SidebarRow.js'
 import { SidebarStatusPill } from './SidebarStatusPill.js'
 import { SidebarReorderItem } from './SidebarReorderItem.js'
+import {
+  createSidebarSessionPagingState,
+  setSidebarSessionVisibleLimit,
+  syncSidebarSessionPaging,
+} from './SidebarSessionPaging.js'
 import { useEverOpened } from '../../../hooks/UsePresenceRetention.js'
 import { cx } from '../../../utils/Cx.js'
 import {
@@ -141,7 +147,10 @@ function SidebarSessionGroupComponent({
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null)
   const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
   const [confirmArchiveSessionId, setConfirmArchiveSessionId] = useState<string | null>(null)
-  const [visibleLimit, setVisibleLimit] = useState(initialLimit)
+  const [paging, setPaging] = useState(() =>
+    createSidebarSessionPagingState({ groupKey, initialLimit }),
+  )
+  const visibleLimit = paging.visibleLimit
   const [renameSession, setRenameSession] = useState<SessionListItem | null>(null)
   const renameDialogMounted = useEverOpened(renameSession !== null)
   const [renameValue, setRenameValue] = useState('')
@@ -191,7 +200,12 @@ function SidebarSessionGroupComponent({
     () => new Set(extraSessions.map((session) => session.id)),
     [extraSessions],
   )
-  const previousGroupKeyRef = useRef(groupKey)
+  /** 所在折叠区域收起时回到默认分页；不在折叠区域内（例如独立渲染）时按展开处理。 */
+  const disclosureExpanded = useDisclosureContentExpanded() ?? true
+
+  function updateVisibleLimit(resolution: number | ((visibleLimit: number) => number)): void {
+    setPaging((current) => setSidebarSessionVisibleLimit(current, resolution))
+  }
 
   useEffect(() => {
     if (draggedSessionId) return
@@ -203,22 +217,11 @@ function SidebarSessionGroupComponent({
   }, [draggedSessionId, sortedSessions])
 
   useEffect(() => {
-    const groupChanged = previousGroupKeyRef.current !== groupKey
-    previousGroupKeyRef.current = groupKey
-    if (pagination === 'all') {
-      return
-    }
-    const activeIndex = orderedSessions.findIndex((session) => session.id === activeSessionId)
-    if (groupChanged) {
-      setVisibleLimit(activeIndex < 0 ? initialLimit : Math.max(initialLimit, activeIndex + 1))
-      return
-    }
-    if (activeIndex >= 0) {
-      // 排序或异步数据变化后，继续让当前激活项处于已渲染分页内。
-      // 用户单独点击“折叠显示”只改变 visibleLimit，不会重新触发本 effect。
-      setVisibleLimit((current) => Math.max(current, activeIndex + 1))
-    }
-  }, [activeSessionId, groupKey, orderedSessions, pagination])
+    if (pagination === 'all') return
+    setPaging((current) =>
+      syncSidebarSessionPaging(current, { disclosureExpanded, groupKey, initialLimit }),
+    )
+  }, [disclosureExpanded, groupKey, initialLimit, pagination])
 
   async function unlinkPullRequest(
     threadId: string,
@@ -269,7 +272,7 @@ function SidebarSessionGroupComponent({
     const [moved] = order.splice(currentIndex, 1)
     if (!moved) return
     order.splice(nextIndex, 0, moved)
-    setVisibleLimit((current) => Math.max(current, nextIndex + 1))
+    updateVisibleLimit((current) => Math.max(current, nextIndex + 1))
     persistManualOrder(order)
   }
 
@@ -759,7 +762,7 @@ function SidebarSessionGroupComponent({
                     className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
                     color="ghostTertiary"
                     onClick={() =>
-                      setVisibleLimit((current) =>
+                      updateVisibleLimit((current) =>
                         Math.min(current + initialLimit, sessions.length),
                       )
                     }
@@ -775,7 +778,7 @@ function SidebarSessionGroupComponent({
                   <Button
                     className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
                     color="ghostTertiary"
-                    onClick={() => setVisibleLimit(initialLimit)}
+                    onClick={() => updateVisibleLimit(initialLimit)}
                     size="compact"
                     type="button"
                   >
