@@ -439,9 +439,6 @@ export class SidecarSupervisor {
       PIDEX_BUILTIN_PLUGINS_DIR: this.#app.isPackaged
         ? join(this.#app.resourcesPath, 'agent', 'plugins')
         : process.env.PIDEX_BUILTIN_PLUGINS_DIR,
-      PIDEX_BUILTIN_INTEGRATIONS_DIR: this.#app.isPackaged
-        ? join(this.#app.resourcesPath, 'agent', 'integrations')
-        : process.env.PIDEX_BUILTIN_INTEGRATIONS_DIR,
       PIDEX_LEGACY_DATA_DIR: join(this.#app.getPath('userData'), 'agent'),
       PIDEX_LEGACY_APPEARANCE_SETTINGS_PATH: join(
         this.#app.getPath('userData'),

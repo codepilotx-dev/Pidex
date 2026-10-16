@@ -85,7 +85,6 @@ async function run() {
       PIDEX_TOOLING_HOME: join(agentDataDir, 'tooling'),
       PIDEX_BUILTIN_SKILLS_DIR: join(root, 'apps', 'agent', 'resources', 'skills'),
       PIDEX_BUILTIN_PLUGINS_DIR: join(root, 'apps', 'agent', 'resources', 'plugins'),
-      PIDEX_BUILTIN_INTEGRATIONS_DIR: join(root, 'apps', 'agent', 'resources', 'integrations'),
       PIDEX_LEGACY_DATA_DIR: join(root, '.pidex'),
       PIDEX_LOG_DIR: agentLogDir,
       PIDEX_CONSOLE_LOG: process.env.PIDEX_CONSOLE_LOG ?? 'info',

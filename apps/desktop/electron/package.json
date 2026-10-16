@@ -68,10 +68,6 @@
         "to": "agent/plugins"
       },
       {
-        "from": "../../agent/resources/integrations",
-        "to": "agent/integrations"
-      },
-      {
         "from": "../native/cpx-cua/dist/cpx-cua.exe",
         "to": "cua/cpx-cua.exe"
       },

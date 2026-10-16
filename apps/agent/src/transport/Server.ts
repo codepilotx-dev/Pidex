@@ -40,7 +40,6 @@ import type { PetService } from '../pet/PetService'
 import type { ReleaseNotesService } from '../release-notes/ReleaseNotesService'
 import type { SkillManagementService } from '../prompt/SkillManagementService'
 import type { PluginManagementService } from '../plugin/PluginManagementService'
-import type { MiniMaxCliIntegrationService } from '../integration/minimax-cli/MiniMaxCliIntegrationService'
 import type { McpRuntimeService } from '../mcp/McpRuntimeService'
 import type { TaskSuggestionService } from '../suggestion/TaskSuggestionService'
 import type { ConfigService } from '../config/ConfigService'
@@ -101,7 +100,6 @@ export interface TransportDependencies {
   releaseNotes: ReleaseNotesService
   skills: SkillManagementService
   plugins: PluginManagementService
-  minimaxCli: MiniMaxCliIntegrationService
   mcp: McpRuntimeService
   suggestions: TaskSuggestionService
   logger: AgentLogger
@@ -494,7 +492,6 @@ export const createApp = (dependencies: TransportDependencies) => {
     releaseNotes,
     skills,
     plugins,
-    minimaxCli,
     suggestions,
     logger,
   } = dependencies
@@ -531,7 +528,6 @@ export const createApp = (dependencies: TransportDependencies) => {
     releaseNotes,
     skills,
     plugins,
-    minimaxCli,
     suggestions,
     usage: dependencies.usage,
     mcp: dependencies.mcp,

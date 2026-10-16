@@ -90,13 +90,6 @@ export function shellRuntimeDependencies(command: string): ManagedToolID[] {
   return [...dependencies]
 }
 
-/** 仅在命令片段的首项识别官方 MiniMax CLI，避免匹配引号或普通参数文本。 */
-export function shellUsesMiniMaxCli(command: string): boolean {
-  return shellCommandSegments(command).some(
-    (segment) => segment.executable === 'mmx' && !segment.executableIsPath,
-  )
-}
-
 export interface ToolExecutionContext {
   subagentLifecycle?: (name: string, input: Record<string, unknown>) => Promise<unknown>
   threadID: string
@@ -197,7 +190,6 @@ export interface ToolExecutorOptions {
   runHost?: typeof runHostCommand
   resolveTooling?: ToolingResolver
   resolveToolingEnvironment?: ToolingEnvironmentResolver
-  resolveMiniMaxCliPathEntries?: () => Promise<readonly string[]>
   resolveShellSecurityLevel?: () => ShellSecurityLevel
   runToolProcess?: ToolProcessRunner
   fileSaved?: (input: { workspaceRoot: string; filePath: string; content: string }) => Promise<void>
@@ -1708,10 +1700,7 @@ export class ToolExecutor {
         )
       }
     }
-    const miniMaxCliPathEntries = shellUsesMiniMaxCli(command)
-      ? ((await this.options?.resolveMiniMaxCliPathEntries?.()) ?? [])
-      : []
-    const env = toolingPathOverride([...environment.pathEntries, ...miniMaxCliPathEntries])
+    const env = toolingPathOverride(environment.pathEntries)
     if (process.platform === 'win32' && shellTool === 'Bash') {
       const resolution = await (this.options?.resolveTooling ?? resolveManagedTool)('git-bash', {
         signal,
