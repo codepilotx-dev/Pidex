@@ -27,7 +27,7 @@ export function CopyButton({
         aria-label={copied ? `${ariaLabel}：已复制` : ariaLabel}
         className={className}
         color="ghostSecondary"
-        size="toolbar"
+        size="xs"
         title={copied ? '已复制' : ariaLabel}
         onClick={(event) => {
           event.stopPropagation()

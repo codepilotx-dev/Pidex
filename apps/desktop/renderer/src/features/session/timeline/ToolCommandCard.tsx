@@ -1,7 +1,7 @@
 import React from 'react'
 import { Check, CircleAlert, CircleStop, LoaderCircle, WrapText } from 'lucide-react'
 import type { Item } from '@pidex/shared/thread'
-import { APP_ICON_SIZES, APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { useScrollEdgeState } from '../../../hooks/UseScrollEdgeState.js'
 import { useCodeWrapPreference } from '../../syntax/WrapPreference.js'
 import { CopyButton } from './CopyButton.js'
@@ -169,14 +169,14 @@ export function ToolCommandCard({
         </div>
         <div className="canonical-command-card__actions">
           <button
-            className="md-code-wrap tw:inline-flex tw:size-7 tw:items-center tw:justify-center tw:rounded-control tw:border-0 tw:text-app-text-soft tw:cursor-pointer tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent"
+            className="md-code-wrap tw:inline-flex tw:size-6 tw:items-center tw:justify-center tw:rounded-control tw:border-0 tw:text-app-text-soft tw:cursor-pointer tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent"
             type="button"
             aria-label="输出自动换行"
             title="输出自动换行"
             aria-pressed={wrapped}
             onClick={() => setWrapped(!wrapped)}
           >
-            <WrapText size={APP_ICON_SIZE} aria-hidden="true" />
+            <WrapText size={APP_ICON_SIZES.sm} aria-hidden="true" />
           </button>
           {output !== null ? <CopyButton ariaLabel="复制返回结果" text={output} /> : null}
         </div>

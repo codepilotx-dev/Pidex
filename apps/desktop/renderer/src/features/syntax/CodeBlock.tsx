@@ -3,7 +3,7 @@ import React, { useContext, useEffect, useRef, useState } from 'react'
 import { Check, Copy, Pencil, WrapText } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
 
-import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import { cx } from '../../utils/Cx.js'
 import { desktopClipboard } from '../../services/desktop-client/index.js'
 import { DesktopThemeContext } from '../theme/ThemeContext.js'
@@ -258,21 +258,25 @@ export function CodeBlock({
       <span className="md-code-actions tw:flex tw:items-center">
         {showWrapControl ? (
           <button
-            className="md-code-wrap tw:inline-flex tw:size-7 tw:items-center tw:justify-center tw:rounded-control tw:border-0 tw:text-app-text-soft tw:cursor-pointer tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent"
+            className="md-code-wrap tw:inline-flex tw:size-6 tw:items-center tw:justify-center tw:rounded-control tw:border-0 tw:text-app-text-soft tw:cursor-pointer tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent"
             type="button"
             aria-label="代码自动换行"
             title="代码自动换行"
             aria-pressed={wrapped}
             onClick={() => setWrapPreference(!wrapPreference)}
           >
-            <WrapText aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <WrapText
+              aria-hidden="true"
+              size={APP_ICON_SIZES.sm}
+              strokeWidth={APP_ICON_STROKE_WIDTH}
+            />
           </button>
         ) : null}
         {onChangeCode && !isEditingCode ? (
           <Button
             isIconOnly
             color="ghostSecondary"
-            size="toolbar"
+            size="xs"
             title="编辑代码"
             type="button"
             onClick={() => {
@@ -280,7 +284,11 @@ export function CodeBlock({
               setIsEditingCode(true)
             }}
           >
-            <Pencil aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <Pencil
+              aria-hidden="true"
+              size={APP_ICON_SIZES.sm}
+              strokeWidth={APP_ICON_STROKE_WIDTH}
+            />
           </Button>
         ) : null}
         <Button
@@ -288,19 +296,23 @@ export function CodeBlock({
           className={cx(
             'md-code-action md-code-copy',
             copied && 'is-copied',
-            'tw:inline-flex tw:size-7 tw:items-center tw:justify-center tw:text-app-text-soft tw:transition-colors tw:duration-[var(--cpx-sys-motion-exit)] tw:hover:bg-app-raised tw:hover:text-app-text tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent',
+            'tw:inline-flex tw:size-6 tw:items-center tw:justify-center tw:text-app-text-soft tw:transition-colors tw:duration-[var(--cpx-sys-motion-exit)] tw:hover:bg-app-raised tw:hover:text-app-text tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent',
           )}
           color="ghostSecondary"
-          size="toolbar"
+          size="xs"
           aria-label={copied ? '已复制代码' : copyLabel}
           title={copied ? '已复制代码' : copyLabel}
           type="button"
           onClick={() => void handleCopy()}
         >
           {copied ? (
-            <Check aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <Check
+              aria-hidden="true"
+              size={APP_ICON_SIZES.sm}
+              strokeWidth={APP_ICON_STROKE_WIDTH}
+            />
           ) : (
-            <Copy aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <Copy aria-hidden="true" size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
           )}
         </Button>
       </span>

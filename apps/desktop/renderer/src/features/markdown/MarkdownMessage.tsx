@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useRef } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
 import type { Token, Tokens } from 'marked'
 import {
   AlertCircle,
@@ -12,10 +13,13 @@ import {
   FolderOpen,
   Info,
   Lightbulb,
+  Maximize2,
+  X,
 } from 'lucide-react'
 import type { DesktopExternalOpenTarget } from '../../../shared/Types.js'
 import { AppContextMenu, type AppContextMenuAction } from '../../components/ui/AppContextMenu.js'
 import { Button } from '../../components/ui/Button.js'
+import { useDialogFocusRestore } from '../../components/ui/UseDialogFocusRestore.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import { OpenTargetIcon } from '../../components/ui/OpenTargetIcon.js'
 import { desktopClient, desktopClipboard } from '../../services/desktop-client/index.js'
@@ -662,7 +666,24 @@ function MarkdownTable({
 }): React.ReactNode {
   const [copied, setCopied] = React.useState(false)
   const [downloadStatus, setDownloadStatus] = React.useState('')
+  const [expanded, setExpanded] = React.useState(false)
+  const [overflowing, setOverflowing] = React.useState(false)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const tableRef = useRef<HTMLTableElement | null>(null)
+  const { onCloseAutoFocus } = useDialogFocusRestore(expanded)
   const html = tableToHtml(table)
+
+  React.useEffect(() => {
+    const scroll = scrollRef.current
+    const content = tableRef.current
+    if (!scroll || !content) return
+    const measure = (): void => setOverflowing(scroll.scrollWidth > scroll.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(scroll)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [source])
 
   async function downloadTable(): Promise<void> {
     try {
@@ -683,14 +704,37 @@ function MarkdownTable({
     }
   }
 
+  const renderContent = (preview: boolean): React.ReactNode => (
+    <table ref={preview ? undefined : tableRef}>
+      <thead>
+        <tr>
+          {table.header.map((cell, index) =>
+            renderTableCell(cell, context, `table-head-${index}`, true),
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {table.rows.map((row, rowIndex) => (
+          <tr key={`table-row-${rowIndex}`}>
+            {row.map((cell, cellIndex) =>
+              renderTableCell(cell, context, `table-cell-${rowIndex}-${cellIndex}`, false),
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+
   return (
-    <figure className={cx('md-table-block', context.allowWideBlocks && 'md-wide-block')}>
-      <div className="md-table-actions">
+    <figure
+      className={cx('md-table-block tw:group/table', context.allowWideBlocks && 'md-wide-block')}
+    >
+      <div className="md-table-actions tw:opacity-0 tw:transition-opacity tw:group-hover/table:opacity-100 tw:group-focus-within/table:opacity-100 tw:pointer-coarse:opacity-100">
         {context.presentation === 'conversation' ? (
           <Button
             isIconOnly
             variant="text"
-            size="toolbar"
+            size={context.presentation === 'conversation' ? 'xs' : 'toolbar'}
             aria-label="下载 CSV"
             title="下载 CSV"
             type="button"
@@ -701,9 +745,13 @@ function MarkdownTable({
         ) : null}
         <Button
           isIconOnly
-          className={cx('md-table-copy', copied && 'is-copied')}
+          className={cx(
+            'md-table-copy',
+            context.presentation === 'conversation' && 'tw:size-6',
+            copied && 'is-copied',
+          )}
           variant={context.presentation === 'conversation' ? 'text' : 'ghost'}
-          size="toolbar"
+          size={context.presentation === 'conversation' ? 'xs' : 'toolbar'}
           title={copied ? '已复制' : '复制表格'}
           type="button"
           onClick={() => void copyTable()}
@@ -714,27 +762,57 @@ function MarkdownTable({
             <Copy aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           )}
         </Button>
+        {context.allowWideBlocks || overflowing ? (
+          <Button
+            isIconOnly
+            variant="text"
+            size="xs"
+            aria-label="展开表格"
+            title="展开表格"
+            aria-haspopup="dialog"
+            aria-expanded={expanded}
+            onClick={() => setExpanded(true)}
+          >
+            <Maximize2 aria-hidden="true" size={APP_ICON_SIZE} />
+          </Button>
+        ) : null}
       </div>
-      <div className="md-table-scroll" tabIndex={0}>
-        <table>
-          <thead>
-            <tr>
-              {table.header.map((cell, index) =>
-                renderTableCell(cell, context, `table-head-${index}`, true),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {table.rows.map((row, rowIndex) => (
-              <tr key={`table-row-${rowIndex}`}>
-                {row.map((cell, cellIndex) =>
-                  renderTableCell(cell, context, `table-cell-${rowIndex}-${cellIndex}`, false),
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="md-table-scroll" ref={scrollRef} tabIndex={0}>
+        {renderContent(false)}
       </div>
+      <Dialog.Root open={expanded} onOpenChange={setExpanded}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="ui-dialog-backdrop tw:fixed tw:inset-0 tw:z-modal" />
+          <Dialog.Content
+            className="ui-dialog-surface ui-dialog-surface--centered tw:z-modal tw:flex tw:w-[calc(100vw-4rem)] tw:max-h-[calc(100vh-4rem)] tw:min-h-0 tw:flex-col tw:gap-3 tw:p-4 tw:text-app-text tw:outline-none"
+            aria-describedby={undefined}
+            onCloseAutoFocus={onCloseAutoFocus}
+          >
+            <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
+              <Dialog.Title className="tw:m-0 tw:type-row-title">表格预览</Dialog.Title>
+              <Dialog.Close asChild>
+                <Button
+                  isIconOnly
+                  color="ghostSecondary"
+                  size="xs"
+                  aria-label="关闭表格预览"
+                  title="关闭表格预览"
+                >
+                  <X aria-hidden="true" size={APP_ICON_SIZE} />
+                </Button>
+              </Dialog.Close>
+            </header>
+            <div
+              className="md-body md-table-block tw:min-h-0 tw:overflow-auto"
+              role="region"
+              aria-label="可滚动表格"
+              tabIndex={0}
+            >
+              {renderContent(true)}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       {downloadStatus ? (
         <p className="md-table-status" role="status">
           {downloadStatus}
