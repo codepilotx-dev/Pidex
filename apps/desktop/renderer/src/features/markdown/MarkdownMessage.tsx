@@ -1204,6 +1204,20 @@ function openFile(context: RenderContext, path: string): void {
   void openPathWithPreferredExternalTarget(target).catch(() => undefined)
 }
 
+/**
+ * 文件引用的长路径在分隔符后给出换行机会，避免正文把文件名从中间硬断行（如 `CanonicalThreadVie` / `w.tsx`）。
+ * 单个路径段仍超出可用宽度时，由 `overflow-wrap: anywhere` 作为最后手段兜底。
+ */
+function renderFileReferenceLabel(children: React.ReactNode): React.ReactNode {
+  if (typeof children !== 'string') return children
+  const segments = children.split(/([/\\])/u)
+  if (segments.length < 2) return children
+  return segments.flatMap((segment, index) =>
+    // 带捕获组切分后，奇数下标必定是路径分隔符，其后才是可换行位置。
+    index % 2 === 1 ? [segment, <wbr key={`path-break-${index}`} />] : [segment],
+  )
+}
+
 function FileReferenceButton({
   children,
   className,
@@ -1382,7 +1396,7 @@ function FileReferenceButton({
                 strokeWidth={APP_ICON_STROKE_WIDTH}
               />
             </span>
-            <span className="md-file-reference__label">{children}</span>
+            <span className="md-file-reference__label">{renderFileReferenceLabel(children)}</span>
           </span>
         </button>
       }

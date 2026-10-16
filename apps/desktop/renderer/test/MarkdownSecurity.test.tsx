@@ -8,6 +8,9 @@ const actions = {
   openFile: () => undefined,
 }
 
+// 文件引用会在路径分隔符后插入 <wbr> 换行机会，正文文本断言先去掉该标签再比对。
+const withoutBreakOpportunities = (html: string): string => html.replaceAll('<wbr/>', '')
+
 describe('basic Markdown HTML safety', () => {
   test('keeps only the basic formatting allowlist and strips attributes', () => {
     const html = renderToStaticMarkup(
@@ -93,8 +96,18 @@ describe('Markdown file references', () => {
     expect(html).toContain('<code>/new</code>')
     expect(html).toContain('<code>/settings/models</code>')
     expect(html.match(/data-file-reference=""/gu)).toHaveLength(2)
-    expect(html).toContain('../../components/ui/Tooltip.js')
-    expect(html).toContain('src/main.ts:12')
+    expect(withoutBreakOpportunities(html)).toContain('../../components/ui/Tooltip.js')
+    expect(withoutBreakOpportunities(html)).toContain('src/main.ts:12')
+  })
+
+  test('inserts line break opportunities after path separators so file names stay intact', () => {
+    const path = 'apps/desktop/renderer/src/features/session/timeline/CanonicalThreadView.tsx'
+    const html = renderToStaticMarkup(<MarkdownMessage cwd="C:\\repo" text={`\`${path}\``} />)
+
+    expect(html).toContain(
+      'apps/<wbr/>desktop/<wbr/>renderer/<wbr/>src/<wbr/>features/<wbr/>session/<wbr/>timeline/<wbr/>CanonicalThreadView.tsx',
+    )
+    expect(withoutBreakOpportunities(html)).toContain(path)
   })
 
   test('preserves extensionless absolute file references in Unix workspaces', () => {

@@ -196,6 +196,9 @@
     font-weight: var(--cpx-sys-font-weight-medium);
     text-decoration: none;
     cursor: pointer;
+
+    /* 按钮内容默认居中，会让换行后的续行居中漂移；文件引用应跟随正文对齐。 */
+    text-align: inherit;
     overflow-wrap: anywhere;
   }
 
