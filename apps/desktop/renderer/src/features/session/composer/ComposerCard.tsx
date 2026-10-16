@@ -34,6 +34,7 @@ import {
   MessageSquarePlus,
   MessagesSquare,
   Paperclip,
+  Plug,
   Plus,
   ShieldAlert,
   ShieldCheck,
@@ -875,7 +876,7 @@ export function ComposerCard({
               plugin.id === 'computer-use' ? (
                 <MonitorSmartphone size={APP_ICON_SIZE} />
               ) : (
-                <Box size={APP_ICON_SIZE} />
+                <Plug size={APP_ICON_SIZE} />
               ),
             matchText: `${plugin.name} ${plugin.id} ${plugin.description}`,
             onSelect: () => insertReference('plugin', plugin.name, `plugin://${plugin.id}`),

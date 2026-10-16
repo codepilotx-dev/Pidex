@@ -1,7 +1,6 @@
 import type { ProtocolCapability } from '@pidex/agent-protocol'
 import {
   Archive,
-  Blocks,
   Brain,
   CreditCard,
   GitBranch,
@@ -9,6 +8,7 @@ import {
   Mic,
   MonitorSmartphone,
   Package,
+  Plug,
   Palette,
   Settings,
   Sliders,
@@ -236,7 +236,7 @@ export const SETTINGS_GROUPS = [
         routeId: 'plugins',
         label: '插件',
         description: '管理插件、技能和 MCP',
-        icon: Blocks,
+        icon: Plug,
         rows: [
           row('插件', '查看 Pidex 已内置和可管理的扩展能力'),
           row('MCP', '查看、启停和配置 MCP 服务器'),

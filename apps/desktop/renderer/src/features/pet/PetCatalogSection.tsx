@@ -78,13 +78,10 @@ export function PetCatalogSection({
     [allCards, query, version],
   )
 
-  const categoryGroups = useMemo(
-    () => groupPetsByCategory(filteredCards),
-    [filteredCards],
-  )
+  const categoryGroups = useMemo(() => groupPetsByCategory(filteredCards), [filteredCards])
 
   const activeCategoryGroup = useMemo(
-    () => (activeCategory ? categoryGroups.find((g) => g.id === activeCategory) ?? null : null),
+    () => (activeCategory ? (categoryGroups.find((g) => g.id === activeCategory) ?? null) : null),
     [activeCategory, categoryGroups],
   )
 
@@ -170,7 +167,10 @@ export function PetCatalogSection({
 
   return (
     <>
-      <section aria-label="社区宠物目录" className="pet-catalog-browser tw:flex tw:min-w-0 tw:w-full tw:flex-col">
+      <section
+        aria-label="社区宠物目录"
+        className="pet-catalog-browser tw:flex tw:min-w-0 tw:w-full tw:flex-col"
+      >
         {activeCategory ? (
           <div className="pet-catalog-drilldown-header tw:mb-4 tw:flex tw:items-center tw:justify-between tw:gap-3">
             <div className="tw:flex tw:items-center tw:gap-2">
@@ -185,15 +185,6 @@ export function PetCatalogSection({
               ) : null}
             </div>
           </div>
-        ) : null}
-
-        {catalog.cacheState === 'stale' ? (
-          <p
-            className="pet-catalog-status tw:m-0 tw:mb-4 tw:rounded-md tw:bg-app-hover tw:px-3 tw:py-2 tw:type-body-sm tw:text-app-text-meta"
-            role="status"
-          >
-            当前显示上次成功获取的目录，联网后可手动刷新。
-          </p>
         ) : null}
 
         {showWakeAction && !overlayEnabled ? (
@@ -318,9 +309,7 @@ export function PetCatalogSection({
                             onClick={() => navigateToCategory(group.id)}
                             type="button"
                           >
-                            <h2 className="tw:m-0 tw:type-title-sm">
-                              {group.label}
-                            </h2>
+                            <h2 className="tw:m-0 tw:type-title-sm">{group.label}</h2>
                             <ChevronRight
                               aria-hidden="true"
                               className="tw:text-app-text-meta tw:transition-transform tw:group-hover:translate-x-0.5"

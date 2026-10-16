@@ -9,6 +9,9 @@ type Option<T extends string> = {
   disabled?: boolean
 }
 
+export type SegmentedControlSize = 'xs' | 'sm' | 'md' | 'lg'
+export type SegmentedControlShape = 'default' | 'pill'
+
 type Props<T extends string> = {
   value: T
   options: readonly Option<T>[]
@@ -18,8 +21,39 @@ type Props<T extends string> = {
   overflowMode?: 'auto' | 'fit'
   semantics?: 'group' | 'tabs'
   variant?: 'default' | 'inset'
+  size?: SegmentedControlSize
+  shape?: SegmentedControlShape
   getTabId?: (value: T) => string
   getPanelId?: (value: T) => string
+}
+
+const SIZE_BOX_CLASS: Record<SegmentedControlSize, string> = {
+  xs: 'tw:h-6 tw:min-h-6 tw:px-2 tw:py-0.5',
+  sm: 'tw:h-[30px] tw:min-h-[30px] tw:px-2.5 tw:py-1',
+  md: 'tw:h-9 tw:min-h-9 tw:px-3.5 tw:py-1.5',
+  lg: 'tw:h-[42px] tw:min-h-[42px] tw:px-4.5 tw:py-2',
+}
+
+const RADIUS_CLASSES: Record<SegmentedControlShape, Record<SegmentedControlSize, string>> = {
+  default: {
+    xs: 'tw:rounded-item',
+    sm: 'tw:rounded-sm',
+    md: 'tw:rounded-md',
+    lg: 'tw:rounded-md',
+  },
+  pill: {
+    xs: 'tw:rounded-full',
+    sm: 'tw:rounded-full',
+    md: 'tw:rounded-full',
+    lg: 'tw:rounded-full',
+  },
+}
+
+const ROOT_GAP_CLASS: Record<SegmentedControlSize, string> = {
+  xs: 'tw:gap-0.5',
+  sm: 'tw:gap-1',
+  md: 'tw:gap-1.5',
+  lg: 'tw:gap-2',
 }
 
 export function SegmentedControl<T extends string>({
@@ -31,11 +65,15 @@ export function SegmentedControl<T extends string>({
   overflowMode = 'auto',
   semantics = 'group',
   variant = 'default',
+  size = 'xs',
+  shape = 'default',
   getTabId,
   getPanelId,
 }: Props<T>): React.ReactNode {
   const itemRefs = useRef<Array<HTMLButtonElement | null>>([])
   const isTabs = semantics === 'tabs'
+  const resolvedSize = size ?? 'xs'
+  const resolvedShape = shape ?? 'default'
 
   const rootClassName = cx(
     'segmented-control',
@@ -43,10 +81,16 @@ export function SegmentedControl<T extends string>({
     overflowMode === 'auto' ? 'tw:min-w-0' : 'tw:w-max',
     overflowMode === 'auto' ? 'tw:max-w-full' : 'tw:max-w-none',
     'tw:items-center',
-    'tw:gap-0.5',
+    ROOT_GAP_CLASS[resolvedSize],
     overflowMode === 'auto' ? 'tw:overflow-x-auto' : 'tw:overflow-visible',
     overflowMode === 'auto' ? 'tw:overflow-y-hidden' : false,
-    variant === 'inset' ? 'tw:rounded-control tw:bg-app-underlay tw:p-0.5' : false,
+    variant === 'inset'
+      ? cx(
+          'tw:bg-app-underlay',
+          resolvedShape === 'pill' ? 'tw:rounded-full' : 'tw:rounded-control',
+          resolvedSize === 'lg' ? 'tw:p-1' : 'tw:p-0.5',
+        )
+      : false,
     className,
   )
   /*
@@ -55,7 +99,9 @@ export function SegmentedControl<T extends string>({
    * inset 变体相反（选中态压过 hover），用普通 hover variant 即可。
    */
   const itemClassName = cx(
-    'segmented-control-item tw:inline-flex tw:min-h-6 tw:shrink-0 tw:cursor-pointer tw:items-center tw:rounded-item tw:border tw:border-transparent tw:bg-transparent tw:px-2 tw:py-0.5 tw:text-app-text-meta tw:type-control',
+    'segmented-control-item tw:inline-flex tw:shrink-0 tw:cursor-pointer tw:items-center tw:justify-center tw:border tw:border-transparent tw:bg-transparent tw:text-app-text-meta tw:type-control',
+    SIZE_BOX_CLASS[resolvedSize],
+    RADIUS_CLASSES[resolvedShape][resolvedSize],
     'tw:transition-[background-color,border-color,box-shadow,color] tw:duration-feedback tw:ease-standard',
     'tw:data-[state=on]:text-app-text tw:aria-pressed:text-app-text tw:aria-selected:text-app-text',
     variant === 'inset'
@@ -74,6 +120,8 @@ export function SegmentedControl<T extends string>({
       <ToggleGroup.Root
         aria-label={ariaLabel}
         className={rootClassName}
+        data-shape={resolvedShape}
+        data-size={resolvedSize}
         data-variant={variant}
         onValueChange={(nextValue) => {
           // 当前组件始终要求有一个选中值；点击已选项时 Radix 会传空字符串，忽略即可。
@@ -112,7 +160,14 @@ export function SegmentedControl<T extends string>({
   }
 
   return (
-    <div aria-label={ariaLabel} className={rootClassName} data-variant={variant} role="tablist">
+    <div
+      aria-label={ariaLabel}
+      className={rootClassName}
+      data-shape={resolvedShape}
+      data-size={resolvedSize}
+      data-variant={variant}
+      role="tablist"
+    >
       {options.map((option, index) => {
         const selected = option.value === value
         return (

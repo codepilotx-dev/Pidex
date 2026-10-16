@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type React from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { PetCatalogResult, PetDescriptor } from '@pidex/agent-protocol'
@@ -21,6 +21,8 @@ const EMPTY_CATALOG: PetCatalogResult = {
   cacheState: 'unavailable',
 }
 
+const CATALOG_REFRESH_INTERVAL_MS = 5 * 60 * 60 * 1_000
+
 export function PetCatalogPage(): React.ReactNode {
   const navigate = useNavigate()
   const { t } = useLocale()
@@ -33,23 +35,22 @@ export function PetCatalogPage(): React.ReactNode {
 
   const { busy, pets, refreshPets, selectPet, setEnabled, settings } = usePetCatalogController()
 
-  const loadCatalog = async (refresh = false): Promise<void> => {
+  const loadCatalog = useCallback(async (refresh = false): Promise<void> => {
     setLoading(true)
     try {
       setCatalog(await desktopClient.listPetCatalog(refresh))
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error))
-      if (!catalog.pets.length) setCatalog(EMPTY_CATALOG)
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     void loadCatalog()
-    // The catalog loads once when the standalone page mounts.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    const timer = window.setInterval(() => void loadCatalog(true), CATALOG_REFRESH_INTERVAL_MS)
+    return () => window.clearInterval(timer)
+  }, [loadCatalog])
 
   const installAndSelect = async (installed: PetDescriptor): Promise<void> => {
     await refreshPets()
@@ -66,11 +67,7 @@ export function PetCatalogPage(): React.ReactNode {
         onClick={() => void loadCatalog(true)}
         title={t('刷新社区宠物目录')}
       >
-        <RefreshCw
-          aria-hidden="true"
-          size={APP_ICON_SIZE}
-          strokeWidth={APP_ICON_STROKE_WIDTH}
-        />
+        <RefreshCw aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       </Button>
       <Button
         isIconOnly
@@ -78,11 +75,7 @@ export function PetCatalogPage(): React.ReactNode {
         onClick={() => navigate('/settings/pets')}
         title={t('宠物设置')}
       >
-        <Settings
-          aria-hidden="true"
-          size={APP_ICON_SIZE}
-          strokeWidth={APP_ICON_STROKE_WIDTH}
-        />
+        <Settings aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       </Button>
     </div>
   )

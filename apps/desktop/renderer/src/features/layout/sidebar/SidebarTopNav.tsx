@@ -5,12 +5,12 @@ import type { ProtocolCapability } from '@pidex/agent-protocol'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Bell,
-  Blocks,
   BrainCircuit,
   Clock3,
   Egg,
   FolderKanban,
   MessagesSquare,
+  Plug,
   Search,
   SquarePen,
   X,
@@ -101,7 +101,7 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
   {
     view: 'plugins',
     label: '插件',
-    icon: <Blocks size={APP_ICON_SIZE} />,
+    icon: <Plug size={APP_ICON_SIZE} />,
     path: '/plugins',
     availability: {
       kind: 'any-capability',
