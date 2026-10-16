@@ -12,7 +12,8 @@ import {
 } from 'lucide-react'
 import type { Item, ToolActivityTarget } from '@pidex/shared/thread'
 
-import { useConversationItemContext } from './ConversationItemContext.js'
+import { absoluteFilePath, fileDisplayName } from './FileMutationPresentation.js'
+import { useWorkspacePath, useConversationItemContext } from './ConversationItemContext.js'
 
 type ToolItem = Extract<Item, { type: 'tool' }>
 
@@ -418,7 +419,7 @@ export function ToolActivityHeader({
 }
 
 function ToolActivityFileLink({ path, text }: { path: string; text: string }): React.ReactNode {
-  const { onOpenFileReference } = useConversationItemContext()
+  const { onOpenFileReference, workspacePath } = useConversationItemContext()
   return (
     <button
       aria-label={`打开文件 ${text}`}
@@ -428,10 +429,10 @@ function ToolActivityFileLink({ path, text }: { path: string; text: string }): R
         event.stopPropagation()
         onOpenFileReference({ path }, { preview: true })
       }}
-      title={text}
+      title={absoluteFilePath(path, workspacePath)}
       type="button"
     >
-      {text}
+      {fileDisplayName(text)}
     </button>
   )
 }
@@ -441,6 +442,7 @@ export function ToolActivityLabel({
 }: {
   summary: ToolSemanticSummary
 }): React.ReactNode {
+  const workspacePath = useWorkspacePath()
   return (
     <span className="cpx-agent-activity__label">
       {value.segments.map((segment, index) => {
@@ -462,8 +464,9 @@ export function ToolActivityLabel({
                       : undefined
             }
             key={key}
+            title={segment.kind === 'file' ? absoluteFilePath(segment.text, workspacePath) : undefined}
           >
-            {segment.text}
+            {segment.kind === 'file' ? fileDisplayName(segment.text) : segment.text}
           </span>
         )
       })}

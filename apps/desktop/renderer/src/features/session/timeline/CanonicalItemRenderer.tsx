@@ -63,7 +63,7 @@ import { useLiveItemTail } from '../state/UseLiveItemTail.js'
 import { countStreamingItemRender } from '../state/StreamingPerfCounters.js'
 import { WorkflowPlanCard, type OpenPlanInDockRequest } from '../workflow/WorkflowPlanCard.js'
 import { AttachmentFilePill, AttachmentImageTile } from '../attachments/AttachmentRowPrimitives.js'
-import { UNKNOWN_FILE_PATH, fileMutationLabel, fileMutationTitle, type FileChangeDisplay } from './FileMutationPresentation.js'
+import { UNKNOWN_FILE_PATH, fileDisplayName, fileMutationLabel, fileMutationTitle, type FileChangeDisplay } from './FileMutationPresentation.js'
 import { useToolArtifactImageSource } from './UseToolArtifactImageSource.js'
 import {
   buildToolSemanticSummary,
@@ -2179,14 +2179,15 @@ function PatchFileButton({
   file: FileChangeDisplay
   onOpenReview?: CanonicalItemRendererProps['onOpenPatchReview']
 }): React.ReactNode {
+  const workspacePath = useWorkspacePath()
   return (
     <button
       className="canonical-patch-card__file"
       onClick={() => onOpenReview?.(file.path)}
-      title={file.path}
+      title={fileMutationTitle(file, workspacePath)}
       type="button"
     >
-      <span>{file.path}</span>
+      <span>{fileDisplayName(file.path)}</span>
       {file.additions !== null ? (
         <small className="canonical-diff-add">+{file.additions}</small>
       ) : null}
