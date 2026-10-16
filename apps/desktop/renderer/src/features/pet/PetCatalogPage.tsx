@@ -60,20 +60,29 @@ export function PetCatalogPage(): React.ReactNode {
   const headerActions = (
     <div className="pet-catalog-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
       <Button
-        isIconOnly
         aria-busy={loading}
-        color="secondary"
         disabled={loading}
+        isIconOnly
         onClick={() => void loadCatalog(true)}
+        shape="pill"
+        size="md"
         title={t('刷新社区宠物目录')}
+        variant="ghost"
       >
-        <RefreshCw aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+        <RefreshCw
+          aria-hidden="true"
+          className={loading ? 'tw:animate-spin' : undefined}
+          size={APP_ICON_SIZE}
+          strokeWidth={APP_ICON_STROKE_WIDTH}
+        />
       </Button>
       <Button
         isIconOnly
-        color="secondary"
         onClick={() => navigate('/settings/pets')}
+        shape="pill"
+        size="md"
         title={t('宠物设置')}
+        variant="ghost"
       >
         <Settings aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       </Button>
@@ -87,7 +96,10 @@ export function PetCatalogPage(): React.ReactNode {
           aria-label="搜索社区宠物"
           onChange={setQuery}
           placeholder="搜索名称、作者或描述"
+          shape="pill"
+          size="md"
           value={query}
+          variant="outlined"
         />
       </div>
       <SettingsDropdown

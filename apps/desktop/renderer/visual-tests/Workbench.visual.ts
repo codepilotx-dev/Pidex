@@ -2091,7 +2091,8 @@ for (const mode of MODES) {
       maxHeight: '224px',
       padding: '0px',
     })
-    expect(surfaces?.items.maskImage).not.toBe('none')
+    // 处理过程列表限高内部滚动，但滚动条被隐藏，也不做遮罩渐隐。
+    expect(surfaces?.items.maskImage).toBe('none')
     expect(surfaces?.shell).toEqual({
       background: 'rgba(0, 0, 0, 0)',
       borderRadius: '0px',

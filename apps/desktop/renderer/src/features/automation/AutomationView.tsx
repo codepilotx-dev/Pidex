@@ -29,7 +29,7 @@ import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
-import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../components/ui/IconTokens.js'
+import { APP_ICON_SIZE, APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
@@ -441,10 +441,10 @@ function AutomationViewContent(): React.ReactNode {
       size="md"
       onOpenChange={setCreateMenuOpen}
       trigger={
-        <Button ref={createButtonRef} color="primary">
-          <Plus aria-hidden="true" size={APP_ICON_SIZE} />
+        <Button ref={createButtonRef} color="primary" shape="pill" size="md">
+          <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           <span>创建</span>
-          <ChevronDown aria-hidden="true" size={APP_ICON_SIZES.sm} />
+          <ChevronDown aria-hidden="true" size={APP_ICON_SIZE} />
         </Button>
       }
     >
@@ -472,12 +472,13 @@ function AutomationViewContent(): React.ReactNode {
             : '规划任务、安排执行，并在同一日历查看运行结果。'
         }
         bodyClassName="automation-view tw:min-h-120 tw:max-[48rem]:min-h-128 tw:text-app-text"
-        expandableSearch
         search={
           <SearchInput
             variant="outlined"
             aria-label={tab === 'runs' ? '搜索执行记录' : '搜索已安排任务'}
             placeholder={tab === 'runs' ? '搜索执行记录' : '搜索已安排任务'}
+            shape="pill"
+            size="md"
             value={controller.query}
             onChange={controller.setQuery}
           />

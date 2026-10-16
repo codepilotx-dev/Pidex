@@ -130,4 +130,128 @@ describe('PrimaryPageLayout', () => {
       'tw:mx-auto tw:min-w-0 tw:w-[min(var(--page-content-max-width),100%)] tw:pb-8',
     )
   })
+
+  test('applies header--with-search and title-row wrapper when permanent search is configured', () => {
+    const html = renderToStaticMarkup(
+      <PrimaryPageLayout
+        actions={<button type="button">操作</button>}
+        description="页面说明"
+        search={<SearchInput aria-label="搜索" onChange={() => undefined} placeholder="搜索" value="" />}
+        title="页面标题"
+      >
+        内容
+      </PrimaryPageLayout>,
+    )
+
+    expect(html).toContain('primary-page-layout tw:@container')
+    expect(html).toContain('primary-page-layout__header--with-search')
+    expect(html).toContain('primary-page-layout__title-row tw:flex tw:min-h-9 tw:min-w-0 tw:items-center')
+    expect(html).toContain('primary-page-layout__actions tw:flex tw:min-h-9 tw:shrink-0 tw:flex-wrap tw:items-center')
+    expect(html).not.toContain('primary-page-layout__actions tw:flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2 tw:pt-1')
+    expect(html).toContain('primary-page-layout__search tw:mt-4 tw:w-full tw:min-w-0')
+  })
+
+  test('keeps title row 36px min-height without permanent search for baseline consistency', () => {
+    const html = renderToStaticMarkup(
+      <PrimaryPageLayout
+        description="页面说明"
+        title="页面标题"
+      >
+        内容
+      </PrimaryPageLayout>,
+    )
+
+    expect(html).not.toContain('primary-page-layout__header--with-search')
+    expect(html).toContain('primary-page-layout__title-row tw:flex tw:min-h-9 tw:min-w-0 tw:items-center')
+  })
+
+  test('supports permanent search without actions and omits actions container', () => {
+    const html = renderToStaticMarkup(
+      <PrimaryPageLayout
+        description="页面说明"
+        search={<SearchInput aria-label="搜索" onChange={() => undefined} placeholder="搜索" value="" />}
+        title="页面标题"
+      >
+        内容
+      </PrimaryPageLayout>,
+    )
+
+    expect(html).toContain('primary-page-layout__header--with-search')
+    expect(html).toContain('primary-page-layout__search')
+    expect(html).not.toContain('primary-page-layout__actions')
+  })
+
+  test('primary-page.css defines shared header--with-search rules without one-off plugin header hacks', () => {
+    const css = readFileSync(
+      new URL('../src/styles/features/primary-page.css', import.meta.url),
+      'utf8',
+    )
+
+    expect(css).toContain('.primary-page-layout__header--with-search')
+    expect(css).toContain('@container (min-width: 680px)')
+    expect(css).not.toContain('plugins-primary-header')
+    expect(css).not.toContain('@container plugins-page')
+  })
+
+  test('all primary pages align buttons and search inputs with plugin page standard while respecting constraints', () => {
+    const automationsSource = readFileSync(
+      new URL('../src/features/automation/AutomationView.tsx', import.meta.url),
+      'utf8',
+    )
+    const modelsSource = readFileSync(
+      new URL('../src/features/models/ModelCenterWorkbench.tsx', import.meta.url),
+      'utf8',
+    )
+    const petsSource = readFileSync(
+      new URL('../src/features/pet/PetCatalogPage.tsx', import.meta.url),
+      'utf8',
+    )
+    const workflowsSource = readFileSync(
+      new URL('../src/features/session-groups/SessionGroupsView.tsx', import.meta.url),
+      'utf8',
+    )
+    const projectsSource = readFileSync(
+      new URL('../src/features/settings/EnvironmentSettings.tsx', import.meta.url),
+      'utf8',
+    )
+    const pullRequestsSource = readFileSync(
+      new URL('../src/features/pull-requests/PullRequestsPlaceholder.tsx', import.meta.url),
+      'utf8',
+    )
+
+    // 1. None of the primary pages use expandableSearch anymore
+    expect(automationsSource).not.toContain('expandableSearch')
+    expect(modelsSource).not.toContain('expandableSearch')
+
+    // 2. All pages with search use permanent pill search: shape="pill", size="md", variant="outlined"
+    for (const source of [automationsSource, modelsSource, petsSource, workflowsSource, projectsSource]) {
+      expect(source).toContain('shape="pill"')
+      expect(source).toContain('size="md"')
+      expect(source).toContain('variant="outlined"')
+    }
+
+    // 3. Header action buttons use shape="pill" and size="md"
+    expect(automationsSource).toContain('color="primary" shape="pill" size="md"')
+    expect(modelsSource).toContain('variant="ghost"')
+    expect(modelsSource).toContain('isIconOnly')
+    expect(modelsSource).toContain('shape="pill"')
+    expect(modelsSource).toContain('size="md"')
+    expect(petsSource).toContain('variant="ghost"')
+    expect(petsSource).toContain('isIconOnly')
+    expect(petsSource).toContain('shape="pill"')
+    expect(petsSource).toContain('size="md"')
+    expect(workflowsSource).toContain('color="primary"')
+    expect(workflowsSource).toContain('shape="pill"')
+    expect(workflowsSource).toContain('size="md"')
+    expect(projectsSource).toContain('color="primary"')
+    expect(projectsSource).toContain('shape="pill"')
+    expect(projectsSource).toContain('size="md"')
+
+    // 4. Respect constraints: do not add search or refresh where there were none originally
+    expect(pullRequestsSource).not.toContain('search=')
+    expect(pullRequestsSource).not.toContain('RefreshCw')
+    expect(automationsSource).not.toContain('title="刷新')
+    expect(workflowsSource).not.toContain('title="刷新')
+    expect(projectsSource).not.toContain('title="刷新')
+  })
 })

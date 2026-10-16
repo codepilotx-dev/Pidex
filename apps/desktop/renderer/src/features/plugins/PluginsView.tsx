@@ -552,7 +552,6 @@ export function PluginsView(): React.ReactNode {
         <PrimaryPageLayout
           actions={headerActions}
           className="plugins-primary-page tw:@container/plugins-page"
-          headerClassName="plugins-primary-header"
           search={headerSearch}
           scrollContainerRef={scrollRegionRef}
           title={tab === 'plugins' ? '插件' : '技能'}

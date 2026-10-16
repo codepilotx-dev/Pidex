@@ -227,8 +227,14 @@ export function SessionGroupsView(): React.ReactNode {
   }
 
   const createWorkflowAction = (
-    <Button aria-label="新建工作组" color="primary" onClick={openCreateDialog}>
-      <Plus size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+    <Button
+      aria-label="新建工作组"
+      color="primary"
+      onClick={openCreateDialog}
+      shape="pill"
+      size="md"
+    >
+      <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       <span>新建工作组</span>
     </Button>
   )
@@ -461,7 +467,10 @@ export function SessionGroupsView(): React.ReactNode {
               aria-label="搜索工作组"
               onChange={setSearch}
               placeholder="搜索名称或说明…"
+              shape="pill"
+              size="md"
               value={search}
+              variant="outlined"
             />
           }
           title="工作组"

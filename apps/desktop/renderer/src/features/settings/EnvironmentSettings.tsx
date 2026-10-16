@@ -189,9 +189,15 @@ function EnvironmentList({
     return (
       <PrimaryPageLayout
         actions={
-          <Button color="primary" loading={adding} onClick={() => void addProject()}>
-            <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-            添加项目
+          <Button
+            color="primary"
+            loading={adding}
+            onClick={() => void addProject()}
+            shape="pill"
+            size="md"
+          >
+            <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <span>添加项目</span>
           </Button>
         }
         className="projects-primary-page"
@@ -201,7 +207,10 @@ function EnvironmentList({
             aria-label="搜索项目"
             onChange={setQuery}
             placeholder="搜索项目名称或路径…"
+            shape="pill"
+            size="md"
             value={query}
+            variant="outlined"
           />
         }
         title="项目"

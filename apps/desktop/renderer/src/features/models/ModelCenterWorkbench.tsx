@@ -494,19 +494,30 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     !showInitialSkeleton && !showingProviderDetail && !creatingCustomProvider ? (
       <div className="model-center-header-actions tw:inline-flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2">
         <Button
-          color="secondary"
+          aria-busy={refreshingProviderData}
           disabled={refreshingProviderData}
-          loading={refreshingProviderData}
+          isIconOnly
           onClick={() => void refreshProviderData()}
+          shape="pill"
+          size="md"
+          title="刷新供应商目录"
+          variant="ghost"
         >
-          {!refreshingProviderData ? <RefreshCw size={APP_ICON_SIZE} aria-hidden /> : null}
-          <span className="model-center-header-action-label tw:max-[479px]:hidden">刷新</span>
+          <RefreshCw
+            aria-hidden="true"
+            className={refreshingProviderData ? 'tw:animate-spin' : undefined}
+            size={APP_ICON_SIZE}
+            strokeWidth={APP_ICON_STROKE_WIDTH}
+          />
         </Button>
-        <Button color="primary" onClick={() => setSearchParams({ newProvider: '1' })}>
-          <Plus size={APP_ICON_SIZE} aria-hidden />
-          <span className="model-center-header-action-label tw:max-[479px]:hidden">
-            新增自定义 Provider
-          </span>
+        <Button
+          color="primary"
+          onClick={() => setSearchParams({ newProvider: '1' })}
+          shape="pill"
+          size="md"
+        >
+          <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+          <span>新增自定义 Provider</span>
         </Button>
       </div>
     ) : null
@@ -520,12 +531,13 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           headerClassName="settings-page-header"
           title="供应商市场"
           description="浏览模型供应商，连接后可在左侧管理凭据与模型。"
-          expandableSearch
           search={
             <SearchInput
               variant="outlined"
               aria-label="搜索供应商"
               placeholder="搜索供应商"
+              shape="pill"
+              size="md"
               value={providerQuery}
               onChange={setProviderQuery}
             />
