@@ -7,6 +7,7 @@ import { desktopClient } from '../../../services/desktop-client/index.js'
 import { environmentDomainClient } from '../../../services/desktop-client/EnvironmentDomainClient.js'
 import { Button } from '../../../components/ui/Button.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { notifyProjectCatalogChanged } from '../../projects/ProjectCatalogEvents.js'
 import { LocalEnvironmentSettings } from './LocalEnvironmentSettings.js'
 
 type Props = {
@@ -147,7 +148,10 @@ export function LocalEnvironmentProjectSettings({
           onClick={() =>
             void desktopClient
               .chooseWorkspace()
-              .then(() => load())
+              .then((project) => {
+                if (project) notifyProjectCatalogChanged()
+                return load()
+              })
               .catch((cause) => onError(message(cause)))
           }
         >

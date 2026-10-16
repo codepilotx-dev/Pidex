@@ -15,6 +15,7 @@ import type {
   DesktopRuntimeStatus,
   DesktopWorkspace,
 } from '../../../shared/Types.js'
+import { notifyProjectCatalogChanged } from '../projects/ProjectCatalogEvents.js'
 import { upsertRecentWorkspace } from '../settings/SettingsStorage.js'
 import { normalizePathForComparison } from '../../utils/PathUtils.js'
 import { errorMessageOf } from '@pidex/shared/errors'
@@ -472,6 +473,7 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
   const chooseWorkspace = useCallback(async (): Promise<DesktopWorkspace | null> => {
     try {
       const selected = await desktopClient.chooseWorkspace()
+      if (selected) notifyProjectCatalogChanged()
       return selected
     } catch (error) {
       onErrorRef.current(errorMessageOf(error))
@@ -483,6 +485,7 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
     async (target: DesktopWorkspace): Promise<DesktopWorkspace | null> => {
       try {
         const selected = await desktopClient.openWorkspace(target.path, target.projectId)
+        if (selected) notifyProjectCatalogChanged()
         return selected
       } catch (error) {
         if (isWorkspaceUnavailableError(error)) {
