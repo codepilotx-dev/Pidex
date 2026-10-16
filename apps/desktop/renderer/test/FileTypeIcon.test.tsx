@@ -8,6 +8,7 @@ describe('FileTypeIcon', () => {
     const html = renderToStaticMarkup(
       <FileTypeIcon
         aria-hidden="true"
+        associationMode="extension-only"
         className="fixture-icon"
         path="C:\\repo\\src\\Component.tsx"
         size={14}
@@ -21,6 +22,7 @@ describe('FileTypeIcon', () => {
     expect(html).toContain('width="14"')
     expect(html).not.toContain('stroke-width="9"')
     expect(html).not.toContain('absoluteStrokeWidth')
+    expect(html.toLowerCase()).not.toContain('associationmode')
   })
 
   test('selects material icons from the complete file path', () => {
