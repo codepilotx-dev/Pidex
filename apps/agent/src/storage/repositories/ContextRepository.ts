@@ -433,6 +433,47 @@ export class ContextRepository {
     return row ? this.compactionByID(row.id) : null
   }
 
+  compactionsForTurns(threadID: string, turnIDs: readonly string[]) {
+    if (!turnIDs.length) return []
+    const rows = this.db.sqlite.query(`
+      SELECT c.id, t.id AS turn_id, c.before_count, c.after_count,
+        c.before_tokens, c.after_tokens, c.target_tokens, c.baseline_version,
+        c.usage_sample_id, c.replacement_history, c.created_at
+      FROM agent_compactions AS c
+      JOIN turns AS t ON t.id = COALESCE(c.turn_id, (
+        SELECT id FROM turns WHERE thread_id = c.thread_id AND created_at <= c.created_at
+        ORDER BY created_at DESC, id DESC LIMIT 1
+      ))
+      WHERE c.thread_id = ? AND t.id IN (${turnIDs.map(() => '?').join(',')})
+      ORDER BY c.created_at, c.id
+    `).all(threadID, ...turnIDs) as Array<{
+      id: string; turn_id: string; before_count: number; after_count: number
+      before_tokens: number; after_tokens: number; target_tokens: number
+      baseline_version: number; usage_sample_id: string | null
+      replacement_history: string; created_at: number
+    }>
+    return rows.flatMap((row) => {
+      const reference = parsePiCompactionReference(row.replacement_history)
+      if (!reference || !row.usage_sample_id) return []
+      return [{
+        turnID: row.turn_id,
+        createdAt: row.created_at,
+        payload: {
+          compactionId: row.id,
+          trigger: reference.trigger,
+          beforeCount: row.before_count,
+          afterCount: row.after_count,
+          beforeTokens: row.before_tokens,
+          afterTokens: row.after_tokens,
+          afterTokensSource: reference.afterTokensSource,
+          targetTokens: row.target_tokens,
+          baselineVersion: row.baseline_version,
+          usageSampleId: row.usage_sample_id,
+        },
+      }]
+    })
+  }
+
   insertCompactedEvent(
     threadID: string,
     turnID: string | null,

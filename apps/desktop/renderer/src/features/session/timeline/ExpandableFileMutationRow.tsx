@@ -8,12 +8,13 @@ import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
 import { useDisclosureExpanded } from '../../../components/ui/KeyedDisclosureStore.js'
 import { cx } from '../../../utils/Cx.js'
 
-import type {
-  CanonicalItemDisclosure,
-  FileChangeDisplay,
-  ReadThreadPatchDiff,
-} from './CanonicalItemRenderer.js'
-import { fileMutationLabel } from './CanonicalItemRenderer.js'
+import type { CanonicalItemDisclosure, ReadThreadPatchDiff } from './CanonicalItemRenderer.js'
+import {
+  fileMutationLabel,
+  fileMutationTitle,
+  type FileChangeDisplay,
+} from './FileMutationPresentation.js'
+import { useWorkspacePath } from './ConversationItemContext.js'
 import {
   FileMutationDiffBody,
   FileMutationDiffError,
@@ -80,6 +81,7 @@ export function ExpandableFileMutationRow({
   threadId: string
 }): React.ReactNode {
   const expanded = useDisclosureExpanded(disclosure.store, disclosure.id)
+  const workspacePath = useWorkspacePath()
   const [attempt, setAttempt] = React.useState(0)
   const [loadState, setLoadState] = React.useState<DiffLoadState>({
     status: 'loading',
@@ -114,7 +116,7 @@ export function ExpandableFileMutationRow({
         type="button"
       >
         <Pencil size={APP_ICON_SIZES.sm} className="cpx-agent-activity__icon" aria-hidden="true" />
-        <span className="cpx-agent-activity__label" title={file.path}>
+        <span className="cpx-agent-activity__label" title={fileMutationTitle(file, workspacePath)}>
           {fileMutationLabel(item.state, file.path, file.operation)}
         </span>
         <span className="cpx-agent-activity__review-indicator">

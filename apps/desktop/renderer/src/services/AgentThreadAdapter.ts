@@ -792,11 +792,28 @@ function latestRawItemContextUsage(
   fallbackProvider?: string,
   fallbackModel?: string,
 ): DesktopContextUsage | null {
+  let compactedTokens: number | undefined
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
+    if (item?.type === 'activity' && item.activity === 'context-compression' && item.status === 'completed') {
+      compactedTokens ??= nonNegativeNumber(item.contextTokens) ?? undefined
+    }
     if (!item || item.type !== 'text' || item.status !== 'completed') continue
     const usage = itemContextUsage(item, fallbackProvider, fallbackModel)
-    if (usage) return usage
+    if (!usage) continue
+    if (compactedTokens === undefined) return usage
+    const usedPercent = Math.min(100, compactedTokens / usage.contextWindow * 100)
+    return {
+      provider: usage.provider,
+      model: usage.model,
+      contextWindow: usage.contextWindow,
+      usedTokens: compactedTokens,
+      totalTokens: compactedTokens,
+      remainingTokens: Math.max(0, usage.contextWindow - compactedTokens),
+      usedPercent,
+      percentUsed: usedPercent,
+      remainingPercent: 100 - usedPercent,
+    }
   }
   return null
 }

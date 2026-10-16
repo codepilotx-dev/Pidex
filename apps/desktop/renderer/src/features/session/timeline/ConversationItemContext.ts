@@ -24,6 +24,13 @@ export type ConversationItemContextValue = {
 
 export const ConversationItemContext = createContext<ConversationItemContextValue | null>(null)
 
+/**
+ * 读取当前线程的工作区根目录；仅用于展示增强，缺少 Provider 时返回 null 而不是抛错。
+ */
+export function useWorkspacePath(): string | null {
+  return useContext(ConversationItemContext)?.workspacePath ?? null
+}
+
 export function useConversationItemContext(): ConversationItemContextValue {
   const context = useContext(ConversationItemContext)
   if (!context) {

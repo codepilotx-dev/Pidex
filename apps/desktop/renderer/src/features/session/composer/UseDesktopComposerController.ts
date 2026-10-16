@@ -532,13 +532,15 @@ export function useDesktopComposerController({
 
   async function handleCompact(): Promise<void> {
     if (!routedSessionId) throw new Error('请先创建任务后再压缩上下文')
+    setLastSubmitOutcome(null)
+    composerDraftStore.clearSubmitOutcome(draftKey)
     await desktopClient.compactSession(routedSessionId)
   }
 
   function handleCommandError(message: string): void {
     const outcome: ComposerSubmitOutcome = {
       status: 'failed',
-      phase: 'send',
+      phase: 'prepare',
       message,
       sessionId: routedSessionId ?? undefined,
     }

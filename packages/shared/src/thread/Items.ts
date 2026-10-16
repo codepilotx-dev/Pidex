@@ -300,6 +300,7 @@ export const ActivityItemSchema = Schema.Struct({
   activity: Schema.Literals(['context-compression', 'file-edit', 'build', 'notice']),
   title: Schema.String,
   detail: Schema.optional(Schema.String),
+  contextTokens: Schema.optional(Schema.Number),
   commands: Schema.optional(Schema.Array(ActivityCommandSchema)),
   status: Schema.Literals(['running', 'completed', 'error', 'interrupted']),
   ordinal: Schema.optional(Schema.Number),

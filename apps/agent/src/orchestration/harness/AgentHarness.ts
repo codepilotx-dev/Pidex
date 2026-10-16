@@ -227,6 +227,10 @@ export class AgentHarness<
     AgentHarnessSystemPrompt<TContext, TSkill, TPromptTemplate, TTool> | undefined
   private toolContext: AgentHarnessToolContextSource<TContext> | undefined
   private streamOptions: AgentHarnessStreamOptions
+  private readonly autoCompaction: {
+    shouldCompact(): boolean | Promise<boolean>
+    onFailure(): void | Promise<void>
+  } | undefined
   private retry: RetryPolicy | undefined
   private resources: AgentHarnessResources<TSkill, TPromptTemplate>
   private tools = new Map<string, TTool>()
@@ -249,6 +253,7 @@ export class AgentHarness<
     this.resources = options.resources ?? {}
     this.streamOptions = cloneStreamOptions(options.streamOptions)
     this.retry = options.retry
+    this.autoCompaction = options.autoCompaction
     this.systemPrompt = options.systemPrompt
     this.toolContext = options.toolContext
     this.deferredToolCatalog = options.deferredToolCatalog
@@ -660,6 +665,18 @@ export class AgentHarness<
       },
       prepareNextTurn: async () => {
         await this.flushPendingSessionWrites()
+        const autoCompaction = this.autoCompaction
+        if (
+          autoCompaction &&
+          !this.runAbortController?.signal.aborted &&
+          await autoCompaction.shouldCompact()
+        ) {
+          try {
+            await this.compactSession(undefined, this.runAbortController?.signal)
+          } catch {
+            await autoCompaction.onFailure()
+          }
+        }
         const nextTurnState = await this.createTurnState()
         setTurnState(nextTurnState)
         await onTurnStatePrepared(nextTurnState)
@@ -1016,19 +1033,27 @@ export class AgentHarness<
       throw new AgentHarnessError('busy', 'compact() requires idle harness')
     this.phase = 'compaction'
     try {
+      return await this.compactSession(customInstructions)
+    } finally {
+      this.phase = 'idle'
+    }
+  }
+
+  private async compactSession(customInstructions?: string, signal?: AbortSignal): Promise<CompactResult> {
+    try {
       const model = this.model
       if (!model) throw new AgentHarnessError('invalid_state', 'No model set for compaction')
       const branchEntries = await this.session.getBranch()
       const preparationResult = prepareCompaction(branchEntries, DEFAULT_COMPACTION_SETTINGS)
       if (!preparationResult.ok) throw preparationResult.error
       const preparation = preparationResult.value
-      if (!preparation) throw new AgentHarnessError('compaction', 'Nothing to compact')
+      if (!preparation) throw new AgentHarnessError('nothing_to_compact', 'Nothing to compact')
       const hookResult = await this.emitHook({
         type: 'session_before_compact',
         preparation,
         branchEntries,
         customInstructions,
-        signal: new AbortController().signal,
+        signal: signal ?? new AbortController().signal,
       })
       if (hookResult?.cancel) throw new AgentHarnessError('compaction', 'Compaction cancelled')
       const provided = hookResult?.compaction
@@ -1039,7 +1064,7 @@ export class AgentHarness<
             this.models,
             model,
             customInstructions,
-            undefined,
+            signal,
             this.thinkingLevel,
             this.retry,
             this.retryCallbacks('compaction'),
@@ -1066,8 +1091,6 @@ export class AgentHarness<
       return result
     } catch (error) {
       throw normalizeHarnessError(error, 'compaction')
-    } finally {
-      this.phase = 'idle'
     }
   }
 

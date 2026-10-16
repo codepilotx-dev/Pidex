@@ -1,3 +1,4 @@
+import { contextCompactionItem } from '@pidex/session-view/context-compaction'
 import {
   activeTurnSql,
   hasThreadEditStorage,
@@ -664,6 +665,25 @@ export class ThreadProjection {
     return { turn }
   }
 
+  private appendContextCompactions(
+    threadId: string,
+    turns: readonly Pick<Turn, 'id' | 'rootAgentId'>[],
+    agents: readonly WireAgentExecution[],
+    items: Item[],
+  ): void {
+    for (const record of this.db.repositories.context.compactionsForTurns(threadId, turns.map((turn) => turn.id))) {
+      const turn = turns.find((turn) => turn.id === record.turnID)!
+      const latestAgent = agents.filter((agent) => agent.turnId === turn.id && agent.createdAt <= record.createdAt).at(-1)
+      const item = contextCompactionItem(record.payload, {
+        turnId: turn.id,
+        agentId: latestAgent?.id ?? turn.rootAgentId,
+        createdAt: record.createdAt,
+      })
+      const index = items.findIndex((existing) => existing.createdAt > item.createdAt)
+      items.splice(index < 0 ? items.length : index, 0, item)
+    }
+  }
+
   snapshot(threadId: string): ThreadSnapshot | null {
     const thread = this.projectThread(threadId)
     if (!thread) return null
@@ -807,6 +827,7 @@ export class ThreadProjection {
         }),
       )
       .filter((item): item is Item => item !== null)
+    this.appendContextCompactions(threadId, turns, agents, items)
     const approvals = (
       this.db.sqlite
         .query(
@@ -1096,14 +1117,16 @@ export class ThreadProjection {
       : []
     const approvals = approvalRows.map((row) => this.approval(row))
 
-    const bundles = selectedTurnRows
+    const turns = selectedTurnRows.map(mapTurn)
+    this.appendContextCompactions(threadId, turns, agents, items)
+    const bundles = turns
       .slice()
       .reverse()
-      .map((row): ThreadTurnBundle => {
-        const turnId = String(row.id)
+      .map((turn): ThreadTurnBundle => {
+        const turnId = turn.id
         const turnInputs = inputsByTurn.get(turnId) ?? []
         return {
-          turn: mapTurn(row),
+          turn,
           inputs: turnInputs,
           messages: messages.filter((message) => message.turnId === turnId),
           agents: agents.filter((agent) => agent.turnId === turnId),

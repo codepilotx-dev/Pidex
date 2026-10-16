@@ -470,3 +470,10 @@ export function ToolActivityLabel({
     </span>
   )
 }
+
+/**
+ * Reasoning and question disclosures reuse the ordinary activity row geometry
+ * and hover/focus states.
+ */
+export const PROCESS_CARD_SUMMARY_CLASS =
+  'canonical-process-card__summary cpx-agent-activity__item-header'

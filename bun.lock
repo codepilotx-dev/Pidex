@@ -19,6 +19,7 @@
         "@earendil-works/pi-mcp": "0.99.2",
         "@pidex/agent-protocol": "workspace:*",
         "@pidex/model-schema": "workspace:*",
+        "@pidex/session-view": "workspace:*",
         "@pidex/shared": "workspace:*",
         "ajv": "8.20.0",
         "ajv-formats": "3.0.1",

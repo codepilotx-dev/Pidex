@@ -131,6 +131,15 @@ export async function executeHarnessRun(
     deferredToolCatalog,
     steeringMode: 'one-at-a-time',
     followUpMode: 'one-at-a-time',
+    ...(options.compaction ? {
+      autoCompaction: {
+        shouldCompact: async () =>
+          !request.signal.aborted &&
+          ((await request.canAutoCompact?.()) ?? true) &&
+          await options.compaction!.shouldAutoCompact(request.threadID),
+        onFailure: () => options.compaction!.recordFailure(request.threadID, 'automatic'),
+      },
+    } : {}),
     streamOptions: {
       timeoutMs: 600_000,
       maxRetries: 2,
@@ -255,14 +264,14 @@ export async function executeHarnessRun(
       parseProposedPlan: request.taskMode === 'plan',
       resolveSessionEntryID: () => dependencies.session.getLeafId(),
       resolveCompactionContext: () => ({
-        trigger: compactionTrigger ?? 'manual',
+        trigger: compactionTrigger ?? 'automatic',
         promptText: bundle.instructions,
       }),
     },
   )
   const unsubscribe = harness.subscribe((event) => adapter.handle(event))
   // These hooks are not broadcast by subscribe; forward metadata through the same event sink.
-  for (const type of ['before_agent_start', 'context', 'before_provider_request'] as const) {
+  for (const type of ['before_agent_start', 'context', 'before_provider_request', 'session_before_compact'] as const) {
     harness.on(type, async (event) => {
       await adapter.handle(event)
       return undefined

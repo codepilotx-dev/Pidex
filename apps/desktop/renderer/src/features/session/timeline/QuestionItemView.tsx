@@ -3,10 +3,8 @@ import { Check, ChevronDown, ListChecks, MessageCircleQuestion } from 'lucide-re
 import type { Item, QuestionItem } from '@pidex/shared/thread'
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../../components/ui/IconTokens.js'
 import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
-import {
-  PROCESS_CARD_SUMMARY_CLASS,
-  type ResolvedCanonicalItemDisclosure,
-} from './CanonicalItemRenderer.js'
+import type { ResolvedCanonicalItemDisclosure } from './CanonicalItemRenderer.js'
+import { PROCESS_CARD_SUMMARY_CLASS } from './ToolActivityPresentation.js'
 import { cx } from '../../../utils/Cx.js'
 
 /** A persisted question owns its tool's presentation, but never hides tool failures. */

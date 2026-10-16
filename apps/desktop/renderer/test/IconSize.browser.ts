@@ -98,14 +98,14 @@ const overrides = Object.entries(APP_ICON_SIZES)
 const send = [ArrowUp, Square, Activity]
   .map((Icon) =>
     expected(
-      20,
+      16,
       renderToString(
         h(
           'div',
           { className: 'composer' },
           h(Button, {
             isIconOnly: true,
-            iconSize: 'lg',
+            iconSize: 'md',
             size: 'composer',
             color: 'primary',
             title: '发送',

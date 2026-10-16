@@ -240,6 +240,7 @@ export class SessionError extends Error {
 }
 
 export type AgentHarnessErrorCode =
+  | 'nothing_to_compact'
   | 'busy'
   | 'invalid_state'
   | 'invalid_argument'
@@ -979,6 +980,11 @@ interface AgentHarnessOptionsBase<
   systemPrompt?: AgentHarnessSystemPrompt<TContext, TSkill, TPromptTemplate, TTool>
   /** Curated stream/provider request options. Snapshotted at turn start. */
   streamOptions?: AgentHarnessStreamOptions
+  /** Product-owned policy checked between tool batches. */
+  autoCompaction?: {
+    shouldCompact(): boolean | Promise<boolean>
+    onFailure(): void | Promise<void>
+  }
   /** Optional retry policy for generated compaction and branch-summary requests. */
   retry?: RetryPolicy
   model: Model<any>

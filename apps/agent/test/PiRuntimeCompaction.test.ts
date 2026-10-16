@@ -35,7 +35,7 @@ const messageText = (message: Context['messages'][number]) => {
 
 async function createRuntime(input: {
   responses: Parameters<ReturnType<typeof fauxProvider>['setResponses']>[0]
-  shouldAutoCompact?: boolean
+  shouldAutoCompact?: boolean | (() => boolean)
 }) {
   const faux = fauxProvider({
     models: [{ id: 'runtime-compaction', input: ['text'], contextWindow: 64_000 }],
@@ -57,6 +57,10 @@ async function createRuntime(input: {
       resolve: async () => ({ models, session }),
     },
     toolExecutor: {
+      definition: () => ({
+        sdkName: 'probe', description: 'probe', schema: { parse: (value: unknown) => value }, inputSchema: { type: 'object', properties: {} },
+      }),
+      execute: async () => ({ content: [{ type: 'text', text: 'probe result' }] }),
       deferredDefinitions: (exposure: { frozenDeferredToolNames?: readonly string[] }) =>
         frozenDeferredEnvelope([], exposure.frozenDeferredToolNames),
     } as never,
@@ -66,7 +70,8 @@ async function createRuntime(input: {
       },
     },
     compaction: {
-      shouldAutoCompact: async () => input.shouldAutoCompact ?? false,
+      shouldAutoCompact: async () => typeof input.shouldAutoCompact === 'function'
+        ? input.shouldAutoCompact() : input.shouldAutoCompact ?? false,
       recordFailure: async (_threadID, trigger) => {
         failures.push(trigger)
       },
@@ -100,6 +105,7 @@ async function createRuntime(input: {
     runtime: {
       run: (request: HarnessRuntimeRequest) => executeHarnessRun(runtimeOptions, request),
       dispose: () => active?.harness.abort() ?? Promise.resolve(),
+      compact: () => active!.compact('manual'),
     },
     request,
     compacted,
@@ -138,6 +144,44 @@ describe('Harness runtime provider errors', () => {
 })
 
 describe('Harness runtime context compaction', () => {
+  test.each([true, false])('checks compaction between tool batches with permission %s', async (allowed) => {
+    let pending = false
+    let continuationContext: Context | undefined
+    const setup = await createRuntime({
+      responses: [
+        () => {
+          pending = true
+          return fauxAssistantMessage([
+            { type: 'toolCall', id: 'probe-call', name: 'probe', arguments: {} },
+          ], { stopReason: 'toolUse' })
+        },
+        ...(allowed ? [() => {
+          pending = false
+          return fauxAssistantMessage('mid-task compact summary')
+        }] : []),
+        (context: Context) => {
+          continuationContext = context
+          return fauxAssistantMessage('continued task')
+        },
+      ],
+      shouldAutoCompact: () => pending,
+    })
+    setup.request.exposedTools = ['probe']
+    setup.request.canAutoCompact = () => allowed
+    try {
+      await expect(setup.runtime.run(setup.request)).resolves.toEqual({
+        status: 'completed', output: 'continued task',
+      })
+      expect(setup.compacted).toEqual(allowed ? ['automatic'] : [])
+      expect(setup.failures).toEqual([])
+      expect(JSON.stringify(continuationContext?.messages)).toContain(
+        allowed ? 'mid-task compact summary' : 'probe result',
+      )
+    } finally {
+      await setup.runtime.dispose()
+    }
+  })
+
   test('successful turns remain successful when automatic compaction runs afterward', async () => {
     const setup = await createRuntime({
       responses: [
@@ -153,6 +197,7 @@ describe('Harness runtime context compaction', () => {
     })
     expect(setup.compacted).toEqual(['automatic'])
     expect(setup.failures).toEqual([])
+    await expect(setup.runtime.compact()).rejects.toMatchObject({ code: 'nothing_to_compact' })
     await setup.runtime.dispose()
   })
 

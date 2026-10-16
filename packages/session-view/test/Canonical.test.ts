@@ -1377,6 +1377,7 @@ describe('canonical thread state', () => {
       agentId: explicitLatestAgent.id,
       type: 'activity',
       activity: 'context-compression',
+      contextTokens: 400,
       status: 'completed',
     })
     const explicitEntry = selectRenderTurnEntries(withExplicitAnchor).find(

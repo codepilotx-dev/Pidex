@@ -966,10 +966,57 @@ describe('canonical tool item display', () => {
     })
 
     const markup = renderToStaticMarkup(<FileMutationItemView item={item} />)
-    expect(markup).toContain('已编辑 src/a.ts')
-    expect(markup).toContain('已创建 src/b.ts')
+    expect(markup).toContain('已编辑 a.ts')
+    expect(markup).toContain('已创建 b.ts')
     expect(markup).toContain('+2')
     expect(markup).not.toContain('+0</small><small')
+  })
+
+  test('shows only the file name and keeps the absolute path in the hover title', () => {
+    const renderInWorkspace = (item: ToolItem) =>
+      renderToStaticMarkup(
+        <ConversationItemContext.Provider
+          value={{
+            canCopyFileReferenceContents: () => false,
+            onCopyFileReferenceContents: () => undefined,
+            onOpenFileReference: () => undefined,
+            onSubmitEditedUserMessage: async () => undefined,
+            sessionStatus: 'idle',
+            workspacePath: 'C:\\workspace',
+          }}
+        >
+          <FileMutationItemView item={item} />
+        </ConversationItemContext.Provider>,
+      )
+
+    const relative = renderInWorkspace(
+      toolItem({
+        command: null,
+        input: { file_path: 'src/features/a.ts' },
+        output: null,
+        tool: 'Edit',
+      }),
+    )
+    expect(relative).toContain('已编辑 a.ts')
+    expect(relative).not.toContain('已编辑 src/features/a.ts')
+    expect(relative).toContain('title="C:/workspace/src/features/a.ts"')
+
+    const absolute = renderInWorkspace(
+      toolItem({
+        command: null,
+        input: { file_path: 'C:\\outside\\probe.mjs' },
+        output: null,
+        tool: 'Write',
+      }),
+    )
+    expect(absolute).toContain('已编辑 probe.mjs')
+    expect(absolute).toContain('title="C:/outside/probe.mjs"')
+
+    const unknown = renderInWorkspace(
+      toolItem({ command: null, input: {}, output: null, tool: 'Edit' }),
+    )
+    expect(unknown).toContain('已编辑 文件')
+    expect(unknown).not.toContain('title=')
   })
 
   test('only exposes completed file mutations backed by diff evidence', () => {

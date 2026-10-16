@@ -17,6 +17,7 @@ import type { QuestionService } from './QuestionService'
 import { ResumeCheckpointResolver, toPlanCheckpoint } from '../interaction/ResumeCheckpointResolver'
 import { executionPolicyFromV4 } from '../permission/ExecutionPolicy'
 import type { AgentRuntime } from '../orchestration/AgentRuntimeTypes'
+import { AgentHarnessError } from '../orchestration/harness/Types'
 import type { AttachmentService } from '../subagent/AttachmentService'
 import type { LocalContextPathService } from '../local-context/LocalContextPathService'
 import type { ProjectSourceService } from '../project/ProjectSourceService'
@@ -580,7 +581,14 @@ export class ThreadService {
     if (this.db.activeTurn(threadID))
       throw new AgentError('THREAD_ACTIVE', '运行中的任务不能手动压缩上下文', 409)
     const preview = await this.promptPreview(threadID)
-    return this.orchestrator.compact(threadID, undefined, preview?.instructions ?? '')
+    try {
+      return await this.orchestrator.compact(threadID, undefined, preview?.instructions ?? '')
+    } catch (error) {
+      if (error instanceof AgentHarnessError && error.code === 'nothing_to_compact') {
+        throw new AgentError('CONFLICT', '上下文已压缩，暂无新增消息需要压缩', 409)
+      }
+      throw error
+    }
   }
 
   private duplicateAdmission(

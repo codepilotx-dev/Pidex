@@ -1,3 +1,4 @@
+import { contextCompactionItem } from '../ContextCompaction'
 import type {
   AgentExecution,
   ApprovalRequest,
@@ -1007,28 +1008,13 @@ function projectContextCompaction(
     .filter((agent) => agent.turnId === turnId)
     .sort(compareCreated)
     .at(-1)
-  const itemId = `activity:context-compression:${envelope.payload.compactionId}`
-  const detailParts = [
-    `消息 ${envelope.payload.beforeCount} → ${envelope.payload.afterCount}`,
-    `Token ${envelope.payload.beforeTokens} → ${envelope.payload.afterTokens}`,
-  ]
-  if (envelope.payload.trigger) detailParts.push(`触发方式：${envelope.payload.trigger}`)
-  if (envelope.payload.afterTokensSource) {
-    detailParts.push(`压缩后用量来源：${envelope.payload.afterTokensSource}`)
-  }
-  upsertItem(state, {
-    id: itemId,
-    messageID: itemId,
+  upsertItem(state, contextCompactionItem(envelope.payload, {
     turnId,
     agentId: latestAgent?.id ?? turn.rootAgentId,
-    type: 'activity',
-    activity: 'context-compression',
-    title: '上下文已压缩',
-    detail: detailParts.join('；'),
-    status: 'completed',
     createdAt: envelope.occurredAt,
-  })
+  }))
 }
+
 
 export type ItemDeltaKind = 'text' | 'reasoning' | 'plan' | 'tool'
 

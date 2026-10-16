@@ -223,6 +223,41 @@ describe('Thread 历史', () => {
     expect(snapshot?.items).toMatchObject([{ id: 'item-1', type: 'text', text: '回答' }])
   })
 
+  test('压缩节点从持久化记录恢复，分页和快照刷新不丢失或迁移到后续轮次', async () => {
+    const { db, projection } = await makeHistory()
+    const thread = db.createThread('压缩历史')
+    const first = db.createTurn(thread.id, input('第一轮'), 'completed')
+    const second = db.createTurn(thread.id, input('第二轮'), 'completed')
+    db.sqlite.query('UPDATE turns SET created_at = ? WHERE id = ?').run(1_000, first.turnID)
+    db.sqlite.query('UPDATE turns SET created_at = ? WHERE id = ?').run(3_000, second.turnID)
+    for (const [id, turnID, createdAt] of [
+      ['manual-compaction', null, 2_000],
+      ['automatic-compaction', first.turnID, 4_000],
+    ] as const) {
+      db.repositories.context.insertCompaction({
+        id, threadID: thread.id, turnID, createdAt,
+        beforeCount: 10, afterCount: 4, beforeTokens: 100_000, afterTokens: 40_000,
+        targetTokens: 55_000, baselineVersion: 1, usageSampleID: `usage-${id}`, summary: '摘要',
+        reference: {
+          version: 1, kind: 'pi-compaction-reference', sessionID: db.getAgentExecution(first.agentID)!.sessionID,
+          entryID: id, firstKeptEntryID: null,
+          trigger: turnID ? 'automatic' : 'manual', afterTokensSource: 'compaction-estimate',
+        },
+      })
+    }
+    const snapshot = projection.snapshot(thread.id)!
+    expect(snapshot.items).toMatchObject([
+      { id: 'activity:context-compression:manual-compaction', turnId: first.turnID, contextTokens: 40_000 },
+      { id: 'activity:context-compression:automatic-compaction', turnId: first.turnID, contextTokens: 40_000 },
+    ])
+    const latest = projection.historyPage(thread.id, { limit: 1 })!
+    expect(latest.turns[0]?.turn.id).toBe(second.turnID)
+    expect(latest.turns[0]?.items).toHaveLength(0)
+    const older = projection.historyPage(thread.id, { before: latest.olderCursor!, limit: 1 })!
+    expect(older.turns[0]?.items).toEqual(snapshot.items)
+    expect(new ThreadProjection(db).snapshot(thread.id)?.items).toEqual(snapshot.items)
+  })
+
   test('按稳定排他游标分页 Turn，并将 queued Turn 与附件独立投影', async () => {
     const { db, projection } = await makeHistory()
     const thread = db.createThread('分页会话')

@@ -16,6 +16,7 @@
     "@pidex/agent-protocol": "workspace:*",
     "@pidex/model-schema": "workspace:*",
     "@pidex/shared": "workspace:*",
+    "@pidex/session-view": "workspace:*",
     "@earendil-works/pi-ai": "0.99.2",
     "@earendil-works/pi-mcp": "0.99.2",
     "ajv": "8.20.0",

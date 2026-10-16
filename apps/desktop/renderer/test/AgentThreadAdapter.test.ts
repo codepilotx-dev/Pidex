@@ -1747,6 +1747,18 @@ describe('agent thread adapter', () => {
       { source: 'messages', chars: 120 },
       { source: 'system_tools', chars: 30 },
     ])
+    const compression: Item = {
+      id: 'compressed', messageID: 'compressed', turnId: 'turn-1', agentId: 'agent-1',
+      type: 'activity', activity: 'context-compression', title: '上下文已压缩',
+      contextTokens: 2_000, status: 'completed', createdAt: 3_000,
+    }
+    const compressedUsage = latestItemContextUsage([withoutBreakdown, withBreakdown, compression])
+    expect(compressedUsage).toMatchObject({
+      usedTokens: 2_000, contextWindow: 200_000, usedPercent: 1, remainingTokens: 198_000,
+    })
+    expect(compressedUsage?.breakdown).toBeUndefined()
+    expect(compressedUsage?.promptCacheReadTokens).toBeUndefined()
+    expect(latestItemContextUsage([compression, withBreakdown])?.usedTokens).toBe(10_000)
     // 累计 cacheRead 9000 / 累计 prompt 侧 11000，而不是只看最后一条。
     expect(usage?.averageCacheHitRate).toBeCloseTo(9_000 / 11_000, 6)
   })

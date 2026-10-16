@@ -1247,6 +1247,11 @@ export function ComposerCard({
           submitting || executingCommandId === 'plan' || executingCommandId === 'goal' || undefined
         }
       >
+        {executingCommandId === 'compact' ? (
+          <div className="tw:mx-1 tw:mb-2 tw:type-caption tw:text-app-muted" role="status">
+            正在压缩上下文…
+          </div>
+        ) : null}
         {inlineSubmitFailure ? (
           <div
             className="composer-submit-error tw:mx-1 tw:mt-0 tw:mb-2 tw:text-app-warning tw:type-caption"
@@ -1817,7 +1822,7 @@ export function ComposerCard({
               className={cx('send-button', submitting && 'is-submitting')}
               color="primary"
               size="composer"
-              iconSize="lg"
+              iconSize="md"
               disabled={!isRunning && !canSubmit}
               onClick={
                 isRunning && !canSubmit
@@ -1830,11 +1835,11 @@ export function ComposerCard({
               type="button"
             >
               {submitting ? (
-                <Activity aria-hidden="true" className="tw:animate-spin" size={APP_ICON_SIZES.lg} />
+                <Activity aria-hidden="true" className="tw:animate-spin" size={APP_ICON_SIZES.md} />
               ) : isRunning && !canSubmit ? (
-                <Square size={APP_ICON_SIZES.lg} fill="currentColor" />
+                <Square size={APP_ICON_SIZES.md} fill="currentColor" />
               ) : (
-                <ArrowUp size={APP_ICON_SIZES.lg} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                <ArrowUp size={APP_ICON_SIZES.md} strokeWidth={APP_ICON_STROKE_WIDTH} />
               )}
             </Button>
           </div>

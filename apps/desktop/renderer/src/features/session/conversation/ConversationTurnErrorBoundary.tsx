@@ -21,6 +21,18 @@ export class ConversationTurnErrorBoundary extends React.Component<
     return { failed: true }
   }
 
+  private retryAfterHotUpdate = (): void => {
+    if (this.state.failed) this.setState({ failed: false })
+  }
+
+  componentDidMount(): void {
+    import.meta.hot?.on('vite:afterUpdate', this.retryAfterHotUpdate)
+  }
+
+  componentWillUnmount(): void {
+    import.meta.hot?.off('vite:afterUpdate', this.retryAfterHotUpdate)
+  }
+
   componentDidUpdate(previous: ConversationTurnErrorBoundaryProps): void {
     if (previous.turnId !== this.props.turnId && this.state.failed) {
       this.setState({ failed: false })

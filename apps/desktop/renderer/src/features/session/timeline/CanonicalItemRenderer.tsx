@@ -54,11 +54,16 @@ import { ConversationMarkdownErrorBoundary } from '../conversation/ConversationT
 import { CollapsibleUserMarkdown } from '../conversation/CollapsibleUserMarkdown.js'
 import { subagentStatusLabel } from '../subagents/SubagentStatusLabel.js'
 import { useScrollEdgeState } from '../../../hooks/UseScrollEdgeState.js'
-import { ConversationItemContext, useConversationItemContext } from './ConversationItemContext.js'
+import {
+  ConversationItemContext,
+  useConversationItemContext,
+  useWorkspacePath,
+} from './ConversationItemContext.js'
 import { useLiveItemTail } from '../state/UseLiveItemTail.js'
 import { countStreamingItemRender } from '../state/StreamingPerfCounters.js'
 import { WorkflowPlanCard, type OpenPlanInDockRequest } from '../workflow/WorkflowPlanCard.js'
 import { AttachmentFilePill, AttachmentImageTile } from '../attachments/AttachmentRowPrimitives.js'
+import { UNKNOWN_FILE_PATH, fileMutationLabel, fileMutationTitle, type FileChangeDisplay } from './FileMutationPresentation.js'
 import { useToolArtifactImageSource } from './UseToolArtifactImageSource.js'
 import {
   buildToolSemanticSummary,
@@ -120,13 +125,6 @@ const LazyLocalContextRows = React.lazy(async () => {
 type ItemOf<T extends Item['type']> = Extract<Item, { type: T }>
 type ToolItem = ItemOf<'tool'>
 
-export type FileChangeDisplay = {
-  additions: number | null
-  deletions: number | null
-  operation?: 'write' | 'create' | 'update' | 'delete'
-  patch?: string | null
-  path: string
-}
 
 export type FileMutationDisplay = {
   files: FileChangeDisplay[]
@@ -474,12 +472,6 @@ export function CanonicalUserInput({
   )
 }
 
-/**
- * Reasoning and question disclosures reuse the ordinary activity row geometry
- * and hover/focus states.
- */
-export const PROCESS_CARD_SUMMARY_CLASS =
-  'canonical-process-card__summary cpx-agent-activity__item-header'
 
 export function CanonicalItemRenderer({
   disclosure,
@@ -1401,6 +1393,7 @@ export function FileMutationItemView({
   readThreadPatchDiff?: ReadThreadPatchDiff
   threadId?: string
 }): React.ReactNode {
+  const workspacePath = useWorkspacePath()
   const mutation = fileMutationDisplay(item)
   if (!mutation) return null
   const active = isActiveToolState(item.state)
@@ -1444,7 +1437,10 @@ export function FileMutationItemView({
                   aria-hidden="true"
                 />
               )}
-              <span className="cpx-agent-activity__label" title={file.path}>
+              <span
+                className="cpx-agent-activity__label"
+                title={fileMutationTitle(file, workspacePath)}
+              >
                 {fileMutationLabel(item.state, file.path, file.operation)}
               </span>
               <span className="cpx-agent-activity__review-indicator tw:inline-flex tw:flex-none tw:items-center tw:gap-2">
@@ -1468,7 +1464,10 @@ export function FileMutationItemView({
                   className="cpx-agent-activity__icon"
                   aria-hidden="true"
                 />
-                <span className="cpx-agent-activity__label" title={file.path}>
+                <span
+                  className="cpx-agent-activity__label"
+                  title={fileMutationTitle(file, workspacePath)}
+                >
                   {fileMutationLabel(item.state, file.path, file.operation)}
                 </span>
                 <span className="cpx-agent-activity__review-indicator tw:inline-flex tw:flex-none tw:items-center tw:gap-2">
@@ -2060,7 +2059,8 @@ function fileCandidates(value: unknown): FileChangeDisplay[] {
   if (!Array.isArray(value)) return []
   return value.flatMap((candidate) => {
     const record = inputRecord(candidate)
-    const path = safeDisplayPath(inputText(record, 'path', 'file_path', 'filePath'))
+    const sourcePath = inputText(record, 'path', 'file_path', 'filePath')
+    const path = safeDisplayPath(sourcePath)
     return path
       ? [
           {
@@ -2073,6 +2073,7 @@ function fileCandidates(value: unknown): FileChangeDisplay[] {
               ? { operation: record.operation }
               : {}),
             path,
+            ...(sourcePath ? { sourcePath } : {}),
           },
         ]
       : []
@@ -2091,6 +2092,9 @@ function mergeFileCandidates(
       deletions: file.deletions ?? current?.deletions ?? null,
       ...((file.operation ?? current?.operation)
         ? { operation: file.operation ?? current?.operation }
+        : {}),
+      ...((file.sourcePath ?? current?.sourcePath)
+        ? { sourcePath: file.sourcePath ?? current?.sourcePath }
         : {}),
       path: file.path,
     })
@@ -2121,14 +2125,15 @@ export function fileMutationDisplay(item: ToolItem): FileMutationDisplay | null 
     ),
   )
   if (files.length === 0) {
-    const path = safeDisplayPath(
+    const sourcePath =
       inputText(output, 'path', 'file_path', 'filePath') ??
-        inputText(input, 'file_path', 'filePath', 'path'),
-    )
-    if (path) files = [{ additions: null, deletions: null, path }]
+      inputText(input, 'file_path', 'filePath', 'path')
+    const path = safeDisplayPath(sourcePath)
+    if (path)
+      files = [{ additions: null, deletions: null, path, ...(sourcePath ? { sourcePath } : {}) }]
   }
   if (files.length === 0) {
-    files = [{ additions: null, deletions: null, path: '文件' }]
+    files = [{ additions: null, deletions: null, path: UNKNOWN_FILE_PATH }]
   }
   const totalAdditions = nonNegativeInteger(
     output.totalAdditions ??
@@ -2153,6 +2158,7 @@ export function fileMutationDisplay(item: ToolItem): FileMutationDisplay | null 
         deletions: files[0].deletions ?? totalDeletions,
         ...(files[0].operation ? { operation: files[0].operation } : {}),
         path: files[0].path,
+        ...(files[0].sourcePath ? { sourcePath: files[0].sourcePath } : {}),
       },
     ]
   }
@@ -2165,17 +2171,6 @@ export function fileMutationDisplay(item: ToolItem): FileMutationDisplay | null 
   }
 }
 
-export function fileMutationLabel(
-  state: ToolItem['state'],
-  path: string,
-  operation: FileChangeDisplay['operation'] = 'update',
-): string {
-  const action = operation === 'create' ? '创建' : operation === 'delete' ? '删除' : '编辑'
-  if (state === 'completed') return `已${action} ${path}`
-  if (state === 'error') return `${action}失败 ${path}`
-  if (state === 'interrupted') return `已停止${action} ${path}`
-  return `正在${action} ${path}`
-}
 
 function PatchFileButton({
   file,
@@ -2207,7 +2202,7 @@ export function syntheticPatchDisplay(items: readonly Item[]): PatchDisplay | nu
     if (item.type !== 'tool' || item.state !== 'completed') return []
     const display = fileMutationDisplay(item)
     if (!display) return []
-    const files = display.files.filter((file) => file.path !== '文件')
+    const files = display.files.filter((file) => file.path !== UNKNOWN_FILE_PATH)
     return files.length ? [{ ...display, files }] : []
   })
   if (mutations.length === 0) return null

@@ -20,6 +20,8 @@ import {
   type SqlitePiSessionStorage,
 } from '../src/storage/pi-session/SqlitePiSession'
 import { ConfigService } from '../src/config/ConfigService'
+import { ThreadService } from '../src/session/ThreadService'
+import { AgentHarnessError } from '../src/orchestration/harness/Types'
 
 const roots: string[] = []
 afterEach(async () => removeFixturePaths(roots.splice(0)))
@@ -676,5 +678,26 @@ describe('Hooks 与记忆', () => {
       { status: 'failed', count: 1 },
     ])
     db.close()
+  })
+})
+
+
+describe('手动上下文压缩', () => {
+  test.each(['nothing_to_compact', 'compaction'] as const)('maps %s without hiding other failures', async (code) => {
+    const failure = new AgentHarnessError(code, 'test compaction failure')
+    const service = {
+      get: () => undefined,
+      db: { activeTurn: () => null },
+      promptPreview: async () => null,
+      orchestrator: { compact: async () => { throw failure } },
+    }
+    const result = ThreadService.prototype.compact.call(service as never, 'thread-compaction')
+    if (code === 'nothing_to_compact') {
+      await expect(result).rejects.toMatchObject({
+        code: 'CONFLICT', message: '上下文已压缩，暂无新增消息需要压缩', status: 409,
+      })
+    } else {
+      await expect(result).rejects.toBe(failure)
+    }
   })
 })
