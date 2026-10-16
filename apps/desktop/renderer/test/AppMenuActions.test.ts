@@ -17,6 +17,7 @@ function setup(overrides: Partial<Options> = {}) {
     close: async () => record('close'),
     openWindow: async (input) => record(input),
     quitDuringStartup: async () => record('quit'),
+    stopBackendAndExit: async () => record('stopBackendAndExit'),
     minimize: async () => record('minimize'),
     toggleMaximize: async () => {
       record('maximize')
@@ -141,10 +142,11 @@ describe('application menu actions', () => {
     expect(calls).toEqual(['maximize', { maximized: true }])
     actions.onWindowMenuAction('close')
     actions.onFileMenuAction('exit')
+    actions.onFileMenuAction('stopBackendAndExit')
     actions.onViewMenuAction('zoomIn')
     actions.onViewMenuAction('zoomOut')
     actions.onViewMenuAction('actualSize')
-    expect(calls.slice(2)).toEqual(['close', 'quit', 'in', 'out', 'reset'])
+    expect(calls.slice(2)).toEqual(['close', 'quit', 'stopBackendAndExit', 'in', 'out', 'reset'])
   })
 
   test('unimplemented actions and missing window capabilities stay disabled', () => {
@@ -177,7 +179,7 @@ describe('application menu actions', () => {
       expect(actions.isHelpActionEnabled(action)).toBe(false)
       actions.onHelpMenuAction(action)
     }
-    for (const action of ['close', 'newWindow', 'exit', 'logOut'] as const) {
+    for (const action of ['close', 'newWindow', 'exit', 'stopBackendAndExit', 'logOut'] as const) {
       expect(actions.isFileActionEnabled(action)).toBe(false)
       actions.onFileMenuAction(action)
     }

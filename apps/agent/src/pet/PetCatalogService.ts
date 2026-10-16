@@ -34,6 +34,8 @@ type CatalogServiceOptions = {
 }
 
 export class PetCatalogService {
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null
+  private stopped = true
   private readonly fetch: typeof globalThis.fetch
   private readonly now: () => number
   private refreshPromise: Promise<CatalogCache> | null = null
@@ -46,6 +48,30 @@ export class PetCatalogService {
   ) {
     this.fetch = options.fetch ?? globalThis.fetch
     this.now = options.now ?? Date.now
+  }
+
+  start() {
+    if (!this.stopped) return
+    this.stopped = false
+    const refresh = async () => {
+      if (this.stopped) return
+      let delay = CACHE_TTL_MS
+      try {
+        const cached = await this.readCache()
+        if (!cached || !this.isFresh(cached)) await this.refresh()
+        else delay = Math.max(1, Date.parse(cached.fetchedAt) + CACHE_TTL_MS - this.now())
+      } catch { /* Retry at the next refresh deadline. */ }
+      if (this.stopped) return
+      this.refreshTimer = setTimeout(() => { void refresh() }, delay)
+      this.refreshTimer.unref?.()
+    }
+    void refresh()
+  }
+
+  dispose() {
+    this.stopped = true
+    if (this.refreshTimer) clearTimeout(this.refreshTimer)
+    this.refreshTimer = null
   }
 
   async list(installedPetIDs: ReadonlySet<string>, refresh = false): Promise<PetCatalogResult> {

@@ -14,6 +14,7 @@ import { RpcRouter, type RpcRouterDependencies } from '../src/transport/rpc/RpcR
 import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { TerminalOutputMirror } from '../src/terminal/TerminalOutputMirror'
 import { rpcTransportAuthority } from '../src/transport/Server'
+import { TurnCoordinator } from '../src/session/TurnCoordinator'
 
 const roots: string[] = []
 afterEach(async () => {
@@ -178,6 +179,27 @@ const fixture = async (
 }
 
 describe('RPC v4 Router', () => {
+  test('连接关闭只清理连接资源，不中止后端普通任务，重连保留执行句柄', async () => {
+    const coordinator = new TurnCoordinator()
+    const handle = coordinator.reserve('thread:background', 'turn:background')
+    let stopped = 0
+    const { db, router, initialize } = await fixture({
+      threads: {
+        resumeHookTrust: () => undefined,
+        stop: async () => { stopped++; handle.controller.abort() },
+      } as never,
+    })
+    try {
+      const connected = await initialize()
+      router.closeConnection(connected.result.connectionId)
+      await Bun.sleep(10)
+      expect(stopped).toBe(0)
+      expect(handle.controller.signal.aborted).toBe(false)
+      expect(coordinator.active('thread:background')?.turnID).toBe('turn:background')
+      await initialize()
+      expect(handle.controller.signal.aborted).toBe(false)
+    } finally { db.close() }
+  })
   test('归档先移除定时任务并停止活动 turn，失败不写入归档', async () => {
     const calls: string[] = []
     let fail = false

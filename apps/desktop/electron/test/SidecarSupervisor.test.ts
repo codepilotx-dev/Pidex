@@ -17,6 +17,28 @@ afterEach(() => {
 })
 
 describe('SidecarSupervisor owned 生命周期', () => {
+  test('后台实例在断连、watchdog 重连和桌面退出时保留，只响应显式停止', async () => {
+    delete process.env.PIDEX_AGENT_URL
+    let starts = 0
+    let shutdowns = 0
+    const harness = createHarness({ backgroundRuntime: {
+      connect: async () => {
+        starts++
+        return { origin: 'http://127.0.0.1:4312', instanceToken: 'background-instance' }
+      },
+      shutdown: async () => { shutdowns++ },
+    } })
+    const supervisor = harness.supervisor()
+    await supervisor.connect(async () => undefined)
+    await supervisor.invalidate()
+    await supervisor.connect(async () => undefined)
+    await supervisor.stop()
+    expect(starts).toBe(2)
+    expect(shutdowns).toBe(0)
+    expect(harness.children).toHaveLength(0)
+    await supervisor.shutdown()
+    expect(shutdowns).toBe(1)
+  })
   test('打包 sidecar 使用安装资源中的内置 Skills 与 Plugins', async () => {
     delete process.env.PIDEX_AGENT_URL
     const harness = createHarness({

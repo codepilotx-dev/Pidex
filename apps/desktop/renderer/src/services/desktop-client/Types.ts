@@ -81,7 +81,7 @@ type DesktopClientWindow = {
     revealPathInFolder?(targetPath: string): Promise<void>
   } & Partial<DesktopPetOverlayBridge> &
     Partial<DesktopWindowIpcBridge> &
-    Partial<Pick<DesktopStartupIpcBridge, 'quitDuringStartup'>> &
+    Partial<Pick<DesktopStartupIpcBridge, 'quitDuringStartup' | 'stopBackendAndExit'>> &
     Partial<DesktopDataLocationIpcBridge> &
     Partial<DesktopTerminalIpcBridge> &
     Partial<DesktopUpdateIpcBridge> &

@@ -222,6 +222,7 @@ const DESKTOP_CLIPBOARD_IPC_CHANNELS = {
 const DESKTOP_STARTUP_IPC_CHANNELS = {
   openLogs: 'startup:open-logs',
   quit: 'startup:quit',
+  stopBackendAndExit: 'startup:stop-backend-and-exit',
 } as const satisfies typeof import('@pidex/shared/desktop-startup-ipc').DESKTOP_STARTUP_IPC_CHANNELS
 
 const DESKTOP_APPEARANCE_IPC_CHANNELS = {
@@ -548,6 +549,7 @@ const desktop = {
   openLogDirectory: (): Promise<string> =>
     ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.openLogs),
   quitDuringStartup: (): Promise<void> => ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.quit),
+  stopBackendAndExit: (): Promise<void> => ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.stopBackendAndExit),
   getAppearanceSettings: (): Promise<DesktopThemeSettingsV7> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.getSettings),
   saveAppearanceSettings: (settings: DesktopThemeSettingsV7): Promise<void> =>

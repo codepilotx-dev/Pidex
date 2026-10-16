@@ -6,6 +6,7 @@ import {
 import { randomBytes } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import type { DesktopLogger } from '../logging/DesktopLogger.js'
+import type { BackgroundRuntime } from './BackgroundRuntime.js'
 import { HostProcessTreeKiller, type ProcessTreeKiller } from '../terminal/ProcessTree.js'
 import { normalizeOrigin } from '../security/Navigation.js'
 import {
@@ -93,6 +94,7 @@ interface OwnedSidecarProcess {
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export interface SidecarSupervisorDependencies {
+  backgroundRuntime?: BackgroundRuntime
   appRuntime: SidecarAppRuntime
   spawnProcess?: (
     executable: string,
@@ -135,6 +137,7 @@ export interface SidecarSupervisorDependencies {
 }
 
 export class SidecarSupervisor {
+  readonly #backgroundRuntime: BackgroundRuntime | undefined
   readonly #token: string
   readonly #logger: DesktopLogger
   readonly #moduleDirectory: string
@@ -174,6 +177,7 @@ export class SidecarSupervisor {
     dataLocation: SidecarDataLocation,
     dependencies: SidecarSupervisorDependencies,
   ) {
+    this.#backgroundRuntime = dependencies.backgroundRuntime
     this.#token = token
     this.#logger = logger
     this.#moduleDirectory = moduleDirectory
@@ -278,6 +282,22 @@ export class SidecarSupervisor {
     })
     return attempt
   }
+
+  async shutdown(): Promise<void> {
+    const connection = this.#connection
+    const onLost = this.#onConnectionLost
+    this.#clearWatchdog()
+    try {
+      if (this.#backgroundRuntime) await this.#backgroundRuntime.shutdown()
+      else if (this.#owned) await this.#disposeCurrentOwned()
+      else throw new Error('外部 Agent 请由服务器管理员显式停止')
+    } catch (error) {
+      if (connection && onLost) this.watch(connection, onLost)
+      throw error
+    }
+  }
+
+  get ownsBackend(): boolean { return Boolean(this.#backgroundRuntime || this.#owned) }
 
   async invalidate(): Promise<void> {
     this.#clearWatchdog()
@@ -460,6 +480,15 @@ export class SidecarSupervisor {
         : process.env.PIDEX_STATIC_DIR,
     }
     reportStage('spawn-process')
+    if (this.#backgroundRuntime) {
+      const connection = await this.#backgroundRuntime.connect(command, childEnvironment)
+      return {
+        ...connection,
+        managed: true,
+        port: Number(new URL(connection.origin).port),
+        generation: identity.generation,
+      }
+    }
     const child = this.#spawnProcess(command.executable, command.args, {
       cwd: command.cwd,
       windowsHide: true,

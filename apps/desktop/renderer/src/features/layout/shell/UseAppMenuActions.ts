@@ -23,6 +23,7 @@ type Options = {
           | 'toggleMaximize'
           | 'changePageZoom'
           | 'quitDuringStartup'
+          | 'stopBackendAndExit'
         >
       >
     | undefined
@@ -58,6 +59,7 @@ export function createAppMenuActions(options: Options) {
     openSettings: () => options.navigate('/settings/general'),
     logOut: undefined,
     exit: bridge?.quitDuringStartup ? () => client.exitApp() : undefined,
+    stopBackendAndExit: bridge?.stopBackendAndExit ? () => bridge.stopBackendAndExit!() : undefined,
   }
   const view: Record<ViewMenuAction, Action | undefined> = {
     toggleSidebar: options.toggleSidebar,

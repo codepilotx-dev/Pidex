@@ -22,6 +22,19 @@ describe('桌面自动更新通道', () => {
 })
 
 describe('桌面自动更新服务', () => {
+  test('后台未确认停止时阻止安装更新', async () => {
+    const updater = new FakeUpdater()
+    const statuses: DesktopUpdateStatus[] = []
+    const service = new DesktopAutoUpdater({
+      packaged: true, version: '1.2.3', logger: loggerStub(), updater,
+      onStatusChange: (status) => statuses.push(status),
+      beforeInstall: async () => { throw new Error('后台仍在运行') },
+    })
+    updater.emit('update-downloaded')
+    await service.quitAndInstall()
+    expect(statuses.at(-1)?.phase).toBe('error')
+    expect(updater.installCalls).toBe(0)
+  })
   test('合并并发检查和下载，并只在下载完成后安装', async () => {
     const updater = new FakeUpdater()
     const statuses: DesktopUpdateStatus[] = []

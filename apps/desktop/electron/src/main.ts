@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, clipboard, ipcMain, nativeTheme, screen, session, shell } from 'electron'
+import { app, clipboard, ipcMain, nativeTheme, safeStorage, screen, session, shell } from 'electron'
 import electronUpdater from 'electron-updater'
 import {
   DESKTOP_SETTINGS_IPC_CHANNELS,
@@ -33,6 +33,7 @@ import { AppearanceSettingsStore } from './settings/AppearanceSettingsStore.js'
 import { DataLocationStore, type DataLocationLaunch } from './settings/DataLocationStore.js'
 import { formatError } from './sidecar/Readiness.js'
 import { SidecarSupervisor } from './sidecar/Supervisor.js'
+import { LocalBackgroundRuntime } from './sidecar/BackgroundRuntime.js'
 import { DesktopAgentConnectionCoordinator } from './sidecar/ConnectionCoordinator.js'
 import { orchestrateDesktopQuit } from './sidecar/DesktopQuitOrchestrator.js'
 import { WindowAppearanceController } from './windows/Appearance.js'
@@ -109,6 +110,7 @@ let logger: DesktopLogger | undefined
 let windows: WindowManager | undefined
 let petOverlay: PetOverlayWindowController | undefined
 let quitting = false
+let stopBackendOnQuit = false
 let connectionCoordinator: DesktopAgentConnectionCoordinator | undefined
 let dataLocationStore: DataLocationStore | undefined
 let dataLocationLaunch: DataLocationLaunch | undefined
@@ -247,6 +249,12 @@ async function startDesktop(): Promise<void> {
     spawnProcess: (executablePath, args, options) => spawn(executablePath, [...args], options),
   })
   const updater = new DesktopAutoUpdater({
+    beforeInstall: async () => {
+      if (supervisor?.ownsBackend) {
+        await supervisor.shutdown()
+        stopBackendOnQuit = true
+      }
+    },
     packaged: app.isPackaged,
     version: app.getVersion(),
     logger,
@@ -308,6 +316,10 @@ async function startDesktop(): Promise<void> {
     getSupervisor: () => supervisor,
     getLogDirectory: () => logger?.directory ?? logDirectory,
     quitDuringStartup: () => app.quit(),
+    stopBackendAndExit: async () => {
+      await supervisor?.shutdown()
+      app.quit()
+    },
     isDesktopRendererSender: (sender) =>
       windows?.isApplicationSender(sender) === true || petOverlay?.isOverlaySender(sender) === true,
     broadcastDesktopSettingsChanged: (settings) => {
@@ -368,8 +380,16 @@ async function startDesktop(): Promise<void> {
   })
   windows.createStartupWindow()
 
-  const token = process.env.PIDEX_AUTH_TOKEN ?? randomBytes(32).toString('base64url')
+  let backgroundRuntime: LocalBackgroundRuntime | undefined
+  if (!process.env.PIDEX_AGENT_URL) {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error('系统凭据加密不可用，无法启动后台 Agent')
+    backgroundRuntime = new LocalBackgroundRuntime(join(dataLocationLaunch.dataDir, 'runtime'), safeStorage)
+  }
+  const token = backgroundRuntime
+    ? await backgroundRuntime.initialize()
+    : process.env.PIDEX_AUTH_TOKEN ?? randomBytes(32).toString('base64url')
   supervisor = new SidecarSupervisor(token, logger, moduleDirectory, dataLocationLaunch, {
+    backgroundRuntime,
     appRuntime: {
       isPackaged: app.isPackaged,
       resourcesPath: process.resourcesPath,
@@ -504,6 +524,7 @@ app.on('before-quit', (event) => {
         manager: terminalManager,
         stopSupervisor: async () => {
           terminalHost?.invalidate()
+          if (stopBackendOnQuit && supervisor?.ownsBackend) await supervisor.shutdown()
           if (connectionCoordinator) await connectionCoordinator.stop()
           else await supervisor?.stop()
         },
@@ -559,6 +580,7 @@ function trackRendererDeepLinkLifecycle(webContents: Electron.WebContents): void
 app.on('window-all-closed', () => app.quit())
 
 function relaunchApplication(): void {
+  stopBackendOnQuit = true
   app.relaunch()
   app.quit()
 }

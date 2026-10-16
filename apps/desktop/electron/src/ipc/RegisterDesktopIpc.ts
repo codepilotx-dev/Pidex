@@ -53,6 +53,7 @@ interface DesktopIpcDependencies {
   getSupervisor: () => SidecarSupervisor | undefined
   getLogDirectory: () => string
   quitDuringStartup: () => void
+  stopBackendAndExit: () => Promise<void>
   broadcastDesktopSettingsChanged: (settings: DesktopSettingsPayload) => void
   isDesktopRendererSender: (sender: WebContents) => boolean
 }
@@ -271,6 +272,10 @@ export function registerDesktopIpc(dependencies: DesktopIpcDependencies): void {
   ipcMain.handle(DESKTOP_STARTUP_IPC_CHANNELS.quit, (event) => {
     requireMainWindowSender(event, windows)
     quitDuringStartup()
+  })
+  ipcMain.handle(DESKTOP_STARTUP_IPC_CHANNELS.stopBackendAndExit, async (event) => {
+    requireMainWindowSender(event, windows)
+    await dependencies.stopBackendAndExit()
   })
   ipcMain.handle(DESKTOP_WORKSPACE_IPC_CHANNELS.pickDirectory, async (event) => {
     const ownerWindow = requireMainWindowSender(event, windows)

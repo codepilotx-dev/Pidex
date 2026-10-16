@@ -1264,6 +1264,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       startQueues: () => {
         threads.startRecoveredQueues()
         if (automationEnabled) automationScheduler?.start()
+        pets.start()
       },
     })
     yield* Effect.promise(() => startupRecovery.run())
@@ -1347,6 +1348,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const dispose = async () => {
       if (disposed) return
       disposed = true
+      pets.dispose()
       computer.dispose()
       unsubscribePlugins()
       browser.dispose()

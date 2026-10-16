@@ -35,6 +35,7 @@ export type FileMenuAction =
   | 'openSettings'
   | 'logOut'
   | 'exit'
+  | 'stopBackendAndExit'
 
 export type EditMenuAction = DesktopEditAction
 
@@ -434,7 +435,13 @@ export function MenuBar({
                 disabled={!isFileActionEnabled('exit')}
                 onSelect={() => onFileMenuAction('exit')}
               >
-                退出应用
+                退出桌面端（后台继续运行）
+              </MenuItem>
+              <MenuItem
+                disabled={!isFileActionEnabled('stopBackendAndExit')}
+                onSelect={() => onFileMenuAction('stopBackendAndExit')}
+              >
+                停止后端并退出
               </MenuItem>
             </AppMenu>
 

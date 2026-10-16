@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
 import { mkdtemp, readFile, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,6 +15,48 @@ afterEach(async () => {
 })
 
 describe('PetCatalogService', () => {
+  test('后端独立启动五小时目录刷新，显式释放后不再安排下一轮', async () => {
+    const root = await temporaryRoot()
+    let now = Date.parse('2026-10-16T00:00:00Z')
+    let requests = 0
+    let wake: (() => void) | undefined
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const originalSetTimeout = globalThis.setTimeout
+    const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((callback: () => void, delay: number) => {
+      const timer = originalSetTimeout(callback, delay)
+      if (delay === 5 * 60 * 60 * 1_000) { wake = callback; timers.push(timer) }
+      return timer
+    }) as typeof setTimeout)
+    const fetch = mockFetch(catalogResponses())
+    const service = new PetCatalogService(root, {
+      now: () => now,
+      fetch: (async (input, init) => {
+        if (input.toString() === catalogUrl) requests++
+        return fetch(input, init)
+      }) as typeof globalThis.fetch,
+    })
+    try {
+      service.start()
+      for (let i = 0; i < 100 && !wake; i++) await Bun.sleep(5)
+      expect(requests).toBe(1)
+      expect(wake).toBeDefined()
+      now += 5 * 60 * 60 * 1_000
+      clearTimeout(timers[0])
+      wake!()
+      for (let i = 0; i < 100 && timers.length < 2; i++) await Bun.sleep(5)
+      expect(requests).toBe(2)
+      expect(timers).toHaveLength(2)
+      service.dispose()
+      wake!()
+      await Bun.sleep(10)
+      expect(requests).toBe(2)
+      expect(timers).toHaveLength(2)
+    } finally {
+      service.dispose()
+      timerSpy.mockRestore()
+      for (const timer of timers) clearTimeout(timer)
+    }
+  })
   test('normalizes the community catalog and marks installed pets', async () => {
     const root = await temporaryRoot()
     const service = new PetCatalogService(root, {
