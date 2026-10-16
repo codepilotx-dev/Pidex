@@ -110,7 +110,7 @@ test.describe('animation contracts', () => {
       await expect(recentSection.locator('.sidebar-section-content')).toBeVisible()
     })
 
-    test(`process group and turn activity collapse with edge fades (${motion})`, async ({
+    test(`process group and turn activity collapse (${motion})`, async ({
       page,
     }) => {
       await openVisualFixture(page, 'scroll-edge', motion)
@@ -122,23 +122,32 @@ test.describe('animation contracts', () => {
       const processSummary = page.locator('.cpx-agent-activity__header')
       await expect(processSummary).toBeVisible()
 
-      // 展开 process group：items 可滚动，顶部/底部渐隐状态正确。
+      // 展开 process group：列表限高内部滚动，但隐藏滚动条、不再有边界渐隐。
       await processSummary.click()
       await expect(processSummary).toHaveAttribute('aria-expanded', 'true')
-      const edgeFrame = page.locator('.cpx-agent-activity__edge-fade')
-      await expect(edgeFrame).toHaveAttribute('data-scrollable', 'true')
-      await expect(edgeFrame).toHaveAttribute('data-at-start', 'true')
-      await expect(edgeFrame).toHaveAttribute('data-at-end', 'false')
-
+      await expect(page.locator('.cpx-agent-activity__edge-fade')).toHaveCount(0)
       const items = page.locator('.cpx-agent-activity__list')
-      await scrollNested(items, 0.5)
-      await expect(edgeFrame).toHaveAttribute('data-at-start', 'false')
-      await expect(edgeFrame).toHaveAttribute('data-at-end', 'false')
+      await expect(items).toBeVisible()
+      await expect(items).toHaveCSS('overflow-y', 'auto')
+      await expect(items).toHaveCSS('max-height', '224px')
+      await expect(items).toHaveCSS('scrollbar-width', 'none')
+      const listMetrics = await items.evaluate((element) => {
+        const list = element as HTMLElement
+        return {
+          clientHeight: list.clientHeight,
+          clientWidth: list.clientWidth,
+          offsetWidth: list.offsetWidth,
+          scrollHeight: list.scrollHeight,
+        }
+      })
+      expect(listMetrics.scrollHeight).toBeGreaterThan(listMetrics.clientHeight)
+      // 滚动条不占位，也不出现可见滚动栏。
+      expect(listMetrics.offsetWidth - listMetrics.clientWidth).toBe(0)
       await scrollNested(items, 1)
-      await expect(edgeFrame).toHaveAttribute('data-at-start', 'false')
-      await expect(edgeFrame).toHaveAttribute('data-at-end', 'true')
+      expect(await items.evaluate((element) => element.scrollTop)).toBeGreaterThan(0)
+      await scrollNested(items, 0)
 
-      // 内容尺寸增长会由 content ResizeObserver 主动重测，无需用户滚动。
+      // 折叠项展开只改变内容高度，不改变列表的滚动容器形态。
       const firstCard = items.locator('.cpx-agent-activity__item').first()
       const firstCardToggle = firstCard.locator('.cpx-agent-activity__item-header')
       const collapsedHeight = await items.evaluate((element) => element.scrollHeight)
@@ -148,7 +157,6 @@ test.describe('animation contracts', () => {
       await expect
         .poll(() => items.evaluate((element) => element.scrollHeight))
         .toBeGreaterThan(collapsedHeight)
-      await expect(edgeFrame).toHaveAttribute('data-at-end', 'false')
 
       // command shell 的伪元素留在外 frame，只有内层 scroller 移动。
       const commandFrame = firstCard.locator('.canonical-command-shell__edge-fade').first()
@@ -168,8 +176,6 @@ test.describe('animation contracts', () => {
 
       await firstCardToggle.locator('.cpx-agent-activity__chevron').click()
       await expect(firstCard).toHaveAttribute('data-expanded', 'false')
-      await scrollNested(items, 0)
-      await expect(edgeFrame).toHaveAttribute('data-at-start', 'true')
 
       // 24ms 内快速反向只复用一个内容实例，不跳到终点或留下空白。
       if (motion === 'off') {
@@ -180,7 +186,7 @@ test.describe('animation contracts', () => {
         await expect(
           processSummary.locator('..').locator(':scope > .ui-disclosure-content'),
         ).toHaveCount(1)
-        await expect(edgeFrame).toBeVisible()
+        await expect(items).toBeVisible()
       }
 
       // 折叠 process group：普通动效必须经过严格的中间高度，标题保持固定。
@@ -228,7 +234,7 @@ test.describe('animation contracts', () => {
       }
       await expect(processDisclosure).toHaveAttribute('aria-hidden', 'true')
       await expect(processDisclosure).toHaveAttribute('inert', '')
-      await expect(processDisclosure.locator('.cpx-agent-activity__edge-fade')).toHaveCount(1)
+      await expect(processDisclosure.locator('.cpx-agent-activity__list')).toHaveCount(1)
       await expect.poll(() => disclosureHeight(processDisclosure)).toBeLessThanOrEqual(0.5)
 
       // turn activity 折叠：回答区连续、单调上移，不出现空白中间帧。

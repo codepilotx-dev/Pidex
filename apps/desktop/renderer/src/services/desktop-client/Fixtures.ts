@@ -406,8 +406,8 @@ export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | n
       )
     }
 
-    // 首个会话的末轮插入一批工具项，为嵌套滚动边界渐隐场景提供
-    // 可滚动的 process group（12 个 Bash 工具项超出 14rem 折叠高度）。
+    // 首个会话的末轮插入一批工具项：为嵌套滚动场景提供限高滚动的
+    // process group（12 个 Bash 工具项超出 14rem 折叠高度）。
     if (includeNestedScrollFixture && sessionIndex === 0 && sessionTurns > 0) {
       const lastTurnIndex = sessionTurns - 1
       const lastUser = messages[lastTurnIndex * 2]!
@@ -692,8 +692,8 @@ export function createBrowserVisualFixture(): DesktopSessionSnapshot | null {
   }
 
   if (visualCase === 'scroll-edge') {
-    // 14 个 Bash 工具项组成可滚动的 process group；执行计划提供
-    // 16 步可滚动的 steps。两者都用于验证滚动边界渐隐状态。
+    // 14 个 Bash 工具项组成限高滚动的 process group（滚动条隐藏）；执行计划
+    // 提供 16 步可滚动的 steps，用于验证滚动边界渐隐状态。
     for (let toolIndex = 0; toolIndex < 14; toolIndex += 1) {
       const toolId = `${sessionId}-tool-${toolIndex}`
       events.push(

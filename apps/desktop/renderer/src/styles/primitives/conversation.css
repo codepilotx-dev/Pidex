@@ -687,45 +687,18 @@
     color: var(--cpx-sys-color-accent-fg);
   }
 
-  .cpx-agent-activity__edge-fade,
   .execution-plan-card__edge-fade {
     position: relative;
     min-width: 0;
   }
 
-  .cpx-agent-activity__edge-fade::before,
-  .cpx-agent-activity__edge-fade::after {
-    position: absolute;
-    z-index: var(--cpx-sys-z-local);
-    inset-inline: 0;
-    height: var(--cpx-sys-space-6);
-    content: '';
-    pointer-events: none;
-    opacity: 0;
-  }
-  .cpx-agent-activity__edge-fade::before {
-    top: 0;
-    background: linear-gradient(
-      to bottom,
-      var(--edge-fade-fill, var(--cpx-sys-color-surface-canvas)),
-      transparent
-    );
-  }
-  .cpx-agent-activity__edge-fade::after {
-    bottom: 0;
-    background: linear-gradient(
-      to top,
-      var(--edge-fade-fill, var(--cpx-sys-color-surface-canvas)),
-      transparent
-    );
-  }
-  .cpx-agent-activity__edge-fade[data-scrollable='true'][data-at-start='false']::before,
-  .cpx-agent-activity__edge-fade[data-scrollable='true'][data-at-end='false']::after {
-    opacity: 1;
+  /* 处理过程列表限高滚动，但隐藏滚动条；上下边界渐隐已移除。 */
+  .cpx-agent-activity__list {
+    scrollbar-width: none;
   }
 
-  .right-dock-side-chat .cpx-agent-activity__edge-fade {
-    --edge-fade-fill: var(--cpx-sys-color-surface-panel);
+  .cpx-agent-activity__list::-webkit-scrollbar {
+    display: none;
   }
 
   /* Path steps colour their grouped children from the parent state. */

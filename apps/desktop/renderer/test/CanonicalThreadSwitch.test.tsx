@@ -211,7 +211,7 @@ describe('canonical thread switch', () => {
     expect(isCurrentCanonicalThreadRequest('thread-a', 2, 'thread-a', 1)).toBe(false)
   })
 
-  test('initializes completed groups collapsed and active groups expanded', () => {
+  test('initializes every process group collapsed and follows manual expansion', () => {
     const completed = renderToStaticMarkup(
       <CanonicalProcessGroup
         active={false}
@@ -287,7 +287,8 @@ describe('canonical thread switch', () => {
     expect(completed).toContain('lucide-square-terminal')
     expect(completed).toContain('lucide-chevron-right')
     expect(completed).not.toContain('lucide-chevron-down')
-    expect(active).toContain('active-tool-card')
+    expect(active).not.toContain('active-tool-card')
+    expect(active).toContain('data-state="active"')
     expect(active).toContain('lucide-loader-circle')
     expect(active).toContain('lucide-chevron-right')
     expect(failed).not.toContain('failed-tool-card')
@@ -913,7 +914,7 @@ describe('canonical thread switch', () => {
     expect(markup.match(/canonical-message-actions--assistant/g)).toHaveLength(1)
   })
 
-  test('summarizes process items into neutral stage labels and auto-expands active groups', () => {
+  test('summarizes process items into neutral stage labels and keeps groups collapsed', () => {
     const tool = (
       id: string,
       activity: Extract<Item, { type: 'tool' }>['activity'],
@@ -962,8 +963,8 @@ describe('canonical thread switch', () => {
         <span data-testid="running-step">step output</span>
       </CanonicalProcessGroup>,
     )
-    expect(activeMarkup).toContain('data-expanded="true"')
-    expect(activeMarkup).toContain('running-step')
+    expect(activeMarkup).toContain('data-expanded="false"')
+    expect(activeMarkup).not.toContain('running-step')
 
     const completedMarkup = renderToStaticMarkup(
       <CanonicalProcessGroup
@@ -1054,8 +1055,8 @@ test('Radix 强制展开不覆盖保存选择，结束后恢复且内层分组�
       </CanonicalProcessGroup>,
     )
   expect(group(false)).not.toContain('内层标记')
-  expect(group(true)).toContain('内层标记')
+  expect(group(true)).not.toContain('内层标记')
   expect(store.getSnapshot('process-group:turn:group')).toBe(false)
   store.setExpanded('process-group:turn:group', true)
-  expect(group(false)).toContain('内层标记')
+  expect(group(true)).toContain('内层标记')
 })

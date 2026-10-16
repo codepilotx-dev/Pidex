@@ -58,7 +58,6 @@ import {
 } from './TimelineDisclosureState.js'
 import type { OpenPlanInDockRequest } from '../workflow/WorkflowPlanCard.js'
 import type { RegisterConversationTurnRow } from '../conversation/UseConversationTurnRowVisibility.js'
-import { useScrollEdgeState } from '../../../hooks/UseScrollEdgeState.js'
 import { questionTimelineItems } from './QuestionItemView.js'
 
 export type ProcessActivityProjection =
@@ -128,7 +127,7 @@ export function CanonicalProcessGroup({
   label,
   summaryKey,
 }: TimelineDisclosureProps): React.ReactNode {
-  const [localExpanded, setLocalExpanded] = React.useState(defaultExpanded || active)
+  const [localExpanded, setLocalExpanded] = React.useState(defaultExpanded)
   const subscribe = React.useCallback(
     (listener: () => void) =>
       disclosure ? disclosure.store.subscribe(disclosure.id, listener) : () => {},
@@ -138,27 +137,12 @@ export function CanonicalProcessGroup({
     () => (disclosure ? disclosure.store.getSnapshot(disclosure.id) : localExpanded),
     [disclosure?.store, disclosure?.id, localExpanded],
   )
-  const storedExpanded = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
-  const expanded = active || storedExpanded
+  const expanded = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
   const setExpanded = (value: boolean) => {
     if (disclosure) disclosure.store.setExpanded(disclosure.id, value)
     else setLocalExpanded(value)
   }
-  const previousActive = React.useRef(active)
-
-  React.useEffect(() => {
-    if (previousActive.current !== active) {
-      if (!disclosure) setLocalExpanded(active)
-      previousActive.current = active
-    }
-  }, [active, disclosure?.store])
   const contentId = React.useId()
-  const itemsRef = React.useRef<HTMLDivElement | null>(null)
-  const itemsContentRef = React.useRef<HTMLDivElement | null>(null)
-  const edge = useScrollEdgeState(itemsRef, {
-    contentRef: itemsContentRef,
-    version: expanded ? children : undefined,
-  })
   const visibleLabel = useDeferredProcessSummary(label, summaryKey, active)
   const datastate = active ? 'active' : failed ? 'failed' : 'completed'
   const SummaryIcon = processSummaryIcon(active ? 'thinking' : failed ? 'failed' : kind)
@@ -216,22 +200,9 @@ export function CanonicalProcessGroup({
           contentClassName="cpx-agent-activity__content"
           id={contentId}
         >
-          <div
-            className="cpx-agent-activity__edge-fade"
-            data-at-end={edge.atEnd}
-            data-at-start={edge.atStart}
-            data-scrollable={edge.scrollable}
-          >
-            <div
-              className="cpx-agent-activity__list tw:max-h-56 tw:overflow-x-hidden tw:overflow-y-auto tw:[overflow-anchor:none] tw:[scrollbar-gutter:stable]"
-              ref={itemsRef}
-            >
-              <div
-                className="cpx-agent-activity__list-content tw:relative tw:grid tw:gap-[var(--conversation-grouped-item-gap,var(--cpx-sys-space-1))]"
-                ref={itemsContentRef}
-              >
-                {children}
-              </div>
+          <div className="cpx-agent-activity__list tw:max-h-56 tw:overflow-x-hidden tw:overflow-y-auto tw:[overflow-anchor:none]">
+            <div className="cpx-agent-activity__list-content tw:relative tw:grid tw:gap-[var(--conversation-grouped-item-gap,var(--cpx-sys-space-1))]">
+              {children}
             </div>
           </div>
         </CollapsibleContent>

@@ -384,7 +384,7 @@ test.describe('desktop UX performance', () => {
     }
   })
 
-  test('nested process list scrolling keeps edge fades frame-cheap', async ({ page }) => {
+  test('nested process list scrolling stays frame-cheap', async ({ page }) => {
     // 这里只测嵌套 scroller；使用小型外层会话避免虚拟列表把目标 turn
     // 卸载后将外层 timeline 成本混入样本。
     await waitForFixture(page, 10, 30, { nestedScroll: true })
@@ -401,8 +401,16 @@ test.describe('desktop UX performance', () => {
     await expect(processItems.first().locator('.cpx-agent-activity__list-content > *')).toHaveCount(
       12,
     )
-    const edgeFrame = page.locator('.cpx-agent-activity__edge-fade').first()
-    await expect(edgeFrame).toHaveAttribute('data-scrollable', 'true')
+    // 折叠项展开后，命令输出的嵌套 scroller 才是渐隐状态切换的载体。
+    // 工具行的展开入口是铺满整行的 overlay 按钮，标题上的 chevron 只做展示。
+    await expect
+      .poll(() =>
+        processItems.first().evaluate((element) => ({
+          scrollable: element.scrollHeight > element.clientHeight + 1,
+          scrollbarWidth: element.offsetWidth - element.clientWidth,
+        })),
+      )
+      .toMatchObject({ scrollable: true, scrollbarWidth: 0 })
 
     for (let sample = 1; sample <= 3; sample += 1) {
       await startInteractionProbe(page)
