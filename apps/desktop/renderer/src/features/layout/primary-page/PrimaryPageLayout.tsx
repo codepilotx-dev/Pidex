@@ -6,7 +6,7 @@ import { cx } from '../../../utils/Cx.js'
 
 export type PrimaryPageLayoutProps = {
   title: React.ReactNode
-  description: React.ReactNode
+  description?: React.ReactNode
   actions?: React.ReactNode
   search?: React.ReactNode
   expandableSearch?: boolean
@@ -66,9 +66,11 @@ export function PrimaryPageLayout({
                 </h1>
               </div>
             )}
-            <p className="primary-page-layout__description tw:mt-2 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body tw:[&_a]:ml-1 tw:[&_a]:text-app-text tw:[&_a]:underline tw:[&_a]:underline-offset-2">
-              {description}
-            </p>
+            {description ? (
+              <p className="primary-page-layout__description tw:mt-2 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body tw:[&_a]:ml-1 tw:[&_a]:text-app-text tw:[&_a]:underline tw:[&_a]:underline-offset-2">
+                {description}
+              </p>
+            ) : null}
           </div>
           {actions ? (
             <div className="primary-page-layout__actions tw:flex tw:min-h-9 tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2">

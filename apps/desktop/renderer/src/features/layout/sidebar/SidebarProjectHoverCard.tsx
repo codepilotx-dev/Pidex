@@ -15,6 +15,8 @@ type Props = {
   conversationCount: number
   openCount: number
   unreadCount: number
+  pinLabel?: string
+  pinIcon?: React.ReactNode
   isPinned: boolean
   isUnavailable: boolean
   project: DesktopWorkspace
@@ -30,6 +32,8 @@ export function SidebarProjectHoverCard({
   conversationCount,
   openCount,
   unreadCount,
+  pinLabel,
+  pinIcon,
   isPinned,
   isUnavailable,
   project,
@@ -60,6 +64,8 @@ export function SidebarProjectHoverCard({
             openCount={openCount}
             unreadCount={unreadCount}
             focusRequest={focusRequest}
+            pinLabel={pinLabel}
+            pinIcon={pinIcon}
             isPinned={isPinned}
             isUnavailable={isUnavailable}
             project={project}

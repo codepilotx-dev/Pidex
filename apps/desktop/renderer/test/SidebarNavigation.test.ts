@@ -138,7 +138,8 @@ describe('Codex 侧栏导航', () => {
           ),
         ),
       )
-      const pinned = render(readySidebarCapabilities('pets.management.v1', 'skills.manage.v1', 'session-group.v1'))
+      const pinned = render(readySidebarCapabilities('pets.management.v1', 'skills.manage.v1', 'session-group.v1', 'git.review.v1'))
+      expect(pinned.indexOf('aria-label="Git 看板"')).toBeGreaterThan(pinned.indexOf('aria-label="其他入口"'))
       expect(pinned).toContain('aria-label="首页"')
       expect(pinned).toContain('aria-label="宠物市场"')
       expect(pinned).toContain('aria-label="更多"')
@@ -247,10 +248,12 @@ describe('Codex 侧栏导航', () => {
       { view: 'new', label: '新建任务', path: '/new' },
       { view: 'sessionGroups', label: '工作组', path: '/workflows' },
       { view: 'automations', label: '已安排', path: '/automations' },
+      { view: 'git', label: 'Git 看板', path: '/git' },
       { view: 'plugins', label: '插件', path: '/plugins' },
       { view: 'providers', label: '供应商', path: '/providers' },
       { view: 'pets', label: '宠物市场', path: '/pets' },
     ])
+    expect(sidebarPaneForRoute('/git', false)).toBe('git')
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/search')).toBeFalse()
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/sites')).toBeFalse()
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/pull-requests')).toBeFalse()

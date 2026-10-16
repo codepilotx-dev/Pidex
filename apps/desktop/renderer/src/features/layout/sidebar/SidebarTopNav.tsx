@@ -9,6 +9,7 @@ import {
   Clock3,
   Egg,
   FolderKanban,
+  GitBranch,
   MessagesSquare,
   Plug,
   Search,
@@ -97,6 +98,13 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
     icon: <Clock3 size={APP_ICON_SIZE} />,
     path: '/automations',
     availability: { kind: 'always' },
+  },
+  {
+    view: 'git',
+    label: 'Git 看板',
+    icon: <GitBranch size={APP_ICON_SIZE} />,
+    path: '/git',
+    availability: { kind: 'any-capability', capabilities: ['git.review.v1'] },
   },
   {
     view: 'plugins',

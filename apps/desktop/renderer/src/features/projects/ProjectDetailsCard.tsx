@@ -2,6 +2,7 @@ import type React from 'react'
 import { useMemo } from 'react'
 import { FolderOpen, MessageSquare, Pin, PinOff, Settings } from 'lucide-react'
 import type { DesktopWorkspace, ProjectAppearance } from '../../../shared/Types.js'
+import { Tooltip } from '../../components/ui/Tooltip.js'
 import { Button } from '../../components/ui/Button.js'
 
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../components/ui/IconTokens.js'
@@ -22,6 +23,8 @@ type Props = {
   conversationCount: number
   openCount: number
   unreadCount: number
+  pinLabel?: string
+  pinIcon?: React.ReactNode
   isPinned: boolean
   isUnavailable: boolean
   project: DesktopWorkspace
@@ -36,6 +39,8 @@ export function ProjectDetailsCard({
   conversationCount,
   openCount,
   unreadCount,
+  pinLabel,
+  pinIcon,
   isPinned,
   isUnavailable,
   project,
@@ -82,20 +87,24 @@ export function ProjectDetailsCard({
         >
           {project.name}
         </strong>
-        <Button
-          isIconOnly
-          iconSize="sm"
-          className="sidebar-project-hover-card-pin tw:inline-flex tw:flex-none tw:items-center tw:justify-center tw:justify-self-end"
-          color={isPinned ? 'ghostActive' : 'ghostSecondary'}
-          ref={pinRef}
-          size="toolbar"
-          title={isPinned ? '取消置顶项目' : '置顶项目'}
-          onClick={() => {
-            onTogglePinned()
-          }}
-        >
-          {isPinned ? <PinOff size={APP_ICON_SIZES.sm} /> : <Pin size={APP_ICON_SIZES.sm} />}
-        </Button>
+        <Tooltip content={pinLabel ?? (isPinned ? '取消置顶项目' : '置顶项目')}>
+          <Button
+            nativeTitle={false}
+            isIconOnly
+            iconSize="sm"
+            className="sidebar-project-hover-card-pin tw:inline-flex tw:flex-none tw:items-center tw:justify-center tw:justify-self-end"
+            color={pinLabel ? 'text' : isPinned ? 'ghostActive' : 'ghostSecondary'}
+            ref={pinRef}
+            size="toolbar"
+            title={pinLabel ?? (isPinned ? '取消置顶项目' : '置顶项目')}
+            onClick={() => {
+              onTogglePinned()
+            }}
+          >
+            {pinIcon ??
+              (isPinned ? <PinOff size={APP_ICON_SIZES.sm} /> : <Pin size={APP_ICON_SIZES.sm} />)}
+          </Button>
+        </Tooltip>
       </SidebarHoverCardHeader>
       <SidebarHoverCardRow className="sidebar-project-hover-card-stats tw:text-app-text-meta tw:type-caption">
         <MessageSquare
@@ -128,21 +137,21 @@ export function ProjectDetailsCard({
       <div className="sidebar-project-hover-card-folders tw:mt-1 tw:flex tw:flex-col tw:gap-1">
         {folders.map((folder) =>
           folder.path ? (
-            <button
-              className={cx('sidebar-project-hover-card-folder', PROJECT_HOVER_CARD_ACTION_CLASS)}
-              disabled={isUnavailable || folder.availability === 'missing'}
-              key={folder.id}
-              type="button"
-              title={folder.path}
-              onClick={() => {
-                onOpenFolder(folder.path)
-              }}
-            >
-              <FolderOpen aria-hidden="true" size={APP_ICON_SIZE} />
-              <span className="sidebar-project-hover-card-folder-path tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
-                {folder.path}
-              </span>
-            </button>
+            <Tooltip key={folder.id} content={folder.path}>
+              <button
+                className={cx('sidebar-project-hover-card-folder', PROJECT_HOVER_CARD_ACTION_CLASS)}
+                disabled={isUnavailable || folder.availability === 'missing'}
+                type="button"
+                onClick={() => {
+                  onOpenFolder(folder.path)
+                }}
+              >
+                <FolderOpen aria-hidden="true" size={APP_ICON_SIZE} />
+                <span className="sidebar-project-hover-card-folder-path tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
+                  {folder.path}
+                </span>
+              </button>
+            </Tooltip>
           ) : null,
         )}
       </div>

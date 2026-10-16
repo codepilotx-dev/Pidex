@@ -335,6 +335,7 @@ describe('自定义信息保留式迁移', () => {
     expect(normalized.pinnedSort).toBe('manual')
     expect(normalized.destinationOrder).toEqual([
       'automations',
+      'git',
       'plugins',
       'providers',
       'pets',
@@ -359,6 +360,7 @@ describe('自定义信息保留式迁移', () => {
       'plugins',
       'unknown',
       'automations',
+      'git',
       'providers',
       'pets',
       'sessionGroups',
@@ -366,11 +368,11 @@ describe('自定义信息保留式迁移', () => {
   })
 })
 
-test('旧导航配置补齐宠物市场并保留已有排序和隐藏设置', () => {
+test('旧导航配置补齐 Git 看板与宠物市场并保留已有排序和隐藏设置', () => {
   const destinationOrder = ['providers', 'plugins', 'automations', 'sessionGroups']
   const hiddenDestinationIds = ['plugins', 'sessionGroups']
   const normalized = normalizeSidebarCustomization({ destinationOrder, hiddenDestinationIds })
-  expect(normalized.destinationOrder).toEqual([...destinationOrder, 'pets'])
+  expect(normalized.destinationOrder).toEqual([...destinationOrder, 'git', 'pets'])
   expect(normalized.hiddenDestinationIds).toEqual(hiddenDestinationIds)
   expect(normalized.version).toBe(1)
 })

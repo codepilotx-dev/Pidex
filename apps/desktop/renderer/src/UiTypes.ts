@@ -14,6 +14,7 @@ export type AppView =
   | 'sessionGroups'
   | 'projects'
   | 'search'
+  | 'git'
   | 'plugins'
   | 'providers'
   | 'pets'

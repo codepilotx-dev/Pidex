@@ -1,9 +1,13 @@
+import { GitBoardSidebar } from '../../git-board/GitBoardSidebar.js'
 import {
   captureSidebarAssignments,
   restoreFailedArchiveAssignments,
 } from '../sidebar/SidebarCustomization.js'
 import { DEFAULT_SIDEBAR_CUSTOMIZATION } from '../../../../shared/SettingsSchema.js'
-import { subscribeProjectRestores } from '../../projects/ProjectCatalogEvents.js'
+import {
+  notifyProjectCatalogChanged,
+  subscribeProjectRestores,
+} from '../../projects/ProjectCatalogEvents.js'
 import { mergeBrowserWorkbench } from '../../browser/BrowserWorkbenchState.js'
 import { mergeComposerAttachments } from '../../session/composer/ComposerAttachmentSelection.js'
 import { ConversationProjectDetails } from '../../projects/ConversationProjectDetails.js'
@@ -259,6 +263,7 @@ function routeAccessibilityLabel(pathname: string): string {
   if (pathname === '/new') return '新对话'
   if (pathname.startsWith('/threads/')) return '会话'
   if (pathname.startsWith('/projects')) return '项目'
+  if (pathname === '/git') return 'Git 看板'
   if (pathname === '/plugins') return '插件与技能'
   if (pathname === '/providers') return '供应商'
   if (pathname === '/pull-requests') return '拉取请求'
@@ -828,6 +833,7 @@ export function DesktopLayout(): React.ReactNode {
 
   const handleGithubWorkspaceCloned = useCallback(
     (selected: DesktopWorkspace): void => {
+      notifyProjectCatalogChanged()
       navigate(QUICK_CHAT_PATH)
       setWorkspaceState(selected)
       setLastActiveWorkspacePath(selected.path)
@@ -2278,6 +2284,7 @@ export function DesktopLayout(): React.ReactNode {
       <div
         className="sidebar-panel-content"
         hidden={
+          displayedSidebarPane === 'git' ||
           displayedSidebarPane === 'settings' ||
           displayedSidebarPane === 'scheduled' ||
           displayedSidebarPane === 'plugins' ||
@@ -2291,6 +2298,16 @@ export function DesktopLayout(): React.ReactNode {
       <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'settings'}>
         {settingsSidebarContent}
       </div>
+      {displayedSidebarPane === 'git' ? (
+        <div className="sidebar-panel-content">
+          <GitBoardSidebar
+            sessions={sessions}
+            onArchiveSessions={handleArchiveSessions}
+            onRemoveWorkspace={handleRemoveWorkspace}
+            onReport={setNoticeMessage}
+          />
+        </div>
+      ) : null}
       {scheduledSidebarMounted ? (
         <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'scheduled'}>
           <SidebarScheduledPane />

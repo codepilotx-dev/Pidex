@@ -28,9 +28,10 @@ type Props = {
 
 /** 导航轨目的地键：与 sidebarCustomization.destinationOrder 中的 id 一一对应。 */
 export type SidebarRailDestinationId =
-  'automations' | 'plugins' | 'providers' | 'pets' | 'sessionGroups'
+  'git' | 'automations' | 'plugins' | 'providers' | 'pets' | 'sessionGroups'
 
 const RAIL_DESTINATION_PANES: Record<SidebarRailDestinationId, SidebarPane | null> = {
+  git: 'git',
   automations: 'scheduled',
   plugins: 'plugins',
   providers: 'providers',
@@ -39,7 +40,7 @@ const RAIL_DESTINATION_PANES: Record<SidebarRailDestinationId, SidebarPane | nul
 }
 
 const OTHER_RAIL_DESTINATION_IDS = new Set<SidebarRailDestinationId>([
-  'sessionGroups', 'providers', 'pets',
+  'git', 'sessionGroups', 'providers', 'pets',
 ])
 
 export function SidebarNavigationRail({

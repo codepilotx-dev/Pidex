@@ -1,4 +1,5 @@
 import { lazy, Suspense, type ReactNode } from 'react'
+import { GitBoardProvider } from './features/git-board/GitBoardContext.js'
 import { createHashRouter, Navigate, useLocation } from 'react-router-dom'
 import { DesktopSettingsProvider } from './features/settings/UseDesktopSettings.js'
 import { DesktopLayout } from './features/layout/shell/DesktopLayout.js'
@@ -18,6 +19,12 @@ import { PetCatalogProvider } from './features/pet/PetCatalogProvider.js'
 import { SessionGroupsView } from './features/session-groups/SessionGroupsView.js'
 import { legacyWorkflowRedirectPath } from './features/routing/WorkflowRoutes.js'
 import { providerWorkspaceTarget } from './features/models/ModelCenterState.js'
+
+const GitBoardView = lazy(() =>
+  import('./features/git-board/GitBoardView.js').then((module) => ({
+    default: module.GitBoardView,
+  })),
+)
 
 const PetOverlayPage = lazy(() =>
   import('./features/pet/PetOverlayPage.js').then((module) => ({
@@ -81,7 +88,9 @@ const router = createHashRouter([
       {
         element: (
           <PetCatalogProvider>
-            <DesktopLayout />
+            <GitBoardProvider>
+              <DesktopLayout />
+            </GitBoardProvider>
           </PetCatalogProvider>
         ),
         children: [
@@ -100,6 +109,14 @@ const router = createHashRouter([
             element: (
               <Suspense fallback={null}>
                 <ProvidersView />
+              </Suspense>
+            ),
+          },
+          {
+            path: 'git',
+            element: (
+              <Suspense fallback={null}>
+                <GitBoardView />
               </Suspense>
             ),
           },

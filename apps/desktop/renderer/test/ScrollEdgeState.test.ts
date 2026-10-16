@@ -121,3 +121,26 @@ describe('resolveScrollEdgeState', () => {
     expect(SCROLL_EDGE_EPSILON).toBe(1)
   })
 })
+
+test('横向滚动在起点、中段和终点显示对应渐隐边界', () => {
+  expect(resolveScrollEdgeState({ scrollLeft: 0, scrollWidth: 1200, clientWidth: 800 })).toEqual({
+    atStart: true,
+    atEnd: false,
+    scrollable: true,
+  })
+  expect(resolveScrollEdgeState({ scrollLeft: 200, scrollWidth: 1200, clientWidth: 800 })).toEqual({
+    atStart: false,
+    atEnd: false,
+    scrollable: true,
+  })
+  expect(resolveScrollEdgeState({ scrollLeft: 400, scrollWidth: 1200, clientWidth: 800 })).toEqual({
+    atStart: false,
+    atEnd: true,
+    scrollable: true,
+  })
+  expect(resolveScrollEdgeState({ scrollLeft: 0, scrollWidth: 800, clientWidth: 800 })).toEqual({
+    atStart: true,
+    atEnd: true,
+    scrollable: false,
+  })
+})
