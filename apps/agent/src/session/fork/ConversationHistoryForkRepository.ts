@@ -1,3 +1,4 @@
+import { activeTurnSql } from '../../storage/repositories/ThreadEditRepository'
 import { randomUUID } from 'node:crypto'
 import type { SessionTreeEntry } from '../../orchestration/harness/Types'
 import { AgentError } from '../../Domain'
@@ -503,7 +504,7 @@ export class ConversationHistoryForkRepository {
         `
       SELECT id
       FROM turns
-      WHERE thread_id = ? AND status = 'completed'
+      WHERE thread_id = ? AND ${activeTurnSql('turns', this.db)} AND status = 'completed'
       ORDER BY created_at DESC, id DESC
       LIMIT 1
     `,
@@ -693,7 +694,7 @@ export class ConversationHistoryForkRepository {
       SELECT turns.status, turns.root_agent_id, agent_executions.session_id
       FROM turns
       JOIN agent_executions ON agent_executions.id = turns.root_agent_id
-      WHERE turns.id = ? AND turns.thread_id = ?
+      WHERE turns.id = ? AND turns.thread_id = ? AND ${activeTurnSql('turns', this.db)}
     `,
       )
       .get(throughTurnID, sourceThreadID) as {
@@ -773,7 +774,7 @@ export class ConversationHistoryForkRepository {
         WHERE candidate.turn_id = turns.id
         ORDER BY candidate.created_at, candidate.id LIMIT 1
       )
-      WHERE turns.thread_id = (SELECT thread_id FROM turns WHERE id = ?)
+      WHERE turns.thread_id = (SELECT thread_id FROM turns WHERE id = ?) AND ${activeTurnSql('turns', this.db)}
         AND agent_executions.session_id = ?
       ORDER BY turns.created_at, turns.id
     `,
@@ -864,7 +865,7 @@ export class ConversationHistoryForkRepository {
     const rootTurns = this.db.sqlite
       .query(
         `
-      SELECT id, status, created_at FROM turns WHERE thread_id = ? ORDER BY created_at, id
+      SELECT id, status, created_at FROM turns WHERE thread_id = ? AND ${activeTurnSql('turns', this.db)} ORDER BY created_at, id
     `,
       )
       .all(sourceRootID) as Array<{ id: string; status: string; created_at: number }>
@@ -896,7 +897,9 @@ export class ConversationHistoryForkRepository {
       for (const child of children) {
         if (throughTurnID === undefined) this.assertFullyForkable(child.child_thread_id)
         const childTurns = this.db.sqlite
-          .query('SELECT id, status FROM turns WHERE thread_id = ? ORDER BY created_at, id')
+          .query(
+            `SELECT id, status FROM turns WHERE thread_id = ? AND ${activeTurnSql('turns', this.db)} ORDER BY created_at, id`,
+          )
           .all(child.child_thread_id) as Array<{ id: string; status: string }>
         if (childTurns.some((turn) => !TERMINAL_TURN_STATES.has(turn.status)))
           throw new AgentError('HISTORY_UNSUPPORTED', '已完成子任务包含未终结 Turn', 409)

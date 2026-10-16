@@ -1,3 +1,4 @@
+import { THREAD_EDIT_SCHEMA } from '../repositories/ThreadEditRepository'
 import { Database } from 'bun:sqlite'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
@@ -170,6 +171,7 @@ export const FINAL_SCHEMA = [
   ...THREAD_GOAL_LEDGER_SCHEMA,
   ...THREAD_GOAL_CONTINUATION_SCHEMA,
   ...THREAD_BOOKMARK_SCHEMA,
+  ...THREAD_EDIT_SCHEMA,
   ...THREAD_PULL_REQUEST_SCHEMA,
   ...THREAD_WORKTREE_OPERATION_SCHEMA,
   ...WORKTREE_SETTINGS_SCHEMA,
@@ -1585,6 +1587,12 @@ class SchemaInitializer {
               ),
             // 任务规划扩展表：计划快照与执行规则、触发去重记录、验收记录。
             // 只新增独立表，不触碰 automations/scheduled_tasks 的既有列与状态。
+            61: () =>
+              this.sqlite.exec(
+                THREAD_EDIT_SCHEMA.map((statement) =>
+                  statement.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '),
+                ).join(';'),
+              ),
             60: () =>
               this.sqlite.exec(
                 TASK_SCHEDULE_SCHEMA.map((statement) =>

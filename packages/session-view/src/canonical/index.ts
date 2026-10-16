@@ -76,6 +76,7 @@ export interface CanonicalThreadState {
     hasOlder: boolean
     loadingOlder: boolean
     generation: number
+    revision?: number
   }
   stream: {
     streamId: string
@@ -141,6 +142,7 @@ export function pageFromThreadSnapshot(
 ): CanonicalThreadPage {
   return {
     thread: snapshot.thread,
+    historyRevision: snapshot.historyRevision,
     pendingPlanApproval: snapshot.pendingPlanApproval,
     subagents: [...snapshot.subagents],
     turns: snapshot.turns.map((turn) => ({
@@ -206,7 +208,8 @@ export function reconcileLatestThreadPage(
   fresh.history.generation = cached.history.generation + 1
   if (
     cached.thread.id !== page.thread.id ||
-    cached.stream.streamId !== page.streamPosition.streamId
+    cached.stream.streamId !== page.streamPosition.streamId ||
+    (cached.history.revision ?? 0) !== (page.historyRevision ?? 0)
   ) {
     return fresh
   }
@@ -291,6 +294,7 @@ export function hydrateLatestThreadPage(
     hasOlder: page.hasOlder,
     loadingOlder: false,
     generation: _state.history.generation + 1,
+    revision: page.historyRevision ?? 0,
   }
   next.stream = {
     streamId: page.streamPosition.streamId,
@@ -304,7 +308,11 @@ export function prependOlderThreadPage(
   state: CanonicalThreadState,
   page: CanonicalThreadPage,
 ): CanonicalThreadState {
-  if (page.thread.id !== state.thread.id) return state
+  if (
+    page.thread.id !== state.thread.id ||
+    (page.historyRevision ?? 0) !== (state.history.revision ?? 0)
+  )
+    return state
   const next = cloneState(state)
   mergePageEntities(next, page, 'prepend')
   for (const projection of page.subagents) {
@@ -686,6 +694,29 @@ function applyEnvelopePayload(
   envelope: ThreadEventEnvelopeLike,
 ): void {
   switch (envelope.type) {
+    case 'thread/history/edited': {
+      const removed = new Set(envelope.payload.removedTurnIds)
+      state.history.revision = envelope.payload.historyRevision
+      state.turnOrder = state.turnOrder.filter((id) => !removed.has(id))
+      for (const id of removed) state.turnsById.delete(id)
+      for (const map of [
+        state.inputsById,
+        state.messagesById,
+        state.agentsById,
+        state.itemsById,
+        state.approvalsById,
+      ]) {
+        for (const [id, row] of map) if (row.turnId && removed.has(row.turnId)) map.delete(id)
+      }
+      for (const [id, row] of state.subagentsByTaskId)
+        if (removed.has(row.task.parentTurnId)) state.subagentsByTaskId.delete(id)
+      for (const [id, row] of state.hookTrustsById)
+        if (removed.has(row.turnId)) state.hookTrustsById.delete(id)
+      state.pendingPlanApproval = null
+      state.history.generation += 1
+      rebuildTurnGroups(state)
+      return
+    }
     case 'thread/created':
     case 'thread/updated':
       state.thread = envelope.payload.thread

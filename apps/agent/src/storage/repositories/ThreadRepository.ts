@@ -1,3 +1,4 @@
+import { activeTurnSql } from './ThreadEditRepository'
 import { resolve } from 'node:path'
 import {
   DEFAULT_PERMISSION_CONFIG,
@@ -427,7 +428,7 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
     if (!thread) return null
     const turns = this.sqlite
       .query(
-        'SELECT id, root_agent_id, status, mode, started_at, finished_at FROM turns WHERE thread_id = ? ORDER BY created_at',
+        `SELECT id, root_agent_id, status, mode, started_at, finished_at FROM turns WHERE thread_id = ? AND ${activeTurnSql('turns', this)} ORDER BY created_at`,
       )
       .all(threadID) as Array<{
       id: string
@@ -545,7 +546,7 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
         `
         SELECT id, root_agent_id, status
         FROM turns
-        WHERE thread_id = ?
+        WHERE thread_id = ? AND ${activeTurnSql('turns', this)}
         ORDER BY created_at DESC, id DESC
         LIMIT 1
       `,
@@ -570,7 +571,7 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
           `
         SELECT id, root_agent_id
         FROM turns
-        WHERE thread_id = ? AND status = 'completed'
+        WHERE thread_id = ? AND ${activeTurnSql('turns', this)} AND status = 'completed'
         ORDER BY created_at DESC, id DESC
         LIMIT ?
       `,

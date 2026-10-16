@@ -1,11 +1,22 @@
 import type React from 'react'
-import type { PluginDetails } from '@pidex/agent-protocol'
-import { useEffect, useMemo, useRef, useState } from 'react'
-import { AlertOctagon, ArrowLeft, ChevronRight, Clock, RefreshCw, Settings2 } from 'lucide-react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import {
+  AlertOctagon,
+  ArrowLeft,
+  ChevronRight,
+  Clock,
+  RefreshCw,
+  Settings,
+  ChevronDown,
+  Plus,
+  Server,
+} from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 
+import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
+import { PopoverItem } from '../../components/ui/PopoverItem.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
@@ -18,7 +29,8 @@ import { desktopClient } from '../../services/desktop-client/index.js'
 import type { DesktopSkillCatalogItem, DesktopSkillOwnerFilter } from '../../../shared/Types.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutletContext.js'
-import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
+import { preparePluginPrompt } from './PluginPrompt.js'
+import { usePluginDetails } from './UsePluginDetails.js'
 import { CatalogDetailsView } from './CatalogDetailsView.js'
 import { PluginCatalogCard } from './PluginCatalogCard.js'
 import { SkillCatalogCard } from './SkillCatalogCard.js'
@@ -29,24 +41,22 @@ import {
   type CatalogDetailsTarget,
 } from './CatalogDetailsDeepLink.js'
 import {
-  PLUGIN_CATALOG_DESCRIPTORS,
   filterPluginCatalog,
-  groupPluginCatalogBySource,
+  groupMarketplacePlugins,
   mergePluginCatalog,
   pluginPrimaryAction,
   type PluginCatalogItem,
-  type PluginCategoryFilter,
 } from './PluginCatalog.js'
 import { groupSkillsForDisplay } from './SkillCatalog.js'
 import { usePluginCatalog } from './UsePluginCatalog.js'
-import { useMiniMaxCli } from './UseMiniMaxCli.js'
 import { cx } from '../../utils/Cx.js'
 import {
   DETAILS_BREADCRUMB_CLASS,
   DETAILS_BREADCRUMB_CURRENT_CLASS,
-  FORCED_COLORS_FOCUS_CLASS,
   FORCED_COLORS_SURFACE_CLASS,
 } from './CatalogClassNames.js'
+
+const catalogScrollPositions = new Map<string, number>()
 
 const SKILLS_SH_API_DOCS_URL = 'https://www.skills.sh/docs/api#authentication'
 
@@ -58,12 +68,10 @@ const PLUGINS_EMPTY_BASE =
 const PLUGINS_CALLOUT_BASE =
   'tw:flex tw:min-w-0 tw:items-start tw:gap-3 tw:rounded-container tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:p-4 tw:shadow-none tw:@max-[479px]/plugins-page:items-stretch tw:@max-[479px]/plugins-page:flex-wrap'
 
-const CATEGORY_OPTIONS: ReadonlyArray<{ value: PluginCategoryFilter; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'included', label: 'Featured' },
-  { value: 'manageable', label: '可管理' },
-  { value: 'external', label: '外部' },
-]
+const DIRECTORY_OPTIONS = [
+  { value: 'public', label: '公开' },
+  { value: 'personal', label: '个人' },
+] as const
 
 const SKILL_OWNER_OPTIONS: ReadonlyArray<{ value: DesktopSkillOwnerFilter; label: string }> = [
   { value: 'all', label: '全部' },
@@ -77,16 +85,31 @@ export function PluginsView(): React.ReactNode {
   const [searchParams, setSearchParams] = useSearchParams()
   const location = useMemo(() => parseCatalogLocation(searchParams), [searchParams])
   const { tab, target } = location
-  const [pluginQuery, setPluginQuery] = useState('')
+  const pluginQuery = searchParams.get('q') ?? ''
+  const pluginDirectory = searchParams.get('directory') === 'personal' ? 'personal' : 'public'
+  const selectedSection = searchParams.get('section')
+  const [addOpen, setAddOpen] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+  function updateBrowse(key: string, value: string) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (value) next.set(key, value)
+        else next.delete(key)
+        if (key !== 'section') next.delete('section')
+        if (key === 'directory') next.delete('category')
+        return next
+      },
+      { replace: key === 'q' },
+    )
+  }
+  const setPluginQuery = (value: string) => updateBrowse('q', value)
   const [skillQuery, setSkillQuery] = useState('')
-  const [pluginCategory, setPluginCategory] = useState<PluginCategoryFilter>('all')
   const [skillOwner, setSkillOwner] = useState<DesktopSkillOwnerFilter>('official')
   const [announcement, setAnnouncement] = useState('')
   const [busyPluginIds, setBusyPluginIds] = useState<Set<string>>(() => new Set())
   const [pluginErrors, setPluginErrors] = useState<Record<string, string>>({})
-  const [confirmMiniMaxUninstall, setConfirmMiniMaxUninstall] = useState(false)
-  const [pluginDetails, setPluginDetails] = useState<Record<string, PluginDetails | null>>({})
-  const pluginDetailsRequestsRef = useRef(new Set<string>())
+  const [removingPlugin, setRemovingPlugin] = useState<PluginCatalogItem | null>(null)
   const [skills, setSkills] = useState<DesktopSkillCatalogItem[] | undefined>()
   const [skillsLoading, setSkillsLoading] = useState(false)
   const [skillsError, setSkillsError] = useState<string | null>(null)
@@ -98,12 +121,12 @@ export function PluginsView(): React.ReactNode {
   const lastTargetRef = useRef<CatalogDetailsTarget | null>(null)
   const {
     plugins,
+    sections,
     error: pluginLoadError,
     loading: pluginsLoading,
     refresh: refreshPlugins,
     setEnabled: setPluginEnabled,
   } = usePluginCatalog(workspacePath)
-  const miniMaxCli = useMiniMaxCli()
 
   useEffect(() => {
     if (!location.invalid) return
@@ -141,27 +164,36 @@ export function PluginsView(): React.ReactNode {
   }, [skillOwner, skillQuery, skillsReloadKey, tab])
 
   const pluginItems = useMemo(
-    () =>
-      mergePluginCatalog(PLUGIN_CATALOG_DESCRIPTORS, plugins, pluginLoadError, {
-        status: miniMaxCli.status,
-        loading: miniMaxCli.loading,
-        unsupported: miniMaxCli.unsupported,
-        error: miniMaxCli.error,
-      }),
-    [
-      miniMaxCli.error,
-      miniMaxCli.loading,
-      miniMaxCli.status,
-      miniMaxCli.unsupported,
-      plugins,
-      pluginLoadError,
-    ],
+    () => mergePluginCatalog(plugins, workspacePath),
+    [plugins, workspacePath],
   )
-  const visiblePlugins = useMemo(
-    () => filterPluginCatalog(pluginItems, pluginQuery, pluginCategory, 'all'),
-    [pluginCategory, pluginItems, pluginQuery],
+  const directoryPlugins = pluginItems.filter((item) =>
+    pluginDirectory === 'public'
+      ? item.inMarketplace
+      : item.installed || item.source === 'workspace' || item.source === 'personal',
   )
-  const pluginGroups = useMemo(() => groupPluginCatalogBySource(visiblePlugins), [visiblePlugins])
+  const visiblePlugins = filterPluginCatalog(directoryPlugins, pluginQuery, 'all', 'all')
+  const pluginGroups: Array<{ id: string; label: string; items: PluginCatalogItem[] }> = (() => {
+    if (pluginDirectory === 'personal')
+      return (
+        [
+          ['bundled', '自带插件'],
+          ['installed', '已安装'],
+          ['workspace', '项目插件'],
+          ['personal', '个人插件'],
+        ] as const
+      )
+        .map(([id, label]) => ({
+          id,
+          label,
+          items: visiblePlugins.filter((item) => item.source === id),
+        }))
+        .filter((group) => group.items.length)
+    if (pluginQuery) return [{ id: 'results', label: '插件', items: visiblePlugins }]
+    const groups = groupMarketplacePlugins(visiblePlugins, sections)
+    if (selectedSection) return groups.filter((group) => group.id === selectedSection)
+    return groups.filter((group) => group.items.length)
+  })()
   const skillGroups = useMemo(() => groupSkillsForDisplay(skills ?? []), [skills])
   const selectedPlugin =
     target?.kind === 'plugin' ? (pluginItems.find((item) => item.id === target.id) ?? null) : null
@@ -171,35 +203,7 @@ export function PluginsView(): React.ReactNode {
     ? `${workspacePath ?? ''}\u0000${selectedPlugin.id}`
     : null
 
-  useEffect(() => {
-    if (
-      !selectedPlugin ||
-      !selectedPluginDetailsKey ||
-      Object.hasOwn(pluginDetails, selectedPluginDetailsKey) ||
-      pluginDetailsRequestsRef.current.has(selectedPluginDetailsKey)
-    )
-      return
-    let cancelled = false
-    pluginDetailsRequestsRef.current.add(selectedPluginDetailsKey)
-    desktopClient
-      .getPluginDetails(selectedPlugin.id, workspacePath)
-      .then((details) => {
-        if (!cancelled) {
-          setPluginDetails((current) => ({ ...current, [selectedPluginDetailsKey]: details }))
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPluginDetails((current) => ({ ...current, [selectedPluginDetailsKey]: null }))
-        }
-      })
-      .finally(() => {
-        pluginDetailsRequestsRef.current.delete(selectedPluginDetailsKey)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [pluginDetails, selectedPlugin, selectedPluginDetailsKey, workspacePath])
+  const selectedDetails = usePluginDetails(selectedPlugin, workspacePath)
 
   useEffect(() => {
     if (target) {
@@ -213,14 +217,14 @@ export function PluginsView(): React.ReactNode {
     window.requestAnimationFrame(() => {
       const selector = `[data-catalog-item-id="${previousTarget.kind}:${CSS.escape(previousTarget.id)}"]`
       const item = document.querySelector<HTMLButtonElement>(selector)
-      if (item) item.focus()
-      else searchInputRef.current?.focus()
+      if (item) item.focus({ preventScroll: true })
+      else searchInputRef.current?.focus({ preventScroll: true })
     })
   }, [target])
 
   useEffect(() => {
     if (!target || location.invalid) return
-    const targetLoaded = target.kind === 'plugin' || skills !== undefined
+    const targetLoaded = target.kind === 'plugin' ? plugins !== undefined : skills !== undefined
     const targetExists = target.kind === 'plugin' ? selectedPlugin !== null : selectedSkill !== null
     if (targetLoaded && !targetExists) {
       setSearchParams(catalogBrowseParams(searchParams, tab), { replace: true })
@@ -232,13 +236,13 @@ export function PluginsView(): React.ReactNode {
     selectedSkill,
     setSearchParams,
     skills,
+    plugins,
     tab,
     target,
   ])
 
   function openDetails(nextTarget: CatalogDetailsTarget): void {
     setSearchParams(catalogDetailsParams(searchParams, nextTarget))
-    scrollRegionRef.current?.scrollTo({ top: 0 })
   }
 
   function closeDetails(): void {
@@ -266,33 +270,17 @@ export function PluginsView(): React.ReactNode {
       }
       return
     }
-    if (action.kind === 'install-minimax' || action.kind === 'update-minimax') {
-      setBusyPluginIds((current) => new Set(current).add(item.id))
-      try {
-        const result = await miniMaxCli.install()
-        setAnnouncement(
-          `MiniMax CLI ${action.kind === 'update-minimax' ? '更新' : '安装'}完成，当前版本 ${result.installedVersion ?? '可用'}。`,
-        )
-        window.requestAnimationFrame(() => trigger.isConnected && trigger.focus())
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'MiniMax CLI 安装失败。'
-        setPluginErrors((current) => ({ ...current, [item.id]: message }))
-        setAnnouncement(message)
-      } finally {
-        setBusyPluginIds((current) => {
-          const next = new Set(current)
-          next.delete(item.id)
-          return next
-        })
-      }
-      return
-    }
-    if (action.kind !== 'toggle-plugin') return
-    if (!item.installed || (item.status !== 'enabled' && item.status !== 'disabled')) return
     setBusyPluginIds((current) => new Set(current).add(item.id))
     try {
-      const result = await setPluginEnabled(item.id, checked ?? !action.checked)
-      setAnnouncement(`${item.name}已${result.enabled ? '启用' : '禁用'}。`)
+      if (action.kind === 'install') {
+        await desktopClient.installPlugin(item.id)
+        setAnnouncement(`${item.name}已安装。`)
+        refreshPlugins()
+        selectedDetails.retry()
+      } else if (action.kind === 'toggle-plugin') {
+        const result = await setPluginEnabled(item.id, checked ?? !action.checked)
+        setAnnouncement(`${item.name}已${result.enabled ? '启用' : '禁用'}。`)
+      }
       window.requestAnimationFrame(() => trigger.isConnected && trigger.focus())
     } catch (error) {
       const message = error instanceof Error ? error.message : `${item.name}状态更新失败。`
@@ -332,63 +320,156 @@ export function PluginsView(): React.ReactNode {
     }
   }
 
-  const activeLoading = tab === 'plugins' ? pluginsLoading || miniMaxCli.loading : skillsLoading
+  const activeLoading = tab === 'plugins' ? pluginsLoading : skillsLoading
+  const browseScrollKey = JSON.stringify([
+    workspacePath,
+    tab,
+    pluginDirectory,
+    pluginQuery,
+    selectedSection,
+    skillQuery,
+    skillOwner,
+  ])
+  useLayoutEffect(() => {
+    const element = scrollRegionRef.current
+    if (target || activeLoading || !element) return
+    element.scrollTop = catalogScrollPositions.get(browseScrollKey) ?? 0
+    return () => {
+      catalogScrollPositions.delete(browseScrollKey)
+      catalogScrollPositions.set(browseScrollKey, element.scrollTop)
+      if (catalogScrollPositions.size > 32)
+        catalogScrollPositions.delete(catalogScrollPositions.keys().next().value!)
+    }
+  }, [browseScrollKey, target, activeLoading])
 
-  async function uninstallMiniMaxCli(): Promise<void> {
+  async function uninstallPlugin(): Promise<void> {
+    if (!removingPlugin || busyPluginIds.has(removingPlugin.id)) return
+    const item = removingPlugin
+    setBusyPluginIds((current) => new Set(current).add(item.id))
     try {
-      await miniMaxCli.uninstall()
-      setAnnouncement('MiniMax CLI 已卸载，保存的登录信息也已删除。')
-      setConfirmMiniMaxUninstall(false)
+      await desktopClient.uninstallPlugin(item.id)
+      setAnnouncement(`${item.name}已移除。`)
+      setRemovingPlugin(null)
+      selectedDetails.retry()
+      refreshPlugins()
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'MiniMax CLI 卸载失败。'
-      setPluginErrors((current) => ({ ...current, minimax: message }))
+      const message = error instanceof Error ? error.message : '插件移除失败。'
+      setPluginErrors((current) => ({ ...current, [item.id]: message }))
       setAnnouncement(message)
+      setRemovingPlugin(null)
+    } finally {
+      setBusyPluginIds((current) => {
+        const next = new Set(current)
+        next.delete(item.id)
+        return next
+      })
     }
   }
 
-  function tryPluginPrompt(prompt: string): void {
-    const text = selectedPlugin
-      ? `[@${selectedPlugin.name.replace(/([\\[\]])/gu, '\\$1')}](plugin://${selectedPlugin.id}) ${prompt}`
-      : prompt
-    composerDraftStore.prefillTextIfEmpty('home', text)
-    navigate('/new')
+  async function tryPluginPrompt(prompt: string): Promise<void> {
+    const item = selectedPlugin
+    if (!item || busyPluginIds.has(item.id)) return
+    setBusyPluginIds((current) => new Set(current).add(item.id))
+    setPluginErrors((current) => ({ ...current, [item.id]: '' }))
+    try {
+      await preparePluginPrompt(item, prompt)
+      refreshPlugins()
+      navigate('/new')
+    } catch (cause) {
+      setPluginErrors((current) => ({
+        ...current,
+        [item.id]: cause instanceof Error ? cause.message : '插件准备失败，请重试。',
+      }))
+    } finally {
+      setBusyPluginIds((current) => {
+        const next = new Set(current)
+        next.delete(item.id)
+        return next
+      })
+    }
   }
+
+  const headerSearch = (
+    <SearchInput
+      aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
+      className="plugins-header-search"
+      onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
+      placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}
+      ref={searchInputRef}
+      shape="pill"
+      size="md"
+      value={tab === 'plugins' ? pluginQuery : skillQuery}
+      variant="outlined"
+    />
+  )
 
   const headerActions = (
     <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
       <Button
-        isIconOnly
         aria-busy={activeLoading}
-        color="secondary"
         disabled={activeLoading}
+        isIconOnly
         onClick={() => {
           if (tab === 'plugins') {
             refreshPlugins()
-            miniMaxCli.refresh()
           } else {
             setSkillsReloadKey((value) => value + 1)
           }
         }}
+        shape="pill"
+        size="md"
         title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
+        variant="ghost"
       >
-        <RefreshCw
-          aria-hidden="true"
-          size={APP_ICON_SIZE}
-          strokeWidth={APP_ICON_STROKE_WIDTH}
-        />
+        <RefreshCw aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       </Button>
       <Button
         isIconOnly
-        color="secondary"
         onClick={() => navigate('/settings/plugins')}
+        shape="pill"
+        size="md"
         title="管理插件设置"
+        variant="ghost"
       >
-        <Settings2
-          aria-hidden="true"
-          size={APP_ICON_SIZE}
-          strokeWidth={APP_ICON_STROKE_WIDTH}
-        />
+        <Settings aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       </Button>
+      {tab === 'plugins' ? (
+        <PopoverMenu
+          align="end"
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          size="md"
+          trigger={
+            <Button color="primary" shape="pill" size="md">
+              添加
+              <ChevronDown aria-hidden="true" size={APP_ICON_SIZE} />
+            </Button>
+          }
+        >
+          <PopoverItem
+            icon={<Plus aria-hidden="true" size={APP_ICON_SIZE} />}
+            onClick={() => {
+              setAddOpen(false)
+              void desktopClient
+                .openExternalURL('https://github.com/codepilotx-dev/Pidex-Plugins#创建插件')
+                .catch((cause) =>
+                  setAddError(cause instanceof Error ? cause.message : '无法打开作者指南。'),
+                )
+            }}
+          >
+            创建插件
+          </PopoverItem>
+          <PopoverItem
+            icon={<Server aria-hidden="true" size={APP_ICON_SIZE} />}
+            onClick={() => {
+              setAddOpen(false)
+              navigate('/settings/plugins?tab=mcps&create=mcp')
+            }}
+          >
+            创建自定义 MCP 服务器
+          </PopoverItem>
+        </PopoverMenu>
+      ) : null}
     </div>
   )
 
@@ -436,9 +517,9 @@ export function PluginsView(): React.ReactNode {
             {selectedPlugin ? (
               <CatalogDetailsView
                 busy={busyPluginIds.has(selectedPlugin.id)}
-                details={
-                  selectedPluginDetailsKey ? (pluginDetails[selectedPluginDetailsKey] ?? null) : null
-                }
+                details={selectedDetails.details}
+                detailsError={selectedDetails.error}
+                onRetryDetails={selectedDetails.retry}
                 error={pluginErrors[selectedPlugin.id]}
                 item={selectedPlugin}
                 kind="plugin"
@@ -447,9 +528,9 @@ export function PluginsView(): React.ReactNode {
                 onPrimaryAction={(item, trigger, checked) =>
                   void runPluginAction(item, trigger, checked)
                 }
-                onTryPrompt={tryPluginPrompt}
+                onTryPrompt={(prompt) => void tryPluginPrompt(prompt)}
                 onUninstall={
-                  selectedPlugin.id === 'minimax' ? () => setConfirmMiniMaxUninstall(true) : undefined
+                  selectedPlugin.canUninstall ? () => setRemovingPlugin(selectedPlugin) : undefined
                 }
               />
             ) : selectedSkill ? (
@@ -471,50 +552,59 @@ export function PluginsView(): React.ReactNode {
         <PrimaryPageLayout
           actions={headerActions}
           className="plugins-primary-page tw:@container/plugins-page"
+          headerClassName="plugins-primary-header"
+          search={headerSearch}
           scrollContainerRef={scrollRegionRef}
           title={tab === 'plugins' ? '插件' : '技能'}
           description={
-            tab === 'plugins'
-              ? '在常用工具中扩展 Pidex 的能力。'
-              : '查找并添加可复用的工作流指令。'
-          }
-          expandableSearch
-          search={
-            <SearchInput
-              variant="outlined"
-              aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
-              onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
-              placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}
-              ref={searchInputRef}
-              value={tab === 'plugins' ? pluginQuery : skillQuery}
-            />
+            tab === 'plugins' ? '在常用工具中扩展 Pidex 的能力。' : '查找并添加可复用的工作流指令。'
           }
         >
           <div aria-live="polite" className="plugins-sr-status tw:sr-only">
             {announcement}
           </div>
+          {addError ? (
+            <CatalogCallout
+              title="无法打开作者指南"
+              message={addError}
+              onRetry={() => {
+                setAddError(null)
+                void desktopClient
+                  .openExternalURL('https://github.com/codepilotx-dev/Pidex-Plugins#创建插件')
+                  .catch((cause) =>
+                    setAddError(cause instanceof Error ? cause.message : '打开失败。'),
+                  )
+              }}
+            />
+          ) : null}
           {tab === 'plugins' ? (
             <PluginDirectory
+              onUninstall={setRemovingPlugin}
               busyPluginIds={busyPluginIds}
               clearFilters={() => {
-                setPluginQuery('')
-                setPluginCategory('all')
+                setSearchParams((current) => {
+                  const next = new URLSearchParams(current)
+                  next.delete('q')
+                  next.delete('category')
+                  next.delete('section')
+                  return next
+                })
               }}
               groups={pluginGroups}
               loadError={pluginLoadError}
               loading={pluginsLoading}
-              onOpenDetails={(item) =>
-                openDetails({ kind: 'plugin', id: item.id, tab: 'plugins' })
-              }
+              onOpenDetails={(item) => openDetails({ kind: 'plugin', id: item.id, tab: 'plugins' })}
               onPrimaryAction={(item, trigger, checked) =>
                 void runPluginAction(item, trigger, checked)
               }
               pluginErrors={pluginErrors}
-              pluginCategory={pluginCategory}
+              directory={pluginDirectory}
+              setDirectory={(value) => updateBrowse('directory', value)}
+              section={selectedSection}
+              openSection={(value) => updateBrowse('section', value)}
               query={pluginQuery}
               refresh={refreshPlugins}
-              setPluginCategory={setPluginCategory}
-              total={visiblePlugins.length}
+              total={pluginGroups.reduce((total, group) => total + group.items.length, 0)}
             />
           ) : (
             <SkillDirectory
@@ -538,13 +628,13 @@ export function PluginsView(): React.ReactNode {
         </PrimaryPageLayout>
       )}
       <ConfirmationDialog
-        actionDisabled={miniMaxCli.busy}
-        actionLabel="卸载并删除登录信息"
-        description="将卸载系统中的 MiniMax CLI，并删除它保存的 API Key 或 OAuth 登录信息。"
-        onAction={() => void uninstallMiniMaxCli()}
-        onCancel={() => setConfirmMiniMaxUninstall(false)}
-        open={confirmMiniMaxUninstall}
-        title="卸载 MiniMax CLI？"
+        actionDisabled={!!removingPlugin && busyPluginIds.has(removingPlugin.id)}
+        actionLabel="移除插件"
+        description={`将移除 ${removingPlugin?.name ?? '插件'} 的下载文件，之后可以重新安装。`}
+        onAction={() => void uninstallPlugin()}
+        onCancel={() => setRemovingPlugin(null)}
+        open={removingPlugin !== null}
+        title="移除插件？"
         tone="danger"
       />
     </>
@@ -552,18 +642,21 @@ export function PluginsView(): React.ReactNode {
 }
 
 type PluginDirectoryProps = {
+  onUninstall: (item: PluginCatalogItem) => void
   busyPluginIds: Set<string>
   clearFilters: () => void
-  groups: ReturnType<typeof groupPluginCatalogBySource>
+  groups: Array<{ id: string; label: string; items: PluginCatalogItem[] }>
   loadError: string | null
   loading: boolean
   onOpenDetails: (item: PluginCatalogItem) => void
   onPrimaryAction: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
-  pluginCategory: PluginCategoryFilter
+  directory: 'public' | 'personal'
+  setDirectory: (value: string) => void
+  section: string | null
+  openSection: (value: string) => void
   pluginErrors: Record<string, string>
   query: string
   refresh: () => void
-  setPluginCategory: (value: PluginCategoryFilter) => void
   total: number
 }
 
@@ -573,24 +666,31 @@ function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
       <div className="plugins-directory-navigation tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3 tw:@max-[479px]/plugins-page:items-stretch">
         <SegmentedControl
           ariaLabel="插件来源"
-          onChange={props.setPluginCategory}
-          options={CATEGORY_OPTIONS}
+          onChange={props.setDirectory}
+          options={DIRECTORY_OPTIONS}
           overflowMode="fit"
-          value={props.pluginCategory}
+          shape="pill"
+          size="md"
+          value={props.directory}
         />
       </div>
 
+      {props.section ? (
+        <Button color="ghostSecondary" onClick={() => props.openSection('')}>
+          返回全部栏目
+        </Button>
+      ) : null}
       {props.loadError ? (
         <CatalogCallout
           message={props.loadError}
           onRetry={props.refresh}
-          title="无法读取可管理插件状态"
+          title="插件目录刷新失败"
         />
       ) : null}
 
-      {props.loading ? (
+      {props.loading && props.total === 0 ? (
         <CatalogSkeleton label="正在加载插件目录" />
-      ) : props.total === 0 ? (
+      ) : props.total === 0 && props.loadError ? null : props.total === 0 ? (
         <CatalogEmpty
           actionLabel="清除筛选"
           message={props.query ? `没有找到与“${props.query}”匹配的插件。` : '清除来源筛选后再试。'}
@@ -600,16 +700,29 @@ function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
       ) : (
         <div className="plugins-source-groups tw:grid tw:min-w-0 tw:gap-8">
           {props.groups.map((group) => (
-            <section
-              className="plugins-source-group tw:grid tw:min-w-0 tw:gap-3"
-              key={group.category}
-            >
+            <section className="plugins-source-group tw:grid tw:min-w-0 tw:gap-3" key={group.id}>
               <header className="plugins-section-heading tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-3">
-                <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{group.label}</h2>
+                <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">
+                  {props.directory === 'public' && !props.query && !props.section ? (
+                    <button
+                      className="tw:inline-flex tw:cursor-pointer tw:items-center tw:gap-1 tw:rounded-control tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus"
+                      type="button"
+                      onClick={() => props.openSection(group.id)}
+                    >
+                      {group.label}
+                      <ChevronRight aria-hidden="true" size={APP_ICON_SIZE} />
+                    </button>
+                  ) : (
+                    group.label
+                  )}
+                </h2>
                 <span className="plugins-sr-status tw:sr-only">共 {group.items.length} 项</span>
               </header>
               <ul className="plugins-catalog-grid tw:m-0 tw:grid tw:grid-cols-2 tw:min-w-0 tw:list-none tw:gap-x-7 tw:gap-y-4 tw:p-0 tw:@max-[580px]/plugins-page:grid-cols-1">
-                {group.items.map((item) => (
+                {(props.directory === 'public' && !props.section && !props.query
+                  ? group.items.slice(0, 8)
+                  : group.items
+                ).map((item) => (
                   <PluginCatalogCard
                     busy={props.busyPluginIds.has(item.id)}
                     error={props.pluginErrors[item.id]}
@@ -617,6 +730,7 @@ function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
                     key={item.id}
                     onOpenDetails={(plugin) => props.onOpenDetails(plugin)}
                     onPrimaryAction={props.onPrimaryAction}
+                    onUninstall={props.onUninstall}
                   />
                 ))}
               </ul>
@@ -657,6 +771,8 @@ function SkillDirectory(props: SkillDirectoryProps): React.ReactNode {
           onChange={props.setSkillOwner}
           options={SKILL_OWNER_OPTIONS}
           overflowMode="fit"
+          shape="pill"
+          size="md"
           value={props.skillOwner}
         />
       </div>

@@ -53,6 +53,10 @@ class Extractor {
         const destDir = path.dirname(path.join(this.opts.dir, entry.fileName))
 
         try {
+          if (this.opts.filter && !this.opts.filter(entry)) {
+            this.zipfile.readEntry()
+            return
+          }
           await fs.mkdir(destDir, { recursive: true })
 
           const canonicalDestDir = await fs.realpath(destDir)

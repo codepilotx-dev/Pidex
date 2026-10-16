@@ -1,3 +1,4 @@
+import { hasThreadEditStorage } from '../storage/repositories/ThreadEditRepository'
 import type { Model } from '@pidex/model-schema'
 import type {
   PermissionConfig,
@@ -391,11 +392,14 @@ export class SubagentRepository {
   }
 
   projectionForThread(threadID: string, includeDescendants = false): SubagentProjection[] {
+    const active = hasThreadEditStorage(this.db)
+      ? 'NOT EXISTS (SELECT 1 FROM thread_inactive_turns WHERE turn_id = t.parent_turn_id)'
+      : '1 = 1'
     const rows = this.db.sqlite
       .query(
         includeDescendants
-          ? `WITH RECURSIVE tree AS (SELECT id, child_thread_id FROM subagent_tasks WHERE parent_thread_id = ? UNION ALL SELECT t.id, t.child_thread_id FROM subagent_tasks t JOIN tree p ON t.parent_thread_id = p.child_thread_id) SELECT id FROM tree`
-          : 'SELECT id FROM subagent_tasks WHERE parent_thread_id = ? ORDER BY created_at',
+          ? `WITH RECURSIVE tree AS (SELECT t.id, t.child_thread_id FROM subagent_tasks t WHERE t.parent_thread_id = ? AND ${active} UNION ALL SELECT t.id, t.child_thread_id FROM subagent_tasks t JOIN tree p ON t.parent_thread_id = p.child_thread_id WHERE ${active}) SELECT id FROM tree`
+          : `SELECT t.id FROM subagent_tasks t WHERE t.parent_thread_id = ? AND ${active} ORDER BY t.created_at`,
       )
       .all(threadID) as Array<{ id: string }>
     return rows.flatMap(({ id }) => {

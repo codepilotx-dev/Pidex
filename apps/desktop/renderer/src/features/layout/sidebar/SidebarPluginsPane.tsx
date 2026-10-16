@@ -1,7 +1,7 @@
 import type React from 'react'
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
-import { Blocks, Box } from 'lucide-react'
+import { Box, Plug } from 'lucide-react'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { SearchHeading } from '../../../components/ui/SearchHeading.js'
@@ -11,14 +11,12 @@ import { PluginActionsMenu } from '../../plugins/PluginActionsMenu.js'
 import { PluginIcon } from '../../plugins/PluginIcon.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import {
-  PLUGIN_CATALOG_DESCRIPTORS,
   filterPluginCatalog,
   mergePluginCatalog,
   pluginStatusLabel,
   type PluginCatalogItem,
 } from '../../plugins/PluginCatalog.js'
 import { catalogBrowseParams, type CatalogTab } from '../../plugins/CatalogDetailsDeepLink.js'
-import { useMiniMaxCli } from '../../plugins/UseMiniMaxCli.js'
 import { usePluginCatalog } from '../../plugins/UsePluginCatalog.js'
 import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
 
@@ -40,29 +38,12 @@ export function SidebarPluginsPane({
   const { plugins, error, loading, refresh, setEnabled } = usePluginCatalog(workspacePath)
   const [busyIds, setBusyIds] = useState<Set<string>>(() => new Set())
   const [actionErrors, setActionErrors] = useState<Record<string, string>>({})
-  const miniMaxCli = useMiniMaxCli()
 
-  const items = useMemo(
-    () =>
-      mergePluginCatalog(PLUGIN_CATALOG_DESCRIPTORS, plugins, error, {
-        status: miniMaxCli.status,
-        loading: miniMaxCli.loading,
-        unsupported: miniMaxCli.unsupported,
-        error: miniMaxCli.error,
-      }),
-    [
-      error,
-      miniMaxCli.error,
-      miniMaxCli.loading,
-      miniMaxCli.status,
-      miniMaxCli.unsupported,
-      plugins,
-    ],
-  )
+  const items = useMemo(() => mergePluginCatalog(plugins), [plugins])
   const visibleItems = useMemo(
     () =>
       filterPluginCatalog(
-        items.filter((item) => item.installed),
+        items.filter((item) => item.installed && item.enabled),
         query,
         'all',
         'all',
@@ -132,7 +113,7 @@ export function SidebarPluginsPane({
             layout="flex"
             leading={
               option.value === 'plugins' ? (
-                <Blocks size={APP_ICON_SIZE} />
+                <Plug size={APP_ICON_SIZE} />
               ) : (
                 <Box size={APP_ICON_SIZE} />
               )
@@ -161,7 +142,7 @@ export function SidebarPluginsPane({
       >
         {loading ? (
           <SidebarEmptyRow role="status">{t('正在加载插件…')}</SidebarEmptyRow>
-        ) : error ? (
+        ) : error && visibleItems.length === 0 ? (
           <div
             className="sidebar-pane-error tw:p-2 tw:text-app-text-soft tw:type-body-sm"
             role="status"
@@ -194,6 +175,7 @@ export function SidebarPluginsPane({
                     }
                   >
                     <PluginIcon
+                      plugin={{ ...item, workspacePath }}
                       name={item.iconName}
                       logoSource={item.logoSource}
                       logoDarkSource={item.logoDarkSource}

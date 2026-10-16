@@ -87,8 +87,6 @@ import { SkillManagementService } from './prompt/SkillManagementService'
 import { SkillSettingsRepository } from './storage/repositories/SkillSettingsRepository'
 import { PluginSettingsRepository } from './storage/repositories/PluginSettingsRepository'
 import { PluginManagementService } from './plugin/PluginManagementService'
-import { MiniMaxCliSettingsRepository } from './storage/repositories/MinimaxCliSettingsRepository'
-import { MiniMaxCliIntegrationService } from './integration/minimax-cli/MiniMaxCliIntegrationService'
 import { McpSettingsRepository } from './storage/repositories/McpSettingsRepository'
 import { McpConfigService } from './mcp/McpConfigService'
 import { McpElicitationService } from './mcp/McpElicitationService'
@@ -398,6 +396,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const pets = new PetService(config.petsDir)
     const plugins = new PluginManagementService(new PluginSettingsRepository(db), {
       builtinPluginsRoot: config.builtinPluginsRoot,
+      dataRoot: config.dataDir,
       userHome: homedir(),
     })
     plugins.initializeComputerUse(
@@ -406,13 +405,12 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
           Record<string, unknown> | undefined
       )?.computerUseEnabled === true,
     )
-    yield* Effect.promise(() => plugins.list())
+    yield* Effect.promise(() => plugins.listLocal())
     const unsubscribePlugins = plugins.subscribe((_pluginId, generation) => {
       void publishAgentEvent(db, hub, null, null, 'plugins/updated', { generation }).catch(() =>
         logger.warn('plugins.status.publish.failed', { error: 'PLUGIN_STATUS_PUBLISH_FAILED' }),
       )
     })
-    let minimaxCli: MiniMaxCliIntegrationService
     const skills = new SkillManagementService(
       new SkillSettingsRepository(db),
       {
@@ -421,10 +419,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         builtinSkillsRoot: config.builtinSkillsRoot,
       },
       configService,
-      async (workspace?: string) => [
-        ...(await plugins.enabledSkillRoots(workspace)),
-        ...((await minimaxCli?.enabledSkillRoots()) ?? []),
-      ],
+      (workspace?: string) => plugins.enabledSkillRoots(workspace),
     )
     const unsubscribeTooling = tooling.subscribe((status) => {
       void publishAgentEvent(db, hub, null, null, 'tooling/updated', { status }).catch((cause) =>
@@ -466,26 +461,6 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       },
     )
     yield* providerCredentialStore.initialize()
-    minimaxCli = new MiniMaxCliIntegrationService(
-      new MiniMaxCliSettingsRepository(db),
-      providerCredentialStore,
-      {
-        userHome: homedir(),
-        integrationRoot: join(config.builtinIntegrationsRoot, 'minimax-cli'),
-      },
-    )
-    const unsubscribeMiniMaxCli = minimaxCli.subscribe((status) => {
-      void publishAgentEvent(db, hub, null, null, 'minimaxCli/updated', { status }).catch(() =>
-        logger.warn('minimax-cli.status.publish.failed', {
-          error: 'MINIMAX_CLI_STATUS_PUBLISH_FAILED',
-        }),
-      )
-    })
-    void minimaxCli.status().catch(() =>
-      logger.warn('minimax-cli.status.warmup.failed', {
-        error: 'MINIMAX_CLI_STATUS_WARMUP_FAILED',
-      }),
-    )
     const github = new GithubService(credentials, {
       getConfiguredClientId: () => config.githubOAuthClientId,
       getBrokerURL: () => config.githubAuthBrokerURL,
@@ -713,7 +688,6 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       resolveTooling: (id, resolveOptions) => tooling.resolve(id, resolveOptions),
       resolveToolingEnvironment: (required, resolveOptions) =>
         tooling.resolveEnvironment(required, resolveOptions),
-      resolveMiniMaxCliPathEntries: () => minimaxCli.shellPathEntries(),
       resolveShellSecurityLevel: () =>
         normalizeShellSecurityLevel(configService.snapshot().shell_security_level),
       authorizeShell: (invocation, signal) => approvals.authorize(invocation, signal),
@@ -1330,7 +1304,6 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       releaseNotes,
       skills,
       plugins,
-      minimaxCli,
       mcp,
       suggestions,
       usage,
@@ -1382,7 +1355,6 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       unsubscribeAutomationEvents()
       unsubscribeExecutionLogs()
       unsubscribeTooling()
-      unsubscribeMiniMaxCli()
       unsubscribeConfig()
       await sideChats.discardAll(true)
       await orchestrator.dispose()

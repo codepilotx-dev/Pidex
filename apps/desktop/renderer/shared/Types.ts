@@ -592,7 +592,8 @@ export type DesktopModelMetadata = ModelMetadata & {
   inputTokens?: number
   nativeApi?: string
   variants?: string[]
-  providerApi?: 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai'
+  providerApi?:
+    'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai'
 }
 
 export type DesktopProviderAvailability =
@@ -616,7 +617,9 @@ export type DesktopModelProviderSummary = Omit<ModelProviderSummary, 'modelMetad
   protocol?: 'pi-native' | 'openai-compatible' | 'unsupported'
   enabled?: boolean
   authMethods?: readonly ('api-key' | 'oauth')[]
-  providerApis?: readonly ('openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai')[]
+  providerApis?: readonly (
+    'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai'
+  )[]
   nativeApis?: readonly string[]
   endpointDefaults?: Readonly<Record<string, string>>
   defaultApi?: string
@@ -1848,7 +1851,9 @@ export type DesktopApi = {
   deleteProvider(providerId: ModelProviderID): Promise<void>
   modelRecommendations?: {
     supported(): Promise<boolean>
-    preview(input: RpcParams<'model/recommendation/preview'>): Promise<RpcResult<'model/recommendation/preview'>>
+    preview(
+      input: RpcParams<'model/recommendation/preview'>,
+    ): Promise<RpcResult<'model/recommendation/preview'>>
     refresh(): Promise<RpcResult<'model/recommendation/refresh'>>
   }
   discoverProviderModels(
@@ -2034,6 +2039,12 @@ export type DesktopApi = {
     mode: LocalRouterMode,
   ): Promise<DesktopSessionSnapshot>
   openExternalURL(url: string): Promise<void>
+  supportsMessageEditing?(): boolean
+  editUserMessage?(
+    sessionId: string,
+    target: { turnId: string; inputId: string; operationId: string },
+    input: DesktopUserMessageInput,
+  ): Promise<void>
   sendUserMessage(
     sessionId: string,
     content: DesktopUserMessageInput,

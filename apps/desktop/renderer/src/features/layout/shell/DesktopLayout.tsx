@@ -1292,11 +1292,15 @@ export function DesktopLayout(): React.ReactNode {
   )
 
   const handleSubmitEditedUserMessage = useCallback(
-    async (input: DesktopUserMessageInput): Promise<void> => {
-      if (!activeSessionItem) return
-      await submitToSession(activeSessionItem.id, input)
+    async (
+      input: DesktopUserMessageInput,
+      target: { turnId: string; inputId: string; operationId: string },
+    ): Promise<void> => {
+      if (!activeSessionItem || !desktopClient.editUserMessage)
+        throw new Error('当前会话不支持修改消息')
+      await desktopClient.editUserMessage(activeSessionItem.id, target, input)
     },
-    [activeSessionItem, submitToSession],
+    [activeSessionItem],
   )
 
   const handleAddComposerFiles = useCallback((filePaths: string[]): void => {
@@ -3156,8 +3160,10 @@ export function DesktopLayout(): React.ReactNode {
             onOpenFileReference: handleOpenMarkdownFileReference,
             onOpenAttachment: handleOpenThreadAttachment,
             onOpenLocalContext: handleOpenThreadLocalContext,
-            onSubmitEditedUserMessage: async (input) => {
-              await sideChatSubmitToSession(tab.threadId, input)
+            canEditUserMessage: desktopClient.supportsMessageEditing?.() ?? false,
+            onSubmitEditedUserMessage: async (input, target) => {
+              if (!desktopClient.editUserMessage) throw new Error('当前会话不支持修改消息')
+              await desktopClient.editUserMessage(tab.threadId, target, input)
             },
             sessionStatus: status,
             workspacePath: currentWorkspace?.path ?? null,
@@ -3270,8 +3276,10 @@ export function DesktopLayout(): React.ReactNode {
           onOpenFileReference: handleOpenMarkdownFileReference,
           onOpenAttachment: handleOpenThreadAttachment,
           onOpenLocalContext: handleOpenThreadLocalContext,
-          onSubmitEditedUserMessage: async (input) => {
-            await sideChatSubmitToSession(tab.threadId, input)
+          canEditUserMessage: desktopClient.supportsMessageEditing?.() ?? false,
+          onSubmitEditedUserMessage: async (input, target) => {
+            if (!desktopClient.editUserMessage) throw new Error('当前会话不支持修改消息')
+            await desktopClient.editUserMessage(tab.threadId, target, input)
           },
           sessionStatus: status,
           workspacePath: currentWorkspace?.path ?? null,

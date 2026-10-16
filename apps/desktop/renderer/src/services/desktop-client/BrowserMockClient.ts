@@ -118,7 +118,6 @@ import type {
   DesktopComputerApi,
   DesktopLocalContextApi,
   DesktopModelProviderRefreshApi,
-  DesktopMiniMaxCliApi,
   DesktopPluginApi,
   DesktopRuntimeCapabilityApi,
   DesktopSpeechApi,
@@ -162,7 +161,6 @@ export function createBrowserMockDesktopClient(
   DesktopCalendarApi &
   DesktopModelProviderRefreshApi &
   DesktopPluginApi &
-  DesktopMiniMaxCliApi &
   DesktopComputerApi {
   let settings: DesktopStoredSettings = defaultDesktopStoredSettings()
   const visualFixture = createBrowserVisualFixture()
@@ -225,17 +223,6 @@ export function createBrowserMockDesktopClient(
       },
     ],
   }
-  let mockMiniMaxCliStatus: RpcResult<'minimaxCli/status'> = {
-    installationStatus: 'not-installed',
-    latestVersion: '1.0.22',
-    updateAvailable: false,
-    nodeVersion: 'v22.22.1',
-    npmVersion: '10.9.4',
-    authStatus: 'not-authenticated',
-    generation: 1,
-    updatedAt: Date.now(),
-  }
-
   let mockComputerState: RpcResult<'computer/state'> = {
     enabled: false,
     available: false,
@@ -688,6 +675,7 @@ export function createBrowserMockDesktopClient(
       browserState = { ...browserState, allowedSites: [], sitePermissions: [] }
       return browserState
     },
+    readPluginAsset: async () => null,
     listPlugins: async () => ({
       plugins: [mockTaskPlanningPlugin],
       generation: mockPluginGeneration,
@@ -695,6 +683,12 @@ export function createBrowserMockDesktopClient(
     }),
     getPluginDetails: async (pluginId) =>
       pluginId === mockTaskPlanningPlugin.id ? mockTaskPlanningDetails : null,
+    installPlugin: async () => {
+      throw new Error('演示客户端不执行插件下载，请连接 Agent。')
+    },
+    uninstallPlugin: async () => {
+      throw new Error('演示客户端不执行插件移除，请连接 Agent。')
+    },
     setPluginEnabled: async (pluginId, enabled) => {
       if (pluginId !== mockTaskPlanningPlugin.id) {
         throw new Error('PLUGIN_NOT_FOUND')
@@ -704,31 +698,6 @@ export function createBrowserMockDesktopClient(
       return mockTaskPlanningPlugin
     },
     onPluginsUpdated: () => () => {},
-    getMiniMaxCliStatus: async () => mockMiniMaxCliStatus,
-    installMiniMaxCli: async () => {
-      mockMiniMaxCliStatus = {
-        ...mockMiniMaxCliStatus,
-        installationStatus: 'installed',
-        installedVersion: mockMiniMaxCliStatus.latestVersion ?? '1.0.22',
-        updateAvailable: false,
-        generation: mockMiniMaxCliStatus.generation + 1,
-        updatedAt: Date.now(),
-      }
-      return mockMiniMaxCliStatus
-    },
-    uninstallMiniMaxCli: async () => {
-      const { installedVersion: _installedVersion, ...remaining } = mockMiniMaxCliStatus
-      mockMiniMaxCliStatus = {
-        ...remaining,
-        installationStatus: 'not-installed',
-        updateAvailable: false,
-        authStatus: 'not-authenticated',
-        generation: mockMiniMaxCliStatus.generation + 1,
-        updatedAt: Date.now(),
-      }
-      return mockMiniMaxCliStatus
-    },
-    onMiniMaxCliUpdated: () => () => {},
     getComputerState: async () => mockComputerState,
     discoverComputerApps: async () => ({ apps: [] }),
     configureComputer: async (input) => {

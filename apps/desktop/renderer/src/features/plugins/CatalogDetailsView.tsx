@@ -9,7 +9,6 @@ import type { PluginCatalogItem } from './PluginCatalog.js'
 import { cx } from '../../utils/Cx.js'
 import {
   DETAILS_ACTION_GROUP_CLASS,
-  DETAILS_ERROR_CLASS,
   DETAILS_ICON_CLASS,
   DETAILS_IDENTITY_CLASS,
   DETAILS_METADATA_CLASS,
@@ -17,8 +16,6 @@ import {
   DETAILS_METADATA_ROW_CLASS,
   DETAILS_METADATA_VALUE_CLASS,
   DETAILS_SECTION_CLASS,
-  DETAILS_SECTION_HEADING_CLASS,
-  DETAILS_SECTION_TITLE_CLASS,
   FORCED_COLORS_SURFACE_CLASS,
 } from './CatalogClassNames.js'
 
@@ -29,6 +26,8 @@ type PluginProps = {
   busy: boolean
   error?: string | null
   onPrimaryAction: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
+  detailsError?: string | null
+  onRetryDetails?: () => void
   onTryPrompt: (prompt: string) => void
   onUninstall?: () => void
   workspacePath?: string | null

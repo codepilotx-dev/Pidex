@@ -47,7 +47,7 @@ import {
   isNewerDesktopThemeSettingsVersion,
   normalizeDesktopThemeSettings,
 } from '../../../shared/Theme.js'
-import { desktopUserMessageInputToPreviewText } from '../../../shared/DesktopUserMessage.js'
+import { formatCanonicalSkillInvocation } from '../../../shared/DesktopUserMessage.js'
 import { resolvePreferredOpenTarget } from './OpenTargetSelection.js'
 import type {
   CreateDesktopSessionOptions,
@@ -130,6 +130,7 @@ export const RENDERER_CAPABILITIES = [
   'mcp.elicitation.v1',
   'approval.retry.v1',
   'turn.admission.v1',
+  'thread.editUserMessage.v1',
   'skills.invocation.v1',
   'plan.approval.v1',
   'plan.structured.v1',
@@ -169,7 +170,8 @@ export const RENDERER_CAPABILITIES = [
   'skills.manage.v1',
   'plugins.manage.v1',
   'plugins.details.v1',
-  'integrations.minimax-cli.v1',
+  'plugins.lifecycle.v1',
+  'plugins.assets.v1',
   'mcp.manage.v1',
   'mcp.oauth.v1',
   'config.manage.v1',
@@ -211,7 +213,6 @@ import type {
   DesktopComputerApi,
   DesktopLocalContextApi,
   DesktopModelProviderRefreshApi,
-  DesktopMiniMaxCliApi,
   DesktopPluginApi,
   DesktopRuntimeCapabilityApi,
   DesktopSpeechApi,
@@ -267,7 +268,6 @@ export function createAgentSessionDesktopClient(
     DesktopSpeechApi &
     DesktopModelProviderRefreshApi &
     DesktopPluginApi &
-    DesktopMiniMaxCliApi &
     DesktopComputerApi &
     DesktopCalendarApi,
   allowBrowserMockFallback: boolean,
@@ -1651,25 +1651,6 @@ export function createAgentSessionDesktopClient(
     return agentPluginApiPromise
   }
 
-  type AgentMiniMaxCliApi = ReturnType<
-    (typeof import('./AgentMinimaxCliApi.js'))['createAgentMiniMaxCliApi']
-  >
-  let agentMiniMaxCliApiPromise: Promise<AgentMiniMaxCliApi> | null = null
-  const loadAgentMiniMaxCliApi = (): Promise<AgentMiniMaxCliApi> => {
-    agentMiniMaxCliApiPromise ??= import('./AgentMinimaxCliApi.js').then((module) =>
-      module.createAgentMiniMaxCliApi({
-        mockClient,
-        requireAgentCapability,
-        rpc: {
-          call: rpc.call,
-          subscribeEnvelope: subscribeGlobalEventEnvelopes,
-        },
-        withAgentOrMock,
-      }),
-    )
-    return agentMiniMaxCliApiPromise
-  }
-
   type AgentComputerApi = ReturnType<
     (typeof import('./AgentComputerApi.js'))['createAgentComputerApi']
   >
@@ -1781,7 +1762,6 @@ export function createAgentSessionDesktopClient(
       ...AGENT_LIVE_EVENT_FILTERS.modelHealth,
       ...AGENT_LIVE_EVENT_FILTERS.skills,
       ...AGENT_LIVE_EVENT_FILTERS.plugins,
-      ...AGENT_LIVE_EVENT_FILTERS.minimaxCli,
       ...AGENT_LIVE_EVENT_FILTERS.tooling,
       ...AGENT_LIVE_EVENT_FILTERS.mcp,
       'speech/statusChanged',
@@ -2093,10 +2073,14 @@ export function createAgentSessionDesktopClient(
         dispose()
       }
     },
+    readPluginAsset: (pluginId, kind, workspacePath) =>
+      loadAgentPluginApi().then((api) => api.readPluginAsset(pluginId, kind, workspacePath)),
     listPlugins: (workspacePath, forceReload) =>
       loadAgentPluginApi().then((api) => api.listPlugins(workspacePath, forceReload)),
     getPluginDetails: (pluginId, workspacePath) =>
       loadAgentPluginApi().then((api) => api.getPluginDetails(pluginId, workspacePath)),
+    installPlugin: (pluginId) => loadAgentPluginApi().then((api) => api.installPlugin(pluginId)),
+    uninstallPlugin: (pluginId) => loadAgentPluginApi().then((api) => api.uninstallPlugin(pluginId)),
     setPluginEnabled: (pluginId, enabled) =>
       loadAgentPluginApi().then((api) => api.setPluginEnabled(pluginId, enabled)),
     onPluginsUpdated: (callback) => {
@@ -2105,22 +2089,6 @@ export function createAgentSessionDesktopClient(
       void loadAgentPluginApi().then((api) => {
         if (disposed) return
         dispose = api.onPluginsUpdated(callback)
-      })
-      return () => {
-        disposed = true
-        dispose()
-      }
-    },
-    getMiniMaxCliStatus: (forceReload) =>
-      loadAgentMiniMaxCliApi().then((api) => api.getMiniMaxCliStatus(forceReload)),
-    installMiniMaxCli: () => loadAgentMiniMaxCliApi().then((api) => api.installMiniMaxCli()),
-    uninstallMiniMaxCli: () => loadAgentMiniMaxCliApi().then((api) => api.uninstallMiniMaxCli()),
-    onMiniMaxCliUpdated: (callback) => {
-      let disposed = false
-      let dispose = () => {}
-      void loadAgentMiniMaxCliApi().then((api) => {
-        if (disposed) return
-        dispose = api.onMiniMaxCliUpdated(callback)
       })
       return () => {
         disposed = true
@@ -3718,6 +3686,18 @@ export function createAgentSessionDesktopClient(
         },
         () => mockClient.disposeSession(sessionId),
       ),
+    supportsMessageEditing: () => agentCapabilities.has('thread.editUserMessage.v1'),
+    editUserMessage: async (sessionId, target, input) => {
+      if (!(await isAgentAvailable())) throw new Error('Agent RPC 当前不可用')
+      requireAgentCapability('thread.editUserMessage.v1')
+      await rpc.call('thread/editUserMessage', {
+        threadId: sessionId, ...target, content: input.text,
+        attachmentIds: [...(input.retainedAttachmentIds ?? [])],
+        contextReferenceIds: [...(input.retainedContextReferenceIds ?? [])],
+      })
+      await loadAgentSessionSnapshot(sessionId).catch(() => null)
+      emitSessionStoreChange()
+    },
     sendUserMessage: async (sessionId, input, model, inputId, goal) =>
       withAgentOrMock(
         async () => {
@@ -3768,7 +3748,7 @@ export function createAgentSessionDesktopClient(
           if (input.skills?.length) requireAgentCapability('skills.invocation.v1')
           await turnQueueClient.callQueueMutation(sessionId, 'queue/update', {
             inputId: followUpId,
-            content: desktopUserMessageInputToPreviewText({ ...input, skills: undefined }),
+            content: formatCanonicalSkillInvocation(input.skillInvocation, input.text),
             ...(input.skills ? { skills: [...input.skills] } : {}),
             ...(shouldReplaceAttachments ? { attachmentIds: imported?.attachmentIds ?? [] } : {}),
             ...(shouldReplaceContextReferences

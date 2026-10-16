@@ -1,7 +1,7 @@
 import type { ModelRef } from '@pidex/shared'
 import type { PermissionConfig, ThreadSnapshot } from '@pidex/shared/thread'
 import type { RpcParams, RpcResult } from '@pidex/agent-protocol'
-import { desktopUserMessageInputToPreviewText } from '../../../shared/DesktopUserMessage.js'
+import { formatCanonicalSkillInvocation } from '../../../shared/DesktopUserMessage.js'
 import type {
   DesktopModelSelection,
   DesktopSessionSnapshot,
@@ -81,7 +81,7 @@ export function createAgentTurnQueueClient({
     }
     if (input.skills?.length) requireSkillInvocationCapability?.()
     const { attachmentIds, contextReferenceIds } = await importMessageContext(sessionId, input)
-    const content = desktopUserMessageInputToPreviewText({ ...input, skills: undefined })
+    const content = formatCanonicalSkillInvocation(input.skillInvocation, input.text)
     const inputId = options?.inputId ?? crypto.randomUUID()
 
     if (delivery === 'steer') {

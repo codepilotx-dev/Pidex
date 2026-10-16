@@ -1,7 +1,9 @@
 import {
   PluginGetDetailsParamsSchema,
+  PluginRpcMethods,
   PluginListParamsSchema,
   PluginSetEnabledParamsSchema,
+  PluginLifecycleParamsSchema,
   type RpcMethod,
 } from '@pidex/agent-protocol'
 import { Schema } from 'effect'
@@ -14,10 +16,18 @@ import type { RpcHandlerGroup } from './Types'
 const decodeList = Schema.decodeUnknownSync(PluginListParamsSchema)
 const decodeGetDetails = Schema.decodeUnknownSync(PluginGetDetailsParamsSchema)
 const decodeSetEnabled = Schema.decodeUnknownSync(PluginSetEnabledParamsSchema)
+const decodeLifecycle = Schema.decodeUnknownSync(PluginLifecycleParamsSchema)
 
 export const pluginHandlers = {
   name: 'plugins',
-  methods: ['plugin/list', 'plugin/getDetails', 'plugin/setEnabled'],
+  methods: [
+    'plugin/readAsset',
+    'plugin/list',
+    'plugin/getDetails',
+    'plugin/setEnabled',
+    'plugin/install',
+    'plugin/uninstall',
+  ],
   async handle(
     runtime: RpcRouter,
     method: RpcMethod,
@@ -28,6 +38,14 @@ export const pluginHandlers = {
     if (!plugins) throw new AgentError('INTERNAL_ERROR', '插件管理服务未配置', 500)
     try {
       switch (method) {
+        case 'plugin/readAsset':
+          return await plugins.readAsset(
+            Schema.decodeUnknownSync(PluginRpcMethods['plugin/readAsset'].params)(rawParams),
+          )
+        case 'plugin/install':
+          return await plugins.install(decodeLifecycle(rawParams))
+        case 'plugin/uninstall':
+          return await plugins.uninstall(decodeLifecycle(rawParams))
         case 'plugin/list':
           return plugins.list(decodeList(rawParams))
         case 'plugin/getDetails':

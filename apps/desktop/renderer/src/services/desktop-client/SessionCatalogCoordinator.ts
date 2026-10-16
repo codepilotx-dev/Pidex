@@ -10,6 +10,7 @@ export const THREAD_BOOKMARKS_UPDATED_EVENT = 'pidex-thread-bookmarks-updated'
 const THREAD_CATALOG_EVENT_TYPES: ReadonlySet<EventEnvelope['type']> = new Set([
   'thread/created',
   'thread/updated',
+  'thread/history/edited',
   'thread/settings/updated',
   // Goal state is part of the canonical thread projection, so a goal change must
   // refresh the catalog on its own rather than waiting for an unrelated event.

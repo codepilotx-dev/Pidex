@@ -1,3 +1,8 @@
+import {
+  activeTurnSql,
+  hasThreadEditStorage,
+  ThreadEditRepository,
+} from '../storage/repositories/ThreadEditRepository'
 import { AgentError } from '../Domain'
 import type {
   ApprovalRequest,
@@ -261,6 +266,7 @@ export class InvalidThreadHistoryCursorError extends Error {
 }
 
 export type ThreadHistoryPage = {
+  historyRevision?: number
   pendingPlanApproval?: PlanApproval | null
   thread: Thread
   subagents: SubagentProjection[]
@@ -829,15 +835,28 @@ export class ThreadProjection {
         toolIdentity: { server: String(payload.server), tool: String(payload.tool) },
       })
     }
+    const inactive = new Set(
+      (hasThreadEditStorage(this.db)
+        ? (this.db.sqlite
+            .query(
+              'SELECT turn_id FROM thread_inactive_turns JOIN turns ON turns.id = turn_id WHERE turns.thread_id = ?',
+            )
+            .all(threadId) as { turn_id: string }[])
+        : []
+      ).map((row) => row.turn_id),
+    )
     return {
       thread,
-      turns,
-      agents,
-      subagents: this.subagents.projectionForThread(threadId, true),
-      inputs,
-      messages,
-      items,
-      approvals,
+      historyRevision: new ThreadEditRepository(this.db).revision(threadId),
+      turns: turns.filter((row) => !inactive.has(row.id)),
+      agents: agents.filter((row) => !inactive.has(row.turnId)),
+      subagents: this.subagents
+        .projectionForThread(threadId, true)
+        .filter((row) => !inactive.has(row.task.parentTurnId)),
+      inputs: inputs.filter((row) => !row.turnId || !inactive.has(row.turnId)),
+      messages: messages.filter((row) => !row.turnId || !inactive.has(row.turnId)),
+      items: items.filter((row) => !row.turnId || !inactive.has(row.turnId)),
+      approvals: approvals.filter((row) => !row.turnId || !inactive.has(row.turnId)),
       goal: this.db.repositories.threadGoals.get(threadId),
       pendingPlanApproval: this.db.repositories.planApprovals.pending(threadId),
       contextReferences: contextRows.map((row) => ({
@@ -866,7 +885,7 @@ export class ThreadProjection {
       SELECT id, thread_id, root_agent_id, status, mode, sandbox_mode, approval_policy,
         approvals_reviewer, model_ref, queue_position, started_at, finished_at, created_at
       FROM turns
-      WHERE thread_id = ? AND status <> 'queued'
+      WHERE thread_id = ? AND status <> 'queued' AND ${activeTurnSql('turns', this.db)}
         ${cursor ? 'AND (created_at < ? OR (created_at = ? AND id < ?))' : ''}
       ORDER BY created_at DESC, id DESC
       LIMIT ?
@@ -1100,6 +1119,7 @@ export class ThreadProjection {
       thread,
       subagents: this.subagents.projectionForThread(threadId, true),
       turns: bundles,
+      historyRevision: new ThreadEditRepository(this.db).revision(threadId),
       pendingPlanApproval: this.db.repositories.planApprovals.pending(threadId),
       queue: {
         ...queueMetadata,

@@ -76,7 +76,10 @@ export type QuickChatContextValue = {
   onGoalResume: () => void
   canCopyFileReferenceContents: (reference: MarkdownFileReference) => boolean
   onCopyFileReferenceContents: (reference: MarkdownFileReference) => void | Promise<void>
-  onSubmitEditedUserMessage: (input: DesktopUserMessageInput) => Promise<void>
+  onSubmitEditedUserMessage: (
+    input: DesktopUserMessageInput,
+    target: { turnId: string; inputId: string; operationId: string },
+  ) => Promise<void>
   onAppendComposerText: (text: string) => void
   onAppendSideChatText: (text: string) => void
   onOpenSideChat: () => void

@@ -704,6 +704,7 @@ export const ThreadHistoryPageResultSchema = Schema.Struct({
     turns: Schema.Array(AgentThread.TurnSchema),
     inputs: Schema.Array(AgentThread.InputSchema),
   }),
+  historyRevision: Schema.optional(SequenceSchema),
   olderCursor: Schema.NullOr(CursorSchema),
   hasOlder: Schema.Boolean,
   streamPosition: StreamPositionSchema,
@@ -993,6 +994,16 @@ const TurnContentFields = {
   attachmentIds: Schema.optional(Schema.Array(OpaqueIDSchema)),
   contextReferenceIds: Schema.optional(Schema.Array(OpaqueIDSchema)),
 }
+
+export const ThreadEditUserMessageParamsSchema = Schema.Struct({
+  operationId: OpaqueIDSchema,
+  threadId: OpaqueIDSchema,
+  turnId: OpaqueIDSchema,
+  inputId: OpaqueIDSchema,
+  content: Schema.String,
+  attachmentIds: Schema.Array(OpaqueIDSchema),
+  contextReferenceIds: Schema.Array(OpaqueIDSchema),
+})
 
 export const TurnStartParamsSchema = Schema.Struct({
   threadId: OpaqueIDSchema,
@@ -1731,6 +1742,14 @@ export const CoreRpcMethods = {
     capability: 'context.compact.v1',
     mutation: true,
     exactResult: true,
+  }),
+  'thread/editUserMessage': defineMethod({
+    params: ThreadEditUserMessageParamsSchema,
+    result: AdmissionSchema,
+    errors: [...ThreadErrors, 'ATTACHMENT_NOT_FOUND', 'LOCAL_CONTEXT_NOT_FOUND'],
+    capability: 'thread.editUserMessage.v1',
+    mutation: true,
+    exactParams: true,
   }),
   'turn/start': defineMethod({
     params: TurnStartParamsSchema,

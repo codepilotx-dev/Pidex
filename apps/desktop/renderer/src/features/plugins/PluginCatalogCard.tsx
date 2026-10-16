@@ -22,6 +22,7 @@ type Props = {
   error?: string | null
   onOpenDetails: (item: PluginCatalogItem, trigger: HTMLButtonElement) => void
   onPrimaryAction: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
+  onUninstall?: (item: PluginCatalogItem) => void
 }
 
 export function PluginCatalogCard({
@@ -30,6 +31,7 @@ export function PluginCatalogCard({
   error,
   onOpenDetails,
   onPrimaryAction,
+  onUninstall,
 }: Props): React.ReactNode {
   const action = pluginPrimaryAction(item)
   const statusClass =
@@ -75,6 +77,7 @@ export function PluginCatalogCard({
             )}
           >
             <PluginIcon
+              plugin={item}
               logoDarkSource={item.logoDarkSource}
               logoSource={item.logoSource}
               name={item.iconName}
@@ -108,7 +111,12 @@ export function PluginCatalogCard({
 
         <div className="plugin-catalog-card__actions tw:flex tw:items-center tw:justify-end">
           {item.installed ? (
-            <PluginActionsMenu item={item} busy={busy} onPrimaryAction={onPrimaryAction} />
+            <PluginActionsMenu
+              item={item}
+              busy={busy}
+              onPrimaryAction={onPrimaryAction}
+              onUninstall={onUninstall ? () => onUninstall(item) : undefined}
+            />
           ) : (
             <Tooltip content={action.disabled ? unavailableReason : `${action.label} ${item.name}`}>
               <span

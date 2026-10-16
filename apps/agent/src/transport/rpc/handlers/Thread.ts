@@ -1,3 +1,5 @@
+import { ThreadEditUserMessageParamsSchema } from '@pidex/agent-protocol'
+import { Schema } from 'effect'
 import { Effect } from 'effect'
 import type { RpcMethod } from '@pidex/agent-protocol'
 import type { RpcRouter } from '../RpcRouter'
@@ -46,6 +48,7 @@ export const threadHandlers = {
     'thread/delete',
     'thread/patch/diff',
     'thread/patch/apply',
+    'thread/editUserMessage',
     'turn/start',
     'turn/steer',
     'turn/interrupt',
@@ -64,6 +67,7 @@ export const threadHandlers = {
     if (
       (
         [
+          'thread/editUserMessage',
           'turn/start',
           'turn/steer',
           'turn/resume',
@@ -325,6 +329,20 @@ export const threadHandlers = {
         const threadId = stringParam(params, 'threadId')
         await history.remove(threadId)
         return { threadId, deletedAt: Date.now() }
+      }
+      case 'thread/editUserMessage': {
+        const request = decodeParams(
+          Schema.decodeUnknownSync(ThreadEditUserMessageParamsSchema),
+          rawParams,
+          'thread/editUserMessage',
+        )
+        const result = await threads.editUserMessage(request)
+        return {
+          inputId: result.inputID,
+          turnId: result.turnID,
+          disposition: result.disposition === 'duplicate' ? 'duplicate' : 'accepted',
+          streamPosition: { streamId: request.threadId, sequence: globalEventSequence(db) },
+        }
       }
       case 'turn/start': {
         const start = decodeParams(decodeTurnStart, rawParams, 'turn/start')

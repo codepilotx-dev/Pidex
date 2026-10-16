@@ -1,18 +1,38 @@
-import { readFile, readdir, realpath } from 'node:fs/promises'
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  readdir,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from 'node:fs/promises'
+import extractZip from 'extract-zip'
 import { homedir } from 'node:os'
-import { dirname, isAbsolute, join, relative, resolve } from 'node:path'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import type {
   PluginDetails,
+  PluginAssetKind,
   PluginInstallationPolicy,
   PluginSource,
   PluginSummary,
 } from '@pidex/agent-protocol'
 import { parseSkillDocument } from '../prompt/SkillService'
 import { hostManagedMcpDeclarations } from '../nodeRepl/Association'
+import { MAX_PLUGIN_ARCHIVE_BYTES, PluginMarketplace } from './PluginMarketplace'
 import {
   PluginSettingsConflictError,
   PluginSettingsRepository,
 } from '../storage/repositories/PluginSettingsRepository'
+
+import {
+  MAX_PLUGIN_ASSET_BYTES,
+  pluginAssetResult,
+  pluginPresentation,
+  type PluginAssets,
+} from './PluginPresentation'
 
 const MAX_JSON_BYTES = 1024 * 1024
 const pluginIdPattern = /^[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]+)*$/
@@ -29,12 +49,16 @@ type PluginSkillRoot = {
 type DiscoveredPlugin = {
   summary: PluginSummary
   details: PluginDetails
+  pluginRoot?: string
+  assets?: PluginAssets
   skillRoot: PluginSkillRoot | null
 }
 
 type PluginRoots = {
   builtinPluginsRoot: string
   userHome?: string
+  dataRoot?: string
+  fetcher?: typeof fetch
 }
 
 type JsonRecord = Record<string, unknown>
@@ -128,6 +152,9 @@ const normalizePolicy = (
 
 export class PluginManagementService {
   private readonly userHome: string
+  private readonly installedRoot: string | undefined
+  private readonly marketplace: PluginMarketplace | undefined
+  private mutation: Promise<unknown> = Promise.resolve()
   private readonly knownPlugins = new Map<string, DiscoveredPlugin>()
   private readonly listeners = new Set<(pluginId: string, generation: number) => void>()
 
@@ -136,6 +163,13 @@ export class PluginManagementService {
     private readonly roots: PluginRoots,
   ) {
     this.userHome = resolve(roots.userHome ?? homedir())
+    if (roots.dataRoot) {
+      this.installedRoot = resolve(roots.dataRoot, 'plugins', 'installed')
+      this.marketplace = new PluginMarketplace(
+        resolve(roots.dataRoot, 'plugins', 'cache'),
+        roots.fetcher,
+      )
+    }
   }
 
   initializeComputerUse(legacyEnabled: boolean) {
@@ -164,21 +198,50 @@ export class PluginManagementService {
       forceReload?: boolean | undefined
     } = {},
   ) {
-    const plugins = await this.discover(input.workspace)
+    if (this.marketplace) await this.managedRoot()
+    await this.marketplace?.refresh(input.forceReload)
+    return this.listLocal(input.workspace, true)
+  }
+
+  async listLocal(workspace?: string, includeCatalog = false) {
+    const plugins = await this.discover(workspace)
+    if (includeCatalog) {
+      const ids = new Set(plugins.map((plugin) => plugin.summary.id))
+      for (const entry of this.marketplace?.entries() ?? []) {
+        if (!ids.has(entry.summary.id)) plugins.push({ ...entry, skillRoot: null })
+      }
+    }
     this.knownPlugins.clear()
     for (const plugin of plugins) this.knownPlugins.set(plugin.summary.id, plugin)
     const state = this.settings.state()
     return {
-      plugins: plugins.map(({ summary }) => summary),
+      plugins: plugins.map(({ summary }) => ({
+        ...summary,
+        ...(includeCatalog
+          ? {
+              inMarketplace:
+                this.marketplace?.entries().some((entry) => entry.summary.id === summary.id) ??
+                false,
+            }
+          : {}),
+      })),
+      ...(includeCatalog ? { sections: this.marketplace?.sections() ?? [] } : {}),
       generation: state.generation,
       updatedAt: state.updatedAt,
+      ...(includeCatalog && this.marketplace?.error
+        ? { catalogError: this.marketplace.error }
+        : {}),
     }
   }
 
-  async setEnabled(input: { pluginId: string; enabled: boolean; operationId: string }) {
+  setEnabled(input: { pluginId: string; enabled: boolean; operationId: string }) {
+    return this.serialize(() => this.updateEnabled(input))
+  }
+
+  private async updateEnabled(input: { pluginId: string; enabled: boolean; operationId: string }) {
     let plugin = this.knownPlugins.get(input.pluginId)
     if (!plugin) {
-      await this.list()
+      await this.listLocal()
       plugin = this.knownPlugins.get(input.pluginId)
     }
     if (!plugin) {
@@ -214,12 +277,57 @@ export class PluginManagementService {
 
   async getDetails(input: { pluginId: string; workspace?: string | undefined }) {
     const plugins = await this.discover(input.workspace)
-    const plugin = plugins.find((candidate) => candidate.summary.id === input.pluginId)
+    let plugin = plugins.find((candidate) => candidate.summary.id === input.pluginId)
+    if (!plugin) {
+      if (this.marketplace) await this.managedRoot()
+      await this.marketplace?.refresh()
+      const entry = this.marketplace
+        ?.entries()
+        .find((candidate) => candidate.summary.id === input.pluginId)
+      if (entry) plugin = { ...entry, skillRoot: null }
+    }
     if (!plugin) {
       throw new PluginManagementError('PLUGIN_NOT_FOUND', '插件不存在', 404)
     }
     this.knownPlugins.set(plugin.summary.id, plugin)
     return { details: plugin.details }
+  }
+
+  async readAsset(input: {
+    pluginId: string
+    kind: PluginAssetKind
+    workspace?: string | undefined
+  }) {
+    try {
+      const plugin = (await this.discover(input.workspace)).find(
+        (entry) => entry.summary.id === input.pluginId,
+      )
+      if (!plugin) {
+        if (this.marketplace) {
+          await this.managedRoot()
+          return await this.marketplace.readAsset(input.pluginId, input.kind)
+        }
+        throw new Error('图片不存在')
+      }
+      const path = plugin.assets?.[input.kind]
+      if (!path || !plugin.pluginRoot) throw new Error('图片不存在')
+      let candidate = plugin.pluginRoot
+      for (const part of path.split('/')) {
+        candidate = join(candidate, part)
+        if ((await lstat(candidate)).isSymbolicLink()) throw new Error('图片路径无效')
+      }
+      const canonical = await realpath(candidate)
+      const stat = await lstat(canonical)
+      if (
+        !contained(plugin.pluginRoot, canonical) ||
+        !stat.isFile() ||
+        stat.size > MAX_PLUGIN_ASSET_BYTES
+      )
+        throw new Error('图片无效')
+      return pluginAssetResult(await readFile(canonical))
+    } catch {
+      throw new PluginManagementError('PLUGIN_INVALID', '插件图片暂不可用', 409)
+    }
   }
 
   async enabledSkillRoots(workspace?: string): Promise<PluginSkillRoot[]> {
@@ -237,6 +345,7 @@ export class PluginManagementService {
 
   private async discover(workspace?: string) {
     const bundled = await this.scanBundled()
+    const installed = await this.scanInstalled()
     const workspacePlugins = workspace
       ? await this.scanMarketplace(
           resolve(workspace, '.agents', 'plugins', 'marketplace.json'),
@@ -250,10 +359,167 @@ export class PluginManagementService {
       'personal',
     )
     const selected = new Map<string, DiscoveredPlugin>()
-    for (const plugin of [...bundled, ...workspacePlugins, ...personal]) {
+    for (const plugin of [...bundled, ...installed, ...workspacePlugins, ...personal]) {
       if (!selected.has(plugin.summary.id)) selected.set(plugin.summary.id, plugin)
     }
     return [...selected.values()]
+  }
+
+  private serialize<T>(work: () => Promise<T>): Promise<T> {
+    const result = this.mutation.then(work)
+    this.mutation = result.catch(() => {})
+    return result
+  }
+
+  install(input: { pluginId: string; operationId: string }) {
+    return this.serialize(() => this.lifecycle(input, 'install'))
+  }
+
+  uninstall(input: { pluginId: string; operationId: string }) {
+    return this.serialize(() => this.lifecycle(input, 'uninstall'))
+  }
+
+  private async managedRoot() {
+    if (!this.installedRoot || !this.roots.dataRoot) {
+      throw new PluginManagementError('PATH_DENIED', '插件安装目录未配置', 403)
+    }
+    const dataRoot = await realpath(this.roots.dataRoot)
+    const pluginRoot = join(dataRoot, 'plugins')
+    await mkdir(pluginRoot, { recursive: true })
+    if ((await realpath(pluginRoot)) !== pluginRoot) {
+      throw new PluginManagementError('PATH_DENIED', '插件安装目录不可用', 403)
+    }
+    await mkdir(this.installedRoot, { recursive: true })
+    const root = await realpath(this.installedRoot)
+    if (!contained(pluginRoot, root) || (await lstat(this.installedRoot)).isSymbolicLink()) {
+      throw new PluginManagementError('PATH_DENIED', '插件安装目录不可用', 403)
+    }
+    return root
+  }
+
+  private async scanInstalled(): Promise<DiscoveredPlugin[]> {
+    if (!this.installedRoot) return []
+    const entries = await readdir(this.installedRoot, { withFileTypes: true }).catch(() => [])
+    if (!entries.length) return []
+    const root = await this.managedRoot()
+    const plugins: DiscoveredPlugin[] = []
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.isSymbolicLink() || !pluginIdPattern.test(entry.name))
+        continue
+      const plugin = await this.loadPlugin({
+        expectedId: entry.name,
+        pluginRoot: join(root, entry.name),
+        source: 'installed',
+        policy: undefined,
+      })
+      plugins.push({
+        ...plugin,
+        summary: { ...plugin.summary, installed: true, canUninstall: true },
+      })
+    }
+    return plugins
+  }
+
+  private async lifecycle(
+    input: { pluginId: string; operationId: string },
+    action: 'install' | 'uninstall',
+  ) {
+    try {
+      if (!pluginIdPattern.test(input.pluginId)) {
+        throw new PluginManagementError('PLUGIN_INVALID', '插件标识无效', 400)
+      }
+      const previous = this.settings.lifecycleOperation(input.operationId, input.pluginId, action)
+      if (previous)
+        return {
+          pluginId: input.pluginId,
+          generation: previous.generation,
+          updatedAt: previous.updatedAt,
+        }
+      const root = await this.managedRoot()
+      const target = join(root, input.pluginId)
+      const existing = await lstat(target).catch((cause: NodeJS.ErrnoException) => {
+        if (cause.code === 'ENOENT') return null
+        throw cause
+      })
+      if (existing?.isSymbolicLink() || (existing && !existing.isDirectory())) {
+        throw new PluginManagementError('PATH_DENIED', '插件目录不可操作', 403)
+      }
+      const local = (await this.discover()).find((plugin) => plugin.summary.id === input.pluginId)
+      if (local && local.summary.source !== 'installed') {
+        throw new PluginManagementError('PATH_DENIED', '此插件不由下载安装管理', 403)
+      }
+      if (action === 'install' && !existing) {
+        if (!this.marketplace)
+          throw new PluginManagementError('PLUGIN_INVALID', '插件目录未配置', 409)
+        const stage = await mkdtemp(join(root, '.install-'))
+        try {
+          const { entry, bytes, prefix } = await this.marketplace.archive(input.pluginId)
+          const archive = join(stage, 'plugin.zip')
+          await writeFile(archive, bytes)
+          let expandedBytes = 0
+          let count = 0
+          await extractZip(archive, {
+            dir: join(stage, 'content'),
+            filter: (zipEntry) => {
+              expandedBytes += zipEntry.uncompressedSize
+              const type = (zipEntry.externalFileAttributes >>> 16) & 0xf000
+              if (
+                ++count > 10_000 ||
+                expandedBytes > MAX_PLUGIN_ARCHIVE_BYTES * 2 ||
+                type === 0xa000 ||
+                /[\\:]/.test(zipEntry.fileName) ||
+                zipEntry.fileName.split('/').some((part) => part === '..' || /[. ]$/.test(part)) ||
+                !zipEntry.fileName.startsWith(`${prefix}/`)
+              )
+                throw new Error('不安全的插件压缩包')
+              return zipEntry.fileName.startsWith(`${prefix}/${entry.path}/`)
+            },
+          })
+          const pluginRoot = join(stage, 'content', prefix, entry.path)
+          const plugin = await this.loadPlugin({
+            expectedId: input.pluginId,
+            pluginRoot,
+            source: 'installed',
+            policy: undefined,
+          })
+          if (
+            plugin.summary.status !== 'ready' ||
+            plugin.summary.version !== entry.summary.version
+          ) {
+            throw new PluginManagementError('PLUGIN_INVALID', '下载的插件清单或版本无效', 409)
+          }
+          await rename(pluginRoot, target)
+        } finally {
+          await rm(stage, { recursive: true, force: true })
+        }
+      } else if (action === 'uninstall' && existing) {
+        if ((await realpath(target)) !== target || !contained(root, target)) {
+          throw new PluginManagementError('PATH_DENIED', '插件目录不可操作', 403)
+        }
+        const trash = join(root, `.remove-${crypto.randomUUID()}`)
+        await rename(target, trash)
+        await rm(trash, { recursive: true, force: true })
+      } else if (
+        action === 'uninstall' &&
+        !local &&
+        !this.marketplace?.entries().some((entry) => entry.summary.id === input.pluginId)
+      ) {
+        throw new PluginManagementError('PLUGIN_NOT_FOUND', '插件不存在', 404)
+      }
+      const result = this.settings.completeLifecycle(input.operationId, input.pluginId, action)
+      await this.listLocal()
+      for (const listener of this.listeners) listener(input.pluginId, result.generation)
+      return {
+        pluginId: input.pluginId,
+        generation: result.generation,
+        updatedAt: result.updatedAt,
+      }
+    } catch (cause) {
+      if (cause instanceof PluginManagementError) throw cause
+      if (cause instanceof PluginSettingsConflictError)
+        throw new PluginManagementError('CONFLICT', cause.message, 409)
+      throw new PluginManagementError('INTERNAL_ERROR', '插件操作失败，请检查网络后重试。', 500)
+    }
   }
 
   private async scanBundled(): Promise<DiscoveredPlugin[]> {
@@ -386,11 +652,13 @@ export class PluginManagementService {
         }
       }
 
+      const presentation = pluginPresentation(interfaceMetadata ?? {})
       const policy = input.policy ?? normalizePolicy(extension?.installation, 'AVAILABLE')
       // 项目 marketplace 显式声明 INSTALLED_BY_DEFAULT 时随该项目生效；个人来源仍不自动安装。
       const installed =
-        policy === 'INSTALLED_BY_DEFAULT' &&
-        (input.source === 'bundled' || input.source === 'workspace')
+        input.source === 'installed' ||
+        (policy === 'INSTALLED_BY_DEFAULT' &&
+          (input.source === 'bundled' || input.source === 'workspace'))
       const disabled = new Set(this.settings.state().disabledPluginIds)
       const skills = await this.resolveSkills(input.pluginRoot, stringValue(manifest.skills))
       const docs = await this.resolveDocs(input.pluginRoot, stringValue(manifest.docs))
@@ -412,7 +680,10 @@ export class PluginManagementService {
       // servers. Skills keep their own `skills` field for older clients.
       const components = [...mcpComponents, ...docs]
       return {
+        pluginRoot: input.pluginRoot,
+        assets: presentation.assets,
         summary: {
+          assetKinds: Object.keys(presentation.assets) as PluginAssetKind[],
           id,
           name: displayName,
           version,
@@ -429,6 +700,7 @@ export class PluginManagementService {
           ...(status === 'unavailable' ? { unavailableReason: '此插件当前不可用' } : {}),
         },
         details: {
+          ...presentation.links,
           pluginId: id,
           longDescription: longDescription ?? shortDescription ?? description,
           displayCapabilities: stringArray(interfaceMetadata?.capabilities),

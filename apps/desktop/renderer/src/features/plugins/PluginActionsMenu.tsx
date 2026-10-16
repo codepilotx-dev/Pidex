@@ -12,6 +12,7 @@ type Props = {
   busy?: boolean
   onPrimaryAction?: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
   onOpenDetails?: () => void
+  onUninstall?: () => void
 }
 
 export function PluginActionsMenu({
@@ -19,6 +20,7 @@ export function PluginActionsMenu({
   busy = false,
   onPrimaryAction,
   onOpenDetails,
+  onUninstall,
 }: Props): React.ReactNode {
   const action = pluginPrimaryAction(item)
   const actionRef = useRef<HTMLButtonElement>(null)
@@ -48,6 +50,17 @@ export function PluginActionsMenu({
           </Button>
         }
       >
+        {item.canUninstall && onUninstall ? (
+          <PopoverItem
+            disabled={busy}
+            onClick={() => {
+              setMenuOpen(false)
+              onUninstall()
+            }}
+          >
+            移除插件
+          </PopoverItem>
+        ) : null}
         {onOpenDetails ? (
           <PopoverItem
             onClick={() => {

@@ -43,6 +43,11 @@ export function filterAdvertisedCapabilities(
   )
   return Capabilities.filter(
     (capability): capability is ProtocolCapability =>
+      capability !== 'integrations.minimax-cli.v1' &&
+      (capability !== 'thread.editUserMessage.v1' ||
+        ['thread_edits', 'thread_inactive_turns', 'turn_pi_starts'].every((table) =>
+          tables.has(table),
+        )) &&
       ((capability !== 'subagents.recursive.v1' && capability !== 'subagents.followup.v1') ||
         (tables.has('subagent_messages') &&
           tables.has('subagent_completions') &&

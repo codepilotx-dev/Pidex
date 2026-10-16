@@ -5,8 +5,15 @@ import type { DesktopPluginApi } from './Types.js'
 
 type Dependencies = {
   mockClient: DesktopPluginApi
-  hasAgentCapability: (name: Extract<ProtocolCapability, 'plugins.details.v1'>) => boolean
-  requireAgentCapability: (name: Extract<ProtocolCapability, 'plugins.manage.v1'>) => void
+  hasAgentCapability: (
+    name: Extract<
+      ProtocolCapability,
+      'plugins.details.v1' | 'plugins.lifecycle.v1' | 'plugins.assets.v1'
+    >,
+  ) => boolean
+  requireAgentCapability: (
+    name: Extract<ProtocolCapability, 'plugins.manage.v1' | 'plugins.lifecycle.v1'>,
+  ) => void
   rpc: Pick<ReturnType<typeof createAgentRpcClient>, 'call' | 'subscribeEnvelope'>
   withAgentOrMock: <T>(
     agentOperation: () => Promise<T>,
@@ -22,14 +29,43 @@ export function createAgentPluginApi({
   withAgentOrMock,
 }: Dependencies): DesktopPluginApi {
   return {
+    readPluginAsset: (pluginId, kind, workspacePath) =>
+      withAgentOrMock(
+        async () => {
+          if (!hasAgentCapability('plugins.assets.v1')) return null
+          return rpc.call('plugin/readAsset', {
+            pluginId,
+            kind,
+            ...(workspacePath ? { workspace: workspacePath } : {}),
+          })
+        },
+        () => mockClient.readPluginAsset(pluginId, kind, workspacePath),
+      ),
     listPlugins: (workspacePath, forceReload) =>
       withAgentOrMock(
         async () => {
           requireAgentCapability('plugins.manage.v1')
-          return rpc.call('plugin/list', {
+          const result = await rpc.call('plugin/list', {
             ...(workspacePath ? { workspace: workspacePath } : {}),
             ...(forceReload === undefined ? {} : { forceReload }),
           })
+          return {
+            ...result,
+            ...(!result.catalogError &&
+            result.sections === undefined &&
+            result.plugins.every((plugin) => plugin.inMarketplace === undefined)
+              ? {
+                  catalogError:
+                    'Agent 未返回插件市场目录。请重启开发 Agent（bun run dev:agent）后刷新；开发模式不会自动重载 Agent 代码。',
+                }
+              : {}),
+            plugins: result.plugins.map((plugin) => ({
+              ...plugin,
+              canInstall: plugin.canInstall === true && hasAgentCapability('plugins.lifecycle.v1'),
+              canUninstall:
+                plugin.canUninstall === true && hasAgentCapability('plugins.lifecycle.v1'),
+            })),
+          }
         },
         () => mockClient.listPlugins(workspacePath, forceReload),
       ),
@@ -45,6 +81,22 @@ export function createAgentPluginApi({
           ).details
         },
         () => mockClient.getPluginDetails(pluginId, workspacePath),
+      ),
+    installPlugin: (pluginId) =>
+      withAgentOrMock(
+        async () => {
+          requireAgentCapability('plugins.lifecycle.v1')
+          return rpc.call('plugin/install', { pluginId, operationId: crypto.randomUUID() })
+        },
+        () => mockClient.installPlugin(pluginId),
+      ),
+    uninstallPlugin: (pluginId) =>
+      withAgentOrMock(
+        async () => {
+          requireAgentCapability('plugins.lifecycle.v1')
+          return rpc.call('plugin/uninstall', { pluginId, operationId: crypto.randomUUID() })
+        },
+        () => mockClient.uninstallPlugin(pluginId),
       ),
     setPluginEnabled: (pluginId, enabled) =>
       withAgentOrMock(

@@ -17,6 +17,13 @@ export const PluginInstallationPolicySchema = Schema.Literals([
 
 export const PluginStatusSchema = Schema.Literals(['ready', 'unavailable', 'invalid'])
 
+export const PluginAssetKindSchema = Schema.Literals(['logo', 'logoDark'])
+export const PluginMarketplaceSectionSchema = Schema.Struct({
+  id: NonEmptyStringSchema,
+  title: NonEmptyStringSchema,
+  pluginIds: Schema.Array(NonEmptyStringSchema),
+})
+
 export const PluginSummarySchema = Schema.Struct({
   id: NonEmptyStringSchema,
   name: NonEmptyStringSchema,
@@ -31,6 +38,10 @@ export const PluginSummarySchema = Schema.Struct({
   status: PluginStatusSchema,
   capabilities: Schema.Array(NonEmptyStringSchema),
   skills: Schema.Array(NonEmptyStringSchema),
+  canInstall: Schema.optional(Schema.Boolean),
+  canUninstall: Schema.optional(Schema.Boolean),
+  inMarketplace: Schema.optional(Schema.Boolean),
+  assetKinds: Schema.optional(Schema.Array(PluginAssetKindSchema)),
   unavailableReason: Schema.optional(NonEmptyStringSchema),
 })
 
@@ -61,6 +72,9 @@ export const PluginDetailsSchema = Schema.Struct({
   skills: Schema.Array(PluginDetailSkillSchema),
   /** Optional plugin component inventory; older clients can ignore it. */
   components: Schema.optional(Schema.Array(PluginComponentSchema)),
+  websiteURL: Schema.optional(NonEmptyStringSchema),
+  privacyPolicyURL: Schema.optional(NonEmptyStringSchema),
+  termsOfServiceURL: Schema.optional(NonEmptyStringSchema),
 })
 
 export const PluginListParamsSchema = Schema.Struct({
@@ -70,6 +84,8 @@ export const PluginListParamsSchema = Schema.Struct({
 
 export const PluginListResultSchema = Schema.Struct({
   plugins: Schema.Array(PluginSummarySchema),
+  catalogError: Schema.optional(NonEmptyStringSchema),
+  sections: Schema.optional(Schema.Array(PluginMarketplaceSectionSchema)),
   generation: SequenceSchema,
   updatedAt: TimestampSchema,
 })
@@ -95,6 +111,17 @@ export const PluginSetEnabledResultSchema = Schema.Struct({
   updatedAt: TimestampSchema,
 })
 
+export const PluginLifecycleParamsSchema = Schema.Struct({
+  pluginId: NonEmptyStringSchema,
+  ...OperationParamsSchema.fields,
+})
+
+export const PluginLifecycleResultSchema = Schema.Struct({
+  pluginId: NonEmptyStringSchema,
+  generation: SequenceSchema,
+  updatedAt: TimestampSchema,
+})
+
 const PluginErrors = [
   'PLUGIN_NOT_FOUND',
   'PLUGIN_NOT_INSTALLED',
@@ -105,6 +132,40 @@ const PluginErrors = [
 ] as const
 
 export const PluginRpcMethods = {
+  'plugin/readAsset': defineMethod({
+    params: Schema.Struct({
+      pluginId: NonEmptyStringSchema,
+      kind: PluginAssetKindSchema,
+      workspace: Schema.optional(NonEmptyStringSchema),
+    }),
+    result: Schema.Struct({
+      mimeType: Schema.Literals(['image/png', 'image/jpeg', 'image/webp']),
+      base64: Schema.String,
+    }),
+    errors: PluginErrors,
+    capability: 'plugins.assets.v1',
+    mutation: false,
+    exactParams: true,
+    exactResult: true,
+  }),
+  'plugin/install': defineMethod({
+    params: PluginLifecycleParamsSchema,
+    result: PluginLifecycleResultSchema,
+    errors: PluginErrors,
+    capability: 'plugins.lifecycle.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
+  }),
+  'plugin/uninstall': defineMethod({
+    params: PluginLifecycleParamsSchema,
+    result: PluginLifecycleResultSchema,
+    errors: PluginErrors,
+    capability: 'plugins.lifecycle.v1',
+    mutation: true,
+    exactParams: true,
+    exactResult: true,
+  }),
   'plugin/list': defineMethod({
     params: PluginListParamsSchema,
     result: PluginListResultSchema,
@@ -141,3 +202,5 @@ export type PluginSummary = typeof PluginSummarySchema.Type
 export type PluginDetailSkill = typeof PluginDetailSkillSchema.Type
 export type PluginComponent = typeof PluginComponentSchema.Type
 export type PluginDetails = typeof PluginDetailsSchema.Type
+export type PluginAssetKind = typeof PluginAssetKindSchema.Type
+export type PluginMarketplaceSection = typeof PluginMarketplaceSectionSchema.Type

@@ -3,7 +3,6 @@ import type React from 'react'
 import {
   ArrowRight,
   Blocks,
-  ExternalLink,
   FileText,
   MessageCircle,
   MoreHorizontal,
@@ -18,30 +17,20 @@ import { usePluginSkills } from './UsePluginSkills.js'
 import { PopoverItem } from '../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
-import { desktopClient } from '../../services/desktop-client/index.js'
 import promptHeroPurple from '../../assets/plugin-backgrounds/prompt-hero-purple.png'
-import { PluginDetailsPrimaryAction } from './PluginDetailsContent.js'
+import { PluginDetailsPrimaryAction, PluginDetailsMetadata } from './PluginDetailsContent.js'
 import { PluginIcon } from './PluginIcon.js'
-import {
-  PLUGIN_CATEGORY_LABELS,
-  pluginPrimaryAction,
-  type PluginCatalogItem,
-} from './PluginCatalog.js'
+import { pluginPrimaryAction, type PluginCatalogItem } from './PluginCatalog.js'
 import { cx } from '../../utils/Cx.js'
 import {
   DETAILS_ACTION_GROUP_CLASS,
   DETAILS_ERROR_CLASS,
   DETAILS_IDENTITY_CLASS,
-  DETAILS_METADATA_CLASS,
-  DETAILS_METADATA_LABEL_CLASS,
-  DETAILS_METADATA_ROW_CLASS,
-  DETAILS_METADATA_VALUE_CLASS,
   DETAILS_SECTION_CLASS,
   DETAILS_SECTION_TITLE_CLASS,
   FORCED_COLORS_SURFACE_CLASS,
 } from './CatalogClassNames.js'
 
-const NODE_DOWNLOAD_URL = 'https://nodejs.org/en/download'
 const SECTION_HEADING_CLASS =
   'tw:flex tw:items-center tw:justify-between tw:gap-3 tw:border-b tw:border-app-border-subtle tw:pb-3'
 
@@ -51,6 +40,8 @@ type Props = {
   busy: boolean
   error?: string | null
   onPrimaryAction: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
+  detailsError?: string | null
+  onRetryDetails?: () => void
   onTryPrompt: (prompt: string) => void
   onUninstall?: () => void
   workspacePath?: string | null
@@ -65,13 +56,18 @@ export function PluginProductDetailsView({
   onTryPrompt,
   onUninstall,
   workspacePath,
+  detailsError,
+  onRetryDetails,
 }: Props): React.ReactNode {
   const [moreOpen, setMoreOpen] = useState(false)
   const prompts = (details?.defaultPrompts ?? []).map((prompt) => prompt.trim()).filter(Boolean)
   const skills =
     details?.skills ?? (item.skills ?? []).map((id) => ({ id, name: id, description: '' }))
   const primaryAction = pluginPrimaryAction(item)
-  const canTry = item.enabled && prompts.length > 0
+  const canTry =
+    prompts.length > 0 &&
+    item.status !== 'unavailable' &&
+    (item.installed || item.canInstall === true)
   const runtimeSkills = usePluginSkills(item.id, item.enabled && skills.length > 0, workspacePath)
   const componentGroups = [
     { kind: 'mcp' as const, title: 'MCP 服务器', Icon: Server },
@@ -95,6 +91,7 @@ export function PluginProductDetailsView({
           data-plugin-tone={item.tone}
         >
           <PluginIcon
+            plugin={item}
             logoDarkSource={item.logoDarkSource}
             logoSource={item.logoSource}
             name={item.iconName}
@@ -110,7 +107,7 @@ export function PluginProductDetailsView({
             <p className="tw:m-0 tw:text-app-text-soft tw:type-body">{item.description}</p>
           </div>
           <div className={cx('catalog-details-view__primary-action', DETAILS_ACTION_GROUP_CLASS)}>
-            {item.id === 'minimax' && item.installed && onUninstall ? (
+            {item.canUninstall && item.installed && onUninstall ? (
               <PopoverMenu
                 align="end"
                 open={moreOpen}
@@ -179,13 +176,14 @@ export function PluginProductDetailsView({
             {prompts.map((prompt, index) => (
               <button
                 className="catalog-plugin-prompts__item tw:grid tw:w-fit tw:max-w-[77%] tw:grid-cols-[minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:rounded-container tw:border-0 tw:bg-app-panel/75 tw:p-2 tw:text-left tw:text-app-text tw:type-body tw:enabled:cursor-pointer tw:enabled:hover:bg-app-panel tw:disabled:cursor-not-allowed tw:disabled:opacity-50 tw:focus-visible:outline-2 tw:focus-visible:outline-solid tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus tw:forced-colors:border tw:forced-colors:border-[color:CanvasText] tw:forced-colors:bg-[color:Canvas] tw:forced-colors:[color:CanvasText]"
-                disabled={!item.enabled || busy}
+                disabled={!canTry || busy}
                 key={`${index}:${prompt}`}
                 onClick={() => onTryPrompt(prompt)}
                 type="button"
               >
                 <span className="catalog-plugin-prompts__label tw:flex tw:min-w-0 tw:items-baseline tw:gap-1">
                   <PluginIcon
+                    plugin={item}
                     className="catalog-plugin-prompts__plugin-icon tw:shrink-0 tw:basis-3.5 tw:max-w-3.5 tw:max-h-3.5 tw:overflow-hidden tw:rounded-sm"
                     logoDarkSource={item.logoDarkSource}
                     logoSource={item.logoSource}
@@ -211,9 +209,19 @@ export function PluginProductDetailsView({
         </div>
       ) : null}
 
-      <p className="catalog-plugin-details__description tw:m-0 tw:text-app-text tw:type-body">
-        {details?.longDescription || item.description}
-      </p>
+      {detailsError ? (
+        <div className={DETAILS_ERROR_CLASS} role="status">
+          {detailsError}
+          <Button color="secondary" onClick={onRetryDetails}>
+            重试详情
+          </Button>
+        </div>
+      ) : null}
+      {details?.longDescription && details.longDescription.trim() !== item.description.trim() ? (
+        <p className="catalog-plugin-details__description tw:m-0 tw:whitespace-pre-line tw:text-app-text tw:type-body">
+          {details.longDescription}
+        </p>
+      ) : null}
 
       {skills.length ? (
         <section
@@ -319,91 +327,7 @@ export function PluginProductDetailsView({
             信息
           </h2>
         </div>
-        <dl className={cx('plugin-details-metadata', DETAILS_METADATA_CLASS)}>
-          {details?.displayCapabilities.length ? (
-            <InformationRow label="功能" value={details.displayCapabilities.join('、')} />
-          ) : null}
-          {item.developerName ? <InformationRow label="开发者" value={item.developerName} /> : null}
-          <InformationRow
-            label="类别"
-            value={item.productCategory ?? PLUGIN_CATEGORY_LABELS[item.category]}
-          />
-          {item.version ? <InformationRow label="版本" value={item.version} /> : null}
-          {item.externalURL ? (
-            <div
-              className={cx(
-                'plugin-details-metadata__row',
-                DETAILS_METADATA_ROW_CLASS,
-                'tw:border-b-0',
-              )}
-            >
-              <dt className={DETAILS_METADATA_LABEL_CLASS}>网站</dt>
-              <dd className={DETAILS_METADATA_VALUE_CLASS}>
-                <Button
-                  color="ghostSecondary"
-                  onClick={() => void desktopClient.openExternalURL(item.externalURL!)}
-                  size="toolbar"
-                >
-                  打开网站
-                  <ExternalLink
-                    aria-hidden="true"
-                    size={APP_ICON_SIZE}
-                    strokeWidth={APP_ICON_STROKE_WIDTH}
-                  />
-                </Button>
-              </dd>
-            </div>
-          ) : null}
-          {item.miniMaxCli?.latestVersion ? (
-            <InformationRow label="最新版本" value={item.miniMaxCli.latestVersion} />
-          ) : null}
-          {item.miniMaxCli ? (
-            <InformationRow label="认证" value={miniMaxAuthLabel(item.miniMaxCli.authStatus)} />
-          ) : null}
-          {item.miniMaxCli?.credentialSource ? (
-            <InformationRow
-              label="当前 Key"
-              value={`${item.miniMaxCli.credentialSource.label} · ${item.miniMaxCli.credentialSource.maskedValue}`}
-            />
-          ) : null}
-          {item.miniMaxCli?.credentialSource ? (
-            <InformationRow
-              label="区域"
-              value={item.miniMaxCli.credentialSource.region === 'cn' ? '中国' : 'Global'}
-            />
-          ) : null}
-          {item.miniMaxCli?.quotaLabel ? (
-            <InformationRow label="套餐" value={item.miniMaxCli.quotaLabel} />
-          ) : null}
-        </dl>
-        {item.id === 'minimax' && item.externalURL ? (
-          <div className={cx('catalog-details-view__secondary-action', DETAILS_ACTION_GROUP_CLASS)}>
-            {item.miniMaxCli?.installationStatus === 'missing-prerequisite' ? (
-              <Button
-                color="secondary"
-                onClick={() => void desktopClient.openExternalURL(NODE_DOWNLOAD_URL)}
-              >
-                下载 Node.js
-                <ExternalLink
-                  aria-hidden="true"
-                  size={APP_ICON_SIZE}
-                  strokeWidth={APP_ICON_STROKE_WIDTH}
-                />
-              </Button>
-            ) : null}
-            <Button
-              color="secondary"
-              onClick={() => void desktopClient.openExternalURL(item.externalURL!)}
-            >
-              查看官方说明
-              <ExternalLink
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            </Button>
-          </div>
-        ) : null}
+        <PluginDetailsMetadata item={item} details={details} />
       </section>
 
       {error || runtimeSkills.error ? (
@@ -413,31 +337,4 @@ export function PluginProductDetailsView({
       ) : null}
     </section>
   )
-}
-
-function InformationRow({
-  label,
-  value,
-}: {
-  label: string
-  value: React.ReactNode
-}): React.ReactNode {
-  return (
-    <div
-      className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS, 'tw:border-b-0')}
-    >
-      <dt className={DETAILS_METADATA_LABEL_CLASS}>{label}</dt>
-      <dd className={DETAILS_METADATA_VALUE_CLASS}>{value}</dd>
-    </div>
-  )
-}
-
-function miniMaxAuthLabel(
-  status: NonNullable<PluginCatalogItem['miniMaxCli']>['authStatus'],
-): string {
-  if (status === 'coding-plan-synced') return '正在使用 API Key Hub 当前 Coding Plan Key'
-  if (status === 'oauth') return '已通过 MiniMax 登录'
-  if (status === 'api-key') return '已配置 MiniMax API Key'
-  if (status === 'not-authenticated') return '尚未登录，实际使用时再登录'
-  return '暂时无法确认'
 }

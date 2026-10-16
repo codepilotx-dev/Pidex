@@ -1466,6 +1466,7 @@ export function ConversationPage(): React.ReactNode {
       onOpenFileReference,
       onOpenAttachment,
       onForkFromMessage: conversationFork.onForkFromMessage,
+      canEditUserMessage: desktopClient.supportsMessageEditing?.() ?? false,
       onSubmitEditedUserMessage,
       sessionStatus: effectiveSessionStatus,
       workspacePath,

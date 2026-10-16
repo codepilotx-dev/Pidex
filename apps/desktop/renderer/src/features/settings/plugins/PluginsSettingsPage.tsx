@@ -104,6 +104,12 @@ export function PluginsSettingsPage({
   const [mcpOAuthAttempts, setMcpOAuthAttempts] = useState<Record<string, McpOAuthAttempt>>({})
   const [selectedServer, setSelectedServer] = useState<DesktopMcpServerListItem | null>(null)
   const [mcpDialogOpen, setMcpDialogOpen] = useState(false)
+  useEffect(() => {
+    if (searchParams.get('create') !== 'mcp') return
+    setSelectedServer(null)
+    setMcpDialogOpen(true)
+    setSearchParams((current) => { const next = new URLSearchParams(current); next.delete('create'); return next }, { replace: true })
+  }, [searchParams, setSearchParams])
   const [mcpDialogTrigger, setMcpDialogTrigger] = useState<HTMLElement | null>(null)
   const [serverPendingRemoval, setServerPendingRemoval] = useState<DesktopMcpServerListItem | null>(
     null,
@@ -112,16 +118,14 @@ export function PluginsSettingsPage({
   const pluginItems = useMemo(
     () =>
       mergePluginCatalog(
-        [],
         plugins
           ?.filter((plugin) => plugin.installed)
           .map((plugin) => ({
             ...plugin,
             enabled: optimisticPluginEnabled[plugin.id] ?? plugin.enabled,
           })),
-        pluginLoadError,
       ),
-    [plugins, optimisticPluginEnabled, pluginLoadError],
+    [plugins, optimisticPluginEnabled],
   )
 
   const tabOptions = useMemo(() => {
@@ -689,6 +693,7 @@ export function PluginsSettingsPage({
                   description={pluginErrors[item.id] || item.description}
                   icon={
                     <PluginIcon
+                      plugin={{ ...item, workspacePath }}
                       logoDarkSource={item.logoDarkSource}
                       logoSource={item.logoSource}
                       name={item.iconName}
@@ -812,6 +817,8 @@ export function PluginsSettingsPage({
       </div>
 
       <PluginDetailsDialog
+        workspacePath={workspacePath}
+        onChanged={refreshPlugins}
         item={selectedPlugin}
         open={pluginDialogOpen}
         busy={selectedPlugin ? busyPluginIds.has(selectedPlugin.id) : false}

@@ -12,7 +12,12 @@ export type ConversationItemContextValue = {
   onOpenAttachment?: (attachment: Attachment) => void
   onOpenLocalContext?: (reference: LocalContextReference) => void
   onForkFromMessage?: (request: { itemId: string; turnId: string }) => void
-  onSubmitEditedUserMessage: (input: DesktopUserMessageInput) => Promise<void>
+  onSubmitEditedUserMessage: (
+    input: DesktopUserMessageInput,
+    target: { turnId: string; inputId: string; operationId: string },
+  ) => Promise<void>
+  canEditUserMessage?: boolean
+  editableInputId?: string | null
   sessionStatus: DesktopSessionStatus
   workspacePath: string | null
 }

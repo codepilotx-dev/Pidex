@@ -448,6 +448,9 @@ export type DesktopTaskScheduleApi = {
 }
 
 export type DesktopPluginApi = {
+  readPluginAsset(pluginId: string, kind: RpcParams<'plugin/readAsset'>['kind'], workspacePath?: string | null): Promise<RpcResult<'plugin/readAsset'> | null>
+  installPlugin(pluginId: string): Promise<RpcResult<'plugin/install'>>
+  uninstallPlugin(pluginId: string): Promise<RpcResult<'plugin/uninstall'>>
   listPlugins(
     workspacePath?: string | null,
     forceReload?: boolean,
@@ -461,13 +464,6 @@ export type DesktopPluginApi = {
     enabled: boolean,
   ): Promise<RpcResult<'plugin/setEnabled'>['plugin']>
   onPluginsUpdated(callback: (generation: number) => void): () => void
-}
-
-export type DesktopMiniMaxCliApi = {
-  getMiniMaxCliStatus(forceReload?: boolean): Promise<RpcResult<'minimaxCli/status'>>
-  installMiniMaxCli(): Promise<RpcResult<'minimaxCli/install'>>
-  uninstallMiniMaxCli(): Promise<RpcResult<'minimaxCli/uninstall'>>
-  onMiniMaxCliUpdated(callback: (status: RpcResult<'minimaxCli/status'>) => void): () => void
 }
 
 export type DesktopComputerApi = {
@@ -612,7 +608,6 @@ export type DesktopClient = DesktopApi &
   DesktopCalendarApi &
   DesktopTaskScheduleApi &
   DesktopPluginApi &
-  DesktopMiniMaxCliApi &
   DesktopComputerApi &
   DesktopSessionGroupApi &
   DesktopAttachmentApi &

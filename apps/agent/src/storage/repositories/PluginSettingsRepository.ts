@@ -66,6 +66,50 @@ export class PluginSettingsRepository {
     return normalizeState(this.database.getSetting<PluginRuntimeState>(SETTINGS_KEY))
   }
 
+  lifecycleOperation(operationId: string, pluginId: string, action: 'install' | 'uninstall') {
+    const raw = this.database.getSetting<{ version: unknown }>(SETTINGS_KEY)
+    if (raw && raw.version !== 1) throw new PluginSettingsConflictError('不支持的插件设置版本')
+    const operations =
+      this.database.getSetting<
+        Array<{
+          operationId: string
+          pluginId: string
+          action: 'install' | 'uninstall'
+          generation: number
+          updatedAt: number
+        }>
+      >('plugins.lifecycle.v1') ?? []
+    const operation = operations.find((entry) => entry.operationId === operationId)
+    if (operation && (operation.pluginId !== pluginId || operation.action !== action)) {
+      throw new PluginSettingsConflictError('operationId 已用于其他插件操作')
+    }
+    if (this.state().operations.some((entry) => entry.operationId === operationId)) {
+      throw new PluginSettingsConflictError('operationId 已用于插件设置请求')
+    }
+    return operation
+  }
+
+  completeLifecycle(operationId: string, pluginId: string, action: 'install' | 'uninstall') {
+    return this.database.profileSqlite.transaction(() => {
+      const state = this.state()
+      const generation = state.generation + 1
+      const updatedAt = Date.now()
+      this.database.setSetting(SETTINGS_KEY, {
+        ...this.database.getSetting<Record<string, unknown>>(SETTINGS_KEY),
+        ...state,
+        generation,
+        updatedAt,
+      })
+      const operations = this.database.getSetting<unknown[]>('plugins.lifecycle.v1') ?? []
+      const result = { operationId, pluginId, action, generation, updatedAt }
+      this.database.setSetting(
+        'plugins.lifecycle.v1',
+        [...operations, result].slice(-MAX_OPERATIONS),
+      )
+      return result
+    })()
+  }
+
   initializeComputerUse(legacyEnabled: boolean) {
     this.database.profileSqlite.transaction(() => {
       const marker = 'plugins.computer-use.initialized.v1'
@@ -88,6 +132,13 @@ export class PluginSettingsRepository {
   }
 
   setEnabled(input: { pluginId: string; enabled: boolean; operationId: string }) {
+    if (
+      (this.database.getSetting<Array<{ operationId: string }>>('plugins.lifecycle.v1') ?? []).some(
+        (operation) => operation.operationId === input.operationId,
+      )
+    ) {
+      throw new PluginSettingsConflictError('operationId 已用于插件安装或移除请求')
+    }
     const state = this.state()
     const existing = state.operations.find(
       (operation) => operation.operationId === input.operationId,

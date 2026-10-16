@@ -1,4 +1,6 @@
+import { ConversationItemContext } from './ConversationItemContext.js'
 import { ModelSwitchDivider } from './ModelSwitchDivider.js'
+import { ReasoningStatusHeading } from './ReasoningStatusHeading.js'
 import { cx } from '../../../utils/Cx.js'
 import { historicalDeliveryText } from './StructuredDeliveryText.js'
 import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
@@ -33,7 +35,7 @@ import {
   type PatchAction,
   type ReadThreadPatchDiff,
 } from './CanonicalItemRenderer.js'
-import { isExplorationToolActivity, toolSemanticIcon } from './ToolActivityPresentation.js'
+import { toolSemanticIcon } from './ToolActivityPresentation.js'
 import { ConversationTurnErrorBoundary } from '../conversation/ConversationTurnErrorBoundary.js'
 import {
   SessionTimelineView,
@@ -60,9 +62,7 @@ import { useScrollEdgeState } from '../../../hooks/UseScrollEdgeState.js'
 import { questionTimelineItems } from './QuestionItemView.js'
 
 export type ProcessActivityProjection =
-  | { kind: 'groupable'; item: Item }
-  | { kind: 'standalone'; item: Item }
-  | { kind: 'summary-only'; item: Extract<Item, { type: 'reasoning' }> }
+  { kind: 'groupable'; item: Item } | { kind: 'standalone'; item: Item } | { kind: 'hidden' }
 
 export type ProcessUnit =
   | { kind: 'group'; key: string; items: Item[] }
@@ -292,14 +292,7 @@ function groupProcessItems(items: readonly Item[]): RawProcessUnit[] {
       case 'groupable':
         pendingItems.push(projection.item)
         break
-      case 'summary-only':
-        if (
-          pendingItems.some(
-            (pending) => pending.type === 'tool' && isExplorationToolActivity(pending),
-          )
-        ) {
-          pendingItems.push(projection.item)
-        }
+      case 'hidden':
         break
       case 'standalone':
         flush()
@@ -358,7 +351,7 @@ export function buildProcessActivityModel(
 }
 
 export function projectProcessItem(item: Item): ProcessActivityProjection {
-  if (item.type === 'reasoning') return { kind: 'summary-only', item }
+  if (item.type === 'reasoning') return { kind: 'hidden' }
   if (item.type === 'text') return { kind: 'standalone', item }
   if (item.type === 'activity' && item.activity === 'context-compression') {
     return { kind: 'standalone', item }
@@ -566,6 +559,18 @@ function CanonicalThreadViewComponent({
   diffMarkerStyle = 'color',
   readThreadPatchDiff,
 }: CanonicalThreadViewProps): React.ReactNode {
+  const itemContext = React.useContext(ConversationItemContext)
+  const lastInput = turns
+    .flatMap((turn) => turn.userItems)
+    .findLast((input) => input.origin !== 'goal-continuation')
+  const editableInputId =
+    lastInput && turns.find((turn) => turn.turn.id === lastInput.turnId)?.userItems.length === 1
+      ? lastInput.id
+      : null
+  const editContext = React.useMemo(
+    () => (itemContext ? { ...itemContext, editableInputId } : null),
+    [itemContext, editableInputId],
+  )
   const disclosureState = useTimelineDisclosureState(threadId)
   const loadOlderPreservingAnchor = React.useCallback(async (): Promise<void> => {
     await onLoadOlder(() => captureThreadHistoryAnchor(listRef.current, scrollRef.current))
@@ -664,21 +669,23 @@ function CanonicalThreadViewComponent({
           {historyError}
         </p>
       ) : null}
-      <SessionTimelineView
-        key={threadId}
-        count={turns.length}
-        initialScrollOffset={initialScrollOffset}
-        layoutResizeActive={layoutResizeActive}
-        items={turns}
-        listRef={listRef}
-        navigationRef={navigationRef}
-        onCanReturnToBottomChange={onCanReturnToBottomChange}
-        onScroll={onScroll}
-        scrollRef={scrollRef}
-        scrollToBottom={active}
-        sessionKey={threadId}
-        renderItem={renderTurn}
-      />
+      <ConversationItemContext.Provider value={editContext}>
+        <SessionTimelineView
+          key={threadId}
+          count={turns.length}
+          initialScrollOffset={initialScrollOffset}
+          layoutResizeActive={layoutResizeActive}
+          items={turns}
+          listRef={listRef}
+          navigationRef={navigationRef}
+          onCanReturnToBottomChange={onCanReturnToBottomChange}
+          onScroll={onScroll}
+          scrollRef={scrollRef}
+          scrollToBottom={active}
+          sessionKey={threadId}
+          renderItem={renderTurn}
+        />
+      </ConversationItemContext.Provider>
     </div>
   )
 }
@@ -900,7 +907,10 @@ function CanonicalConversationTurnComponent({
       {processActivity.showThinkingFallback ? (
         <div className="canonical-turn__thinking" role="status" aria-live="polite">
           <LoaderCircle size={APP_ICON_SIZES.sm} className="canonical-spin" aria-hidden="true" />
-          <span>正在思考</span>
+          <ReasoningStatusHeading
+            item={processItems.findLast((item) => item.type === 'reasoning')}
+            threadId={threadId}
+          />
         </div>
       ) : null}
     </section>

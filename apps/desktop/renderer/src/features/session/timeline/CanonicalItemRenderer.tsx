@@ -83,6 +83,7 @@ import { cx } from '../../../utils/Cx.js'
 import { ResultCardView } from './ResultCardView.js'
 import { historicalDeliveryText, StructuredDeliveryText } from './StructuredDeliveryText.js'
 import { safeCitationUrl } from './CitationUrl.js'
+import { MessageSentTime } from './MessageSentTime.js'
 
 export {
   buildToolSemanticSummary,
@@ -238,9 +239,13 @@ export function CanonicalUserInput({
     onOpenAttachment,
     onOpenLocalContext,
     onSubmitEditedUserMessage,
+    canEditUserMessage,
+    editableInputId,
     sessionStatus,
     workspacePath,
   } = useConversationItemContext()
+  const editingAllowed = Boolean(canEditUserMessage && editableInputId === input.id)
+  const operationRef = React.useRef(crypto.randomUUID())
   const [editing, setEditing] = React.useState(false)
   const displayText = input.skills?.length
     ? desktopUserMessageInputToPreviewText({ text: input.content, skills: input.skills })
@@ -265,10 +270,15 @@ export function CanonicalUserInput({
     [contextReferences, retainedContextReferenceIds],
   )
   const canSubmit =
-    (draft.trim().length > 0 || Boolean(input.skills?.length)) &&
+    (draft.trim().length > 0 ||
+      Boolean(input.skills?.length) ||
+      retainedAttachments.length > 0 ||
+      retainedContextReferences.length > 0) &&
+    editingAllowed &&
     !submitting &&
     sessionStatus !== 'running' &&
-    sessionStatus !== 'waiting'
+    sessionStatus !== 'waiting' &&
+    sessionStatus !== 'queued'
 
   React.useEffect(() => {
     setDraft(input.content)
@@ -297,6 +307,7 @@ export function CanonicalUserInput({
     setRetainedAttachmentIds([...(input.attachmentIds ?? [])])
     setRetainedContextReferenceIds([...(input.contextReferenceIds ?? [])])
     setSubmitError(null)
+    operationRef.current = crypto.randomUUID()
     setEditing(true)
   }
 
@@ -305,12 +316,16 @@ export function CanonicalUserInput({
     setSubmitting(true)
     setSubmitError(null)
     try {
-      await onSubmitEditedUserMessage({
-        text: draft.trim(),
-        ...(input.skills ? { skills: input.skills } : {}),
-        retainedAttachmentIds,
-        retainedContextReferenceIds,
-      })
+      if (!input.turnId) return
+      await onSubmitEditedUserMessage(
+        {
+          text: draft.trim(),
+          ...(input.skills ? { skills: input.skills } : {}),
+          retainedAttachmentIds,
+          retainedContextReferenceIds,
+        },
+        { turnId: input.turnId, inputId: input.id, operationId: operationRef.current },
+      )
       setEditing(false)
     } catch (error) {
       setSubmitError(error instanceof Error ? error.message : '消息发送失败，请重试。')
@@ -358,6 +373,7 @@ export function CanonicalUserInput({
               onChange={setDraft}
               onCompositionChange={() => undefined}
               onKeyDown={(event) => {
+                if (event.isComposing || submitting) return false
                 if (event.key === 'Escape') {
                   event.preventDefault()
                   cancelEditing()
@@ -386,7 +402,7 @@ export function CanonicalUserInput({
             </p>
           ) : null}
           <div className="canonical-user-message__editor-actions">
-            <Button color="secondary" onClick={cancelEditing}>
+            <Button color="secondary" disabled={submitting} onClick={cancelEditing}>
               取消
             </Button>
             <Button
@@ -438,19 +454,21 @@ export function CanonicalUserInput({
         />
       </div>
       <div className="canonical-message-actions" aria-label="用户消息操作">
+        <MessageSentTime sentAt={input.createdAt} />
         <CopyButton text={displayText} />
-        <Tooltip content="修改并重新发送">
+        {editingAllowed ? <Tooltip content="修改并重新发送">
           <Button
             isIconOnly
             aria-label="修改并重新发送"
             color="ghostSecondary"
-            size="toolbar"
+            size="xs"
             title="修改并重新发送"
+            disabled={sessionStatus === 'running' || sessionStatus === 'waiting' || sessionStatus === 'queued'}
             onClick={startEditing}
           >
             <Pencil aria-hidden="true" size={APP_ICON_SIZE} />
           </Button>
-        </Tooltip>
+        </Tooltip> : null}
       </div>
     </article>
   )
@@ -545,7 +563,7 @@ function CanonicalItemRendererContentComponent({
         <TextItemView item={item} showAssistantActions={showAssistantActions} threadId={threadId} />
       )
     case 'reasoning':
-      return <ReasoningItemView disclosure={disclosure} item={item} threadId={threadId} />
+      return null
     case 'activity':
       return <ActivityItemView disclosure={disclosure} item={item} />
     case 'tool': {
@@ -641,7 +659,7 @@ function TextItemView({
                 isIconOnly
                 aria-label="在新聊天中继续"
                 color="ghostSecondary"
-                size="toolbar"
+                size="xs"
                 title="在新聊天中继续"
                 onClick={(event) => {
                   event.stopPropagation()
@@ -656,85 +674,10 @@ function TextItemView({
               </Button>
             </Tooltip>
           ) : null}
+          <MessageSentTime sentAt={item.createdAt} />
         </div>
       ) : null}
     </article>
-  )
-}
-
-function ReasoningItemView({
-  disclosure,
-  item,
-  threadId,
-}: {
-  disclosure?: ResolvedCanonicalItemDisclosure
-  item: ItemOf<'reasoning'>
-  threadId?: string
-}): React.ReactNode {
-  const streaming = item.status === 'streaming'
-  const tail = useLiveItemTail(threadId, item.id)
-  const text = tail ? item.text + tail : item.text
-  if (streaming) countStreamingItemRender()
-  const [localExpanded, setLocalExpanded] = React.useState(streaming)
-  const expanded = disclosure?.expanded ?? localExpanded
-  const contentId = React.useId()
-
-  React.useEffect(() => {
-    if (!disclosure) setLocalExpanded(streaming)
-  }, [disclosure, streaming])
-
-  const setExpanded = (next: boolean): void => {
-    if (disclosure) disclosure.onExpandedChange(disclosure.id, next)
-    else setLocalExpanded(next)
-  }
-
-  return (
-    <div
-      className="canonical-process-card canonical-reasoning"
-      data-expanded={expanded ? 'true' : 'false'}
-    >
-      <button
-        aria-controls={contentId}
-        aria-expanded={expanded}
-        className={cx(PROCESS_CARD_SUMMARY_CLASS, expanded && 'tw:text-app-text')}
-        onClick={() => setExpanded(!expanded)}
-        type="button"
-      >
-        {streaming ? (
-          <LoaderCircle
-            size={APP_ICON_SIZES.sm}
-            className="canonical-spin"
-            strokeWidth={APP_ICON_STROKE_WIDTH}
-            aria-hidden="true"
-          />
-        ) : (
-          <Check size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} aria-hidden="true" />
-        )}
-        <span>{streaming ? '正在思考' : '思考过程'}</span>
-        <ChevronDown
-          size={APP_ICON_SIZES.sm}
-          className={cx(
-            'canonical-process-card__chevron tw:transition-transform tw:duration-disclosure tw:ease-disclosure',
-            expanded && 'tw:rotate-180',
-          )}
-          aria-hidden="true"
-        />
-      </button>
-      <DisclosureContent
-        contentClassName="canonical-process-card__body tw:bg-app-chrome"
-        expanded={expanded}
-        id={contentId}
-        mountPolicy="until-exit"
-      >
-        <ConversationMarkdownErrorBoundary contentKey={`${item.id}:${text}`}>
-          <MarkdownMessage
-            presentation="conversation"
-            text={text || '正在整理思路…'}
-            streaming={streaming}
-          />
-        </ConversationMarkdownErrorBoundary>
-      </DisclosureContent>
-    </div>
   )
 }
 

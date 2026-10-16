@@ -328,6 +328,16 @@ export const EventManifest = {
     stream: 'global',
     capability: 'events.replay.v1',
   }),
+  'thread/history/edited': defineEvent({
+    payload: Schema.Struct({
+      removedTurnIds: Schema.Array(OpaqueIDSchema),
+      historyRevision: VersionSchema,
+    }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'thread.editUserMessage.v1',
+  }),
   'thread/updated': defineEvent({
     payload: Schema.Struct({ thread: ThreadSchema, version: VersionSchema }),
     version: 1,

@@ -1,3 +1,6 @@
+import { activeTurnSql, ThreadEditRepository } from '../storage/repositories/ThreadEditRepository'
+import { ThreadEditService } from './ThreadEditService'
+import type { RpcParams } from '@pidex/agent-protocol'
 import { Effect } from 'effect'
 import type { PluginManagementService } from '../plugin/PluginManagementService'
 import { pluginReferenceData } from '../plugin/PluginReferences'
@@ -51,6 +54,8 @@ import type { ThreadGoalService } from './ThreadGoalService'
 import type { ThreadForkWorkspaceService } from './fork/ThreadForkWorkspaceService'
 
 type TurnAdmissionTransition = {
+  originalInputID?: string
+  beforePublish?: () => Promise<void>
   beforeCreate: () => void
   afterCreate: (turnID: string) => void
   validationThreadID?: string
@@ -643,9 +648,19 @@ export class ThreadService {
     this.localContextPaths?.repository.validateForThread(threadID, contextReferenceIDs)
   }
 
-  private async validateAdmission(threadID: string, input: SubmitMessage) {
+  private async validateAdmission(
+    threadID: string,
+    input: SubmitMessage,
+    attachmentIDs: readonly string[],
+    contextReferenceIDs: readonly string[],
+  ) {
     this.get(threadID)
-    if (!input.content.trim() && !input.skills?.length)
+    if (
+      !input.content.trim() &&
+      !input.skills?.length &&
+      !attachmentIDs.length &&
+      !contextReferenceIDs.length
+    )
       throw new AgentError('EMPTY_MESSAGE', '消息不能为空', 400)
     await this.workspaceResolver.resolve(threadID)
     if (input.skills?.length) {
@@ -702,6 +717,47 @@ export class ThreadService {
     )
   }
 
+  async editUserMessage(request: RpcParams<'thread/editUserMessage'>) {
+    return this.coordinator.exclusive(request.threadId, async () => {
+      const edits = new ThreadEditService(this.db)
+      const prepared = edits.prepare(request)
+      if (prepared.kind === 'duplicate') {
+        return {
+          disposition: 'duplicate' as const,
+          turnID: prepared.duplicate.turn_id,
+          inputID: prepared.duplicate.input_id,
+        }
+      }
+      const { boundary } = prepared
+      const switchHistory = await edits.repository.stageHistorySwitch(request.threadId, boundary)
+      const inputID = crypto.randomUUID()
+      let editedEvent: EventEnvelope | undefined
+      return this.startTurnLocked(
+        request.threadId,
+        prepared.input,
+        inputID,
+        request.attachmentIds,
+        request.contextReferenceIds,
+        {
+          originalInputID: request.inputId,
+          beforeCreate: () => {
+            edits.repository.prepare(request.threadId, request.turnId, request.inputId)
+            edits.repository.commit(request, prepared.hash, inputID, boundary)
+            switchHistory()
+            editedEvent = this.db.insertEvent(request.threadId, null, 'thread/history/edited', {
+              removedTurnIds: boundary.removedTurnIds,
+              historyRevision: edits.repository.revision(request.threadId),
+            })
+          },
+          afterCreate: (turnID) => edits.repository.finish(request.operationId, turnID),
+          beforePublish: async () => {
+            if (editedEvent) await Effect.runPromise(this.hub.publish(editedEvent))
+          },
+        },
+      )
+    })
+  }
+
   async resumeGoalContinuation(threadID: string): Promise<void> {
     await this.coordinator.exclusive(threadID, async () => {
       const goal = this.db.repositories.threadGoals.get(threadID)
@@ -720,7 +776,7 @@ export class ThreadService {
         return
       const source = this.db.sqlite
         .query(
-          "SELECT id FROM turns WHERE thread_id = ? AND status = 'completed' ORDER BY finished_at DESC, created_at DESC LIMIT 1",
+          `SELECT id FROM turns WHERE thread_id = ? AND ${activeTurnSql('turns', this.db)} AND status = 'completed' ORDER BY finished_at DESC, created_at DESC LIMIT 1`,
         )
         .get(threadID) as { id: string } | null
       if (!source || this.db.repositories.threadGoalContinuations.hasSourceTurn(source.id)) return
@@ -847,7 +903,7 @@ export class ThreadService {
     const duplicate = this.duplicateAdmission(threadID, inputID, input.content, input.skills)
     if (duplicate) return duplicate
     const validationThreadID = transition?.validationThreadID ?? threadID
-    await this.validateAdmission(validationThreadID, input)
+    await this.validateAdmission(validationThreadID, input, attachmentIDs, contextReferenceIDs)
     this.validateInputItems(validationThreadID, attachmentIDs, contextReferenceIDs)
     const queued = this.db.sqlite
       .query("SELECT 1 FROM turns WHERE thread_id = ? AND status = 'queued' LIMIT 1")
@@ -855,7 +911,11 @@ export class ThreadService {
     if (this.coordinator.active(threadID) || this.db.activeTurn(threadID) || queued) {
       throw new AgentError('TURN_ACTIVE', '当前 Thread 已有运行中或待运行的 Turn', 409)
     }
-    await this.validateInputAttachments(inputID, attachmentIDs, input.model)
+    await this.validateInputAttachments(
+      transition?.originalInputID ?? inputID,
+      attachmentIDs,
+      input.model,
+    )
     let created
     let goalEvent: EventEnvelope | null = null
     let threadEvent: EventEnvelope | undefined
@@ -871,10 +931,16 @@ export class ThreadService {
         inputID,
       })
       transition?.afterCreate(value.turnID)
-      this.db.bindInputAttachments(inputID, attachmentIDs)
+      const edits = new ThreadEditRepository(this.db)
+      edits.recordStart(threadID, value.turnID)
+      this.db.bindInputAttachments(
+        inputID,
+        transition?.originalInputID ? edits.cloneAttachments(attachmentIDs) : attachmentIDs,
+      )
       this.localContextPaths?.repository.bindInput(threadID, inputID, contextReferenceIDs)
       return value
     })
+    await transition?.beforePublish?.()
     if (threadEvent) await Effect.runPromise(this.hub.publish(threadEvent))
     await this.publishCreatedTurn(created)
     if (goalEvent) await Effect.runPromise(this.hub.publish(goalEvent))
@@ -905,7 +971,7 @@ export class ThreadService {
       }
       const duplicate = this.duplicateAdmission(threadID, inputID, input.content, input.skills)
       if (duplicate) return duplicate
-      await this.validateAdmission(threadID, input)
+      await this.validateAdmission(threadID, input, attachmentIDs, contextReferenceIDs)
       this.validateInputItems(threadID, attachmentIDs, contextReferenceIDs)
       await this.validateInputAttachments(inputID, attachmentIDs, input.model)
       const active = this.coordinator.active(threadID) ?? this.db.activeTurn(threadID)
@@ -956,7 +1022,12 @@ export class ThreadService {
         return duplicate
       }
       this.get(threadID)
-      if (!input.content.trim() && !input.skills?.length)
+      if (
+        !input.content.trim() &&
+        !input.skills?.length &&
+        !attachmentIDs.length &&
+        !contextReferenceIDs.length
+      )
         throw new AgentError('EMPTY_MESSAGE', '消息不能为空', 400)
       if (input.skills?.length)
         (await this.inputSkillService(threadID)).resolveInvocations(input.content, input.skills)
@@ -1076,8 +1147,6 @@ export class ThreadService {
     if (!queued || queued.thread_id !== threadID)
       throw new AgentError('QUEUED_INPUT_NOT_FOUND', '排队消息不存在或已开始执行', 409)
     const nextSkills = skills ?? this.db.getTurnInput(queued.turn_id)?.skills
-    if (!content.trim() && !nextSkills?.length)
-      throw new AgentError('EMPTY_MESSAGE', '消息不能为空', 400)
     if (nextSkills?.length)
       (await this.inputSkillService(threadID)).resolveInvocations(content, nextSkills)
     const desired = attachmentIDs ? [...attachmentIDs] : null
@@ -1091,6 +1160,8 @@ export class ThreadService {
       this.localContextPaths?.repository.listByInput(inputID).map((entry) => entry.id) ?? []
     const nextContextIDs =
       contextReferenceIDs === undefined ? currentContextIDs : [...contextReferenceIDs]
+    if (!content.trim() && !nextSkills?.length && !nextIDs.length && !nextContextIDs.length)
+      throw new AgentError('EMPTY_MESSAGE', '消息不能为空', 400)
     this.validateInputItems(threadID, nextIDs, nextContextIDs)
     const records = await Promise.all(
       nextIDs.map((id) => this.attachments.read(id).then((value) => value.record)),
@@ -1174,6 +1245,7 @@ export class ThreadService {
     } catch {
       return
     }
+    new ThreadEditRepository(this.db).recordStart(threadID, turnID)
     const started = this.db.startTurnExecution(turnID, input)
     if (!started) {
       if (reservedHere) this.coordinator.release(threadID, turnID)

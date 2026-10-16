@@ -28,6 +28,7 @@ export const QueueActionSchema = Schema.Literals([
 export type QueueAction = typeof QueueActionSchema.Type
 
 export const ThreadSnapshotSchema = Schema.Struct({
+  historyRevision: Schema.optional(Schema.Number),
   thread: ThreadSchema,
   turns: Schema.Array(TurnSchema),
   agents: Schema.Array(AgentExecutionSchema),
