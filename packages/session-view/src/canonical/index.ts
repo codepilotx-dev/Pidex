@@ -1,3 +1,4 @@
+import type { ThreadContextState } from '@pidex/shared/thread'
 import { contextCompactionItem } from '../ContextCompaction'
 import type {
   AgentExecution,
@@ -57,6 +58,7 @@ export interface CanonicalTurnGroups {
 }
 
 export interface CanonicalThreadState {
+  context: ThreadContextState | null
   thread: Thread
   pendingPlanApproval: PlanApproval | null
   turnOrder: string[]
@@ -143,6 +145,7 @@ export function pageFromThreadSnapshot(
 ): CanonicalThreadPage {
   return {
     thread: snapshot.thread,
+    context: snapshot.context,
     historyRevision: snapshot.historyRevision,
     pendingPlanApproval: snapshot.pendingPlanApproval,
     subagents: [...snapshot.subagents],
@@ -280,6 +283,7 @@ export function hydrateLatestThreadPage(
   page: CanonicalThreadPage,
 ): CanonicalThreadState {
   const next = emptyState(page.thread)
+  next.context = page.context ?? null
   next.pendingPlanApproval = page.pendingPlanApproval ?? null
   mergePageEntities(next, page, 'replace')
   next.subagentsByTaskId = mapBy(page.subagents, (projection) => projection.task.id)
@@ -980,6 +984,18 @@ function applyEnvelopePayload(
       upsertApproval(state, { ...approval, status })
       return
     }
+    case 'context/usageUpdated':
+      state.context = {
+        budget: envelope.payload.budget,
+        operation: state.context?.operation ?? null,
+      }
+      return
+    case 'context/compactionUpdated':
+      state.context = {
+        budget: state.context?.budget ?? null,
+        operation: envelope.payload.operation,
+      }
+      return
     case 'context/compacted':
       projectContextCompaction(state, envelope)
       return
@@ -1008,13 +1024,15 @@ function projectContextCompaction(
     .filter((agent) => agent.turnId === turnId)
     .sort(compareCreated)
     .at(-1)
-  upsertItem(state, contextCompactionItem(envelope.payload, {
-    turnId,
-    agentId: latestAgent?.id ?? turn.rootAgentId,
-    createdAt: envelope.occurredAt,
-  }))
+  upsertItem(
+    state,
+    contextCompactionItem(envelope.payload, {
+      turnId,
+      agentId: latestAgent?.id ?? turn.rootAgentId,
+      createdAt: envelope.occurredAt,
+    }),
+  )
 }
-
 
 export type ItemDeltaKind = 'text' | 'reasoning' | 'plan' | 'tool'
 
@@ -1326,6 +1344,7 @@ function upsertTurn(state: CanonicalThreadState, turn: Turn): void {
 function emptyState(thread: Thread): CanonicalThreadState {
   return {
     thread,
+    context: null,
     pendingPlanApproval: null,
     turnOrder: [],
     turnsById: new Map(),

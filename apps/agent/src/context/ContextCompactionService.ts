@@ -1,3 +1,6 @@
+import type { ContextBudget, ContextCompactionOperation } from '@pidex/shared/thread'
+import type { ContextUsageAnchor } from './ContextBudget'
+import { AgentError } from '../Domain'
 import type { RpcResult } from '@pidex/agent-protocol'
 import type { CompactionEntry } from '../orchestration/harness/Types'
 import type { EventEnvelope } from '../Domain'
@@ -21,6 +24,7 @@ export type CompleteContextCompactionInput = {
   items: AgentInputItem[]
   promptText?: string
   contextWindowTokens?: number
+  requestBudget?: ContextBudget | undefined
 }
 
 export type ContextCompaction = RpcResult<'thread/compact'>['compaction'] & {
@@ -42,6 +46,191 @@ const nonNegativeInteger = (name: string, value: number) => {
 /** Coordinates durable product metadata after Pi has created and flushed its entry. */
 export class ContextCompactionService {
   private readonly context: ContextManager
+  private publisher: (event: EventEnvelope) => Promise<void> = async () => {}
+  private idleRunner?: (threadID: string, signal: AbortSignal) => Promise<unknown>
+  private readonly controllers = new Map<string, AbortController>()
+
+  configure(
+    publish: (event: EventEnvelope) => Promise<void>,
+    runIdle: (threadID: string, signal: AbortSignal) => Promise<unknown>,
+  ) {
+    this.publisher = publish
+    this.idleRunner = runIdle
+  }
+
+  private notify(event: EventEnvelope) {
+    this.db.onTransactionCommit(() => {
+      // Outbox replay survives delivery failure; rolled-back events must never reach clients.
+      queueMicrotask(() => {
+        void this.publisher(event).catch(() => {})
+      })
+    })
+  }
+
+  state(threadID: string) {
+    return this.db.repositories.context.runtimeState(threadID)
+  }
+  anchor(threadID: string) {
+    return this.db.repositories.context.anchor(threadID)
+  }
+  pending(threadID: string) {
+    return this.db.repositories.context.latestOperation(threadID, true)
+  }
+
+  budget(
+    threadID: string,
+    budget: ContextBudget,
+    anchor?: ContextUsageAnchor | null,
+    completed = false,
+  ) {
+    if (!this.db.repositories.context.supportsLifecycle()) return
+    this.db.transaction(() => {
+      this.db.repositories.context.saveRuntimeState(threadID, budget, anchor)
+      this.context.recordActiveBudget(threadID, budget, completed)
+      this.notify(this.db.insertEvent(threadID, null, 'context/usageUpdated', { budget }))
+    })
+  }
+
+  request(threadID: string, operationId: string) {
+    if (!this.db.repositories.context.supportsLifecycle())
+      throw new AgentError('CONFLICT', '当前数据版本不支持上下文压缩状态管理', 409)
+    return this.db.transaction(() => {
+      const previous =
+        this.db.repositories.context.requestedOperation(operationId) ??
+        this.db.repositories.context.operation(operationId)
+      if (previous) {
+        if (previous.threadId !== threadID)
+          throw new AgentError('OPERATION_ID_CONFLICT', '压缩操作标识已被使用', 409)
+        return previous
+      }
+      const pending = this.pending(threadID)
+      if (pending) {
+        this.db.repositories.context.bindRequest(operationId, pending)
+        return pending
+      }
+      const operation = this.begin(threadID, 'manual', 'queued', operationId)
+      this.db.repositories.context.bindRequest(operationId, operation)
+      return operation
+    })
+  }
+
+  begin(
+    threadID: string,
+    trigger: ContextCompactionTrigger,
+    status: 'queued' | 'running' = 'running',
+    operationId: string = crypto.randomUUID(),
+  ): ContextCompactionOperation {
+    if (!this.db.repositories.context.supportsLifecycle())
+      throw new AgentError('CONFLICT', '当前数据版本不支持上下文压缩状态管理', 409)
+    const pending = this.pending(threadID)
+    if (pending) return pending
+    const timestamp = Date.now()
+    return this.transition({
+      operationId,
+      threadId: threadID,
+      sessionId: null,
+      agentId: null,
+      trigger,
+      phase: 'settled',
+      status,
+      compactionId: null,
+      reason: null,
+      createdAt: timestamp,
+      updatedAt: timestamp,
+    })
+  }
+
+  transition(operation: ContextCompactionOperation): ContextCompactionOperation {
+    return this.db.transaction(() => {
+      const next = { ...operation, updatedAt: Date.now() }
+      this.db.repositories.context.saveOperation(next)
+      this.notify(
+        this.db.insertEvent(next.threadId, null, 'context/compactionUpdated', { operation: next }),
+      )
+      return next
+    })
+  }
+
+  running(
+    threadID: string,
+    trigger: ContextCompactionTrigger,
+    sessionId: string,
+    agentId: string | null,
+    phase: ContextCompactionOperation['phase'],
+  ) {
+    const operation = this.pending(threadID) ?? this.begin(threadID, trigger)
+    const controller = new AbortController()
+    this.controllers.set(operation.operationId, controller)
+    return {
+      operation: this.transition({ ...operation, status: 'running', sessionId, agentId, phase }),
+      signal: controller.signal,
+    }
+  }
+
+  finish(
+    threadID: string,
+    status: ContextCompactionOperation['status'],
+    reason: ContextCompactionOperation['reason'] = null,
+    compactionId: string | null = null,
+  ) {
+    const operation = this.pending(threadID)
+    if (!operation) return
+    this.controllers.delete(operation.operationId)
+    return this.transition({ ...operation, status, reason, compactionId })
+  }
+
+  cancel(threadID: string, operationId: string) {
+    const operation = this.db.repositories.context.operation(operationId)
+    if (!operation || operation.threadId !== threadID)
+      throw new AgentError('CONFLICT', '压缩操作不存在', 409)
+    if (!['queued', 'running'].includes(operation.status)) return operation
+    const controller = this.controllers.get(operationId)
+    if (controller) {
+      controller.abort()
+      return this.transition({ ...operation, reason: 'stopped' })
+    }
+    return this.finish(threadID, 'cancelled', 'stopped')!
+  }
+
+  startIdle(threadID: string) {
+    const operation = this.pending(threadID)
+    if (
+      !operation ||
+      operation.status !== 'queued' ||
+      this.db.activeTurn(threadID) ||
+      this.db.nextQueuedTurn(threadID) ||
+      !this.idleRunner
+    )
+      return
+    const controller = new AbortController()
+    this.controllers.set(operation.operationId, controller)
+    this.transition({ ...operation, status: 'running' })
+    void this.idleRunner?.(threadID, controller.signal)
+      .then(() => {
+        if (this.pending(threadID)) this.finish(threadID, 'completed')
+      })
+      .catch((error) => {
+        if (!this.pending(threadID)) return
+        this.finish(
+          threadID,
+          controller.signal.aborted
+            ? 'cancelled'
+            : error?.code === 'nothing_to_compact'
+              ? 'skipped'
+              : 'failed',
+          controller.signal.aborted
+            ? 'stopped'
+            : error?.code === 'nothing_to_compact'
+              ? 'already-compacted'
+              : 'provider-failed',
+        )
+      })
+  }
+
+  recover() {
+    for (const operation of this.db.repositories.context.unfinishedOperations())
+      this.transition({ ...operation, status: 'interrupted', reason: 'restart' })
+  }
 
   constructor(
     private readonly db: AgentDatabase,
@@ -117,8 +306,10 @@ export class ContextCompactionService {
           ? {}
           : { contextWindowTokens: input.contextWindowTokens }),
       })
+      const actual = input.requestBudget
+      if (actual) this.budget(input.threadID, actual, null, true)
       const state = this.context.state(input.threadID)!
-      if (estimate.needsCompaction && input.trigger === 'automatic') {
+      if (!actual && estimate.needsCompaction && input.trigger === 'automatic') {
         this.context.recordCompactionFailure(input.threadID)
       }
       const compaction = {
@@ -126,8 +317,8 @@ export class ContextCompactionService {
         beforeCount: input.beforeCount,
         afterCount: input.afterCount,
         beforeTokens: durableEntry.tokensBefore,
-        afterTokens: estimate.usedTokens,
-        targetTokens: estimate.targetTokens,
+        afterTokens: actual?.usedTokens ?? estimate.usedTokens,
+        targetTokens: actual?.targetTokens ?? estimate.targetTokens,
         usageSampleId: estimate.sampleID,
         baselineVersion: state.baselineVersion,
         trigger: input.trigger,
@@ -172,6 +363,12 @@ export class ContextCompactionService {
           trigger: compaction.trigger,
           afterTokensSource: compaction.afterTokensSource,
         },
+      )
+      this.finish(
+        input.threadID,
+        'completed',
+        compaction.afterTokens > compaction.targetTokens ? 'target-unmet' : null,
+        compaction.id,
       )
       return { compaction, event }
     })

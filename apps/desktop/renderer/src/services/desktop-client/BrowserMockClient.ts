@@ -1460,6 +1460,8 @@ export function createBrowserMockDesktopClient(
       mockSessionSnapshot('mock', { path: '', name: 'Mock', branchName: null }, {}),
     resumeQueuedFollowUps: async () =>
       mockSessionSnapshot('mock', { path: '', name: 'Mock', branchName: null }, {}),
+    supportsQueuedCompaction: () => false,
+    cancelCompaction: async () => {},
     compactSession: async () => {},
     getSessionPromptPreview: async () => null,
     rollbackSession: async () => ({

@@ -2237,6 +2237,50 @@ const fixtures = {
       },
     },
   ),
+  'thread/compact/request': methodFixture(
+    'thread/compact/request',
+    {
+      threadId: threadListItem.id,
+      operationId: 'compact-request',
+    },
+    {
+      operation: {
+        operationId: 'compact-request',
+        threadId: threadListItem.id,
+        sessionId: null,
+        agentId: null,
+        trigger: 'manual',
+        phase: 'settled',
+        status: 'queued',
+        compactionId: null,
+        reason: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    },
+  ),
+  'thread/compact/cancel': methodFixture(
+    'thread/compact/cancel',
+    {
+      threadId: threadListItem.id,
+      operationId: 'compact-request',
+    },
+    {
+      operation: {
+        operationId: 'compact-request',
+        threadId: threadListItem.id,
+        sessionId: null,
+        agentId: null,
+        trigger: 'manual',
+        phase: 'settled',
+        status: 'cancelled',
+        compactionId: null,
+        reason: 'stopped',
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    },
+  ),
   'thread/editUserMessage': {
     params: {
       operationId: 'edit-1',
@@ -2473,13 +2517,21 @@ const fixtures = {
       updatedAt: 2,
     },
   ),
-  'plugin/readAsset': methodFixture('plugin/readAsset', { pluginId: 'pidex-demo', kind: 'logo' }, { mimeType: 'image/png', base64: 'aGVsbG8=' }),
-  'plugin/install': methodFixture('plugin/install',
+  'plugin/readAsset': methodFixture(
+    'plugin/readAsset',
+    { pluginId: 'pidex-demo', kind: 'logo' },
+    { mimeType: 'image/png', base64: 'aGVsbG8=' },
+  ),
+  'plugin/install': methodFixture(
+    'plugin/install',
     { pluginId: 'pidex-demo', operationId: 'install-demo' },
-    { pluginId: 'pidex-demo', generation: 2, updatedAt: 2 }),
-  'plugin/uninstall': methodFixture('plugin/uninstall',
+    { pluginId: 'pidex-demo', generation: 2, updatedAt: 2 },
+  ),
+  'plugin/uninstall': methodFixture(
+    'plugin/uninstall',
     { pluginId: 'pidex-demo', operationId: 'uninstall-demo' },
-    { pluginId: 'pidex-demo', generation: 3, updatedAt: 3 }),
+    { pluginId: 'pidex-demo', generation: 3, updatedAt: 3 },
+  ),
   'plugin/list': methodFixture(
     'plugin/list',
     {
@@ -6096,7 +6148,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(342)
+    expect(methods).toHaveLength(344)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6464,7 +6516,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(321)
+    expect(Object.keys(RpcMethods)).toHaveLength(323)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })
@@ -6473,8 +6525,16 @@ describe('RPC method schema contracts', () => {
     expect(Capabilities).toContain('plugins.manage.v1')
     expect(Capabilities).toContain('plugins.details.v1')
     expect(Capabilities).toContain('plugins.assets.v1')
-    expect(RpcMethods['plugin/readAsset']).toMatchObject({ capability: 'plugins.assets.v1', mutation: false, exactParams: true })
-    expect(() => Schema.decodeUnknownSync(RpcMethods['plugin/readAsset'].params, { onExcessProperty: 'error' })({ pluginId: 'pidex-demo', kind: 'logo', path: '../secret' })).toThrow()
+    expect(RpcMethods['plugin/readAsset']).toMatchObject({
+      capability: 'plugins.assets.v1',
+      mutation: false,
+      exactParams: true,
+    })
+    expect(() =>
+      Schema.decodeUnknownSync(RpcMethods['plugin/readAsset'].params, {
+        onExcessProperty: 'error',
+      })({ pluginId: 'pidex-demo', kind: 'logo', path: '../secret' }),
+    ).toThrow()
     expect(Schema.decodeUnknownSync(ProtocolCapabilitySchema)('plugins.manage.v1')).toBe(
       'plugins.manage.v1',
     )

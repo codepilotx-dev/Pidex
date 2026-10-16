@@ -175,6 +175,7 @@ export interface CompactionSettings {
   reserveTokens: number
   /** Approximate recent-context tokens to keep after compaction. */
   keepRecentTokens: number
+  summaryTokens?: number
 }
 
 /** Default compaction settings used by the harness. */
@@ -309,8 +310,12 @@ function estimateTextAndImageContentChars(
 export function estimateMessageChars(message: AgentMessage): number {
   switch (message.role) {
     case 'user': {
-      return estimateTextAndImageContentChars(
-        (message as { content: string | Array<{ type: string; text?: string }> }).content,
+      return (
+        estimateTextAndImageContentChars(
+          (message as { content: string | Array<{ type: string; text?: string }> }).content,
+        ) +
+        ((message as typeof message & { media?: unknown[] }).media?.length ?? 0) *
+          ESTIMATED_IMAGE_CHARS
       )
     }
     case 'assistant': {
@@ -645,6 +650,8 @@ export async function generateSummaryWithUsage(
   }
 
   const textContent = contentText(response.content)
+  if (!textContent.trim() || response.stopReason === 'length')
+    return err(new CompactionError('summarization_failed', '压缩摘要为空或不完整'))
 
   return ok({ text: textContent, usage: response.usage })
 }
@@ -818,7 +825,9 @@ export async function compact(
         messagesToSummarize,
         models,
         model,
-        settings.reserveTokens,
+        settings.summaryTokens === undefined
+          ? settings.reserveTokens
+          : Math.floor((settings.summaryTokens * (messagesToSummarize.length ? 0.5 : 1)) / 0.8),
         signal,
         customInstructions,
         previousSummary,
@@ -834,7 +843,9 @@ export async function compact(
       turnPrefixMessages,
       models,
       model,
-      settings.reserveTokens,
+      settings.summaryTokens === undefined
+        ? settings.reserveTokens
+        : Math.floor((settings.summaryTokens * (messagesToSummarize.length ? 0.5 : 1)) / 0.5),
       signal,
       thinkingLevel,
       retry,
@@ -850,7 +861,9 @@ export async function compact(
       messagesToSummarize,
       models,
       model,
-      settings.reserveTokens,
+      settings.summaryTokens === undefined
+        ? settings.reserveTokens
+        : Math.floor(settings.summaryTokens / 0.8),
       signal,
       customInstructions,
       previousSummary,
@@ -926,8 +939,8 @@ async function generateTurnPrefixSummary(
     )
   }
 
-  return ok({
-    text: contentText(response.content),
-    usage: response.usage,
-  })
+  const text = contentText(response.content)
+  if (!text.trim() || response.stopReason === 'length')
+    return err(new CompactionError('summarization_failed', '压缩摘要为空或不完整'))
+  return ok({ text, usage: response.usage })
 }

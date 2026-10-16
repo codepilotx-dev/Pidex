@@ -10,7 +10,7 @@ import {
 import { AgentError } from '../src/Domain'
 import { executeHarnessRun } from '../src/orchestration/pi/ExecuteHarnessRun'
 import { frozenDeferredEnvelope } from '../src/tool/ToolExecutor'
-import { REACTIVE_CONTINUATION_PROMPT } from '../src/orchestration/pi/ContextOverflow'
+
 import type {
   ActiveHarness,
   HarnessRuntimeOptions,
@@ -36,6 +36,10 @@ const messageText = (message: Context['messages'][number]) => {
 async function createRuntime(input: {
   responses: Parameters<ReturnType<typeof fauxProvider>['setResponses']>[0]
   shouldAutoCompact?: boolean | (() => boolean)
+  history?: string
+  toolResult?: string
+  manualAfterTool?: boolean
+  manualOnFinal?: boolean
 }) {
   const faux = fauxProvider({
     models: [{ id: 'runtime-compaction', input: ['text'], contextWindow: 64_000 }],
@@ -46,6 +50,11 @@ async function createRuntime(input: {
   const repo = new InMemorySessionRepo()
   const sessionID = crypto.randomUUID()
   const session = await repo.create({ id: sessionID })
+  if (input.history) {
+    await session.appendMessage({ role: 'user', content: input.history, timestamp: 1 })
+    await session.appendMessage(fauxAssistantMessage('old assistant answer'))
+  }
+  let manualPending = false
   const compacted: RuntimeCompactionTrigger[] = []
   const failures: RuntimeCompactionTrigger[] = []
   let active: ActiveHarness | undefined
@@ -58,20 +67,41 @@ async function createRuntime(input: {
     },
     toolExecutor: {
       definition: () => ({
-        sdkName: 'probe', description: 'probe', schema: { parse: (value: unknown) => value }, inputSchema: { type: 'object', properties: {} },
+        sdkName: 'probe',
+        description: 'probe',
+        schema: { parse: (value: unknown) => value },
+        inputSchema: { type: 'object', properties: {} },
       }),
-      execute: async () => ({ content: [{ type: 'text', text: 'probe result' }] }),
+      execute: async () => {
+        manualPending = input.manualAfterTool ?? false
+        return input.toolResult ?? 'probe result'
+      },
       deferredDefinitions: (exposure: { frozenDeferredToolNames?: readonly string[] }) =>
         frozenDeferredEnvelope([], exposure.frozenDeferredToolNames),
     } as never,
     eventSink: {
+      assistantMessageCompleted: (_context, event) => {
+        if (input.manualOnFinal && event.text === 'completed task') manualPending = true
+      },
       compacted: async (_context, event) => {
         compacted.push(event.trigger)
+        manualPending = false
       },
     },
     compaction: {
-      shouldAutoCompact: async () => typeof input.shouldAutoCompact === 'function'
-        ? input.shouldAutoCompact() : input.shouldAutoCompact ?? false,
+      lifecycle: {
+        anchor: () => null,
+        pending: () => (manualPending ? { status: 'queued' } : null),
+        running: () => ({ signal: new AbortController().signal }),
+        finish: () => {
+          manualPending = false
+        },
+        budget: () => {},
+      } as never,
+      shouldAutoCompact: async () =>
+        typeof input.shouldAutoCompact === 'function'
+          ? input.shouldAutoCompact()
+          : (input.shouldAutoCompact ?? false),
       recordFailure: async (_threadID, trigger) => {
         failures.push(trigger)
       },
@@ -110,6 +140,7 @@ async function createRuntime(input: {
     request,
     compacted,
     failures,
+    session,
   }
 }
 
@@ -144,82 +175,151 @@ describe('Harness runtime provider errors', () => {
 })
 
 describe('Harness runtime context compaction', () => {
-  test.each([true, false])('checks compaction between tool batches with permission %s', async (allowed) => {
-    let pending = false
-    let continuationContext: Context | undefined
+  test.each([true, false])(
+    'checks compaction between tool batches with permission %s',
+    async (allowed) => {
+      let pending = false
+      let continuationContext: Context | undefined
+      const setup = await createRuntime({
+        responses: [
+          () => {
+            pending = true
+            return fauxAssistantMessage(
+              [{ type: 'toolCall', id: 'probe-call', name: 'probe', arguments: {} }],
+              { stopReason: 'toolUse' },
+            )
+          },
+          ...(allowed
+            ? [
+                () => {
+                  pending = false
+                  return fauxAssistantMessage('mid-task compact summary')
+                },
+              ]
+            : []),
+          (context: Context) => {
+            continuationContext = context
+            return fauxAssistantMessage('continued task')
+          },
+        ],
+        shouldAutoCompact: () => pending,
+        toolResult: allowed ? 'x'.repeat(200_000) : 'probe result',
+      })
+      setup.request.exposedTools = ['probe']
+      setup.request.canAutoCompact = () => allowed
+      try {
+        await expect(setup.runtime.run(setup.request)).resolves.toEqual({
+          status: 'completed',
+          output: 'continued task',
+        })
+        expect(setup.compacted).toEqual(allowed ? ['automatic'] : [])
+        expect(setup.failures).toEqual([])
+        expect(JSON.stringify(continuationContext?.messages)).toContain(
+          allowed ? 'mid-task compact summary' : 'probe result',
+        )
+      } finally {
+        await setup.runtime.dispose()
+      }
+    },
+  )
+
+  test('compacts before the first provider request without duplicating the new input', async () => {
+    let next: Context | undefined
     const setup = await createRuntime({
+      history: 'x'.repeat(200_000),
+      shouldAutoCompact: true,
       responses: [
-        () => {
-          pending = true
-          return fauxAssistantMessage([
-            { type: 'toolCall', id: 'probe-call', name: 'probe', arguments: {} },
-          ], { stopReason: 'toolUse' })
-        },
-        ...(allowed ? [() => {
-          pending = false
-          return fauxAssistantMessage('mid-task compact summary')
-        }] : []),
+        fauxAssistantMessage('pre-request summary'),
         (context: Context) => {
-          continuationContext = context
-          return fauxAssistantMessage('continued task')
+          next = context
+          return fauxAssistantMessage('completed')
         },
       ],
-      shouldAutoCompact: () => pending,
+    })
+    await expect(setup.runtime.run(setup.request)).resolves.toMatchObject({
+      status: 'completed',
+      output: 'completed',
+    })
+    expect(setup.compacted).toEqual(['automatic'])
+    expect(
+      next?.messages.filter((message) => messageText(message) === setup.request.content),
+    ).toHaveLength(1)
+    await setup.runtime.dispose()
+  })
+
+  test('failed candidate preserves history and blocks the unsafe provider request', async () => {
+    const setup = await createRuntime({
+      history: 'x'.repeat(200_000),
+      shouldAutoCompact: true,
+      responses: [
+        fauxAssistantMessage([], { stopReason: 'error', errorMessage: 'summary unavailable' }),
+      ],
+    })
+    await expect(setup.runtime.run(setup.request)).rejects.toBeInstanceOf(AgentError)
+    expect(setup.compacted).toEqual([])
+    expect(setup.failures).toEqual(['automatic'])
+    expect((await setup.session.getBranch()).some((entry) => entry.type === 'compaction')).toBe(
+      false,
+    )
+    await setup.runtime.dispose()
+  })
+
+  test('queued manual compaction runs after tools and continues the same task', async () => {
+    const setup = await createRuntime({
+      manualAfterTool: true,
+      responses: [
+        fauxAssistantMessage([{ type: 'toolCall', id: 'probe', name: 'probe', arguments: {} }], {
+          stopReason: 'toolUse',
+        }),
+        fauxAssistantMessage('manual summary'),
+        fauxAssistantMessage('continued task'),
+      ],
     })
     setup.request.exposedTools = ['probe']
-    setup.request.canAutoCompact = () => allowed
+    await expect(setup.runtime.run(setup.request)).resolves.toMatchObject({
+      output: 'continued task',
+    })
+    expect(setup.compacted).toEqual(['manual'])
+    await setup.runtime.dispose()
+  })
+
+  test('manual compaction queued during the final response runs at the natural finish boundary', async () => {
+    const setup = await createRuntime({
+      manualOnFinal: true,
+      history: 'previous history',
+      responses: [fauxAssistantMessage('completed task'), fauxAssistantMessage('settled summary')],
+    })
     try {
-      await expect(setup.runtime.run(setup.request)).resolves.toEqual({
-        status: 'completed', output: 'continued task',
+      await expect(setup.runtime.run(setup.request)).resolves.toMatchObject({
+        output: 'completed task',
       })
-      expect(setup.compacted).toEqual(allowed ? ['automatic'] : [])
-      expect(setup.failures).toEqual([])
-      expect(JSON.stringify(continuationContext?.messages)).toContain(
-        allowed ? 'mid-task compact summary' : 'probe result',
-      )
+      expect(setup.compacted).toEqual(['manual'])
     } finally {
       await setup.runtime.dispose()
     }
   })
 
-  test('successful turns remain successful when automatic compaction runs afterward', async () => {
+  test('two oversized candidates preserve the old history and stop sampling', async () => {
     const setup = await createRuntime({
-      responses: [
-        fauxAssistantMessage('completed before compaction'),
-        fauxAssistantMessage('automatic compact summary'),
-      ],
+      history: 'x'.repeat(200_000),
       shouldAutoCompact: true,
-    })
-
-    await expect(setup.runtime.run(setup.request)).resolves.toEqual({
-      status: 'completed',
-      output: 'completed before compaction',
-    })
-    expect(setup.compacted).toEqual(['automatic'])
-    expect(setup.failures).toEqual([])
-    await expect(setup.runtime.compact()).rejects.toMatchObject({ code: 'nothing_to_compact' })
-    await setup.runtime.dispose()
-  })
-
-  test('automatic compaction failure is recorded without replacing a successful turn', async () => {
-    const setup = await createRuntime({
       responses: [
-        fauxAssistantMessage('completed before failed compaction'),
-        fauxAssistantMessage([], {
-          stopReason: 'error',
-          errorMessage: 'summary provider unavailable',
-        }),
+        fauxAssistantMessage('oversized summary'.repeat(20_000)),
+        fauxAssistantMessage('oversized summary'.repeat(20_000)),
       ],
-      shouldAutoCompact: true,
     })
-
-    await expect(setup.runtime.run(setup.request)).resolves.toEqual({
-      status: 'completed',
-      output: 'completed before failed compaction',
-    })
-    expect(setup.compacted).toEqual([])
-    expect(setup.failures).toEqual(['automatic'])
-    await setup.runtime.dispose()
+    try {
+      await expect(setup.runtime.run(setup.request)).rejects.toMatchObject({
+        code: 'CONTEXT_BUDGET_EXCEEDED',
+      })
+      expect(setup.compacted).toEqual([])
+      expect((await setup.session.getBranch()).some((entry) => entry.type === 'compaction')).toBe(
+        false,
+      )
+      expect(setup.failures).toEqual(['automatic'])
+    } finally {
+      await setup.runtime.dispose()
+    }
   })
 
   test('provider overflow compacts once and continues without appending the original request again', async () => {
@@ -245,7 +345,7 @@ describe('Harness runtime context compaction', () => {
       continuationContext?.messages.filter((message) => message.role === 'user').map(messageText) ??
       []
     expect(userMessages.filter((text) => text === setup.request.content)).toHaveLength(1)
-    expect(userMessages.at(-1)).toBe(REACTIVE_CONTINUATION_PROMPT)
+    expect(userMessages).not.toContain('Continue the previous task')
     await setup.runtime.dispose()
   })
 

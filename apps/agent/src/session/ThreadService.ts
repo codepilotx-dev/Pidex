@@ -576,6 +576,16 @@ export class ThreadService {
     }
   }
 
+  requestCompaction(threadID: string, operationId: string) {
+    this.get(threadID)
+    return this.orchestrator.requestCompaction(threadID, operationId)
+  }
+
+  cancelCompaction(threadID: string, operationId: string) {
+    this.get(threadID)
+    return this.orchestrator.cancelCompaction(threadID, operationId)
+  }
+
   async compact(threadID: string) {
     this.get(threadID)
     if (this.db.activeTurn(threadID))
@@ -638,7 +648,11 @@ export class ThreadService {
     }
     if (records.some((record) => record.kind !== 'text')) {
       const selected = await this.providers.resolve(model)
-      if (records.some((record) => record.kind !== 'text' && !selected.capabilities.input.includes(record.kind)))
+      if (
+        records.some(
+          (record) => record.kind !== 'text' && !selected.capabilities.input.includes(record.kind),
+        )
+      )
         throw new AgentError('INVALID_REQUEST', '当前模型不支持所选媒体输入', 409)
     }
   }
@@ -910,6 +924,11 @@ export class ThreadService {
   ) {
     const duplicate = this.duplicateAdmission(threadID, inputID, input.content, input.skills)
     if (duplicate) return duplicate
+    if (
+      this.db.repositories.context.latestOperation(threadID, true)?.status === 'running' &&
+      !this.db.activeTurn(threadID)
+    )
+      throw new AgentError('CONFLICT', '上下文正在压缩，请等待完成或取消后发送', 409)
     const validationThreadID = transition?.validationThreadID ?? threadID
     await this.validateAdmission(validationThreadID, input, attachmentIDs, contextReferenceIDs)
     this.validateInputItems(validationThreadID, attachmentIDs, contextReferenceIDs)
@@ -930,6 +949,11 @@ export class ThreadService {
     created = this.db.transaction(() => {
       threadEvent = transition?.initialize?.().event
       transition?.beforeCreate()
+      if (
+        this.db.repositories.context.latestOperation(threadID, true)?.status === 'running' &&
+        !this.db.activeTurn(threadID)
+      )
+        throw new AgentError('CONFLICT', '上下文正在压缩，请等待完成或取消后发送', 409)
       if (goal) {
         if (!this.threadGoals)
           throw new AgentError('GOAL_NOT_AVAILABLE', '当前 Agent 不支持 Goal', 409)
@@ -1125,7 +1149,17 @@ export class ThreadService {
           : [],
       )
       try {
-        await this.orchestrator.steer(threadID, content, images, input.id, attachments.flatMap((attachment) => attachment.kind === 'audio' || attachment.kind === 'video' ? [{ kind: attachment.kind, data: attachment.base64, mimeType: attachment.mediaType }] : []))
+        await this.orchestrator.steer(
+          threadID,
+          content,
+          images,
+          input.id,
+          attachments.flatMap((attachment) =>
+            attachment.kind === 'audio' || attachment.kind === 'video'
+              ? [{ kind: attachment.kind, data: attachment.base64, mimeType: attachment.mediaType }]
+              : [],
+          ),
+        )
         handle.dispatchedSteerIDs.add(input.id)
       } catch (cause) {
         const code = cause && typeof cause === 'object' && 'code' in cause ? String(cause.code) : ''
@@ -1184,7 +1218,11 @@ export class ThreadService {
       throw new AgentError('ATTACHMENT_ALREADY_BOUND', '附件已绑定到其他 Turn', 409)
     if (records.some((record) => record.kind !== 'text')) {
       const model = await this.providers.resolve(JSON.parse(queued.model_ref) as Model.Ref)
-      if (records.some((record) => record.kind !== 'text' && !model.capabilities.input.includes(record.kind)))
+      if (
+        records.some(
+          (record) => record.kind !== 'text' && !model.capabilities.input.includes(record.kind),
+        )
+      )
         throw new AgentError('INVALID_REQUEST', '当前模型不支持所选媒体输入', 409)
     }
     const removed = currentIDs.filter((id) => !nextIDs.includes(id))
@@ -1490,9 +1528,7 @@ export class ThreadService {
       // 计划修改轮次：用户消息是修改意见原文，完整源计划按 next_turn_id 关联
       // 重建为 prompt context，不写入用户消息文本，也不新增数据库字段。
       const planFeedbackSource =
-        input.taskMode === 'plan'
-          ? this.db.repositories.planApprovals.feedbackSource(turnID)
-          : null
+        input.taskMode === 'plan' ? this.db.repositories.planApprovals.feedbackSource(turnID) : null
       if (planFeedbackSource?.markdown.trim()) {
         promptSections.splice(promptSections.length - 1, 0, {
           id: 'thread.plan-feedback-source',
@@ -1889,6 +1925,11 @@ export class ThreadService {
       await mcpLease?.release()
       if (terminalStatus) this.coordinator.finish(threadID, turnID, terminalStatus)
       else this.coordinator.release(threadID, turnID)
+      const pendingCompaction = terminalStatus
+        ? this.db.repositories.context.latestOperation(threadID, true)
+        : null
+      if (pendingCompaction?.status === 'queued')
+        this.orchestrator.requestCompaction(threadID, pendingCompaction.operationId)
       await this.subagents.reconcileCompletions()
       if (!this.db.activeTurn(threadID)) {
         const next = this.db.nextQueuedTurn(threadID)

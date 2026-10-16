@@ -1,3 +1,4 @@
+import type { ThreadContextState } from '@pidex/shared/thread'
 import {
   DEFAULT_PERMISSION_CONFIG,
   AUTO_REVIEW_PERMISSION_CONFIG,
@@ -236,10 +237,13 @@ export function agentThreadSnapshotToDesktop(
         })),
       toolLog: snapshot.items.flatMap(itemToToolLog),
       pendingPermissions: pendingPermissionRequests(events),
-      contextUsage: latestItemContextUsage(
-        snapshot.items,
-        latestTurn?.model.providerID ?? latestInput?.model.providerID,
-        latestTurn?.model.id ?? latestInput?.model.id,
+      contextUsage: contextStateUsage(
+        snapshot.context,
+        latestItemContextUsage(
+          snapshot.items,
+          latestTurn?.model.providerID ?? latestInput?.model.providerID,
+          latestTurn?.model.id ?? latestInput?.model.id,
+        ),
       ),
     },
     events,
@@ -738,6 +742,35 @@ function itemToAgentEvents(threadId: string, item: Item): DesktopAgentEvent[] {
   return []
 }
 
+export function contextStateUsage(
+  state: ThreadContextState | null | undefined,
+  fallback: DesktopContextUsage | null,
+): DesktopContextUsage | null {
+  if (!state?.budget)
+    return state?.operation
+      ? { ...(fallback ?? { usedTokens: 0 }), compactionOperation: state.operation }
+      : fallback
+  const budget = state.budget
+  const usedPercent = Math.min(100, (budget.usedTokens / budget.contextWindowTokens) * 100)
+  return {
+    ...(fallback
+      ? {
+          provider: fallback.provider,
+          model: fallback.model,
+          averageCacheHitRate: fallback.averageCacheHitRate,
+        }
+      : {}),
+    usedTokens: budget.usedTokens,
+    contextWindow: budget.contextWindowTokens,
+    remainingTokens: Math.max(0, budget.contextWindowTokens - budget.usedTokens),
+    usedPercent,
+    remainingPercent: 100 - usedPercent,
+    percentUsed: usedPercent,
+    budget,
+    ...(state.operation ? { compactionOperation: state.operation } : {}),
+  }
+}
+
 export function itemContextUsage(
   item: Item,
   fallbackProvider?: string,
@@ -795,14 +828,18 @@ function latestRawItemContextUsage(
   let compactedTokens: number | undefined
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
-    if (item?.type === 'activity' && item.activity === 'context-compression' && item.status === 'completed') {
+    if (
+      item?.type === 'activity' &&
+      item.activity === 'context-compression' &&
+      item.status === 'completed'
+    ) {
       compactedTokens ??= nonNegativeNumber(item.contextTokens) ?? undefined
     }
     if (!item || item.type !== 'text' || item.status !== 'completed') continue
     const usage = itemContextUsage(item, fallbackProvider, fallbackModel)
     if (!usage) continue
     if (compactedTokens === undefined) return usage
-    const usedPercent = Math.min(100, compactedTokens / usage.contextWindow * 100)
+    const usedPercent = Math.min(100, (compactedTokens / usage.contextWindow) * 100)
     return {
       provider: usage.provider,
       model: usage.model,

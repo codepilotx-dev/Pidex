@@ -1,3 +1,5 @@
+import type { ContextBudget, ContextCompactionOperation } from '@pidex/shared/thread'
+import type { ContextUsageAnchor } from '../../context/ContextBudget'
 import type {
   ImageContent,
   Model,
@@ -980,10 +982,24 @@ interface AgentHarnessOptionsBase<
   systemPrompt?: AgentHarnessSystemPrompt<TContext, TSkill, TPromptTemplate, TTool>
   /** Curated stream/provider request options. Snapshotted at turn start. */
   streamOptions?: AgentHarnessStreamOptions
-  /** Product-owned policy checked between tool batches. */
-  autoCompaction?: {
-    shouldCompact(): boolean | Promise<boolean>
-    onFailure(): void | Promise<void>
+  contextCompaction?: {
+    anchor?: ContextUsageAnchor | null | undefined
+    pending(): boolean
+    canCompact(): boolean | Promise<boolean>
+    enabled(): boolean | Promise<boolean>
+    start(
+      trigger: 'manual' | 'automatic' | 'reactive',
+      phase: ContextCompactionOperation['phase'],
+    ): AbortSignal | Promise<AbortSignal>
+    finish(
+      status: ContextCompactionOperation['status'],
+      reason: ContextCompactionOperation['reason'],
+    ): void | Promise<void>
+    onBudget(
+      budget: ContextBudget,
+      anchor?: ContextUsageAnchor | null | undefined,
+    ): void | Promise<void>
+    onFailure(trigger: 'manual' | 'automatic' | 'reactive'): void | Promise<void>
   }
   /** Optional retry policy for generated compaction and branch-summary requests. */
   retry?: RetryPolicy

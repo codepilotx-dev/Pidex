@@ -1,3 +1,4 @@
+import type { ContextCompactionOperation } from '@pidex/shared/thread'
 import type {
   ModelRef,
   PermissionConfig,
@@ -158,10 +159,23 @@ export type AgentRuntimeResult =
 
 export interface AgentRuntime {
   run(request: AgentRuntimeRequest): Promise<AgentRuntimeResult>
-  steer(threadID: string, content: string, images?: RuntimeImage[], inputID?: string, media?: import('../provider/pi/MediaInput').MediaInput[]): Promise<void>
+  steer(
+    threadID: string,
+    content: string,
+    images?: RuntimeImage[],
+    inputID?: string,
+    media?: import('../provider/pi/MediaInput').MediaInput[],
+  ): Promise<void>
   followUp(threadID: string, content: string): Promise<void>
   abort(threadID: string): Promise<void>
-  compact(threadID: string, instructions?: string, promptText?: string): Promise<ContextCompaction>
+  requestCompaction(threadID: string, operationId: string): ContextCompactionOperation
+  cancelCompaction(threadID: string, operationId: string): ContextCompactionOperation
+  compact(
+    threadID: string,
+    instructions?: string,
+    promptText?: string,
+    signal?: AbortSignal,
+  ): Promise<ContextCompaction>
   toolExposure(input: ToolExposureInput): ToolExposurePlan
   /** Capability summary for the discoverable scope; preview reuses the turn generation. */
   capabilityCatalog(input: ToolExposureInput, toolCatalog?: ToolCatalog): PromptSection

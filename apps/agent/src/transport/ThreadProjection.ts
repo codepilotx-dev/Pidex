@@ -267,6 +267,7 @@ export class InvalidThreadHistoryCursorError extends Error {
 }
 
 export type ThreadHistoryPage = {
+  context?: import('@pidex/shared/thread').ThreadContextState
   historyRevision?: number
   pendingPlanApproval?: PlanApproval | null
   thread: Thread
@@ -671,9 +672,14 @@ export class ThreadProjection {
     agents: readonly WireAgentExecution[],
     items: Item[],
   ): void {
-    for (const record of this.db.repositories.context.compactionsForTurns(threadId, turns.map((turn) => turn.id))) {
+    for (const record of this.db.repositories.context.compactionsForTurns(
+      threadId,
+      turns.map((turn) => turn.id),
+    )) {
       const turn = turns.find((turn) => turn.id === record.turnID)!
-      const latestAgent = agents.filter((agent) => agent.turnId === turn.id && agent.createdAt <= record.createdAt).at(-1)
+      const latestAgent = agents
+        .filter((agent) => agent.turnId === turn.id && agent.createdAt <= record.createdAt)
+        .at(-1)
       const item = contextCompactionItem(record.payload, {
         turnId: turn.id,
         agentId: latestAgent?.id ?? turn.rootAgentId,
@@ -868,6 +874,7 @@ export class ThreadProjection {
     )
     return {
       thread,
+      context: this.db.repositories.context.runtimeState(threadId),
       historyRevision: new ThreadEditRepository(this.db).revision(threadId),
       turns: turns.filter((row) => !inactive.has(row.id)),
       agents: agents.filter((row) => !inactive.has(row.turnId)),
@@ -1142,6 +1149,7 @@ export class ThreadProjection {
       thread,
       subagents: this.subagents.projectionForThread(threadId, true),
       turns: bundles,
+      context: this.db.repositories.context.runtimeState(threadId),
       historyRevision: new ThreadEditRepository(this.db).revision(threadId),
       pendingPlanApproval: this.db.repositories.planApprovals.pending(threadId),
       queue: {

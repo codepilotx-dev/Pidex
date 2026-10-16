@@ -1,4 +1,5 @@
 import { Schema } from 'effect'
+import { ThreadContextStateSchema } from './Context'
 import {
   ApprovalRequestSchema,
   AttachmentSchema,
@@ -28,6 +29,7 @@ export const QueueActionSchema = Schema.Literals([
 export type QueueAction = typeof QueueActionSchema.Type
 
 export const ThreadSnapshotSchema = Schema.Struct({
+  context: Schema.optional(ThreadContextStateSchema),
   historyRevision: Schema.optional(Schema.Number),
   thread: ThreadSchema,
   turns: Schema.Array(TurnSchema),

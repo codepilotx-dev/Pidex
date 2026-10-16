@@ -1,3 +1,4 @@
+import { ContextCompactionService } from '../src/context/ContextCompactionService'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -492,7 +493,7 @@ describe('核心工具面', () => {
       models,
       toolExecutor: executor,
       hub: { publish: () => Effect.succeed(undefined) } as never,
-      contextCompaction: { shouldAutoCompact: async () => false } as never,
+      contextCompaction: new ContextCompactionService(db),
     })
     const request = {
       threadID: thread.id,

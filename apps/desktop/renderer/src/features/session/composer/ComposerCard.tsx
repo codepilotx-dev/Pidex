@@ -353,6 +353,8 @@ type Props = {
   onPlanModeChange?: (active: boolean) => void | Promise<void>
   onLocalRouterModeChange?: (mode: LocalRouterMode) => void
   onSubmit: (delivery?: ComposerDeliveryIntent) => void
+  queuedCompactionSupported?: boolean
+  onCancelCompaction?: () => Promise<void>
   onCompact?: () => Promise<void>
   onCommandError?: (message: string) => void
   onThinkingChange: (value: DesktopThinkingMode) => void
@@ -482,6 +484,8 @@ export function ComposerCard({
   onLocalRouterModeChange,
   onSubmit,
   onCompact,
+  queuedCompactionSupported = false,
+  onCancelCompaction,
   onCommandError,
   onThinkingChange,
   onSkillSelect,
@@ -710,6 +714,7 @@ export function ComposerCard({
     canReview: Boolean(onStartReview && workspace),
     subagentMode,
     sessionBusy,
+    queuedCompactionSupported,
     reasoningAvailable: showThinkingOptions,
     onOpenModel: () => setOpenDropdown('model'),
     onOpenReasoning: () => setOpenDropdown('model'),
@@ -1247,8 +1252,42 @@ export function ComposerCard({
           submitting || executingCommandId === 'plan' || executingCommandId === 'goal' || undefined
         }
       >
-        {executingCommandId === 'compact' ? (
-          <div className="tw:mx-1 tw:mb-2 tw:type-caption tw:text-app-muted" role="status">
+        {contextUsage?.compactionOperation &&
+        (contextUsage.compactionOperation.status !== 'completed' ||
+          contextUsage.compactionOperation.reason === 'target-unmet') ? (
+          <div
+            className="tw:mx-1 tw:mb-2 tw:flex tw:items-center tw:gap-2 tw:type-caption tw:text-app-text-meta"
+            role="status"
+          >
+            <span>
+              {
+                {
+                  completed: '上下文已压缩到安全范围，未完全达到压缩目标',
+                  queued: '已排队，当前回复和工具完成后压缩',
+                  running: '正在压缩上下文…',
+                  skipped: '上下文已压缩，暂无新增内容需要压缩',
+                  failed: '上下文压缩失败，请减少输入或检查模型后重试',
+                  cancelled: '上下文压缩已取消',
+                  interrupted: '压缩因进程重启中断，请重新发起',
+                }[contextUsage.compactionOperation.status]
+              }
+            </span>
+            {['queued', 'running'].includes(contextUsage.compactionOperation.status) &&
+            onCancelCompaction ? (
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  void onCancelCompaction().catch((error) =>
+                    onCommandError?.(error instanceof Error ? error.message : '取消压缩失败'),
+                  )
+                }
+              >
+                取消压缩
+              </Button>
+            ) : null}
+          </div>
+        ) : executingCommandId === 'compact' ? (
+          <div className="tw:mx-1 tw:mb-2 tw:type-caption tw:text-app-text-meta" role="status">
             正在压缩上下文…
           </div>
         ) : null}

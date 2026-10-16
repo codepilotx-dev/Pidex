@@ -694,6 +694,7 @@ export const ThreadHistoryReadParamsSchema = Schema.Struct({
 })
 
 export const ThreadHistoryPageResultSchema = Schema.Struct({
+  context: Schema.optional(AgentThread.ThreadContextStateSchema),
   thread: AgentThread.ThreadSchema,
   pendingPlanApproval: Schema.optional(Schema.NullOr(AgentThread.PlanApprovalSchema)),
   subagents: Schema.Array(AgentThread.SubagentProjectionSchema),
@@ -1734,6 +1735,22 @@ export const CoreRpcMethods = {
     errors: ThreadErrors,
     capability: 'prompt.refresh.v1',
     mutation: true,
+  }),
+  'thread/compact/request': defineMethod({
+    params: ThreadCompactParamsSchema,
+    result: Schema.Struct({ operation: AgentThread.ContextCompactionOperationSchema }),
+    errors: ThreadErrors,
+    capability: 'context.compact.lifecycle.v1',
+    mutation: true,
+    exactResult: true,
+  }),
+  'thread/compact/cancel': defineMethod({
+    params: ThreadCompactParamsSchema,
+    result: Schema.Struct({ operation: AgentThread.ContextCompactionOperationSchema }),
+    errors: ThreadErrors,
+    capability: 'context.compact.lifecycle.v1',
+    mutation: true,
+    exactResult: true,
   }),
   'thread/compact': defineMethod({
     params: ThreadCompactParamsSchema,

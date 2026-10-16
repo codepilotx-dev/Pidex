@@ -1001,8 +1001,16 @@ export class AgentRuntimeService implements AgentRuntime {
             afterCount: afterContext.messages.length,
             items: afterContext.messages,
             promptText: input.promptText,
-            contextWindowTokens: Math.max(1, Math.min(Number(runtimeModel.contextWindow) || 1, (runtimeModel as typeof runtimeModel & { maxInputTokens?: number }).maxInputTokens ?? Infinity)),
+            contextWindowTokens: Math.max(
+              1,
+              Math.min(
+                Number(runtimeModel.contextWindow) || 1,
+                (runtimeModel as typeof runtimeModel & { maxInputTokens?: number })
+                  .maxInputTokens ?? Infinity,
+              ),
+            ),
             trigger: input.trigger,
+            requestBudget: input.budget,
           })
         })
         this.setCompletedCompaction(context.threadID, completed.compaction)
@@ -1433,7 +1441,7 @@ export class AgentRuntimeService implements AgentRuntime {
       const previousRuntime = this.active.get(request.threadID)
       if (previousRuntime) {
         try {
-          await previousRuntime.harness.abort()
+          await previousRuntime.harness.abort(true)
           await previousRuntime.harness.waitForIdle()
         } finally {
           previousRuntime.unsubscribe()
@@ -1535,6 +1543,7 @@ export class AgentRuntimeService implements AgentRuntime {
           return { block: true, reason: '等待用户审批', pause: true }
         },
         compaction: {
+          lifecycle: this.options.contextCompaction,
           shouldAutoCompact: (threadID) =>
             this.options.contextCompaction.shouldAutoCompact(threadID),
           recordFailure: (threadID, trigger) =>
@@ -1935,36 +1944,56 @@ export class AgentRuntimeService implements AgentRuntime {
       definitions,
     })
   }
-  async compact(threadID: string, instructions?: string, promptText?: string) {
+  requestCompaction(threadID: string, operationId: string) {
+    const operation = this.options.contextCompaction.request(threadID, operationId)
+    queueMicrotask(() => this.options.contextCompaction.startIdle(threadID))
+    return operation
+  }
+
+  cancelCompaction(threadID: string, operationId: string) {
+    return this.options.contextCompaction.cancel(threadID, operationId)
+  }
+
+  async compact(
+    threadID: string,
+    instructions?: string,
+    promptText?: string,
+    signal?: AbortSignal,
+  ) {
+    this.options.contextCompaction.begin(threadID, 'manual')
+    try {
+      return await this.compactIdle(threadID, instructions, promptText, signal)
+    } catch (error) {
+      const nothing =
+        error instanceof Error && 'code' in error && error.code === 'nothing_to_compact'
+      this.options.contextCompaction.finish(
+        threadID,
+        signal?.aborted ? 'cancelled' : nothing ? 'skipped' : 'failed',
+        signal?.aborted ? 'stopped' : nothing ? 'already-compacted' : 'provider-failed',
+      )
+      throw error
+    }
+  }
+
+  private async compactIdle(
+    threadID: string,
+    instructions?: string,
+    promptText?: string,
+    signal?: AbortSignal,
+  ) {
     const runtime = this.active.get(threadID)
     if (runtime) {
-      await runtime.compact('manual', instructions)
+      await runtime.harness.compact(instructions, signal)
       const completed = this.completedCompactions.get(threadID)
       if (!completed) throw new Error('Pi 压缩完成但缺少产品压缩记录')
       return completed
     }
-    const row = this.options.db.sqlite
-      .query(
-        `
-      SELECT a.session_id, a.model_ref, t.project_id,
-             t.workspace_root, t.workspace_cwd
-      FROM agent_executions AS a
-      JOIN threads AS t ON t.id = a.thread_id
-      WHERE a.thread_id = ? AND a.profile = 'main'
-      ORDER BY a.created_at DESC LIMIT 1
-    `,
-      )
-      .get(threadID) as {
-      session_id: string
-      model_ref: string
-      project_id: string | null
-      workspace_root: string | null
-      workspace_cwd: string | null
-    } | null
+    const row = this.options.db.repositories.context.latestSession(threadID)
     if (!row) throw new Error('Pi session 不存在，无法执行手动压缩')
     const ref = JSON.parse(row.model_ref) as { providerID: string; id: string }
     const model = this.options.models.getModel(ref.providerID, ref.id)
     if (!model) throw new Error(`Pi 模型 ${ref.providerID}/${ref.id} 不可用`)
+    const frozen = this.options.db.repositories.runtimeCompositions.get(row.turn_id)?.snapshot
     const session = await this.repo.openForThread(row.session_id, threadID)
     const storage = session.getStorage() as SqlitePiSessionStorage
     const harness = new AgentHarness({
@@ -1972,10 +2001,15 @@ export class AgentRuntimeService implements AgentRuntime {
       models: this.options.models,
       model,
       tools: [],
-      systemPrompt: '',
+      systemPrompt: promptText ?? frozen?.prompt.instructions ?? '',
     })
     const beforeCount = (await session.getEntries()).length
-    const result = await harness.compact(instructions)
+    const result = await harness.compact(
+      instructions,
+      signal,
+      undefined,
+      this.options.contextCompaction.state(threadID).budget?.fixedTokens,
+    )
     const entryID = await storage.getLeafId()
     const piEntry = entryID ? await session.getEntry(entryID) : undefined
     if (!piEntry || piEntry.type !== 'compaction') {
@@ -1996,8 +2030,15 @@ export class AgentRuntimeService implements AgentRuntime {
         afterCount: afterContext.messages.length,
         items: afterContext.messages,
         promptText: promptText ?? '',
-        contextWindowTokens: Math.max(1, Math.min(Number(model.contextWindow) || 1, (model as typeof model & { maxInputTokens?: number }).maxInputTokens ?? Infinity)),
+        contextWindowTokens: Math.max(
+          1,
+          Math.min(
+            Number(model.contextWindow) || 1,
+            (model as typeof model & { maxInputTokens?: number }).maxInputTokens ?? Infinity,
+          ),
+        ),
         trigger: 'manual',
+        requestBudget: harness.getContextBudget(),
       })
     })
     this.setCompletedCompaction(threadID, completed.compaction)
@@ -2028,6 +2069,9 @@ export class AgentRuntimeService implements AgentRuntime {
   }
 
   async abort(threadID: string) {
+    const operation = this.options.contextCompaction.pending(threadID)
+    if (operation?.status === 'queued')
+      this.options.contextCompaction.finish(threadID, 'cancelled', 'stopped')
     const runtime = this.active.get(threadID)
     if (runtime) await runtime.harness.abort()
   }

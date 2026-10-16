@@ -490,7 +490,9 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const piModels = new PiModelService(providerCredentialStore, {
       ...(options.models ? { models: options.models } : {}),
       modelsStore: new PiModelsFileStore(config.piModelCachePath),
-      recommendations: new ModelRecommendationStore(join(dirname(config.piModelCachePath), 'model-recommendations.json')),
+      recommendations: new ModelRecommendationStore(
+        join(dirname(config.piModelCachePath), 'model-recommendations.json'),
+      ),
       config: () => {
         const snapshot = configService.snapshot()
         const modelCatalog = snapshot.model_catalog as Record<string, unknown> | undefined
@@ -726,12 +728,13 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const questions = new QuestionService(db, hub, false)
     const artifacts = yield* Effect.promise(() => ArtifactService.open(config.dataDir, db))
     tools.register(intelligentUiDefinition(artifacts))
+    const contextCompaction = new ContextCompactionService(db)
     const orchestrator = new AgentRuntimeService({
       db,
       hub,
       models: piModels.pi,
       toolExecutor,
-      contextCompaction: new ContextCompactionService(db),
+      contextCompaction,
       artifacts,
       memoryManager,
       scheduleDrafts: () => schedulePlans,
@@ -747,6 +750,12 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
           event,
         ),
     })
+    contextCompaction.configure(
+      async (event) => {
+        await Effect.runPromise(hub.publish(event))
+      },
+      (threadID, signal) => orchestrator.compact(threadID, undefined, undefined, signal),
+    )
     const attachments = yield* Effect.promise(() =>
       AttachmentService.open(config.dataDir, {
         catalog: new SqliteAttachmentCatalog(db),
@@ -1232,7 +1241,10 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       (threadID) => review.prepareThreadSnapshotCleanup(threadID),
     )
     const startupRecovery = new StartupRecoveryCoordinator({
-      recoverInterruptedRuns: () => new InterruptedRunRecoveryCoordinator(db).run(),
+      recoverInterruptedRuns: () => {
+        new InterruptedRunRecoveryCoordinator(db).run()
+        contextCompaction.recover()
+      },
       discardRecoveredSideChats: () => sideChats.discardAll(),
       recoverResumeLeases: () => {
         resumeCheckpoints.recoverInterruptedLeases()

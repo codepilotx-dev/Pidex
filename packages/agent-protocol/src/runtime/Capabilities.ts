@@ -49,6 +49,7 @@ export const Capabilities = [
   'github.pullRequests.v1',
   'github.threadPullRequests.v1',
   'context.compact.v1',
+  'context.compact.lifecycle.v1',
   'hooks.trust.v1',
   'subagents.v1',
   'subagents.recursive.v1',

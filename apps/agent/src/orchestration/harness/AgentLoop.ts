@@ -1,3 +1,4 @@
+import { isProviderContextOverflow } from '../pi/ContextOverflow'
 /**
  * Agent loop that works with AgentMessage throughout.
  * Transforms to Message[] only at the LLM call boundary.
@@ -201,13 +202,27 @@ async function runLoop(
       }
 
       // Stream assistant response
-      const message = await streamAssistantResponse(
+      let message = await streamAssistantResponse(
         currentContext,
         config,
         signal,
         emit,
         streamFunction,
       )
+      if (
+        message.stopReason === 'error' &&
+        isProviderContextOverflow(message.errorMessage) &&
+        config.recoverContextOverflow
+      ) {
+        currentContext = await config.recoverContextOverflow()
+        message = await streamAssistantResponse(
+          currentContext,
+          config,
+          signal,
+          emit,
+          streamFunction,
+        )
+      }
       newMessages.push(message)
 
       if (message.stopReason === 'error' || message.stopReason === 'aborted') {

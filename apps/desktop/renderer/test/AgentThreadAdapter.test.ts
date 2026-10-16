@@ -15,6 +15,7 @@ import {
   agentTurnStatusToDesktopStatus,
   desktopPermissionModeToPermissionConfig,
   latestItemContextUsage,
+  contextStateUsage,
   permissionModeFromPermissionConfig,
   questionToRequest,
   approvalToRequest,
@@ -1748,13 +1749,23 @@ describe('agent thread adapter', () => {
       { source: 'system_tools', chars: 30 },
     ])
     const compression: Item = {
-      id: 'compressed', messageID: 'compressed', turnId: 'turn-1', agentId: 'agent-1',
-      type: 'activity', activity: 'context-compression', title: '上下文已压缩',
-      contextTokens: 2_000, status: 'completed', createdAt: 3_000,
+      id: 'compressed',
+      messageID: 'compressed',
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'activity',
+      activity: 'context-compression',
+      title: '上下文已压缩',
+      contextTokens: 2_000,
+      status: 'completed',
+      createdAt: 3_000,
     }
     const compressedUsage = latestItemContextUsage([withoutBreakdown, withBreakdown, compression])
     expect(compressedUsage).toMatchObject({
-      usedTokens: 2_000, contextWindow: 200_000, usedPercent: 1, remainingTokens: 198_000,
+      usedTokens: 2_000,
+      contextWindow: 200_000,
+      usedPercent: 1,
+      remainingTokens: 198_000,
     })
     expect(compressedUsage?.breakdown).toBeUndefined()
     expect(compressedUsage?.promptCacheReadTokens).toBeUndefined()
@@ -1762,4 +1773,28 @@ describe('agent thread adapter', () => {
     // 累计 cacheRead 9000 / 累计 prompt 侧 11000，而不是只看最后一条。
     expect(usage?.averageCacheHitRate).toBeCloseTo(9_000 / 11_000, 6)
   })
+})
+
+test('Agent context budget replaces stale message usage without replacing historical cache rate', () => {
+  const budget = {
+    contextWindowTokens: 200000,
+    inputBudgetTokens: 131904,
+    outputReserveTokens: 64000,
+    usedTokens: 42000,
+    triggerTokens: 131904,
+    targetTokens: 110000,
+    source: 'compaction-estimate' as const,
+    sampledAt: 1,
+  }
+  const usage = contextStateUsage(
+    { budget, operation: null },
+    { usedTokens: 180000, averageCacheHitRate: 0.95 },
+  )
+  expect(usage).toMatchObject({
+    usedTokens: 42000,
+    usedPercent: 21,
+    averageCacheHitRate: 0.95,
+    budget,
+  })
+  expect(usage?.promptCacheReadTokens).toBeUndefined()
 })

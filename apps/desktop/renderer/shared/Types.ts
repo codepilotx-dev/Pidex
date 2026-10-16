@@ -2073,6 +2073,8 @@ export type DesktopApi = {
   ): Promise<DesktopSessionSnapshot>
   removeQueuedFollowUp(sessionId: string, followUpId: string): Promise<DesktopSessionSnapshot>
   resumeQueuedFollowUps(sessionId: string): Promise<DesktopSessionSnapshot>
+  supportsQueuedCompaction(): boolean
+  cancelCompaction(sessionId: string, operationId: string): Promise<void>
   compactSession(sessionId: string): Promise<void>
   getSessionPromptPreview(sessionId: string): Promise<unknown>
   rollbackSession(input: DesktopRollbackRequest): Promise<DesktopRollbackResult>

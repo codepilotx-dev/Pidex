@@ -1,3 +1,5 @@
+import type { ContextBudget } from '@pidex/shared/thread'
+import type { ContextCompactionService } from '../../context/ContextCompactionService'
 import type { AgentHarness } from '../harness/AgentHarness'
 import type {
   AgentHarnessEvent,
@@ -210,6 +212,7 @@ export interface PiRuntimeEventSink {
       beforeCount: number
       trigger: RuntimeCompactionTrigger
       promptText: string
+      budget?: ContextBudget
     },
   ): void | Promise<void>
   savePoint?(
@@ -334,6 +337,7 @@ export interface HarnessRuntimeOptions {
     },
   ) => Promise<{ block?: boolean; reason?: string; pause?: boolean } | undefined>
   compaction?: {
+    lifecycle?: ContextCompactionService
     shouldAutoCompact(threadID: string): boolean | Promise<boolean>
     recordFailure(threadID: string, trigger: RuntimeCompactionTrigger): void | Promise<void>
   }

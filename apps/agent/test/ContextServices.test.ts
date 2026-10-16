@@ -681,23 +681,122 @@ describe('Hooks 与记忆', () => {
   })
 })
 
-
 describe('手动上下文压缩', () => {
-  test.each(['nothing_to_compact', 'compaction'] as const)('maps %s without hiding other failures', async (code) => {
-    const failure = new AgentHarnessError(code, 'test compaction failure')
-    const service = {
-      get: () => undefined,
-      db: { activeTurn: () => null },
-      promptPreview: async () => null,
-      orchestrator: { compact: async () => { throw failure } },
-    }
-    const result = ThreadService.prototype.compact.call(service as never, 'thread-compaction')
-    if (code === 'nothing_to_compact') {
-      await expect(result).rejects.toMatchObject({
-        code: 'CONFLICT', message: '上下文已压缩，暂无新增消息需要压缩', status: 409,
+  test.each(['nothing_to_compact', 'compaction'] as const)(
+    'maps %s without hiding other failures',
+    async (code) => {
+      const failure = new AgentHarnessError(code, 'test compaction failure')
+      const service = {
+        get: () => undefined,
+        db: { activeTurn: () => null },
+        promptPreview: async () => null,
+        orchestrator: {
+          compact: async () => {
+            throw failure
+          },
+        },
+      }
+      const result = ThreadService.prototype.compact.call(service as never, 'thread-compaction')
+      if (code === 'nothing_to_compact') {
+        await expect(result).rejects.toMatchObject({
+          code: 'CONFLICT',
+          message: '上下文已压缩，暂无新增消息需要压缩',
+          status: 409,
+        })
+      } else {
+        await expect(result).rejects.toBe(failure)
+      }
+    },
+  )
+})
+
+describe('上下文压缩生命周期与兼容存储', () => {
+  test('request is idempotent across duplicate clicks and completion; cancellation and restart are durable', async () => {
+    const { db, thread } = await fixture()
+    try {
+      const service = new ContextCompactionService(db)
+      const first = service.request(thread.id, 'manual-first')
+      expect(first.status).toBe('queued')
+      expect(service.request(thread.id, 'manual-second').operationId).toBe(first.operationId)
+      service.finish(thread.id, 'skipped', 'already-compacted')
+      expect(service.request(thread.id, 'manual-second').status).toBe('skipped')
+      const queued = service.request(thread.id, 'manual-third')
+      expect(service.cancel(thread.id, queued.operationId).status).toBe('cancelled')
+      service.request(thread.id, 'manual-restart')
+      const active = service.running(thread.id, 'manual', 'session', 'agent', 'mid-turn')
+      service.cancel(thread.id, active.operation.operationId)
+      expect(active.signal.aborted).toBe(true)
+      service.finish(thread.id, 'cancelled', 'stopped')
+      service.request(thread.id, 'manual-last')
+      new ContextCompactionService(db).recover()
+      expect(service.state(thread.id).operation).toMatchObject({
+        status: 'interrupted',
+        reason: 'restart',
       })
-    } else {
-      await expect(result).rejects.toBe(failure)
+      const other = db.createThread('other')
+      expect(() => service.request(other.id, 'manual-first')).toThrow('压缩操作标识已被使用')
+    } finally {
+      db.close()
+    }
+  })
+
+  test('operation state and outbox roll back together', async () => {
+    const { db, thread } = await fixture()
+    try {
+      const service = new ContextCompactionService(db)
+      const published: unknown[] = []
+      service.configure(
+        async (event) => {
+          published.push(event)
+        },
+        async () => {},
+      )
+      expect(() =>
+        db.transaction(() => {
+          service.request(thread.id, 'outer-rollback')
+          throw new Error('rollback outer transaction')
+        }),
+      ).toThrow('rollback outer transaction')
+      await Promise.resolve()
+      expect(published).toEqual([])
+      db.sqlite.exec(
+        "CREATE TRIGGER fail_context_operation BEFORE INSERT ON events WHEN NEW.method = 'context/compactionUpdated' BEGIN SELECT RAISE(ABORT, 'operation outbox unavailable'); END",
+      )
+      expect(() => service.request(thread.id, 'failed-operation')).toThrow(
+        'operation outbox unavailable',
+      )
+      expect(service.state(thread.id).operation).toBeNull()
+    } finally {
+      db.close()
+    }
+  })
+
+  test('62 migration preserves data and future versions keep unknown data', async () => {
+    const { db, root, thread } = await fixture()
+    db.sqlite.exec(
+      'DROP TABLE context_compaction_requests; DROP TABLE context_compaction_operations; DROP TABLE context_runtime_state; PRAGMA user_version = 62',
+    )
+    db.close()
+    const migrated = new AgentDatabase(join(root, 'agent.sqlite'))
+    expect(migrated.getThread(thread.id)?.title).toBe(thread.title)
+    expect(migrated.repositories.context.runtimeState(thread.id)).toEqual({
+      budget: null,
+      operation: null,
+    })
+    migrated.sqlite.exec(
+      `CREATE TABLE future_context_data(value TEXT); INSERT INTO future_context_data VALUES ('preserve'); PRAGMA user_version = ${SCHEMA_VERSION + 5}`,
+    )
+    migrated.close()
+    const future = new AgentDatabase(join(root, 'agent.sqlite'))
+    try {
+      expect(future.sqlite.query('PRAGMA user_version').get()).toEqual({
+        user_version: SCHEMA_VERSION + 5,
+      })
+      expect(future.sqlite.query('SELECT value FROM future_context_data').get()).toEqual({
+        value: 'preserve',
+      })
+    } finally {
+      future.close()
     }
   })
 })

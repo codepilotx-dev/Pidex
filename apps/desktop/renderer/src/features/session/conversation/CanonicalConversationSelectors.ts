@@ -12,6 +12,7 @@ import {
   agentTurnStatusToDesktopStatus,
   approvalToRequest,
   latestItemContextUsage,
+  contextStateUsage,
   questionToRequest,
   toolToRequest,
 } from '../../../services/AgentThreadAdapter.js'
@@ -102,9 +103,7 @@ export function selectCanonicalSessionStatus(
  * 该聊天最新的完整计划项：只有它显示右栏打开入口。生成中的计划不作为
  * “最新”身份，避免把半成品当成可审阅对象。
  */
-export function selectCanonicalLatestPlanItemId(
-  state: CanonicalThreadState | null,
-): string | null {
+export function selectCanonicalLatestPlanItemId(state: CanonicalThreadState | null): string | null {
   if (!state) return null
   let latest: Extract<Item, { type: 'plan' }> | null = null
   for (const item of state.itemsById.values()) {
@@ -137,7 +136,7 @@ export function selectCanonicalConversationAuxiliaryState(
       inputs.length > 0 ||
       items.some((item) => item.type === 'text' && item.text.trim().length > 0),
     pendingPermissions: selectPendingPermissions(state),
-    contextUsage: latestItemContextUsage(items),
+    contextUsage: contextStateUsage(state.context, latestItemContextUsage(items)),
     queuedFollowUps: selectQueuedFollowUps(state),
     queuePauseReason: state.queue.pauseReason,
     sessionStatus: selectCanonicalSessionStatus(state),

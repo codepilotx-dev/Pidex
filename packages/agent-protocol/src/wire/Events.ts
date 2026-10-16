@@ -1,3 +1,4 @@
+import { ContextBudgetSchema, ContextCompactionOperationSchema } from '@pidex/shared/thread'
 import { ComputerStateSchema } from '../methods/Computer'
 import { Model, Provider } from '@pidex/model-schema'
 import { AutomationRunStatusSchema, AutomationStatusSchema } from '@pidex/shared/automation'
@@ -657,6 +658,20 @@ export const EventManifest = {
     durability: 'durable',
     stream: 'thread',
     capability: 'events.replay.v1',
+  }),
+  'context/compactionUpdated': defineEvent({
+    payload: Schema.Struct({ operation: ContextCompactionOperationSchema }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'context.compact.lifecycle.v1',
+  }),
+  'context/usageUpdated': defineEvent({
+    payload: Schema.Struct({ budget: ContextBudgetSchema }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'context.compact.lifecycle.v1',
   }),
   'context/compacted': defineEvent({
     payload: Schema.Struct({

@@ -1,3 +1,4 @@
+import type { ContextBudget } from '@pidex/shared/thread'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 
 export type AgentInputItem = Record<string, any>
@@ -157,6 +158,30 @@ export class ContextManager {
 
   usageSamples(threadID: string, limit = 100) {
     return this.db.repositories.context.usageSamples(threadID, Math.max(1, Math.min(1_000, limit)))
+  }
+
+  recordActiveBudget(threadID: string, budget: ContextBudget, clearAutoCompactCircuit = false) {
+    if (!this.state(threadID)) return
+    const sample = this.insertUsageSample({
+      threadID,
+      turnID: null,
+      sessionID: null,
+      contextFingerprint: '',
+      contextWindowTokens: budget.contextWindowTokens,
+      inputTokens: budget.usedTokens,
+      outputTokens: 0,
+      source: budget.source === 'measured' ? 'estimated' : budget.source,
+    })
+    this.db.repositories.context.updateBudgetState({
+      threadID,
+      contextWindowTokens: budget.contextWindowTokens,
+      usageTokens: budget.usedTokens,
+      usageSource: sample.source,
+      usageSampleID: sample.id,
+      needsCompaction: budget.usedTokens >= budget.triggerTokens,
+      clearAutoCompactCircuit,
+      updatedAt: budget.sampledAt,
+    })
   }
 
   shouldAutoCompact(threadID: string) {

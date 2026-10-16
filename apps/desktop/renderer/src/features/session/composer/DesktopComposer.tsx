@@ -1,3 +1,4 @@
+import { desktopClient } from '../../../services/desktop-client/index.js'
 import { useEffect } from 'react'
 import type React from 'react'
 import type {
@@ -499,6 +500,12 @@ export function DesktopComposer({
       onLocalRouterModeChange={onLocalRouterModeChange}
       onSubmit={handleSubmit}
       onCompact={handleCompact}
+      queuedCompactionSupported={desktopClient.supportsQueuedCompaction()}
+      onCancelCompaction={async () => {
+        const operation = contextUsage?.compactionOperation
+        if (routedSessionId && operation)
+          await desktopClient.cancelCompaction(routedSessionId, operation.operationId)
+      }}
       onCommandError={handleCommandError}
       onThinkingChange={onThinkingChange}
       onSkillSelect={handleSkillSelectWithWorkingPluginClear}

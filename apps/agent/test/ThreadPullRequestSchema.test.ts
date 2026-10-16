@@ -32,7 +32,7 @@ describe('thread pull request schema', () => {
     expect(migrated.sqlite.query('PRAGMA user_version').get()).toEqual({
       user_version: SCHEMA_VERSION,
     })
-    expect(SCHEMA_VERSION).toBe(62)
+    expect(SCHEMA_VERSION).toBe(63)
     expect(migrated.repositories.threadPullRequests.available()).toBe(true)
     expect(filterAdvertisedCapabilities(migrated)).toContain('github.threadPullRequests.v1')
     expect(

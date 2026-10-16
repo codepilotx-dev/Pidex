@@ -1,3 +1,4 @@
+import type { ContextBudget } from '@pidex/shared/thread'
 import type { AgentHarnessEvent } from '../harness/Types'
 import { readMessagePhase, type MessagePhase, type ToolResultBlock } from '@pidex/shared/thread'
 import { decodeResultCardEnvelope } from '@pidex/shared/thread-result-card'
@@ -292,6 +293,7 @@ export class PiEventAdapter {
       resolveSessionEntryID?: () => string | null | Promise<string | null>
       resolveCompactionContext?: () => {
         trigger: RuntimeCompactionTrigger
+        budget?: ContextBudget | undefined
         promptText: string
       }
     } = {},
@@ -732,6 +734,7 @@ export class PiEventAdapter {
           tokensBefore: event.compactionEntry.tokensBefore,
           beforeCount: this.beforeCompactionCount ?? 0,
           trigger: compaction.trigger,
+          ...(compaction.budget ? { budget: compaction.budget } : {}),
           promptText: compaction.promptText,
         })
         this.beforeCompactionCount = undefined

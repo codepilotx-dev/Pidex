@@ -1,3 +1,4 @@
+import { isProviderContextOverflow } from './ContextOverflow'
 import { AgentHarness } from '../harness/AgentHarness'
 import { DeferredToolCatalog } from '../../tool/harness/DeferredToolCatalog'
 import { type AssistantMessage, type ImageContent } from '@earendil-works/pi-ai'
@@ -24,11 +25,6 @@ import type {
   HarnessRuntimeRequest,
 } from './Types'
 import type { RuntimeCompactionTrigger } from './Types'
-import {
-  isProviderContextOverflow,
-  REACTIVE_COMPACTION_INSTRUCTIONS,
-  REACTIVE_CONTINUATION_PROMPT,
-} from './ContextOverflow'
 
 const promptContext = (request: HarnessRuntimeRequest, contextItems: readonly unknown[]) => {
   const attachments =
@@ -131,15 +127,37 @@ export async function executeHarnessRun(
     deferredToolCatalog,
     steeringMode: 'one-at-a-time',
     followUpMode: 'one-at-a-time',
-    ...(options.compaction ? {
-      autoCompaction: {
-        shouldCompact: async () =>
-          !request.signal.aborted &&
-          ((await request.canAutoCompact?.()) ?? true) &&
-          await options.compaction!.shouldAutoCompact(request.threadID),
-        onFailure: () => options.compaction!.recordFailure(request.threadID, 'automatic'),
-      },
-    } : {}),
+    ...(options.compaction
+      ? {
+          contextCompaction: {
+            anchor: options.compaction.lifecycle?.anchor(request.threadID),
+            pending: () =>
+              options.compaction?.lifecycle?.pending(request.threadID)?.status === 'queued',
+            canCompact: async () =>
+              !request.signal.aborted && ((await request.canAutoCompact?.()) ?? true),
+            enabled: () => options.compaction!.shouldAutoCompact(request.threadID),
+            start: async (trigger, phase) => {
+              compactionTrigger = trigger
+              return (
+                options.compaction?.lifecycle?.running(
+                  request.threadID,
+                  trigger,
+                  request.sessionID,
+                  request.agentID,
+                  phase,
+                ).signal ?? new AbortController().signal
+              )
+            },
+            finish: (status, reason) => {
+              options.compaction?.lifecycle?.finish(request.threadID, status, reason)
+              compactionTrigger = null
+            },
+            onBudget: (budget, anchor) =>
+              options.compaction?.lifecycle?.budget(request.threadID, budget, anchor),
+            onFailure: (trigger) => options.compaction!.recordFailure(request.threadID, trigger),
+          },
+        }
+      : {}),
     streamOptions: {
       timeoutMs: 600_000,
       maxRetries: 2,
@@ -266,12 +284,18 @@ export async function executeHarnessRun(
       resolveCompactionContext: () => ({
         trigger: compactionTrigger ?? 'automatic',
         promptText: bundle.instructions,
+        budget: harness.getContextBudget(),
       }),
     },
   )
   const unsubscribe = harness.subscribe((event) => adapter.handle(event))
   // These hooks are not broadcast by subscribe; forward metadata through the same event sink.
-  for (const type of ['before_agent_start', 'context', 'before_provider_request', 'session_before_compact'] as const) {
+  for (const type of [
+    'before_agent_start',
+    'context',
+    'before_provider_request',
+    'session_before_compact',
+  ] as const) {
     harness.on(type, async (event) => {
       await adapter.handle(event)
       return undefined
@@ -295,30 +319,33 @@ export async function executeHarnessRun(
     const images = promptImages(request)
     let message: AssistantMessage = await harness.prompt(
       promptContext(request, bundle.contextItems),
-      { images, media: request.attachments?.flatMap((attachment) => attachment.kind === 'audio' || attachment.kind === 'video' ? [{ kind: attachment.kind, data: attachment.base64, mimeType: attachment.mediaType }] : []) ?? [] },
+      {
+        images,
+        media:
+          request.attachments?.flatMap((attachment) =>
+            attachment.kind === 'audio' || attachment.kind === 'video'
+              ? [{ kind: attachment.kind, data: attachment.base64, mimeType: attachment.mediaType }]
+              : [],
+          ) ?? [],
+      },
     )
     if (message.stopReason === 'error' && isProviderContextOverflow(message.errorMessage)) {
-      try {
-        await compact('reactive', REACTIVE_COMPACTION_INSTRUCTIONS)
-        message = await harness.prompt(REACTIVE_CONTINUATION_PROMPT)
-      } catch {
-        await options.compaction?.recordFailure(request.threadID, 'reactive')
-        throw new AgentError(
-          'PI_CONTEXT_WINDOW_EXCEEDED',
-          '模型上下文超过窗口限制，自动压缩未能恢复',
-          413,
-        )
-      }
-      if (message.stopReason === 'error' && isProviderContextOverflow(message.errorMessage)) {
-        await options.compaction?.recordFailure(request.threadID, 'reactive')
-        throw new AgentError(
-          'PI_CONTEXT_WINDOW_EXCEEDED',
-          '模型上下文超过窗口限制，压缩后仍无法继续',
-          413,
-        )
-      }
+      await options.compaction?.recordFailure(request.threadID, 'reactive')
+      throw new AgentError(
+        'PI_CONTEXT_WINDOW_EXCEEDED',
+        '模型上下文超过窗口限制，压缩后仍无法继续',
+        413,
+      )
     }
     if (message.stopReason === 'error') {
+      const budget = harness.getContextBudget()
+      if (budget && budget.usedTokens >= budget.triggerTokens) {
+        throw new AgentError(
+          'CONTEXT_BUDGET_EXCEEDED',
+          '上下文超过安全输入预算，压缩未能恢复；固定提示词、最新输入或保留内容过大，请减少输入或调整模型额度',
+          413,
+        )
+      }
       const category = providerFailureCategory(message.errorMessage ?? 'Pi Agent 执行失败')
       throw new AgentError(
         `PI_${category.toUpperCase().replace('-', '_')}_FAILED`,
@@ -329,18 +356,6 @@ export async function executeHarnessRun(
     if (message.stopReason === 'aborted' || request.signal.aborted)
       throw new AgentError('RUN_ABORTED', '任务已停止', 499)
     const output = adapter.outputText(message.content)
-    const compaction = options.compaction
-    if (
-      compaction &&
-      ((await request.canAutoCompact?.()) ?? true) &&
-      (await compaction.shouldAutoCompact(request.threadID))
-    ) {
-      try {
-        await compact('automatic')
-      } catch {
-        await compaction.recordFailure(request.threadID, 'automatic')
-      }
-    }
     // The delivery candidate is bound to its tool call: only when the final
     // assistant message is the one that carried the successful submission is
     // it the delivery result of this runtime. Later steering or continued

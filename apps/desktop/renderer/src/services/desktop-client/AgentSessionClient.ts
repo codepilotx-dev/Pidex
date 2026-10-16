@@ -152,6 +152,7 @@ export const RENDERER_CAPABILITIES = [
   'github.pullRequests.v1',
   'github.threadPullRequests.v1',
   'context.compact.v1',
+  'context.compact.lifecycle.v1',
   'hooks.trust.v1',
   'subagents.v1',
   'subagents.recursive.v1',
@@ -1298,7 +1299,8 @@ export function createAgentSessionDesktopClient(
     const payload = await buildAgentAttachmentUploads(input, (attachmentId) =>
       rpc.call('attachment/read', { attachmentId }),
     )
-    if (payload.some((attachment) => attachment.kind === 'audio' || attachment.kind === 'video')) requireAgentCapability('model.media-input.v1')
+    if (payload.some((attachment) => attachment.kind === 'audio' || attachment.kind === 'video'))
+      requireAgentCapability('model.media-input.v1')
     if (!payload.length) return []
     const response = await rpc.call('attachment/import', {
       uploads: payload,
@@ -2080,7 +2082,8 @@ export function createAgentSessionDesktopClient(
     getPluginDetails: (pluginId, workspacePath) =>
       loadAgentPluginApi().then((api) => api.getPluginDetails(pluginId, workspacePath)),
     installPlugin: (pluginId) => loadAgentPluginApi().then((api) => api.installPlugin(pluginId)),
-    uninstallPlugin: (pluginId) => loadAgentPluginApi().then((api) => api.uninstallPlugin(pluginId)),
+    uninstallPlugin: (pluginId) =>
+      loadAgentPluginApi().then((api) => api.uninstallPlugin(pluginId)),
     setPluginEnabled: (pluginId, enabled) =>
       loadAgentPluginApi().then((api) => api.setPluginEnabled(pluginId, enabled)),
     onPluginsUpdated: (callback) => {
@@ -3342,14 +3345,17 @@ export function createAgentSessionDesktopClient(
       invalidateModelCatalog()
     },
     modelRecommendations: {
-      supported: async () => (await isAgentAvailable()) && agentCapabilities.has('model.recommendations.v1'),
+      supported: async () =>
+        (await isAgentAvailable()) && agentCapabilities.has('model.recommendations.v1'),
       preview: async (input) => {
         requireAgentCapability('model.recommendations.v1')
         return rpc.call('model/recommendation/preview', input)
       },
       refresh: async () => {
         requireAgentCapability('model.recommendations.v1')
-        const result = await rpc.call('model/recommendation/refresh', { operationId: crypto.randomUUID() })
+        const result = await rpc.call('model/recommendation/refresh', {
+          operationId: crypto.randomUUID(),
+        })
         return result
       },
     },
@@ -3691,7 +3697,9 @@ export function createAgentSessionDesktopClient(
       if (!(await isAgentAvailable())) throw new Error('Agent RPC 当前不可用')
       requireAgentCapability('thread.editUserMessage.v1')
       await rpc.call('thread/editUserMessage', {
-        threadId: sessionId, ...target, content: input.text,
+        threadId: sessionId,
+        ...target,
+        content: input.text,
         attachmentIds: [...(input.retainedAttachmentIds ?? [])],
         contextReferenceIds: [...(input.retainedContextReferenceIds ?? [])],
       })
@@ -3783,10 +3791,22 @@ export function createAgentSessionDesktopClient(
         },
         () => mockClient.resumeQueuedFollowUps(sessionId),
       ),
+    supportsQueuedCompaction: () => agentCapabilities.has('context.compact.lifecycle.v1'),
+    cancelCompaction: async (sessionId, operationId) => {
+      requireAgentCapability('context.compact.lifecycle.v1')
+      await rpc.call('thread/compact/cancel', { threadId: sessionId, operationId })
+    },
     compactSession: (sessionId) =>
       withAgentOrMock(
         async () => {
           requireAgentCapability('compact')
+          if (agentCapabilities.has('context.compact.lifecycle.v1')) {
+            await rpc.call('thread/compact/request', {
+              threadId: sessionId,
+              operationId: crypto.randomUUID(),
+            })
+            return
+          }
           await rpc.call('thread/compact', {
             threadId: sessionId,
             operationId: crypto.randomUUID(),

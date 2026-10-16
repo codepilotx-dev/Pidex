@@ -85,6 +85,22 @@ export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
           ))}
         </div>
       ) : null}
+      {contextUsage.budget ? (
+        <div className="tw:mt-2 tw:type-caption tw:text-app-text-meta">
+          <div>
+            自动压缩触发线：{formatCompactNumber(contextUsage.budget.triggerTokens)} · 目标：
+            {formatCompactNumber(contextUsage.budget.targetTokens)}
+          </div>
+          <div>
+            输出预留：{formatCompactNumber(contextUsage.budget.outputReserveTokens)} ·{' '}
+            {contextUsage.budget.source === 'measured' ? '实测用量' : '估算用量'}
+          </div>
+          {contextUsage.budget.triggerTokens <
+          Math.ceil(contextUsage.budget.contextWindowTokens * 0.8) ? (
+            <div>为模型输入上限、输出与安全余量提前压缩</div>
+          ) : null}
+        </div>
+      ) : null}
       {cacheHitRate ? (
         <div className="context-usage-panel-row context-usage-panel-divider tw:mt-2 tw:flex tw:items-center tw:gap-2 tw:border-t tw:border-app-border tw:pt-3 tw:text-app-text-meta tw:type-secondary">
           <span className="context-usage-panel-label tw:min-w-0 tw:flex-1 tw:truncate">

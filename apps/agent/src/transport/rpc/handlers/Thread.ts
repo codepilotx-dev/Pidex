@@ -40,6 +40,8 @@ export const threadHandlers = {
     'prompt/preview',
     'prompt/refresh',
     'thread/compact',
+    'thread/compact/request',
+    'thread/compact/cancel',
     'thread/update',
     'thread/mark-read',
     'thread/mark-unread',
@@ -268,6 +270,20 @@ export const threadHandlers = {
           throw new AgentError('CHECKPOINT_UNAVAILABLE', '无法刷新提示词 cache key', 409)
         return { threadId, settings, cacheKey: preview.cacheKey }
       }
+      case 'thread/compact/request':
+        return {
+          operation: threads.requestCompaction(
+            stringParam(params, 'threadId'),
+            stringParam(params, 'operationId'),
+          ),
+        }
+      case 'thread/compact/cancel':
+        return {
+          operation: threads.cancelCompaction(
+            stringParam(params, 'threadId'),
+            stringParam(params, 'operationId'),
+          ),
+        }
       case 'thread/compact':
         return { compaction: await threads.compact(stringParam(params, 'threadId')) }
       case 'thread/update': {

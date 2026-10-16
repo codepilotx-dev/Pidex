@@ -400,7 +400,7 @@ describe('任务安排与人工验收', () => {
     expect(db.sqlite.query('SELECT value FROM unknown_task_data').get()).toEqual({
       value: 'preserved',
     })
-    expect(db.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: 62 })
+    expect(db.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: 63 })
   })
   test('纯时间草案可以先保存新任务名字，确认前不创建任务；重排消除旧到期提醒', async () => {
     const f = await fixture()

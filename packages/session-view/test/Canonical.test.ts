@@ -1937,3 +1937,37 @@ test('编辑事件移除旧轮，重放和迟到历史页不会恢复失活记�
   })
   expect(selectRenderTurnEntries(refreshed)).toHaveLength(0)
 })
+
+test('context budgets and operation state survive replay and snapshot hydration', () => {
+  const base = createCanonicalThreadState(page([]))
+  const budget = {
+    contextWindowTokens: 200000,
+    inputBudgetTokens: 131904,
+    outputReserveTokens: 64000,
+    usedTokens: 50000,
+    triggerTokens: 131904,
+    targetTokens: 110000,
+    source: 'compaction-estimate' as const,
+    sampledAt: 10,
+  }
+  const operation = {
+    operationId: 'compact-operation',
+    threadId: base.thread.id,
+    sessionId: null,
+    agentId: null,
+    trigger: 'manual' as const,
+    phase: 'mid-turn' as const,
+    status: 'queued' as const,
+    compactionId: null,
+    reason: null,
+    createdAt: 9,
+    updatedAt: 10,
+  }
+  const updated = applyThreadEnvelopes(base, [
+    durable(11, 'context/usageUpdated', { budget }),
+    durable(12, 'context/compactionUpdated', { operation }),
+  ])
+  expect(updated.context).toEqual({ budget, operation })
+  const restored = createCanonicalThreadState({ ...page([]), context: updated.context! })
+  expect(restored.context).toEqual(updated.context)
+})

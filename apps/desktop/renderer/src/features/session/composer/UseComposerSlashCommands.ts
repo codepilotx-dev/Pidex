@@ -11,6 +11,7 @@ type UseComposerSlashCommandsOptions = {
   canReview: boolean
   subagentMode: boolean
   sessionBusy: boolean
+  queuedCompactionSupported?: boolean
   reasoningAvailable: boolean
   onOpenModel: () => void
   onOpenReasoning: () => void
@@ -42,6 +43,7 @@ export function useComposerSlashCommands({
   canReview,
   subagentMode,
   sessionBusy,
+  queuedCompactionSupported = false,
   reasoningAvailable,
   onOpenModel,
   onOpenReasoning,
@@ -71,7 +73,11 @@ export function useComposerSlashCommands({
   const [executingCommandId, setExecutingCommandId] = useState<ComposerSlashCommandId | null>(null)
 
   const compactEnabled =
-    hasThread && hasConversationMessages && !subagentMode && !sessionBusy && Boolean(onCompact)
+    hasThread &&
+    hasConversationMessages &&
+    !subagentMode &&
+    (!sessionBusy || queuedCompactionSupported) &&
+    Boolean(onCompact)
 
   const commands = useMemo<ComposerSlashCommand[]>(
     () => [

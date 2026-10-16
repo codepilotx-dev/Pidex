@@ -231,6 +231,8 @@ export interface AgentLoopConfig extends SimpleStreamOptions {
    * Return replacement context/model/thinking state to affect the next turn in this run.
    * Return undefined to keep using the current context/config.
    */
+  recoverContextOverflow?: () => Promise<AgentContext>
+
   prepareNextTurn?: (
     context: PrepareNextTurnContext,
   ) => AgentLoopTurnUpdate | undefined | Promise<AgentLoopTurnUpdate | undefined>
