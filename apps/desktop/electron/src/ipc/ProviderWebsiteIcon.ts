@@ -83,15 +83,22 @@ export function pageIconCandidates(html: string, base: string): string[] {
   return [...new Set(candidates.sort((a, b) => a.priority - b.priority).map(({ url }) => url))]
 }
 
+const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+
+/** 从文件头识别图标真实类型，避免信任声明的内容类型。 */
+export function sniffImageMediaType(bytes: Buffer): string | undefined {
+  if (bytes.subarray(0, 8).equals(PNG_SIGNATURE)) return 'image/png'
+  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return 'image/jpeg'
+  if (/^GIF8[79]a/.test(bytes.subarray(0, 6).toString())) return 'image/gif'
+  if (bytes.subarray(0, 4).toString() === 'RIFF' && bytes.subarray(8, 12).toString() === 'WEBP') return 'image/webp'
+  if (bytes.subarray(0, 4).equals(Buffer.from([0, 0, 1, 0]))) return 'image/x-icon'
+  if (/^\s*(?:<\?xml[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)?<svg\b/i.test(bytes.toString('utf8'))) return 'image/svg+xml'
+  return undefined
+}
+
 function iconSource(page: IconPage): string {
   const b = page.bytes
-  let type: string | undefined
-  if (b.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) type = 'image/png'
-  else if (b[0] === 255 && b[1] === 216 && b[2] === 255) type = 'image/jpeg'
-  else if (/^GIF8[79]a/.test(b.subarray(0, 6).toString())) type = 'image/gif'
-  else if (b.subarray(0, 4).toString() === 'RIFF' && b.subarray(8, 12).toString() === 'WEBP') type = 'image/webp'
-  else if (b.subarray(0, 4).equals(Buffer.from([0, 0, 1, 0]))) type = 'image/x-icon'
-  else if (/^\s*(?:<\?xml[^>]*>\s*)?(?:<!--[\s\S]*?-->\s*)?<svg\b/i.test(b.toString('utf8'))) type = 'image/svg+xml'
+  const type = sniffImageMediaType(b)
   if (!type || !b.length || b.length > 1024 * 1024) throw new Error('网站未提供有效图标')
   return `data:${type};base64,${b.toString('base64')}`
 }

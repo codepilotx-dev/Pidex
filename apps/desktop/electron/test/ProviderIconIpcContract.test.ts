@@ -16,11 +16,13 @@ describe('供应商图标 IPC 契约', () => {
     expect(DESKTOP_PROVIDER_ICON_IPC_CHANNELS).toEqual({
       resolve: 'desktop-provider-icon:resolve',
       website: 'desktop-provider-icon:website',
+      upload: 'desktop-provider-icon:upload',
       changed: 'desktop-provider-icon:changed',
     })
 
     const preload = await readFile(resolve(import.meta.dir, '../src/preload.cts'), 'utf8')
     expectSourceContains(preload, 'resolve: "desktop-provider-icon:resolve"')
+    expectSourceContains(preload, 'upload: "desktop-provider-icon:upload"')
     expectSourceContains(
       preload,
       'typeof import("@pidex/shared/desktop-provider-icon-ipc").DESKTOP_PROVIDER_ICON_IPC_CHANNELS',
@@ -28,6 +30,10 @@ describe('供应商图标 IPC 契约', () => {
     expectSourceContains(
       preload,
       'ipcRenderer.invoke(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.resolve, input)',
+    )
+    expectSourceContains(
+      preload,
+      'ipcRenderer.invoke(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.upload, input)',
     )
     expectSourceContains(preload, 'ipcRenderer.on(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.changed')
   })
@@ -79,6 +85,23 @@ describe('供应商图标 IPC 契约', () => {
     await expect(handler({ sender: {} } as IpcMainInvokeEvent, input)).rejects.toThrow('IPC 调用来源无效')
     expect(received).toHaveLength(0)
     await expect(handler({ sender: mainWindow } as IpcMainInvokeEvent, input)).rejects.toThrow('原图标已保留')
+    expect(received).toEqual([input])
+  })
+
+  test('上传图标校验窗口来源，失败不透出内部校验细节', async () => {
+    const handlers = new Map<string, (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>>()
+    const mainWindow = {} as WebContents
+    const received: unknown[] = []
+    registerProviderIconIpc({
+      ipc: { handle: (channel, handler) => handlers.set(channel, handler as never) } as unknown as Pick<IpcMain, 'handle'>,
+      isMainWindowSender: (sender) => sender === mainWindow,
+      providerIcons: { setUploadedIcon: async (input: unknown) => { received.push(input); throw new Error('invalid PNG header') } } as never,
+    })
+    const handler = handlers.get(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.upload)!
+    const input = { providerID: 'relay', dataURL: 'data:image/png;base64,AAAA' }
+    await expect(handler({ sender: {} } as IpcMainInvokeEvent, input)).rejects.toThrow('IPC 调用来源无效')
+    expect(received).toHaveLength(0)
+    await expect(handler({ sender: mainWindow } as IpcMainInvokeEvent, input)).rejects.toThrow('图片格式受支持')
     expect(received).toEqual([input])
   })
 })

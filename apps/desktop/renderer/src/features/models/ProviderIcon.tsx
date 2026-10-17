@@ -2,6 +2,7 @@ import { Server } from 'lucide-react'
 import type React from 'react'
 import { RemoteImage } from '../../components/ui/RemoteImage.js'
 import { useProviderIconSource } from '../../services/desktop-client/ProviderIconClient.js'
+import { cx } from '../../utils/Cx.js'
 
 export type ProviderIconProps = {
   foreground?: boolean
@@ -35,18 +36,30 @@ export function ProviderIcon({
     <Server aria-hidden="true" size={14} data-icon-kind="artwork" strokeWidth={2} />
   )
 
+  const slot = cx(
+    'tw:inline-flex tw:min-w-0 tw:overflow-hidden tw:items-center tw:justify-center',
+    className,
+  )
+
   if (!source) {
-    return className ? <span className={className}>{placeholder}</span> : placeholder
+    return className ? <span className={slot}>{placeholder}</span> : placeholder
   }
 
-  return (
+  const image = (
     <RemoteImage
       alt=""
       foreground={foreground && !override}
-      className={className}
       fallback={placeholder}
-      imageClassName={override ? imageClassName?.replace(/tw:\[\.dark-theme_&\]:(?:invert|hue-rotate-180)/g, '') : imageClassName}
+      imageClassName={
+        override
+          ? imageClassName?.replace(/tw:\[\.dark-theme_&\]:(?:invert|hue-rotate-180)/g, '')
+          : imageClassName
+      }
       src={source}
     />
   )
+
+  // `RemoteImage` always occupies its container, so the caller-provided class must
+  // size this wrapping slot instead of competing with `size-full` on the image.
+  return className ? <span className={slot}>{image}</span> : image
 }

@@ -1,6 +1,7 @@
 export const DESKTOP_PROVIDER_ICON_IPC_CHANNELS = {
   resolve: 'desktop-provider-icon:resolve',
   website: 'desktop-provider-icon:website',
+  upload: 'desktop-provider-icon:upload',
   changed: 'desktop-provider-icon:changed',
 } as const
 
@@ -14,6 +15,12 @@ export type DesktopProviderWebsiteIconInput = {
   providerID: string
   /** Omit to restore the catalogue icon. */
   website?: string
+}
+
+export type DesktopProviderUploadedIconInput = {
+  providerID: string
+  /** 渲染层缩放后的 PNG 数据地址；主进程会再次校验格式与大小。 */
+  dataURL: string
 }
 
 export type DesktopProviderIconResolution = {
@@ -33,6 +40,7 @@ export type DesktopProviderIconChange = {
 
 export interface DesktopProviderIconIpcBridge {
   setProviderWebsiteIcon(input: DesktopProviderWebsiteIconInput): Promise<DesktopProviderIconResolution>
+  setProviderUploadedIcon(input: DesktopProviderUploadedIconInput): Promise<DesktopProviderIconResolution>
   resolveProviderIcon(
     input: DesktopProviderIconResolveInput,
   ): Promise<DesktopProviderIconResolution>

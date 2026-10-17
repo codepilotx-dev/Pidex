@@ -7,7 +7,7 @@ import type {
 } from '@pidex/shared/desktop-provider-icon-ipc'
 import { isRecord } from '@pidex/shared/guards'
 import { writeJsonAtomically } from '../windows/DebouncedAtomicJsonWriter.js'
-import { discoverWebsiteIcon } from './ProviderWebsiteIcon.js'
+import { discoverWebsiteIcon, sniffImageMediaType } from './ProviderWebsiteIcon.js'
 
 /**
  * 供应商图标本地缓存：命中即立即显示，只有距最近一次成功更新满 5 小时才在后台
@@ -21,6 +21,8 @@ export const PROVIDER_ICON_EXPIRY_SWEEP_INTERVAL_MS = 5 * 60 * 1000
 const ICON_RECORD_VERSION = 1
 const MAX_ICON_BYTES = 512 * 1024
 const MAX_ICON_BASE64_LENGTH = Math.ceil(MAX_ICON_BYTES / 3) * 4
+const MAX_UPLOAD_ICON_SOURCE_LENGTH = 700_000
+const UPLOADED_ICON_DATA_URL = /^data:image\/(png|jpeg|webp|gif);base64,([A-Za-z0-9+/]+={0,2})$/
 const MAX_ICON_URL_LENGTH = 2048
 const DOWNLOAD_TIMEOUT_MS = 10_000
 const ALLOWED_ICON_HOST = 'models.dev'
@@ -123,9 +125,26 @@ export class ProviderIconCacheService {
     // Refuse to overwrite a newer appearance record.
     await this.#readOverride(providerID)
     const source = typeof input.website === 'string' ? await this.#discoverWebsiteIcon(input.website) : null
+    await this.#persistOverride(providerID, source)
+    return { source }
+  }
+
+  /**
+   * 保存用户上传的图标。渲染层已把图片缩放为 PNG，这里仍按文件头校验真实类型
+   * 与大小，避免任意数据经 IPC 写入图标记录。
+   */
+  async setUploadedIcon(input: unknown): Promise<DesktopProviderIconResolution> {
+    if (!isRecord(input)) throw new Error('供应商图标参数无效')
+    const providerID = requireProviderID(input.providerID)
+    const source = requireUploadedIconSource(input)
+    await this.#readOverride(providerID)
+    await this.#persistOverride(providerID, source)
+    return { source }
+  }
+
+  async #persistOverride(providerID: string, source: string | null): Promise<void> {
     await writeJsonAtomically(this.#recordPath(`provider:${providerID}`), { version: 1, providerID, source })
     this.#publish({ url: '', providerID, source })
-    return { source }
   }
 
   async #readOverride(providerID: string): Promise<{ source: string | null }> {
@@ -260,6 +279,26 @@ export class ProviderIconCacheService {
 function requireProviderID(input: unknown): string {
   if (typeof input !== 'string' || !input.trim() || input.length > 256 || /[\u0000-\u001f]/.test(input)) throw new Error('供应商标识无效')
   return input
+}
+
+/**
+ * 只接受渲染层生成的 PNG/JPEG/WebP/GIF 数据地址；声明类型必须与文件头一致，
+ * 且解码后不超过下载图标的大小上限。
+ */
+export function requireUploadedIconSource(input: unknown): string {
+  if (!isRecord(input) || typeof input.dataURL !== 'string') throw new Error('供应商图标参数无效')
+  const dataURL = input.dataURL
+  if (dataURL.length > MAX_UPLOAD_ICON_SOURCE_LENGTH) throw new Error('供应商图标内容过大')
+  const match = UPLOADED_ICON_DATA_URL.exec(dataURL)
+  if (!match) throw new Error('供应商图标格式不受支持')
+  const mediaType = `image/${match[1]!}`
+  const data = match[2]!
+  const bytes = Buffer.from(data, 'base64')
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_ICON_BYTES) {
+    throw new Error('供应商图标内容无效')
+  }
+  if (sniffImageMediaType(bytes) !== mediaType) throw new Error('供应商图标格式不受支持')
+  return `data:${mediaType};base64,${data}`
 }
 
 /** 只接受 models.dev 的绝对 https 图标地址；地址原样保留作为缓存键。 */
