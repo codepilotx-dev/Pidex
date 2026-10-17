@@ -23,6 +23,7 @@ import {
   McpElicitationUnsupported,
 } from '../mcpElicitation/McpElicitationForm.js'
 import { getSchemaMode, parseMcpElicitationSchema } from '../mcpElicitation/McpElicitationUtils.js'
+import { GuardianReviewSummary } from './GuardianReviewSummary.js'
 import { useHeightTransition } from '../../../hooks/UseHeightTransition.js'
 import { cx } from '../../../utils/Cx.js'
 
@@ -174,6 +175,18 @@ export function InlineApprovalCard({
           }
         })
       : []
+  const guardianSummary = request.guardian ? (
+    <GuardianReviewSummary
+      review={request.guardian}
+      {...(request.autoReviewFallbackReason
+        ? { fallbackReason: request.autoReviewFallbackReason }
+        : {})}
+    />
+  ) : request.autoReviewFallbackReason ? (
+    <p className="inline-approval-target tw:m-0 tw:px-2 tw:text-app-text-soft tw:type-body-sm tw:wrap-anywhere">
+      自动审查无法完成，已转为人工审批：{request.autoReviewFallbackReason}
+    </p>
+  ) : null
   async function act(action: () => void | Promise<void>): Promise<void> {
     if (busyRef.current || disabledReason) return
     busyRef.current = true
@@ -452,11 +465,7 @@ export function InlineApprovalCard({
             {request.description}
           </p>
         ) : null}
-        {request.autoReviewFallbackReason ? (
-          <p className="inline-approval-target tw:m-0 tw:px-2 tw:text-app-text-soft tw:type-body-sm tw:wrap-anywhere">
-            自动审查无法完成，已转为人工审批：{request.autoReviewFallbackReason}
-          </p>
-        ) : null}
+        {guardianSummary}
         {reviewSummary ? (
           <p className="inline-approval-target tw:m-0 tw:px-2 tw:text-app-text-soft tw:type-body-sm tw:wrap-anywhere">
             {reviewSummary}
@@ -499,11 +508,7 @@ export function InlineApprovalCard({
           {request.description}
         </p>
       ) : null}
-      {request.autoReviewFallbackReason ? (
-        <p className="inline-approval-target">
-          自动审查无法完成，已转为人工审批：{request.autoReviewFallbackReason}
-        </p>
-      ) : null}
+      {guardianSummary}
       {reviewSummary ? (
         <p className="inline-approval-target tw:m-0 tw:px-2 tw:text-app-text-soft tw:type-body-sm tw:wrap-anywhere">
           {reviewSummary}

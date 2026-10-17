@@ -1056,7 +1056,7 @@ const fixtures = {
   'approval/reviewState': methodFixture(
     'approval/reviewState',
     { threadId: 'thread:1' },
-    { manualAllows: 3, denials: [] },
+    { manualAllows: 3, denials: [], reviews: [] },
   ),
   'approval/retry': methodFixture(
     'approval/retry',

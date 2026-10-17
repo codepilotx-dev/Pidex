@@ -262,6 +262,10 @@ export interface PermissionDecision {
   risk: 'low' | 'medium' | 'high' | 'critical'
   reason: string
   review?: ShellReview
+  /** Structured Guardian Beta verdict; absent for deterministic decisions. */
+  guardian?: import('./permission/Guardian').GuardianReview
+  /** Set when an auto-review request was downgraded to a human decision. */
+  fallbackReason?: string
   /** Returned only by authorization previews for scope-bound execution. */
   authorizationFingerprint?: string
 }

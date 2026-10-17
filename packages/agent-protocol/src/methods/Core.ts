@@ -1,5 +1,6 @@
 import { Model } from '@pidex/model-schema'
 import { AgentThread } from '@pidex/shared'
+import { GuardianReviewSchema } from '@pidex/shared/thread'
 import { Schema } from 'effect'
 import { defineMethod, type MethodMap } from '../wire/Definition'
 import {
@@ -1415,6 +1416,22 @@ export const CoreRpcMethods = {
           tool: Schema.String,
           reason: Schema.String,
           input: Schema.optional(Schema.Record(Schema.String, JsonValueSchema)),
+          decision: Schema.Literals(['allow', 'ask', 'deny']),
+          risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
+          guardian: GuardianReviewSchema,
+          retryOperationId: Schema.optional(OpaqueIDSchema),
+          createdAt: TimestampSchema,
+        }),
+      ),
+      reviews: Schema.Array(
+        Schema.Struct({
+          id: OpaqueIDSchema,
+          tool: Schema.String,
+          reason: Schema.String,
+          input: Schema.optional(Schema.Record(Schema.String, JsonValueSchema)),
+          decision: Schema.Literals(['allow', 'ask', 'deny']),
+          risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
+          guardian: GuardianReviewSchema,
           retryOperationId: Schema.optional(OpaqueIDSchema),
           createdAt: TimestampSchema,
         }),

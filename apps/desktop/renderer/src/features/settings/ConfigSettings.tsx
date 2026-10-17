@@ -365,8 +365,8 @@ export function ConfigSettings(): React.ReactNode {
                     { value: 'user', label: '用户', detail: '由你确认或拒绝审批请求' },
                     {
                       value: 'auto_review',
-                      label: 'Guardian 自动审查',
-                      detail: '由独立 Guardian 模型处理审批请求',
+                      label: 'Guardian 自动审查 (Beta)',
+                      detail: '由独立 Guardian 模型复核风险与用户授权；异常或高风险时转人工确认。',
                     },
                   ]}
                   onChange={(value) => {

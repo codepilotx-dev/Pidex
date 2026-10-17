@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import type { ToolInvocation } from '../src/Domain'
 import { ReviewerService } from '../src/permission/ReviewerService'
+import { GuardianEvidenceService } from '../src/permission/GuardianEvidenceService'
 import type { PiModelService } from '../src/provider/pi'
 import { ToolRegistry } from '../src/tool/ToolRegistry'
 import { PermissionDecisionEngine } from '../src/permission/PermissionDecisionEngine'
@@ -156,5 +157,111 @@ describe('Shell ReviewerService', () => {
     await expect(
       service.reviewShell({ command: 'npm test' }, new AbortController().signal, fallback),
     ).resolves.toMatchObject({ decision: 'deny', reviewUnavailable: true })
+  })
+
+  test('非 Shell 审核使用工作区只读证据，并拒绝任意执行工具', async () => {
+    const configured = Model.Ref.make({
+      providerID: Provider.ID.make('configured'),
+      id: Model.ID.make('reviewer'),
+    })
+    const read: string[] = []
+    const evidence = new GuardianEvidenceService(async () => ({
+      read: async (path) => {
+        read.push(path)
+        return path === 'AGENTS.md' ? '项目规则' : 'const value = 1'
+      },
+      list: async () => [],
+    }))
+    let calls = 0
+    const providers = {
+      getPiModel: async () => ({ provider: 'configured', id: 'reviewer' }),
+      pi: {
+        completeSimple: async (_model: unknown, context: { tools?: Array<{ name: string }> }) => {
+          calls += 1
+          if (calls === 1) {
+            expect(context.tools?.map((tool) => tool.name)).toContain('guardian_read_file')
+            expect(context.tools?.map((tool) => tool.name)).not.toContain('Bash')
+            return {
+              stopReason: 'toolUse',
+              content: [
+                {
+                  type: 'toolCall',
+                  id: 'call-1',
+                  name: 'guardian_read_file',
+                  arguments: { path: 'src/a.ts' },
+                },
+              ],
+            }
+          }
+          return {
+            stopReason: 'toolUse',
+            content: [
+              {
+                type: 'toolCall',
+                id: 'call-2',
+                name: 'submit_guardian_tool_review',
+                arguments: {
+                  decision: 'allow',
+                  risk: 'low',
+                  confidence: 'high',
+                  categories: [],
+                  requested_scope_valid: true,
+                  reason: '只读证据支持低风险',
+                },
+              },
+            ],
+          }
+        },
+      },
+    } as unknown as PiModelService
+    const sqlite = {
+      query: (sql: string) => ({
+        get: () => (sql.includes('FROM threads') ? { present: 1 } : null),
+        all: () => [],
+        run: () => ({ changes: 1 }),
+      }),
+    }
+    const service = new ReviewerService(
+      {
+        sqlite,
+        getSetting: () => configured,
+        threadProjectID: () => null,
+      } as unknown as AgentDatabase,
+      providers,
+      {
+        snapshot: () => ({
+          model_provider: 'configured',
+          specialized_models: { security: 'configured/reviewer' },
+        }),
+      } as never,
+      evidence,
+    )
+    const invocation = {
+      id: 'tool-write',
+      threadID: 'thread-1',
+      turnID: 'turn-1',
+      agentID: 'agent-1',
+      name: 'Write',
+      input: { file_path: 'src/a.ts' },
+      permissionConfig: {
+        sandboxMode: 'workspace-write',
+        approvalPolicy: 'on-request',
+        approvalsReviewer: 'auto_review',
+      },
+      taskMode: 'chat',
+      authorizationScope: {
+        affectedPaths: [{ path: 'src/a.ts', operation: 'update' }],
+        fingerprint: 'scope-1',
+        ruleRequiresApproval: true,
+      },
+    } as unknown as ToolInvocation
+
+    await expect(service.review(invocation, new AbortController().signal)).resolves.toMatchObject({
+      decision: 'allow',
+      risk: 'low',
+    })
+    expect(calls).toBe(2)
+    expect(read).toContain('AGENTS.md')
+    expect(read).toContain('src/a.ts')
   })
 })

@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import type { ModelRef } from '@pidex/shared/model'
 import type { ScheduleExecution } from '@pidex/shared/schedule-draft'
 import type { TaskSchedule } from '@pidex/shared/task-schedule'
-import { AgentDatabase } from '../src/storage/database/AgentDatabase'
+import { AgentDatabase, SCHEMA_VERSION } from '../src/storage/database/AgentDatabase'
 import { TaskScheduleService } from '../src/calendar/TaskScheduleService'
 import { ScheduledTaskCoordinator } from '../src/calendar/ScheduledTaskCoordinator'
 import { removeFixturePaths } from './FixtureCleanup'
@@ -400,7 +400,7 @@ describe('任务安排与人工验收', () => {
     expect(db.sqlite.query('SELECT value FROM unknown_task_data').get()).toEqual({
       value: 'preserved',
     })
-    expect(db.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: 63 })
+    expect(db.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: SCHEMA_VERSION })
   })
   test('纯时间草案可以先保存新任务名字，确认前不创建任务；重排消除旧到期提醒', async () => {
     const f = await fixture()

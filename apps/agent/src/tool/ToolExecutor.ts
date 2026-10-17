@@ -156,6 +156,8 @@ export interface ToolExecutorOptions {
   userConfigPath?: string
   validateConfigDocument?: (text: string, scope: 'user' | 'project') => void
   authorizeShell: (invocation: ToolInvocation, signal: AbortSignal) => Promise<PermissionDecision>
+  /** Optional Guardian Beta observation; must never block tool execution. */
+  observeToolStart?: (invocation: ToolInvocation) => void
   recordToolCall?: (
     invocation: ToolInvocation,
     status: 'running' | 'completed' | 'error' | 'interrupted',
@@ -686,6 +688,8 @@ export class ToolExecutor {
           // Existing execution validation remains authoritative when no text preview is available.
         }
       }
+      if (context.approvedToolCallID !== invocation.id && !context.authorizationOnly)
+        this.options?.observeToolStart?.(invocation)
       authorization = await this.options.authorizeShell(
         secretScrubber.scrub(invocation),
         context.signal,

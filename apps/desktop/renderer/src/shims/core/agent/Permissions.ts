@@ -33,6 +33,20 @@ export type AgentPermissionDecision = {
   updatedInput?: Record<string, unknown>
 }
 
+export type AgentGuardianReview = {
+  status: 'completed' | 'cached' | 'unavailable' | 'timeout' | 'circuit_open'
+  source: 'model' | 'cache' | 'fallback'
+  risk: 'low' | 'medium' | 'high' | 'critical'
+  userAuthorization: 'unknown' | 'low' | 'medium' | 'high'
+  confidence: 'low' | 'medium' | 'high'
+  categories: readonly string[]
+  rationale: string
+  reviewedAt: number
+  scoreLag?: number
+  fallbackReason?: string
+  model?: string
+}
+
 export type AgentPermissionRequest = {
   requestId: string
   toolName: string
@@ -51,6 +65,7 @@ export type AgentPermissionRequest = {
     | 'tool'
     | 'permission-grant'
   autoReviewFallbackReason?: string
+  guardian?: AgentGuardianReview
 }
 
 export type DesktopAgentPermissionMode = 'default' | 'auto-review' | 'full-access' | 'custom'

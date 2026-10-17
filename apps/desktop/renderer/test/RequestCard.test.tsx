@@ -68,6 +68,36 @@ test('permissions use independent allow/deny actions and preserve read-only comm
   expect(html).not.toContain('<textarea')
 })
 
+test('guardian review exposes status, risk, authorization and rationale', () => {
+  const html = renderToStaticMarkup(
+    <InlineApprovalCard
+      request={{
+        requestId: 'approval-2',
+        toolName: 'Bash',
+        input: { command: 'rm -rf ./tmp' },
+        description: '清理临时目录',
+        guardian: {
+          status: 'completed',
+          source: 'model',
+          risk: 'high',
+          userAuthorization: 'low',
+          confidence: 'high',
+          categories: ['destructive'],
+          rationale: '用户没有明确授权删除该目录。',
+          reviewedAt: 1,
+        },
+      }}
+      onDecide={() => {}}
+    />,
+  )
+  expect(html).toContain('Guardian 自动审查')
+  expect(html).toContain('审查完成')
+  expect(html).toContain('高风险')
+  expect(html).toContain('授权弱')
+  expect(html).toContain('用户没有明确授权删除该目录。')
+  expect(html).toContain('破坏性')
+})
+
 test('plan review is an action card, not a questionnaire', () => {
   const html = renderToStaticMarkup(
     <PlanApprovalCard

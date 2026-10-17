@@ -17,9 +17,44 @@ import {
   hookTrustRequestedPayload,
   hookTrustResolvedPayload,
 } from '../../interaction/HookTrustPayloads'
+import {
+  guardianActionHash,
+  guardianAuthorizationVersion,
+} from '../../permission/Guardian'
+import type { RiskCategory } from '../../security/ShellRiskClassifier'
 
 export type ProjectModelSettings = {
   defaultModel: ModelRef | null
+}
+
+type ApprovalReviewRow = {
+  id: string
+  invocation: string
+  reason: string
+  decision: 'allow' | 'ask' | 'deny'
+  risk: 'low' | 'medium' | 'high' | 'critical'
+  confidence: 'low' | 'medium' | 'high' | null
+  categories: string | null
+  user_authorization: 'unknown' | 'low' | 'medium' | 'high' | null
+  fallback_reason: string | null
+  review_source: string | null
+  review_status: string | null
+  score_lag: number | null
+  reviewed_at: number | null
+  retry_operation_id: string | null
+  created_at: number
+}
+
+const parseGuardianCategories = (value: string | null): RiskCategory[] => {
+  if (!value) return []
+  try {
+    const parsed = JSON.parse(value) as unknown
+    return Array.isArray(parsed)
+      ? parsed.filter((item): item is RiskCategory => typeof item === 'string')
+      : []
+  } catch {
+    return []
+  }
 }
 
 export type StoredEncryptedCredential = {
@@ -654,10 +689,11 @@ export abstract class InteractionRepositoryDatabase extends ExecutionRepositoryD
     if (!this.interactionTableAvailable('approval_reviews')) return null
     const id = crypto.randomUUID()
     const timestamp = now()
+    const guardian = review.guardian
     return this.transaction(() => {
       this.sqlite
         .query(
-          'INSERT INTO approval_reviews (id, thread_id, tool_call_id, invocation, fingerprint, decision, risk, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          'INSERT INTO approval_reviews (id, thread_id, tool_call_id, invocation, fingerprint, decision, risk, reason, created_at, confidence, categories, user_authorization, fallback_reason, review_source, review_status, score_lag, reviewed_at, action_hash, authorization_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
         )
         .run(
           id,
@@ -669,6 +705,18 @@ export abstract class InteractionRepositoryDatabase extends ExecutionRepositoryD
           review.risk,
           review.reason,
           timestamp,
+          guardian?.confidence ?? null,
+          guardian ? stringify(guardian.categories) : null,
+          guardian?.userAuthorization ?? null,
+          guardian?.fallbackReason ?? review.fallbackReason ?? null,
+          guardian?.source ?? null,
+          guardian?.status ?? null,
+          guardian?.scoreLag ?? null,
+          guardian?.reviewedAt ?? timestamp,
+          guardian ? guardianActionHash(invocation) : null,
+          guardian
+            ? guardianAuthorizationVersion({ sqlite: this.sqlite }, invocation.threadID)
+            : null,
         )
       const item: import('../../Domain').Item = {
         id: `approval-review:${id}`,
@@ -678,8 +726,10 @@ export abstract class InteractionRepositoryDatabase extends ExecutionRepositoryD
         status: review.decision === 'deny' ? 'error' : 'completed',
         data: {
           activity: 'notice',
-          title: `自动审查${review.decision === 'allow' ? '已允许' : review.decision === 'deny' ? '已拒绝' : '转人工确认'} · ${invocation.name}`,
-          detail: review.reason,
+          title: `Guardian 自动审查${review.decision === 'allow' ? '已允许' : review.decision === 'deny' ? '已拒绝' : '转人工确认'} · ${invocation.name}`,
+          detail: guardian
+            ? `${review.reason}（${guardian.risk} · 授权 ${guardian.userAuthorization}）`
+            : review.reason,
         },
         createdAt: timestamp,
         updatedAt: timestamp,
@@ -689,18 +739,21 @@ export abstract class InteractionRepositoryDatabase extends ExecutionRepositoryD
     })
   }
   approvalReviewState(threadID: string) {
+    const selectColumns =
+      'id, invocation, reason, decision, risk, confidence, categories, user_authorization, fallback_reason, review_source, review_status, score_lag, reviewed_at, retry_operation_id, created_at'
     const rows = this.interactionTableAvailable('approval_reviews')
       ? (this.sqlite
           .query(
-            "SELECT id, invocation, reason, retry_operation_id, created_at FROM approval_reviews WHERE thread_id = ? AND decision = 'deny' AND retry_consumed_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 20",
+            `SELECT ${selectColumns} FROM approval_reviews WHERE thread_id = ? AND decision = 'deny' AND retry_consumed_at IS NULL ORDER BY created_at DESC, id DESC LIMIT 20`,
           )
-          .all(threadID) as Array<{
-          id: string
-          invocation: string
-          reason: string
-          retry_operation_id: string | null
-          created_at: number
-        }>)
+          .all(threadID) as Array<ApprovalReviewRow>)
+      : []
+    const recent = this.interactionTableAvailable('approval_reviews')
+      ? (this.sqlite
+          .query(
+            `SELECT ${selectColumns} FROM approval_reviews WHERE thread_id = ? ORDER BY created_at DESC, id DESC LIMIT 20`,
+          )
+          .all(threadID) as Array<ApprovalReviewRow>)
       : []
     const count = this.sqlite
       .query(
@@ -709,17 +762,44 @@ export abstract class InteractionRepositoryDatabase extends ExecutionRepositoryD
       .get(threadID) as { count: number }
     return {
       manualAllows: count.count,
-      denials: rows.map((row) => {
-        const invocation = JSON.parse(row.invocation) as ToolInvocation
-        return {
-          id: row.id,
-          tool: invocation.name,
-          input: invocation.input,
-          reason: row.reason,
-          ...(row.retry_operation_id ? { retryOperationId: row.retry_operation_id } : {}),
-          createdAt: row.created_at,
-        }
-      }),
+      denials: rows.map((row) => this.approvalReviewRow(row)),
+      reviews: recent.map((row) => this.approvalReviewRow(row)),
+    }
+  }
+  private approvalReviewRow(row: ApprovalReviewRow) {
+    const invocation = JSON.parse(row.invocation) as ToolInvocation
+    const status =
+      row.review_status === 'cached' ||
+      row.review_status === 'unavailable' ||
+      row.review_status === 'timeout' ||
+      row.review_status === 'circuit_open'
+        ? row.review_status
+        : 'completed'
+    const source =
+      row.review_source === 'cache' || row.review_source === 'fallback'
+        ? row.review_source
+        : 'model'
+    return {
+      id: row.id,
+      tool: invocation.name,
+      input: invocation.input,
+      reason: row.reason,
+      decision: row.decision,
+      risk: row.risk,
+      guardian: {
+        status,
+        source,
+        risk: row.risk,
+        confidence: row.confidence ?? 'medium',
+        categories: parseGuardianCategories(row.categories),
+        userAuthorization: row.user_authorization ?? 'unknown',
+        rationale: row.reason,
+        reviewedAt: row.reviewed_at ?? row.created_at,
+        ...(row.score_lag === null ? {} : { scoreLag: row.score_lag }),
+        ...(row.fallback_reason ? { fallbackReason: row.fallback_reason } : {}),
+      },
+      ...(row.retry_operation_id ? { retryOperationId: row.retry_operation_id } : {}),
+      createdAt: row.created_at,
     }
   }
   authorizeApprovalRetry(threadID: string, reviewID: string, operationID: string) {

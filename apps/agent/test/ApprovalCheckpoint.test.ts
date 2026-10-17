@@ -314,6 +314,50 @@ describe('审批范围与外部交互', () => {
     expect(() => service.requestRetry(invocation.threadID, denial.id, 'retry:1')).toThrow('失效')
   })
 
+  test('自动审查连续拒绝后熔断并中断本轮，不再调用 Guardian', async () => {
+    const { db, hub, tools, config, invocation } = await scopedFixture()
+    const reviewed: ToolInvocation[] = []
+    const interrupted: Array<[string, string]> = []
+    const service = new ApprovalService(
+      db,
+      hub,
+      tools,
+      async (value) => {
+        reviewed.push(value)
+        return { decision: 'deny', risk: 'high', reason: '自动审查拒绝' }
+      },
+      config,
+    )
+    service.setTurnInterruptHandler((threadID, turnID) => interrupted.push([threadID, turnID]))
+    const automatic = {
+      ...invocation,
+      permissionFacts: { ruleRequiresApproval: true },
+      permissionConfig: {
+        ...invocation.permissionConfig,
+        approvalPolicy: 'on-request' as const,
+        approvalsReviewer: 'auto_review' as const,
+      },
+    }
+    for (let index = 0; index < 3; index += 1) {
+      const result = await service.authorize(
+        { ...automatic, id: `denied-${index}` },
+        new AbortController().signal,
+      )
+      expect(result.decision).toBe('deny')
+    }
+    expect(interrupted).toEqual([[invocation.threadID, invocation.turnID]])
+    const reopened = await service.authorize(
+      { ...automatic, id: 'circuit-open' },
+      new AbortController().signal,
+    )
+    expect(reopened.decision).toBe('deny')
+    expect(reopened.guardian?.status).toBe('circuit_open')
+    expect(reviewed).toHaveLength(3)
+    expect(interrupted).toHaveLength(1)
+    const state = db.repositories.interactions.approvalReviewState(invocation.threadID)
+    expect(state.reviews[0]?.guardian.status).toBe('circuit_open')
+  })
+
   test('MCP 表单校验、过期回复、拒绝、断连取消和重启取消分别保留语义', async () => {
     const { db, hub, invocation } = await scopedFixture()
     const service = new McpElicitationService(db, hub)
@@ -411,6 +455,7 @@ describe('审批范围与外部交互', () => {
     expect(db.repositories.interactions.approvalReviewState(db.createThread().id)).toEqual({
       manualAllows: 0,
       denials: [],
+      reviews: [],
     })
     expect(db.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: 999 })
   })

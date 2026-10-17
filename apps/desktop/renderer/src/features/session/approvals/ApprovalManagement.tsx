@@ -10,12 +10,32 @@ import { cx } from '../../../utils/Cx.js'
 type ReviewState = RpcResult<'approval/reviewState'>
 const dismissedNudges = new Set<string>()
 
+const RISK_LABELS: Record<string, string> = {
+  low: '低风险',
+  medium: '中风险',
+  high: '高风险',
+  critical: '灾难级风险',
+}
+const AUTH_LABELS: Record<string, string> = {
+  unknown: '授权未知',
+  low: '授权弱',
+  medium: '授权中',
+  high: '授权明确',
+}
+const STATUS_LABELS: Record<string, string> = {
+  completed: '审查完成',
+  cached: '低风险放行',
+  unavailable: '审查不可用',
+  timeout: '审查超时',
+  circuit_open: '本轮已中断',
+}
+
 export function useApprovalReviewState(threadId: string | null | undefined, busy: boolean) {
   const supported = useApprovalCapability(threadId ?? '', !!threadId, 'approval.retry.v1')
-  const [state, setState] = React.useState<ReviewState>({ manualAllows: 0, denials: [] })
+  const [state, setState] = React.useState<ReviewState>({ manualAllows: 0, denials: [], reviews: [] })
   React.useEffect(() => {
     let active = true
-    setState({ manualAllows: 0, denials: [] })
+    setState({ manualAllows: 0, denials: [], reviews: [] })
     if (supported && threadId)
       void desktopClient
         .approvalReviewState(threadId)
@@ -171,7 +191,7 @@ export function ApprovalRetryDialog({
   open: boolean
   onClose: () => void
 }) {
-  const [state, setState] = React.useState<ReviewState>({ manualAllows: 0, denials: [] })
+  const [state, setState] = React.useState<ReviewState>({ manualAllows: 0, denials: [], reviews: [] })
   const [selected, setSelected] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState('')
@@ -220,6 +240,10 @@ export function ApprovalRetryDialog({
       description={
         <div className="request-card-content">
           <p>授权仅匹配原工具、参数和范围，重试仍经过 Guardian。</p>
+          <p className="tw:text-app-text-soft tw:type-body-sm">
+            最近 {state.reviews.length} 次自动审查 · 人工允许累计 {state.manualAllows} 次 · 可重试拒绝{' '}
+            {state.denials.length} 次
+          </p>
           {error ? <p role="alert">{error}</p> : null}
           {!busy && !state.denials.length ? <p>当前聊天没有可重试的自动审查拒绝。</p> : null}
           {state.denials.map((denial) => (
@@ -229,7 +253,7 @@ export function ApprovalRetryDialog({
               role="radio"
               aria-checked={selected === denial.id}
               className={cx(
-                'inline-approval-option tw:grid tw:w-full tw:grid-cols-[var(--cpx-sys-space-7)_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:rounded-lg tw:border tw:border-transparent tw:p-2 tw:text-left tw:text-app-text tw:type-body tw:focus-visible:shadow-[var(--cpx-sys-focus-ring)] tw:focus-visible:outline-none',
+                'inline-approval-option tw:grid tw:w-full tw:gap-1 tw:rounded-lg tw:border tw:border-transparent tw:p-2 tw:text-left tw:text-app-text tw:type-body tw:focus-visible:shadow-[var(--cpx-sys-focus-ring)] tw:focus-visible:outline-none',
                 selected === denial.id ? 'selected tw:bg-app-hover' : 'tw:bg-transparent',
               )}
               disabled={busy}
@@ -237,6 +261,17 @@ export function ApprovalRetryDialog({
             >
               <span>
                 {denial.tool}：{denial.reason}
+              </span>
+              <span className="tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:gap-2 tw:text-app-text-meta tw:type-caption">
+                <span>{STATUS_LABELS[denial.guardian.status] ?? denial.guardian.status}</span>
+                <span>{RISK_LABELS[denial.guardian.risk] ?? denial.guardian.risk}</span>
+                <span>
+                  {AUTH_LABELS[denial.guardian.userAuthorization] ??
+                    denial.guardian.userAuthorization}
+                </span>
+                {denial.guardian.fallbackReason ? (
+                  <span>回退：{denial.guardian.fallbackReason}</span>
+                ) : null}
               </span>
               {denial.input ? (
                 <pre className="inline-approval-command tw:block tw:w-full tw:min-w-0 tw:overflow-auto tw:bg-transparent tw:p-0 tw:text-app-text-soft tw:type-code tw:whitespace-pre-wrap tw:break-all tw:max-h-[3lh]">

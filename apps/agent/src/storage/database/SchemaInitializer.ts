@@ -83,7 +83,8 @@ const SCHEDULE_CALENDAR_SCHEMA = [
 
 export const FINAL_SCHEMA = [
   'CREATE TABLE thread_project_memberships (thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE, project_id TEXT, removal_operation_id TEXT, updated_at INTEGER NOT NULL)',
-  'CREATE TABLE approval_reviews (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE, tool_call_id TEXT NOT NULL, invocation TEXT NOT NULL, fingerprint TEXT NOT NULL, decision TEXT NOT NULL, risk TEXT NOT NULL, reason TEXT NOT NULL, retry_operation_id TEXT, retry_consumed_at INTEGER, created_at INTEGER NOT NULL)',
+  'CREATE TABLE approval_reviews (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE, tool_call_id TEXT NOT NULL, invocation TEXT NOT NULL, fingerprint TEXT NOT NULL, decision TEXT NOT NULL, risk TEXT NOT NULL, reason TEXT NOT NULL, retry_operation_id TEXT, retry_consumed_at INTEGER, created_at INTEGER NOT NULL, confidence TEXT, categories TEXT, user_authorization TEXT, fallback_reason TEXT, review_source TEXT, review_status TEXT, score_lag INTEGER, reviewed_at INTEGER, action_hash TEXT, authorization_version TEXT)',
+  'CREATE INDEX IF NOT EXISTS idx_approval_reviews_thread_created ON approval_reviews(thread_id, created_at DESC)',
   "CREATE TABLE mcp_elicitations (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE, turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE, agent_id TEXT NOT NULL, tool_call_id TEXT NOT NULL, connection_id TEXT NOT NULL, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending', response TEXT, created_at INTEGER NOT NULL)",
   'CREATE TABLE agent_checkpoints (\n        agent_id TEXT PRIMARY KEY REFERENCES agent_executions(id) ON DELETE CASCADE,\n        turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,\n        thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n        state TEXT NOT NULL,\n        payload TEXT NOT NULL,\n        version INTEGER NOT NULL,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      )',
   'CREATE TABLE agent_compactions (\n          id TEXT PRIMARY KEY,\n          thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL,\n          baseline_version INTEGER NOT NULL,\n          before_count INTEGER NOT NULL,\n          after_count INTEGER NOT NULL,\n          summary TEXT NOT NULL,\n          replacement_history TEXT NOT NULL,\n          created_at INTEGER NOT NULL\n        , before_tokens INTEGER NOT NULL DEFAULT 0, after_tokens INTEGER NOT NULL DEFAULT 0, target_tokens INTEGER NOT NULL DEFAULT 0, usage_sample_id TEXT)',
@@ -1587,6 +1588,33 @@ class SchemaInitializer {
                     .replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS '),
                 ).join(';'),
               ),
+            63: () => {
+              const columns = new Set(
+                (
+                  this.sqlite.query('PRAGMA table_info(approval_reviews)').all() as Array<{
+                    name: string
+                  }>
+                ).map((column) => column.name),
+              )
+              const add = (name: string, type: string) => {
+                if (columns.has(name)) return
+                this.sqlite.exec(`ALTER TABLE approval_reviews ADD COLUMN ${name} ${type}`)
+                columns.add(name)
+              }
+              add('confidence', 'TEXT')
+              add('categories', 'TEXT')
+              add('user_authorization', 'TEXT')
+              add('fallback_reason', 'TEXT')
+              add('review_source', 'TEXT')
+              add('review_status', 'TEXT')
+              add('score_lag', 'INTEGER')
+              add('reviewed_at', 'INTEGER')
+              add('action_hash', 'TEXT')
+              add('authorization_version', 'TEXT')
+              this.sqlite.exec(
+                'CREATE INDEX IF NOT EXISTS idx_approval_reviews_thread_created ON approval_reviews(thread_id, created_at DESC)',
+              )
+            },
             // 任务规划扩展表：计划快照与执行规则、触发去重记录、验收记录。
             // 只新增独立表，不触碰 automations/scheduled_tasks 的既有列与状态。
             62: () =>

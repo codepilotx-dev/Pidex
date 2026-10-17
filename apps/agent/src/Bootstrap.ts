@@ -27,6 +27,8 @@ import { ToolExecutor } from './tool/ToolExecutor'
 import { getToolingManager } from './tool/ToolingManager'
 import { ApprovalService } from './permission/ApprovalService'
 import { ReviewerService } from './permission/ReviewerService'
+import { GuardianScoreService } from './permission/GuardianScoreService'
+import { GuardianEvidenceService } from './permission/GuardianEvidenceService'
 import { QuestionService } from './session/QuestionService'
 import { ResumeCheckpointResolver } from './interaction/ResumeCheckpointResolver'
 import { ThreadService } from './session/ThreadService'
@@ -613,7 +615,15 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         },
       ]
     })
-    const reviewer = new ReviewerService(db, piModels, configService)
+    const guardianEvidence = new GuardianEvidenceService(async (threadID) => {
+      try {
+        return (await workspaceResolver.resolve(threadID)).workspace
+      } catch {
+        return null
+      }
+    })
+    const reviewer = new ReviewerService(db, piModels, configService, guardianEvidence)
+    const guardianScores = new GuardianScoreService(db, reviewer)
     const approvals = new ApprovalService(
       db,
       hub,
@@ -621,6 +631,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       (invocation, signal) => reviewer.review(invocation, signal),
       configService,
       browser,
+      guardianScores,
     )
     let toolExecutor!: ToolExecutor
     const hostToolAudit = new AutomationHostAuditRepository(db.sqlite)
@@ -693,6 +704,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       resolveShellSecurityLevel: () =>
         normalizeShellSecurityLevel(configService.snapshot().shell_security_level),
       authorizeShell: (invocation, signal) => approvals.authorize(invocation, signal),
+      observeToolStart: (invocation) => guardianScores.observe(invocation),
       recordToolCall: (invocation, status, output, error, startedAt) =>
         hostTurnInputs.has(invocation.turnID)
           ? hostToolAudit.record(invocation, status, output, error, startedAt)
@@ -875,6 +887,15 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       computer,
       plugins,
     )
+    approvals.setTurnInterruptHandler((threadID, turnID) => {
+      // Never await the stop from inside approval evaluation: the turn is still
+      // unwinding the denied tool. Let it return first, then interrupt.
+      queueMicrotask(() => {
+        approvals.cancelTurn(turnID)
+        questions.cancelTurn(turnID)
+        void threads.stop(threadID, turnID).catch(() => undefined)
+      })
+    })
     const automationStorage = probeAutomationStorageCapabilities(db.sqlite)
     const planApprovals = new PlanApprovalService(
       db,

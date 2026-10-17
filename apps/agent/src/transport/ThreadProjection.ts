@@ -1692,6 +1692,12 @@ export class ThreadProjection {
       review,
       risk: String(row.risk) as ApprovalRequest['risk'],
       reason: String(row.reason),
+      ...(request.guardian
+        ? { guardian: request.guardian as ApprovalRequest['guardian'] }
+        : {}),
+      ...(typeof request.autoReviewFallbackReason === 'string'
+        ? { autoReviewFallbackReason: request.autoReviewFallbackReason }
+        : {}),
       status:
         row.status === 'pending'
           ? 'pending'

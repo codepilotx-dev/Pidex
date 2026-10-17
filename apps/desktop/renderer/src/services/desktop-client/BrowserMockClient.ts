@@ -398,7 +398,7 @@ export function createBrowserMockDesktopClient(
     getRuntimeCapabilities: async () =>
       (await import('@pidex/agent-protocol/capabilities')).Capabilities,
     pauseQuestion: async () => {},
-    approvalReviewState: async () => ({ manualAllows: 0, denials: [] }),
+    approvalReviewState: async () => ({ manualAllows: 0, denials: [], reviews: [] }),
     retryApproval: async () => {},
     listApprovalRules: async () => ({ rules: [] }),
     revokeApprovalRule: async () => {},

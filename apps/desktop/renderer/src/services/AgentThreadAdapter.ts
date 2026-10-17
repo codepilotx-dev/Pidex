@@ -968,6 +968,24 @@ export function approvalToRequest(approval: ApprovalRequest): DesktopPermissionR
     requestKind: permissionGrant ? 'permission-grant' : approval.command ? 'shell-command' : 'tool',
     ...(permissionGrant ? { permissionGrant } : {}),
     ...(approval.computerApp ? { computerApp: { ...approval.computerApp } } : {}),
+    ...(approval.guardian ? { guardian: approval.guardian } : {}),
+    ...(approval.autoReviewFallbackReason
+      ? { autoReviewFallbackReason: approval.autoReviewFallbackReason }
+      : {}),
+  }
+}
+
+function guardianFromParams(
+  params: Record<string, unknown>,
+): Pick<DesktopPermissionRequest, 'guardian' | 'autoReviewFallbackReason'> {
+  const guardian =
+    params.guardian && typeof params.guardian === 'object' && !Array.isArray(params.guardian)
+      ? (params.guardian as DesktopPermissionRequest['guardian'])
+      : undefined
+  const fallbackReason = stringValue(params.autoReviewFallbackReason)
+  return {
+    ...(guardian ? { guardian } : {}),
+    ...(fallbackReason ? { autoReviewFallbackReason: fallbackReason } : {}),
   }
 }
 
@@ -1024,6 +1042,7 @@ function approvalParamsToRequest(params: Record<string, unknown>): DesktopPermis
       : {}),
     description: stringValue(params.reason) || '需要批准工具调用',
     requestKind: command ? 'shell-command' : 'tool',
+    ...guardianFromParams(params),
   }
 }
 
@@ -1062,6 +1081,7 @@ function permissionParamsToRequest(params: Record<string, unknown>): DesktopPerm
     },
     description: stringValue(params.reason) || '需要额外权限',
     requestKind: 'permission-grant',
+    ...guardianFromParams(params),
     permissionGrant: {
       requestedPermissions,
       requestedScope,

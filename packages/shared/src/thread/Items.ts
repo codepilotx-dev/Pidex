@@ -594,6 +594,27 @@ export const ComputerAppApprovalSchema = Schema.Struct({
   allowPersistentApproval: Schema.Boolean,
 })
 
+export const GuardianReviewSchema = Schema.Struct({
+  status: Schema.Literals([
+    'completed',
+    'cached',
+    'unavailable',
+    'timeout',
+    'circuit_open',
+  ]),
+  source: Schema.Literals(['model', 'cache', 'fallback']),
+  risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
+  userAuthorization: Schema.Literals(['unknown', 'low', 'medium', 'high']),
+  confidence: Schema.Literals(['low', 'medium', 'high']),
+  categories: Schema.Array(RiskCategorySchema),
+  rationale: Schema.String,
+  reviewedAt: Schema.Number,
+  scoreLag: Schema.optional(Schema.Number),
+  fallbackReason: Schema.optional(Schema.String),
+  model: Schema.optional(Schema.String),
+})
+export type GuardianReview = typeof GuardianReviewSchema.Type
+
 export const ApprovalRequestSchema = Schema.Struct({
   grantOptions: Schema.optional(
     Schema.Array(
@@ -622,6 +643,8 @@ export const ApprovalRequestSchema = Schema.Struct({
   computerApp: Schema.optional(ComputerAppApprovalSchema),
   requestedPermissions: AdditionalPermissionsSchema,
   review: Schema.NullOr(ShellReviewSchema),
+  guardian: Schema.optional(GuardianReviewSchema),
+  autoReviewFallbackReason: Schema.optional(Schema.String),
   risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
   reason: Schema.String,
   status: Schema.Literals(['pending', 'allowed', 'denied', 'cancelled']),

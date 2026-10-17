@@ -20,6 +20,12 @@ import type { ConfigService } from '../config/ConfigService'
 import { analyzeShellRisk } from '../security/ShellRiskClassifier'
 import type { BrowserService } from '../browser/BrowserService'
 import type { ApprovalRule } from './ApprovalRules'
+import {
+  GuardianCircuitBreaker,
+  guardianFallbackDecision,
+  type GuardianReview,
+} from './Guardian'
+import type { GuardianScoreService } from './GuardianScoreService'
 
 export type Reviewer = (
   invocation: ToolInvocation,
@@ -104,6 +110,9 @@ const approvalScopePayload = (invocation: ToolInvocation) =>
 export class ApprovalService {
   readonly rules: ApprovalRules
   private readonly decisions = new PermissionDecisionEngine()
+  private readonly guardianCircuit = new GuardianCircuitBreaker()
+  private readonly interruptedTurns = new Set<string>()
+  private turnInterruptHandler?: (threadID: string, turnID: string) => void
   private agentStatusHandler?: (agentID: string, status: 'waiting_permission' | 'running') => void
 
   constructor(
@@ -113,6 +122,7 @@ export class ApprovalService {
     private readonly reviewer: Reviewer | null = null,
     config?: ConfigService,
     private readonly browser?: BrowserService,
+    private readonly guardianScores?: GuardianScoreService,
   ) {
     this.rules = new ApprovalRules(db, tools, config)
   }
@@ -147,6 +157,26 @@ export class ApprovalService {
       ...approvalScopePayload(invocation),
     }
   }
+  private guardianPayload(review: PermissionDecision) {
+    return {
+      ...(review.guardian ? { guardian: review.guardian } : {}),
+      ...(review.fallbackReason ? { autoReviewFallbackReason: review.fallbackReason } : {}),
+    }
+  }
+
+  private guardianPayloadFromRecord(review: Record<string, unknown> | undefined) {
+    const guardian = review?.guardian
+    const fallbackReason = review?.fallbackReason
+    return {
+      ...(guardian && typeof guardian === 'object' && !Array.isArray(guardian)
+        ? { guardian }
+        : {}),
+      ...(typeof fallbackReason === 'string'
+        ? { autoReviewFallbackReason: fallbackReason }
+        : {}),
+    }
+  }
+
   private browserRules(invocation: ToolInvocation): ApprovalRule[] {
     const origin = invocation.authorizationScope?.browserOrigin
     if (!origin || !this.browser || invocation.permissionFacts?.hookRequiresApproval) return []
@@ -169,6 +199,15 @@ export class ApprovalService {
     handler: (agentID: string, status: 'waiting_permission' | 'running') => void,
   ) {
     this.agentStatusHandler = handler
+  }
+
+  /**
+   * Wired by the composition root after the live turn service exists. The
+   * handler must only schedule the stop; awaiting it here would deadlock the
+   * tool that is currently waiting for this permission decision.
+   */
+  setTurnInterruptHandler(handler: (threadID: string, turnID: string) => void) {
+    this.turnInterruptHandler = handler
   }
 
   private async emit(threadID: string, turnID: string, method: string, params: unknown) {
@@ -207,23 +246,14 @@ export class ApprovalService {
         invocation.threadID,
         fingerprint,
       )
-      let reviewed: PermissionDecision
-      try {
-        reviewed = await this.reviewer(
-          reviewerInvocation({
-            ...safeInvocation,
-            ...(retryAuthorization ? { retryAuthorization } : {}),
-          }),
-          signal,
-        )
-      } catch (cause) {
-        const denied = invocation.permissionConfig.approvalPolicy === 'never'
-        reviewed = {
-          decision: denied ? 'deny' : 'ask',
-          risk: resolved.risk,
-          reason: `Guardian 不可用，${denied ? '已拒绝' : '转人工确认'}：${secretScrubber.scrubText(cause instanceof Error ? cause.message : String(cause))}`,
-        }
-      }
+      const reviewed = await this.reviewWithGuardian(
+        reviewerInvocation({
+          ...safeInvocation,
+          ...(retryAuthorization ? { retryAuthorization } : {}),
+        }),
+        resolved,
+        signal,
+      )
       const event = this.db.repositories.interactions.recordApprovalReview(
         safeInvocation,
         fingerprint,
@@ -250,6 +280,161 @@ export class ApprovalService {
     } satisfies PermissionDecision
     return this.checkpointForHuman(safeInvocation, review, resolved)
   }
+  private async reviewWithGuardian(
+    invocation: ToolInvocation,
+    resolved: Extract<ResolvedPermissionDecision, { action: 'review' }>,
+    signal: AbortSignal,
+  ): Promise<PermissionDecision> {
+    const circuit = this.guardianCircuit.check(invocation.threadID, invocation.turnID)
+    if (circuit.open) {
+      const fallback = guardianFallbackDecision({
+        risk: resolved.risk,
+        status: 'circuit_open',
+        reason: circuit.reason ?? 'Guardian 本轮已暂停自动审查',
+        approvalPolicy: invocation.permissionConfig.approvalPolicy,
+      })
+      return this.finishGuardianReview(invocation, fallback)
+    }
+
+    const cached = invocation.retryAuthorization
+      ? null
+      : this.guardianScores?.cachedAllow(invocation)
+    if (cached) return this.finishGuardianReview(invocation, cached)
+    if (!this.reviewer) {
+      const fallback = guardianFallbackDecision({
+        risk: resolved.risk,
+        status: 'unavailable',
+        reason: '未配置独立 Guardian，转人工确认',
+        approvalPolicy: invocation.permissionConfig.approvalPolicy,
+      })
+      return this.finishGuardianReview(invocation, fallback)
+    }
+
+    const controller = new AbortController()
+    const abort = () => controller.abort(signal.reason)
+    if (signal.aborted) controller.abort(signal.reason)
+    else signal.addEventListener('abort', abort, { once: true })
+
+    const reviewPromise: Promise<PermissionDecision> = this.reviewer(
+      invocation,
+      controller.signal,
+    ).then(
+      (decision) => {
+        const reviewed = this.ensureGuardianReview(decision, resolved.risk)
+        if (reviewed.decision !== 'allow') this.guardianScores?.invalidateAction(invocation)
+        return reviewed
+      },
+      (cause) => {
+        const reason = `Guardian 不可用：${secretScrubber.scrubText(
+          cause instanceof Error ? cause.message : String(cause),
+        )}`
+        return guardianFallbackDecision({
+          risk: resolved.risk,
+          status: 'unavailable',
+          reason,
+          approvalPolicy: invocation.permissionConfig.approvalPolicy,
+        })
+      },
+    )
+
+    try {
+      if (!this.guardianScores || invocation.retryAuthorization)
+        return await this.finishGuardianReview(invocation, await reviewPromise)
+      const winner = await Promise.race([
+        reviewPromise.then((decision) => ({ kind: 'review' as const, decision })),
+        this.guardianScores
+          .waitForLowRisk(invocation, signal, 2_500)
+          .then((decision) => ({ kind: 'score' as const, decision })),
+      ])
+      if (winner.kind === 'score' && winner.decision) {
+        controller.abort(new Error('Guardian fast path won'))
+        void reviewPromise.catch(() => {})
+        return this.finishGuardianReview(invocation, winner.decision)
+      }
+      return this.finishGuardianReview(
+        invocation,
+        winner.decision ?? (await reviewPromise),
+      )
+    } finally {
+      signal.removeEventListener('abort', abort)
+    }
+  }
+
+  private async finishGuardianReview(
+    invocation: ToolInvocation,
+    decision: PermissionDecision,
+  ): Promise<PermissionDecision> {
+    this.guardianScores?.recordDecision(invocation, decision.decision)
+    const outcome = this.guardianCircuit.record(
+      invocation.threadID,
+      invocation.turnID,
+      decision.decision,
+    )
+    if (outcome.tripped || decision.guardian?.status === 'circuit_open') {
+      await this.interruptGuardedTurn(
+        invocation,
+        outcome.reason ?? decision.guardian?.rationale ?? decision.reason,
+      )
+    }
+    return decision
+  }
+
+  /**
+   * A tripped circuit no longer parks the turn in a pending approval. The host
+   * interrupts the live turn after the denied tool unwinds, so the model cannot
+   * keep retrying the same action.
+   */
+  private async interruptGuardedTurn(invocation: ToolInvocation, reason: string) {
+    if (this.interruptedTurns.has(invocation.turnID)) return
+    this.interruptedTurns.add(invocation.turnID)
+    try {
+      const timestamp = Date.now()
+      const { event } = this.db.upsertItemWithEvent(
+        invocation.threadID,
+        {
+          id: `guardian-circuit:${invocation.turnID}`,
+          turnID: invocation.turnID,
+          agentID: invocation.agentID,
+          type: 'activity',
+          status: 'error',
+          data: {
+            activity: 'notice',
+            title: 'Guardian 已中断本轮',
+            detail: reason,
+          },
+          createdAt: timestamp,
+          updatedAt: timestamp,
+        },
+        'item/completed',
+      )
+      await Promise.allSettled([Effect.runPromise(this.hub.publish(event))])
+    } catch {
+      // The interrupt itself must still happen if the notice cannot be written.
+    } finally {
+      this.turnInterruptHandler?.(invocation.threadID, invocation.turnID)
+    }
+  }
+
+  private ensureGuardianReview(
+    decision: PermissionDecision,
+    fallbackRisk: PermissionDecision['risk'],
+  ): PermissionDecision {
+    if (decision.guardian) return decision
+    return {
+      ...decision,
+      guardian: {
+        status: 'completed',
+        source: 'model',
+        risk: decision.risk ?? fallbackRisk,
+        userAuthorization: 'unknown',
+        confidence: 'medium',
+        categories: decision.review?.categories ? [...decision.review.categories] : [],
+        rationale: decision.reason,
+        reviewedAt: Date.now(),
+      } satisfies GuardianReview,
+    }
+  }
+
   private retryFingerprint(invocation: ToolInvocation): string {
     return createHash('sha256')
       .update(
@@ -298,6 +483,7 @@ export class ApprovalService {
         cwd: safeInvocation.input.cwd ?? null,
         requestedPermissions: requestedPermissions(safeInvocation.input),
         ...this.approvalMetadata(safeInvocation),
+        ...this.guardianPayload(review),
         // Dynamic permission requests persist their grant metadata so the
         // thread projection can restore permissionGrant without live events.
         ...(safeInvocation.name === 'request_permissions'
@@ -407,6 +593,7 @@ export class ApprovalService {
             risk: ['low', 'medium', 'high', 'critical'].includes(stored.risk)
               ? stored.risk
               : 'high',
+            ...this.guardianPayloadFromRecord(stored.payload.review),
           }
         : {
             interactionId: stored.approvalID,
@@ -428,6 +615,7 @@ export class ApprovalService {
             ...(typeof invocation.input.cwd === 'string' ? { cwd: invocation.input.cwd } : {}),
             requestedPermissions: requestedPermissions(invocation.input),
             ...this.approvalMetadata(invocation),
+            ...this.guardianPayloadFromRecord(stored.payload.review),
             allowedChoices: ['allow-once', 'deny', 'stop'],
           }
     const { checkpoint, events } = this.db.activateApprovalCheckpoint(
