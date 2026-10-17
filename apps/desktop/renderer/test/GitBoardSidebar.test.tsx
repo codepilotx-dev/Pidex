@@ -18,6 +18,7 @@ test('Git sidebar renders real project hover cards inside its own provider', () 
   const state = addGitBoardGroup(defaultGitBoardState(), 'dev', '开发组', project.projectId)
   const controller: ReturnType<typeof boardContext.useGitBoard> = {
     state,
+    ready: true,
     view: gitBoardView(state, null),
     openGroup: () => {},
     toggleQuickView: () => {},
@@ -50,8 +51,8 @@ test('Git sidebar renders real project hover cards inside its own provider', () 
     expect(emptyQuick).not.toContain('搜索仓库')
     expect(emptyQuick.match(/aria-label="刷新所有项目仓库"/g)).toHaveLength(1)
     expect(emptyQuick).not.toContain('title="新建分组"')
-    expect(emptyQuick).not.toContain('>速览</span>')
-    expect(emptyQuick).not.toContain('清空速览')
+    expect(emptyQuick).toContain('>速览</span>')
+    expect(emptyQuick).toContain('清空速览')
     expect(emptyQuick.indexOf('>项目</span>')).toBeGreaterThan(-1)
     expect(emptyQuick.indexOf('>项目</span>')).toBeLessThan(emptyQuick.indexOf('>开发组</span>'))
     controller.state = { ...state, quickProjectIds: [project.projectId] }

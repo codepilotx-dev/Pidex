@@ -949,6 +949,7 @@ export type ProjectAppearance = {
 }
 
 export type DesktopStoredSettings = {
+  gitBoardState?: string | null
   language: 'system' | 'zh-CN' | 'en-US'
   enableParetoCodeRouter?: boolean
   enableFusionRouter?: boolean

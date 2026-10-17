@@ -307,12 +307,15 @@ export function RepositoryColumn({
 
 function GroupBoard() {
   const { t } = useLocale()
-  const { view, projects, repositories, state, toggleQuickView } = useGitBoard()
+  const { view, projects, repositories, state, toggleQuickView, ready } = useGitBoard()
   const [selection, setSelection] = useState<Selection | null>(null)
   const viewportRef = useRef<HTMLDivElement>(null)
   const edges = useScrollEdgeState(viewportRef, { axis: 'x', version: view.projectIds })
   return (
-    <div className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:overflow-hidden">
+    <div
+      inert={ready === false}
+      className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:overflow-hidden"
+    >
       <div className="tw:relative tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1">
         <div
           ref={viewportRef}

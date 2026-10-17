@@ -1,3 +1,8 @@
+import { createDesktopSettingsDraft } from '../src/features/settings/UseDesktopSettings.js'
+import {
+  defaultDesktopStoredSettings,
+  normalizeDesktopStoredSettings,
+} from '../shared/SettingsSchema.js'
 import { describe, expect, test } from 'bun:test'
 import {
   addGitBoardGroup,
@@ -83,4 +88,30 @@ describe('Git board quick view and independent groups', () => {
       parseGitBoardState(JSON.stringify({ quickProjectIds: ['a', null, 'a'], groups: [null] })),
     ).toEqual({ quickProjectIds: ['a'], quickCollapsed: false, groups: [] })
   })
+})
+
+test('看板设置通过桌面设置保存并恢复，空速览不会被旧数据覆盖', async () => {
+  let saved = defaultDesktopStoredSettings()
+  const state = addGitBoardGroup(
+    toggleGitBoardQuickView(defaultGitBoardState(), 'repo'),
+    'dev',
+    '开发',
+    'repo',
+  )
+  state.groups[0]!.collapsed = true
+  const draft = createDesktopSettingsDraft(saved, async (next) => {
+    saved = normalizeDesktopStoredSettings(next)
+    return saved
+  })
+  draft.setValue('gitBoardState', JSON.stringify(state))
+  await draft.saveFields(['gitBoardState'])
+  expect(parseGitBoardState(normalizeDesktopStoredSettings(saved).gitBoardState ?? null)).toEqual(
+    state,
+  )
+  draft.setValue('gitBoardState', JSON.stringify({ ...state, quickProjectIds: [] }))
+  await draft.saveFields(['gitBoardState'])
+  expect(
+    parseGitBoardState(normalizeDesktopStoredSettings(saved).gitBoardState ?? null).quickProjectIds,
+  ).toEqual([])
+  expect(saved.sidebarLayout).toBe('modern')
 })

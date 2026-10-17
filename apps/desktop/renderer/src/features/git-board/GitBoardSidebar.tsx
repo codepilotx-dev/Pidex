@@ -39,6 +39,7 @@ export function GitBoardSidebar({
   const { t } = useLocale()
   const {
     state,
+    ready,
     view,
     update,
     openGroup,
@@ -49,9 +50,6 @@ export function GitBoardSidebar({
     refresh,
     refreshing,
   } = useGitBoard()
-  const hasQuickProjects = state.quickProjectIds.some((id) =>
-    projects.some((project) => project.projectId === id),
-  )
   const [dialog, setDialog] = useState<GroupDialog | null>(null)
   const [name, setName] = useState('')
   const [projectsCollapsed, setProjectsCollapsed] = useState(false)
@@ -109,7 +107,11 @@ export function GitBoardSidebar({
   }
   return (
     <SidebarHoverCardProvider>
-      <div className="sidebar-git-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
+      <div
+        inert={ready === false}
+        aria-busy={ready === false}
+        className="sidebar-git-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2"
+      >
         <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
           <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('Git 看板')}</h2>
           <Tooltip content={t('刷新所有项目仓库')}>
@@ -131,42 +133,40 @@ export function GitBoardSidebar({
             {t('看板保存失败，本次修改仅在当前窗口有效')}
           </p>
         )}
-        {hasQuickProjects && (
-          <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:p-2">
-            <SidebarRow
-              active={view.id === null}
-              className="tw:group"
-              layout="flex"
-              leading={<LayoutDashboard aria-hidden size={APP_ICON_SIZE} />}
-              trailing={
-                // 速览行的尾部操作与标题行图标按钮同轴：容器 p-2 加行内 px-2 比标题 px-3 多出 4px，这里抵消。
-                <span className="tw:inline-flex tw:-mr-1 tw:opacity-0 tw:pointer-events-none tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-focus-within:opacity-100 tw:group-focus-within:pointer-events-auto">
-                  <Tooltip content={t('清空速览')}>
-                    <Button
-                      nativeTitle={false}
-                      isIconOnly
-                      variant="text"
-                      size="compact"
-                      title={t('清空速览')}
-                      onClick={() => update((current) => ({ ...current, quickProjectIds: [] }))}
-                    >
-                      <ListX size={APP_ICON_SIZE} />
-                    </Button>
-                  </Tooltip>
-                </span>
-              }
+        <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:p-2">
+          <SidebarRow
+            active={view.id === null}
+            className="tw:group"
+            layout="flex"
+            leading={<LayoutDashboard aria-hidden size={APP_ICON_SIZE} />}
+            trailing={
+              // 速览行的尾部操作与标题行图标按钮同轴：容器 p-2 加行内 px-2 比标题 px-3 多出 4px，这里抵消。
+              <span className="tw:inline-flex tw:-mr-1 tw:opacity-0 tw:pointer-events-none tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-focus-within:opacity-100 tw:group-focus-within:pointer-events-auto">
+                <Tooltip content={t('清空速览')}>
+                  <Button
+                    nativeTitle={false}
+                    isIconOnly
+                    variant="text"
+                    size="compact"
+                    title={t('清空速览')}
+                    onClick={() => update((current) => ({ ...current, quickProjectIds: [] }))}
+                  >
+                    <ListX size={APP_ICON_SIZE} />
+                  </Button>
+                </Tooltip>
+              </span>
+            }
+          >
+            <button
+              type="button"
+              aria-current={view.id === null ? 'page' : undefined}
+              className="tw:w-full tw:cursor-pointer tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit tw:type-body"
+              onClick={() => openGroup(null)}
             >
-              <button
-                type="button"
-                aria-current={view.id === null ? 'page' : undefined}
-                className="tw:w-full tw:cursor-pointer tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit tw:type-body"
-                onClick={() => openGroup(null)}
-              >
-                <span>{t('速览')}</span>
-              </button>
-            </SidebarRow>
-          </div>
-        )}
+              <span>{t('速览')}</span>
+            </button>
+          </SidebarRow>
+        </div>
         <ScrollArea
           className="tw:min-h-0 tw:flex-1 tw:px-2 tw:pb-2 tw:pt-0"
           contentClassName="tw:flex tw:flex-col tw:gap-3"

@@ -1,5 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
+import { createContext } from 'react'
 import { defaultDesktopSettings } from '../src/features/settings/SettingsStorage.js'
 import {
   DesktopSettingsProvider,
@@ -10,6 +11,30 @@ import {
 } from '../src/features/settings/UseDesktopSettings.js'
 
 describe('desktop settings provider', () => {
+  test('preserves both context instances when the module is hot reloaded', async () => {
+    const source = await Bun.file(
+      new URL('../src/features/settings/UseDesktopSettings.ts', import.meta.url),
+    ).text()
+    const initialization = source.slice(
+      source.indexOf('type DesktopSettingsHotData ='),
+      source.indexOf('export function DesktopSettingsProvider('),
+    )
+    const script = new Bun.Transpiler({ loader: 'ts' }).transformSync(
+      initialization.replaceAll('import.meta.hot', 'hot') +
+        '\nreturn [DesktopSettingsContext, DesktopRuntimeSettingsContext]',
+    )
+    const initialize = new Function('hot', 'createContext', script)
+    const hot = { data: {} }
+    const initial = initialize(hot, createContext)
+    const reloaded = initialize(hot, createContext)
+    expect(reloaded[0]).toBe(initial[0])
+    expect(reloaded[1]).toBe(initial[1])
+    expect(initial[0]).not.toBe(initial[1])
+    const cold = initialize(undefined, createContext)
+    expect(cold[0]).not.toBe(initial[0])
+    expect(cold[1]).not.toBe(initial[1])
+  })
+
   test.each(['read-write', 'read-only'] as const)(
     'shares settings and runtime state between consumers with %s access',
     (access) => {

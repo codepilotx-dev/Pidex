@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type Context,
   type ReactNode,
 } from 'react'
 import type { DrawerTab } from '../../UiTypes.js'
@@ -325,8 +326,25 @@ export function createDesktopSettingsDraft(
   }
 }
 
-const DesktopSettingsContext = createContext<UseDesktopSettingsResult | null>(null)
-const DesktopRuntimeSettingsContext = createContext<UseDesktopRuntimeSettingsResult | null>(null)
+type DesktopSettingsHotData = {
+  desktopSettingsContext?: Context<UseDesktopSettingsResult | null>
+  desktopRuntimeSettingsContext?: Context<UseDesktopRuntimeSettingsResult | null>
+}
+
+const hotData = import.meta.hot?.data as DesktopSettingsHotData | undefined
+
+// 热更新时保留 Context 身份，避免已有 Provider 与更新后的 Hook 引用不同实例。
+const DesktopSettingsContext =
+  hotData?.desktopSettingsContext ?? createContext<UseDesktopSettingsResult | null>(null)
+const DesktopRuntimeSettingsContext =
+  hotData?.desktopRuntimeSettingsContext ??
+  createContext<UseDesktopRuntimeSettingsResult | null>(null)
+
+if (import.meta.hot) {
+  const data = import.meta.hot.data as DesktopSettingsHotData
+  data.desktopSettingsContext = DesktopSettingsContext
+  data.desktopRuntimeSettingsContext = DesktopRuntimeSettingsContext
+}
 
 export function DesktopSettingsProvider({
   children,
@@ -647,6 +665,7 @@ function useDesktopSettingsState(
 
   const effectiveSettings = useMemo<StoredDesktopSettings>(
     () => ({
+      gitBoardState: committedDraftValues.gitBoardState ?? null,
       language: committedDraftValues.language,
       sidebarLayout: committedDraftValues.sidebarLayout,
       worktreeRoot: committedDraftValues.worktreeRoot,
@@ -733,6 +752,7 @@ function useDesktopSettingsState(
       notifications: committedDraftValues.notifications,
     }),
     [
+      committedDraftValues.gitBoardState,
       committedDraftValues.language,
       committedDraftValues.sidebarLayout,
       committedDraftValues.worktreeRoot,

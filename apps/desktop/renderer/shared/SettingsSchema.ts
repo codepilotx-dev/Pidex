@@ -487,6 +487,7 @@ export function normalizeDesktopStoredSettings(value: unknown): DesktopStoredSet
       typeof parsed.rustSearchAndDiffKernels === 'boolean'
         ? parsed.rustSearchAndDiffKernels
         : defaults.rustSearchAndDiffKernels,
+    gitBoardState: typeof parsed.gitBoardState === 'string' ? parsed.gitBoardState : null,
     sidebarLayout: parsed.sidebarLayout === 'classic' ? 'classic' : 'modern',
     sidebarOrganization: isDesktopSidebarOrganization(parsed.sidebarOrganization)
       ? parsed.sidebarOrganization

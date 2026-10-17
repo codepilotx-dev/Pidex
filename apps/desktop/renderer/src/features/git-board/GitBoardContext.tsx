@@ -8,6 +8,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
 import { useLocation } from 'react-router-dom'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { notifyProjectCatalogChanged } from '../projects/ProjectCatalogEvents.js'
@@ -30,26 +31,54 @@ export type { GitBoardRepository } from './GitBoardRepository.js'
 
 function useGitBoardController() {
   const active = useLocation().pathname === '/git'
-  const [state, setState] = useState(() => {
-    try {
-      return parseGitBoardState(window.localStorage.getItem(GIT_BOARD_STORAGE_KEY))
-    } catch {
-      return parseGitBoardState(null)
-    }
-  })
+  const { settingsLoaded, draft } = useDesktopSettings()
+  const hydrated = useRef(false)
+  const [ready, setReady] = useState(false)
+  const saveVersion = useRef(0)
+  const [state, setState] = useState(() => parseGitBoardState(null))
   const [storageError, setStorageError] = useState(false)
   const stateRef = useRef(state)
-  const update = useCallback((change: (current: GitBoardState) => GitBoardState) => {
-    const next = change(stateRef.current)
+  const saveState = useCallback(
+    (next: GitBoardState) => {
+      const version = ++saveVersion.current
+      draft.setValue('gitBoardState', JSON.stringify(next))
+      void draft
+        .saveFields(['gitBoardState'])
+        .then(() => {
+          if (version === saveVersion.current) setStorageError(false)
+        })
+        .catch(() => {
+          if (version === saveVersion.current) setStorageError(true)
+        })
+    },
+    [draft.setValue, draft.saveFields],
+  )
+  useEffect(() => {
+    if (!settingsLoaded || hydrated.current) return
+    const stored = draft.values.gitBoardState
+    let legacy: string | null = null
+    try {
+      legacy = window.localStorage.getItem(GIT_BOARD_STORAGE_KEY)
+    } catch {
+      /* Desktop settings remain available without browser storage. */
+    }
+    const next = parseGitBoardState(stored ?? legacy)
+    hydrated.current = true
     stateRef.current = next
     setState(next)
-    try {
-      window.localStorage.setItem(GIT_BOARD_STORAGE_KEY, JSON.stringify(next))
-      setStorageError(false)
-    } catch {
-      setStorageError(true)
-    }
-  }, [])
+    setReady(true)
+    if (stored == null && legacy !== null) saveState(next)
+  }, [settingsLoaded, draft.values.gitBoardState, saveState])
+  const update = useCallback(
+    (change: (current: GitBoardState) => GitBoardState) => {
+      if (!hydrated.current) return
+      const next = change(stateRef.current)
+      stateRef.current = next
+      setState(next)
+      saveState(next)
+    },
+    [saveState],
+  )
   const { projectCatalogState } = useSidebarProjectCatalog()
   const projects = useMemo(
     () => projectCatalogState.projects.filter((project) => project.projectId),
@@ -151,6 +180,7 @@ function useGitBoardController() {
 
   return {
     state,
+    ready,
     view,
     openGroup,
     toggleQuickView,
