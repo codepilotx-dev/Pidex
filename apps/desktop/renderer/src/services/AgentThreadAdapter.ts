@@ -47,13 +47,16 @@ export function agentQuestionIdFromRequestId(requestId: string): string | null {
 
 export function desktopPermissionModeToPermissionConfig(
   mode: DesktopPermissionMode | undefined,
+  current?: PermissionConfig,
 ): PermissionConfig {
   return {
-    ...(mode === 'auto-review'
-      ? AUTO_REVIEW_PERMISSION_CONFIG
-      : mode === 'full-access'
-        ? FULL_ACCESS_PERMISSION_CONFIG
-        : DEFAULT_PERMISSION_CONFIG),
+    ...(mode === 'custom'
+      ? (current ?? DEFAULT_PERMISSION_CONFIG)
+      : mode === 'auto-review'
+        ? AUTO_REVIEW_PERMISSION_CONFIG
+        : mode === 'full-access'
+          ? FULL_ACCESS_PERMISSION_CONFIG
+          : DEFAULT_PERMISSION_CONFIG),
   }
 }
 
@@ -1189,7 +1192,12 @@ export function permissionModeFromPermissionConfig(
 ): DesktopPermissionMode {
   if (config?.sandboxMode === 'danger-full-access' && config.approvalPolicy === 'never')
     return 'full-access'
-  if (config?.approvalsReviewer === 'auto_review') return 'auto-review'
+  if (
+    config?.sandboxMode === 'workspace-write' &&
+    config.approvalPolicy === 'on-request' &&
+    config.approvalsReviewer === 'auto_review'
+  )
+    return 'auto-review'
   if (
     config?.sandboxMode === 'workspace-write' &&
     config.approvalPolicy === 'on-request' &&

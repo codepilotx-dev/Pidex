@@ -1254,9 +1254,11 @@ export function createAgentSessionDesktopClient(
   }
 
   function permissionConfigForSession(sessionId: string) {
+    const snapshot = sessionSnapshots.get(sessionId)
     return (
       sessionPermissionConfigs.get(sessionId) ??
-      desktopPermissionModeToPermissionConfig(sessionSnapshots.get(sessionId)?.item.permissionMode)
+      snapshot?.settings.permissionConfig ??
+      desktopPermissionModeToPermissionConfig(snapshot?.item.permissionMode)
     )
   }
 
@@ -3464,6 +3466,7 @@ export function createAgentSessionDesktopClient(
           })
           const snapshot = agentThreadSnapshotToDesktop(sharedSnapshot, project)
           sessionSnapshots.set(snapshot.item.id, snapshot)
+          sessionPermissionConfigs.set(snapshot.item.id, snapshot.settings.permissionConfig)
           activeSessionId = snapshot.item.id
           await refreshAgentSessionStoreChange().catch(() => emitSessionStoreChange())
           return {
@@ -3674,7 +3677,10 @@ export function createAgentSessionDesktopClient(
       withAgentOrMock(
         () =>
           updateThreadSettings(sessionId, {
-            permissionConfig: desktopPermissionModeToPermissionConfig(mode),
+            permissionConfig: desktopPermissionModeToPermissionConfig(
+              mode,
+              permissionConfigForSession(sessionId),
+            ),
           }),
         () => mockClient.setSessionPermissionMode(sessionId, mode),
       ),

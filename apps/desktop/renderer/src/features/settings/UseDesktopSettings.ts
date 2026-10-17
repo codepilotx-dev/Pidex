@@ -547,7 +547,7 @@ function useDesktopSettingsState(
   const setPermissionMode = useCallback((value: DesktopPermissionMode) => {
     setCommittedDraftValues((current) => ({
       ...current,
-      permissionConfig: permissionConfigForMode(value),
+      permissionConfig: permissionConfigForMode(value, current.permissionConfig),
     }))
   }, [])
   const draftDirtyKeysRef = useRef<Set<keyof StoredDesktopSettings>>(new Set())

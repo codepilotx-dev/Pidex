@@ -227,11 +227,47 @@ describe('agent thread adapter', () => {
     ).toBe('auto-review')
     expect(
       permissionModeFromPermissionConfig({
+        sandboxMode: 'workspace-write',
+        approvalPolicy: 'untrusted',
+        approvalsReviewer: 'auto_review',
+      }),
+    ).toBe('custom')
+    expect(
+      permissionModeFromPermissionConfig({
+        sandboxMode: 'workspace-write',
+        approvalPolicy: {
+          type: 'granular' as const,
+          sandboxApproval: true,
+          rules: true,
+          skillApproval: true,
+          requestPermissions: true,
+          mcpTools: true,
+          mcpElicitations: true,
+        },
+        approvalsReviewer: 'auto_review',
+      }),
+    ).toBe('custom')
+    expect(
+      permissionModeFromPermissionConfig({
         sandboxMode: 'danger-full-access',
         approvalPolicy: 'never',
         approvalsReviewer: 'auto_review',
       }),
     ).toBe('full-access')
+  })
+
+  test('keeps the current custom config when the custom mode is selected', () => {
+    const current = {
+      sandboxMode: 'workspace-write' as const,
+      approvalPolicy: 'untrusted' as const,
+      approvalsReviewer: 'auto_review' as const,
+    }
+    expect(desktopPermissionModeToPermissionConfig('custom', current)).toEqual(current)
+    expect(desktopPermissionModeToPermissionConfig('custom')).toEqual({
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'user',
+    })
   })
 
   test('maps thread list item status and workspace fields', () => {

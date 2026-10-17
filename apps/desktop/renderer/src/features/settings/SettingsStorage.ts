@@ -94,13 +94,18 @@ export function permissionModeForConfig(config: DesktopPermissionConfig): Deskto
   return 'custom'
 }
 
-export function permissionConfigForMode(mode: DesktopPermissionMode): DesktopPermissionConfig {
+export function permissionConfigForMode(
+  mode: DesktopPermissionMode,
+  current?: DesktopPermissionConfig,
+): DesktopPermissionConfig {
   return {
-    ...(mode === 'full-access'
-      ? FULL_ACCESS_PERMISSION_CONFIG
-      : mode === 'auto-review'
-        ? AUTO_REVIEW_PERMISSION_CONFIG
-        : DEFAULT_PERMISSION_CONFIG),
+    ...(mode === 'custom'
+      ? (current ?? DEFAULT_PERMISSION_CONFIG)
+      : mode === 'full-access'
+        ? FULL_ACCESS_PERMISSION_CONFIG
+        : mode === 'auto-review'
+          ? AUTO_REVIEW_PERMISSION_CONFIG
+          : DEFAULT_PERMISSION_CONFIG),
   }
 }
 

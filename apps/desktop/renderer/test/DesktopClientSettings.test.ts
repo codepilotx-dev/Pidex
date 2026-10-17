@@ -629,7 +629,7 @@ describe('desktop thread settings client', () => {
       taskMode: 'plan',
       permissionConfig: {
         sandboxMode: 'workspace-write',
-        approvalPolicy: 'on-request',
+        approvalPolicy: 'untrusted',
         approvalsReviewer: 'auto_review',
       },
     }
