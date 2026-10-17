@@ -1031,18 +1031,61 @@
   }
   .canonical-command-card__command {
     position: relative;
-    display: flex;
-    gap: var(--cpx-sys-space-2);
-    padding: var(--cpx-sys-space-2);
-    padding-right: calc(var(--cpx-sys-space-8) + var(--cpx-sys-space-2));
-    font: var(--cpx-sys-type-code);
+    min-width: 0;
+    padding: var(--cpx-sys-space-1) var(--cpx-sys-space-2);
   }
-  .canonical-command-card__command pre {
+
+  /* 命令区收起态限高两行、展开态限高十行并可滚动；两个状态共用同一视口，
+     $ 提示符与正文一起滚动，滚到命令中段时不会留下悬空的行首标记。 */
+  .canonical-command-card__command-viewport {
+    min-width: 0;
+    padding-right: calc(var(--cpx-sys-space-8) + var(--cpx-sys-space-2));
+  }
+  .canonical-command-card__command-viewport > pre {
     min-width: 0;
     margin: 0;
-    font: inherit;
+    font: var(--cpx-sys-type-code);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    max-height: calc(var(--cpx-sys-line-height-code) * 2);
+    overflow: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .canonical-command-card__command-viewport > pre[data-expanded='true'] {
+    max-height: calc(var(--cpx-sys-line-height-code) * 10);
+    overflow-y: auto;
+  }
+  .canonical-command-card__command-viewport > pre[data-expanded='true']:hover {
+    scrollbar-color: var(--cpx-sys-color-border-strong) transparent;
+  }
+
+  /* 折叠入口对齐命令正文，不占用右侧复制按钮位置。 */
+  .canonical-command-card__command-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cpx-sys-space-1);
+    margin: 0 var(--cpx-sys-space-2) var(--cpx-sys-space-2) calc(var(--cpx-sys-space-2) + 2ch);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--cpx-sys-color-fg-tertiary);
+    font: var(--cpx-sys-type-caption);
+    cursor: pointer;
+  }
+  .canonical-command-card__command-toggle:hover {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+  .canonical-command-card__command-toggle:focus-visible {
+    outline: 1px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+    border-radius: var(--cpx-sys-radius-control);
+  }
+  .canonical-command-card__chevron {
+    transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
+  }
+  .canonical-command-card__chevron.is-expanded {
+    transform: rotate(180deg);
   }
   .canonical-command-shell__prompt {
     color: var(--cpx-sys-color-fg-tertiary);

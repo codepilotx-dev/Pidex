@@ -798,6 +798,29 @@ describe('canonical tool item display', () => {
     expect(markup).not.toContain('lucide-chevron')
   })
 
+  test('renders the command viewport with a collapsed two-line limit by default', () => {
+    const command = ['bun -e \'const fs=require("fs")\';', 'second line', 'third line'].join(
+      String.fromCharCode(10),
+    )
+    const item = toolItem({ command })
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ToolExecutionCard item={item} view={buildToolItemDisplay(item)} />
+      </TooltipProvider>,
+    )
+
+    expect(markup).toContain('canonical-command-card__command-viewport')
+    // 命令正文与 $ 提示符同处一个滚动视口，收起态不展开。
+    expect(markup).toContain('data-expanded="false"')
+    expect(markup).toContain('aria-label="执行内容"')
+    expect(markup).toContain('third line')
+    // 测试环境没有布局，收起态不渲染实测得出的折叠按钮。
+    expect(markup).not.toContain('canonical-command-card__command-toggle')
+    // 结果区不提供折叠入口。
+    const output = markup.slice(markup.indexOf('aria-label="返回结果"'))
+    expect(output).not.toContain('canonical-command-card__command-toggle')
+  })
+
   test('keeps ordinary code blocks on a standalone surface', () => {
     const markup = renderToStaticMarkup(
       <TooltipProvider>
