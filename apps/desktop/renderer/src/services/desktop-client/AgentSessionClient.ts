@@ -974,6 +974,18 @@ export function createAgentSessionDesktopClient(
     latestLifecycleBySessionId.delete(sessionId)
   }
 
+  /**
+   * Drops every remembered lifecycle status. A subscription that just (re)connected
+   * resumes at the live position, so any lifecycle event published inside that gap
+   * is lost while what this client remembers survives. A remembered terminal status
+   * would then win against every later catalog read for that thread and pin its row
+   * to the finished turn. After a reconnect the persisted catalog is the authority.
+   */
+  function resetSessionLifecycles(): void {
+    lifecycleEpochBySessionId.clear()
+    latestLifecycleBySessionId.clear()
+  }
+
   async function listAgentSessions(options?: {
     archived?: boolean
   }): Promise<DesktopSessionSnapshot[]> {
@@ -1111,6 +1123,9 @@ export function createAgentSessionDesktopClient(
 
   function reconcileAgentSessionStore(): Promise<void> {
     if (sessionStoreReconcile) return sessionStoreReconcile
+    // The subscription that drives this reconcile just started at its live
+    // position, so the lifecycle memory may be missing events from the gap.
+    resetSessionLifecycles()
     providerCredentialsCache = null
     invalidateModelCatalog()
     notifyModelProviderChanged()
