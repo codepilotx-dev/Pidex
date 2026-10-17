@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { DesktopWorkspace } from '../shared/Types.js'
 import { ComposerCard } from '../src/features/session/composer/ComposerCard.js'
+import { ContextUsagePanel } from '../src/features/session/composer/ContextUsagePanel.js'
 import {
   resolveThinkingLabel,
   resolveThinkingOptions,
@@ -60,6 +61,72 @@ function composerCardProps(overrides: Partial<ComposerCardProps> = {}): Composer
 }
 
 describe('composer surface variant', () => {
+  test('没有上下文统计时不渲染用量圆环与空面板', () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard {...composerCardProps({ showContextUsage: true })} />,
+    )
+    expect(html).not.toContain('aria-label="上下文窗口使用量')
+    expect(html).not.toContain('chip-dot')
+    expect(html).not.toContain('暂无上下文统计')
+    expect(renderToStaticMarkup(<ContextUsagePanel contextUsage={null} />)).toBe('')
+  })
+
+  test('有上下文统计时圆环标注已用与剩余比例', () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          showContextUsage: true,
+          contextUsage: { usedTokens: 12_000, contextWindow: 200_000, usedPercent: 6 },
+        })}
+      />,
+    )
+    expect(html).toContain('已用 6%，剩余 94%')
+  })
+
+  test('缓存明细渲染为标签 + 数值 chip 的等宽条目', () => {
+    const html = renderToStaticMarkup(
+      <ContextUsagePanel
+        contextUsage={{
+          usedTokens: 135_168,
+          contextWindow: 1_000_000,
+          usedPercent: 13.5,
+          promptCacheReadTokens: 131_072,
+          promptCacheWriteTokens: 0,
+          promptUncachedTokens: 597,
+        }}
+      />,
+    )
+    expect(html.split('context-usage-panel-detail-item').length - 1).toBe(3)
+    expect(html.split('context-usage-panel-detail-chip').length - 1).toBe(3)
+    expect(html).toContain('tw:grid-cols-3')
+    expect(html).toContain('tw:justify-center')
+    expect(html).toContain('131.1K')
+    expect(html).toContain('未缓存')
+    expect(html).toContain('597')
+    expect(html).not.toContain('缓存 读')
+    expect(html).not.toContain(' · ')
+  })
+
+  test('存在推理明细时改为 2×2 等宽条目', () => {
+    const html = renderToStaticMarkup(
+      <ContextUsagePanel
+        contextUsage={{
+          usedTokens: 135_168,
+          contextWindow: 1_000_000,
+          usedPercent: 13.5,
+          promptCacheReadTokens: 131_072,
+          promptCacheWriteTokens: 0,
+          promptUncachedTokens: 597,
+          reasoningTokens: 12_288,
+        }}
+      />,
+    )
+    expect(html.split('context-usage-panel-detail-item').length - 1).toBe(4)
+    expect(html.split('context-usage-panel-detail-chip').length - 1).toBe(4)
+    expect(html).toContain('tw:grid-cols-2')
+    expect(html).toContain('推理')
+  })
+
   test('Plan 仅开启后显示可退出标记，子 Agent 不展示', () => {
     const render = (planModeActive: boolean, subagentMode = false) =>
       renderToStaticMarkup(

@@ -224,10 +224,16 @@ try {
       ;(window as any).__entry = value
       if (value.includes('icons=1')) {
         ;(window as any).DesktopBridge = {
-          resolveProviderIcon: async () => ({ source: null }),
+          resolveProviderIcon: async (input: any) => ({ source: input.url || null }),
+          onProviderIconChange: () => () => {},
           setProviderWebsiteIcon: async () => {
             if ((window as any).__iconFailure) throw new Error("No handler registered for 'desktop-provider-icon:website'")
             return { source: null }
+          },
+          setProviderUploadedIcon: async (input: any) => {
+            ;(window as any).__uploadedIcons = [...((window as any).__uploadedIcons ?? []), input]
+            if ((window as any).__iconUploadFailure) throw new Error("No handler registered for 'desktop-provider-icon:upload'")
+            return { source: input.dataURL }
           },
         }
       }
@@ -246,12 +252,61 @@ try {
 
   const iconsPage = await mount('/providers?provider=mixed&controller=1&icons=1', false)
   await iconsPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  await expect(iconsPage.getByText('图标单独保存并立即生效，仅访问公网 HTTPS 网站。')).toHaveCount(0)
   await iconsPage.getByRole('button', { name: '从网站获取', exact: true }).click()
   await expect.poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1))).toBe('网站图标已保存')
   await iconsPage.evaluate(() => { (window as any).__iconFailure = true })
   await iconsPage.getByRole('button', { name: '从网站获取', exact: true }).click()
   await expect.poll(() => iconsPage.evaluate(() => (window as any).__noticeErrors?.at(-1))).toContain('完全退出并重新启动 Pidex')
   await iconsPage.evaluate(() => { (window as any).__iconFailure = false })
+  const iconFile = {
+    name: 'provider-logo.png',
+    mimeType: 'image/png',
+    buffer: Buffer.from(
+      'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
+      'base64',
+    ),
+  }
+  await iconsPage.locator('input[type="file"]').setInputFiles(iconFile)
+  await expect.poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1))).toBe('图标已更新')
+  const uploadedIcon = await iconsPage.evaluate(() => (window as any).__uploadedIcons?.at(-1))
+  assert.equal(uploadedIcon.providerID, 'mixed')
+  assert.ok(uploadedIcon.dataURL.startsWith('data:image/png;base64,'))
+  await iconsPage.evaluate(() => { (window as any).__iconUploadFailure = true })
+  await iconsPage.locator('input[type="file"]').setInputFiles(iconFile)
+  await expect.poll(() => iconsPage.evaluate(() => (window as any).__noticeErrors?.at(-1))).toContain('完全退出并重新启动 Pidex')
+  await iconsPage.evaluate(() => { (window as any).__iconUploadFailure = false })
+  const uploadedCount = await iconsPage.evaluate(() => (window as any).__uploadedIcons.length)
+  await iconsPage.evaluate(() => new Promise<void>((resolve) => {
+    const canvas = document.createElement('canvas')
+    canvas.width = 600
+    canvas.height = 300
+    const context = canvas.getContext('2d')!
+    context.fillStyle = '#336699'
+    context.fillRect(0, 0, 600, 300)
+    canvas.toBlob((blob) => {
+      const transfer = new DataTransfer()
+      transfer.items.add(new File([blob!], 'large-logo.png', { type: 'image/png' }))
+      const input = document.querySelector<HTMLInputElement>('input[type="file"]')!
+      input.files = transfer.files
+      input.dispatchEvent(new Event('change', { bubbles: true }))
+      resolve()
+    }, 'image/png')
+  }))
+  await expect.poll(() => iconsPage.evaluate(() => (window as any).__uploadedIcons.length)).toBe(uploadedCount + 1)
+  const normalizedIcon = await iconsPage.evaluate(async () => {
+    const source = (window as any).__uploadedIcons.at(-1).dataURL
+    const image = new Image()
+    image.src = source
+    await image.decode()
+    return {
+      width: image.naturalWidth,
+      height: image.naturalHeight,
+      png: source.startsWith('data:image/png;base64,'),
+    }
+  })
+  // 上传的大图按最长边缩放到 256px，并保持宽高比。
+  assert.deepEqual(normalizedIcon, { width: 256, height: 128, png: true })
   await iconsPage.getByRole('button', { name: '恢复默认图标', exact: true }).click()
   await expect.poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1))).toBe('已恢复默认图标')
   await iconsPage.close()
@@ -763,10 +818,40 @@ try {
     await authPage.close()
   }
   if (process.argv.includes('--layout')) {
-    const layoutPage = await mount('/providers?provider=mixed&controller=1', false)
+    const layoutPage = await mount('/providers?provider=mixed&controller=1&icons=1', false)
     await layoutPage.addStyleTag({
       content: await layoutPage.evaluate(() => (window as any).__rendererCss),
     })
+    await layoutPage.getByRole('button', { name: '显示右侧边栏', exact: true }).evaluate((button) => (button as HTMLButtonElement).click())
+    await expect(layoutPage.getByRole('heading', { name: '供应商图标', exact: true })).toBeVisible()
+    const iconGeometry = await layoutPage
+      .locator('section[aria-label="供应商图标"]')
+      .evaluate((section) => {
+        const bounds = section.getBoundingClientRect()
+        const preview = section
+          .querySelector('.provider-icon-settings-preview')!
+          .getBoundingClientRect()
+        const input = section.querySelector('input:not([type="file"])')!.getBoundingClientRect()
+        return {
+          sectionRight: bounds.right,
+          previewWidth: preview.width,
+          previewRight: preview.right,
+          inputLeft: input.left,
+          inputRight: input.right,
+          inputWidth: input.width,
+        }
+      })
+    // 预览槽必须保持固定尺寸，不能把来源输入框顶出面板。
+    assert.ok(
+      iconGeometry.previewWidth > 0 && iconGeometry.previewWidth <= 48,
+      JSON.stringify(iconGeometry),
+    )
+    assert.ok(iconGeometry.inputLeft >= iconGeometry.previewRight, JSON.stringify(iconGeometry))
+    assert.ok(
+      iconGeometry.inputWidth > 100 && iconGeometry.inputRight <= iconGeometry.sectionRight + 1,
+      JSON.stringify(iconGeometry),
+    )
+    await layoutPage.getByRole('button', { name: '关闭供应商设置', exact: true }).click()
     const geometry = await layoutPage
       .locator('.model-center-model-row')
       .first()

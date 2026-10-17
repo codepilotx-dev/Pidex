@@ -7,14 +7,18 @@ import { ReasoningMenu } from './ReasoningMenu.js'
 import type { ThinkingOption } from './ThinkingLevelPopover.js'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 import { layoutTween, motionTransition } from '../../motion/MotionTransitions.js'
+import { splitComposerModelName } from './ComposerModelName.js'
 
 /*
  * Capsule trigger for the integrated model picker. The chevron follows the
  * capsule through the `group` utility so the hover hand-off does not need a
- * descendant selector.
+ * descendant selector. The capsule hugs its content with a 20rem cap, and the
+ * existing motion layout animates width changes when the selected model changes,
+ * so long names neither leave dead space nor snap the composer layout. Only
+ * names beyond the cap collapse the vendor prefix and truncate.
  */
 const CAPSULE_CLASS = cx(
-  'composer-model-trigger-capsule tw:group tw:inline-flex tw:h-7 tw:cursor-pointer tw:select-none tw:items-center tw:gap-1.5',
+  'composer-model-trigger-capsule tw:group tw:inline-flex tw:h-7 tw:min-w-0 tw:max-w-80 tw:cursor-pointer tw:select-none tw:items-center tw:gap-1.5',
   'tw:rounded-pill tw:pl-3 tw:pr-2 tw:text-app-text-soft',
   'tw:transition-[background-color,color] tw:duration-feedback tw:ease-standard',
   'tw:hover:bg-app-hover tw:hover:text-app-text',
@@ -22,12 +26,19 @@ const CAPSULE_CLASS = cx(
 const CAPSULE_IDLE_CLASS = 'tw:bg-transparent'
 const CAPSULE_ACTIVE_CLASS = 'tw:bg-app-hover tw:text-app-text'
 const NAME_BUTTON_CLASS = cx(
-  'composer-model-trigger-name-btn tw:inline-flex tw:cursor-pointer tw:items-center tw:border-0 tw:bg-transparent tw:p-0 tw:m-0',
+  'composer-model-trigger-name-btn tw:inline-flex tw:min-w-0 tw:cursor-pointer tw:items-center tw:border-0 tw:bg-transparent tw:p-0 tw:m-0',
   'tw:text-inherit tw:type-control tw:outline-none',
   'tw:focus-visible:rounded-xs tw:focus-visible:outline-solid tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus tw:focus-visible:outline-offset-2',
 )
-const NAME_CLASS = 'composer-model-trigger-name tw:max-w-40 tw:truncate tw:tracking-[-0.01em]'
-const EFFORT_WRAP_CLASS = 'composer-model-trigger-effort-wrap tw:inline-flex tw:items-center'
+const NAME_CLASS =
+  'composer-model-trigger-name tw:flex tw:min-w-0 tw:items-center tw:tracking-[-0.01em]'
+const NAME_PREFIX_CLASS =
+  'composer-model-trigger-name-prefix tw:min-w-0 tw:truncate tw:shrink-[999] tw:text-app-text-meta'
+const NAME_SEPARATOR_CLASS =
+  'composer-model-trigger-name-separator tw:shrink-0 tw:text-app-text-meta'
+const NAME_MODEL_CLASS = 'composer-model-trigger-name-model tw:min-w-0 tw:truncate'
+const EFFORT_WRAP_CLASS =
+  'composer-model-trigger-effort-wrap tw:inline-flex tw:shrink-0 tw:items-center'
 const EFFORT_BUTTON_CLASS = cx(
   'composer-model-trigger-effort-btn tw:inline-flex tw:cursor-pointer tw:items-center tw:rounded-indicator tw:border-0',
   'tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_5%,transparent)] tw:px-1.5 tw:py-px tw:text-app-text-soft tw:type-label',
@@ -36,7 +47,7 @@ const EFFORT_BUTTON_CLASS = cx(
   'tw:focus-visible:outline-solid tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus tw:focus-visible:outline-offset-1',
 )
 const CHEVRON_WRAP_CLASS =
-  'composer-model-trigger-chevron-wrap tw:inline-flex tw:cursor-pointer tw:items-center tw:justify-center tw:text-app-text-meta tw:group-hover:text-app-text'
+  'composer-model-trigger-chevron-wrap tw:inline-flex tw:shrink-0 tw:cursor-pointer tw:items-center tw:justify-center tw:text-app-text-meta tw:group-hover:text-app-text'
 const CHEVRON_CLASS =
   'composer-model-trigger-chevron tw:transition-transform tw:duration-state tw:ease-standard'
 const CHEVRON_OPEN_CLASS = 'tw:rotate-180 tw:text-app-text'
@@ -82,6 +93,7 @@ export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTr
     const transition = motionTransition(reducedMotion, layoutTween)
 
     const active = isOpen || effortMenuOpen
+    const { prefix, model } = splitComposerModelName(modelName)
 
     return (
       <motion.div
@@ -113,7 +125,15 @@ export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTr
             }
           }}
         >
-          <span className={NAME_CLASS}>{modelName}</span>
+          <span className={NAME_CLASS}>
+            {prefix ? (
+              <>
+                <span className={NAME_PREFIX_CLASS}>{prefix}</span>
+                <span className={NAME_SEPARATOR_CLASS}>/</span>
+              </>
+            ) : null}
+            <span className={NAME_MODEL_CLASS}>{model}</span>
+          </span>
         </motion.button>
 
         {showThinkingOptions && thinkingLabel && onThinkingChange ? (

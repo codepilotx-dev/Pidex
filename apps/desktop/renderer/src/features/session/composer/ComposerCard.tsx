@@ -276,6 +276,11 @@ const TOOLBAR_DIVIDER_CLASS =
 const COMPOSER_META_CHIP_HIDE_LABEL_CLASS = 'tw:@max-[475px]:[&_.meta-chip_span]:hidden'
 const COMPOSER_HIDE_DIVIDER_CLASS = 'tw:@max-[300px]:[&_.toolbar-divider]:hidden'
 const COMPOSER_HIDE_USAGE_CHIP_CLASS = 'tw:@max-[300px]:[&_.context-usage-chip]:hidden'
+
+/** 上下文用量圆环按 12px 槽位绘制；进度由描边虚线长度表达，避免低分辨率下的圆孔失真。 */
+const CONTEXT_RING_VIEWBOX = 12
+const CONTEXT_RING_RADIUS = 5
+const CONTEXT_RING_CIRCUMFERENCE = 2 * Math.PI * CONTEXT_RING_RADIUS
 const COMPOSER_HIDE_PLAN_CHIP_LABEL_CLASS =
   'tw:@max-[475px]:[&_.composer-plan-mode-chip>span:last-child]:hidden'
 
@@ -538,6 +543,10 @@ export function ComposerCard({
   const [openDropdown, setOpenDropdown] = useState<ComposerDropdown | null>(null)
   const [contextPreviewOpen, setContextPreviewOpen] = useState(false)
   const contextPreviewRef = useRef<HTMLDivElement>(null)
+  // 圆环在无统计或关闭展示时会卸载，同时丢弃预览状态，避免数据回来后浮层无故弹出。
+  useEffect(() => {
+    if (!showContextUsage || !contextUsage) setContextPreviewOpen(false)
+  }, [contextUsage, showContextUsage])
   const [fullAccessConfirmationOpen, setFullAccessConfirmationOpen] = useState(false)
   const [fullAccessSaving, setFullAccessSaving] = useState(false)
   const [fullAccessError, setFullAccessError] = useState('')
@@ -1184,7 +1193,7 @@ export function ComposerCard({
   }
 
   const isRunning = sessionStatus === 'running' || sessionStatus === 'waiting'
-  const usedPercent = contextUsage ? Math.min(100, Math.max(0, contextUsage.usedPercent)) : 0
+  const usedPercent = contextUsage ? Math.min(100, Math.max(0, contextUsage.usedPercent ?? 0)) : 0
   return (
     <div
       className={COMPOSER_STACK_CLASS}
@@ -1532,7 +1541,7 @@ export function ComposerCard({
               </Select.Trigger>
               <Select.Portal>
                 <Select.Content
-                  size="lg"
+                  size="md"
                   align="start"
                   className="popover-surface permission-select-content tw:max-h-[min(320px,calc(100vh_-_96px))] tw:overflow-hidden"
                   data-theme-component="dropdown-surface"
@@ -1540,7 +1549,7 @@ export function ComposerCard({
 
                   side="bottom"
                   sideOffset={4}
-                  style={buildPopoverSizingStyle({ size: 'lg' })}
+                  style={buildPopoverSizingStyle({ size: 'md' })}
                 >
                   <div className="permission-select-scroll-area tw:grid tw:max-h-[max(80px,calc(min(320px,calc(100vh-96px))-12px))] tw:overflow-x-hidden tw:overflow-y-auto">
                     <div className="permission-select-scroll-content tw:grid tw:min-w-0">
@@ -1733,11 +1742,11 @@ export function ComposerCard({
           </div>
 
           <div className={TOOLBAR_RIGHT_CLASS}>
-            {showContextUsage ? (
+            {showContextUsage && contextUsage ? (
               <Popover.Root open={contextPreviewOpen} onOpenChange={setContextPreviewOpen}>
                 <Popover.Anchor asChild>
                   <span
-                    aria-label={`上下文窗口使用量：${contextUsage ? `已用 ${usedPercent}%，剩余 ${100 - usedPercent}%` : '暂无数据'}`}
+                    aria-label={`上下文窗口使用量：已用 ${usedPercent}%，剩余 ${100 - usedPercent}%`}
                     className="context-usage-chip tw:group tw:relative tw:inline-flex tw:size-3 tw:shrink-0 tw:cursor-pointer tw:items-center tw:justify-center tw:text-app-text-soft"
                     role="button"
                     tabIndex={0}
@@ -1761,13 +1770,27 @@ export function ComposerCard({
                       setContextPreviewOpen(false)
                       setOpenDropdown('status')
                     }}
-                    style={
-                      {
-                        '--context-usage-progress': usedPercent,
-                      } as React.CSSProperties
-                    }
                   >
-                    <span className="chip-dot" />
+                    <svg
+                      aria-hidden="true"
+                      className="chip-dot"
+                      viewBox={`0 0 ${CONTEXT_RING_VIEWBOX} ${CONTEXT_RING_VIEWBOX}`}
+                    >
+                      <circle
+                        className="chip-dot-track"
+                        cx={CONTEXT_RING_VIEWBOX / 2}
+                        cy={CONTEXT_RING_VIEWBOX / 2}
+                        r={CONTEXT_RING_RADIUS}
+                      />
+                      <circle
+                        className="chip-dot-progress"
+                        cx={CONTEXT_RING_VIEWBOX / 2}
+                        cy={CONTEXT_RING_VIEWBOX / 2}
+                        r={CONTEXT_RING_RADIUS}
+                        strokeDasharray={`${(CONTEXT_RING_CIRCUMFERENCE * usedPercent) / 100} ${CONTEXT_RING_CIRCUMFERENCE}`}
+                        transform={`rotate(-90 ${CONTEXT_RING_VIEWBOX / 2} ${CONTEXT_RING_VIEWBOX / 2})`}
+                      />
+                    </svg>
                   </span>
                 </Popover.Anchor>
                 <Popover.Portal>
@@ -1791,18 +1814,13 @@ export function ComposerCard({
             ) : null}
             <ModelPickerPopover
               align="end"
-              deepSeekThinkingControls={modelVariantOptions ? false : deepSeekThinkingControls}
               open={openDropdown === 'model'}
               providerOptions={providerOptions}
               allProviders={allProviders}
               selectedModelPreset={selectedModelPreset}
               selectedProviderID={selectedProviderID}
-              showThinkingOptions={showThinkingOptions}
               side="top"
               sideOffset={4}
-              thinkingMode={modelVariant ?? thinkingMode}
-              thinkingPreviewMode={thinkingPreviewMode}
-              thinkingOptions={modelVariantOptions ?? thinkingOptions}
               trigger={
                 <ModelSelectTrigger
                   isOpen={openDropdown === 'model'}
@@ -1842,17 +1860,6 @@ export function ComposerCard({
               onProviderOpen={onProviderOpen}
               onProviderSearch={onProviderSearch}
               onOpenModelSettings={onOpenModelSettings}
-              onThinkingChange={(value) => {
-                if (onModelVariantChange) onModelVariantChange(value)
-                else if (
-                  value === 'default' ||
-                  value === 'enabled' ||
-                  value === 'adaptive' ||
-                  value === 'disabled'
-                )
-                  onThinkingChange(value)
-              }}
-              onThinkingPreviewChange={setThinkingPreviewMode}
             />
 
             <Button
@@ -2068,7 +2075,7 @@ export function ComposerCard({
                   currentBranchName={branchName}
                   open={openDropdown === 'branch'}
                   side="top"
-                  size="lg"
+                  size="md"
                   onBranchSearchChange={setBranchSearch}
                   onBranchSelect={onBranchSelect}
                   onCreateBranch={onCreateBranch}

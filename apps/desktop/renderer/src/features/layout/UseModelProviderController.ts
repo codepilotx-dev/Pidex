@@ -64,12 +64,17 @@ export function useModelProviderController({
         const models = isSelected
           ? (providerState?.models ?? provider.defaultModels)
           : provider.defaultModels
+        const modelMetadata =
+          isSelected && providerState?.modelMetadata
+            ? { ...provider.modelMetadata, ...providerState.modelMetadata }
+            : provider.modelMetadata
         return {
           providerID: provider.providerID,
           displayName: provider.displayName,
           modelPresets: buildModelPresets(models.filter((id) => !['embedding', 'rerank'].includes(provider.modelMetadata?.[id]?.modelType ?? 'chat'))),
           baseURL: provider.baseURL,
           logoURL: provider.logoURL,
+          modelMetadata,
         }
       })
   }, [modelProviders, providerState])

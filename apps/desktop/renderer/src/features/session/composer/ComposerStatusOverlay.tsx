@@ -140,9 +140,11 @@ export function ComposerStatusOverlay({
         </div>
 
         {/* Context Usage */}
-        <div className={SECTION_CLASS}>
-          <ContextUsagePanel contextUsage={contextUsage} />
-        </div>
+        {contextUsage ? (
+          <div className={SECTION_CLASS}>
+            <ContextUsagePanel contextUsage={contextUsage} />
+          </div>
+        ) : null}
 
         {/* Quota section */}
         {selectedProviderID ? (

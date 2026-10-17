@@ -17,15 +17,10 @@ type Props = {
 /**
  * 上下文容量面板：标题行 + 总量 + 进度条 + 来源分类行 + 平均缓存命中率。
  * Composer 圆环浮层与 /status 弹层共用，避免两处各画一套。
+ * 没有统计时保持空白，由调用方决定是否显示入口，不渲染占位文案。
  */
 export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
-  if (!contextUsage) {
-    return (
-      <div className="context-usage-panel-empty tw:text-app-text-meta tw:type-secondary">
-        暂无上下文统计
-      </div>
-    )
-  }
+  if (!contextUsage) return null
 
   const usedPercent = Math.min(100, Math.max(0, contextUsage.usedPercent ?? 0))
   // 轨道代表完整上下文窗口，着色部分只按实际用量铺开，段内再分来源。
@@ -34,7 +29,7 @@ export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
     usedPercent / 100,
   )
   const cacheHitRate = formatCacheHitRate(contextUsage.averageCacheHitRate)
-  const detail = contextUsageDetail(contextUsage)
+  const detailItems = contextUsageDetailItems(contextUsage)
   const totalLabel = `${formatCompactNumber(contextUsage.usedTokens)}/${formatCompactNumber(
     contextUsage.contextWindow,
   )} (${formatPercentValue(usedPercent / 100)})`
@@ -100,29 +95,50 @@ export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
           </span>
         </div>
       ) : null}
-      {detail ? (
-        <div className="context-usage-panel-detail tw:mt-2 tw:text-app-text-meta tw:type-caption">
-          {detail}
+      {detailItems.length > 0 ? (
+        <div
+          className={
+            detailItems.length > 3
+              ? 'context-usage-panel-detail tw:mt-2 tw:grid tw:grid-cols-2 tw:gap-2'
+              : 'context-usage-panel-detail tw:mt-2 tw:grid tw:grid-cols-3 tw:gap-2'
+          }
+        >
+          {detailItems.map((item) => (
+            <div
+              className="context-usage-panel-detail-item tw:flex tw:min-w-0 tw:items-center tw:justify-center tw:gap-1.5"
+              key={item.label}
+            >
+              <span className="tw:shrink-0 tw:text-app-text-meta tw:type-caption">{item.label}</span>
+              <span className="context-usage-panel-detail-chip tw:inline-flex tw:shrink-0 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-hover tw:px-2 tw:py-0.5 tw:text-app-text tw:type-caption tw:tabular-nums">
+                {item.value}
+              </span>
+            </div>
+          ))}
         </div>
       ) : null}
     </div>
   )
 }
 
-/** 缓存的读写明细：只在下发过缓存数据时出现，作为面板最下方的一行补充。 */
-function contextUsageDetail(contextUsage: DesktopContextUsage): string | null {
+type ContextUsageDetailItem = {
+  label: string
+  value: string
+}
+
+/** 缓存的读写明细：只在下发过缓存数据时出现，作为面板最下方的 chip 行。 */
+function contextUsageDetailItems(contextUsage: DesktopContextUsage): ContextUsageDetailItem[] {
   const cacheRead = contextUsage.promptCacheReadTokens ?? 0
   const cacheWrite = contextUsage.promptCacheWriteTokens ?? 0
   const uncached = contextUsage.promptUncachedTokens ?? 0
   const reasoning = contextUsage.reasoningTokens ?? 0
-  const parts: string[] = []
+  const items: ContextUsageDetailItem[] = []
   if (cacheRead + cacheWrite + uncached > 0) {
-    parts.push(
-      `缓存 读 ${formatCompactNumber(cacheRead)}`,
-      `写 ${formatCompactNumber(cacheWrite)}`,
-      `未缓存 ${formatCompactNumber(uncached)}`,
+    items.push(
+      { label: '读', value: formatCompactNumber(cacheRead) },
+      { label: '写', value: formatCompactNumber(cacheWrite) },
+      { label: '未缓存', value: formatCompactNumber(uncached) },
     )
   }
-  if (reasoning > 0) parts.push(`推理 ${formatCompactNumber(reasoning)}`)
-  return parts.length > 0 ? parts.join(' · ') : null
+  if (reasoning > 0) items.push({ label: '推理', value: formatCompactNumber(reasoning) })
+  return items
 }

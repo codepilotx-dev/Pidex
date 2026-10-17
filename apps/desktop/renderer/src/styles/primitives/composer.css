@@ -24,6 +24,9 @@
  * 7. The suggestion menu's scroll-mask fades: they are gradients selected by a
  *    `data-scroll-mask` attribute, and a `data-[...]` variant cannot carry an
  *    arbitrary `[mask-image:...]` property in this Tailwind build.
+ * 8. The model row name's overflow fade and scroll: the mask is a gradient
+ *    switched by the measured-overflow attribute and the scroll distance is a
+ *    runtime custom property, so neither can be a static utility.
  */
 @layer primitives {
   /* --- ProseMirror editor surface ------------------------------------- */
@@ -159,10 +162,42 @@
 
   .composer-model-name {
     font: var(--cpx-sys-type-control);
+    text-overflow: ellipsis;
   }
 
   .composer-model-row.is-selected .composer-model-name {
     font-weight: var(--cpx-sys-font-weight-bold);
+  }
+
+  /* Long names dissolve into the trailing mark slot instead of hitting a hard edge. */
+  .composer-model-name[data-overflowing='true'] {
+    mask-image: linear-gradient(to right, black calc(100% - var(--cpx-sys-space-4)), transparent);
+    text-overflow: clip;
+  }
+
+  .composer-model-name[data-overflowing='true'][data-scrolling='true'] {
+    mask-image: linear-gradient(
+      to right,
+      transparent,
+      black var(--cpx-sys-space-2),
+      black calc(100% - var(--cpx-sys-space-4)),
+      transparent
+    );
+  }
+
+  /* The measured overflow distance and duration are published by `OverflowTitle`. */
+  .composer-model-name-track[data-scrolling='true'] {
+    transform: translateX(calc(-1 * var(--composer-model-name-scroll-distance)));
+    transition: transform var(--composer-model-name-scroll-duration) var(--cpx-sys-ease-linear)
+      var(--cpx-sys-motion-micro);
+  }
+
+  @media (forced-colors: active) {
+    .composer-model-name[data-overflowing='true'],
+    .composer-model-name[data-overflowing='true'][data-scrolling='true'] {
+      mask-image: none;
+      text-overflow: ellipsis;
+    }
   }
 
   .context-usage-panel-total {

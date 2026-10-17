@@ -14,6 +14,9 @@ const PANEL_CONTENT = '.composer-model-panel-content'
 const RAIL_BUTTON = '.composer-provider-btn'
 const MODEL_ROW = '.composer-model-row'
 const MODEL_ROW_SELECTED = '.composer-model-row.is-selected'
+const MODEL_MARK = '.composer-model-row-mark'
+const MODEL_NAME = '.composer-model-name'
+const MODEL_NAME_TRACK = '.composer-model-name-track'
 const EFFORT_PILL = '.composer-effort-pill'
 const EFFORT_DROPDOWN = '.composer-effort-dropdown'
 const EFFORT_ITEM = '.composer-effort-item'
@@ -25,6 +28,14 @@ const SEARCH_INPUT = '.composer-search-input'
 const MODELS_TITLE = '.composer-models-title'
 const PROVIDER_LOGO = '.composer-provider-logo'
 const PROVIDER_LOGO_IMAGE = '.composer-provider-logo .ui-remote-image img'
+
+async function maskTransparentStopCount(locator: Locator): Promise<number> {
+  return locator.evaluate((element) => {
+    const style = getComputedStyle(element)
+    const mask = style.maskImage || style.webkitMaskImage
+    return mask.match(/rgba\(0, 0, 0, 0\)|transparent/g)?.length ?? 0
+  })
+}
 
 async function openModelPicker(
   page: Page,
@@ -160,6 +171,77 @@ test('model hub lists the provider directory, filters it, and returns to the mod
   await panel.locator(HUB_BACK).click()
   await expect(panel.locator(HUB_ROW)).toHaveCount(0)
   await expect(modelsTitle).toHaveText(initialTitle)
+})
+
+test('model selection is a check mark and a long name dissolves then scrolls on hover', async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 920 })
+  await prepareVisualTheme(page, 'dark', { reduceMotion: 'off' })
+
+  await page.goto(`${PICKER_FIXTURE}#/threads/visual-permission`)
+  // Clicking the trigger's name button toggles the panel, so this case drives
+  // the current capsule classes directly.
+  const trigger = page.locator('.composer-model-trigger-capsule:visible')
+  await waitForVisualPage(page, 'dark', trigger)
+  await trigger.locator('.composer-model-trigger-name-btn').click()
+  const panel = page.locator(PANEL)
+  await expect(panel).toBeVisible()
+
+  // Selection is a check in the trailing slot: only the selected row renders the
+  // slot at all, so unselected rows keep their full width for the name.
+  await expect(page.locator('.composer-model-dot')).toHaveCount(0)
+  await expect(page.locator(`${MODEL_ROW}:not(.is-selected) ${MODEL_MARK}`)).toHaveCount(0)
+  await expect(page.locator(`${MODEL_ROW} ${MODEL_MARK} svg`)).toHaveCount(1)
+  await expect(page.locator(`${MODEL_ROW_SELECTED} ${MODEL_MARK} svg`)).toHaveCount(1)
+
+  const row = panel.locator(MODEL_ROW_SELECTED)
+  const name = row.locator(MODEL_NAME)
+  const track = name.locator(MODEL_NAME_TRACK)
+
+  // The fixture label is short, so narrow the slot to the overflow state a real
+  // long model id reaches.
+  await page.addStyleTag({ content: `${MODEL_NAME} { width: 24px; flex: 0 0 24px; }` })
+  await page.mouse.move(1200, 40)
+  await expect(name).toHaveAttribute('data-overflowing', 'true')
+  await expect(name).not.toHaveAttribute('data-scrolling', 'true')
+
+  const resting = await name.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return {
+      clientWidth: element.clientWidth,
+      maskImage: style.maskImage || style.webkitMaskImage,
+      scrollWidth: element.scrollWidth,
+      transform: getComputedStyle(element.querySelector('.composer-model-name-track')!).transform,
+    }
+  })
+  expect(resting.scrollWidth).toBeGreaterThan(resting.clientWidth)
+  expect(resting.maskImage).toContain('linear-gradient')
+  expect(await maskTransparentStopCount(name)).toBe(1)
+  expect(resting.transform).toBe('none')
+
+  await row.hover()
+  await expect(name).toHaveAttribute('data-scrolling', 'true')
+  await expect
+    .poll(async () => track.evaluate((element) => getComputedStyle(element).transform))
+    .not.toBe('none')
+  const hovered = await name.evaluate((element) => {
+    const style = getComputedStyle(element)
+    return {
+      distance: Number.parseFloat(style.getPropertyValue('--composer-model-name-scroll-distance')),
+      duration: Number.parseFloat(style.getPropertyValue('--composer-model-name-scroll-duration')),
+      maskImage: style.maskImage || style.webkitMaskImage,
+    }
+  })
+  expect(hovered.maskImage).toContain('linear-gradient')
+  expect(await maskTransparentStopCount(name)).toBe(2)
+  expect(hovered.distance).toBe(resting.scrollWidth - resting.clientWidth)
+  expect(hovered.duration).toBeCloseTo(Math.max(4, hovered.distance / 20), 2)
+
+  await page.mouse.move(1200, 40)
+  await expect(name).not.toHaveAttribute('data-scrolling')
+  await expect(track).toHaveCSS('transform', 'none')
+  expect(await maskTransparentStopCount(name)).toBe(1)
 })
 
 test('model picker keeps a bounded trigger and stays inside a short viewport', async ({ page }) => {

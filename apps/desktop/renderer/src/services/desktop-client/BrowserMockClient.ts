@@ -241,10 +241,21 @@ export function createBrowserMockDesktopClient(
       ? {
           apiKeyConfigured: true,
           logoURL: '/favicon.png',
+          defaultModels: ['mock', 'workbuddy/deepseek-v4.1-flash'],
           modelMetadata: {
             mock: {
               id: 'mock',
               name: 'Browser Mock',
+              contextWindow: 1_048_576,
+              vision: true,
+              reasoning: true,
+              variants: ['low', 'medium', 'high'],
+            },
+            'workbuddy/deepseek-v4.1-flash': {
+              id: 'workbuddy/deepseek-v4.1-flash',
+              name: 'workbuddy/deepseek-v4.1-flash',
+              contextWindow: 1_048_576,
+              vision: true,
               reasoning: true,
               variants: ['low', 'medium', 'high'],
             },

@@ -3,26 +3,26 @@ import {
   APP_ICON_STROKE_WIDTH,
   APP_ICON_SIZE,
 } from '../../../components/ui/IconTokens.js'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Popover as Popover } from '../../../components/ui/floating/Popover.js'
-import { ChevronDown, ChevronLeft, Plus, Search, X } from 'lucide-react'
-import type { DesktopModelProviderSummary, ModelProviderID } from '../../../../shared/Types.js'
-import type { ModelPreset } from '../../../ModelPresets.js'
-import {
-  resolveThinkingLabel,
-  resolveThinkingOptions,
-  type ThinkingOption,
-} from './ThinkingLevelPopover.js'
+import { Brain, Check, ChevronLeft, Eye, Plus, Search, X } from 'lucide-react'
+import type { DesktopModelMetadata, DesktopModelProviderSummary, ModelProviderID } from '../../../../shared/Types.js'
+import { sortModelPresetsByName, type ModelPreset } from '../../../ModelPresets.js'
+import { modelCapabilityBadges } from './ModelCapabilitySummary.js'
+import { centeredScrollTop } from './CenterSelectedModel.js'
 import { cx } from '../../../utils/Cx.js'
 import { ProviderLogo } from './ProviderLogos.js'
 import { modelLogoURL } from '../../../services/desktop-client/ModelLogo.js'
-import { ReasoningMenu } from './ReasoningMenu.js'
+import { OverflowTitle } from '../../../components/ui/OverflowTitle.js'
+import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 
 /*
  * Integrated model picker. `.composer-model-name` and `.composer-reasoning-menu-*`
  * keep their font in `src/styles/primitives/composer.css` (the selected state
  * raises the weight, which cannot be a utility next to the `font` shorthand
- * roles), and the provider/model lists hide their scrollbar there too.
+ * roles), and the provider/model lists hide their scrollbar there too. The same
+ * file owns the model name's overflow fade and scroll rules, because the name is
+ * measured at runtime by `OverflowTitle`.
  */
 const PANEL_CONTENT_CLASS = 'composer-model-panel-content tw:overflow-hidden'
 const PANEL_CLASS =
@@ -108,7 +108,7 @@ const MODELS_LIST_CLASS =
 const HUB_LIST_CLASS =
   'composer-models-list composer-hub-list tw:flex tw:flex-1 tw:flex-col tw:gap-1.5 tw:overflow-y-auto tw:px-0.5'
 const MODEL_ROW_CLASS = cx(
-  'composer-model-row tw:group tw:flex tw:cursor-pointer tw:items-center tw:justify-between',
+  'composer-model-row tw:group tw:flex tw:min-h-8.5 tw:cursor-pointer tw:items-center tw:justify-between',
   'tw:rounded-control tw:px-3 tw:py-2',
   'tw:transition-colors tw:duration-feedback tw:ease-standard tw:hover:bg-app-hover',
 )
@@ -119,20 +119,16 @@ const MODEL_ROW_MAIN_CLASS =
 const MODEL_ROW_ICON_CLASS = 'composer-model-row-icon tw:size-icon-md tw:shrink-0 tw:text-app-text'
 const MODEL_ROW_TRAILING_CLASS =
   'composer-model-row-trailing tw:flex tw:shrink-0 tw:items-center tw:gap-2'
-const MODEL_DOT_CLASS = cx(
-  'composer-model-dot tw:flex tw:size-4.5 tw:shrink-0 tw:items-center tw:justify-center tw:rounded-full',
-  'tw:transition-colors tw:duration-feedback tw:ease-standard',
+const MODEL_MARK_CLASS = cx(
+  'composer-model-row-mark tw:flex tw:size-4.5 tw:shrink-0 tw:items-center tw:justify-center',
+  'tw:text-app-accent-fg',
 )
-const MODEL_DOT_IDLE_CLASS =
-  'tw:border-[1.5px] tw:border-app-border tw:group-hover:border-app-border-strong'
-const MODEL_DOT_SELECTED_CLASS = 'is-selected tw:bg-app-accent'
-const MODEL_DOT_INNER_CLASS =
-  'composer-model-dot-inner tw:size-1.5 tw:rounded-full tw:bg-app-on-accent'
-const EFFORT_PILL_CLASS = cx(
-  'composer-effort-pill tw:inline-flex tw:cursor-pointer tw:items-center tw:gap-1 tw:rounded-compact tw:border-0',
-  'tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_10%,transparent)] tw:px-2 tw:py-0.5 tw:text-app-text tw:type-label',
-  'tw:transition-colors tw:duration-feedback tw:ease-standard',
-  'tw:hover:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_16%,transparent)]',
+const CAPABILITIES_CLASS =
+  'composer-model-capabilities tw:hidden tw:shrink-0 tw:items-center tw:gap-1 tw:group-hover:flex'
+const CAPABILITY_CHIP_CLASS = cx(
+  'composer-model-capability tw:inline-flex tw:h-4.5 tw:shrink-0 tw:items-center tw:justify-center tw:gap-1',
+  'tw:rounded-indicator tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_9%,transparent)]',
+  'tw:px-1.5 tw:text-app-text-soft tw:type-label tw:tabular-nums',
 )
 const HUB_ROW_CLASS = cx(
   'composer-hub-row tw:flex tw:cursor-pointer tw:items-center tw:justify-between tw:gap-2.5',
@@ -172,6 +168,7 @@ export type ProviderModelOption = {
   displayName: string
   modelPresets: ModelPreset[]
   logoURL?: string
+  modelMetadata?: Record<string, DesktopModelMetadata>
 }
 
 export type ModelPickerPopoverProps = {
@@ -182,13 +179,6 @@ export type ModelPickerPopoverProps = {
   selectedModelPreset?: string
   providerOptions: ProviderModelOption[]
   allProviders?: readonly DesktopModelProviderSummary[]
-  deepSeekThinkingControls: boolean
-  showThinkingOptions: boolean
-  thinkingMode: string
-  thinkingPreviewMode?: string | null
-  thinkingOptions: ThinkingOption[]
-  onThinkingChange: (mode: string) => void
-  onThinkingPreviewChange?: (mode: string | null) => void
   onProviderModelChange: (providerID: ModelProviderID, modelID: string) => void
   onProviderOpen?: (providerID: ModelProviderID) => void
   onProviderSearch?: (providerID: ModelProviderID, query: string) => void
@@ -216,13 +206,6 @@ export function ModelPickerPopover({
   selectedModelPreset,
   providerOptions,
   allProviders,
-  deepSeekThinkingControls,
-  showThinkingOptions,
-  thinkingMode,
-  thinkingPreviewMode,
-  thinkingOptions,
-  onThinkingChange,
-  onThinkingPreviewChange,
   onProviderModelChange,
   onProviderOpen,
   onProviderSearch,
@@ -238,19 +221,15 @@ export function ModelPickerPopover({
   const [searchExpanded, setSearchExpanded] = useState(false)
   const [filterText, setFilterText] = useState('')
   const [hubFilterText, setHubFilterText] = useState('')
+  const [hoveredModelID, setHoveredModelID] = useState<string | null>(null)
+  const reducedMotion = usePrefersReducedMotion()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const hubSearchInputRef = useRef<HTMLInputElement>(null)
+  const modelsListRef = useRef<HTMLDivElement>(null)
+  const modelRowRefs = useRef(new Map<string, HTMLDivElement>())
+  const previousProviderIDRef = useRef<ModelProviderID | null>(null)
   const providerSearchTimersRef = useRef(new Map<ModelProviderID, ReturnType<typeof setTimeout>>())
   const lastForwardedQueryRef = useRef('')
-
-  const effectiveThinkingOptions = useMemo(
-    () => resolveThinkingOptions(deepSeekThinkingControls, thinkingOptions),
-    [deepSeekThinkingControls, thinkingOptions],
-  )
-  const currentThinkingLabel = resolveThinkingLabel(
-    effectiveThinkingOptions,
-    thinkingPreviewMode ?? thinkingMode,
-  )
 
   useEffect(() => {
     if (selectedProviderID) setActiveProviderID(selectedProviderID)
@@ -269,6 +248,7 @@ export function ModelPickerPopover({
       setSearchExpanded(false)
       setFilterText('')
       setHubFilterText('')
+      setHoveredModelID(null)
     }
   }, [open, activeProviderID, onProviderOpen, onProviderSearch])
 
@@ -297,12 +277,46 @@ export function ModelPickerPopover({
 
   const filteredModels = useMemo(() => {
     const query = filterText.trim().toLowerCase()
-    if (!query) return currentProvider.modelPresets
-    return currentProvider.modelPresets.filter(
-      (model) =>
-        model.label.toLowerCase().includes(query) || model.id.toLowerCase().includes(query),
-    )
+    const models = query
+      ? currentProvider.modelPresets.filter(
+          (model) =>
+            model.label.toLowerCase().includes(query) || model.id.toLowerCase().includes(query),
+        )
+      : currentProvider.modelPresets
+    // 选择器固定按模型名 A→Z 展示；搜索只缩小范围，不改变排序规则。
+    return sortModelPresetsByName(models)
   }, [currentProvider, filterText])
+
+  const currentProviderModelMetadata = useMemo(
+    () =>
+      currentProvider.modelMetadata ??
+      allProviders?.find((provider) => provider.providerID === activeProviderID)?.modelMetadata,
+    [activeProviderID, allProviders, currentProvider.modelMetadata],
+  )
+
+  // 打开面板（或切换服务商）时把选中模型滚到列表中间；搜索期间不抢滚动位置。
+  useLayoutEffect(() => {
+    const list = modelsListRef.current
+    const providerChanged = previousProviderIDRef.current !== activeProviderID
+    previousProviderIDRef.current = activeProviderID
+    if (!open || isHubOpen || !list) return
+    const row = selectedModelPreset ? modelRowRefs.current.get(selectedModelPreset) : undefined
+    if (filterText.trim()) return
+    if (!row) {
+      if (providerChanged) list.scrollTop = 0
+      return
+    }
+    const listRect = list.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    list.scrollTop = centeredScrollTop({
+      scrollTop: list.scrollTop,
+      scrollHeight: list.scrollHeight,
+      listTop: listRect.top,
+      listClientHeight: list.clientHeight,
+      rowTop: rowRect.top,
+      rowHeight: rowRect.height,
+    })
+  }, [open, isHubOpen, activeProviderID, selectedModelPreset, filterText, filteredModels])
 
   const hubProviders = useMemo<HubProviderItem[]>(() => {
     if (allProviders && allProviders.length > 0) {
@@ -613,14 +627,25 @@ export function ModelPickerPopover({
                     </div>
                   </div>
 
-                  <div className={MODELS_LIST_CLASS}>
+                  <div className={MODELS_LIST_CLASS} ref={modelsListRef}>
                     {filteredModels.length > 0 ? (
                       filteredModels.map((preset) => {
                         const isSelected = preset.id === selectedModelPreset
+                        const capabilityBadges = modelCapabilityBadges(
+                          currentProviderModelMetadata?.[preset.id],
+                        )
                         return (
                           <div
                             key={preset.id}
+                            ref={(element) => {
+                              if (element) modelRowRefs.current.set(preset.id, element)
+                              else modelRowRefs.current.delete(preset.id)
+                            }}
                             onClick={() => handleModelSelect(preset.id)}
+                            onMouseEnter={() => setHoveredModelID(preset.id)}
+                            onMouseLeave={() =>
+                              setHoveredModelID((current) => (current === preset.id ? null : current))
+                            }
                             className={cx(MODEL_ROW_CLASS, isSelected && MODEL_ROW_SELECTED_CLASS)}
                           >
                             <div className={MODEL_ROW_MAIN_CLASS}>
@@ -630,49 +655,65 @@ export function ModelPickerPopover({
                                   providerID={modelLogoURL(preset.id, preset.label) ? undefined : currentProvider.providerID}
                                 />
                               </span>
-                              <span className="composer-model-name tw:truncate tw:tracking-[-0.01em] tw:text-app-text">
+                              <OverflowTitle
+                                active={hoveredModelID === preset.id}
+                                reducedMotion={reducedMotion}
+                                variant="composer"
+                              >
                                 {preset.label || preset.id}
-                              </span>
+                              </OverflowTitle>
                             </div>
 
                             <div className={MODEL_ROW_TRAILING_CLASS}>
-                              {isSelected && showThinkingOptions ? (
-                                <ReasoningMenu
-                                  thinkingMode={thinkingMode}
-                                  thinkingPreviewMode={thinkingPreviewMode}
-                                  thinkingOptions={effectiveThinkingOptions}
-                                  onThinkingChange={onThinkingChange}
-                                  onThinkingPreviewChange={onThinkingPreviewChange}
-                                  side="top"
-                                  sideOffset={6}
-                                  align="end"
-                                  trigger={
-                                    <button
-                                      type="button"
-                                      onClick={(event) => event.stopPropagation()}
-                                      className={EFFORT_PILL_CLASS}
-                                      title="选择推理思考强度"
-                                      aria-label={`推理思考强度：${currentThinkingLabel}`}
-                                    >
-                                      <span>{currentThinkingLabel}</span>
-                                      <ChevronDown
-                                        size={APP_ICON_SIZES.sm}
-                                        strokeWidth={APP_ICON_STROKE_WIDTH}
-                                      />
-                                    </button>
-                                  }
-                                />
+                              {capabilityBadges.length > 0 ? (
+                                <div className={CAPABILITIES_CLASS}>
+                                  {capabilityBadges.map((badge) =>
+                                    badge.kind === 'context' ? (
+                                      <span
+                                        key={badge.kind}
+                                        className={CAPABILITY_CHIP_CLASS}
+                                        title={badge.title}
+                                      >
+                                        {badge.label}
+                                      </span>
+                                    ) : (
+                                      <span
+                                        key={badge.kind}
+                                        className={CAPABILITY_CHIP_CLASS}
+                                        role="img"
+                                        aria-label={badge.label}
+                                        title={badge.title}
+                                      >
+                                        {badge.kind === 'vision' ? (
+                                          <Eye
+                                            size={APP_ICON_SIZES.sm}
+                                            strokeWidth={APP_ICON_STROKE_WIDTH}
+                                          />
+                                        ) : (
+                                          <Brain
+                                            size={APP_ICON_SIZES.sm}
+                                            strokeWidth={APP_ICON_STROKE_WIDTH}
+                                          />
+                                        )}
+                                      </span>
+                                    ),
+                                  )}
+                                </div>
                               ) : null}
 
-                              <div
-                                aria-hidden="true"
-                                className={cx(
-                                  MODEL_DOT_CLASS,
-                                  isSelected ? MODEL_DOT_SELECTED_CLASS : MODEL_DOT_IDLE_CLASS,
-                                )}
-                              >
-                                {isSelected ? <div className={MODEL_DOT_INNER_CLASS} /> : null}
-                              </div>
+                              {isSelected ? (
+                                <span
+                                  aria-hidden="true"
+                                  className={cx(
+                                    MODEL_MARK_CLASS,
+                                    capabilityBadges.length > 0
+                                      ? 'tw:group-hover:hidden'
+                                      : undefined,
+                                  )}
+                                >
+                                  <Check size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                                </span>
+                              ) : null}
                             </div>
                           </div>
                         )
