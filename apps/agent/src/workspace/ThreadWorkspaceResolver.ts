@@ -60,7 +60,16 @@ export class ThreadWorkspaceResolver {
     threadID: string,
     descriptor: Parameters<TaskExecutionBindingService['resolve']>[1],
   ): TaskExecutionBinding {
-    if (this.bindings) return this.bindings.resolve(threadID, descriptor)
+    if (this.bindings) {
+      // 派生线程（子 Agent）没有自己的执行绑定，复用工作区归属线程的绑定，
+      // 让子 Agent 与父线程落在同一个 checkout（含托管 worktree）。
+      const ownerThreadID = this.db.threadWorkspaceOwner(threadID)
+      if (ownerThreadID && ownerThreadID !== threadID) {
+        const inherited = this.bindings.read(ownerThreadID)
+        if (inherited) return { ...inherited, threadId: threadID }
+      }
+      return this.bindings.resolve(threadID, descriptor)
+    }
     const cwd = resolve(descriptor.cwd)
     const digest = createHash('sha256')
       .update(`${threadID}\0${descriptor.kind}\0${cwd}`, 'utf8')

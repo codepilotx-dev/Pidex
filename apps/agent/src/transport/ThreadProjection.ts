@@ -445,12 +445,17 @@ export class ThreadProjection {
   private projectThreadRow(
     row: Record<string, string | number | null>,
     workspace: Thread['workspace'] | undefined,
+    /**
+     * 派生线程（子 Agent）没有自己的执行绑定，按工作区归属线程投影运行环境；
+     * 否则会退回描述符里的项目根目录，把父线程的托管 worktree 显示成主检出。
+     */
+    ownerThreadID = String(row.id),
   ): Thread {
     const threadId = String(row.id)
     const sessionGroupId = this.db.repositories.sessionGroups.membership(threadId)?.group_id ?? null
     const executionEnvironment = this.resolveExecutionEnvironment(
-      this.executionEnvironments([threadId]),
-      threadId,
+      this.executionEnvironments([ownerThreadID]),
+      ownerThreadID,
       workspace,
     )
     return {
@@ -490,7 +495,7 @@ export class ThreadProjection {
     const { creationSurface: columnExists } = probeThreadsStorageCapabilities(this.db.sqlite)
     const sql = `SELECT t.id, t.title, ${this.db.projectMembershipSql()} AS project_id, t.git_branch,
       ${columnExists ? 't.creation_surface' : 'NULL AS creation_surface'},
-      t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer,
+      t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.parent_thread_id,
       t.archived_at, t.created_at, t.updated_at, ${THREAD_ORIGIN_PROJECTION_SQL}
       FROM threads AS t WHERE t.id = ?`
     const threadRow = this.db.sqlite.query(sql).get(threadId) as Record<
@@ -498,7 +503,14 @@ export class ThreadProjection {
       string | number | null
     > | null
     if (!threadRow) return null
-    return this.projectThreadRow(threadRow, this.db.threadWorkspace(threadId) ?? undefined)
+    return this.projectThreadRow(
+      threadRow,
+      this.db.threadWorkspace(threadId) ?? undefined,
+      // 只有派生线程需要多一次上溯查询，主线程沿用自身 id。
+      threadRow.parent_thread_id == null
+        ? threadId
+        : (this.db.threadWorkspaceOwner(threadId) ?? threadId),
+    )
   }
 
   private projectInput(row: Record<string, string | number | null>): Input {

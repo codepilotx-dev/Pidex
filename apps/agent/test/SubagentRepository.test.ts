@@ -72,6 +72,45 @@ describe('子 Agent 持久化与调度', () => {
     db.close()
   })
 
+  test('项目会话中的子 Agent 不持有工作区描述符，按父线程解析工作区', () => {
+    const path = join(tmpdir(), `pidex-subagent-workspace-${crypto.randomUUID()}.sqlite`)
+    paths.push(path)
+    const db = new AgentDatabase(path)
+    const project = db.createProject({ rootPath: join(tmpdir(), 'pidex-subagent-project') })
+    const thread = db.createThread('项目会话', project.id)
+    const root = db.createTurn(thread.id, {
+      content: 'root',
+      model,
+      permissionConfig: permission,
+      strategy: 'queue',
+      taskMode: 'chat',
+    })
+    const created = new SubagentRepository(db).create({
+      parentThreadID: thread.id,
+      parentTurnID: root.turnID,
+      parentAgentID: root.agentID,
+      displayName: 'Explorer 1',
+      profile: 'explorer',
+      task: '审计实现',
+      model,
+      permissionCeiling: permission,
+      workspaceMode: 'shared',
+      workspaceRoot: 'C:\\workspace',
+    })
+
+    const childThreadID = created.task.childThreadId
+    expect(db.threadWorkspaceOwner(childThreadID)).toBe(thread.id)
+    expect(db.threadWorkspace(childThreadID)).toEqual(db.threadWorkspace(thread.id))
+    expect(new ThreadProjection(db).list().map((item) => item.id)).toEqual([thread.id])
+    // 自己持有描述符的派生线程（例如子 Agent 的分叉）优先用自己的，不回退到父线程。
+    const forked = db.createThread('子 Agent 分叉', project.id)
+    db.sqlite
+      .query('UPDATE threads SET parent_thread_id = ? WHERE id = ?')
+      .run(childThreadID, forked.id)
+    expect(db.threadWorkspaceOwner(forked.id)).toBe(forked.id)
+    db.close()
+  })
+
   test('同一根 Agent 最多 claim 四个子任务并持久化队列原因，删除父 Thread 级联清理', () => {
     const path = join(tmpdir(), `pidex-subagent-limit-${crypto.randomUUID()}.sqlite`)
     paths.push(path)

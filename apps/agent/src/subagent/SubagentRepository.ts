@@ -68,18 +68,20 @@ export class SubagentRepository {
         : input.permissionCeiling
     return this.db.transaction(() => {
       const parent = this.db.sqlite
-        .query('SELECT project_id FROM threads WHERE id = ?')
-        .get(input.parentThreadID) as { project_id: string | null } | null
+        .query('SELECT id FROM threads WHERE id = ?')
+        .get(input.parentThreadID) as { id: string } | null
       if (!parent) throw new Error(`Parent thread ${input.parentThreadID} 不存在`)
+      // 子 Agent 不持有自己的工作区描述符：工作区与执行绑定按父线程解析
+      // （见 WorkspaceRepository.threadWorkspace）。写入 project_id 会与
+      // threads_workspace_insert_valid 的 legacy 描述符约束冲突并中止整批创建。
       this.db.sqlite
         .query(
-          `INSERT INTO threads (id, title, kind, parent_thread_id, project_id, task_mode, sandbox_mode, approval_policy, approvals_reviewer, created_at, updated_at) VALUES (?, ?, 'subagent', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO threads (id, title, kind, parent_thread_id, task_mode, sandbox_mode, approval_policy, approvals_reviewer, created_at, updated_at) VALUES (?, ?, 'subagent', ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           childThreadID,
           input.displayName,
           input.parentThreadID,
-          parent.project_id,
           input.taskMode ?? 'chat',
           permission.sandboxMode,
           encodeApprovalPolicy(permission.approvalPolicy),

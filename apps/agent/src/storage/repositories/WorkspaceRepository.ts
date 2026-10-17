@@ -26,6 +26,17 @@ export type StoredThreadWorkspace =
       outputDirectory: string
     }
 
+type ThreadWorkspaceRow = {
+  project_id: string | null
+  workspace_kind: string
+  workspace_root: string | null
+  workspace_cwd: string | null
+  workspace_roots: string | null
+  instruction_sources: string | null
+  output_directory: string | null
+  parent_thread_id: string | null
+}
+
 export type CreateThreadInput = {
   id?: string
   title?: string | undefined
@@ -90,25 +101,47 @@ export abstract class WorkspaceRepositoryDatabase extends ProjectRepositoryDatab
     return this.projectMembership(threadID)
   }
 
-  threadWorkspace(threadID: string): StoredThreadWorkspace | null {
-    const row = this.sqlite
+  /**
+   * 派生线程（子 Agent）不持有自己的工作区描述符，只写 `parent_thread_id`
+   * （见 `SubagentRepository.create`），因此工作区沿父线程链上溯解析。
+   * 只有 legacy 行继续上溯：描述符非法的行不能被当成「没有描述符」跳到父线程。
+   */
+  private resolveWorkspaceRow(
+    threadID: string,
+  ): { ownerID: string; row: ThreadWorkspaceRow } | null {
+    let candidate: string | null = threadID
+    while (candidate) {
+      const row = this.threadWorkspaceRow(candidate)
+      if (!row) return null
+      if (row.workspace_kind !== 'legacy') return { ownerID: candidate, row }
+      candidate = row.parent_thread_id
+    }
+    return null
+  }
+
+  private threadWorkspaceRow(threadID: string): ThreadWorkspaceRow | null {
+    return this.sqlite
       .query(
         `
         SELECT project_id, workspace_kind, workspace_root, workspace_cwd,
-          workspace_roots, instruction_sources, output_directory
+          workspace_roots, instruction_sources, output_directory, parent_thread_id
         FROM threads WHERE id = ?
       `,
       )
-      .get(threadID) as {
-      project_id: string | null
-      workspace_kind: string
-      workspace_root: string | null
-      workspace_cwd: string | null
-      workspace_roots: string | null
-      instruction_sources: string | null
-      output_directory: string | null
-    } | null
-    if (!row || row.workspace_kind === 'legacy') return null
+      .get(threadID) as ThreadWorkspaceRow | null
+  }
+
+  threadWorkspace(threadID: string): StoredThreadWorkspace | null {
+    const resolved = this.resolveWorkspaceRow(threadID)
+    return resolved ? this.mapThreadWorkspace(resolved.ownerID, resolved.row) : null
+  }
+
+  /** 持有工作区与执行绑定的线程：自身，或最近的持有描述符的祖先线程。 */
+  threadWorkspaceOwner(threadID: string): string | null {
+    return this.resolveWorkspaceRow(threadID)?.ownerID ?? null
+  }
+
+  private mapThreadWorkspace(threadID: string, row: ThreadWorkspaceRow): StoredThreadWorkspace {
     if (row.workspace_kind === 'project' && row.project_id) {
       const project = this.getProject(row.project_id)
       if (!project)

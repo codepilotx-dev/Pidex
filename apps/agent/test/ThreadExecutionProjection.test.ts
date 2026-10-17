@@ -2,12 +2,24 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { Model, Provider } from '@pidex/model-schema'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import { SessionGroupRepository } from '../src/storage/repositories/SessionGroupRepository'
+import { SubagentRepository } from '../src/subagent/SubagentRepository'
 import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { TaskExecutionBindingService } from '../src/worktree/TaskExecutionBindingService'
 import { WorktreeRepository } from '../src/worktree/WorktreeRepository'
 import { removeFixturePaths } from './FixtureCleanup'
+
+const model = Model.Ref.make({
+  providerID: Provider.ID.make('openai'),
+  id: Model.ID.make('fixture'),
+})
+const permission = {
+  sandboxMode: 'workspace-write',
+  approvalPolicy: 'on-request',
+  approvalsReviewer: 'user',
+} as const
 
 const paths: string[] = []
 afterEach(async () => removeFixturePaths(paths.splice(0)), 30_000)
@@ -134,6 +146,45 @@ describe('Thread execution environment projection', () => {
     const environment = projection.snapshot(thread.id)?.thread.executionEnvironment
     expect(environment).toEqual({ kind: 'local', cwd: projectCwd, revision: 1 })
     expect(listItem(db, thread.id)?.executionEnvironment).toEqual(environment)
+    db.close()
+  })
+
+  test('子 Agent child Thread 按工作区归属线程投影执行环境', async () => {
+    const { db, projection, root } = await fixture()
+    const project = db.createProject({ rootPath: join(root, 'project'), name: '测试项目' })
+    const thread = db.createThread('项目线程', project.id)
+    const worktreePath = join(root, 'worktree')
+    insertWorktree(db, { id: 'worktree:1', path: worktreePath, root })
+    bindWorktreeDirectly(db, thread.id, 'worktree:1', worktreePath)
+
+    const parentEnvironment = projection.snapshot(thread.id)?.thread.executionEnvironment
+    expect(parentEnvironment).toMatchObject({ kind: 'worktree', cwd: resolve(worktreePath) })
+
+    const turn = db.createTurn(thread.id, {
+      content: 'root',
+      model,
+      permissionConfig: permission,
+      strategy: 'queue',
+      taskMode: 'chat',
+    })
+    const child = new SubagentRepository(db).create({
+      parentThreadID: thread.id,
+      parentTurnID: turn.turnID,
+      parentAgentID: turn.agentID,
+      displayName: 'Explorer 1',
+      profile: 'explorer',
+      task: '审计实现',
+      model,
+      permissionCeiling: permission,
+      workspaceMode: 'shared',
+      workspaceRoot: worktreePath,
+    })
+
+    // 子 Agent 没有自己的绑定行：必须复用父线程的 worktree 绑定，
+    // 而不是退回描述符里的项目根目录。
+    expect(projection.snapshot(child.task.childThreadId)?.thread.executionEnvironment).toEqual(
+      parentEnvironment,
+    )
     db.close()
   })
 
