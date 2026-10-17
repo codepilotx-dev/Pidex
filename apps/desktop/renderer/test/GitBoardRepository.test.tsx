@@ -151,6 +151,34 @@ test('卡片只显示文件名、状态和单行提交作者，禁用旧服务�
   }
 })
 
+test('仓库分节复用共享折叠动画并默认展开', () => {
+  const hook = spyOn(boardContext, 'useGitBoard').mockReturnValue({
+    state: { quickProjectIds: ['board'], quickCollapsed: false, groups: [] },
+    selectedRefs: {},
+    supportsCommitRef: false,
+    refresh: () => {},
+    toggleQuickView: () => {},
+    selectBranch: () => {},
+  } as unknown as ReturnType<typeof boardContext.useGitBoard>)
+  try {
+    const html = renderToStaticMarkup(
+      <RepositoryColumn
+        project={project}
+        repository={{ result, commits: [commit] }}
+        onSelect={() => {}}
+        onBranchChange={() => {}}
+      />,
+    )
+    // 未提交改动与最近提交都使用共享的 grid-rows 折叠动画，而不是原生 details。
+    expect(html.match(/class="ui-disclosure-content /g)).toHaveLength(2)
+    expect(html.match(/data-expanded="true"/g)).toHaveLength(2)
+    expect(html.match(/aria-expanded="true"/g)).toHaveLength(2)
+    expect(html).not.toContain('<details')
+  } finally {
+    hook.mockRestore()
+  }
+})
+
 test('右侧只刷新当前分组，左侧刷新全部项目，空分组不请求仓库', () => {
   const other = { ...project, projectId: 'other' }
   expect(gitBoardRefreshTargets([project, other]).map((item) => item.projectId)).toEqual([

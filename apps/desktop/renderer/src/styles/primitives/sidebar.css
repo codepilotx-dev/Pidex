@@ -48,6 +48,13 @@
     );
   }
 
+  /* The measured overflow distance and duration are published by `OverflowTitle`. */
+  .sidebar-session-title-track[data-scrolling='true'] {
+    transform: translateX(calc(-1 * var(--sidebar-title-scroll-distance)));
+    transition: transform var(--sidebar-title-scroll-duration) var(--cpx-sys-ease-linear)
+      var(--cpx-sys-motion-micro);
+  }
+
   @media (forced-colors: active) {
     .sidebar-session-title[data-overflowing='true'],
     .sidebar-session-title[data-overflowing='true'][data-scrolling='true'] {

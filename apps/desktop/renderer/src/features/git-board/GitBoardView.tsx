@@ -1,4 +1,4 @@
-import { lazy, Suspense, useRef, useState } from 'react'
+import { lazy, Suspense, useRef, useState, type ReactNode } from 'react'
 import { ChevronDown, GitBranch, RefreshCw } from 'lucide-react'
 import type {
   DesktopGitFileChange,
@@ -8,10 +8,12 @@ import type {
 import { Tooltip } from '../../components/ui/Tooltip.js'
 import { Select } from '../../components/ui/Select.js'
 import { OverflowTitle } from '../../components/ui/OverflowTitle.js'
+import { DisclosureController } from '../../components/ui/DisclosureController.js'
 import { useScrollEdgeState } from '../../hooks/UseScrollEdgeState.js'
 import { usePrefersReducedMotion } from '../../hooks/UsePrefersReducedMotion.js'
 import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { Button } from '../../components/ui/Button.js'
+import { cx } from '../../utils/Cx.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
 import { FileTypeIcon } from '../layout/FileTypeIcon.js'
 import { SidebarRow } from '../layout/sidebar/SidebarRow.js'
@@ -58,20 +60,35 @@ function SectionSummary({
   count,
   diffStats,
   showDiff = false,
+  expanded,
+  contentId,
+  onToggle,
 }: {
   title: string
   count: number
   diffStats?: GitBoardRepository['diffStats']
   showDiff?: boolean
+  expanded: boolean
+  contentId: string
+  onToggle: () => void
 }) {
   const { t } = useLocale()
   return (
-    <summary className="tw:flex tw:min-h-[var(--sidebar-row-height,30px)] tw:cursor-pointer tw:list-none tw:items-center tw:gap-2 tw:rounded-md tw:px-2 tw:select-none tw:type-body tw:text-app-text-meta tw:focus-visible:outline-app-focus tw:[&::-webkit-details-marker]:hidden">
+    <button
+      type="button"
+      aria-controls={contentId}
+      aria-expanded={expanded}
+      onClick={onToggle}
+      className="tw:flex tw:min-h-[var(--sidebar-row-height,30px)] tw:w-full tw:cursor-pointer tw:items-center tw:gap-2 tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0 tw:px-2 tw:select-none tw:text-left tw:type-body tw:text-app-text-meta tw:focus-visible:outline-app-focus"
+    >
       <span>{title}</span>
       <ChevronDown
         aria-hidden="true"
         size={14}
-        className="tw:shrink-0 tw:-rotate-90 tw:opacity-0 tw:group-hover:opacity-100 tw:group-focus-within:opacity-100 tw:group-open:rotate-0 tw:transition-[opacity,transform] tw:duration-feedback"
+        className={cx(
+          'tw:shrink-0 tw:opacity-0 tw:group-hover:opacity-100 tw:group-focus-within:opacity-100 tw:[transition:opacity_var(--cpx-sys-motion-feedback)_var(--cpx-sys-ease-out),transform_var(--cpx-sys-motion-disclosure)_var(--cpx-sys-ease-disclosure)]',
+          expanded ? 'tw:rotate-0' : 'tw:-rotate-90',
+        )}
       />
       <span className="tw:ml-auto tw:inline-flex tw:shrink-0 tw:items-center tw:gap-2">
         {showDiff &&
@@ -89,7 +106,46 @@ function SectionSummary({
           ))}
         <CountChip count={count} />
       </span>
-    </summary>
+    </button>
+  )
+}
+
+function BoardSection({
+  title,
+  count,
+  diffStats,
+  showDiff,
+  className,
+  children,
+}: {
+  title: string
+  count: number
+  diffStats?: GitBoardRepository['diffStats']
+  showDiff?: boolean
+  className?: string
+  children: ReactNode
+}) {
+  return (
+    <section className={cx('tw:group', className)}>
+      <DisclosureController
+        defaultExpanded
+        renderTrigger={({ expanded, contentId, toggle }) => (
+          <h3 className="tw:m-0">
+            <SectionSummary
+              contentId={contentId}
+              count={count}
+              diffStats={diffStats}
+              expanded={expanded}
+              showDiff={showDiff}
+              title={title}
+              onToggle={toggle}
+            />
+          </h3>
+        )}
+      >
+        {children}
+      </DisclosureController>
+    </section>
   )
 }
 
@@ -225,14 +281,13 @@ export function RepositoryColumn({
           </div>
         ) : (
           <>
-            <details open className="tw:mb-4 tw:group">
-              <SectionSummary
-                title={t('未提交改动')}
-                count={result.status.files.length}
-                showDiff
-                diffStats={repository?.diffStats}
-              />
-
+            <BoardSection
+              className="tw:mb-4"
+              title={t('未提交改动')}
+              count={result.status.files.length}
+              showDiff
+              diffStats={repository?.diffStats}
+            >
               {result.status.clean && (
                 <p className="tw:py-3 tw:type-body-sm tw:text-app-text-meta">{t('工作区干净')}</p>
               )}
@@ -272,9 +327,8 @@ export function RepositoryColumn({
                   </button>
                 </SidebarRow>
               ))}
-            </details>
-            <details open className="tw:group">
-              <SectionSummary title={t('最近提交')} count={repository?.commits?.length ?? 0} />
+            </BoardSection>
+            <BoardSection title={t('最近提交')} count={repository?.commits?.length ?? 0}>
               {repository?.historyError ? (
                 <div role="alert">
                   <p>{t(repository.historyError)}</p>
@@ -297,7 +351,7 @@ export function RepositoryColumn({
                   />
                 ))
               )}
-            </details>
+            </BoardSection>
           </>
         )}
       </div>

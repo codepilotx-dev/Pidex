@@ -114,7 +114,7 @@ export function SessionGroupSwitcherPopover({
       selectedValue={value ?? '__none__'}
       side={side}
       trigger={trigger}
-      size="md"
+      size="sm"
       onOpenChange={onOpenChange}
       onSearchChange={setSearch}
       onSelect={async (option) => {

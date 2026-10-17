@@ -273,7 +273,7 @@ function SidebarProjectGroupComponent({
       <SidebarContextMenu
         actions={contextActions()}
         layout="grid"
-        size="md"
+        size="sm"
         trigger={
           <SidebarRow
             className={cx(
@@ -310,7 +310,7 @@ function SidebarProjectGroupComponent({
                     className="popover-sidebar-project popover-menu--grid"
                     open={menuOpen}
                     side="bottom"
-                    size="md"
+                    size="sm"
                     trigger={
                       <Button
                         isIconOnly

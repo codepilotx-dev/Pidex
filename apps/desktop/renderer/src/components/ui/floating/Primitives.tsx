@@ -91,9 +91,9 @@ export function Portal({ children, container, anchor }: PortalProps) {
   const [defaultHost] = useState(() =>
     typeof document === 'undefined'
       ? null
-      : (anchor ?? document.activeElement)?.closest<HTMLElement>(
+      : ((anchor ?? document.activeElement)?.closest<HTMLElement>(
           '[role="dialog"], [role="alertdialog"]',
-        ) ?? document.body,
+        ) ?? document.body),
   )
   const host = container ?? defaultHost
   if (!host) return null
@@ -240,20 +240,35 @@ export function useFocusReturn(
 ) {
   const closeHandler = useRef(onCloseAutoFocus)
   closeHandler.current = onCloseAutoFocus
+  // StrictMode 探针会在首次挂载后立即清理再重挂副作用。关闭回调一旦同步执行，
+  // 恢复的焦点会落在浮层外，把刚打开的菜单当成外部焦点关掉；因此把恢复推迟到
+  // 微任务，并允许紧随其后的重挂载取消它。
+  const cancelPendingRestore = useRef<(() => void) | null>(null)
   useLayoutEffect(() => {
     if (!open) return
+    cancelPendingRestore.current?.()
+    cancelPendingRestore.current = null
     const previous = document.activeElement as HTMLElement | null
     const content = contentRef.current
     return () => {
-      const event = new Event('floating.closeAutoFocus', { cancelable: true })
-      closeHandler.current?.(event)
-      if (event.defaultPrevented) return
-      if (document.activeElement === document.body || content?.contains(document.activeElement)) {
+      const restore =
+        document.activeElement === document.body ||
+        Boolean(content?.contains(document.activeElement))
+      let cancelled = false
+      cancelPendingRestore.current = () => {
+        cancelled = true
+      }
+      queueMicrotask(() => {
+        if (cancelled) return
+        cancelPendingRestore.current = null
+        const event = new Event('floating.closeAutoFocus', { cancelable: true })
+        closeHandler.current?.(event)
+        if (event.defaultPrevented || !restore) return
         const anchor = targetRef?.current
         const target =
           anchor && (anchor.tabIndex >= 0 || anchor.hasAttribute('tabindex')) ? anchor : previous
         if (target?.isConnected) target.focus()
-      }
+      })
     }
   }, [open, contentRef, targetRef])
 }
