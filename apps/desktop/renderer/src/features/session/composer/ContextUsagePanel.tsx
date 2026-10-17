@@ -3,6 +3,7 @@ import type { DesktopContextUsage } from '../../../../shared/Types.js'
 import { formatCompactNumber } from '../../../utils/UsageFormatters.js'
 import {
   CONTEXT_USAGE_BREAKDOWN_LABELS,
+  buildContextUsageBarSegments,
   buildContextUsageBreakdownSegments,
   contextUsageSegmentColor,
   formatCacheHitRate,
@@ -27,7 +28,11 @@ export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
   }
 
   const usedPercent = Math.min(100, Math.max(0, contextUsage.usedPercent ?? 0))
-  const segments = buildContextUsageBreakdownSegments(contextUsage.breakdown)
+  // 轨道代表完整上下文窗口，着色部分只按实际用量铺开，段内再分来源。
+  const segments = buildContextUsageBarSegments(
+    buildContextUsageBreakdownSegments(contextUsage.breakdown),
+    usedPercent / 100,
+  )
   const cacheHitRate = formatCacheHitRate(contextUsage.averageCacheHitRate)
   const detail = contextUsageDetail(contextUsage)
   const totalLabel = `${formatCompactNumber(contextUsage.usedTokens)}/${formatCompactNumber(
@@ -51,7 +56,7 @@ export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
               className="context-usage-panel-segment tw:h-full tw:shrink-0"
               key={segment.source}
               style={{
-                width: formatPercentValue(segment.percent),
+                width: formatPercentValue(segment.windowPercent),
                 background: contextUsageSegmentColor(index),
               }}
             />
@@ -79,26 +84,10 @@ export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
                 {CONTEXT_USAGE_BREAKDOWN_LABELS[segment.source]}
               </span>
               <span className="context-usage-panel-value tw:ml-auto tw:shrink-0 tw:text-right tw:text-app-text">
-                {formatPercentValue(segment.percent)}
+                {formatPercentValue(segment.windowPercent)}
               </span>
             </div>
           ))}
-        </div>
-      ) : null}
-      {contextUsage.budget ? (
-        <div className="tw:mt-2 tw:type-caption tw:text-app-text-meta">
-          <div>
-            自动压缩触发线：{formatCompactNumber(contextUsage.budget.triggerTokens)} · 目标：
-            {formatCompactNumber(contextUsage.budget.targetTokens)}
-          </div>
-          <div>
-            输出预留：{formatCompactNumber(contextUsage.budget.outputReserveTokens)} ·{' '}
-            {contextUsage.budget.source === 'measured' ? '实测用量' : '估算用量'}
-          </div>
-          {contextUsage.budget.triggerTokens <
-          Math.ceil(contextUsage.budget.contextWindowTokens * 0.8) ? (
-            <div>为模型输入上限、输出与安全余量提前压缩</div>
-          ) : null}
         </div>
       ) : null}
       {cacheHitRate ? (

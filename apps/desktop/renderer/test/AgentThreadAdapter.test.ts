@@ -1775,7 +1775,7 @@ describe('agent thread adapter', () => {
   })
 })
 
-test('Agent context budget replaces stale message usage without replacing historical cache rate', () => {
+test('Agent context budget replaces stale totals while preserving breakdown and cache details', () => {
   const budget = {
     contextWindowTokens: 200000,
     inputBudgetTokens: 131904,
@@ -1788,13 +1788,27 @@ test('Agent context budget replaces stale message usage without replacing histor
   }
   const usage = contextStateUsage(
     { budget, operation: null },
-    { usedTokens: 180000, averageCacheHitRate: 0.95 },
+    {
+      usedTokens: 180000,
+      averageCacheHitRate: 0.95,
+      breakdown: [{ source: 'messages', chars: 12000 }],
+      promptCacheReadTokens: 139400,
+      promptCacheWriteTokens: 0,
+      promptUncachedTokens: 3100,
+      reasoningTokens: 323,
+    },
   )
   expect(usage).toMatchObject({
     usedTokens: 42000,
     usedPercent: 21,
+    contextWindow: 200000,
+    remainingTokens: 158000,
     averageCacheHitRate: 0.95,
+    breakdown: [{ source: 'messages', chars: 12000 }],
+    promptCacheReadTokens: 139400,
+    promptCacheWriteTokens: 0,
+    promptUncachedTokens: 3100,
+    reasoningTokens: 323,
     budget,
   })
-  expect(usage?.promptCacheReadTokens).toBeUndefined()
 })

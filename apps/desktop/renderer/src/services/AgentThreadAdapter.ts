@@ -753,13 +753,7 @@ export function contextStateUsage(
   const budget = state.budget
   const usedPercent = Math.min(100, (budget.usedTokens / budget.contextWindowTokens) * 100)
   return {
-    ...(fallback
-      ? {
-          provider: fallback.provider,
-          model: fallback.model,
-          averageCacheHitRate: fallback.averageCacheHitRate,
-        }
-      : {}),
+    ...fallback,
     usedTokens: budget.usedTokens,
     contextWindow: budget.contextWindowTokens,
     remainingTokens: Math.max(0, budget.contextWindowTokens - budget.usedTokens),
