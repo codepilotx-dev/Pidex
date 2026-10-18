@@ -4,22 +4,64 @@ import { createProviderIconStore } from '../src/services/desktop-client/Provider
 
 const ICON_URL = 'https://models.dev/logos/openai.svg'
 const CACHED_SOURCE = 'data:image/svg+xml;base64,PHN2Zy8+'
+const MANUAL_SOURCE = 'data:image/png;base64,AAA='
 
 describe('供应商图标客户端缓存', () => {
-  test('提供商覆盖图标独立加载并响应获取与恢复默认', async () => {
+  test('提供商手动图标独立加载并响应获取与恢复默认', async () => {
     let publish: ((change: DesktopProviderIconChange) => void) | undefined
     const store = createProviderIconStore({
-      resolveProviderIcon: async ({ providerID }) => ({ source: providerID ? null : CACHED_SOURCE }),
+      resolveProviderIcon: async ({ url }) => (url ? { source: CACHED_SOURCE } : { source: null }),
       onProviderIconChange: (listener) => { publish = listener; return () => undefined },
     })
-    await store.load(ICON_URL)
-    await store.load('', 'relay')
-    publish?.({ url: '', providerID: 'relay', source: 'data:image/png;base64,AAA=' })
-    expect(store.getSource('provider:relay')).toBe('data:image/png;base64,AAA=')
-    expect(store.getSource(ICON_URL)).toBe(CACHED_SOURCE)
+    await store.loadProviderOverride('relay')
+    expect(store.getProviderOverride('relay')).toEqual({ source: null, resolved: true })
+
+    publish?.({ url: '', providerID: 'relay', source: MANUAL_SOURCE })
+    expect(store.getProviderOverride('relay')).toEqual({ source: MANUAL_SOURCE, resolved: true })
+
     publish?.({ url: '', providerID: 'relay', source: null })
-    expect(store.getSource('provider:relay')).toBeUndefined()
+    expect(store.getProviderOverride('relay')).toEqual({ source: null, resolved: true })
+  })
+
+  test('手动图标生效时不请求目录图标，恢复默认后才加载目录图标', async () => {
+    let publish: ((change: DesktopProviderIconChange) => void) | undefined
+    const calls: { url: string; providerID?: string }[] = []
+    const store = createProviderIconStore({
+      resolveProviderIcon: async (input) => {
+        calls.push(input)
+        if (!input.url) return { source: MANUAL_SOURCE, override: true }
+        if (store.getProviderOverride('relay').source) return { source: MANUAL_SOURCE, override: true }
+        return { source: CACHED_SOURCE }
+      },
+      onProviderIconChange: (listener) => { publish = listener; return () => undefined },
+    })
+
+    expect(await store.loadProviderOverride('relay')).toBe(true)
+    // 恢复默认前，目录地址不应被解析或缓存。
+    expect(calls).toEqual([{ url: '', providerID: 'relay' }])
+    expect(store.getSource(ICON_URL)).toBeUndefined()
+
+    publish?.({ url: '', providerID: 'relay', source: null })
+    await store.loadCatalogueIcon(ICON_URL, 'relay')
     expect(store.getSource(ICON_URL)).toBe(CACHED_SOURCE)
+    expect(calls.at(-1)).toEqual({ url: ICON_URL, providerID: 'relay' })
+  })
+
+  test('目录解析期间被设为手动图标时不污染地址缓存', async () => {
+    let release: ((resolution: { source: string | null; override?: boolean }) => void) | undefined
+    const store = createProviderIconStore({
+      resolveProviderIcon: async () =>
+        new Promise((resolve) => {
+          release = resolve
+        }),
+    })
+
+    const pending = store.loadCatalogueIcon(ICON_URL, 'relay')
+    release?.({ source: MANUAL_SOURCE, override: true })
+    await pending
+
+    expect(store.getSource(ICON_URL)).toBeUndefined()
+    expect(store.getProviderOverride('relay')).toEqual({ source: MANUAL_SOURCE, resolved: true })
   })
 
   test('同一地址只解析一次，重复读取直接命中缓存', async () => {
@@ -31,8 +73,8 @@ describe('供应商图标客户端缓存', () => {
       },
     })
 
-    await store.load(ICON_URL)
-    await store.load(ICON_URL)
+    await store.loadCatalogueIcon(ICON_URL)
+    await store.loadCatalogueIcon(ICON_URL)
 
     expect(calls).toEqual([ICON_URL])
     expect(store.getSource(ICON_URL)).toBe(CACHED_SOURCE)
@@ -52,7 +94,11 @@ describe('供应商图标客户端缓存', () => {
       },
     })
 
-    const pending = Promise.all([store.load(ICON_URL), store.load(ICON_URL), store.load(ICON_URL)])
+    const pending = Promise.all([
+      store.loadCatalogueIcon(ICON_URL),
+      store.loadCatalogueIcon(ICON_URL),
+      store.loadCatalogueIcon(ICON_URL),
+    ])
     release?.()
     await pending
 
@@ -74,7 +120,7 @@ describe('供应商图标客户端缓存', () => {
       notifications += 1
     })
 
-    await store.load(ICON_URL)
+    await store.loadCatalogueIcon(ICON_URL)
     expect(store.getSource(ICON_URL)).toBe('data:image/svg+xml;base64,b2xk')
 
     publish?.({ url: ICON_URL, source: CACHED_SOURCE })
@@ -94,7 +140,12 @@ describe('供应商图标客户端缓存', () => {
     })
 
     expect(store.getSource(ICON_URL)).toBeUndefined()
-    await store.load(ICON_URL)
+    await store.loadCatalogueIcon(ICON_URL)
     expect(store.getSource(ICON_URL)).toBeUndefined()
+  })
+
+  test('未解析的覆盖状态保持稳定引用，供 useSyncExternalStore 使用', () => {
+    const store = createProviderIconStore({ resolveProviderIcon: async () => ({ source: null }) })
+    expect(store.getProviderOverride('relay')).toBe(store.getProviderOverride('relay'))
   })
 })

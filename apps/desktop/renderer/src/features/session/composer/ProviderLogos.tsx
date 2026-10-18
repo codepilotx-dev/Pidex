@@ -9,8 +9,7 @@ import { useProviderIconSource } from '../../../services/desktop-client/Provider
  * Unknown brands retain the generic provider glyph.
  */
 export function ProviderLogo({ logoURL, providerID }: { logoURL?: string; providerID?: string }): React.ReactNode {
-  const source = useProviderIconSource(logoURL, providerID)
-  const override = useProviderIconSource(undefined, providerID)
+  const { source, override } = useProviderIconSource(logoURL, providerID)
   const [loadedSource, setLoadedSource] = useState<string>()
   const fallback = <Server aria-hidden="true" size={14} data-icon-kind="artwork" strokeWidth={2} />
 

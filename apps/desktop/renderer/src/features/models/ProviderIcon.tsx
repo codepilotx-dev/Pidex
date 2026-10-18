@@ -30,8 +30,7 @@ export function ProviderIcon({
   imageClassName,
   fallback,
 }: ProviderIconProps): React.ReactNode {
-  const source = useProviderIconSource(logoURL, providerID)
-  const override = useProviderIconSource(undefined, providerID)
+  const { source, override } = useProviderIconSource(logoURL, providerID)
   const placeholder = fallback ?? (
     <Server aria-hidden="true" size={14} data-icon-kind="artwork" strokeWidth={2} />
   )

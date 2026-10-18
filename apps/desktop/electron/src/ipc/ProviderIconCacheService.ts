@@ -100,7 +100,9 @@ export class ProviderIconCacheService {
     if (isRecord(input) && input.providerID !== undefined) {
       const providerID = requireProviderID(input.providerID)
       const override = await this.#readOverride(providerID)
-      if (override.source) return { source: override.source }
+      // 手动图标（网站获取或上传）优先且不进入目录地址缓存，因此不会被 5 小时
+      // 后台刷新替换；只有恢复默认后才会继续走下面的目录图标链路。
+      if (override.source) return { source: override.source, override: true }
       if (input.url === '') return { source: null }
     }
     const url = requireProviderIconURL(input)

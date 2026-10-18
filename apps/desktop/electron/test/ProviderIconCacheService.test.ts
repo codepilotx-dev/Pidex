@@ -84,10 +84,16 @@ describe('供应商图标缓存服务', () => {
     await expect(service.resolve(input)).resolves.toEqual({ source: null })
     await service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' })
     const restarted = new ProviderIconCacheService(dependencies)
-    await expect(restarted.resolve(input)).resolves.toEqual({ source: dataURL(UPDATED_SVG_BODY) })
+    await expect(restarted.resolve(input)).resolves.toEqual({
+      source: dataURL(UPDATED_SVG_BODY),
+      override: true,
+    })
     fail = true
     await expect(service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' })).rejects.toThrow()
-    await expect(service.resolve(input)).resolves.toEqual({ source: dataURL(UPDATED_SVG_BODY) })
+    await expect(service.resolve(input)).resolves.toEqual({
+      source: dataURL(UPDATED_SVG_BODY),
+      override: true,
+    })
     await service.setWebsiteIcon({ providerID: input.providerID })
     await expect(restarted.resolve(input)).resolves.toEqual({ source: null })
     await expect(service.resolve({ ...input, url: ICON_URL })).resolves.toEqual({ source: dataURL(SVG_BODY) })
@@ -109,12 +115,15 @@ describe('供应商图标缓存服务', () => {
     await expect(
       service.setUploadedIcon({ providerID: input.providerID, dataURL: source }),
     ).resolves.toEqual({ source })
-    await expect(service.resolve(input)).resolves.toEqual({ source })
+    await expect(service.resolve(input)).resolves.toEqual({ source, override: true })
     const restarted = new ProviderIconCacheService(dependencies)
-    await expect(restarted.resolve(input)).resolves.toEqual({ source })
+    await expect(restarted.resolve(input)).resolves.toEqual({ source, override: true })
 
     await service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' })
-    await expect(restarted.resolve(input)).resolves.toEqual({ source: dataURL(UPDATED_SVG_BODY) })
+    await expect(restarted.resolve(input)).resolves.toEqual({
+      source: dataURL(UPDATED_SVG_BODY),
+      override: true,
+    })
 
     await service.setWebsiteIcon({ providerID: input.providerID })
     await expect(restarted.resolve(input)).resolves.toEqual({ source: null })
@@ -154,7 +163,56 @@ describe('供应商图标缓存服务', () => {
     await expect(service.setUploadedIcon({ providerID, dataURL: oversized })).rejects.toThrow(
       '内容过大',
     )
-    await expect(service.resolve({ providerID, url: '' })).resolves.toEqual({ source: png })
+    await expect(service.resolve({ providerID, url: '' })).resolves.toEqual({
+      source: png,
+      override: true,
+    })
+  })
+
+  test('手动图标生效期间目录图标不刷新，恢复默认后继续每五小时刷新', async () => {
+    const root = await createCacheRoot()
+    let now = 1_700_000_000_000
+    const initial = createFetchStub([SVG_BODY])
+    const seeded = new ProviderIconCacheService({
+      rootDirectory: root,
+      publish: () => undefined,
+      fetch: initial.fetch,
+      now: () => now,
+    })
+    const catalogueSource = (await seeded.resolve({ url: ICON_URL })).source
+    seeded.dispose()
+
+    const changes: DesktopProviderIconChange[] = []
+    const refreshing = createFetchStub([UPDATED_SVG_BODY])
+    const service = new ProviderIconCacheService({
+      rootDirectory: root,
+      publish: (change) => changes.push(change),
+      fetch: refreshing.fetch,
+      now: () => now,
+    })
+    const providerID = 'custom-manual'
+    const manualSource = `data:image/png;base64,${PNG_1X1_BASE64}`
+    await service.setUploadedIcon({ providerID, dataURL: manualSource })
+
+    now += PROVIDER_ICON_CACHE_TTL_MS
+    await expect(service.resolve({ url: ICON_URL, providerID })).resolves.toEqual({
+      source: manualSource,
+      override: true,
+    })
+    await settle()
+    // 手动图标期间不读取、也不后台刷新目录地址。
+    expect(catalogueSource).not.toBeNull()
+    expect(refreshing.calls).toEqual([])
+
+    await service.setWebsiteIcon({ providerID })
+    await expect(service.resolve({ url: ICON_URL, providerID })).resolves.toEqual({
+      source: catalogueSource,
+    })
+    await settle()
+    // 恢复默认后重新参与每五小时刷新。
+    expect(refreshing.calls).toEqual([ICON_URL])
+    expect(changes.map((change) => change.source)).toEqual([manualSource, null, dataURL(UPDATED_SVG_BODY)])
+    service.dispose()
   })
 
   test('首次加载下载图标并写入独立缓存文件', async () => {

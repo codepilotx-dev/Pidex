@@ -29,6 +29,11 @@ export type DesktopProviderIconResolution = {
    * 客户端继续展示既有占位图标。
    */
   source: string | null
+  /**
+   * `source` 来自供应商手动设置（网站获取或上传），而不是目录图标缓存。
+   * 手动图标不参与 5 小时刷新，也不应被写入目录地址的客户端缓存。
+   */
+  override?: boolean
 }
 
 export type DesktopProviderIconChange = {
