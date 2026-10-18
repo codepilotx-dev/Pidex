@@ -52,7 +52,7 @@ import {
   type AppContextMenuAction as ContextMenuAction,
 } from '../../../components/ui/AppContextMenu.js'
 import type { DesktopSidebarSort } from '../../../../shared/Types.js'
-import { deriveSidebarSessionVisualState } from './SidebarViewModel.js'
+import { deriveSidebarSessionVisualState, sidebarSessionProjectKey } from './SidebarViewModel.js'
 import { desktopClient, desktopClipboard } from '../../../services/desktop-client/index.js'
 import { InputDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { useSidebarActivityPreview } from './UseSidebarActivityPreview.js'
@@ -97,6 +97,8 @@ type Props = {
   customSections?: readonly { id: string; title: string }[]
   /** 当前会话所属的自定义分组；不在任何分组时为 null。 */
   currentSectionId?: string | null
+  /** 全部源目录都不可用的项目键集合；命中时标题转灰。 */
+  unavailableProjectKeys?: ReadonlySet<string>
   onMoveToSection?: (sessionId: string, sectionId: string) => void
   onMoveToDefault?: (sessionId: string) => void
   /** 跨容器拖放：开始拖动时上报选中载荷，结束时提交落点。 */
@@ -130,6 +132,7 @@ function SidebarSessionGroupComponent({
   initialLimit = GROUP_LIMIT,
   customSections = [],
   currentSectionId = null,
+  unavailableProjectKeys,
   onMoveToSection,
   onMoveToDefault,
   onItemDragStart,
@@ -430,6 +433,9 @@ function SidebarSessionGroupComponent({
     const indicatorState = hideInputPill ? (session.unreadAt ? 'unread' : 'idle') : visualState
     const showActions = hoveredSessionId === session.id || focusedSessionId === session.id
     const showIndicators = !showActions && confirmArchiveSessionId !== session.id
+    const projectUnavailable = Boolean(
+      unavailableProjectKeys?.has(sidebarSessionProjectKey(session)),
+    )
     const metaClassName = cx(
       'sidebar-session-meta',
       'tw:flex',
@@ -507,7 +513,12 @@ function SidebarSessionGroupComponent({
       <SidebarRow
         active={session.id === activeSessionId}
         asChild
-        className={cx('sidebar-session-row tw:[&>.sidebar-row-trailing]:w-auto', rowHeightClass)}
+        className={cx(
+          'sidebar-session-row tw:[&>.sidebar-row-trailing]:w-auto',
+          rowHeightClass,
+          projectUnavailable &&
+            'sidebar-session-row--project-unavailable tw:[&_.sidebar-session-title]:text-app-text-disabled',
+        )}
         data-sidebar-session-id={session.id}
         indent={showConversationIcon || sessionIndent === 'gutter' ? 'none' : 'session'}
         layout="grid"
@@ -517,12 +528,19 @@ function SidebarSessionGroupComponent({
           ) : undefined
         }
         leadingMode={showConversationIcon ? 'icon' : sessionIndent === 'gutter' ? 'none' : 'spacer'}
-        onMouseEnter={() => setHoveredSessionId(session.id)}
-        onMouseLeave={() => {
+        onMouseOver={(event) => {
+          if (!event.currentTarget.contains(event.target as Node)) return
+          setHoveredSessionId(session.id)
+        }}
+        onMouseOut={(event) => {
+          if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
           setHoveredSessionId((current) => (current === session.id ? null : current))
           setConfirmArchiveSessionId((current) => (current === session.id ? null : current))
         }}
-        onFocusCapture={() => setFocusedSessionId(session.id)}
+        onFocusCapture={(event) => {
+          if (!event.currentTarget.contains(event.target as Node)) return
+          setFocusedSessionId(event.target.matches(':focus-visible') ? session.id : null)
+        }}
         onBlurCapture={(event) => {
           if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
           setFocusedSessionId((current) => (current === session.id ? null : current))
@@ -759,7 +777,7 @@ function SidebarSessionGroupComponent({
                   <Button
                     aria-expanded={canCollapse}
                     className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
-                    color="ghostTertiary"
+                    color="text"
                     onClick={() =>
                       updateVisibleLimit((current) =>
                         Math.min(current + initialLimit, sessions.length),
@@ -776,8 +794,8 @@ function SidebarSessionGroupComponent({
                 {canCollapse ? (
                   <Button
                     className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
-                    color="ghostTertiary"
                     onClick={() => updateVisibleLimit(initialLimit)}
+                    color="text"
                     size="compact"
                     type="button"
                   >

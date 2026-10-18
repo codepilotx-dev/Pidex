@@ -2,7 +2,7 @@ import type React from 'react'
 import { useSyncExternalStore, useState, useRef, useLayoutEffect, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { CheckCheck, CircleAlert, X } from 'lucide-react'
-import { toastStore, calculateCardTransform, type ToastItem } from './ToastState.js'
+import { toastStore, calculateCardTransform, toastExpiryDelayMs, type ToastItem } from './ToastState.js'
 import { usePrefersReducedMotion } from '../../hooks/UsePrefersReducedMotion.js'
 import { Button } from '../ui/Button.js'
 
@@ -149,6 +149,24 @@ function ToastCardWrapper({
   onHeightChange: (height: number) => void
 }): React.ReactNode {
   const cardRef = useRef<HTMLDivElement>(null)
+  const { expiresAt } = toast
+  /**
+   * 带动作期限的提示（如项目移除撤销）到点后必须禁用动作：期限是服务端事实，
+   * 不因多条通知冻结倒计时、悬停暂停或退出动画而延长，避免过期后点击才失败。
+   */
+  const [expired, setExpired] = useState(() => toastExpiryDelayMs(expiresAt) === 0)
+
+  useEffect(() => {
+    const delay = toastExpiryDelayMs(expiresAt)
+    if (delay === undefined) return
+    if (delay === 0) {
+      setExpired(true)
+      return
+    }
+    setExpired(false)
+    const timer = setTimeout(() => setExpired(true), delay)
+    return () => clearTimeout(timer)
+  }, [expiresAt])
 
   useLayoutEffect(() => {
     if (cardRef.current) {
@@ -222,7 +240,7 @@ function ToastCardWrapper({
             <Button
               variant={toast.appearance === 'action' ? 'secondary' : 'ghost'}
               size={toast.appearance === 'action' ? 'sm' : 'compact'}
-              disabled={toast.action.disabled}
+              disabled={toast.action.disabled || expired}
               onClick={toast.action.onClick}
               type="button"
             >
@@ -234,7 +252,7 @@ function ToastCardWrapper({
             <Button
               variant={toast.appearance === 'action' ? 'primary' : 'ghost'}
               size={toast.appearance === 'action' ? 'sm' : 'compact'}
-              disabled={toast.secondaryAction.disabled}
+              disabled={toast.secondaryAction.disabled || expired}
               onClick={toast.secondaryAction.onClick}
               type="button"
             >

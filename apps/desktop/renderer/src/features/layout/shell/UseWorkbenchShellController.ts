@@ -292,12 +292,9 @@ export function useWorkbenchShellController({
       tabId: WorkbenchTabId,
       index?: number,
     ): void => {
-      if (target === 'sidebar' && sidebarCollapsed) {
-        setSidebarCollapsed(false)
-      }
       dispatchPanelAction({ type: 'moveTab', source, target, tabId, index })
     },
-    [dispatchPanelAction, setSidebarCollapsed, sidebarCollapsed],
+    [dispatchPanelAction],
   )
 
   const popOutPanelTab = useCallback(

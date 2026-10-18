@@ -67,8 +67,7 @@ import {
   notifyProjectRestored,
   subscribeProjectRemovals,
 } from '../projects/ProjectCatalogEvents.js'
-import { Toast, ToastDivider } from '../../components/ui/Toast.js'
-import { Button } from '../../components/ui/Button.js'
+import { toastStore } from '../../components/toast/ToastState.js'
 import { InputDialog } from '../../components/ui/ConfirmationDialog.js'
 import type { SidebarPane } from './sidebar/SidebarNavigation.js'
 
@@ -603,6 +602,16 @@ export function DesktopSidebar({
     return () => clearTimeout(timer)
   }, [projectUndo])
 
+  const restoreRemovedProject = useCallback((): void => {
+    if (!projectUndo) return
+    setRestoringProject(true)
+    void projectUndo
+      .restore()
+      .then(() => setProjectUndo(null))
+      .catch((error) => onReport(error instanceof Error ? error.message : String(error)))
+      .finally(() => setRestoringProject(false))
+  }, [projectUndo, onReport])
+
   const [pendingSectionKeys, setPendingSectionKeys] = useState<string[] | null>(null)
   const [sectionTitle, setSectionTitle] = useState('')
   const createCustomSection = useCallback((itemKeys: string[] = []): void => {
@@ -734,29 +743,11 @@ export function DesktopSidebar({
   return (
     <div className="sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2">
       {projectUndo ? (
-        <div className="tw:fixed tw:bottom-4 tw:left-1/2 tw:z-50 tw:-translate-x-1/2">
-          <Toast role="status" aria-live="polite">
-            项目已移除
-            <ToastDivider />
-            <Button
-              color="ghostSecondary"
-              size="compact"
-              disabled={restoringProject}
-              onClick={() => {
-                setRestoringProject(true)
-                void projectUndo
-                  .restore()
-                  .then(() => setProjectUndo(null))
-                  .catch((error) =>
-                    onReport(error instanceof Error ? error.message : String(error)),
-                  )
-                  .finally(() => setRestoringProject(false))
-              }}
-            >
-              撤销
-            </Button>
-          </Toast>
-        </div>
+        <ProjectRemovalUndoNotice
+          expiresAt={projectUndo.expiresAt}
+          restoring={restoringProject}
+          onUndo={restoreRemovedProject}
+        />
       ) : null}
       <InputDialog
         open={pendingSectionKeys !== null}
@@ -956,6 +947,48 @@ export function DesktopSidebar({
       ) : null}
     </div>
   )
+}
+
+/**
+ * 项目移除撤销提示：位置、堆叠、动效与无障碍交由全局 ToastStack 承载，
+ * 并带上服务端撤销期限，到点后撤销动作自动禁用，不再自绘固定定位提示。
+ */
+function ProjectRemovalUndoNotice({
+  expiresAt,
+  restoring,
+  onUndo,
+}: {
+  expiresAt: number
+  restoring: boolean
+  onUndo: () => void
+}): null {
+  const onUndoRef = useRef(onUndo)
+
+  useEffect(() => {
+    onUndoRef.current = onUndo
+  }, [onUndo])
+
+  useEffect(() => {
+    const id = toastStore.show({
+      id: 'project-removal-undo',
+      tone: 'status',
+      appearance: 'action',
+      dedupeKey: 'project-removal-undo',
+      message: '项目已移除',
+      duration: Math.max(0, expiresAt - Date.now()),
+      expiresAt,
+      action: {
+        label: '撤销',
+        disabled: restoring,
+        onClick: () => onUndoRef.current(),
+      },
+    })
+    return () => {
+      toastStore.dismiss(id)
+    }
+  }, [expiresAt, restoring])
+
+  return null
 }
 
 function sidebarDisclosureSignature(

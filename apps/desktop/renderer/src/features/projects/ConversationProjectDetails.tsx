@@ -13,6 +13,7 @@ import { desktopClient } from '../../services/desktop-client/index.js'
 import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
 import {
   buildProjectSessionBuckets,
+  isSidebarProjectUnavailable,
   normalizeSidebarPath,
   sidebarProjectKey,
 } from '../layout/sidebar/SidebarViewModel.js'
@@ -89,8 +90,9 @@ function ProjectDetailsTrigger({
     ? (projectAppearances[managedProject.projectId] ?? DEFAULT_PROJECT_APPEARANCE)
     : DEFAULT_PROJECT_APPEARANCE
   const isPinned = Boolean(managedProject.pinnedAt)
-  const isUnavailable = [...unavailableWorkspacePaths].some(
-    (path) => normalizeSidebarPath(path) === normalizeSidebarPath(managedProject.path),
+  const isUnavailable = isSidebarProjectUnavailable(
+    managedProject,
+    new Set([...unavailableWorkspacePaths].map((path) => normalizeSidebarPath(path))),
   )
 
   return (

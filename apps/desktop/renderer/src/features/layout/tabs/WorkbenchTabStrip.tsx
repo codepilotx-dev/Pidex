@@ -211,7 +211,7 @@ export function WorkbenchTabStrip({
                         'right-dock-tab-wrap tw:group tw:relative tw:flex tw:h-7 tw:min-w-22.5 tw:max-w-39 tw:flex-[1_1_156px] tw:items-center tw:overflow-hidden tw:rounded-lg tw:border tw:border-transparent tw:px-2 tw:py-1 tw:shadow-none tw:transition-[background-color,border-color,color] tw:duration-state tw:ease-standard tw:[&.dragging]:opacity-50',
                         active
                           ? 'active tw:bg-app-selected tw:text-app-text'
-                          : 'tw:text-app-text-meta tw:hover:bg-app-hover tw:hover:text-app-text-soft tw:focus-within:bg-app-hover tw:focus-within:text-app-text-soft',
+                          : 'tw:text-app-text-meta tw:hover:bg-app-hover tw:hover:text-app-text-soft tw:has-[:focus-visible]:bg-app-hover tw:has-[:focus-visible]:text-app-text-soft',
                         hasDivider && 'has-divider',
                       )}
                       data-panel-tab={tab.id}
@@ -283,7 +283,7 @@ export function WorkbenchTabStrip({
                       <Button
                         isIconOnly
                         className={cx(
-                          'right-dock-tab-close tw:absolute tw:right-1 tw:top-1/2 tw:-translate-y-1/2 tw:z-local tw:inline-flex tw:items-center tw:justify-center tw:rounded-md tw:border-0 tw:bg-transparent tw:text-app-text-meta tw:transition-[background-color,color,opacity] tw:duration-feedback tw:ease-standard tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-focus-within:opacity-100 tw:group-focus-within:pointer-events-auto tw:focus-visible:pointer-events-auto tw:focus-visible:bg-app-hover tw:focus-visible:text-app-text tw:focus-visible:opacity-100 tw:focus-visible:outline-app-accent/72',
+                          'right-dock-tab-close tw:absolute tw:right-1 tw:top-1/2 tw:-translate-y-1/2 tw:z-local tw:inline-flex tw:items-center tw:justify-center tw:rounded-md tw:border-0 tw:bg-transparent tw:text-app-text-meta tw:transition-[background-color,color,opacity] tw:duration-feedback tw:ease-standard tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:focus-visible:pointer-events-auto tw:focus-visible:bg-app-hover tw:focus-visible:text-app-text tw:focus-visible:opacity-100 tw:focus-visible:outline-app-accent/72',
                           active
                             ? 'tw:pointer-events-auto tw:opacity-100'
                             : 'tw:pointer-events-none tw:opacity-0',

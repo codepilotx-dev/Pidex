@@ -329,7 +329,7 @@
   }
 
   .md-code-block:hover > .md-code-actions,
-  .md-code-block:focus-within > .md-code-actions {
+  .md-code-block:has(:focus-visible) > .md-code-actions {
     opacity: 1;
     pointer-events: auto;
   }
@@ -470,7 +470,7 @@
   }
 
   .md-table-block:hover .md-table-copy,
-  .md-table-block:focus-within .md-table-copy,
+  .md-table-block:has(:focus-visible) .md-table-copy,
   .md-table-copy.is-copied {
     opacity: 1;
     pointer-events: auto;
@@ -791,7 +791,7 @@
     opacity: 0;
     pointer-events: none;
   }
-  .md-body--conversation .md-table-block:is(:hover, :focus-within) .md-table-actions > button {
+  .md-body--conversation .md-table-block:is(:hover, :has(:focus-visible)) .md-table-actions > button {
     opacity: 1;
     pointer-events: auto;
   }

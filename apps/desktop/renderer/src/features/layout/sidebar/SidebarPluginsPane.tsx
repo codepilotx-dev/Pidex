@@ -183,7 +183,7 @@ export function SidebarPluginsPane({
                   </span>
                 }
                 trailing={
-                  <span className="tw:relative tw:z-1 tw:inline-flex tw:opacity-0 tw:pointer-events-none tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-focus-within:opacity-100 tw:group-focus-within:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto">
+                  <span className="tw:relative tw:z-1 tw:inline-flex tw:opacity-0 tw:pointer-events-none tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto">
                     <PluginActionsMenu
                       item={item}
                       busy={busyIds.has(item.id)}

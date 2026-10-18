@@ -16,6 +16,11 @@ export interface ToastItem {
   textKey: string
   timestamp: number
   duration: number
+  /**
+   * 动作的硬截止时间戳。期限是服务端事实，不随「多条冻结」或悬停暂停而延长；
+   * 到点后卡片必须禁用动作，避免期限过后点击才失败。
+   */
+  expiresAt?: number
   onDismiss?: () => void
   action?: ToastAction
   secondaryAction?: ToastAction
@@ -28,6 +33,7 @@ export interface ShowToastOptions {
   tone?: ToastTone
   message: React.ReactNode
   duration?: number
+  expiresAt?: number
   onDismiss?: () => void
   action?: ToastAction
   secondaryAction?: ToastAction
@@ -38,6 +44,14 @@ export interface ShowToastOptions {
 export const MAX_TOASTS = 5
 export const DEFAULT_DURATION_MS = 5000
 export const DEDUPE_WINDOW_MS = 1000
+
+/**
+ * 动作型 Toast 的剩余有效期：`undefined` 表示不受期限约束，`0` 表示已经过期。
+ */
+export function toastExpiryDelayMs(expiresAt?: number, now = Date.now()): number | undefined {
+  if (expiresAt === undefined) return undefined
+  return Math.max(0, expiresAt - now)
+}
 
 export interface ToastStoreState {
   toasts: ToastItem[]
@@ -172,6 +186,7 @@ export function createToastStore(options?: {
           timestamp: now,
           message: toastOptions.message,
           appearance: toastOptions.appearance,
+          expiresAt: toastOptions.expiresAt,
           action: toastOptions.action,
           secondaryAction: toastOptions.secondaryAction,
         }
@@ -193,6 +208,7 @@ export function createToastStore(options?: {
       textKey,
       timestamp: now,
       duration: toastOptions.duration ?? defaultDuration,
+      expiresAt: toastOptions.expiresAt,
       onDismiss: toastOptions.onDismiss,
       action: toastOptions.action,
       secondaryAction: toastOptions.secondaryAction,

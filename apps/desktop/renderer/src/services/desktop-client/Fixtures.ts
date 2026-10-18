@@ -86,10 +86,11 @@ import {
 } from '../AgentThreadAdapter.js'
 import { createAgentRpcClient, type AgentRpcSubscription } from '../AgentRpcClient.js'
 
-const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v6'
+const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v8'
 const LEGACY_BROWSER_APPEARANCE_SETTINGS_STORAGE_KEYS = [
   'pidex.desktop.appearance.v3',
   'pidex.desktop.appearance.v5',
+  'pidex.desktop.appearance.v6',
 ] as const
 
 export function emptyBrowserState(): DesktopBrowserState {

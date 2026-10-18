@@ -178,13 +178,6 @@ export function SidebarFrame({
       <motion.aside
         id="desktop-sidebar-pane"
         ref={sidebarRef}
-        onClick={
-          docked
-            ? undefined
-            : () => {
-                shell.pin()
-              }
-        }
         onPointerEnter={floating ? shell.onPreviewPanelEnter : undefined}
         onPointerLeave={floating ? shell.onPreviewPanelLeave : undefined}
         aria-label={labels.sidebar}

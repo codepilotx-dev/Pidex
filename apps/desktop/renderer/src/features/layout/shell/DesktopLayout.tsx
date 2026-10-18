@@ -1,4 +1,5 @@
 import { GitBoardSidebar } from '../../git-board/GitBoardSidebar.js'
+import { useGitBoard } from '../../git-board/GitBoardContext.js'
 import {
   captureSidebarAssignments,
   restoreFailedArchiveAssignments,
@@ -604,6 +605,11 @@ export function DesktopLayout(): React.ReactNode {
     planModeActive,
     localRouterMode: effectiveLocalRouterMode,
   } = session
+  // 侧栏聊天列表只用于 Git 看板的项目活跃度排序，看板不额外请求聊天历史。
+  const { registerActivitySessions } = useGitBoard()
+  useEffect(() => {
+    registerActivitySessions(sessions)
+  }, [registerActivitySessions, sessions])
   const isBrowserMockSession = sessionId?.startsWith('browser-mock-') === true
   const localRouterAvailable = !sessionId || isBrowserMockSession
 
@@ -950,6 +956,7 @@ export function DesktopLayout(): React.ReactNode {
     void refreshWorkspace(currentWorkspace, {
       clearSelectedFile: false,
       force: true,
+      refreshGitStatus: true,
     })
   }, [currentWorkspace, refreshWorkspace])
 
@@ -1425,7 +1432,7 @@ export function DesktopLayout(): React.ReactNode {
       void handleChooseWorkspace()
     },
     onRefreshWorkspace: () => {
-      void refreshWorkspace(undefined, { force: true })
+      void refreshWorkspace(undefined, { force: true, refreshGitStatus: true })
     },
     onOpenSettings: () => {
       navigate('/settings/general')
@@ -2184,7 +2191,7 @@ export function DesktopLayout(): React.ReactNode {
       workspace={currentWorkspace}
       onChooseWorkspace={() => void handleChooseWorkspace()}
       onCreateSession={(workspaceItem) => {
-        sidebarShell.pin()
+        sidebarShell.closePreview()
         void handleCreateSession(workspaceItem)
       }}
       onOpenCommandMenu={() => setCommandMenuOpen(true)}
@@ -2193,7 +2200,7 @@ export function DesktopLayout(): React.ReactNode {
       onRemoveWorkspace={handleRemoveWorkspace}
       onUnpinWorkspace={handleUnpinWorkspace}
       onSelectSession={(session) => {
-        sidebarShell.pin()
+        sidebarShell.closePreview()
         handleSelectSession(session)
       }}
       onArchiveSessions={handleArchiveSessions}
@@ -2220,7 +2227,7 @@ export function DesktopLayout(): React.ReactNode {
       workspacePath={currentWorkspace?.path ?? null}
       onBack={handleSettingsBack}
       onTabChange={(tab) => {
-        sidebarShell.pin()
+        sidebarShell.closePreview()
         handleSettingsTabChange(tab)
       }}
     />
@@ -2268,7 +2275,6 @@ export function DesktopLayout(): React.ReactNode {
           capabilityState={sidebarCapabilities}
           onOpenWhatsNew={openWhatsNewDialog}
           onReport={setNoticeMessage}
-          onPinPanel={sidebarShell.pin}
         />
       }
       collapsed={sidebarCollapsed}
@@ -3439,6 +3445,7 @@ export function DesktopLayout(): React.ReactNode {
                   await refreshWorkspace(currentWorkspace, {
                     clearSelectedFile: false,
                     force: true,
+                    refreshGitStatus: true,
                   })
                 }
               }}

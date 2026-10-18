@@ -63,6 +63,8 @@ import {
   deriveSidebarSessionVisualState,
   filterSidebarActivitySessions,
   hasSidebarUnreadSessions,
+  isProjectWorkspaceUnavailable,
+  isSidebarProjectUnavailable,
   labelForDayOffset,
   localDayOrdinal,
   reorderSidebarPinnedItemKeys,
@@ -132,7 +134,7 @@ describe('Codex 侧栏导航', () => {
               createElement(SidebarNavigationRail, {
                 shell: { mode: 'docked' } as unknown as SidebarShellController,
                 activePane: 'chats', capabilityState,
-                onOpenWhatsNew: () => {}, onReport: () => {}, onPinPanel: () => {},
+                onOpenWhatsNew: () => {}, onReport: () => {},
               }),
             ),
           ),
@@ -172,7 +174,6 @@ describe('Codex 侧栏导航', () => {
               capabilityState: readySidebarCapabilities('pets.management.v1'),
               onOpenWhatsNew: () => {},
               onReport: () => {},
-              onPinPanel: () => {},
             }),
           ),
         ),
@@ -200,7 +201,6 @@ describe('Codex 侧栏导航', () => {
         capabilityState: unknownSidebarCapabilities,
         onOpenWhatsNew: () => {},
         onReport: () => {},
-        onPinPanel: () => {},
       }),
     )
     expect(rail).toContain('aria-label="首页"')
@@ -2028,4 +2028,41 @@ describe('聊天 header 项目归属', () => {
     expect(resolveConversationProject(active, [], legacy)).toBe(legacy)
     expect(resolveConversationProject(active, [], second)).toBeNull()
   })
+})
+
+test('项目只在全部源目录都缺失时才算不可用', () => {
+  const folder = (path: string, availability: 'available' | 'missing') => ({
+    id: path,
+    name: path,
+    path,
+    role: 'primary' as const,
+    availability,
+    order: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  })
+  const project = (folders?: ReturnType<typeof folder>[]) => ({
+    name: 'P',
+    path: 'F:\\P',
+    ...(folders ? { folders } : {}),
+  })
+
+  expect(isProjectWorkspaceUnavailable(project())).toBeFalse()
+  expect(isProjectWorkspaceUnavailable(project([]))).toBeFalse()
+  expect(isProjectWorkspaceUnavailable(project([folder('F:\\P', 'available')]))).toBeFalse()
+  expect(
+    isProjectWorkspaceUnavailable(
+      project([folder('F:\\P', 'missing'), folder('F:\\P2', 'available')]),
+    ),
+  ).toBeFalse()
+  expect(
+    isProjectWorkspaceUnavailable(
+      project([folder('F:\\P', 'missing'), folder('F:\\P2', 'missing')]),
+    ),
+  ).toBeTrue()
+  // 运行时探测到的不可用仍然优先，保持原有兜底语义。
+  expect(
+    isSidebarProjectUnavailable(project([folder('F:\\P', 'available')]), new Set(['f:/p'])),
+  ).toBeTrue()
+  expect(isSidebarProjectUnavailable(project([folder('F:\\P', 'missing')]), new Set())).toBeTrue()
 })

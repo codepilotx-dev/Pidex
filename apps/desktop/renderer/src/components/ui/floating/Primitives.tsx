@@ -28,8 +28,8 @@ export function useControllableState<T>(
   const setValue = useCallback(
     (next: T) => {
       if (Object.is(currentRef.current, next)) return
+      currentRef.current = next
       if (value === undefined) {
-        currentRef.current = next
         setInternalValue(next)
       }
       onChange?.(next)

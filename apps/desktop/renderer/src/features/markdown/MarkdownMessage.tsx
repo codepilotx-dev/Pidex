@@ -729,7 +729,7 @@ function MarkdownTable({
     <figure
       className={cx('md-table-block tw:group/table', context.allowWideBlocks && 'md-wide-block')}
     >
-      <div className="md-table-actions tw:opacity-0 tw:transition-opacity tw:group-hover/table:opacity-100 tw:group-focus-within/table:opacity-100 tw:pointer-coarse:opacity-100">
+      <div className="md-table-actions tw:opacity-0 tw:transition-opacity tw:group-hover/table:opacity-100 tw:group-has-[:focus-visible]/table:opacity-100 tw:pointer-coarse:opacity-100">
         {context.presentation === 'conversation' ? (
           <Button
             isIconOnly

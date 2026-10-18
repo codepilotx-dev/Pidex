@@ -69,10 +69,10 @@
 
   /* 当前或相邻标签处于 active / hover / focus 时隐藏分隔线，避免与状态底色叠线。 */
   .right-dock-tab-wrap.has-divider:hover::after,
-  .right-dock-tab-wrap.has-divider:focus-within::after,
+  .right-dock-tab-wrap.has-divider:has(:focus-visible)::after,
   .right-dock-tab-wrap.has-divider:has(+ .right-dock-tab-wrap.active)::after,
   .right-dock-tab-wrap.has-divider:has(+ .right-dock-tab-wrap:hover)::after,
-  .right-dock-tab-wrap.has-divider:has(+ .right-dock-tab-wrap:focus-within)::after {
+  .right-dock-tab-wrap.has-divider:has(+ .right-dock-tab-wrap:has(:focus-visible))::after {
     content: none;
   }
 

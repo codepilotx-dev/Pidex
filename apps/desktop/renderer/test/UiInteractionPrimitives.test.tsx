@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { Button } from '../src/components/ui/Button.js'
+import { useControllableState } from '../src/components/ui/floating/Primitives.js'
 import { Spinner } from '../src/components/ui/Spinner.js'
 
 describe('loading interaction primitives', () => {
@@ -109,5 +110,25 @@ describe('loading interaction primitives', () => {
     expect(tailwindCss).not.toContain('text-box-trim')
     expect(tailwindCss).not.toContain('text-box:')
     expect(tailwindCss).not.toContain('text-trim')
+  })
+})
+
+describe('controlled interaction state', () => {
+  test('keeps a close request after opening before the owner renders again', () => {
+    const changes: boolean[] = []
+    let setOpen!: (open: boolean) => void
+    function Controlled() {
+      const [, update] = useControllableState(false, false, (open) => changes.push(open))
+      setOpen = update
+      return null
+    }
+    renderToStaticMarkup(<Controlled />)
+
+    setOpen(true)
+    setOpen(true)
+    setOpen(false)
+    setOpen(false)
+
+    expect(changes).toEqual([true, false])
   })
 })

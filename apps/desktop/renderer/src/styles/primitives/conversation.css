@@ -566,11 +566,11 @@
   }
 
   .canonical-user-message:hover .canonical-message-actions,
-  .canonical-user-message:focus-within .canonical-message-actions,
+  .canonical-user-message:is(:focus-visible, :has(:focus-visible)) .canonical-message-actions,
   .canonical-turn:hover .canonical-message-actions--assistant,
-  .canonical-turn:focus-within .canonical-message-actions--assistant,
+  .canonical-turn:is(:focus-visible, :has(:focus-visible)) .canonical-message-actions--assistant,
   .canonical-text-item:hover .canonical-message-actions,
-  .canonical-text-item:focus-within .canonical-message-actions {
+  .canonical-text-item:is(:focus-visible, :has(:focus-visible)) .canonical-message-actions {
     opacity: 1;
   }
 
@@ -823,7 +823,7 @@
   .cpx-agent-activity__header:focus-visible,
   .cpx-agent-activity__header:active,
   .cpx-agent-activity__item-header:hover,
-  .cpx-agent-activity__item-header:focus-within,
+  .cpx-agent-activity__item-header:is(:focus-visible, :has(:focus-visible)),
   .cpx-agent-activity__item-header:active {
     background: transparent;
     color: var(--cpx-sys-color-fg-primary);
@@ -841,9 +841,9 @@
   }
 
   .cpx-agent-activity__header:hover > .cpx-agent-activity__chevron,
-  .cpx-agent-activity__header:focus-within > .cpx-agent-activity__chevron,
+  .cpx-agent-activity__header:is(:focus-visible, :has(:focus-visible)) > .cpx-agent-activity__chevron,
   .cpx-agent-activity__item-header:hover > .cpx-agent-activity__chevron,
-  .cpx-agent-activity__item-header:focus-within > .cpx-agent-activity__chevron {
+  .cpx-agent-activity__item-header:is(:focus-visible, :has(:focus-visible)) > .cpx-agent-activity__chevron {
     opacity: 1;
   }
 
@@ -1102,8 +1102,8 @@
     display: flex;
     gap: var(--cpx-sys-space-1);
   }
-  .canonical-command-card__command:is(:hover, :focus-within) .canonical-command-card__copy,
-  .canonical-command-card__output:is(:hover, :focus-within) .canonical-command-card__actions {
+  .canonical-command-card__command:is(:hover, :has(:focus-visible)) .canonical-command-card__copy,
+  .canonical-command-card__output:is(:hover, :has(:focus-visible)) .canonical-command-card__actions {
     opacity: 1;
     pointer-events: auto;
   }

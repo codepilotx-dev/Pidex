@@ -45,6 +45,7 @@ import {
 import {
   buildSidebarPinnedItems,
   clampTimelineVisibleLimit,
+  isSidebarProjectUnavailable,
   normalizeSidebarPath,
   reorderSidebarPinnedItemKeys,
   sidebarPinnedProjectKey,
@@ -283,6 +284,16 @@ function SidebarBodyContent({
   const unavailablePaths = useMemo(
     () => new Set([...unavailableWorkspacePaths].map((path) => normalizeSidebarPath(path))),
     [unavailableWorkspacePaths],
+  )
+  /** 不可用项目的键集合：供会话组把标题置灰。 */
+  const unavailableProjectKeys = useMemo(
+    () =>
+      new Set(
+        [...projectWorkspaces, ...pinnedWorkspaces]
+          .filter((project) => isSidebarProjectUnavailable(project, unavailablePaths))
+          .map(sidebarProjectKey),
+      ),
+    [pinnedWorkspaces, projectWorkspaces, unavailablePaths],
   )
   const pinnedItems = useMemo(
     () =>
@@ -524,7 +535,7 @@ function SidebarBodyContent({
   }, [organization])
 
   function isUnavailable(project: DesktopWorkspace): boolean {
-    return unavailablePaths.has(normalizeSidebarPath(project.path))
+    return isSidebarProjectUnavailable(project, unavailablePaths)
   }
 
   function moveProject(
@@ -708,6 +719,7 @@ function SidebarBodyContent({
             now={now}
             pendingPermissionSessionIds={pendingPermissionSessionIds}
             titleLoadingIds={titleLoadingIds}
+            unavailableProjectKeys={unavailableProjectKeys}
             sessionFallbackTitles={sessionFallbackTitles}
             sessions={[item.session]}
             showConversationIcon
@@ -776,6 +788,7 @@ function SidebarBodyContent({
               showPinned={showTimelinePinned}
               timeline={timeline}
               titleLoadingIds={titleLoadingIds}
+              unavailableProjectKeys={unavailableProjectKeys}
               sessionFallbackTitles={sessionFallbackTitles}
               onArchiveSessions={onArchiveSessions}
               onMarkAttentionRead={onMarkAttentionRead}
@@ -855,6 +868,7 @@ function SidebarBodyContent({
                   selectedKeys={selectedKeys}
                   sessionFallbackTitles={sessionFallbackTitles}
                   titleLoadingIds={titleLoadingIds}
+                  unavailableProjectKeys={unavailableProjectKeys}
                   onArchiveSessions={onArchiveSessions}
                   onDelete={onDeleteSection}
                   onItemDragEnd={commitItemDrop}
@@ -993,6 +1007,7 @@ function SidebarBodyContent({
                     now={now}
                     pendingPermissionSessionIds={pendingPermissionSessionIds}
                     titleLoadingIds={titleLoadingIds}
+                    unavailableProjectKeys={unavailableProjectKeys}
                     sessionFallbackTitles={sessionFallbackTitles}
                     sessions={recentSessions}
                     sort={sessionSort}
@@ -1048,6 +1063,7 @@ function Timeline({
   pendingPermissionSessionIds,
   timeline,
   titleLoadingIds,
+  unavailableProjectKeys,
   sessionFallbackTitles,
   onArchiveSessions,
   onPinSession,
@@ -1062,6 +1078,7 @@ function Timeline({
   pendingPermissionSessionIds: ReadonlySet<string>
   timeline: SidebarTimelineModel
   titleLoadingIds: ReadonlySet<string>
+  unavailableProjectKeys: ReadonlySet<string>
   sessionFallbackTitles: Record<string, string>
   onArchiveSessions: (sessions: readonly SessionListItem[]) => Promise<boolean>
   onPinSession: (session: SessionListItem) => void
@@ -1117,6 +1134,7 @@ function Timeline({
     now,
     pendingPermissionSessionIds,
     titleLoadingIds,
+    unavailableProjectKeys,
     sessionFallbackTitles,
     onArchiveSessions,
     onPinSession,
@@ -1263,6 +1281,7 @@ function FocusSectionGroup({
   section,
   sort,
   titleLoadingIds,
+  unavailableProjectKeys,
   sessionFallbackTitles,
   onArchiveSessions,
   onPinSession,
@@ -1279,6 +1298,7 @@ function FocusSectionGroup({
   section: SidebarFocusSection
   sort: 'updated' | 'preserve'
   titleLoadingIds: ReadonlySet<string>
+  unavailableProjectKeys: ReadonlySet<string>
   sessionFallbackTitles: Record<string, string>
   onArchiveSessions: (sessions: readonly SessionListItem[]) => Promise<boolean>
   onPinSession: (session: SessionListItem) => void
@@ -1311,6 +1331,7 @@ function FocusSectionGroup({
             presentation="activity"
             sort={sort}
             titleLoadingIds={titleLoadingIds}
+            unavailableProjectKeys={unavailableProjectKeys}
             sessionFallbackTitles={sessionFallbackTitles}
             sessions={section.sessions}
             onArchiveSessions={onArchiveSessions}
@@ -1511,7 +1532,7 @@ function SidebarShowMoreActions({
           <Button
             aria-expanded={canCollapse}
             className={SHOW_MORE_BUTTON_CLASS}
-            color="ghostTertiary"
+            color="text"
             onClick={onShowMore}
             size="compact"
             type="button"
@@ -1522,7 +1543,7 @@ function SidebarShowMoreActions({
         {canCollapse ? (
           <Button
             className={SHOW_MORE_BUTTON_CLASS}
-            color="ghostTertiary"
+            color="text"
             onClick={onCollapse}
             size="compact"
             type="button"
@@ -1589,6 +1610,7 @@ function SidebarCustomSection({
   selectedKeys,
   sessionFallbackTitles,
   titleLoadingIds,
+  unavailableProjectKeys,
   onArchiveSessions,
   onDelete,
   onItemDragEnd,
@@ -1616,6 +1638,7 @@ function SidebarCustomSection({
   selectedKeys: readonly string[]
   sessionFallbackTitles: Record<string, string>
   titleLoadingIds: ReadonlySet<string>
+  unavailableProjectKeys: ReadonlySet<string>
   onArchiveSessions: (sessions: readonly SessionListItem[]) => Promise<boolean>
   onDelete: (sectionId: string) => void
   onManualOrderChange: (scopeKey: string, order: string[]) => void
@@ -1695,6 +1718,7 @@ function SidebarCustomSection({
           showConversationIcon
           sort="preserve"
           titleLoadingIds={titleLoadingIds}
+          unavailableProjectKeys={unavailableProjectKeys}
           onArchiveSessions={onArchiveSessions}
           onItemDragEnd={onItemDragEnd}
           onItemDragStart={onItemDragStart}

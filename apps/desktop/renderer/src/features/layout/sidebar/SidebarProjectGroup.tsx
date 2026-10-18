@@ -1,5 +1,5 @@
 import type React from 'react'
-import { memo, useEffect, useId, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useState } from 'react'
 import {
   Archive,
   FolderOpen,
@@ -126,7 +126,6 @@ function SidebarProjectGroupComponent({
   onUnpinWorkspace,
   onReport = () => undefined,
 }: Props): React.ReactNode {
-  const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false)
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
@@ -142,6 +141,11 @@ function SidebarProjectGroupComponent({
   const isExpanded = useDisclosureExpanded(disclosureStore, disclosureKey)
   const projectSessionsId = useId()
   const projectSessions = bucket.displaySessions
+  // 项目目录全部不存在时，其下会话标题一并转灰。
+  const projectUnavailableKeys = useMemo(
+    () => (isUnavailable ? new Set([projectKey]) : null),
+    [isUnavailable, projectKey],
+  )
   const hasCollapsedUnread =
     !isExpanded && projectSessions.some((session) => Boolean(session.unreadAt))
   const countedProjectSessions = bucket.allSessions
@@ -151,7 +155,6 @@ function SidebarProjectGroupComponent({
     workspace?.projectId && managedProject.projectId
       ? workspace.projectId === managedProject.projectId
       : normalizeSidebarPath(workspace?.path ?? '') === normalizeSidebarPath(managedProject.path)
-  const actionsVisible = hovered || menuOpen
   const isPinned = Boolean(managedProject.pinnedAt)
   const appearance = managedProject.projectId
     ? (projectAppearances[managedProject.projectId] ?? DEFAULT_PROJECT_APPEARANCE)
@@ -293,16 +296,14 @@ function SidebarProjectGroupComponent({
                 )}
               />
             }
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
             trailing={
               <>
                 <div
                   className={cx(
-                    'sidebar-project-actions tw:relative tw:flex tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
-                    actionsVisible
-                      ? 'is-visible tw:opacity-100 tw:pointer-events-auto'
-                      : 'tw:opacity-0 tw:pointer-events-none',
+                    'sidebar-project-actions tw:relative tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
+                    menuOpen
+                      ? 'is-visible tw:flex tw:opacity-100 tw:pointer-events-auto'
+                      : 'tw:hidden tw:group-hover:flex tw:group-focus-within:flex tw:opacity-100 tw:pointer-events-auto',
                   )}
                   onClick={(event) => event.stopPropagation()}
                 >
@@ -327,21 +328,22 @@ function SidebarProjectGroupComponent({
                   >
                     <DropdownActions actions={contextActions()} />
                   </PopoverMenu>
-                  <Button
-                    isIconOnly
-                    aria-label="新建对话"
-                    className="sidebar-project-action-button"
-                    variant="text"
-                    iconSize="md"
-                    disabled={isUnavailable}
-                    size="compact"
-                    title="新建对话"
-                    onClick={() => onCreateSession(managedProject)}
-                  >
-                    <SquarePen size={APP_ICON_SIZE} />
-                  </Button>
+                  {isUnavailable ? null : (
+                    <Button
+                      isIconOnly
+                      aria-label="新建对话"
+                      className="sidebar-project-action-button"
+                      variant="text"
+                      iconSize="md"
+                      size="compact"
+                      title="新建对话"
+                      onClick={() => onCreateSession(managedProject)}
+                    >
+                      <SquarePen size={APP_ICON_SIZE} />
+                    </Button>
+                  )}
                 </div>
-                {hasCollapsedUnread && !actionsVisible ? (
+                {hasCollapsedUnread && !menuOpen ? (
                   <span
                     className="sidebar-project-unread sidebar-indicator tw:pointer-events-none tw:absolute tw:inset-y-0 tw:end-0 tw:my-auto tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:text-app-text-meta tw:group-hover:hidden tw:group-has-[:focus-visible]:hidden tw:group-has-[[data-state=open]]:hidden"
                     role="img"
@@ -414,6 +416,7 @@ function SidebarProjectGroupComponent({
             customSections={customSections}
             pendingPermissionSessionIds={pendingPermissionSessionIds}
             titleLoadingIds={titleLoadingIds}
+            unavailableProjectKeys={projectUnavailableKeys}
             groupKey={`project:${projectKey}`}
             onItemDragEnd={onItemDragEnd}
             onItemDragStart={onItemDragStart}

@@ -23,7 +23,6 @@ type Props = {
   capabilityState: SidebarCapabilityState
   onOpenWhatsNew: (restoreFocusElement: HTMLElement | null) => void
   onReport: (message: string) => void
-  onPinPanel: () => void
 }
 
 /** 导航轨目的地键：与 sidebarCustomization.destinationOrder 中的 id 一一对应。 */
@@ -49,7 +48,6 @@ export function SidebarNavigationRail({
   capabilityState,
   onOpenWhatsNew,
   onReport,
-  onPinPanel,
 }: Props): ReactNode {
   const {
     sidebarProductMode,
@@ -132,7 +130,11 @@ export function SidebarNavigationRail({
       content={t(label)}
       side="right"
       key={id}
-      open={tooltipId === id && !moreOpen && canShowSidebarTooltip(shell.mode, false)}
+      open={
+        tooltipId === id &&
+        !moreOpen &&
+        canShowSidebarTooltip(shell.mode, shell.mode === 'collapsed' && pane != null)
+      }
       onOpenChange={(open) =>
         setTooltipId((current) => (open ? id : current === id ? null : current))
       }
@@ -148,9 +150,16 @@ export function SidebarNavigationRail({
         className="sidebar-rail-button tw:flex-none tw:data-[active=true]:bg-app-selected tw:data-[active=true]:text-app-text"
         variant="ghost"
         size="md"
-        onClick={onClick}
+        onClick={() => {
+          setTooltipId(null)
+          shell.closePreview()
+          onClick()
+        }}
         onPointerEnter={pane ? (event) => shell.onRailItemEnter(pane, event) : undefined}
-        onPointerLeave={pane ? (event) => shell.onRailItemLeave(event) : undefined}
+        onPointerLeave={(event) => {
+          setTooltipId((current) => (current === id ? null : current))
+          if (pane) shell.onRailItemLeave(event)
+        }}
       >
         {icon}
       </Button>
@@ -175,7 +184,6 @@ export function SidebarNavigationRail({
             item.icon,
             () => {
               navigate(item.path)
-              if (pane) onPinPanel()
             },
             pane,
             selected,
@@ -200,7 +208,6 @@ export function SidebarNavigationRail({
           <Home size={APP_ICON_SIZE} />,
           () => {
             navigate(lastChatPath.current)
-            onPinPanel()
           },
           sidebarTimelineEnabled ? 'activity' : 'chats',
           activePane === 'chats' || activePane === 'activity',
@@ -249,11 +256,11 @@ export function SidebarNavigationRail({
                             layout="grid"
                             leading={item.icon}
                             active={location.pathname === item.path || location.pathname.startsWith(`${item.path}/`)}
-                            className="tw:group tw:[&>.sidebar-row-trailing]:w-auto tw:focus-within:bg-app-hover"
+                            className="tw:group tw:[&>.sidebar-row-trailing]:w-auto tw:has-[:focus-visible]:bg-app-hover"
                             onClick={() => {
                               setMoreOpen(false)
                               navigate(item.path)
-                              if (RAIL_DESTINATION_PANES[id]) onPinPanel()
+                              shell.closePreview()
                             }}
                             trailing={
                               <Tooltip content={pinLabel}>
@@ -264,7 +271,7 @@ export function SidebarNavigationRail({
                                   iconSize="md"
                                   nativeTitle={false}
                                   aria-label={`${pinLabel}: ${t(item.label)}`}
-                                  className={`tw:shrink-0 ${pinned ? '' : 'tw:opacity-0 tw:group-hover:opacity-100 tw:group-focus-within:opacity-100'}`}
+                                  className={`tw:shrink-0 ${pinned ? '' : 'tw:opacity-0 tw:group-hover:opacity-100 tw:group-has-[:focus-visible]:opacity-100'}`}
                                   onClick={(event) => {
                                     event.stopPropagation()
                                     toggleDestination(id)
@@ -303,7 +310,7 @@ export function SidebarNavigationRail({
       <div className="sidebar-rail-bottom tw:flex tw:w-full tw:flex-col tw:items-center tw:gap-1">
         <SidebarFooter
           compact
-          onNavigate={onPinPanel}
+          onNavigate={shell.closePreview}
           onOpenWhatsNew={onOpenWhatsNew}
           onReport={onReport}
         />

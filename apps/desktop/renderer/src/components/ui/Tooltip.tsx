@@ -511,7 +511,7 @@ export const TooltipTrigger = forwardRef<HTMLElement, TooltipTriggerProps>(
 
     const handleFocus = (e: React.FocusEvent<HTMLElement>) => {
       onFocus?.(e)
-      if (disabled || e.defaultPrevented) return
+      if (disabled || e.defaultPrevented || !e.currentTarget.matches(':focus-visible')) return
       clearEnterTimer()
       context.cancelCloseTimer()
       context.setOpen(true)

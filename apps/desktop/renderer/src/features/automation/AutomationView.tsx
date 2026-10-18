@@ -976,7 +976,8 @@ function AutomationRow({
         : 'active'
   return (
     <li
-      className="tw:group tw:relative tw:grid tw:grid-cols-[minmax(0,1fr)_var(--cpx-sys-space-8)] tw:items-center tw:rounded-container tw:transition-[background,opacity] tw:duration-feedback tw:ease-standard tw:hover:bg-app-hover tw:focus-within:bg-app-hover tw:data-[selected=true]:bg-app-selected tw:data-[status=paused]:not-data-[selected=true]:opacity-60 tw:data-[status=paused]:hover:opacity-100 tw:data-[status=paused]:focus-within:opacity-100"
+      className="tw:group tw:relative tw:grid tw:grid-cols-[minmax(0,1fr)_var(--cpx-sys-space-8)] tw:items-center tw:rounded-container tw:transition-[background,opacity] tw:duration-feedback tw:ease-standard tw:hover:bg-app-hover tw:has-[:focus-visible]:bg-app-hover tw:data-[selected=true]:bg-app-selected tw:data-[status=paused]:not-data-[selected=true]:opacity-60 tw:data-[status=paused]:hover:opacity-100 tw:data-[status=paused]:has-[:focus-visible]:opacity-100"
+      data-state={menuOpen ? 'open' : undefined}
       data-selected={selected || undefined}
       data-status={rowStatus}
     >
@@ -1015,7 +1016,7 @@ function AutomationRow({
             {targetLabel}
           </span>
         </span>
-        <span className="automation-row-status tw:shrink-0 tw:truncate tw:text-right tw:type-caption tw:text-app-text-meta tw:group-hover:opacity-0 tw:group-focus-within:opacity-0 tw:max-[48rem]:hidden">
+        <span className="automation-row-status tw:shrink-0 tw:truncate tw:text-right tw:type-caption tw:text-app-text-meta tw:group-hover:opacity-0 tw:group-has-[:focus-visible]:opacity-0 tw:group-data-[state=open]:opacity-0 tw:max-[48rem]:hidden">
           {activeRun
             ? '正在运行'
             : automation.status === 'paused'
@@ -1033,7 +1034,7 @@ function AutomationRow({
         trigger={
           <Button
             isIconOnly
-            className="automation-row-menu tw:justify-self-center tw:opacity-0 tw:group-hover:opacity-100 tw:group-focus-within:opacity-100 tw:focus-visible:opacity-100"
+            className="automation-row-menu tw:justify-self-center tw:opacity-0 tw:group-hover:opacity-100 tw:group-has-[:focus-visible]:opacity-100 tw:group-data-[state=open]:opacity-100 tw:focus-visible:opacity-100"
             color="ghostSecondary"
             size="toolbar"
             title={`${automation.name} 操作`}
@@ -1099,7 +1100,7 @@ function AutomationSuggestions({
       >
         {suggestions.map((item) => (
           <li
-            className="tw:group tw:rounded-container tw:p-1.25 tw:hover:bg-app-hover tw:focus-within:bg-app-hover"
+            className="tw:group tw:rounded-container tw:p-1.25 tw:hover:bg-app-hover tw:has-[:focus-visible]:bg-app-hover"
             key={item.id}
             data-tone={item.tone}
           >

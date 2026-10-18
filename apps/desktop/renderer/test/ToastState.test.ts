@@ -1,5 +1,9 @@
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test'
-import { createToastStore, calculateCardTransform } from '../src/components/toast/ToastState.js'
+import {
+  createToastStore,
+  calculateCardTransform,
+  toastExpiryDelayMs,
+} from '../src/components/toast/ToastState.js'
 
 describe('toastState & transform calculations', () => {
   describe('calculateCardTransform', () => {
@@ -166,6 +170,34 @@ describe('toastState & transform calculations', () => {
       expect(store.getState().toasts.length).toBe(0)
       expect(dismissed1).toBe(true)
       expect(dismissed2).toBe(true)
+    })
+  })
+
+  describe('动作期限', () => {
+    it('按到期时间返回剩余毫秒，已过期归零，无期限返回 undefined', () => {
+      const now = 1_000
+      expect(toastExpiryDelayMs(undefined, now)).toBeUndefined()
+      expect(toastExpiryDelayMs(now + 250, now)).toBe(250)
+      expect(toastExpiryDelayMs(now, now)).toBe(0)
+      expect(toastExpiryDelayMs(now - 250, now)).toBe(0)
+    })
+
+    it('show 保留 expiresAt 供卡片到点禁用动作', () => {
+      const store = createToastStore({ defaultDurationMs: 50 })
+      const expiresAt = Date.now() + 1_000
+      store.show({ message: '项目已移除', tone: 'status', appearance: 'action', expiresAt })
+
+      expect(store.getState().toasts[0]?.expiresAt).toBe(expiresAt)
+      store._clearTimer()
+    })
+
+    it('重新 show 同一 id 且未带期限时清除旧期限', () => {
+      const store = createToastStore({ defaultDurationMs: 50 })
+      store.show({ id: 'undo', message: '项目已移除', expiresAt: Date.now() + 1_000 })
+      store.show({ id: 'undo', message: '项目已移除' })
+
+      expect(store.getState().toasts[0]?.expiresAt).toBeUndefined()
+      store._clearTimer()
     })
   })
 })
