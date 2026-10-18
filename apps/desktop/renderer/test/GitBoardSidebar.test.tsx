@@ -20,7 +20,9 @@ test('Git sidebar renders real project hover cards inside its own provider', () 
     state,
     ready: true,
     view: gitBoardView(state, null),
+    remoteView: 'board',
     openGroup: () => {},
+    openRemoteView: () => {},
     toggleQuickView: () => {},
     update: () => {},
     storageError: false,
@@ -30,9 +32,11 @@ test('Git sidebar renders real project hover cards inside its own provider', () 
     selectedRefs: {},
     selectBranch: () => {},
     supportsCommitRef: false,
+    capabilities: [],
     refreshing: false,
     refresh: () => {},
     refreshView: () => {},
+    refreshProject: () => {},
   }
   const hook = spyOn(boardContext, 'useGitBoard').mockReturnValue(controller)
   try {
@@ -96,6 +100,21 @@ test('Git sidebar renders real project hover cards inside its own provider', () 
     expect(html).not.toContain('title="更多"')
     expect(html).not.toContain('title="在右侧面板中打开"')
     expect(html.match(/sidebar-project-title-text/g)).toHaveLength(2)
+    // GitHub 仓库与速览并列：左侧图标槽相邻，默认看板视图下只有速览带当前页语义。
+    const githubRowIndex = html.indexOf('>GitHub 仓库</span>')
+    expect(githubRowIndex).toBeGreaterThan(-1)
+    expect(html.indexOf('lucide-github')).toBeGreaterThan(-1)
+    expect(html.indexOf('lucide-github')).toBeLessThan(githubRowIndex)
+    expect(githubRowIndex).toBeGreaterThan(html.indexOf('>速览</span>'))
+    expect(githubRowIndex).toBeLessThan(html.indexOf('>项目</span>'))
+    expect(html.match(/aria-current="page"/g)).toHaveLength(1)
+    // 切到仓库页后两行选中态互斥。
+    controller.view = gitBoardView(state, 'dev')
+    controller.remoteView = 'github'
+    const githubHtml = render()
+    expect(githubHtml.match(/aria-current="page"/g)).toHaveLength(1)
+    expect(githubHtml.slice(githubHtml.indexOf('aria-current="page"'))).toContain('GitHub 仓库')
+    expect(githubHtml).toContain('>开发组</span>')
   } finally {
     hook.mockRestore()
   }

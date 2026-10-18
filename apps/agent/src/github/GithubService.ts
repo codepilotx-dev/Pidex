@@ -27,6 +27,7 @@ const GITHUB_API = 'https://api.github.com'
 const GITHUB_GRAPHQL = `${GITHUB_API}/graphql`
 const MAX_GIT_OUTPUT_BYTES = 1024 * 1024
 const DEFAULT_GIT_TIMEOUT_MS = 120_000
+const REPOSITORIES_PER_PAGE = 100
 
 type CredentialRepository = Pick<EncryptedCredentialRepository, 'get' | 'set' | 'remove'>
 type Fetch = (input: string | URL | Request, init?: RequestInit) => Promise<Response>
@@ -474,13 +475,26 @@ export class GithubService {
   }
 
   async repositories(): Promise<{ repositories: GithubRepository[] }> {
-    const result = await this.rest(
-      'GET',
-      '/user/repos?affiliation=owner,collaborator,organization_member&per_page=100&sort=pushed',
-    )
-    if (!Array.isArray(result))
-      throw new AgentError('GITHUB_RESPONSE_INVALID', 'GitHub 仓库响应无效', 502)
-    return { repositories: result.map(repositoryFromApi) }
+    const repositories: GithubRepository[] = []
+    const seenIds = new Set<number>()
+    for (let page = 1; ; page += 1) {
+      const result = await this.rest(
+        'GET',
+        `/user/repos?affiliation=owner,collaborator,organization_member&per_page=${REPOSITORIES_PER_PAGE}&sort=pushed&page=${page}`,
+      )
+      if (!Array.isArray(result))
+        throw new AgentError('GITHUB_RESPONSE_INVALID', 'GitHub 仓库响应无效', 502)
+      // 服务端按 pushed 排序返回，逐页追加即可保持“最近推送在前”。
+      for (const value of result) {
+        const repository = repositoryFromApi(value)
+        if (seenIds.has(repository.id)) continue
+        seenIds.add(repository.id)
+        repositories.push(repository)
+      }
+      // 后续页请求失败会直接抛出，整个调用必须失败，禁止返回不完整列表。
+      if (result.length < REPOSITORIES_PER_PAGE) break
+    }
+    return { repositories }
   }
 
   async cloneRepository(input: {
@@ -563,23 +577,6 @@ export class GithubService {
         ),
       ),
     }
-  }
-
-  /** Open pull requests whose head branch lives in the given repository. */
-  async listOpenPullRequestsForBranch(input: {
-    owner: string
-    repository: string
-    branch: string
-  }): Promise<GithubPullRequest[]> {
-    validateRepositoryInput(input)
-    const branch = nonEmpty(input.branch, 'branch')
-    const result = await this.rest(
-      'GET',
-      `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repository)}/pulls?state=open&head=${encodeURIComponent(`${input.owner}:${branch}`)}&per_page=100`,
-    )
-    if (!Array.isArray(result))
-      throw new AgentError('GITHUB_RESPONSE_INVALID', 'GitHub Pull Request 列表响应无效', 502)
-    return result.map(pullRequestFromApi)
   }
 
   async readWatch(input: { owner: string; repository: string; number: number }) {
@@ -944,38 +941,85 @@ export class GithubService {
     const branch = input.branch?.trim() || (await this.currentBranch(workspaceRoot))
     const branchCheck = await this.git(workspaceRoot, ['check-ref-format', '--branch', branch])
     if (branchCheck.code !== 0) throw new AgentError('INVALID_REQUEST', 'branch 参数无效', 400)
+    const result = await this.authenticatedRemoteGit(
+      workspaceRoot,
+      remote,
+      repository,
+      credential.accessToken,
+      [
+        'push',
+        ...(input.setUpstream === true ? ['--set-upstream'] : []),
+        ...(input.forceWithLease === true ? ['--force-with-lease'] : []),
+        remote,
+        `refs/heads/${branch}:refs/heads/${branch}`,
+      ],
+    )
+    if (result.code !== 0)
+      throw new AgentError('GITHUB_PUSH_FAILED', safeGitError(result.stderr), 409)
+    return {
+      remote,
+      branch,
+      repositoryUrl: `https://github.com/${repository.owner}/${repository.repository}`,
+      status: await this.workspaceStatus(workspaceRoot),
+    }
+  }
+
+  async runRemoteGit(
+    workspaceRoot: string,
+    remote: string,
+    args: readonly string[],
+  ): Promise<GitCommandResult> {
+    let repository: { owner: string; repository: string } | undefined
+    if (remote !== '.') {
+      try {
+        repository = await this.githubRemote(workspaceRoot, remote)
+      } catch (error) {
+        if (!(error instanceof AgentError) || error.code !== 'GITHUB_REMOTE_UNSUPPORTED')
+          throw error
+      }
+    }
+    const credential = repository ? await this.credential() : null
+    if (!repository || !credential)
+      return this.git(workspaceRoot, args, { GIT_TERMINAL_PROMPT: '0' })
+    return this.authenticatedRemoteGit(
+      workspaceRoot,
+      remote,
+      repository,
+      credential.accessToken,
+      args,
+    )
+  }
+
+  private async authenticatedRemoteGit(
+    workspaceRoot: string,
+    remote: string,
+    repository: { owner: string; repository: string },
+    accessToken: string,
+    args: readonly string[],
+  ): Promise<GitCommandResult> {
     const helperRoot = await mkdtemp(join(tmpdir(), 'pidex-github-askpass-'))
     try {
       const helperPath = await writeAskPassHelper(helperRoot)
-      const result = await this.git(
+      return await this.git(
         workspaceRoot,
         [
           '-c',
           'credential.helper=',
           '-c',
           'credential.useHttpPath=true',
+          // remote.url 是多值配置，先清空才能替换实际使用的首个地址。
+          '-c',
+          `remote.${remote}.url=`,
           '-c',
           `remote.${remote}.url=https://x-access-token@github.com/${repository.owner}/${repository.repository}.git`,
-          'push',
-          ...(input.setUpstream === true ? ['--set-upstream'] : []),
-          ...(input.forceWithLease === true ? ['--force-with-lease'] : []),
-          remote,
-          `refs/heads/${branch}:refs/heads/${branch}`,
+          ...args,
         ],
         {
           GIT_ASKPASS: helperPath,
           GIT_TERMINAL_PROMPT: '0',
-          PIDEX_GITHUB_TOKEN: credential.accessToken,
+          PIDEX_GITHUB_TOKEN: accessToken,
         },
       )
-      if (result.code !== 0)
-        throw new AgentError('GITHUB_PUSH_FAILED', safeGitError(result.stderr), 409)
-      return {
-        remote,
-        branch,
-        repositoryUrl: `https://github.com/${repository.owner}/${repository.repository}`,
-        status: await this.workspaceStatus(workspaceRoot),
-      }
     } finally {
       await rm(helperRoot, { recursive: true, force: true }).catch(() => undefined)
     }
@@ -1187,7 +1231,9 @@ const parseGithubRemote = (value: string) => {
   } catch {
     throw new AgentError('GITHUB_REMOTE_UNSUPPORTED', '当前 remote 不是 GitHub.com 仓库', 400)
   }
-  if (url.hostname.toLowerCase() !== 'github.com')
+  const host = url.hostname.toLowerCase()
+  const isSsh443 = url.protocol === 'ssh:' && host === 'ssh.github.com' && url.port === '443'
+  if (host !== 'github.com' && !isSsh443)
     throw new AgentError('GITHUB_REMOTE_UNSUPPORTED', '当前 remote 不是 GitHub.com 仓库', 400)
   const parts = url.pathname.replace(/^\/+/, '').split('/')
   if (parts.length !== 2 || !parts[0] || !parts[1])

@@ -101,9 +101,10 @@ const runLimited = async <T>(tasks: Array<() => Promise<T>>, limit: number): Pro
 }
 
 /**
- * Owns thread↔pull-request associations: persisted links, execution-directory
- * discovery, and the 60s status cache the sidebar reads. Never triggers a push,
- * fix or merge — that stays with the PR watch service.
+ * Owns thread↔pull-request associations: persisted explicit links, the 60s
+ * status cache the sidebar reads, and the execution-directory probe that only
+ * ranks those links. Never invents associations from a shared branch: two
+ * threads in the same repo/branch would otherwise claim the same PR.
  *
  * ponytail: both caches are unbounded Maps keyed by thread/PR identity; add
  * eviction only if very long-lived sessions make the footprint matter.
@@ -114,7 +115,6 @@ export class ThreadPullRequestService {
   private readonly statusCache = new Map<string, ResolvedStatus>()
   private readonly statusInFlight = new Map<string, Promise<ResolvedStatus>>()
   private readonly environmentCache = new Map<string, { at: number; value: ThreadEnvironment }>()
-  private readonly discoveryCache = new Map<string, number>()
 
   constructor(
     private readonly db: AgentDatabase,
@@ -145,11 +145,22 @@ export class ThreadPullRequestService {
     for (const event of events) await Effect.runPromise(this.hub.publish(event))
   }
 
+  /**
+   * Sidebar-visible associations. Historical `discovered` rows stay in the
+   * database but never reach a read, mutation result or event; re-linking the
+   * same PR upgrades the row to an explicit origin and it shows up again.
+   */
+  private visible(threadId: string): ThreadPullRequestRecord[] {
+    return this.repository()
+      .list(threadId)
+      .filter((record) => record.origin !== 'discovered')
+  }
+
   /** Persists associations and stages one durable event for the affected thread. */
   private publish(threadId: string): EventEnvelope {
     return this.db.insertEvent(threadId, null, 'thread/pull-requests/updated', {
       threadId,
-      items: this.summaries(this.repository().list(threadId)),
+      items: this.summaries(this.visible(threadId)),
     })
   }
 
@@ -187,11 +198,7 @@ export class ThreadPullRequestService {
       return { threadId, items: [] }
     }
     const environment = await this.resolveEnvironment(threadId, resolveCwd)
-    let records = this.repository().list(threadId)
-    if (environment.repo && environment.branch) {
-      await this.discover(threadId, environment)
-      records = this.repository().list(threadId)
-    }
+    const records = this.visible(threadId)
     const statuses = await this.refresh(records)
     return { threadId, items: this.order(records, statuses, environment) }
   }
@@ -240,59 +247,6 @@ export class ThreadPullRequestService {
     })
     const branch = result.stdout.trim()
     return result.code === 0 && branch && branch !== 'HEAD' ? branch : null
-  }
-
-  private async discover(threadId: string, environment: ThreadEnvironment): Promise<void> {
-    if (!environment.repo || !environment.branch) return
-    const repo = environment.repo
-    const key = JSON.stringify([threadId, repo, environment.branch])
-    const cached = this.discoveryCache.get(key)
-    if (cached !== undefined && this.now() - cached < CACHE_TTL_MS) return
-    this.discoveryCache.set(key, this.now())
-    let pullRequests: Awaited<ReturnType<GithubService['listOpenPullRequestsForBranch']>>
-    try {
-      pullRequests = await this.github.listOpenPullRequestsForBranch({
-        owner: repo.owner,
-        repository: repo.repository,
-        branch: environment.branch,
-      })
-    } catch {
-      return
-    }
-    const event = this.db.transaction(() => {
-      const records = this.repository().list(threadId)
-      let changed = false
-      for (const pullRequest of pullRequests) {
-        const existing = records.find(
-          (record) =>
-            identityKey(record) ===
-            identityKey({
-              ...repo,
-              number: pullRequest.number,
-            }),
-        )
-        if (
-          existing &&
-          existing.url === pullRequest.htmlUrl &&
-          existing.title === pullRequest.title &&
-          existing.headRef === pullRequest.head.ref
-        )
-          continue
-        this.repository().upsert({
-          threadId,
-          owner: repo.owner,
-          repository: repo.repository,
-          number: pullRequest.number,
-          url: pullRequest.htmlUrl,
-          title: pullRequest.title,
-          headRef: pullRequest.head.ref,
-          origin: 'discovered',
-        })
-        changed = true
-      }
-      return changed ? this.publish(threadId) : null
-    })
-    if (event) await this.publishStored([event]).catch(() => undefined)
   }
 
   private async refresh(
@@ -439,7 +393,7 @@ export class ThreadPullRequestService {
 
   /** Fresh read for a single thread, used as the mutation result. */
   private async readThreadView(threadId: string): Promise<ThreadPullRequestList> {
-    const records = this.repository().list(threadId)
+    const records = this.visible(threadId)
     const statuses = await this.refresh(records)
     return { threadId, items: this.order(records, statuses, this.cachedEnvironment(threadId)) }
   }

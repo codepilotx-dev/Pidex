@@ -209,7 +209,7 @@ export function createAgentReviewApi({
             },
             async () => unsupportedReviewOperation(),
           ),
-    getAgentReviewCommits: (workspacePath, projectId, ref) =>
+    getAgentReviewCommits: (workspacePath, projectId, ref, limit) =>
       isBrowserVisualReviewCase()
         ? Promise.resolve([])
         : withAgentOrMock(
@@ -232,7 +232,7 @@ export function createAgentReviewApi({
                 }>
               }>('review/commits', {
                 projectId: project.id,
-                limit: 20,
+                limit: limit ?? 20,
                 ...(ref !== undefined ? { ref } : {}),
               })
               return result.commits

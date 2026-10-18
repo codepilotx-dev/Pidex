@@ -795,7 +795,9 @@ export class GitReviewService {
         .split('\0')
         .filter(Boolean)
       for (const path of untracked) {
-        const normalized = validateRelativePath(path)
+        const directory = path.endsWith('/')
+        const normalized = validateRelativePath(directory ? path.slice(0, -1) : path)
+        if (directory) continue
         if (!rawEntries.some((entry) => entry.path === normalized)) {
           rawEntries.push({
             path: normalized,
@@ -1825,7 +1827,7 @@ export class GitReviewService {
       upstream,
       ahead,
       behind,
-      clean: files.length === 0,
+      clean: porcelain.stdout.length === 0,
       files,
     }
   }

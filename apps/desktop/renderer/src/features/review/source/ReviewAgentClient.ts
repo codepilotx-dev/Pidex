@@ -225,8 +225,13 @@ export const reviewAgentClient = {
     return desktopClient.getAgentReviewBranches(workspacePath, projectId)
   },
 
-  async commits(workspacePath: string, projectId?: string, ref?: string): Promise<ReviewCommit[]> {
-    return desktopClient.getAgentReviewCommits(workspacePath, projectId, ref)
+  async commits(
+    workspacePath: string,
+    projectId?: string,
+    ref?: string,
+    limit?: number,
+  ): Promise<ReviewCommit[]> {
+    return desktopClient.getAgentReviewCommits(workspacePath, projectId, ref, limit)
   },
 
   async listComments(

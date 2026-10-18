@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useId, useState } from 'react'
 import {
   Archive,
   FolderOpen,
@@ -16,6 +16,11 @@ import { Tooltip } from '../../components/ui/Tooltip.js'
 import { Button } from '../../components/ui/Button.js'
 import { DropdownActions } from '../../components/ui/DropdownActions.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
+import { DisclosureContent } from '../../components/ui/DisclosureContent.js'
+import {
+  useDisclosureExpanded,
+  type KeyedDisclosureStore,
+} from '../../components/ui/KeyedDisclosureStore.js'
 import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
 import {
   AppContextMenu as SidebarContextMenu,
@@ -35,38 +40,57 @@ import { SidebarProjectHoverCard } from '../layout/sidebar/SidebarProjectHoverCa
 import { countOpenProjectSessions, sidebarProjectKey } from '../layout/sidebar/SidebarViewModel.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { useGitBoard } from './GitBoardContext.js'
+import { GitBoardCommitRows } from './GitBoardCommitRows.js'
 import { toggleGitBoardGroupProject } from './GitBoardState.js'
+
+/**
+ * 提交子列表的折叠键按“区域 + 仓库”区分：同一仓库在项目区与分组区各渲染一次，
+ * 两处展开互不影响，与提交分页的 groupKey 保持一致。
+ */
+export function gitBoardCommitsDisclosureKey(
+  type: 'project' | 'group',
+  project: DesktopWorkspace,
+): string {
+  return `commits:${type}:${sidebarProjectKey(project)}`
+}
 
 export function GitBoardProjectRow({
   project,
   sessions,
+  type = 'project',
   onArchiveSessions,
   onRemoveWorkspace,
   onReport,
   onCreateGroup,
+  commitsDisclosureStore,
 }: {
   project: DesktopWorkspace
   sessions: readonly SessionListItem[]
+  /** 该行出现在“项目”区还是自定义分组；同一仓库会各渲染一次，提交选中态共享。 */
+  type?: 'project' | 'group'
   onArchiveSessions: (sessions: readonly SessionListItem[]) => Promise<boolean>
   onRemoveWorkspace: (project: DesktopWorkspace) => void
   onReport: (message: string) => void
   onCreateGroup: (projectId: string) => void
+  /** 与会话列表一致的折叠仓库：项目行标题负责展开/折叠提交子列表。 */
+  commitsDisclosureStore: KeyedDisclosureStore
 }) {
   const { state, update, repositories, toggleQuickView } = useGitBoard()
   const { projectAppearances } = useDesktopSettings()
   const [managedProject, setManagedProject] = useState(project)
-  const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [managerOpen, setManagerOpen] = useState(false)
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false)
   const [processingAction, setProcessingAction] = useState<'archive' | null>(null)
+  const commitsId = useId()
+  const commitsDisclosureKey = gitBoardCommitsDisclosureKey(type, project)
+  const commitsExpanded = useDisclosureExpanded(commitsDisclosureStore, commitsDisclosureKey)
   useEffect(() => setManagedProject(project), [project])
   const projectKey = sidebarProjectKey(managedProject)
   const isPinned = state.quickProjectIds.includes(managedProject.projectId!)
   const result = repositories[managedProject.projectId!]?.result
   const isUnavailable = result?.ok === false
-  const actionsVisible = hovered || menuOpen
   const appearance = projectAppearances[managedProject.projectId!] ?? DEFAULT_PROJECT_APPEARANCE
   const countedProjectSessions = sessions
   const openCount = countOpenProjectSessions(sessions)
@@ -160,15 +184,18 @@ export function GitBoardProjectRow({
   }
 
   const projectButton = (
-    <span
-      tabIndex={0}
-      aria-label={managedProject.name}
+    <button
+      type="button"
+      aria-controls={commitsId}
+      aria-expanded={commitsExpanded}
       className="sidebar-project-button tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:gap-2 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit tw:focus-visible:outline-none"
+      onClick={() => commitsDisclosureStore.setExpanded(commitsDisclosureKey, !commitsExpanded)}
     >
       <span className="sidebar-project-title-text tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:whitespace-nowrap tw:text-inherit tw:type-row-title">
         {managedProject.name}
       </span>
-    </span>
+
+    </button>
   )
 
   return (
@@ -196,16 +223,14 @@ export function GitBoardProjectRow({
                 )}
               />
             }
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
             trailing={
               <>
                 <div
                   className={cx(
-                    'sidebar-project-actions tw:relative tw:flex tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
-                    actionsVisible
-                      ? 'is-visible tw:opacity-100 tw:pointer-events-auto'
-                      : 'tw:opacity-0 tw:pointer-events-none',
+                    'sidebar-project-actions tw:relative tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
+                    menuOpen
+                      ? 'is-visible tw:flex tw:opacity-100 tw:pointer-events-auto'
+                      : 'tw:hidden tw:group-hover:flex tw:group-focus-within:flex tw:opacity-100 tw:pointer-events-auto',
                   )}
                   onClick={(event) => event.stopPropagation()}
                 >
@@ -328,6 +353,16 @@ export function GitBoardProjectRow({
         onRemoveWorkspace={onRemoveWorkspace}
         onReport={onReport}
       />
+      {!isUnavailable && (
+        <DisclosureContent
+          id={commitsId}
+          expanded={commitsExpanded}
+          mountPolicy="until-exit"
+          className="sidebar-project-commits-disclosure"
+        >
+          <GitBoardCommitRows project={managedProject} type={type} />
+        </DisclosureContent>
+      )}
     </section>
   )
 }

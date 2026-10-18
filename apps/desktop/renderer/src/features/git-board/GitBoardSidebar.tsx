@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { LayoutDashboard, RefreshCw, Pencil, Trash2, ListX } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Github, LayoutDashboard, RefreshCw, Pencil, Trash2, ListX } from 'lucide-react'
 import type { DesktopWorkspace } from '../../../shared/Types.js'
 import type { SessionListItem } from '../../UiTypes.js'
 import { Tooltip } from '../../components/ui/Tooltip.js'
@@ -7,6 +7,7 @@ import { Button } from '../../components/ui/Button.js'
 import { ScrollArea } from '../../components/ui/ScrollArea.js'
 import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { ConfirmationDialog, InputDialog } from '../../components/ui/ConfirmationDialog.js'
+import { createKeyedDisclosureStore } from '../../components/ui/KeyedDisclosureStore.js'
 import { SidebarEmptyRow, SidebarRow } from '../layout/sidebar/SidebarRow.js'
 import { SidebarHoverCardProvider } from '../layout/sidebar/SidebarHoverCard.js'
 import {
@@ -41,8 +42,10 @@ export function GitBoardSidebar({
     state,
     ready,
     view,
+    remoteView,
     update,
     openGroup,
+    openRemoteView,
     storageError,
     projects,
     projectCatalogState,
@@ -53,6 +56,15 @@ export function GitBoardSidebar({
   const [dialog, setDialog] = useState<GroupDialog | null>(null)
   const [name, setName] = useState('')
   const [projectsCollapsed, setProjectsCollapsed] = useState(false)
+  // 与主侧栏的“项目”分组一致：仓库行的提交子列表默认收起，展开态保存在本组件生命周期内，
+  // 不写入看板持久化状态，避免重新进入页面时默认展开全部提交。
+  const commitsDisclosureStore = useMemo(
+    () => createKeyedDisclosureStore({ initialExpandedKeys: [] }),
+    [],
+  )
+  // 速览与 GitHub 仓库页互斥：仓库页打开时“速览”不再显示为当前页。
+  const quickViewActive = view.id === null && remoteView === 'board'
+  const githubViewActive = remoteView === 'github'
   const buckets = buildProjectSessionBuckets(
     sessions.filter((session) => !session.archivedAt),
     [],
@@ -69,10 +81,12 @@ export function GitBoardSidebar({
     setName('')
     setDialog({ kind: 'create', projectId })
   }
-  const renderProject = (project: DesktopWorkspace) => (
+  const renderProject = (project: DesktopWorkspace, type: 'project' | 'group' = 'project') => (
     <GitBoardProjectRow
       key={project.projectId}
       project={project}
+      type={type}
+      commitsDisclosureStore={commitsDisclosureStore}
       sessions={buckets.get(sidebarProjectKey(project))?.allSessions ?? []}
       onArchiveSessions={async (targets) => {
         const result = await onArchiveSessions(targets.map((session) => session.id))
@@ -87,10 +101,9 @@ export function GitBoardSidebar({
   const renderMembers = (ids: readonly string[]) =>
     ids.flatMap((id) => {
       const project = projects.find((item) => item.projectId === id)
-      return project ? [renderProject(project)] : []
+      return project ? [renderProject(project, 'group')] : []
     })
-  const saveGroup = () => {
-    const title = name.trim()
+  const saveGroup = () => {    const title = name.trim()
     if (!title || !dialog || dialog.kind === 'delete') return
     if (dialog.kind === 'create') {
       const id = crypto.randomUUID()
@@ -135,7 +148,7 @@ export function GitBoardSidebar({
         )}
         <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:p-2">
           <SidebarRow
-            active={view.id === null}
+            active={quickViewActive}
             className="tw:group"
             layout="flex"
             leading={<LayoutDashboard aria-hidden size={APP_ICON_SIZE} />}
@@ -159,11 +172,25 @@ export function GitBoardSidebar({
           >
             <button
               type="button"
-              aria-current={view.id === null ? 'page' : undefined}
+              aria-current={quickViewActive ? 'page' : undefined}
               className="tw:w-full tw:cursor-pointer tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit tw:type-body"
               onClick={() => openGroup(null)}
             >
               <span>{t('速览')}</span>
+            </button>
+          </SidebarRow>
+          <SidebarRow
+            active={githubViewActive}
+            layout="flex"
+            leading={<Github aria-hidden size={APP_ICON_SIZE} />}
+          >
+            <button
+              type="button"
+              aria-current={githubViewActive ? 'page' : undefined}
+              className="tw:w-full tw:cursor-pointer tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit tw:type-body"
+              onClick={openRemoteView}
+            >
+              <span>{t('GitHub 仓库')}</span>
             </button>
           </SidebarRow>
         </div>
@@ -182,7 +209,7 @@ export function GitBoardSidebar({
             {projectCatalogState.status === 'unavailable' && (
               <SidebarEmptyRow role="alert">{t('项目列表加载失败')}</SidebarEmptyRow>
             )}
-            {visible.map(renderProject)}
+            {visible.map((project) => renderProject(project))}
             {projectCatalogState.status === 'ready' && !visible.length && (
               <SidebarEmptyRow>{t('没有匹配的 Git 仓库')}</SidebarEmptyRow>
             )}

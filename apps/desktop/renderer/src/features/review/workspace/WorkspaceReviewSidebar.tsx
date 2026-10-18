@@ -1867,6 +1867,7 @@ function WorkspaceReviewSidebarImpl({
         const statusResult = await desktopClient.getWorkspaceGitStatus(
           workspacePath,
           projectId ?? undefined,
+          { refresh: true },
         )
         if ('error' in statusResult) {
           throw new Error(statusResult.error)

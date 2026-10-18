@@ -6,7 +6,7 @@ export const ThreadPullRequestOriginSchema = Schema.Literals([
   'created',
   /** A PR watch was started from this thread. */
   'watch',
-  /** Discovered from the thread's execution directory (branch + origin). */
+  /** Legacy read-time discovery; kept for stored rows, never shown by the sidebar. */
   'discovered',
   /** Linked explicitly by the user. */
   'manual',

@@ -18,11 +18,13 @@ export function GitBoardDetails({
   project,
   source,
   path,
+  hasConflicts = false,
   onClose,
 }: {
   project: DesktopWorkspace
   source: DesktopReviewSource
   path?: string
+  hasConflicts?: boolean
   onClose: () => void
 }) {
   const { t } = useLocale()
@@ -34,6 +36,12 @@ export function GitBoardDetails({
   const [error, setError] = useState<string | null>(null)
   const [retry, setRetry] = useState(0)
   useEffect(() => {
+    if (hasConflicts) {
+      setSummary(null)
+      setDiff(null)
+      setError(null)
+      return
+    }
     let cancelled = false
     void reviewAgentClient
       .summary(project.path, source, true, project.projectId)
@@ -54,9 +62,9 @@ export function GitBoardDetails({
     return () => {
       cancelled = true
     }
-  }, [project.path, project.projectId, source, retry])
+  }, [project.path, project.projectId, source, retry, hasConflicts])
   useEffect(() => {
-    if (!summary || !selectedPath) return
+    if (hasConflicts || !summary || !selectedPath) return
     let cancelled = false
     void reviewAgentClient
       .fileDiff(project.path, source, summary.generation, selectedPath, false, project.projectId)
@@ -69,7 +77,7 @@ export function GitBoardDetails({
     return () => {
       cancelled = true
     }
-  }, [project.path, project.projectId, source, summary, selectedPath])
+  }, [project.path, project.projectId, source, summary, selectedPath, hasConflicts])
   return (
     <aside
       aria-label={t('变更详情')}
@@ -94,7 +102,14 @@ export function GitBoardDetails({
           </Button>
         </Tooltip>
       </header>
-      {error && (
+      {hasConflicts && (
+        <p role="status" className="tw:p-3 tw:type-body-sm tw:text-app-text-meta">
+          {t(
+            '存在未解决的合并冲突，暂不加载差异。冲突解除后将自动恢复，仓库状态和提交历史仍会刷新。',
+          )}
+        </p>
+      )}
+      {!hasConflicts && error && (
         <div role="alert" className="tw:p-3">
           <p>{t(error)}</p>
           <Button
@@ -110,12 +125,12 @@ export function GitBoardDetails({
           </Button>
         </div>
       )}
-      {!summary && !error && (
+      {!hasConflicts && !summary && !error && (
         <p role="status" className="tw:p-3">
           {t('加载中')}
         </p>
       )}
-      {summary && (
+      {!hasConflicts && summary && (
         <>
           <div className="tw:max-h-48 tw:shrink-0 tw:overflow-y-auto tw:border-b tw:border-app-border-subtle tw:p-2">
             {summary.files.length === 0 && <p className="tw:type-body-sm">{t('没有文件变更')}</p>}

@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { removeFixturePaths } from './FixtureCleanup'
 import { GitCommandRunner } from '../src/git/GitCommandRunner'
 import type { AgentLogger } from '../src/observability/AgentLogger'
+import { parsePorcelainStatus } from '../src/review/diff/Parsers'
 import { GitReviewService } from '../src/review/GitReviewService'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 
@@ -114,6 +115,46 @@ describe('GitReviewService', () => {
     ).rejects.toMatchObject({ code: 'GIT_OUTPUT_TOO_LARGE', details: undefined })
     review.dispose()
     db.close()
+  }, 30_000)
+
+  test('未跟踪目录标记不被当作文件，仍拒绝越界路径', () => {
+    expect(parsePorcelainStatus('?? nested/\0 M src/index.ts\0').map((file) => file.path)).toEqual([
+      'src/index.ts',
+    ])
+    expect(() => parsePorcelainStatus('?? ../outside/\0')).toThrow('仓库内相对路径')
+    expect(() => parsePorcelainStatus('?? /absolute/\0')).toThrow('仓库内相对路径')
+  })
+
+  test('父仓库包含独立嵌套仓库时状态和摘要仍可用', async () => {
+    const { root, db, project, review } = await fixture()
+    try {
+      const nested = join(root, 'nested')
+      await mkdir(nested)
+      await git(nested, 'init', '-b', 'main')
+      await git(
+        nested,
+        '-c',
+        'user.name=Pidex Test',
+        '-c',
+        'user.email=test@pidex.local',
+        'commit',
+        '--allow-empty',
+        '-m',
+        'nested',
+      )
+      const nestedOnly = await review.status(project.id)
+      expect(nestedOnly.files).toEqual([])
+      expect(nestedOnly.clean).toBe(false)
+      await writeFile(join(root, 'src', 'index.ts'), 'export const value = 2\n', 'utf8')
+      const status = await review.status(project.id)
+      expect(status.files.map((file) => file.path)).toEqual(['src/index.ts'])
+      const snapshot = await review.summary(project.id, { kind: 'uncommitted' })
+      expect(snapshot.files.map((file) => file.path)).toContain('src/index.ts')
+      expect(snapshot.files.some((file) => file.path.startsWith('nested/'))).toBe(false)
+    } finally {
+      review.dispose()
+      db.close()
+    }
   }, 30_000)
 
   test('读取项目当前工作分支', async () => {

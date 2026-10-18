@@ -48,23 +48,38 @@ const restPullRequest = {
   mergeable: true,
 }
 
-const fixture = async (options: { openPullRequests?: unknown[]; now?: () => number } = {}) => {
+const fixture = async (
+  options: {
+    now?: () => number
+    readWatch?: (input: { owner: string; repository: string; number: number }) => unknown
+  } = {},
+) => {
   const root = await mkdtemp(join(tmpdir(), 'pidex-thread-pr-'))
   paths.push(root)
   const historyPath = join(root, 'history.sqlite')
   const profilePath = join(root, 'profile.sqlite')
   const db = new AgentDatabase({ historyPath, profilePath })
   const thread = db.repositories.threads.createThread('会话')
-  const published: unknown[] = []
+  const published: Array<{ method?: string; params?: unknown }> = []
+  const counts = { watchReads: 0 }
   const github = {
-    readPullRequest: async () => ({ pullRequest: restPullRequest }),
-    readWatch: async () => watch(),
+    readPullRequest: async (input: { owner: string; repository: string; number: number }) => ({
+      pullRequest: {
+        ...restPullRequest,
+        number: input.number,
+        title: `PR ${input.number}`,
+        htmlUrl: `https://github.com/${input.owner}/${input.repository}/pull/${input.number}`,
+      },
+    }),
+    readWatch: async (input: { owner: string; repository: string; number: number }) => {
+      counts.watchReads += 1
+      return options.readWatch ? options.readWatch(input) : watch()
+    },
     repositoryIdentity: async () => ({ owner: 'octocat', repository: 'fixture' }),
-    listOpenPullRequestsForBranch: async () => options.openPullRequests ?? [],
   } as never
   const hub = {
     publish: (event: unknown) => {
-      published.push(event)
+      published.push(event as { method?: string; params?: unknown })
       return Effect.succeed(undefined)
     },
   } as never
@@ -73,7 +88,7 @@ const fixture = async (options: { openPullRequests?: unknown[]; now?: () => numb
     git,
     ...(options.now ? { now: options.now } : {}),
   })
-  return { db, historyPath, profilePath, thread, published, service, git }
+  return { db, historyPath, profilePath, thread, published, service, git, counts }
 }
 
 describe('thread pull request status', () => {
@@ -128,55 +143,39 @@ describe('thread pull request status', () => {
 })
 
 describe('thread pull request associations', () => {
-  test('discovers new PRs alongside existing links and emits only changed associations', async () => {
+  test('shares directory and branch without linking: only the explicit thread returns a PR', async () => {
     let now = 0
-    const openPullRequests = [restPullRequest]
-    const { db, thread, service, published, git } = await fixture({
-      openPullRequests,
-      now: () => now,
-    })
+    const { db, thread, service, published } = await fixture({ now: () => now })
+    const sibling = db.repositories.threads.createThread('同目录会话')
     await service.link({ threadId: thread.id, url: restPullRequest.htmlUrl })
-    const read = () => service.read({ threadIds: [thread.id], resolveCwd: async () => 'C:\\repo' })
-    await read()
-    expect(published).toHaveLength(1)
-    openPullRequests.push({
-      ...restPullRequest,
-      number: 8,
-      htmlUrl: 'https://github.com/octocat/fixture/pull/8',
-    })
-    expect((await read()).threads[0]!.items).toHaveLength(1)
-    now = 60_000
-    expect((await read()).threads[0]!.items).toHaveLength(2)
-    expect(published).toHaveLength(2)
+    published.length = 0
+    const read = () =>
+      service.read({
+        threadIds: [thread.id, sibling.id],
+        resolveCwd: async () => 'C:\\repo',
+      })
+
+    const first = await read()
+    expect(first.threads.map((entry) => entry.items.map((item) => item.number))).toEqual([
+      [7],
+      [],
+    ])
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      now += 60_000
+      const repeated = await read()
+      expect(repeated.threads.map((entry) => entry.items.map((item) => item.number))).toEqual([
+        [7],
+        [],
+      ])
+    }
+    expect(published).toEqual([])
+    expect(db.repositories.threadPullRequests.list(sibling.id)).toEqual([])
     expect(
-      db.repositories.threadPullRequests.list(thread.id).find((pr) => pr.number === 7)?.origin,
-    ).toBe('manual')
-    now += 60_000
-    await read()
-    expect(published).toHaveLength(2)
-    expect(
-      db.sqlite
-        .query("SELECT method FROM events WHERE method = 'thread/pull-requests/updated'")
-        .all(),
-    ).toHaveLength(2)
-    git.run = async () => ({ code: 0, stdout: 'next-feature\n', stderr: '' })
-    openPullRequests.splice(0, openPullRequests.length, {
-      ...restPullRequest,
-      number: 9,
-      htmlUrl: 'https://github.com/octocat/fixture/pull/9',
-      head: { ...restPullRequest.head, ref: 'next-feature' },
-    })
-    now += 60_000
-    const switched = (await read()).threads[0]!.items
-    expect(switched).toHaveLength(3)
-    expect(switched[0]).toMatchObject({ number: 9, primary: true })
-    expect(published).toHaveLength(3)
-    openPullRequests[0] = { ...openPullRequests[0]!, title: 'Updated title' }
-    now += 60_000
-    expect((await read()).threads[0]!.items[0]!.title).toBe('Updated title')
-    expect(published).toHaveLength(4)
+      db.sqlite.query("SELECT method FROM events WHERE method = 'thread/pull-requests/updated'").all(),
+    ).toHaveLength(1)
     db.close()
   })
+
   test('persists links, prefers explicit origins and survives reopen', async () => {
     const { db, historyPath, profilePath, thread } = await fixture()
     const repository = db.repositories.threadPullRequests
@@ -251,20 +250,159 @@ describe('thread pull request associations', () => {
     expect(published).toHaveLength(2)
   })
 
-  test('discovers an open PR for the execution directory branch and marks it primary', async () => {
-    const { thread, service } = await fixture({ openPullRequests: [restPullRequest] })
-    const discovered = await service.read({
-      threadIds: [thread.id],
-      resolveCwd: async () => 'C:\\repo',
-    })
-    expect(discovered.threads[0]!.items).toHaveLength(1)
-    expect(discovered.threads[0]!.items[0]).toMatchObject({
+  test('hides historical discovered rows from reads, mutation results and events', async () => {
+    const { db, thread, service, published } = await fixture()
+    const repository = db.repositories.threadPullRequests
+    const historical = {
+      threadId: thread.id,
       owner: 'octocat',
       repository: 'fixture',
       number: 7,
-      origin: 'discovered',
-      primary: true,
-      status: { state: 'mergeable' },
+      url: restPullRequest.htmlUrl,
+      title: '旧自动发现',
+      headRef: 'feature',
+      origin: 'discovered' as const,
+    }
+    repository.upsert(historical)
+    const read = () => service.read({ threadIds: [thread.id], resolveCwd: async () => 'C:\\repo' })
+
+    expect((await read()).threads[0]!.items).toEqual([])
+
+    const linked = await service.link({
+      threadId: thread.id,
+      url: 'https://github.com/octocat/fixture/pull/8',
     })
+    expect(linked.thread.items.map((item) => [item.number, item.origin])).toEqual([[8, 'manual']])
+    expect(repository.list(thread.id)).toHaveLength(2)
+
+    const unlinked = await service.unlink({
+      threadId: thread.id,
+      owner: 'octocat',
+      repository: 'fixture',
+      number: 8,
+    })
+    expect(unlinked.thread.items).toEqual([])
+
+    expect(published).toHaveLength(2)
+    for (const event of published) {
+      const items = (event.params as { items: Array<{ number: number }> }).items
+      expect(items.map((item) => item.number)).not.toContain(7)
+    }
+    // 历史记录只从展示与状态查询中隐去，数据库原行保留。
+    expect(repository.list(thread.id)).toEqual([
+      expect.objectContaining({ number: 7, origin: 'discovered', title: '旧自动发现' }),
+    ])
+    db.close()
+  })
+
+  test('keeps created, manual and watch associations visible', async () => {
+    const { db, thread, service } = await fixture()
+    const record = (number: number, origin: 'created' | 'watch') =>
+      service.record({
+        threadId: thread.id,
+        owner: 'octocat',
+        repository: 'fixture',
+        number,
+        url: `https://github.com/octocat/fixture/pull/${number}`,
+        title: `PR ${number}`,
+        headRef: 'feature',
+        origin,
+      })
+    record(7, 'created')
+    record(8, 'watch')
+    await service.link({
+      threadId: thread.id,
+      url: 'https://github.com/octocat/fixture/pull/9',
+    })
+
+    const items = (
+      await service.read({ threadIds: [thread.id], resolveCwd: async () => 'C:\\repo' })
+    ).threads[0]!.items
+    expect(items.map((item) => [item.number, item.origin]).sort()).toEqual([
+      [7, 'created'],
+      [8, 'watch'],
+      [9, 'manual'],
+    ])
+    expect(items.filter((item) => item.primary)).toHaveLength(1)
+    db.close()
+  })
+
+  test('re-linking a historical PR upgrades it to an explicit origin and shows it', async () => {
+    const { db, thread, service } = await fixture()
+    db.repositories.threadPullRequests.upsert({
+      threadId: thread.id,
+      owner: 'octocat',
+      repository: 'fixture',
+      number: 7,
+      url: restPullRequest.htmlUrl,
+      title: '旧自动发现',
+      headRef: 'feature',
+      origin: 'discovered',
+    })
+
+    const linked = await service.link({ threadId: thread.id, url: restPullRequest.htmlUrl })
+    expect(linked.thread.items).toHaveLength(1)
+    expect(linked.thread.items[0]).toMatchObject({ number: 7, origin: 'manual', primary: true })
+    expect(db.repositories.threadPullRequests.list(thread.id)).toEqual([
+      expect.objectContaining({ number: 7, origin: 'manual' }),
+    ])
+    db.close()
+  })
+
+  test('unlinking stays unlinked across refresh cycles', async () => {
+    let now = 0
+    const { db, thread, service, published } = await fixture({ now: () => now })
+    await service.link({ threadId: thread.id, url: restPullRequest.htmlUrl })
+    const read = () => service.read({ threadIds: [thread.id], resolveCwd: async () => 'C:\\repo' })
+    expect((await read()).threads[0]!.items).toHaveLength(1)
+
+    await service.unlink({
+      threadId: thread.id,
+      owner: 'octocat',
+      repository: 'fixture',
+      number: 7,
+    })
+    const events = published.length
+    for (let cycle = 0; cycle < 3; cycle += 1) {
+      now += 60_000
+      expect((await read()).threads[0]!.items).toEqual([])
+    }
+    expect(published).toHaveLength(events)
+    expect(db.repositories.threadPullRequests.list(thread.id)).toEqual([])
+    db.close()
+  })
+
+  test('caches status within the freshness window and ranks the matching branch first', async () => {
+    let now = 1_000
+    const { db, thread, service, counts } = await fixture({ now: () => now })
+    const repository = db.repositories.threadPullRequests
+    const link = (number: number, headRef: string) =>
+      repository.upsert({
+        threadId: thread.id,
+        owner: 'octocat',
+        repository: 'fixture',
+        number,
+        url: `https://github.com/octocat/fixture/pull/${number}`,
+        title: `PR ${number}`,
+        headRef,
+        origin: 'manual',
+      })
+    link(8, 'other')
+    link(7, 'feature')
+    const read = () => service.read({ threadIds: [thread.id], resolveCwd: async () => 'C:\\repo' })
+
+    const items = (await read()).threads[0]!.items
+    expect(items.map((item) => item.number)).toEqual([7, 8])
+    expect(items[0]).toMatchObject({ primary: true, status: { state: 'mergeable' } })
+    expect(items[1]).toMatchObject({ primary: false })
+
+    const reads = counts.watchReads
+    now += 30_000
+    await read()
+    expect(counts.watchReads).toBe(reads)
+    now += 60_000
+    await read()
+    expect(counts.watchReads).toBeGreaterThan(reads)
+    db.close()
   })
 })

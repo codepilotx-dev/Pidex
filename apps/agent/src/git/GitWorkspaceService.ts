@@ -2,10 +2,13 @@ import { realpath } from 'node:fs/promises'
 import { isAbsolute, relative, resolve } from 'node:path'
 import { AgentError } from '../Domain'
 import type { RepositoryDatabase } from '../storage/repositories/RepositoryDatabase'
+import type { GithubService } from '../github/GithubService'
 import { GitCommandRunner } from './GitCommandRunner'
 
 const DEFAULT_MAX_OUTPUT_BYTES = 4 * 1024 * 1024
 const DEFAULT_TIMEOUT_MS = 30_000
+// 无 GitHub 集成时保留系统凭据配置，禁止等待不可见的终端输入。
+const NETWORK_GIT_ENV = { GIT_TERMINAL_PROMPT: '0' } as const
 
 const isContainedPath = (parent: string, candidate: string) => {
   const value = relative(parent, candidate)
@@ -18,6 +21,7 @@ export class GitWorkspaceService {
   constructor(
     private readonly db: RepositoryDatabase,
     runner?: GitCommandRunner,
+    private readonly github?: Pick<GithubService, 'runRemoteGit'>,
   ) {
     this.runner =
       runner ??
@@ -80,6 +84,76 @@ export class GitWorkspaceService {
     return { project }
   }
 
+  async fetch(projectId: string) {
+    const { project, repositoryRoot } = await this.repository(projectId)
+    const remotes = await this.runner.run({ cwd: repositoryRoot, args: ['remote'] })
+    for (const remote of remotes.stdout.trim().split('\n').filter(Boolean)) {
+      const skip = await this.runner.run({
+        cwd: repositoryRoot,
+        args: ['config', '--bool', '--get', `remote.${remote}.skipFetchAll`],
+        acceptedCodes: [0, 1],
+      })
+      if (skip.stdout.trim() === 'true') continue
+      const result = await this.runRemoteGit(repositoryRoot, remote, ['fetch', '--', remote])
+      if (result.code !== 0)
+        throw new AgentError(
+          'GIT_COMMAND_FAILED',
+          '获取失败，请检查登录凭据、仓库权限和网络设置',
+          409,
+        )
+    }
+    return { project }
+  }
+
+  async pull(projectId: string) {
+    const { project, repositoryRoot } = await this.repository(projectId)
+    const branch = await this.runner.run({
+      cwd: repositoryRoot,
+      args: ['symbolic-ref', '--quiet', '--short', 'HEAD'],
+      acceptedCodes: [0, 1, 128],
+    })
+    if (branch.code !== 0 || !branch.stdout.trim()) {
+      throw new AgentError('GIT_BRANCH_REQUIRED', '当前处于 detached HEAD，无法拉取', 409)
+    }
+    const upstream = await this.runner.run({
+      cwd: repositoryRoot,
+      args: ['rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'],
+      acceptedCodes: [0, 128],
+    })
+    if (upstream.code !== 0 || !upstream.stdout.trim()) {
+      throw new AgentError('GIT_BRANCH_REQUIRED', '当前分支未设置上游分支，无法拉取', 409)
+    }
+
+    const remote = await this.runner.run({
+      cwd: repositoryRoot,
+      args: ['config', '--get', `branch.${branch.stdout.trim()}.remote`],
+    })
+    const pulled = await this.runRemoteGit(repositoryRoot, remote.stdout.trim(), [
+      '-c',
+      'pull.rebase=false',
+      '-c',
+      'rebase.autoStash=false',
+      'pull',
+      '--ff-only',
+      '--no-rebase',
+      '--no-autostash',
+    ])
+    if (pulled.code !== 0) {
+      throw new AgentError(
+        'GIT_PULL_FAILED',
+        '拉取失败：请检查登录凭据、仓库权限和网络；分支分叉或本地改动也会阻止快进更新',
+        409,
+      )
+    }
+    return { project }
+  }
+
+  private runRemoteGit(cwd: string, remote: string, args: readonly string[]) {
+    return this.github
+      ? this.github.runRemoteGit(cwd, remote, args)
+      : this.runner.run({ cwd, args, env: NETWORK_GIT_ENV, acceptedCodes: null })
+  }
+
   private async repository(projectId: string) {
     const project = this.db.getProject(projectId)
     if (!project || project.removedAt) {
@@ -113,7 +187,8 @@ export class GitWorkspaceService {
     if (!isContainedPath(projectRoot, repositoryRoot)) {
       throw new AgentError('PATH_DENIED', 'Git 仓库超出项目工作区边界', 403)
     }
-    return { project, repositoryRoot }
+    const { rootPath: _rootPath, ...publicProject } = project
+    return { project: publicProject, repositoryRoot }
   }
 
   private async validateBranchName(repositoryRoot: string, value: string) {

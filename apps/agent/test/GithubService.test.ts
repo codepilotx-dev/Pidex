@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp } from 'node:fs/promises'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { access, mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { removeFixturePaths } from './FixtureCleanup'
@@ -10,6 +10,8 @@ import {
 } from '../src/auth/EncryptedCredentialRepository'
 import { AgentError } from '../src/Domain'
 import { GithubService, __test } from '../src/github/GithubService'
+import { GitCommandRunner } from '../src/git/GitCommandRunner'
+import { GitWorkspaceService } from '../src/git/GitWorkspaceService'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 
 const paths: string[] = []
@@ -39,6 +41,27 @@ const json = (value: unknown, status = 200, headers?: Record<string, string>) =>
     status,
     headers: { 'Content-Type': 'application/json', ...headers },
   })
+
+const repositoryPayload = (id: number) => ({
+  id,
+  name: `repo-${id}`,
+  full_name: `octocat/repo-${id}`,
+  owner: { login: 'octocat' },
+  private: false,
+  fork: false,
+  archived: false,
+  disabled: false,
+  clone_url: `https://github.com/octocat/repo-${id}.git`,
+  ssh_url: `git@github.com:octocat/repo-${id}.git`,
+  html_url: `https://github.com/octocat/repo-${id}`,
+  description: null,
+  default_branch: 'main',
+  pushed_at: null,
+  updated_at: '2026-01-01T00:00:00Z',
+})
+
+const repositoryPage = (from: number, count: number) =>
+  Array.from({ length: count }, (_, index) => repositoryPayload(from + index))
 
 const git = async (cwd: string, ...args: string[]) => {
   const process = Bun.spawn(['git', ...args], { cwd, stdout: 'pipe', stderr: 'pipe' })
@@ -325,6 +348,85 @@ describe('GithubService API', () => {
     db.close()
   })
 
+  test('仓库列表逐页合并，保持服务端顺序', async () => {
+    const { db, credentials } = await repository()
+    await Effect.runPromise(
+      credentials.set({
+        integrationID: 'github',
+        value: { type: 'oauth', accessToken: 'token', tokenType: 'bearer', scope: 'repo' },
+      }),
+    )
+    const urls: string[] = []
+    const service = new GithubService(credentials, {
+      fetch: async (input) => {
+        const url = String(input)
+        urls.push(url)
+        const page = Number(new URL(url).searchParams.get('page'))
+        if (page === 1) return json(repositoryPage(1, 100))
+        if (page === 2) return json(repositoryPage(101, 2))
+        throw new Error(`unexpected page ${page}`)
+      },
+    })
+
+    const { repositories } = await service.repositories()
+    // 第 1 页满 100 条必须继续取第 2 页；第 2 页 2 条（<100）即结束。
+    expect(repositories.map(({ id }) => id)).toEqual([
+      ...Array.from({ length: 100 }, (_, index) => index + 1),
+      101,
+      102,
+    ])
+    expect(urls).toHaveLength(2)
+    expect(urls[0]).toContain('page=1')
+    expect(urls[1]).toContain('page=2')
+    expect(urls.every((url) => url.includes('per_page=100'))).toBe(true)
+    db.close()
+  })
+
+  test('仓库列表跨页重复的仓库按 id 只保留首次出现', async () => {
+    const { db, credentials } = await repository()
+    await Effect.runPromise(
+      credentials.set({
+        integrationID: 'github',
+        value: { type: 'oauth', accessToken: 'token', tokenType: 'bearer', scope: 'repo' },
+      }),
+    )
+    const service = new GithubService(credentials, {
+      fetch: async (input) =>
+        new URL(String(input)).searchParams.get('page') === '1'
+          ? json(repositoryPage(1, 100))
+          : json([repositoryPayload(100), repositoryPayload(101)]),
+    })
+
+    const { repositories } = await service.repositories()
+    // 第 2 页重复了第 1 页末条 id=100，去重后保留首次出现的位置与顺序。
+    expect(repositories).toHaveLength(101)
+    expect(repositories.at(-1)?.id).toBe(101)
+    expect(repositories.filter(({ id }) => id === 100)).toHaveLength(1)
+    db.close()
+  })
+
+  test('后续分页失败时整个调用失败，不返回部分列表', async () => {
+    const { db, credentials } = await repository()
+    await Effect.runPromise(
+      credentials.set({
+        integrationID: 'github',
+        value: { type: 'oauth', accessToken: 'token', tokenType: 'bearer', scope: 'repo' },
+      }),
+    )
+    const service = new GithubService(credentials, {
+      fetch: async (input) =>
+        new URL(String(input)).searchParams.get('page') === '1'
+          ? json(repositoryPage(1, 100))
+          : json({ message: 'Server Error' }, 500),
+    })
+
+    await expect(service.repositories()).rejects.toMatchObject({
+      code: 'GITHUB_API_FAILED',
+      status: 500,
+    })
+    db.close()
+  })
+
   test('Profile overview 使用真实 GraphQL 组织、仓库和贡献数据', async () => {
     const { db, credentials } = await repository()
     await Effect.runPromise(
@@ -564,7 +666,7 @@ describe('GithubService API', () => {
     await Bun.write(join(root, 'README.md'), '# fixture\n')
     await git(root, 'add', 'README.md')
     await git(root, 'commit', '-m', 'initial')
-    await git(root, 'remote', 'add', 'origin', 'git@github.com:octocat/repo.git')
+    await git(root, 'remote', 'add', 'origin', 'ssh://git@ssh.github.com:443/octocat/repo.git')
     await Effect.runPromise(
       credentials.set({
         integrationID: 'github',
@@ -646,6 +748,98 @@ describe('GithubService API', () => {
     db.close()
   })
 
+  test('Fetch/Pull 复用加密保存的 GitHub 凭据，隔离其他 remote，并清理认证脚本', async () => {
+    const { root, db, credentials } = await repository()
+    await git(root, 'init', '-b', 'main')
+    await git(root, 'config', 'user.name', 'Pidex Test')
+    await git(root, 'config', 'user.email', 'test@pidex.local')
+    await git(root, 'commit', '--allow-empty', '-m', 'initial')
+    await git(root, 'remote', 'add', 'origin', 'ssh://git@ssh.github.com:443/octocat/private.git')
+    await git(root, 'remote', 'add', 'backup', 'https://gitlab.com/octocat/private.git')
+    await git(root, 'remote', 'add', 'skipped', 'https://github.com/octocat/skipped.git')
+    await git(root, 'config', 'remote.skipped.skipFetchAll', 'true')
+    await git(root, 'update-ref', 'refs/remotes/origin/main', 'HEAD')
+    await git(root, 'branch', '--set-upstream-to', 'origin/main')
+    const project = db.createProject({ rootPath: root })
+    const fakeToken = 'fixture-github-token'
+    await Effect.runPromise(
+      credentials.set({
+        integrationID: 'github',
+        value: {
+          type: 'oauth',
+          accessToken: fakeToken,
+          tokenType: 'bearer',
+          scope: 'repo read:user read:org',
+        },
+      }),
+    )
+    const github = new GithubService(credentials)
+    const service = new GitWorkspaceService(db, undefined, github)
+    const originalRun = GitCommandRunner.prototype.run
+    const calls: Array<{ args: readonly string[]; authenticated: boolean }> = []
+    const helpers: string[] = []
+    let failNetwork = false
+    const runner = spyOn(GitCommandRunner.prototype, 'run').mockImplementation(
+      async function (this: GitCommandRunner, input) {
+        if (!input.args.some((arg) => ['fetch', 'pull', 'push'].includes(arg)))
+          return originalRun.call(this, input)
+        const authenticated = input.env?.PIDEX_GITHUB_TOKEN === fakeToken
+        calls.push({ args: input.args, authenticated })
+        expect(input.env?.GIT_TERMINAL_PROMPT).toBe('0')
+        expect(input.args.join(' ').includes(fakeToken)).toBe(false)
+        if (authenticated) {
+          expect(input.args).toContain(
+            'remote.origin.url=https://x-access-token@github.com/octocat/private.git',
+          )
+          const operationIndex = input.args.findIndex((arg) => ['fetch', 'pull', 'push'].includes(arg))
+          const effectiveRemote = await originalRun.call(this, {
+            cwd: root,
+            args: [...input.args.slice(0, operationIndex), 'remote', 'get-url', 'origin'],
+          })
+          expect(effectiveRemote.stdout.trim()).toBe(
+            'https://x-access-token@github.com/octocat/private.git',
+          )
+          const helper = input.env!.GIT_ASKPASS!
+          helpers.push(helper)
+          expect((await readFile(helper, 'utf8')).includes(fakeToken)).toBe(false)
+        } else {
+          expect(input.env?.GIT_ASKPASS).toBeUndefined()
+        }
+        return { code: failNetwork ? 128 : 0, stdout: '', stderr: failNetwork ? fakeToken : '' }
+      },
+    )
+    try {
+      await service.fetch(project.id)
+      expect(calls.map(({ authenticated }) => authenticated)).toEqual([false, true])
+      expect(calls.some(({ args }) => args.includes('skipped'))).toBe(false)
+      await github.push({ workspaceRoot: root })
+      expect(calls.at(-1)?.authenticated).toBe(true)
+      await service.pull(project.id)
+      expect(calls.at(-1)?.authenticated).toBe(true)
+      expect(calls.at(-1)?.args).toContain('--ff-only')
+      expect(calls.at(-1)?.args).toContain('--no-autostash')
+      // HTTPS 与 SSH remote 使用相同的已登录凭据。
+      await git(root, 'remote', 'set-url', 'origin', 'https://github.com/octocat/private.git')
+      await service.pull(project.id)
+      expect(calls.at(-1)?.authenticated).toBe(true)
+      failNetwork = true
+      await expect(service.pull(project.id)).rejects.toMatchObject({ code: 'GIT_PULL_FAILED' })
+      await git(root, 'remote', 'remove', 'backup')
+      await expect(service.fetch(project.id)).rejects.toMatchObject({ code: 'GIT_COMMAND_FAILED' })
+      for (const helper of helpers) await expect(access(helper)).rejects.toThrow()
+      failNetwork = false
+      await Effect.runPromise(credentials.remove('github'))
+      await service.pull(project.id)
+      expect(calls.at(-1)?.authenticated).toBe(false)
+      expect(await git(root, 'remote', 'get-url', 'origin')).toBe(
+        'https://github.com/octocat/private.git',
+      )
+    } finally {
+      runner.mockRestore()
+      db.close()
+    }
+  }, 30_000)
+
   test('只接受 GitHub.com remote', () => {
     expect(__test.parseGithubRemote('git@github.com:octocat/repo.git')).toEqual({
       owner: 'octocat',
@@ -655,6 +849,13 @@ describe('GithubService API', () => {
       owner: 'octocat',
       repository: 'repo',
     })
+    expect(__test.parseGithubRemote('ssh://git@ssh.github.com:443/octocat/repo.git')).toEqual({
+      owner: 'octocat',
+      repository: 'repo',
+    })
+    expect(() => __test.parseGithubRemote('https://ssh.github.com/octocat/repo.git')).toThrow(
+      '不是 GitHub.com',
+    )
     expect(() => __test.parseGithubRemote('https://gitlab.com/octocat/repo.git')).toThrow(
       '不是 GitHub.com',
     )
