@@ -29,6 +29,8 @@ export type ResolvedPermissionDecision =
       decision: 'ask'
       risk: PermissionDecision['risk']
       reason: string
+      /** Explicit ask rules and host-forced approvals never route to Guardian. */
+      forceHumanApproval: boolean
     }
   | { action: 'deny'; reason: string; decision: 'deny'; risk: PermissionDecision['risk'] }
 
@@ -87,7 +89,13 @@ const hardGatedCapability = (invocation: ToolInvocation, tool: ToolCatalogEntry)
   return null
 }
 
-/** Pure permission truth source used by prompting, exposure, approval and execution. */
+/**
+ * Pure permission truth source used by prompting, exposure, approval and
+ * execution. Host facts (rules, protected resources, hook asks) are loaded
+ * outside this engine; here they are interpreted in one fixed order:
+ * hard deny → Plan/read-only roots/disabled capability → Deny rule → Ask rule
+ * → forced approval/protected resources → bounded Allow rule → preset policy.
+ */
 export class PermissionDecisionEngine {
   evaluate(invocation: ToolInvocation, tool: ToolCatalogEntry): ResolvedPermissionDecision {
     invocation = {
@@ -133,53 +141,80 @@ export class PermissionDecisionEngine {
       risk,
       reason,
     })
-    const review = (reason: string): ResolvedPermissionDecision => ({
+    const review = (
+      reason: string,
+      forceHumanApproval: boolean,
+      reviewer?: 'user' | 'auto_review',
+    ): ResolvedPermissionDecision => ({
       action: 'review',
-      reviewer:
-        invocation.authorizationScope?.computerApp &&
-        invocation.authorizationScope.ruleRequiresApproval
-          ? 'user'
-          : invocation.permissionConfig.approvalsReviewer,
+      reviewer: forceHumanApproval ? 'user' : (reviewer ?? invocation.permissionConfig.approvalsReviewer),
       sandbox,
       decision: 'ask',
       risk,
       reason,
+      forceHumanApproval,
     })
     const policy = invocation.permissionConfig.approvalPolicy
     // Capability switches are hard gates, not merely instructions about who
-    // reviews a request. They must run before always-review can create one.
+    // reviews a request. They must run before rules or always-review can create
+    // a request.
     const hardCapability = hardGatedCapability(invocation, tool)
     if (isGranularApprovalPolicy(policy) && hardCapability) {
       if (!policy[hardCapability]) return deny(`granular 策略禁止 ${hardCapability} capability`)
     }
+
+    // 1. Explicit Deny rules always win over ask/allow and over every reviewer.
+    const ruleEffect = invocation.permissionFacts?.ruleEffect
+    if (ruleEffect === 'deny') return deny('权限规则拒绝此操作')
+
+    // 2. Explicit Ask rules always require a human. Guardian, persistent allow
+    // rules and temporary grants can never answer them.
+    if (ruleEffect === 'ask') {
+      if (policy === 'never') return deny('never 策略禁止等待人工审批')
+      if (isGranularApprovalPolicy(policy) && !policy.rules)
+        return deny('细粒度策略禁止规则审批')
+      return review(
+        invocation.permissionFacts?.approvalReason ?? '权限规则要求人工批准',
+        true,
+      )
+    }
+
     // A not-yet-granted application is an elevation like any other. It routes
     // through the same policy gates, but the prompt must say what the grant
     // actually means: screenshots enter the chat and the app may be fronted.
     const computerApp = invocation.authorizationScope?.computerApp
     if (computerApp && invocation.authorizationScope?.ruleRequiresApproval) {
       if (policy === 'never') return deny(`never 策略禁止新的电脑应用授权：${computerApp.name}`)
-      return isGranularApprovalPolicy(policy) && !policy[approvalCapability(invocation, tool)]
-        ? deny(`细粒度策略禁止新的电脑应用授权：${computerApp.name}`)
-        : review(
-            `允许在此聊天中读取和操作应用：${computerApp.name}。截图会进入聊天，必要时会短暂切到前台。`,
-          )
+      if (isGranularApprovalPolicy(policy) && !policy[approvalCapability(invocation, tool)])
+        return deny(`细粒度策略禁止新的电脑应用授权：${computerApp.name}`)
+      return review(
+        `允许在此聊天中读取和操作应用：${computerApp.name}。截图会进入聊天，必要时会短暂切到前台。`,
+        true,
+      )
     }
-    const elevated =
-      hasRequestedPermissions(invocation.input) ||
-      invocation.permissionFacts?.skillScript === true ||
-      invocation.authorizationScope?.ruleRequiresApproval === true ||
-      invocation.permissionFacts?.hookRequiresApproval === true ||
+
+    // 3. Host-forced approval and protected resources. A bounded allow rule or
+    // an existing grant cannot remove these gates. Destructive actions are
+    // host facts, never model arguments, so they ask even under on-request
+    // where an ordinary in-scope command runs without a prompt.
+    const forcedApproval =
+      invocation.permissionFacts?.forcedApproval === true ||
       invocation.permissionFacts?.ruleRequiresApproval === true ||
-      (tool.origin?.kind === 'mcp' && tool.capabilities.externalState) ||
+      invocation.permissionFacts?.destructive === true ||
+      invocation.permissionFacts?.hookRequiresApproval === true ||
+      invocation.permissionFacts?.skillScript === true ||
       tool.approvalStrategy === 'always-review' ||
-      Boolean(invocation.permissionFacts?.approvalCategories?.length)
-    if (elevated) {
+      (tool.origin?.kind === 'mcp' && tool.capabilities.externalState) ||
+      (invocation.permissionFacts?.approvalCategories?.length ?? 0) > 0 ||
+      hasRequestedPermissions(invocation.input)
+    if (forcedApproval) {
       if (policy === 'never') return deny('never 策略禁止等待审批或新增授权')
       if (isGranularApprovalPolicy(policy)) {
         const categories = new Set(invocation.permissionFacts?.approvalCategories ?? [])
         categories.add(approvalCapability(invocation, tool))
         if (
           invocation.permissionFacts?.ruleRequiresApproval ||
+          invocation.permissionFacts?.destructive ||
           invocation.permissionFacts?.hookRequiresApproval ||
           invocation.authorizationScope?.ruleRequiresApproval
         )
@@ -191,15 +226,21 @@ export class PermissionDecisionEngine {
       }
       return review(
         invocation.permissionFacts?.approvalReason ?? '额外范围、工具、Hook 或规则要求审批',
+        false,
       )
     }
-    if (computerApp) return allow('电脑应用访问资格已满足')
+
+    // 4. A matched Allow rule covers only ordinary approval; it never expands
+    // the file scope or removes a forced gate.
+    if (ruleEffect === 'allow') return allow('已匹配允许规则，免除普通审批')
+
     if (tool.approvalStrategy === 'never-review') return allow('工具声明为无需审批')
+    if (computerApp) return allow('电脑应用访问资格已满足')
     if (isGranularApprovalPolicy(policy)) return allow('当前权限范围内执行')
     if (policy === 'untrusted')
-      return tool.capabilities.filesystem === 'read' && !tool.capabilities.process && !elevated
+      return tool.capabilities.filesystem === 'read' && !tool.capabilities.process
         ? allow('可信纯读取操作')
-        : review('untrusted 策略要求审批非纯读取操作')
+        : review('untrusted 策略要求审批非纯读取操作', false)
     return allow('当前权限范围内执行')
   }
 }

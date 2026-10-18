@@ -11,6 +11,7 @@ export const interactionHandlers = {
     'interaction/questionPause',
     'approval/rules/list',
     'approval/rules/revoke',
+    'approval/rules/upsert',
     'approval/reviewState',
     'approval/retry',
   ],
@@ -30,7 +31,16 @@ export const interactionHandlers = {
         return runtime.dependencies.approvals.rules.revoke(
           String(params.threadId),
           String(params.ruleId),
+          typeof params.expectedVersion === 'string' ? params.expectedVersion : undefined,
         )
+      case 'approval/rules/upsert':
+        return runtime.dependencies.approvals.rules
+          .upsert(
+            String(params.threadId),
+            params.rule as import('@pidex/shared/thread').PermissionRuleInput,
+            typeof params.expectedVersion === 'string' ? params.expectedVersion : undefined,
+          )
+          .then((rule) => ({ rule }))
       case 'approval/reviewState':
         return runtime.dependencies.db.repositories.interactions.approvalReviewState(
           String(params.threadId),

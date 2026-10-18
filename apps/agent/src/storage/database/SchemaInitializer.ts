@@ -23,6 +23,7 @@ import { LOCAL_ENVIRONMENT_SELECTION_SCHEMA } from '../../local-environment/Loca
 import { PR_WATCH_SCHEMA } from '../../github/PullRequestWatchService'
 import { SUBAGENT_COLLABORATION_SCHEMA } from '../../subagent/SubagentCollaborationRepository'
 import { AUTOMATION_HOST_AUDIT_SCHEMA } from '../../automation/AutomationHostAuditRepository'
+import { PERMISSION_RULES_SCHEMA } from '../repositories/PermissionRuleRepository'
 
 import { PROFILE_APPLICATION_ID, PROFILE_SCHEMA_VERSION, SCHEMA_VERSION } from './Schema'
 
@@ -184,6 +185,7 @@ export const FINAL_SCHEMA = [
   ...SUBAGENT_COLLABORATION_SCHEMA,
   ...BROWSER_SCHEMA,
   ...BROWSER_DATA_SCHEMA,
+  ...PERMISSION_RULES_SCHEMA,
   'CREATE INDEX agent_checkpoints_thread ON agent_checkpoints(thread_id, updated_at DESC)',
   'CREATE INDEX agent_compactions_thread ON agent_compactions(thread_id, created_at DESC)',
   'CREATE UNIQUE INDEX agent_executions_run_sequence_unique ON agent_executions(subagent_run_id, run_sequence) WHERE subagent_run_id IS NOT NULL',
@@ -1615,6 +1617,16 @@ class SchemaInitializer {
                 'CREATE INDEX IF NOT EXISTS idx_approval_reviews_thread_created ON approval_reviews(thread_id, created_at DESC)',
               )
             },
+            // 权限规则独立表：聊天规则与旧聊天授权撤销记录。
+            // 只新增表与索引；旧 approval_rules 与审批历史保持原样。
+            64: () =>
+              this.sqlite.exec(
+                PERMISSION_RULES_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
             // 任务规划扩展表：计划快照与执行规则、触发去重记录、验收记录。
             // 只新增独立表，不触碰 automations/scheduled_tasks 的既有列与状态。
             62: () =>

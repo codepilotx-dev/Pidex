@@ -1,9 +1,3 @@
-import {
-  DEFAULT_PERMISSION_CONFIG,
-  AUTO_REVIEW_PERMISSION_CONFIG,
-  FULL_ACCESS_PERMISSION_CONFIG,
-} from '@pidex/shared/thread'
-import { desktopClient } from '../../services/desktop-client/index.js'
 import type {
   DesktopPermissionConfig,
   DesktopPermissionMode,
@@ -11,51 +5,41 @@ import type {
   DesktopThinkingMode,
   LocalRouterMode,
 } from '../../../shared/Types.js'
+import { desktopClient } from '../../services/desktop-client/index.js'
 import { defaultDesktopStoredSettings } from '../../../shared/SettingsSchema.js'
+import {
+  permissionConfigForSelection,
+  permissionPresetSelection,
+  visiblePermissionPresetOptions,
+  type PermissionPresetVisibility,
+} from './PermissionPresetView.js'
+export {
+  permissionPresetDescription,
+  permissionPresetLabel,
+  permissionPresetUnavailableReason,
+  permissionPresetView,
+  permissionPresetViewForConfig,
+  type PermissionPresetOptionView,
+  type PermissionPresetView,
+  type PermissionPresetVisibility,
+} from './PermissionPresetView.js'
 export { MAX_RECENT_WORKSPACES, upsertRecentWorkspace } from '../../../shared/SettingsSchema.js'
 export type { LocalRouterMode } from '../../../shared/Types.js'
 
+/** Preset catalog options; labels and descriptions come from the shared catalog. */
 export const PERMISSION_MODE_OPTIONS: Array<{
   value: DesktopPermissionMode
   label: string
   detail: string
-}> = [
-  {
-    value: 'default',
-    label: '默认权限',
-    detail:
-      '结构化文件工具限工作区；Shell 经安全规则和项目 Hook 后在本机执行，额外权限才请求批准。',
-  },
-  {
-    value: 'auto-review',
-    label: '自动审查',
-    detail: 'Shell 经安全规则和项目 Hook 后在本机执行；需要审批的请求由 Guardian 自动审查。',
-  },
-  {
-    value: 'full-access',
-    label: '完全访问权限',
-    detail:
-      '内建文件工具可访问工作区外路径；Shell 在宿主执行。保留硬拒绝、Plan、规则和 Hook；需要新增授权时拒绝执行。',
-  },
-  {
-    value: 'custom',
-    label: 'Pidex 自定义策略',
-    detail: '使用配置页中的文件访问范围、approval policy、reviewer 与 granular controls。',
-  },
-]
+}> = visiblePermissionPresetOptions({
+  enableAutoReviewPermissionMode: true,
+  enableFullAccessPermissionMode: true,
+})
 
-export function getVisiblePermissionModeOptions({
-  enableAutoReviewPermissionMode,
-  enableFullAccessPermissionMode,
-}: {
-  enableAutoReviewPermissionMode?: boolean
-  enableFullAccessPermissionMode?: boolean
-}): typeof PERMISSION_MODE_OPTIONS {
-  return PERMISSION_MODE_OPTIONS.filter((option) => {
-    if (option.value === 'auto-review') return enableAutoReviewPermissionMode
-    if (option.value === 'full-access') return enableFullAccessPermissionMode
-    return option.value === 'default' || option.value === 'custom'
-  })
+export function getVisiblePermissionModeOptions(
+  visibility: PermissionPresetVisibility,
+): typeof PERMISSION_MODE_OPTIONS {
+  return visiblePermissionPresetOptions(visibility)
 }
 
 export const THINKING_MODE_OPTIONS: Array<{
@@ -76,37 +60,19 @@ export function defaultDesktopSettings(): StoredDesktopSettings {
   return defaultDesktopStoredSettings()
 }
 
+/**
+ * A config is exactly one shared preset only when all three stored fields match.
+ * Full access with an automatic reviewer is custom, never full access.
+ */
 export function permissionModeForConfig(config: DesktopPermissionConfig): DesktopPermissionMode {
-  if (config.sandboxMode === 'danger-full-access' && config.approvalPolicy === 'never')
-    return 'full-access'
-  if (
-    config.sandboxMode === 'workspace-write' &&
-    config.approvalPolicy === 'on-request' &&
-    config.approvalsReviewer === 'auto_review'
-  )
-    return 'auto-review'
-  if (
-    config.sandboxMode === 'workspace-write' &&
-    config.approvalPolicy === 'on-request' &&
-    config.approvalsReviewer === 'user'
-  )
-    return 'default'
-  return 'custom'
+  return permissionPresetSelection(config)
 }
 
 export function permissionConfigForMode(
   mode: DesktopPermissionMode,
   current?: DesktopPermissionConfig,
 ): DesktopPermissionConfig {
-  return {
-    ...(mode === 'custom'
-      ? (current ?? DEFAULT_PERMISSION_CONFIG)
-      : mode === 'full-access'
-        ? FULL_ACCESS_PERMISSION_CONFIG
-        : mode === 'auto-review'
-          ? AUTO_REVIEW_PERMISSION_CONFIG
-          : DEFAULT_PERMISSION_CONFIG),
-  }
+  return permissionConfigForSelection(mode, current)
 }
 
 export function readStoredDesktopSettings(): StoredDesktopSettings {

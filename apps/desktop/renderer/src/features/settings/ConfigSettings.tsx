@@ -4,14 +4,14 @@ import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { CONFIG_UPDATED_EVENT, desktopClient } from '../../services/desktop-client/index.js'
 import { useDesktopSettings } from './UseDesktopSettings.js'
 import {
-  PERMISSION_MODE_OPTIONS,
-  permissionConfigForMode,
-  permissionModeForConfig,
-} from './SettingsStorage.js'
+  permissionConfigForSelection,
+  permissionPresetViewForConfig,
+} from './PermissionPresetView.js'
 import type {
   DesktopConfigReadResult,
   DesktopConfigProfileListResult,
   DesktopDataLocationState,
+  DesktopPermissionMode,
   DesktopShellSecurityLevel,
 } from '../../../shared/Types.js'
 import { SettingsRow } from './SettingsRow.js'
@@ -21,6 +21,8 @@ import { SpecializedModelSelect } from './SpecializedModelSelect.js'
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
 import { Button } from '../../components/ui/Button.js'
+import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
+import { ApprovalRulesDialog } from '../session/approvals/ApprovalManagement.js'
 
 export function ConfigSettings(): React.ReactNode {
   const settings = useDesktopSettings()
@@ -32,6 +34,34 @@ export function ConfigSettings(): React.ReactNode {
   const [configLayer, setConfigLayer] = useState<'user' | 'profile' | 'project'>('user')
   const [configProfiles, setConfigProfiles] = useState<DesktopConfigProfileListResult | null>(null)
   const configCwd = draft.values.lastActiveWorkspacePath || undefined
+  const [pendingFullAccess, setPendingFullAccess] = useState(false)
+  const [approvalRulesThreadId, setApprovalRulesThreadId] = useState<string | null>(null)
+  const [approvalRulesError, setApprovalRulesError] = useState('')
+  const permissionView = permissionPresetViewForConfig(draft.values.permissionConfig, {
+    enableAutoReviewPermissionMode: draft.values.enableAutoReviewPermissionMode,
+    enableFullAccessPermissionMode: draft.values.enableFullAccessPermissionMode,
+  })
+
+  const applyPermissionPreset = (selection: DesktopPermissionMode): void => {
+    // Custom keeps the current config; every other preset comes from the shared catalog.
+    if (selection === 'custom') return
+    draft.setValue('permissionConfig', permissionConfigForSelection(selection))
+    draft.autoSave()
+  }
+
+  const openApprovalRules = async (): Promise<void> => {
+    setApprovalRulesError('')
+    try {
+      const activeSessionId = await desktopClient.getActiveSessionId()
+      if (!activeSessionId) {
+        setApprovalRulesError('请先打开一个任务，再管理审批规则。')
+        return
+      }
+      setApprovalRulesThreadId(activeSessionId)
+    } catch {
+      setApprovalRulesError('无法读取当前任务，请稍后重试。')
+    }
+  }
 
   const readConfigState = async () => {
     const read = await desktopClient.readConfig({
@@ -114,7 +144,8 @@ export function ConfigSettings(): React.ReactNode {
   }
 
   return (
-    <SettingsContentArea className="">
+    <>
+      <SettingsContentArea className="">
       <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
           <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
@@ -210,26 +241,53 @@ export function ConfigSettings(): React.ReactNode {
             ) : null}
             <SettingsRow
               title="权限预设"
-              description="快速选择默认权限、自动审查、完全访问或自定义策略。"
+              description={
+                <>
+                  当前为「{permissionView.label}」：{permissionView.detail}
+                  {permissionView.unavailableReason ? (
+                    <>
+                      <br />
+                      {permissionView.unavailableReason}
+                    </>
+                  ) : null}
+                </>
+              }
               control={
                 <SettingsDropdown
                   size="md"
                   ariaLabel="权限预设"
-                  value={permissionModeForConfig(draft.values.permissionConfig)}
-                  options={PERMISSION_MODE_OPTIONS.map((option) => ({
+                  value={permissionView.selection}
+                  options={permissionView.options.map((option) => ({
                     value: option.value,
                     label: option.label,
                     detail: option.detail,
+                    disabled: option.disabled,
                   }))}
                   onChange={(value) => {
-                    const mode = value as Parameters<typeof permissionConfigForMode>[0]
-                    if (mode !== 'custom')
-                      draft.setValue('permissionConfig', permissionConfigForMode(mode))
-                    draft.autoSave()
+                    const mode = value as DesktopPermissionMode
+                    if (mode === 'full-access' && permissionView.selection !== 'full-access') {
+                      setPendingFullAccess(true)
+                      return
+                    }
+                    applyPermissionPreset(mode)
                   }}
                 />
               }
             />
+            <SettingsRow
+              title="审批规则"
+              description="管理允许、询问与拒绝规则。规则按来源（用户、项目、聊天）与范围展示；旧授权以「允许 / 旧授权」显示并可撤销。"
+              control={
+                <Button color="secondary" type="button" onClick={() => void openApprovalRules()}>
+                  管理审批规则
+                </Button>
+              }
+            />
+            {approvalRulesError ? (
+              <p className="tw:m-0 tw:py-1 tw:text-app-danger tw:type-body-sm" role="alert">
+                {approvalRulesError}
+              </p>
+            ) : null}
             <SettingsRow
               title="文件访问范围"
               description="约束内建文件工具；Shell 始终在宿主机执行。网络授权属于审批范围，不提供网络隔离。"
@@ -598,7 +656,35 @@ export function ConfigSettings(): React.ReactNode {
           />
         </SettingsSection>
       </div>
-    </SettingsContentArea>
+      </SettingsContentArea>
+      <ConfirmationDialog
+        actionLabel="启用完全访问"
+        description={
+          <>
+            <p className="tw:m-0">
+              内建文件访问范围将扩大到工作区外路径；宿主 Shell 会直接在本机执行。
+            </p>
+            <p className="tw:m-0 tw:mt-1">
+              硬拒绝、Plan、规则与受保护资源仍然生效。Pidex 不承诺 OS 沙箱或网络隔离。
+            </p>
+          </>
+        }
+        open={pendingFullAccess}
+        title="启用「完全访问」预设？"
+        onAction={() => {
+          setPendingFullAccess(false)
+          applyPermissionPreset('full-access')
+        }}
+        onCancel={() => setPendingFullAccess(false)}
+      />
+      {approvalRulesThreadId ? (
+        <ApprovalRulesDialog
+          open
+          threadId={approvalRulesThreadId}
+          onClose={() => setApprovalRulesThreadId(null)}
+        />
+      ) : null}
+    </>
   )
 }
 

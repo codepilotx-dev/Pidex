@@ -715,7 +715,8 @@ export abstract class InteractionRepositoryDatabase extends ExecutionRepositoryD
           guardian?.reviewedAt ?? timestamp,
           guardian ? guardianActionHash(invocation) : null,
           guardian
-            ? guardianAuthorizationVersion({ sqlite: this.sqlite }, invocation.threadID)
+            ? (guardian.authorizationVersion ??
+              guardianAuthorizationVersion({ sqlite: this.sqlite }, invocation.threadID))
             : null,
         )
       const item: import('../../Domain').Item = {
@@ -933,12 +934,29 @@ export abstract class InteractionRepositoryDatabase extends ExecutionRepositoryD
       WHERE r.thread_id = ? AND r.reply = 'allow' AND r.status IN ('resolved', 'claimed')`,
       )
       .all(threadID) as Array<{ payload: string }>
+    const revoked = this.revokedLegacyGrantIDs(threadID)
     return rows.flatMap((row) => {
       const payload = JSON.parse(row.payload) as ApprovalCheckpointPayload
-      return payload.resolution?.grantRule?.scope === 'session'
-        ? [payload.resolution.grantRule]
-        : []
+      if (payload.resolution?.grantRule?.scope !== 'session') return []
+      if (revoked.has(payload.resolution.grantRule.id)) return []
+      return [payload.resolution.grantRule]
     })
+  }
+
+  private revokedLegacyGrantIDs(threadID: string): Set<string> {
+    const available = this.sqlite
+      .query(
+        "SELECT 1 AS present FROM sqlite_master WHERE type = 'table' AND name = 'permission_grant_revocations'",
+      )
+      .get() as { present: number } | null
+    if (!available) return new Set()
+    return new Set(
+      (
+        this.sqlite
+          .query('SELECT rule_id FROM permission_grant_revocations WHERE thread_id = ?')
+          .all(threadID) as Array<{ rule_id: string }>
+      ).map((row) => row.rule_id),
+    )
   }
 
   pendingQuestions(threadID?: string) {

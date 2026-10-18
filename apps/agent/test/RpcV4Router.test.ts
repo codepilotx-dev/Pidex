@@ -1416,7 +1416,7 @@ describe('RPC v4 Router', () => {
     expect(listCalls).toBe(1)
     expect(modelCalls).toBe(1)
 
-    await call('model/refresh', { operationId: 'operation:model-refresh-paged' })
+    await call('model/refresh', { operationId: 'operation:model-refresh-paged', providerId: providerID })
     const expired = await call('model/list', {
       providerId: providerID,
       enabled: true,
@@ -1439,7 +1439,7 @@ describe('RPC v4 Router', () => {
     })
     try {
       await initialize()
-      const result = await call('model/refresh', { operationId: 'operation:failed-refresh' })
+      const result = await call('model/refresh', { operationId: 'operation:failed-refresh', providerId: 'google' })
       expect(result.error).toMatchObject({
         message: '模型目录刷新失败，请检查提供商连接、凭据和模型接口后重试。',
         data: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
@@ -1450,16 +1450,44 @@ describe('RPC v4 Router', () => {
     }
   })
 
+  test('model refresh returns safe provider diagnostics for the toast', async () => {
+    const { db, call, initialize } = await fixture({
+      providers: {
+        refresh: async () => {
+          throw new PiModelServiceError('CATALOG_REFRESH_FAILED', 'private upstream failure',
+            { cause: new Error('private credential') }, ['openai：凭据鉴权失败（HTTP 401）'])
+        },
+      } as unknown as RpcRouterDependencies['providers'],
+    })
+    try {
+      await initialize()
+      const result = await call('model/refresh', { operationId: 'operation:refresh-diagnostics', providerId: 'openai' })
+      expect(result.error).toMatchObject({
+        message: '模型目录刷新失败（1 个提供商）：openai：凭据鉴权失败（HTTP 401）。',
+        data: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
+      })
+      expect(JSON.stringify(result)).not.toContain('private')
+    } finally {
+      db.close()
+    }
+  })
+
   test('model mutations and refresh return their declared versioned results', async () => {
     let refreshCalls = 0
+    let reloadCalls = 0
+    const refreshScopes: Array<string | undefined> = []
     const { db, call, initialize } = await fixture({
       providers: {
         list: async () => [],
         models: async () => [],
-        refresh: async () => {
+        refresh: async (_force: boolean, providerId?: string) => {
           refreshCalls += 1
+          refreshScopes.push(providerId)
         },
       } as unknown as RpcRouterDependencies['providers'],
+      piModels: {
+        refreshDirectory: async () => { reloadCalls += 1 },
+      } as unknown as RpcRouterDependencies['piModels'],
     })
     await initialize()
     expect(
@@ -1494,7 +1522,14 @@ describe('RPC v4 Router', () => {
       providers: [],
       catalogVersion: 4,
     })
-    expect(refreshCalls).toBe(1)
+    expect(refreshCalls).toBe(0)
+    expect(reloadCalls).toBe(1)
+    expect(refreshScopes).toEqual([])
+    const scoped = await call('model/refresh', {
+      operationId: 'operation:google-refresh', providerId: 'google',
+    })
+    expect(scoped.error).toBeUndefined()
+    expect(refreshScopes).toEqual(['google'])
     db.close()
   })
 

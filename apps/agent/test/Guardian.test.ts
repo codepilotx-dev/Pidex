@@ -5,6 +5,9 @@ import {
   GuardianCircuitBreaker,
   guardianActionHash,
   guardianActionSensitivity,
+  guardianFallbackDecision,
+  guardianFastPathEligible,
+  guardianReview,
   guardianScopeClass,
   guardianVerdictSchema,
   shouldScoreGuardianAction,
@@ -160,22 +163,133 @@ describe('Guardian action identity', () => {
 
   test('read-only tools stay off the fast path', () => {
     expect(
-      shouldScoreGuardianAction(
+      guardianFastPathEligible(
         invocation({
           name: 'Read',
           toolPolicy: { capabilities: { filesystem: 'read', network: 'none', process: false } },
         }),
       ),
     ).toBe(false)
-    expect(shouldScoreGuardianAction(invocation())).toBe(true)
+    expect(guardianFastPathEligible(invocation({ input: { command: 'git status' } }))).toBe(true)
+    expect(guardianFastPathEligible(invocation())).toBe(false)
     expect(
-      shouldScoreGuardianAction(
+      guardianFastPathEligible(
         invocation({
           permissionConfig: {
             sandboxMode: 'workspace-write',
             approvalPolicy: 'on-request',
             approvalsReviewer: 'user',
           },
+        }),
+      ),
+    ).toBe(false)
+    expect(shouldScoreGuardianAction(invocation({ input: { command: 'git status' } }))).toBe(
+      guardianFastPathEligible(invocation({ input: { command: 'git status' } })),
+    )
+  })
+
+  test('the fast path is excluded for user intent and elevated surfaces', () => {
+    const benign = invocation({ input: { command: 'git status' } })
+    expect(guardianFastPathEligible(benign)).toBe(true)
+    // Newly requested permissions are an elevation.
+    expect(
+      guardianFastPathEligible(
+        invocation({
+          input: {
+            command: 'git status',
+            additionalPermissions: { writePaths: ['C:\\outside'] },
+          },
+        }),
+      ),
+    ).toBe(false)
+    // Forced approvals from hooks, skills, rules or host-confirmed grants.
+    for (const permissionFacts of [
+      { hookRequiresApproval: true },
+      { skillScript: true },
+      { ruleRequiresApproval: true },
+      { denyReason: 'hard deny' },
+      { approvalCategories: ['rules'] as const },
+      { forcedApproval: true },
+      { ruleEffect: 'ask' as const },
+      { ruleEffect: 'deny' as const },
+      { ruleIDs: ['rule-1'] },
+    ]) {
+      expect(guardianFastPathEligible(invocation({ permissionFacts }))).toBe(false)
+    }
+    // Protected resources.
+    expect(guardianFastPathEligible(invocation({ grantsForbidden: true }))).toBe(false)
+    // Ask rules and host-confirmed computer grants live on the authorization scope.
+    expect(
+      guardianFastPathEligible(
+        invocation({
+          authorizationScope: {
+            affectedPaths: [],
+            fingerprint: 'scope',
+            ruleRequiresApproval: true,
+          },
+        }),
+      ),
+    ).toBe(false)
+    expect(
+      guardianFastPathEligible(
+        invocation({
+          authorizationScope: {
+            affectedPaths: [],
+            fingerprint: 'scope',
+            ruleRequiresApproval: true,
+            computerApp: { name: 'App', allowPersistentApproval: false },
+          },
+        }),
+      ),
+    ).toBe(false)
+    // Always-review tools, resumed SDK preflights and human-authorized retries.
+    expect(
+      guardianFastPathEligible(
+        invocation({
+          toolPolicy: {
+            capabilities: { filesystem: 'none', network: 'none', process: true },
+            approvalStrategy: 'always-review',
+          },
+        }),
+      ),
+    ).toBe(false)
+    expect(guardianFastPathEligible(invocation({ durableApproval: true }))).toBe(false)
+    expect(
+      guardianFastPathEligible(
+        invocation({ retryAuthorization: { reviewId: 'review-1', fingerprint: 'fp' } }),
+      ),
+    ).toBe(false)
+    // Stricter approval policies keep the synchronous decision path.
+    for (const approvalPolicy of ['never', 'untrusted', { type: 'granular' } as const]) {
+      expect(
+        guardianFastPathEligible(
+          invocation({
+            permissionConfig: {
+              sandboxMode: 'workspace-write',
+              approvalPolicy,
+              approvalsReviewer: 'auto_review',
+            },
+          }),
+        ),
+      ).toBe(false)
+    }
+    // Full access and request_permissions are never auto-approved.
+    expect(
+      guardianFastPathEligible(
+        invocation({
+          permissionConfig: {
+            sandboxMode: 'danger-full-access',
+            approvalPolicy: 'on-request',
+            approvalsReviewer: 'auto_review',
+          },
+        }),
+      ),
+    ).toBe(false)
+    expect(
+      guardianFastPathEligible(
+        invocation({
+          name: 'request_permissions',
+          permissionFacts: { approvalCategories: ['requestPermissions'] },
         }),
       ),
     ).toBe(false)
@@ -197,9 +311,10 @@ describe('Guardian action identity', () => {
       scope: 'shell',
       sensitive: true,
     })
-    expect(
-      guardianActionSensitivity(invocation({ input: { command: 'git status' } })),
-    ).toEqual({ scope: 'shell', sensitive: false })
+    expect(guardianActionSensitivity(invocation({ input: { command: 'git status' } }))).toEqual({
+      scope: 'shell',
+      sensitive: false,
+    })
     expect(
       guardianActionSensitivity(invocation({ input: { command: 'git push --force' } })),
     ).toEqual({ scope: 'shell', sensitive: true })
@@ -214,5 +329,74 @@ describe('Guardian action identity', () => {
         }),
       ),
     ).toEqual({ scope: 'file-write', sensitive: true })
+  })
+})
+
+describe('Guardian fallback policy', () => {
+  const fallback = (overrides: Record<string, unknown> = {}) =>
+    guardianFallbackDecision({
+      risk: 'high',
+      status: 'unavailable',
+      reason: 'Guardian 不可用',
+      approvalPolicy: 'on-request',
+      ...overrides,
+    })
+
+  test('on-request degrades to a human question, never to an allow', () => {
+    expect(fallback()).toMatchObject({
+      decision: 'ask',
+      fallbackReason: 'Guardian 不可用',
+      guardian: { status: 'unavailable', source: 'fallback', risk: 'high' },
+    })
+  })
+
+  test('never and untrusted deny instead of waiting for approval', () => {
+    expect(fallback({ approvalPolicy: 'never' })).toMatchObject({ decision: 'deny' })
+    expect(fallback({ approvalPolicy: 'untrusted' })).toMatchObject({ decision: 'deny' })
+  })
+
+  test('an open circuit denies even under on-request', () => {
+    expect(fallback({ status: 'circuit_open', reason: '本轮已中断' })).toMatchObject({
+      decision: 'deny',
+      reason: '本轮已中断',
+    })
+  })
+
+  test('granular policies deny disabled approval categories and ask otherwise', () => {
+    const policy = {
+      type: 'granular' as const,
+      sandboxApproval: true,
+      rules: false,
+      skillApproval: true,
+      requestPermissions: true,
+      mcpTools: true,
+      mcpElicitations: true,
+    }
+    expect(
+      fallback({ approvalPolicy: policy, approvalCategories: ['sandboxApproval'] }),
+    ).toMatchObject({ decision: 'ask' })
+    expect(fallback({ approvalPolicy: policy, approvalCategories: ['rules'] })).toMatchObject({
+      decision: 'deny',
+    })
+    // Without host-derived categories we cannot prove the category is enabled,
+    // so we fail closed to a human question instead of denying outright.
+    expect(fallback({ approvalPolicy: policy })).toMatchObject({ decision: 'ask' })
+  })
+})
+
+describe('Guardian review metadata', () => {
+  test('carries the authorization snapshot used for the verdict', () => {
+    expect(
+      guardianReview({
+        status: 'completed',
+        source: 'model',
+        risk: 'low',
+        userAuthorization: 'high',
+        confidence: 'high',
+        categories: [],
+        rationale: 'ok',
+        authorizationVersion: 'version-1',
+      }),
+    ).toMatchObject({ authorizationVersion: 'version-1' })
   })
 })

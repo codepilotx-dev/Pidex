@@ -140,6 +140,7 @@ const PROFILE_ALLOWED_ROOTS = new Set([
 ])
 const KNOWN_CONFIG_ROOTS = new Set([
   'approval_rules',
+  'permission_rules',
   ...PROFILE_ALLOWED_ROOTS,
   'profile',
   'model_providers',

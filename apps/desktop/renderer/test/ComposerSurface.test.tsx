@@ -345,6 +345,31 @@ describe('composer surface variant', () => {
     expect(html).not.toContain('选择分支')
   })
 
+  test('隐藏的已配置预设显示实际标签与不可用原因', () => {
+    const reason = '“帮我批准”预设已在设置中关闭；当前配置保持不变。'
+    const html = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          permissionMode: 'auto-review',
+          permissionOptions: [
+            { value: 'default', label: '请求批准' },
+            {
+              value: 'auto-review',
+              label: '帮我批准',
+              detail: reason,
+              disabled: true,
+            },
+            { value: 'custom', label: '自定义' },
+          ],
+          permissionUnavailableReason: reason,
+        })}
+      />,
+    )
+    expect(html).toContain('帮我批准')
+    expect(html).toContain('aria-label="选择权限模式"')
+    expect(html).toContain(reason)
+  })
+
   test('Composer 发送门禁不依赖 Git/Review 状态，非 Git 项目仍可提交', () => {
     expect(resolveComposerCanSubmit(canSubmitInput())).toBe(true)
     expect(

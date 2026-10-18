@@ -1,9 +1,5 @@
 import type { ThreadContextState } from '@pidex/shared/thread'
-import {
-  DEFAULT_PERMISSION_CONFIG,
-  AUTO_REVIEW_PERMISSION_CONFIG,
-  FULL_ACCESS_PERMISSION_CONFIG,
-} from '@pidex/shared/thread'
+import { matchPermissionPreset, permissionConfigForPreset } from '@pidex/shared/thread'
 import type {
   ApprovalRequest,
   Input,
@@ -45,19 +41,12 @@ export function agentQuestionIdFromRequestId(requestId: string): string | null {
     : null
 }
 
+/** Generates the stored config from the shared preset catalog; custom keeps `current`. */
 export function desktopPermissionModeToPermissionConfig(
   mode: DesktopPermissionMode | undefined,
   current?: PermissionConfig,
 ): PermissionConfig {
-  return {
-    ...(mode === 'custom'
-      ? (current ?? DEFAULT_PERMISSION_CONFIG)
-      : mode === 'auto-review'
-        ? AUTO_REVIEW_PERMISSION_CONFIG
-        : mode === 'full-access'
-          ? FULL_ACCESS_PERMISSION_CONFIG
-          : DEFAULT_PERMISSION_CONFIG),
-  }
+  return permissionConfigForPreset(mode ?? 'default', current)
 }
 
 export function agentTurnStatusToDesktopStatus(
@@ -1210,21 +1199,8 @@ function eventTime(params: Record<string, unknown>): number {
 export function permissionModeFromPermissionConfig(
   config: PermissionConfig | undefined,
 ): DesktopPermissionMode {
-  if (config?.sandboxMode === 'danger-full-access' && config.approvalPolicy === 'never')
-    return 'full-access'
-  if (
-    config?.sandboxMode === 'workspace-write' &&
-    config.approvalPolicy === 'on-request' &&
-    config.approvalsReviewer === 'auto_review'
-  )
-    return 'auto-review'
-  if (
-    config?.sandboxMode === 'workspace-write' &&
-    config.approvalPolicy === 'on-request' &&
-    config.approvalsReviewer === 'user'
-  )
-    return 'default'
-  return 'custom'
+  // Unknown configs stay custom; preset identity always comes from the shared catalog.
+  return config ? matchPermissionPreset(config) : 'custom'
 }
 
 export function projectToDesktopWorkspace(

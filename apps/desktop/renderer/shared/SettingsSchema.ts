@@ -947,7 +947,24 @@ export function upsertRecentWorkspace(
     return next
   }
   // Append new workspace to the end
-  return [...workspaces, workspace].slice(-MAX_RECENT_WORKSPACES)
+  return trimRecentWorkspaces([...workspaces, workspace])
+}
+
+/**
+ * 置顶状态保存在最近工作区列表中，置顶条目不受最近数量上限约束；
+ * 超出上限时只裁剪最旧的未置顶条目，避免新打开项目把置顶项目挤出列表。
+ */
+function trimRecentWorkspaces(workspaces: DesktopWorkspace[]): DesktopWorkspace[] {
+  let overflow =
+    workspaces.filter((workspace) => !workspace.pinnedAt).length - MAX_RECENT_WORKSPACES
+  if (overflow <= 0) return workspaces
+  return workspaces.filter((workspace) => {
+    if (overflow > 0 && !workspace.pinnedAt) {
+      overflow -= 1
+      return false
+    }
+    return true
+  })
 }
 
 function normalizeProjectFolders(

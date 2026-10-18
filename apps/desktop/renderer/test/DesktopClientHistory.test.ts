@@ -150,16 +150,16 @@ describe('desktop history client', () => {
       theme.ink = '#345678'
       theme.semanticColors.skill = '#456789'
       theme.contrast = 99
-      theme.fonts = {
-        ui: 'Inter',
-        uiFace: { family: 'Inter', fullName: 'Inter Bold', postscriptName: 'Inter-Bold' },
-        code: 'CodeMono',
-        codeFace: {
-          family: 'CodeMono',
-          fullName: 'CodeMono Bold',
-          postscriptName: 'CodeMono-Bold',
-        },
-      }
+    }
+    settings.fonts = {
+      ui: 'Inter',
+      uiFace: { family: 'Inter', fullName: 'Inter Bold', postscriptName: 'Inter-Bold' },
+      code: 'CodeMono',
+      codeFace: {
+        family: 'CodeMono',
+        fullName: 'CodeMono Bold',
+        postscriptName: 'CodeMono-Bold',
+      },
     }
     const before = structuredClone(settings)
     let stored = settings
@@ -193,9 +193,10 @@ describe('desktop history client', () => {
       expect(reloaded.chromeThemes[variant]).toEqual({
         ...before.chromeThemes[variant],
         contrast: defaults.chromeThemes[variant].contrast,
-        fonts: { ...defaults.chromeThemes[variant].fonts, ui: 'Inter' },
+        fonts: { ...defaults.fonts, ui: 'Inter' },
       })
     }
+    expect(reloaded.fonts).toEqual({ ...defaults.fonts, ui: 'Inter' })
   })
 
   test('persists appearance settings through the minimal Electron bridge', async () => {
@@ -223,14 +224,14 @@ describe('desktop history client', () => {
 
     const loaded = await client.getThemeSettings()
     expect(loaded).toMatchObject({
-      version: 7,
+      version: 8,
       mode: 'system',
       codeThemeIds: { light: 'codex-new-light', dark: 'codex-new-dark' },
     })
     expect(loaded.chromeThemes.light).not.toHaveProperty('opaqueWindows')
 
     await client.saveThemeSettings({ ...loaded, mode: 'light' })
-    expect(stored).toMatchObject({ version: 7, mode: 'light' })
+    expect(stored).toMatchObject({ version: 8, mode: 'light' })
     await client.saveThemeSettings({
       ...loaded,
       chromeThemes: {
@@ -313,7 +314,7 @@ describe('desktop history client', () => {
   test('never batch-writes over a newer Agent appearance generation', async () => {
     const rpcMethods: string[] = []
     const futureAppearance = {
-      version: 8,
+      version: 9,
       mode: 'dark',
       futureField: 'must-survive',
     }

@@ -215,7 +215,16 @@ describe('审批范围与外部交互', () => {
     ).toBe(false)
     expect(await rules.matches({ ...mcp, threadID: db.createThread('无项目').id })).toBe(false)
     expect(await rules.list(mcp.threadID)).toEqual({
-      rules: [{ id: grant.id, kind: 'mcp', target: ['fixture', 'save'] }],
+      rules: [
+        {
+          id: grant.id,
+          effect: 'allow',
+          scope: 'project',
+          source: 'legacy',
+          match: { kind: 'mcp', server: 'fixture', tool: 'save' },
+          editable: true,
+        },
+      ],
     })
     expect(await rules.revoke(mcp.threadID, grant.id)).toEqual({ revoked: true })
     expect(await rules.matches(mcp)).toBe(false)

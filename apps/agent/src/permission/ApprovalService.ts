@@ -11,6 +11,7 @@ import type { InteractionOperationInput } from '../storage/repositories/Interact
 import type { ToolRegistry } from '../tool/ToolRegistry'
 import {
   PermissionDecisionEngine,
+  hasRequestedPermissions,
   requestedPermissions,
   type ResolvedPermissionDecision,
 } from './PermissionDecisionEngine'
@@ -22,6 +23,7 @@ import type { BrowserService } from '../browser/BrowserService'
 import type { ApprovalRule } from './ApprovalRules'
 import {
   GuardianCircuitBreaker,
+  guardianAuthorizationVersion,
   guardianFallbackDecision,
   type GuardianReview,
 } from './Guardian'
@@ -217,22 +219,50 @@ export class ApprovalService {
   }
 
   async authorize(invocation: ToolInvocation, signal: AbortSignal): Promise<PermissionDecision> {
+    if (signal.aborted) return { decision: 'deny', risk: 'low', reason: '操作已取消' }
     const tool = (invocation.toolPolicy ??
       this.tools.get(invocation.name)) as import('../tool/ToolRegistry').ToolCatalogEntry
     if (typeof invocation.input.command === 'string') {
+      const workspaceRoot = this.rules.workspace(invocation)?.root
       const analysis = analyzeShellRisk({
         command: invocation.input.command,
         ...(typeof invocation.input.cwd === 'string' ? { cwd: invocation.input.cwd } : {}),
+        ...(workspaceRoot ? { workspaceRoot } : {}),
       })
-      if (analysis.hardDenied)
-        return { decision: 'deny', risk: analysis.risk, reason: analysis.reason }
+      if (analysis.hardDenied) {
+        this.guardianScores?.invalidateAction(invocation)
+        return {
+          decision: 'deny',
+          risk: analysis.risk,
+          reason: secretScrubber.scrubText(analysis.reason),
+        }
+      }
     }
+    // Rules are evaluated immediately before the final gate, after any Hook
+    // rewrite. ToolExecutor normally loads them already; direct service callers
+    // (previews/tests) go through the same host rule source here.
+    if (invocation.permissionFacts?.ruleFactsLoaded !== true) {
+      const ruleFacts = await this.rules.evaluate(invocation)
+      invocation = {
+        ...invocation,
+        permissionFacts: {
+          ...invocation.permissionFacts,
+          ruleFactsLoaded: true,
+          ...(ruleFacts.effect ? { ruleEffect: ruleFacts.effect } : {}),
+          ...(ruleFacts.ids.length ? { ruleIDs: ruleFacts.ids } : {}),
+        },
+      }
+    }
+    const authorizationVersionAtStart = guardianAuthorizationVersion(this.db, invocation.threadID)
     const resolved = this.decisions.evaluate(invocation, tool)
     const safeInvocation = secretScrubber.scrub(invocation)
-    if (resolved.action !== 'review')
+    if (resolved.action !== 'review') {
+      if (resolved.decision === 'deny') this.guardianScores?.invalidateAction(invocation)
       return { decision: resolved.decision, risk: resolved.risk, reason: resolved.reason }
+    }
+    const forceHumanApproval = resolved.forceHumanApproval
     if (
-      resolved.reviewer === 'user' &&
+      !forceHumanApproval &&
       ((await this.rules.matches(invocation)) ||
         !!(
           invocation.authorizationScope?.browserOrigin &&
@@ -240,7 +270,7 @@ export class ApprovalService {
         ))
     )
       return { decision: 'allow', risk: resolved.risk, reason: '已匹配用户授予的审批范围' }
-    if (resolved.reviewer === 'auto_review' && this.reviewer) {
+    if (resolved.reviewer === 'auto_review' && !forceHumanApproval && this.reviewer) {
       const fingerprint = this.retryFingerprint(invocation)
       const retryAuthorization = this.db.repositories.interactions.claimApprovalRetry(
         invocation.threadID,
@@ -254,32 +284,132 @@ export class ApprovalService {
         resolved,
         signal,
       )
+      if (signal.aborted) return { decision: 'deny', risk: resolved.risk, reason: '操作已取消' }
+      const reviewedAfterVersion = this.rebindReviewToAuthorization(
+        reviewed,
+        resolved,
+        invocation,
+        authorizationVersionAtStart,
+      )
       const event = this.db.repositories.interactions.recordApprovalReview(
         safeInvocation,
         fingerprint,
-        reviewed,
+        reviewedAfterVersion,
       )
       if (event) await Promise.allSettled([Effect.runPromise(this.hub.publish(event))])
-      if (reviewed.decision !== 'ask') return reviewed
-      return this.checkpointForHuman(safeInvocation, reviewed, resolved)
+      if (reviewedAfterVersion.decision !== 'ask') return reviewedAfterVersion
+      this.guardianScores?.invalidateAction(invocation)
+      if (signal.aborted) return { decision: 'deny', risk: resolved.risk, reason: '操作已取消' }
+      return this.checkpointForHuman(safeInvocation, reviewedAfterVersion, resolved)
     }
     if (
       resolved.reviewer === 'auto_review' &&
       invocation.permissionConfig.approvalPolicy === 'never'
-    )
+    ) {
+      this.guardianScores?.invalidateAction(invocation)
       return {
         decision: 'deny',
         risk: resolved.risk,
         reason: '未配置独立 Guardian，never 策略下拒绝',
       }
+    }
+    if (signal.aborted) {
+      this.guardianScores?.invalidateAction(invocation)
+      return { decision: 'deny', risk: resolved.risk, reason: '操作已取消' }
+    }
+    this.guardianScores?.invalidateAction(invocation)
     const review = {
       decision: 'ask',
       risk: resolved.risk,
-      reason:
-        resolved.reviewer === 'auto_review' ? '未配置独立 Guardian，转人工确认' : resolved.reason,
+      reason: secretScrubber.scrubText(
+        resolved.reviewer === 'auto_review' && !forceHumanApproval
+          ? '未配置独立 Guardian，转人工确认'
+          : resolved.reason,
+      ),
     } satisfies PermissionDecision
     return this.checkpointForHuman(safeInvocation, review, resolved)
   }
+
+  /**
+   * A synchronous Guardian allow is bound to the authorization snapshot at
+   * request start. If the user changed the conversation while the review was in
+   * flight the old allow can never be reused.
+   */
+  private rebindReviewToAuthorization(
+    decision: PermissionDecision,
+    resolved: Extract<ResolvedPermissionDecision, { action: 'review' }>,
+    invocation: ToolInvocation,
+    authorizationVersionAtStart: string,
+  ): PermissionDecision {
+    if (decision.decision !== 'allow') return decision
+    if (guardianAuthorizationVersion(this.db, invocation.threadID) === authorizationVersionAtStart)
+      return decision
+    const reason = '审查期间用户授权上下文已变化，需要人工确认'
+    if (invocation.permissionConfig.approvalPolicy === 'never')
+      return {
+        decision: 'deny',
+        risk: resolved.risk,
+        reason,
+        ...(decision.guardian ? { guardian: decision.guardian } : {}),
+      }
+    return {
+      decision: 'ask',
+      risk: resolved.risk,
+      reason,
+      fallbackReason: reason,
+      ...(decision.guardian
+        ? {
+            guardian: {
+              ...decision.guardian,
+              status: 'unavailable' as const,
+              fallbackReason: reason,
+            },
+          }
+        : {}),
+    }
+  }
+  /**
+   * Guardian failure policy: on-request falls back to a human, while never,
+   * untrusted and a granular policy that disables the required category denies.
+   */
+  private guardianFailureDecision(
+    invocation: ToolInvocation,
+    resolved: Extract<ResolvedPermissionDecision, { action: 'review' }>,
+    status: 'unavailable' | 'timeout' | 'circuit_open',
+    reason: string,
+  ): PermissionDecision {
+    const fallback = guardianFallbackDecision({
+      risk: resolved.risk,
+      status,
+      reason,
+      approvalPolicy: invocation.permissionConfig.approvalPolicy,
+      approvalCategories: this.guardianApprovalCategories(invocation),
+    })
+    return fallback
+  }
+
+  private guardianApprovalCategories(
+    invocation: ToolInvocation,
+  ): Array<keyof import('@pidex/shared/thread').GranularApprovalConfig> {
+    const tool = invocation.toolPolicy ?? this.tools.get(invocation.name)
+    const categories = new Set(invocation.permissionFacts?.approvalCategories ?? [])
+    if (
+      invocation.permissionFacts?.ruleRequiresApproval ||
+      invocation.permissionFacts?.destructive ||
+      invocation.permissionFacts?.hookRequiresApproval ||
+      invocation.authorizationScope?.ruleRequiresApproval
+    )
+      categories.add('rules')
+    if (tool.sdkName === 'request_permissions') categories.add('requestPermissions')
+    if (invocation.permissionFacts?.skillScript === true) categories.add('skillApproval')
+    if (tool.origin?.kind === 'mcp') categories.add('mcpTools')
+    if (tool.capabilities.process || tool.capabilities.filesystem === 'host-write')
+      categories.add('sandboxApproval')
+    if (hasRequestedPermissions(invocation.input) && tool.sdkName !== 'request_permissions')
+      categories.add('sandboxApproval')
+    return [...categories]
+  }
+
   private async reviewWithGuardian(
     invocation: ToolInvocation,
     resolved: Extract<ResolvedPermissionDecision, { action: 'review' }>,
@@ -287,27 +417,31 @@ export class ApprovalService {
   ): Promise<PermissionDecision> {
     const circuit = this.guardianCircuit.check(invocation.threadID, invocation.turnID)
     if (circuit.open) {
-      const fallback = guardianFallbackDecision({
-        risk: resolved.risk,
-        status: 'circuit_open',
-        reason: circuit.reason ?? 'Guardian 本轮已暂停自动审查',
-        approvalPolicy: invocation.permissionConfig.approvalPolicy,
-      })
-      return this.finishGuardianReview(invocation, fallback)
+      return this.finishGuardianReview(
+        invocation,
+        this.guardianFailureDecision(
+          invocation,
+          resolved,
+          'circuit_open',
+          circuit.reason ?? 'Guardian 本轮已暂停自动审查',
+        ),
+      )
     }
 
     const cached = invocation.retryAuthorization
       ? null
-      : this.guardianScores?.cachedAllow(invocation)
+      : this.guardianScores?.cachedAllow(invocation, signal)
     if (cached) return this.finishGuardianReview(invocation, cached)
     if (!this.reviewer) {
-      const fallback = guardianFallbackDecision({
-        risk: resolved.risk,
-        status: 'unavailable',
-        reason: '未配置独立 Guardian，转人工确认',
-        approvalPolicy: invocation.permissionConfig.approvalPolicy,
-      })
-      return this.finishGuardianReview(invocation, fallback)
+      return this.finishGuardianReview(
+        invocation,
+        this.guardianFailureDecision(
+          invocation,
+          resolved,
+          'unavailable',
+          '未配置独立 Guardian，转人工确认',
+        ),
+      )
     }
 
     const controller = new AbortController()
@@ -328,12 +462,7 @@ export class ApprovalService {
         const reason = `Guardian 不可用：${secretScrubber.scrubText(
           cause instanceof Error ? cause.message : String(cause),
         )}`
-        return guardianFallbackDecision({
-          risk: resolved.risk,
-          status: 'unavailable',
-          reason,
-          approvalPolicy: invocation.permissionConfig.approvalPolicy,
-        })
+        return this.guardianFailureDecision(invocation, resolved, 'unavailable', reason)
       },
     )
 
@@ -694,6 +823,10 @@ export class ApprovalService {
     const checkpoint = result.checkpoint
     try {
       if (grantRule?.scope === 'project') await this.rules.persistProject(grantRule)
+      // A new explicit approval restores a legacy chat grant that was revoked
+      // earlier; revocation records are not approval history.
+      if (grantRule && grantRule.scope === 'session')
+        this.rules.restoreLegacyGrant(checkpoint.threadID, grantRule.id)
       if (
         grantRule?.kind === 'browser' &&
         (grantRule.scope === 'origin' || grantRule.scope === 'all-sites')

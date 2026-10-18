@@ -83,8 +83,8 @@ export function useComposerSlashCommands({
     () => [
       command(
         'approve',
-        '重试被拒绝的操作',
-        '为最近的自动审查拒绝授权一次重试，仍经过 Guardian',
+        '最近拒绝',
+        '查看最近的自动审查拒绝并授权一次重试，仍经过 Guardian',
         Boolean(onApprove),
         hasThread && !sessionBusy,
         () => onApprove?.(),

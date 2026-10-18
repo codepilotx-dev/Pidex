@@ -147,6 +147,67 @@ describe('Shell 静态风险分类与灾难级拒绝', () => {
     })
   })
 
+  test('删除远程仓库、分支和发布等外部状态必须进入审批但不硬拒绝', () => {
+    const commands = [
+      'gh repo delete xiaohai-ouyang/guardian-lab-git-test --yes',
+      'gh api -X DELETE repos/owner/name',
+      'gh release delete v1.0.0 --yes',
+      'git push origin --delete feature/x',
+      'git push origin :feature/x',
+      'git remote remove backup',
+      'git branch -D obsolete',
+      'aws s3 rm s3://bucket/key',
+    ]
+    for (const command of commands) {
+      for (const securityLevel of ['strict', 'balanced', 'relaxed'] as const) {
+        expect(analyzeShellRisk({ command, securityLevel })).toMatchObject({
+          hardDenied: false,
+          destructive: true,
+        })
+      }
+      expect(analyzeShellRisk({ command }).requiresApproval).toBe(true)
+    }
+    for (const command of ['gh repo view owner/name', 'git push origin main', 'git branch -a']) {
+      expect(analyzeShellRisk({ command })).toMatchObject({
+        requiresApproval: false,
+        destructive: false,
+      })
+    }
+  })
+
+  test('工作区外绝对路径在工作区已知时进入审批', () => {
+    const workspaceRoot = 'C:\\Users\\tester\\Documents\\Pidex\\chat\\work'
+    const outside =
+      "$target='F:\\CodeProject\\guardian-lab\\src\\git-tests'; Remove-Item -LiteralPath $target -Recurse -Force"
+    expect(analyzeShellRisk({ command: outside })).toBeDefined()
+    const insideWorkspace = 'Set-Content -LiteralPath .\\notes\\draft.md -Value $text -Encoding utf8'
+    expect(
+      analyzeShellRisk({ command: insideWorkspace, workspaceRoot }).requiresApproval,
+    ).toBe(false)
+    expect(analyzeShellRisk({ command: outside, workspaceRoot })).toMatchObject({
+      hardDenied: false,
+      requiresApproval: true,
+      destructive: true,
+      categories: expect.arrayContaining(['scope_escape']),
+    })
+    expect(
+      analyzeShellRisk({
+        command: "Remove-Item -LiteralPath 'C:\\Users\\tester\\Documents\\Pidex\\chat\\work\\tmp' -Recurse",
+        workspaceRoot,
+      }).requiresApproval,
+    ).toBe(false)
+  })
+
+  test('工作区外 cwd 在工作区已知时进入审批', () => {
+    expect(
+      analyzeShellRisk({
+        command: 'npm test',
+        cwd: 'F:\\CodeProject\\guardian-lab',
+        workspaceRoot: 'C:\\Users\\tester\\Documents\\Pidex\\chat\\work',
+      }),
+    ).toMatchObject({ requiresApproval: true, destructive: true })
+  })
+
   test('普通 Pidex 源码写入不被误判为沙箱策略篡改', () => {
     const workspaceRoot = 'F:\\CodeProject\\Pidex'
     const commands = [

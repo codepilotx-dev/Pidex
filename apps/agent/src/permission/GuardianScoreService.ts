@@ -6,8 +6,8 @@ import {
   guardianActionHash,
   guardianActionSensitivity,
   guardianAuthorizationVersion,
+  guardianFastPathEligible,
   guardianReview,
-  shouldScoreGuardianAction,
   type GuardianScopeClass,
   type GuardianTrajectoryEntry,
 } from './Guardian'
@@ -16,15 +16,24 @@ import {
  * Per-thread fast path for Guardian Beta.
  *
  * The score is a short, binary risk classification sampled before the tool
- * executes. A low score may satisfy a later approval only when the authorization
- * version is unchanged, the score predates the action, and it is at most two
- * tool calls old. Cross-action reuse additionally requires the same capability
- * class, a low trajectory prediction and a non-sensitive action.
+ * executes. A low score may satisfy a later approval only when every one of the
+ * following still holds at reuse time:
+ *
+ * - the score belongs to the same turn and to the current invalidation
+ *   generation (denials, asks, turn end and authorization changes bump it)
+ * - the authorization snapshot is unchanged
+ * - the action hash is unchanged for the same tool call
+ * - the score is settled, low risk, and at most two tool calls old
+ * - the caller's AbortSignal is not aborted
+ *
+ * Invalidation makes late asynchronous results unusable: a stale resolution can
+ * never restore a low score, reset `failed`, or resurrect an approval.
  */
 
 type ScoreEntry = {
   callID: string
   index: number
+  generation: number
   actionHash: string
   authorizationVersion: string
   sampledAt: number
@@ -43,9 +52,18 @@ type ScoreEntry = {
 
 type ThreadState = {
   turnID: string
+  /** Bumped by every invalidation; entries from older generations are dead. */
+  generation: number
+  authorizationVersion: string
   nextIndex: number
   entries: ScoreEntry[]
   byCall: Map<string, ScoreEntry>
+}
+
+type LowRiskSelection = {
+  entry: ScoreEntry
+  lag: number
+  reusedAcrossActions: boolean
 }
 
 const MAX_TOOL_CALL_LAG = 2
@@ -54,7 +72,10 @@ const SCORE_TIMEOUT_MS = 7_000
 
 const summarizeInvocation = (invocation: ToolInvocation): string => {
   const candidate =
-    invocation.input.command ?? invocation.input.file_path ?? invocation.input.path ?? invocation.name
+    invocation.input.command ??
+    invocation.input.file_path ??
+    invocation.input.path ??
+    invocation.name
   return secretScrubber
     .scrubText(typeof candidate === 'string' ? candidate : invocation.name)
     .slice(0, 240)
@@ -69,15 +90,24 @@ export class GuardianScoreService {
   ) {}
 
   observe(invocation: ToolInvocation): void {
-    if (!shouldScoreGuardianAction(invocation)) return
     const state = this.stateFor(invocation.threadID, invocation.turnID)
-    const index = state.nextIndex++
+    this.syncAuthorization(state, invocation.threadID)
     const actionHash = guardianActionHash(invocation)
+    const previous = state.byCall.get(invocation.id)
+    if (previous) {
+      // A re-observed tool call means a new execution attempt. The previous
+      // score must never survive, even when the action text is identical.
+      this.failEntry(previous)
+      state.byCall.delete(invocation.id)
+    }
+    if (!guardianFastPathEligible(invocation)) return
+    const index = state.nextIndex++
     const authorizationVersion = guardianAuthorizationVersion(this.db, invocation.threadID)
     const sensitivity = guardianActionSensitivity(invocation)
     const entry: ScoreEntry = {
       callID: invocation.id,
       index,
+      generation: state.generation,
       actionHash,
       authorizationVersion,
       sampledAt: Date.now(),
@@ -92,12 +122,14 @@ export class GuardianScoreService {
       settled: false,
       promise: Promise.resolve(),
     }
-    entry.promise = this.score(invocation, entry)
+    entry.promise = this.score(invocation, entry, state)
     state.entries.push(entry)
     state.byCall.set(entry.callID, entry)
     if (state.entries.length > MAX_ENTRIES) {
       const removed = state.entries.splice(0, state.entries.length - MAX_ENTRIES)
-      for (const item of removed) state.byCall.delete(item.callID)
+      for (const item of removed) {
+        if (state.byCall.get(item.callID) === item) state.byCall.delete(item.callID)
+      }
     }
   }
 
@@ -111,7 +143,13 @@ export class GuardianScoreService {
     if (!state || state.turnID !== invocation.turnID) return []
     const current = state.byCall.get(invocation.id)?.index ?? state.nextIndex
     return state.entries
-      .filter((entry) => entry.settled && !entry.failed && entry.index < current)
+      .filter(
+        (entry) =>
+          entry.generation === state.generation &&
+          entry.settled &&
+          !entry.failed &&
+          entry.index < current,
+      )
       .slice(-6)
       .map((entry) => ({
         tool: entry.tool,
@@ -123,33 +161,27 @@ export class GuardianScoreService {
       }))
   }
 
-  /** Records the enforced outcome so later scores can be invalidated. */
+  /**
+   * Records the enforced outcome so later scores can be invalidated. A human
+   * confirmation (ask) or a denial ends the trajectory the classifier scored.
+   */
   recordDecision(invocation: ToolInvocation, decision: 'allow' | 'ask' | 'deny'): void {
     const state = this.threads.get(invocation.threadID)
     if (!state || state.turnID !== invocation.turnID) return
+    this.syncAuthorization(state, invocation.threadID)
     const entry = state.byCall.get(invocation.id)
     if (entry) entry.decision = decision
-    // A human confirmation or a denial means the turn is no longer the same
-    // trajectory the classifier evaluated. Drop every reuse candidate.
-    if (decision !== 'allow') {
-      for (const item of state.entries) {
-        item.failed = true
-        item.predictedRisk = 'high'
-        item.trajectoryRisk = 'high'
-      }
-    }
+    if (decision !== 'allow') this.invalidateState(state)
   }
 
-  cachedAllow(invocation: ToolInvocation): PermissionDecision | null {
-    const entry = this.selectLowRisk(invocation)
-    if (!entry) return null
-    const state = this.stateFor(invocation.threadID, invocation.turnID)
-    const current = state.byCall.get(invocation.id)?.index ?? state.nextIndex - 1
-    return this.allowFromScore(
-      entry,
-      Math.max(0, current - entry.index),
-      entry.actionHash !== guardianActionHash(invocation),
-    )
+  cachedAllow(invocation: ToolInvocation, signal?: AbortSignal): PermissionDecision | null {
+    if (signal?.aborted) return null
+    const state = this.currentState(invocation)
+    if (!state) return null
+    if (!guardianFastPathEligible(invocation)) return null
+    const selection = this.selectLowRisk(state, invocation)
+    if (!selection) return null
+    return this.allowFromScore(selection.entry, selection.lag, selection.reusedAcrossActions)
   }
 
   async waitForLowRisk(
@@ -157,76 +189,94 @@ export class GuardianScoreService {
     signal: AbortSignal,
     timeoutMs = 2_500,
   ): Promise<PermissionDecision | null> {
-    const cached = this.cachedAllow(invocation)
-    if (cached) return cached
     if (signal.aborted) return null
-    const state = this.stateFor(invocation.threadID, invocation.turnID)
+    const cached = this.cachedAllow(invocation, signal)
+    if (cached) return cached
+    const state = this.currentState(invocation)
+    if (!state) return null
     const entry = state.byCall.get(invocation.id)
     if (!entry) return null
+    if (entry.generation !== state.generation) return null
     const winner = await Promise.race([
       entry.promise.then(() => 'settled' as const),
       this.timeout(signal, timeoutMs),
     ])
-    if (winner !== 'settled') return null
-    if (signal.aborted) return null
-    if (
-      entry.failed ||
-      entry.risk !== 'low' ||
-      entry.authorizationVersion !== guardianAuthorizationVersion(this.db, invocation.threadID)
-    ) {
+    if (winner !== 'settled') {
+      // A cancellation must also kill the late result: invalidate the turn so a
+      // score that finishes afterwards can never be reused.
+      if (signal.aborted) this.invalidateState(state)
       return null
     }
-    const current = state.byCall.get(invocation.id)?.index ?? entry.index
-    if (current - entry.index > MAX_TOOL_CALL_LAG) return null
-    return this.allowFromScore(
-      entry,
-      Math.max(0, current - entry.index),
-      entry.actionHash !== guardianActionHash(invocation),
-    )
+    if (signal.aborted) {
+      this.invalidateState(state)
+      return null
+    }
+    // `cachedAllow` owns the single reuse validation for both entry points.
+    return this.cachedAllow(invocation, signal)
   }
 
   clearThread(threadID: string): void {
     this.threads.delete(threadID)
   }
 
-  /** A synchronous denial overrides low async scores for the whole turn. */
+  /**
+   * Ends a turn. Every outstanding score becomes unusable, including results
+   * that resolve after this call, and the state is dropped so a new turn starts
+   * from a clean generation.
+   */
+  endTurn(threadID: string, turnID: string): void {
+    const state = this.threads.get(threadID)
+    if (!state || state.turnID !== turnID) return
+    state.generation += 1
+    for (const entry of state.entries) this.failEntry(entry)
+    this.threads.delete(threadID)
+  }
+
+  /** A synchronous denial/ask overrides low async scores for the whole turn. */
   invalidateAction(invocation: ToolInvocation): void {
     const state = this.threads.get(invocation.threadID)
     if (!state || state.turnID !== invocation.turnID) return
-    for (const entry of state.entries) {
-      entry.risk = 'high'
-      entry.predictedRisk = 'high'
-      entry.trajectoryRisk = 'high'
-      entry.failed = true
-    }
+    this.syncAuthorization(state, invocation.threadID)
+    this.invalidateState(state)
   }
 
-  private selectLowRisk(invocation: ToolInvocation): ScoreEntry | null {
-    const state = this.threads.get(invocation.threadID)
-    if (!state || state.turnID !== invocation.turnID) return null
-    const current = state.byCall.get(invocation.id)?.index ?? state.nextIndex - 1
-    const authorizationVersion = guardianAuthorizationVersion(this.db, invocation.threadID)
+  /** Returns the low score that may satisfy this action, after full validation. */
+  private selectLowRisk(state: ThreadState, invocation: ToolInvocation): LowRiskSelection | null {
     const actionHash = guardianActionHash(invocation)
+    const authorizationVersion = guardianAuthorizationVersion(this.db, invocation.threadID)
     const sensitivity = guardianActionSensitivity(invocation)
+    const own = state.byCall.get(invocation.id)
+    const current = own?.index ?? state.nextIndex - 1
+    // A settled high-risk or failed score for the current action is a verdict:
+    // it must not fall through to an older low score from another action.
+    if (own && own.settled && (own.failed || own.risk !== 'low')) return null
+    if (own && own.generation !== state.generation) return null
     let best: ScoreEntry | null = null
     for (const entry of state.entries) {
-      if (entry.failed || !entry.settled) continue
+      if (!entry.settled || entry.failed) continue
+      if (entry.generation !== state.generation) continue
       if (entry.authorizationVersion !== authorizationVersion) continue
       if (entry.index > current) continue
       if (current - entry.index > MAX_TOOL_CALL_LAG) continue
-      if (entry.actionHash === actionHash) {
-        if (entry.risk !== 'low') continue
-      } else if (
-        !this.reusableAcrossActions(entry, sensitivity) ||
-        entry.risk !== 'low' ||
-        entry.predictedRisk !== 'low' ||
-        entry.trajectoryRisk !== 'low'
-      ) {
+      const sameAction = entry.actionHash === actionHash
+      if (!sameAction) {
+        // The same tool call must never reuse a score for a different command
+        // or action; cross-action reuse is only for distinct benign actions.
+        if (entry.callID === invocation.id) continue
+        if (!this.reusableAcrossActions(entry, sensitivity)) continue
+        if (entry.risk !== 'low' || entry.predictedRisk !== 'low' || entry.trajectoryRisk !== 'low')
+          continue
+      } else if (entry.risk !== 'low') {
         continue
       }
       if (!best || entry.index > best.index) best = entry
     }
-    return best
+    if (!best) return null
+    return {
+      entry: best,
+      lag: Math.max(0, current - best.index),
+      reusedAcrossActions: best.actionHash !== actionHash,
+    }
   }
 
   /**
@@ -268,11 +318,16 @@ export class GuardianScoreService {
           : '当前动作被 Guardian 异步评分为低风险，且用户授权版本未变化。',
         scoreLag: lag,
         reviewedAt: entry.sampledAt,
+        authorizationVersion: entry.authorizationVersion,
       }),
     }
   }
 
-  private async score(invocation: ToolInvocation, entry: ScoreEntry): Promise<void> {
+  private async score(
+    invocation: ToolInvocation,
+    entry: ScoreEntry,
+    state: ThreadState,
+  ): Promise<void> {
     const controller = new AbortController()
     const timeout = setTimeout(
       () => controller.abort(new Error('Guardian score timeout')),
@@ -284,9 +339,17 @@ export class GuardianScoreService {
         controller.signal,
         this.trajectory(invocation),
       )
-      if (guardianAuthorizationVersion(this.db, invocation.threadID) !== entry.authorizationVersion) {
-        entry.risk = 'high'
-        entry.failed = true
+      if (!this.isCurrentEntry(invocation, state, entry)) {
+        // The turn ended, the action was invalidated, or a newer generation
+        // started while the classifier was running. Never resurrect the score.
+        this.failEntry(entry)
+        return
+      }
+      if (
+        guardianAuthorizationVersion(this.db, invocation.threadID) !== entry.authorizationVersion
+      ) {
+        this.syncAuthorization(state, invocation.threadID)
+        this.failEntry(entry)
         return
       }
       entry.risk = result.risk
@@ -294,14 +357,54 @@ export class GuardianScoreService {
       entry.predictedRisk = result.predicted_risk ?? result.risk
       entry.failed = false
     } catch {
-      entry.risk = 'high'
-      entry.trajectoryRisk = 'high'
-      entry.predictedRisk = 'high'
-      entry.failed = true
+      this.failEntry(entry)
     } finally {
       entry.settled = true
       clearTimeout(timeout)
     }
+  }
+
+  private isCurrentEntry(
+    invocation: ToolInvocation,
+    state: ThreadState,
+    entry: ScoreEntry,
+  ): boolean {
+    return (
+      this.threads.get(invocation.threadID) === state &&
+      state.turnID === invocation.turnID &&
+      state.generation === entry.generation
+    )
+  }
+
+  private currentState(invocation: ToolInvocation): ThreadState | null {
+    const state = this.threads.get(invocation.threadID)
+    if (!state || state.turnID !== invocation.turnID) return null
+    this.syncAuthorization(state, invocation.threadID)
+    return state
+  }
+
+  /**
+   * Authorization changes invalidate all outstanding scores. The check is
+   * evaluated lazily on every state access, so it also covers changes that happen
+   * while a classifier call is in flight.
+   */
+  private syncAuthorization(state: ThreadState, threadID: string): void {
+    const current = guardianAuthorizationVersion(this.db, threadID)
+    if (current === state.authorizationVersion) return
+    state.authorizationVersion = current
+    this.invalidateState(state)
+  }
+
+  private invalidateState(state: ThreadState): void {
+    state.generation += 1
+    for (const entry of state.entries) this.failEntry(entry)
+  }
+
+  private failEntry(entry: ScoreEntry): void {
+    entry.risk = 'high'
+    entry.trajectoryRisk = 'high'
+    entry.predictedRisk = 'high'
+    entry.failed = true
   }
 
   private stateFor(threadID: string, turnID: string): ThreadState {
@@ -309,6 +412,8 @@ export class GuardianScoreService {
     if (current && current.turnID === turnID) return current
     const next: ThreadState = {
       turnID,
+      generation: 0,
+      authorizationVersion: guardianAuthorizationVersion(this.db, threadID),
       nextIndex: 0,
       entries: [],
       byCall: new Map(),

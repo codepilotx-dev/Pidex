@@ -612,6 +612,8 @@ export const GuardianReviewSchema = Schema.Struct({
   scoreLag: Schema.optional(Schema.Number),
   fallbackReason: Schema.optional(Schema.String),
   model: Schema.optional(Schema.String),
+  /** Authorization version captured at review start; changed versions invalidate allow. */
+  authorizationVersion: Schema.optional(Schema.String),
 })
 export type GuardianReview = typeof GuardianReviewSchema.Type
 

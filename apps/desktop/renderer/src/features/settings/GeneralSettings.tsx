@@ -9,7 +9,7 @@ import { SettingsDropdown } from './SettingsDropdown.js'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { useDesktopSettings } from './UseDesktopSettings.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
-import { permissionConfigForMode, permissionModeForConfig } from './SettingsStorage.js'
+import { permissionPresetViewForConfig } from './PermissionPresetView.js'
 import type {
   DesktopOpenTarget,
   DesktopReviewDelivery,
@@ -83,7 +83,10 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
     defaultModeRequestUserInput,
     notifications,
   } = draft.values
-  const permissionMode = permissionModeForConfig(permissionConfig)
+  const permissionView = permissionPresetViewForConfig(permissionConfig, {
+    enableAutoReviewPermissionMode,
+    enableFullAccessPermissionMode,
+  })
 
   const [openTargets, setOpenTargets] = useState<DesktopOpenTarget[]>(FALLBACK_OPEN_TARGETS)
   const [openTargetsLoaded, setOpenTargetsLoaded] = useState(false)
@@ -208,17 +211,13 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
   )
 
   const handleAutoApprove = (checked: boolean) => {
+    // Availability is a feature flag only; the stored permission config is never rewritten.
     draft.setValue('enableAutoReviewPermissionMode', checked)
-    if (!checked && permissionMode === 'auto-review') {
-      draft.setValue('permissionConfig', permissionConfigForMode('default'))
-    }
     draft.autoSave()
   }
   const handleFullAccess = (checked: boolean) => {
+    // Availability is a feature flag only; the stored permission config is never rewritten.
     draft.setValue('enableFullAccessPermissionMode', checked)
-    if (!checked && permissionMode === 'full-access') {
-      draft.setValue('permissionConfig', permissionConfigForMode('default'))
-    }
     draft.autoSave()
   }
 
@@ -309,28 +308,28 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
 
         <SettingsSection title="权限">
           <SettingsRow
-            title="默认权限"
-            description="默认情况下，Pidex 可以自动读取工作区内容；写入文件、运行命令、联网和 MCP 请求需要你授权。"
-            autoSave
-            control={(aria) => (
-              <ToggleSwitch
-                checked
-                disabled
-                onChange={() => {}}
-                ariaLabelledby={aria.labelledby}
-                ariaDescribedby={aria.describedby}
-              />
-            )}
-          />
-          <SettingsRow
-            title="自动审核"
-            autoSave
+            title="当前权限"
             description={
               <>
-                Pidex 可以读取和编辑其工作区中的文件。Pidex
-                会自动审核额外访问权限请求。自动审核可能会出错。
+                当前为「{permissionView.label}」：{permissionView.detail}
+                {permissionView.unavailableReason ? (
+                  <>
+                    <br />
+                    {permissionView.unavailableReason}请在「配置」页重新选择权限预设，或重新开启该模式。
+                  </>
+                ) : null}
               </>
             }
+            control={
+              <span className="settings-row-status">
+                {permissionView.hidden ? '已隐藏' : '可用'}
+              </span>
+            }
+          />
+          <SettingsRow
+            title="允许「帮我批准」预设"
+            autoSave
+            description="启用后可在权限菜单与「配置」页选择「帮我批准」：内建文件访问范围限当前工作区；宿主 Shell 经安全规则和项目 Hook 执行；工作区外访问、破坏性动作和命中规则时由 Guardian 审查。关闭只隐藏该预设，不会改写已保存的权限配置。"
             control={(aria) => (
               <ToggleSwitch
                 checked={enableAutoReviewPermissionMode ?? false}
@@ -341,14 +340,9 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
             )}
           />
           <SettingsRow
-            title="完全访问权限"
+            title="允许「完全访问」预设"
             autoSave
-            description={
-              <>
-                当 Pidex
-                以完全访问权限运行时，无需你批准，即可自动放行所有权限工具，编辑你的电脑上的任何文件并运行联网命令。这会显著增加数据丢失、泄露或意外行为的风险。
-              </>
-            }
+            description="启用后可在权限菜单与「配置」页选择「完全访问」：内建文件访问范围扩大到工作区外路径；宿主 Shell 直接在本机执行；硬拒绝、Plan、规则与受保护资源仍然生效。关闭只隐藏该预设，不会改写已保存的权限配置。"
             control={(aria) => (
               <ToggleSwitch
                 checked={enableFullAccessPermissionMode ?? false}
@@ -357,6 +351,10 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
                 ariaDescribedby={aria.describedby}
               />
             )}
+          />
+          <SettingsRow
+            title="权限说明"
+            description="内建文件访问范围与审批策略在「配置」页调整。宿主 Shell 始终在本机执行；工作区外访问、破坏性动作（如删除远程仓库或分支）和命中规则时由你确认或由 Guardian 审查。Pidex 不承诺 OS 沙箱或网络隔离。"
           />
         </SettingsSection>
 

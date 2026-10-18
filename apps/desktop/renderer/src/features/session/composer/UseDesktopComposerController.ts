@@ -13,7 +13,7 @@ import type {
 import { hasBlockingComposerAttachmentErrors } from '../../../../shared/DesktopUserMessage.js'
 import { toUserErrorMessage } from '../../../utils/Errors.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
-import { getVisiblePermissionModeOptions } from '../../settings/SettingsStorage.js'
+import { permissionPresetView } from '../../settings/PermissionPresetView.js'
 import type { Message } from '../../../UiTypes.js'
 import type {
   ComposerDraft,
@@ -72,7 +72,6 @@ type ControllerOptions = {
     draftKey: ComposerDraftKey,
     snapshot: ComposerDraftContentSnapshot,
   ) => boolean | void
-  onPermissionChange: (value: DesktopPermissionMode) => void | Promise<void>
   createSessionForWorkspace: (
     target?: DesktopWorkspace | null,
     initialSessionName?: string,
@@ -157,7 +156,6 @@ export function useDesktopComposerController({
   onAppendAttachmentsForDraft,
   onRemoveAttachmentForDraft,
   onDraftAccepted,
-  onPermissionChange,
   createSessionForWorkspace,
   submitToSession,
   onError,
@@ -245,25 +243,20 @@ export function useDesktopComposerController({
     [attachments],
   )
   const branchName = getDesktopComposerBranchName(workspace)
-  const permissionOptions = useMemo(
+  const permissionView = useMemo(
     () =>
-      getVisiblePermissionModeOptions({
+      permissionPresetView(permissionMode, {
         enableAutoReviewPermissionMode,
         enableFullAccessPermissionMode,
       }),
-    [enableAutoReviewPermissionMode, enableFullAccessPermissionMode],
+    [permissionMode, enableAutoReviewPermissionMode, enableFullAccessPermissionMode],
   )
-  const permissionModeVisible = permissionOptions.some((option) => option.value === permissionMode)
-  const effectivePermissionMode = permissionModeVisible ? permissionMode : 'default'
+  // The configured preset is always shown as-is. A preset hidden by a feature
+  // toggle is surfaced with its unavailable reason and never rewritten here.
+  const permissionOptions = permissionView.options
+  const effectivePermissionMode = permissionView.selection
   const hasConversationMessages =
     hasConversationMessagesOverride ?? messages.some((message) => message.role !== 'system')
-
-  useEffect(() => {
-    if (permissionModeVisible) return
-    void Promise.resolve(onPermissionChange('default')).catch((error: unknown) =>
-      onError?.(error instanceof Error ? error.message : '权限模式未更新'),
-    )
-  }, [onPermissionChange, permissionModeVisible, onError])
 
   useEffect(() => {
     let cancelled = false
@@ -599,6 +592,7 @@ export function useDesktopComposerController({
     isSubmitting,
     lastSubmitOutcome: composerDraftStore.getSubmitOutcome(draftKey) ?? lastSubmitOutcome,
     permissionOptions,
+    permissionUnavailableReason: permissionView.unavailableReason,
     selectedSkillToken,
     activeSkillToken,
     composerDocument,

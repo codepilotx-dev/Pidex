@@ -422,7 +422,7 @@ export function ThreadSummaryPanel({
                 />
                 <span className={SUMMARY_ROW_LABEL_CLASS}>变更</span>
                 <span
-                  className={`tw:inline-flex tw:items-center tw:justify-end ${gitMenuOpen || branchPopoverOpen ? 'tw:invisible' : 'tw:group-hover:invisible tw:group-focus-within:invisible'}`}
+                  className={`tw:inline-flex tw:items-center tw:justify-end ${gitMenuOpen || branchPopoverOpen ? 'tw:invisible' : 'tw:group-hover:invisible tw:group-has-[:focus-visible]:invisible'}`}
                 >
                   {changesLoading && !model.changes ? (
                     <Spinner label="正在加载变更统计" className="tw:text-app-text-meta" />
@@ -441,7 +441,7 @@ export function ThreadSummaryPanel({
                 </span>
               </button>
               <div
-                className={`tw:absolute tw:right-0 tw:top-0 tw:bottom-0 tw:flex tw:items-center ${gitMenuOpen || branchPopoverOpen ? 'tw:opacity-100' : 'tw:opacity-0 tw:group-hover:opacity-100 tw:group-focus-within:opacity-100'}`}
+                className={`tw:absolute tw:right-0 tw:top-0 tw:bottom-0 tw:flex tw:items-center ${gitMenuOpen || branchPopoverOpen ? 'tw:opacity-100' : 'tw:opacity-0 tw:group-hover:opacity-100 tw:group-has-[:focus-visible]:opacity-100'}`}
               >
                 <PopoverMenu
                   open={gitMenuOpen}

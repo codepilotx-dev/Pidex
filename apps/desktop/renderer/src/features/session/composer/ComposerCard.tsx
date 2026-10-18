@@ -153,6 +153,7 @@ type Option<T extends string> = {
   value: T
   label: string
   detail?: string
+  disabled?: boolean
 }
 
 type ProviderModelOption = {
@@ -313,6 +314,8 @@ type Props = {
   providerOptions: ProviderModelOption[]
   allProviders?: readonly DesktopModelProviderSummary[]
   permissionOptions: Option<DesktopPermissionMode>[]
+  /** Why the configured preset is not offered by the current feature flags. */
+  permissionUnavailableReason?: string | null
   thinkingOptions: Option<DesktopThinkingMode>[]
   branchName: string
   branches: string[]
@@ -445,6 +448,7 @@ export function ComposerCard({
   providerOptions,
   allProviders,
   permissionOptions,
+  permissionUnavailableReason,
   thinkingOptions,
   branchName,
   branches,
@@ -705,10 +709,10 @@ export function ComposerCard({
 
   const sessionBusy = sessionStatus === 'running' || sessionStatus === 'waiting'
   const approvalReview = useApprovalReviewState(routedSessionId, sessionBusy)
-  const scopedGrantsSupported = useApprovalCapability(
+  const approvalRulesSupported = useApprovalCapability(
     routedSessionId ?? '',
     Boolean(routedSessionId),
-    'interaction.scopedGrants.v1',
+    'permission.rules.v1',
   )
   const {
     commands: builtinSlashCommands,
@@ -1512,6 +1516,7 @@ export function ComposerCard({
               onOpenChange={(open) => setOpenDropdown(open ? 'permission' : null)}
               onValueChange={(value) => {
                 if (value === 'approval-rules') setApprovalRulesOpen(true)
+                else if (value === 'recent-denials') setApprovalRetryOpen(true)
                 else if (value === 'full-access' && permissionMode !== 'full-access') {
                   setFullAccessError('')
                   setFullAccessConfirmationOpen(true)
@@ -1532,11 +1537,11 @@ export function ComposerCard({
                   PERMISSION_TRIGGER_CLASS,
                   openDropdown === 'permission' && PERMISSION_TRIGGER_OPEN_CLASS,
                 )}
-                title="选择权限模式"
+                title={permissionUnavailableReason ?? '选择权限模式'}
               >
                 {getPermissionIcon(permissionMode)}
                 <span className={PERMISSION_TRIGGER_LABEL_CLASS}>
-                  {selectedPermission?.label ?? '默认权限'}
+                  {selectedPermission?.label ?? '请求批准'}
                 </span>
               </Select.Trigger>
               <Select.Portal>
@@ -1553,14 +1558,28 @@ export function ComposerCard({
                 >
                   <div className="permission-select-scroll-area tw:grid tw:max-h-[max(80px,calc(min(320px,calc(100vh-96px))-12px))] tw:overflow-x-hidden tw:overflow-y-auto">
                     <div className="permission-select-scroll-content tw:grid tw:min-w-0">
-                      {routedSessionId && workspace?.projectId && scopedGrantsSupported ? (
+                      {permissionUnavailableReason ? (
+                        <p
+                          className="permission-select-note tw:m-0 tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-caption tw:whitespace-normal"
+                          role="status"
+                        >
+                          {permissionUnavailableReason}
+                        </p>
+                      ) : null}
+                      {routedSessionId && approvalRulesSupported ? (
                         <Select.Item className="permission-select-item" value="approval-rules">
-                          <span>管理项目授权</span>
+                          <span>审批规则</span>
+                        </Select.Item>
+                      ) : null}
+                      {routedSessionId && approvalReview.supported ? (
+                        <Select.Item className="permission-select-item" value="recent-denials">
+                          <span>最近拒绝</span>
                         </Select.Item>
                       ) : null}
                       {permissionOptions.map((option) => (
                         <Select.Item
                           asChild
+                          disabled={option.disabled}
                           key={option.value}
                           value={option.value}
                           textValue={option.label}

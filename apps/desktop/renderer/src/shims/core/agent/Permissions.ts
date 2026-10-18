@@ -1,8 +1,4 @@
-import {
-  DEFAULT_PERMISSION_CONFIG,
-  AUTO_REVIEW_PERMISSION_CONFIG,
-  FULL_ACCESS_PERMISSION_CONFIG,
-} from '@pidex/shared/thread'
+import { permissionConfigForPreset } from '@pidex/shared/thread'
 export type ApprovalsReviewer = 'user' | 'auto_review'
 export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 
@@ -108,18 +104,17 @@ export function permissionPolicyForDesktopMode(
   mode: DesktopAgentPermissionMode | string | undefined,
 ): AgentPermissionPolicy {
   const normalized = normalizeDesktopAgentPermissionMode(mode)
-  const config =
-    normalized === 'full-access'
-      ? FULL_ACCESS_PERMISSION_CONFIG
-      : normalized === 'auto-review'
-        ? AUTO_REVIEW_PERMISSION_CONFIG
-        : DEFAULT_PERMISSION_CONFIG
+  // Preset configs come from the shared catalog; custom keeps the default config.
+  const config = permissionConfigForPreset(normalized)
   const profile = config.sandboxMode === 'danger-full-access' ? ':danger-full-access' : ':workspace'
+  // Preset configs never use granular policies; the fallback keeps the type explicit.
+  const approvalMode: AgentApprovalMode =
+    typeof config.approvalPolicy === 'string' ? config.approvalPolicy : 'on-request'
   return {
     profile,
     sandboxPolicy: profile,
     sandboxMode: config.sandboxMode,
-    approvalMode: config.approvalPolicy,
+    approvalMode,
     approvalsReviewer: config.approvalsReviewer,
   }
 }

@@ -99,6 +99,198 @@ export const FULL_ACCESS_PERMISSION_CONFIG = {
   approvalsReviewer: 'user',
 } as const satisfies PermissionConfig
 
+/**
+ * Shared permission preset catalog. Every client must derive its labels,
+ * selection state and generated config from this single source instead of
+ * re-identifying permission combinations locally.
+ *
+ * The three stored fields (`sandboxMode`, `approvalPolicy`, `approvalsReviewer`)
+ * form one preset identity. A configuration that differs in any of them is
+ * custom, including full access combined with an automatic reviewer.
+ */
+export type PermissionPresetId = 'default' | 'auto-review' | 'full-access'
+export type PermissionPresetSelection = PermissionPresetId | 'custom'
+
+export type PermissionPreset = {
+  id: PermissionPresetId
+  label: string
+  description: string
+  config: PermissionConfig
+}
+
+export const PERMISSION_PRESETS: readonly PermissionPreset[] = [
+  {
+    id: 'default',
+    label: '请求批准',
+    description:
+      '内建文件访问范围限当前工作区；宿主 Shell 经安全规则和项目 Hook 执行；访问工作区外路径、删除外部状态（远程仓库/分支/发布）等破坏性动作以及命中规则时由你确认。',
+    config: DEFAULT_PERMISSION_CONFIG,
+  },
+  {
+    id: 'auto-review',
+    label: '帮我批准',
+    description:
+      '内建文件访问范围限当前工作区；宿主 Shell 经安全规则和项目 Hook 执行；工作区外访问、破坏性动作和命中规则时由 Guardian 审查；显式 Ask 规则始终由你确认。',
+    config: AUTO_REVIEW_PERMISSION_CONFIG,
+  },
+  {
+    id: 'full-access',
+    label: '完全访问',
+    description:
+      '内建文件工具可访问工作区外路径；宿主 Shell 直接在本机执行；硬拒绝、Plan、规则与受保护资源仍然生效。',
+    config: FULL_ACCESS_PERMISSION_CONFIG,
+  },
+]
+
+export const CUSTOM_PERMISSION_PRESET = {
+  id: 'custom',
+  label: '自定义',
+  description: '分别配置内建文件访问范围、审批策略与审批者。',
+} as const
+
+export const PERMISSION_PRESET_OPTIONS: ReadonlyArray<{
+  id: PermissionPresetSelection
+  label: string
+  description: string
+}> = [
+  ...PERMISSION_PRESETS.map(({ id, label, description }) => ({ id, label, description })),
+  CUSTOM_PERMISSION_PRESET,
+]
+
+const approvalPolicyIsEqual = (left: ApprovalPolicy, right: ApprovalPolicy): boolean => {
+  if (typeof left === 'string' || typeof right === 'string')
+    return typeof left === 'string' && typeof right === 'string' && left === right
+  return encodeApprovalPolicy(left) === encodeApprovalPolicy(right)
+}
+
+/** Exact three-field preset matching. Anything else is custom. */
+export const matchPermissionPreset = (
+  config: PermissionConfig,
+): PermissionPresetSelection => {
+  const preset = PERMISSION_PRESETS.find(
+    (candidate) =>
+      candidate.config.sandboxMode === config.sandboxMode &&
+      candidate.config.approvalsReviewer === config.approvalsReviewer &&
+      approvalPolicyIsEqual(candidate.config.approvalPolicy, config.approvalPolicy),
+  )
+  return preset?.id ?? 'custom'
+}
+
+/** Generates the stored config for a preset; custom keeps the current config. */
+export const permissionConfigForPreset = (
+  preset: PermissionPresetSelection,
+  current?: PermissionConfig,
+): PermissionConfig => {
+  if (preset === 'custom') return { ...(current ?? DEFAULT_PERMISSION_CONFIG) }
+  const selected = PERMISSION_PRESETS.find((candidate) => candidate.id === preset)
+  return { ...(selected?.config ?? DEFAULT_PERMISSION_CONFIG) }
+}
+
+/**
+ * Permission rules are additive user intent layered on top of the preset.
+ * `effect` is the requested outcome, `scope` is the persistence boundary and
+ * `match` describes the exact host-observed subject. Deny always outranks ask,
+ * and ask always outranks allow.
+ */
+export const PermissionRuleEffectSchema = Schema.Literals(['allow', 'ask', 'deny'])
+export type PermissionRuleEffect = typeof PermissionRuleEffectSchema.Type
+
+export const PermissionRuleScopeSchema = Schema.Literals(['user', 'project', 'chat'])
+export type PermissionRuleScope = typeof PermissionRuleScopeSchema.Type
+
+/** Where the rule is stored; legacy rules come from old approval grants. */
+export const PermissionRuleSourceSchema = Schema.Literals(['user', 'project', 'chat', 'legacy'])
+export type PermissionRuleSource = typeof PermissionRuleSourceSchema.Type
+
+export const PermissionRuleMatchSchema = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal('tool'),
+    /** Canonical registered tool name. */
+    tool: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('file'),
+    access: Schema.Literals(['read', 'write']),
+    /** Absolute, host-resolved path or directory. */
+    path: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('command'),
+    /** Exact raw command value, always matched literally. */
+    command: Schema.String,
+    /** Safe argv prefix parsed by the host; absent means exact-command only. */
+    argv: Schema.optional(Schema.Array(Schema.String)),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('network'),
+    /** Exact lower-case hostname only; no wildcard or subdomain matching. */
+    domain: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal('mcp'),
+    server: Schema.String,
+    tool: Schema.optional(Schema.String),
+  }),
+])
+export type PermissionRuleMatch = typeof PermissionRuleMatchSchema.Type
+
+export const PermissionRuleSchema = Schema.Struct({
+  id: Schema.String,
+  effect: PermissionRuleEffectSchema,
+  scope: PermissionRuleScopeSchema,
+  source: PermissionRuleSourceSchema,
+  match: PermissionRuleMatchSchema,
+  editable: Schema.Boolean,
+  /** Config layer version or chat-rule revision used for optimistic writes. */
+  version: Schema.optional(Schema.String),
+  createdAt: Schema.optional(Schema.Number),
+})
+export type PermissionRule = typeof PermissionRuleSchema.Type
+
+export const PermissionRuleInputSchema = Schema.Struct({
+  id: Schema.optional(Schema.String),
+  effect: PermissionRuleEffectSchema,
+  scope: PermissionRuleScopeSchema,
+  match: PermissionRuleMatchSchema,
+})
+export type PermissionRuleInput = typeof PermissionRuleInputSchema.Type
+
+export const permissionRuleEffectRank: Readonly<Record<PermissionRuleEffect, number>> = {
+  deny: 3,
+  ask: 2,
+  allow: 1,
+}
+
+/** Deny > ask > allow, independent of storage source. */
+export const strongestPermissionRuleEffect = (
+  effects: readonly PermissionRuleEffect[],
+): PermissionRuleEffect | null =>
+  effects.reduce<PermissionRuleEffect | null>(
+    (strongest, effect) =>
+      strongest === null || permissionRuleEffectRank[effect] > permissionRuleEffectRank[strongest]
+        ? effect
+        : strongest,
+    null,
+  )
+
+/** Stable identity for a match object, used to deduplicate and compare rules. */
+export const permissionRuleMatchKey = (match: PermissionRuleMatch): string => {
+  switch (match.kind) {
+    case 'tool':
+      return `tool:${match.tool}`
+    case 'file':
+      return `file:${match.access}:${match.path}`
+    case 'command':
+      return match.argv && match.argv.length > 0
+        ? `command:${match.argv.join('\u0000')}`
+        : `command-exact:${match.command}`
+    case 'network':
+      return `network:${match.domain}`
+    case 'mcp':
+      return `mcp:${match.server}/${match.tool ?? '*'}`
+  }
+}
+
 export const AdditionalPermissionsSchema = Schema.Struct({
   readPaths: Schema.optional(Schema.Array(Schema.String)),
   writePaths: Schema.optional(Schema.Array(Schema.String)),

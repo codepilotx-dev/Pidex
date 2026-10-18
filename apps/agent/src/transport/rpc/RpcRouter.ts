@@ -25,6 +25,8 @@ import type { QuestionService } from '../../session/QuestionService'
 import { PlanApprovalService } from '../../session/plan/PlanApprovalService'
 import type { ApiKeyService } from '../../provider/ApiKeyService'
 import type { ModelHealthService } from '../../provider/ModelHealthService'
+import type { ModelSyncService } from '../../provider/ModelSyncService'
+import type { ProtocolDetectionService } from '../../provider/ProtocolDetectionService'
 import type { ProviderCredentialService } from '../../provider/ProviderCredentialService'
 import type { ProviderCredentialStoreManager } from '../../auth/ProviderCredentialStoreManager'
 import type { PiModelService } from '../../provider/pi'
@@ -151,6 +153,8 @@ export type RpcRouterDependencies = {
   piModels: PiModelService
   apiKeys: ApiKeyService
   modelHealth: ModelHealthService
+  modelSync: ModelSyncService
+  protocolDetection: ProtocolDetectionService
   providerCredentials: ProviderCredentialService
   providerCredentialStore: ProviderCredentialStoreManager
   authSessions: PiAuthSessionService

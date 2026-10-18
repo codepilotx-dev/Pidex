@@ -24,6 +24,8 @@ import type { ProviderCredentialService } from '../provider/ProviderCredentialSe
 import type { ProviderCredentialStoreManager } from '../auth/ProviderCredentialStoreManager'
 import type { PiModelService } from '../provider/pi'
 import type { ModelHealthService } from '../provider/ModelHealthService'
+import type { ModelSyncService } from '../provider/ModelSyncService'
+import type { ProtocolDetectionService } from '../provider/ProtocolDetectionService'
 import type { PiAuthSessionService } from '../auth/PiAuthSessionService'
 import type { SubagentService } from '../subagent/SubagentService'
 import type { AttachmentService } from '../subagent/AttachmentService'
@@ -86,6 +88,8 @@ export interface TransportDependencies {
   piModels: PiModelService
   apiKeys: ApiKeyService
   modelHealth: ModelHealthService
+  modelSync: ModelSyncService
+  protocolDetection: ProtocolDetectionService
   providerCredentials: ProviderCredentialService
   providerCredentialStore: ProviderCredentialStoreManager
   authSessions: PiAuthSessionService
@@ -516,6 +520,8 @@ export const createApp = (dependencies: TransportDependencies) => {
     piModels,
     apiKeys,
     modelHealth,
+    modelSync: dependencies.modelSync,
+    protocolDetection: dependencies.protocolDetection,
     providerCredentials,
     providerCredentialStore,
     authSessions,

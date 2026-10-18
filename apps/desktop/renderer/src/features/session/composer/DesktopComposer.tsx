@@ -296,6 +296,7 @@ export function DesktopComposer({
     isSubmitting,
     lastSubmitOutcome,
     permissionOptions,
+    permissionUnavailableReason,
     activeSkillToken,
     composerDocument,
     setGoalModeEnabled,
@@ -329,7 +330,6 @@ export function DesktopComposer({
     onAppendAttachmentsForDraft,
     onRemoveAttachmentForDraft,
     onDraftAccepted,
-    onPermissionChange,
     createSessionForWorkspace,
     submitToSession,
     onError,
@@ -402,6 +402,7 @@ export function DesktopComposer({
       canSubmit={canSubmit}
       sessionStatus={sessionStatus}
       permissionMode={effectivePermissionMode}
+      permissionUnavailableReason={permissionUnavailableReason}
       planModeActive={planModeActive}
       placement={placement}
       capabilities={{

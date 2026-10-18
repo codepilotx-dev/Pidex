@@ -36,6 +36,11 @@ export type ScheduleDraftStorageCapabilities = {
   scheduleDrafts: boolean
 }
 
+export type PermissionRuleStorageCapabilities = {
+  chatRules: boolean
+  legacyGrantRevocations: boolean
+}
+
 const cache = new WeakMap<Database, ThreadsStorageCapabilities>()
 
 const artifactsCache = new WeakMap<Database, ArtifactsStorageCapabilities>()
@@ -159,5 +164,34 @@ export function probeScheduleDraftStorageCapabilities(
     .get()
   const capabilities = { scheduleDrafts: Boolean(row) }
   scheduleDraftCache.set(sqlite, capabilities)
+  return capabilities
+}
+
+const permissionRuleCache = new WeakMap<Database, PermissionRuleStorageCapabilities>()
+
+/**
+ * Read-only probe for the additive schema 65 permission-rule tables. A newer
+ * unknown store may lack them; callers must hide the corresponding write
+ * capability instead of altering storage.
+ */
+export function probePermissionRuleStorageCapabilities(
+  sqlite: Database,
+): PermissionRuleStorageCapabilities {
+  const cached = permissionRuleCache.get(sqlite)
+  if (cached) return cached
+  const names = new Set(
+    (
+      sqlite
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('permission_chat_rules','permission_grant_revocations')",
+        )
+        .all() as Array<{ name: string }>
+    ).map((row) => row.name),
+  )
+  const capabilities = {
+    chatRules: names.has('permission_chat_rules'),
+    legacyGrantRevocations: names.has('permission_grant_revocations'),
+  }
+  permissionRuleCache.set(sqlite, capabilities)
   return capabilities
 }

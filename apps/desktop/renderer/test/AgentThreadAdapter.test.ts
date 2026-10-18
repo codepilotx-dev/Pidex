@@ -253,7 +253,22 @@ describe('agent thread adapter', () => {
         approvalPolicy: 'never',
         approvalsReviewer: 'auto_review',
       }),
-    ).toBe('full-access')
+    ).toBe('custom')
+  })
+
+  test('round-trips every shared preset and keeps reviewer-aware full access custom', () => {
+    for (const mode of ['default', 'auto-review', 'full-access'] as const) {
+      const config = desktopPermissionModeToPermissionConfig(mode)
+      expect(permissionModeFromPermissionConfig(config)).toBe(mode)
+    }
+    // Full access identity includes the reviewer; an automatic reviewer is custom.
+    const configuredReviewer = desktopPermissionModeToPermissionConfig('full-access')
+    expect(
+      permissionModeFromPermissionConfig({
+        ...configuredReviewer,
+        approvalsReviewer: 'auto_review',
+      }),
+    ).toBe('custom')
   })
 
   test('keeps the current custom config when the custom mode is selected', () => {
@@ -299,7 +314,8 @@ describe('agent thread adapter', () => {
     expect(item.workspacePath).toBe(project.rootPath)
     expect(item.preview).toBe('预览')
     expect(item.firstPrompt).toBe('第一条消息')
-    expect(item.permissionMode).toBe('full-access')
+    // Full access recognition includes approvalsReviewer; auto review makes it custom.
+    expect(item.permissionMode).toBe('custom')
     expect(item.planModeActive).toBe(true)
     expect(item.gitBranch).toBe('codex/hover-card')
     expect(item.unreadAt).toBe('2023-11-14T22:13:20.500Z')
@@ -719,7 +735,8 @@ describe('agent thread adapter', () => {
 
     const desktop = agentThreadSnapshotToDesktop(snapshot, project)
     expect(desktop.item.planModeActive).toBe(false)
-    expect(desktop.item.permissionMode).toBe('full-access')
+    // Thread settings include an automatic reviewer, so the preset identity is custom.
+    expect(desktop.item.permissionMode).toBe('custom')
   })
 
   test('projects queued inputs in queue order without duplicating them in the timeline', () => {

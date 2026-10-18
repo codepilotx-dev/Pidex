@@ -32,6 +32,8 @@ export interface ShellReviewInput extends ShellInput {
 export interface ShellRiskAnalysis {
   hardDenied: boolean
   requiresApproval: boolean
+  /** True when the command can destroy state outside the workspace or on a remote host. */
+  destructive: boolean
   securityLevel: ShellSecurityLevel
   risk: ShellRiskLevel
   categories: RiskCategory[]
@@ -189,7 +191,26 @@ const OBFUSCATED_COMMAND =
   /\b(?:powershell|pwsh)\b[\s\S]*(?:-enc(?:odedcommand)?\b|-e\s+[a-z0-9+/=]{16,})|\b(?:certutil|mshta|rundll32)\b[\s\S]*(?:javascript:|vbscript:|url\.dll)/i
 const IRREVERSIBLE_CHANGE =
   /\bgit\s+(?:reset\s+--hard|clean\s+-[^\n]*f)|\bgit\s+push\b[\s\S]*--force(?:-with-lease)?\b|\b(?:drop\s+database|drop\s+table)\b|\bterraform\s+destroy\b/i
+/**
+ * Host and remote state that cannot be recovered from a local checkout. These
+ * stay out of RISK_RULES so they never hard-deny: deleting a repository or a
+ * branch is a legitimate user request, but it always needs an explicit
+ * approval instead of running as an ordinary in-scope command.
+ */
+const EXTERNAL_STATE_DESTRUCTION: readonly RegExp[] = [
+  /\bgh\s+repo\s+delete\b/i,
+  /\bgh\s+(?:api|release|run|secret|variable|gist|ssh-key|gpg-key)\b[\s\S]*(?:-X|--method)\s+(?:DELETE|PUT)\b/i,
+  /\bgh\s+(?:release|secret|variable|gist|cache|ssh-key|gpg-key)\s+delete\b/i,
+  /\bgit\s+push\b[\s\S]*(?:--delete\b|:\S)|\bgit\s+remote\s+(?:remove|rm)\b|\bgit\s+tag\s+-d\b|\bgit\s+branch\s+-[dD]\b/i,
+  /\bgit\s+(?:lfs\s+)?(?:prune|reflog\s+expire|filter-repo)\b/i,
+  /\b(?:aws|az|gcloud|firebase|vercel|netlify|heroku)\b[\s\S]*\b(?:delete|remove|destroy|terminate|rm)\b/i,
+  /\b(?:docker|kubectl|helm)\b[\s\S]*\b(?:rm|delete|uninstall|prune|down)\b/i,
+  /\b(?:npm|yarn|pnpm|bun)\s+(?:unpublish|deprecate)\b|\b(?:npm|yarn|pnpm)\s+owner\s+rm\b/i,
+]
 const WINDOWS_ABSOLUTE_PATH = /(?:^|[\s"'=])([a-z]:[\\/][^\s"'|;&<>]*)/gi
+
+const matchesExternalStateDestruction = (command: string) =>
+  EXTERNAL_STATE_DESTRUCTION.some((pattern) => pattern.test(command))
 
 export const normalizeShellSecurityLevel = (value: unknown): ShellSecurityLevel =>
   value === 'strict' || value === 'relaxed' ? value : 'balanced'
@@ -427,8 +448,22 @@ export const analyzeShellRisk = (input: ShellReviewInput): ShellRiskAnalysis => 
   if (PROMPT_INJECTION.test(command)) addCategory(categories, 'prompt_injection')
   if (OBFUSCATED_COMMAND.test(command)) addCategory(categories, 'obfuscation')
   if (IRREVERSIBLE_CHANGE.test(command)) addCategory(categories, 'irreversible_change')
+  const externalStateDestruction = matchesExternalStateDestruction(command)
+  if (externalStateDestruction) {
+    addCategory(categories, 'destructive')
+    matchedRules.push('external-state-destruction')
+    // Never hard-deny: deleting a remote repository or branch is a legitimate
+    // request, but the host must always ask before touching state that no
+    // local checkout can restore.
+    reviewReasons.push('检测到删除远程仓库、分支、发布或其他不可本地恢复的外部状态')
+  }
+  // Without a workspace root the host cannot tell whether an absolute path is
+  // in or out of scope; the caller must pass it so escapes are detectable.
   const workspaceExternal = referencesWorkspaceExternalPath(input, command)
-  if (workspaceExternal) addCategory(categories, 'scope_escape')
+  if (workspaceExternal) {
+    addCategory(categories, 'scope_escape')
+    reviewReasons.push('命令或 cwd 指向工作区外路径')
+  }
 
   const scopeValid = requestedScopeValid(input.additionalPermissions)
   if (!scopeValid) addCategory(categories, 'scope_escape')
@@ -442,15 +477,18 @@ export const analyzeShellRisk = (input: ShellReviewInput): ShellRiskAnalysis => 
       (!scopeValid
         ? '申请的额外权限范围无效或过于宽泛'
         : (reviewReasons[0] ??
-          (workspaceExternal
-            ? '命令或 cwd 指向工作区外路径'
-            : categories.length > 0
-              ? '命令包含需要审核的风险特征'
-              : '未发现静态灾难级特征'))))
+          (categories.length > 0
+            ? '命令包含需要审核的风险特征'
+            : '未发现静态灾难级特征'))))
 
   return {
     hardDenied,
     requiresApproval,
+    destructive:
+      externalStateDestruction ||
+      workspaceExternal ||
+      categories.includes('destructive') ||
+      categories.includes('irreversible_change'),
     securityLevel,
     risk,
     categories,

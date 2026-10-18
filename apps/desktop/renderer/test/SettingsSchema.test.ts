@@ -7,6 +7,7 @@ import {
   PROJECT_APPEARANCE_COLORS,
   PROJECT_APPEARANCE_ICONS,
   SIDEBAR_STATE_VERSION,
+  upsertRecentWorkspace,
 } from '../shared/SettingsSchema'
 
 describe('侧边栏布局设置', () => {
@@ -592,6 +593,39 @@ test('不再持久化 GitHub OAuth 客户端与认证服务地址', () => {
 
   expect('githubOAuthClientId' in settings).toBe(false)
   expect('authBaseUrl' in settings).toBe(false)
+})
+
+test('新增最近项目不会把置顶项目挤出最近工作区列表', () => {
+  const project = (name: string, pinnedAt: string | null = null) => ({
+    name,
+    path: `F:\\CodeProject\\${name}`,
+    pinnedAt,
+  })
+  const workspaces = [
+    project('pinned-a', '2026-10-01T00:00:00.000Z'),
+    project('pinned-b', '2026-10-02T00:00:00.000Z'),
+    project('a'),
+    project('b'),
+    project('c'),
+    project('d'),
+    project('e'),
+  ]
+
+  const next = upsertRecentWorkspace(workspaces, project('new'))
+
+  expect(next.map((workspace) => workspace.name)).toEqual([
+    'pinned-a',
+    'pinned-b',
+    'b',
+    'c',
+    'd',
+    'e',
+    'new',
+  ])
+  expect(next.flatMap((workspace) => (workspace.pinnedAt ? [workspace.name] : []))).toEqual([
+    'pinned-a',
+    'pinned-b',
+  ])
 })
 
 describe('聊天宽度', () => {

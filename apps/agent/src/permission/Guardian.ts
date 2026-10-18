@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto'
+import { isGranularApprovalPolicy, type ApprovalPolicy } from '@pidex/shared/thread'
 import { z } from 'zod'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { PermissionDecision, ToolInvocation } from '../Domain'
@@ -8,6 +9,7 @@ import {
   type RiskCategory,
   type ShellRiskLevel,
 } from '../security/ShellRiskClassifier'
+import { hasRequestedPermissions } from './PermissionDecisionEngine'
 
 /**
  * Guardian Beta fidelity layer.
@@ -93,6 +95,11 @@ export type GuardianReview = {
   scoreLag?: number
   fallbackReason?: string
   model?: string
+  /**
+   * Authorization snapshot the verdict was evaluated against. Callers must drop
+   * an allow when this no longer matches the current snapshot.
+   */
+  authorizationVersion?: string
 }
 
 export type GuardianPolicyResult = {
@@ -238,6 +245,7 @@ export function guardianReview(input: {
   scoreLag?: number
   fallbackReason?: string
   model?: string
+  authorizationVersion?: string
 }): GuardianReview {
   return {
     status: input.status,
@@ -251,6 +259,9 @@ export function guardianReview(input: {
     ...(input.scoreLag === undefined ? {} : { scoreLag: input.scoreLag }),
     ...(input.fallbackReason ? { fallbackReason: input.fallbackReason } : {}),
     ...(input.model ? { model: input.model } : {}),
+    ...(input.authorizationVersion === undefined
+      ? {}
+      : { authorizationVersion: input.authorizationVersion }),
   }
 }
 
@@ -261,19 +272,39 @@ export function attachGuardianReview(
   return { ...decision, guardian: review }
 }
 
+export type GuardianFallbackApprovalCategory =
+  keyof import('@pidex/shared/thread').GranularApprovalConfig
+
+/**
+ * Fail-closed fallback when the synchronous reviewer cannot decide.
+ *
+ * - `never`/`untrusted` may not wait for approval, so they deny.
+ * - A granular policy that disables a requested approval category denies; when
+ *   the caller cannot name the categories we still degrade to `ask`, never allow.
+ * - An open circuit denies, because the model kept retrying after repeated
+ *   denials.
+ * - Everything else asks the user. The fallback never silently allows.
+ */
 export function guardianFallbackDecision(input: {
   risk: ShellRiskLevel
   status: 'unavailable' | 'timeout' | 'circuit_open'
   reason: string
   approvalPolicy: unknown
   categories?: readonly RiskCategory[]
+  /** Host-derived categories required by this action under a granular policy. */
+  approvalCategories?: readonly GuardianFallbackApprovalCategory[]
 }): PermissionDecision {
+  const policy = input.approvalPolicy as ApprovalPolicy
+  const granularDisabled =
+    isGranularApprovalPolicy(policy) &&
+    (input.approvalCategories ?? []).some((category) => policy[category] !== true)
   const decision =
-    input.approvalPolicy === 'never' || input.status === 'circuit_open'
+    policy === 'never' ||
+    policy === 'untrusted' ||
+    input.status === 'circuit_open' ||
+    granularDisabled
       ? 'deny'
-      : input.approvalPolicy === 'untrusted'
-        ? 'deny'
-        : 'ask'
+      : 'ask'
   return {
     decision,
     risk: input.risk,
@@ -470,23 +501,59 @@ export class GuardianCircuitBreaker {
 }
 
 /**
- * Only score actions that can plausibly require an approval. Read-only file
- * inspection stays on the deterministic path, which keeps the fast path cheap.
+ * Gate for the Guardian async fast path. Only benign, narrowly scoped shell
+ * actions under `auto_review` + `on-request` may be scored ahead of the real
+ * reviewer. Everything that expresses user intent or elevated risk is excluded:
+ *
+ * - human review (`approvalsReviewer: 'user'`)
+ * - `never`/`untrusted`/granular policies and full access
+ * - newly requested permissions, forced approvals (Hook/skill/rule), protected
+ *   resources, host-confirmed computer grants and resumed SDK preflights
+ * - always-review tools, sensitive actions and non-shell capabilities
+ *
+ * The fast path may only ever *save latency* for actions that do not need a
+ * specific user decision. A policy rebuild or new authorization always falls
+ * back to the synchronous reviewer.
+ */
+export function guardianFastPathEligible(invocation: ToolInvocation): boolean {
+  const config = invocation.permissionConfig
+  if (config.approvalsReviewer !== 'auto_review') return false
+  if (config.approvalPolicy !== 'on-request') return false
+  if (config.sandboxMode === 'danger-full-access') return false
+  if (invocation.durableApproval || invocation.retryAuthorization) return false
+  const facts = invocation.permissionFacts
+  if (facts?.denyReason || facts?.hookRequiresApproval || facts?.skillScript) return false
+  // Rule-driven asks, protected resources, forced approvals and explicit
+  // approval categories are user intent; a probabilistic score must not approve
+  // them.
+  if (facts?.forcedApproval || facts?.ruleIDs?.length) return false
+  if (facts?.ruleEffect === 'ask' || facts?.ruleEffect === 'deny') return false
+  if (facts?.ruleRequiresApproval || facts?.approvalCategories?.length) return false
+  if (facts?.destructive) return false
+  const scope = invocation.authorizationScope
+  if (scope?.ruleRequiresApproval || scope?.computerApp) return false
+  if (invocation.grantsForbidden) return false
+  if (hasRequestedPermissions(invocation.input)) return false
+  if (invocation.toolPolicy?.approvalStrategy === 'always-review') return false
+  const capabilities = invocation.toolPolicy?.capabilities
+  if (!capabilities) return false
+  // Keep read-only tools on the deterministic path; they are cheap to decide.
+  if (
+    !capabilities.process &&
+    capabilities.network === 'none' &&
+    capabilities.filesystem !== 'workspace-write' &&
+    capabilities.filesystem !== 'host-write'
+  )
+    return false
+  return !guardianActionSensitivity(invocation).sensitive
+}
+
+/**
+ * Backwards-compatible name used by the score service. The eligibility rules
+ * live in {@link guardianFastPathEligible}.
  */
 export function shouldScoreGuardianAction(invocation: ToolInvocation): boolean {
-  if (invocation.permissionConfig.approvalsReviewer !== 'auto_review') return false
-  if (invocation.permissionConfig.approvalPolicy === 'never') return false
-  if (invocation.permissionConfig.sandboxMode === 'danger-full-access') return false
-  if (invocation.durableApproval) return false
-  const capabilities = invocation.toolPolicy?.capabilities
-  if (!capabilities) return true
-  if (invocation.name === 'request_permissions') return true
-  return (
-    capabilities.process ||
-    capabilities.network !== 'none' ||
-    capabilities.filesystem === 'workspace-write' ||
-    capabilities.filesystem === 'host-write'
-  )
+  return guardianFastPathEligible(invocation)
 }
 
 /**

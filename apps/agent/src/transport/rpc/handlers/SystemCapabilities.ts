@@ -5,6 +5,7 @@ import type { AgentDatabase } from '../../../storage/database/AgentDatabase'
 import {
   probeAutomationStorageCapabilities,
   probeArtifactsStorageCapabilities,
+  probePermissionRuleStorageCapabilities,
   probeScheduleCalendarStorageCapabilities,
   probeScheduleDraftStorageCapabilities,
   probeThreadsStorageCapabilities,
@@ -41,6 +42,7 @@ export function filterAdvertisedCapabilities(
   const { scheduledTasks, schedulePlanProposals } = probeScheduleCalendarStorageCapabilities(
     db.sqlite,
   )
+  const permissionRules = probePermissionRuleStorageCapabilities(db.sqlite)
   return Capabilities.filter(
     (capability): capability is ProtocolCapability =>
       capability !== 'integrations.minimax-cli.v1' &&
@@ -94,7 +96,10 @@ export function filterAdvertisedCapabilities(
           db.repositories.taskSchedules.available())) &&
       // 任务规划草案确认依赖独立扩展表；缺失时不得退回创建普通自动化。
       (capability !== 'schedule.draft.v1' ||
-        (scheduleDrafts && automations && automationRuns && scheduledTasks)),
+        (scheduleDrafts && automations && automationRuns && scheduledTasks)) &&
+      // 规则管理写入依赖独立表；高版本未知库缺少表时只隐藏能力，不擅自修库。
+      (capability !== 'permission.rules.v1' ||
+        (permissionRules.chatRules && permissionRules.legacyGrantRevocations)),
   )
 }
 

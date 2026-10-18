@@ -43,6 +43,7 @@ import { resolveEffectivePermissionConfig } from '../permission/EffectivePermiss
 import { executionPolicyFromV4 } from '../permission/ExecutionPolicy'
 import { filePathProtection, resolveProtectionPath } from '../permission/FilePathProtection'
 import { PermissionGrantStore } from '../permission/PermissionGrantStore'
+import { simpleCommandArgv, type PermissionRuleFacts } from '../permission/ApprovalRules'
 import { pathContains } from '../permission/PathPermissions'
 import { analyzeShellRisk, type ShellSecurityLevel } from '../security/ShellRiskClassifier'
 import { secretScrubber } from '../security/SecretScrubber'
@@ -198,6 +199,12 @@ export interface ToolExecutorOptions {
   recordMutation?: (batch: TurnPatchMutationBatch) => Promise<void>
   discardMutationEvidence?: (input: { threadID: string; turnID: string }) => Promise<void>
   permissionGrants?: PermissionGrantStore
+  /** Host-owned rule facts loaded immediately before the final permission gate. */
+  resolvePermissionRules?: (invocation: ToolInvocation) => Promise<PermissionRuleFacts>
+  /** Called when a turn ends so stale async authorization state cannot survive it. */
+  settleTurn?: (threadID: string, turnID: string) => void
+  /** Invalidates in-flight Guardian scores when host evaluation denies an action. */
+  onPermissionDenied?: (invocation: ToolInvocation) => void
   logger?: AgentLogger
 }
 
@@ -562,6 +569,27 @@ export class ToolExecutor {
           protectedConfigWrite ||
           authorizationScope?.ruleRequiresApproval,
         ),
+        ...(() => {
+          const networkDomains = [
+            ...requestedPermissions(input).networkDomains.map((domain) =>
+              domain.trim().toLowerCase(),
+            ),
+            ...(authorizationScope?.browserOrigin
+              ? [authorizationScope.browserOrigin.toLowerCase()]
+              : []),
+          ].filter(Boolean)
+          if (!rawPaths.length && networkDomains.length === 0) return {}
+          return {
+            ruleTargets: {
+              ...(rawPaths.length
+                ? writesFiles
+                  ? { writePaths: canonicalPaths }
+                  : { readPaths: canonicalPaths }
+                : {}),
+              networkDomains,
+            },
+          }
+        })(),
       },
       ...(authorizationScope ? { authorizationScope } : {}),
       ...(context.authorizationOnly ? { durableApproval: true } : {}),
@@ -640,10 +668,12 @@ export class ToolExecutor {
           'PreToolUse Hook 要求审批',
       }
     resolved = this.decisions.evaluate(invocation, definition)
+    await this.loadPermissionRules(invocation, context.signal)
+    resolved = this.decisions.evaluate(invocation, definition)
     if (resolved.action === 'deny')
       throw new AgentError('TOOL_PERMISSION_DENIED', resolved.reason, 403, resolved)
     const grant =
-      !resumedApproval && !hookAsked && resolved.action === 'review'
+      !resumedApproval && !hookAsked && resolved.action === 'review' && !resolved.forceHumanApproval
         ? this.permissionGrantFor(invocation, definition, !context.authorizationOnly)
         : null
     let authorization: PermissionDecision = {
@@ -690,10 +720,7 @@ export class ToolExecutor {
       }
       if (context.approvedToolCallID !== invocation.id && !context.authorizationOnly)
         this.options?.observeToolStart?.(invocation)
-      authorization = await this.options.authorizeShell(
-        secretScrubber.scrub(invocation),
-        context.signal,
-      )
+      authorization = await this.options.authorizeShell(invocation, context.signal)
     }
     if (context.authorizationOnly) {
       return {
@@ -1099,6 +1126,13 @@ export class ToolExecutor {
       permissionConfig,
       model,
       taskMode: context.taskMode,
+      toolPolicy: {
+        sdkName: catalog.get(shellTool).sdkName,
+        capabilities: catalog.get(shellTool).capabilities,
+        allowedModes: catalog.get(shellTool).allowedModes,
+        approvalStrategy: catalog.get(shellTool).approvalStrategy,
+        ...(catalog.get(shellTool).origin ? { origin: catalog.get(shellTool).origin } : {}),
+      },
       ...(context.authorizationOnly ? { durableApproval: true } : {}),
     }
     const preflightStartedAt = Date.now()
@@ -1110,6 +1144,7 @@ export class ToolExecutor {
       const staticRisk = analyzeShellRisk({
         command: shell.command,
         cwd,
+        workspaceRoot,
         securityLevel: options.resolveShellSecurityLevel?.() ?? 'balanced',
         ...(shell.additionalPermissions
           ? { additionalPermissions: shell.additionalPermissions }
@@ -1122,8 +1157,22 @@ export class ToolExecutor {
         throw new AgentError('SHELL_HARD_DENY', staticRisk.reason, 403, staticRisk)
       invocation.permissionFacts = {
         ruleRequiresApproval: staticRisk.requiresApproval,
+        destructive: staticRisk.destructive,
         risk: staticRisk.risk,
         approvalReason: staticRisk.reason,
+        ruleTargets: {
+          command: shell.command,
+          argv: simpleCommandArgv(shell.command),
+          networkDomains: (shell.additionalPermissions?.networkDomains ?? [])
+            .map((domain) => domain.trim().toLowerCase())
+            .filter(Boolean),
+          ...(additionalPermissions?.readPaths
+            ? { readPaths: additionalPermissions.readPaths }
+            : {}),
+          ...(additionalPermissions?.writePaths
+            ? { writePaths: additionalPermissions.writePaths }
+            : {}),
+        },
       }
       invocation.authorizationScope = {
         affectedPaths: [],
@@ -1197,13 +1246,20 @@ export class ToolExecutor {
             hookResults.find(({ result }) => result.decision === 'ask')?.result.reason ??
             'PreToolUse Hook 要求审批',
         }
+      await this.loadPermissionRules(invocation, context.signal)
+      if (!resumedApproval && !context.authorizationOnly)
+        this.options?.observeToolStart?.(invocation)
       const finalDecision = this.decisions.evaluate(invocation, catalog.get(shellTool))
       phase = 'authorization'
-      const grant = resumedApproval
-        ? null
-        : this.permissionGrantFor(invocation, catalog.get(shellTool), !context.authorizationOnly)
-      if (finalDecision.action === 'deny' && !grant)
+      if (finalDecision.action === 'deny') {
+        this.options?.onPermissionDenied?.(invocation)
         throw new AgentError('TOOL_PERMISSION_DENIED', finalDecision.reason, 403, finalDecision)
+      }
+      const hookAsked = invocation.permissionFacts?.hookRequiresApproval === true
+      const grant =
+        resumedApproval || hookAsked || finalDecision.action !== 'review' || finalDecision.forceHumanApproval
+          ? null
+          : this.permissionGrantFor(invocation, catalog.get(shellTool), !context.authorizationOnly)
       const decision = resumedApproval
         ? ({
             decision: 'allow',
@@ -1216,7 +1272,7 @@ export class ToolExecutor {
               risk: staticRisk.risk,
               reason: `已使用 ${grant.scope} 临时权限`,
             } satisfies PermissionDecision)
-          : await this.options.authorizeShell(secretScrubber.scrub(invocation), context.signal)
+          : await this.options.authorizeShell(invocation, context.signal)
       options.logger?.info('shell.preflight.completed', {
         context: logContext,
         details: {
@@ -1380,6 +1436,24 @@ export class ToolExecutor {
 
   clearTurnPermissionGrants(threadID: string, turnID: string) {
     this.permissionGrants.clearTurn(threadID, turnID)
+    this.options?.settleTurn?.(threadID, turnID)
+  }
+
+  /**
+   * Loads Allow/Ask/Deny rule facts after Hook rewriting and immediately before
+   * the final permission gate. The decision engine stays pure; only the host
+   * reads configuration, chat rules and canonical targets.
+   */
+  private async loadPermissionRules(invocation: ToolInvocation, signal: AbortSignal) {
+    if (!this.options?.resolvePermissionRules) return
+    if (signal.aborted) throw new AgentError('RUN_ABORTED', '任务已停止', 499)
+    const facts = await this.options.resolvePermissionRules(invocation)
+    invocation.permissionFacts = {
+      ...invocation.permissionFacts,
+      ruleFactsLoaded: true,
+      ...(facts.effect ? { ruleEffect: facts.effect } : {}),
+      ...(facts.ids.length ? { ruleIDs: facts.ids } : {}),
+    }
   }
 
   clearThreadPermissionGrants(threadID: string) {

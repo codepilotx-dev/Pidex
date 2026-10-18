@@ -41,6 +41,8 @@ const fixture = async (overrides: Partial<RpcRouterDependencies> = {}) => {
     piModels: {} as never,
     apiKeys: {} as never,
     modelHealth: {} as never,
+    modelSync: {} as never,
+    protocolDetection: {} as never,
     providerCredentials: {} as never,
     providerCredentialStore: {} as never,
     authSessions: {} as never,
