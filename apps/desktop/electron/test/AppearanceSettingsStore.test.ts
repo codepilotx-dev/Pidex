@@ -151,14 +151,15 @@ describe('Electron 外观设置存储', () => {
     })
 
     expect(normalized).toMatchObject({
-      version: 7,
+      version: 8,
       mode: 'dark',
       codeThemeIds: { light: 'codex-light', dark: 'linear-dark' },
       pointerCursorEnabled: true,
       reduceMotion: 'on',
       fontSizes: { ui: 16, code: 8 },
     })
-    expect(normalized.chromeThemes.light.fonts).toEqual({
+    // The mode's variant seeds the shared fonts; both variants mirror them.
+    expect(normalized.fonts).toEqual({
       ui: 'Inter',
       uiFace: {
         family: 'Inter',
@@ -168,6 +169,9 @@ describe('Electron 外观设置存储', () => {
       code: null,
       codeFace: null,
     })
+    for (const variant of ['light', 'dark'] as const) {
+      expect(normalized.chromeThemes[variant].fonts).toEqual(normalized.fonts)
+    }
     expect(normalized.chromeThemes.light).not.toHaveProperty('opaqueWindows')
     expect(normalized.chromeThemes.dark).not.toHaveProperty('opaqueWindows')
   })
@@ -195,19 +199,20 @@ describe('Electron 外观设置存储', () => {
       },
     })
 
-    expect(normalized.chromeThemes.dark.fonts.uiFace).toBeNull()
-    expect(normalized.chromeThemes.dark.fonts.codeFace).toBeNull()
-    expect(normalized.chromeThemes.dark.fonts).toHaveProperty('uiFace', null)
-    expect(normalized.chromeThemes.dark.fonts).toHaveProperty('codeFace', null)
-    expect(normalized.chromeThemes.light.fonts).toEqual({
-      ui: null,
+    expect(normalized.fonts.uiFace).toBeNull()
+    expect(normalized.fonts.codeFace).toBeNull()
+    expect(normalized.fonts).toHaveProperty('uiFace', null)
+    expect(normalized.fonts).toHaveProperty('codeFace', null)
+    expect(normalized.fonts).toEqual({
+      ui: 'Inter',
       uiFace: null,
-      code: null,
+      code: 'CodeMono',
       codeFace: null,
     })
+    expect(normalized.chromeThemes.light.fonts).toEqual(normalized.fonts)
   })
 
-  test('读取 V6 设置时保留式升级到 V7', async () => {
+  test('读取 V6 设置时保留式升级到 V8 并把字体提升为全外观共用', async () => {
     const root = temporaryRoot()
     const records: Array<{ event: string; fields?: Record<string, unknown> }> = []
     const store = new AppearanceSettingsStore(root, {
@@ -254,7 +259,7 @@ describe('Electron 外观设置存储', () => {
     const loaded = await store.load()
 
     expect(loaded).toMatchObject({
-      version: 7,
+      version: 8,
       mode: 'light',
       codeThemeIds: { light: 'github-light-default', dark: 'codex-dark' },
       pointerCursorEnabled: true,
@@ -264,9 +269,16 @@ describe('Electron 外观设置存储', () => {
     })
     expect(loaded.chromeThemes.light.accent).toBe('#abcdef')
     expect(loaded.chromeThemes.light.surface).toBe('#fefefe')
-    expect(loaded.chromeThemes.light.fonts.ui).toBe('Inter')
-    expect(loaded.chromeThemes.light.fonts.code).toBe('JetBrains Mono')
-    expect(loaded.chromeThemes.dark.fonts.code).toBe('Cascadia Code')
+    // The light variant owns the shared fonts because it is the active mode;
+    // both variants mirror the result so the V9 code font is gone from here.
+    expect(loaded.fonts).toEqual({
+      ui: 'Inter',
+      uiFace: null,
+      code: 'JetBrains Mono',
+      codeFace: null,
+    })
+    expect(loaded.chromeThemes.light.fonts).toEqual(loaded.fonts)
+    expect(loaded.chromeThemes.dark.fonts).toEqual(loaded.fonts)
     expect(records).toEqual([])
     expect(await store.canRestorePreviousAppearance()).toBe(false)
     expect(JSON.parse(await readFile(store.filePath, 'utf8'))).toEqual(loaded)
@@ -276,8 +288,8 @@ describe('Electron 外观设置存储', () => {
     expect(reapplied.chromeThemes.light.accent).toBe('#0169cc')
     expect(reapplied.chromeThemes.light.surface).toBe('#ffffff')
     expect(reapplied.fontSizes.ui).toBe(15)
-    expect(reapplied.chromeThemes.light.fonts.ui).toBe('Inter')
-    expect(reapplied.chromeThemes.light.fonts.code).toBe('JetBrains Mono')
+    expect(reapplied.fonts.ui).toBe('Inter')
+    expect(reapplied.fonts.code).toBe('JetBrains Mono')
     expect(JSON.parse(await readFile(store.filePath, 'utf8'))).toEqual(reapplied)
     expect(await store.canRestorePreviousAppearance()).toBe(false)
   })
@@ -285,19 +297,25 @@ describe('Electron 外观设置存储', () => {
   test('V7 缺少迁移记录时保留已保存配色、字体和字号，重启仍一致', async () => {
     const root = temporaryRoot()
     const store = new AppearanceSettingsStore(root)
+    // A genuine V7 document: fonts still live on the variants and no shared
+    // onts key exists yet.
+    const { fonts: _v7AbsentSharedFonts, ...v7Defaults } = DEFAULT_APPEARANCE_SETTINGS
     const current = normalizeAppearanceSettings({
-      ...DEFAULT_APPEARANCE_SETTINGS,
+      ...v7Defaults,
+      version: 7,
       chromeThemes: {
-        ...DEFAULT_APPEARANCE_SETTINGS.chromeThemes,
         light: {
           ...DEFAULT_APPEARANCE_SETTINGS.chromeThemes.light,
           accent: '#0066cc',
           ink: '#1d1d1f',
-          fonts: { ui: 'Inter', code: 'Cascadia Code' },
+          fonts: { ui: 'Inter', uiFace: null, code: 'Cascadia Code', codeFace: null },
         },
+        dark: DEFAULT_APPEARANCE_SETTINGS.chromeThemes.dark,
       },
       fontSizes: { ui: 16, code: 14 },
     })
+    expect(current.version).toBe(8)
+    expect(current.fonts.ui).toBe('Inter')
     await mkdir(root, { recursive: true })
     await writeFile(store.filePath, JSON.stringify(current), 'utf8')
     expect(await store.load()).toEqual(current)
@@ -510,7 +528,7 @@ describe('Electron 外观设置存储', () => {
     expect(JSON.stringify(records)).not.toContain('{not-json')
   })
 
-  test('读取旧设置时直接覆盖为 V7 默认值', async () => {
+  test('读取旧设置时直接覆盖为当前默认值', async () => {
     const root = temporaryRoot()
     const records: Array<{ event: string; fields?: Record<string, unknown> }> = []
     const store = new AppearanceSettingsStore(root, {
@@ -542,7 +560,7 @@ describe('Electron 外观设置存储', () => {
     expect(records).toEqual([])
   })
 
-  test('所有已知旧版本都重置为 V7 默认值', () => {
+  test('所有已知旧版本都重置为当前默认值', () => {
     for (const version of [1, 2, 3, 4, 5]) {
       expect(
         migrateAppearanceSettings({
@@ -558,7 +576,7 @@ describe('Electron 外观设置存储', () => {
     const root = temporaryRoot()
     const store = new AppearanceSettingsStore(root)
     const futureSettings = JSON.stringify({
-      version: 8,
+      version: 9,
       mode: 'light',
       futureField: 'must-survive',
     })
@@ -573,7 +591,7 @@ describe('Electron 外观设置存储', () => {
     const root = temporaryRoot()
     const store = new AppearanceSettingsStore(root)
     const futureSettings = JSON.stringify({
-      version: 8,
+      version: 9,
       mode: 'light',
       futureField: 'must-survive',
     })

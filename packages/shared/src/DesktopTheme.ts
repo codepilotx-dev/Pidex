@@ -90,7 +90,19 @@ export type DesktopThemeFontFace = Pick<
   'family' | 'fullName' | 'postscriptName'
 >
 
-export const DESKTOP_THEME_SETTINGS_VERSION = 7
+/**
+ * Font selection owned by the appearance as a whole instead of one variant.
+ * Light and dark share the same UI and code fonts; `chromeThemes[*].fonts` only
+ * remains as the V6/V7 input location that V8 normalization reads from.
+ */
+export type DesktopThemeFonts = {
+  code: string | null
+  codeFace?: DesktopThemeFontFace | null
+  ui: string | null
+  uiFace?: DesktopThemeFontFace | null
+}
+
+export const DESKTOP_THEME_SETTINGS_VERSION = 8
 
 export function isNewerDesktopThemeSettingsVersion(value: unknown): boolean {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false
@@ -120,6 +132,44 @@ export function desktopThemeFontFaceMatchesFamily(
 export type DesktopSystemFontsResult =
   | { ok: true; fonts: DesktopSystemFontFace[] }
   | { ok: false; error: 'unsupported' | 'denied' | 'failed' }
+
+/**
+ * Picks the shared font set for a V7 document that still stores fonts per
+ * variant. The variant of the current mode owns the value so the visible theme
+ * never changes during the upgrade; `system` mode prefers an explicitly
+ * configured variant over the untouched default.
+ */
+export function resolveSharedFontsFromVariants(
+  themes: { light: { fonts: DesktopThemeFonts }; dark: { fonts: DesktopThemeFonts } },
+  mode: DesktopThemeMode,
+): DesktopThemeFonts {
+  const preferred =
+    mode === 'dark'
+      ? ['dark', 'light']
+      : mode === 'light'
+        ? ['light', 'dark']
+        : hasConfiguredFonts(themes.dark.fonts) && !hasConfiguredFonts(themes.light.fonts)
+          ? ['dark', 'light']
+          : ['light', 'dark']
+  for (const variant of preferred as DesktopThemeVariant[]) {
+    const fonts = themes[variant].fonts
+    if (hasConfiguredFonts(fonts)) return cloneFonts(fonts)
+  }
+  return cloneFonts(themes[preferred[0] as DesktopThemeVariant].fonts)
+}
+
+function hasConfiguredFonts(fonts: DesktopThemeFonts): boolean {
+  return Boolean(fonts.ui || fonts.uiFace || fonts.code || fonts.codeFace)
+}
+
+function cloneFonts(fonts: DesktopThemeFonts): DesktopThemeFonts {
+  return {
+    code: fonts.code,
+    codeFace: fonts.codeFace ?? null,
+    ui: fonts.ui,
+    uiFace: fonts.uiFace ?? null,
+  }
+}
 
 export type DesktopChromeTheme = {
   accent: DesktopHexColor
@@ -165,6 +215,18 @@ export type DesktopThemeSettingsV7<CodeThemeId extends string = string> = Omit<
   'version'
 > & { version: 7 }
 
+/**
+ * V8 hoists the fonts to the top-level `fonts` key so both variants share one
+ * UI font and one code font. V7 documents stay valid input: their variant
+ * `chromeThemes[*].fonts` seed the shared value, the active mode's variant wins
+ * when the two disagree, and the shared value is written back to both variants
+ * so older readers keep seeing a consistent theme.
+ */
+export type DesktopThemeSettingsV8<CodeThemeId extends string = string> = Omit<
+  DesktopThemeSettingsV7<CodeThemeId>,
+  'version'
+> & { version: 8; fonts: DesktopThemeFonts }
+
 export const DEFAULT_LIGHT_CHROME_THEME: DesktopChromeTheme = {
   accent: '#0169cc',
   accentPreset: 'custom',
@@ -198,11 +260,12 @@ export const DEFAULT_CHROME_THEMES: Record<DesktopThemeVariant, DesktopChromeThe
   dark: DEFAULT_DARK_CHROME_THEME,
 }
 
-export const DEFAULT_APPEARANCE_SETTINGS: DesktopThemeSettingsV7 = {
-  version: 7,
+export const DEFAULT_APPEARANCE_SETTINGS: DesktopThemeSettingsV8 = {
+  version: 8,
   mode: 'system',
   chromeThemes: DEFAULT_CHROME_THEMES,
   codeThemeIds: { light: 'codex-new-light', dark: 'codex-new-dark' },
+  fonts: { code: null, ui: null, uiFace: null, codeFace: null },
   pointerCursorEnabled: false,
   reduceMotion: 'system',
   fontSmoothingEnabled: true,

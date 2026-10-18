@@ -77,6 +77,7 @@ function cloneDefaultSettings(): DesktopThemeSettings {
       },
     },
     codeThemeIds: { ...DEFAULT_DESKTOP_THEME_SETTINGS.codeThemeIds },
+    fonts: { ...DEFAULT_DESKTOP_THEME_SETTINGS.fonts },
     fontSizes: { ...DEFAULT_DESKTOP_THEME_SETTINGS.fontSizes },
   }
 }

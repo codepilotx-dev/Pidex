@@ -1,7 +1,7 @@
 import {
   deriveDesktopSurfaceUnder,
   type DesktopChromeTheme,
-  type DesktopThemeSettingsV7,
+  type DesktopThemeSettingsV8,
 } from '@pidex/shared/desktop-theme'
 import type { DesktopStartupThemeSeed } from '@pidex/shared/desktop-appearance-ipc'
 
@@ -42,7 +42,7 @@ export function createRendererApplicationUrl(
 }
 
 export function resolveStartupPageTheme(
-  settings: DesktopThemeSettingsV7,
+  settings: DesktopThemeSettingsV8,
   systemVariant: 'light' | 'dark',
 ): Omit<StartupPageOptions, 'logoDataUrl'> {
   const variant = settings.mode === 'system' ? systemVariant : settings.mode

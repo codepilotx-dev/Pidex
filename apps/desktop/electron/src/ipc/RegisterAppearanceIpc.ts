@@ -7,13 +7,13 @@ import {
   type AppearanceSettingsStore,
   migrateAppearanceSettings,
   normalizeAppearanceSettings,
-  type DesktopThemeSettingsV7,
+  type DesktopThemeSettingsV8,
 } from '../settings/AppearanceSettingsStore.js'
 import type { WindowAppearanceController } from '../windows/Appearance.js'
 import { resolveStartupPageTheme } from '../windows/StartupPage.js'
 
 export function registerAppearanceIpc(
-  initialSettings: DesktopThemeSettingsV7,
+  initialSettings: DesktopThemeSettingsV8,
   appearance: WindowAppearanceController,
   store: AppearanceSettingsStore,
   isMainWindowSender: (sender: Electron.WebContents) => boolean,

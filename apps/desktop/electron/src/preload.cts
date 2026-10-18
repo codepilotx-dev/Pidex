@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { DesktopThemeSettingsV7 } from './settings/AppearanceSettingsStore.js'
+import type { DesktopThemeSettingsV8 } from './settings/AppearanceSettingsStore.js'
 import type { DesktopSystemFontFace, DesktopSystemFontsResult } from '@pidex/shared/desktop-theme'
 import type {
   DesktopPetOverlayBridge,
@@ -555,15 +555,15 @@ const desktop = {
     ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.openLogs),
   quitDuringStartup: (): Promise<void> => ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.quit),
   stopBackendAndExit: (): Promise<void> => ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.stopBackendAndExit),
-  getAppearanceSettings: (): Promise<DesktopThemeSettingsV7> =>
+  getAppearanceSettings: (): Promise<DesktopThemeSettingsV8> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.getSettings),
-  saveAppearanceSettings: (settings: DesktopThemeSettingsV7): Promise<void> =>
+  saveAppearanceSettings: (settings: DesktopThemeSettingsV8): Promise<void> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.saveSettings, settings),
   canRestorePreviousAppearance: (): Promise<boolean> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.canRestorePreviousAppearance),
-  restorePreviousAppearance: (): Promise<DesktopThemeSettingsV7> =>
+  restorePreviousAppearance: (): Promise<DesktopThemeSettingsV8> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.restorePreviousAppearance),
-  applyNewDesignTheme: (): Promise<DesktopThemeSettingsV7> =>
+  applyNewDesignTheme: (): Promise<DesktopThemeSettingsV8> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.applyNewDesignTheme),
   getSystemTheme: (): Promise<SystemThemeVariant> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.getSystemTheme),

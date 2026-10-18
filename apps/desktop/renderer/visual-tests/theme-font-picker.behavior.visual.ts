@@ -7,7 +7,7 @@ import {
   waitForVisualPage,
 } from './VisualTestHelpers.js'
 
-const THEME_STORAGE_KEY = 'pidex.desktop.appearance.v6'
+const THEME_STORAGE_KEY = 'pidex.desktop.appearance.v8'
 
 const MOCK_FONTS = [
   { family: 'Inter', fullName: 'Inter Regular', postscriptName: 'Inter-Regular', style: 'Regular' },
@@ -93,7 +93,7 @@ test('theme font picker enumerates, filters, searches, and persists family + fac
   await waitForVisualPage(page, 'dark', page.getByRole('heading', { name: '外观' }))
 
   const familyTrigger = page.getByRole('button', {
-    name: '深色界面字体字体家族',
+    name: '界面字体字体家族',
   })
   await expect(familyTrigger).toBeVisible()
   await expect(familyTrigger).toHaveCSS('height', '28px')
@@ -123,9 +123,8 @@ test('theme font picker enumerates, filters, searches, and persists family + fac
   await expectTriggerContentFits(familyTrigger)
 
   // Selecting a family with several faces enables the style dropdown.
-  await page.getByRole('button', { name: '高级', exact: true }).click()
   const styleTrigger = page.getByRole('combobox', {
-    name: '深色界面字体字体样式',
+    name: '界面字体字体样式',
   })
   await expect(styleTrigger).toBeEnabled()
   await expect(styleTrigger).toHaveText('常规')
@@ -141,7 +140,7 @@ test('theme font picker enumerates, filters, searches, and persists family + fac
       page.evaluate((storageKey) => {
         const raw = localStorage.getItem(storageKey)
         if (!raw) return null
-        return JSON.parse(raw).chromeThemes.dark.fonts
+        return JSON.parse(raw).fonts
       }, THEME_STORAGE_KEY),
     )
     .toEqual({
@@ -163,7 +162,7 @@ test('theme font picker enumerates, filters, searches, and persists family + fac
       page.evaluate((storageKey) => {
         const raw = localStorage.getItem(storageKey)
         if (!raw) return null
-        return JSON.parse(raw).chromeThemes.dark.fonts
+        return JSON.parse(raw).fonts
       }, THEME_STORAGE_KEY),
     )
     .toEqual({
@@ -183,7 +182,7 @@ test('theme font picker enumerates, filters, searches, and persists family + fac
 
   // Code font families are filtered to monospace ones only.
   const codeTrigger = page.getByRole('button', {
-    name: '深色代码字体字体家族',
+    name: '代码字体字体家族',
   })
   await codeTrigger.click()
   await expect(page.getByRole('option', { name: 'CodeMono' })).toBeVisible()
@@ -192,14 +191,16 @@ test('theme font picker enumerates, filters, searches, and persists family + fac
   await page.keyboard.press('Escape')
   await expect(codeTrigger).toBeFocused()
 
-  // Light and dark variants persist independently.
+  // The font is shared: switching the mode does not fork the value, and both
+  // variants keep mirroring the single shared setting.
   await page
     .getByRole('radiogroup', { name: '外观模式' })
     .getByRole('radio', { name: '浅色' })
     .click()
   const lightFamilyTrigger = page.getByRole('button', {
-    name: '浅色界面字体字体家族',
+    name: '界面字体字体家族',
   })
+  await expect(lightFamilyTrigger).toHaveText('CodeMono')
   await lightFamilyTrigger.click()
   await page.getByRole('option', { name: 'Inter' }).click()
   await expect
@@ -209,23 +210,30 @@ test('theme font picker enumerates, filters, searches, and persists family + fac
         if (!raw) return null
         const settings = JSON.parse(raw)
         return {
+          shared: settings.fonts,
           light: settings.chromeThemes.light.fonts,
           dark: settings.chromeThemes.dark.fonts,
         }
       }, THEME_STORAGE_KEY),
     )
     .toEqual({
-      light: {
+      shared: {
+        code: null,
+        codeFace: null,
         ui: 'Inter',
         uiFace: null,
+      },
+      light: {
         code: null,
         codeFace: null,
+        ui: 'Inter',
+        uiFace: null,
       },
       dark: {
-        ui: 'CodeMono',
-        uiFace: null,
         code: null,
         codeFace: null,
+        ui: 'Inter',
+        uiFace: null,
       },
     })
 
@@ -237,7 +245,7 @@ test('theme font picker enumerates, filters, searches, and persists family + fac
       page.evaluate((storageKey) => {
         const raw = localStorage.getItem(storageKey)
         if (!raw) return null
-        return JSON.parse(raw).chromeThemes.light.fonts
+        return JSON.parse(raw).fonts
       }, THEME_STORAGE_KEY),
     )
     .toEqual({
@@ -257,7 +265,7 @@ test('theme font picker keeps its compact layout on narrow windows', async ({ pa
   await page.goto('/?visualCase=empty#/settings/appearance')
   await waitForVisualPage(page, 'dark', page.getByRole('heading', { name: '外观' }))
 
-  await page.getByRole('button', { name: '深色界面字体字体家族' }).click()
+  await page.getByRole('button', { name: '界面字体字体家族' }).click()
   await expect(page.getByRole('option', { name: 'Inter' })).toBeVisible()
   await expectNoHorizontalOverflow(page)
 })
@@ -273,8 +281,8 @@ test('theme font picker degrades to the free-text input when enumeration fails',
   await page.goto('/?visualCase=empty#/settings/appearance')
   await waitForVisualPage(page, 'dark', page.getByRole('heading', { name: '外观' }))
 
-  await page.getByRole('button', { name: '深色界面字体字体家族' }).click()
-  const textInput = page.getByRole('textbox', { name: '深色界面字体' })
+  await page.getByRole('button', { name: '界面字体字体家族' }).click()
+  const textInput = page.getByRole('textbox', { name: '界面字体' })
   await expect(textInput).toBeVisible()
   await textInput.fill('Inter, sans-serif')
   await textInput.press('Enter')
@@ -283,7 +291,7 @@ test('theme font picker degrades to the free-text input when enumeration fails',
       page.evaluate((storageKey) => {
         const raw = localStorage.getItem(storageKey)
         if (!raw) return null
-        return JSON.parse(raw).chromeThemes.dark.fonts
+        return JSON.parse(raw).fonts
       }, THEME_STORAGE_KEY),
     )
     .toEqual({

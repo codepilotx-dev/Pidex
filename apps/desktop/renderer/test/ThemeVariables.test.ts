@@ -434,9 +434,9 @@ describe('fixed Codex UI themes', () => {
       pointerCursorEnabled: false,
       fontSizes: { ui: 17, code: 15 },
     })
-
     expect(migrated).toMatchObject({
-      version: 7,
+      version: 8,
+      fonts: { code: null, ui: null, uiFace: null, codeFace: null },
       mode: 'system',
       codeThemeIds: {
         light: 'codex-new-light',
@@ -487,7 +487,7 @@ describe('fixed Codex UI themes', () => {
     })
   })
 
-  test('resets a previous V2 single selection to V7 defaults', () => {
+  test('resets a previous V2 single selection to V8 defaults', () => {
     expect(
       normalizeDesktopThemeSettings({
         version: 2,

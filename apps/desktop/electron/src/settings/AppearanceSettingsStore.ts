@@ -6,7 +6,8 @@ import type {
   DesktopChromeTheme,
   DesktopHexColor,
   DesktopThemeFontFace,
-  DesktopThemeSettingsV7,
+  DesktopThemeFonts,
+  DesktopThemeSettingsV8,
   DesktopThemeVariant,
 } from '@pidex/shared/desktop-theme'
 import {
@@ -14,6 +15,7 @@ import {
   DEFAULT_CHROME_THEMES,
   desktopThemeFontFaceMatchesFamily,
   normalizeDesktopAccentPreset,
+  resolveSharedFontsFromVariants,
 } from '@pidex/shared/desktop-theme'
 import { writeJsonAtomically } from '../windows/DebouncedAtomicJsonWriter.js'
 
@@ -21,7 +23,7 @@ export type {
   AppearanceMigrationBackup,
   AppearanceMigrationRecord,
   DesktopChromeTheme,
-  DesktopThemeSettingsV7,
+  DesktopThemeSettingsV8,
 } from '@pidex/shared/desktop-theme'
 export { DEFAULT_APPEARANCE_SETTINGS, DEFAULT_CHROME_THEMES } from '@pidex/shared/desktop-theme'
 import { isRecord } from '@pidex/shared/guards'
@@ -30,7 +32,7 @@ type HexColor = DesktopHexColor
 type AppearanceVariant = DesktopThemeVariant
 
 type RecordValue = Record<string, unknown>
-const CURRENT_APPEARANCE_SETTINGS_VERSION = 7
+const CURRENT_APPEARANCE_SETTINGS_VERSION = 8
 const MIGRATION_RECORD_VERSION = 1
 const MIGRATION_ID = 'ui-design-visual-theme'
 
@@ -112,7 +114,47 @@ function normalizeChromeTheme(
   }
 }
 
-export function normalizeAppearanceSettings(value: unknown): DesktopThemeSettingsV7 {
+/**
+ * Reads the shared V8 `fonts` value. V6/V7 documents store fonts per variant,
+ * so their value is seeded from the current mode's variant to keep the visible
+ * theme stable across the upgrade.
+ */
+function normalizeSharedFonts(
+  value: unknown,
+  mode: DesktopThemeSettingsV8['mode'],
+  themes: Record<DesktopThemeVariant, DesktopChromeTheme>,
+): DesktopThemeFonts {
+  if (!isRecord(value)) return resolveSharedFontsFromVariants(themes, mode)
+  const ui = fontOr(value.ui)
+  const code = fontOr(value.code)
+  const uiFace = fontFaceOr(value.uiFace)
+  const codeFace = fontFaceOr(value.codeFace)
+  return {
+    ui,
+    uiFace: desktopThemeFontFaceMatchesFamily(ui, uiFace) ? uiFace : null,
+    code,
+    codeFace: desktopThemeFontFaceMatchesFamily(code, codeFace) ? codeFace : null,
+  }
+}
+
+/** Mirrors the shared fonts onto both variants for variant-shaped readers. */
+function withSharedVariantFonts(
+  themes: Record<DesktopThemeVariant, DesktopChromeTheme>,
+  fonts: DesktopThemeFonts,
+): Record<DesktopThemeVariant, DesktopChromeTheme> {
+  const variantFonts = {
+    ui: fonts.ui,
+    uiFace: fonts.uiFace ?? null,
+    code: fonts.code,
+    codeFace: fonts.codeFace ?? null,
+  }
+  return {
+    light: { ...themes.light, fonts: { ...variantFonts } },
+    dark: { ...themes.dark, fonts: { ...variantFonts } },
+  }
+}
+
+export function normalizeAppearanceSettings(value: unknown): DesktopThemeSettingsV8 {
   const source = isRecord(value) ? value : {}
   const mode =
     source.mode === 'light' || source.mode === 'dark' || source.mode === 'system'
@@ -121,17 +163,20 @@ export function normalizeAppearanceSettings(value: unknown): DesktopThemeSetting
   const codeThemeIds = isRecord(source.codeThemeIds) ? source.codeThemeIds : {}
   const chromeThemes = isRecord(source.chromeThemes) ? source.chromeThemes : {}
   const fontSizes = isRecord(source.fontSizes) ? source.fontSizes : {}
+  const normalizedThemes = {
+    light: normalizeChromeTheme(chromeThemes.light, DEFAULT_CHROME_THEMES.light, 'light'),
+    dark: normalizeChromeTheme(chromeThemes.dark, DEFAULT_CHROME_THEMES.dark, 'dark'),
+  }
+  const fonts = normalizeSharedFonts(source.fonts, mode, normalizedThemes)
   return {
-    version: 7,
+    version: 8,
     mode,
-    chromeThemes: {
-      light: normalizeChromeTheme(chromeThemes.light, DEFAULT_CHROME_THEMES.light, 'light'),
-      dark: normalizeChromeTheme(chromeThemes.dark, DEFAULT_CHROME_THEMES.dark, 'dark'),
-    },
+    chromeThemes: withSharedVariantFonts(normalizedThemes, fonts),
     codeThemeIds: {
       light: codeThemeIdOr(codeThemeIds.light, 'codex-light'),
       dark: codeThemeIdOr(codeThemeIds.dark, 'codex-dark'),
     },
+    fonts,
     pointerCursorEnabled: booleanOr(
       source.pointerCursorEnabled,
       DEFAULT_APPEARANCE_SETTINGS.pointerCursorEnabled,
@@ -152,16 +197,19 @@ export function normalizeAppearanceSettings(value: unknown): DesktopThemeSetting
 }
 
 /**
- * V7 is a preserve-style upgrade over V6: every existing mode, theme color,
- * code theme, cursor, motion, font-size, and font-smoothing value survives,
- * and only the nullable `uiFace`/`codeFace` keys plus `version: 7` are added.
+ * V8 hoists the fonts to the appearance level so light and dark share one UI
+ * and one code font. Every existing mode, theme color, code theme, cursor,
+ * motion, font-size, and font-smoothing value survives; the shared font value
+ * is seeded from the current mode's variant so the visible theme does not change
+ * during the upgrade, and it is mirrored back onto both variants for readers
+ * that still read `chromeThemes[*].fonts`.
  *
  * V6 was an intentional solid-surface reset. Known V1-V5 documents are still
  * replaced with the new defaults instead of carrying old palette choices into
  * the semantic-token contract. Future documents remain protected from
  * downgrade.
  */
-export function migrateAppearanceSettings(value: unknown): DesktopThemeSettingsV7 {
+export function migrateAppearanceSettings(value: unknown): DesktopThemeSettingsV8 {
   if (!isRecord(value)) {
     throw new UnsupportedAppearanceSettingsVersionError(value)
   }
@@ -277,7 +325,7 @@ export class AppearanceSettingsStore {
     return this.#migrationFilePath
   }
 
-  async load(): Promise<DesktopThemeSettingsV7> {
+  async load(): Promise<DesktopThemeSettingsV8> {
     try {
       const source = await readFile(this.#filePath, 'utf8')
       let parsed: unknown
@@ -331,7 +379,7 @@ export class AppearanceSettingsStore {
     )
   }
 
-  async restorePreviousAppearance(): Promise<DesktopThemeSettingsV7> {
+  async restorePreviousAppearance(): Promise<DesktopThemeSettingsV8> {
     const recordRead = await this.#readMigrationRecord()
     const record = recordRead.status === 'record' ? recordRead.record : null
     if (!record?.backup) {
@@ -339,7 +387,14 @@ export class AppearanceSettingsStore {
     }
     const current = await this.load()
     const backup = record.backup
-    const restored: DesktopThemeSettingsV7 = {
+    // The backup keeps fonts per variant; the current mode's variant restores them.
+    const restoredFonts: DesktopThemeFonts = normalizeSharedFonts(
+      undefined,
+      current.mode,
+      backup.chromeThemes,
+    )
+
+    const restored: DesktopThemeSettingsV8 = {
       ...current,
       chromeThemes: {
         light: {
@@ -350,11 +405,6 @@ export class AppearanceSettingsStore {
           ink: backup.chromeThemes.light.ink,
           contrast: backup.chromeThemes.light.contrast,
           semanticColors: { ...backup.chromeThemes.light.semanticColors },
-          fonts: {
-            ...current.chromeThemes.light.fonts,
-            ui: backup.chromeThemes.light.fonts.ui,
-            uiFace: backup.chromeThemes.light.fonts.uiFace ?? null,
-          },
         },
         dark: {
           ...current.chromeThemes.dark,
@@ -364,35 +414,25 @@ export class AppearanceSettingsStore {
           ink: backup.chromeThemes.dark.ink,
           contrast: backup.chromeThemes.dark.contrast,
           semanticColors: { ...backup.chromeThemes.dark.semanticColors },
-          fonts: {
-            ...current.chromeThemes.dark.fonts,
-            ui: backup.chromeThemes.dark.fonts.ui,
-            uiFace: backup.chromeThemes.dark.fonts.uiFace ?? null,
-          },
         },
       },
+      fonts: restoredFonts,
       fontSizes: {
         ...current.fontSizes,
         ui: backup.fontSizes.ui,
       },
     }
     await this.save(restored)
-    return restored
+    return this.load()
   }
 
-  async applyNewDesignTheme(): Promise<DesktopThemeSettingsV7> {
+  async applyNewDesignTheme(): Promise<DesktopThemeSettingsV8> {
     const current = await this.load()
-    const next: DesktopThemeSettingsV7 = {
+    const next: DesktopThemeSettingsV8 = {
       ...current,
       chromeThemes: {
-        light: {
-          ...DEFAULT_CHROME_THEMES.light,
-          fonts: { ...current.chromeThemes.light.fonts },
-        },
-        dark: {
-          ...DEFAULT_CHROME_THEMES.dark,
-          fonts: { ...current.chromeThemes.dark.fonts },
-        },
+        light: { ...DEFAULT_CHROME_THEMES.light, fonts: { ...current.fonts } },
+        dark: { ...DEFAULT_CHROME_THEMES.dark, fonts: { ...current.fonts } },
       },
     }
     await this.save(next)
@@ -451,7 +491,7 @@ export class AppearanceSettingsStore {
     this.#existingVersionChecked = true
   }
 
-  async #removeCorruptAndReset(): Promise<DesktopThemeSettingsV7> {
+  async #removeCorruptAndReset(): Promise<DesktopThemeSettingsV8> {
     await rm(this.#filePath, { force: true })
     this.#logger?.info('appearance-settings.corrupt-reset', { reason: 'invalid-json' })
     const fallback = normalizeAppearanceSettings(DEFAULT_APPEARANCE_SETTINGS)
@@ -465,7 +505,7 @@ export class AppearanceSettingsStore {
     return fallback
   }
 
-  async #writeAtomically(settings: DesktopThemeSettingsV7): Promise<void> {
+  async #writeAtomically(settings: DesktopThemeSettingsV8): Promise<void> {
     await writeJsonAtomically(this.#filePath, settings)
   }
 }

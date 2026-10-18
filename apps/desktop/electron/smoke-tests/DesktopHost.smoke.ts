@@ -10,7 +10,7 @@ import {
   type ElectronApplication,
   type Page,
 } from '@playwright/test'
-import type { DesktopThemeSettingsV7 } from '@pidex/shared/desktop-theme'
+import type { DesktopThemeSettingsV8 } from '@pidex/shared/desktop-theme'
 import type { DesktopPetPresentation } from '@pidex/shared/desktop-pet-overlay'
 import type { DesktopSettingsPayload } from '@pidex/shared/desktop-settings-ipc'
 import type { DesktopDataLocationState } from '@pidex/shared/desktop-data-location-ipc'
@@ -24,8 +24,8 @@ declare global {
       theme: string | null
     }>
     DesktopBridge: {
-      getAppearanceSettings(): Promise<DesktopThemeSettingsV7>
-      saveAppearanceSettings(settings: DesktopThemeSettingsV7): Promise<void>
+      getAppearanceSettings(): Promise<DesktopThemeSettingsV8>
+      saveAppearanceSettings(settings: DesktopThemeSettingsV8): Promise<void>
       getDataLocation(): Promise<DesktopDataLocationState>
       openPetOverlay(): Promise<void>
       hidePetOverlay(): Promise<void>
@@ -352,7 +352,7 @@ test.describe('真实 Electron 宿主', () => {
     await expect(page.locator('html')).toHaveAttribute('data-theme', 'dark')
     const persisted = await page.evaluate(async () => window.DesktopBridge.getAppearanceSettings())
     expect(persisted).toMatchObject({
-      version: 7,
+      version: 8,
       mode: 'dark',
       pointerCursorEnabled: true,
       reduceMotion: 'on',

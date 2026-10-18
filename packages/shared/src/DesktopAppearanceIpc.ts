@@ -1,4 +1,4 @@
-import type { DesktopThemeSettingsV7, DesktopThemeVariant } from './DesktopTheme.js'
+import type { DesktopThemeSettingsV8, DesktopThemeVariant } from './DesktopTheme.js'
 
 export const DESKTOP_APPEARANCE_IPC_CHANNELS = {
   getSettings: 'appearance:settings:get',
@@ -19,11 +19,11 @@ export interface DesktopStartupThemeSeed {
 }
 
 export interface DesktopAppearanceIpcBridge<CodeThemeId extends string = string> {
-  getAppearanceSettings(): Promise<DesktopThemeSettingsV7<CodeThemeId>>
-  saveAppearanceSettings(settings: DesktopThemeSettingsV7<CodeThemeId>): Promise<void>
+  getAppearanceSettings(): Promise<DesktopThemeSettingsV8<CodeThemeId>>
+  saveAppearanceSettings(settings: DesktopThemeSettingsV8<CodeThemeId>): Promise<void>
   getSystemTheme(): Promise<DesktopThemeVariant>
   onSystemThemeChange(listener: (variant: DesktopThemeVariant) => void): () => void
   canRestorePreviousAppearance(): Promise<boolean>
-  restorePreviousAppearance(): Promise<DesktopThemeSettingsV7<CodeThemeId>>
-  applyNewDesignTheme(): Promise<DesktopThemeSettingsV7<CodeThemeId>>
+  restorePreviousAppearance(): Promise<DesktopThemeSettingsV8<CodeThemeId>>
+  applyNewDesignTheme(): Promise<DesktopThemeSettingsV8<CodeThemeId>>
 }

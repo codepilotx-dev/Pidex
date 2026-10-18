@@ -4126,7 +4126,7 @@ test('Dracula code theme applies the recovered Codex runtime hierarchy', async (
       composer: '#373843',
     })
   await expect
-    .poll(() => page.evaluate(() => localStorage.getItem('pidex.desktop.appearance.v6')))
+    .poll(() => page.evaluate(() => localStorage.getItem('pidex.desktop.appearance.v8')))
     .toContain('"dracula"')
 
   await page.reload()
@@ -4470,6 +4470,7 @@ test('settings shell search and appearance source contracts', async ({ page }) =
     const gallery = document.querySelector('.appearance-mode-gallery')!
     const diff = document.querySelector('.appearance-diff-preview')!
     const editors = document.querySelector('.appearance-theme-editors')!
+    const fontsCard = document.querySelector('.appearance-font-preview')!.parentElement!
     const inner = document.querySelector('.appearance-settings')!
     const card = document.querySelector('.appearance-mode-visual')!
     const galleryStyle = getComputedStyle(gallery)
@@ -4483,6 +4484,7 @@ test('settings shell search and appearance source contracts', async ({ page }) =
       diffAfterEditors: Boolean(
         editors.compareDocumentPosition(diff) & Node.DOCUMENT_POSITION_FOLLOWING,
       ),
+      diffInsideModeCard: diff.parentElement === fontsCard,
       galleryMaxWidth: galleryStyle.maxWidth,
       innerMaxWidth: innerStyle.maxWidth,
       innerPadding: innerStyle.paddingTop,
@@ -4493,6 +4495,7 @@ test('settings shell search and appearance source contracts', async ({ page }) =
   expect(structure).toMatchObject({
     diffAfterGallery: true,
     diffAfterEditors: true,
+    diffInsideModeCard: true,
     galleryMaxWidth: '100%',
     innerMaxWidth: '1049px',
     innerPadding: '20px',
@@ -4508,12 +4511,12 @@ test('settings shell search and appearance source contracts', async ({ page }) =
       .first()
       .locator('.settings-row-title')
       .evaluateAll((nodes) => nodes.map((node) => node.textContent?.trim())),
-  ).resolves.toEqual(['浅色主题', '强调色', '背景', '前景', 'UI 字体'])
+  ).resolves.toEqual(['浅色主题', '强调色', '背景', '前景'])
   await expect(
     page
       .locator('.appearance-theme-editor[data-section="advanced"] .settings-row-title')
       .evaluateAll((nodes) => nodes.map((node) => node.textContent?.trim())),
-  ).resolves.toEqual(['浅色主题', 'UI 字体样式', '代码字体', '对比度'])
+  ).resolves.toEqual(['浅色主题', '对比度'])
   const lightPicker = page.getByRole('combobox', { name: '浅色代码主题' })
   await expect(page.getByRole('button', { name: '导入' })).toHaveCount(0)
   await expect(page.getByRole('button', { name: '复制主题' })).toHaveCount(0)
@@ -4755,7 +4758,7 @@ for (const mode of MODES) {
     await expect
       .poll(() =>
         page.evaluate(() => {
-          const raw = localStorage.getItem('pidex.desktop.appearance.v6')
+          const raw = localStorage.getItem('pidex.desktop.appearance.v8')
           return raw ? JSON.parse(raw).mode : null
         }),
       )

@@ -13,12 +13,16 @@ import type {
   DesktopChromeTheme,
   DesktopDiffMarkerStyle,
   DesktopReviewDiffFile,
+  DesktopThemeFontFace,
   DesktopThemeMode,
   DesktopThemeSettings,
   DesktopThemeVariant,
 } from '../../../shared/Types.js'
 import { defaultDesktopStoredSettings } from '../../../shared/SettingsSchema.js'
-import { resetAdvancedDesktopThemeSettings } from '../../../shared/Theme.js'
+import {
+  applySharedDesktopThemeFonts,
+  resetAdvancedDesktopThemeSettings,
+} from '../../../shared/Theme.js'
 import { ReviewDiffReadOnlySplit } from '../review/diff/ReviewDiffSurface.js'
 import { getThemesForVariant } from '../syntax/Theme.js'
 import { useDesktopTheme } from '../theme/ThemeContext.js'
@@ -566,11 +570,13 @@ function ThemePreview({
   theme,
   codeThemeId,
   markerStyle,
+  labelPrefix = '',
 }: {
   variant: DesktopThemeVariant
   theme: DesktopChromeTheme
   codeThemeId: string
   markerStyle: DesktopDiffMarkerStyle
+  labelPrefix?: string
 }) {
   const variables = deriveThemeVariables({ codeThemeId, theme, variant })
   const style = {
@@ -579,13 +585,13 @@ function ThemePreview({
 
   return (
     <div
-      aria-label={`${variant === 'light' ? '浅色' : '深色'}主题差异预览`}
+      aria-label={`${labelPrefix}${variant === 'light' ? '浅色' : '深色'}主题差异预览`}
       className="appearance-diff-preview tw:mx-0 tw:mt-0 tw:mb-4 tw:block tw:overflow-hidden tw:rounded-lg tw:bg-app-editor"
       data-variant={variant}
       style={style}
     >
       <ReviewDiffReadOnlySplit
-        ariaLabel={`${variant === 'light' ? '浅色' : '深色'}主题差异代码`}
+        ariaLabel={`${labelPrefix}${variant === 'light' ? '浅色' : '深色'}主题差异代码`}
         diffMarkerStyle={markerStyle}
         file={THEME_PREVIEW_DIFF}
         showWordDiff
@@ -596,18 +602,51 @@ function ThemePreview({
   )
 }
 
+/**
+ * Side-by-side preview of the one shared font set in both variants. The
+ * comparison only switches colors; the font tokens come from the same shared
+ * settings, which is exactly what the preview is meant to make visible. Each
+ * pane is already self-evidently light or dark, so neither carries a label.
+ */
+function SharedFontPreview({
+  settings,
+  markerStyle,
+  variants,
+}: {
+  settings: DesktopThemeSettings
+  markerStyle: DesktopDiffMarkerStyle
+  variants: readonly DesktopThemeVariant[]
+}) {
+  return (
+    <div className="appearance-font-preview tw:grid tw:gap-4 tw:p-4 tw:@max-[760px]:grid-cols-1 tw:@[761px]:grid-cols-2">
+      {variants.map((variant) => (
+        <ThemePreview
+          codeThemeId={settings.codeThemeIds[variant]}
+          key={variant}
+          labelPrefix="字体"
+          markerStyle={markerStyle}
+          theme={settings.chromeThemes[variant]}
+          variant={variant}
+        />
+      ))}
+    </div>
+  )
+}
+
 function VariantThemeEditor({
   section,
   variant,
   settings,
   onUpdate,
   onError,
+  needsThemeSeeds = true,
 }: {
   section: 'visual' | 'advanced'
   variant: DesktopThemeVariant
   settings: DesktopThemeSettings
   onUpdate: (updater: ThemeSettingsUpdater) => void
   onError: (message: string) => void
+  needsThemeSeeds?: boolean
 }) {
   const chromeTheme = settings.chromeThemes[variant]
   const { t } = useLocale()
@@ -636,7 +675,18 @@ function VariantThemeEditor({
   })
 
   useEffect(() => {
-    if (section !== 'visual') return
+    if (section !== 'visual') {
+      // Advanced editors never show the theme picker; loading every code
+      // theme seed there would only delay the appearance page.
+      setThemeSeedsReady(true)
+      return
+    }
+    if (!needsThemeSeeds) {
+      // A hidden disclosure keeps the card mounted; the seeds load once it
+      // becomes visible again.
+      setThemeSeedsReady(true)
+      return
+    }
     let cancelled = false
     setThemeSeedsReady(false)
     void Promise.allSettled(
@@ -672,7 +722,7 @@ function VariantThemeEditor({
     return () => {
       cancelled = true
     }
-  }, [themes, variant, section])
+  }, [themes, variant, section, needsThemeSeeds])
 
   const updateChromeTheme = (patch: Partial<DesktopChromeTheme>): void => {
     onUpdate((current) => {
@@ -687,25 +737,9 @@ function VariantThemeEditor({
     })
   }
 
-  const updateFonts = (patch: Partial<DesktopChromeTheme['fonts']>): void => {
-    onUpdate((current) => {
-      const currentTheme = current.chromeThemes[variant]
-      return {
-        ...current,
-        chromeThemes: {
-          ...current.chromeThemes,
-          [variant]: {
-            ...currentTheme,
-            fonts: { ...currentTheme.fonts, ...patch },
-          },
-        },
-      }
-    })
-  }
-
   return (
     <article
-      aria-busy={section === 'visual' && !themeSeedsReady}
+      aria-busy={section === 'visual' && needsThemeSeeds && !themeSeedsReady}
       className="appearance-theme-editor settings-card tw:overflow-hidden tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:shadow-none tw:[&>.settings-row]:min-h-12"
       data-section={section}
     >
@@ -812,68 +846,76 @@ function VariantThemeEditor({
             />
           </>
         ) : null}
-        <SettingsRow
-          title={section === 'visual' ? 'UI 字体' : 'UI 字体样式'}
-          size="compact"
-          control={
-            <ThemeFontPicker
-              ariaLabel={`${variantLabel}界面字体`}
-              kind="ui"
-              controls={section === 'visual' ? 'family' : 'style'}
-              placeholder="ui-sans-serif, system-ui, sans-serif"
-              face={chromeTheme.fonts.uiFace ?? null}
-              family={chromeTheme.fonts.ui}
-              onCommit={(ui, uiFace) => updateFonts({ ui, uiFace })}
-            />
-          }
-        />
         {section === 'advanced' ? (
-          <>
-            <SettingsRow
-              title="代码字体"
-              size="compact"
-              control={
-                <ThemeFontPicker
-                  ariaLabel={`${variantLabel}代码字体`}
-                  kind="code"
-                  placeholder="ui-monospace, SFMono-Regular, Consolas, monospace"
-                  face={chromeTheme.fonts.codeFace ?? null}
-                  family={chromeTheme.fonts.code}
-                  onCommit={(code, codeFace) => updateFonts({ code, codeFace })}
+          <SettingsRow
+            title="对比度"
+            size="compact"
+            control={
+              <label className="appearance-contrast-control">
+                <input
+                  aria-label={`${variantLabel}对比度`}
+                  max={100}
+                  min={0}
+                  style={
+                    {
+                      '--appearance-slider-accent': chromeTheme.accent,
+                      '--appearance-slider-surface': chromeTheme.surface,
+                    } as React.CSSProperties
+                  }
+                  type="range"
+                  value={chromeTheme.contrast}
+                  onChange={(event) =>
+                    updateChromeTheme({
+                      contrast: Number.parseInt(event.target.value, 10),
+                    })
+                  }
                 />
-              }
-            />
-            <SettingsRow
-              title="对比度"
-              size="compact"
-              control={
-                <label className="appearance-contrast-control">
-                  <input
-                    aria-label={`${variantLabel}对比度`}
-                    max={100}
-                    min={0}
-                    style={
-                      {
-                        '--appearance-slider-accent': chromeTheme.accent,
-                        '--appearance-slider-surface': chromeTheme.surface,
-                      } as React.CSSProperties
-                    }
-                    type="range"
-                    value={chromeTheme.contrast}
-                    onChange={(event) =>
-                      updateChromeTheme({
-                        contrast: Number.parseInt(event.target.value, 10),
-                      })
-                    }
-                  />
-                  <output>{chromeTheme.contrast}</output>
-                </label>
-              }
-            />
-          </>
+                <output>{chromeTheme.contrast}</output>
+              </label>
+            }
+          />
         ) : null}
       </div>
     </article>
+  )
+}
+
+/**
+ * 浅色与深色共用的字体设置行：UI 字体与代码字体共用同一张卡片，各占一行，
+ * 不再在两种配色的主题卡片里各出现一次同一个共用值。
+ */
+function SharedFontRow({
+  title,
+  ariaLabel,
+  kind,
+  placeholder,
+  family,
+  face,
+  onCommit,
+}: {
+  title: string
+  ariaLabel: string
+  kind: 'ui' | 'code'
+  placeholder: string
+  family: string | null
+  face: DesktopThemeFontFace | null
+  onCommit: (family: string | null, face: DesktopThemeFontFace | null) => void
+}) {
+  return (
+    <SettingsRow
+      control={
+        <ThemeFontPicker
+          ariaLabel={ariaLabel}
+          controls="both"
+          face={face}
+          family={family}
+          kind={kind}
+          placeholder={placeholder}
+          onCommit={onCommit}
+        />
+      }
+      title={title}
+    />
   )
 }
 
@@ -923,7 +965,7 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
 
   return (
     <SettingsContentArea>
-      <div className="settings-content-inner appearance-settings tw:[&>.settings-section>.appearance-theme-editors]:mt-4 tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
+      <div className="settings-content-inner appearance-settings tw:[&>.settings-section>.appearance-shared-fonts]:mt-4 tw:[&>.settings-section>.appearance-theme-editors]:mt-4 tw:[&>.settings-section]:grid tw:[&>.settings-section]:gap-4 tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
           <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
             {t('外观')}
@@ -931,7 +973,7 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
         </div>
 
         <SettingsSection bare title="视觉样式">
-          <div className="settings-card tw:overflow-hidden tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:shadow-none">
+          <div className="settings-card tw:overflow-hidden tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:shadow-none tw:[&>.settings-row]:px-4">
             <SettingsRow
               title="模式"
               control={
@@ -986,6 +1028,39 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
                     />
                   ))}
                 </div>
+              }
+            />
+            <SharedFontPreview
+              markerStyle={desktopSettings.draft.values.diffMarkerStyle}
+              settings={settings}
+              variants={visibleVariants}
+            />
+          </div>
+          <div className="settings-card tw:overflow-hidden tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:shadow-none tw:[&>.settings-row]:px-4">
+            <SharedFontRow
+              ariaLabel={t('界面字体')}
+              face={settings.fonts.uiFace ?? null}
+              family={settings.fonts.ui}
+              kind="ui"
+              placeholder="ui-sans-serif, system-ui, sans-serif"
+              title="UI 字体"
+              onCommit={(ui, uiFace) =>
+                saveThemeSettings((current) =>
+                  applySharedDesktopThemeFonts(current, { ui, uiFace }),
+                )
+              }
+            />
+            <SharedFontRow
+              ariaLabel={t('代码字体')}
+              face={settings.fonts.codeFace ?? null}
+              family={settings.fonts.code}
+              kind="code"
+              placeholder="ui-monospace, SFMono-Regular, Consolas, monospace"
+              title="代码字体"
+              onCommit={(code, codeFace) =>
+                saveThemeSettings((current) =>
+                  applySharedDesktopThemeFonts(current, { code, codeFace }),
+                )
               }
             />
           </div>
@@ -1079,6 +1154,7 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
                 <VariantThemeEditor
                   section="advanced"
                   key={variant}
+                  needsThemeSeeds={false}
                   settings={settings}
                   variant={variant}
                   onError={reportError}
@@ -1151,14 +1227,6 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
                 />
               ) : null}
             </div>
-            <SettingsSection bare title="差异预览">
-              <ThemePreview
-                codeThemeId={settings.codeThemeIds[resolvedVariant]}
-                markerStyle={desktopSettings.draft.values.diffMarkerStyle}
-                theme={settings.chromeThemes[resolvedVariant]}
-                variant={resolvedVariant}
-              />
-            </SettingsSection>
           </DisclosureController>
         </SettingsSection>
       </div>

@@ -5,7 +5,7 @@ import {
   DEFAULT_APPEARANCE_SETTINGS,
   migrateAppearanceSettings,
   normalizeAppearanceSettings,
-  type DesktopThemeSettingsV7,
+  type DesktopThemeSettingsV8,
 } from './AppearanceSettingsStore.js'
 
 const isObject = (value: unknown): value is Record<string, unknown> =>
@@ -15,7 +15,7 @@ export async function readStartupAppearanceConfig(
   configJsonPath: string,
   legacyConfigTomlPath?: string,
   legacyAppearancePath?: string,
-): Promise<DesktopThemeSettingsV7> {
+): Promise<DesktopThemeSettingsV8> {
   let configJsonMissing = false
   try {
     const source = (await readFile(configJsonPath, 'utf8')).replace(/^\uFEFF/, '')
