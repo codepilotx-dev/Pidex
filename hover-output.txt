@@ -1,0 +1,37 @@
+$ bun run scripts/RunPlaywright.ts playwright.config.ts visual-tests/_tmp-hover.visual.ts
+[playwright] 使用动态回环端口 12014
+(node:37932) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:37932) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+[1A[2K[WebServer] $ vite --mode visual --host 127.0.0.1 --port "12014" --strictPort
+[1A[2K[WebServer] (node:26656) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+[1A[2K[WebServer] (node:26656) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+
+
+Running 1 test using 1 worker
+
+[1A[2K(node:35092) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+(node:35092) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+
+
+
+
+[1A[2K(node:35092) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+
+
+[1A[2K(node:35092) [UNDICI-EHPA] Warning: EnvHttpProxyAgent is experimental, expect them to change at any time.
+[1A[2K[1/1] visual-tests\_tmp-hover.visual.ts:4:1 › measure row layout on hover
+[1A[2Kvisual-tests\_tmp-hover.visual.ts:4:1 › measure row layout on hover
+rest {"list":{"scrollTop":0,"scrollHeight":326,"clientWidth":282,"scrollWidth":282,"clientHeight":326},"rows":[{"top":536.16,"height":34,"nameWidth":36,"nameOverflowing":""},{"top":574.16,"height":34,"nameWidth":197.36,"nameOverflowing":""}]}
+
+[1A[2Khover 0 {"list":{"scrollTop":0,"scrollHeight":326,"clientWidth":282,"scrollWidth":282,"clientHeight":326},"rows":[{"top":534,"height":34,"nameWidth":36,"nameOverflowing":""},{"top":572,"height":34,"nameWidth":197.36,"nameOverflowing":""}]}
+
+[1A[2Khover 1 {"list":{"scrollTop":0,"scrollHeight":326,"clientWidth":282,"scrollWidth":282,"clientHeight":326},"rows":[{"top":534,"height":34,"nameWidth":36,"nameOverflowing":""},{"top":572,"height":34,"nameWidth":142.88,"nameOverflowing":"true"}]}
+
+[1A[2K  1 passed (11.4s)
