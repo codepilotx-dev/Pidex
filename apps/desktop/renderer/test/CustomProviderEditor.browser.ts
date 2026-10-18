@@ -14,7 +14,8 @@ window.__calls = [];
 window.__releaseTests = [];
 window.__modelPages = [];
 export const desktopClient = {
-  discoverProviderModels: async (providerID, api) => {window.__discoveries = (window.__discoveries ?? 0) + 1; return [{id: 'remote-only', name: 'Remote', api, enabled: true}];},
+  discoverProviderModels: async input => {window.__discoveries = (window.__discoveries ?? 0) + 1; window.__lastDiscovery = input; return [{id: 'remote-only', name: 'Remote', api: input.api, enabled: false}];},
+  syncProviderModels: async providerID => {window.__syncs = (window.__syncs ?? 0) + 1; return {providerId: providerID, api: 'openai-completions', fetchedAt: 1, candidates: [{id: 'remote-only', name: 'Remote', api: 'openai-completions', enabled: false}], removedModelIds: [], baselineCreated: true, totalFetched: 3, catalogVersion: 1};},
   fetchProviderModels: async options => {window.__modelPages.push(options); return {models: ['chat', 'messages', 'remote-only']};},
   testModelProvider: async (providerID, model) => {
     window.__calls.push({kind: 'test', providerID, id: model.id});
@@ -223,16 +224,40 @@ try {
     await page.evaluate((value) => {
       ;(window as any).__entry = value
       if (value.includes('icons=1')) {
+        const manualSource =
+          'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+        if (value.includes('manualIcon=1')) (window as any).__manualProviderIcon = true
+        let iconListener: ((change: any) => void) | null = null
         ;(window as any).DesktopBridge = {
-          resolveProviderIcon: async (input: any) => ({ source: input.url || null }),
-          onProviderIconChange: () => () => {},
-          setProviderWebsiteIcon: async () => {
-            if ((window as any).__iconFailure) throw new Error("No handler registered for 'desktop-provider-icon:website'")
-            return { source: null }
+          resolveProviderIcon: async (input: any) => {
+            ;(window as any).__iconResolutions = [
+              ...((window as any).__iconResolutions ?? []),
+              input,
+            ]
+            if ((window as any).__manualProviderIcon && input.providerID) {
+              return { source: manualSource, override: true }
+            }
+            return { source: input.url || null }
+          },
+          onProviderIconChange: (listener: (change: any) => void) => {
+            iconListener = listener
+            return () => {
+              iconListener = null
+            }
+          },
+          setProviderWebsiteIcon: async (input: any) => {
+            if ((window as any).__iconFailure)
+              throw new Error("No handler registered for 'desktop-provider-icon:website'")
+            const source = input.website ? manualSource : null
+            if (!input.website) (window as any).__manualProviderIcon = false
+            iconListener?.({ url: '', providerID: input.providerID, source })
+            return { source }
           },
           setProviderUploadedIcon: async (input: any) => {
             ;(window as any).__uploadedIcons = [...((window as any).__uploadedIcons ?? []), input]
-            if ((window as any).__iconUploadFailure) throw new Error("No handler registered for 'desktop-provider-icon:upload'")
+            if ((window as any).__iconUploadFailure)
+              throw new Error("No handler registered for 'desktop-provider-icon:upload'")
+            iconListener?.({ url: '', providerID: input.providerID, source: input.dataURL })
             return { source: input.dataURL }
           },
         }
@@ -252,13 +277,23 @@ try {
 
   const iconsPage = await mount('/providers?provider=mixed&controller=1&icons=1', false)
   await iconsPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
-  await expect(iconsPage.getByText('图标单独保存并立即生效，仅访问公网 HTTPS 网站。')).toHaveCount(0)
+  await expect(iconsPage.getByText('图标单独保存并立即生效，仅访问公网 HTTPS 网站。')).toHaveCount(
+    0,
+  )
   await iconsPage.getByRole('button', { name: '从网站获取', exact: true }).click()
-  await expect.poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1))).toBe('网站图标已保存')
-  await iconsPage.evaluate(() => { (window as any).__iconFailure = true })
+  await expect
+    .poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1)))
+    .toBe('网站图标已保存')
+  await iconsPage.evaluate(() => {
+    ;(window as any).__iconFailure = true
+  })
   await iconsPage.getByRole('button', { name: '从网站获取', exact: true }).click()
-  await expect.poll(() => iconsPage.evaluate(() => (window as any).__noticeErrors?.at(-1))).toContain('完全退出并重新启动 Pidex')
-  await iconsPage.evaluate(() => { (window as any).__iconFailure = false })
+  await expect
+    .poll(() => iconsPage.evaluate(() => (window as any).__noticeErrors?.at(-1)))
+    .toContain('完全退出并重新启动 Pidex')
+  await iconsPage.evaluate(() => {
+    ;(window as any).__iconFailure = false
+  })
   const iconFile = {
     name: 'provider-logo.png',
     mimeType: 'image/png',
@@ -268,32 +303,45 @@ try {
     ),
   }
   await iconsPage.locator('input[type="file"]').setInputFiles(iconFile)
-  await expect.poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1))).toBe('图标已更新')
+  await expect
+    .poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1)))
+    .toBe('图标已更新')
   const uploadedIcon = await iconsPage.evaluate(() => (window as any).__uploadedIcons?.at(-1))
   assert.equal(uploadedIcon.providerID, 'mixed')
   assert.ok(uploadedIcon.dataURL.startsWith('data:image/png;base64,'))
-  await iconsPage.evaluate(() => { (window as any).__iconUploadFailure = true })
+  await iconsPage.evaluate(() => {
+    ;(window as any).__iconUploadFailure = true
+  })
   await iconsPage.locator('input[type="file"]').setInputFiles(iconFile)
-  await expect.poll(() => iconsPage.evaluate(() => (window as any).__noticeErrors?.at(-1))).toContain('完全退出并重新启动 Pidex')
-  await iconsPage.evaluate(() => { (window as any).__iconUploadFailure = false })
+  await expect
+    .poll(() => iconsPage.evaluate(() => (window as any).__noticeErrors?.at(-1)))
+    .toContain('完全退出并重新启动 Pidex')
+  await iconsPage.evaluate(() => {
+    ;(window as any).__iconUploadFailure = false
+  })
   const uploadedCount = await iconsPage.evaluate(() => (window as any).__uploadedIcons.length)
-  await iconsPage.evaluate(() => new Promise<void>((resolve) => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 600
-    canvas.height = 300
-    const context = canvas.getContext('2d')!
-    context.fillStyle = '#336699'
-    context.fillRect(0, 0, 600, 300)
-    canvas.toBlob((blob) => {
-      const transfer = new DataTransfer()
-      transfer.items.add(new File([blob!], 'large-logo.png', { type: 'image/png' }))
-      const input = document.querySelector<HTMLInputElement>('input[type="file"]')!
-      input.files = transfer.files
-      input.dispatchEvent(new Event('change', { bubbles: true }))
-      resolve()
-    }, 'image/png')
-  }))
-  await expect.poll(() => iconsPage.evaluate(() => (window as any).__uploadedIcons.length)).toBe(uploadedCount + 1)
+  await iconsPage.evaluate(
+    () =>
+      new Promise<void>((resolve) => {
+        const canvas = document.createElement('canvas')
+        canvas.width = 600
+        canvas.height = 300
+        const context = canvas.getContext('2d')!
+        context.fillStyle = '#336699'
+        context.fillRect(0, 0, 600, 300)
+        canvas.toBlob((blob) => {
+          const transfer = new DataTransfer()
+          transfer.items.add(new File([blob!], 'large-logo.png', { type: 'image/png' }))
+          const input = document.querySelector<HTMLInputElement>('input[type="file"]')!
+          input.files = transfer.files
+          input.dispatchEvent(new Event('change', { bubbles: true }))
+          resolve()
+        }, 'image/png')
+      }),
+  )
+  await expect
+    .poll(() => iconsPage.evaluate(() => (window as any).__uploadedIcons.length))
+    .toBe(uploadedCount + 1)
   const normalizedIcon = await iconsPage.evaluate(async () => {
     const source = (window as any).__uploadedIcons.at(-1).dataURL
     const image = new Image()
@@ -308,8 +356,39 @@ try {
   // 上传的大图按最长边缩放到 256px，并保持宽高比。
   assert.deepEqual(normalizedIcon, { width: 256, height: 128, png: true })
   await iconsPage.getByRole('button', { name: '恢复默认图标', exact: true }).click()
-  await expect.poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1))).toBe('已恢复默认图标')
+  await expect
+    .poll(() => iconsPage.evaluate(() => (window as any).__notices?.at(-1)))
+    .toBe('已恢复默认图标')
   await iconsPage.close()
+
+  // 手动图标不请求目录图标；恢复默认后才重新加载目录图标并参与 5 小时刷新。
+  const manualPage = await mount(
+    '/providers?provider=mixed&controller=1&icons=1&manualIcon=1',
+    false,
+  )
+  await manualPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
+  await expect(manualPage.locator('.provider-icon-settings-preview .ui-remote-image')).toHaveCount(
+    1,
+  )
+  const mixedResolutions = await manualPage.evaluate(() =>
+    (window as any).__iconResolutions.filter((input: any) => input.providerID === 'mixed'),
+  )
+  assert.deepEqual(mixedResolutions, [{ url: '', providerID: 'mixed' }])
+  await manualPage.getByRole('button', { name: '恢复默认图标', exact: true }).click()
+  await expect
+    .poll(() =>
+      manualPage.evaluate(() =>
+        (window as any).__iconResolutions.some(
+          (input: any) =>
+            input.providerID === 'mixed' && input.url === (window as any).__providers.mixed.logoURL,
+        ),
+      ),
+    )
+    .toBe(true)
+  await expect(manualPage.locator('.provider-icon-settings-preview .ui-remote-image')).toHaveCount(
+    1,
+  )
+  await manualPage.close()
 
   // 新建只保留草稿；校验失败、保存失败均不离开。首次保存选中真实身份。
   const page = await mount('/providers?newProvider=1')
@@ -337,6 +416,22 @@ try {
   const created = await page.evaluate(() => (window as any).__calls.at(-1).definition)
   assert.equal(created.models[0].api, 'anthropic-messages')
   await page.close()
+
+  // 新供应商保存前可从 /models 获取候选，并把上游基线随创建写入 modelSync。
+  const presave = await mount('/providers?newProvider=1')
+  await presave.getByPlaceholder('https://example.com/v1').fill('https://pre-save.example/v1')
+  await presave.getByRole('button', { name: '从 /models 获取', exact: true }).click()
+  await expect(presave.getByText('发现 1 个候选模型')).toBeVisible()
+  await presave.getByRole('button', { name: '导入已选 (1)', exact: true }).click()
+  await presave.getByRole('button', { name: '保存配置', exact: true }).click()
+  await expect
+    .poll(() => presave.evaluate(() => (window as any).__calls.at(-1)?.kind))
+    .toBe('create')
+  const presaved = await presave.evaluate(() => (window as any).__calls.at(-1).definition)
+  assert.equal(presaved.models[0].id, 'remote-only')
+  assert.deepEqual(presaved.modelSync.models, ['remote-only'])
+  assert.equal(presaved.modelSync.api, 'openai-completions')
+  await presave.close()
 
   // 混合协议与隐藏扩展字段保留；凭据刷新不覆盖草稿；离开选择能保存或放弃。
   const mixed = await mount('/providers?provider=mixed&section=models', false)
@@ -518,7 +613,7 @@ try {
     ['mixed', 'mixed'],
   )
   await tests.getByRole('button', { name: '同步模型', exact: true }).click()
-  await expect.poll(() => tests.evaluate(() => (window as any).__discoveries)).toBe(1)
+  await expect.poll(() => tests.evaluate(() => (window as any).__syncs)).toBe(1)
   await expect(tests.getByRole('dialog')).toContainText('remote-only')
   await tests.getByRole('button', { name: '关闭模型发现' }).click()
   assert.equal(
@@ -586,11 +681,15 @@ try {
   await reset.click()
   await expect(editDialog.getByLabel('分组名称', { exact: true })).toHaveValue('常用模型')
   await expect(inputLimit).toHaveValue('')
-  await expect(editDialog.getByRole('spinbutton', { name: '输入价格', exact: true })).toHaveValue('0')
+  await expect(editDialog.getByRole('spinbutton', { name: '输入价格', exact: true })).toHaveValue(
+    '0',
+  )
   await expect(reset).toBeDisabled()
   await back.click()
   await expect(inputLimit).toHaveValue('125000')
-  await expect(editDialog.getByRole('spinbutton', { name: '输入价格', exact: true })).toHaveValue('9')
+  await expect(editDialog.getByRole('spinbutton', { name: '输入价格', exact: true })).toHaveValue(
+    '9',
+  )
   await expect(reasoningChip).toHaveAttribute('aria-pressed', originalReasoning!)
   await editDialog.getByRole('button', { name: '高级设置', exact: true }).click()
   await editDialog.getByRole('button', { name: '协议参数', exact: true }).click()
@@ -642,26 +741,44 @@ try {
   const endpointPanel = endpointPage.getByRole('complementary')
   await expect(endpointPanel).not.toContainText('Responses')
   await expect(endpointPanel.getByRole('combobox', { name: '请求协议' })).toHaveCount(0)
-  await endpointPanel.getByRole('textbox', { name: 'API 地址', exact: true }).fill('https://chat.example/v1')
-  await endpointPanel.getByRole('textbox', { name: 'Anthropic Messages API 地址', exact: true }).fill('https://messages.example')
+  await endpointPanel
+    .getByRole('textbox', { name: 'API 地址', exact: true })
+    .fill('https://chat.example/v1')
+  await endpointPanel
+    .getByRole('textbox', { name: 'Anthropic Messages API 地址', exact: true })
+    .fill('https://messages.example')
   await endpointPanel.getByRole('button', { name: '设为默认', exact: true }).last().click()
   await endpointPanel.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(endpointPanel.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
   const endpointsSaved = await endpointPage.evaluate(() => (window as any).__providers.mixed.config)
   assert.equal(endpointsSaved.baseUrl, 'https://messages.example')
-  assert.deepEqual(endpointsSaved.endpoints, { 'openai-completions': 'https://chat.example/v1', 'anthropic-messages': 'https://messages.example' })
+  assert.deepEqual(endpointsSaved.endpoints, {
+    'openai-completions': 'https://chat.example/v1',
+    'anthropic-messages': 'https://messages.example',
+  })
   assert.ok(endpointsSaved.models.every((model: any) => model.api === 'anthropic-messages'))
   await endpointPanel.getByRole('button', { name: '添加端点', exact: true }).click()
   await endpointPanel.getByRole('button', { name: '新端点协议', exact: true }).click()
   await endpointPage.getByRole('option', { name: 'Embeddings', exact: true }).click()
-  await endpointPanel.getByRole('textbox', { name: '新端点 API 地址', exact: true }).fill('https://vectors.example/v1')
+  await endpointPanel
+    .getByRole('textbox', { name: '新端点 API 地址', exact: true })
+    .fill('https://vectors.example/v1')
   await endpointPage.getByRole('button', { name: '关闭供应商设置', exact: true }).click()
   await endpointPage.getByRole('button', { name: '继续编辑', exact: true }).click()
-  await expect(endpointPanel.getByRole('textbox', { name: '新端点 API 地址', exact: true })).toHaveValue('https://vectors.example/v1')
+  await expect(
+    endpointPanel.getByRole('textbox', { name: '新端点 API 地址', exact: true }),
+  ).toHaveValue('https://vectors.example/v1')
   await endpointPanel.getByRole('button', { name: '添加', exact: true }).click()
-  await expect(endpointPanel.getByRole('textbox', { name: 'Embeddings API 地址', exact: true })).toHaveValue('https://vectors.example/v1')
+  await expect(
+    endpointPanel.getByRole('textbox', { name: 'Embeddings API 地址', exact: true }),
+  ).toHaveValue('https://vectors.example/v1')
   await endpointPanel.getByRole('button', { name: '保存配置', exact: true }).click()
-  assert.equal(await endpointPage.evaluate(() => (window as any).__providers.mixed.config.endpoints['openai-embeddings']), 'https://vectors.example/v1')
+  assert.equal(
+    await endpointPage.evaluate(
+      () => (window as any).__providers.mixed.config.endpoints['openai-embeddings'],
+    ),
+    'https://vectors.example/v1',
+  )
   await endpointPage.close()
   const builtinPage = await mount('/providers?provider=google&controller=1', false)
   await builtinPage.getByRole('button', { name: '编辑模型 native', exact: true }).click()
@@ -670,11 +787,21 @@ try {
   await builtinDialog.getByLabel('分组名称', { exact: true }).fill('常用')
   await builtinDialog.getByRole('button', { name: '高级设置', exact: true }).click()
   await expect(builtinDialog.getByText('模型 API 协议', { exact: true })).toHaveCount(0)
-  await builtinDialog.getByRole('spinbutton', { name: '最大输入 Token', exact: true }).fill('100000')
+  await builtinDialog
+    .getByRole('spinbutton', { name: '最大输入 Token', exact: true })
+    .fill('100000')
   await builtinDialog.getByRole('button', { name: '保存模型', exact: true }).click()
   assert.deepEqual(
     await builtinPage.evaluate(() => (window as any).__providers.google.config.models),
-    [{ id: 'native', enabled: true, name: 'Renamed native', group: '常用', maxInputTokens: 100000 }],
+    [
+      {
+        id: 'native',
+        enabled: true,
+        name: 'Renamed native',
+        group: '常用',
+        maxInputTokens: 100000,
+      },
+    ],
   )
   await builtinPage.getByRole('button', { name: '添加模型', exact: true }).click()
   await builtinPage
@@ -712,18 +839,34 @@ try {
   await expect(builtinPanel).not.toContainText('当前提供商配置只读')
   await expect(builtinPanel).not.toContainText('Responses')
   await builtinPanel.getByRole('button', { name: '高级与网络设置', exact: true }).click()
-  await builtinPanel.getByRole('textbox', { name: '允许模型（逗号分隔，留空表示全部）', exact: true }).fill('native, private-model')
+  await builtinPanel
+    .getByRole('textbox', { name: '允许模型（逗号分隔，留空表示全部）', exact: true })
+    .fill('native, private-model')
   await builtinPanel.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(builtinPanel.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
-  assert.deepEqual(await builtinPage.evaluate(() => (window as any).__providers.google.config.allowModels), ['native', 'private-model'])
-  assert.equal(await builtinPage.evaluate(() => (window as any).__providers.google.config.protocol), undefined)
+  assert.deepEqual(
+    await builtinPage.evaluate(() => (window as any).__providers.google.config.allowModels),
+    ['native', 'private-model'],
+  )
+  assert.equal(
+    await builtinPage.evaluate(() => (window as any).__providers.google.config.protocol),
+    undefined,
+  )
 
-  await builtinPanel.getByRole('textbox', { name: 'Chat Completions API 地址', exact: true }).fill('https://custom-compatible.example/v1')
+  await builtinPanel
+    .getByRole('textbox', { name: 'Chat Completions API 地址', exact: true })
+    .fill('https://custom-compatible.example/v1')
   await builtinPanel.getByRole('button', { name: '设为默认', exact: true }).click()
   await builtinPanel.getByRole('button', { name: '保存配置', exact: true }).click()
   await expect(builtinPanel.getByRole('button', { name: '保存配置', exact: true })).toBeDisabled()
-  assert.equal(await builtinPage.evaluate(() => (window as any).__providers.google.config.protocol), 'openai-completions')
-  assert.equal(await builtinPage.evaluate(() => (window as any).__providers.google.config.baseUrl), 'https://custom-compatible.example/v1')
+  assert.equal(
+    await builtinPage.evaluate(() => (window as any).__providers.google.config.protocol),
+    'openai-completions',
+  )
+  assert.equal(
+    await builtinPage.evaluate(() => (window as any).__providers.google.config.baseUrl),
+    'https://custom-compatible.example/v1',
+  )
   await builtinPage.close()
   const navigationPage = await mount('/providers?provider=mixed&controller=1', false)
   await navigationPage.getByRole('button', { name: '添加模型', exact: true }).click()
@@ -822,7 +965,9 @@ try {
     await layoutPage.addStyleTag({
       content: await layoutPage.evaluate(() => (window as any).__rendererCss),
     })
-    await layoutPage.getByRole('button', { name: '显示右侧边栏', exact: true }).evaluate((button) => (button as HTMLButtonElement).click())
+    await layoutPage
+      .getByRole('button', { name: '显示右侧边栏', exact: true })
+      .evaluate((button) => (button as HTMLButtonElement).click())
     await expect(layoutPage.getByRole('heading', { name: '供应商图标', exact: true })).toBeVisible()
     const iconGeometry = await layoutPage
       .locator('section[aria-label="供应商图标"]')
@@ -880,14 +1025,26 @@ try {
     const scrollDialog = layoutPage.getByRole('dialog', { name: '编辑模型', exact: true })
     await scrollDialog.getByRole('button', { name: '高级设置', exact: true }).click()
     for (const name of ['回退高级配置', '重置高级配置']) {
-      const buttonGeometry = await scrollDialog.getByRole('button', { name, exact: true }).evaluate((element) => ({ height: element.getBoundingClientRect().height, width: element.getBoundingClientRect().width, radius: getComputedStyle(element).borderRadius }))
+      const buttonGeometry = await scrollDialog
+        .getByRole('button', { name, exact: true })
+        .evaluate((element) => ({
+          height: element.getBoundingClientRect().height,
+          width: element.getBoundingClientRect().width,
+          radius: getComputedStyle(element).borderRadius,
+        }))
       assert.deepEqual(buttonGeometry, { height: 24, width: 24, radius: '10px' })
     }
 
     await scrollDialog.getByRole('button', { name: '协议参数', exact: true }).click()
     await scrollDialog.getByPlaceholder('X-Model-Specific: value').scrollIntoViewIfNeeded()
     await scrollDialog.getByText('API Compat (JSON)', { exact: true }).scrollIntoViewIfNeeded()
-    const scrolling = await scrollDialog.locator('.settings-management-dialog-body').evaluate((element) => ({ height: element.clientHeight, content: element.scrollHeight, top: element.scrollTop }))
+    const scrolling = await scrollDialog
+      .locator('.settings-management-dialog-body')
+      .evaluate((element) => ({
+        height: element.clientHeight,
+        content: element.scrollHeight,
+        top: element.scrollTop,
+      }))
     assert.ok(scrolling.content > scrolling.height && scrolling.top > 0, JSON.stringify(scrolling))
     await layoutPage.close()
   }

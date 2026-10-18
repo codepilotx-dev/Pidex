@@ -1046,12 +1046,43 @@ const fixtures = {
   'approval/rules/list': methodFixture(
     'approval/rules/list',
     { threadId: 'thread:1' },
-    { rules: [] },
+    {
+      rules: [
+        {
+          id: 'rule:1',
+          effect: 'ask',
+          scope: 'chat',
+          source: 'chat',
+          match: { kind: 'network', domain: 'example.com' },
+          editable: true,
+          version: '3',
+        },
+      ],
+    },
   ),
   'approval/rules/revoke': methodFixture(
     'approval/rules/revoke',
-    { threadId: 'thread:1', ruleId: 'rule:1' },
+    { threadId: 'thread:1', ruleId: 'rule:1', expectedVersion: '3' },
     { revoked: true },
+  ),
+  'approval/rules/upsert': methodFixture(
+    'approval/rules/upsert',
+    {
+      threadId: 'thread:1',
+      expectedVersion: '3',
+      rule: { effect: 'allow', scope: 'project', match: { kind: 'tool', tool: 'Bash' } },
+    },
+    {
+      rule: {
+        id: 'rule:2',
+        effect: 'allow',
+        scope: 'project',
+        source: 'project',
+        match: { kind: 'tool', tool: 'Bash' },
+        editable: true,
+        version: '4',
+      },
+    },
   ),
   'approval/reviewState': methodFixture(
     'approval/reviewState',
@@ -3406,6 +3437,60 @@ const fixtures = {
     },
     { models: customProviderDefinition.models },
   ),
+  'provider/model/sync': methodFixture(
+    'provider/model/sync',
+    { providerId },
+    {
+      providerId,
+      api: 'openai-completions',
+      fetchedAt: 2,
+      candidates: customProviderDefinition.models,
+      removedModelIds: [modelId],
+      baselineCreated: false,
+      totalFetched: customProviderDefinition.models.length + 1,
+      catalogVersion: 2,
+    },
+  ),
+  'provider/protocol/detect': methodFixture(
+    'provider/protocol/detect',
+    {
+      draft: {
+        baseUrl: 'https://example.test/v1',
+        endpoints: { 'openai-responses': 'https://example.test/v1' },
+        auth: 'api-key',
+        headers: { 'x-client-version': '0.1.0' },
+        apiKey: 'fixture-transient-key',
+      },
+      providerId,
+      model: modelId,
+      batch: false,
+    },
+    {
+      mode: 'single',
+      protocols: [
+        'openai-completions',
+        'openai-responses',
+        'anthropic-messages',
+        'google-generative-ai',
+      ],
+      models: [
+        {
+          model: modelId,
+          cells: [
+            { protocol: 'openai-completions', status: 'success', latencyMs: 12 },
+            {
+              protocol: 'openai-responses',
+              status: 'failed',
+              category: 'configuration',
+              message: 'HTTP 404',
+            },
+          ],
+        },
+      ],
+      totalModels: 1,
+      skippedModels: 0,
+    },
+  ),
   'provider/credential/list': methodFixture(
     'provider/credential/list',
     { providerId },
@@ -3715,6 +3800,36 @@ const fixtures = {
       projectId: project.id,
       branchName: 'main',
     },
+    {
+      project,
+      status: {
+        branchName: 'main',
+        upstream: 'origin/main',
+        ahead: 0,
+        behind: 0,
+        clean: true,
+        files: [],
+      },
+    },
+  ),
+  'git/fetch': methodFixture(
+    'git/fetch',
+    { projectId: project.id },
+    {
+      project,
+      status: {
+        branchName: 'main',
+        upstream: 'origin/main',
+        ahead: 1,
+        behind: 0,
+        clean: true,
+        files: [],
+      },
+    },
+  ),
+  'git/pull': methodFixture(
+    'git/pull',
+    { projectId: project.id },
     {
       project,
       status: {
@@ -6095,6 +6210,28 @@ describe('RPC method schema contracts', () => {
     ).toThrow()
   })
 
+  test('Git 同步方法使用独立能力且只接受项目标识', () => {
+    expect(Capabilities).toContain('git.sync.v1')
+    for (const method of ['git/fetch', 'git/pull'] as const) {
+      expect(RpcMethods[method]).toMatchObject({
+        capability: 'git.sync.v1',
+        mutation: true,
+        exactParams: true,
+        exactResult: true,
+      })
+      const decode = Schema.decodeUnknownSync(RpcMethods[method].params, {
+        onExcessProperty: 'error',
+      })
+      expect(decode(fixtures[method].params)).toEqual(fixtures[method].params)
+      expect(() =>
+        decode({ projectId: project.id, workspacePath: 'F:\\private-workspace' }),
+      ).toThrow()
+      expect(Schema.decodeUnknownSync(RpcMethods[method].result)(fixtures[method].result)).toEqual(
+        fixtures[method].result,
+      )
+    }
+  })
+
   test('批量 Review Diff 使用独立的向后兼容能力', () => {
     expect(RpcMethods['review/file-diffs'].capability).toBe('git.review.batch.v1')
     expect(Capabilities).toContain('git.review.batch.v1')
@@ -6148,7 +6285,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(344)
+    expect(methods).toHaveLength(349)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6516,7 +6653,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(323)
+    expect(Object.keys(RpcMethods)).toHaveLength(328)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })

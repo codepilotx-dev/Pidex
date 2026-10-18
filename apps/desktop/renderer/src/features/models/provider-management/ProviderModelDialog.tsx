@@ -9,6 +9,7 @@ import { useDialogFocusRestore } from '../../../components/ui/UseDialogFocusRest
 import { fullErrorMessage } from '../../../utils/Errors.js'
 import { editableModel, ModelEditor, normalizeEditableModel } from './ProviderEditorForm.js'
 import { ProviderEditorNavigationGuard } from './ProviderEditorNavigationGuard.js'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../../settings/SettingsManagementDialogSizing.js'
 
 export function ProviderModelDialog({
   model,
@@ -75,7 +76,7 @@ export function ProviderModelDialog({
           <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
           <Dialog.Content
             onCloseAutoFocus={onCloseAutoFocus}
-            className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:w-[min(680px,calc(100vw_-_32px))] tw:max-h-[85vh] tw:flex tw:flex-col tw:overflow-hidden"
+            className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:flex-col tw:overflow-hidden ${SETTINGS_MANAGEMENT_DIALOG_SIZE.providerModels}`}
           >
             <header className="settings-management-dialog-header tw:shrink-0">
               <div className="settings-management-dialog-heading">

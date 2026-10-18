@@ -45,6 +45,8 @@ import { ExecutionLogObserver, HarnessLogObserver } from './observability/Execut
 import { normalizeShellSecurityLevel } from './security/ShellRiskClassifier'
 import { ApiKeyService } from './provider/ApiKeyService'
 import { ModelHealthService } from './provider/ModelHealthService'
+import { ModelSyncService } from './provider/ModelSyncService'
+import { ProtocolDetectionService } from './provider/ProtocolDetectionService'
 import { ProviderCredentialService } from './provider/ProviderCredentialService'
 import { SubagentService } from './subagent/SubagentService'
 import { SubagentWorkspaceCoordinator } from './subagent/SubagentWorkspaceCoordinator'
@@ -488,8 +490,9 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const memoryManager = new MemoryManager({ logger })
     memoryManager.registerHook('sqlite', () => db.shrinkMemory())
     memoryManager.registerHook('git_review', () => review.shrink())
-    const git = new GitWorkspaceService(db)
+    const git = new GitWorkspaceService(db, undefined, github)
     const piModels = new PiModelService(providerCredentialStore, {
+      logger,
       ...(options.models ? { models: options.models } : {}),
       modelsStore: new PiModelsFileStore(config.piModelCachePath),
       recommendations: new ModelRecommendationStore(
@@ -510,6 +513,8 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const modelHealth = new ModelHealthService(piModels, async (payload) => {
       await publishAgentEvent(db, hub, null, null, 'model/health/updated', payload)
     })
+    const modelSync = new ModelSyncService(piModels, configService)
+    const protocolDetection = new ProtocolDetectionService(piModels)
     const apiKeys = new ApiKeyService(piModels, providerCredentialStore, modelHealth)
     const providerCredentials = new ProviderCredentialService(piModels, providerCredentialStore)
     const anthropicUsageModels = builtinModels({
@@ -704,6 +709,9 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       resolveShellSecurityLevel: () =>
         normalizeShellSecurityLevel(configService.snapshot().shell_security_level),
       authorizeShell: (invocation, signal) => approvals.authorize(invocation, signal),
+      resolvePermissionRules: (invocation) => approvals.rules.evaluate(invocation),
+      settleTurn: (threadID, turnID) => guardianScores.endTurn(threadID, turnID),
+      onPermissionDenied: (invocation) => guardianScores.invalidateAction(invocation),
       observeToolStart: (invocation) => guardianScores.observe(invocation),
       recordToolCall: (invocation, status, output, error, startedAt) =>
         hostTurnInputs.has(invocation.turnID)
@@ -1322,6 +1330,8 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       piModels,
       apiKeys,
       modelHealth,
+      modelSync,
+      protocolDetection,
       providerCredentials,
       providerCredentialStore,
       authSessions,
@@ -1368,7 +1378,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     })
     const initialCatalogRevision = providers.catalogRevision?.() ?? 0
     void providers
-      .refresh(false)
+      .reload()
       .catch(() => undefined)
       .then(async () => {
         const nextCatalogRevision = providers.catalogRevision?.() ?? 0

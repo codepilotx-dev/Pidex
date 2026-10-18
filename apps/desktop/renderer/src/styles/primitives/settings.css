@@ -11,7 +11,9 @@
  *   (`.provider-editor-field` / `.provider-editor-switch-card`) from the
  *   features layer. Keeping the shared geometry in one place preserves the
  *   original cascade for every consumer instead of baking values into only
- *   some of them.
+ *   some of them. Dialog width and max-height are the exception: they are
+ *   utilities owned by `features/settings/SettingsManagementDialogSizing.ts`,
+ *   so this file must not reintroduce a default size.
  * - The `.settings-row` sibling dividers and the card/appearance padding
  *   overrides: `+`-sibling `::before` hairlines and subtree overrides that must
  *   reach every descendant row regardless of the class each row carries.
@@ -228,22 +230,10 @@
 
   .settings-management-dialog {
     display: flex;
-    width: min(44rem, calc(100vw - var(--cpx-sys-space-8)));
-    max-height: min(48rem, calc(100vh - var(--cpx-sys-space-8)));
     min-width: 0;
     flex-direction: column;
     overflow: hidden;
     color: var(--cpx-sys-color-fg-primary);
-  }
-
-  .settings-management-dialog[data-dialog-size='detail'] {
-    width: min(36rem, calc(100vw - var(--cpx-sys-space-8)));
-    max-height: min(42rem, calc(100vh - var(--cpx-sys-space-8)));
-  }
-
-  .settings-management-dialog[data-dialog-size='credential'] {
-    width: min(32rem, calc(100vw - var(--cpx-sys-space-8)));
-    max-height: min(45rem, calc(100vh - var(--cpx-sys-space-8)));
   }
 
   .settings-management-dialog-header {

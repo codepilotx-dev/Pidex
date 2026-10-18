@@ -21,6 +21,7 @@ import {
 import type { CatalogProvider, ModelRef, Project } from '@pidex/shared'
 import type {
   PermissionConfig,
+  PermissionRule,
   SubagentProjection,
   ThreadListItem,
   ThreadSettings,
@@ -80,6 +81,7 @@ import type {
   DesktopSubagentRead,
   DesktopUpdateStatus,
   DesktopUserMessageInput,
+  DesktopProviderModelDefinition,
   DesktopWorkspace,
   ModelProviderID,
 } from '../../../shared/Types.js'
@@ -124,7 +126,7 @@ import type {
   DesktopSpeechStatus,
 } from './Types.js'
 
-const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v6'
+const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v8'
 
 const BROWSER_UNAVAILABLE_SPEECH_STATUS = {
   state: 'unsupported',
@@ -185,6 +187,8 @@ export function createBrowserMockDesktopClient(
   let githubLoginMode: DesktopGithubAuthMode = 'browser'
   const sessions = new Map<string, DesktopSessionSnapshot>()
   const sideChatSessionIds = new Set<string>()
+  const approvalRules = new Map<string, PermissionRule[]>()
+  let mockApprovalRuleVersion = 1
   let activeSessionId: string | null = null
   const sessionStoreListeners = new Set<(change: DesktopSessionStoreChange) => void>()
   const settingsListeners = new Set<(change: DesktopSettingsChange) => void>()
@@ -377,6 +381,15 @@ export function createBrowserMockDesktopClient(
     activeSessionId = performanceFixture.activeSessionId
   }
 
+  // Provider 模型同步 mock 的进程内基线：首次调用建基线，之后模拟上游下架。
+  const mockProviderSyncCounts = new Map<string, number>()
+  const mockProtocols = [
+    'openai-completions',
+    'openai-responses',
+    'anthropic-messages',
+    'google-generative-ai',
+  ] as const
+
   return {
     getSpeechStatus: async () => BROWSER_UNAVAILABLE_SPEECH_STATUS,
     installSpeech: async () => BROWSER_UNAVAILABLE_SPEECH_STATUS,
@@ -411,8 +424,43 @@ export function createBrowserMockDesktopClient(
     pauseQuestion: async () => {},
     approvalReviewState: async () => ({ manualAllows: 0, denials: [], reviews: [] }),
     retryApproval: async () => {},
-    listApprovalRules: async () => ({ rules: [] }),
-    revokeApprovalRule: async () => {},
+    listApprovalRules: async (threadId) => ({
+      rules: [...(approvalRules.get(threadId) ?? [])],
+    }),
+    upsertApprovalRule: async ({ threadId, expectedVersion, rule }) => {
+      const current = approvalRules.get(threadId) ?? []
+      const existing = rule.id ? current.find((entry) => entry.id === rule.id) : undefined
+      if (rule.id && !existing) throw new Error('CONFLICT: 规则已被删除，请刷新后重试')
+      if (expectedVersion && existing?.version && expectedVersion !== existing.version)
+        throw new Error('CONFLICT: 规则版本已变化，请刷新后重试')
+      const id = rule.id ?? `mock-permission-rule-${mockApprovalRuleVersion}`
+      const next: PermissionRule = {
+        id,
+        effect: rule.effect,
+        scope: rule.scope,
+        source: rule.scope,
+        match: rule.match,
+        editable: true,
+        version: String(mockApprovalRuleVersion++),
+      }
+      approvalRules.set(
+        threadId,
+        existing ? current.map((entry) => (entry.id === id ? next : entry)) : [next, ...current],
+      )
+      return { rule: next }
+    },
+    revokeApprovalRule: async (threadId, ruleId, expectedVersion) => {
+      const current = approvalRules.get(threadId) ?? []
+      const existing = current.find((entry) => entry.id === ruleId)
+      if (!existing) return { revoked: false }
+      if (expectedVersion && existing.version && expectedVersion !== existing.version)
+        throw new Error('CONFLICT: 规则版本已变化，请刷新后重试')
+      approvalRules.set(
+        threadId,
+        current.filter((entry) => entry.id !== ruleId),
+      )
+      return { revoked: true }
+    },
     listAutomations: async () => ({ automations: [] }),
     listAutomationRuns: async () => ({ runs: [] }),
     readAutomation: async () => {
@@ -879,6 +927,91 @@ export function createBrowserMockDesktopClient(
           id: 'mock-model',
         }) as Extract<RpcResult<'provider/test'>, { status: 'reachable' }>['model'],
       }) as RpcResult<'provider/test'>,
+    // 首次同步只建基线并返回候选；第二次模拟上游下架，便于验证移除提示。
+    syncProviderModels: async (providerId) => {
+      const previousSyncCount = mockProviderSyncCounts.get(providerId) ?? 0
+      mockProviderSyncCounts.set(providerId, previousSyncCount + 1)
+      const baselineCreated = previousSyncCount === 0
+      return {
+        providerId: providerId as RpcParams<'provider/model/sync'>['providerId'],
+        api: 'openai-completions',
+        fetchedAt: Date.now(),
+        candidates: (baselineCreated
+          ? [
+              {
+                id: 'mock-sync-model',
+                name: 'Mock Sync Model',
+                api: 'openai-completions',
+                enabled: false,
+              },
+              { id: 'mock-sync-model-2', api: 'openai-completions', enabled: false },
+            ]
+          : []) as unknown as RpcResult<'provider/model/sync'>['candidates'],
+        removedModelIds: (baselineCreated
+          ? []
+          : [
+              'mock-sync-model-retired',
+            ]) as unknown as RpcResult<'provider/model/sync'>['removedModelIds'],
+        baselineCreated,
+        totalFetched: baselineCreated ? 2 : 1,
+        catalogVersion: previousSyncCount + 1,
+      }
+    },
+    // 固定四协议矩阵：首个协议成功，其余按认证/超时/未知失败，单模型与批量共用。
+    detectProviderProtocols: async (params) => {
+      const mode = params.batch ? 'batch' : 'single'
+      const models =
+        mode === 'batch'
+          ? ['mock-sync-model', 'mock-sync-model-2']
+          : [params.model ?? 'mock-sync-model']
+      return {
+        mode,
+        protocols: [...mockProtocols],
+        models: models.map((model, modelIndex) => ({
+          model,
+          cells: mockProtocols.map((protocol, protocolIndex) =>
+            protocolIndex === 0
+              ? { protocol, status: 'success', latencyMs: 24 + modelIndex * 4 }
+              : {
+                  protocol,
+                  status: 'failed',
+                  category:
+                    protocolIndex === 1
+                      ? 'authentication'
+                      : protocolIndex === 2
+                        ? 'timeout'
+                        : 'unknown',
+                  message: `${protocol} 在浏览器 mock 模式下不可用。`,
+                },
+          ),
+        })),
+        totalModels: models.length,
+        skippedModels: mode === 'batch' ? 1 : 0,
+      } as unknown as RpcResult<'provider/protocol/detect'>
+    },
+    // 草稿探测不访问网络：模型 id 或地址含特定关键字时模拟不可达。
+    testProviderDraft: async (input) => {
+      const providerId = (input.providerId ?? 'draft') as Extract<
+        RpcResult<'provider/test'>,
+        { status: 'reachable' }
+      >['providerId']
+      const testedAt = Date.now()
+      const model = {
+        providerID: providerId,
+        id: input.modelId,
+      } as Extract<RpcResult<'provider/test'>, { status: 'reachable' }>['model']
+      if (input.modelId.includes('unavailable') || input.draft.baseUrl.includes('unreachable')) {
+        return {
+          providerId,
+          model,
+          status: 'unavailable',
+          testedAt,
+          category: 'configuration',
+          message: '浏览器 mock 模式模拟草稿模型不可达。',
+        }
+      }
+      return { providerId, model, status: 'reachable', testedAt, latencyMs: 18 }
+    },
     previewModelHealth: async () => ({
       totalRequests: 0,
       excludedProviders: [],
@@ -923,7 +1056,11 @@ export function createBrowserMockDesktopClient(
     createProvider: async () => undefined,
     updateProvider: async () => undefined,
     deleteProvider: async () => undefined,
-    discoverProviderModels: async () => [],
+    discoverProviderModels: async (input) =>
+      [
+        { id: 'mock-sync-model', name: 'Mock Sync Model', api: input.api, enabled: false },
+        { id: 'mock-sync-model-2', api: input.api, enabled: false },
+      ] as unknown as DesktopProviderModelDefinition[],
     startAuthSession: async (target) =>
       ({
         id: crypto.randomUUID(),
@@ -1048,6 +1185,14 @@ export function createBrowserMockDesktopClient(
       branchName,
     }),
     getWorkspaceGitStatus: async () => ({ ok: true, status: cleanGitStatus() }),
+    fetchWorkspaceRepository: async () => ({
+      ok: false,
+      error: '浏览器 mock 模式不会执行 Fetch。',
+    }),
+    pullWorkspaceRepository: async () => ({
+      ok: false,
+      error: '浏览器 mock 模式不会执行 Pull。',
+    }),
     createWorkspaceBranch: async (input) => ({
       ok: true,
       workspace: {
@@ -1158,22 +1303,15 @@ export function createBrowserMockDesktopClient(
     applyNewDesignTheme: async () => {
       themeSettings = normalizeDesktopThemeSettings({
         ...themeSettings,
+        fonts: { ...DEFAULT_DESKTOP_THEME_SETTINGS.fonts },
         chromeThemes: {
           light: {
             ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.light,
-            fonts: {
-              ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.light.fonts,
-              code: themeSettings.chromeThemes.light.fonts.code,
-              codeFace: themeSettings.chromeThemes.light.fonts.codeFace,
-            },
+            fonts: { ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.light.fonts },
           },
           dark: {
             ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.dark,
-            fonts: {
-              ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.dark.fonts,
-              code: themeSettings.chromeThemes.dark.fonts.code,
-              codeFace: themeSettings.chromeThemes.dark.fonts.codeFace,
-            },
+            fonts: { ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.dark.fonts },
           },
         },
         fontSizes: {

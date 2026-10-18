@@ -2,7 +2,16 @@ import { Model, Provider } from '@pidex/model-schema'
 import type { Api, Model as PiModel } from '@earendil-works/pi-ai'
 import { Schema } from 'effect'
 import { AgentError } from '../Domain'
+import { PiTransientProbe } from './PiTransientProbe'
 import type { PiModelService } from './pi'
+import type { CustomProviderApi } from './pi/PiProviderConfig'
+import {
+  hasAuthorizationHeader,
+  normalizeProtocolBaseUrl,
+  resolveTransientProbeApiKey,
+  validateDraftHeaders,
+  type ProviderRequestDraftLike,
+} from './ProviderProtocolUrl'
 
 const modelRef = Schema.decodeUnknownSync(Model.Ref)
 
@@ -73,9 +82,9 @@ export type ModelHealthUpdatedPayload = {
   completedAt?: number
 }
 
-type ProbeResult =
-  | { ok: true; latencyMs: number }
-  | { ok: false; category: ModelHealthFailureCategory; message: string }
+export type ProbeResult =
+  | { ok: true; latencyMs: number; api?: string }
+  | { ok: false; category: ModelHealthFailureCategory; message: string; api?: string }
 
 type HealthUpdatedHandler = (payload: ModelHealthUpdatedPayload) => void | Promise<void>
 
@@ -250,6 +259,7 @@ export class ModelHealthService {
   constructor(
     private readonly piModels: PiModelService,
     private readonly onUpdated: HealthUpdatedHandler,
+    private readonly transientProbe: PiTransientProbe = new PiTransientProbe(),
   ) {}
 
   async preview(): Promise<{
@@ -677,14 +687,22 @@ export class ModelHealthService {
     if (opts.signal?.aborted) {
       return { ok: false, category: 'timeout', message: '模型测试已取消' }
     }
+    const api = piModel.api as string
     const startedAt = performance.now()
     try {
       const modelType = (piModel as typeof piModel & { modelType?: string }).modelType
       if (modelType === 'embedding' || modelType === 'rerank') {
-        const options = { ...(opts.explicitApiKey ? { apiKey: opts.explicitApiKey } : {}), signal: AbortSignal.any([AbortSignal.timeout(15000), ...(opts.signal ? [opts.signal] : [])]) }
-        if (modelType === 'embedding') await this.piModels.embed(ref, ['health check'], undefined, options)
+        const options = {
+          ...(opts.explicitApiKey ? { apiKey: opts.explicitApiKey } : {}),
+          signal: AbortSignal.any([
+            AbortSignal.timeout(15000),
+            ...(opts.signal ? [opts.signal] : []),
+          ]),
+        }
+        if (modelType === 'embedding')
+          await this.piModels.embed(ref, ['health check'], undefined, options)
         else await this.piModels.rerank(ref, 'health check', ['health check'], 1, options)
-        return { ok: true, latencyMs: Math.max(0, Math.round(performance.now() - startedAt)) }
+        return { ok: true, latencyMs: Math.max(0, Math.round(performance.now() - startedAt)), api }
       }
       const response = await this.piModels.pi.completeSimple(
         piModel,
@@ -710,13 +728,76 @@ export class ModelHealthService {
       if (response.stopReason === 'error' || response.stopReason === 'aborted') {
         throw new Error(response.errorMessage ?? '模型的响应异常')
       }
-      return { ok: true, latencyMs: Math.max(0, Math.round(performance.now() - startedAt)) }
+      return { ok: true, latencyMs: Math.max(0, Math.round(performance.now() - startedAt)), api }
     } catch (cause) {
       if (opts.signal?.aborted) {
-        return { ok: false, category: 'timeout', message: '模型测试已取消' }
+        return { ok: false, category: 'timeout', message: '模型测试已取消', api }
       }
       const category = providerFailureCategory(cause)
-      return { ok: false, category, message: providerFailureMessage(category, 'health-check') }
+      return {
+        ok: false,
+        category,
+        message: providerFailureMessage(category, 'health-check'),
+        api,
+      }
+    }
+  }
+
+  /**
+   * Executes one minimal request for an unsaved provider draft and protocol.
+   * Reuses the transient probe (ephemeral Pi model, no catalog registration and
+   * no config write) and the existing failure classification. The draft apiKey
+   * is a transient request input; an explicit apiKey overrides it per call.
+   */
+  async probeDraft(
+    protocol: CustomProviderApi,
+    modelId: string,
+    draft: ProviderRequestDraftLike,
+    explicitApiKey?: string,
+  ): Promise<ProbeResult> {
+    let baseUrl: string
+    let headers: Readonly<Record<string, string>>
+    try {
+      headers = validateDraftHeaders(draft.headers)
+      baseUrl = normalizeProtocolBaseUrl(
+        protocol,
+        draft.endpoints?.[protocol] ?? draft.baseUrl,
+        draft.allowInsecureHttp === true,
+      )
+    } catch {
+      return {
+        ok: false,
+        category: 'configuration',
+        message: providerFailureMessage('configuration', 'health-check'),
+        api: protocol,
+      }
+    }
+    const apiKey = resolveTransientProbeApiKey(draft, headers, explicitApiKey)
+    if (!apiKey && !hasAuthorizationHeader(headers)) {
+      return {
+        ok: false,
+        category: 'configuration',
+        message: providerFailureMessage('configuration', 'health-check'),
+        api: protocol,
+      }
+    }
+    const result = await this.transientProbe.probe(
+      {
+        protocol,
+        modelId,
+        baseUrl,
+        headers,
+        ...(apiKey ? { apiKey } : {}),
+      },
+      { timeoutMs: 15_000 },
+    )
+    if (result.ok) return { ok: true, latencyMs: result.latencyMs, api: protocol }
+    const category = providerFailureCategory(result.cause)
+    return {
+      ok: false,
+      category,
+      message: providerFailureMessage(category, 'health-check'),
+      api: protocol,
     }
   }
 }

@@ -123,7 +123,8 @@ describe('provider management store', () => {
   test('manual refresh forces the catalog before reloading page data without querying usage', async () => {
     const calls: string[] = []
     const client = createClient({
-      refreshModelProviders: async () => {
+      refreshModelProviders: async (providerId) => {
+        expect(providerId).toBe('google')
         calls.push('refresh-models')
       },
       listModelProviders: async () => {
@@ -154,7 +155,7 @@ describe('provider management store', () => {
     })
     const store = createProviderManagementStore(client)
 
-    await store.refreshAllProviderData()
+    await store.refreshAllProviderData('google')
 
     expect(calls).toEqual(['refresh-models', 'providers', 'state', 'credentials', 'sources'])
     expect(store.getSnapshot().loading).toBe(false)

@@ -847,6 +847,10 @@ export type DesktopBuiltinProviderDefinition = Extract<
 >
 export type DesktopCustomProviderDefinition = RpcParams<'provider/create'>['definition']
 export type DesktopProviderModelDefinition = DesktopCustomProviderDefinition['models'][number]
+/** 未保存的 Provider 请求草稿；`apiKey` 只用于单次请求，不落盘、不进事件。 */
+export type DesktopProviderDraft = NonNullable<RpcParams<'provider/model/discover'>['draft']>
+/** 可发起模型列表读取与最小生成探测的四类 wire 协议。 */
+export type DesktopProviderChatApi = RpcParams<'provider/model/discover'>['api']
 export type DesktopProviderCredential = RpcResult<'provider/credential/list'>['credentials'][number]
 export type DesktopAuthTarget = RpcParams<'auth/session/start'>['target']
 export type DesktopAuthSession = RpcResult<'auth/session/status'>['session']
@@ -1142,6 +1146,7 @@ export type {
   DesktopSystemFontFace,
   DesktopSystemFontsResult,
   DesktopThemeFontFace,
+  DesktopThemeFonts,
   DesktopThemeMode,
   DesktopThemeVariant,
 } from '@pidex/shared/desktop-theme'
@@ -1149,6 +1154,7 @@ import type {
   DesktopChromeTheme,
   DesktopThemeSettingsV6 as SharedDesktopThemeSettingsV6,
   DesktopThemeSettingsV7 as SharedDesktopThemeSettingsV7,
+  DesktopThemeSettingsV8 as SharedDesktopThemeSettingsV8,
   DesktopThemeVariant,
 } from '@pidex/shared/desktop-theme'
 
@@ -1162,7 +1168,9 @@ export type DesktopThemeSettingsV6 = SharedDesktopThemeSettingsV6<HighlightTheme
 
 export type DesktopThemeSettingsV7 = SharedDesktopThemeSettingsV7<HighlightThemeSlug>
 
-export type DesktopThemeSettings = DesktopThemeSettingsV7
+export type DesktopThemeSettingsV8 = SharedDesktopThemeSettingsV8<HighlightThemeSlug>
+
+export type DesktopThemeSettings = DesktopThemeSettingsV8
 
 export type DesktopPermissionGrantScope = 'tool-call' | 'turn' | 'session'
 
@@ -1718,7 +1726,14 @@ export type DesktopApi = {
   approvalReviewState(threadId: string): Promise<RpcResult<'approval/reviewState'>>
   retryApproval(threadId: string, reviewId: string): Promise<void>
   listApprovalRules(threadId: string): Promise<RpcResult<'approval/rules/list'>>
-  revokeApprovalRule(threadId: string, ruleId: string): Promise<void>
+  upsertApprovalRule(
+    params: RpcParams<'approval/rules/upsert'>,
+  ): Promise<RpcResult<'approval/rules/upsert'>>
+  revokeApprovalRule(
+    threadId: string,
+    ruleId: string,
+    expectedVersion?: string,
+  ): Promise<RpcResult<'approval/rules/revoke'>>
   writeConfigBatch(params: DesktopConfigBatchWriteParams): Promise<DesktopConfigWriteResult>
   listConfigProfiles(): Promise<DesktopConfigProfileListResult>
   selectConfigProfile(profileId: string | null): Promise<DesktopConfigProfileSelectResult>
@@ -1843,6 +1858,19 @@ export type DesktopApi = {
     providerID: ModelProviderID,
     model?: DesktopModelRef,
   ): Promise<RpcResult<'provider/test'>>
+  /** 立即同步上游模型列表；首次只建基线，之后返回下架/候选差异。 */
+  syncProviderModels(providerId: ModelProviderID): Promise<RpcResult<'provider/model/sync'>>
+  /** 对草稿地址逐协议（或批量模型）做最小生成探测，不落盘。 */
+  detectProviderProtocols(
+    params: RpcParams<'provider/protocol/detect'>,
+  ): Promise<RpcResult<'provider/protocol/detect'>>
+  /** 用未保存草稿探测单个模型可达性；缺省用合成 providerID 构造 Model.Ref。 */
+  testProviderDraft(input: {
+    providerId?: ModelProviderID
+    modelId: string
+    api: DesktopProviderChatApi
+    draft: DesktopProviderDraft
+  }): Promise<RpcResult<'provider/test'>>
   previewModelHealth(): Promise<RpcResult<'model/health/preview'>>
   startModelHealth(operationId: string): Promise<RpcResult<'model/health/start'>>
   readModelHealth(runId: string): Promise<RpcResult<'model/health/read'>>
@@ -1857,10 +1885,12 @@ export type DesktopApi = {
     ): Promise<RpcResult<'model/recommendation/preview'>>
     refresh(): Promise<RpcResult<'model/recommendation/refresh'>>
   }
-  discoverProviderModels(
-    providerId: ModelProviderID,
-    api: DesktopProviderModelDefinition['api'],
-  ): Promise<DesktopProviderModelDefinition[]>
+  /** 读取上游模型列表；提供 draft 时用于保存前获取，不访问已保存配置。 */
+  discoverProviderModels(input: {
+    providerId?: ModelProviderID
+    api: DesktopProviderChatApi
+    draft?: DesktopProviderDraft
+  }): Promise<DesktopProviderModelDefinition[]>
   startAuthSession(target: DesktopAuthTarget): Promise<DesktopAuthSession>
   respondAuthSession(
     sessionId: string,
@@ -1940,7 +1970,19 @@ export type DesktopApi = {
     branchName: string,
     projectId?: string,
   ): Promise<DesktopWorkspace>
-  getWorkspaceGitStatus(workspacePath: string, projectId?: string): Promise<DesktopGitStatusResult>
+  getWorkspaceGitStatus(
+    workspacePath: string,
+    projectId?: string,
+    options?: { refresh?: boolean },
+  ): Promise<DesktopGitStatusResult>
+  fetchWorkspaceRepository(
+    workspacePath: string,
+    projectId?: string,
+  ): Promise<DesktopGitStatusResult>
+  pullWorkspaceRepository(
+    workspacePath: string,
+    projectId?: string,
+  ): Promise<DesktopGitStatusResult>
   createWorkspaceBranch(input: CreateBranchInput): Promise<DesktopGitWorkspaceResult>
   commitWorkspaceChanges(input: CommitChangesInput): Promise<DesktopGitOperationResult>
   pushWorkspaceBranch(input: PushBranchInput): Promise<DesktopGitOperationResult>

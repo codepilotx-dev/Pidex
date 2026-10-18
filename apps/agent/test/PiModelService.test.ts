@@ -1,15 +1,116 @@
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
 import { Model, type Credential } from '@pidex/model-schema'
 import { Effect } from 'effect'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { EncryptedCredentialRepository } from '../src/auth/EncryptedCredentialRepository'
+import { ModelRecommendationStore } from '../src/provider/pi/ModelRecommendationStore'
 import {
   EncryptedCredentialStore,
   PiModelService,
   type PiModelCatalogConfig,
 } from '../src/provider/pi'
+
+test('catalog refresh identifies failed providers without logging upstream secrets', async () => {
+  const logs: unknown[] = []
+  const service = new PiModelService(repository().adapter, {
+    logger: { warn: (event, fields) => { logs.push({ event, ...fields }) } },
+  })
+  const refresh = spyOn(service.pi, 'refresh').mockResolvedValue({
+    aborted: false,
+    errors: new Map([
+      ['openai', new Error('Model discovery failed with HTTP 401 private-secret')],
+      ['google', new Error('fetch failed private-secret')],
+      ['custom', new Error('Model discovery returned an invalid OpenAI catalog')],
+    ]),
+  })
+  try {
+    await expect(service.refresh(true, 'google')).rejects.toMatchObject({
+      refreshFailures: ['openai：凭据鉴权失败（HTTP 401）', 'google：网络连接失败', 'custom：模型列表响应格式无效'],
+    })
+    expect(logs).toHaveLength(3)
+    expect(JSON.stringify(logs)).not.toContain('private-secret')
+    expect(logs[0]).toMatchObject({ provider: 'openai', category: 'authentication' })
+  } finally {
+    refresh.mockRestore()
+    await service.dispose()
+  }
+})
+
+test('scoped catalog refresh never requests other providers and directory reload stays offline', async () => {
+  const service = new PiModelService(repository().adapter)
+  const refresh = spyOn(service.pi, 'refresh').mockImplementation(async (options) => ({
+    aborted: false,
+    errors: new Map(options?.providers?.includes('xiaomi-token-plan-cn')
+      ? [['xiaomi-token-plan-cn', new Error('Model discovery failed with HTTP 401')]]
+      : []),
+  }))
+  try {
+    await service.refresh(true, 'google')
+    expect(refresh).toHaveBeenLastCalledWith({ allowNetwork: true, force: true, providers: ['google'] })
+    await service.reload()
+    expect(refresh).toHaveBeenLastCalledWith({ allowNetwork: false })
+    await expect(service.refresh(true, 'missing-provider')).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(refresh).toHaveBeenCalledTimes(2)
+  } finally {
+    refresh.mockRestore()
+    await service.dispose()
+  }
+})
+
+test('directory refresh downloads models.dev without requesting provider models and preserves data on failure', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pidex-provider-directory-'))
+  const path = join(directory, 'catalog.json')
+  let failed = false
+  const requests: string[] = []
+  const recommendations = new ModelRecommendationStore(path, async (url, init) => {
+    requests.push(String(url))
+    expect(init?.headers).toBeUndefined()
+    if (failed) return Response.json({ invalid: true })
+    return Response.json({
+      models: { example: { name: 'Example' } },
+      providers: {
+        google: { name: 'Google updated', models: {} },
+        'directory-only': { name: 'New directory supplier', models: {} },
+        local: { name: 'Upstream local name', models: {} },
+      },
+    })
+  })
+  const config = { schemaVersion: 2, providers: { local: {
+    kind: 'custom', name: 'My supplier', enabled: true, auth: 'none',
+    base_url: 'https://local.example/v1', models: {},
+  } } }
+  const service = new PiModelService(repository().adapter, { config, recommendations })
+  // The service starts the recommendation timer; only the explicit refresh is under test.
+  recommendations.dispose()
+  const refresh = spyOn(service.pi, 'refresh').mockImplementation(async (options) => {
+    expect(options?.allowNetwork).toBe(false)
+    return { aborted: false, errors: new Map() }
+  })
+  try {
+    await service.refreshDirectory()
+    const providers = await service.list()
+    expect(providers.find((p) => p.id === 'google')?.name).toBe('Google updated')
+    expect(providers.find((p) => p.id === 'local')?.name).toBe('My supplier')
+    expect(providers.find((p) => p.id === 'directory-only')).toMatchObject({
+      name: 'New directory supplier',
+      availability: { status: 'unavailable', reason: 'unsupported-protocol' },
+    })
+    expect(service.pi.getProviders().some((p) => p.id === 'directory-only')).toBe(false)
+    expect((await new ModelRecommendationStore(path).providerDirectory()).some((p) => p.id === 'directory-only')).toBe(true)
+    failed = true
+    const revision = service.catalogRevision()
+    await expect(service.refreshDirectory()).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
+    expect(await service.list()).toEqual(providers)
+    expect(service.catalogRevision()).toBe(revision)
+    expect(requests.every((url) => url === 'https://models.dev/catalog.json?type=all')).toBe(true)
+  } finally {
+    refresh.mockRestore()
+    await service.dispose()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
 
 type Stored = {
   id: string
@@ -512,7 +613,7 @@ describe('PiModelService', () => {
       ).toBe(true)
 
       const initialRevision = service.catalogRevision()
-      await service.refresh(false)
+      await service.reload()
       expect(service.catalogRevision()).toBeGreaterThan(initialRevision)
 
       expect(await service.isAuthConfigured('custom-shadow')).toBe(true)

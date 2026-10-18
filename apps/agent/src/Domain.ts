@@ -199,6 +199,20 @@ export interface EventEnvelope<T = unknown> {
   createdAt: number
 }
 
+/** Host-resolved subjects used only by permission-rule matching. */
+export interface ToolRuleTargets {
+  /** Canonical absolute read targets, after symlink resolution and validation. */
+  readPaths?: readonly string[]
+  /** Canonical absolute write targets; multi-file patches list every path. */
+  writePaths?: readonly string[]
+  /** Exact raw shell command value. */
+  command?: string
+  /** Safe literal argv from the host parser; null when the command is complex. */
+  argv?: readonly string[] | null
+  /** Requested exact network hostnames. */
+  networkDomains?: readonly string[]
+}
+
 export interface ToolPermissionFacts {
   ruleRequiresApproval?: boolean
   hookRequiresApproval?: boolean
@@ -207,6 +221,21 @@ export interface ToolPermissionFacts {
   denyReason?: string
   approvalReason?: string
   approvalCategories?: readonly (keyof import('@pidex/shared/thread').GranularApprovalConfig)[]
+  /** Host rule facts loaded immediately before final permission evaluation. */
+  ruleEffect?: import('@pidex/shared/thread').PermissionRuleEffect
+  ruleIDs?: readonly string[]
+  /** Host-resolved rule match subjects; never derived from model arguments alone. */
+  ruleTargets?: ToolRuleTargets
+  /** True once the host evaluated the current rule catalog for this invocation. */
+  ruleFactsLoaded?: boolean
+  /** Approval the host always requires; allow rules and legacy grants cannot bypass it. */
+  forcedApproval?: boolean
+  /**
+   * Host-derived: the action can destroy state that no local checkout can
+   * restore (remote repositories, branches, releases, workspace-external
+   * targets). Promotes an otherwise ordinary command to a forced approval.
+   */
+  destructive?: boolean
 }
 
 export interface ToolInvocation {

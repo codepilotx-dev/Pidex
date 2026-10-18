@@ -23,6 +23,7 @@ import {
 import { SettingsDropdown } from '../SettingsDropdown.js'
 import { useLastNonNull } from '../../../hooks/UsePresenceRetention.js'
 import { errorMessageOf as rawErrorMessage } from '@pidex/shared/errors'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../SettingsManagementDialogSizing.js'
 
 type TransportType = DesktopMcpServerConfig['type']
 
@@ -305,7 +306,7 @@ export function McpEditorDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
         <Dialog.Content
-          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:max-h-[min(48rem,calc(100vh-3rem))] tw:w-[min(44rem,calc(100vw-3rem))] tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text"
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text ${SETTINGS_MANAGEMENT_DIALOG_SIZE.mcpEditor}`}
           onCloseAutoFocus={(event) => {
             if (!restoreFocusElement?.isConnected) return
             event.preventDefault()

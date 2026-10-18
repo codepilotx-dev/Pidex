@@ -15,6 +15,7 @@ import { SettingsDropdown } from '../settings/SettingsDropdown.js'
 import { useDialogFocusRestore } from '../../components/ui/UseDialogFocusRestore.js'
 import { useLastNonNull } from '../../hooks/UsePresenceRetention.js'
 import { cx } from '../../utils/Cx.js'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../settings/SettingsManagementDialogSizing.js'
 
 export type ApiKeyEditorValue = {
   providerId: ModelProviderID
@@ -262,8 +263,7 @@ export function ApiKeyEditorDialog({
         <Dialog.Content
           aria-describedby={descriptionId}
           aria-labelledby={titleId}
-          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog model-center-key-dialog tw:w-[min(520px,calc(100vw_-_48px))] tw:max-h-[min(720px,calc(100vh_-_48px))] tw:overflow-x-hidden"
-          data-dialog-size="credential"
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog model-center-key-dialog tw:overflow-x-hidden ${SETTINGS_MANAGEMENT_DIALOG_SIZE.credential}`}
           onCloseAutoFocus={onCloseAutoFocus}
         >
           <header className="settings-management-dialog-header model-center-key-dialog-header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:p-5">

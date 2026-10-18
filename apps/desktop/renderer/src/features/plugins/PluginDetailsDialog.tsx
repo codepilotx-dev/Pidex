@@ -6,6 +6,7 @@ import { Button } from '../../components/ui/Button.js'
 
 import { ScrollArea } from '../../components/ui/ScrollArea.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../settings/SettingsManagementDialogSizing.js'
 import type { PluginCatalogItem } from './PluginCatalog.js'
 import { PluginProductDetailsView } from './PluginProductDetailsView.js'
 import { usePluginDetails } from './UsePluginDetails.js'
@@ -73,10 +74,9 @@ export function PluginDetailsDialog({
           <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop plugin-details-dialog__backdrop tw:overflow-hidden tw:forced-colors:bg-[color:Canvas] tw:forced-colors:opacity-75" />
           <Dialog.Content
             className={cx(
-              'ui-dialog-surface ui-dialog-surface--centered settings-management-dialog plugin-details-dialog tw:grid tw:w-[min(56rem,calc(100vw_-_var(--cpx-sys-space-8)))] tw:max-h-[min(56rem,calc(100vh_-_var(--cpx-sys-space-8)))] tw:min-w-0 tw:overflow-hidden tw:grid-rows-[auto_minmax(0,1fr)_auto] tw:text-app-text',
+              `ui-dialog-surface ui-dialog-surface--centered settings-management-dialog plugin-details-dialog tw:grid tw:min-w-0 tw:overflow-hidden tw:grid-rows-[auto_minmax(0,1fr)_auto] tw:text-app-text ${SETTINGS_MANAGEMENT_DIALOG_SIZE.pluginDetails}`,
               FORCED_COLORS_SURFACE_CLASS,
             )}
-            data-dialog-size="detail"
             onCloseAutoFocus={(event) => {
               if (!restoreFocusElement?.isConnected) return
               event.preventDefault()

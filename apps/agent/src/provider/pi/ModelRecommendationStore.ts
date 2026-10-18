@@ -64,6 +64,11 @@ export class ModelRecommendationStore {
     }
   }
 
+  async providerDirectory() {
+    await this.load()
+    return this.index?.providers ?? []
+  }
+
   refresh() {
     return this.serial(async () => {
       await this.load(true)

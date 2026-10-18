@@ -15,6 +15,7 @@ import {
   skillScopeLabel,
 } from '../../plugins/BuiltinSkillPresentation.js'
 import { errorMessageOr as errorMessageOf } from '@pidex/shared/errors'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../SettingsManagementDialogSizing.js'
 
 type Props = {
   workspacePath: string | null
@@ -82,8 +83,7 @@ export function SkillDetailsDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
         <Dialog.Content
-          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:max-h-[min(42rem,calc(100vh-3rem))] tw:w-[min(48rem,calc(100vw-3rem))] tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text"
-          data-dialog-size="detail"
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text ${SETTINGS_MANAGEMENT_DIALOG_SIZE.skillDetails}`}
           onCloseAutoFocus={(event) => {
             if (!restoreFocusElement?.isConnected) return
             event.preventDefault()

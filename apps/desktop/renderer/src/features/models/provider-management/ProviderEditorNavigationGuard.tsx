@@ -2,6 +2,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { useBlocker } from 'react-router-dom'
 import { Button } from '../../../components/ui/Button.js'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../../settings/SettingsManagementDialogSizing.js'
 
 export function ProviderEditorNavigationGuard({
   dirty,
@@ -80,7 +81,9 @@ export function ProviderEditorNavigationGuard({
     >
       <Dialog.Portal>
         <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
-        <Dialog.Content className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:w-[min(480px,calc(100vw_-_32px))]">
+        <Dialog.Content
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog ${SETTINGS_MANAGEMENT_DIALOG_SIZE.navigationGuard}`}
+        >
           <header className="settings-management-dialog-header">
             <div className="settings-management-dialog-heading">
               <Dialog.Title>供应商有未保存修改</Dialog.Title>

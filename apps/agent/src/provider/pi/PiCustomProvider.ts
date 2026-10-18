@@ -17,7 +17,11 @@ const toPiModel = (
   providerID: string,
   provider: PiCustomProviderConfig,
   model: PiCustomModelConfig,
-): Model<Api> & { inputExplicit: boolean; modelType?: NonNullable<PiCustomModelConfig['modelType']>; tools?: boolean } => ({
+): Model<Api> & {
+  inputExplicit: boolean
+  modelType?: NonNullable<PiCustomModelConfig['modelType']>
+  tools?: boolean
+} => ({
   id: model.id,
   name: model.name,
   api: model.api,
@@ -45,8 +49,13 @@ export const createPiCustomProvider = (
     .filter((model) => model.enabled)
     .map((model) => toPiModel(providerID, config, model))
   const requiredApis = new Set(models.map((model) => model.api as CustomProviderApi))
+  // A fully delisted upstream may leave a custom provider with zero models.
+  // Pi still requires one stream implementation to register a provider, so a
+  // placeholder is used; it is never dispatched because no model references it.
   const api = Object.fromEntries(
-    [...requiredApis].map((id) => [id, streams[id]()] as const),
+    (requiredApis.size > 0 ? [...requiredApis] : ['openai-completions' as const]).map(
+      (id) => [id, streams[id]()] as const,
+    ),
   ) as Partial<Record<Api, ProviderStreams>>
   return createProvider({
     id: providerID,
@@ -129,10 +138,7 @@ export const discoverOpenAIModels = async (
     offset += chunk.byteLength
   }
   const document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown
-  if (
-    typeof document !== 'object' ||
-    document === null
-  ) {
+  if (typeof document !== 'object' || document === null) {
     throw new Error('Model discovery returned an invalid OpenAI catalog')
   }
   const codex = !('data' in document)

@@ -16,7 +16,11 @@ export const CUSTOM_PROVIDER_APIS = [
   'google-generative-ai',
 ] as const
 
-export const PROVIDER_ENDPOINT_APIS = [...CUSTOM_PROVIDER_APIS, 'openai-embeddings', 'jina-rerank'] as const
+export const PROVIDER_ENDPOINT_APIS = [
+  ...CUSTOM_PROVIDER_APIS,
+  'openai-embeddings',
+  'jina-rerank',
+] as const
 export type ProviderEndpointApi = (typeof PROVIDER_ENDPOINT_APIS)[number]
 
 export type CustomProviderApi = (typeof CUSTOM_PROVIDER_APIS)[number]
@@ -47,11 +51,17 @@ const extraBuiltinEndpoints: Readonly<Record<string, Readonly<Record<string, str
   minimax: { 'openai-completions': 'https://api.minimax.io/v1' },
   'minimax-cn': { 'openai-completions': 'https://api.minimax.cn/v1' },
 }
-const nativeBuiltinEndpoints = new Map(builtinProviders().map((provider) => [provider.id,
-  Object.fromEntries(provider.getModels().map((model) => [model.api, model.baseUrl || provider.baseUrl || ''])),
-]))
+const nativeBuiltinEndpoints = new Map(
+  builtinProviders().map((provider) => [
+    provider.id,
+    Object.fromEntries(
+      provider.getModels().map((model) => [model.api, model.baseUrl || provider.baseUrl || '']),
+    ),
+  ]),
+)
 export const builtinProviderEndpoints = (id: string): Readonly<Record<string, string>> => ({
-  ...nativeBuiltinEndpoints.get(id), ...extraBuiltinEndpoints[id],
+  ...nativeBuiltinEndpoints.get(id),
+  ...extraBuiltinEndpoints[id],
 })
 
 export interface PiBuiltinProviderConfig {
@@ -95,6 +105,13 @@ export interface PiCustomModelConfig {
   readonly compat?: OpenAICompletionsCompat | OpenAIResponsesCompat | AnthropicMessagesCompat
 }
 
+/** Persisted baseline of the last successful upstream model list. */
+export interface PiCustomModelSyncConfig {
+  readonly fetchedAt: number
+  readonly api: CustomProviderApi
+  readonly models: readonly string[]
+}
+
 export interface PiCustomProviderConfig {
   readonly kind: 'custom'
   readonly name: string
@@ -106,6 +123,11 @@ export interface PiCustomProviderConfig {
   readonly allowInsecureHttp: boolean
   readonly headers: Readonly<Record<string, string>>
   readonly models: Readonly<Record<string, PiCustomModelConfig>>
+  /**
+   * Last upstream list baseline; internal to the agent and never returned to
+   * clients. An invalid baseline is ignored instead of rejecting the provider.
+   */
+  readonly modelSync?: PiCustomModelSyncConfig
 }
 
 export type PiProviderConfig = PiBuiltinProviderConfig | PiCustomProviderConfig
@@ -166,6 +188,8 @@ export type PiProviderDefinitionInput =
         readonly api: CustomProviderApi
         readonly cost?: Partial<PiCustomModelConfig['cost']>
       })[]
+      /** Baseline recorded when the provider was created after a pre-save fetch. */
+      readonly modelSync?: PiCustomModelSyncConfig
     }
 
 export class PiProviderConfigValidationError extends Error {
@@ -311,6 +335,31 @@ const parseCompat = (value: unknown) => {
   return clone as OpenAICompletionsCompat | OpenAIResponsesCompat | AnthropicMessagesCompat
 }
 
+const MAX_MODEL_SYNC_MODELS = 1_000
+
+/**
+ * Parses the optional upstream baseline. A malformed baseline only loses the
+ * baseline; it must never make an otherwise valid custom provider unusable.
+ */
+const parseCustomModelSync = (value: unknown): PiCustomModelSyncConfig | undefined => {
+  if (!isObject(value)) return undefined
+  const fetchedAt = value.fetched_at ?? value.fetchedAt
+  if (typeof fetchedAt !== 'number' || !Number.isFinite(fetchedAt) || fetchedAt < 0)
+    return undefined
+  const api = value.api
+  if (typeof api !== 'string' || !(CUSTOM_PROVIDER_APIS as readonly string[]).includes(api)) {
+    return undefined
+  }
+  const models = value.models
+  if (!Array.isArray(models) || models.length === 0 || models.length > MAX_MODEL_SYNC_MODELS) {
+    return undefined
+  }
+  if (models.some((model) => typeof model !== 'string')) return undefined
+  const ids = [...new Set((models as string[]).map((model) => model.trim()).filter(Boolean))]
+  if (ids.length === 0 || ids.length > MAX_MODEL_SYNC_MODELS) return undefined
+  return { fetchedAt, api: api as CustomProviderApi, models: ids }
+}
+
 const parseCustomModel = (
   providerID: string,
   configuredID: string,
@@ -324,13 +373,20 @@ const parseCustomModel = (
   const id = typeof value.id === 'string' && value.id.trim() ? value.id : configuredID
   if (
     value.input !== undefined &&
-    (!Array.isArray(value.input) || value.input.some((item) => !['text', 'image', 'audio', 'video'].includes(item)))
+    (!Array.isArray(value.input) ||
+      value.input.some((item) => !['text', 'image', 'audio', 'video'].includes(item)))
   ) {
     throw new Error('Custom model input must contain text or image')
   }
-  if (value.modelType !== undefined && !['chat', 'embedding', 'rerank'].includes(String(value.modelType))) throw new Error('Unsupported model type')
-  if (value.tools !== undefined && typeof value.tools !== 'boolean') throw new Error('Invalid tools capability')
-  if (value.group !== undefined && (typeof value.group !== 'string' || value.group.length > 128)) throw new Error('Invalid model group')
+  if (
+    value.modelType !== undefined &&
+    !['chat', 'embedding', 'rerank'].includes(String(value.modelType))
+  )
+    throw new Error('Unsupported model type')
+  if (value.tools !== undefined && typeof value.tools !== 'boolean')
+    throw new Error('Invalid tools capability')
+  if (value.group !== undefined && (typeof value.group !== 'string' || value.group.length > 128))
+    throw new Error('Invalid model group')
   const input = strings(value.input) as readonly ('text' | 'image' | 'audio' | 'video')[]
   const cost = isObject(value.cost) ? value.cost : {}
   const thinkingLevelMap = parseThinkingLevelMap(value.thinking_level_map ?? value.thinkingLevelMap)
@@ -341,11 +397,14 @@ const parseCustomModel = (
     ...(typeof value.group === 'string' ? { group: value.group.trim() } : {}),
     name: typeof value.name === 'string' && value.name.trim() ? value.name : configuredID,
     enabled: bool(value.enabled, true),
-    ...(value.modelType !== undefined ? { modelType: value.modelType as NonNullable<PiCustomModelConfig['modelType']> } : {}),
+    ...(value.modelType !== undefined
+      ? { modelType: value.modelType as NonNullable<PiCustomModelConfig['modelType']> }
+      : {}),
     ...(value.tools !== undefined ? { tools: value.tools as boolean } : {}),
     contextWindow: positiveInteger(value.context_window ?? value.contextWindow, 32_768),
     ...((value.max_input_tokens ?? value.maxInputTokens) !== undefined
-      ? { maxInputTokens: positiveInteger(value.max_input_tokens ?? value.maxInputTokens, 32_768) } : {}),
+      ? { maxInputTokens: positiveInteger(value.max_input_tokens ?? value.maxInputTokens, 32_768) }
+      : {}),
     maxTokens: positiveInteger(value.max_tokens ?? value.maxTokens, 8_192),
     reasoning: bool(value.reasoning, false),
     input: input.length ? input : ['text'],
@@ -361,18 +420,37 @@ const parseCustomModel = (
   }
 }
 
-const parseEndpoints = (value: unknown, allowHttp: boolean, supported: readonly string[] = PROVIDER_ENDPOINT_APIS) => {
+const parseEndpoints = (
+  value: unknown,
+  allowHttp: boolean,
+  supported: readonly string[] = PROVIDER_ENDPOINT_APIS,
+) => {
   if (!isObject(value)) throw new Error('Provider endpoints must be an object')
-  return Object.fromEntries(Object.entries(value).map(([api, address]) => {
-    if (!supported.includes(api))
-      throw new Error('Unsupported provider endpoint protocol')
-    return [api, validateCustomProviderBaseUrl(address, allowHttp)]
-  })) as Partial<Record<ProviderEndpointApi, string>>
+  return Object.fromEntries(
+    Object.entries(value).map(([api, address]) => {
+      if (!supported.includes(api)) throw new Error('Unsupported provider endpoint protocol')
+      return [api, validateCustomProviderBaseUrl(address, allowHttp)]
+    }),
+  ) as Partial<Record<ProviderEndpointApi, string>>
 }
 
-const parseBuiltinProtocol = (providerID: string, value: unknown, endpoints: unknown): string | undefined => {
+const parseBuiltinProtocol = (
+  providerID: string,
+  value: unknown,
+  endpoints: unknown,
+): string | undefined => {
   if (value === undefined) return undefined
-  if (typeof value !== 'string' || !(value in builtinProviderEndpoints(providerID)) && !((CUSTOM_PROVIDER_APIS as readonly string[]).filter((api) => api !== 'google-generative-ai').includes(value) && isObject(endpoints) && typeof endpoints[value] === 'string'))
+  if (
+    typeof value !== 'string' ||
+    (!(value in builtinProviderEndpoints(providerID)) &&
+      !(
+        (CUSTOM_PROVIDER_APIS as readonly string[])
+          .filter((api) => api !== 'google-generative-ai')
+          .includes(value) &&
+        isObject(endpoints) &&
+        typeof endpoints[value] === 'string'
+      ))
+  )
     throw new Error('Builtin provider protocol is unsupported')
   return value
 }
@@ -389,7 +467,15 @@ const parseBuiltin = (providerID: string, value: Record<string, unknown>) => {
 
   return {
     kind: 'builtin' as const,
-    ...(value.endpoints !== undefined ? { endpoints: parseEndpoints(value.endpoints, bool(value.allow_insecure_http ?? value.allowInsecureHttp, false), [...Object.keys(builtinProviderEndpoints(providerID)), ...PROVIDER_ENDPOINT_APIS]) } : {}),
+    ...(value.endpoints !== undefined
+      ? {
+          endpoints: parseEndpoints(
+            value.endpoints,
+            bool(value.allow_insecure_http ?? value.allowInsecureHttp, false),
+            [...Object.keys(builtinProviderEndpoints(providerID)), ...PROVIDER_ENDPOINT_APIS],
+          ),
+        }
+      : {}),
     enabled: bool(value.enabled, !bool(value.disabled, false)),
     allowModels: strings(value.allow_models ?? value.allowModels),
     denyModels: strings(value.deny_models ?? value.denyModels),
@@ -482,17 +568,17 @@ const parseCustom = (
   const parsedModels = Object.fromEntries(
     Object.entries(models).map(([id, model]) => [id, parseCustomModel(providerID, id, model)]),
   )
-  if (Object.keys(parsedModels).length === 0) {
-    throw new Error('Custom provider must declare at least one model')
-  }
   const modelIDs = Object.values(parsedModels).map((model) => model.id)
   if (new Set(modelIDs).size !== modelIDs.length) {
     throw new Error('Custom provider model ids must be unique')
   }
   const auth = value.auth === 'none' ? 'none' : 'api-key'
+  const modelSync = parseCustomModelSync(value.model_sync ?? value.modelSync)
   return {
     kind: 'custom',
-    ...(value.endpoints !== undefined ? { endpoints: parseEndpoints(value.endpoints, allowInsecureHttp) } : {}),
+    ...(value.endpoints !== undefined
+      ? { endpoints: parseEndpoints(value.endpoints, allowInsecureHttp) }
+      : {}),
     name: typeof value.name === 'string' && value.name.trim() ? value.name : providerID,
     enabled: bool(value.enabled, true),
     baseUrl: validateCustomProviderBaseUrl(value.base_url ?? value.baseUrl, allowInsecureHttp),
@@ -501,6 +587,7 @@ const parseCustom = (
     allowInsecureHttp,
     headers: assertSafeProviderHeaders(value.headers, `provider ${providerID}`),
     models: parsedModels,
+    ...(modelSync ? { modelSync } : {}),
   }
 }
 
@@ -625,6 +712,23 @@ export const serializePiProviderDefinition = (
       },
     ])
   }
+  const modelSync =
+    definition.kind === 'custom' && definition.modelSync !== undefined
+      ? parseCustomModelSync({
+          fetched_at: definition.modelSync.fetchedAt,
+          api: definition.modelSync.api,
+          models: [...definition.modelSync.models],
+        })
+      : undefined
+  if (definition.kind === 'custom' && definition.modelSync !== undefined && !modelSync) {
+    throw new PiProviderConfigValidationError([
+      {
+        providerID: definition.id,
+        path: `model_providers.${definition.id}.model_sync`,
+        code: 'INVALID_PROVIDER',
+      },
+    ])
+  }
   const raw: Record<string, unknown> =
     definition.kind === 'builtin'
       ? {
@@ -650,6 +754,15 @@ export const serializePiProviderDefinition = (
           env: [...definition.env],
           allow_insecure_http: definition.allowInsecureHttp,
           headers: { ...definition.headers },
+          ...(modelSync
+            ? {
+                model_sync: {
+                  fetched_at: modelSync.fetchedAt,
+                  api: modelSync.api,
+                  models: [...modelSync.models],
+                },
+              }
+            : {}),
           models: Object.fromEntries(
             definition.models.map((model) => [
               model.id,
@@ -664,7 +777,9 @@ export const serializePiProviderDefinition = (
                   : {}),
                 ...(model.modelType !== undefined ? { modelType: model.modelType } : {}),
                 ...(model.tools !== undefined ? { tools: model.tools } : {}),
-                ...(model.maxInputTokens !== undefined ? { max_input_tokens: model.maxInputTokens } : {}),
+                ...(model.maxInputTokens !== undefined
+                  ? { max_input_tokens: model.maxInputTokens }
+                  : {}),
                 ...(model.maxTokens !== undefined ? { max_tokens: model.maxTokens } : {}),
                 ...(model.reasoning !== undefined ? { reasoning: model.reasoning } : {}),
                 ...(model.input !== undefined ? { input: [...model.input] } : {}),
@@ -728,6 +843,15 @@ export const serializePiProviderDefinition = (
             env: [...provider.env],
             allow_insecure_http: provider.allowInsecureHttp,
             headers: { ...provider.headers },
+            ...(provider.modelSync
+              ? {
+                  model_sync: {
+                    fetched_at: provider.modelSync.fetchedAt,
+                    api: provider.modelSync.api,
+                    models: [...provider.modelSync.models],
+                  },
+                }
+              : {}),
             models: Object.fromEntries(
               Object.entries(provider.models).map(([id, model]) => [
                 id,
@@ -739,8 +863,10 @@ export const serializePiProviderDefinition = (
                   enabled: model.enabled,
                   context_window: model.contextWindow,
                   ...(model.modelType !== undefined ? { modelType: model.modelType } : {}),
-                ...(model.tools !== undefined ? { tools: model.tools } : {}),
-                ...(model.maxInputTokens !== undefined ? { max_input_tokens: model.maxInputTokens } : {}),
+                  ...(model.tools !== undefined ? { tools: model.tools } : {}),
+                  ...(model.maxInputTokens !== undefined
+                    ? { max_input_tokens: model.maxInputTokens }
+                    : {}),
                   max_tokens: model.maxTokens,
                   reasoning: model.reasoning,
                   input: [...model.input],

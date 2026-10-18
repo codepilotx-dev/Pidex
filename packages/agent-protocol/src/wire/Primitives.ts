@@ -140,6 +140,7 @@ export const ApplicationErrorCodeSchema = Schema.Literals([
   'GIT_BRANCH_NOT_FOUND',
   'GIT_CHECKOUT_CONFLICT',
   'GIT_PUSH_FAILED',
+  'GIT_PULL_FAILED',
   'GIT_STATUS_FAILED',
   'GIT_OUTPUT_TOO_LARGE',
   'GIT_OUTPUT_ENCODING_INVALID',

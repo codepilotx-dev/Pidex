@@ -243,6 +243,7 @@ export type DesktopAgentReviewApi = {
     workspacePath: string,
     projectId?: string,
     ref?: string,
+    limit?: number,
   ): Promise<
     Array<{
       sha: string
@@ -589,7 +590,7 @@ export type DesktopLocalContextApi = {
 }
 
 export type DesktopModelProviderRefreshApi = {
-  refreshModelProviders(): Promise<void>
+  refreshModelProviders(providerId?: string): Promise<void>
 }
 
 export type DesktopWindowApi = {

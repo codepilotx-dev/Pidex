@@ -39,6 +39,7 @@ import { Checkbox } from '../../../components/ui/Checkbox.js'
 import { useDialogFocusRestore } from '../../../components/ui/UseDialogFocusRestore.js'
 import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../../settings/SettingsManagementDialogSizing.js'
 
 export type ProviderModelsSectionProps = {
   provider: DesktopModelProviderSummary
@@ -91,17 +92,22 @@ export function ProviderModelsSection({
   const editable = provider.config != null
   async function fetchModels() {
     if (!customConfig) return onFetchModels()
-    const api = customConfig.models.find((model) => model.api !== 'anthropic-messages')?.api
-    if (!api) {
-      onError('此端点不支持 OpenAI /models 发现，可手动添加模型。')
-      return
-    }
+    if (saving || busy) return
     setSaving(true)
     try {
-      const discovered = await desktopClient.discoverProviderModels(provider.providerID, api)
-      const existing = new Set(customConfig.models.map((model) => model.id))
-      setDiscoveredModels(discovered.filter((model) => !existing.has(model.id)))
+      const result = await desktopClient.syncProviderModels(provider.providerID)
+      await onRefresh()
+      const existing = new Set(customConfig.models.map((model) => String(model.id)))
+      const candidates = result.candidates.filter((model) => !existing.has(String(model.id)))
+      setDiscoveredModels(candidates.length > 0 ? candidates : null)
       setSelectedModels(new Set())
+      const summary = [
+        `从上游获取 ${result.totalFetched} 个模型`,
+        `移除 ${result.removedModelIds.length} 个`,
+        `候选 ${candidates.length} 个`,
+        ...(result.baselineCreated ? ['已建立同步基线'] : []),
+      ]
+      onNotice(`模型同步完成：${summary.join('，')}。`)
     } catch (error) {
       onError(fullErrorMessage(error))
     } finally {
@@ -192,7 +198,7 @@ export function ProviderModelsSection({
       : undefined
     const api =
       configured?.api ??
-      (customConfig?.models.find((model) => !model.modelType || model.modelType === 'chat')?.api) ??
+      customConfig?.models.find((model) => !model.modelType || model.modelType === 'chat')?.api ??
       protocolMetadata?.providerApi ??
       provider.providerApis?.[0] ??
       'openai-completions'
@@ -213,7 +219,10 @@ export function ProviderModelsSection({
       maxTokens: metadata?.outputTokens ?? 8_192,
       reasoning: metadata?.reasoning ?? false,
       tools: metadata?.toolCall ?? true,
-      modelType: metadata?.modelType === 'embedding' || metadata?.modelType === 'rerank' ? metadata.modelType : 'chat',
+      modelType:
+        metadata?.modelType === 'embedding' || metadata?.modelType === 'rerank'
+          ? metadata.modelType
+          : 'chat',
       input: metadata?.modalities?.input ?? (metadata?.vision ? ['text', 'image'] : ['text']),
       ...configured,
       cost: {
@@ -281,8 +290,6 @@ export function ProviderModelsSection({
     setSaving(true)
     try {
       const config = provider.config
-      if (config.kind === 'custom' && config.models.length <= 1)
-        throw new Error('供应商至少需要保留一个模型。')
       await onSaveDefinition(
         config.kind === 'custom'
           ? { ...config, models: config.models.filter((model) => model.id !== id) }
@@ -318,7 +325,6 @@ export function ProviderModelsSection({
       .includes(searchQuery.trim().toLowerCase()),
   )
 
-
   return (
     <section
       className="model-center-models-section tw:grid tw:min-w-0 tw:gap-3"
@@ -329,9 +335,11 @@ export function ProviderModelsSection({
           title={
             <div className="tw:flex tw:items-center tw:gap-2">
               <h3 className="tw:m-0 tw:flex tw:items-center tw:gap-2 tw:type-title-sm">
-                模型 <span className="tw:inline-flex tw:h-6 tw:min-w-6 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-hover tw:px-2 tw:type-body-sm tw:tabular-nums">{rows.length}</span>
+                模型{' '}
+                <span className="tw:inline-flex tw:h-6 tw:min-w-6 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-hover tw:px-2 tw:type-body-sm tw:tabular-nums">
+                  {rows.length}
+                </span>
               </h3>
-
             </div>
           }
           search={
@@ -399,7 +407,9 @@ export function ProviderModelsSection({
                 onRemove={() => setDeletingModel(row.id)}
                 editingDisabled={busy || saving || editingBlocked || !provider.config || !editable}
                 logoURL={modelLogoURL(row.id, row.metadata?.name) ?? provider.logoURL}
-                providerID={modelLogoURL(row.id, row.metadata?.name) ? undefined : provider.providerID}
+                providerID={
+                  modelLogoURL(row.id, row.metadata?.name) ? undefined : provider.providerID
+                }
               />
             ))}
           </ModelGroup>
@@ -432,7 +442,7 @@ export function ProviderModelsSection({
           <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
           <Dialog.Content
             onCloseAutoFocus={onCloseAutoFocus}
-            className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:w-[min(680px,calc(100vw_-_32px))] tw:max-h-[85vh] tw:overflow-y-auto"
+            className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:overflow-y-auto ${SETTINGS_MANAGEMENT_DIALOG_SIZE.providerModels}`}
           >
             <header className="settings-management-dialog-header">
               <div className="settings-management-dialog-heading">
@@ -626,13 +636,14 @@ function ModelRowItem({
         ) : null}
         {testStatus?.state === 'reachable' ? (
           <span role="status" className="tw:text-app-success tw:type-caption">
+            {testStatus.api ? `${testStatus.api} · ` : ''}
             {testStatus.latencyMs} ms
           </span>
         ) : testStatus?.state === 'failed' ? (
           <span
             role="status"
             className="tw:text-app-danger tw:type-caption"
-            title={testStatus.message}
+            title={`${testStatus.message}${testStatus.category ? ` · ${testStatus.category}` : ''}`}
           >
             失败
           </span>

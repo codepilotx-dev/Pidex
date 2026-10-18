@@ -609,7 +609,7 @@ describe('desktop provider client', () => {
         })
       }
       if (body.method === 'model/refresh') {
-        expect(body.params).toEqual({ operationId: expect.any(String) })
+        expect(body.params).toEqual({ operationId: expect.any(String), providerId: 'google' })
         return rpc(body.id, {
           providers: [provider],
           defaultModel: { providerID: provider.provider.id, id: 'MiniMax-M3' },
@@ -626,7 +626,7 @@ describe('desktop provider client', () => {
 
     await client.getModelProviderState()
     await client.listModelProviders()
-    await client.refreshModelProviders()
+    await client.refreshModelProviders('google')
     await client.getModelProviderState()
     await client.listModelProviders()
 
@@ -942,7 +942,7 @@ describe('desktop provider client', () => {
         expect(body.params.capabilities).toEqual(
           expect.arrayContaining(['provider.config.pi.v1', 'provider.auth.pi.v1']),
         )
-        return rpc(body.id, initializedResult())
+        return rpc(body.id, initializedResult(['rpc.typed.v1', 'provider.config.pi.v1']))
       }
       if (body.method === 'initialized') return new Response(null, { status: 204 })
       if (body.method === 'provider/create') {
@@ -975,9 +975,12 @@ describe('desktop provider client', () => {
       headers: {},
       models: [{ id: 'llama-3.1', api: 'openai-completions' }],
     } as never)
-    expect(await client.discoverProviderModels('local', 'openai-completions')).toEqual([
-      { id: 'llama-3.1', api: 'openai-completions' },
-    ])
+    expect(
+      await client.discoverProviderModels({
+        providerId: 'local',
+        api: 'openai-completions',
+      }),
+    ).toEqual([{ id: 'llama-3.1', api: 'openai-completions' }])
     const started = await client.startAuthSession({
       kind: 'provider',
       providerId: 'openai',
@@ -1005,30 +1008,44 @@ describe('desktop provider client', () => {
 
   test('智能配置通过 capability 协商、typed RPC 预览和手动刷新', async () => {
     const requests: string[] = []
-    const client = createDesktopClient({ fetch: async (_path: string, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body))
-      requests.push(body.method)
-      if (body.method === 'initialize') return rpc(body.id, initializedResult(['rpc.typed.v1', 'model.recommendations.v1']))
-      if (body.method === 'initialized') return new Response(null, { status: 204 })
-      if (body.method === 'model/recommendation/preview') return rpc(body.id, { status: 'no-cache', recommended: {} })
-      if (body.method === 'model/recommendation/refresh') {
-        expect(body.params.operationId).toBeString()
-        return rpc(body.id, { updatedAt: 123 })
-      }
-      throw new Error(`Unexpected RPC: ${body.method}`)
-    } })
+    const client = createDesktopClient({
+      fetch: async (_path: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body))
+        requests.push(body.method)
+        if (body.method === 'initialize')
+          return rpc(body.id, initializedResult(['rpc.typed.v1', 'model.recommendations.v1']))
+        if (body.method === 'initialized') return new Response(null, { status: 204 })
+        if (body.method === 'model/recommendation/preview')
+          return rpc(body.id, { status: 'no-cache', recommended: {} })
+        if (body.method === 'model/recommendation/refresh') {
+          expect(body.params.operationId).toBeString()
+          return rpc(body.id, { updatedAt: 123 })
+        }
+        throw new Error(`Unexpected RPC: ${body.method}`)
+      },
+    })
     expect(await client.modelRecommendations!.supported()).toBe(true)
     expect(requests).not.toContain('model/recommendation/refresh')
-    expect(await client.modelRecommendations!.preview({ providerId: 'relay', modelId: 'example', modelType: 'chat' })).toMatchObject({ status: 'no-cache' })
+    expect(
+      await client.modelRecommendations!.preview({
+        providerId: 'relay',
+        modelId: 'example',
+        modelType: 'chat',
+      }),
+    ).toMatchObject({ status: 'no-cache' })
     expect(await client.modelRecommendations!.refresh()).toEqual({ updatedAt: 123 })
-    const older = createDesktopClient({ fetch: async (_path: string, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body))
-      if (body.method === 'initialize') return rpc(body.id, initializedResult())
-      if (body.method === 'initialized') return new Response(null, { status: 204 })
-      throw new Error('Old service must not receive recommendation RPC')
-    } })
+    const older = createDesktopClient({
+      fetch: async (_path: string, init?: RequestInit) => {
+        const body = JSON.parse(String(init?.body))
+        if (body.method === 'initialize') return rpc(body.id, initializedResult())
+        if (body.method === 'initialized') return new Response(null, { status: 204 })
+        throw new Error('Old service must not receive recommendation RPC')
+      },
+    })
     expect(await older.modelRecommendations!.supported()).toBe(false)
-    await expect(older.modelRecommendations!.refresh()).rejects.toThrow('AGENT_OPERATION_UNSUPPORTED')
+    await expect(older.modelRecommendations!.refresh()).rejects.toThrow(
+      'AGENT_OPERATION_UNSUPPORTED',
+    )
   })
 
   test('模型健康 RPC 通过 typed RPC 调用并受 capability 门禁', async () => {

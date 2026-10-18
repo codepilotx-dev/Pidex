@@ -82,7 +82,7 @@ test('static OpenAI catalogs discover remote models, preserve metadata and cache
     'openai-responses',
   )
   try {
-    await service.refresh(true)
+    await service.refresh(true, 'nvidia')
     expect((await service.models()).map((model) => String(model.id))).toContain('remote-only')
     expect(service.pi.getModel('nvidia', 'known')).toMatchObject({
       name: 'Known model',
@@ -99,17 +99,17 @@ test('static OpenAI catalogs discover remote models, preserve metadata and cache
     expect(restored.pi.getModel('nvidia', 'remote-only')).toBeDefined()
     expect(requests).toBe(1)
     fail = true
-    await expect(service.refresh(true)).rejects.toMatchObject({ code: 'CATALOG_REFRESH_FAILED' })
+    await expect(service.refresh(true, 'nvidia')).rejects.toMatchObject({ code: 'CATALOG_REFRESH_FAILED' })
     expect(service.pi.getModel('nvidia', 'remote-only')).toBeDefined()
     expect(requests).toBe(2)
     fail = false
     enabled = true
     baseUrl = `${server.url}override`
-    await service.refresh(true)
+    await service.refresh(true, 'nvidia')
     expect(service.pi.getModel('nvidia', 'remote-only')?.baseUrl).toBe(baseUrl)
     expect(requests).toBe(3)
     enabled = false
-    await service.refresh(true)
+    await service.refresh(true, 'nvidia')
     expect(requests).toBe(3)
     const native = { ...provider(), refreshModels: async () => {} }
     expect(withPiOpenAIModelDiscovery(native, async () => undefined)).toBe(native)

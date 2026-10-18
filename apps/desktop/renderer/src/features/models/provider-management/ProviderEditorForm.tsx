@@ -47,6 +47,7 @@ import { desktopClient } from '../../../services/desktop-client/index.js'
 import { SettingsDropdown } from '../../settings/SettingsDropdown.js'
 import { PROVIDER_PRESETS, type ProviderPreset } from './ProviderEditorPresets.js'
 import { cx } from '../../../utils/Cx.js'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../../settings/SettingsManagementDialogSizing.js'
 import {
   DEEPSEEK_PROTOCOL_OPTIONS,
   DEFAULT_DEEPSEEK_PROTOCOL,
@@ -107,6 +108,16 @@ const BUILTIN_PROVIDER_IDS: ReadonlySet<string> = new Set([
 ])
 
 type Api = DesktopProviderModelDefinition['api']
+
+/** /models 目录读取支持的聊天协议，与协议包 ProviderChatApiSchema 一致。 */
+const DISCOVERY_CHAT_APIS = [
+  'openai-completions',
+  'openai-responses',
+  'anthropic-messages',
+  'google-generative-ai',
+] as const
+
+type DiscoveryChatApi = (typeof DISCOVERY_CHAT_APIS)[number]
 
 export type EditableModel = {
   group?: string
@@ -219,6 +230,10 @@ export function ProviderEditorForm({
   const createdProviderId = useRef<string | null>(null)
   const [candidates, setCandidates] = useState<DesktopProviderModelDefinition[]>([])
   const [selectedCandidates, setSelectedCandidates] = useState<Set<string>>(new Set())
+  const [tempApiKey, setTempApiKey] = useState('')
+  const [pendingModelSync, setPendingModelSync] =
+    useState<DesktopCustomProviderDefinition['modelSync']>(undefined)
+  const [discovering, setDiscovering] = useState(false)
   const [protocol, setProtocol] = useState<DeepSeekProtocol>(DEFAULT_DEEPSEEK_PROTOCOL)
   const [internalBusy, setBusy] = useState(false)
   const busy = internalBusy || operationBusy
@@ -284,6 +299,8 @@ export function ProviderEditorForm({
     setProtocol(managed ? deepSeekProtocolOf(managed.config) : DEFAULT_DEEPSEEK_PROTOCOL)
     setCandidates([])
     setSelectedCandidates(new Set())
+    setTempApiKey('')
+    setPendingModelSync(undefined)
     setError(null)
   }
 
@@ -364,11 +381,12 @@ export function ProviderEditorForm({
         }
       }
     }
-    if (normalizedModels.length === 0) return new Error('至少添加一个有效模型。')
     const modelIds = normalizedModels.map((item) => item.id)
     if (new Set(modelIds).size !== modelIds.length) {
       return new Error('模型列表中存在重复的模型 ID。')
     }
+    const existingModelSync =
+      provider?.config?.kind === 'custom' ? provider.config.modelSync : undefined
     return {
       kind: 'custom',
       id: trimmedId,
@@ -390,6 +408,10 @@ export function ProviderEditorForm({
       allowInsecureHttp,
       headers: headerEntries,
       models: normalizedModels,
+      // 保存前获取过的上游基线随创建一起提交；已保存供应商沿用既有基线。
+      ...((pendingModelSync ?? existingModelSync)
+        ? { modelSync: pendingModelSync ?? existingModelSync }
+        : {}),
     } as unknown as DesktopCustomProviderDefinition
   }, [
     allowInsecureHttp,
@@ -402,6 +424,7 @@ export function ProviderEditorForm({
     id,
     models,
     name,
+    pendingModelSync,
     provider?.config,
   ])
 
@@ -468,6 +491,7 @@ export function ProviderEditorForm({
         await onSaveDefinition(definition)
         createdProviderId.current = definition.id
       }
+      setPendingModelSync(undefined)
       allowNavigation.current = true
       const savedProvider = await onSaved(definition.id, select)
       if (savedProvider) resetForm(savedProvider)
@@ -484,32 +508,60 @@ export function ProviderEditorForm({
     }
   }
 
+  function discoveryChatApi(): DiscoveryChatApi {
+    const match = models.find(
+      (model) =>
+        (!model.modelType || model.modelType === 'chat') &&
+        (DISCOVERY_CHAT_APIS as readonly string[]).includes(model.api),
+    )
+    return (match?.api as DiscoveryChatApi | undefined) ?? DISCOVERY_CHAT_APIS[0]
+  }
+
+  /**
+   * 新建供应商保存前从上游 /models 读取目录：使用当前表单草稿与可选临时
+   * API Key，只记录候选与待提交的同步基线，不写入任何配置。
+   */
   async function discover(): Promise<void> {
-    if (!editing) {
-      setError('请先保存 Provider，再主动导入 /models。')
+    if (editing || createdProviderId.current) {
+      setError('供应商已保存，请在模型列表中使用“同步模型”。')
       return
     }
     if (definition instanceof Error) {
       setError(definition.message)
       return
     }
-    const api = models.find((model) => model.api !== 'anthropic-messages')?.api
-    if (!api || api === 'anthropic-messages') {
-      setError('Anthropic Messages Endpoint 不支持自动发现。')
-      return
-    }
-    if (busyRef.current) return
+    if (busyRef.current || discovering) return
+    const api = discoveryChatApi()
     busyRef.current = true
+    setDiscovering(true)
     setBusy(true)
     setError(null)
     try {
-      const result = await desktopClient.discoverProviderModels(provider.providerID, api)
-      setCandidates(result)
-      setSelectedCandidates(new Set(result.map((model) => String(model.id))))
+      const result = await desktopClient.discoverProviderModels({
+        api,
+        draft: {
+          baseUrl: definition.baseUrl,
+          ...(definition.endpoints ? { endpoints: definition.endpoints } : {}),
+          auth: definition.auth,
+          headers: definition.headers,
+          allowInsecureHttp: definition.allowInsecureHttp,
+          ...(tempApiKey.trim() ? { apiKey: tempApiKey.trim() } : {}),
+        },
+      })
+      const existing = new Set(models.map((model) => model.id.trim()).filter(Boolean))
+      const nextCandidates = result.filter((model) => !existing.has(String(model.id)))
+      setCandidates(nextCandidates)
+      setSelectedCandidates(new Set(nextCandidates.map((model) => String(model.id))))
+      setPendingModelSync({
+        fetchedAt: Date.now(),
+        api,
+        models: result.map((model) => model.id),
+      })
     } catch (discoverError) {
       setError(discoverError instanceof Error ? discoverError.message : String(discoverError))
     } finally {
       busyRef.current = false
+      setDiscovering(false)
       setBusy(false)
     }
   }
@@ -868,16 +920,6 @@ export function ProviderEditorForm({
                 </div>
                 {!managed ? (
                   <div className="provider-editor-models-actions tw:flex tw:items-center tw:gap-2">
-                    {editing ? (
-                      <Button
-                        size="md"
-                        color="secondary"
-                        disabled={busy || (embedded && dirty)}
-                        onClick={() => void discover()}
-                      >
-                        <RefreshCw aria-hidden size={APP_ICON_SIZE} />从 /models 导入
-                      </Button>
-                    ) : null}
                     <Button
                       size="md"
                       color="secondary"
@@ -891,6 +933,42 @@ export function ProviderEditorForm({
                   </div>
                 ) : null}
               </header>
+
+              {!managed && !editing && !createdProviderId.current ? (
+                <section className="provider-editor-discover-card tw:grid tw:gap-3 tw:rounded-lg tw:border tw:border-dashed tw:border-app-border-subtle tw:bg-app-panel tw:p-4">
+                  <header className="tw:grid tw:gap-1">
+                    <strong className="tw:text-app-text tw:type-row-title">保存前获取模型</strong>
+                    <span className="tw:text-app-text-soft tw:type-body-sm">
+                      使用当前 Base URL、认证与请求头读取上游目录；候选模型保存后可再导入。
+                    </span>
+                  </header>
+                  <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2">
+                    <Input
+                      aria-label="临时 API Key"
+                      autoComplete="off"
+                      className="tw:flex-1"
+                      placeholder="临时 API Key（仅本次获取，不保存）"
+                      type="password"
+                      value={tempApiKey}
+                      onChange={(event) => setTempApiKey(event.target.value)}
+                    />
+                    <Button
+                      size="md"
+                      color="secondary"
+                      disabled={busy || discovering}
+                      loading={discovering}
+                      onClick={() => void discover()}
+                    >
+                      <RefreshCw aria-hidden size={APP_ICON_SIZE} />从 /models 获取
+                    </Button>
+                  </div>
+                  {pendingModelSync ? (
+                    <p className="tw:m-0 tw:text-app-text-soft tw:type-body-sm" role="status">
+                      已获取 {pendingModelSync.models.length} 个上游模型，保存时将记录同步基线。
+                    </p>
+                  ) : null}
+                </section>
+              ) : null}
 
               {candidates.length > 0 ? (
                 <section className="provider-editor-candidates-card tw:grid tw:gap-3 tw:rounded-lg tw:border tw:border-app-accent-border tw:bg-app-accent-subtle tw:p-4">
@@ -962,6 +1040,9 @@ export function ProviderEditorForm({
                       defaultExpanded={index === 0}
                       key={model.editorKey}
                       model={model}
+                      {...(editing && onTestModel && model.id.trim() && !busy
+                        ? { onTest: () => void onTestModel(model.id.trim()) }
+                        : {})}
                       onChange={(next) =>
                         setModels((current) =>
                           current.map((item) => (item.editorKey === model.editorKey ? next : item)),
@@ -1139,7 +1220,7 @@ export function ProviderEditorForm({
         <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
         <Dialog.Content
           aria-labelledby={titleId}
-          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog provider-editor-dialog tw:w-[min(720px,calc(100vw_-_32px))] tw:max-h-[min(85vh,780px)] tw:max-[720px]:w-[calc(100vw_-_16px)] tw:max-[720px]:max-h-[calc(100vh_-_16px)]"
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog provider-editor-dialog ${SETTINGS_MANAGEMENT_DIALOG_SIZE.providerEditor}`}
           onCloseAutoFocus={onCloseAutoFocus}
         >
           {content}
@@ -1245,7 +1326,9 @@ const ProviderModelCard = memo(function ProviderModelCard({
         <Dialog.Root open={expanded} onOpenChange={setExpanded}>
           <Dialog.Portal>
             <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
-            <Dialog.Content className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:w-[min(680px,calc(100vw_-_32px))] tw:max-h-[85vh]">
+            <Dialog.Content
+              className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog ${SETTINGS_MANAGEMENT_DIALOG_SIZE.providerModels}`}
+            >
               <header className="settings-management-dialog-header">
                 <div className="settings-management-dialog-heading">
                   <Dialog.Title>编辑模型</Dialog.Title>
@@ -1258,7 +1341,12 @@ const ProviderModelCard = memo(function ProviderModelCard({
                 disabled={disabled}
                 className="settings-management-dialog-body tw:m-0 tw:border-0"
               >
-                <ModelEditor model={model} onChange={onChange} providerId={providerId} baseUrl={baseUrl} />
+                <ModelEditor
+                  model={model}
+                  onChange={onChange}
+                  providerId={providerId}
+                  baseUrl={baseUrl}
+                />
               </fieldset>
               <footer className="settings-management-dialog-footer">
                 <Dialog.Close asChild>
@@ -1277,7 +1365,12 @@ const ProviderModelCard = memo(function ProviderModelCard({
           id={contentId}
           mountPolicy="always"
         >
-          <ModelEditor model={model} onChange={onChange} providerId={providerId} baseUrl={baseUrl} />
+          <ModelEditor
+            model={model}
+            onChange={onChange}
+            providerId={providerId}
+            baseUrl={baseUrl}
+          />
         </DisclosureContent>
       )}
     </div>
@@ -1304,7 +1397,18 @@ export function ModelEditor({
   const smart = useSmartModelConfig(model, rawOnChange, providerId, baseUrl)
   const onChange = smart.change
   const advancedValues = (value: EditableModel) => {
-    const { id, name, group, api, editorKey, original, headers, thinkingLevelMap, compat, ...values } = value
+    const {
+      id,
+      name,
+      group,
+      api,
+      editorKey,
+      original,
+      headers,
+      thinkingLevelMap,
+      compat,
+      ...values
+    } = value
     return { ...values, maxInputTokens: value.maxInputTokens }
   }
   const initialAdvanced = useRef(advancedValues(model)).current
@@ -1329,18 +1433,48 @@ export function ModelEditor({
     changeAdvanced({ ...model, [key]: Math.max(0, Number(value) || 0) })
 
   const chip = (label: string, selected: boolean, onClick: () => void, disabled = false) => (
-    <button type="button" aria-pressed={selected} disabled={disabled} onClick={onClick}
-      className={cx('tw:inline-flex tw:items-center tw:justify-center tw:rounded-full tw:border tw:border-app-border tw:px-3 tw:py-1 tw:type-body-sm tw:focus-visible:outline-app-focus', selected ? 'tw:bg-app-selected tw:text-app-text' : 'tw:bg-transparent tw:text-app-text-soft tw:hover:bg-app-hover')}>
+    <button
+      type="button"
+      aria-pressed={selected}
+      disabled={disabled}
+      onClick={onClick}
+      className={cx(
+        'tw:inline-flex tw:items-center tw:justify-center tw:rounded-full tw:border tw:border-app-border tw:px-3 tw:py-1 tw:type-body-sm tw:focus-visible:outline-app-focus',
+        selected
+          ? 'tw:bg-app-selected tw:text-app-text'
+          : 'tw:bg-transparent tw:text-app-text-soft tw:hover:bg-app-hover',
+      )}
+    >
       {label}
     </button>
   )
-  const tokenField = (key: 'contextWindow' | 'maxInputTokens' | 'maxTokens', label: string, values: number[]) => (
+  const tokenField = (
+    key: 'contextWindow' | 'maxInputTokens' | 'maxTokens',
+    label: string,
+    values: number[],
+  ) => (
     <div className={PROVIDER_EDITOR_FIELD_CLASS}>
       <span>{label}</span>
-      <div className="tw:flex tw:flex-wrap tw:gap-2">{values.map((value) => <span key={value}>
-        {chip(value >= 1000000 ? `${value / 1000000}M` : `${(value === 32768 || value === 8192 ? value / 1024 : value / 1000)}K`, model[key] === value, () => number(key, String(value)))}
-      </span>)}</div>
-      <Input type="number" min={1} aria-label={label} value={model[key] === undefined || model[key] === 0 ? "" : String(model[key])} onChange={(event) => number(key, event.target.value)} />
+      <div className="tw:flex tw:flex-wrap tw:gap-2">
+        {values.map((value) => (
+          <span key={value}>
+            {chip(
+              value >= 1000000
+                ? `${value / 1000000}M`
+                : `${value === 32768 || value === 8192 ? value / 1024 : value / 1000}K`,
+              model[key] === value,
+              () => number(key, String(value)),
+            )}
+          </span>
+        ))}
+      </div>
+      <Input
+        type="number"
+        min={1}
+        aria-label={label}
+        value={model[key] === undefined || model[key] === 0 ? '' : String(model[key])}
+        onChange={(event) => number(key, event.target.value)}
+      />
     </div>
   )
 
@@ -1368,8 +1502,23 @@ export function ModelEditor({
         <div className={PROVIDER_EDITOR_FIELD_CLASS}>
           <label htmlFor={`${model.editorKey}-group`}>分组名称</label>
           <div className="tw:flex tw:min-w-0 tw:items-center tw:gap-2">
-            <Input id={`${model.editorKey}-group`} placeholder="输入新分组，或选择已有分组" maxLength={128} value={model.group ?? ''} onChange={(event) => onChange({ ...model, group: event.target.value })} />
-            {groups.length > 0 ? <SettingsDropdown ariaLabel="选择已有分组" searchable size="sm" value={model.group ?? ''} options={groups.map((group) => ({ value: group, label: group }))} onChange={(group) => onChange({ ...model, group })} /> : null}
+            <Input
+              id={`${model.editorKey}-group`}
+              placeholder="输入新分组，或选择已有分组"
+              maxLength={128}
+              value={model.group ?? ''}
+              onChange={(event) => onChange({ ...model, group: event.target.value })}
+            />
+            {groups.length > 0 ? (
+              <SettingsDropdown
+                ariaLabel="选择已有分组"
+                searchable
+                size="sm"
+                value={model.group ?? ''}
+                options={groups.map((group) => ({ value: group, label: group }))}
+                onChange={(group) => onChange({ ...model, group })}
+              />
+            ) : null}
           </div>
         </div>
       </div>
@@ -1379,21 +1528,45 @@ export function ModelEditor({
         data-expanded={advanced ? 'true' : 'false'}
       >
         <div className="tw:flex tw:items-center tw:gap-2 tw:pr-3">
-        <button
-          aria-controls={advancedId}
-          aria-expanded={advanced}
-          className="provider-editor-model-advanced-summary tw:flex tw:flex-1 tw:cursor-pointer tw:select-none tw:items-center tw:gap-1 tw:rounded-none tw:border-0 tw:bg-transparent tw:px-3 tw:py-2 tw:text-left tw:text-app-text-soft tw:type-caption tw:hover:text-app-text tw:focus-visible:outline-none tw:focus-visible:shadow-[var(--cpx-sys-focus-ring-inset)] tw:[&_svg]:size-icon-sm tw:[&_svg]:transition-transform tw:[&_svg]:duration-disclosure tw:[&_svg]:ease-disclosure"
-          onClick={() => setAdvanced((current) => !current)}
-          type="button"
-        >
-          <ChevronRight size={APP_ICON_SIZES.sm} aria-hidden="true" className={advanced ? 'tw:rotate-90' : undefined} />
-          高级设置
-        </button>
+          <button
+            aria-controls={advancedId}
+            aria-expanded={advanced}
+            className="provider-editor-model-advanced-summary tw:flex tw:flex-1 tw:cursor-pointer tw:select-none tw:items-center tw:gap-1 tw:rounded-none tw:border-0 tw:bg-transparent tw:px-3 tw:py-2 tw:text-left tw:text-app-text-soft tw:type-caption tw:hover:text-app-text tw:focus-visible:outline-none tw:focus-visible:shadow-[var(--cpx-sys-focus-ring-inset)] tw:[&_svg]:size-icon-sm tw:[&_svg]:transition-transform tw:[&_svg]:duration-disclosure tw:[&_svg]:ease-disclosure"
+            onClick={() => setAdvanced((current) => !current)}
+            type="button"
+          >
+            <ChevronRight
+              size={APP_ICON_SIZES.sm}
+              aria-hidden="true"
+              className={advanced ? 'tw:rotate-90' : undefined}
+            />
+            高级设置
+          </button>
           <div className="tw:flex tw:items-center tw:gap-1">
-            <Button variant="ghost" size="xs" shape="default" isIconOnly className="tw:[&&]:rounded-md" aria-label="回退高级配置" title="回退高级配置" disabled={!history.length} onClick={undoAdvanced}>
+            <Button
+              variant="ghost"
+              size="xs"
+              shape="default"
+              isIconOnly
+              className="tw:[&&]:rounded-md"
+              aria-label="回退高级配置"
+              title="回退高级配置"
+              disabled={!history.length}
+              onClick={undoAdvanced}
+            >
               <Undo2 size={APP_ICON_SIZES.sm} aria-hidden="true" />
             </Button>
-            <Button variant="ghost" size="xs" shape="default" isIconOnly className="tw:[&&]:rounded-md" aria-label="重置高级配置" title="重置高级配置" disabled={!advancedDirty} onClick={() => changeAdvanced({ ...model, ...initialAdvanced })}>
+            <Button
+              variant="ghost"
+              size="xs"
+              shape="default"
+              isIconOnly
+              className="tw:[&&]:rounded-md"
+              aria-label="重置高级配置"
+              title="重置高级配置"
+              disabled={!advancedDirty}
+              onClick={() => changeAdvanced({ ...model, ...initialAdvanced })}
+            >
               <RefreshCw size={APP_ICON_SIZES.sm} aria-hidden="true" />
             </Button>
           </div>
@@ -1405,24 +1578,85 @@ export function ModelEditor({
           mountPolicy="always"
         >
           <div className="tw:grid tw:gap-4">
-            <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型类型</h4>
-              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('文本', !model.modelType || model.modelType === 'chat', () => changeAdvanced({ ...model, modelType: 'chat' }))}{chip('嵌入', model.modelType === 'embedding', () => changeAdvanced({ ...model, modelType: 'embedding' }))}{chip('重排', model.modelType === 'rerank', () => changeAdvanced({ ...model, modelType: 'rerank' }))}</div>
+            <div className="tw:grid tw:gap-2">
+              <h4 className="tw:m-0 tw:type-label">模型类型</h4>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">
+                {chip('文本', !model.modelType || model.modelType === 'chat', () =>
+                  changeAdvanced({ ...model, modelType: 'chat' }),
+                )}
+                {chip('嵌入', model.modelType === 'embedding', () =>
+                  changeAdvanced({ ...model, modelType: 'embedding' }),
+                )}
+                {chip('重排', model.modelType === 'rerank', () =>
+                  changeAdvanced({ ...model, modelType: 'rerank' }),
+                )}
+              </div>
             </div>
-            {!model.modelType || model.modelType === 'chat' ? <>
-            <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型能力</h4>
-              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('推理', model.reasoning, () => changeAdvanced({ ...model, reasoning: !model.reasoning }))}{chip('工具', model.tools !== false, () => changeAdvanced({ ...model, tools: model.tools === false }), model.modelType === 'embedding' || model.modelType === 'rerank')}</div>
-            </div>
-            <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">输入模态</h4>
-              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('文本输入', true, () => {}, true)}{chip('视觉', model.imageInput, () => changeAdvanced({ ...model, imageInput: !model.imageInput }))}{['openai-completions', 'google-generative-ai', 'google-vertex'].includes(nativeApi ?? model.api) ? chip('音频', model.audioInput ?? false, () => changeAdvanced({ ...model, audioInput: !model.audioInput })) : null}{['google-generative-ai', 'google-vertex'].includes(nativeApi ?? model.api) ? chip('视频', model.videoInput ?? false, () => changeAdvanced({ ...model, videoInput: !model.videoInput })) : null}</div>
-            </div>
-            </> : null}
-            <div className="tw:grid tw:gap-2"><h4 className="tw:m-0 tw:type-label">模型状态</h4>
-              <div className="tw:flex tw:flex-wrap tw:gap-2">{chip('启用模型', model.enabled, () => changeAdvanced({ ...model, enabled: !model.enabled }))}</div>
+            {!model.modelType || model.modelType === 'chat' ? (
+              <>
+                <div className="tw:grid tw:gap-2">
+                  <h4 className="tw:m-0 tw:type-label">模型能力</h4>
+                  <div className="tw:flex tw:flex-wrap tw:gap-2">
+                    {chip('推理', model.reasoning, () =>
+                      changeAdvanced({ ...model, reasoning: !model.reasoning }),
+                    )}
+                    {chip(
+                      '工具',
+                      model.tools !== false,
+                      () => changeAdvanced({ ...model, tools: model.tools === false }),
+                      model.modelType === 'embedding' || model.modelType === 'rerank',
+                    )}
+                  </div>
+                </div>
+                <div className="tw:grid tw:gap-2">
+                  <h4 className="tw:m-0 tw:type-label">输入模态</h4>
+                  <div className="tw:flex tw:flex-wrap tw:gap-2">
+                    {chip('文本输入', true, () => {}, true)}
+                    {chip('视觉', model.imageInput, () =>
+                      changeAdvanced({ ...model, imageInput: !model.imageInput }),
+                    )}
+                    {['openai-completions', 'google-generative-ai', 'google-vertex'].includes(
+                      nativeApi ?? model.api,
+                    )
+                      ? chip('音频', model.audioInput ?? false, () =>
+                          changeAdvanced({ ...model, audioInput: !model.audioInput }),
+                        )
+                      : null}
+                    {['google-generative-ai', 'google-vertex'].includes(nativeApi ?? model.api)
+                      ? chip('视频', model.videoInput ?? false, () =>
+                          changeAdvanced({ ...model, videoInput: !model.videoInput }),
+                        )
+                      : null}
+                  </div>
+                </div>
+              </>
+            ) : null}
+            <div className="tw:grid tw:gap-2">
+              <h4 className="tw:m-0 tw:type-label">模型状态</h4>
+              <div className="tw:flex tw:flex-wrap tw:gap-2">
+                {chip('启用模型', model.enabled, () =>
+                  changeAdvanced({ ...model, enabled: !model.enabled }),
+                )}
+              </div>
             </div>
           </div>
-          {tokenField('contextWindow', '上下文窗口（Token）', [32768, 128000, 200000, 256000, 400000, 512000, 1000000])}
-          {tokenField('maxInputTokens', '最大输入 Token', [128000, 200000, 256000, 512000, 1000000])}
-          {!model.modelType || model.modelType === 'chat' ? tokenField('maxTokens', '最大输出（Token）', [8192, 16000, 32000, 64000, 128000, 256000]) : null}
+          {tokenField(
+            'contextWindow',
+            '上下文窗口（Token）',
+            [32768, 128000, 200000, 256000, 400000, 512000, 1000000],
+          )}
+          {tokenField(
+            'maxInputTokens',
+            '最大输入 Token',
+            [128000, 200000, 256000, 512000, 1000000],
+          )}
+          {!model.modelType || model.modelType === 'chat'
+            ? tokenField(
+                'maxTokens',
+                '最大输出（Token）',
+                [8192, 16000, 32000, 64000, 128000, 256000],
+              )
+            : null}
           <h4 className="tw:m-0 tw:type-label">价格（USD／百万 Token）</h4>
           <div className="provider-editor-grid tw:grid tw:grid-cols-2 tw:gap-4">
             <label className={PROVIDER_EDITOR_FIELD_CLASS}>
@@ -1463,51 +1697,62 @@ export function ModelEditor({
         </DisclosureContent>
       </div>
       <div className="tw:overflow-hidden tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel">
-          <button type="button" className="tw:flex tw:w-full tw:items-center tw:gap-1 tw:border-0 tw:bg-transparent tw:px-3 tw:py-2 tw:text-left tw:text-app-text-soft tw:type-caption" aria-expanded={parametersOpen} aria-controls={parametersId} onClick={() => setParametersOpen(!parametersOpen)}>
-            <ChevronRight aria-hidden size={APP_ICON_SIZES.sm} className={parametersOpen ? 'tw:rotate-90' : ''} />协议参数
-          </button>
-          <DisclosureContent
-            id={parametersId}
-            expanded={parametersOpen}
-            mountPolicy="always"
-            contentClassName="tw:grid tw:gap-3 tw:p-3"
-          >
-            <label className={PROVIDER_EDITOR_FIELD_CLASS}>
-              <span>
-                模型专属 Headers
-                <small>每行 name: value</small>
-              </span>
-              <textarea
-                className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
-                placeholder="X-Model-Specific: value"
-                rows={3}
-                value={model.headers}
-                onChange={(event) => onChange({ ...model, headers: event.target.value })}
-              />
-            </label>
+        <button
+          type="button"
+          className="tw:flex tw:w-full tw:items-center tw:gap-1 tw:border-0 tw:bg-transparent tw:px-3 tw:py-2 tw:text-left tw:text-app-text-soft tw:type-caption"
+          aria-expanded={parametersOpen}
+          aria-controls={parametersId}
+          onClick={() => setParametersOpen(!parametersOpen)}
+        >
+          <ChevronRight
+            aria-hidden
+            size={APP_ICON_SIZES.sm}
+            className={parametersOpen ? 'tw:rotate-90' : ''}
+          />
+          协议参数
+        </button>
+        <DisclosureContent
+          id={parametersId}
+          expanded={parametersOpen}
+          mountPolicy="always"
+          contentClassName="tw:grid tw:gap-3 tw:p-3"
+        >
+          <label className={PROVIDER_EDITOR_FIELD_CLASS}>
+            <span>
+              模型专属 Headers
+              <small>每行 name: value</small>
+            </span>
+            <textarea
+              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+              placeholder="X-Model-Specific: value"
+              rows={3}
+              value={model.headers}
+              onChange={(event) => onChange({ ...model, headers: event.target.value })}
+            />
+          </label>
 
-            <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
-              <span>Thinking Level Map (JSON)</span>
-              <textarea
-                className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
-                placeholder='{"high": "high"}'
-                rows={3}
-                value={model.thinkingLevelMap}
-                onChange={(event) => onChange({ ...model, thinkingLevelMap: event.target.value })}
-              />
-            </label>
+          <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
+            <span>Thinking Level Map (JSON)</span>
+            <textarea
+              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+              placeholder='{"high": "high"}'
+              rows={3}
+              value={model.thinkingLevelMap}
+              onChange={(event) => onChange({ ...model, thinkingLevelMap: event.target.value })}
+            />
+          </label>
 
-            <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
-              <span>API Compat (JSON)</span>
-              <textarea
-                className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
-                placeholder="{}"
-                rows={3}
-                value={model.compat}
-                onChange={(event) => onChange({ ...model, compat: event.target.value })}
-              />
-            </label>
-          </DisclosureContent>
+          <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
+            <span>API Compat (JSON)</span>
+            <textarea
+              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+              placeholder="{}"
+              rows={3}
+              value={model.compat}
+              onChange={(event) => onChange({ ...model, compat: event.target.value })}
+            />
+          </label>
+        </DisclosureContent>
       </div>
     </div>
   )
@@ -1661,13 +1906,21 @@ export function normalizeEditableModel(
     maxTokens: model.maxTokens || 8_192,
     reasoning: (!model.modelType || model.modelType === 'chat') && model.reasoning,
     modelType: model.modelType ?? 'chat',
-    tools: model.modelType === 'embedding' || model.modelType === 'rerank' ? false : model.tools ?? true,
-    input: model.modelType === 'embedding' || model.modelType === 'rerank' ? ['text'] : [
-      ...(model.original?.input ?? ['text']).filter((value) => !['image', 'audio', 'video'].includes(value)),
-      ...(model.imageInput ? ['image' as const] : []),
-      ...(model.audioInput ? ['audio' as const] : []),
-      ...(model.videoInput ? ['video' as const] : []),
-    ],
+    tools:
+      model.modelType === 'embedding' || model.modelType === 'rerank'
+        ? false
+        : (model.tools ?? true),
+    input:
+      model.modelType === 'embedding' || model.modelType === 'rerank'
+        ? ['text']
+        : [
+            ...(model.original?.input ?? ['text']).filter(
+              (value) => !['image', 'audio', 'video'].includes(value),
+            ),
+            ...(model.imageInput ? ['image' as const] : []),
+            ...(model.audioInput ? ['audio' as const] : []),
+            ...(model.videoInput ? ['video' as const] : []),
+          ],
     cost: {
       input: model.inputCost || 0,
       output: model.outputCost || 0,

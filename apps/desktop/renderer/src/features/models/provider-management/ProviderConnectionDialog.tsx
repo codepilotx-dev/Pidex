@@ -13,6 +13,7 @@ import { OAuthConnection } from './OAuthConnection.js'
 import { useDialogFocusRestore } from '../../../components/ui/UseDialogFocusRestore.js'
 import { useLastNonNull } from '../../../hooks/UsePresenceRetention.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../../settings/SettingsManagementDialogSizing.js'
 
 export type ConnectionChoice =
   | { id: 'inference-key'; kind: 'inference-key' }
@@ -90,8 +91,7 @@ export function ProviderConnectionDialog({
         <Dialog.Content
           aria-describedby={descriptionId}
           aria-labelledby={titleId}
-          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog model-center-key-dialog model-center-connection-dialog tw:w-[min(600px,calc(100vw_-_48px))] tw:max-h-[min(720px,calc(100vh_-_48px))] tw:overflow-x-hidden tw:[&>section]:p-5"
-          data-dialog-size="detail"
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog model-center-key-dialog model-center-connection-dialog tw:overflow-x-hidden tw:[&>section]:p-5 ${SETTINGS_MANAGEMENT_DIALOG_SIZE.connection}`}
           onCloseAutoFocus={focusRestore.onCloseAutoFocus}
         >
           <header className="settings-management-dialog-header model-center-key-dialog-header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:p-5">

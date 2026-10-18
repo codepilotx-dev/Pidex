@@ -126,6 +126,7 @@ export const RENDERER_CAPABILITIES = [
   'interaction.recovery.v1',
   'interaction.questionSkip.v1',
   'interaction.scopedGrants.v1',
+  'permission.rules.v1',
   'interaction.questionPause.v1',
   'mcp.elicitation.v1',
   'approval.retry.v1',
@@ -148,6 +149,7 @@ export const RENDERER_CAPABILITIES = [
   'git.review.uncommitted.v1',
   'git.review.commit-ref.v1',
   'git.workspace.v1',
+  'git.sync.v1',
   'ai.review.v1',
   'github.oauth.v1',
   'github.pullRequests.v1',
@@ -166,6 +168,8 @@ export const RENDERER_CAPABILITIES = [
   'model.recommendations.v1',
   'model.media-input.v1',
   'provider.config.pi.v1',
+  'provider.modelSync.v1',
+  'provider.protocolDetection.v1',
   'provider.builtinOverrides.v1',
   'provider.auth.pi.v1',
   'tooling.management.v1',
@@ -1728,6 +1732,38 @@ export function createAgentSessionDesktopClient(
     return agentModelHealthApiPromise
   }
 
+  type AgentProviderModelSyncApi = ReturnType<
+    (typeof import('./AgentProviderModelSyncApi.js'))['createAgentProviderModelSyncApi']
+  >
+  let agentProviderModelSyncApiPromise: Promise<AgentProviderModelSyncApi> | null = null
+  const loadAgentProviderModelSyncApi = (): Promise<AgentProviderModelSyncApi> => {
+    agentProviderModelSyncApiPromise ??= import('./AgentProviderModelSyncApi.js').then((module) =>
+      module.createAgentProviderModelSyncApi({
+        mockClient,
+        requireAgentCapability,
+        rpc,
+        withAgentOrMock,
+      }),
+    )
+    return agentProviderModelSyncApiPromise
+  }
+
+  type AgentProtocolDetectionApi = ReturnType<
+    (typeof import('./AgentProtocolDetectionApi.js'))['createAgentProtocolDetectionApi']
+  >
+  let agentProtocolDetectionApiPromise: Promise<AgentProtocolDetectionApi> | null = null
+  const loadAgentProtocolDetectionApi = (): Promise<AgentProtocolDetectionApi> => {
+    agentProtocolDetectionApiPromise ??= import('./AgentProtocolDetectionApi.js').then((module) =>
+      module.createAgentProtocolDetectionApi({
+        mockClient,
+        requireAgentCapability,
+        rpc,
+        withAgentOrMock,
+      }),
+    )
+    return agentProtocolDetectionApiPromise
+  }
+
   type AgentSessionGroupApi = ReturnType<
     (typeof import('./AgentSessionGroupApi.js'))['createAgentSessionGroupApi']
   >
@@ -2238,10 +2274,16 @@ export function createAgentSessionDesktopClient(
       loadAgentGitApi().then((api) => api.linkThreadPullRequest(input)),
     unlinkThreadPullRequest: (input) =>
       loadAgentGitApi().then((api) => api.unlinkThreadPullRequest(input)),
-    getWorkspaceGitStatus: (workspacePath) =>
-      loadAgentGitApi().then((api) => api.getWorkspaceGitStatus(workspacePath)),
-    checkoutWorkspaceBranch: (workspacePath, branchName) =>
-      loadAgentGitApi().then((api) => api.checkoutWorkspaceBranch(workspacePath, branchName)),
+    getWorkspaceGitStatus: (workspacePath, projectId, options) =>
+      loadAgentGitApi().then((api) => api.getWorkspaceGitStatus(workspacePath, projectId, options)),
+    fetchWorkspaceRepository: (workspacePath, projectId) =>
+      loadAgentGitApi().then((api) => api.fetchWorkspaceRepository(workspacePath, projectId)),
+    pullWorkspaceRepository: (workspacePath, projectId) =>
+      loadAgentGitApi().then((api) => api.pullWorkspaceRepository(workspacePath, projectId)),
+    checkoutWorkspaceBranch: (workspacePath, branchName, projectId) =>
+      loadAgentGitApi().then((api) =>
+        api.checkoutWorkspaceBranch(workspacePath, branchName, projectId),
+      ),
     createWorkspaceBranch: (input) =>
       loadAgentGitApi().then((api) => api.createWorkspaceBranch(input)),
     commitWorkspaceChanges: (input) =>
@@ -2258,8 +2300,10 @@ export function createAgentSessionDesktopClient(
       loadAgentReviewApi().then((api) => api.applyAgentReviewBatch(input)),
     getAgentReviewBranches: (workspacePath) =>
       loadAgentReviewApi().then((api) => api.getAgentReviewBranches(workspacePath)),
-    getAgentReviewCommits: (workspacePath, projectId, ref) =>
-      loadAgentReviewApi().then((api) => api.getAgentReviewCommits(workspacePath, projectId, ref)),
+    getAgentReviewCommits: (workspacePath, projectId, ref, limit) =>
+      loadAgentReviewApi().then((api) =>
+        api.getAgentReviewCommits(workspacePath, projectId, ref, limit),
+      ),
     listAgentReviewComments: (input) =>
       loadAgentReviewApi().then((api) => api.listAgentReviewComments(input)),
     saveAgentReviewComment: (input) =>
@@ -2743,13 +2787,22 @@ export function createAgentSessionDesktopClient(
       }),
     listApprovalRules: (threadId) =>
       withRequiredAgent(async () => {
-        requireAgentCapability('interaction.scopedGrants.v1')
+        requireAgentCapability('permission.rules.v1')
         return rpc.call('approval/rules/list', { threadId })
       }),
-    revokeApprovalRule: (threadId, ruleId) =>
+    upsertApprovalRule: (params) =>
       withRequiredAgent(async () => {
-        requireAgentCapability('interaction.scopedGrants.v1')
-        await rpc.call('approval/rules/revoke', { threadId, ruleId })
+        requireAgentCapability('permission.rules.v1')
+        return rpc.call('approval/rules/upsert', params)
+      }),
+    revokeApprovalRule: (threadId, ruleId, expectedVersion) =>
+      withRequiredAgent(async () => {
+        requireAgentCapability('permission.rules.v1')
+        return rpc.call('approval/rules/revoke', {
+          threadId,
+          ruleId,
+          ...(expectedVersion ? { expectedVersion } : {}),
+        })
       }),
     writeConfigBatch: (params) =>
       withAgentOrMock(
@@ -3092,16 +3145,19 @@ export function createAgentSessionDesktopClient(
           context: input.context,
         })
       }),
-    refreshModelProviders: () =>
+    refreshModelProviders: (providerId) =>
       withAgentOrMock(
         async () => {
           await rpc.call('model/refresh', {
             operationId: crypto.randomUUID(),
+            ...(providerId !== undefined
+              ? { providerId: providerId as RpcParams<'model/refresh'>['providerId'] }
+              : {}),
           })
           invalidateModelCatalog()
           providerCredentialsCache = null
         },
-        () => mockClient.refreshModelProviders(),
+        () => mockClient.refreshModelProviders(providerId),
       ),
     listModelProviders: () =>
       withAgentOrMock(
@@ -3334,6 +3390,12 @@ export function createAgentSessionDesktopClient(
       loadAgentProviderCredentialApi().then((api) => api.deleteProviderCredential(credentialId)),
     testModelProvider: (providerID, model) =>
       loadAgentModelHealthApi().then((api) => api.testModelProvider(providerID, model)),
+    syncProviderModels: (providerId) =>
+      loadAgentProviderModelSyncApi().then((api) => api.syncProviderModels(providerId)),
+    detectProviderProtocols: (params) =>
+      loadAgentProtocolDetectionApi().then((api) => api.detectProviderProtocols(params)),
+    testProviderDraft: (input) =>
+      loadAgentProtocolDetectionApi().then((api) => api.testProviderDraft(input)),
     previewModelHealth: () => loadAgentModelHealthApi().then((api) => api.previewModelHealth()),
     startModelHealth: (operationId) =>
       loadAgentModelHealthApi().then((api) => api.startModelHealth(operationId)),
@@ -3377,13 +3439,8 @@ export function createAgentSessionDesktopClient(
         return result
       },
     },
-    discoverProviderModels: async (providerId, api) => {
-      const result = await rpc.call('provider/model/discover', {
-        providerId: providerId as RpcParams<'provider/model/discover'>['providerId'],
-        api,
-      })
-      return [...result.models]
-    },
+    discoverProviderModels: (input) =>
+      loadAgentProviderModelSyncApi().then((api) => api.discoverProviderModels(input)),
     startAuthSession: async (target) => {
       const result = await rpc.call('auth/session/start', {
         target,

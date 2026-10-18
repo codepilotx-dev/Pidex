@@ -37,7 +37,7 @@ export type ProviderManagementStore = {
   subscribe(listener: () => void): () => void
   ensureLoaded(): Promise<ProviderManagementSnapshot>
   refresh(): Promise<ProviderManagementSnapshot>
-  refreshAllProviderData(): Promise<ProviderManagementSnapshot>
+  refreshAllProviderData(providerId?: string): Promise<ProviderManagementSnapshot>
   refreshConnections(): Promise<ProviderManagementSnapshot>
   refreshSources(): Promise<RpcResult<'usage/source/list'>>
   querySources(params: ProviderUsageQueryParams): Promise<ProviderUsageQueryResult>
@@ -218,10 +218,10 @@ export function createProviderManagementStore(
     return pending
   }
 
-  const refreshAllProviderData = async (): Promise<ProviderManagementSnapshot> => {
+  const refreshAllProviderData = async (providerId?: string): Promise<ProviderManagementSnapshot> => {
     update({ loading: true })
     try {
-      await client.refreshModelProviders()
+      await client.refreshModelProviders(providerId)
       const results = await Promise.allSettled([
         client.listModelProviders(),
         client.getModelProviderState(),

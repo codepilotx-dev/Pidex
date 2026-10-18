@@ -5,8 +5,19 @@ import {
   type ModelHealthFailureCategory,
   type ModelHealthUpdatedPayload,
 } from '../src/provider/ModelHealthService'
+import {
+  PiTransientProbe,
+  TRANSIENT_PROBE_PROVIDER_ID,
+  type TransientProbeStream,
+} from '../src/provider/PiTransientProbe'
+import { TRANSIENT_NO_AUTH_API_KEY } from '../src/provider/ProviderProtocolUrl'
 import type { PiModelService } from '../src/provider/pi'
-import type { Api, Model as PiModel } from '@earendil-works/pi-ai'
+import type {
+  Api,
+  AssistantMessage,
+  Model as PiModel,
+  SimpleStreamOptions,
+} from '@earendil-works/pi-ai'
 
 type ProbeHandler = (
   model: PiModel<Api>,
@@ -26,6 +37,7 @@ const makeService = (
     completeSimple?: ProbeHandler
     getPiModelDelayMs?: number
     publish?: (payload: ModelHealthUpdatedPayload) => void | Promise<void>
+    transientProbe?: PiTransientProbe
   } = {},
 ) => {
   const events: ModelHealthUpdatedPayload[] = []
@@ -45,6 +57,7 @@ const makeService = (
       (async (payload) => {
         events.push(payload)
       }),
+    handlers.transientProbe ?? new PiTransientProbe(),
   )
   return { service, events, providerID, modelID }
 }
@@ -504,5 +517,208 @@ describe('ModelHealthService', () => {
     if (failed?.status === 'failed') {
       expect(failed.category).toBe('rate-limit')
     }
+  })
+})
+
+const draftFor = (
+  overrides: Partial<{
+    baseUrl: string
+    endpoints: Record<string, string>
+    auth: 'api-key' | 'none'
+    headers: Record<string, string>
+    allowInsecureHttp: boolean
+    apiKey: string
+  }> = {},
+) => ({
+  baseUrl: 'https://api.example.com/v1',
+  auth: 'api-key' as const,
+  ...overrides,
+})
+
+type DraftProbeCall = {
+  model: PiModel<Api>
+  options: SimpleStreamOptions
+}
+
+const captureDraftProbe = (
+  stream: (model: PiModel<Api>, options: SimpleStreamOptions) => TransientProbeStream = () => ({
+    result: async () => ({ stopReason: 'stop' }) as AssistantMessage,
+  }),
+) => {
+  const calls: DraftProbeCall[] = []
+  const probe = new PiTransientProbe({
+    streamSimple: (model, _context, options) => {
+      calls.push({ model, options })
+      return stream(model, options)
+    },
+  })
+  return { probe, calls }
+}
+
+describe('ModelHealthService.probeDraft', () => {
+  test('使用草稿地址、请求头与 Key 发起一次性探针并返回延迟', async () => {
+    const { probe, calls } = captureDraftProbe()
+    const { service } = makeService({ transientProbe: probe })
+    const result = await service.probeDraft(
+      'openai-completions',
+      'gpt-draft',
+      draftFor({
+        baseUrl: 'https://api.example.com/v1/chat/completions',
+        headers: { 'x-client': 'client-1' },
+        apiKey: 'draft-key',
+      }),
+    )
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.latencyMs).toBeGreaterThanOrEqual(0)
+    expect(calls).toHaveLength(1)
+    const call = calls[0]!
+    expect(call.model.id).toBe('gpt-draft')
+    expect(call.model.api).toBe('openai-completions')
+    expect(call.model.provider).toBe(TRANSIENT_PROBE_PROVIDER_ID)
+    expect(call.model.baseUrl).toBe('https://api.example.com/v1')
+    expect(call.model.headers).toEqual({ 'x-client': 'client-1' })
+    expect(call.options.apiKey).toBe('draft-key')
+    expect(call.options.maxTokens).toBe(8)
+    expect(call.options.maxRetries).toBe(0)
+  })
+
+  test('端点覆盖与显式 Key 优先于草稿 Key', async () => {
+    const { probe, calls } = captureDraftProbe()
+    const { service } = makeService({ transientProbe: probe })
+    const result = await service.probeDraft(
+      'openai-responses',
+      'gpt-draft',
+      draftFor({
+        endpoints: { 'openai-responses': 'https://responses.example.com/v1/responses' },
+        apiKey: 'draft-key',
+      }),
+      'explicit-key',
+    )
+    expect(result.ok).toBe(true)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.model.baseUrl).toBe('https://responses.example.com/v1')
+    expect(calls[0]!.options.apiKey).toBe('explicit-key')
+  })
+
+  test('失败原因复用既有分类且消息不泄漏密钥或原始异常', async () => {
+    const cases: Array<{
+      stream: () => TransientProbeStream
+      expected: ModelHealthFailureCategory
+    }> = [
+      {
+        stream: () => ({
+          result: async () => {
+            throw Object.assign(new Error('401 Unauthorized sk-leak-123'), { status: 401 })
+          },
+        }),
+        expected: 'authentication',
+      },
+      {
+        stream: () => ({
+          result: async () => {
+            throw new TypeError('fetch failed')
+          },
+        }),
+        expected: 'network',
+      },
+      {
+        stream: () => ({
+          result: async () => {
+            throw Object.assign(new Error('500 internal server error'), { status: 500 })
+          },
+        }),
+        expected: 'provider',
+      },
+      {
+        stream: () => ({
+          result: async () =>
+            ({ stopReason: 'error', errorMessage: 'rate limit exceeded 429' }) as AssistantMessage,
+        }),
+        expected: 'rate-limit',
+      },
+    ]
+    for (const { stream, expected } of cases) {
+      const { probe } = captureDraftProbe(stream)
+      const { service } = makeService({ transientProbe: probe })
+      const result = await service.probeDraft(
+        'openai-completions',
+        'm',
+        draftFor({ apiKey: 'sk-draft-secret' }),
+      )
+      expect(result.ok, expected).toBe(false)
+      if (result.ok) continue
+      expect(result.category).toBe(expected)
+      expect(result.message).not.toContain('sk-leak-123')
+      expect(result.message).not.toContain('sk-draft-secret')
+      expect(result.message).not.toContain('fetch failed')
+      expect(result.message).not.toContain('429')
+      expect(result.message.length).toBeLessThanOrEqual(1024)
+    }
+  })
+
+  test('超时分类使用 health-check 消息', async () => {
+    const probe = {
+      probe: async () => ({
+        ok: false as const,
+        cause: new DOMException('timed out', 'TimeoutError'),
+      }),
+    } as unknown as PiTransientProbe
+    const { service } = makeService({ transientProbe: probe })
+    const result = await service.probeDraft('anthropic-messages', 'm', draftFor({ apiKey: 'k' }))
+    expect(result).toMatchObject({
+      ok: false,
+      category: 'timeout',
+      message: '请求在 15 秒内未完成',
+    })
+  })
+
+  test('不安全的地址或请求头归类为配置失败且不发起请求', async () => {
+    const { probe, calls } = captureDraftProbe()
+    const { service } = makeService({ transientProbe: probe })
+    const invalidUrl = await service.probeDraft(
+      'openai-completions',
+      'm',
+      draftFor({ baseUrl: 'ftp://example.com', apiKey: 'k' }),
+    )
+    expect(invalidUrl).toMatchObject({ ok: false, category: 'configuration' })
+    const insecure = await service.probeDraft(
+      'openai-completions',
+      'm',
+      draftFor({ baseUrl: 'http://remote.example.com', apiKey: 'k' }),
+    )
+    expect(insecure).toMatchObject({ ok: false, category: 'configuration' })
+    const sensitiveHeader = await service.probeDraft(
+      'openai-completions',
+      'm',
+      draftFor({ headers: { authorization: 'Bearer secret' }, apiKey: 'k' }),
+    )
+    expect(sensitiveHeader).toMatchObject({ ok: false, category: 'configuration' })
+    expect(calls).toHaveLength(0)
+  })
+
+  test('auth=api-key 缺少凭据时直接归类为配置失败', async () => {
+    const { probe, calls } = captureDraftProbe()
+    const { service } = makeService({ transientProbe: probe })
+    const result = await service.probeDraft('openai-completions', 'm', draftFor())
+    expect(result).toMatchObject({
+      ok: false,
+      category: 'configuration',
+      message: '模型或 Provider 配置不可用',
+    })
+    expect(calls).toHaveLength(0)
+  })
+
+  test('auth=none 使用适配器占位 Key 探测无认证端点', async () => {
+    const { probe, calls } = captureDraftProbe()
+    const { service } = makeService({ transientProbe: probe })
+    const result = await service.probeDraft(
+      'openai-completions',
+      'local-model',
+      draftFor({ baseUrl: 'http://127.0.0.1:8080/v1', auth: 'none' }),
+    )
+    expect(result.ok).toBe(true)
+    expect(calls).toHaveLength(1)
+    expect(calls[0]!.options.apiKey).toBe(TRANSIENT_NO_AUTH_API_KEY)
+    expect(calls[0]!.model.baseUrl).toBe('http://127.0.0.1:8080/v1')
   })
 })

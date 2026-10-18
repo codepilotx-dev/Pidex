@@ -1,6 +1,10 @@
 import { Model } from '@pidex/model-schema'
 import { AgentThread } from '@pidex/shared'
-import { GuardianReviewSchema } from '@pidex/shared/thread'
+import {
+  GuardianReviewSchema,
+  PermissionRuleInputSchema,
+  PermissionRuleSchema,
+} from '@pidex/shared/thread'
 import { Schema } from 'effect'
 import { defineMethod, type MethodMap } from '../wire/Definition'
 import {
@@ -1394,16 +1398,10 @@ export const CoreRpcMethods = {
   'approval/rules/list': defineMethod({
     params: Schema.Struct({ threadId: OpaqueIDSchema }),
     result: Schema.Struct({
-      rules: Schema.Array(
-        Schema.Struct({
-          id: NonEmptyStringSchema,
-          kind: Schema.Literals(['network', 'mcp']),
-          target: Schema.Array(Schema.String),
-        }),
-      ),
+      rules: Schema.Array(PermissionRuleSchema),
     }),
     errors: InteractionErrors,
-    capability: 'interaction.scopedGrants.v1',
+    capability: 'permission.rules.v1',
     mutation: false,
   }),
   'approval/reviewState': defineMethod({
@@ -1453,10 +1451,25 @@ export const CoreRpcMethods = {
     mutation: true,
   }),
   'approval/rules/revoke': defineMethod({
-    params: Schema.Struct({ threadId: OpaqueIDSchema, ruleId: NonEmptyStringSchema }),
+    params: Schema.Struct({
+      threadId: OpaqueIDSchema,
+      ruleId: NonEmptyStringSchema,
+      expectedVersion: Schema.optional(NonEmptyStringSchema),
+    }),
     result: Schema.Struct({ revoked: Schema.Boolean }),
     errors: InteractionErrors,
-    capability: 'interaction.scopedGrants.v1',
+    capability: 'permission.rules.v1',
+    mutation: true,
+  }),
+  'approval/rules/upsert': defineMethod({
+    params: Schema.Struct({
+      threadId: OpaqueIDSchema,
+      expectedVersion: Schema.optional(NonEmptyStringSchema),
+      rule: PermissionRuleInputSchema,
+    }),
+    result: Schema.Struct({ rule: PermissionRuleSchema }),
+    errors: InteractionErrors,
+    capability: 'permission.rules.v1',
     mutation: true,
   }),
   'project/list': defineMethod({

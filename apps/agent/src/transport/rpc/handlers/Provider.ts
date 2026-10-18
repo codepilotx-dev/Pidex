@@ -28,6 +28,8 @@ const providerMethods = [
   'provider/update',
   'provider/delete',
   'provider/model/discover',
+  'provider/model/sync',
+  'provider/protocol/detect',
   'provider/credential/list',
   'provider/credential/setActive',
   'provider/credential/setEnabled',
@@ -100,6 +102,28 @@ const legacyTestCategory = (
 ): 'authentication' | 'configuration' | 'network' | 'rate-limit' | 'unknown' =>
   category === 'timeout' || category === 'provider' ? 'unknown' : category
 
+const draftChatApis = new Set([
+  'openai-completions',
+  'openai-responses',
+  'anthropic-messages',
+  'google-generative-ai',
+])
+
+type DraftChatApi =
+  'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai'
+
+const draftChatApiParam = (value: unknown): DraftChatApi => {
+  if (typeof value !== 'string' || !draftChatApis.has(value)) {
+    throw new AgentError('INVALID_REQUEST', 'API 协议参数无效', 400)
+  }
+  return value as DraftChatApi
+}
+
+const stringParamOrNull = (params: Record<string, unknown>, name: string): string | undefined => {
+  const value = params[name]
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
 export const providerHandlers = {
   name: 'provider',
   methods: providerMethods,
@@ -118,6 +142,8 @@ export const providerHandlers = {
       providerCredentialStore,
       authSessions,
       modelHealth,
+      modelSync,
+      protocolDetection,
     } = runtime.dependencies
     const params = optionalRecord(rawParams)
     switch (method) {
@@ -138,6 +164,10 @@ export const providerHandlers = {
               if (!configured && provider.source.kind === 'custom') {
                 throw new AgentError('INTERNAL_ERROR', '自定义 Provider 缺少可编辑配置', 500)
               }
+              const modelSync =
+                configured?.kind === 'custom'
+                  ? await piModels.modelSyncSummary(String(provider.id))
+                  : undefined
               return {
                 ...provider,
                 authConfigured:
@@ -151,6 +181,7 @@ export const providerHandlers = {
                   denyModels: [],
                   models: [],
                 },
+                ...(modelSync ? { modelSync } : {}),
               }
             }),
           ),
@@ -165,12 +196,15 @@ export const providerHandlers = {
         return runtime.modelCatalog(params)
       case 'model/refresh':
         try {
-          await providers.refresh(true)
+          if (params.providerId === undefined) await piModels.refreshDirectory()
+          else await providers.refresh(true, stringParam(params, 'providerId'))
         } catch (cause) {
           if (cause instanceof PiModelServiceError && cause.code === 'CATALOG_REFRESH_FAILED') {
             throw new AgentError(
               'PROVIDER_UNAVAILABLE',
-              '模型目录刷新失败，请检查提供商连接、凭据和模型接口后重试。',
+              cause.refreshFailures.length > 0
+                ? `模型目录刷新失败（${cause.refreshFailures.length} 个提供商）：${cause.refreshFailures.slice(0, 5).join('；')}${cause.refreshFailures.length > 5 ? '；其余失败请查看 Agent 日志' : ''}。`
+                : '模型目录刷新失败，请检查提供商连接、凭据和模型接口后重试。',
               502,
             )
           }
@@ -181,7 +215,8 @@ export const providerHandlers = {
         const model = modelRefOrNull(params.model)
         if (model) {
           const selected = await providers.resolve(model)
-          if (selected.modelType && selected.modelType !== 'chat') throw new AgentError('INVALID_REQUEST', '嵌入与重排模型不能设为聊天模型', 400)
+          if (selected.modelType && selected.modelType !== 'chat')
+            throw new AgentError('INVALID_REQUEST', '嵌入与重排模型不能设为聊天模型', 400)
         }
         // 兼容外壳：旧客户端的“默认模型”语义现在映射为新建任务最近选择。
         await config.batchWrite({
@@ -205,7 +240,8 @@ export const providerHandlers = {
         const model = modelRefOrNull(params.model)
         if (model) {
           const selected = await providers.resolve(model)
-          if (selected.modelType && selected.modelType !== 'chat') throw new AgentError('INVALID_REQUEST', '嵌入与重排模型不能设为聊天模型', 400)
+          if (selected.modelType && selected.modelType !== 'chat')
+            throw new AgentError('INVALID_REQUEST', '嵌入与重排模型不能设为聊天模型', 400)
         }
         await config.batchWrite({
           edits: [
@@ -219,12 +255,48 @@ export const providerHandlers = {
         return { reviewerModel: model, settingsVersion: catalog.catalogVersion }
       }
       case 'provider/test': {
-        const providerID = stringParam(params, 'providerId')
         const explicitModel = params.model ? modelRefOrNull(params.model) : null
+        const testedAt = Date.now()
+        if (params.draft !== undefined) {
+          const draft = object(params.draft, 'draft')
+          const api = draftChatApiParam(params.api)
+          if (!explicitModel) {
+            throw new AgentError('INVALID_REQUEST', '草稿测试需要显式指定模型', 400)
+          }
+          const draftProviderID =
+            stringParamOrNull(params, 'providerId') ?? String(explicitModel.providerID)
+          const probe = await modelHealth.probeDraft(
+            api,
+            String(explicitModel.id),
+            draft as never,
+            typeof draft.apiKey === 'string' && draft.apiKey ? draft.apiKey : undefined,
+          )
+          const modelField = { model: explicitModel }
+          const apiField = probe.api ? { api: probe.api } : {}
+          if (!probe.ok) {
+            return {
+              providerId: draftProviderID,
+              ...modelField,
+              ...apiField,
+              status: 'unavailable',
+              testedAt,
+              category: legacyTestCategory(probe.category),
+              message: probe.message,
+            }
+          }
+          return {
+            providerId: draftProviderID,
+            ...modelField,
+            ...apiField,
+            status: 'reachable',
+            testedAt,
+            latencyMs: probe.latencyMs,
+          }
+        }
+        const providerID = stringParam(params, 'providerId')
         if (explicitModel && String(explicitModel.providerID) !== providerID) {
           throw new AgentError('INVALID_REQUEST', '显式传入的模型与 Provider 不匹配', 400)
         }
-        const testedAt = Date.now()
         let ref = explicitModel
         if (!ref) {
           const recent = recentNewThreadModel(config.snapshot())
@@ -260,10 +332,12 @@ export const providerHandlers = {
         // The legacy method only carries `model` when the caller asked for it;
         // old clients without the field keep receiving the old shape.
         const modelField = explicitModel ? { model: ref } : {}
+        const apiField = probe.api ? { api: probe.api } : {}
         if (!probe.ok) {
           return {
             providerId: providerID,
             ...modelField,
+            ...apiField,
             status: 'unavailable',
             testedAt,
             category: legacyTestCategory(probe.category),
@@ -273,6 +347,7 @@ export const providerHandlers = {
         return {
           providerId: providerID,
           ...modelField,
+          ...apiField,
           status: 'reachable',
           testedAt,
           latencyMs: probe.latencyMs,
@@ -430,26 +505,41 @@ export const providerHandlers = {
         return { providerId: providerID, deleted: true, catalogVersion: catalog.catalogVersion }
       }
       case 'provider/model/discover': {
-        const providerID = stringParam(params, 'providerId')
-        const api = stringParam(params, 'api') as
-          'openai-completions' | 'openai-responses' | 'anthropic-messages'
-        if (api === 'anthropic-messages') {
-          throw new AgentError('PROVIDER_UNAVAILABLE', 'Anthropic 兼容端点不支持自动发现', 400)
-        }
-        const discovered = await piModels.discoverModels(providerID)
-        return {
-          models: discovered.map((model) => ({
-            id: model.id,
-            name: model.name,
+        const api = draftChatApiParam(params.api)
+        const providerID = stringParamOrNull(params, 'providerId')
+        const draft = params.draft === undefined ? undefined : object(params.draft, 'draft')
+        if (draft) {
+          const result = await modelSync.discoverDraft({
             api,
-            enabled: true,
-            contextWindow: 32_768,
-            maxTokens: 8_192,
-            reasoning: false,
-            input: ['text'],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          })),
+            draft: draft as never,
+            ...(providerID ? { providerId: providerID } : {}),
+          })
+          return { models: result.models }
         }
+        if (!providerID) {
+          throw new AgentError('INVALID_REQUEST', '模型发现需要 providerId 或草稿配置', 400)
+        }
+        const discovered = await modelSync.discoverSaved(providerID, api)
+        return { models: discovered }
+      }
+      case 'provider/model/sync': {
+        const providerID = stringParam(params, 'providerId')
+        const result = await modelSync.sync(providerID)
+        await providers.reload()
+        const catalog = await runtime.publishCatalogUpdated()
+        return { ...result, catalogVersion: catalog.catalogVersion }
+      }
+      case 'provider/protocol/detect': {
+        const draft = object(params.draft, 'draft')
+        const providerID = stringParamOrNull(params, 'providerId')
+        const model = stringParamOrNull(params, 'model')
+        const result = await protocolDetection.detect({
+          draft: draft as never,
+          ...(providerID ? { providerId: providerID } : {}),
+          ...(model ? { model } : {}),
+          batch: params.batch === true,
+        })
+        return result
       }
       case 'provider/credential/list':
         return {

@@ -1,7 +1,7 @@
 export { EncryptedCredentialStore } from './EncryptedCredentialStore'
 export type { EncryptedCredentialStoreOptions } from './EncryptedCredentialStore'
 export { PiModelService, PiModelServiceError } from './PiModelService'
-export type { PiModelServiceOptions } from './PiModelService'
+export type { PiModelServiceOptions, PiProviderModelSyncSummary } from './PiModelService'
 export {
   assertSafeProviderHeaders,
   CUSTOM_PROVIDER_APIS,
@@ -21,6 +21,7 @@ export type {
   ParsedPiProviderCatalog,
   PiBuiltinProviderConfig,
   PiCustomModelConfig,
+  PiCustomModelSyncConfig,
   PiCustomProviderConfig,
   PiModelCatalogConfig,
   PiProviderConfig,
@@ -31,4 +32,12 @@ export { piProviderApiStreams } from './PiProviderApis'
 export { createPiDeepSeekProvider } from './PiDeepSeekProvider'
 export { createPiCustomProvider, discoverOpenAIModels } from './PiCustomProvider'
 export type { DiscoveredOpenAIModel, DiscoverOpenAIModelsOptions } from './PiCustomProvider'
+export { LISTABLE_CHAT_APIS, listProviderModels, resolveModelListingRoot } from './PiModelListing'
+export type {
+  ListableChatApi,
+  ListedProviderModel,
+  ProviderModelFetch,
+  ProviderModelListing,
+  ProviderModelListingRequest,
+} from './PiModelListing'
 export { PiModelsFileStore } from './PiModelsFileStore'
