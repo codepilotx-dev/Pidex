@@ -17,7 +17,6 @@
 ## 子代理与外部 Coding Agent
 
 - 用户明确要求，或适用 Skill 明确规定时，可将边界清晰、相互独立的子问题交给子代理；否则由当前 Agent 完成。子代理不得独立决定架构、数据兼容策略、安全边界或验收标准。
-- 仅在用户明确要求使用 OpenCode 等外部 Coding Agent 时，读取并遵守 [外部 Coding Agent 规则](docs/agent/external-coding-agent.md)；普通任务不得因此启动外部 Agent。
 
 ## 仓库与多客户端边界
 
