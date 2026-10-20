@@ -364,7 +364,8 @@ export default defineConfig(({ command, mode }) => ({
     alias: {
       '@pidex/core': resolve(__dirname, 'src/shims/core'),
     },
-    dedupe: ['react', 'react-dom'],
+    // ProseMirror checks model objects with instanceof across editor dependencies.
+    dedupe: ['react', 'react-dom', 'prosemirror-model'],
   },
   optimizeDeps: {
     include: ['cmdk'],
