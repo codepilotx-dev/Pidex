@@ -87,31 +87,9 @@
     white-space: pre;
   }
 
-  /* --- Git Workflow Modal --- */
-  .git-workflow-modal {
-    width: min(720px, 100%);
-  }
-
-  .git-workflow-form label {
-    display: grid;
-    gap: 6px;
-    color: var(--cpx-sys-color-fg-primary);
-    font: var(--cpx-sys-type-body);
-  }
-  .git-workflow-form input,
-  .git-workflow-form textarea {
-    width: 100%;
-    padding: 0.57em var(--cpx-comp-button-padding-inline);
-    border: 1px solid var(--cpx-sys-color-border-default);
-    border-radius: var(--cpx-comp-input-radius);
-    background: var(--cpx-sys-color-surface-control);
-    color: var(--cpx-sys-color-fg-primary);
-    font: inherit;
-  }
-  .git-workflow-form textarea {
-    resize: vertical;
-  }
-
+  /* --- Git Workflow Modal ---
+     Form controls are `components/ui` primitives now, so only the scroll shell
+     and the status glyph stay here; element selectors would restyle Button/Checkbox. */
   .git-workflow-files-scroll-area {
     display: grid;
     max-height: 260px;
@@ -128,43 +106,11 @@
     gap: 6px;
     padding: var(--cpx-sys-space-3);
   }
-  .git-workflow-files-scroll-content > div,
-  .git-workflow-files-scroll-content .git-workflow-check {
-    display: flex;
-    align-items: center;
-    gap: var(--cpx-sys-space-2);
-  }
-  .git-workflow-files-scroll-content > div {
-    justify-content: space-between;
-  }
-  .git-workflow-files-scroll-content button {
-    padding: var(--cpx-comp-button-padding-block-compact)
-      var(--cpx-comp-button-padding-inline-compact);
-    border: 1px solid var(--cpx-sys-color-border-subtle);
-    border-radius: var(--cpx-comp-button-radius-md);
-    background: var(--cpx-sys-color-surface-control);
-    line-height: var(--cpx-sys-line-height-tight);
-  }
-  .git-workflow-files-scroll-content label {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--cpx-sys-space-2);
-  }
-  .git-workflow-files-scroll-content label span {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--cpx-sys-color-fg-primary);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+
+  /* Status glyph: kept because the label rows themselves use `tw:` utilities. */
   .git-workflow-files-scroll-content small {
     color: var(--cpx-sys-color-fg-tertiary);
     font-family: var(--cpx-sys-font-family-mono);
-  }
-
-  .git-workflow-check {
-    justify-content: start;
   }
 
   .git-workflow-error {
