@@ -18,6 +18,49 @@ afterEach(async () => {
 })
 
 describe('ConfigService', () => {
+  test('可信子项目首次保存创建本项目配置，不覆盖祖先配置；无效文件仍拒绝覆盖', async () => {
+    const root = await temporaryRoot()
+    const parent = join(root, 'parent')
+    const child = join(parent, 'child')
+    const parentFile = join(parent, '.pidex', 'config.json')
+    const childFile = join(child, '.pidex', 'config.json')
+    await mkdir(join(parent, '.pidex'), { recursive: true })
+    await mkdir(child)
+    const original = '{ "future_parent": true }\n'
+    await writeFile(parentFile, original, 'utf8')
+    const service = new ConfigService(
+      join(root, 'config.json'),
+      {},
+      {
+        read: (path) => (path === parent || path === child ? 'trusted' : null),
+        write: () => undefined,
+      },
+    )
+    await service.initialize()
+    try {
+      await service.trustUpdate(parent, 'trusted')
+      await service.trustUpdate(child, 'trusted')
+      await service.batchWrite({
+        cwd: child,
+        target: { kind: 'project' },
+        expectedVersion: createHash('sha256').update('').digest('hex'),
+        edits: [{ keyPath: ['permission_rules'], value: [] }],
+      })
+      expect(JSON.parse(await readFile(childFile, 'utf8'))).toEqual({ permission_rules: [] })
+      expect(await readFile(parentFile, 'utf8')).toBe(original)
+      await writeFile(childFile, '{invalid', 'utf8')
+      await expect(
+        service.batchWrite({
+          cwd: child,
+          target: { kind: 'project' },
+          edits: [{ keyPath: ['permission_rules'], value: [] }],
+        }),
+      ).rejects.toMatchObject({ code: 'CONFIG_VALIDATION_ERROR' })
+      expect(await readFile(childFile, 'utf8')).toBe('{invalid')
+    } finally {
+      await service.dispose()
+    }
+  })
   test('首次保存外观时跳过不存在的 nullable 字体项并仍可删除已有项', async () => {
     const root = await temporaryRoot()
     const service = new ConfigService(join(root, 'config.json'))
