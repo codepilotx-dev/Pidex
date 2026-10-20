@@ -245,11 +245,33 @@ test('提交行收起短 SHA，只在 hover 或行内聚焦时显示', () => {
     expect(element).toContain('group-hover:inline')
     expect(element).toContain('group-has-[:focus-visible]:inline')
     // 点击选中的提交保留 SHA，便于对照当前详情。
-    expect(element).toContain('group-[.active]:inline')
+    expect(element).toContain('group-data-[selected=true]:inline')
   }
   // 隐藏时不占布局宽度；悬浮卡仍提供完整 SHA。
   expect(html).toContain('aaaa000')
   expect(html.match(/sidebar-commit-row tw:group/g)).toHaveLength(2)
+})
+
+test('选中的提交行通过 data-selected 保留短 SHA', () => {
+  const list = commits(2)
+  const html = renderCommits(
+    { commits: list },
+    {
+      hook: controller({
+        repositories: { [project.projectId!]: { result, commits: list } },
+        selectedReview: {
+          project,
+          source: { kind: 'commit', commitSha: list[1]!.sha },
+        },
+      }),
+    },
+  )
+  // 只有被选中的那一行带 data-selected，组选择器据此让 SHA 常显。
+  const selectedRows = html.match(/<div class="sidebar-row[^"]*"[^>]*data-selected="true"/g) ?? []
+  expect(selectedRows).toHaveLength(1)
+  // 两行提交各渲染一次，未选中的行不应带该属性。
+  expect(html.match(/sidebar-row--grid/g)).toHaveLength(2)
+  expect(html.match(/data-selected="true"/g)).toHaveLength(1)
 })
 
 test('仓库行标题默认折叠提交，展开后由同一入口收起且不显示箭头', () => {

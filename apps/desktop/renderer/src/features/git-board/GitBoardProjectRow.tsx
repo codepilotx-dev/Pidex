@@ -230,7 +230,7 @@ export function GitBoardProjectRow({
                     'sidebar-project-actions tw:relative tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
                     menuOpen
                       ? 'is-visible tw:flex tw:opacity-100 tw:pointer-events-auto'
-                      : 'tw:hidden tw:group-hover:flex tw:group-focus-within:flex tw:opacity-100 tw:pointer-events-auto',
+                      : 'tw:hidden tw:group-hover:flex tw:group-has-[:focus-visible]:flex tw:opacity-100 tw:pointer-events-auto',
                   )}
                   onClick={(event) => event.stopPropagation()}
                 >

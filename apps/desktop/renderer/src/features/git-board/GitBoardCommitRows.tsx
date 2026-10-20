@@ -36,7 +36,7 @@ const COMMIT_STATUS_CLASS =
  * 便于对照当前选中的提交。完整 SHA 与作者/时间仍由悬浮卡提供。
  */
 const COMMIT_SHA_CLASS =
-  'sidebar-commit-sha tw:max-w-[5.5rem] tw:shrink-0 tw:truncate tw:font-mono tw:type-caption tw:text-app-text-meta tw:hidden tw:group-hover:inline tw:group-has-[:focus-visible]:inline tw:group-[.active]:inline'
+  'sidebar-commit-sha tw:max-w-[5.5rem] tw:shrink-0 tw:truncate tw:font-mono tw:type-caption tw:text-app-text-meta tw:hidden tw:group-hover:inline tw:group-has-[:focus-visible]:inline tw:group-data-[selected=true]:inline'
 
 function GitBoardCommitRow({
   commit,

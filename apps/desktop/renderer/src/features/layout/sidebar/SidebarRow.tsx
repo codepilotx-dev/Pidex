@@ -56,6 +56,9 @@ export const SidebarRow = forwardRef<HTMLElement, Props>(function SidebarRow(
     'tw:hover:bg-app-hover',
     className,
   )
+  // Selection is also published as a data attribute so descendants can react with
+  // Tailwind `group-data-[selected=true]:*` instead of targeting the `selected` class.
+  const rowAttributes = active ? { ...rowProps, 'data-selected': 'true' } : rowProps
 
   if (asChild) {
     const child = Children.only(children) as ReactElement<{
@@ -67,7 +70,7 @@ export const SidebarRow = forwardRef<HTMLElement, Props>(function SidebarRow(
     return cloneElement(
       child,
       {
-        ...rowProps,
+        ...rowAttributes,
         className: cx(rowClassName, child.props.className),
         ref,
       },
@@ -87,7 +90,7 @@ export const SidebarRow = forwardRef<HTMLElement, Props>(function SidebarRow(
     <Component
       className={rowClassName}
       ref={ref as Ref<HTMLDivElement> & Ref<HTMLLIElement>}
-      {...rowProps}
+      {...rowAttributes}
     >
       {renderRowContent({
         children,
