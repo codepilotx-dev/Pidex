@@ -3,7 +3,7 @@ import { Effect } from 'effect'
 import { Schema } from 'effect'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { Model, Provider } from '@pidex/model-schema'
 import { EventManifest } from '@pidex/agent-protocol'
 import { removeFixturePaths } from './FixtureCleanup'
@@ -24,6 +24,18 @@ import {
 import { ConfigService } from '../src/config/ConfigService'
 import { McpElicitationService } from '../src/mcp/McpElicitationService'
 import { filterAdvertisedCapabilities } from '../src/transport/rpc/handlers/SystemCapabilities'
+import {
+  createModels,
+  fauxAssistantMessage,
+  fauxProvider,
+  fauxToolCall,
+} from '@earendil-works/pi-ai'
+import { AgentRuntimeService } from '../src/orchestration/AgentRuntimeService'
+import { ContextCompactionService } from '../src/context/ContextCompactionService'
+import { ToolExecutor } from '../src/tool/ToolExecutor'
+import { WorkspaceService } from '../src/workspace/WorkspaceService'
+import { ReviewerService } from '../src/permission/ReviewerService'
+import type { PiModelService } from '../src/provider/pi'
 
 const paths: string[] = []
 const databases: AgentDatabase[] = []
@@ -85,6 +97,297 @@ async function scopedFixture() {
 }
 
 describe('审批范围与外部交互', () => {
+  test('真实 Guardian 10 秒超时转人工，批准后原命令只执行一次且不重复审查', async () => {
+    const {
+      db,
+      hub,
+      tools,
+      config,
+      workspace: root,
+      thread,
+      turn,
+      invocation,
+    } = await scopedFixture()
+    let reviewCalls = 0
+    let reviewAborted = false
+    const providers = {
+      getPiModel: async () => ({ provider: 'openai', id: 'test' }),
+      pi: {
+        completeSimple: async (
+          _model: unknown,
+          _context: unknown,
+          options: { signal: AbortSignal },
+        ) => {
+          reviewCalls++
+          return new Promise((_resolve, reject) => {
+            options.signal.addEventListener(
+              'abort',
+              () => {
+                reviewAborted = true
+                reject(options.signal.reason)
+              },
+              { once: true },
+            )
+          })
+        },
+      },
+    } as unknown as PiModelService
+    const reviewer = new ReviewerService(db, providers, config)
+    const service = new ApprovalService(
+      db,
+      hub,
+      tools,
+      (value, signal) => reviewer.review(value, signal),
+      config,
+    )
+    let executions = 0
+    const executor = new ToolExecutor(tools, {
+      dataDir: join(root, '..', 'agent-data'),
+      authorizeShell: (value, signal) => service.authorize(value, signal),
+      resolvePermissionRules: (value) => service.rules.evaluate(value),
+      runHost: async () => {
+        executions++
+        return {
+          stdout: 'approved',
+          stderr: '',
+          exitCode: 0,
+          signal: null,
+          timedOut: false,
+          truncated: false,
+        }
+      },
+    })
+    const context = {
+      threadID: thread.id,
+      turnID: turn.turnID,
+      agentID: turn.agentID,
+      taskMode: 'chat' as const,
+      signal: new AbortController().signal,
+      workspace: await WorkspaceService.open(root),
+      model: invocation.model,
+      permissionConfig: {
+        ...invocation.permissionConfig,
+        approvalPolicy: 'on-request' as const,
+        approvalsReviewer: 'auto_review' as const,
+      },
+    }
+    const input = { command: 'curl.exe -I https://example.com', cwd: root }
+    const decision = await executor.previewApproval('PowerShell', input, context, 'real-timeout')
+    expect(reviewCalls).toBe(1)
+    expect(reviewAborted).toBe(true)
+    expect(executions).toBe(0)
+    expect(decision).toMatchObject({
+      decision: 'ask',
+      guardian: { status: 'timeout', source: 'fallback' },
+    })
+    await service.attachRunState('real-timeout', '{"engine":"pi"}', { toolCallID: 'real-timeout' })
+    const checkpoint = db.approvalCheckpointForToolCall('real-timeout')!
+    expect(checkpoint.status).toBe('pending')
+    expect(db.repositories.interactions.approvalReviewState(thread.id).reviews[0]).toMatchObject({
+      decision: 'ask',
+      guardian: { status: 'timeout' },
+    })
+    await service.respond(checkpoint.approvalID, 'allow')
+    const output = await executor.execute('PowerShell', input, {
+      ...context,
+      toolCallID: 'real-timeout',
+      approvedToolCallID: 'real-timeout',
+      ...(decision.authorizationFingerprint
+        ? { approvedAuthorizationFingerprint: decision.authorizationFingerprint }
+        : {}),
+    })
+    expect(output).toMatchObject({ stdout: 'approved', exitCode: 0 })
+    expect(executions).toBe(1)
+    expect(reviewCalls).toBe(1)
+  }, 20_000)
+
+  for (const unavailable of ['missing', 'error'] as const) {
+    test(`Guardian ${unavailable} 时联网调用转可恢复人工审批`, async () => {
+      const { db, hub, tools, config, invocation } = await scopedFixture()
+      const service = new ApprovalService(
+        db,
+        hub,
+        tools,
+        unavailable === 'missing'
+          ? null
+          : async () => {
+              throw new Error('reviewer unavailable')
+            },
+        config,
+      )
+      const network = {
+        ...invocation,
+        input: { ...invocation.input, command: 'curl.exe -I https://example.com' },
+        permissionConfig: {
+          ...invocation.permissionConfig,
+          approvalPolicy: 'on-request' as const,
+          approvalsReviewer: 'auto_review' as const,
+        },
+        permissionFacts: { risk: 'medium' as const, networkAccess: true },
+      }
+      expect(await service.authorize(network, new AbortController().signal)).toMatchObject({
+        decision: 'ask',
+      })
+      await service.attachRunState(network.id, '{"engine":"pi"}', { toolCallID: network.id })
+      const checkpoint = db.approvalCheckpointForToolCall(network.id)!
+      expect(checkpoint.status).toBe('pending')
+      expect(
+        (await service.respond(checkpoint.approvalID, 'allow')).payload.resolution?.decision,
+      ).toBe('allow')
+    })
+  }
+
+  for (const name of ['Write', 'PowerShell'] as const) {
+    for (const scope of ['once', 'session', 'project'] as const) {
+      test(`${name} ${scope} 审批暂停后只执行一次，等待结果不能冒充完成结果`, async () => {
+        const {
+          db,
+          hub,
+          tools,
+          config,
+          workspace: root,
+          thread,
+          turn,
+          invocation,
+        } = await scopedFixture()
+        if (scope === 'project') await unlink(join(root, '.pidex', 'config.json'))
+        const service = new ApprovalService(db, hub, tools, null, config)
+        const workspace = await WorkspaceService.open(root)
+        const target = join(root, '..', 'approved.txt')
+        const call = fauxToolCall(
+          name,
+          name === 'Write'
+            ? { file_path: target, content: 'approved' }
+            : { command: 'curl.exe -I https://example.com', cwd: root },
+        )
+        let executions = 0
+        const executor = new ToolExecutor(tools, {
+          dataDir: join(root, '..', 'agent-data'),
+          authorizeShell: (input, signal) => service.authorize(input, signal),
+          resolvePermissionRules: (input) => service.rules.evaluate(input),
+          recordToolCall: (input, status, output, error, startedAt) => {
+            if (status === 'running') executions++
+            db.upsertToolCall(input, status, output, error, startedAt)
+          },
+          runHost: async () => ({
+            stdout: 'HTTP/1.1 200 OK',
+            stderr: '',
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            truncated: false,
+          }),
+        })
+        const faux = fauxProvider({
+          models: [{ id: 'approval-test', input: ['text'], contextWindow: 64_000 }],
+        })
+        const models = createModels()
+        models.setProvider(faux.provider)
+        const runtime = new AgentRuntimeService({
+          db,
+          hub,
+          models,
+          toolExecutor: executor,
+          contextCompaction: new ContextCompactionService(db),
+        })
+        const request = {
+          threadID: thread.id,
+          turnID: turn.turnID,
+          agentID: turn.agentID,
+          sessionID: db.getAgentExecution(turn.agentID)!.sessionID,
+          content: 'execute exactly once',
+          taskMode: 'chat' as const,
+          fallbackModel: invocation.model,
+          permissionConfig: {
+            ...invocation.permissionConfig,
+            approvalPolicy: 'on-request' as const,
+          },
+          signal: new AbortController().signal,
+          workspace,
+          promptSections: [],
+          resolveModel: async () => ({ ref: invocation.model, model: faux.getModel() }),
+          pause: async (
+            pending: import('../src/orchestration/AgentRuntimeTypes').PendingApproval,
+          ) => {
+            await service.attachRunState(
+              pending.toolCallID!,
+              pending.checkpoint.state,
+              pending.checkpoint.interruption,
+            )
+          },
+        }
+        faux.setResponses([
+          fauxAssistantMessage(call, { stopReason: 'toolUse' }),
+          () => {
+            throw new Error('审批暂停期间不能继续请求模型')
+          },
+        ])
+        try {
+          expect(await runtime.run(request)).toMatchObject({ status: 'paused' })
+          expect(executions).toBe(0)
+          expect(db.hasPersistedToolResult(turn.turnID, call.id)).toBe(false)
+          const checkpoint = db.approvalCheckpointForToolCall(call.id)!
+          const option = service.rules
+            .options(checkpoint.payload.invocation)
+            .find((value) => value.scope === scope)
+          if (scope !== 'once') expect(option).toBeDefined()
+          if (name === 'PowerShell')
+            expect(
+              checkpoint.payload.invocation.permissionFacts?.ruleTargets?.networkDomains,
+            ).toEqual(['example.com'])
+          await service.respond(
+            checkpoint.approvalID,
+            'allow',
+            undefined,
+            undefined,
+            undefined,
+            option?.id,
+          )
+          if (scope !== 'once')
+            expect((await service.rules.list(thread.id)).rules.length).toBeGreaterThan(0)
+          faux.setResponses([
+            (context) => {
+              const transcript = JSON.stringify(context.messages)
+              expect(transcript).toContain('新的 toolCallId 并重新判权')
+              expect(transcript).toContain('不得重复执行该 ID')
+              expect(transcript).toContain('不得自行换工具或等价命令绕过用户拒绝')
+              return fauxAssistantMessage('done')
+            },
+          ])
+          const resume = {
+            state: checkpoint.payload.runState!,
+            interruption: checkpoint.payload.interruption,
+            answer: null,
+            decision: 'allow' as const,
+            toolCallID: call.id,
+            ...(checkpoint.payload.invocation.authorizationScope?.fingerprint
+              ? {
+                  authorizationFingerprint:
+                    checkpoint.payload.invocation.authorizationScope.fingerprint,
+                }
+              : {}),
+          }
+          await runtime.run({ ...request, resume })
+          expect(executions).toBe(1)
+          expect(
+            db.sqlite.query('SELECT status, error FROM tool_calls WHERE id = ?').get(call.id),
+          ).toMatchObject({ status: 'completed', error: null })
+          expect(db.hasPersistedToolResult(turn.turnID, call.id)).toBe(true)
+          if (name === 'Write') expect(await readFile(target, 'utf8')).toBe('approved')
+          else
+            expect(db.completedToolCall(call.id)?.output).toMatchObject({
+              stdout: 'HTTP/1.1 200 OK',
+            })
+          faux.setResponses([fauxAssistantMessage('already done')])
+          await runtime.run({ ...request, resume })
+          expect(executions).toBe(1)
+        } finally {
+          await runtime.dispose()
+        }
+      })
+    }
+  }
+
   test('持久规则保存失败仍恢复单次允许，不留下聊天白名单', async () => {
     const { db, hub, tools, config, invocation } = await scopedFixture()
     const service = new ApprovalService(db, hub, tools, null, config)
@@ -104,7 +407,7 @@ describe('审批范围与外部交互', () => {
     await service.attachRunState(mcp.id, '{"version":1}', { name: mcp.name, callId: mcp.id })
     const checkpoint = db.approvalCheckpointForToolCall(mcp.id)!
     const option = service.rules.options(mcp).find((value) => value.scope === 'project')!
-    service.rules.persistProject = async () => {
+    service.rules.persistGrant = async () => {
       throw new Error('fixture settings failure')
     }
     await service.respond(
@@ -160,22 +463,22 @@ describe('审批范围与外部交互', () => {
     expect(
       (
         await recovered.authorize(
-          { ...invocation, id: 'next', input: { command: 'git status --short', cwd: workspace } },
+          { ...invocation, id: 'next', input: { command: 'git status', cwd: workspace } },
           new AbortController().signal,
         )
       ).decision,
     ).toBe('allow')
     for (const changed of [
       { ...invocation, input: { command: 'git status-all', cwd: workspace } },
+      { ...invocation, input: { command: 'git status --short', cwd: workspace } },
       { ...invocation, input: { command: 'git status', cwd: join(workspace, 'other') } },
       { ...invocation, threadID: db.createThread('另一聊天', project.id).id },
-      { ...invocation, grantsForbidden: true },
       {
         ...invocation,
         input: { command: 'git status', additionalPermissions: { readPaths: ['C:/secret'] } },
       },
     ])
-      expect(await recovered.rules.matches(changed)).toBe(false)
+      expect((await recovered.rules.evaluate(changed)).effect).not.toBe('allow')
     await expect(
       service.respond(stored.approvalID, 'allow', undefined, undefined, undefined, grant.id),
     ).rejects.toThrow('已经处理')
@@ -193,7 +496,9 @@ describe('审批范围与外部交互', () => {
         origin: { kind: 'mcp' as const, serverName: 'fixture', rawToolName: 'save', generation: 1 },
       },
     }
-    const grant = rules.candidates(mcp).find((rule) => rule.scope === 'project')!
+    const candidate = rules.candidates(mcp).find((rule) => rule.scope === 'project')!
+    const { subjects: _subjects, ...legacyCandidate } = candidate
+    const grant = { ...legacyCandidate, target: ['fixture', 'save'] }
     const futureRule = { id: grant.id, kind: 'future', target: ['keep'], scope: 'project' }
     await config.batchWrite({
       cwd: grant.workspace,
@@ -243,17 +548,20 @@ describe('审批范围与外部交互', () => {
         additionalPermissions: { networkDomains: ['example.test'] },
       },
     }
-    const grants = rules.candidates(network)
-    await rules.persistProject(
-      grants.find((rule) => rule.kind === 'network' && rule.scope === 'project')!,
-    )
+    await rules.persistProject({
+      id: 'legacy-network',
+      kind: 'network',
+      scope: 'project',
+      workspace,
+      target: ['example.test'],
+    })
     expect(await rules.matches(network)).toBe(false)
     expect(
       await rules.matches({
         ...network,
         permissionConfig: { ...network.permissionConfig, approvalPolicy: 'on-request' },
       }),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       await rules.matches({
         ...network,

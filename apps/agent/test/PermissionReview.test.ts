@@ -137,6 +137,7 @@ const reviewInvocation = (overrides: Record<string, unknown> = {}): ToolInvocati
     turnID: 'turn-1',
     agentID: 'agent-1',
     name: 'Write',
+    permissionFacts: { risk: 'low' },
     input: { file_path: 'src/a.ts' },
     permissionConfig: {
       sandboxMode: 'workspace-write',
@@ -165,7 +166,7 @@ describe('Shell ReviewerService', () => {
     expect(result.reason).toContain('审核模型')
   })
 
-  test('旧 review 调用保持 PermissionDecision 兼容，并对 Shell 审核异常拒绝', async () => {
+  test('Shell 模型不可用上报基础设施异常，由审批服务决定人工回退', async () => {
     const service = reviewer(() => null)
     const invocation = {
       id: 'tool-1',
@@ -180,9 +181,8 @@ describe('Shell ReviewerService', () => {
       },
       taskMode: 'chat',
     } as unknown as ToolInvocation
-    await expect(service.review(invocation, new AbortController().signal)).resolves.toMatchObject({
-      decision: 'deny',
-      risk: 'high',
+    await expect(service.review(invocation, new AbortController().signal)).rejects.toMatchObject({
+      code: 'REVIEWER_UNAVAILABLE',
     })
   })
 
@@ -195,6 +195,7 @@ describe('Shell ReviewerService', () => {
       turnID: 'turn-1',
       agentID: 'agent-1',
       name: 'shell',
+      permissionFacts: { risk: 'low' },
       input: { command: 'npm test' },
       permissionConfig: {
         sandboxMode: 'workspace-write',
@@ -241,7 +242,7 @@ describe('Shell ReviewerService', () => {
         tools.get('PowerShell'),
       ),
     ).toMatchObject({ action: 'review', reviewer: 'user' })
-    // never 策略无法询问人工，只能拒绝
+    // 完全访问不进入风险审批
     expect(
       engine.evaluate(
         {
@@ -255,7 +256,7 @@ describe('Shell ReviewerService', () => {
         },
         tools.get('PowerShell'),
       ),
-    ).toMatchObject({ action: 'deny' })
+    ).toMatchObject({ action: 'allow' })
   })
 
   test('独立审核模型不可用时回退当前任务模型', async () => {
@@ -300,6 +301,81 @@ describe('Shell ReviewerService', () => {
     ).resolves.toMatchObject({ decision: 'allow', reason: '任务模型审核通过' })
     expect(resolved).toEqual(['configured/reviewer', 'fallback/task'])
   })
+
+  for (const failure of ['timeout', 'error', 'deny', 'cancel'] as const) {
+    test(`安全模型 ${failure}：记录实际模型并仅在基础设施失败后回退`, async () => {
+      const fallback = Model.Ref.make({
+        providerID: Provider.ID.make('fallback'),
+        id: Model.ID.make('task'),
+      })
+      const controller = new AbortController()
+      const calls: string[] = []
+      const logs: Array<{ event: string; details: Record<string, unknown> }> = []
+      const log = (event: string, entry: { details?: Record<string, unknown> }) =>
+        logs.push({ event, details: entry.details ?? {} })
+      let timedOut = false
+      const providers = {
+        getPiModel: async (ref: Model.Ref) => ({ provider: ref.providerID, id: ref.id }),
+        pi: {
+          completeSimple: async (model: { provider: string; id: string }, _context: unknown,
+            options: { signal: AbortSignal }) => {
+            calls.push(`${model.provider}/${model.id}`)
+            if (model.provider === 'configured') {
+              if (failure === 'timeout') {
+                return await new Promise((_, reject) => {
+                  options.signal.addEventListener('abort', () => {
+                    timedOut = true
+                    reject(options.signal.reason)
+                  }, { once: true })
+                })
+              }
+              if (failure === 'error') throw new Error('provider failed')
+              if (failure === 'cancel') {
+                controller.abort(new Error('user cancelled'))
+                throw controller.signal.reason
+              }
+            }
+            return {
+              stopReason: 'stop',
+              content: [{ type: 'text', text: JSON.stringify({
+                decision: failure === 'deny' ? 'deny' : 'allow',
+                risk: 'low', confidence: 'high', categories: [],
+                requested_scope_valid: true, reason: '审核完成',
+              }) }],
+            }
+          },
+        },
+      } as unknown as PiModelService
+      const service = new ReviewerService(
+        { threadProjectID: () => null } as unknown as AgentDatabase,
+        providers,
+        { snapshot: () => ({ specialized_models: { security: 'configured/reviewer' } }) } as never,
+        undefined,
+        { info: log, warn: log } as never,
+      )
+      const result = await service.reviewShell({ command: 'npm test' }, controller.signal, fallback)
+      const shouldFallback = failure === 'timeout' || failure === 'error'
+      expect(calls).toEqual(shouldFallback
+        ? ['configured/reviewer', 'fallback/task'] : ['configured/reviewer'])
+      expect(logs.filter(entry => entry.event === 'guardian.review.started')
+        .map(entry => `${entry.details.provider}/${entry.details.model}`)).toEqual(calls)
+      expect(logs.some(entry => entry.event === 'guardian.review.fallback')).toBe(shouldFallback)
+      if (failure === 'cancel') expect(result.reviewUnavailable).toBe(true)
+      else {
+        expect(result).toMatchObject({
+          decision: failure === 'deny' ? 'deny' : 'allow',
+          model: shouldFallback ? 'fallback/task' : 'configured/reviewer',
+        })
+        expect(logs.at(-1)).toMatchObject({ event: 'guardian.review.completed',
+          details: { provider: shouldFallback ? 'fallback' : 'configured' } })
+      }
+      if (failure === 'timeout') {
+        expect(timedOut).toBe(true)
+        expect(logs.find(entry => entry.event === 'guardian.review.failed')?.details.code)
+          .toBe('REVIEWER_TIMEOUT')
+      }
+    }, 20_000)
+  }
 
   test('独立审核模型与任务模型都不可用时保持 fail-closed', async () => {
     const configured = Model.Ref.make({
@@ -405,6 +481,7 @@ describe('Shell ReviewerService', () => {
       turnID: 'turn-1',
       agentID: 'agent-1',
       name: 'Write',
+      permissionFacts: { risk: 'low' },
       input: { file_path: 'src/a.ts' },
       permissionConfig: {
         sandboxMode: 'workspace-write',
@@ -430,6 +507,19 @@ describe('Shell ReviewerService', () => {
 })
 
 describe('Guardian authorization context', () => {
+  test('非 Shell 宿主高风险不会被 Reviewer 的 low 结果降低', async () => {
+    const service = contextualReviewer(
+      { threadID: 'thread-1', messages: { 'thread-1': ['执行该操作'] } },
+      [],
+    )
+    const decision = await service.review(
+      reviewInvocation({ permissionFacts: { risk: 'high', destructive: true } }),
+      new AbortController().signal,
+    )
+    expect(decision.risk).toBe('high')
+    expect(decision.guardian?.categories).toContain('destructive')
+  })
+
   test('only real user messages and host-confirmed actions may prove authorization', async () => {
     const captured: ReviewCapture[] = []
     const service = contextualReviewer(

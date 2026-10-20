@@ -217,6 +217,13 @@ export function ApprovalRulesDialog({
     setEditor(null)
     setEditorError(null)
     setPendingRevoke(null)
+    // Chat isolation: never show the previous chat's catalog while this one loads.
+    // `error`/`versionConflict` also belong to the previous chat's requests.
+    setRules([])
+    setWorkspaceRoots([])
+    setIsProjectChat(false)
+    setVersionConflict(false)
+    setError('')
     if (supported) void loadRules()
     return () => {
       loadGenerationRef.current += 1
@@ -231,11 +238,14 @@ export function ApprovalRulesDialog({
 
   const openCreate = (): void => {
     setEditorError(null)
+    // A new edit session starts clean; a conflict banner from an abandoned one would mislead.
+    setVersionConflict(false)
     setEditor({ mode: 'create', values: createApprovalRuleEditorValues(tab) })
   }
 
   const openEdit = (rule: PermissionRule): void => {
     setEditorError(null)
+    setVersionConflict(false)
     setEditor({
       mode: 'edit',
       id: rule.id,
@@ -267,6 +277,7 @@ export function ApprovalRulesDialog({
       setTab(result.rule.effect)
       setEditor(null)
       setVersionConflict(false)
+      await loadRules()
     } catch (cause) {
       if (isApprovalRuleVersionConflict(cause)) setVersionConflict(true)
       else setEditorError(errorMessage(cause, '保存审批规则失败，请重试。'))
@@ -288,6 +299,8 @@ export function ApprovalRulesDialog({
       setRules((current) => applyApprovalRuleRevoke(current, pendingRevoke.id))
       if (editor?.id === pendingRevoke.id) setEditor(null)
       setPendingRevoke(null)
+      // User/project rules share the configuration layer's version.
+      await loadRules()
     } catch (cause) {
       if (isApprovalRuleVersionConflict(cause)) setVersionConflict(true)
       else setError(errorMessage(cause, '撤销审批规则失败，请重试。'))
@@ -402,6 +415,8 @@ export function ApprovalRulesDialog({
                     if (!busy) {
                       setEditor(null)
                       setEditorError(null)
+                      // Abandoning the edit abandons its conflict too.
+                      setVersionConflict(false)
                     }
                   }}
                   onChange={(values) => setEditor((current) => (current ? { ...current, values } : current))}

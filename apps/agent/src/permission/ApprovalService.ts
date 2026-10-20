@@ -1,3 +1,4 @@
+import { isFullAccessPermissionConfig } from '@pidex/shared/thread'
 import { Effect } from 'effect'
 import { createHash } from 'node:crypto'
 import { AgentError, type PermissionDecision, type ToolInvocation } from '../Domain'
@@ -123,7 +124,7 @@ export class ApprovalService {
     private readonly tools: ToolRegistry,
     private readonly reviewer: Reviewer | null = null,
     config?: ConfigService,
-    private readonly browser?: BrowserService,
+    _browser?: BrowserService,
     private readonly guardianScores?: GuardianScoreService,
   ) {
     this.rules = new ApprovalRules(db, tools, config)
@@ -132,21 +133,7 @@ export class ApprovalService {
   approvalMetadata(invocation: ToolInvocation) {
     const origin = (invocation.toolPolicy ?? this.tools.get(invocation.name)).origin
     return {
-      grantOptions: [
-        ...this.rules.options(invocation),
-        ...this.browserRules(invocation).map((rule) => ({
-          id: rule.id,
-          kind: 'browser' as const,
-          scope: rule.scope,
-          label:
-            rule.scope === 'session'
-              ? '此聊天允许此网站'
-              : rule.scope === 'origin'
-                ? `始终允许 ${rule.target[0]}`
-                : '允许所有网站',
-          ...(rule.scope === 'all-sites' ? { requiresConfirmation: true } : {}),
-        })),
-      ],
+      grantOptions: this.rules.options(invocation),
       ...(origin?.kind === 'mcp'
         ? {
             toolIdentity: { server: origin.serverName, tool: origin.rawToolName },
@@ -170,31 +157,13 @@ export class ApprovalService {
     const guardian = review?.guardian
     const fallbackReason = review?.fallbackReason
     return {
-      ...(guardian && typeof guardian === 'object' && !Array.isArray(guardian)
-        ? { guardian }
-        : {}),
-      ...(typeof fallbackReason === 'string'
-        ? { autoReviewFallbackReason: fallbackReason }
-        : {}),
+      ...(guardian && typeof guardian === 'object' && !Array.isArray(guardian) ? { guardian } : {}),
+      ...(typeof fallbackReason === 'string' ? { autoReviewFallbackReason: fallbackReason } : {}),
     }
   }
 
-  private browserRules(invocation: ToolInvocation): ApprovalRule[] {
-    const origin = invocation.authorizationScope?.browserOrigin
-    if (!origin || !this.browser || invocation.permissionFacts?.hookRequiresApproval) return []
-    return (['session', 'origin', 'all-sites'] as const).map((scope) => ({
-      id: `${invocation.authorizationScope!.fingerprint}:${scope}`,
-      kind: 'browser',
-      scope,
-      workspace: '',
-      target: [origin],
-    }))
-  }
   validateGrant(invocation: ToolInvocation, id: string): ApprovalRule {
-    return (
-      this.browserRules(invocation).find((rule) => rule.id === id) ??
-      this.rules.validate(invocation, id)
-    )
+    return this.rules.validate(invocation, id)
   }
 
   setAgentStatusHandler(
@@ -222,20 +191,35 @@ export class ApprovalService {
     if (signal.aborted) return { decision: 'deny', risk: 'low', reason: '操作已取消' }
     const tool = (invocation.toolPolicy ??
       this.tools.get(invocation.name)) as import('../tool/ToolRegistry').ToolCatalogEntry
-    if (typeof invocation.input.command === 'string') {
+    if (
+      invocation.taskMode !== 'plan' &&
+      isFullAccessPermissionConfig(invocation.permissionConfig)
+    ) {
+      const decision = this.decisions.evaluate(invocation, tool)
+      return { decision: decision.decision, risk: decision.risk, reason: decision.reason }
+    }
+    if (typeof invocation.input.command === 'string' && !invocation.permissionFacts?.risk) {
       const workspaceRoot = this.rules.workspace(invocation)?.root
       const analysis = analyzeShellRisk({
         command: invocation.input.command,
         ...(typeof invocation.input.cwd === 'string' ? { cwd: invocation.input.cwd } : {}),
         ...(workspaceRoot ? { workspaceRoot } : {}),
       })
-      if (analysis.hardDenied) {
-        this.guardianScores?.invalidateAction(invocation)
-        return {
-          decision: 'deny',
+      invocation = {
+        ...invocation,
+        permissionFacts: {
+          ...invocation.permissionFacts,
           risk: analysis.risk,
-          reason: secretScrubber.scrubText(analysis.reason),
-        }
+          networkAccess: analysis.categories.includes('network_access'),
+          ruleRequiresApproval:
+            invocation.permissionFacts?.ruleRequiresApproval ||
+            analysis.hardDenied ||
+            analysis.requiresApproval,
+          destructive: invocation.permissionFacts?.destructive || analysis.destructive,
+          ruleTargets: invocation.permissionFacts?.ruleTargets ?? {
+            command: invocation.input.command,
+          },
+        },
       }
     }
     // Rules are evaluated immediately before the final gate, after any Hook
@@ -261,15 +245,6 @@ export class ApprovalService {
       return { decision: resolved.decision, risk: resolved.risk, reason: resolved.reason }
     }
     const forceHumanApproval = resolved.forceHumanApproval
-    if (
-      !forceHumanApproval &&
-      ((await this.rules.matches(invocation)) ||
-        !!(
-          invocation.authorizationScope?.browserOrigin &&
-          this.browser?.isGranted(invocation.threadID, invocation.authorizationScope.browserOrigin)
-        ))
-    )
-      return { decision: 'allow', risk: resolved.risk, reason: '已匹配用户授予的审批范围' }
     if (resolved.reviewer === 'auto_review' && !forceHumanApproval && this.reviewer) {
       const fingerprint = this.retryFingerprint(invocation)
       const retryAuthorization = this.db.repositories.interactions.claimApprovalRetry(
@@ -459,10 +434,14 @@ export class ApprovalService {
         return reviewed
       },
       (cause) => {
-        const reason = `Guardian 不可用：${secretScrubber.scrubText(
+        const status =
+          cause instanceof AgentError && cause.code === 'REVIEWER_TIMEOUT'
+            ? 'timeout'
+            : 'unavailable'
+        const reason = `Guardian ${status === 'timeout' ? '审查超时' : '不可用'}：${secretScrubber.scrubText(
           cause instanceof Error ? cause.message : String(cause),
         )}`
-        return this.guardianFailureDecision(invocation, resolved, 'unavailable', reason)
+        return this.guardianFailureDecision(invocation, resolved, status, reason)
       },
     )
 
@@ -480,10 +459,7 @@ export class ApprovalService {
         void reviewPromise.catch(() => {})
         return this.finishGuardianReview(invocation, winner.decision)
       }
-      return this.finishGuardianReview(
-        invocation,
-        winner.decision ?? (await reviewPromise),
-      )
+      return this.finishGuardianReview(invocation, winner.decision ?? (await reviewPromise))
     } finally {
       signal.removeEventListener('abort', abort)
     }
@@ -802,7 +778,7 @@ export class ApprovalService {
       safeFeedback,
       operation,
       computerGrant,
-      grantRule,
+      grantRule?.subjects ? undefined : grantRule,
     )
     if (result.state === 'missing')
       throw new AgentError('APPROVAL_NOT_FOUND', '审批请求不存在', 404)
@@ -822,16 +798,7 @@ export class ApprovalService {
       throw new AgentError('APPROVAL_CHECKPOINT_INVALID', '审批 checkpoint 状态无效', 409)
     const checkpoint = result.checkpoint
     try {
-      if (grantRule?.scope === 'project') await this.rules.persistProject(grantRule)
-      // A new explicit approval restores a legacy chat grant that was revoked
-      // earlier; revocation records are not approval history.
-      if (grantRule && grantRule.scope === 'session')
-        this.rules.restoreLegacyGrant(checkpoint.threadID, grantRule.id)
-      if (
-        grantRule?.kind === 'browser' &&
-        (grantRule.scope === 'origin' || grantRule.scope === 'all-sites')
-      )
-        await this.browser?.grant(grantRule.target[0]!, grantRule.scope)
+      if (grantRule) await this.rules.persistGrant(checkpoint.threadID, grantRule)
     } catch {
       // Resolution already owns the durable resume. A settings error must not strand it.
       const timestamp = Date.now()

@@ -6,27 +6,22 @@
 
 ## 判权顺序
 
-固定顺序为：硬拒绝、Plan、显式只读根、禁用能力 → Deny 规则 → Ask 规则 → 强制审批与受保护资源 → 有界 Allow 规则与已有授权 → 普通预设策略。
+参数、能力可用性与 Plan/显式只读限制先校验。完全访问随后直接通过权限门禁，不运行权限规则、静态风险拒绝或 Guardian。其余配置按 Deny → Ask → 匹配的 Allow/已有授权 → 预设与风险判断执行；自定义 never 只拒绝剩余需要审批的请求。
 
-- 破坏性动作（`permissionFacts.destructive`）属于强制审批：Allow 规则、持续允许与临时授权都不能免除，`never` 策略下拒绝。
+- 请求批准：工作区内低风险操作直接执行；编辑外部文件、外部目录执行命令、检测到联网及中高风险/未知操作询问用户。普通外部读取仅在检测到敏感风险时询问。
+- 帮我批准：低风险操作直接执行，包括工作区外低风险操作；联网与风险/未知操作交独立 Guardian，无法判断或不可用时询问用户。
+- 工具、MCP 和 Skill 按实际风险处理，来源本身不构成强制审批。显式 Ask 和 Hook 要求询问不能被普通 Allow 覆盖；完全访问跳过权限性质的 Ask/Deny，保留 Hook 输入改写和生命周期。
+- 完全访问不改变 Plan，也不关闭输入校验、取消处理、凭据保护或工具自身功能约束。
 
-- Deny 优先于 Ask，Ask 优先于 Allow；跨用户、项目与聊天来源同样成立。
-- 显式 Ask 始终人工批准：Guardian、持续允许规则和临时授权都不能覆盖；`never` 或对应 granular 类别禁用时直接拒绝。
-- Allow 只免除其匹配范围内的普通审批，不能扩大文件范围、解除强制审批或提高子 Agent 权限。
-- 文件规则按宿主真实路径匹配，多路径写入必须全部落在规则范围内；符号链接先解析再匹配。
-- 命令规则复用 `simpleCommandArgv`；复杂 Shell 只支持完整命令，不新增解析器。
+## 执行链与授权
 
-## 执行链
+ToolExecutor 在 Hook 改写后加载宿主规则事实，PermissionDecisionEngine 统一判定；ApprovalService 负责人工 checkpoint、恢复和 Guardian。恢复一次批准时核对操作指纹，输入和目标改变需重新批准。
 
-注册元数据声明能力和审批策略；inspectInput 返回宿主 permissionFacts 与 authorizationScope。ToolExecutor 在 Hook 与输入改写之后、最终执行之前加载宿主规则事实，覆盖普通工具、Shell、MCP 和生命周期工具；PermissionDecisionEngine 保持纯判定。ApprovalService 负责审批恢复、临时授权与 Guardian 调用，不复制判权逻辑。
+菜单提供允许一次、在此会话中允许、始终允许。一次批准只覆盖当前调用；会话批准绑定聊天与工作区并支持重启恢复；始终允许写入当前项目的 permission_rules，同项目聊天共享。A 项目授权不用于 B 项目；从 A 操作外部 B 也不构成 B 的授权。无工作区时仅提供允许一次。
 
-Hook 改写输入后重新走注册 schema、路径检查和统一判权。新审批预览返回操作指纹；恢复时检查指纹与当前 Deny 规则。保留旧 checkpoint 的无指纹读取路径及 SDK RunState 绑定；已审批的 Hook 结果不重复执行，以保留中断恢复语义。
+命令菜单生成完整命令与有效 cwd 的精确规则，不自动生成 argv 前缀；手动配置的安全 argv 前缀继续支持。多目标与混合操作必须全部匹配，文件路径先由宿主规范化。聊天规则以 history schema 66 新增可空 workspace 字段；无法确认原工作区的旧记录保留展示但不自动授予权限。旧 approval_rules 与审批历史不删除，通过统一适配参与判定和撤销。
 
-临时授权复用 PermissionGrantStore。内建文件工具根据实际目标匹配授权，WorkspaceService 只给本次调用授权路径；预览不消费，执行前才消费。读取授权不能写入，写入授权包含必要的读取；多文件补丁全部预检查。显式只读根、Plan、受保护资源与硬拒绝始终有效。
-
-文件范围只约束内建文件工具。Shell 是宿主进程，没有 OS 沙箱；网络授权表示审批范围，没有网络隔离。
-
-`on-request` 只对“已在当前范围内”的普通 Shell 命令直接执行，因此静态风险分类是唯一防线：调用点必须把工作区根传给 `analyzeShellRisk`，否则工作区外绝对路径与工作区外 cwd 无法判定；工作区外路径、外部状态破坏（远程仓库、分支、发布、云资源、包发布撤回）与已记录的静态风险都会产生宿主动作事实 `destructive`，进入强制审批，`never` 策略下直接拒绝，Guardian 快速路径与旧授权匹配都不接受破坏性动作。
+WorkspaceService 仅为本次文件调用开放目标路径，实际执行仍等待统一判权。Shell 始终在宿主执行；命令检测可识别 curl 等明显联网意图，无法保证发现脚本、子进程或重定向的真实联网和文件访问，不提供 OS 沙箱或网络隔离。
 
 ## Guardian
 
@@ -36,6 +31,6 @@ Guardian 异步评分按 turn 保存失效代际：作废、拒绝、转人工�
 
 ## 来源与适配
 
-参考 ZCode 提交 `872ad96` 的 `apps/zcode-cli/packages/core/src/tool/executor/permission-capability.ts`、`permission-input-recheck.ts` 和 `permission-rules.ts`，适配其宿主能力事实、来源不可由模型覆盖、输入变更重新判权的实现方式。对应改动位于 Pidex 的 ToolRegistry、ToolExecutor 和 PermissionDecisionEngine，继续复用已有命令解析器与审批存储；没有搬入整套 ZCode 权限系统，也没有采用 yolo 提前跳过 deny 的顺序。
+参考 ZCode 提交 `872ad96` 的 `apps/zcode-cli/packages/core/src/tool/executor/permission-capability.ts`、`permission-input-recheck.ts` 和 `permission-rules.ts`，适配其宿主能力事实、来源不可由模型覆盖、输入变更重新判权的实现方式。对应改动位于 Pidex 的 ToolRegistry、ToolExecutor 和 PermissionDecisionEngine，继续复用已有命令解析器与审批存储；没有搬入整套 ZCode 权限系统，完全访问的提前放行采用 Pidex 当前产品定义。
 
 ZCode 使用 Apache-2.0，保留[许可证](../licenses/ZCode-Apache-2.0.txt)。Pidex 的新增实现及改动不代表 ZCode 上游原版。

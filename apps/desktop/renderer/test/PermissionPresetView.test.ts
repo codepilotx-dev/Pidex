@@ -92,10 +92,10 @@ describe('shared permission preset round-trip', () => {
       'full-access': '完全访问',
       custom: '自定义',
     })
-    expect(PERMISSION_MODE_OPTIONS[0]!.detail).toContain('内建文件访问范围')
-    expect(PERMISSION_MODE_OPTIONS[0]!.detail).toContain('宿主 Shell')
+    expect(PERMISSION_MODE_OPTIONS[0]!.detail).toContain('低风险操作直接执行')
+    expect(PERMISSION_MODE_OPTIONS[0]!.detail).toContain('授权仅在当前项目生效')
     expect(PERMISSION_MODE_OPTIONS[1]!.detail).toContain('Guardian')
-    expect(PERMISSION_MODE_OPTIONS[2]!.detail).not.toContain('沙箱')
+    expect(PERMISSION_MODE_OPTIONS[2]!.detail).toContain('不提供 OS 沙箱或网络隔离')
   })
 })
 

@@ -382,7 +382,6 @@ export const applyPatchDefinition: ToolDefinition<ApplyPatchInput, ApplyPatchOut
       filePathProtection(file.canonicalPath, file.path).requiresApproval
     return {
       authorizationScope: prepared.authorizationScope,
-      grantsForbidden: prepared.operations.some(protectedFile),
       fileDiffs: prepared.operations
         .filter((file) => !protectedFile(file))
         .map((file) =>

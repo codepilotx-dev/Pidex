@@ -264,3 +264,16 @@ describe('approval rule editor conversion', () => {
     })
   })
 })
+
+test('编辑精确命令时保留宿主绑定的执行目录', () => {
+  const source = rule({
+    id: 'cwd-rule',
+    effect: 'allow',
+    scope: 'project',
+    source: 'project',
+    match: { kind: 'command', command: 'bun run test', cwd: 'C:/projects/a' },
+  })
+  const values = approvalRuleEditorValuesFromRule(source)
+  const result = buildApprovalRuleInput(values, { id: source.id, isProjectChat: true })
+  expect(result.input?.match).toEqual(source.match)
+})

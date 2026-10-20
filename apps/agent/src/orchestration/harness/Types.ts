@@ -806,6 +806,7 @@ export interface BeforeProviderPayloadResult {
 
 export interface ToolCallResult {
   block?: boolean
+  pause?: boolean
   reason?: string
 }
 

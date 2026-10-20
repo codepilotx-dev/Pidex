@@ -674,6 +674,7 @@ export class AgentHarness<
           ? {
               ...(result.block !== undefined ? { block: result.block } : {}),
               ...(result.reason !== undefined ? { reason: result.reason } : {}),
+              ...(result.pause !== undefined ? { pause: result.pause } : {}),
             }
           : undefined
       },

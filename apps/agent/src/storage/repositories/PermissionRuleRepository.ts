@@ -17,6 +17,7 @@ export const PERMISSION_RULES_SCHEMA = [
     thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
     effect TEXT NOT NULL CHECK(effect IN ('allow','ask','deny')),
     match TEXT NOT NULL,
+    workspace TEXT,
     version INTEGER NOT NULL DEFAULT 1 CHECK(version >= 1),
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
@@ -35,6 +36,7 @@ const CHAT_RULES_REQUIRED_COLUMNS = [
   'thread_id',
   'effect',
   'match',
+  'workspace',
   'version',
   'created_at',
   'updated_at',
@@ -55,6 +57,7 @@ const stringify = (value: unknown) => JSON.stringify(value)
 export type StoredPermissionChatRule = {
   id: string
   threadID: string
+  workspace: string | null
   effect: PermissionRuleEffect
   match: PermissionRuleMatch
   version: number
@@ -103,11 +106,12 @@ export class PermissionRuleRepository {
     return (
       this.db.sqlite
         .query(
-          'SELECT id, thread_id, effect, match, version, created_at, updated_at FROM permission_chat_rules WHERE thread_id = ? ORDER BY created_at, id',
+          `SELECT id, thread_id, effect, match, ${tableColumns(this.db.sqlite, 'permission_chat_rules').has('workspace') ? 'workspace' : 'NULL AS workspace'}, version, created_at, updated_at FROM permission_chat_rules WHERE thread_id = ? ORDER BY created_at, id`,
         )
         .all(threadID) as Array<{
         id: string
         thread_id: string
+        workspace: string | null
         effect: PermissionRuleEffect
         match: string
         version: number
@@ -117,6 +121,7 @@ export class PermissionRuleRepository {
     ).map((row) => ({
       id: row.id,
       threadID: row.thread_id,
+      workspace: row.workspace,
       effect: row.effect,
       match: parse<PermissionRuleMatch>(row.match),
       version: row.version,
@@ -131,12 +136,13 @@ export class PermissionRuleRepository {
 
   upsertChatRule(input: {
     threadID: string
+    workspace?: string | null
     id?: string
     effect: PermissionRuleEffect
     match: PermissionRuleMatch
     expectedVersion?: string
   }): StoredPermissionChatRule {
-    if (!this.hasTable('permission_chat_rules'))
+    if (!this.available())
       throw new AgentError('CONFLICT', '当前数据库缺少聊天规则存储，请升级或刷新能力', 409)
     const timestamp = this.now()
     if (input.id) {
@@ -160,12 +166,21 @@ export class PermissionRuleRepository {
         const nextVersion = current.version + 1
         this.db.sqlite
           .query(
-            'UPDATE permission_chat_rules SET effect = ?, match = ?, version = ?, updated_at = ? WHERE thread_id = ? AND id = ?',
+            'UPDATE permission_chat_rules SET effect = ?, match = ?, version = ?, updated_at = ?, workspace = COALESCE(workspace, ?) WHERE thread_id = ? AND id = ?',
           )
-          .run(input.effect, stringify(input.match), nextVersion, timestamp, input.threadID, ruleID)
+          .run(
+            input.effect,
+            stringify(input.match),
+            nextVersion,
+            timestamp,
+            input.workspace ?? null,
+            input.threadID,
+            ruleID,
+          )
         return {
           id: ruleID,
           threadID: input.threadID,
+          workspace: input.workspace ?? null,
           effect: input.effect,
           match: input.match,
           version: nextVersion,
@@ -178,12 +193,21 @@ export class PermissionRuleRepository {
       const id = `permission-rule:${crypto.randomUUID()}`
       this.db.sqlite
         .query(
-          'INSERT INTO permission_chat_rules (id, thread_id, effect, match, version, created_at, updated_at) VALUES (?, ?, ?, ?, 1, ?, ?)',
+          'INSERT INTO permission_chat_rules (id, thread_id, effect, match, workspace, version, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?)',
         )
-        .run(id, input.threadID, input.effect, stringify(input.match), timestamp, timestamp)
+        .run(
+          id,
+          input.threadID,
+          input.effect,
+          stringify(input.match),
+          input.workspace ?? null,
+          timestamp,
+          timestamp,
+        )
       return {
         id,
         threadID: input.threadID,
+        workspace: input.workspace ?? null,
         effect: input.effect,
         match: input.match,
         version: 1,

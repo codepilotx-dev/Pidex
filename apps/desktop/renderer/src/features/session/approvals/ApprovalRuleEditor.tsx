@@ -161,6 +161,15 @@ export function ApprovalRuleEditor({
               onChange={(event) => set({ command: event.currentTarget.value })}
             />
           </label>
+          <label className={FIELD_CLASS}>
+            <span className="tw:text-app-text-soft tw:type-label">执行目录</span>
+            <Input
+              aria-label="执行目录"
+              value={values.commandCwd ?? ''}
+              placeholder="留空匹配当前项目内的执行目录"
+              onChange={(event) => set({ commandCwd: event.currentTarget.value })}
+            />
+          </label>
           <label className="tw:flex tw:items-center tw:justify-between tw:gap-3 tw:type-control tw:text-app-text">
             <span>同时接收相同参数前缀</span>
             <ToggleSwitch

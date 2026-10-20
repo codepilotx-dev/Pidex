@@ -123,21 +123,21 @@ export const PERMISSION_PRESETS: readonly PermissionPreset[] = [
     id: 'default',
     label: '请求批准',
     description:
-      '内建文件访问范围限当前工作区；宿主 Shell 经安全规则和项目 Hook 执行；访问工作区外路径、删除外部状态（远程仓库/分支/发布）等破坏性动作以及命中规则时由你确认。',
+      '工作区内低风险操作直接执行；外部文件编辑、外部目录命令、检测到的联网与风险操作由你批准。授权仅在当前项目生效。',
     config: DEFAULT_PERMISSION_CONFIG,
   },
   {
     id: 'auto-review',
     label: '帮我批准',
     description:
-      '内建文件访问范围限当前工作区；宿主 Shell 经安全规则和项目 Hook 执行；工作区外访问、破坏性动作和命中规则时由 Guardian 审查；显式 Ask 规则始终由你确认。',
+      '低风险操作自动执行，包括工作区外低风险操作；联网与风险操作交 Guardian，无法判断或不可用时询问你。',
     config: AUTO_REVIEW_PERMISSION_CONFIG,
   },
   {
     id: 'full-access',
     label: '完全访问',
     description:
-      '内建文件工具可访问工作区外路径；宿主 Shell 直接在本机执行；硬拒绝、Plan、规则与受保护资源仍然生效。',
+      '允许访问本机文件、互联网、执行命令及调用工具和 MCP，不进行权限审批；Plan 模式仍独立生效。不提供 OS 沙箱或网络隔离。',
     config: FULL_ACCESS_PERMISSION_CONFIG,
   },
 ]
@@ -164,9 +164,7 @@ const approvalPolicyIsEqual = (left: ApprovalPolicy, right: ApprovalPolicy): boo
 }
 
 /** Exact three-field preset matching. Anything else is custom. */
-export const matchPermissionPreset = (
-  config: PermissionConfig,
-): PermissionPresetSelection => {
+export const matchPermissionPreset = (config: PermissionConfig): PermissionPresetSelection => {
   const preset = PERMISSION_PRESETS.find(
     (candidate) =>
       candidate.config.sandboxMode === config.sandboxMode &&
@@ -175,6 +173,10 @@ export const matchPermissionPreset = (
   )
   return preset?.id ?? 'custom'
 }
+
+/** Full access is one complete preset, not a file-scope flag. */
+export const isFullAccessPermissionConfig = (config: PermissionConfig): boolean =>
+  matchPermissionPreset(config) === 'full-access'
 
 /** Generates the stored config for a preset; custom keeps the current config. */
 export const permissionConfigForPreset = (
@@ -218,6 +220,7 @@ export const PermissionRuleMatchSchema = Schema.Union([
     kind: Schema.Literal('command'),
     /** Exact raw command value, always matched literally. */
     command: Schema.String,
+    cwd: Schema.optional(Schema.String),
     /** Safe argv prefix parsed by the host; absent means exact-command only. */
     argv: Schema.optional(Schema.Array(Schema.String)),
   }),
@@ -244,6 +247,7 @@ export const PermissionRuleSchema = Schema.Struct({
   /** Config layer version or chat-rule revision used for optimistic writes. */
   version: Schema.optional(Schema.String),
   createdAt: Schema.optional(Schema.Number),
+  workspace: Schema.optional(Schema.String),
 })
 export type PermissionRule = typeof PermissionRuleSchema.Type
 
@@ -283,7 +287,7 @@ export const permissionRuleMatchKey = (match: PermissionRuleMatch): string => {
     case 'command':
       return match.argv && match.argv.length > 0
         ? `command:${match.argv.join('\u0000')}`
-        : `command-exact:${match.command}`
+        : `command-exact:${match.cwd ?? ''}:${match.command}`
     case 'network':
       return `network:${match.domain}`
     case 'mcp':

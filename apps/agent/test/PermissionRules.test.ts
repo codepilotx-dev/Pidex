@@ -203,7 +203,7 @@ describe('权限规则匹配', () => {
     ).toMatchObject({ action: 'deny' })
   })
 
-  test('Allow 规则不能解除强制审批，Deny 规则优先于已有授权', () => {
+  test('Allow 可免除默认风险审批，Deny 规则优先于已有授权', () => {
     const engine = new PermissionDecisionEngine()
     const tools = new ToolRegistry()
     const tool = tools.get('Write')
@@ -224,7 +224,7 @@ describe('权限规则匹配', () => {
       },
     }
     expect(engine.evaluate({ ...invocation, grantsForbidden: true }, tool)).toMatchObject({
-      action: 'review',
+      action: 'allow',
     })
     expect(
       engine.evaluate(
@@ -443,6 +443,33 @@ describe('ToolExecutor 规则最终门禁', () => {
 })
 
 describe('权限规则存储', () => {
+  test('连续撤销同项目规则时重读列表取得新版本，旧版本仍拒绝并发写入', async () => {
+    const { db, tools, config, thread } = await fixture({ project: true })
+    const rules = new ApprovalRules(db, tools, config)
+    for (const domain of ['example.com', 'example.org'])
+      await rules.upsert(thread.id, {
+        effect: 'allow',
+        scope: 'project',
+        match: { kind: 'network', domain },
+      })
+    const initial = (await rules.list(thread.id)).rules.filter((rule) => rule.source === 'project')
+    expect(initial).toHaveLength(2)
+    expect(initial[0]!.version).toBe(initial[1]!.version)
+    await rules.revoke(thread.id, initial[0]!.id, initial[0]!.version)
+    await expect(
+      rules.revoke(thread.id, initial[1]!.id, initial[1]!.version),
+    ).rejects.toMatchObject({ code: 'CONFLICT' })
+    const refreshed = (await rules.list(thread.id)).rules.find(
+      (rule) => rule.id === initial[1]!.id,
+    )!
+    expect(refreshed.version).not.toBe(initial[1]!.version)
+    expect(await rules.revoke(thread.id, refreshed.id, refreshed.version)).toEqual({
+      revoked: true,
+    })
+    expect(
+      (await rules.list(thread.id)).rules.filter((rule) => rule.source === 'project'),
+    ).toHaveLength(0)
+  })
   test('用户与项目规则使用 permission_rules 局部编辑并保留未知内容', async () => {
     const { db, config, tools, thread, configPath, projectFile, workspace } = await fixture({
       project: true,
@@ -479,7 +506,7 @@ describe('权限规则存储', () => {
   })
 
   test('聊天规则新增、编辑、撤销并校验版本冲突', async () => {
-    const { db, config, tools, thread, invocation } = await fixture()
+    const { db, config, tools, thread, invocation } = await fixture({ project: true })
     const rules = new ApprovalRules(db, tools, config)
     const created = await rules.upsert(thread.id, {
       effect: 'allow',
@@ -528,16 +555,15 @@ describe('权限规则存储', () => {
       callId: approved.id,
     })
     const checkpoint = db.approvalCheckpointForToolCall(approved.id)!
-    const option = service.rules.options(approved).find((rule) => rule.kind === 'command')
-    expect(option).toBeTruthy()
-    await service.respond(
-      checkpoint.approvalID,
-      'allow',
-      undefined,
-      undefined,
-      undefined,
-      option!.id,
-    )
+    const workspace = service.rules.workspace(approved)!.root
+    db.resolveApprovalCheckpoint(checkpoint.approvalID, 'allow', undefined, undefined, undefined, {
+      id: 'legacy-command',
+      kind: 'command',
+      scope: 'session',
+      workspace,
+      cwd: String(approved.input.cwd),
+      target: ['git', 'status'],
+    })
     const legacy = (await service.rules.list(approved.threadID)).rules.find(
       (rule) => rule.source === 'legacy' && rule.scope === 'chat',
     )
@@ -553,7 +579,125 @@ describe('权限规则存储', () => {
     db.sqlite.exec('DROP TABLE permission_chat_rules; DROP TABLE permission_grant_revocations;')
     expect(filterAdvertisedCapabilities(db)).not.toContain('permission.rules.v1')
     expect(db.sqlite.query('PRAGMA user_version').get() as { user_version: number }).toEqual({
-      user_version: 65,
+      user_version: 66,
     })
   })
+})
+
+describe('项目内精确授权', () => {
+  test('会话授权支持恢复、撤销与 A→B→A，且不扩大命令或执行目录', async () => {
+    const f = await fixture({ project: true })
+    const rules = new ApprovalRules(f.db, f.tools, f.config)
+    const operation: ToolInvocation = {
+      ...f.invocation,
+      input: { command: 'bun run test', cwd: f.workspace },
+    }
+    const candidate = rules.candidates(operation).find((rule) => rule.scope === 'session')!
+    await rules.persistGrant(f.thread.id, candidate)
+    f.db.close()
+    databases.splice(databases.indexOf(f.db), 1)
+    const recovered = new AgentDatabase(join(f.root, 'history.sqlite'))
+    databases.push(recovered)
+    const restored = new ApprovalRules(recovered, f.tools, f.config)
+    expect((await restored.evaluate(operation)).effect).toBe('allow')
+    for (const command of ['bun run build', 'bun run test --watch', 'bun run test; echo other'])
+      expect(
+        (await restored.evaluate({ ...operation, input: { command, cwd: f.workspace } })).effect,
+      ).toBeNull()
+    expect(
+      (await restored.evaluate({ ...operation, input: { command: 'bun run test', cwd: f.root } }))
+        .effect,
+    ).toBeNull()
+    const another = recovered.createThread('同项目另一聊天', f.project!.id)
+    expect((await restored.evaluate({ ...operation, threadID: another.id })).effect).toBeNull()
+    const projectB = recovered.createProject({ rootPath: f.root })
+    recovered.sqlite
+      .query('UPDATE threads SET project_id = ? WHERE id = ?')
+      .run(projectB.id, f.thread.id)
+    expect((await restored.evaluate(operation)).effect).toBeNull()
+    recovered.sqlite
+      .query('UPDATE threads SET project_id = ? WHERE id = ?')
+      .run(f.project!.id, f.thread.id)
+    expect((await restored.evaluate(operation)).effect).toBe('allow')
+    const saved = (await restored.list(f.thread.id)).rules.find((rule) => rule.source === 'chat')!
+    await restored.revoke(f.thread.id, saved.id)
+    expect((await restored.evaluate(operation)).effect).toBeNull()
+  })
+
+  test('项目授权跨聊天生效，混合命令与联网必须全部覆盖', async () => {
+    const f = await fixture({ project: true })
+    const rules = new ApprovalRules(f.db, f.tools, f.config)
+    const operation: ToolInvocation = {
+      ...f.invocation,
+      permissionFacts: {
+        ruleTargets: { command: 'curl https://example.test', networkDomains: ['example.test'] },
+      },
+      input: { command: 'curl https://example.test', cwd: f.workspace },
+    }
+    await rules.persistGrant(
+      f.thread.id,
+      rules.candidates(operation).find((rule) => rule.scope === 'project')!,
+    )
+    const another = f.db.createThread('同项目', f.project!.id)
+    expect((await rules.evaluate({ ...operation, threadID: another.id })).effect).toBe('allow')
+    const saved = (await rules.list(f.thread.id)).rules.find(
+      (rule) => rule.match.kind === 'network',
+    )!
+    await rules.revoke(f.thread.id, saved.id, saved.version)
+    expect((await rules.evaluate(operation)).effect).toBeNull()
+    expect(
+      (await rules.evaluate({ ...operation, threadID: f.db.createThread('无项目').id })).effect,
+    ).toBeNull()
+  })
+
+  test('schema 65 前向迁移保留旧规则，未知工作区规则不自动放行', async () => {
+    const f = await fixture({ project: true })
+    const rules = new ApprovalRules(f.db, f.tools, f.config)
+    await rules.upsert(f.thread.id, {
+      effect: 'allow',
+      scope: 'chat',
+      match: { kind: 'command', command: 'git status' },
+    })
+    f.db.sqlite.exec(
+      "ALTER TABLE permission_chat_rules DROP COLUMN workspace; PRAGMA user_version = 65; CREATE TABLE future_data (value TEXT); INSERT INTO future_data VALUES ('keep')",
+    )
+    f.db.close()
+    databases.splice(databases.indexOf(f.db), 1)
+    const reopened = new AgentDatabase(join(f.root, 'history.sqlite'))
+    databases.push(reopened)
+    const restored = new ApprovalRules(reopened, f.tools, f.config)
+    expect((await restored.list(f.thread.id)).rules).toHaveLength(1)
+    expect((await restored.evaluate(f.invocation)).effect).toBeNull()
+    expect(reopened.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: 66 })
+    expect(reopened.sqlite.query('SELECT value FROM future_data').get()).toEqual({ value: 'keep' })
+  })
+})
+
+test('多文件批准逐个覆盖目标，任一目标的 Deny 不被其他允许规则遮蔽', async () => {
+  const f = await fixture({ project: true })
+  const rules = new ApprovalRules(f.db, f.tools, f.config)
+  const first = join(f.root, 'first.txt')
+  const second = join(f.root, 'second.txt')
+  const operation: ToolInvocation = {
+    ...f.invocation,
+    name: 'apply_patch',
+    input: { patch: 'fixture' },
+    permissionFacts: { ruleTargets: { writePaths: [first, second] } },
+  }
+  await rules.persistGrant(
+    f.thread.id,
+    rules.candidates(operation).find((rule) => rule.scope === 'session')!,
+  )
+  expect((await rules.evaluate(operation)).effect).toBe('allow')
+  const saved = (await rules.list(f.thread.id)).rules.find(
+    (rule) => rule.match.kind === 'file' && rule.match.path === first,
+  )!
+  await rules.revoke(f.thread.id, saved.id)
+  expect((await rules.evaluate(operation)).effect).toBeNull()
+  await rules.upsert(f.thread.id, {
+    effect: 'deny',
+    scope: 'chat',
+    match: { kind: 'file', access: 'write', path: second },
+  })
+  expect((await rules.evaluate(operation)).effect).toBe('deny')
 })

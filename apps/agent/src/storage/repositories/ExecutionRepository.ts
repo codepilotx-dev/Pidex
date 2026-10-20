@@ -925,6 +925,12 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           AND json_extract(entry.payload, '$.type') = 'message'
           AND json_extract(entry.payload, '$.message.role') = 'toolResult'
           AND json_extract(entry.payload, '$.message.toolCallId') = ?
+          AND COALESCE(json_extract(entry.payload, '$.message.details.__piPause'), 0) != 1
+          -- Older approval pauses were persisted as ordinary tool errors.
+          AND NOT (
+            COALESCE(json_extract(entry.payload, '$.message.isError'), 0) = 1
+            AND COALESCE(json_extract(entry.payload, '$.message.content[0].text'), '') = '等待用户审批'
+          )
         LIMIT 1
       `,
         )

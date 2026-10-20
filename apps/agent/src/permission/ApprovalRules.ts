@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto'
 import { isAbsolute, resolve } from 'node:path'
+import { realpathSync } from 'node:fs'
 import {
   permissionRuleMatchKey,
   strongestPermissionRuleEffect,
@@ -17,6 +18,19 @@ import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { ToolRegistry } from '../tool/ToolRegistry'
 import { requestedPermissions } from './PermissionDecisionEngine'
 
+const workspacePath = (path: string): string => {
+  try {
+    return realpathSync.native(resolve(path))
+  } catch {
+    return resolve(path)
+  }
+}
+const sameWorkspace = (left: string, right: string): boolean => {
+  const key = (path: string) =>
+    process.platform === 'win32' ? workspacePath(path).toLowerCase() : workspacePath(path)
+  return key(left) === key(right)
+}
+
 export type ApprovalRule = {
   id: string
   kind: 'command' | 'files' | 'network' | 'mcp' | 'browser'
@@ -24,6 +38,7 @@ export type ApprovalRule = {
   workspace: string
   target: string[]
   cwd?: string
+  subjects?: PermissionRuleMatch[]
 }
 type GrantOption = NonNullable<ApprovalRequest['grantOptions']>[number]
 const literalCommandVerbs: Record<string, ReadonlySet<string>> = Object.fromEntries(
@@ -147,8 +162,7 @@ export function permissionRuleMatches(
     case 'tool':
       return canonicalToolName(invocation) === match.tool
     case 'file': {
-      const paths =
-        match.access === 'read' ? targets?.readPaths : targets?.writePaths
+      const paths = match.access === 'read' ? targets?.readPaths : targets?.writePaths
       if (!paths?.length) return false
       const normalizedRule = resolve(match.path)
       // Every observed target must be inside the rule scope. A patch touching
@@ -156,6 +170,7 @@ export function permissionRuleMatches(
       return paths.every((candidate) => pathContainsNormalized(normalizedRule, candidate))
     }
     case 'command': {
+      if (match.cwd && !sameWorkspace(String(invocation.input.cwd ?? ''), match.cwd)) return false
       const command = targets?.command ?? invocation.input.command
       if (typeof command !== 'string') return false
       if (match.argv?.length) {
@@ -189,8 +204,11 @@ const pathContainsNormalized = (parent: string, candidate: string) => {
   }
   const parentKey = key(parent)
   const candidateKey = key(candidate)
-  return candidateKey === parentKey || candidateKey.startsWith(`${parentKey}\\`) ||
+  return (
+    candidateKey === parentKey ||
+    candidateKey.startsWith(`${parentKey}\\`) ||
     candidateKey.startsWith(`${parentKey}/`)
+  )
 }
 
 export type PermissionRuleFacts = {
@@ -271,9 +289,9 @@ export class ApprovalRules {
     const descriptor = this.db.threadWorkspace(invocation.threadID)
     if (!descriptor) return null
     if (descriptor.kind === 'projectless')
-      return { root: resolve(descriptor.workspaceRoot), project: false }
+      return { root: workspacePath(descriptor.workspaceRoot), project: false }
     const project = this.db.getProject(descriptor.projectID)
-    return project?.rootPath ? { root: resolve(project.rootPath), project: true } : null
+    return project?.rootPath ? { root: workspacePath(project.rootPath), project: true } : null
   }
 
   private projectRoot(threadID: string): string | null {
@@ -282,25 +300,28 @@ export class ApprovalRules {
     return project?.rootPath ? resolve(project.rootPath) : null
   }
 
-  private async layers(root: string | null): Promise<
-    | {
-        user?: { config: Record<string, unknown>; version: string }
-        project?: {
-          config: Record<string, unknown>
-          version: string
-          trusted: boolean
-          root: string
-        }
-      }
-    | null
-  > {
+  private async layers(root: string | null): Promise<{
+    user?: { config: Record<string, unknown>; version: string }
+    project?: {
+      config: Record<string, unknown>
+      version: string
+      trusted: boolean
+      root: string
+    }
+  } | null> {
     if (!this.config) return null
     const result = await this.config.read({
       ...(root ? { cwd: root } : {}),
       includeLayers: true,
     })
     const user = result.layers?.find((layer) => layer.kind === 'user')
-    const projectLayer = result.layers?.find((layer) => layer.kind === 'project')
+    const projectLayer = result.layers?.find(
+      (layer) =>
+        layer.kind === 'project' &&
+        root &&
+        layer.filePath &&
+        sameWorkspace(layer.filePath, resolve(root, '.pidex', 'config.json')),
+    )
     const projectRoot = root
     return {
       ...(user
@@ -315,83 +336,77 @@ export class ApprovalRules {
               root: projectRoot,
             },
           }
-        : {}),
+        : projectRoot && this.config.isProjectTrusted(projectRoot)
+          ? {
+              project: {
+                config: {},
+                version: createHash('sha256').update('').digest('hex'),
+                trusted: true,
+                root: projectRoot,
+              },
+            }
+          : {}),
     }
   }
 
-  /** Legacy session/project grants that can satisfy an ordinary approval. */
+  /** Exact host-observed subjects; a saved allow must cover every subject. */
+  private subjects(invocation: ToolInvocation): PermissionRuleMatch[] {
+    const targets =
+      invocation.permissionFacts?.ruleTargets ??
+      (typeof invocation.input.command === 'string'
+        ? { command: invocation.input.command }
+        : undefined)
+    const subjects: PermissionRuleMatch[] = []
+    if (targets?.command)
+      subjects.push({
+        kind: 'command',
+        command: targets.command,
+        cwd: resolve(String(invocation.input.cwd ?? this.workspace(invocation)?.root ?? '.')),
+      })
+    for (const path of targets?.writePaths ?? [])
+      subjects.push({ kind: 'file', access: 'write', path })
+    for (const path of targets?.readPaths ?? [])
+      subjects.push({ kind: 'file', access: 'read', path })
+    for (const domain of targets?.networkDomains ?? []) subjects.push({ kind: 'network', domain })
+    const requested = requestedPermissions(invocation.input)
+    for (const path of requested.readPaths)
+      if (!subjects.some((subject) => subject.kind === 'file' && subject.path === path))
+        subjects.push({ kind: 'file', access: 'read', path })
+    for (const path of requested.writePaths)
+      if (!subjects.some((subject) => subject.kind === 'file' && subject.path === path))
+        subjects.push({ kind: 'file', access: 'write', path })
+    for (const domain of requested.networkDomains)
+      if (!subjects.some((subject) => subject.kind === 'network' && subject.domain === domain))
+        subjects.push({ kind: 'network', domain })
+    const origin = originTargets(invocation)
+    if (origin) subjects.push({ kind: 'mcp', ...origin })
+    if (!subjects.length) subjects.push({ kind: 'tool', tool: canonicalToolName(invocation) })
+    return subjects
+  }
+
   candidates(invocation: ToolInvocation): ApprovalRule[] {
     if (
       invocation.grantsForbidden ||
       invocation.permissionFacts?.hookRequiresApproval ||
       invocation.name === 'request_permissions' ||
-      invocation.authorizationScope?.computerApp ||
-      invocation.authorizationScope?.browserOrigin
+      invocation.authorizationScope?.computerApp
     )
       return []
     const workspace = this.workspace(invocation)
-    if (!workspace) return []
-    const permissions = requestedPermissions(invocation.input)
-    if (
-      permissions.readPaths.length ||
-      permissions.writePaths.length ||
-      permissions.networkDomains.length > 1
-    )
-      return []
-    const tool = invocation.toolPolicy ?? this.tools.get(invocation.name)
-    let kind: ApprovalRule['kind'] | undefined
-    let target: string[] = []
-    let cwd: string | undefined
-    if (tool.origin?.kind === 'mcp') {
-      kind = 'mcp'
-      target = [tool.origin.serverName, tool.origin.rawToolName]
-    } else if (typeof invocation.input.command === 'string') {
-      const argv = simpleCommandArgv(invocation.input.command)
-      if (argv) {
-        kind = 'command'
-        target = argv.slice(0, 2)
-        cwd = resolve(
-          typeof invocation.input.cwd === 'string' ? invocation.input.cwd : workspace.root,
-        )
-      }
-    } else if (
-      ['Write', 'Edit', 'apply_patch'].includes(invocation.name) &&
-      !Object.values(permissions).some((values) => values.length)
-    ) {
-      kind = 'files'
-    } else if (
-      !tool.capabilities.process &&
-      !tool.capabilities.externalState &&
-      permissions.networkDomains.length === 1 &&
-      !permissions.readPaths.length &&
-      !permissions.writePaths.length
-    ) {
-      const domain = permissions.networkDomains[0]!.toLowerCase()
-      if (!NETWORK_DOMAIN.test(domain)) return []
-      kind = 'network'
-      target = [domain]
-    }
-    const subjects: Array<{ kind: ApprovalRule['kind']; target: string[]; cwd?: string }> = kind
-      ? [{ kind, target, ...(cwd ? { cwd } : {}) }]
-      : []
-    if (permissions.networkDomains.length === 1 && kind !== 'mcp' && kind !== 'network') {
-      const domain = permissions.networkDomains[0]!.toLowerCase()
-      if (NETWORK_DOMAIN.test(domain)) subjects.push({ kind: 'network', target: [domain] })
-    }
-    return subjects.flatMap((subject) => {
-      const scopes: ApprovalRule['scope'][] =
-        subject.kind === 'network' || subject.kind === 'mcp'
-          ? [
-              'session',
-              ...(workspace.project && this.config?.isProjectTrusted(workspace.root)
-                ? ['project' as const]
-                : []),
-            ]
-          : ['session']
-      return scopes.map((scope) => {
-        const data = { ...subject, scope, workspace: workspace.root }
-        return { ...data, id: createHash('sha256').update(JSON.stringify(data)).digest('hex') }
-      })
+    const subjects = this.subjects(invocation)
+    if (!workspace || !subjects.length) return []
+    const first = subjects[0]!
+    const kind: ApprovalRule['kind'] =
+      first.kind === 'file' ? 'files' : first.kind === 'tool' ? 'command' : first.kind
+    const scopes = [
+      'session',
+      ...(workspace.project && this.config?.isProjectTrusted(workspace.root)
+        ? ['project' as const]
+        : []),
+    ] as const
+    return scopes.map((scope) => {
+      const data = { kind, scope, workspace: workspace.root, target: [], subjects }
+      return { ...data, id: createHash('sha256').update(JSON.stringify(data)).digest('hex') }
     })
   }
 
@@ -400,12 +415,7 @@ export class ApprovalRules {
       id: rule.id,
       kind: rule.kind,
       scope: rule.scope,
-      label:
-        rule.kind === 'command'
-          ? `此聊天允许类似命令：${rule.target.join(' ')}`
-          : rule.kind === 'files'
-            ? '此聊天允许后续文件修改'
-            : `${rule.scope === 'project' ? '此项目始终允许' : '此聊天允许'} ${rule.target.join(' / ')}`,
+      label: rule.scope === 'project' ? '始终允许（当前项目）' : '在此会话中允许（当前项目）',
     }))
   }
 
@@ -416,60 +426,114 @@ export class ApprovalRules {
     return Array.isArray(project?.config.approval_rules) ? project.config.approval_rules : []
   }
 
-  async matches(invocation: ToolInvocation): Promise<boolean> {
-    const candidates = this.candidates(invocation)
-    if (!candidates.length) return false
-    const session = this.db.repositories.interactions.resolvedApprovalGrantRules(
-      invocation.threadID,
-    )
-    const project = await this.projectRules(candidates[0]!.workspace)
-    const matches = (candidate: ApprovalRule) =>
-      [...session, ...project].some((value) => {
-        if (!value || typeof value !== 'object') return false
-        const rule = value as ApprovalRule
-        if (
-          candidate.kind !== rule.kind ||
-          candidate.scope !== rule.scope ||
-          candidate.workspace !== rule.workspace
-        )
-          return false
-        if (rule.kind === 'command') {
-          const argv = simpleCommandArgv(String(invocation.input.command))
-          return (
-            rule.cwd === candidate.cwd &&
-            !!argv &&
-            Array.isArray(rule.target) &&
-            commandPrefixMatches(rule.target, argv)
-          )
-        }
-        return (
-          candidate.id === rule.id &&
-          Array.isArray(rule.target) &&
-          candidate.target.length === rule.target.length &&
-          candidate.target.every((argument, index) => argument === rule.target[index])
-        )
-      })
-    const kinds = new Set(candidates.map((candidate) => candidate.kind))
-    if (
-      typeof invocation.input.command === 'string' &&
-      requestedPermissions(invocation.input).networkDomains.length
-    ) {
-      const commandRequired =
-        invocation.permissionConfig.approvalPolicy === 'untrusted' ||
-        (invocation.toolPolicy ?? this.tools.get(invocation.name)).approvalStrategy ===
-          'always-review' ||
-        invocation.permissionFacts?.ruleRequiresApproval === true ||
-        invocation.permissionFacts?.destructive === true
-      if (commandRequired && !kinds.has('command')) return false
-      if (!commandRequired) kinds.delete('command')
-      if (!kinds.has('network')) return false
-    }
-    return (
-      kinds.size > 0 &&
-      [...kinds].every((kind) =>
-        candidates.some((candidate) => candidate.kind === kind && matches(candidate)),
+  private async legacySubjects(invocation: ToolInvocation): Promise<PermissionRuleMatch[]> {
+    if (invocation.grantsForbidden || invocation.permissionFacts?.hookRequiresApproval) return []
+    const workspace = this.workspace(invocation)
+    if (!workspace) return []
+    const revoked = this.db.repositories.permissionRules.revokedLegacyGrantIDs(invocation.threadID)
+    const legacy = [
+      ...this.db.repositories.interactions.resolvedApprovalGrantRules(invocation.threadID),
+      ...(await this.projectRules(workspace.root)),
+    ] as ApprovalRule[]
+    const allowed = legacy.flatMap((rule): PermissionRuleMatch[] => {
+      if (
+        !rule ||
+        typeof rule !== 'object' ||
+        revoked.has(rule.id) ||
+        !rule.workspace ||
+        !sameWorkspace(rule.workspace, workspace.root)
       )
+        return []
+      if (rule.cwd && !sameWorkspace(rule.cwd, String(invocation.input.cwd ?? workspace.root)))
+        return []
+      return (
+        rule.subjects ??
+        (legacyGrantMatch(rule, workspace.root) ? [legacyGrantMatch(rule, workspace.root)!] : [])
+      )
+    })
+    return allowed
+  }
+
+  async matches(invocation: ToolInvocation): Promise<boolean> {
+    return this.coversSubjects(invocation, await this.legacySubjects(invocation))
+  }
+
+  private coversSubjects(
+    invocation: ToolInvocation,
+    allowed: readonly PermissionRuleMatch[],
+  ): boolean {
+    const required = this.subjects(invocation)
+    if (!required.length)
+      return allowed.some((match) =>
+        permissionRuleMatches(match, invocation, invocation.permissionFacts?.ruleTargets),
+      )
+    return required.every((subject) =>
+      allowed.some((match) => {
+        if (match.kind === 'tool') return permissionRuleMatches(match, invocation)
+        if (match.kind !== subject.kind) return false
+        const targets =
+          subject.kind === 'file'
+            ? subject.access === 'write'
+              ? { writePaths: [subject.path] }
+              : { readPaths: [subject.path] }
+            : subject.kind === 'network'
+              ? { networkDomains: [subject.domain] }
+              : invocation.permissionFacts?.ruleTargets
+        return permissionRuleMatches(match, invocation, targets)
+      }),
     )
+  }
+
+  async persistGrant(threadID: string, rule: ApprovalRule): Promise<void> {
+    if (!rule.subjects?.length) return this.persistProject(rule)
+    if (rule.scope === 'session') {
+      this.db.sqlite.transaction(() => {
+        for (const match of rule.subjects!) {
+          const repository = this.db.repositories.permissionRules
+          const existing = repository
+            .listChatRules(threadID)
+            .find(
+              (saved) =>
+                saved.effect === 'allow' &&
+                saved.workspace &&
+                sameWorkspace(saved.workspace, rule.workspace) &&
+                permissionRuleMatchKey(saved.match) === permissionRuleMatchKey(match),
+            )
+          repository.upsertChatRule({
+            threadID,
+            effect: 'allow',
+            match,
+            workspace: rule.workspace,
+            ...(existing ? { id: existing.id, expectedVersion: String(existing.version) } : {}),
+          })
+        }
+      })()
+      return
+    }
+    if (rule.scope !== 'project' || !this.config) return
+    const layer = (await this.layers(rule.workspace))?.project
+    if (!layer) throw new AgentError('CONFLICT', '项目配置不可用', 409)
+    const raw = Array.isArray(layer.config.permission_rules) ? layer.config.permission_rules : []
+    await this.config.batchWrite({
+      cwd: rule.workspace,
+      target: { kind: 'project' },
+      expectedVersion: layer.version,
+      edits: [
+        {
+          keyPath: ['permission_rules'],
+          value: [
+            ...raw.filter((value) => !isStoredRule(value) || !value.id.startsWith(`${rule.id}:`)),
+            ...rule.subjects.map((match, index) => ({
+              id: `${rule.id}:${index}`,
+              effect: 'allow',
+              scope: 'project',
+              match,
+              createdAt: Date.now(),
+            })),
+          ] as unknown as ConfigValue,
+        },
+      ],
+    })
   }
 
   validate(invocation: ToolInvocation, id: string): ApprovalRule {
@@ -479,6 +543,7 @@ export class ApprovalRules {
   }
 
   async persistProject(rule: ApprovalRule): Promise<void> {
+    if (rule.subjects?.length) return this.persistGrant('', rule)
     if (rule.scope !== 'project' || !this.config) return
     const result = await this.config.read({ cwd: rule.workspace, includeLayers: true })
     const layer = result.layers?.find((candidate) => candidate.kind === 'project')
@@ -510,7 +575,12 @@ export class ApprovalRules {
       permissionConfig: {},
     } as unknown as ToolInvocation)
     const rules: PermissionRule[] = [
-      ...layerRules(layers?.user?.config.permission_rules, 'user', 'user', layers?.user?.version ?? ''),
+      ...layerRules(
+        layers?.user?.config.permission_rules,
+        'user',
+        'user',
+        layers?.user?.version ?? '',
+      ),
       ...(layers?.project?.trusted
         ? layerRules(
             layers.project.config.permission_rules,
@@ -531,6 +601,7 @@ export class ApprovalRules {
         editable: true,
         version: String(rule.version),
         createdAt: rule.createdAt,
+        ...(rule.workspace ? { workspace: rule.workspace } : {}),
       })
     }
     if (root && layers?.project?.trusted) {
@@ -595,6 +666,8 @@ export class ApprovalRules {
       }
       case 'command': {
         const command = match.command.trim()
+        if (match.cwd && !isAbsolute(match.cwd))
+          throw new AgentError('INVALID_REQUEST', '命令执行目录必须是绝对路径', 400)
         if (!command) throw new AgentError('INVALID_REQUEST', '命令规则不能为空', 400)
         const parsed = simpleCommandArgv(command)
         if (match.argv?.length) {
@@ -602,7 +675,7 @@ export class ApprovalRules {
             throw new AgentError('INVALID_REQUEST', '命令前缀必须来自安全 argv', 400)
           return { kind: 'command', command, argv: [...match.argv] }
         }
-        return { kind: 'command', command }
+        return { kind: 'command', command, ...(match.cwd ? { cwd: resolve(match.cwd) } : {}) }
       }
       case 'network': {
         const domain = match.domain.trim().toLowerCase()
@@ -611,15 +684,20 @@ export class ApprovalRules {
         return { kind: 'network', domain }
       }
       case 'mcp': {
-        const servers = this.tools.all().flatMap((tool) =>
-          tool.origin?.kind === 'mcp'
-            ? [{ server: tool.origin.serverName, tool: tool.origin.rawToolName }]
-            : [],
-        )
+        const servers = this.tools
+          .all()
+          .flatMap((tool) =>
+            tool.origin?.kind === 'mcp'
+              ? [{ server: tool.origin.serverName, tool: tool.origin.rawToolName }]
+              : [],
+          )
         const serverKnown = servers.some((entry) => entry.server === match.server)
         if (!serverKnown)
           throw new AgentError('INVALID_REQUEST', `未注册的 MCP 服务器：${match.server}`, 400)
-        if (match.tool && !servers.some((entry) => entry.server === match.server && entry.tool === match.tool))
+        if (
+          match.tool &&
+          !servers.some((entry) => entry.server === match.server && entry.tool === match.tool)
+        )
           throw new AgentError('INVALID_REQUEST', `未注册的 MCP 工具：${match.tool}`, 400)
         return {
           kind: 'mcp',
@@ -642,6 +720,7 @@ export class ApprovalRules {
         threadID,
         ...(input.id ? { id: input.id } : {}),
         effect: input.effect,
+        workspace: this.workspace({ threadID } as ToolInvocation)?.root ?? null,
         match,
         ...(expectedVersion ? { expectedVersion } : {}),
       })
@@ -654,6 +733,7 @@ export class ApprovalRules {
         editable: true,
         version: String(rule.version),
         createdAt: rule.createdAt,
+        ...(rule.workspace ? { workspace: rule.workspace } : {}),
       }
     }
     if (!this.config)
@@ -662,8 +742,7 @@ export class ApprovalRules {
     if (input.scope === 'project' && !layers?.project?.trusted)
       throw new AgentError('CONFIG_PROJECT_UNTRUSTED', '项目配置尚未信任，不能保存项目规则', 409)
     const layer = input.scope === 'user' ? layers?.user : layers?.project
-    if (!layer)
-      throw new AgentError('CAPABILITY_REQUIRED', '配置层不可用，无法保存规则', 409)
+    if (!layer) throw new AgentError('CAPABILITY_REQUIRED', '配置层不可用，无法保存规则', 409)
     const raw = Array.isArray(layer.config.permission_rules) ? layer.config.permission_rules : []
     const id = input.id ?? `permission-rule:${crypto.randomUUID()}`
     const existingIndex = raw.findIndex((value) => isStoredRule(value) && value.id === id)
@@ -673,7 +752,8 @@ export class ApprovalRules {
       throw new AgentError('CONFLICT', '规则版本已变化，请刷新后重试', 409)
     const now = Date.now()
     const createdAt =
-      existingIndex >= 0 && typeof (raw[existingIndex] as { createdAt?: unknown }).createdAt === 'number'
+      existingIndex >= 0 &&
+      typeof (raw[existingIndex] as { createdAt?: unknown }).createdAt === 'number'
         ? ((raw[existingIndex] as { createdAt: number }).createdAt ?? now)
         : now
     const nextValue: ConfigValue = {
@@ -687,7 +767,10 @@ export class ApprovalRules {
       existingIndex >= 0
         ? raw.map((value, index) =>
             index === existingIndex
-              ? ({ ...(value as Record<string, unknown>), ...(nextValue as Record<string, unknown>) } as ConfigValue)
+              ? ({
+                  ...(value as Record<string, unknown>),
+                  ...(nextValue as Record<string, unknown>),
+                } as ConfigValue)
               : (value as ConfigValue),
           )
         : [...raw, nextValue]
@@ -746,9 +829,7 @@ export class ApprovalRules {
       const layer = scope === 'user' ? layers?.user : layers?.project
       if (!layer) continue
       if (scope === 'project' && !layers?.project?.trusted) continue
-      const raw = Array.isArray(layer.config.permission_rules)
-        ? layer.config.permission_rules
-        : []
+      const raw = Array.isArray(layer.config.permission_rules) ? layer.config.permission_rules : []
       const index = raw.findIndex((value) => isStoredRule(value) && value.id === ruleId)
       if (index < 0) continue
       if (expectedVersion && expectedVersion !== layer.version)
@@ -811,12 +892,7 @@ export class ApprovalRules {
       const layers = await this.layers(workspace?.root ?? null)
       if (layers?.user)
         rules.push(
-          ...layerRules(
-            layers.user.config.permission_rules,
-            'user',
-            'user',
-            layers.user.version,
-          ),
+          ...layerRules(layers.user.config.permission_rules, 'user', 'user', layers.user.version),
         )
       if (layers?.project?.trusted)
         rules.push(
@@ -832,6 +908,8 @@ export class ApprovalRules {
     }
     if (invocation.threadID) {
       for (const rule of this.db.repositories.permissionRules.listChatRules(invocation.threadID)) {
+        if (!rule.workspace || !workspace || !sameWorkspace(rule.workspace, workspace.root))
+          continue
         rules.push({
           id: rule.id,
           effect: rule.effect,
@@ -843,12 +921,34 @@ export class ApprovalRules {
         })
       }
     }
-    const matches = rules.filter((rule) =>
-      permissionRuleMatches(rule.match, invocation, invocation.permissionFacts?.ruleTargets),
-    )
-    if (!matches.length) return EMPTY_RULE_FACTS
+    const matches = rules.filter((rule) => {
+      const targets = invocation.permissionFacts?.ruleTargets
+      if (rule.match.kind === 'file') {
+        const paths = rule.match.access === 'write' ? targets?.writePaths : targets?.readPaths
+        return (
+          paths?.some((path) =>
+            permissionRuleMatches(
+              rule.match,
+              invocation,
+              rule.match.kind === 'file' && rule.match.access === 'write'
+                ? { writePaths: [path] }
+                : { readPaths: [path] },
+            ),
+          ) ?? false
+        )
+      }
+      return permissionRuleMatches(rule.match, invocation, targets)
+    })
+    const strongest = strongestPermissionRuleEffect(matches.map((rule) => rule.effect))
+    const covered = this.coversSubjects(invocation, [
+      ...matches.filter((rule) => rule.effect === 'allow').map((rule) => rule.match),
+      ...(await this.legacySubjects(invocation)),
+    ])
+    const effect =
+      strongest === 'deny' || strongest === 'ask' ? strongest : covered ? 'allow' : null
+    if (!effect) return EMPTY_RULE_FACTS
     return {
-      effect: strongestPermissionRuleEffect(matches.map((rule) => rule.effect)),
+      effect,
       ids: matches.map((rule) => rule.id),
       matches,
     }

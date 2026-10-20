@@ -244,8 +244,9 @@ describe('统一 Shell 宿主执行门', () => {
         { command: 'winget uninstall fixture' },
         await executionContext(root),
       ),
-    ).rejects.toMatchObject({ code: 'SHELL_HARD_DENY' })
-    expect(runs).toBe(1)
+    ).resolves.toBeDefined()
+    expect(receivedRuleApproval).toBe(true)
+    expect(runs).toBe(2)
   })
 
   test('Pi 预审批恢复后不重复执行项目 Hook', async () => {
@@ -367,7 +368,7 @@ describe('统一 Shell 宿主执行门', () => {
   })
 })
 
-test('Shell 恢复审批核对精确指纹；Hook 改写后重新验证 schema 和硬拒绝', async () => {
+test('Shell 恢复审批核对精确指纹；Hook 改写后重新验证 schema 并重新审批风险', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pidex-shell-recheck-'))
   tempPaths.push(root)
   const context = await executionContext(root)
@@ -412,6 +413,6 @@ test('Shell 恢复审批核对精确指纹；Hook 改写后重新验证 schema �
   rewrite = { command: 'Remove-Item -Recurse -Force C:\\Windows' }
   await expect(
     executor.execute('PowerShell', { command: 'Write-Output ok' }, context),
-  ).rejects.toThrow()
-  expect(runs).toBe(0)
+  ).resolves.toBeDefined()
+  expect(runs).toBe(1)
 })

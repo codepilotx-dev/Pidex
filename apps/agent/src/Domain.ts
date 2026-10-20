@@ -214,6 +214,11 @@ export interface ToolRuleTargets {
 }
 
 export interface ToolPermissionFacts {
+  workspaceRoot?: string
+  riskCategories?: readonly import('@pidex/shared/thread').RiskCategory[]
+  networkAccess?: boolean
+  externalWrite?: boolean
+  externalCommand?: boolean
   ruleRequiresApproval?: boolean
   hookRequiresApproval?: boolean
   skillScript?: boolean
@@ -228,12 +233,12 @@ export interface ToolPermissionFacts {
   ruleTargets?: ToolRuleTargets
   /** True once the host evaluated the current rule catalog for this invocation. */
   ruleFactsLoaded?: boolean
-  /** Approval the host always requires; allow rules and legacy grants cannot bypass it. */
+  /** Host-detected approval requirement; a matching user grant can satisfy it. */
   forcedApproval?: boolean
   /**
    * Host-derived: the action can destroy state that no local checkout can
    * restore (remote repositories, branches, releases, workspace-external
-   * targets). Promotes an otherwise ordinary command to a forced approval.
+   * targets). Requires approval unless the user has already authorized the matching operation.
    */
   destructive?: boolean
 }

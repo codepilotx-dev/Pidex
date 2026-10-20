@@ -131,7 +131,7 @@ describe('完全访问权限下的文件工具', () => {
         { pattern: '*.md', path: outside },
         context(DEFAULT_PERMISSION_CONFIG),
       ),
-    ).rejects.toMatchObject({ code: 'WORKSPACE_PATH_DENIED' })
+    ).resolves.toHaveProperty('matches')
   })
 
   test('完全访问模式下 apply_patch 的写入预检与提交同样作用于工作区外文件', async () => {
@@ -163,31 +163,30 @@ describe('完全访问权限下的文件工具', () => {
     expect(approvals).toEqual([])
   })
 
-  test('默认与只读文件访问范围继续阻止工作区外的读写', async () => {
+  test('默认允许外部低风险读取，外部写入先审批，只读配置仍拒绝写入', async () => {
     const { outside, executor, approvals, context } = await fixture()
     const external = join(outside, 'plan.md')
     await writeFile(external, 'external plan\n', 'utf8')
-    const readOnly: PermissionConfig = {
-      sandboxMode: 'read-only',
-      approvalPolicy: 'on-request',
-      approvalsReviewer: 'user',
-    }
-
     await expect(
       executor.execute('Read', { file_path: external }, context(DEFAULT_PERMISSION_CONFIG)),
-    ).rejects.toMatchObject({ code: 'WORKSPACE_PATH_DENIED' })
-    await expect(
-      executor.execute('Read', { file_path: external }, context(readOnly)),
-    ).rejects.toMatchObject({ code: 'WORKSPACE_PATH_DENIED' })
+    ).resolves.toMatchObject({ content: 'external plan\n' })
+    expect(approvals).toEqual([])
+    const target = join(outside, 'approved.txt')
+    await executor.execute(
+      'Write',
+      { file_path: target, content: 'approved\n' },
+      context(DEFAULT_PERMISSION_CONFIG),
+    )
+    expect(approvals).toEqual(['Write'])
+    expect(await readFile(target, 'utf8')).toBe('approved\n')
     await expect(
       executor.execute(
         'Write',
-        { file_path: join(outside, 'blocked.txt'), content: 'blocked\n' },
-        context(DEFAULT_PERMISSION_CONFIG),
+        { file_path: join(outside, 'blocked.txt'), content: 'blocked' },
+        context({ ...DEFAULT_PERMISSION_CONFIG, sandboxMode: 'read-only' }),
       ),
-    ).rejects.toMatchObject({ code: 'WORKSPACE_PATH_DENIED' })
+    ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
     expect(await Bun.file(join(outside, 'blocked.txt')).exists()).toBe(false)
-    expect(approvals).toEqual([])
   })
 
   test('默认模式可以读取只读本地上下文但不能写入', async () => {
@@ -270,42 +269,31 @@ describe('完全访问权限下的文件工具', () => {
     expect(await readFile(join(locked, 'locked.txt'), 'utf8')).toBe('locked\n')
   })
 
-  test('并发调用与权限切换不会继承其他调用的完全访问权限', async () => {
-    const { outside, workspace, executor, context } = await fixture()
-    const external = join(outside, 'shared.md')
-    await writeFile(external, 'shared\n', 'utf8')
-
-    const [granted, restricted] = await Promise.allSettled([
-      executor.execute<{ content: string }>(
-        'Read',
-        { file_path: external },
+  test('并发调用不会把完全访问传给默认模式的外部写入', async () => {
+    const { outside, workspace, executor, approvals, context } = await fixture()
+    await Promise.all([
+      executor.execute(
+        'Write',
+        { file_path: join(outside, 'full.txt'), content: 'full' },
         context(FULL_ACCESS_PERMISSION_CONFIG),
       ),
-      executor.execute('Read', { file_path: external }, context(DEFAULT_PERMISSION_CONFIG)),
+      executor.execute(
+        'Write',
+        { file_path: join(outside, 'approved.txt'), content: 'approved' },
+        context(DEFAULT_PERMISSION_CONFIG),
+      ),
     ])
-    expect(granted.status).toBe('fulfilled')
-    expect(restricted.status).toBe('rejected')
-    if (restricted.status === 'rejected') {
-      expect((restricted.reason as { code?: string }).code).toBe('WORKSPACE_PATH_DENIED')
-    }
-
-    // 共享实例本身从未被改写：完全访问结束后仍按工作区边界工作。
+    expect(approvals).toEqual(['Write'])
     expect(workspace.fileAccess).toBe('workspace-write')
-    await expect(
-      executor.execute('Read', { file_path: external }, context(DEFAULT_PERMISSION_CONFIG)),
-    ).rejects.toMatchObject({ code: 'WORKSPACE_PATH_DENIED' })
-    await expect(
-      executor
-        .execute<{ content: string }>(
-          'Read',
-          { file_path: external },
-          context(FULL_ACCESS_PERMISSION_CONFIG),
-        )
-        .then((result) => result.content),
-    ).resolves.toBe('shared\n')
+    await executor.execute(
+      'Write',
+      { file_path: join(outside, 'later.txt'), content: 'later' },
+      context(DEFAULT_PERMISSION_CONFIG),
+    )
+    expect(approvals).toEqual(['Write', 'Write'])
   })
 
-  test('默认模式仍阻止工作区内符号链接指向工作区外', async () => {
+  test('默认读取链接按宿主真实目标访问外部低风险文件', async () => {
     const { root, outside, executor, context } = await fixture()
     const external = join(outside, 'secret.txt')
     await writeFile(external, 'secret\n', 'utf8')
@@ -313,7 +301,7 @@ describe('完全访问权限下的文件工具', () => {
 
     await expect(
       executor.execute('Read', { file_path: 'linked.txt' }, context(DEFAULT_PERMISSION_CONFIG)),
-    ).rejects.toMatchObject({ code: 'WORKSPACE_PATH_DENIED' })
+    ).resolves.toMatchObject({ content: 'secret\n' })
   })
 })
 
@@ -371,7 +359,7 @@ describe('权限申请工具的暴露与审批', () => {
 
     await expect(
       executor.execute('request_permissions', request, context(FULL_ACCESS_PERMISSION_CONFIG)),
-    ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
+    ).resolves.toMatchObject({ granted: true })
     await expect(
       executor.execute(
         'request_permissions',
@@ -391,7 +379,7 @@ describe('权限申请工具的暴露与审批', () => {
       context(DEFAULT_PERMISSION_CONFIG, { authorizationOnly: true }),
     )
     expect(decision.decision).toBe('allow')
-    expect(approvals).toEqual(['request_permissions'])
+    expect(approvals).toEqual([])
   })
 })
 
@@ -434,7 +422,7 @@ describe('真实路径的配置与敏感文件保护', () => {
     })
   }
 
-  test('外部新建项目配置和 Git hooks 通过目录链接仍要求审批', async () => {
+  test('完全访问可通过真实目录链接写配置和 Git hooks，不跳过内容校验', async () => {
     const { root, outside, executor, approvals, context } = await fixture()
     const configDir = join(outside, '.pidex')
     const hooksDir = join(outside, '.git', 'hooks')
@@ -452,13 +440,13 @@ describe('真实路径的配置与敏感文件保护', () => {
           { file_path: target, content: 'blocked' },
           context(FULL_ACCESS_PERMISSION_CONFIG),
         ),
-      ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
-      expect(await Bun.file(target).exists()).toBe(false)
+      ).resolves.toBeDefined()
+      expect(await readFile(target, 'utf8')).toBe('blocked')
     }
     expect(approvals).toEqual([])
   })
 
-  test('外部环境文件的补丁保留审批规则，示例文件仍可编辑', async () => {
+  test('完全访问允许外部环境文件与示例文件补丁', async () => {
     const { outside, executor, context } = await fixture()
     for (const name of ['.env', '.env.example']) {
       const target = join(outside, name)
@@ -472,13 +460,8 @@ describe('真实路径的配置与敏感文件保护', () => {
         },
         context(FULL_ACCESS_PERMISSION_CONFIG),
       )
-      if (name === '.env') {
-        await expect(operation).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
-        expect(await Bun.file(target).exists()).toBe(false)
-      } else {
-        await operation
-        expect(await readFile(target, 'utf8')).toBe('example\n')
-      }
+      await operation
+      expect(await readFile(target, 'utf8')).toBe('example\n')
     }
   })
 })

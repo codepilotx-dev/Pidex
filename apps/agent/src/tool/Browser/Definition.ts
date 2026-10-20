@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isFullAccessPermissionConfig } from '@pidex/shared/thread'
 import type { BrowserOperation, BrowserResult } from '@pidex/agent-protocol'
 import type { BrowserService } from '../../browser/BrowserService'
 import { AgentError } from '../../Domain'
@@ -93,10 +94,21 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
     allowedModes: read ? ['chat', 'plan'] : ['chat'],
     inspectInput: (value, context) => {
       const i = value as z.infer<typeof input>
-      const scope = browser.inspect(identity(context), i.tabId, i.operation)
+      const scope = browser.inspect(
+        identity(context),
+        i.tabId,
+        i.operation,
+        context.taskMode !== 'plan' && isFullAccessPermissionConfig(context.permissionConfig),
+      )
       if (context.taskMode === 'plan' && scope.ruleRequiresApproval)
         throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式只能读取已授权的浏览器站点', 403)
-      return { authorizationScope: scope }
+      return {
+        authorizationScope: scope,
+        permissionFacts: {
+          risk: read ? 'low' : 'medium',
+          networkAccess: Boolean(scope.browserOrigin),
+        },
+      }
     },
     execute: (value, context) => {
       const i = value as z.infer<typeof input>
@@ -105,6 +117,7 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
         i.tabId,
         i.operation as BrowserOperation,
         context.signal,
+        context.taskMode !== 'plan' && isFullAccessPermissionConfig(context.permissionConfig),
       )
     },
     auditResult: (value) => {
@@ -147,8 +160,12 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
         if (['takeover', 'release', 'close'].includes(v.action) && !v.tabId)
           throw new AgentError('INVALID_REQUEST', '缺少标签 ID', 400)
         if (v.action === 'takeover' || v.action === 'release')
-          return { authorizationScope: browser.inspectTakeover(identity(context), v.tabId!) }
+          return {
+            authorizationScope: browser.inspectTakeover(identity(context), v.tabId!),
+            permissionFacts: { risk: 'low', networkAccess: false },
+          }
         return {
+          permissionFacts: { risk: 'low', networkAccess: false },
           authorizationScope: browser.inspect(
             identity(context),
             v.action === 'close' ? v.tabId : undefined,
@@ -170,7 +187,12 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
         }
         if (v.action === 'close') {
           if (!v.tabId) throw new AgentError('INVALID_REQUEST', '缺少标签 ID', 400)
-          browser.inspect(threadId, v.tabId)
+          browser.inspect(
+            threadId,
+            v.tabId,
+            undefined,
+            context.taskMode !== 'plan' && isFullAccessPermissionConfig(context.permissionConfig),
+          )
           await browser.close(v.tabId)
           return { closed: true }
         }

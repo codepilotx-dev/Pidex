@@ -13,7 +13,7 @@ import type { ConfigService } from '../config/ConfigService'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
 import { ComputerPolicyService } from './ComputerPolicyService'
-import type { PermissionConfig } from '@pidex/shared/thread'
+import { isFullAccessPermissionConfig, type PermissionConfig } from '@pidex/shared/thread'
 import type { PluginManagementService } from '../plugin/PluginManagementService'
 
 type Identity = { threadID: string; turnID: string; agentID?: string; toolCallID?: string }
@@ -364,14 +364,16 @@ export class ComputerUseService {
     ref: string,
     plan: boolean,
     operation?: ComputerAction,
-    _permissionConfig?: PermissionConfig,
+    permissionConfig?: PermissionConfig,
   ) {
     this.requireAvailable(identity)
     const window = this.window(ref)
+    const fullAccess = !plan && !!permissionConfig && isFullAccessPermissionConfig(permissionConfig)
     const permission = this.permissions().find((entry) => entry.appId === window.appId)
     const policy = this.appPolicy(window)
     if (policy.access === 'deny') throw new AgentError('PERMISSION_DENIED', policy.reason, 403)
     if (
+      !fullAccess &&
       this.permissions().some(
         (entry) =>
           entry.decision === 'deny' &&
@@ -380,6 +382,7 @@ export class ComputerUseService {
     )
       throw new AgentError('PERMISSION_DENIED', '此应用的电脑控制权限已拒绝', 403)
     const granted =
+      fullAccess ||
       (permission?.decision === 'allow' &&
         !permission.needsConfirmation &&
         this.policy.state().allowPersistentApproval) ||

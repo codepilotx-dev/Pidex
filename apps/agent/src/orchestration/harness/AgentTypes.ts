@@ -69,6 +69,8 @@ export type AgentToolCall = Extract<AssistantMessage['content'][number], { type:
 export interface BeforeToolCallResult {
   block?: boolean
   reason?: string
+  /** A durable host approval is pending; do not continue the model loop. */
+  pause?: boolean
 }
 
 /**

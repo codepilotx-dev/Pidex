@@ -2152,7 +2152,10 @@ export function ComposerCard({
         title="启用 Full Access？"
         description={
           <>
-            <p>允许 Agent 使用完整文件访问范围并取消常规人工审批。请仅在信任当前任务时启用。</p>
+            <p>
+              允许 Agent 访问本机文件、互联网、执行命令及调用工具和 MCP，无需权限审批。Plan
+              独立生效，不提供 OS 沙箱或网络隔离。
+            </p>
             {fullAccessError ? <p role="alert">{fullAccessError}</p> : null}
           </>
         }

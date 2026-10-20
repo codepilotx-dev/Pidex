@@ -696,8 +696,11 @@ type FinalizedToolCallEntry = FinalizedToolCallOutcome | (() => Promise<Finalize
 
 function shouldTerminateToolBatch(finalizedCalls: FinalizedToolCallOutcome[]): boolean {
   return (
-    finalizedCalls.length > 0 &&
-    finalizedCalls.every((finalized) => finalized.result.terminate === true)
+    finalizedCalls.some(
+      ({ result }) => (result.details as { __piPause?: boolean } | undefined)?.__piPause === true,
+    ) ||
+    (finalizedCalls.length > 0 &&
+      finalizedCalls.every((finalized) => finalized.result.terminate === true))
   )
 }
 
@@ -754,7 +757,10 @@ async function prepareToolCall(
       if (beforeResult?.block) {
         return {
           kind: 'immediate',
-          result: createErrorToolResult(beforeResult.reason || 'Tool execution was blocked'),
+          result: {
+            ...createErrorToolResult(beforeResult.reason || 'Tool execution was blocked'),
+            ...(beforeResult.pause ? { details: { __piPause: true }, terminate: true } : {}),
+          },
           isError: true,
         }
       }

@@ -29,15 +29,15 @@ export const APPROVAL_RULE_EFFECT_LABELS: Record<PermissionRuleEffect, string> =
 }
 
 export const APPROVAL_RULE_SCOPE_LABELS: Record<PermissionRuleScope, string> = {
-  chat: '当前聊天',
+  chat: '当前会话与项目',
   user: '用户',
-  project: '项目',
+  project: '当前项目',
 }
 
 export const APPROVAL_RULE_SOURCE_LABELS: Record<PermissionRuleSource, string> = {
   chat: '聊天',
   user: '用户',
-  project: '项目',
+  project: '当前项目',
   legacy: '旧授权',
 }
 
@@ -53,7 +53,7 @@ export function approvalRuleScopeOptions(isProjectChat: boolean): ApprovalRuleSc
     {
       value: 'chat',
       label: '当前聊天',
-      detail: '仅对当前聊天生效，删除后立即失效。',
+      detail: '仅对当前聊天与当前项目的交集生效，恢复聊天后仍有效。',
     },
     {
       value: 'user',
@@ -92,6 +92,7 @@ export type ApprovalRuleEditorValues = {
   filePath: string
   commandMode: 'exact' | 'prefix'
   command: string
+  commandCwd?: string
   argvText: string
   domain: string
   mcpServer: string
@@ -133,6 +134,7 @@ export function approvalRuleEditorValuesFromRule(rule: PermissionRule): Approval
       return {
         ...base,
         command: rule.match.command,
+        commandCwd: rule.match.cwd,
         commandMode: rule.match.argv?.length ? 'prefix' : 'exact',
         argvText: rule.match.argv?.join('\n') ?? '',
       }
@@ -191,10 +193,17 @@ export function buildApprovalRuleInput(
     }
     case 'command': {
       const command = values.command.trim()
+      const cwd = values.commandCwd?.trim()
+      if (cwd && !isAbsoluteHostPath(cwd)) return { input: null, error: '执行目录必须是绝对路径。' }
       if (!command) return { input: null, error: '请输入命令。' }
       if (values.commandMode === 'exact')
         return {
-          input: { ...(id ? { id } : {}), effect, scope, match: { kind: 'command', command } },
+          input: {
+            ...(id ? { id } : {}),
+            effect,
+            scope,
+            match: { kind: 'command', command, ...(cwd ? { cwd } : {}) },
+          },
           error: null,
         }
       const argv = values.argvText
@@ -207,7 +216,7 @@ export function buildApprovalRuleInput(
           ...(id ? { id } : {}),
           effect,
           scope,
-          match: { kind: 'command', command, argv },
+          match: { kind: 'command', command, argv, ...(cwd ? { cwd } : {}) },
         },
         error: null,
       }

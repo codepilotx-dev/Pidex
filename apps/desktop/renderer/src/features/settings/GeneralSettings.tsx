@@ -315,7 +315,8 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
                 {permissionView.unavailableReason ? (
                   <>
                     <br />
-                    {permissionView.unavailableReason}请在「配置」页重新选择权限预设，或重新开启该模式。
+                    {permissionView.unavailableReason}
+                    请在「配置」页重新选择权限预设，或重新开启该模式。
                   </>
                 ) : null}
               </>
@@ -342,7 +343,7 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
           <SettingsRow
             title="允许「完全访问」预设"
             autoSave
-            description="启用后可在权限菜单与「配置」页选择「完全访问」：内建文件访问范围扩大到工作区外路径；宿主 Shell 直接在本机执行；硬拒绝、Plan、规则与受保护资源仍然生效。关闭只隐藏该预设，不会改写已保存的权限配置。"
+            description="启用后可在权限菜单与「配置」页选择「完全访问」：允许访问本机文件、互联网、执行命令及调用工具和 MCP，无需权限审批；Plan 模式独立生效。关闭只隐藏该预设，不会改写已保存的权限配置。"
             control={(aria) => (
               <ToggleSwitch
                 checked={enableFullAccessPermissionMode ?? false}

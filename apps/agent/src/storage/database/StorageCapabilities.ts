@@ -189,7 +189,11 @@ export function probePermissionRuleStorageCapabilities(
     ).map((row) => row.name),
   )
   const capabilities = {
-    chatRules: names.has('permission_chat_rules'),
+    chatRules:
+      names.has('permission_chat_rules') &&
+      (sqlite.query('PRAGMA table_info(permission_chat_rules)').all() as { name: string }[]).some(
+        (column) => column.name === 'workspace',
+      ),
     legacyGrantRevocations: names.has('permission_grant_revocations'),
   }
   permissionRuleCache.set(sqlite, capabilities)

@@ -457,7 +457,7 @@ export class BrowserService {
           new AgentError('INVALID_REQUEST', '浏览器连接已中断，操作不会自动重放', 409),
         )
   }
-  inspect(threadId: string, tabId?: string, operation?: BrowserOperation) {
+  inspect(threadId: string, tabId?: string, operation?: BrowserOperation, fullAccess = false) {
     if (operation?.url && operation.action !== 'navigate')
       throw new AgentError('INVALID_REQUEST', '只有导航操作接受 URL', 400)
     if (operation?.action === 'navigate' && !operation.url)
@@ -468,7 +468,7 @@ export class BrowserService {
     const url = operation?.url ? browserUrl(operation.url) : tab?.url
     const origin = url && url !== 'about:blank' ? new URL(url).origin : null
     const permission = this.permissions().find((item) => item.origin === origin)
-    if (permission?.decision === 'deny')
+    if (!fullAccess && permission?.decision === 'deny')
       throw new AgentError('PERMISSION_DENIED', '此站点的浏览器授权已被拒绝', 403)
     return {
       origin,
@@ -489,8 +489,14 @@ export class BrowserService {
       ruleRequiresApproval: Boolean(origin && !this.isGranted(threadId, origin)),
     }
   }
-  async execute(threadId: string, tabId: string, operation: BrowserOperation, signal: AbortSignal) {
-    const inspected = this.inspect(threadId, tabId, operation)
+  async execute(
+    threadId: string,
+    tabId: string,
+    operation: BrowserOperation,
+    signal: AbortSignal,
+    fullAccess = false,
+  ) {
+    const inspected = this.inspect(threadId, tabId, operation, fullAccess)
     // ToolExecutor authorizes this exact operation. A one-time approval never writes a site rule.
     let tab = this.require(tabId)
     if (tab.busy) throw new AgentError('INVALID_REQUEST', '此标签已有操作正在执行', 409)
@@ -512,22 +518,13 @@ export class BrowserService {
       tabId,
       generation: tab.generation,
       operation: operation.url ? { ...operation, url: browserUrl(operation.url) } : operation,
-      allowedOrigins: this.permissions()
-        .filter((p) => p.decision === 'allow')
-        .map((p) => p.origin)
-        .concat(
-          this.db.repositories.interactions
-            .resolvedApprovalGrantRules(threadId)
-            .flatMap((value) => {
-              const rule = value as import('../permission/ApprovalRules').ApprovalRule
-              return rule.kind === 'browser' && rule.scope === 'session' ? rule.target : []
-            }),
-        )
-        .concat(inspected.origin ? [inspected.origin] : []),
-      deniedOrigins: this.permissions()
-        .filter((p) => p.decision === 'deny')
-        .map((p) => p.origin),
-      allowAllSites: this.allowsAllSites(),
+      allowedOrigins: inspected.origin ? [inspected.origin] : [],
+      deniedOrigins: fullAccess
+        ? []
+        : this.permissions()
+            .filter((p) => p.decision === 'deny')
+            .map((p) => p.origin),
+      allowAllSites: fullAccess,
     }
     try {
       signal.throwIfAborted()

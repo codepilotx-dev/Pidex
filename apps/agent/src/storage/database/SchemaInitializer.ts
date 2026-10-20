@@ -1619,6 +1619,13 @@ class SchemaInitializer {
             },
             // 权限规则独立表：聊天规则与旧聊天授权撤销记录。
             // 只新增表与索引；旧 approval_rules 与审批历史保持原样。
+            65: () => {
+              const columns = this.sqlite
+                .query('PRAGMA table_info(permission_chat_rules)')
+                .all() as { name: string }[]
+              if (!columns.some((column) => column.name === 'workspace'))
+                this.sqlite.exec('ALTER TABLE permission_chat_rules ADD COLUMN workspace TEXT')
+            },
             64: () =>
               this.sqlite.exec(
                 PERMISSION_RULES_SCHEMA.map((statement) =>

@@ -40,6 +40,7 @@ async function createRuntime(input: {
   toolResult?: string
   manualAfterTool?: boolean
   manualOnFinal?: boolean
+  beforeToolCall?: HarnessRuntimeOptions['beforeToolCall']
 }) {
   const faux = fauxProvider({
     models: [{ id: 'runtime-compaction', input: ['text'], contextWindow: 64_000 }],
@@ -59,6 +60,7 @@ async function createRuntime(input: {
   const failures: RuntimeCompactionTrigger[] = []
   let active: ActiveHarness | undefined
   const runtimeOptions: HarnessRuntimeOptions = {
+    ...(input.beforeToolCall ? { beforeToolCall: input.beforeToolCall } : {}),
     activated: (_threadID, value) => {
       active = value
     },
@@ -145,6 +147,39 @@ async function createRuntime(input: {
 }
 
 describe('Harness runtime provider errors', () => {
+  test('混合批次中的审批暂停会终止模型循环，并保留可恢复标记', async () => {
+    const setup = await createRuntime({
+      responses: [
+        fauxAssistantMessage(
+          [
+            { type: 'toolCall', id: 'paused', name: 'probe', arguments: {} },
+            { type: 'toolCall', id: 'safe', name: 'probe', arguments: {} },
+          ],
+          { stopReason: 'toolUse' },
+        ),
+        () => {
+          throw new Error('审批完成前不能继续请求模型')
+        },
+      ],
+      beforeToolCall: async (_request, call) =>
+        call.toolCallID === 'paused'
+          ? { block: true, pause: true, reason: '等待用户审批' }
+          : undefined,
+    })
+    try {
+      await setup.runtime.run({ ...setup.request, exposedTools: ['probe'] })
+      const results = (await setup.session.getEntries()).flatMap((entry) =>
+        entry.type === 'message' && entry.message.role === 'toolResult' ? [entry.message] : [],
+      )
+      expect(results).toHaveLength(2)
+      expect(results.find((result) => result.toolCallId === 'paused')?.details).toEqual({
+        __piPause: true,
+      })
+      expect(results.find((result) => result.toolCallId === 'safe')?.isError).toBe(false)
+    } finally {
+      await setup.runtime.dispose()
+    }
+  })
   test.each([
     ['timeout', 'PI_TIMEOUT_FAILED', '模型请求超时，请稍后重试'],
     ['unexpected failure', 'PI_UNKNOWN_FAILED', '模型请求失败，请稍后重试'],

@@ -285,7 +285,7 @@ describe('ComputerUseService', () => {
     expect(result?.command).toBeNull()
   })
 
-  test('never 拒绝新应用授权，允许询问时走审批，已手动授权时 never 可读取', async () => {
+  test('完全访问跳过新应用审批，自定义询问与手动授权继续生效', async () => {
     const { computer, db } = await fixture()
     const registry = new ToolRegistry()
     for (const definition of computerToolDefinitions(computer)) registry.register(definition)
@@ -309,7 +309,7 @@ describe('ComputerUseService', () => {
       authorizationScope: scope,
     }
     const engine = new PermissionDecisionEngine()
-    expect(engine.evaluate(invocation, tool).action).toBe('deny')
+    expect(engine.evaluate(invocation, tool).action).toBe('allow')
     expect(
       engine.evaluate(
         {
@@ -658,14 +658,14 @@ const FULL_ACCESS = {
 } as const
 
 describe('聊天电脑授权', () => {
-  test('完全访问 never 拒绝新应用，保留已手动授权范围且不能绕过显式拒绝', async () => {
+  test('完全访问无需应用审批，保留 Plan 限制与应用身份校验', async () => {
     const { computer, db, root } = await fixture()
     const identity = { threadID: db.createThread().id, turnID: 'turn:full' }
     const signal = new AbortController().signal
     await discover(computer, identity, signal)
     expect(
       computer.inspect(identity, REF, false, undefined, FULL_ACCESS).ruleRequiresApproval,
-    ).toBe(true)
+    ).toBe(false)
     const registry = new ToolRegistry()
     for (const definition of computerToolDefinitions(computer)) registry.register(definition)
     const executor = new ToolExecutor(registry)
@@ -679,7 +679,7 @@ describe('聊天电脑授权', () => {
     }
     await expect(
       executor.execute('ComputerRead', { windowRef: REF }, { ...context, authorizationOnly: true }),
-    ).rejects.toThrow('never')
+    ).resolves.toMatchObject({ decision: 'allow' })
     expect(() => computer.inspect(identity, REF, true, undefined, FULL_ACCESS)).toThrow('Plan')
     await computer.configure({ appId: APP.appId, decision: 'allow' })
     expect(
@@ -688,7 +688,9 @@ describe('聊天电脑授权', () => {
     await computer.configure({ appId: APP.appId, decision: 'deny' })
     const next = { ...identity, turnID: 'turn:denied' }
     await discover(computer, next, signal)
-    expect(() => computer.inspect(next, REF, false, undefined, FULL_ACCESS)).toThrow('已拒绝')
+    expect(computer.inspect(next, REF, false, undefined, FULL_ACCESS).ruleRequiresApproval).toBe(
+      false,
+    )
   })
 
   for (const reviewer of ['user', 'auto_review'] as const) {
@@ -743,7 +745,7 @@ describe('聊天电脑授权', () => {
           { windowRef: REF },
           { ...context, permissionConfig: FULL_ACCESS, authorizationOnly: true },
         ),
-      ).rejects.toThrow('never')
+      ).resolves.toMatchObject({ decision: 'allow' })
       const result = await executor.execute(
         'ComputerRead',
         { windowRef: REF },

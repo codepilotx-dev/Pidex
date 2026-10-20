@@ -221,7 +221,6 @@ export async function executeHarnessRun(
     measureContextUsage(messagesChars(event.messages))
     return undefined
   })
-  const pausedToolCalls = new Set<string>()
   // Lifecycle tools that only make sense as the sole call of an assistant
   // message. The hook carries the per-message tool call count so the runtime
   // can reject a submission mixed with other tool calls; every other tool in
@@ -263,17 +262,14 @@ export async function executeHarnessRun(
         input: event.input,
         messageToolCallCount: event.messageToolCallCount,
       })
-      if (result?.pause) pausedToolCalls.add(event.toolCallId)
       return result
         ? {
             ...(result.block === undefined ? {} : { block: result.block }),
             ...(result.reason === undefined ? {} : { reason: result.reason }),
+            ...(result.pause === undefined ? {} : { pause: result.pause }),
           }
         : undefined
     })
-  harness.on('tool_result', (event) =>
-    pausedToolCalls.has(event.toolCallId) ? { terminate: true } : undefined,
-  )
   let compactionTrigger: RuntimeCompactionTrigger | null = null
   const adapter = new PiEventAdapter(
     { threadID: request.threadID, turnID: request.turnID, agentID: request.agentID },

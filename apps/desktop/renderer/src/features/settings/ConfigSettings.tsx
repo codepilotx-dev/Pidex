@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { isFullAccessPermissionConfig } from '@pidex/shared/thread'
 import { AlertTriangle, ExternalLink } from 'lucide-react'
 import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { CONFIG_UPDATED_EVENT, desktopClient } from '../../services/desktop-client/index.js'
@@ -35,6 +36,9 @@ export function ConfigSettings(): React.ReactNode {
   const [configProfiles, setConfigProfiles] = useState<DesktopConfigProfileListResult | null>(null)
   const configCwd = draft.values.lastActiveWorkspacePath || undefined
   const [pendingFullAccess, setPendingFullAccess] = useState(false)
+  const [pendingPermissionConfig, setPendingPermissionConfig] = useState<
+    typeof draft.values.permissionConfig | null
+  >(null)
   const [approvalRulesThreadId, setApprovalRulesThreadId] = useState<string | null>(null)
   const [approvalRulesError, setApprovalRulesError] = useState('')
   const permissionView = permissionPresetViewForConfig(draft.values.permissionConfig, {
@@ -46,6 +50,20 @@ export function ConfigSettings(): React.ReactNode {
     // Custom keeps the current config; every other preset comes from the shared catalog.
     if (selection === 'custom') return
     draft.setValue('permissionConfig', permissionConfigForSelection(selection))
+    draft.autoSave()
+  }
+
+  const updatePermissionConfig = (next: typeof draft.values.permissionConfig) => {
+    const current = draft.values.permissionConfig
+    if (
+      (next.sandboxMode === 'danger-full-access' && current.sandboxMode !== next.sandboxMode) ||
+      (isFullAccessPermissionConfig(next) && !isFullAccessPermissionConfig(current))
+    ) {
+      setPendingPermissionConfig(next)
+      setPendingFullAccess(true)
+      return
+    }
+    draft.setValue('permissionConfig', next)
     draft.autoSave()
   }
 
@@ -318,7 +336,7 @@ export function ConfigSettings(): React.ReactNode {
                       value: ':danger-full-access',
                       label: '完全访问',
                       detail:
-                        '结构化文件工具可访问本机路径；终端命令在本机执行并经过风险、Hook 和审批',
+                        '允许访问本机文件；完全访问预设下不进行权限审批',
                     },
                   ]}
                   onChange={(value) => {
@@ -328,11 +346,7 @@ export function ConfigSettings(): React.ReactNode {
                         : value === ':danger-full-access'
                           ? 'danger-full-access'
                           : 'workspace-write'
-                    draft.setValue('permissionConfig', {
-                      ...draft.values.permissionConfig,
-                      sandboxMode,
-                    })
-                    draft.autoSave()
+                    updatePermissionConfig({ ...draft.values.permissionConfig, sandboxMode })
                   }}
                 />
               }
@@ -402,11 +416,7 @@ export function ConfigSettings(): React.ReactNode {
                             mcpElicitations: true,
                           }
                         : (value as 'untrusted' | 'on-request' | 'never')
-                    draft.setValue('permissionConfig', {
-                      ...draft.values.permissionConfig,
-                      approvalPolicy,
-                    })
-                    draft.autoSave()
+                    updatePermissionConfig({ ...draft.values.permissionConfig, approvalPolicy })
                   }}
                 />
               }
@@ -429,11 +439,7 @@ export function ConfigSettings(): React.ReactNode {
                   ]}
                   onChange={(value) => {
                     const approvalsReviewer = value as 'user' | 'auto_review'
-                    draft.setValue('permissionConfig', {
-                      ...draft.values.permissionConfig,
-                      approvalsReviewer,
-                    })
-                    draft.autoSave()
+                    updatePermissionConfig({ ...draft.values.permissionConfig, approvalsReviewer })
                   }}
                 />
               }
@@ -462,11 +468,7 @@ export function ConfigSettings(): React.ReactNode {
                           const policy = draft.values.permissionConfig.approvalPolicy
                           if (typeof policy !== 'object') return
                           const approvalPolicy = { ...policy, [key]: checked }
-                          draft.setValue('permissionConfig', {
-                            ...draft.values.permissionConfig,
-                            approvalPolicy,
-                          })
-                          draft.autoSave()
+                          updatePermissionConfig({ ...draft.values.permissionConfig, approvalPolicy })
                         }}
                       />
                     }
@@ -665,7 +667,7 @@ export function ConfigSettings(): React.ReactNode {
               内建文件访问范围将扩大到工作区外路径；宿主 Shell 会直接在本机执行。
             </p>
             <p className="tw:m-0 tw:mt-1">
-              硬拒绝、Plan、规则与受保护资源仍然生效。Pidex 不承诺 OS 沙箱或网络隔离。
+              无需权限审批即可访问本机文件、互联网、执行命令及调用工具和 MCP。Plan 独立生效，不提供 OS 沙箱或网络隔离。
             </p>
           </>
         }
@@ -673,9 +675,16 @@ export function ConfigSettings(): React.ReactNode {
         title="启用「完全访问」预设？"
         onAction={() => {
           setPendingFullAccess(false)
-          applyPermissionPreset('full-access')
+          if (pendingPermissionConfig) {
+            draft.setValue('permissionConfig', pendingPermissionConfig)
+            draft.autoSave()
+          } else applyPermissionPreset('full-access')
+          setPendingPermissionConfig(null)
         }}
-        onCancel={() => setPendingFullAccess(false)}
+        onCancel={() => {
+          setPendingFullAccess(false)
+          setPendingPermissionConfig(null)
+        }}
       />
       {approvalRulesThreadId ? (
         <ApprovalRulesDialog
