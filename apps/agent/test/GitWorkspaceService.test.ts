@@ -224,4 +224,47 @@ describe('GitWorkspaceService', () => {
       db.close()
     }
   }, 30_000)
+
+  test('Fetch 逐行 trim 后解析 remote，兼容 CRLF 输出', async () => {
+    const container = await mkdtemp(join(tmpdir(), 'pidex-git-crlf-'))
+    roots.push(container)
+    const root = join(container, 'repository')
+    await mkdir(root)
+    const db = new AgentDatabase(join(container, 'agent.sqlite'))
+    const project = db.createProject({ rootPath: root })
+    const calls: string[][] = []
+    // Windows git may emit CRLF; a remote name carrying '\r' would break config lookups.
+    const runner = {
+      run: async ({ args }: { args: readonly string[] }) => {
+        calls.push([...args])
+        if (args[0] === 'rev-parse') return { code: 0, stdout: `${root}\n`, stderr: '' }
+        if (args[0] === 'remote') return { code: 0, stdout: 'origin\r\nbackup\r\n', stderr: '' }
+        return { code: 1, stdout: '', stderr: '' }
+      },
+    }
+    const fetched: string[] = []
+    const service = new GitWorkspaceService(
+      db,
+      runner as never,
+      {
+        runRemoteGit: async (_cwd: string, remote: string) => {
+          fetched.push(remote)
+          return { code: 0, stdout: '', stderr: '' }
+        },
+      },
+    )
+    try {
+      await service.fetch(project.id)
+      // Both names survive the CRLF split intact and reach the remote runner trimmed.
+      expect(fetched).toEqual(['origin', 'backup'])
+      const skipLookups = calls.filter((args) => args.includes('--get'))
+      expect(skipLookups.map((args) => args[3])).toEqual([
+        'remote.origin.skipFetchAll',
+        'remote.backup.skipFetchAll',
+      ])
+      for (const remote of fetched) expect(remote).not.toContain('\r')
+    } finally {
+      db.close()
+    }
+  }, 30_000)
 })

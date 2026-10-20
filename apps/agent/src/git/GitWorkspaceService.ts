@@ -87,7 +87,12 @@ export class GitWorkspaceService {
   async fetch(projectId: string) {
     const { project, repositoryRoot } = await this.repository(projectId)
     const remotes = await this.runner.run({ cwd: repositoryRoot, args: ['remote'] })
-    for (const remote of remotes.stdout.trim().split('\n').filter(Boolean)) {
+    // Git may emit CRLF on Windows; trim each line so remote names never carry '\r'.
+    const remoteNames = remotes.stdout
+      .split('\n')
+      .map((line) => line.trim())
+      .filter(Boolean)
+    for (const remote of remoteNames) {
       const skip = await this.runner.run({
         cwd: repositoryRoot,
         args: ['config', '--bool', '--get', `remote.${remote}.skipFetchAll`],
