@@ -176,6 +176,54 @@ describe('thread pull request associations', () => {
     db.close()
   })
 
+  test('无可见关联时跳过环境探测与状态刷新', async () => {
+    let identityProbes = 0
+    const { db, thread, counts } = await fixture()
+    // The shared fixture probes `repositoryIdentity` for the sidebar environment.
+    let gitCalls = 0
+    const countingGit = {
+      run: async () => {
+        gitCalls += 1
+        return { code: 0, stdout: 'feature\n', stderr: '' }
+      },
+    }
+    const noProbeGithub = {
+      readPullRequest: async () => ({ pullRequest: restPullRequest }),
+      readWatch: async () => {
+        counts.watchReads += 1
+        return watch()
+      },
+      repositoryIdentity: async () => {
+        identityProbes += 1
+        return { owner: 'octocat', repository: 'fixture' }
+      },
+    } as never
+    const countingService = new ThreadPullRequestService(
+      db,
+      noProbeGithub,
+      { publish: () => Effect.succeed(undefined) } as never,
+      { git: countingGit },
+    )
+    const result = await countingService.read({
+      threadIds: [thread.id],
+      resolveCwd: async () => 'C:\\repo',
+    })
+    // No association means nothing to sort: the read must not pay for probing.
+    expect(result.threads).toEqual([{ threadId: thread.id, items: [] }])
+    expect(identityProbes).toBe(0)
+    expect(gitCalls).toBe(0)
+    expect(counts.watchReads).toBe(0)
+    // An explicit association still probes and refreshes as before.
+    await countingService.link({ threadId: thread.id, url: restPullRequest.htmlUrl })
+    const linked = await countingService.read({
+      threadIds: [thread.id],
+      resolveCwd: async () => 'C:\\repo',
+    })
+    expect(linked.threads[0]?.items.map((item) => item.number)).toEqual([7])
+    expect(identityProbes).toBeGreaterThan(0)
+    db.close()
+  })
+
   test('persists links, prefers explicit origins and survives reopen', async () => {
     const { db, historyPath, profilePath, thread } = await fixture()
     const repository = db.repositories.threadPullRequests

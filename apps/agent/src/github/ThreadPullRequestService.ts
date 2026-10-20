@@ -197,8 +197,11 @@ export class ThreadPullRequestService {
     if (!this.db.getThread(threadId) || !this.repository().available()) {
       return { threadId, items: [] }
     }
-    const environment = await this.resolveEnvironment(threadId, resolveCwd)
     const records = this.visible(threadId)
+    // No visible association means nothing to sort or refresh: skip the
+    // repository probe entirely instead of paying for it on every sidebar read.
+    if (records.length === 0) return { threadId, items: [] }
+    const environment = await this.resolveEnvironment(threadId, resolveCwd)
     const statuses = await this.refresh(records)
     return { threadId, items: this.order(records, statuses, environment) }
   }
