@@ -113,15 +113,10 @@ function consensus(entries: Entry[]): Model.Recommendation {
 
 export class ModelRecommendationIndex {
   private readonly entries: Entry[] = []
-  readonly providers: readonly { id: string; name: string }[]
   constructor(payload: unknown) {
     const catalog = object(payload)
     const models = object(catalog.models)
     const providers = object(catalog.providers)
-    this.providers = Object.entries(providers).map(([id, input]) => {
-      const provider = object(input)
-      return { id, name: typeof provider.name === 'string' && provider.name.trim() ? provider.name : id }
-    })
     const commonByBare = new Map<string, string[]>()
     for (const id of Object.keys(models)) {
       const key = bare(id)

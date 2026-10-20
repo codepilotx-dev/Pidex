@@ -1,4 +1,5 @@
 import { ModelRecommendationStore } from './ModelRecommendationStore'
+import { ProviderDirectoryStore, directoryBaseUrlKey, directoryProviderConfig, type DirectoryProvider } from './ProviderDirectoryStore'
 import type { RecommendationInput } from './ModelRecommendations'
 import { AgentError } from '../../Domain'
 import type { AgentLogger } from '../../observability/AgentLogger'
@@ -42,6 +43,7 @@ import { withPiOpenAIModelDiscovery } from './PiOpenAIModelDiscovery'
 import { withPiBuiltinProviderOverrides } from './PiBuiltinProviderOverrides'
 import {
   createPiCustomProvider,
+  toPiModel,
   discoverOpenAIModels,
   type DiscoveredOpenAIModel,
 } from './PiCustomProvider'
@@ -49,6 +51,7 @@ import {
 export interface PiModelServiceOptions extends EncryptedCredentialStoreOptions {
   readonly logger?: Pick<AgentLogger, 'warn'>
   readonly recommendations?: ModelRecommendationStore
+  readonly directory?: ProviderDirectoryStore
   readonly models?: Models
   readonly modelsStore?: ModelsStore
   readonly config?:
@@ -211,12 +214,15 @@ export interface PiProviderModelSyncSummary {
 /** Pi-backed model catalog with the existing Pidex catalog shape. */
 export class PiModelService {
   readonly recommendations: ModelRecommendationStore
+  readonly directory: ProviderDirectoryStore
   readonly pi: Models
   private readonly mediaModels = new WeakMap<PiModel<Api>, PiModel<Api>>()
   readonly credentials: EncryptedCredentialStore
   private readonly mutablePi: MutableModels | undefined
   private readonly configSource: PiModelServiceOptions['config']
   private readonly baseProviders: ReadonlyMap<string, PiProvider>
+  private directoryBaseProviders: ReadonlyMap<string, PiProvider> = new Map()
+  private directoryEntries: readonly DirectoryProvider[] = []
   private readonly builtinProviderIDs: ReadonlySet<string>
   private configuredCustomProviderIDs = new Set<string>()
   private catalogVersion = 0
@@ -241,6 +247,7 @@ export class PiModelService {
     private readonly options: PiModelServiceOptions = {},
   ) {
     this.recommendations = options.recommendations ?? new ModelRecommendationStore()
+    this.directory = options.directory ?? new ProviderDirectoryStore()
     this.credentials = new EncryptedCredentialStore(repository, options)
     this.pi =
       options.models ??
@@ -276,13 +283,19 @@ export class PiModelService {
   async list(): Promise<readonly Provider.Info[]> {
     this.assertActive()
     const config = await this.syncProviders()
-    const directory = new Map((await this.recommendations.providerDirectory()).map((entry) => [entry.id, entry]))
+    const directory = new Map(this.directoryEntries.map((entry) => [entry.id, entry]))
+    const configuredIDs = new Set(Object.keys((await this.rawConfig()).providers ?? {}))
+    const saved = new Set(configuredIDs)
+    for (const credential of await this.credentials.list()) saved.add(credential.providerId)
     const providers = this.pi
       .getProviders()
       .map((provider) => {
         const configured = config.providers[provider.id]
-        const kind = configured?.kind === 'custom' ? 'custom' : 'builtin'
-        const origin: Provider.CatalogOrigin = configured?.kind === 'custom' ? 'user' : 'pi-bundled'
+        const entry = directory.get(provider.id)
+        const userCustom = configured?.kind === 'custom' && !configured.directorySource && configuredIDs.has(provider.id)
+        const kind = userCustom ? 'custom' : 'builtin'
+        const origin: Provider.CatalogOrigin = userCustom ? 'user' :
+          (configured?.kind === 'custom' ? configured.directorySource : undefined) ?? entry?.origin ?? 'pi-bundled'
         const info = piProviderToInfo(
           provider,
           kind,
@@ -291,19 +304,54 @@ export class PiModelService {
           configured,
           origin,
         )
-        const entry = directory.get(provider.id)
         directory.delete(provider.id)
-        return kind === 'builtin' && entry ? { ...info, name: entry.name } : info
+        const defaultApi = configured?.kind === 'builtin' && configured.protocol ? configured.protocol :
+          configured?.kind === 'custom' ? Object.keys(configured.endpoints ?? {})[0] ?? Object.values(configured.models)[0]?.api ?? entry?.api :
+          entry?.api ?? info.source.apis[0]
+        return kind === 'builtin' && entry ? {
+          ...info, name: configured?.kind === 'custom' ? configured.name : entry.name,
+          source: {
+            ...info.source,
+            ...(defaultApi ? { defaultApi } : {}),
+            ...(entry.baseUrl ? { endpoints: {
+              ...info.source.endpoints, ...entry.endpoints,
+              ...(defaultApi ? { [defaultApi]: configured?.baseUrl ?? entry.baseUrl } : {}),
+              ...configured?.endpoints,
+            } } : {}),
+          },
+        } : info
       })
       .map(clone)
-    return [
+    const candidates: Provider.Info[] = [
       ...providers,
       ...[...directory.values()].map((entry): Provider.Info => ({
         ...Provider.Info.empty(Provider.ID.make(entry.id)),
         name: entry.name,
-        availability: { status: 'unavailable', reason: 'unsupported-protocol' },
+        catalogOrigin: entry.origin,
+        source: {
+          type: 'pi', kind: 'builtin', apis: [],
+          ...(entry.api ? { defaultApi: entry.api } : {}),
+          ...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
+        },
+        auth: { apiKey: true, oauth: false },
+        availability: { status: 'unavailable', reason: entry.api ? 'unresolved-endpoint' : 'missing-api' },
       })),
     ]
+    const keys = new Set<string>()
+    return candidates
+      .sort((a, b) => Number(saved.has(String(b.id))) - Number(saved.has(String(a.id))) ||
+        Number(!this.builtinProviderIDs.has(String(a.id))) - Number(!this.builtinProviderIDs.has(String(b.id))) ||
+        Number(a.catalogOrigin === 'models-dev') - Number(b.catalogOrigin === 'models-dev') || String(a.id).localeCompare(String(b.id)))
+      .filter((provider) => {
+        if (provider.catalogOrigin === 'user') return true
+        const api = provider.source.defaultApi
+        const key = directoryBaseUrlKey((api ? provider.source.endpoints?.[api] : undefined) ?? provider.source.baseUrl)
+        if (!key) return true
+        if (saved.has(String(provider.id))) { keys.add(key); return true }
+        if (keys.has(key)) return false
+        keys.add(key)
+        return true
+      })
   }
 
   async isAuthConfigured(providerID: string): Promise<boolean> {
@@ -325,6 +373,7 @@ export class PiModelService {
           kind: 'custom',
           id: provider.id,
           name: configured.name,
+          ...(configured.directorySource ? { directorySource: configured.directorySource } : {}),
           enabled: configured.enabled,
           baseUrl: configured.baseUrl,
           ...(configured.endpoints ? { endpoints: configured.endpoints } : {}),
@@ -613,10 +662,11 @@ export class PiModelService {
   async refreshDirectory(): Promise<void> {
     this.assertActive()
     try {
-      await this.recommendations.refresh()
-    } catch {
-      this.options.logger?.warn('provider.directory.refresh.failed', { reason: 'MODELS_DEV_UNAVAILABLE' })
-      throw new AgentError('PROVIDER_UNAVAILABLE', '供应商目录更新失败：无法下载或解析 models.dev 目录，已保留现有目录，请稍后重试。', 502)
+      await this.directory.refresh()
+    } catch (cause) {
+      this.options.logger?.warn('provider.directory.refresh.failed', { reason: cause instanceof AgentError ? cause.message : 'DIRECTORY_CACHE_UNAVAILABLE' })
+      if (cause instanceof AgentError) throw cause
+      throw new AgentError('PROVIDER_UNAVAILABLE', '供应商目录更新失败，已保留现有目录，请稍后重试。', 502)
     }
     await this.reload()
   }
@@ -718,9 +768,58 @@ export class PiModelService {
   private syncProviders(force = false): Promise<ParsedPiProviderCatalog> {
     const operation = async () => {
       const raw = await this.rawConfig()
+      const entries = await this.directory.providers()
       const fingerprint = JSON.stringify(raw)
-      if (!force && fingerprint === this.configFingerprint) return this.parsedConfig
-      const parsed = parsePiProviderCatalog(raw)
+      if (!force && fingerprint === this.configFingerprint && entries === this.directoryEntries) return this.parsedConfig
+      let parsed = parsePiProviderCatalog(raw)
+      this.directoryEntries = entries
+      const defaults = new Map(entries.map((entry) => [entry.id, directoryProviderConfig(entry)]))
+      if (parsed.schemaVersion <= PI_PROVIDER_CONFIG_SCHEMA_VERSION) {
+        const providers = { ...parsed.providers }
+        for (const [id, config] of defaults) {
+          if (config && !this.builtinProviderIDs.has(id) && !Object.hasOwn(raw.providers ?? {}, id)) {
+            providers[id] = { ...config, models: {}, directorySource: entries.find((entry) => entry.id === id)!.origin }
+          }
+          if (config && this.builtinProviderIDs.has(id)) {
+            const existing = providers[id]
+            const bundledModels = new Set(this.baseProviders.get(id)!.getModels().map((model) => model.id))
+            const disabled = Object.fromEntries(Object.keys(config.models).filter((modelID) => !bundledModels.has(modelID)).map((modelID) => [modelID, { enabled: false }]))
+            if (Object.keys(disabled).length && (!existing || existing.kind === 'builtin')) {
+              providers[id] = {
+                kind: 'builtin', enabled: true, allowModels: [], denyModels: [], ...existing,
+                models: { ...disabled, ...existing?.models },
+              }
+            }
+          }
+        }
+        parsed = { ...parsed, providers }
+      }
+      this.directoryBaseProviders = new Map([...this.baseProviders].map(([id, base]) => {
+        const config = defaults.get(id)
+        if (!config) return [id, base]
+        const entry = entries.find((candidate) => candidate.id === id)
+        const apis = new Set(base.getModels().map((model) => model.api))
+        const remoteModels = new Map<string, PiModel<Api>>()
+        for (const model of Object.values(config.models)) {
+          if (apis.has(model.api)) remoteModels.set(model.id, {
+            ...toPiModel(id, config, model),
+            baseUrl: entry?.modelBaseUrls?.[model.id] ?? config.endpoints?.[model.api] ?? config.baseUrl,
+          })
+        }
+        const getModels = () => {
+          const models = new Map(base.getModels().map((model) => [model.id, model]))
+          for (const [modelID, model] of remoteModels) models.set(modelID, model)
+          return [...models.values()]
+        }
+        return [id, {
+          ...base,
+          getModels,
+          getAllModels: () => [
+            ...(base.getAllModels?.() ?? []).filter((model) => model.type !== undefined && model.type !== 'chat'),
+            ...getModels(),
+          ],
+        }]
+      }))
       const custom = Object.entries(parsed.providers).filter(
         (entry): entry is [string, Extract<(typeof entry)[1], { kind: 'custom' }>] =>
           entry[1].kind === 'custom',
@@ -741,7 +840,7 @@ export class PiModelService {
       }
       this.configuredCustomProviderIDs = nextCustomProviderIDs
       this.applyProviderProtocolOverride(parsed)
-      for (const [id, base] of this.baseProviders) {
+      for (const [id, base] of this.directoryBaseProviders) {
         const configured = parsed.providers[id]
         if (id === DEEPSEEK_PROVIDER_ID && parsed.issues.some((issue) => issue.providerID === id))
           continue
@@ -767,7 +866,7 @@ export class PiModelService {
    */
   private applyProviderProtocolOverride(config: ParsedPiProviderCatalog): void {
     if (!this.mutablePi) return
-    const base = this.baseProviders.get(DEEPSEEK_PROVIDER_ID)
+    const base = this.directoryBaseProviders.get(DEEPSEEK_PROVIDER_ID) ?? this.baseProviders.get(DEEPSEEK_PROVIDER_ID)
     if (!base) return
     const active = this.deepSeekProtocol
     const current = base

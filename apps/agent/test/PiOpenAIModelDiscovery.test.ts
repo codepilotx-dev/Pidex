@@ -6,6 +6,7 @@ import { createPiDeepSeekProvider } from '../src/provider/pi/PiDeepSeekProvider'
 import { PiModelService } from '../src/provider/pi/PiModelService'
 import { piProviderApiStreams } from '../src/provider/pi/PiProviderApis'
 import { withPiOpenAIModelDiscovery } from '../src/provider/pi/PiOpenAIModelDiscovery'
+import { ProviderDirectoryStore } from '../src/provider/pi/ProviderDirectoryStore'
 
 test('static OpenAI catalogs discover remote models, preserve metadata and cache, and skip disabled providers', async () => {
   let requests = 0
@@ -62,11 +63,19 @@ test('static OpenAI catalogs discover remote models, preserve metadata and cache
     list: () => [],
     get: () => Effect.succeed(null),
   } as unknown as ProviderCredentialRepository
+  const directory = new ProviderDirectoryStore(undefined, async (url) => Response.json(
+    String(url).startsWith('https://pi.dev/') ? { nvidia: { known: provider().getModels()[0] } } : {
+      models: { known: { name: 'Known model' } },
+      providers: { nvidia: { name: 'NVIDIA', models: {} } },
+    },
+  ))
+  await directory.refresh()
   const runtime = () => {
     const models = createModels({ modelsStore })
     models.setProvider(provider())
     return new PiModelService(repository, {
       models,
+      directory,
       config: () => ({
         schemaVersion: 2,
         providers: {

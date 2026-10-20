@@ -69,7 +69,8 @@ function providerProtocols(provider: DesktopModelProviderSummary) {
       : Object.keys(provider.endpointDefaults ?? {}).length > 0
         ? Object.keys(provider.endpointDefaults!)
         : (provider.nativeApis ?? provider.providerApis ?? [])
-  return [...new Set([...apis, ...Object.keys(provider.config?.endpoints ?? {})])].map((value) => ({
+  const directoryProtocols = provider.catalogOrigin === 'models-dev' || provider.catalogOrigin === 'pi-remote' ? DETECTION_PROTOCOL_ORDER : []
+  return [...new Set([...apis, ...Object.keys(provider.config?.endpoints ?? {}), ...directoryProtocols])].map((value) => ({
     value,
     label:
       commonProtocols.find((option) => option.value === value)?.label ??
@@ -111,7 +112,7 @@ function requestDraft(provider: DesktopModelProviderSummary) {
   const protocol =
     config?.kind === 'builtin'
       ? (config.protocol ?? provider.defaultApi ?? provider.nativeApis?.[0] ?? apis[0] ?? 'mixed')
-      : (apis[0] ?? 'mixed')
+      : (apis[0] ?? Object.keys(config?.endpoints ?? {})[0] ?? provider.defaultApi ?? 'mixed')
   if (config?.baseUrl && protocol !== 'mixed') endpoints[protocol] = config.baseUrl
   return {
     endpoints,
@@ -240,6 +241,18 @@ export function ProviderRequestSettingsForm({
       }
       if (draft.address !== initial.current.address || config.baseUrl)
         next = { ...next, baseUrl: draft.address.trim() }
+      if (config.kind === 'builtin' && (provider.catalogOrigin === 'models-dev' || provider.catalogOrigin === 'pi-remote') &&
+        provider.availability?.status === 'unavailable' &&
+        ['missing-api', 'unresolved-endpoint'].includes(provider.availability.reason)) {
+        if (!DETECTION_PROTOCOL_ORDER.includes(draft.protocol as typeof DETECTION_PROTOCOL_ORDER[number])) throw new Error('请选择已支持的协议')
+        next = {
+          kind: 'custom', id: config.id, name: draft.name.trim(), enabled: config.enabled,
+          directorySource: provider.catalogOrigin as 'pi-remote' | 'models-dev',
+          baseUrl: draft.address.trim(), auth: draft.auth as 'api-key' | 'none',
+          env: draft.env.split(',').map((value) => value.trim()).filter(Boolean),
+          allowInsecureHttp: draft.allowHttp, headers: {}, models: [], endpoints,
+        }
+      }
       if (config.kind === 'custom') {
         const headers = parseHeaders(draft.headers)
         if (headers instanceof Error) throw headers
@@ -293,8 +306,8 @@ export function ProviderRequestSettingsForm({
         ...next,
         endpoints: Object.fromEntries(
           Object.entries({
-            ...endpoints,
             ...(draft.protocol !== 'mixed' ? { [draft.protocol]: draft.address.trim() } : {}),
+            ...Object.fromEntries(Object.entries(endpoints).filter(([api]) => api !== draft.protocol)),
           }).filter(([, address]) => address.trim()),
         ),
       }

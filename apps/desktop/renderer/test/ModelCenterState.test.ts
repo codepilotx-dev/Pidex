@@ -281,7 +281,7 @@ describe('model center Provider directory', () => {
 })
 
 describe('provider sidebar grouping', () => {
-  test('groups configured connections and saved custom configurations separately from unconfigured providers', () => {
+  test('groups only configured connections; saved custom configuration alone is insufficient', () => {
     const items = projectProviderDirectory(
       [
         provider({ providerID: 'unconfigured' }),
@@ -297,7 +297,21 @@ describe('provider sidebar grouping', () => {
     )
     expect(
       items.filter(isConfiguredProviderDirectoryItem).map((item) => item.provider.providerID),
-    ).toEqual(['environment', 'stored', 'custom'])
+    ).toEqual(['environment', 'stored'])
+  })
+
+  test('downloaded directory defaults stay unconfigured until a provider credential is added', () => {
+    const directoryProviders = ['models-dev', 'pi-remote'].map((directorySource) => ({
+      ...provider({ providerID: directorySource, displayName: directorySource }),
+      config: { kind: 'custom', directorySource, auth: 'api-key', baseUrl: 'https://vendor.example/v1' },
+    })) as DesktopModelProviderSummary[]
+    const before = projectProviderDirectory(directoryProviders)
+    expect(before.map(isConfiguredProviderDirectoryItem)).toEqual([false, false])
+    expect(projectProviderDirectory(directoryProviders, { filter: 'configured' })).toEqual([])
+    const after = projectProviderDirectory(directoryProviders, {
+      apiKeys: [apiKey({ id: 'directory-key', providerId: 'models-dev' })],
+    })
+    expect(after.map(isConfiguredProviderDirectoryItem)).toEqual([true, false])
   })
 })
 

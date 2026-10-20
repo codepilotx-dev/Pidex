@@ -81,9 +81,9 @@ export type ProviderDirectoryItem = {
   healthTone: 'healthy' | 'warning' | 'neutral'
 }
 
-/** 自定义配置保存后即可管理凭据；尚未添加 Key 时也保留在已配置列表。 */
+/** 目录默认值或保存的配置不代表已配置凭据。 */
 export function isConfiguredProviderDirectoryItem(item: ProviderDirectoryItem): boolean {
-  return item.connectionStatus !== 'unconfigured' || item.provider.config?.kind === 'custom'
+  return item.connectionStatus !== 'unconfigured'
 }
 
 export type ProviderDirectoryOptions = {

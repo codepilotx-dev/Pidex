@@ -1,9 +1,10 @@
-import type { ConfigService, ConfigValue } from '../config/ConfigService'
+import { ConfigServiceError, type ConfigService, type ConfigValue } from '../config/ConfigService'
 import { AgentError } from '../Domain'
 import {
   assertSafeProviderHeaders,
   CUSTOM_PROVIDER_APIS,
   validateCustomProviderBaseUrl,
+  serializePiProviderDefinition,
   type PiCustomModelSyncConfig,
   type PiCustomProviderConfig,
   type ProviderEndpointApi,
@@ -110,12 +111,20 @@ export class ModelSyncService {
     providerId: string,
     options: ProviderModelSyncOptions = {},
   ): Promise<ProviderModelSyncResult> {
+    const configuration = await this.config.read({ includeLayers: true })
+    const userLayer = configuration.layers?.find((layer) => layer.kind === 'user')
+    if (!userLayer) throw new AgentError('CONFLICT', '供应商配置层不可用，请刷新后重试', 409)
     const provider = await this.customProvider(providerId)
     const api = this.selectApi(provider)
     const request = await this.savedRequest(providerId, provider, api, options.fetch)
+    const snapshot = this.config.snapshot()
+    const savedProviders = isObject(snapshot.model_providers) ? snapshot.model_providers : {}
+    const definition = provider.directorySource && !isObject(savedProviders[providerId])
+      ? (await this.piModels.providerDefinitions()).find((entry) => entry.id === providerId)
+      : undefined
+    const initial = definition ? serializePiProviderDefinition(definition).value : undefined
+    const raw = initial ? { models: {} as Record<string, unknown> } : await this.rawProvider(providerId)
     const listing = await listProviderModels(request)
-
-    const raw = await this.rawProvider(providerId)
     const fetchedIDs = new Set(listing.models.map((model) => model.id))
     const baseline = provider.modelSync
     const removedModelIds = baseline
@@ -131,22 +140,36 @@ export class ModelSyncService {
       api,
       models: listing.models.map((model) => model.id),
     }
-    await this.config.batchWrite({
-      edits: [
-        {
-          keyPath: ['model_providers', providerId, 'models'],
-          value: models as unknown as ConfigValue,
-        },
-        {
-          keyPath: ['model_providers', providerId, 'model_sync'],
-          value: {
-            fetched_at: modelSync.fetchedAt,
-            api: modelSync.api,
-            models: [...modelSync.models],
-          } as unknown as ConfigValue,
-        },
-      ],
-    })
+    try {
+      await this.config.batchWrite({
+        target: { kind: 'user' },
+        expectedVersion: userLayer.version,
+        edits: [
+          ...Object.entries(initial ?? {})
+            .filter(([key]) => key !== 'models' && key !== 'model_sync')
+            .map(([key, value]) => ({
+              keyPath: ['model_providers', providerId, key],
+              value: value as ConfigValue,
+            })),
+          {
+            keyPath: ['model_providers', providerId, 'models'],
+            value: models as unknown as ConfigValue,
+          },
+          {
+            keyPath: ['model_providers', providerId, 'model_sync'],
+            value: {
+              fetched_at: modelSync.fetchedAt,
+              api: modelSync.api,
+              models: [...modelSync.models],
+            } as unknown as ConfigValue,
+          },
+        ],
+      })
+    } catch (cause) {
+      if (cause instanceof ConfigServiceError && cause.code === 'CONFIG_VERSION_CONFLICT')
+        throw new AgentError('CONFLICT', '同步期间供应商配置已变化，请重新同步', 409)
+      throw cause
+    }
     return {
       providerId,
       api,
@@ -249,13 +272,15 @@ export class ModelSyncService {
     return provider
   }
 
-  /** First enabled chat model protocol, then the saved baseline protocol. */
+  /** Model protocol, saved baseline, then the configured endpoint for a new provider. */
   private selectApi(provider: PiCustomProviderConfig): ListableChatApi {
     const first = Object.values(provider.models).find(
       (model) => (!model.modelType || model.modelType === 'chat') && isListableChatApi(model.api),
     )
     if (first) return first.api
     if (provider.modelSync) return provider.modelSync.api
+    const endpointApi = Object.keys(provider.endpoints ?? {}).find(isListableChatApi)
+    if (endpointApi) return endpointApi
     throw new AgentError('INVALID_REQUEST', '请先添加至少一个聊天模型后再同步上游模型', 400)
   }
 

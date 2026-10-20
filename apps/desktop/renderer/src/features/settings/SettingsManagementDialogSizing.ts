@@ -11,6 +11,8 @@ export const SETTINGS_MANAGEMENT_DIALOG_SIZE = {
   pluginDetails:
     'tw:w-[min(56rem,calc(100vw_-_var(--cpx-sys-space-8)))] tw:max-h-[min(56rem,calc(100vh_-_var(--cpx-sys-space-8)))]',
   providerModels: 'tw:w-[min(680px,calc(100vw_-_32px))] tw:max-h-[85vh]',
+  discoveredModels:
+    'tw:w-[min(840px,calc(100vw_-_32px))] tw:max-h-[85vh] tw:max-[840px]:w-[calc(100vw_-_16px)]',
   providerEditor:
     'tw:w-[min(720px,calc(100vw_-_32px))] tw:max-h-[min(85vh,780px)] tw:max-[720px]:w-[calc(100vw_-_16px)] tw:max-[720px]:max-h-[calc(100vh_-_16px)]',
   navigationGuard:

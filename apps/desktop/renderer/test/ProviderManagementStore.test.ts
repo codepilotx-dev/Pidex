@@ -11,6 +11,7 @@ import {
   selectProviderConnections,
   type ProviderManagementClient,
 } from '../src/features/provider-management/index.js'
+import { isConfiguredProviderDirectoryItem, projectProviderDirectory, providerDetailStatus } from '../src/features/models/ModelCenterState.js'
 
 const provider = {
   providerID: 'openai',
@@ -34,6 +35,47 @@ const providerState = {
 } as DesktopModelProviderState
 
 describe('provider management store', () => {
+  for (const remaining of ['none', 'oauth', 'environment'] as const) {
+    test(`deleting the final API key reconciles configuration with remaining ${remaining} credentials`, async () => {
+      let deleted = false
+      const config = {
+        kind: 'custom', id: 'openai', name: 'Saved directory provider',
+        directorySource: 'models-dev', baseUrl: 'https://saved.example/v1',
+        enabled: true, auth: 'api-key', env: [], headers: {}, models: [],
+      } as const
+      const credentials = () => [
+        ...(!deleted ? [credential('last-key', 'api-key', true)] : []),
+        ...(remaining === 'oauth' ? [credential('oauth-key', 'oauth', true)] : []),
+      ]
+      const summary = () => ({ ...provider, config, apiKeyConfigured: !deleted || remaining !== 'none' }) as DesktopModelProviderSummary
+      const client = createClient({
+        listModelProviders: async () => [summary()],
+        listProviderCredentials: async () => credentials(),
+        getModelProviderState: async () => ({
+          ...providerState, provider: summary(),
+          apiKeyConfigured: !deleted || remaining !== 'none',
+          apiKeySource: remaining === 'environment' ? 'OPENAI_API_KEY' : !deleted || remaining === 'oauth' ? 'secureStorage' : null,
+        }),
+        deleteProviderCredential: async (id) => {
+          expect(id).toBe('last-key')
+          deleted = true
+          return credentials()
+        },
+      })
+      const store = createProviderManagementStore(client)
+      const before = await store.ensureLoaded()
+      expect(isConfiguredProviderDirectoryItem(projectProviderDirectory(before.providers, before)[0]!)).toBe(true)
+      await store.deleteCredential('last-key')
+      const after = store.getSnapshot()
+      expect(after.apiKeys).toEqual([])
+      expect(after.providers[0]?.config).toEqual(config)
+      const item = projectProviderDirectory(after.providers, after)[0]!
+      expect(isConfiguredProviderDirectoryItem(item)).toBe(remaining !== 'none')
+      expect(item.connectionStatus).toBe(remaining === 'none' ? 'unconfigured' : remaining === 'oauth' ? 'oauth' : 'environment')
+      expect(providerDetailStatus(after.providers[0]!, after.currentProviderState, undefined).label).toBe(remaining === 'none' ? '未配置' : '已配置')
+    })
+  }
+
   test('deduplicates concurrent loads and projects API Key plus OAuth credentials', async () => {
     let listCalls = 0
     const client = createClient({

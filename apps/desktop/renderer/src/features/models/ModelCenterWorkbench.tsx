@@ -130,11 +130,12 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           id: item.provider.providerID,
           name: item.provider.displayName,
           logoURL: item.provider.logoURL,
-          source: '内置',
+          source: item.provider.catalogOrigin === 'models-dev' ? 'models.dev' : item.provider.catalogOrigin === 'pi-remote' ? 'Pi 官方' : '内置',
           modelCount: item.provider.modelCount ?? item.provider.defaultModels.length,
           current: item.current,
           canAddConnection: !isConfiguredProviderDirectoryItem(item),
-          connectionDisabled: item.provider.availability?.status === 'unavailable',
+          connectionDisabled: item.provider.availability?.status === 'unavailable' &&
+            item.provider.catalogOrigin !== 'models-dev' && item.provider.catalogOrigin !== 'pi-remote',
         })),
     [providers, snapshot, providerQuery],
   )

@@ -114,6 +114,7 @@ export interface PiCustomModelSyncConfig {
 
 export interface PiCustomProviderConfig {
   readonly kind: 'custom'
+  readonly directorySource?: 'pi-remote' | 'models-dev'
   readonly name: string
   readonly enabled: boolean
   readonly baseUrl: string
@@ -174,6 +175,7 @@ export type PiProviderDefinitionInput =
     }
   | {
       readonly kind: 'custom'
+      readonly directorySource?: 'pi-remote' | 'models-dev'
       readonly id: string
       readonly name: string
       readonly enabled: boolean
@@ -574,8 +576,10 @@ const parseCustom = (
   }
   const auth = value.auth === 'none' ? 'none' : 'api-key'
   const modelSync = parseCustomModelSync(value.model_sync ?? value.modelSync)
+  const directorySource = value.directory_source ?? value.directorySource
   return {
     kind: 'custom',
+    ...(directorySource === 'pi-remote' || directorySource === 'models-dev' ? { directorySource } : {}),
     ...(value.endpoints !== undefined
       ? { endpoints: parseEndpoints(value.endpoints, allowInsecureHttp) }
       : {}),
@@ -747,6 +751,7 @@ export const serializePiProviderDefinition = (
       : {
           kind: 'custom',
           name: definition.name,
+          ...(definition.directorySource ? { directory_source: definition.directorySource } : {}),
           enabled: definition.enabled,
           ...(definition.endpoints ? { endpoints: definition.endpoints } : {}),
           base_url: definition.baseUrl,
@@ -836,6 +841,7 @@ export const serializePiProviderDefinition = (
         : {
             kind: 'custom',
             name: provider.name,
+            ...(provider.directorySource ? { directory_source: provider.directorySource } : {}),
             enabled: provider.enabled,
             ...(provider.endpoints ? { endpoints: provider.endpoints } : {}),
             base_url: provider.baseUrl,

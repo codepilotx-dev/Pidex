@@ -1,11 +1,14 @@
 import { describe, expect, spyOn, test } from 'bun:test'
-import { Model, type Credential } from '@pidex/model-schema'
+import { Model, Provider, type Credential } from '@pidex/model-schema'
 import { Effect } from 'effect'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { EncryptedCredentialRepository } from '../src/auth/EncryptedCredentialRepository'
-import { ModelRecommendationStore } from '../src/provider/pi/ModelRecommendationStore'
+import { ProviderDirectoryStore } from '../src/provider/pi/ProviderDirectoryStore'
+import { normalizeContext } from '@earendil-works/pi-ai'
+import { ModelSyncService } from '../src/provider/ModelSyncService'
+import type { ConfigService } from '../src/config/ConfigService'
 import {
   EncryptedCredentialStore,
   PiModelService,
@@ -59,15 +62,18 @@ test('scoped catalog refresh never requests other providers and directory reload
   }
 })
 
-test('directory refresh downloads models.dev without requesting provider models and preserves data on failure', async () => {
+test('directory refresh downloads both upstreams without requesting provider models and preserves data on failure', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'pidex-provider-directory-'))
   const path = join(directory, 'catalog.json')
   let failed = false
   const requests: string[] = []
-  const recommendations = new ModelRecommendationStore(path, async (url, init) => {
+  const directoryStore = new ProviderDirectoryStore(path, async (url, init) => {
     requests.push(String(url))
     expect(init?.headers).toBeUndefined()
     if (failed) return Response.json({ invalid: true })
+    if (String(url).startsWith('https://pi.dev/')) return Response.json({ google: {
+      example: { id: 'example', name: 'Example', api: 'google-generative-ai', baseUrl: 'https://generativelanguage.googleapis.com/v1beta', contextWindow: 32768, maxTokens: 8192, input: ['text'], reasoning: false },
+    } })
     return Response.json({
       models: { example: { name: 'Example' } },
       providers: {
@@ -81,9 +87,7 @@ test('directory refresh downloads models.dev without requesting provider models 
     kind: 'custom', name: 'My supplier', enabled: true, auth: 'none',
     base_url: 'https://local.example/v1', models: {},
   } } }
-  const service = new PiModelService(repository().adapter, { config, recommendations })
-  // The service starts the recommendation timer; only the explicit refresh is under test.
-  recommendations.dispose()
+  const service = new PiModelService(repository().adapter, { config, directory: directoryStore })
   const refresh = spyOn(service.pi, 'refresh').mockImplementation(async (options) => {
     expect(options?.allowNetwork).toBe(false)
     return { aborted: false, errors: new Map() }
@@ -92,24 +96,105 @@ test('directory refresh downloads models.dev without requesting provider models 
     await service.refreshDirectory()
     const providers = await service.list()
     expect(providers.find((p) => p.id === 'google')?.name).toBe('Google updated')
+    expect((await service.models(Provider.ID.make('google'))).some((model) => model.id === 'example')).toBe(false)
     expect(providers.find((p) => p.id === 'local')?.name).toBe('My supplier')
     expect(providers.find((p) => p.id === 'directory-only')).toMatchObject({
       name: 'New directory supplier',
-      availability: { status: 'unavailable', reason: 'unsupported-protocol' },
+      availability: { status: 'unavailable', reason: 'missing-api' },
     })
     expect(service.pi.getProviders().some((p) => p.id === 'directory-only')).toBe(false)
-    expect((await new ModelRecommendationStore(path).providerDirectory()).some((p) => p.id === 'directory-only')).toBe(true)
+    expect((await new ProviderDirectoryStore(path).providers()).some((p) => p.id === 'directory-only')).toBe(true)
     failed = true
     const revision = service.catalogRevision()
     await expect(service.refreshDirectory()).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
     expect(await service.list()).toEqual(providers)
     expect(service.catalogRevision()).toBe(revision)
-    expect(requests.every((url) => url === 'https://models.dev/catalog.json?type=all')).toBe(true)
+    expect(requests.every((url) => url === 'https://models.dev/catalog.json?type=all' || url === 'https://pi.dev/api/models?pi-version=0.99.2')).toBe(true)
   } finally {
     refresh.mockRestore()
     await service.dispose()
     await rm(directory, { recursive: true, force: true })
   }
+})
+
+test('directory aliases deduplicate without hiding manual providers and compatible suppliers execute through Pi', async () => {
+  const hits: string[] = []
+  const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch(request) {
+    hits.push(new URL(request.url).pathname)
+    expect(request.headers.get('authorization')).toBe('Bearer directory-test-key')
+    const chunk = (delta: object, finish: string | null) => `data: ${JSON.stringify({
+      id: 'chat-test', object: 'chat.completion.chunk', created: 1, model: 'm',
+      choices: [{ index: 0, delta, finish_reason: finish }],
+    })}\n\n`
+    return new Response(`${chunk({ content: 'OK' }, null)}${chunk({}, 'stop')}data: [DONE]\n\n`, { headers: { 'content-type': 'text/event-stream' } })
+  } })
+  const baseUrl = `${server.url}v1`
+  const directory = new ProviderDirectoryStore(undefined, async (url) => Response.json(
+    String(url).startsWith('https://pi.dev/') ? { 'vendor-a': { m: {
+      id: 'm', name: 'Pi m', api: 'openai-completions', baseUrl,
+      contextWindow: 32768, maxTokens: 8192, input: ['text'], reasoning: false,
+    } } } : { models: { m: { name: 'm' } }, providers: {
+      'vendor-a': { name: 'Vendor A', api: baseUrl, npm: '@ai-sdk/openai-compatible', models: { m: {} } },
+      'vendor-b': { name: 'Same vendor with another name', api: `${baseUrl}/`, npm: '@ai-sdk/openai-compatible', models: { m: {} } },
+      separate: { name: 'Different product', api: `${baseUrl}/coding`, npm: '@ai-sdk/openai-compatible', models: { m: {} } },
+      unknown: { name: 'Choose protocol', api: baseUrl, npm: 'unsupported-sdk', models: {} },
+      manual: { name: 'Upstream name', api: baseUrl, npm: '@ai-sdk/openai-compatible', models: {} },
+    } },
+  ))
+  const fake = repository([{ id: 'cred_vendor-a', integrationID: 'vendor-a', methodID: null, label: 'default', value: { type: 'key', key: 'directory-test-key' } }])
+  const config: { schemaVersion: number; providers: Record<string, unknown> } = { schemaVersion: 2, providers: { manual: {
+    kind: 'custom', name: 'My manual provider', base_url: baseUrl, auth: 'none', models: {},
+  } } }
+  const service = new PiModelService(fake.adapter, { directory, config, env: {} })
+  try {
+    await service.refreshDirectory()
+    expect(hits).toEqual([])
+    const providers = await service.list()
+    expect(providers.some((p) => p.id === 'vendor-a')).toBe(true)
+    expect(providers.some((p) => p.id === 'vendor-b')).toBe(false)
+    expect(providers.some((p) => p.id === 'separate')).toBe(true)
+    expect(providers.find((p) => p.id === 'manual')).toMatchObject({ name: 'My manual provider', catalogOrigin: 'user' })
+    expect(service.pi.getModels('vendor-a')).toHaveLength(0)
+    const writes: unknown[] = []
+    const sync = new ModelSyncService(service, {
+      read: async () => ({ layers: [{ kind: 'user', version: 'fixture' }] }),
+      snapshot: () => ({ model_providers: config.providers }),
+      batchWrite: async (input: Parameters<ConfigService['batchWrite']>[0]) => {
+        writes.push(input)
+        for (const edit of input.edits) {
+          const id = edit.keyPath[1]!
+          const value = (config.providers[id] ??= {}) as Record<string, unknown>
+          value[edit.keyPath[2]!] = edit.value
+        }
+        return {} as never
+      },
+    } as unknown as ConfigService)
+    await expect(sync.sync('vendor-a', { fetch: async () => new Response(null, { status: 503 }) })).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
+    expect(writes).toEqual([])
+    const synced = await sync.sync('vendor-a', { fetch: async (url) => {
+      expect(String(url)).toBe(`${baseUrl}/models`)
+      return Response.json({ data: [{ id: 'm' }] })
+    } })
+    expect(synced.candidates[0]).toMatchObject({ id: 'm', enabled: false })
+    expect(config.providers['vendor-a']).toMatchObject({ kind: 'custom', directory_source: 'pi-remote', models: {} })
+    await service.reload()
+    config.providers['vendor-a'] = {
+      kind: 'custom', directory_source: 'pi-remote', name: 'My saved vendor',
+      base_url: baseUrl, auth: 'api-key', env: [],
+      models: { m: { api: 'openai-completions', enabled: true } },
+    }
+    await service.reload()
+    expect((await service.list()).find((p) => p.id === 'vendor-a')?.catalogOrigin).toBe('pi-remote')
+    const model = await service.getPiModel(Model.Ref.make({ providerID: Provider.ID.make('vendor-a'), id: Model.ID.make('m') }))
+    expect(model.api).toBe('openai-completions')
+    expect((await service.pi.getAuth('vendor-a'))?.auth.apiKey).toBe('directory-test-key')
+    const response = await service.pi.completeSimple(model, normalizeContext({ messages: [{ role: 'user', content: 'Reply OK', timestamp: 1 }] }), { maxTokens: 8 })
+    expect(response.stopReason).not.toBe('error')
+    expect(hits).toEqual(['/v1/chat/completions'])
+    // Existing credentials keep both configured aliases visible; no identity is merged.
+    fake.values.set('vendor-b', { id: 'cred_vendor-b', integrationID: 'vendor-b', methodID: null, label: 'default', value: { type: 'key', key: 'another-fixture-key' } })
+    expect((await service.list()).some((p) => p.id === 'vendor-b')).toBe(true)
+  } finally { await service.dispose(); server.stop(true) }
 })
 
 type Stored = {

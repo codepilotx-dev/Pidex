@@ -382,6 +382,18 @@ describe('ModelSyncService', () => {
     expect(missing.writes).toEqual([])
   })
 
+  test('零模型目录供应商使用已配置端点的协议同步，不要求先添加模型', async () => {
+    const fixture = await createFixture({ gateway: customProvider({
+      directory_source: 'models-dev', models: {}, endpoints: { 'openai-responses': 'https://gateway.example/v1' },
+    }) })
+    const result = await fixture.sync.sync('gateway', { fetch: async (url) => {
+      expect(String(url)).toBe('https://gateway.example/v1/models')
+      return Response.json({ data: [{ id: 'new-model' }] })
+    } })
+    expect(result.api).toBe('openai-responses')
+    expect(result.candidates[0]).toMatchObject({ id: 'new-model', enabled: false })
+  })
+
   test('无聊天模型时回退到基线协议，只有 Embedding 时要求先添加聊天模型', async () => {
     const fixture = await createFixture({
       gateway: customProvider({
@@ -563,4 +575,54 @@ describe('ModelSyncService', () => {
       }),
     ).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
   })
+})
+
+
+test('同步期间新增模型或其他配置变化时返回 CONFLICT 并保留写入', async () => {
+  const fixture = await createFixture({
+    gateway: customProvider({ models: { manual: { api: 'openai-completions' } } }),
+  })
+  await expect(
+    fixture.sync.sync('gateway', {
+      fetch: async () => {
+        await fixture.config.batchWrite({
+          edits: [
+            {
+              keyPath: ['model_providers', 'gateway', 'models', 'new'],
+              value: { api: 'openai-completions' },
+            },
+          ],
+        })
+        return Response.json({ data: [{ id: 'upstream' }] })
+      },
+    }),
+  ).rejects.toMatchObject({ code: 'CONFLICT' })
+  expect(fixture.snapshotProvider('gateway').models).toHaveProperty('new')
+  expect(fixture.snapshotProvider('gateway').model_sync).toBeUndefined()
+})
+
+test('并发同步只有基于当前版本的一次能够提交', async () => {
+  const fixture = await createFixture({
+    gateway: customProvider({ models: { manual: { api: 'openai-completions' } } }),
+  })
+  let started!: () => void
+  let finish!: () => void
+  const ready = new Promise<void>((resolve) => {
+    started = resolve
+  })
+  const waiting = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  const first = fixture.sync.sync('gateway', {
+    fetch: async () => {
+      started()
+      await waiting
+      return Response.json({ data: [{ id: 'stale' }] })
+    },
+  })
+  await ready
+  await fixture.sync.sync('gateway', { fetch: openaiFetch(['current']) })
+  finish()
+  await expect(first).rejects.toMatchObject({ code: 'CONFLICT' })
+  expect(fixture.snapshotProvider('gateway').model_sync).toMatchObject({ models: ['current'] })
 })

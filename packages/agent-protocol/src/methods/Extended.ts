@@ -254,6 +254,7 @@ export const BuiltinProviderDefinitionSchema = Schema.Struct({
 
 export const CustomProviderDefinitionSchema = Schema.Struct({
   kind: Schema.Literal('custom'),
+  directorySource: Schema.optional(Schema.Literals(['pi-remote', 'models-dev'])),
   id: Provider.ID,
   name: NonEmptyStringSchema,
   enabled: Schema.Boolean,

@@ -13,7 +13,7 @@ import type {
 } from './PiProviderConfig'
 import { piProviderApiStreams as streams } from './PiProviderApis'
 
-const toPiModel = (
+export const toPiModel = (
   providerID: string,
   provider: PiCustomProviderConfig,
   model: PiCustomModelConfig,

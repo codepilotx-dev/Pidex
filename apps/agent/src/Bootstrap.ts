@@ -1,4 +1,5 @@
 import { ModelRecommendationStore } from './provider/pi/ModelRecommendationStore'
+import { ProviderDirectoryStore } from './provider/pi/ProviderDirectoryStore'
 import { ComputerUseService } from './computer/ComputerUseService'
 import { LocalEnvironmentRepository } from './local-environment/LocalEnvironmentRepository'
 import { LocalEnvironmentCatalog } from './local-environment/LocalEnvironmentCatalog'
@@ -493,6 +494,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const git = new GitWorkspaceService(db, undefined, github)
     const piModels = new PiModelService(providerCredentialStore, {
       logger,
+      directory: new ProviderDirectoryStore(join(dirname(config.piModelCachePath), 'provider-directory.json')),
       ...(options.models ? { models: options.models } : {}),
       modelsStore: new PiModelsFileStore(config.piModelCachePath),
       recommendations: new ModelRecommendationStore(
@@ -627,7 +629,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         return null
       }
     })
-    const reviewer = new ReviewerService(db, piModels, configService, guardianEvidence)
+    const reviewer = new ReviewerService(db, piModels, configService, guardianEvidence, logger)
     const guardianScores = new GuardianScoreService(db, reviewer)
     const approvals = new ApprovalService(
       db,

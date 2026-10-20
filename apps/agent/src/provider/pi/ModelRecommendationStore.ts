@@ -7,6 +7,28 @@ const URL = 'https://models.dev/catalog.json?type=all'
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000
 type Document = { owner: 'pidex'; formatVersion: 1; updatedAt: number; catalog: unknown }
 
+export const downloadCatalogJson = async (
+  request: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
+  url: string,
+): Promise<unknown> => {
+  const response = await request(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' })
+  if (!response.ok) throw new Error('Catalog download failed')
+  const reader = response.body?.getReader()
+  if (!reader) throw new Error('Empty catalog response')
+  const chunks: Uint8Array[] = []
+  let size = 0
+  try {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      size += value.length
+      if (size > 64 * 1024 * 1024) throw new Error('Catalog too large')
+      chunks.push(value)
+    }
+  } finally { await reader.cancel() }
+  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
+}
+
 export class ModelRecommendationStore {
   private loaded = false
   private index?: ModelRecommendationIndex
@@ -64,35 +86,10 @@ export class ModelRecommendationStore {
     }
   }
 
-  async providerDirectory() {
-    await this.load()
-    return this.index?.providers ?? []
-  }
-
   refresh() {
     return this.serial(async () => {
       await this.load(true)
-      const response = await this.request(URL, {
-        signal: AbortSignal.timeout(30_000),
-        redirect: 'error',
-      })
-      if (!response.ok) throw new Error('models.dev recommendation download failed')
-      const reader = response.body?.getReader()
-      if (!reader) throw new Error('Empty models.dev response')
-      const chunks: Uint8Array[] = []
-      let size = 0
-      try {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          size += value.length
-          if (size > 64 * 1024 * 1024) throw new Error('models.dev catalog too large')
-          chunks.push(value)
-        }
-      } finally {
-        await reader.cancel()
-      }
-      const catalog: unknown = JSON.parse(Buffer.concat(chunks).toString('utf8'))
+      const catalog = await downloadCatalogJson(this.request, URL)
       const index = new ModelRecommendationIndex(catalog)
       const updatedAt = Date.now()
       if (this.path) {
