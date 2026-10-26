@@ -1,8 +1,12 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
-import type { DesktopWorkspace } from '../shared/Types.js'
+import type { DesktopThreadGoal, DesktopWorkspace } from '../shared/Types.js'
 import { ComposerCard } from '../src/features/session/composer/ComposerCard.js'
-import { ContextUsagePanel } from '../src/features/session/composer/ContextUsagePanel.js'
+import { ComposerStatusOverlay } from '../src/features/session/composer/ComposerStatusOverlay.js'
+import {
+  ContextUsagePanel,
+  ContextUsageStatusPanel,
+} from '../src/features/session/composer/ContextUsagePanel.js'
 import {
   resolveThinkingLabel,
   resolveThinkingOptions,
@@ -17,6 +21,19 @@ const WORKSPACE: DesktopWorkspace = {
   name: 'Alpha 工作区',
   path: 'C:\\alpha',
   branchName: 'feature/working-surface',
+}
+
+const GOAL: DesktopThreadGoal = {
+  id: 'goal-1',
+  threadId: 'thread-1',
+  objective: '统一 Composer 顶部托盘',
+  status: 'active',
+  tokenBudget: 10_000,
+  tokensUsed: 1_200,
+  timeUsedSeconds: 90,
+  version: 1,
+  createdAt: 0,
+  updatedAt: 0,
 }
 
 function composerCardProps(overrides: Partial<ComposerCardProps> = {}): ComposerCardProps {
@@ -81,50 +98,72 @@ describe('composer surface variant', () => {
       />,
     )
     expect(html).toContain('已用 6%，剩余 94%')
+    expect(html).toContain('chip-dot tw:size-3')
   })
 
-  test('缓存明细渲染为标签 + 数值 chip 的等宽条目', () => {
+  test('Composer 圆环保留纵向来源、缓存和读写明细布局', () => {
     const html = renderToStaticMarkup(
       <ContextUsagePanel
         contextUsage={{
           usedTokens: 135_168,
           contextWindow: 1_000_000,
           usedPercent: 13.5,
+          breakdown: [
+            { source: 'messages', chars: 800 },
+            { source: 'skills', chars: 200 },
+          ],
+          averageCacheHitRate: 0.597,
           promptCacheReadTokens: 131_072,
           promptCacheWriteTokens: 0,
           promptUncachedTokens: 597,
         }}
       />,
     )
+    expect(html.split('context-usage-panel-segment').length - 1).toBe(2)
+    expect(html).toContain('context-usage-panel-divider')
     expect(html.split('context-usage-panel-detail-item').length - 1).toBe(3)
     expect(html.split('context-usage-panel-detail-chip').length - 1).toBe(3)
-    expect(html).toContain('tw:grid-cols-3')
-    expect(html).toContain('tw:justify-center')
-    expect(html).toContain('131.1K')
+    expect(html).toContain('平均缓存命中率')
+    expect(html).toContain('59.7%')
     expect(html).toContain('未缓存')
-    expect(html).toContain('597')
-    expect(html).not.toContain('缓存 读')
-    expect(html).not.toContain(' · ')
+    expect(html).not.toContain('data-usage-layout="title-bar-value"')
+    expect(html).not.toContain('data-usage-bar-source')
   })
 
-  test('存在推理明细时改为 2×2 等宽条目', () => {
+  test('发送中使用侧栏运行会话同款的圆环加载指示', () => {
     const html = renderToStaticMarkup(
-      <ContextUsagePanel
+      <ComposerCard {...composerCardProps({ submitting: true, canSubmit: false })} />,
+    )
+    expect(html).toContain('send-button-session-spinner')
+    expect(html).not.toContain('lucide-activity')
+  })
+
+  test('状态与用量面板使用标题、状态条和数据的可聚焦色块布局', () => {
+    const html = renderToStaticMarkup(
+      <ContextUsageStatusPanel
         contextUsage={{
           usedTokens: 135_168,
           contextWindow: 1_000_000,
           usedPercent: 13.5,
-          promptCacheReadTokens: 131_072,
-          promptCacheWriteTokens: 0,
-          promptUncachedTokens: 597,
-          reasoningTokens: 12_288,
+          breakdown: [
+            { source: 'messages', chars: 800 },
+            { source: 'skills', chars: 200 },
+          ],
+          averageCacheHitRate: 0.597,
         }}
       />,
     )
-    expect(html.split('context-usage-panel-detail-item').length - 1).toBe(4)
-    expect(html.split('context-usage-panel-detail-chip').length - 1).toBe(4)
-    expect(html).toContain('tw:grid-cols-2')
-    expect(html).toContain('推理')
+    expect(html).toContain('平均缓存命中率')
+    expect(html.split('data-usage-layout="title-bar-value"').length - 1).toBe(2)
+    expect(html).toContain('59.7%')
+    expect(html).toContain('data-usage-bar-source="messages"')
+    expect(html).toContain('data-usage-bar-source="skills"')
+    expect(html).toContain('data-usage-bar-source="cache-hit"')
+    expect(html).not.toContain('data-usage-bar-source="cache-miss"')
+    expect(html).toContain('aria-label="缓存命中：59.7%"')
+    expect(html).toContain('width:59.70%')
+    expect(html).not.toContain('context-usage-panel-row')
+    expect(html).not.toContain('context-usage-panel-detail')
   })
 
   test('Plan 仅开启后显示可退出标记，子 Agent 不展示', () => {
@@ -239,6 +278,131 @@ describe('composer surface variant', () => {
     expect(singleLine).toContain('data-composer-layout="single-line"')
     expect(singleLine).toContain('data-composer-radius-variant="single-line"')
     expect(compact).toContain('data-composer-radius-variant="compact"')
+  })
+
+  test('Composer utility bar 只在有内容时渲染，首页默认显示项目、工作组和分支', () => {
+    const emptyThread = renderToStaticMarkup(
+      <ComposerCard {...composerCardProps({ placement: 'thread' })} />,
+    )
+    expect(emptyThread).not.toContain('composer-bottom composer-utility-bar')
+
+    const home = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          surface: 'coding',
+          utilityBarVariant: 'home',
+          workspace: WORKSPACE,
+        })}
+      />,
+    )
+    expect(home.split('composer-bottom composer-utility-bar').length - 1).toBe(1)
+    expect(home).toContain(WORKSPACE.name)
+    expect(home).toContain('工作组')
+    expect(home).toContain(WORKSPACE.branchName)
+  })
+
+  test('暂停队列与 thread Goal 共用一个 utility bar，且队列不再显示数量头', () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          placement: 'thread',
+          routedSessionId: 'thread-1',
+          workspace: WORKSPACE,
+          threadGoal: GOAL,
+          queuedFollowUps: [
+            {
+              id: 'queue-1',
+              input: { text: '继续补齐验收' },
+              previewText: '继续补齐验收',
+              createdAt: '2026-10-26T00:00:00.000Z',
+            },
+          ],
+          queuePauseReason: 'interrupted',
+        })}
+      />,
+    )
+
+    expect(html.split('composer-bottom composer-utility-bar').length - 1).toBe(1)
+    expect(html).toContain('aria-label="Composer 顶部托盘"')
+    expect(html).toContain('data-composer-utility-item="queue"')
+    expect(html).toContain('待发送')
+    expect(html).toContain('1 条')
+    expect(html).not.toContain('已排队 1 条')
+    expect(html).toContain('队列因你中断了任务而暂停')
+    expect(html).toContain('继续队列')
+    expect(html).toContain('data-composer-utility-item="goal"')
+    expect(html).toContain('目标')
+    expect(html).toContain(GOAL.objective)
+    expect(html).toContain('aria-label="目标操作"')
+    expect(html).not.toContain(WORKSPACE.name)
+
+    const complete = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          placement: 'thread',
+          routedSessionId: 'thread-1',
+          threadGoal: { ...GOAL, status: 'complete' },
+        })}
+      />,
+    )
+    expect(complete).not.toContain('data-composer-utility-item="goal"')
+    expect(complete).not.toContain('composer-bottom composer-utility-bar')
+  })
+
+  test('/status is a command that opens the transient status panel', async () => {
+    let commands: ReturnType<typeof useComposerSlashCommands>['commands'] = []
+    let executeCommand: ReturnType<typeof useComposerSlashCommands>['executeCommand']
+    let opens = 0
+
+    function Harness() {
+      const controls = useComposerSlashCommands({
+        capabilities: DEFAULT_COMPOSER_CAPABILITIES,
+        planModeActive: false,
+        goalModeEnabled: false,
+        hasConversationMessages: false,
+        hasThread: false,
+        canReview: false,
+        subagentMode: false,
+        sessionBusy: false,
+        reasoningAvailable: false,
+        showThreadActions: false,
+        showNewSessionActions: true,
+        canFork: false,
+        hasProject: false,
+        onOpenModel: () => {},
+        onOpenReasoning: () => {},
+        onOpenStatus: () => {
+          opens += 1
+        },
+        onOpenReview: () => {},
+      })
+      commands = controls.commands
+      executeCommand = controls.executeCommand
+      return null
+    }
+
+    renderToStaticMarkup(<Harness />)
+    const status = commands.find((command) => command.id === 'status')
+    expect(status?.trigger).toBe('status')
+    expect(await executeCommand!(status!)).toBe(true)
+    expect(opens).toBe(1)
+  })
+
+  test('status panel renders its content only when mounted', () => {
+    const html = renderToStaticMarkup(
+      <ComposerStatusOverlay
+        contextUsage={{ usedTokens: 20_000, contextWindow: 100_000, usedPercent: 20 }}
+        routedSessionId="thread-1"
+        selectedProviderID="anthropic"
+        onClose={() => {}}
+      />,
+    )
+    expect(html).toContain('状态与用量')
+    expect(html).toContain('thread-1')
+    expect(html).toContain('上下文容量')
+    expect(html).not.toContain('上下文 · 剩余')
+    expect(html).toContain('关闭')
+    expect(html).not.toContain('lucide-x')
   })
 
   test('Coding 未选 workspace 时保留进入项目工作入口', () => {

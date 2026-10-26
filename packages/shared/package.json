@@ -36,6 +36,7 @@
     "./schedule-draft": "./src/ScheduleDraft.ts",
     "./scheduled-task": "./src/ScheduledTask.ts",
     "./session-group": "./src/SessionGroup.ts",
+    "./slash-commands": "./src/SlashCommands.ts",
     "./thread": "./src/thread/index.ts",
     "./thread-reference": "./src/ThreadReference.ts",
     "./thread-result-card": "./src/ThreadResultCard.ts",

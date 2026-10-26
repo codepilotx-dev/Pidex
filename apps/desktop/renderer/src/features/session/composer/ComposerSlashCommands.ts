@@ -1,15 +1,15 @@
+import type { SharedSlashCommandId } from '@pidex/shared/slash-commands'
 import type { DesktopInstalledSkill } from '../../../../shared/Types.js'
 
 export type ComposerSlashCommandId =
+  | SharedSlashCommandId
   | 'approve'
   | 'model'
   | 'reasoning'
-  | 'plan'
   | 'goal'
   | 'review'
   | 'compact'
   | 'mcp'
-  | 'status'
   | 'side'
   | 'fork'
   | 'archive'
@@ -59,9 +59,7 @@ export type ParsedSlashInvocation =
   | { kind: 'disabled'; command: ComposerSlashCommand; reason: string }
   | { kind: 'unknown' }
 
-export function planTaskFromInput(input: string): string | null {
-  return /^\/plan\s+([\s\S]*\S)\s*$/iu.exec(input)?.[1] ?? null
-}
+export { parsePlanTaskFromInput as planTaskFromInput } from '@pidex/shared/slash-commands'
 
 export function skillToComposerCommand(skill: DesktopInstalledSkill): ComposerSkillCommand {
   return {

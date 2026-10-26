@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import type { ThreadSnapshot } from '@pidex/shared/thread'
 import { createAgentTurnQueueClient } from '../src/services/desktop-client/AgentTurnQueueClient.js'
 
-function harness(status?: string) {
+function harness(status?: string, interruptGate?: Promise<void>) {
   const calls: Array<{ method: string; params: Record<string, unknown> }> = []
   let imported = false
   let failed = false
@@ -11,6 +11,7 @@ function harness(status?: string) {
     rpc: {
       call: async (method: string, params: Record<string, unknown>) => {
         calls.push({ method, params })
+        if (method === 'turn/interrupt') await interruptGate
         if (failNext && !failed) {
           failed = true
           throw new Error('目标版本冲突')
@@ -117,4 +118,18 @@ describe('goal and first-turn admission', () => {
       expect(h.calls.map((call) => call.method)).toEqual(['settings/synced'])
     },
   )
+  test('重复停止共享同一个进行中请求', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const h = harness('running', gate)
+    const first = h.client.interrupt('thread:1')
+    const second = h.client.interrupt('thread:1')
+
+    release()
+    await Promise.all([first, second])
+
+    expect(h.calls.filter((call) => call.method === 'turn/interrupt')).toHaveLength(1)
+  })
 })

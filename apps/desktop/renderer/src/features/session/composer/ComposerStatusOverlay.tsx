@@ -1,10 +1,9 @@
-import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import type React from 'react'
 import { useEffect, useState } from 'react'
-import { X } from 'lucide-react'
-import { ChatInputDropdown } from './ChatInputDropdown.js'
+import { Gauge } from 'lucide-react'
+import { Button } from '../../../components/ui/Button.js'
+import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../../components/ui/IconTokens.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
-import { cx } from '../../../utils/Cx.js'
 import {
   criticalQuotaWindows,
   formatCount,
@@ -16,15 +15,13 @@ import {
   type ProviderUsageSource,
 } from '../../../utils/UsageFormatters.js'
 import type { DesktopContextUsage, ModelProviderID } from '../../../../shared/Types.js'
-import { ContextUsagePanel } from './ContextUsagePanel.js'
+import { ContextUsageStatusPanel } from './ContextUsagePanel.js'
 
 type Props = {
-  open: boolean
   onClose: () => void
   routedSessionId: string | null
   contextUsage: DesktopContextUsage | null
   selectedProviderID?: ModelProviderID
-  side?: 'top' | 'bottom'
 }
 
 /*
@@ -33,16 +30,15 @@ type Props = {
  * `scripts/CheckStyleContracts.ts` pins that rule to a transform-only,
  * compositor-safe transition.
  */
-const SECTION_CLASS = cx(
-  'composer-status-section tw:px-4 tw:py-3',
-  'tw:[&+&]:border-t tw:[&+&]:border-app-border',
-)
+const SECTION_CLASS = 'composer-status-section tw:min-w-0'
+const HEADER_CLASS =
+  'composer-status-header tw:flex tw:min-h-10 tw:items-center tw:justify-between tw:gap-3 tw:px-3 tw:pb-1 tw:pt-2'
 
 function renderQuotaRow(quota: ProviderQuotaWindow): React.ReactNode {
   const percent = quotaRemainingPercent(quota)
   return (
     <div className="composer-status-quota-row tw:[&+&]:mt-2" key={quota.id}>
-      <div className="composer-status-label tw:mb-1 tw:text-app-text-meta tw:type-label tw:[&>svg]:size-icon-sm">
+      <div className="composer-status-label tw:mb-1 tw:text-app-text-meta tw:type-label tw:[&>svg]:size-[var(--inline-icon-size,1em)]">
         {quota.label}
       </div>
       <div className="composer-status-bar-track tw:my-1 tw:h-1.5 tw:overflow-hidden tw:rounded-indicator tw:bg-app-border">
@@ -67,19 +63,22 @@ function renderQuotaRow(quota: ProviderQuotaWindow): React.ReactNode {
 }
 
 export function ComposerStatusOverlay({
-  open,
   onClose,
   routedSessionId,
   contextUsage,
   selectedProviderID,
-  side = 'top',
 }: Props): React.ReactNode {
   const [usageSource, setUsageSource] = useState<ProviderUsageSource | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!open || !selectedProviderID) return
+    if (!selectedProviderID) {
+      setUsageSource(null)
+      setLoading(false)
+      setError(null)
+      return
+    }
     let cancelled = false
     setLoading(true)
     setError(null)
@@ -109,32 +108,42 @@ export function ComposerStatusOverlay({
     return () => {
       cancelled = true
     }
-  }, [open, selectedProviderID])
+  }, [selectedProviderID])
 
   const quotas = criticalQuotaWindows(usageSource, 3)
+  const showQuotaSection =
+    Boolean(selectedProviderID) && (loading || Boolean(error) || quotas.length > 0)
 
   return (
-    <ChatInputDropdown open={open} onClose={onClose} side={side} size="lg">
-      <div className="composer-status-content tw:p-0">
-        {/* Header */}
-        <div className="composer-status-header tw:flex tw:items-center tw:justify-between tw:border-b tw:border-app-border tw:px-4 tw:pt-3 tw:pb-2">
-          <span className="composer-status-title tw:type-row-title">状态</span>
-          <button
-            className="composer-status-close tw:inline-flex tw:cursor-pointer tw:items-center tw:justify-center tw:rounded-md tw:border-0 tw:bg-transparent tw:p-1 tw:text-app-text tw:hover:bg-app-hover"
-            onClick={onClose}
-            type="button"
-            aria-label="关闭"
-          >
-            <X size={APP_ICON_SIZES.sm} />
-          </button>
-        </div>
+    <section
+      aria-label="状态与用量"
+      className="composer-status tw:w-full tw:min-w-0"
+      data-composer-utility-item="status"
+    >
+      <div className={HEADER_CLASS}>
+        <span className="tw:flex tw:min-w-0 tw:items-center tw:gap-2">
+          <Gauge
+            aria-hidden="true"
+            className="tw:shrink-0 tw:text-app-text-meta"
+            size={APP_ICON_SIZE}
+            strokeWidth={APP_ICON_STROKE_WIDTH}
+          />
+          <span className="tw:text-app-text-meta tw:type-label">状态与用量</span>
+        </span>
+        <Button color="ghostSecondary" size="composerSm" title="关闭状态与用量" onClick={onClose}>
+          关闭
+        </Button>
+      </div>
 
+      <div className="composer-status-content tw:grid tw:gap-3 tw:px-3 tw:pb-3">
         {/* Session ID */}
-        <div className={SECTION_CLASS}>
-          <div className="composer-status-label tw:mb-1 tw:text-app-text-meta tw:type-label tw:[&>svg]:size-icon-sm">
+        <div
+          className={`${SECTION_CLASS} composer-status-field tw:flex tw:min-w-0 tw:items-center tw:gap-3`}
+        >
+          <div className="composer-status-label tw:w-[7.5rem] tw:shrink-0 tw:text-app-text-meta tw:type-label tw:[&>svg]:size-[var(--inline-icon-size,1em)]">
             会话 ID
           </div>
-          <div className="composer-status-value tw:break-all tw:text-app-text tw:type-code">
+          <div className="composer-status-value tw:min-w-0 tw:flex-1 tw:break-all tw:text-app-text tw:type-code">
             {routedSessionId ?? '尚未创建会话'}
           </div>
         </div>
@@ -142,12 +151,12 @@ export function ComposerStatusOverlay({
         {/* Context Usage */}
         {contextUsage ? (
           <div className={SECTION_CLASS}>
-            <ContextUsagePanel contextUsage={contextUsage} />
+            <ContextUsageStatusPanel contextUsage={contextUsage} />
           </div>
         ) : null}
 
         {/* Quota section */}
-        {selectedProviderID ? (
+        {showQuotaSection ? (
           <div className={SECTION_CLASS}>
             {loading ? (
               <div className="composer-status-empty tw:py-2 tw:text-app-text-meta tw:type-secondary">
@@ -159,14 +168,10 @@ export function ComposerStatusOverlay({
               </div>
             ) : quotas.length > 0 ? (
               quotas.map(renderQuotaRow)
-            ) : (
-              <div className="composer-status-empty tw:py-2 tw:text-app-text-meta tw:type-secondary">
-                当前提供商未返回用量数据
-              </div>
-            )}
+            ) : null}
           </div>
         ) : null}
       </div>
-    </ChatInputDropdown>
+    </section>
   )
 }

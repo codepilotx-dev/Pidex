@@ -472,11 +472,14 @@ export function DesktopComposer({
       onSkillTokenActivate={onSkillTokenActivate}
       onCompositionStart={handleCompositionStart}
       onCompositionEnd={handleCompositionEnd}
-      onInterrupt={() =>
-        void onInterrupt().catch((error) =>
-          handleCommandError(error instanceof Error ? error.message : String(error)),
-        )
-      }
+      onInterrupt={async () => {
+        try {
+          await onInterrupt()
+        } catch (error) {
+          handleCommandError(error instanceof Error ? error.message : String(error))
+          throw error
+        }
+      }}
       onProviderModelChange={onProviderModelChange}
       onProviderOpen={onProviderOpen}
       onProviderSearch={onProviderSearch}

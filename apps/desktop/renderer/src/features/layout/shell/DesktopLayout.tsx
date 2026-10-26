@@ -1020,7 +1020,7 @@ export function DesktopLayout(): React.ReactNode {
   )
 
   const handleSetGoalStatus = useCallback(
-    (status: 'active' | 'paused'): void => {
+    (status: 'active' | 'paused' | 'complete'): void => {
       if (!sessionId) return
       desktopClient
         .setSessionGoal(sessionId, { status })
@@ -1036,6 +1036,17 @@ export function DesktopLayout(): React.ReactNode {
   const handleGoalResume = useCallback((): void => {
     handleSetGoalStatus('active')
   }, [handleSetGoalStatus])
+
+  const handleGoalComplete = useCallback((): void => {
+    handleSetGoalStatus('complete')
+  }, [handleSetGoalStatus])
+
+  const handleGoalClear = useCallback((): void => {
+    if (!sessionId) return
+    desktopClient
+      .clearSessionGoal(sessionId)
+      .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)))
+  }, [sessionId])
 
   const handleOpenThreadAttachment = useCallback(
     (attachment: Attachment): void => {
@@ -2365,6 +2376,10 @@ export function DesktopLayout(): React.ReactNode {
           onModelVariantChange: handleVariantChange,
           modelSelectionError: session.modelSelectionError ?? selectedModelUnavailableMessage,
           threadGoal: activeSessionItem?.threadGoal ?? null,
+          onGoalPause: handleGoalPause,
+          onGoalResume: handleGoalResume,
+          onGoalComplete: handleGoalComplete,
+          onGoalClear: handleGoalClear,
           onRetryModelSelection: () => {
             session.reloadModelSelection()
             void refreshProviderState()
@@ -3862,7 +3877,7 @@ function ArchiveConversationNotice({
       dedupeKey: 'archive-conversation-notice',
       message: (
         <span className="tw:inline-flex tw:items-center tw:gap-3 tw:px-1.5 tw:type-heading-sm tw:whitespace-nowrap">
-          <Archive aria-hidden="true" className="tw:size-4 tw:shrink-0" />
+          <Archive aria-hidden="true" className="tw:size-[var(--inline-icon-size,1em)] tw:shrink-0" size="var(--inline-icon-size, 1em)" />
           已归档的聊天
         </span>
       ),

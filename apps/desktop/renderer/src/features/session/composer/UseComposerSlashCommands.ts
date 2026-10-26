@@ -1,4 +1,5 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { SHARED_SLASH_COMMANDS } from '@pidex/shared/slash-commands'
 import type { ComposerCapabilities } from './ComposerTypes.js'
 import type { ComposerSlashCommand, ComposerSlashCommandId } from './ComposerSlashCommands.js'
 
@@ -99,7 +100,7 @@ export function useComposerSlashCommands({
         onOpenReasoning,
       ),
       command(
-        'plan',
+        SHARED_SLASH_COMMANDS.plan.id,
         '计划模式',
         planModeActive ? '关闭计划模式' : '开启计划模式',
         !subagentMode,
@@ -154,7 +155,7 @@ export function useComposerSlashCommands({
         '当前界面无法打开 MCP 设置',
       ),
       command(
-        'status',
+        SHARED_SLASH_COMMANDS.status.id,
         '状态',
         '显示任务 ID、上下文用量和速率限制',
         capabilities.status,
@@ -271,7 +272,10 @@ function command(
 ): ComposerSlashCommand {
   return {
     id,
-    trigger: id,
+    trigger:
+      id === SHARED_SLASH_COMMANDS.plan.id || id === SHARED_SLASH_COMMANDS.status.id
+        ? SHARED_SLASH_COMMANDS[id].trigger
+        : id,
     title,
     description,
     source: 'builtin',
