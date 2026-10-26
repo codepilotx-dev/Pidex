@@ -203,16 +203,20 @@ export function ProviderConnectionSection({
     ).label === '已配置'
   const panel = useDesktopLayoutOutletContext()?.providerManagement
   const section = panel?.tab?.providerId === provider.providerID ? panel.tab.section : null
+  const scrollRef = useRef<HTMLDivElement>(null)
   const credentialsRef = useRef<HTMLElement>(null)
   const requestRef = useRef<HTMLElement>(null)
   const [requestFooterHost, setRequestFooterHost] = useState<HTMLDivElement | null>(null)
   useEffect(() => {
     if (!section || !panel?.host) return
-    const frame = requestAnimationFrame(() =>
-      (section === 'request' ? requestRef : credentialsRef).current?.scrollIntoView({
-        block: 'start',
-      }),
-    )
+    const frame = requestAnimationFrame(() => {
+      const viewport = scrollRef.current
+      const target = (section === 'request' ? requestRef : credentialsRef).current
+      if (!viewport || !target) return
+      viewport.scrollTo({
+        top: viewport.scrollTop + target.getBoundingClientRect().top - viewport.getBoundingClientRect().top,
+      })
+    })
     return () => cancelAnimationFrame(frame)
   }, [section, panel?.host])
   const [keyEditor, setKeyEditor] = useState<DesktopApiKeySummary | 'new' | null>(null)
@@ -343,8 +347,8 @@ export function ProviderConnectionSection({
   const envActive = activeConnection?.kind === 'env'
   return (
     <div className="model-center-connection-section tw:grid tw:gap-6">
-      <div className="tw:grid tw:min-w-0 tw:grid-cols-2 tw:gap-6">
-      <section aria-label="连接摘要" className="tw:grid tw:gap-3">
+      <div className="tw:grid tw:min-w-0 tw:grid-cols-1 tw:gap-6 tw:@min-[640px]:grid-cols-2">
+      <section aria-label="连接摘要" className="tw:grid tw:min-w-0 tw:gap-3">
         <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">
           {oauthActive
             ? '账号授权'
@@ -377,7 +381,7 @@ export function ProviderConnectionSection({
 
         </div>
       </section>
-      <section className="tw:grid tw:gap-3">
+      <section className="tw:grid tw:min-w-0 tw:gap-3">
         <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">API 地址</h3>
         <div className="tw:flex tw:items-center tw:gap-2">
           <Input
@@ -385,7 +389,7 @@ export function ProviderConnectionSection({
             readOnly
             value={provider.config?.baseUrl ?? provider.baseURL ?? ''}
             placeholder="供应商默认地址"
-            className="tw:flex-1 tw:type-code"
+            className="tw:min-w-0 tw:flex-1 tw:type-code"
           />
 
         </div>
@@ -413,7 +417,7 @@ export function ProviderConnectionSection({
       {panel?.host && section
         ? createPortal(
             <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col">
-            <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-6 tw:overflow-y-auto tw:p-4 tw:[&_.model-center-oauth-flow]:p-0">
+            <div ref={scrollRef} className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-6 tw:overflow-y-auto tw:p-4 tw:[&_.model-center-oauth-flow]:p-0">
               <section className="tw:grid tw:gap-4" aria-label="供应商图标">
                 <h3 className="tw:m-0 tw:type-title-sm">供应商图标</h3>
                 <ProviderWebsiteIconSettings key={provider.providerID} providerID={provider.providerID} logoURL={provider.logoURL} address={provider.config?.baseUrl ?? provider.baseURL ?? ''} onNotice={onNotice} onError={onError} />

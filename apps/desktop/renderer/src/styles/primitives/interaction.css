@@ -83,10 +83,6 @@
     width: 24px;
   }
 
-  .right-dock > .workbench-dock-frame__target {
-    padding-left: 24px;
-  }
-
   .bottom-panel > .workbench-dock-frame__target {
     padding-top: 24px;
   }
