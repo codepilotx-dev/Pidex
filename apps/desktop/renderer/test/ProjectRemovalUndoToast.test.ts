@@ -6,24 +6,24 @@ const sidebar = readFileSync(
   new URL('../src/features/layout/DesktopSidebar.tsx', import.meta.url),
   'utf8',
 )
+const stack = readFileSync(
+  new URL('../src/components/toast/ToastStack.tsx', import.meta.url),
+  'utf8',
+)
+const styles = readFileSync(new URL('../src/styles/modal.css', import.meta.url), 'utf8')
 
-/**
- * 项目移除的撤销提示必须走全局 Toast：位置、堆叠、动效与无障碍由 ToastStack
- * 统一承载，并携带服务端撤销期限；禁止再自绘固定定位提示压住输入区工具行。
- */
-describe('项目移除撤销提示', () => {
-  test('经全局 toastStore 呈现并携带撤销期限', () => {
-    expectSourceContains(
-      sidebar,
-      "import { toastStore } from '../../components/toast/ToastState.js'",
-    )
-    expectSourceContains(sidebar, "message: '项目已移除'")
-    expectSourceContains(sidebar, "'project-removal-undo'")
-    expectSourceContains(sidebar, 'expiresAt,')
+describe('全局 toast', () => {
+  test('项目移除不弹出全局撤销提示', () => {
+    expectSourceNotContains(sidebar, 'project-removal-undo')
+    expectSourceNotContains(sidebar, 'ProjectRemovalUndoNotice')
+    expectSourceNotContains(sidebar, 'subscribeProjectRemovals')
   })
 
-  test('不再自绘固定定位提示', () => {
-    expectSourceNotContains(sidebar, 'tw:fixed tw:bottom-4')
-    expectSourceNotContains(sidebar, "from '../../components/ui/Toast.js'")
+  test('水平居中只应用一次位移', () => {
+    expectSourceContains(stack, 'tw:left-1/2')
+    expectSourceContains(stack, 'tw:-translate-x-1/2')
+    const containerStyles = styles.split('.toast-stack-container {')[1]!.split('}')[0]!
+    expectSourceNotContains(containerStyles, 'transform:')
+    expectSourceNotContains(containerStyles, 'translate:')
   })
 })

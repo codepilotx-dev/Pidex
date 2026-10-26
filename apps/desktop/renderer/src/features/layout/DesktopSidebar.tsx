@@ -63,11 +63,6 @@ import {
 } from './sidebar/SidebarCustomization.js'
 import type { SidebarCustomization } from '../../../shared/Types.js'
 
-import {
-  notifyProjectRestored,
-  subscribeProjectRemovals,
-} from '../projects/ProjectCatalogEvents.js'
-import { toastStore } from '../../components/toast/ToastState.js'
 import { InputDialog } from '../../components/ui/ConfirmationDialog.js'
 import type { SidebarPane } from './sidebar/SidebarNavigation.js'
 
@@ -544,74 +539,6 @@ export function DesktopSidebar({
     setSidebarProjectSort(sort)
   }
 
-  const [projectUndo, setProjectUndo] = useState<{
-    expiresAt: number
-    restore: () => Promise<void>
-  } | null>(null)
-  const [restoringProject, setRestoringProject] = useState(false)
-  useEffect(
-    () =>
-      subscribeProjectRemovals(({ project, removalOperationId, undoExpiresAt }) => {
-        const key = sidebarPinnedProjectKey(project)
-        const assignments = captureSidebarAssignments(sidebarCustomizationRef.current, [key])
-        const orders = Object.entries(sidebarManualOrder).flatMap(([scope, keys]) => {
-          const index = keys.indexOf(scope === 'projects' ? sidebarProjectKey(project) : key)
-          return index < 0
-            ? []
-            : [{ scope, index, key: scope === 'projects' ? sidebarProjectKey(project) : key }]
-        })
-        const selected = Boolean(
-          workspace &&
-          (project.projectId
-            ? workspace.projectId === project.projectId
-            : workspace.path === project.path),
-        )
-        setProjectUndo({
-          expiresAt: undoExpiresAt,
-          restore: async () => {
-            const restored = await desktopClient.restoreProject(
-              project.projectId!,
-              removalOperationId,
-            )
-            const workspaceToRestore = { ...restored, pinnedAt: project.pinnedAt }
-            updateSidebarCustomization((current) =>
-              restoreFailedArchiveAssignments(current, [key], assignments),
-            )
-            setSidebarManualOrder((current) => {
-              const next = { ...current }
-              for (const entry of orders) {
-                const keys = [...(next[entry.scope] ?? [])]
-                if (!keys.includes(entry.key))
-                  keys.splice(Math.min(entry.index, keys.length), 0, entry.key)
-                next[entry.scope] = keys
-              }
-              return next
-            })
-            notifyProjectRestored(workspaceToRestore, selected)
-          },
-        })
-      }),
-    [sidebarManualOrder, workspace, setSidebarManualOrder, updateSidebarCustomization],
-  )
-  useEffect(() => {
-    if (!projectUndo) return
-    const timer = setTimeout(
-      () => setProjectUndo(null),
-      Math.max(0, projectUndo.expiresAt - Date.now()),
-    )
-    return () => clearTimeout(timer)
-  }, [projectUndo])
-
-  const restoreRemovedProject = useCallback((): void => {
-    if (!projectUndo) return
-    setRestoringProject(true)
-    void projectUndo
-      .restore()
-      .then(() => setProjectUndo(null))
-      .catch((error) => onReport(error instanceof Error ? error.message : String(error)))
-      .finally(() => setRestoringProject(false))
-  }, [projectUndo, onReport])
-
   const [pendingSectionKeys, setPendingSectionKeys] = useState<string[] | null>(null)
   const [sectionTitle, setSectionTitle] = useState('')
   const createCustomSection = useCallback((itemKeys: string[] = []): void => {
@@ -742,13 +669,6 @@ export function DesktopSidebar({
 
   return (
     <div className="sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2">
-      {projectUndo ? (
-        <ProjectRemovalUndoNotice
-          expiresAt={projectUndo.expiresAt}
-          restoring={restoringProject}
-          onUndo={restoreRemovedProject}
-        />
-      ) : null}
       <InputDialog
         open={pendingSectionKeys !== null}
         title="新建分区"
@@ -947,48 +867,6 @@ export function DesktopSidebar({
       ) : null}
     </div>
   )
-}
-
-/**
- * 项目移除撤销提示：位置、堆叠、动效与无障碍交由全局 ToastStack 承载，
- * 并带上服务端撤销期限，到点后撤销动作自动禁用，不再自绘固定定位提示。
- */
-function ProjectRemovalUndoNotice({
-  expiresAt,
-  restoring,
-  onUndo,
-}: {
-  expiresAt: number
-  restoring: boolean
-  onUndo: () => void
-}): null {
-  const onUndoRef = useRef(onUndo)
-
-  useEffect(() => {
-    onUndoRef.current = onUndo
-  }, [onUndo])
-
-  useEffect(() => {
-    const id = toastStore.show({
-      id: 'project-removal-undo',
-      tone: 'status',
-      appearance: 'action',
-      dedupeKey: 'project-removal-undo',
-      message: '项目已移除',
-      duration: Math.max(0, expiresAt - Date.now()),
-      expiresAt,
-      action: {
-        label: '撤销',
-        disabled: restoring,
-        onClick: () => onUndoRef.current(),
-      },
-    })
-    return () => {
-      toastStore.dismiss(id)
-    }
-  }, [expiresAt, restoring])
-
-  return null
 }
 
 function sidebarDisclosureSignature(

@@ -60,12 +60,6 @@
   }
 
   .toast-stack-container {
-    position: absolute;
-    top: var(--cpx-sys-space-2);
-    left: 50%;
-    z-index: var(--cpx-sys-z-toast);
-    transform: translateX(-50%);
-    width: min(420px, calc(100% - var(--cpx-sys-space-4)));
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
