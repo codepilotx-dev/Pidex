@@ -28,8 +28,17 @@
  * outranking the shared primitives they rewrite.
  */
 @layer primitives {
+  .conversation-page {
+    /* Keep the compatibility transform from nesting @supports inside ::highlight. */
+    --conversation-action-selection-background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 32%,
+      transparent
+    );
+  }
+
   ::highlight(conversation-action-selection) {
-    background: color-mix(in srgb, var(--cpx-sys-color-accent) 32%, transparent);
+    background: var(--conversation-action-selection-background);
     color: inherit;
   }
 
@@ -527,17 +536,8 @@
 
   /* --- Thread summary geometry -------------------------------------- */
 
-  /*
-   * 置顶摘要的共享宽度：内联面板从 `.workflow-page__main` 继承，浮层挂在
-   * Portal 上，必须自己再声明一次。值与迁移前一致（space-1 × 75 = 300px）。
-   */
-  .workflow-page__main,
   .thread-summary-popover {
     --thread-summary-inline-width: calc(var(--cpx-sys-space-1) * 75);
-  }
-
-  .workflow-page__main {
-    --thread-summary-inline-edge: var(--cpx-sys-space-4);
   }
 
   /* --- Quick chat surface geometry ---------------------------------- */

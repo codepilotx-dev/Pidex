@@ -49,12 +49,6 @@ import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
 import type { CommandMenuActionRegistration } from '../../search/CommandMenuActionStore.js'
 import { PopoverItem } from '../../../components/ui/PopoverItem.js'
 
-/**
- * 置顶摘要的宽度契约：行在浮层里靠 `--thread-summary-inline-width` 取得与内联
- * 面板一致的宽度，浮层挂在 Portal 上，必须自己再声明一次该变量。
- */
-const THREAD_SUMMARY_WIDTH_CLASS = 'tw:w-full'
-
 const SUMMARY_ROW_CLASS =
   'interactive-row interactive-row--nav thread-summary-row tw:grid tw:w-[calc(100%+16px)] tw:min-w-0 tw:-mx-2 tw:grid-cols-[16px_minmax(0,1fr)_max-content] tw:text-left tw:no-underline tw:type-body'
 
@@ -137,8 +131,8 @@ export function ThreadSummaryPopover({
         <Popover.Content
           size="lg"
           align="end"
-          aria-label="置顶摘要"
-          className={`thread-summary-popover ${THREAD_SUMMARY_WIDTH_CLASS} tw:max-h-[min(680px,calc(100vh-80px))]`}
+          aria-label="会话概览"
+          className="thread-summary-popover tw:w-[var(--thread-summary-inline-width)] tw:[&]:p-0 tw:max-w-[calc(100vw-24px)] tw:max-h-[min(680px,calc(100vh-80px))]"
           collisionPadding={12}
           side="bottom"
           sideOffset={8}
@@ -147,17 +141,6 @@ export function ThreadSummaryPopover({
         </Popover.Content>
       </Popover.Portal>
     </Popover.Root>
-  )
-}
-
-export function ThreadSummaryInline({ children }: { children: React.ReactNode }): React.ReactNode {
-  return (
-    <div
-      className="thread-summary-inline tw:absolute tw:top-4 tw:bottom-4 tw:end-[var(--thread-summary-inline-edge)] tw:z-sticky tw:w-[var(--thread-summary-inline-width)] tw:min-h-0 tw:origin-right"
-      data-testid="thread-summary-inline"
-    >
-      {children}
-    </div>
   )
 }
 
@@ -186,7 +169,7 @@ export class ThreadSummaryErrorBoundary extends React.Component<
       return (
         <section
           aria-label="摘要加载失败"
-          className={`thread-summary-error ${THREAD_SUMMARY_WIDTH_CLASS} tw:grid tw:min-h-45 tw:place-content-center tw:justify-items-center tw:gap-2 tw:p-5 tw:text-center`}
+          className={`thread-summary-error tw:w-full tw:grid tw:min-h-0 tw:place-content-center tw:justify-items-center tw:gap-2 tw:p-3 tw:text-center`}
           role="alert"
         >
           <strong>摘要暂时无法显示</strong>
@@ -196,7 +179,7 @@ export class ThreadSummaryErrorBoundary extends React.Component<
             onClick={this.retry}
             className="tw:mt-2 tw:inline-flex tw:items-center tw:gap-1 tw:rounded-control tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:[font:inherit] tw:cursor-pointer tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus"
           >
-            <RefreshCcw size={APP_ICON_SIZE} />
+            <RefreshCcw size="var(--inline-icon-size, 1em)" />
             重试
           </button>
         </section>
@@ -267,12 +250,12 @@ export function ThreadSummaryPanel({
 
   return (
     <aside
-      className={`thread-summary-panel ${THREAD_SUMMARY_WIDTH_CLASS} tw:flex tw:min-h-0 tw:flex-col tw:gap-3 tw:overflow-x-hidden tw:overflow-y-auto tw:pt-3 tw:pb-2 tw:[scrollbar-width:thin]`}
-      aria-label="置顶摘要"
+      className={`thread-summary-panel tw:w-full tw:flex tw:min-h-0 tw:flex-col tw:gap-1 tw:overflow-x-hidden tw:overflow-y-auto tw:py-2 tw:[scrollbar-width:thin]`}
+      aria-label="会话概览"
     >
       {model.gitDetection === 'error' ? (
         <div
-          className="tw:flex tw:items-center tw:gap-2 tw:px-4 tw:py-2 tw:text-app-text-meta tw:type-body-sm"
+          className="tw:flex tw:items-center tw:gap-2 tw:px-3 tw:py-0 tw:text-app-text-meta tw:type-body-sm"
           role="status"
         >
           <>
@@ -418,7 +401,7 @@ export function ThreadSummaryPanel({
                 <SquarePlus
                   className={SUMMARY_ROW_ICON_CLASS}
                   aria-hidden="true"
-                  size={APP_ICON_SIZE}
+                  size="var(--inline-icon-size, 1em)"
                 />
                 <span className={SUMMARY_ROW_LABEL_CLASS}>变更</span>
                 <span
@@ -504,12 +487,12 @@ export function ThreadSummaryPanel({
                         <GitBranch
                           className={SUMMARY_ROW_ICON_CLASS}
                           aria-hidden="true"
-                          size={APP_ICON_SIZE}
+                          size="var(--inline-icon-size, 1em)"
                         />
                         <span className={SUMMARY_ROW_LABEL_CLASS}>
                           {environment.branchName ?? '未检测到 Git 分支'}
                         </span>
-                        <ChevronDown aria-hidden="true" size={APP_ICON_SIZES.sm} />
+                        <ChevronDown aria-hidden="true" size="var(--inline-icon-size, 1em)" />
                       </button>
                     }
                   />
@@ -582,7 +565,7 @@ export function ThreadSummaryPanel({
                 type="button"
                 onClick={() => onOpenSubagent?.(agent.id)}
               >
-                <Bot className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size={APP_ICON_SIZE} />
+                <Bot className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
                 <span className={SUMMARY_ROW_LABEL_CLASS}>{agent.name}</span>
                 <small
                   className={cx(
@@ -613,7 +596,7 @@ export function ThreadSummaryPanel({
               type="button"
               onClick={() => setShowAllAgents(true)}
             >
-              <ChevronDown aria-hidden="true" size={APP_ICON_SIZE} />
+              <ChevronDown aria-hidden="true" size="var(--inline-icon-size, 1em)" />
               <span className={SUMMARY_ROW_LABEL_CLASS}>
                 查看全部 {agentPreview.totalCount} 个 Agent
               </span>
@@ -674,7 +657,7 @@ export function ThreadSummaryPanel({
               type="button"
               onClick={() => setShowAllArtifacts(true)}
             >
-              <ChevronDown aria-hidden="true" size={APP_ICON_SIZE} />
+              <ChevronDown aria-hidden="true" size="var(--inline-icon-size, 1em)" />
               <span className={SUMMARY_ROW_LABEL_CLASS}>
                 查看全部 {artifactPreview.totalCount} 个产物
               </span>
@@ -705,7 +688,7 @@ export function ThreadSummaryPanel({
               type="button"
               onClick={() => setSourcesPanelOpen(true)}
             >
-              <Link2 aria-hidden="true" size={APP_ICON_SIZE} />
+              <Link2 aria-hidden="true" size="var(--inline-icon-size, 1em)" />
               <span className={SUMMARY_ROW_LABEL_CLASS}>
                 查看全部 {sourcePreview.totalCount} 条来源
               </span>
@@ -802,7 +785,7 @@ function BrowserTabRow({
       type="button"
       onClick={() => onActivate?.(tab.tabId)}
     >
-      <Globe className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size={APP_ICON_SIZE} />
+      <Globe className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
       <span className={SUMMARY_ROW_LABEL_CLASS}>{tab.title}</span>
       <small className="tw:flex tw:items-center tw:gap-1.5 tw:whitespace-nowrap tw:text-app-text-meta tw:type-caption">
         {tab.domain ? <span>{tab.domain}</span> : null}
@@ -839,7 +822,7 @@ function ThreadSummarySourceRow({
         type="button"
         onClick={() => onOpenAttachment?.(source.attachment)}
       >
-        <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size={APP_ICON_SIZE} />
+        <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
         <span className={SUMMARY_ROW_LABEL_CLASS}>{source.label}</span>
       </button>
     )
@@ -853,7 +836,7 @@ function ThreadSummarySourceRow({
         type="button"
         onClick={() => onOpenLocalContext?.(source.reference)}
       >
-        <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size={APP_ICON_SIZE} />
+        <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
         <span className={SUMMARY_ROW_LABEL_CLASS}>{source.label}</span>
       </button>
     )
@@ -867,7 +850,7 @@ function ThreadSummarySourceRow({
         target="_blank"
         title={source.url}
       >
-        <Link2 className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size={APP_ICON_SIZE} />
+        <Link2 className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
         <span className={SUMMARY_ROW_LABEL_CLASS}>{source.label}</span>
       </a>
     )
@@ -878,7 +861,7 @@ function ThreadSummarySourceRow({
       className="thread-summary-row thread-summary-source-static tw:grid tw:w-[calc(100%+16px)] tw:min-w-0 tw:-mx-2 tw:grid-cols-[16px_minmax(0,1fr)] tw:items-center tw:gap-2 tw:px-2 tw:text-app-text tw:type-body"
       title={source.source ?? source.label}
     >
-      <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size={APP_ICON_SIZE} />
+      <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
       <span className={SUMMARY_ROW_LABEL_CLASS}>{source.label}</span>
     </div>
   )
@@ -902,9 +885,9 @@ function ArtifactRow({
   const row = (
     <>
       {artifact.previewKind === 'image' ? (
-        <ImageIcon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size={APP_ICON_SIZE} />
+        <ImageIcon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
       ) : (
-        <Package className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size={APP_ICON_SIZE} />
+        <Package className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
       )}
       <span className={SUMMARY_ROW_LABEL_CLASS}>{artifact.name}</span>
       <small
@@ -1021,11 +1004,11 @@ function ThreadSummarySection({
       aria-labelledby={headingId}
       className={
         first
-          ? 'thread-summary-section thread-summary-section--first tw:relative tw:z-0 tw:flex tw:flex-col tw:pb-3 tw:last:pb-1'
-          : 'thread-summary-section tw:relative tw:z-0 tw:flex tw:flex-col tw:pb-3 tw:last:pb-1'
+          ? 'thread-summary-section thread-summary-section--first tw:relative tw:z-0 tw:flex tw:flex-col tw:pb-2 tw:last:pb-0'
+          : 'thread-summary-section tw:relative tw:z-0 tw:flex tw:flex-col tw:pb-2 tw:last:pb-0'
       }
     >
-      <header className="tw:sticky tw:top-0 tw:z-local tw:flex tw:h-7 tw:w-full tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:bg-transparent tw:pt-0 tw:pr-3 tw:pb-1 tw:pl-4 tw:text-app-text-soft tw:type-row-title">
+      <header className="tw:sticky tw:top-0 tw:z-local tw:flex tw:h-7 tw:w-full tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:bg-transparent tw:px-3 tw:py-0 tw:text-app-text-soft tw:type-row-title">
         <h2 className="tw:m-0 tw:text-inherit tw:[font:inherit]">
           <button
             aria-controls={contentId}
@@ -1041,7 +1024,7 @@ function ThreadSummarySection({
               {title}
             </span>
             {!expanded ? collapsedSummary : null}
-            <ChevronDown aria-hidden="true" size={APP_ICON_SIZES.sm} />
+            <ChevronDown aria-hidden="true" size="var(--inline-icon-size, 1em)" />
           </button>
         </h2>
         <span className="thread-summary-section__actions tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:justify-end">
@@ -1050,7 +1033,7 @@ function ThreadSummarySection({
       </header>
       <DisclosureContent
         className="thread-summary-section__content tw:relative tw:z-0"
-        contentClassName="thread-summary-section__rows tw:grid tw:min-h-0 tw:gap-0 tw:overflow-hidden tw:px-4 tw:pt-1"
+        contentClassName="thread-summary-section__rows tw:grid tw:min-h-0 tw:gap-0 tw:overflow-hidden tw:px-3 tw:pt-0"
         expanded={expanded}
         id={contentId}
       >

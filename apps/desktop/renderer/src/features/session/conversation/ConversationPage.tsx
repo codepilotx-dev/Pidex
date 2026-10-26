@@ -560,9 +560,8 @@ export function ConversationPage(): React.ReactNode {
       workspacePath,
     ],
   )
-  const workflowMainRef = React.useRef<HTMLElement>(null)
-  const threadSummary = useThreadSummaryController(workflowMainRef)
-  // 切换会话时关闭浮层，保留置顶偏好；分区折叠状态按会话保留在内存里。
+  const threadSummary = useThreadSummaryController()
+  // 切换会话时关闭浮层，分区折叠状态按会话保留在内存里。
   const closeSummaryPopover = threadSummary.setPopoverOpen
   const EMPTY_COLLAPSED_SECTIONS = React.useMemo<ReadonlySet<ThreadSummarySectionId>>(
     () => new Set(),
@@ -1294,31 +1293,10 @@ export function ConversationPage(): React.ReactNode {
     const summaryToggle = (
       <Button
         isIconOnly
-        color={
-          threadSummary.displayMode === 'overlay'
-            ? threadSummary.isPopoverOpen
-              ? 'ghostActive'
-              : 'ghostSecondary'
-            : threadSummary.isPinned
-              ? 'ghostActive'
-              : 'ghostSecondary'
-        }
-        title={
-          threadSummary.displayMode === 'overlay'
-            ? threadSummary.isPopoverOpen
-              ? '关闭置顶摘要'
-              : '打开置顶摘要'
-            : threadSummary.isPinned
-              ? '取消置顶摘要'
-              : '置顶摘要'
-        }
-        aria-pressed={
-          threadSummary.displayMode === 'overlay'
-            ? threadSummary.isPopoverOpen
-            : threadSummary.isPinned
-        }
+        color={threadSummary.isPopoverOpen ? 'ghostActive' : 'ghostSecondary'}
+        title={threadSummary.isPopoverOpen ? '关闭概览' : '打开概览'}
+        aria-pressed={threadSummary.isPopoverOpen}
         size="toolbar"
-        onClick={threadSummary.displayMode === 'overlay' ? undefined : threadSummary.toggle}
       >
         <LayoutList size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       </Button>
@@ -1326,20 +1304,16 @@ export function ConversationPage(): React.ReactNode {
 
     return (
       <div className="chat-session-actions tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:whitespace-nowrap">
-        {threadSummary.displayMode === 'overlay' ? (
-          summaryAvailable ? (
-            <ThreadSummaryPopover
-              open={threadSummary.isPopoverOpen}
-              panel={summaryPanel}
-              onOpenChange={threadSummary.setPopoverOpen}
-            >
-              {summaryToggle}
-            </ThreadSummaryPopover>
-          ) : (
-            <Tooltip content="当前对话暂无可展示的摘要">{summaryToggle}</Tooltip>
-          )
+        {summaryAvailable ? (
+          <ThreadSummaryPopover
+            open={threadSummary.isPopoverOpen}
+            panel={summaryPanel}
+            onOpenChange={threadSummary.setPopoverOpen}
+          >
+            {summaryToggle}
+          </ThreadSummaryPopover>
         ) : (
-          <Tooltip content="置顶摘要">{summaryToggle}</Tooltip>
+          <Tooltip content="当前对话暂无可展示的摘要">{summaryToggle}</Tooltip>
         )}
       </div>
     )
@@ -1582,13 +1556,7 @@ export function ConversationPage(): React.ReactNode {
       ) : null}
       <div className="workflow-page__body tw:flex tw:w-full tw:min-h-0 tw:flex-1 tw:overflow-hidden">
         <main
-          ref={workflowMainRef}
           className="workflow-page__main tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:flex-1 tw:flex-col tw:bg-transparent"
-          data-thread-summary-inline={
-            (!isThreadLoading && threadSummary.shouldShowInline && threadSummaryModel.hasContent) ||
-            undefined
-          }
-          data-thread-summary-mode={threadSummary.displayMode}
         >
           <div className="workflow-main-scroll-frame tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:flex-1 tw:overflow-hidden">
             <ConversationTurnNavRail
@@ -1643,7 +1611,7 @@ export function ConversationPage(): React.ReactNode {
                         <div className="session-timeline-loaded-presence tw:flex tw:w-full tw:min-h-0 tw:flex-[1_0_auto] tw:flex-col tw:animate-[session-timeline-fade-in_var(--cpx-sys-motion-panel)_var(--cpx-sys-ease-out)_both]">
                           {subagents.length ? (
                             <div
-                              className="subagent-timeline-summary tw:mx-auto tw:my-2 tw:flex tw:w-[min(760px,calc(100%-32px))] tw:flex-col tw:gap-1"
+                              className="subagent-timeline-summary tw:mx-auto tw:my-2 tw:flex tw:w-[min(var(--page-content-max-width),var(--session-content-w))] tw:flex-col tw:gap-1"
                               aria-label="子智能体任务"
                             >
                               {subagents.map(({ task, currentRun }) => (
@@ -1653,7 +1621,7 @@ export function ConversationPage(): React.ReactNode {
                                   onClick={() => onOpenSubagent(task.id)}
                                   className="tw:grid tw:min-h-[34px] tw:grid-cols-[18px_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:rounded-md tw:border-0 tw:bg-app-editor tw:px-3 tw:py-2 tw:text-left tw:text-app-text tw:cursor-pointer tw:hover:bg-app-hover"
                                 >
-                                  <Bot size={APP_ICON_SIZE} />
+                                  <Bot size="var(--inline-icon-size, 1em)" />
                                   <span className="tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
                                     {task.displayName}
                                   </span>
@@ -1674,64 +1642,6 @@ export function ConversationPage(): React.ReactNode {
               />
             </ThreadScrollLayout>
           </div>
-          <AnimatePresence initial={false}>
-            {!isThreadLoading && threadSummary.shouldShowInline && threadSummaryModel.hasContent ? (
-              <ThreadSummaryInlinePresence key="thread-summary-inline" reducedMotion={reduceMotion}>
-                <ThreadSummaryErrorBoundary>
-                  <ThreadSummaryPanel
-                    key={activeSessionId ?? 'thread-summary'}
-                    branches={branches}
-                    collapsedSections={collapsedSections}
-                    model={threadSummaryModel}
-                    workspaceActions={launchActions}
-                    environmentChoices={environmentChoices}
-                    selectedActionId={selectedLaunchActionId}
-                    onSelectAction={setSelectedLaunchActionId}
-                    onActivateBrowserTab={onActivateBrowserTab}
-                    onBranchSelect={onBranchSelect}
-                    onCommitOrPush={onCommitOrPush}
-                    onCreateBranch={onCreateBranch}
-                    onCreatePullRequest={onCreatePullRequest}
-                    onCreateOutput={() => onAppendComposerText('请帮我创建文件或站点：')}
-                    onGitOperation={onGitOperation}
-                    onAddEnvironmentAction={() =>
-                      navigate(
-                        `/settings/worktrees?tab=environments&threadId=${encodeURIComponent(activeSessionId ?? '')}&mode=edit`,
-                      )
-                    }
-                    onOpenEnvironmentSettings={() =>
-                      navigate(
-                        `/settings/worktrees?tab=environments&threadId=${encodeURIComponent(activeSessionId ?? '')}`,
-                      )
-                    }
-                    onOpenTerminal={onOpenTerminal}
-                    pushEnabled={Boolean(
-                      gitStatus?.branchName && (!gitStatus.upstream || gitStatus.ahead > 0),
-                    )}
-                    onMoveToWorktree={
-                      handoffAction
-                        ? () => {
-                            void handoffAction.execute()
-                          }
-                        : undefined
-                    }
-                    onGoalPause={onGoalPause}
-                    onGoalResume={onGoalResume}
-                    onOpenArtifact={onOpenArtifact}
-                    onOpenAttachment={onOpenAttachment}
-                    onOpenLocalContext={onOpenLocalContext}
-                    onOpenReview={openBranchReview}
-                    onRetryGitDetection={onRefreshDiff}
-                    changesLoading={branchReviewState.loading}
-                    onOpenSubagent={onOpenSubagent}
-                    onOpenWorkspacePath={onOpenWorkspacePath}
-                    onStopSubagent={handleStopSubagent}
-                    onToggleSection={toggleSummarySection}
-                  />
-                </ThreadSummaryErrorBoundary>
-              </ThreadSummaryInlinePresence>
-            ) : null}
-          </AnimatePresence>
         </main>
       </div>
     </section>
@@ -1761,37 +1671,6 @@ function ComposerFooterPresence({
       }}
       inert={!isPresent ? true : undefined}
       initial={reducedMotion ? false : { opacity: 0, scale: 0.985, y: 4 }}
-      style={{ pointerEvents: isPresent ? undefined : 'none' }}
-      transition={motionTransition(reducedMotion, enterTween)}
-    >
-      {children}
-    </motion.div>
-  )
-}
-
-function ThreadSummaryInlinePresence({
-  children,
-  reducedMotion,
-}: {
-  children: React.ReactNode
-  reducedMotion: boolean
-}): React.ReactNode {
-  const isPresent = useIsPresent()
-
-  return (
-    <motion.div
-      animate={{ opacity: 1, x: 0 }}
-      aria-hidden={!isPresent ? true : undefined}
-      className="thread-summary-inline tw:absolute tw:top-4 tw:bottom-4 tw:end-[var(--thread-summary-inline-edge)] tw:z-sticky tw:w-[var(--thread-summary-inline-width)] tw:min-h-0 tw:origin-right"
-      data-presence={isPresent ? 'present' : 'exiting'}
-      data-testid="thread-summary-inline"
-      exit={{
-        opacity: 0,
-        x: 6,
-        transition: motionTransition(reducedMotion, exitTween),
-      }}
-      inert={!isPresent ? true : undefined}
-      initial={reducedMotion ? false : { opacity: 0, x: 6 }}
       style={{ pointerEvents: isPresent ? undefined : 'none' }}
       transition={motionTransition(reducedMotion, enterTween)}
     >
