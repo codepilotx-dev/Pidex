@@ -8,13 +8,14 @@ import { isExecutableDesktopProvider } from '../../services/desktop-client/Provi
 import React, { useEffect, useMemo, useState } from 'react'
 import type {
   DesktopApiKeySummary,
+  DesktopProviderCredential,
   DesktopModelProviderState,
   DesktopModelProviderSummary,
   DesktopProviderDefinition,
   ModelProviderID,
 } from '../../../shared/Types.js'
 import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
-import { fullErrorMessage } from '../../utils/Errors.js'
+import { fullErrorMessage, toUserErrorMessage } from '../../utils/Errors.js'
 import { ChevronRight, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
 import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutletContext.js'
@@ -46,6 +47,7 @@ import { type ApiKeyEditorValue } from './ApiKeyEditorDialog.js'
 import {
   providerManagementStore,
   selectConfiguredProviderGroups,
+  selectOrphanProviderCredentials,
 } from '../provider-management/index.js'
 
 const NO_MODEL_OPTION = '__no_models_available__'
@@ -89,6 +91,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const [deepSeekProtocolSupported, setDeepSeekProtocolSupported] = useState(false)
   const [connectionDraftDirty, setConnectionDraftDirty] = useState(false)
   const [deleteKey, setDeleteKey] = useState<DesktopApiKeySummary | null>(null)
+  const [orphanToDelete, setOrphanToDelete] = useState<DesktopProviderCredential | null>(null)
   const [providerToDelete, setProviderToDelete] = useState<DesktopModelProviderSummary | null>(null)
   const [deletingProvider, setDeletingProvider] = useState(false)
 
@@ -115,6 +118,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const busy = busyProviderIds.includes(providerID)
 
   const configuredGroups = useMemo(() => selectConfiguredProviderGroups(snapshot), [snapshot])
+  const orphanCredentials = useMemo(() => selectOrphanProviderCredentials(snapshot), [snapshot])
 
   const marketProviders = useMemo(
     () =>
@@ -276,7 +280,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
       window.dispatchEvent(new Event('desktop:model-provider-changed'))
       return true
     } catch (error) {
-      onError(fullErrorMessage(error))
+      onError(toUserErrorMessage(error))
       return false
     } finally {
       setBusyKeyId(null)
@@ -558,6 +562,28 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
               onAddConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
             />
           )}
+          {orphanCredentials.length > 0 ? (
+            <section aria-label="遗留供应商凭据" className="tw:mt-6 tw:grid tw:gap-3">
+              <h2 className="tw:type-title-sm tw:text-app-text">遗留供应商凭据</h2>
+              <p className="tw:type-body-sm tw:text-app-text-meta">
+                这些凭据所属的供应商已不存在，可单独删除，历史聊天仍保留。
+              </p>
+              {orphanCredentials.map((credential) => (
+                <div
+                  key={credential.id}
+                  className="tw:flex tw:items-center tw:justify-between tw:gap-3"
+                >
+                  <span>
+                    {credential.providerId} · {credential.label} ·{' '}
+                    {credential.kind === 'oauth' ? 'OAuth' : 'API Key'} {credential.maskedValue}
+                  </span>
+                  <Button size="sm" onClick={() => setOrphanToDelete(credential)}>
+                    删除凭据
+                  </Button>
+                </div>
+              ))}
+            </section>
+          ) : null}
         </PrimaryPageLayout>
       ) : (
         <div className="model-center-shell tw:@container tw:h-full tw:w-full tw:min-w-0 tw:overflow-x-hidden tw:overflow-y-auto tw:p-5">
@@ -586,7 +612,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
                   <ChevronRight
                     aria-hidden="true"
                     className="model-center-breadcrumb-separator tw:shrink-0 tw:text-app-text-meta tw:opacity-60"
-                    size={APP_ICON_SIZES.sm}
+                    size="var(--inline-icon-size, 1em)"
                     strokeWidth={APP_ICON_STROKE_WIDTH}
                   />
                   <span className="model-center-breadcrumb-current tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap">
@@ -657,12 +683,35 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
       <ConfirmationDialog
         open={providerToDelete !== null}
         title="删除自定义供应商？"
-        description={`确定删除自定义供应商“${providerToDelete?.displayName ?? ''}”？历史会话引用与已保存凭据将保留。`}
+        description={`确定删除自定义供应商“${providerToDelete?.displayName ?? ''}”？将同时删除此供应商已保存的 API Key 和 OAuth 凭据，历史会话引用保留。`}
         actionLabel="删除供应商"
         tone="danger"
         actionDisabled={deletingProvider}
         onAction={() => void confirmDeleteProvider()}
-        onCancel={() => { if (!deletingProvider) setProviderToDelete(null) }}
+        onCancel={() => {
+          if (!deletingProvider) setProviderToDelete(null)
+        }}
+      />
+
+      <ConfirmationDialog
+        open={orphanToDelete !== null}
+        title="删除遗留凭据？"
+        description={`删除“${orphanToDelete?.label ?? ''}”后无法恢复，历史聊天仍保留。`}
+        actionLabel="删除凭据"
+        tone="danger"
+        actionDisabled={busyKeyId !== null}
+        onAction={() => {
+          if (!orphanToDelete) return
+          const target = orphanToDelete
+          void mutateKey(
+            target.id,
+            () => providerManagementStore.deleteCredential(target.id),
+            '遗留凭据已删除。',
+          ).then((success) => {
+            if (success) setOrphanToDelete(null)
+          })
+        }}
+        onCancel={() => setOrphanToDelete(null)}
       />
       <ConfirmationDialog
         actionDisabled={busyKeyId !== null}

@@ -497,10 +497,13 @@ export const providerHandlers = {
         if (recent?.providerID === providerID || specializedReferencesProvider) {
           throw new AgentError('CONFLICT', 'Provider 仍被最近模型或专用模型引用', 409)
         }
+        // Keep the provider manageable if credential storage refuses the deletion.
+        await providerCredentials.deleteAll(providerID)
         await config.batchWrite({
           edits: [{ keyPath: ['model_providers', providerID], value: null }],
         })
         await providers.reload()
+        await emitCredentialUpdated(runtime, providerID)
         const catalog = await runtime.publishCatalogUpdated()
         return { providerId: providerID, deleted: true, catalogVersion: catalog.catalogVersion }
       }

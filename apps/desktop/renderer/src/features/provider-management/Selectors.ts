@@ -8,6 +8,12 @@ import type {
   ProviderManagementSnapshot,
 } from './Types.js'
 
+export function selectOrphanProviderCredentials(snapshot: ProviderManagementSnapshot) {
+  if (!snapshot.loaded || snapshot.configurationError || snapshot.error) return []
+  const known = new Set(snapshot.providers.map((provider) => String(provider.providerID)))
+  return snapshot.credentials.filter((credential) => !known.has(String(credential.providerId)))
+}
+
 const usageConnectionKind = (source: UsageSourceDescriptor): ProviderConnectionKind | null => {
   switch (source.connection.kind) {
     case 'provider-key':

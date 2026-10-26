@@ -41,6 +41,15 @@ describe('toUserErrorMessage sanitization and mapping', () => {
     ).toBe('Agent 发生内部错误，请重试。')
   })
 
+  test('keeps safe conflict messages instead of reporting an internal error', () => {
+    expect(
+      toUserErrorMessage({
+        errorCode: 'CONFLICT',
+        message: '此 Provider 已保存相同的 API Key',
+      }),
+    ).toBe('此 Provider 已保存相同的 API Key')
+  })
+
   test('maps agent unavailable and network disconnection errors', () => {
     expect(toUserErrorMessage({ errorCode: 'AGENT_UNAVAILABLE' })).toBe(
       'Agent 暂时不可用，请稍后重试。',

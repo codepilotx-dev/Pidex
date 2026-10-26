@@ -1,6 +1,7 @@
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../../components/ui/IconTokens.js'
-import React, { useState } from 'react'
-import { motion } from 'motion/react'
+import React, { useRef, useState } from 'react'
+import { mergeRefs } from '../../../components/ui/floating/Primitives.js'
+import { motion, type HTMLMotionProps } from 'motion/react'
 import { ChevronDown } from 'lucide-react'
 import { cx } from '../../../utils/Cx.js'
 import { ReasoningMenu } from './ReasoningMenu.js'
@@ -52,12 +53,11 @@ const CHEVRON_CLASS =
   'composer-model-trigger-chevron tw:transition-transform tw:duration-state tw:ease-standard'
 const CHEVRON_OPEN_CLASS = 'tw:rotate-180 tw:text-app-text'
 
-export type ModelSelectTriggerProps = {
+export type ModelSelectTriggerProps = Omit<HTMLMotionProps<'button'>, 'children'> & {
   modelName: string
   tooltipTitle?: string
   loading?: boolean
   isOpen?: boolean
-  onToggleOpen?: () => void
   showThinkingOptions?: boolean
   thinkingLabel?: string
   thinkingMode?: string
@@ -69,13 +69,13 @@ export type ModelSelectTriggerProps = {
   id?: string
 }
 
-export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTriggerProps>(
+export const ModelSelectTrigger = React.forwardRef<HTMLButtonElement, ModelSelectTriggerProps>(
   function ModelSelectTrigger(
     {
       modelName,
       tooltipTitle,
+      loading: _loading,
       isOpen = false,
-      onToggleOpen,
       showThinkingOptions = false,
       thinkingLabel,
       thinkingMode = 'default',
@@ -85,10 +85,12 @@ export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTr
       onThinkingPreviewChange,
       className = '',
       id = 'model-select-trigger',
+      ...buttonProps
     },
     ref,
   ) {
     const [effortMenuOpen, setEffortMenuOpen] = useState(false)
+    const buttonRef = useRef<HTMLButtonElement>(null)
     const reducedMotion = usePrefersReducedMotion()
     const transition = motionTransition(reducedMotion, layoutTween)
 
@@ -99,15 +101,17 @@ export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTr
       <motion.div
         layout
         transition={transition}
-        ref={ref}
-        id={id}
         className={cx(CAPSULE_CLASS, active ? CAPSULE_ACTIVE_CLASS : CAPSULE_IDLE_CLASS, className)}
-        onClick={onToggleOpen}
+        onClick={(event) => {
+          if (!(event.target as Element).closest('button')) buttonRef.current?.click()
+        }}
       >
         <motion.button
           layout="position"
           transition={transition}
           type="button"
+          id={id}
+          ref={mergeRefs(ref, buttonRef)}
           aria-expanded={isOpen}
           aria-haspopup="dialog"
           title={tooltipTitle}
@@ -117,13 +121,7 @@ export const ModelSelectTrigger = React.forwardRef<HTMLDivElement, ModelSelectTr
               : `模型：${modelName}`
           }
           className={NAME_BUTTON_CLASS}
-          onClick={(event) => {
-            // Let the parent container's onClick handle it or trigger directly
-            if (onToggleOpen) {
-              event.stopPropagation()
-              onToggleOpen()
-            }
-          }}
+          {...buttonProps}
         >
           <span className={NAME_CLASS}>
             {prefix ? (

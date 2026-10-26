@@ -21,7 +21,7 @@ import { Button } from '../../../components/ui/Button.js'
 import { Input } from '../../../components/ui/Input.js'
 import { ToggleSwitch } from '../../../components/ui/ToggleSwitch.js'
 import { useDesktopLayoutOutletContext } from '../../layout/shell/DesktopLayoutOutletContext.js'
-import { ApiKeyEditorForm, type ApiKeyEditorValue } from '../ApiKeyEditorDialog.js'
+import { ApiKeyEditorForm, ApiKeyQuickAdd, type ApiKeyEditorValue } from '../ApiKeyEditorDialog.js'
 import { ProviderRequestSettingsForm } from './ProviderRequestSettingsForm.js'
 import { ProviderWebsiteIconSettings } from './ProviderWebsiteIconSettings.js'
 import { ProviderEditorNavigationGuard } from './ProviderEditorNavigationGuard.js'
@@ -364,12 +364,14 @@ export function ProviderConnectionSection({
               </span>
             </span>
           ) : (
-            <Input
-              aria-label="当前 API 密钥"
-              readOnly
-              value={activeKey?.maskedValue ?? ''}
-              placeholder="尚未配置 API 密钥"
-              className="tw:flex-1 tw:type-code"
+            <ApiKeyQuickAdd
+              maskedValue={activeKey?.maskedValue}
+              busy={busy}
+              onAdd={(key) => onSubmitKey({
+                providerId: provider.providerID,
+                label: `API Key ${apiKeys.length + 1}`,
+                key,
+              }, null)}
             />
           )}
 
@@ -490,7 +492,7 @@ export function ProviderConnectionSection({
                               key={connection.id}
                               className="model-center-key-row tw:flex tw:min-w-0 tw:items-center tw:gap-2 tw:py-2 tw:[&+&]:border-t tw:[&+&]:border-app-border-subtle"
                             >
-                              <KeyRound aria-hidden size={APP_ICON_SIZE} />
+                              <KeyRound aria-hidden size="var(--inline-icon-size, 1em)" />
                               <span className="tw:min-w-0 tw:flex-1 tw:truncate tw:type-body-sm">
                                 {connection.label}
                               </span>
@@ -505,7 +507,7 @@ export function ProviderConnectionSection({
                         </div>
                       ) : (
                         <div className="model-center-section-empty-hint tw:flex tw:items-center tw:gap-2 tw:py-2 tw:text-app-text-soft tw:type-body-sm tw:[&_svg]:shrink-0 tw:[&_svg]:text-app-text-meta">
-                          <KeyRound aria-hidden size={APP_ICON_SIZE} />
+                          <KeyRound aria-hidden size="var(--inline-icon-size, 1em)" />
                           <span>尚未保存此供应商的 API Key，点击「新增 API Key」进行配置。</span>
                         </div>
                       )}

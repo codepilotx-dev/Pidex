@@ -1276,8 +1276,14 @@ describe('RPC v4 Router', () => {
   })
 
   test('provider/delete 不再被遗留 model_provider 阻塞', async () => {
+    const deletedCredentials: string[] = []
     const providerID = Schema.decodeUnknownSync(Provider.ID)('provider:custom')
     const value = await fixture({
+      providerCredentials: {
+        deleteAll: async (id: string) => {
+          deletedCredentials.push(id)
+        },
+      } as unknown as RpcRouterDependencies['providerCredentials'],
       providers: {
         list: async () => [],
         models: async () => [],
@@ -1299,13 +1305,20 @@ describe('RPC v4 Router', () => {
     expect(deleted.error).toBeUndefined()
     expect(deleted.result).toMatchObject({ providerId: String(providerID), deleted: true })
     expect(value.configDocument.model_providers).toEqual({})
+    expect(deletedCredentials).toEqual([String(providerID)])
     expect(value.configDocument.model_provider).toBe(String(providerID))
     value.db.close()
   })
 
   test('provider/delete 仍被真实专用模型引用阻塞', async () => {
+    let credentialsDeleted = false
     const providerID = Schema.decodeUnknownSync(Provider.ID)('provider:custom')
     const value = await fixture({
+      providerCredentials: {
+        deleteAll: async () => {
+          credentialsDeleted = true
+        },
+      } as unknown as RpcRouterDependencies['providerCredentials'],
       providers: {
         list: async () => [],
         models: async () => [],
@@ -1328,6 +1341,26 @@ describe('RPC v4 Router', () => {
       message: 'Provider 仍被最近模型或专用模型引用',
     })
     expect(value.configDocument.model_providers).toHaveProperty(String(providerID))
+    expect(credentialsDeleted).toBe(false)
+    value.db.close()
+  })
+
+  test('provider/delete 凭据清理失败时保留供应商入口', async () => {
+    const value = await fixture({
+      providerCredentials: {
+        deleteAll: async () => {
+          throw new AgentError('CREDENTIAL_WRITE_FAILED', '凭据删除失败', 500)
+        },
+      } as unknown as RpcRouterDependencies['providerCredentials'],
+    })
+    await value.initialize()
+    value.configDocument.model_providers = { 'provider:custom': { kind: 'custom' } }
+    const result = await value.call('provider/delete', {
+      providerId: 'provider:custom',
+      operationId: 'operation:delete-failed',
+    })
+    expect(result.error.data.code).toBe('INTERNAL_ERROR')
+    expect(value.configDocument.model_providers).toHaveProperty('provider:custom')
     value.db.close()
   })
 

@@ -103,6 +103,12 @@ export class ProviderCredentialService {
     return remaining.map((item) => this.publicSummary(item))
   }
 
+  async deleteAll(providerID: string): Promise<void> {
+    for (const credential of this.credentials.listProviderCredentials(providerID)) {
+      await Effect.runPromise(this.credentials.deleteProviderCredential(credential.id))
+    }
+  }
+
   private async requiredProvider(providerID: string) {
     const provider = (await this.providers.list()).find(
       (candidate) => String(candidate.id) === providerID,

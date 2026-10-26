@@ -8,6 +8,7 @@ import type {
 import {
   createProviderManagementStore,
   selectConfiguredProviderGroups,
+  selectOrphanProviderCredentials,
   selectProviderConnections,
   type ProviderManagementClient,
 } from '../src/features/provider-management/index.js'
@@ -35,6 +36,34 @@ const providerState = {
 } as DesktopModelProviderState
 
 describe('provider management store', () => {
+  test('遗留凭据仅在目录成功加载后显示，按原凭据 ID 删除并刷新', async () => {
+    const orphan = {
+      ...credential('orphan-key', 'api-key', false),
+      providerId: 'removed-provider',
+    } as DesktopProviderCredential
+    let deleted = false
+    const client = createClient({
+      listProviderCredentials: async () => [
+        credential('existing', 'api-key', true),
+        ...(!deleted ? [orphan] : []),
+      ],
+      deleteProviderCredential: async (id) => {
+        expect(id).toBe('orphan-key')
+        deleted = true
+        return []
+      },
+    })
+    const store = createProviderManagementStore(client)
+    expect(selectOrphanProviderCredentials(store.getSnapshot())).toEqual([])
+    const snapshot = await store.ensureLoaded()
+    expect(selectOrphanProviderCredentials(snapshot)).toEqual([orphan])
+    expect(selectOrphanProviderCredentials({ ...snapshot, configurationError: 'offline' })).toEqual(
+      [],
+    )
+    await store.deleteCredential(orphan.id)
+    expect(selectOrphanProviderCredentials(store.getSnapshot())).toEqual([])
+    expect(store.getSnapshot().credentials.map((item) => item.id)).toEqual(['existing'])
+  })
   for (const remaining of ['none', 'oauth', 'environment'] as const) {
     test(`deleting the final API key reconciles configuration with remaining ${remaining} credentials`, async () => {
       let deleted = false

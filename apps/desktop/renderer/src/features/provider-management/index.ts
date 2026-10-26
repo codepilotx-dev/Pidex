@@ -9,6 +9,7 @@ export type {
 export {
   selectAnalyticsSources,
   selectConfiguredProviderGroups,
+  selectOrphanProviderCredentials,
   selectProviderConnections,
 } from './Selectors.js'
 export type {

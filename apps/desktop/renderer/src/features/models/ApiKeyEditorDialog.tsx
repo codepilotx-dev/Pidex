@@ -23,6 +23,51 @@ export type ApiKeyEditorValue = {
   key?: string
 }
 
+export function ApiKeyQuickAdd({
+  maskedValue,
+  busy,
+  onAdd,
+}: {
+  maskedValue?: string
+  busy: boolean
+  onAdd: (key: string) => Promise<boolean>
+}) {
+  const [key, setKey] = useState('')
+  const [saving, setSaving] = useState(false)
+  const submitting = useRef(false)
+  return (
+    <form
+      className="tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:gap-2"
+      onSubmit={async (event) => {
+        event.preventDefault()
+        if (busy || submitting.current || !key.trim()) return
+        submitting.current = true
+        setSaving(true)
+        try {
+          if (await onAdd(key.trim())) setKey('')
+        } finally {
+          submitting.current = false
+          setSaving(false)
+        }
+      }}
+    >
+      <Input
+        aria-label="新增 API 密钥"
+        type="password"
+        autoComplete="new-password"
+        value={key}
+        onChange={(event) => setKey(event.target.value)}
+        disabled={busy || saving}
+        placeholder={maskedValue ? `当前：${maskedValue}；输入新 Key` : '输入 API Key'}
+        className="tw:min-w-0 tw:flex-1 tw:type-code"
+      />
+      <Button type="submit" size="sm" disabled={busy || saving || !key.trim()}>
+        {saving ? '添加中…' : '添加'}
+      </Button>
+    </form>
+  )
+}
+
 export type ApiKeyEditorFormProps = {
   apiKey?: DesktopApiKeySummary | null
   busy?: boolean

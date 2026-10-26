@@ -16,6 +16,9 @@ export function toUserErrorMessage(error: unknown, context?: ErrorContext): stri
     return '桌面主进程尚未加载此功能，请完全退出并重新启动 Pidex；刷新页面不会更新主进程。'
   }
 
+  // Safe domain conflicts carry actionable messages; do not collapse them into internal errors.
+  if (errorCode === 'CONFLICT' && message && message !== 'CONFLICT') return message
+
   // 1. Internal Error (Highest priority for server-side exceptions)
   if (
     numericCode === -32603 ||
