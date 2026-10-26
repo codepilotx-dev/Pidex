@@ -8,7 +8,6 @@ import type {
   DesktopProviderDefinition,
 } from '../../../../shared/Types.js'
 import { Button } from '../../../components/ui/Button.js'
-import { Checkbox } from '../../../components/ui/Checkbox.js'
 import { Input } from '../../../components/ui/Input.js'
 import { ToggleSwitch } from '../../../components/ui/ToggleSwitch.js'
 import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
@@ -26,29 +25,6 @@ import { DEEPSEEK_PROTOCOL_OPTIONS } from './DeepseekProtocol.js'
 type RequestDraftModel = {
   id: string
   api: string
-}
-
-const DETECTION_PROTOCOL_LABELS: Record<string, string> = {
-  'openai-completions': 'Chat',
-  'openai-responses': 'Responses',
-  'anthropic-messages': 'Anthropic',
-  'google-generative-ai': 'Gemini',
-}
-
-const FAILURE_CATEGORY_LABELS: Record<string, string> = {
-  authentication: '鉴权失败',
-  configuration: '配置无效',
-  network: '网络不可达',
-  'rate-limit': '请求被限流',
-  timeout: '请求超时',
-  provider: '上游错误',
-  unknown: '未知错误',
-}
-
-function detectionFailureLabel(cell: { category?: string; message?: string }): string {
-  if (cell.message) return cell.message
-  if (cell.category) return FAILURE_CATEGORY_LABELS[cell.category] ?? cell.category
-  return '检测失败'
 }
 
 const commonProtocols = DEEPSEEK_PROTOCOL_OPTIONS.map((option) => ({
@@ -182,10 +158,6 @@ export function ProviderRequestSettingsForm({
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [advanced, setAdvanced] = useState(false)
-  const [detection, setDetection] = useState<DetectionResultLike | null>(null)
-  const [trialModel, setTrialModel] = useState('')
-  const [batchDetect, setBatchDetect] = useState(false)
-  const [tempApiKey, setTempApiKey] = useState('')
   const [detecting, setDetecting] = useState(false)
   const advancedId = useId()
   // OAuth 专用供应商继续使用原有测试能力，不提供基于 API Key/请求草稿的协议检测。
@@ -209,94 +181,93 @@ export function ProviderRequestSettingsForm({
     return () => onDraftChange(false)
   }, [dirty, saving, onDraftChange])
   useEffect(() => {
-    onBusyChange(saving)
+    onBusyChange(saving || detecting)
     return () => onBusyChange(false)
-  }, [saving, onBusyChange])
+  }, [saving, detecting, onBusyChange])
   function reset() {
     initial.current = source
     setDraft(source)
     setError(null)
     setAddingEndpoint(false)
     setEndpointAddress('')
-    setDetection(null)
   }
-  async function save(): Promise<boolean> {
+  async function save(nextDraft = draft): Promise<boolean> {
     if (saving) return false
-    if (!dirty) return true
+    if (JSON.stringify(nextDraft) === JSON.stringify(initial.current) && !(addingEndpoint && endpointAddress.trim())) return true
     const config = provider.config
     if (!config) return false
     setSaving(true)
     setError(null)
     try {
       const endpoints = {
-        ...draft.endpoints,
+        ...nextDraft.endpoints,
         ...(addingEndpoint && endpointAddress.trim()
           ? { [endpointProtocol]: endpointAddress.trim() }
           : {}),
       }
       let next: DesktopProviderDefinition = {
         ...config,
-        allowInsecureHttp: draft.allowHttp,
+        allowInsecureHttp: nextDraft.allowHttp,
         endpoints,
       }
-      if (draft.address !== initial.current.address || config.baseUrl)
-        next = { ...next, baseUrl: draft.address.trim() }
+      if (nextDraft.address !== initial.current.address || config.baseUrl)
+        next = { ...next, baseUrl: nextDraft.address.trim() }
       if (config.kind === 'builtin' && (provider.catalogOrigin === 'models-dev' || provider.catalogOrigin === 'pi-remote') &&
         provider.availability?.status === 'unavailable' &&
         ['missing-api', 'unresolved-endpoint'].includes(provider.availability.reason)) {
-        if (!DETECTION_PROTOCOL_ORDER.includes(draft.protocol as typeof DETECTION_PROTOCOL_ORDER[number])) throw new Error('请选择已支持的协议')
+        if (!DETECTION_PROTOCOL_ORDER.includes(nextDraft.protocol as typeof DETECTION_PROTOCOL_ORDER[number])) throw new Error('请选择已支持的协议')
         next = {
-          kind: 'custom', id: config.id, name: draft.name.trim(), enabled: config.enabled,
+          kind: 'custom', id: config.id, name: nextDraft.name.trim(), enabled: config.enabled,
           directorySource: provider.catalogOrigin as 'pi-remote' | 'models-dev',
-          baseUrl: draft.address.trim(), auth: draft.auth as 'api-key' | 'none',
-          env: draft.env.split(',').map((value) => value.trim()).filter(Boolean),
-          allowInsecureHttp: draft.allowHttp, headers: {}, models: [], endpoints,
+          baseUrl: nextDraft.address.trim(), auth: nextDraft.auth as 'api-key' | 'none',
+          env: nextDraft.env.split(',').map((value) => value.trim()).filter(Boolean),
+          allowInsecureHttp: nextDraft.allowHttp, headers: {}, models: [], endpoints,
         }
       }
       if (config.kind === 'custom') {
-        const headers = parseHeaders(draft.headers)
+        const headers = parseHeaders(nextDraft.headers)
         if (headers instanceof Error) throw headers
         next = {
           ...config,
           endpoints,
-          name: draft.name.trim(),
-          baseUrl: draft.address.trim(),
-          allowInsecureHttp: draft.allowHttp,
-          auth: draft.auth as 'api-key' | 'none',
-          env: draft.env
+          name: nextDraft.name.trim(),
+          baseUrl: nextDraft.address.trim(),
+          allowInsecureHttp: nextDraft.allowHttp,
+          auth: nextDraft.auth as 'api-key' | 'none',
+          env: nextDraft.env
             .split(',')
             .map((value) => value.trim())
             .filter(Boolean),
           headers,
           models: config.models.map((model) => {
-            const detected = draft.models.find((candidate) => candidate.id === String(model.id))
+            const detected = nextDraft.models.find((candidate) => candidate.id === String(model.id))
             if (detected && detected.api !== model.api) {
               const { compat: _, ...rest } = model
               return { ...rest, api: detected.api as typeof model.api }
             }
             if (
               (model.modelType && model.modelType !== 'chat') ||
-              draft.protocol === 'mixed' ||
-              draft.protocol === initial.current.protocol
+              nextDraft.protocol === 'mixed' ||
+              nextDraft.protocol === initial.current.protocol
             )
               return model
             const { compat: _, ...rest } = model
-            return { ...rest, api: draft.protocol as typeof model.api }
+            return { ...rest, api: nextDraft.protocol as typeof model.api }
           }),
         }
       } else if (next.kind === 'builtin') {
         next = {
           ...next,
-          ...(draft.protocol !== 'mixed' &&
+          ...(nextDraft.protocol !== 'mixed' &&
           ((config.kind === 'builtin' && config.protocol) ||
-            draft.protocol !== initial.current.protocol)
-            ? { protocol: draft.protocol }
+            nextDraft.protocol !== initial.current.protocol)
+            ? { protocol: nextDraft.protocol }
             : {}),
-          allowModels: draft.allowModels
+          allowModels: nextDraft.allowModels
             .split(',')
             .map((id) => id.trim())
             .filter(Boolean) as never,
-          denyModels: draft.denyModels
+          denyModels: nextDraft.denyModels
             .split(',')
             .map((id) => id.trim())
             .filter(Boolean) as never,
@@ -306,18 +277,18 @@ export function ProviderRequestSettingsForm({
         ...next,
         endpoints: Object.fromEntries(
           Object.entries({
-            ...(draft.protocol !== 'mixed' ? { [draft.protocol]: draft.address.trim() } : {}),
-            ...Object.fromEntries(Object.entries(endpoints).filter(([api]) => api !== draft.protocol)),
+            ...(nextDraft.protocol !== 'mixed' ? { [nextDraft.protocol]: nextDraft.address.trim() } : {}),
+            ...Object.fromEntries(Object.entries(endpoints).filter(([api]) => api !== nextDraft.protocol)),
           }).filter(([, address]) => address.trim()),
         ),
       }
       await onSaveDefinition(next)
       await onSaved()
       initial.current = {
-        ...draft,
+        ...nextDraft,
         endpoints,
-        address: draft.address.trim(),
-        name: draft.name.trim(),
+        address: nextDraft.address.trim(),
+        name: nextDraft.name.trim(),
       }
       setDraft(initial.current)
       setAddingEndpoint(false)
@@ -352,7 +323,7 @@ export function ProviderRequestSettingsForm({
     })
   }
 
-  /** 用当前请求配置草稿生成协议检测输入；临时 API Key 只用于本次请求。 */
+  /** 用当前请求配置草稿和已保存凭据生成协议检测输入。 */
   function detectionRequestDraft():
     | {
         baseUrl: string
@@ -360,7 +331,6 @@ export function ProviderRequestSettingsForm({
         auth: 'api-key' | 'none'
         headers: Record<string, string>
         allowInsecureHttp: boolean
-        apiKey?: string
       }
     | Error {
     const headers = parseHeaders(draft.headers)
@@ -377,7 +347,6 @@ export function ProviderRequestSettingsForm({
       auth: draft.auth === 'none' ? 'none' : 'api-key',
       headers,
       allowInsecureHttp: draft.allowHttp,
-      ...(tempApiKey.trim() ? { apiKey: tempApiKey.trim() } : {}),
     }
   }
 
@@ -394,59 +363,47 @@ export function ProviderRequestSettingsForm({
       const result = await desktopClient.detectProviderProtocols({
         draft: requestDraftValue,
         providerId: provider.providerID as RpcParams<'provider/protocol/detect'>['providerId'],
-        ...(trialModel.trim()
-          ? {
-              model: trialModel.trim() as NonNullable<
-                RpcParams<'provider/protocol/detect'>['model']
-              >,
-            }
-          : {}),
-        batch: batchDetect,
       })
-      setDetection(result as DetectionResultLike)
+      if (result.models.some((row) => row.cells.some((cell) => cell.status === 'success'))) {
+        await applyDetection(result as DetectionResultLike)
+      } else {
+        setError('未检测到可用端点，请检查地址、凭据或稍后重试。')
+      }
     } catch (detectError) {
-      setDetection(null)
       setError(fullErrorMessage(detectError))
     } finally {
       setDetecting(false)
     }
   }
 
-  /** 只更新本地草稿；保存配置时经 provider/update 生效。 */
-  function applyDetection(): void {
-    if (!detection) return
-    const currentModels = provider.config?.kind === 'custom' ? (draft.models ?? []) : []
+  /** 检测结果先写回草稿，再复用配置保存流程。 */
+  async function applyDetection(result: DetectionResultLike): Promise<void> {
+    const current = draft
+    const currentModels = provider.config?.kind === 'custom' ? current.models : []
     const applied = applyProtocolDetection(
       {
-        address: draft.address,
-        endpoints: draft.endpoints,
-        protocol: draft.protocol,
+        address: current.address,
+        endpoints: current.endpoints,
+        protocol: current.protocol,
         models: currentModels,
       },
-      detection,
+      result,
       currentModels,
     )
-    setDraft({
-      ...draft,
+    const nextDraft = {
+      ...current,
       endpoints: applied.endpoints,
       ...(applied.models ? { models: applied.models } : {}),
       ...(applied.protocol
         ? {
             protocol: applied.protocol,
-            address: applied.endpoints[applied.protocol] ?? draft.address,
+            address: applied.endpoints[applied.protocol] ?? current.address,
           }
         : {}),
-    })
-    setError(null)
+    }
+    setDraft(nextDraft)
+    await save(nextDraft)
   }
-
-  const detectionColumns = detection
-    ? DETECTION_PROTOCOL_ORDER.filter(
-        (protocol) => detection.protocols.length === 0 || detection.protocols.includes(protocol),
-      )
-    : []
-  const detectionHasSuccess =
-    detection?.models.some((row) => row.cells.some((cell) => cell.status === 'success')) ?? false
 
   const footer = (
     <footer className="tw:flex tw:shrink-0 tw:justify-end tw:gap-2 tw:border-t tw:border-app-border-subtle tw:px-4 tw:py-4">
@@ -487,26 +444,41 @@ export function ProviderRequestSettingsForm({
       }}
     >
       <fieldset
-        disabled={saving}
+        disabled={saving || detecting}
         className="tw:m-0 tw:grid tw:min-h-0 tw:min-w-0 tw:content-start tw:gap-4 tw:border-0 tw:p-0"
       >
         <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
           <h3 className="tw:m-0 tw:type-title-sm">请求配置</h3>
-          {!addingEndpoint ? (
-            <Button
-              size="sm"
-              shape="default"
-              variant="outline"
-              disabled={!availableEndpoints.length}
-              onClick={() => {
-                setEndpointProtocol(availableEndpoints[0]!.value)
-                setAddingEndpoint(true)
-              }}
-            >
-              <Plus aria-hidden="true" size={APP_ICON_SIZES.sm} />
-              添加端点
-            </Button>
-          ) : null}
+          <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-2">
+            {!oauthOnly ? (
+              <Button
+                size="sm"
+                shape="default"
+                color="secondary"
+                disabled={saving || detecting}
+                loading={detecting}
+                onClick={() => void detectProtocols()}
+              >
+                <Activity aria-hidden="true" size={APP_ICON_SIZES.sm} />
+                检测协议
+              </Button>
+            ) : null}
+            {!addingEndpoint ? (
+              <Button
+                size="sm"
+                shape="default"
+                variant="outline"
+                disabled={!availableEndpoints.length}
+                onClick={() => {
+                  setEndpointProtocol(availableEndpoints[0]!.value)
+                  setAddingEndpoint(true)
+                }}
+              >
+                <Plus aria-hidden="true" size={APP_ICON_SIZES.sm} />
+                添加端点
+              </Button>
+            ) : null}
+          </div>
         </header>
         {provider.config?.kind === 'custom' ? (
           <label className="tw:grid tw:gap-2 tw:type-label">
@@ -609,146 +581,6 @@ export function ProviderRequestSettingsForm({
               </Button>
             </div>
           </div>
-        ) : null}
-        {!oauthOnly ? (
-          <section
-            aria-label="检测协议"
-            className="tw:grid tw:gap-3 tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-4"
-          >
-            <header className="tw:grid tw:gap-1">
-              <h4 className="tw:m-0 tw:type-row-title">检测协议</h4>
-              <p className="tw:m-0 tw:text-app-text-soft tw:type-body-sm">
-                用当前地址、请求头与认证方式探测可用接口；检测结果只写入本地草稿，保存配置后生效。
-              </p>
-            </header>
-            <div className="tw:grid tw:gap-2">
-              <label className="tw:grid tw:gap-2 tw:type-label">
-                试用模型（可选）
-                <Input
-                  aria-label="试用模型"
-                  placeholder="留空时使用已保存模型或上游同步基线"
-                  value={trialModel}
-                  onChange={(event) => setTrialModel(event.target.value)}
-                />
-              </label>
-              <label className="tw:grid tw:gap-2 tw:type-label">
-                本次检测 API Key（可选，不保存）
-                <Input
-                  aria-label="本次检测 API Key"
-                  autoComplete="off"
-                  placeholder="仅本次检测使用，不写入配置"
-                  type="password"
-                  value={tempApiKey}
-                  onChange={(event) => setTempApiKey(event.target.value)}
-                />
-              </label>
-            </div>
-            <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-3">
-              <Checkbox
-                ariaLabel="逐个检测已选模型"
-                checked={batchDetect}
-                disabled={detecting}
-                onCheckedChange={(checked) => setBatchDetect(checked === true)}
-              >
-                逐个检测已选模型（最多 30 个）
-              </Checkbox>
-              <Button
-                size="sm"
-                shape="default"
-                color="secondary"
-                disabled={saving || detecting}
-                loading={detecting}
-                onClick={() => void detectProtocols()}
-              >
-                <Activity aria-hidden="true" size={APP_ICON_SIZES.sm} />
-                检测协议
-              </Button>
-            </div>
-            {detection ? (
-              <div className="tw:grid tw:gap-2">
-                <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
-                  <span className="tw:text-app-text-soft tw:type-caption">
-                    {detection.mode === 'batch'
-                      ? `批量检测 ${detection.totalModels} 个模型`
-                      : '单模型检测'}
-                    {detection.skippedModels > 0
-                      ? ` · 另有 ${detection.skippedModels} 个模型未检测（最多 30 个）`
-                      : ''}
-                  </span>
-                  <Button
-                    size="sm"
-                    shape="default"
-                    color="primary"
-                    disabled={!detectionHasSuccess}
-                    onClick={applyDetection}
-                  >
-                    使用检测结果
-                  </Button>
-                </div>
-                <div className="tw:min-w-0 tw:overflow-x-auto">
-                  <table className="tw:w-full tw:border-collapse tw:type-body-sm">
-                    <thead>
-                      <tr className="tw:text-left tw:text-app-text-soft">
-                        <th
-                          className="tw:border-b tw:border-app-border-subtle tw:px-2 tw:py-2 tw:type-weight-label"
-                          scope="col"
-                        >
-                          模型
-                        </th>
-                        {detectionColumns.map((protocol) => (
-                          <th
-                            className="tw:border-b tw:border-app-border-subtle tw:px-2 tw:py-2 tw:type-weight-label"
-                            key={protocol}
-                            scope="col"
-                          >
-                            {DETECTION_PROTOCOL_LABELS[protocol]}
-                          </th>
-                        ))}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detection.models.map((row) => (
-                        <tr key={row.model}>
-                          <th
-                            className="tw:border-b tw:border-app-border-subtle tw:px-2 tw:py-2 tw:text-left tw:font-mono tw:type-code"
-                            scope="row"
-                          >
-                            {row.model}
-                          </th>
-                          {detectionColumns.map((protocol) => {
-                            const cell = row.cells.find(
-                              (candidate) => candidate.protocol === protocol,
-                            )
-                            return (
-                              <td
-                                className="tw:max-w-64 tw:border-b tw:border-app-border-subtle tw:px-2 tw:py-2 tw:align-top tw:break-words"
-                                key={protocol}
-                              >
-                                {cell?.status === 'success' ? (
-                                  <span className="tw:text-app-success tw:tabular-nums">
-                                    {cell.latencyMs ?? 0} ms
-                                  </span>
-                                ) : cell ? (
-                                  <span
-                                    className="tw:text-app-danger"
-                                    title={detectionFailureLabel(cell)}
-                                  >
-                                    {detectionFailureLabel(cell)}
-                                  </span>
-                                ) : (
-                                  <span className="tw:text-app-text-meta">—</span>
-                                )}
-                              </td>
-                            )
-                          })}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </div>
-            ) : null}
-          </section>
         ) : null}
         <div className="tw:grid tw:gap-3">
           <button

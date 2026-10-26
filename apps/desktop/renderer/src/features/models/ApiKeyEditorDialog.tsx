@@ -52,6 +52,7 @@ export function ApiKeyQuickAdd({
       }}
     >
       <Input
+        onBlur={(event) => event.currentTarget.form?.requestSubmit()}
         aria-label="新增 API 密钥"
         type="password"
         autoComplete="new-password"
@@ -61,9 +62,6 @@ export function ApiKeyQuickAdd({
         placeholder={maskedValue ? `当前：${maskedValue}；输入新 Key` : '输入 API Key'}
         className="tw:min-w-0 tw:flex-1 tw:type-code"
       />
-      <Button type="submit" size="sm" disabled={busy || saving || !key.trim()}>
-        {saving ? '添加中…' : '添加'}
-      </Button>
     </form>
   )
 }
