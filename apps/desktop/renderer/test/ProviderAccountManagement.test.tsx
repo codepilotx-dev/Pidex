@@ -1,6 +1,5 @@
 import { describe, expect, test } from 'bun:test'
 import type { UsageSourceDescriptor } from '@pidex/agent-protocol'
-import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { DesktopApiKeySummary, DesktopModelProviderSummary } from '../shared/Types.js'
 import {
