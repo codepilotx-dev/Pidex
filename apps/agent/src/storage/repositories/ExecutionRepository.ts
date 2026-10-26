@@ -55,6 +55,32 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
   }
 
   recoverInterruptedExecutions(timestamp: number) {
+    // A resumable approval has not finished its tool; keep its item waiting for the real result.
+    const resumableApprovalItem = `type = 'tool' AND EXISTS (
+      SELECT 1 FROM approval_requests AS r
+      JOIN approval_checkpoints AS c ON c.approval_id = r.id
+      JOIN turns AS t ON t.id = r.turn_id
+      WHERE r.tool_call_id = items.id AND r.turn_id = items.turn_id
+        AND r.thread_id = items.thread_id AND r.agent_id = items.agent_id
+        AND r.status IN ('pending', 'resolved', 'claimed')
+        AND t.status IN ('waiting_permission', 'queued') AND c.version = 1
+        AND json_type(c.payload, '$.runState') = 'text'
+        AND json_type(c.payload, '$.interruption') IS NOT NULL
+    )`
+    // The question and its paused tool share one continuation, including a persisted reply.
+    const resumableQuestionToolItem = `type = 'tool' AND EXISTS (
+      SELECT 1 FROM question_requests AS q JOIN turns AS t ON t.id = q.turn_id
+      WHERE q.tool_call_id = items.id AND q.turn_id = items.turn_id
+        AND q.thread_id = items.thread_id AND q.agent_id = items.agent_id
+        AND ((q.status = 'pending' AND t.status = 'waiting_question')
+          OR (q.status IN ('resolved', 'resuming') AND t.status = 'queued'))
+        AND ((json_type(q.payload, '$.checkpoint.state') = 'text'
+          AND length(json_extract(q.payload, '$.checkpoint.state')) > 0
+          AND json_type(q.payload, '$.checkpoint.interruption') IS NOT NULL)
+          OR (json_type(q.payload, '$.checkpoint.payload.state') = 'text'
+          AND length(json_extract(q.payload, '$.checkpoint.payload.state')) > 0
+          AND json_type(q.payload, '$.checkpoint.payload.interruption') IS NOT NULL))
+    )`
     const interruptedTurns = this.sqlite
       .query(
         `
@@ -82,6 +108,8 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         `
       SELECT id FROM items
       WHERE status IN ('pending', 'running') AND type <> 'subagent'
+        AND NOT (${resumableApprovalItem})
+        AND NOT (${resumableQuestionToolItem})
         AND NOT (type = 'question' AND id IN (
           SELECT id FROM question_requests WHERE status = 'pending'
             AND (json_extract(payload, '$.checkpoint.state') IS NOT NULL
@@ -125,6 +153,8 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       .query(
         `UPDATE items SET status = 'interrupted', updated_at = ?
       WHERE status IN ('pending', 'running') AND type <> 'subagent'
+        AND NOT (${resumableApprovalItem})
+        AND NOT (${resumableQuestionToolItem})
         AND NOT (type = 'question' AND id IN (
           SELECT id FROM question_requests WHERE status = 'pending'
             AND (json_extract(payload, '$.checkpoint.state') IS NOT NULL
@@ -133,6 +163,19 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
     `,
       )
       .run(timestamp)
+    // Requeue first so even a mailbox-only thread is paused before startup can run it.
+    for (const turn of interruptedTurns) {
+      for (const queued of this.requeueInterruptedMailbox(turn.thread_id, turn.id, timestamp)) {
+        this.insertEvent(turn.thread_id, queued.turnID, 'turn/queued', {
+          turnId: queued.turnID,
+          inputId: queued.inputID,
+          createdAt: timestamp,
+        })
+        this.insertEvent(turn.thread_id, queued.turnID, 'agent/upserted', {
+          agent: this.getAgentExecution(queued.agentID),
+        })
+      }
+    }
     this.sqlite
       .query(
         `UPDATE threads SET queue_pause_reason = 'interrupted', queue_version = queue_version + 1, updated_at = ?
@@ -516,6 +559,91 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
     })
   }
 
+  private requeueInterruptedMailbox(threadID: string, turnID: string, timestamp: number) {
+    const interruptedMailbox = this.sqlite
+      .query(
+        `
+              SELECT id, content, model_ref, sandbox_mode, approval_policy, approvals_reviewer, task_mode, created_at
+              FROM inputs
+              WHERE thread_id = ? AND turn_id = ? AND status = 'mailbox'
+              ORDER BY created_at, id
+            `,
+      )
+      .all(threadID, turnID) as Array<{
+      id: string
+      content: string
+      model_ref: string
+      sandbox_mode: PermissionConfig['sandboxMode']
+      approval_policy: string
+      approvals_reviewer: PermissionConfig['approvalsReviewer']
+      task_mode: TaskMode
+      created_at: number
+    }>
+    const requeuedSteers: Array<{ turnID: string; agentID: string; inputID: string }> = []
+    if (interruptedMailbox.length > 0) {
+      this.sqlite
+        .query(
+          "UPDATE turns SET queue_position = queue_position + ?, updated_at = ? WHERE thread_id = ? AND status = 'queued'",
+        )
+        .run(interruptedMailbox.length, timestamp, threadID)
+      interruptedMailbox.forEach((mailbox, index) => {
+        const nextTurnID = crypto.randomUUID()
+        const nextAgentID = crypto.randomUUID()
+        this.sqlite
+          .query(
+            `INSERT INTO turns (
+              id, thread_id, root_agent_id, status, mode, sandbox_mode, approval_policy,
+              approvals_reviewer, model_ref, strategy, queue_position, started_at, finished_at,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, 'queue', ?, NULL, NULL, ?, ?)`,
+          )
+          .run(
+            nextTurnID,
+            threadID,
+            nextAgentID,
+            mailbox.task_mode,
+            mailbox.sandbox_mode,
+            mailbox.approval_policy,
+            mailbox.approvals_reviewer,
+            mailbox.model_ref,
+            index + 1,
+            mailbox.created_at,
+            timestamp,
+          )
+        this.sqlite
+          .query(
+            `INSERT INTO agent_executions (
+              id, thread_id, turn_id, parent_agent_id, profile, task, model_ref, session_id,
+              depth, status, error, created_at, updated_at
+            ) VALUES (?, ?, ?, NULL, 'main', ?, ?, ?, 0, 'queued', NULL, ?, ?)`,
+          )
+          .run(
+            nextAgentID,
+            threadID,
+            nextTurnID,
+            mailbox.content,
+            mailbox.model_ref,
+            `${threadID}:main`,
+            mailbox.created_at,
+            timestamp,
+          )
+        this.sqlite
+          .query(
+            "UPDATE inputs SET turn_id = ?, strategy = 'queue', status = 'queued' WHERE id = ? AND status = 'mailbox'",
+          )
+          .run(nextTurnID, mailbox.id)
+        this.sqlite
+          .query('UPDATE messages SET turn_id = ? WHERE id = ?')
+          .run(nextTurnID, mailbox.id)
+        requeuedSteers.push({ turnID: nextTurnID, agentID: nextAgentID, inputID: mailbox.id })
+      })
+      this.sqlite
+        .query('UPDATE threads SET queue_version = queue_version + ?, updated_at = ? WHERE id = ?')
+        .run(interruptedMailbox.length, timestamp, threadID)
+    }
+    return requeuedSteers
+  }
+
   finalizeTurn(input: {
     threadID: string
     turnID: string
@@ -526,92 +654,10 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
   }) {
     const timestamp = now()
     return this.transaction(() => {
-      const interruptedMailbox =
+      const requeuedSteers =
         input.status === 'interrupted'
-          ? (this.sqlite
-              .query(
-                `
-              SELECT id, content, model_ref, sandbox_mode, approval_policy, approvals_reviewer, task_mode, created_at
-              FROM inputs
-              WHERE thread_id = ? AND turn_id = ? AND status = 'mailbox'
-              ORDER BY created_at, id
-            `,
-              )
-              .all(input.threadID, input.turnID) as Array<{
-              id: string
-              content: string
-              model_ref: string
-              sandbox_mode: PermissionConfig['sandboxMode']
-              approval_policy: string
-              approvals_reviewer: PermissionConfig['approvalsReviewer']
-              task_mode: TaskMode
-              created_at: number
-            }>)
+          ? this.requeueInterruptedMailbox(input.threadID, input.turnID, timestamp)
           : []
-      const requeuedSteers: Array<{ turnID: string; agentID: string; inputID: string }> = []
-      if (interruptedMailbox.length > 0) {
-        this.sqlite
-          .query(
-            "UPDATE turns SET queue_position = queue_position + ?, updated_at = ? WHERE thread_id = ? AND status = 'queued'",
-          )
-          .run(interruptedMailbox.length, timestamp, input.threadID)
-        interruptedMailbox.forEach((mailbox, index) => {
-          const nextTurnID = crypto.randomUUID()
-          const nextAgentID = crypto.randomUUID()
-          this.sqlite
-            .query(
-              `INSERT INTO turns (
-              id, thread_id, root_agent_id, status, mode, sandbox_mode, approval_policy,
-              approvals_reviewer, model_ref, strategy, queue_position, started_at, finished_at,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, 'queue', ?, NULL, NULL, ?, ?)`,
-            )
-            .run(
-              nextTurnID,
-              input.threadID,
-              nextAgentID,
-              mailbox.task_mode,
-              mailbox.sandbox_mode,
-              mailbox.approval_policy,
-              mailbox.approvals_reviewer,
-              mailbox.model_ref,
-              index + 1,
-              mailbox.created_at,
-              timestamp,
-            )
-          this.sqlite
-            .query(
-              `INSERT INTO agent_executions (
-              id, thread_id, turn_id, parent_agent_id, profile, task, model_ref, session_id,
-              depth, status, error, created_at, updated_at
-            ) VALUES (?, ?, ?, NULL, 'main', ?, ?, ?, 0, 'queued', NULL, ?, ?)`,
-            )
-            .run(
-              nextAgentID,
-              input.threadID,
-              nextTurnID,
-              mailbox.content,
-              mailbox.model_ref,
-              `${input.threadID}:main`,
-              mailbox.created_at,
-              timestamp,
-            )
-          this.sqlite
-            .query(
-              "UPDATE inputs SET turn_id = ?, strategy = 'queue', status = 'queued' WHERE id = ? AND status = 'mailbox'",
-            )
-            .run(nextTurnID, mailbox.id)
-          this.sqlite
-            .query('UPDATE messages SET turn_id = ? WHERE id = ?')
-            .run(nextTurnID, mailbox.id)
-          requeuedSteers.push({ turnID: nextTurnID, agentID: nextAgentID, inputID: mailbox.id })
-        })
-        this.sqlite
-          .query(
-            'UPDATE threads SET queue_version = queue_version + ?, updated_at = ? WHERE id = ?',
-          )
-          .run(interruptedMailbox.length, timestamp, input.threadID)
-      }
       this.deleteAgentTurnCheckpoint(input.turnID)
       this.updateTurnStatus(input.turnID, input.status)
       const agent = this.updateAgentStatus(input.agentID, input.status, input.message ?? null)

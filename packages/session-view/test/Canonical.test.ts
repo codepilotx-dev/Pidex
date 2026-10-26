@@ -526,6 +526,17 @@ describe('canonical thread state', () => {
         answers,
         answer: skip ? '' : 'b',
       })
+      const resumedItems = [
+        resolved.itemsById.get('group')!,
+        textItem('after-answer', activeTurn.id, activeTurn.rootAgentId),
+      ]
+      const resumed = selectRenderTurnEntries(
+        createCanonicalThreadState(page([{ ...bundle, items: resumedItems }])),
+      )[0]!
+      expect(resumed.processItems.map((item) => item.id)).toEqual(['group'])
+      expect(resumed.assistantResultItems.map((item) => item.id)).toEqual(['after-answer'])
+      expect(resumed.postAssistantItems).toEqual([])
+      expect(resumed.contentBlocks.map((block) => block.kind)).toEqual(['process', 'assistant'])
       expect(
         createCanonicalThreadState(
           page([{ ...bundle, items: [resolved.itemsById.get('group')!] }]),

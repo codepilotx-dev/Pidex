@@ -22,6 +22,11 @@ import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { SubagentRepository } from '../src/subagent/SubagentRepository'
 import { interactionQuestions } from '../src/session/QuestionInput'
 import { ThreadReadViewRepository } from '../src/session/ThreadReadViewRepository'
+import { ApprovalService } from '../src/permission/ApprovalService'
+import { PermissionDecisionEngine } from '../src/permission/PermissionDecisionEngine'
+import { ToolRegistry } from '../src/tool/ToolRegistry'
+import { recoverInterruptedRuns } from '../src/storage/recovery/InterruptedRunRecovery'
+import type { ToolInvocation } from '../src/Domain'
 
 const roots: string[] = []
 const databases: AgentDatabase[] = []
@@ -85,6 +90,119 @@ const seedTurn = (db: AgentDatabase, threadID: string) => {
 }
 
 describe('v4 会话事件投影契约', () => {
+  test.each([false, true])(
+    '待审批重启快照与实时事件一致，不依赖工具执行记录（旧展示字段：%s）',
+    async (legacy) => {
+      const { root, db: initialDB, hub, projection } = await fixture()
+      let db = initialDB
+      const thread = db.createThread('审批展示恢复')
+      const turn = seedTurn(db, thread.id)
+      db.claimTurnExecution(turn.turnID)
+      const tools = new ToolRegistry()
+      let approvals = new ApprovalService(db, hub, tools)
+      const invocation: ToolInvocation = {
+        id: 'pending-shell',
+        threadID: thread.id,
+        turnID: turn.turnID,
+        agentID: turn.agentID,
+        name: 'PowerShell',
+        input: {
+          command: 'Write-Output "api_key=projection-secret"',
+          cwd: root,
+          additionalPermissions: { readPaths: [root], writePaths: [join(root, 'target.txt')] },
+        },
+        permissionConfig: { ...permission, approvalPolicy: 'untrusted', approvalsReviewer: 'user' },
+        model,
+        taskMode: 'chat',
+        durableApproval: true,
+      }
+      const decision = new PermissionDecisionEngine().evaluate(
+        invocation,
+        tools.get(invocation.name),
+      )
+      if (decision.action !== 'review') throw new Error('fixture requires approval')
+      const prepared = approvals.prepare(
+        invocation,
+        { decision: 'ask', risk: 'medium', reason: '确认命令' },
+        decision,
+      )
+      if (legacy) delete prepared.requestPayload.tool
+      approvals.persist(prepared)
+      await approvals.attachRunState(invocation.id, '{"engine":"pi"}', {
+        toolCallID: invocation.id,
+      })
+      const row = db.sqlite
+        .query(
+          "SELECT id, thread_id, turn_id, method, params, created_at FROM events WHERE method = 'approval/requested' AND turn_id = ?",
+        )
+        .get(turn.turnID) as {
+        id: number
+        thread_id: string
+        turn_id: string
+        method: string
+        params: string
+        created_at: number
+      }
+      const stored = {
+        id: row.id,
+        threadId: row.thread_id,
+        turnId: row.turn_id,
+        method: row.method,
+        params: JSON.parse(row.params),
+        createdAt: row.created_at,
+      } as EventEnvelope
+      const live = decodeFromStorage(stored, projection).payload as Record<string, unknown>
+      expect(live).toMatchObject({ tool: 'PowerShell', cwd: root })
+      expect(live.command).not.toContain('projection-secret')
+      const before = projection
+        .snapshot(thread.id)!
+        .approvals.find((value) => value.id === prepared.approvalID)
+      expect(before).toMatchObject({
+        id: live.interactionId,
+        toolCallID: live.toolCallId,
+        threadId: live.threadId,
+        turnId: live.turnId,
+        agentId: live.agentId,
+        tool: live.tool,
+        command: live.command,
+        cwd: live.cwd,
+        requestedPermissions: live.requestedPermissions,
+        risk: live.risk,
+        reason: live.reason,
+        paths: [join(root, 'target.txt'), root],
+        status: 'pending',
+      })
+      expect(db.sqlite.query('SELECT COUNT(*) AS count FROM tool_calls').get()).toEqual({
+        count: 0,
+      })
+      db.close()
+      db = new AgentDatabase(join(root, 'agent.sqlite'))
+      databases.push(db)
+      recoverInterruptedRuns(db)
+      const restored = new ThreadProjection(db)
+        .snapshot(thread.id)!
+        .approvals.find((value) => value.id === prepared.approvalID)
+      expect(restored).toEqual(before)
+      expect(JSON.stringify(restored)).not.toContain('projection-secret')
+      expect(JSON.stringify(restored)).not.toContain('invocationHash')
+      expect(JSON.stringify(restored)).not.toContain('runState')
+      expect(db.sqlite.query('SELECT COUNT(*) AS count FROM tool_calls').get()).toEqual({
+        count: 0,
+      })
+      approvals = new ApprovalService(db, hub, tools)
+      await approvals.respond(prepared.approvalID, legacy ? 'deny' : 'allow')
+      expect(approvals.claimResume(turn.turnID)).toMatchObject({
+        toolCallID: invocation.id,
+        approvalID: prepared.approvalID,
+        decision: legacy ? 'deny' : 'allow',
+      })
+      expect(approvals.claimResume(turn.turnID)).toBeNull()
+      expect(db.sqlite.query('SELECT COUNT(*) AS count FROM tool_calls').get()).toEqual({
+        count: 0,
+      })
+    },
+  )
+
   test.each([false, true])(
     '真实提问历史严格编码保留完整问题（缺省答题数量：%s）',
     async (omitLimits) => {
@@ -882,4 +1000,71 @@ test('阶段变更使用持久事件原位更新，实时、重放与数据库�
     text: '回答',
     status: 'completed',
   })
+})
+
+test('已发布的正文增量在完成前中止仍可从持久快照恢复，迟到增量不改终态', async () => {
+  const { db, root } = await fixture()
+  const thread = db.createThread()
+  const turn = seedTurn(db, thread.id)
+  db.startTurnExecution(turn.turnID, { ...turn.input, id: turn.inputID })
+  const context = { threadID: thread.id, turnID: turn.turnID, agentID: turn.agentID }
+  const runtime = new AgentRuntimeService({
+    db,
+    hub: {} as never,
+    models: {} as never,
+    toolExecutor: {} as never,
+    contextCompaction: {} as never,
+  })
+  const internals = runtime as unknown as {
+    publish(event: EventEnvelope): Promise<void>
+    eventSink(
+      storage: unknown,
+      session: unknown,
+      model: unknown,
+      sessionID: string,
+    ): PiRuntimeEventSink
+  }
+  const published: EventEnvelope[] = []
+  internals.publish = async (event) => {
+    published.push(event)
+  }
+  const sink = internals.eventSink(
+    { discardPending() {} },
+    {},
+    { provider: 'openai', id: 'model', contextWindow: 1000 },
+    'session',
+  )
+  const ids = { textItemID: 'stopped-text', reasoningItemID: 'reasoning', planItemID: 'plan' }
+  await sink.assistantMessageStarted!(context, { ...ids, placement: 'process' })
+  await sink.textDelta!(context, { itemID: ids.textItemID, delta: '001 已输出\n' })
+  await sink.textDelta!(context, { itemID: ids.textItemID, delta: '002 部分回答' })
+  expect(db.getItem(ids.textItemID)!.data.text).toBe('001 已输出\n002 部分回答')
+  await sink.aborted!(context)
+  db.repositories.executions.finalizeTurn({
+    ...context,
+    status: 'interrupted',
+    pauseReason: 'interrupted',
+  })
+  recoverInterruptedRuns(db)
+  recoverInterruptedRuns(db)
+  await sink.textDelta!(context, { itemID: ids.textItemID, delta: '迟到 END' })
+  const reopened = new AgentDatabase(join(root, 'agent.sqlite'))
+  databases.push(reopened)
+  const history = new ThreadReadViewRepository(reopened).history(thread.id, { limit: 10 })
+  const texts = history.turns.flatMap((entry) => entry.items).filter((item) => item.type === 'text')
+  expect(texts).toHaveLength(1)
+  expect(texts[0]).toMatchObject({
+    id: ids.textItemID,
+    text: '001 已输出\n002 部分回答',
+    status: 'interrupted',
+  })
+  expect(db.sqlite.query('SELECT status FROM turns WHERE id = ?').get(turn.turnID)).toEqual({
+    status: 'interrupted',
+  })
+  expect(published.filter((event) => event.method === 'item/agentMessage/delta')).toHaveLength(2)
+  expect(
+    db.sqlite
+      .query("SELECT count(*) AS n FROM events WHERE turn_id = ? AND method = 'turn/completed'")
+      .get(turn.turnID),
+  ).toEqual({ n: 0 })
 })

@@ -326,6 +326,7 @@ export interface HarnessRuntimeOptions {
   toolExecutor: ToolExecutor
   eventSink?: PiRuntimeEventSink
   activated?(threadID: string, active: ActiveHarness): void
+  onRuntimeReady?(): void | Promise<void>
   lifecycle?: PiLifecycleCallbacks
   beforeToolCall?: (
     request: HarnessRuntimeRequest,

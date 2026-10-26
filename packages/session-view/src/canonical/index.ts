@@ -548,8 +548,8 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
     } else if (isContextCompressionActivity(item)) {
       postAssistantItems.push(item)
     } else if (item.type === 'question' && item.status !== 'pending') {
-      postAssistantItems.push(item)
-      contentBlocks.push({ kind: 'post', id: `post:${item.id}`, item })
+      processItems.push(item)
+      appendProcessBlock(contentBlocks, item)
     } else if (item.type !== 'question') {
       processItems.push(item)
       appendProcessBlock(contentBlocks, item)

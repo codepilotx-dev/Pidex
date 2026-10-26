@@ -3,19 +3,25 @@ import { Effect } from 'effect'
 import { Schema } from 'effect'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { mkdtemp, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
+import { appendFile, mkdtemp, mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { Model, Provider } from '@pidex/model-schema'
 import { EventManifest } from '@pidex/agent-protocol'
 import { removeFixturePaths } from './FixtureCleanup'
 import type { ToolInvocation } from '../src/Domain'
 import { ApprovalService } from '../src/permission/ApprovalService'
+import { QuestionService } from '../src/session/QuestionService'
 import { PermissionDecisionEngine } from '../src/permission/PermissionDecisionEngine'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
+import { SqlitePiSessionRepo } from '../src/storage/pi-session/SqlitePiSession'
 import { recoverInterruptedRuns } from '../src/storage/recovery/InterruptedRunRecovery'
 import { EventHub } from '../src/storage/events/EventHub'
 import { ToolRegistry } from '../src/tool/ToolRegistry'
 import { pausedSubagentStatus } from '../src/subagent/SubagentService'
 import { InteractionService } from '../src/interaction/InteractionService'
+import {
+  ResumeCheckpointResolver,
+  toPlanCheckpoint,
+} from '../src/interaction/ResumeCheckpointResolver'
 import {
   ApprovalRules,
   simpleCommandArgv,
@@ -46,7 +52,7 @@ afterEach(async () => {
   await removeFixturePaths(paths.splice(0))
 }, 30_000)
 
-const setup = (db: AgentDatabase, projectID?: string) => {
+const setup = (db: AgentDatabase, projectID?: string, taskMode: 'chat' | 'plan' = 'chat') => {
   const thread = db.createThread('审批', projectID)
   const input = {
     content: '执行命令',
@@ -57,14 +63,14 @@ const setup = (db: AgentDatabase, projectID?: string) => {
       approvalsReviewer: 'user',
     },
     strategy: 'queue',
-    taskMode: 'chat',
+    taskMode,
   } as const
   const turn = db.createTurn(thread.id, input)
   db.claimTurnExecution(turn.turnID)
   return { thread, turn, input }
 }
 
-async function scopedFixture() {
+async function scopedFixture(taskMode: 'chat' | 'plan' = 'chat') {
   const root = await mkdtemp(join(tmpdir(), 'cpx-scoped-approval-'))
   paths.push(root)
   const db = new AgentDatabase(join(root, 'history.sqlite'))
@@ -78,7 +84,7 @@ async function scopedFixture() {
   await config.initialize()
   await config.trustUpdate(workspace, 'trusted')
   const project = db.createProject({ rootPath: workspace })
-  const { thread, turn, input } = setup(db, project.id)
+  const { thread, turn, input } = setup(db, project.id, taskMode)
   const hub = await Effect.runPromise(EventHub.make)
   const tools = new ToolRegistry()
   const invocation: ToolInvocation = {
@@ -90,11 +96,359 @@ async function scopedFixture() {
     input: { command: 'git status', cwd: workspace },
     permissionConfig: input.permissionConfig,
     model: input.model,
-    taskMode: 'chat',
+    taskMode,
     durableApproval: true,
   }
   return { db, hub, tools, config, project, projectFile, workspace, thread, turn, invocation }
 }
+
+describe('harness ready 与审批恢复期间的 steer', () => {
+  for (const mode of ['startup', 'live-tool', 'approval-resume'] as const) {
+    const approvalResume = mode === 'approval-resume'
+    test(`${mode} 接受的追加交给当前运行 harness 且只消费一次`, async () => {
+      const {
+        db,
+        hub,
+        tools,
+        config,
+        workspace: root,
+        thread,
+        turn,
+        invocation,
+      } = await scopedFixture()
+      const approvals = new ApprovalService(db, hub, tools, null, config)
+      const workspace = await WorkspaceService.open(root)
+      const target = join(root, 'once.txt')
+      let writes = 0
+      let enter!: () => void
+      let release!: () => void
+      const entered = new Promise<void>((resolve) => {
+        enter = resolve
+      })
+      const gate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      const executor = new ToolExecutor(tools, {
+        dataDir: join(root, '..', 'agent-data'),
+        authorizeShell: (input, signal) => approvals.authorize(input, signal),
+        resolvePermissionRules: (input) => approvals.rules.evaluate(input),
+        recordToolCall: (input, status, output, error, startedAt) =>
+          db.upsertToolCall(input, status, output, error, startedAt),
+        runHost: async () => {
+          enter()
+          await gate
+          writes++
+          await appendFile(target, 'ONLY-WRITE\n', 'utf8')
+          return {
+            stdout: 'ONLY-WRITE',
+            stderr: '',
+            exitCode: 0,
+            signal: null,
+            timedOut: false,
+            truncated: false,
+          }
+        },
+      })
+      const faux = fauxProvider({
+        models: [{ id: 'steer-ready', input: ['text'], contextWindow: 64_000 }],
+      })
+      const models = createModels()
+      models.setProvider(faux.provider)
+      const runtime = new AgentRuntimeService({
+        db,
+        hub,
+        models,
+        toolExecutor: executor,
+        contextCompaction: new ContextCompactionService(db),
+      })
+      const request = {
+        threadID: thread.id,
+        turnID: turn.turnID,
+        agentID: turn.agentID,
+        sessionID: db.getAgentExecution(turn.agentID)!.sessionID,
+        content: 'original request',
+        taskMode: 'chat' as const,
+        fallbackModel: invocation.model,
+        permissionConfig: invocation.permissionConfig,
+        signal: new AbortController().signal,
+        workspace,
+        promptSections: [],
+        resolveModel: async () => ({ ref: invocation.model, model: faux.getModel() }),
+        pause: async (
+          pending: import('../src/orchestration/AgentRuntimeTypes').PendingApproval,
+        ) => {
+          await approvals.attachRunState(
+            pending.toolCallID!,
+            pending.checkpoint.state,
+            pending.checkpoint.interruption,
+          )
+        },
+      }
+      const guideId = 'steer-during-tool'
+      const addGuide = () =>
+        db.appendGuide(
+          thread.id,
+          turn.turnID,
+          { ...invocation, content: 'STEER-MARKER', strategy: 'guide' as const },
+          guideId,
+        )
+      let ready = 0
+      const onRuntimeReady = async () => {
+        ready++
+        for (const guide of db.guideMailbox(turn.turnID))
+          await runtime.steer(thread.id, guide.content, [], guide.id)
+      }
+      const call = fauxToolCall('PowerShell', {
+        command: 'curl.exe -I https://example.com',
+        cwd: root,
+      })
+      try {
+        let resume: import('../src/orchestration/AgentRuntimeTypes').AgentRuntimeRequest['resume']
+        if (approvalResume) {
+          faux.setResponses([fauxAssistantMessage(call, { stopReason: 'toolUse' })])
+          expect(await runtime.run(request)).toMatchObject({ status: 'paused' })
+          expect(writes).toBe(0)
+          const checkpoint = db.approvalCheckpointForToolCall(call.id)!
+          await approvals.respond(checkpoint.approvalID, 'allow')
+          const acquired = new ResumeCheckpointResolver(db, approvals).acquire(
+            turn.turnID,
+            'main',
+            'steer-resume-lease',
+          )!
+          if (acquired.checkpoint.kind !== 'permission') throw new Error('Expected approval resume')
+          resume = toPlanCheckpoint({ leaseID: acquired.leaseID, checkpoint: acquired.checkpoint })
+        } else if (mode === 'startup') addGuide()
+        if (mode === 'live-tool')
+          await approvals.rules.upsert(thread.id, {
+            effect: 'allow',
+            scope: 'chat',
+            match: { kind: 'tool', tool: 'PowerShell' },
+          })
+        faux.setResponses([
+          ...(mode === 'live-tool' ? [fauxAssistantMessage(call, { stopReason: 'toolUse' })] : []),
+          (context) => {
+            expect(JSON.stringify(context.messages)).toContain('STEER-MARKER')
+            if (mode !== 'startup') {
+              const results = context.messages.filter(
+                (message) => message.role === 'toolResult' && message.toolCallId === call.id,
+              )
+              expect(results).toHaveLength(1)
+            }
+            return fauxAssistantMessage('STEER-CONSUMED-OK')
+          },
+        ])
+        const running = runtime.run({ ...request, ...(resume ? { resume } : {}), onRuntimeReady })
+        if (mode !== 'startup') {
+          await entered
+          addGuide()
+          expect(db.guideMailbox(turn.turnID).map((input) => input.id)).toEqual([guideId])
+          expect(ready).toBe(approvalResume ? 0 : 1)
+          if (!approvalResume) await runtime.steer(thread.id, 'STEER-MARKER', [], guideId)
+          release()
+        }
+        expect(await running).toMatchObject({ status: 'completed', output: 'STEER-CONSUMED-OK' })
+        expect(ready).toBe(1)
+        expect(db.guideMailbox(turn.turnID)).toEqual([])
+        expect(db.sqlite.query('SELECT status FROM inputs WHERE id=?').get(guideId)).toEqual({
+          status: 'consumed',
+        })
+        expect(
+          db.sqlite
+            .query(
+              "SELECT count(*) AS n FROM events WHERE turn_id=? AND method='queue/updated' AND json_extract(params,'$.action')='steer-consumed' AND json_extract(params,'$.inputId')=?",
+            )
+            .get(turn.turnID, guideId),
+        ).toEqual({ n: 1 })
+        if (mode !== 'startup') {
+          expect(writes).toBe(1)
+          expect(await readFile(target, 'utf8')).toBe('ONLY-WRITE\n')
+          expect(
+            db.sqlite
+              .query(
+                "SELECT count(*) AS n FROM events WHERE turn_id=? AND method='tool/callCompleted'",
+              )
+              .get(turn.turnID),
+          ).toEqual({ n: 1 })
+        }
+      } finally {
+        release()
+        await runtime.dispose()
+      }
+    })
+  }
+})
+
+describe('提问重启的工具结果一致性', () => {
+  test.each(['pending', 'resolved', 'stopped', 'invalid-checkpoint', 'nested-checkpoint'] as const)(
+    '真实问题 checkpoint 在 %s 时重启，保留可恢复工具且只完成一次',
+    async (stage) => {
+      const fixture = await scopedFixture('plan')
+      const { hub, tools, config, workspace: root, thread, turn, invocation } = fixture
+      let db = fixture.db
+      let questions = new QuestionService(db, hub)
+      const faux = fauxProvider({
+        models: [{ id: 'question-recovery', input: ['text'], contextWindow: 64_000 }],
+      })
+      const models = createModels()
+      models.setProvider(faux.provider)
+      const createRuntime = () =>
+        new AgentRuntimeService({
+          db,
+          hub,
+          models,
+          toolExecutor: new ToolExecutor(tools, {
+            dataDir: join(root, '..', 'agent-data'),
+            authorizeShell: async () => {
+              throw new Error('提问恢复测试不应执行 Shell')
+            },
+          }),
+          contextCompaction: new ContextCompactionService(db),
+        })
+      let runtime = createRuntime()
+      const call = fauxToolCall('request_user_input', {
+        questions: [
+          {
+            id: 'route',
+            header: '路线',
+            question: '选择路线？',
+            options: [
+              { label: 'Alpha', description: '第一条路线' },
+              { label: 'Beta', description: '第二条路线' },
+            ],
+          },
+        ],
+      })
+      const request = {
+        threadID: thread.id,
+        turnID: turn.turnID,
+        agentID: turn.agentID,
+        sessionID: db.getAgentExecution(turn.agentID)!.sessionID,
+        content: '确认路线',
+        taskMode: 'plan' as const,
+        fallbackModel: invocation.model,
+        permissionConfig: invocation.permissionConfig,
+        signal: new AbortController().signal,
+        workspace: await WorkspaceService.open(root),
+        promptSections: [],
+        resolveModel: async () => ({ ref: invocation.model, model: faux.getModel() }),
+        pause: async (
+          pending: import('../src/orchestration/AgentRuntimeTypes').PendingApproval,
+        ) => {
+          await questions.checkpoint(thread.id, turn.turnID, turn.agentID, pending)
+        },
+      }
+      try {
+        faux.setResponses([fauxAssistantMessage([call])])
+        expect(await runtime.run(request)).toMatchObject({ status: 'paused' })
+        const pending = db.pendingQuestions(thread.id)[0]!
+        expect(db.repositories.interactions.questionToolCallID(pending.id)).toBe(call.id)
+        const answer = [{ questionId: 'route', choiceIds: [], text: 'FREEFORM-RECOVERED' }]
+        db.upsertItem(thread.id, {
+          id: 'unrelated-question-tool',
+          turnID: turn.turnID,
+          agentID: turn.agentID,
+          type: 'tool',
+          status: 'running',
+          data: {},
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        })
+        if (stage === 'resolved') await questions.reply(pending.id, answer, false, 'user', false)
+        if (stage === 'invalid-checkpoint')
+          db.sqlite
+            .query(
+              "UPDATE question_requests SET payload = json_remove(payload, '$.checkpoint') WHERE id = ?",
+            )
+            .run(pending.id)
+        if (stage === 'nested-checkpoint')
+          db.sqlite
+            .query(
+              "UPDATE question_requests SET payload = json_set(payload, '$.checkpoint', json_object('payload', json_extract(payload, '$.checkpoint'))) WHERE id = ?",
+            )
+            .run(pending.id)
+        if (stage === 'stopped') {
+          questions.cancelTurn(turn.turnID)
+          db.updateTurnStatus(turn.turnID, 'interrupted')
+          db.updateAgentStatus(turn.agentID, 'interrupted')
+        }
+        await runtime.dispose()
+        questions.dispose()
+        db.close()
+        db = new AgentDatabase(join(root, '..', 'history.sqlite'))
+        databases.push(db)
+        recoverInterruptedRuns(db)
+        questions = new QuestionService(db, hub)
+        runtime = createRuntime()
+        const approvals = new ApprovalService(db, hub, tools, null, config)
+        const resolver = new ResumeCheckpointResolver(db, approvals)
+        expect(db.getItem('unrelated-question-tool')?.status).toBe('interrupted')
+        if (stage === 'stopped') {
+          expect(db.getItem(call.id)?.status).toBe('interrupted')
+          expect(db.repositories.interactions.pendingQuestionVersion(pending.id)?.status).toBe(
+            'cancelled',
+          )
+          await expect(questions.reply(pending.id, answer)).rejects.toThrow()
+          expect(resolver.acquire(turn.turnID, 'main', crypto.randomUUID())).toBeNull()
+          return
+        }
+        if (stage === 'invalid-checkpoint') {
+          expect(db.getItem(call.id)?.status).toBe('interrupted')
+          expect(resolver.acquire(turn.turnID, 'main', crypto.randomUUID())).toBeNull()
+          return
+        }
+        expect(db.getItem(call.id)?.status).toBe('running')
+        if (stage !== 'resolved') await questions.reply(pending.id, answer, false, 'user', false)
+        const acquired = resolver.acquire(turn.turnID, 'main', crypto.randomUUID())!
+        expect(acquired.checkpoint.kind).toBe('question')
+        if (acquired.checkpoint.kind !== 'question') throw new Error('expected question lease')
+        const resume = toPlanCheckpoint({ ...acquired, checkpoint: acquired.checkpoint })
+        faux.setResponses([
+          (context) => {
+            const results = context.messages.filter(
+              (message) => message.role === 'toolResult' && message.toolCallId === call.id,
+            )
+            expect(results).toHaveLength(1)
+            expect(JSON.stringify(results)).toContain('FREEFORM-RECOVERED')
+            expect(JSON.stringify(results)).not.toContain('__piPause')
+            return fauxAssistantMessage('确认 FREEFORM-RECOVERED')
+          },
+        ])
+        expect(await runtime.run({ ...request, resume })).toMatchObject({ status: 'completed' })
+        expect(resolver.complete(resume.resumeLeaseID!)).toBe(true)
+        expect(db.getItem(call.id)).toMatchObject({
+          status: 'completed',
+          data: { error: null, output: expect.stringContaining('FREEFORM-RECOVERED') },
+        })
+        expect(db.repositories.interactions.pendingQuestionVersion(pending.id)?.status).toBe(
+          'consumed',
+        )
+        const events = db.sqlite
+          .query(
+            "SELECT method, count(*) AS n FROM events WHERE turn_id = ? AND method IN ('tool/callCompleted','tool/error','interaction/resolved') GROUP BY method ORDER BY method",
+          )
+          .all(turn.turnID)
+        expect(events).toEqual([
+          { method: 'interaction/resolved', n: 1 },
+          { method: 'tool/callCompleted', n: 1 },
+        ])
+        recoverInterruptedRuns(db)
+        expect(resolver.acquire(turn.turnID, 'main', crypto.randomUUID())).toBeNull()
+        await expect(questions.reply(pending.id, answer)).rejects.toThrow()
+        expect(db.getItem(call.id)?.status).toBe('completed')
+        expect(
+          db.sqlite
+            .query(
+              "SELECT count(*) AS n FROM events WHERE turn_id = ? AND method = 'tool/callCompleted'",
+            )
+            .get(turn.turnID),
+        ).toEqual({ n: 1 })
+      } finally {
+        questions.dispose()
+        await runtime.dispose()
+      }
+    },
+  )
+})
 
 describe('审批范围与外部交互', () => {
   test('真实 Guardian 10 秒超时转人工，批准后原命令只执行一次且不重复审查', async () => {
@@ -325,6 +679,13 @@ describe('审批范围与外部交互', () => {
         try {
           expect(await runtime.run(request)).toMatchObject({ status: 'paused' })
           expect(executions).toBe(0)
+          expect(
+            db.sqlite
+              .query(
+                "SELECT COUNT(*) AS count FROM events WHERE turn_id = ? AND method = 'tool/error'",
+              )
+              .get(turn.turnID),
+          ).toEqual({ count: 0 })
           expect(db.hasPersistedToolResult(turn.turnID, call.id)).toBe(false)
           const checkpoint = db.approvalCheckpointForToolCall(call.id)!
           const option = service.rules
@@ -387,6 +748,265 @@ describe('审批范围与外部交互', () => {
       })
     }
   }
+
+  test.each([
+    ['in-order', 'allow', 'deny'],
+    ['reverse', 'deny', 'allow'],
+    ['resolved-together', 'allow', 'allow'],
+    ['stop-after-first', 'allow', 'deny'],
+    ['restart-before-first', 'allow', 'deny'],
+    ['restart-before-first-deny', 'deny', 'allow'],
+    ['stopped-before-restart', 'allow', 'deny'],
+  ] as const)(
+    '同批审批 %s（%s/%s）逐一恢复并保留其他工具结果，全部处理前不请求模型',
+    async (order, firstDecision, secondDecision) => {
+      const {
+        db: initialDB,
+        hub,
+        tools,
+        config,
+        workspace: root,
+        thread,
+        turn,
+        invocation,
+      } = await scopedFixture()
+      let db = initialDB
+      let service = new ApprovalService(db, hub, tools, null, config)
+      let resolver = new ResumeCheckpointResolver(db, service)
+      const workspace = await WorkspaceService.open(root)
+      const calls = [
+        fauxToolCall('Write', { file_path: join(root, '..', 'first.txt'), content: 'first' }),
+        fauxToolCall('Write', { file_path: join(root, '..', 'second.txt'), content: 'second' }),
+        fauxToolCall('Read', { file_path: join(root, 'safe.txt') }),
+      ]
+      await writeFile(join(root, 'safe.txt'), 'SAFE-SIBLING', 'utf8')
+      const executions: string[] = []
+      const controller = new AbortController()
+      const createExecutor = () =>
+        new ToolExecutor(tools, {
+          dataDir: join(root, '..', 'agent-data'),
+          authorizeShell: (input, signal) => service.authorize(input, signal),
+          resolvePermissionRules: (input) => service.rules.evaluate(input),
+          recordToolCall: (input, status, output, error, startedAt) => {
+            if (status === 'running') executions.push(input.id)
+            db.upsertToolCall(input, status, output, error, startedAt)
+            if (
+              order === 'stop-after-first' &&
+              status === 'completed' &&
+              input.id === calls[0]!.id
+            ) {
+              controller.abort()
+              db.updateTurnStatus(turn.turnID, 'interrupted')
+              db.updateAgentStatus(turn.agentID, 'interrupted')
+            }
+          },
+        })
+      let executor = createExecutor()
+      const faux = fauxProvider({
+        models: [{ id: 'batch-approval', input: ['text'], contextWindow: 64_000 }],
+      })
+      const models = createModels()
+      models.setProvider(faux.provider)
+      const createRuntime = () =>
+        new AgentRuntimeService({
+          db,
+          hub,
+          models,
+          toolExecutor: executor,
+          contextCompaction: new ContextCompactionService(db),
+        })
+      let runtime = createRuntime()
+      const request = {
+        threadID: thread.id,
+        turnID: turn.turnID,
+        agentID: turn.agentID,
+        sessionID: db.getAgentExecution(turn.agentID)!.sessionID,
+        content: 'batch approval',
+        taskMode: 'chat' as const,
+        fallbackModel: invocation.model,
+        permissionConfig: { ...invocation.permissionConfig, approvalPolicy: 'on-request' as const },
+        signal: controller.signal,
+        workspace,
+        promptSections: [],
+        resolveModel: async () => ({ ref: invocation.model, model: faux.getModel() }),
+        pause: async (
+          pending: import('../src/orchestration/AgentRuntimeTypes').PendingApproval,
+        ) => {
+          await service.attachRunState(
+            pending.toolCallID!,
+            pending.checkpoint.state,
+            pending.checkpoint.interruption,
+          )
+        },
+      }
+      const restart = async () => {
+        await runtime.dispose()
+        db.close()
+        db = new AgentDatabase(join(root, '..', 'history.sqlite'))
+        databases.push(db)
+        recoverInterruptedRuns(db)
+        service = new ApprovalService(db, hub, tools, null, config)
+        resolver = new ResumeCheckpointResolver(db, service)
+        executor = createExecutor()
+        runtime = createRuntime()
+      }
+      const assertResults = async () => {
+        const session = await new SqlitePiSessionRepo(db).openByID(request.sessionID)
+        const branch = await session.getBranch()
+        const branchResults = branch.flatMap((entry) =>
+          entry.type === 'message' && entry.message.role === 'toolResult' ? [entry.message] : [],
+        )
+        for (const call of calls) {
+          expect(branchResults.filter((result) => result.toolCallId === call.id)).toHaveLength(1)
+          const denied = db.approvalCheckpointForToolCall(call.id)?.decision === 'deny'
+          expect(db.getItem(call.id)).toMatchObject({
+            status: denied ? 'error' : 'completed',
+            data: denied
+              ? { output: null, error: expect.any(String) }
+              : { output: expect.any(String), error: null },
+          })
+          expect(
+            db.sqlite
+              .query(
+                "SELECT COUNT(*) AS count FROM events WHERE turn_id = ? AND method = ? AND json_extract(params, '$.item.id') = ?",
+              )
+              .get(turn.turnID, denied ? 'tool/error' : 'tool/callCompleted', call.id),
+          ).toEqual({ count: 1 })
+        }
+      }
+      faux.setResponses([
+        fauxAssistantMessage(calls, { stopReason: 'toolUse' }),
+        () => {
+          throw new Error('所有审批处理前不能请求模型')
+        },
+      ])
+      try {
+        expect(await runtime.run(request)).toMatchObject({ status: 'paused' })
+        expect(executions).toEqual([calls[2]!.id])
+        const checkpoints = calls
+          .slice(0, 2)
+          .map((call) => db.approvalCheckpointForToolCall(call.id)!)
+        expect(checkpoints.every((checkpoint) => checkpoint.status === 'pending')).toBe(true)
+        if (order === 'stopped-before-restart') {
+          db.repositories.interactions.finalizeTurn({
+            threadID: thread.id,
+            turnID: turn.turnID,
+            agentID: turn.agentID,
+            status: 'interrupted',
+            pauseReason: 'interrupted',
+          })
+          await restart()
+          expect(db.getAgentExecution(turn.agentID)?.status).toBe('interrupted')
+          expect(resolver.acquire(turn.turnID, 'main', crypto.randomUUID())).toBeNull()
+          for (const checkpoint of checkpoints) {
+            expect(db.getItem(checkpoint.toolCallID)?.status).toBe('interrupted')
+            expect(service.load(checkpoint.approvalID)?.status).toBe('cancelled')
+            await expect(service.respond(checkpoint.approvalID, 'allow')).rejects.toThrow()
+          }
+          expect(executions).toEqual([calls[2]!.id])
+          return
+        }
+        if (order.startsWith('restart-before-first')) {
+          db.upsertItem(thread.id, {
+            id: 'unrelated-running-tool',
+            turnID: turn.turnID,
+            agentID: turn.agentID,
+            type: 'tool',
+            status: 'running',
+            data: {},
+            createdAt: Date.now(),
+            updatedAt: Date.now(),
+          })
+          await restart()
+          for (const checkpoint of checkpoints)
+            expect(db.getItem(checkpoint.toolCallID)?.status).toBe('running')
+          expect(db.getItem('unrelated-running-tool')?.status).toBe('interrupted')
+        }
+        if (order === 'reverse') checkpoints.reverse()
+        const first = checkpoints[0]!,
+          second = checkpoints[1]!
+        await service.respond(first.approvalID, firstDecision)
+        if (order === 'resolved-together') await service.respond(second.approvalID, secondDecision)
+        const resume = (checkpoint: typeof first) => {
+          const acquired = resolver.acquire(turn.turnID, 'main', crypto.randomUUID())!
+          expect(acquired.checkpoint.kind).toBe('permission')
+          if (acquired.checkpoint.kind !== 'permission') throw new Error('expected approval lease')
+          expect(acquired.checkpoint.approvalID).toBe(checkpoint.approvalID)
+          return toPlanCheckpoint({ ...acquired, checkpoint: acquired.checkpoint })
+        }
+        const firstResume = resume(first)
+        if (order === 'stop-after-first') {
+          await expect(runtime.run({ ...request, resume: firstResume })).rejects.toMatchObject({
+            code: 'RUN_ABORTED',
+          })
+          expect(db.getAgentExecution(turn.agentID)?.status).toBe('interrupted')
+          return
+        }
+        expect(await runtime.run({ ...request, resume: firstResume })).toMatchObject({
+          status: 'paused',
+        })
+        expect(resolver.complete(firstResume.resumeLeaseID!)).toBe(true)
+        expect(executions.filter((id) => id === first.toolCallID)).toHaveLength(
+          firstDecision === 'allow' ? 1 : 0,
+        )
+        expect(db.getAgentExecution(turn.agentID)?.status).toBe(
+          order === 'resolved-together' ? 'queued' : 'waiting_permission',
+        )
+        // Reopen storage and recreate execution state to exercise process recovery.
+        await restart()
+        expect(db.getItem(second.toolCallID)?.status).toBe('running')
+        if (order !== 'resolved-together') await service.respond(second.approvalID, secondDecision)
+        faux.setResponses([
+          (context) => {
+            const results = context.messages.filter((message) => message.role === 'toolResult')
+            for (const call of calls)
+              expect(results.filter((result) => result.toolCallId === call.id)).toHaveLength(1)
+            expect(JSON.stringify(results)).toContain('SAFE-SIBLING')
+            expect(results.find((result) => result.toolCallId === first.toolCallID)?.isError).toBe(
+              firstDecision === 'deny',
+            )
+            expect(results.find((result) => result.toolCallId === second.toolCallID)?.isError).toBe(
+              secondDecision === 'deny',
+            )
+            expect(JSON.stringify(results)).not.toContain('__piPause')
+            return fauxAssistantMessage('done')
+          },
+        ])
+        const lastResume = resume(second)
+        expect(await runtime.run({ ...request, resume: lastResume })).toMatchObject({
+          status: 'completed',
+        })
+        expect(resolver.complete(lastResume.resumeLeaseID!)).toBe(true)
+        await assertResults()
+        expect(executions.filter((id) => id === second.toolCallID)).toHaveLength(
+          secondDecision === 'allow' ? 1 : 0,
+        )
+        expect(db.repositories.interactions.pendingApprovalIDs(thread.id)).toHaveLength(0)
+        for (const [checkpoint, decision] of [
+          [first, firstDecision],
+          [second, secondDecision],
+        ] as const) {
+          const file = Bun.file(checkpoint.payload.invocation.input.file_path as string)
+          expect(await file.exists()).toBe(decision === 'allow')
+          if (decision === 'allow')
+            expect(await file.text()).toBe(
+              checkpoint.toolCallID === calls[0]!.id ? 'first' : 'second',
+            )
+        }
+        faux.setResponses([fauxAssistantMessage('recovered')])
+        await runtime.run({ ...request, resume: lastResume })
+        await assertResults()
+        expect(executions.filter((id) => id === first.toolCallID)).toHaveLength(
+          firstDecision === 'allow' ? 1 : 0,
+        )
+        expect(executions.filter((id) => id === second.toolCallID)).toHaveLength(
+          secondDecision === 'allow' ? 1 : 0,
+        )
+      } finally {
+        await runtime.dispose()
+      }
+    },
+  )
 
   test('持久规则保存失败仍恢复单次允许，不留下聊天白名单', async () => {
     const { db, hub, tools, config, invocation } = await scopedFixture()

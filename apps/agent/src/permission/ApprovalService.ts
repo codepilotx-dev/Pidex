@@ -584,6 +584,7 @@ export class ApprovalService {
       review,
       requestPayload: {
         version: 1,
+        tool: safeInvocation.name,
         command: safeInvocation.input.command ?? null,
         cwd: safeInvocation.input.cwd ?? null,
         requestedPermissions: requestedPermissions(safeInvocation.input),

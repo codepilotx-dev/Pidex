@@ -1983,11 +1983,25 @@ export class ThreadService {
   async stop(threadID: string, expectedTurnID: string) {
     let terminal: Promise<TurnTerminalStatus> = Promise.resolve('interrupted')
     let status: TurnTerminalStatus = 'interrupted'
+    let alreadyTerminal: TurnTerminalStatus | null = null
     await this.coordinator.exclusive(threadID, async () => {
       const live = this.coordinator.active(threadID)
       const active = this.db.activeTurn(threadID)
       const actualTurnID = live?.turnID ?? active?.id
-      if (!actualTurnID) throw new AgentError('NO_ACTIVE_TURN', '当前没有运行中的 Turn', 409)
+      if (!actualTurnID) {
+        const turn = this.db.sqlite
+          .query('SELECT status FROM turns WHERE id = ? AND thread_id = ?')
+          .get(expectedTurnID, threadID) as { status: string } | null
+        if (
+          turn?.status === 'completed' ||
+          turn?.status === 'failed' ||
+          turn?.status === 'interrupted'
+        ) {
+          alreadyTerminal = turn.status
+          return
+        }
+        throw new AgentError('NO_ACTIVE_TURN', '当前没有运行中的 Turn', 409)
+      }
       if (actualTurnID !== expectedTurnID)
         throw new AgentError('TURN_ID_MISMATCH', '活动 Turn 已变化，请刷新后重试', 409)
       const agent = this.db.agentForTurn(expectedTurnID)
@@ -2012,6 +2026,7 @@ export class ThreadService {
         })
       }
     })
+    if (alreadyTerminal) return alreadyTerminal
     const parentAgent = this.db.agentForTurn(expectedTurnID)
     if (parentAgent) await this.subagents.stopChildrenForParent(parentAgent.id)
     await this.orchestrator.abort(threadID).catch(() => undefined)

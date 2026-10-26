@@ -307,6 +307,11 @@ export async function executeHarnessRun(
   }
   const active = { harness, unsubscribe, compact } as unknown as ActiveHarness
   options.activated?.(request.threadID, active)
+  // Mailbox delivery needs both the registered harness and its running phase.
+  harness.on('before_agent_start', async () => {
+    await options.onRuntimeReady?.()
+    return undefined
+  })
   const onAbort = () => {
     void harness.abort()
   }

@@ -1622,11 +1622,18 @@ export class ThreadProjection {
     const tool = this.db.sqlite
       .query('SELECT tool_name, input FROM tool_calls WHERE id = ?')
       .get(String(row.tool_call_id)) as { tool_name: string; input: string } | null
-    const input = tool ? parse<Record<string, unknown>>(tool.input) : {}
     const request =
       typeof row.request_payload === 'string'
         ? parse<Record<string, unknown>>(row.request_payload)
         : {}
+    const invocation = this.db.getApprovalCheckpoint(String(row.id))?.payload.invocation
+    const input = invocation?.input ?? (tool ? parse<Record<string, unknown>>(tool.input) : {})
+    // The approved display survives before execution and takes precedence over tool records.
+    const command = Object.hasOwn(request, 'command') ? request.command : input.command
+    const cwd = Object.hasOwn(request, 'cwd') ? request.cwd : input.cwd
+    const affectedPaths = Array.isArray(request.affectedPaths)
+      ? (request.affectedPaths as NonNullable<ApprovalRequest['affectedPaths']>)
+      : undefined
     const rawComputerApp = request.computerApp as Record<string, unknown> | undefined
     const computerApp =
       rawComputerApp &&
@@ -1647,12 +1654,13 @@ export class ThreadProjection {
       Array.isArray(permissions[name])
         ? permissions[name].filter((value): value is string => typeof value === 'string')
         : []
-    // 动态权限请求把读路径、写路径和网络域名纳入可展示范围；普通审批保持原状。
+    // Match the live-event projection for permission scopes and affected paths.
     const paths =
       requestKind === 'permission'
         ? [...list('readPaths'), ...list('writePaths'), ...list('networkDomains')]
-        : [input.path, input.cwd].filter((value): value is string => typeof value === 'string')
-    const command = typeof input.command === 'string' ? input.command : null
+        : affectedPaths
+          ? affectedPaths.map(({ path }) => path)
+          : [...list('writePaths'), ...list('readPaths')]
     const rawRequestedScope = request.requestedScope
     const rawAllowedScopes = request.allowedScopes
     const permissionGrant =
@@ -1680,9 +1688,12 @@ export class ThreadProjection {
       turnId: String(row.turn_id),
       agentId: String(row.agent_id),
       toolCallID: String(row.tool_call_id),
-      tool: tool?.tool_name ?? 'tool',
-      command,
-      cwd: typeof input.cwd === 'string' ? input.cwd : null,
+      tool:
+        typeof request.tool === 'string'
+          ? request.tool
+          : (invocation?.name ?? tool?.tool_name ?? 'tool'),
+      command: typeof command === 'string' ? command : null,
+      cwd: typeof cwd === 'string' ? cwd : null,
       paths,
       requestedPermissions: {
         readPaths: list('readPaths'),
@@ -1692,9 +1703,7 @@ export class ThreadProjection {
       review,
       risk: String(row.risk) as ApprovalRequest['risk'],
       reason: String(row.reason),
-      ...(request.guardian
-        ? { guardian: request.guardian as ApprovalRequest['guardian'] }
-        : {}),
+      ...(request.guardian ? { guardian: request.guardian as ApprovalRequest['guardian'] } : {}),
       ...(typeof request.autoReviewFallbackReason === 'string'
         ? { autoReviewFallbackReason: request.autoReviewFallbackReason }
         : {}),
@@ -1716,9 +1725,7 @@ export class ThreadProjection {
         ? { toolIdentity: request.toolIdentity as ApprovalRequest['toolIdentity'] }
         : {}),
       ...(request.input ? { input: request.input as ApprovalRequest['input'] } : {}),
-      ...(request.affectedPaths
-        ? { affectedPaths: request.affectedPaths as ApprovalRequest['affectedPaths'] }
-        : {}),
+      ...(affectedPaths ? { affectedPaths } : {}),
       ...(request.reviewSummary
         ? { reviewSummary: request.reviewSummary as ApprovalRequest['reviewSummary'] }
         : {}),

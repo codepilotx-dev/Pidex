@@ -736,6 +736,14 @@ export class AgentRuntimeService implements AgentRuntime {
         await this.publish(persisted.event)
       },
       textDelta: async (context, input) => {
+        const current = this.options.db.getItem(input.itemID)
+        if (!current || current.status !== 'running') return
+        // Persist the visible prefix before publishing; a stop may never reach a completion save point.
+        this.options.db.upsertItem(context.threadID, {
+          ...current,
+          data: { ...current.data, text: String(current.data.text ?? '') + input.delta },
+          updatedAt: Date.now(),
+        })
         await this.publish(
           createLiveEvent(
             this.options.db,
@@ -1279,7 +1287,13 @@ export class AgentRuntimeService implements AgentRuntime {
                 (part) => part.type === 'toolCall' && part.id === request.resume!.toolCallID,
               )
             : undefined
-        if (!assistantEntry || !toolCall || toolCall.type !== 'toolCall')
+        if (
+          !assistantEntry ||
+          assistantEntry.type !== 'message' ||
+          assistantEntry.message.role !== 'assistant' ||
+          !toolCall ||
+          toolCall.type !== 'toolCall'
+        )
           throw new Error('Pi checkpoint 中找不到待恢复的 tool call')
         // A node_repl approval resumes only the recorded internal operation. The
         // pause never persisted a script, so the call is re-executed with the
@@ -1288,7 +1302,32 @@ export class AgentRuntimeService implements AgentRuntime {
         const alreadySettled =
           !nodeReplRecovery &&
           this.options.db.hasPersistedToolResult(request.turnID, request.resume.toolCallID)
-        if (!alreadySettled) await session.moveTo(assistantEntry.id)
+        if (!alreadySettled) {
+          const callIDs = new Set(
+            assistantEntry.message.content.flatMap((part) =>
+              part.type === 'toolCall' ? [part.id] : [],
+            ),
+          )
+          // Rewinding replaces pause placeholders, but must retain settled siblings,
+          // including results committed by an earlier approval before a restart.
+          const settledSiblings = new Map(
+            entries.flatMap((entry) => {
+              if (entry.type !== 'message' || entry.message.role !== 'toolResult') return []
+              const message = entry.message
+              if (
+                !callIDs.has(message.toolCallId) ||
+                message.toolCallId === request.resume!.toolCallID ||
+                (message.details as { __piPause?: boolean } | undefined)?.__piPause === true ||
+                (message.isError &&
+                  piToolResultText(message, { tool: message.toolName }) === '等待用户审批')
+              )
+                return []
+              return [[message.toolCallId, message] as const]
+            }),
+          )
+          await session.moveTo(assistantEntry.id)
+          for (const message of settledSiblings.values()) await session.appendMessage(message)
+        }
         let resolutionText =
           request.resume.decision === 'deny'
             ? request.resume.answer
@@ -1437,6 +1476,30 @@ export class AgentRuntimeService implements AgentRuntime {
           })
           for (const event of completedEvents) await this.publish(event)
         }
+        if (request.resume.decision) {
+          if (request.signal.aborted) throw new AgentError('RUN_ABORTED', '任务已停止', 499)
+          const waitingEvent = this.options.db.transaction(() => {
+            const interactions = this.options.db.repositories.interactions
+            const resolved = interactions.resolvedApprovalForResume(request.turnID)
+            const pending = interactions
+              .pendingApprovalIDs(request.threadID)
+              .some(
+                ({ id }) => this.options.db.getApprovalCheckpoint(id)?.turnID === request.turnID,
+              )
+            if (!resolved && !pending) return null
+            const status = resolved ? 'queued' : 'waiting_permission'
+            this.options.db.updateTurnStatus(request.turnID, status)
+            this.options.db.updateAgentStatus(request.agentID, status)
+            storage.flush()
+            return this.options.db.insertEvent(request.threadID, request.turnID, 'agent/upserted', {
+              agent: this.options.db.getAgentExecution(request.agentID),
+            })
+          })
+          if (waitingEvent) {
+            await this.publish(waitingEvent)
+            return { status: 'paused' as const, output: '' }
+          }
+        }
       }
       const previousRuntime = this.active.get(request.threadID)
       if (previousRuntime) {
@@ -1494,6 +1557,7 @@ export class AgentRuntimeService implements AgentRuntime {
       }
       const runtimeOptions: HarnessRuntimeOptions = {
         activated: (threadID, active) => this.active.set(threadID, active),
+        ...(request.onRuntimeReady ? { onRuntimeReady: request.onRuntimeReady } : {}),
         toolExecutor: this.options.toolExecutor,
         harnessFactory: {
           resolve: async () => ({
@@ -1768,7 +1832,6 @@ export class AgentRuntimeService implements AgentRuntime {
           finalizeResult: async (input: SubagentResult) => input,
         },
       }
-      await request.onRuntimeReady?.()
       const resumedContent = request.resume
         ? `<interaction_resolution toolCallId=${JSON.stringify(request.resume.toolCallID ?? 'unknown')}>${JSON.stringify({ answer: request.resume.answer, decision: request.resume.decision ?? null })}</interaction_resolution>\n继续处理已恢复的 Pi session；复用上述 toolCallId 的处理结果，不得重复执行该 ID，也不得自行换工具或等价命令绕过用户拒绝。此限制不禁止用户后续明确要求再次执行相同命令：那是新的工具调用，必须使用新的 toolCallId 并重新判权，不能复用一次批准。若用户给出调整要求，必须据此处理。`
         : request.content

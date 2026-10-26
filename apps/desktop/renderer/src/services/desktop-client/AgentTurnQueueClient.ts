@@ -53,6 +53,8 @@ export function createAgentTurnQueueClient({
   emitSessionStoreChange,
   requireSkillInvocationCapability,
 }: AgentTurnQueueClientDependencies) {
+  const pendingInterrupts = new Map<string, Promise<void>>()
+
   async function submitMessage(
     sessionId: string,
     input: DesktopUserMessageInput,
@@ -179,14 +181,24 @@ export function createAgentTurnQueueClient({
   }
 
   async function interrupt(sessionId: string): Promise<void> {
-    const current = await loadThreadSnapshot(sessionId)
-    const activeTurn = findActiveTurn(current)
-    if (!activeTurn) return
-    await rpc.call('turn/interrupt', {
-      threadId: sessionId,
-      turnId: activeTurn.id,
-      operationId: crypto.randomUUID(),
-    })
+    const pending = pendingInterrupts.get(sessionId)
+    if (pending) return pending
+    const operation = (async () => {
+      const current = await loadThreadSnapshot(sessionId)
+      const activeTurn = findActiveTurn(current)
+      if (!activeTurn) return
+      await rpc.call('turn/interrupt', {
+        threadId: sessionId,
+        turnId: activeTurn.id,
+        operationId: crypto.randomUUID(),
+      })
+    })()
+    pendingInterrupts.set(sessionId, operation)
+    const clear = () => {
+      if (pendingInterrupts.get(sessionId) === operation) pendingInterrupts.delete(sessionId)
+    }
+    void operation.then(clear, clear)
+    return operation
   }
 
   async function startTurn(

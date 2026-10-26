@@ -697,6 +697,11 @@ export class PiEventAdapter {
         })
         break
       case 'tool_execution_end': {
+        // A durable pause has no execution result; its interaction owns the waiting state.
+        if (
+          (resultDetails(event.result) as { __piPause?: boolean } | undefined)?.__piPause === true
+        )
+          break
         const { blocks, artifacts } = piToolResultBlocks(event.result)
         await this.sink.toolFinished?.(this.context, {
           toolCallID: event.toolCallId,

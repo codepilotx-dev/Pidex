@@ -160,6 +160,14 @@ test('编辑末轮保留旧记录，切换上下文；幂等、连续编辑、�
   f.finish(second.turnID)
 })
 
+test('停止已经结束的 Turn 是幂等成功', async () => {
+  const f = await fixture()
+  const turn = await f.completed('已结束')
+  f.finish(turn.turnID)
+
+  await expect(f.service.stop(f.thread.id, turn.turnID)).resolves.toBe('completed')
+})
+
 test('纯附件编辑复制元数据，保留原输入绑定；全部清空和跨输入引用均拒绝', async () => {
   const f = await fixture()
   const old = await f.completed('旧问题')
