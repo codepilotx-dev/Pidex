@@ -167,7 +167,7 @@ function GitBoardCommitSection({
     <div className="sidebar-commit-group tw:grid tw:min-w-0 tw:sidebar-row-gap">
       {repository?.historyError ? (
         <div role="alert" className={cx(COMMIT_STATUS_CLASS, 'tw:flex-wrap tw:whitespace-normal')}>
-          <AlertCircle aria-hidden="true" size={APP_ICON_SIZE} className="tw:shrink-0" />
+          <AlertCircle aria-hidden="true" size="var(--inline-icon-size, 1em)" className="tw:shrink-0" />
           <span className="tw:min-w-0 tw:flex-1">{t(repository.historyError)}</span>
           <Button
             className="sidebar-show-more-button tw:w-auto tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"

@@ -34,7 +34,7 @@ export function FileMutationDiffLoading(): React.ReactNode {
       role="status"
     >
       <LoaderCircle
-        size={APP_ICON_SIZES.sm}
+        size="var(--inline-icon-size, 1em)"
         className="canonical-spin tw:flex-none"
         strokeWidth={APP_ICON_STROKE_WIDTH}
         aria-hidden="true"

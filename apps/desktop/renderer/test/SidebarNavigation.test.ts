@@ -820,6 +820,17 @@ describe('sidebar view model', () => {
     })
   })
 
+  test('recent session paging collapses to its five-item default', () => {
+    const items = Array.from({ length: 25 }, (_, index) => index)
+
+    expect(getSidebarSessionDisplayGroups(items, 5, 5)).toMatchObject({
+      baseSessions: items.slice(0, 5),
+      extraSessions: [],
+      canShowMore: true,
+      canCollapse: false,
+    })
+  })
+
   test('flat organization projects every unpinned task into recent', () => {
     const model = buildSidebarViewModel({
       organization: 'flat',

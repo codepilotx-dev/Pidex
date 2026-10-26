@@ -60,7 +60,7 @@ export const COMPOSER_CHIP_TRIGGER_CLASS = cx(
   'tw:transition-[background,border-color,color] tw:duration-feedback tw:ease-standard',
   'tw:hover:bg-app-hover tw:hover:border-transparent',
   'tw:data-[state=open]:bg-app-selected tw:data-[state=open]:border-transparent',
-  'tw:[&>svg:first-child]:block tw:[&>svg:first-child]:size-icon tw:[&>svg:first-child]:shrink-0',
+  'tw:[&>svg:first-child]:block tw:[&>svg:first-child]:size-[var(--inline-icon-size,1em)] tw:[&>svg:first-child]:shrink-0',
 )
 
 export function ComposerModeSwitcher({

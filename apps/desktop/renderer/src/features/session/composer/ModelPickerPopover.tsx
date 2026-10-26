@@ -621,7 +621,7 @@ export function ModelPickerPopover({
                           className={SEARCH_TRIGGER_CLASS}
                         >
                           <span>快速搜索</span>
-                          <Search size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                          <Search size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
                         </button>
                       )}
                     </div>

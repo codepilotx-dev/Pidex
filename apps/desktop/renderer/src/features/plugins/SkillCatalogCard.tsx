@@ -96,7 +96,7 @@ export function SkillCatalogCard({
         <div className="skill-catalog-card__actions tw:flex tw:items-center tw:justify-end">
           {skill.installed ? (
             <span className="skill-catalog-card__installed tw:flex tw:items-center tw:gap-2 tw:text-app-text-meta tw:type-caption tw:whitespace-nowrap">
-              <Check aria-hidden="true" size={APP_ICON_SIZES.sm} />
+              <Check aria-hidden="true" size="var(--inline-icon-size, 1em)" />
               已添加
             </span>
           ) : (

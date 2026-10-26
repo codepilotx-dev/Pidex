@@ -159,7 +159,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
   return (
     <div
       className={cx(
-        'search-input tw:inline-flex tw:min-w-0 tw:items-center tw:gap-control-gap tw:border tw:border-app-border-subtle tw:bg-app-canvas',
+        'search-input tw:type-control tw:inline-flex tw:min-w-0 tw:items-center tw:gap-control-gap tw:border tw:border-app-border-subtle tw:bg-app-canvas',
         'tw:transition-[background-color,border-color,color,opacity] tw:duration-feedback tw:ease-standard',
         'tw:hover:border-app-border-strong',
         'tw:has-[:focus-visible]:border-app-focus tw:has-[:focus-visible]:outline-2 tw:has-[:focus-visible]:outline-offset-1 tw:has-[:focus-visible]:outline-app-focus',
@@ -174,7 +174,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
     >
       <Search
         aria-hidden="true"
-        className="search-input-icon tw:size-icon-md tw:shrink-0 tw:pointer-events-none tw:text-app-text"
+        className="search-input-icon tw:size-[var(--inline-icon-size,1em)] tw:shrink-0 tw:pointer-events-none tw:text-app-text"
         size={APP_ICON_SIZE}
       />
       <input
@@ -194,7 +194,7 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         <Button
           isIconOnly
           aria-label={onClose ? '清除并关闭搜索' : clearLabel}
-          className={cx('search-input-clear', variant === 'outlined' && 'tw:size-5 tw:text-app-text-meta')}
+          className={cx('search-input-clear', variant === 'outlined' && 'tw:text-app-text-meta')}
           color="ghostSecondary"
           onClick={handleClear}
           size="iconMd"

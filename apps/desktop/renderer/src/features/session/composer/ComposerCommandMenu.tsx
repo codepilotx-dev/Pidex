@@ -50,7 +50,7 @@ const MENU_ITEM_DISABLED_CLASS =
   'is-disabled tw:cursor-not-allowed tw:pointer-events-none tw:text-app-text-meta tw:opacity-58'
 const ITEM_LEADING_CLASS = cx(
   'chat-input__dropdown-leading tw:inline-flex tw:size-4 tw:items-center tw:justify-center tw:text-app-text',
-  'tw:[&>svg]:block tw:[&>svg]:size-icon',
+  'tw:[&>svg]:block tw:[&>svg]:size-[var(--inline-icon-size,1em)]',
 )
 const ITEM_COPY_CLASS =
   'chat-input__dropdown-copy tw:flex tw:min-w-0 tw:items-baseline tw:gap-2 tw:overflow-hidden'

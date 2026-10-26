@@ -1002,7 +1002,8 @@ function SidebarBodyContent({
                     dropIndexBase={displayedProjects.length}
                     groupKey="recent"
                     sessionIndent="gutter"
-                    initialLimit={10}
+                    initialLimit={5}
+                    pageSize={10}
                     manualOrderByScope={manualOrderByScope}
                     now={now}
                     pendingPermissionSessionIds={pendingPermissionSessionIds}

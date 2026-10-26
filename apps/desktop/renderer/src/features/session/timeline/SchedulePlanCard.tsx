@@ -133,7 +133,7 @@ export function SchedulePlanCard({ item }: { item: ToolItem }): React.ReactNode 
           className="schedule-plan-card__icon tw:grid tw:size-6 tw:place-items-center tw:rounded-container tw:border tw:border-app-info-border tw:bg-app-info-subtle tw:text-app-info-fg"
           aria-hidden="true"
         >
-          <CalendarCheck2 className="tw:size-icon" size={APP_ICON_SIZES.sm} />
+          <CalendarCheck2 className="tw:size-[var(--inline-icon-size,1em)]" size={APP_ICON_SIZES.sm} />
         </span>
         <div className="tw:grid tw:min-w-0 tw:flex-1 tw:gap-1">
           <strong>{committed ? '日程已创建' : '确认任务规划'}</strong>

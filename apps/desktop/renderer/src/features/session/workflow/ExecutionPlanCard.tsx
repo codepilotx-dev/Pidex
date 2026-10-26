@@ -69,8 +69,8 @@ function ExecutionPlanStepView({
       <span
         className={
           step.status === 'in_progress'
-            ? 'execution-plan-card__step-icon tw:mt-1 tw:inline-flex tw:items-center tw:justify-center tw:text-app-focus tw:[&>svg]:size-icon-sm'
-            : 'execution-plan-card__step-icon tw:mt-1 tw:inline-flex tw:items-center tw:justify-center tw:text-app-text-meta tw:[&>svg]:size-icon-sm'
+            ? 'execution-plan-card__step-icon tw:mt-1 tw:inline-flex tw:items-center tw:justify-center tw:text-app-focus tw:[&>svg]:size-[var(--inline-icon-size,1em)]'
+            : 'execution-plan-card__step-icon tw:mt-1 tw:inline-flex tw:items-center tw:justify-center tw:text-app-text-meta tw:[&>svg]:size-[var(--inline-icon-size,1em)]'
         }
         aria-hidden="true"
       >

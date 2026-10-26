@@ -374,7 +374,7 @@ export function CanonicalTurnActivity({
           size={APP_ICON_SIZES.sm}
           aria-hidden="true"
           className={cx(
-            'canonical-turn-activity__chevron tw:size-icon-sm tw:flex-none tw:transition-transform tw:duration-disclosure tw:ease-disclosure',
+            'canonical-turn-activity__chevron tw:size-[var(--inline-icon-size,1em)] tw:flex-none tw:transition-transform tw:duration-disclosure tw:ease-disclosure',
             expanded ? 'tw:rotate-90' : 'tw:rotate-0',
           )}
         />
@@ -593,7 +593,7 @@ function CanonicalThreadViewComponent({
         className="canonical-thread-state canonical-thread-state--error tw:mx-auto tw:flex tw:min-h-40 tw:w-[min(var(--page-content-max-width),var(--session-content-w))] tw:items-center tw:justify-center tw:gap-2 tw:p-6 tw:text-app-text-soft tw:type-body-sm"
         role="alert"
       >
-        <CircleAlert size={APP_ICON_SIZES.sm} aria-hidden="true" />
+        <CircleAlert size="var(--inline-icon-size, 1em)" aria-hidden="true" />
         <span className="tw:grid">
           <strong>无法加载会话</strong>
           <small className="tw:max-w-[520px] tw:wrap-anywhere">{error}</small>
@@ -603,7 +603,7 @@ function CanonicalThreadViewComponent({
           type="button"
           onClick={() => void onReload()}
         >
-          <RotateCcw size={APP_ICON_SIZES.sm} aria-hidden="true" />
+          <RotateCcw size="var(--inline-icon-size, 1em)" aria-hidden="true" />
           重试
         </button>
       </div>
@@ -960,7 +960,7 @@ function CanonicalConversationTurnComponent({
       ) : null}
       {entry.turn.error ? (
         <div className="canonical-turn__status canonical-turn__status--error">
-          <CircleAlert size={APP_ICON_SIZES.sm} aria-hidden="true" />
+          <CircleAlert size="var(--inline-icon-size, 1em)" aria-hidden="true" />
           <span>{entry.turn.error}</span>
         </div>
       ) : null}

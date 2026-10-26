@@ -63,7 +63,7 @@ export function ReviewSourceMenu({
           <span className="review-scope-trigger-label tw:min-w-[54px] tw:text-left">
             {reviewSourceLabel(source)}
           </span>
-          <ChevronDown size={APP_ICON_SIZES.sm} />
+          <ChevronDown size="var(--inline-icon-size, 1em)" />
         </button>
       }
       onOpenChange={onOpenChange}

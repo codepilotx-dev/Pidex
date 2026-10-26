@@ -73,7 +73,7 @@ function SectionSummary({
       <span>{title}</span>
       <ChevronDown
         aria-hidden="true"
-        size={14}
+        size="var(--inline-icon-size, 1em)"
         className={cx(
           'tw:shrink-0 tw:opacity-0 tw:group-hover/section-summary:opacity-100 tw:group-focus-visible/section-summary:opacity-100 tw:[transition:opacity_var(--cpx-sys-motion-feedback)_var(--cpx-sys-ease-out),transform_var(--cpx-sys-motion-disclosure)_var(--cpx-sys-ease-disclosure)]',
           expanded ? 'tw:rotate-0' : 'tw:-rotate-90',

@@ -167,13 +167,13 @@ const SIZE_BOX_CLASS: Record<ButtonSize, { standard: string; iconOnly: string; i
       iconSize: 20,
     },
     iconMd: {
-      standard: 'tw:h-5 tw:min-h-5 tw:px-0.5 tw:gap-1',
-      iconOnly: 'tw:w-5 tw:h-5 tw:min-h-5 tw:p-0',
+      standard: 'tw:h-6 tw:min-h-6 tw:px-0.5 tw:gap-1',
+      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
       iconSize: 12,
     },
     iconSm: {
-      standard: 'tw:h-4 tw:min-h-4 tw:px-0.5 tw:gap-1',
-      iconOnly: 'tw:w-4 tw:h-4 tw:min-h-4 tw:p-0',
+      standard: 'tw:h-6 tw:min-h-6 tw:px-0.5 tw:gap-1',
+      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
       iconSize: 12,
     },
     large: {
@@ -274,6 +274,16 @@ const ICON_OVERRIDE_ICON_CLASS: Record<AppIconSize, string> = {
   md: 'tw:[&>svg]:size-icon-md',
   lg: 'tw:[&>svg]:size-icon-lg',
 }
+
+/*
+ * Text buttons scale both icon axes with the label using the UI locale's unit,
+ * keeps square icon slots; artwork is excluded.
+ */
+const TEXT_ICON_CLASS = cx(
+  "tw:[&>svg:not([data-icon-kind='artwork'])]:size-[var(--inline-icon-size,1em)]",
+  "tw:[&>span>svg:not([data-icon-kind='artwork'])]:size-[var(--inline-icon-size,1em)]",
+  'tw:[&>.ui-spinner]:size-[var(--inline-icon-size,1em)]',
+)
 
 const ICON_OVERRIDE_SPINNER_SIZE: Record<AppIconSize, SpinnerProps['size']> = {
   sm: 'small',
@@ -500,6 +510,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <Spinner className="ui-button-spinner tw:shrink-0" size={spinnerSize} aria-hidden="true" />
   )
 
+  const iconClasses = isIcon
+    ? iconSize
+      ? ICON_OVERRIDE_ICON_CLASS[iconSize]
+      : SIZE_ICON_CLASS[resolvedSize]
+    : TEXT_ICON_CLASS
+
   const baseClasses = cx(
     BASE_CLASS,
     variant !== 'text' && 'tw:active:scale-[0.98]',
@@ -510,7 +526,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     isIcon && 'icon-button tw:aspect-square tw:shrink-0',
     fullWidth && 'tw:w-full',
     allowShrink && 'tw:min-w-0',
-    iconSize ? ICON_OVERRIDE_ICON_CLASS[iconSize] : SIZE_ICON_CLASS[resolvedSize],
+    iconClasses,
     className,
   )
 

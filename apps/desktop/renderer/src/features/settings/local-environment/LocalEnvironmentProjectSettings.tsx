@@ -221,7 +221,7 @@ function ProjectCard({
             onOpen(projectId, defaultEnvironment.id, !defaultEnvironment.exists)
           }
         >
-          <Folder aria-hidden="true" size={APP_ICON_SIZE} />
+          <Folder aria-hidden="true" size="var(--inline-icon-size, 1em)" />
           <span className="tw:min-w-0 tw:type-row-title">
             {project.name}
             <span className="tw:block tw:truncate tw:type-caption tw:text-app-text-meta">
@@ -256,7 +256,7 @@ function ProjectCard({
                 {item.path.split(/[\\/]/).pop()}
               </span>
             </span>
-            <ChevronRight size={APP_ICON_SIZE} />
+            <ChevronRight size="var(--inline-icon-size, 1em)" />
           </button>
         ))}
       {error ? (

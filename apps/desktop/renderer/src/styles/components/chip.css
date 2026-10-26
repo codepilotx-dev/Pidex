@@ -27,8 +27,8 @@
     color: var(--cpx-sys-color-fg-primary);
   }
   .chip-button > svg {
-    width: var(--cpx-sys-icon-size);
-    height: var(--cpx-sys-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     display: block;
     flex-shrink: 0;
   }
@@ -99,8 +99,8 @@
     border: 1px solid transparent;
   }
   .chip-semantic > svg {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     display: block;
     flex-shrink: 0;
   }

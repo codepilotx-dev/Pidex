@@ -283,9 +283,9 @@
   }
 
   .settings-nav-icon {
-    width: var(--sidebar-icon-size);
-    height: var(--sidebar-icon-size);
-    flex: 0 0 var(--sidebar-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
+    flex: 0 0 auto;
   }
 
   /*

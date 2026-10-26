@@ -520,7 +520,7 @@ describe('Codex CPX design system token contract', () => {
     expectSourceNotContains(rightDock, '--cpx-sys-radius-prominent')
   })
 
-  test('keeps user messages and inline summaries on dedicated semantics', async () => {
+  test('keeps user messages and compact summary popovers on dedicated semantics', async () => {
     const [systemTokens, conversation, summary, threadSummary] = await Promise.all([
       Bun.file(new URL('../src/styles/design-system/tokens.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/primitives/conversation.css', import.meta.url)).text(),
@@ -540,18 +540,16 @@ describe('Codex CPX design system token contract', () => {
 
     expect(summary.match(/--thread-summary-inline-width:/g)).toHaveLength(1)
     expect(summary).toMatch(
-      /\.workflow-page__main,\s*\.thread-summary-popover\s*\{[\s\S]*?--thread-summary-inline-width: calc\(var\(--cpx-sys-space-1\) \* 75\);/,
+      /\.thread-summary-popover\s*\{[\s\S]*?--thread-summary-inline-width: calc\(var\(--cpx-sys-space-1\) \* 75\);/,
     )
-    expect(summary).not.toMatch(
-      /\.workflow-page__main\[data-thread-summary-inline=['"]true['"]\][\s\S]*?padding-inline-end:/,
-    )
-    // 内联面板保留布局宽度；浮层使用 UI-Design 尺寸，内容填满容器。
-    const inlinePanelClass =
-      threadSummary.match(/className="(thread-summary-inline [^"]*)"/)?.[1] ?? ''
-    expect(inlinePanelClass).toContain('tw:w-[var(--thread-summary-inline-width)]')
-    expectSourceContains(threadSummary, "const THREAD_SUMMARY_WIDTH_CLASS = 'tw:w-full'")
-    expectSourceContains(threadSummary, 'thread-summary-popover ${THREAD_SUMMARY_WIDTH_CLASS}')
-    expect(summary).not.toMatch(/width:\s*(?:260|272|300)px/)
+    expect(threadSummary).toContain('thread-summary-popover tw:w-[var(--thread-summary-inline-width)]')
+    expect(threadSummary).toContain('tw:[&]:p-0')
+    expect(threadSummary).toContain('thread-summary-panel tw:w-full tw:flex tw:min-h-0 tw:flex-col tw:gap-1')
+    expect(threadSummary).toContain('tw:overflow-y-auto tw:py-2')
+    expect(threadSummary).toContain('tw:pb-2 tw:last:pb-0')
+    expect(threadSummary).toContain('tw:max-w-[calc(100vw-24px)]')
+    expect(threadSummary).not.toContain('thread-summary-inline tw:absolute')
+    expect(conversation).not.toContain('--conversation-shift-offset')
   })
 
   test('keeps component tokens private to shared component styles', async () => {

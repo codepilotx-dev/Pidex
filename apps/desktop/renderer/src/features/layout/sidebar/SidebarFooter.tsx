@@ -444,8 +444,8 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
                         {t('了解更多')}
                       </span>
                       <ArrowUpRight
-                        className="popover-usage-action-icon tw:size-icon tw:flex-none tw:text-app-text-meta"
-                        size={APP_ICON_SIZE}
+                        className="popover-usage-action-icon tw:size-[var(--inline-icon-size,1em)] tw:flex-none tw:text-app-text-meta"
+                        size="var(--inline-icon-size, 1em)"
                       />
                     </DropdownMenu.Item>
                   </div>

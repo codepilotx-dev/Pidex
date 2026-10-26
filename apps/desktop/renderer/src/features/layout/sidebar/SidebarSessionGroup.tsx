@@ -93,6 +93,8 @@ type Props = {
   dropIndexBase?: number
   /** 列表默认显示条数；聊天列表 10，项目与自定义分组沿用调用方设置。 */
   initialLimit?: number
+  /** 每次展开增加的条数；未指定时沿用默认显示条数。 */
+  pageSize?: number
   /** 可供“移动到分组”选择的自定义分组。 */
   customSections?: readonly { id: string; title: string }[]
   /** 当前会话所属的自定义分组；不在任何分组时为 null。 */
@@ -130,6 +132,7 @@ function SidebarSessionGroupComponent({
   pagination = 'incremental',
   dropIndexBase = 0,
   initialLimit = GROUP_LIMIT,
+  pageSize = initialLimit,
   customSections = [],
   currentSectionId = null,
   unavailableProjectKeys,
@@ -197,7 +200,7 @@ function SidebarSessionGroupComponent({
     return [...ordered, ...sortedSessions.filter((session) => !knownIds.has(session.id))]
   }, [reorderSessionIds, sortedSessions])
   const { baseSessions, canCollapse, canShowMore, extraSessions, hasOverflow } =
-    getSidebarSessionDisplayGroups(orderedSessions, visibleLimit)
+    getSidebarSessionDisplayGroups(orderedSessions, visibleLimit, initialLimit)
   const extraSessionIds = useMemo(
     () => new Set(extraSessions.map((session) => session.id)),
     [extraSessions],
@@ -780,7 +783,7 @@ function SidebarSessionGroupComponent({
                     color="text"
                     onClick={() =>
                       updateVisibleLimit((current) =>
-                        Math.min(current + initialLimit, sessions.length),
+                        Math.min(current + pageSize, sessions.length),
                       )
                     }
                     size="compact"
@@ -916,7 +919,7 @@ function SidebarSessionWorkspaceMeta({ session }: { session: SessionListItem }):
       <span className="sidebar-session-workspace-meta tw:flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
         <MessageSquare
           className="sidebar-session-workspace-meta__icon tw:flex-none"
-          size={APP_ICON_SIZES.sm}
+          size="var(--inline-icon-size, 1em)"
         />
         <span className="sidebar-session-workspace-meta__name tw:min-w-0 tw:overflow-hidden tw:whitespace-nowrap">
           会话
@@ -939,7 +942,7 @@ function SidebarSessionWorkspaceMeta({ session }: { session: SessionListItem }):
   }
   return (
     <span className="sidebar-session-workspace-meta tw:flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
-      <Folder className="sidebar-session-workspace-meta__icon tw:flex-none" size={APP_ICON_SIZE} />
+      <Folder className="sidebar-session-workspace-meta__icon tw:flex-none" size="var(--inline-icon-size, 1em)" />
       <span className="sidebar-session-workspace-meta__name tw:min-w-0 tw:overflow-hidden tw:whitespace-nowrap">
         {session.workspaceName}
       </span>

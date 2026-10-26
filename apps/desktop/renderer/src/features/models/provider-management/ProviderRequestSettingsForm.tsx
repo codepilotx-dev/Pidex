@@ -760,7 +760,7 @@ export function ProviderRequestSettingsForm({
           >
             <ChevronRight
               aria-hidden="true"
-              size={APP_ICON_SIZES.sm}
+              size="var(--inline-icon-size, 1em)"
               strokeWidth={APP_ICON_STROKE_WIDTH}
               className={advanced ? 'tw:rotate-90' : ''}
             />

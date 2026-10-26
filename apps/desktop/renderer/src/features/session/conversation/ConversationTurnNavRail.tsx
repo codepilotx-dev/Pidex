@@ -428,10 +428,10 @@ export function ConversationTurnNavRail({
         scrubSessionRef.current
       )
         return
-      const top = index * 10
+      const top = index * 24
       if (top < list.scrollTop) {
         virtualizerRef.current?.scrollToIndex(index, { align: 'start' })
-      } else if (top + 10 > list.scrollTop + list.clientHeight) {
+      } else if (top + 24 > list.scrollTop + list.clientHeight) {
         virtualizerRef.current?.scrollToIndex(index, { align: 'end' })
       }
     }
@@ -575,7 +575,7 @@ export function ConversationTurnNavRail({
           ref={virtualizerRef}
           data={items}
           scrollRef={listRef}
-          itemSize={10}
+          itemSize={24}
           bufferSize={60}
           keepMounted={keepMounted}
         >
@@ -594,7 +594,7 @@ export function ConversationTurnNavRail({
                 }`}
                 aria-posinset={index + 1}
                 aria-setsize={items.length}
-                className="conversation-turn-nav-item tw:relative tw:flex tw:h-2.5 tw:min-h-2.5 tw:w-9 tw:min-w-9 tw:shrink-0 tw:items-center tw:justify-start tw:border-none tw:bg-transparent tw:p-0 tw:cursor-pointer tw:outline-none tw:focus-visible:rounded-md tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus"
+                className="conversation-turn-nav-item tw:relative tw:flex tw:h-6 tw:min-h-6 tw:w-9 tw:min-w-9 tw:shrink-0 tw:items-center tw:justify-start tw:border-none tw:bg-transparent tw:p-0 tw:cursor-pointer tw:outline-none tw:focus-visible:rounded-md tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus"
                 data-neighbor-distance={
                   visualIndex === undefined ? undefined : Math.abs(index - visualIndex)
                 }

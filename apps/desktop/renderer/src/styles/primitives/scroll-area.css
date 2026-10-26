@@ -60,12 +60,12 @@
 
   .scroll-area {
     scrollbar-color: var(--cpx-comp-scrollbar-slider-bg) transparent;
-    scrollbar-width: thin;
+    scrollbar-width: auto;
   }
 
   .scroll-area::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 24px;
+    height: 24px;
   }
 
   .scroll-area::-webkit-scrollbar-track,

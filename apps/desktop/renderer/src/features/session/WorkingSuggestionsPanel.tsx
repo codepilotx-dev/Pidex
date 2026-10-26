@@ -82,7 +82,7 @@ export function WorkingSuggestionsPanel({
               <ListChecks
                 aria-hidden
                 className="tw:shrink-0 tw:text-app-text-soft"
-                size={APP_ICON_SIZE}
+                size="var(--inline-icon-size, 1em)"
               />
               <span>{suggestion.label}</span>
             </button>
@@ -98,7 +98,7 @@ export function WorkingSuggestionsPanel({
             type="button"
             onClick={onShowTemplates}
           >
-            <LayoutTemplate aria-hidden className="tw:shrink-0" size={APP_ICON_SIZE} />
+            <LayoutTemplate aria-hidden className="tw:shrink-0" size="var(--inline-icon-size, 1em)" />
             <span>查看工作模板</span>
           </button>
         </div>
@@ -116,7 +116,7 @@ export function WorkingSuggestionsPanel({
         <div className="working-suggestion-list tw:grid tw:gap-0.5">
           <div className={`${SUGGESTION_HEADING_CLASS} working-suggestion-list-heading`}>
             <span className="tw:inline-flex tw:min-w-0 tw:items-center tw:gap-2 tw:text-app-text-soft">
-              <LayoutTemplate aria-hidden size={APP_ICON_SIZE} />
+              <LayoutTemplate aria-hidden size="var(--inline-icon-size, 1em)" />
               工作模板
             </span>
             <button
@@ -124,7 +124,7 @@ export function WorkingSuggestionsPanel({
               className={SUGGESTION_HEADING_ACTION_CLASS}
               onClick={onShowSuggestions}
             >
-              <ArrowLeft aria-hidden size={APP_ICON_SIZE} />
+              <ArrowLeft aria-hidden size="var(--inline-icon-size, 1em)" />
               返回建议
             </button>
           </div>
@@ -177,7 +177,7 @@ export function WorkingSuggestionsPanel({
             className={SUGGESTION_HEADING_ACTION_CLASS}
             onClick={() => onBack(category)}
           >
-            <ArrowLeft aria-hidden size={APP_ICON_SIZE} />
+            <ArrowLeft aria-hidden size="var(--inline-icon-size, 1em)" />
             返回
           </button>
         </div>

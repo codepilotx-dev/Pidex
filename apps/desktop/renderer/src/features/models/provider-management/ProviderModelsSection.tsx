@@ -1070,17 +1070,17 @@ export function DiscoveredModelCard({
         <div className="tw:shrink-0">
           {isToggling ? (
             <span className="tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:bg-app-hover tw:px-2 tw:py-0.5 tw:type-caption tw:text-app-text-soft">
-              <RefreshCw size={10} className="tw:animate-spin" />
+              <RefreshCw size="var(--inline-icon-size, 1em)" className="tw:animate-spin" />
               <span>保存中</span>
             </span>
           ) : isSelected ? (
             <span className="tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:bg-app-accent tw:text-app-on-accent tw:px-2 tw:py-0.5 tw:type-caption tw:shadow-sm">
-              <Check size={11} strokeWidth={2.5} />
+              <Check size="var(--inline-icon-size, 1em)" strokeWidth={2.5} />
               <span>已添加</span>
             </span>
           ) : (
             <span className="tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:border tw:border-dashed tw:border-app-border-subtle tw:px-2 tw:py-0.5 tw:type-caption tw:text-app-text-meta tw:group-hover:border-app-border tw:group-hover:text-app-text-soft">
-              <Plus size={11} />
+              <Plus size="var(--inline-icon-size, 1em)" />
               <span>未添加</span>
             </span>
           )}
@@ -1109,7 +1109,7 @@ export function DiscoveredModelCard({
       {/* 第三行：模型的上下文长度 */}
       <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:type-caption tw:text-app-text-soft tw:pt-1 tw:border-t tw:border-app-border-subtle/40">
         <div className="tw:flex tw:items-center tw:gap-1.5 tw:min-w-0">
-          <Cpu size={12} className="tw:shrink-0 tw:text-app-text-meta" />
+          <Cpu size="var(--inline-icon-size, 1em)" className="tw:shrink-0 tw:text-app-text-meta" />
           <span>
             上下文长度:{' '}
             <strong className="tw:text-app-text">

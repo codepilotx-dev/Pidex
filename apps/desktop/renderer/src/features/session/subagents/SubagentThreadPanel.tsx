@@ -374,7 +374,7 @@ export function SubagentThreadPanel({
               className="subagent-thread-panel__error tw:flex tw:items-center tw:gap-2 tw:rounded-lg tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:px-3 tw:py-2 tw:text-app-danger-fg tw:type-body-sm"
               role="alert"
             >
-              <AlertCircle size={APP_ICON_SIZE} />
+              <AlertCircle size="var(--inline-icon-size, 1em)" />
               <span>{run.error}</span>
             </div>
           ) : null}
@@ -445,7 +445,7 @@ function BlockedNotice({
       className="subagent-thread-panel__blocked tw:flex tw:items-center tw:gap-2 tw:rounded-lg tw:border tw:border-app-warning-border tw:bg-app-warning-subtle tw:px-3 tw:py-2 tw:text-app-warning-fg tw:type-body-sm"
       role="status"
     >
-      <AlertCircle size={APP_ICON_SIZE} />
+      <AlertCircle size="var(--inline-icon-size, 1em)" />
       <span>{label}</span>
     </div>
   )

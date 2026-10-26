@@ -24,7 +24,7 @@ export function ComputerControlChip({ threadId }: { threadId: string | null }): 
         className="chip-button composer-plan-mode-chip active tw:relative tw:bg-app-selected tw:text-app-accent-fg tw:type-secondary tw:hover:bg-app-selected"
         title="当前聊天正在控制电脑；停止后需要新的对话回合才能继续"
       >
-        <MonitorSmartphone aria-hidden="true" size={APP_ICON_SIZE} />
+        <MonitorSmartphone aria-hidden="true" size="var(--inline-icon-size, 1em)" />
         <span>{controlled ? `电脑操作中：${state.targetName ?? '电脑'}` : '电脑控制中'}</span>
         <Button
           color="secondary"

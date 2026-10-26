@@ -730,7 +730,7 @@ function ActivityItemView({
         )}
         <span className="cpx-agent-activity__label">{item.title}</span>
         <ChevronRight
-          size={APP_ICON_SIZES.sm}
+          size="var(--inline-icon-size, 1em)"
           className="cpx-agent-activity__chevron"
           aria-hidden="true"
         />
@@ -1126,9 +1126,9 @@ function ToolResultBlockView({
       const url = safeCitationUrl(block.url)
       return (
         <div className="canonical-tool-result-block canonical-tool-result-block--citation">
-          <Globe2 aria-hidden="true" size={APP_ICON_SIZES.sm} />
+          <Globe2 aria-hidden="true" size="var(--inline-icon-size, 1em)" />
           {url ? (
-            <a href={url} rel="noopener noreferrer" target="_blank">
+            <a className="tw:inline-flex tw:min-h-6 tw:min-w-6 tw:items-center" href={url} rel="noopener noreferrer" target="_blank">
               {block.title ?? url}
             </a>
           ) : (
@@ -1320,7 +1320,6 @@ export function PatchSummaryView({
             <Button
               color="primary"
               className="canonical-patch-card__action tw:[&&]:rounded-md"
-              iconSize="md"
               loading={pendingAction === patchAction}
               shape="default"
               size="sm"
@@ -1460,7 +1459,7 @@ export function FileMutationItemView({
             fallback={
               <div className="cpx-agent-activity__item-header cpx-agent-activity__item-header--static">
                 <Pencil
-                  size={APP_ICON_SIZES.sm}
+                  size="var(--inline-icon-size, 1em)"
                   className="cpx-agent-activity__icon"
                   aria-hidden="true"
                 />
@@ -1517,7 +1516,7 @@ function SubagentItemView({
       type="button"
       onClick={() => onOpen(item.subagentTaskId)}
     >
-      <Bot size={APP_ICON_SIZES.sm} aria-hidden="true" />
+      <Bot size="var(--inline-icon-size, 1em)" aria-hidden="true" />
       <span>
         <strong>{item.displayName}</strong>
         <small>{item.task}</small>

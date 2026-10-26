@@ -80,8 +80,8 @@ function GitBoardCommitHoverCardOverlay({
           <SidebarHoverCardRow className={metaRowClassName}>
             <User
               aria-hidden="true"
-              className="tw:size-icon-sm tw:text-app-text-meta"
-              size={APP_ICON_SIZE}
+              className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
+              size="var(--inline-icon-size, 1em)"
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
             <span className="sidebar-commit-hover-card-row-content tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
@@ -91,8 +91,8 @@ function GitBoardCommitHoverCardOverlay({
           <SidebarHoverCardRow className={metaRowClassName}>
             <CalendarClock
               aria-hidden="true"
-              className="tw:size-icon-sm tw:text-app-text-meta"
-              size={APP_ICON_SIZE}
+              className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
+              size="var(--inline-icon-size, 1em)"
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
             <span className="sidebar-commit-hover-card-row-content tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:tabular-nums">
@@ -102,8 +102,8 @@ function GitBoardCommitHoverCardOverlay({
           <SidebarHoverCardRow className={metaRowClassName}>
             <Database
               aria-hidden="true"
-              className="tw:size-icon-sm tw:text-app-text-meta"
-              size={APP_ICON_SIZE}
+              className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
+              size="var(--inline-icon-size, 1em)"
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
             <span className="sidebar-commit-hover-card-row-content tw:min-w-0 tw:overflow-hidden tw:font-mono tw:text-ellipsis tw:whitespace-nowrap">
@@ -113,8 +113,8 @@ function GitBoardCommitHoverCardOverlay({
           <SidebarHoverCardRow className={metaRowClassName}>
             <Folder
               aria-hidden="true"
-              className="tw:size-icon-sm tw:text-app-text-meta"
-              size={APP_ICON_SIZE}
+              className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
+              size="var(--inline-icon-size, 1em)"
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
             <span className="sidebar-commit-hover-card-row-content tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
@@ -124,8 +124,8 @@ function GitBoardCommitHoverCardOverlay({
           <SidebarHoverCardRow className={metaRowClassName}>
             <GitBranch
               aria-hidden="true"
-              className="tw:size-icon-sm tw:text-app-text-meta"
-              size={APP_ICON_SIZE}
+              className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
+              size="var(--inline-icon-size, 1em)"
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
             <span className="sidebar-commit-hover-card-row-content tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1">

@@ -21,6 +21,7 @@
 @import './primitives/chrome.css';
 @import './primitives/right-dock.css';
 @import './primitives/button.css';
+@import './primitives/interaction.css';
 @import './primitives/overlays.css';
 @import './primitives/sidebar.css';
 @import './primitives/review.css';

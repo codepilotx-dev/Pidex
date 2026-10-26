@@ -58,8 +58,8 @@
   }
 
   .settings-dropdown-icon {
-    width: var(--cpx-comp-icon-size-sm);
-    height: var(--cpx-comp-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     color: var(--cpx-comp-input-placeholder-fg);
     flex-shrink: 0;
   }

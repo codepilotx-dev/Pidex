@@ -212,7 +212,7 @@ function ResultCardReferenceItem({
       <li className="canonical-result-card__reference">
         <Icon aria-hidden="true" size={APP_ICON_SIZES.sm} />
         {url ? (
-          <a href={url} rel="noopener noreferrer" target="_blank" title={reference.value}>
+          <a className="tw:inline-flex tw:min-h-6 tw:min-w-6 tw:items-center" href={url} rel="noopener noreferrer" target="_blank" title={reference.value}>
             {text}
           </a>
         ) : (

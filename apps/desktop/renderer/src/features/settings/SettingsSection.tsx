@@ -14,6 +14,7 @@ type HeaderProps = {
   description?: React.ReactNode
   actions?: React.ReactNode
   children?: React.ReactNode
+  keepActionsInline?: boolean
 }
 
 type SlotProps = {
@@ -29,11 +30,14 @@ export function SettingsSectionHeader({
   description,
   actions,
   children,
+  keepActionsInline = false,
 }: HeaderProps): React.ReactNode {
   const { t } = useLocale()
   if (!title && !description && !actions && !children) return null
   return (
-    <header className="settings-section-header tw:mb-3 tw:flex tw:min-w-0 tw:items-start tw:justify-between tw:gap-4 tw:@max-[42rem]:flex-col tw:@max-[42rem]:items-stretch">
+    <header
+      className={`settings-section-header tw:mb-3 tw:flex tw:min-w-0 tw:items-start tw:justify-between tw:gap-4 ${keepActionsInline ? '' : 'tw:@max-[42rem]:flex-col tw:@max-[42rem]:items-stretch'}`}
+    >
       <div className="settings-section-header-copy tw:min-w-0 tw:flex-1">
         {title ? (
           <h3 className="settings-section-title tw:m-0 tw:text-app-text tw:type-title-sm">
@@ -48,7 +52,9 @@ export function SettingsSectionHeader({
         {children}
       </div>
       {actions ? (
-        <div className="settings-section-header-actions tw:flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-3 tw:@max-[42rem]:justify-start">
+        <div
+          className={`settings-section-header-actions tw:flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-3 ${keepActionsInline ? '' : 'tw:@max-[42rem]:justify-start'}`}
+        >
           {actions}
         </div>
       ) : null}

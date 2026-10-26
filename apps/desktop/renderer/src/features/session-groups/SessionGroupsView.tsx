@@ -299,14 +299,14 @@ export function SessionGroupsView(): React.ReactNode {
                   className="session-groups-back tw:inline-flex tw:items-center tw:gap-2 tw:rounded-md tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-label tw:no-underline tw:hover:bg-app-hover tw:hover:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus"
                   to="/workflows"
                 >
-                  <ArrowLeft aria-hidden="true" size={APP_ICON_SIZE} />
+                  <ArrowLeft aria-hidden="true" size="var(--inline-icon-size, 1em)" />
                   <span>返回工作组</span>
                 </Link>
               </div>
               <header className="session-group-detail__header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:pb-6 tw:@max-[760px]:flex-col tw:@max-[760px]:items-stretch">
                 <div className="session-group-detail__info tw:flex tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:flex-col tw:gap-1 tw:[&>h1]:mt-1 tw:[&>h1]:text-app-text tw:[&>h1]:type-title-xl tw:[&>p]:m-0 tw:[&>p]:text-app-text-soft tw:[&>p]:type-body">
                   <span className="chip-semantic accent session-group-eyebrow tw:self-start">
-                    <Sparkles size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                    <Sparkles size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
                     共享上下文
                   </span>
                   <h1>{detail.group.name}</h1>
@@ -361,7 +361,7 @@ export function SessionGroupsView(): React.ReactNode {
 
               <section className="session-group-section tw:border-b tw:border-b-app-border-subtle tw:py-6 tw:last:border-b-0">
                 <div className="session-group-section__title-row tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:text-app-text tw:[&>h3]:m-0 tw:[&>h3]:type-title-sm">
-                  <Users size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                  <Users size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
                   <h3>成员会话</h3>
                   <span className="session-group-section-count tw:inline-flex tw:h-4.5 tw:min-w-4.5 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-control tw:px-1 tw:text-app-text-soft tw:type-label">
                     {detail.members.length}
@@ -437,7 +437,7 @@ export function SessionGroupsView(): React.ReactNode {
 
               <section className="session-group-section tw:border-b tw:border-b-app-border-subtle tw:py-6 tw:last:border-b-0">
                 <div className="session-group-section__title-row tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:text-app-text tw:[&>h3]:m-0 tw:[&>h3]:type-title-sm">
-                  <History size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                  <History size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
                   <h3>步骤时间线</h3>
                   <span className="session-group-section-count tw:inline-flex tw:h-4.5 tw:min-w-4.5 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-control tw:px-1 tw:text-app-text-soft tw:type-label">
                     {steps.length}
@@ -484,7 +484,7 @@ export function SessionGroupsView(): React.ReactNode {
                 className="session-group-notice tw:mb-4 tw:flex tw:items-center tw:justify-between tw:gap-3 tw:rounded-lg tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:px-4 tw:py-3 tw:text-app-danger-fg tw:type-body-sm"
                 role="alert"
               >
-                <AlertCircle size={APP_ICON_SIZE} />
+                <AlertCircle size="var(--inline-icon-size, 1em)" />
                 <span>{error}</span>
                 <Button color="secondary" size="compact" onClick={() => void refresh()}>
                   <RefreshCw size={APP_ICON_SIZES.sm} />
@@ -529,7 +529,7 @@ export function SessionGroupsView(): React.ReactNode {
                       </span>
                       <span className="session-group-row__updated tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:whitespace-nowrap tw:text-app-text-meta tw:type-caption">
                         <span>{formatGroupTime(group.latestStepAt) || '暂无记录'}</span>
-                        <ChevronRight aria-hidden="true" size={APP_ICON_SIZES.sm} />
+                        <ChevronRight aria-hidden="true" size="var(--inline-icon-size, 1em)" />
                       </span>
                     </Link>
                   ))}
@@ -693,7 +693,7 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
               to={`/threads/${encodeURIComponent(step.sourceThreadId)}`}
             >
               <span>打开来源</span>
-              <ArrowUpRight size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+              <ArrowUpRight size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
             </Link>
           ) : (
             <span className="session-group-step__link session-group-step__link--disabled tw:cursor-default tw:text-app-text-disabled">
@@ -783,7 +783,7 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
             role="alert"
           >
             <div className="session-group-step__failure-title tw:flex tw:items-center tw:gap-1 tw:type-weight-label">
-              <AlertCircle size={APP_ICON_SIZE} />
+              <AlertCircle size="var(--inline-icon-size, 1em)" />
               <strong>失败阶段：{step.failure.stage}</strong>
             </div>
             <span>{step.failure.message}</span>
@@ -799,7 +799,7 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
               type="button"
               onClick={() => void toggleDiff()}
             >
-              <FileDiff size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+              <FileDiff size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
               <span>{step.changedFiles.length} 个变更文件</span>
               {diffOpen ? (
                 <ChevronUp size={APP_ICON_SIZES.sm} />

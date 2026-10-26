@@ -104,7 +104,7 @@ export function ThemePickerDropdown({
       </span>
       <ChevronDown
         className="tw:text-app-text-soft tw:shrink-0"
-        size={APP_ICON_SIZES.sm}
+        size="var(--inline-icon-size, 1em)"
         strokeWidth={APP_ICON_STROKE_WIDTH}
       />
     </button>

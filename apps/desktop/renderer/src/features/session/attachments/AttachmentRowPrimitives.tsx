@@ -48,7 +48,7 @@ const FILE_PILL_OPEN_CLASS = cx(
   'tw:hover:bg-app-hover',
   'tw:focus-visible:outline-solid tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus tw:focus-visible:outline-offset-2',
 )
-const FILE_PILL_OPEN_REMOVABLE_CLASS = 'tw:pe-6'
+const FILE_PILL_OPEN_REMOVABLE_CLASS = 'tw:pe-7'
 const FILE_PILL_OPEN_STATIC_CLASS = 'tw:pe-3'
 const FILE_PILL_ICON_CLASS = 'attachment-file-pill__icon tw:shrink-0 tw:text-app-text'
 const FILE_PILL_TEXT_CLASS =
@@ -117,7 +117,7 @@ export function AttachmentImageTile({
       <span aria-label={`${name} 正在加载`} className={TILE_LOADING_CLASS} />
     ) : status === 'error' ? (
       <span className={TILE_ERROR_CLASS}>
-        <ImageOff aria-hidden="true" size={APP_ICON_SIZE} />
+        <ImageOff aria-hidden="true" size="var(--inline-icon-size, 1em)" />
         <span>加载失败</span>
       </span>
     ) : source ? (

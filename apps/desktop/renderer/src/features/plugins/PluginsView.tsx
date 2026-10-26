@@ -491,7 +491,7 @@ export function PluginsView(): React.ReactNode {
                   </Button>
                   <ChevronRight
                     aria-hidden="true"
-                    size={APP_ICON_SIZES.sm}
+                    size="var(--inline-icon-size, 1em)"
                     strokeWidth={APP_ICON_STROKE_WIDTH}
                   />
                   <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>

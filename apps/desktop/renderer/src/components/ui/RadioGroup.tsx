@@ -81,7 +81,7 @@ export function RadioItem({
       <RadioGroupPrimitive.Item
         aria-label={ariaLabel}
         className={cx(
-          'ui-radio-control tw:inline-grid tw:size-4 tw:shrink-0 tw:place-items-center tw:rounded-pill tw:border tw:border-app-border-strong tw:bg-app-control tw:p-0 tw:text-app-on-accent',
+          'ui-radio-control tw:inline-grid tw:size-6 tw:shrink-0 tw:place-items-center tw:rounded-pill tw:border tw:border-app-border-strong tw:bg-app-control tw:p-0 tw:text-app-on-accent',
           'tw:transition-[background-color,border-color] tw:duration-feedback tw:ease-standard',
           'tw:data-[state=checked]:border-app-accent tw:data-[state=checked]:bg-app-accent',
           'tw:focus-visible:border-app-focus tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus',

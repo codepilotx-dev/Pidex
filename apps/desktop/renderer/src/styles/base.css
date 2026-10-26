@@ -30,7 +30,7 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     scrollbar-color: var(--cpx-comp-scrollbar-slider-bg) transparent;
-    scrollbar-width: thin;
+    scrollbar-width: auto;
   }
 
   .skip-to-main {
@@ -53,8 +53,8 @@
   }
 
   *::-webkit-scrollbar {
-    width: 10px;
-    height: 10px;
+    width: 24px;
+    height: 24px;
   }
 
   *::-webkit-scrollbar-track {

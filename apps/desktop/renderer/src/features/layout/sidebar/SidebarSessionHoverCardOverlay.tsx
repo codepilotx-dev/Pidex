@@ -52,7 +52,7 @@ function PullRequestRow({
     <SidebarHoverCardRow className="sidebar-session-hover-card-row tw:grid-cols-[var(--sidebar-hover-leading-width)_minmax(0,1fr)] tw:text-app-text-meta tw:type-caption">
       <Icon
         aria-hidden="true"
-        className={cx('tw:size-icon-sm', visual.className)}
+        className={cx('tw:size-[var(--inline-icon-size,1em)]', visual.className)}
         size={APP_ICON_SIZE}
         strokeWidth={APP_ICON_STROKE_WIDTH}
       />
@@ -160,7 +160,7 @@ export function SidebarSessionHoverCardOverlay({
             <Laptop
               aria-hidden="true"
               className="sidebar-session-hover-card-device-icon tw:flex-none tw:text-app-text-meta"
-              size={APP_ICON_SIZE}
+              size="var(--inline-icon-size, 1em)"
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
             <span className="sidebar-session-hover-card-time tw:flex-none tw:text-app-text-meta tw:type-caption tw:tabular-nums tw:whitespace-nowrap">
@@ -192,8 +192,8 @@ export function SidebarSessionHoverCardOverlay({
           <SidebarHoverCardRow className="sidebar-session-hover-card-row tw:grid-cols-[var(--sidebar-hover-leading-width)_minmax(0,1fr)] tw:text-app-text-meta tw:type-caption">
             <Folder
               aria-hidden="true"
-              className="tw:size-icon-sm tw:text-app-text-meta"
-              size={APP_ICON_SIZE}
+              className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
+              size="var(--inline-icon-size, 1em)"
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
             <span className="sidebar-session-hover-card-row-content tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1">
@@ -226,14 +226,14 @@ export function SidebarSessionHoverCardOverlay({
               {model.environmentKind === 'worktree' ? (
                 <GitFork
                   aria-hidden="true"
-                  className="tw:size-icon-sm tw:text-app-text-meta"
+                  className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
                   size={APP_ICON_SIZE}
                   strokeWidth={APP_ICON_STROKE_WIDTH}
                 />
               ) : (
                 <Laptop
                   aria-hidden="true"
-                  className="tw:size-icon-sm tw:text-app-text-meta"
+                  className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
                   size={APP_ICON_SIZE}
                   strokeWidth={APP_ICON_STROKE_WIDTH}
                 />

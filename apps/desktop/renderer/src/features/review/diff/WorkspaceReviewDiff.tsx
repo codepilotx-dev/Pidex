@@ -778,7 +778,7 @@ export const ReviewDiffFilePreview = React.memo(function ReviewDiffFilePreview({
           <FileTypeIcon
             associationMode="extension-only"
             aria-hidden="true"
-            className="review-file-icon tw:size-icon tw:min-w-4 tw:mr-2 tw:shrink-0"
+            className="review-file-icon tw:size-[var(--inline-icon-size,1em)] tw:mr-2 tw:shrink-0"
             path={file.path}
             size={APP_ICON_SIZE}
           />
@@ -1033,7 +1033,7 @@ export function ReviewVirtualDiffRows({
         bufferSize={64}
         className="review-diff-vlist tw:flex-1 tw:min-h-0 tw:overflow-x-hidden"
         data={flattenedRows}
-        itemSize={20}
+        itemSize={24}
         style={{ width: '100%', height: '100%' }}
       >
         {(row) =>

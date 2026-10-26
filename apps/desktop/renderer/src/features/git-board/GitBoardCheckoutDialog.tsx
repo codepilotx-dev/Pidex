@@ -171,12 +171,12 @@ export function GitBoardCheckoutDialog({
                         onCheckout(branch.name)
                       }}
                     >
-                      <GitBranch aria-hidden="true" size={APP_ICON_SIZE} className="tw:shrink-0" />
+                      <GitBranch aria-hidden="true" size="var(--inline-icon-size, 1em)" className="tw:shrink-0" />
                       <span className="tw:min-w-0 tw:flex-1 tw:truncate">{branch.name}</span>
                       {branch.current && (
                         <Tooltip content={t('当前分支')}>
                           <span className="tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:type-caption">
-                            <Check aria-hidden="true" size={APP_ICON_SIZE} />
+                            <Check aria-hidden="true" size="var(--inline-icon-size, 1em)" />
                             {t('当前分支')}
                           </span>
                         </Tooltip>

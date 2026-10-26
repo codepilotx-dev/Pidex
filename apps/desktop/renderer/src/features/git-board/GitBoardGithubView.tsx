@@ -287,9 +287,9 @@ function RepositoryRow({
             <MetaChip>
               <GitFork
                 aria-hidden="true"
-                size={APP_ICON_SIZE}
+                size="var(--inline-icon-size, 1em)"
                 strokeWidth={APP_ICON_STROKE_WIDTH}
-                className="tw:size-3"
+                className="tw:size-[var(--inline-icon-size,1em)]"
               />
               Fork
             </MetaChip>

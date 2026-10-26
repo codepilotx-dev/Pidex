@@ -1083,6 +1083,7 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
             contentClassName="appearance-advanced-content tw:flex tw:flex-col tw:gap-4"
             renderTrigger={({ expanded, contentId, toggle }) => (
               <SettingsSection.Header
+                keepActionsInline
                 title={
                   <button
                     aria-controls={contentId}
@@ -1092,7 +1093,7 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
                     type="button"
                   >
                     {t('高级')}
-                    {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                    {expanded ? <ChevronDown size="var(--inline-icon-size, 1em)" /> : <ChevronRight size="var(--inline-icon-size, 1em)" />}
                   </button>
                 }
                 actions={

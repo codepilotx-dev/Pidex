@@ -247,7 +247,7 @@ export function WorkbenchTabStrip({
                         aria-controls={`workbench-panel-${target}-${domId(tab.id)}`}
                         aria-selected={active}
                         className={cx(
-                          'right-dock-tab tw:pr-5 tw:relative tw:inline-flex tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:items-center tw:gap-2 tw:overflow-hidden tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0 tw:text-inherit tw:whitespace-nowrap tw:type-control tw:focus-visible:outline-app-accent/72',
+                          'right-dock-tab tw:pr-7 tw:relative tw:inline-flex tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:items-center tw:gap-2 tw:overflow-hidden tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0 tw:text-inherit tw:whitespace-nowrap tw:type-control tw:focus-visible:outline-app-accent/72',
                           active && 'active',
                           tab.kind === 'file-preview' && tab.preview && 'preview tw:italic',
                         )}
@@ -273,7 +273,7 @@ export function WorkbenchTabStrip({
                           onCloseTab(tab.id)
                         }}
                       >
-                        <span className="right-dock-tab-icon tw:inline-flex tw:size-icon tw:items-center tw:justify-center tw:[&>svg]:size-icon">
+                        <span className="right-dock-tab-icon tw:inline-flex tw:size-[var(--inline-icon-size,1em)] tw:items-center tw:justify-center tw:[&>svg]:size-[var(--inline-icon-size,1em)]">
                           {tabIcon}
                         </span>
                         <span className="right-dock-tab-title tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:whitespace-nowrap">

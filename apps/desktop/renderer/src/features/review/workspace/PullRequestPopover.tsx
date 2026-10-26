@@ -69,9 +69,9 @@ export function PullRequestPopover({
               <span className="review-popover-branch-name tw:max-w-40 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
                 {branchLabel}
               </span>
-              <ArrowUpRight size={APP_ICON_SIZE} />
+              <ArrowUpRight size="var(--inline-icon-size, 1em)" />
               <span>{targetLabel}</span>
-              <ChevronDown size={APP_ICON_SIZES.sm} />
+              <ChevronDown size="var(--inline-icon-size, 1em)" />
             </span>
             <span className="review-popover-counts tw:ml-auto tw:inline-flex tw:items-center tw:gap-1 tw:type-weight-label tw:tabular-nums">
               <strong className="tw:text-app-success tw:type-weight-label">
@@ -144,7 +144,7 @@ export function PullRequestPopover({
               onClick={() => onCreateDraftPR(title, body, pushFirst)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <GitFork size={APP_ICON_SIZE} />
+                <GitFork size="var(--inline-icon-size, 1em)" />
                 创建草稿 PR
               </span>
               <span className="shortcut">Ctrl+Enter</span>
@@ -155,7 +155,7 @@ export function PullRequestPopover({
               onClick={() => onCreatePR(title, body, pushFirst)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <GitFork size={APP_ICON_SIZE} />
+                <GitFork size="var(--inline-icon-size, 1em)" />
                 创建拉取请求
               </span>
             </Button>
@@ -165,7 +165,7 @@ export function PullRequestPopover({
               onClick={() => onOpenPR()}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <ExternalLink size={APP_ICON_SIZE} />
+                <ExternalLink size="var(--inline-icon-size, 1em)" />
                 在浏览器中打开 PR
               </span>
             </Button>

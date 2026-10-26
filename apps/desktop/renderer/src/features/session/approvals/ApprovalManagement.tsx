@@ -383,7 +383,7 @@ export function ApprovalRulesDialog({
                   <AlertTriangle
                     aria-hidden="true"
                     className="tw:shrink-0 tw:text-app-warning"
-                    size={APP_ICON_SIZE}
+                    size="var(--inline-icon-size, 1em)"
                   />
                   <span className="tw:min-w-0 tw:flex-1 tw:text-app-text-soft tw:type-body-sm">
                     规则已在其他位置更新，请刷新后重试。

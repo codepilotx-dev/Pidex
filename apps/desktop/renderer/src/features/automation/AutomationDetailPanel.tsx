@@ -504,7 +504,7 @@ function SaveIndicator({ controller }: { controller: AutomationController }): Re
   if (controller.saveState === 'saving')
     return (
       <span className="automation-save-state tw:inline-flex tw:items-center tw:gap-1">
-        <RotateCcw className="tw:size-icon-sm" size={APP_ICON_SIZE} aria-hidden="true" />
+        <RotateCcw className="tw:size-[var(--inline-icon-size,1em)]" size="var(--inline-icon-size, 1em)" aria-hidden="true" />
         正在保存…
       </span>
     )
@@ -525,7 +525,7 @@ function SaveIndicator({ controller }: { controller: AutomationController }): Re
   if (controller.saveState === 'saved')
     return (
       <span className="automation-save-state tw:inline-flex tw:items-center tw:gap-1">
-        <Check className="tw:size-icon-sm" size={APP_ICON_SIZES.sm} aria-hidden="true" />
+        <Check className="tw:size-[var(--inline-icon-size,1em)]" size="var(--inline-icon-size, 1em)" aria-hidden="true" />
         已保存
       </span>
     )

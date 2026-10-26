@@ -467,7 +467,7 @@ export function ModelSetupPage(): React.ReactNode {
                         </small>
                       </span>
                       <span
-                        className="model-setup-provider-status tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:[font-size:var(--cpx-sys-font-size-xs)] tw:[&_svg]:size-icon-sm tw:data-[connected=true]:text-app-success"
+                        className="model-setup-provider-status tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:[font-size:var(--cpx-sys-font-size-xs)] tw:[&_svg]:size-[var(--inline-icon-size,1em)] tw:data-[connected=true]:text-app-success"
                         data-connected={connected || undefined}
                       >
                         {connected ? (
@@ -503,8 +503,8 @@ export function ModelSetupPage(): React.ReactNode {
                       </p>
                     </div>
                     {providerConnected ? (
-                      <span className="model-setup-connected tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-success tw:[font-size:var(--cpx-sys-font-size-xs)] tw:[&_svg]:size-icon-sm">
-                        <Check size={APP_ICON_SIZES.sm} aria-hidden />
+                      <span className="model-setup-connected tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-success tw:[font-size:var(--cpx-sys-font-size-xs)] tw:[&_svg]:size-[var(--inline-icon-size,1em)]">
+                        <Check size="var(--inline-icon-size, 1em)" aria-hidden />
                         已连接
                       </span>
                     ) : null}
@@ -634,7 +634,7 @@ export function ModelSetupPage(): React.ReactNode {
                         {metadata?.vision ? '图片' : null}
                       </span>
                       {modelId === id ? (
-                        <Check className="tw:size-icon-sm" size={APP_ICON_SIZES.sm} aria-hidden />
+                        <Check className="tw:size-[var(--inline-icon-size,1em)]" size={APP_ICON_SIZES.sm} aria-hidden />
                       ) : null}
                     </button>
                   )

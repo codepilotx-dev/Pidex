@@ -104,34 +104,12 @@
 
 @layer overrides {
   /*
-   * A trailing chevron is an affordance one step below the button icon slot, so
-   * it keeps the 12px slot; `data-icon-size` replaces it, mirroring the former
-   * `--button-icon-size-override` / `--cpx-sys-icon-size-sm` fallback chain. The
-   * overrides drop `.ui-button`'s own weight with `:where()` so they land on the
-   * base rule's specificity and win by source order, staying inside the
-   * `selector-max-specificity` contract.
+   * A trailing chevron belongs to the label, so a text button scales it with
+   * the font (using the UI locale's unit, mirroring the icon slot in Button.tsx).
    */
   .ui-button:not([data-uniform])
     > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
-  }
-
-  :where(.ui-button)[data-icon-size='sm']:not([data-uniform])
-    > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
-  }
-
-  :where(.ui-button)[data-icon-size='md']:not([data-uniform])
-    > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
-    width: var(--cpx-sys-icon-size-md);
-    height: var(--cpx-sys-icon-size-md);
-  }
-
-  :where(.ui-button)[data-icon-size='lg']:not([data-uniform])
-    > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
-    width: var(--cpx-sys-icon-size-lg);
-    height: var(--cpx-sys-icon-size-lg);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 }

@@ -143,7 +143,7 @@ function DestinationButton({
       <Split
         aria-hidden="true"
         className="tw:shrink-0"
-        size={APP_ICON_SIZE}
+        size="var(--inline-icon-size, 1em)"
         strokeWidth={APP_ICON_STROKE_WIDTH}
       />
       <span className="tw:grid tw:min-w-0 tw:gap-1">

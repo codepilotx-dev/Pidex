@@ -91,7 +91,7 @@
     --review-diffs-indicator-padding-inline-start: 2ch;
     --review-diffs-comment-padding: 0 2ch 0 1ch;
     --review-diffs-font-size: var(--cpx-sys-font-size-code, 13px);
-    --review-diffs-line-height: var(--cpx-sys-line-height-code);
+    --review-diffs-line-height: max(24px, calc(1em * var(--cpx-sys-line-height-code)));
 
     box-sizing: border-box;
     width: 100%;

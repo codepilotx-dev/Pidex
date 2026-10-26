@@ -158,9 +158,9 @@ export function CollapsibleUserMarkdown({
         >
           <span>{collapseState === 'expanded' ? '收起' : '展开全文'}</span>
           <ChevronDown
-            size={APP_ICON_SIZES.sm}
+            size="var(--inline-icon-size, 1em)"
             className={cx(
-              'tw:size-icon-sm tw:transition-transform tw:duration-[var(--cpx-sys-motion-micro)] tw:ease-standard',
+              'tw:size-[var(--inline-icon-size,1em)] tw:transition-transform tw:duration-[var(--cpx-sys-motion-micro)] tw:ease-standard',
               collapseState === 'expanded' && 'tw:rotate-180',
             )}
             aria-hidden="true"

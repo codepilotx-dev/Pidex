@@ -655,25 +655,48 @@ describe('non-color design token contracts', () => {
     )
   })
 
-  test('review diff uses shared code line-height token instead of local formula', async () => {
+  test('review diff preserves shared code rhythm with a 24px floor for line actions', async () => {
     const review = await read('../src/styles/primitives/review.css')
-    expect(review).not.toMatch(/--review-diffs-line-height:\s*max\(/)
+    expect(review).toContain('--review-diffs-line-height: max(24px, calc(1em * var(--cpx-sys-line-height-code)))')
     expect(review).toMatch(/line-height:\s*var\(--cpx-sys-line-height-code\)/)
   })
 
-  test('conversation composer inner aligns with canonical turns across conversation and side chat', async () => {
+  test('conversation composer overhangs the reading column without shrinking the timeline twice', async () => {
     const conversation = await read('../src/styles/primitives/conversation.css')
     const threadComposerDock = await read(
       '../src/features/session/conversation/ThreadComposerDock.tsx',
     )
     const composerSurface = await read('../src/features/session/composer/ComposerSurface.tsx')
+    const timeline = await read('../src/features/session/timeline/SessionTimelineView.tsx')
+    const page = await read('../src/features/session/conversation/ConversationPage.tsx')
 
+    expect(conversation).not.toContain('--conversation-shift-offset')
     expect(conversation).toMatch(
-      /\.conversation-page \.session-timeline-main,\s*\.conversation-page \.workflow-page__composer-inner\s*\{[\s\S]*?transform:\s*translateX\(var\(--conversation-shift-offset,\s*0px\)\);/,
+      /\.conversation-page \.workflow-page__composer-inner\s*\{[\s\S]*?width:\s*min\([\s\S]*?calc\(var\(--page-content-max-width\) \+ 2 \* var\(--conversation-composer-overhang\)\),[\s\S]*?calc\(100% - 2 \* var\(--conversation-inline-gutter\)\)[\s\S]*?margin-inline:\s*auto;/,
+    )
+    expect(conversation).toContain('container: conversation-panel / inline-size;')
+    expect(conversation).toContain('@container conversation-panel (width < 53.5rem)')
+    expect(conversation).toContain('--page-content-max-width: 40rem;')
+    expect(conversation).toContain('--cpx-sys-layout-conversation-max-width: 48rem;')
+    expect(conversation).toContain('--conversation-inline-gutter: var(--cpx-sys-space-4);')
+    expect(conversation).toContain('--conversation-composer-overhang: var(--cpx-sys-space-6);')
+    expect(conversation).toContain(
+      '100% - 2 * (var(--conversation-inline-gutter) + var(--conversation-composer-overhang))',
+    )
+    expect(conversation).toContain('--session-timeline-width: 100%;')
+    expect(timeline).toContain('tw:w-[var(--session-timeline-width,var(--session-content-w,100%))]')
+    expect(conversation).not.toContain('--conversation-content-inline-start')
+    expect(conversation).not.toContain('@media (max-width: 760px)')
+    expect(conversation).toContain(
+      'padding-inline: calc(var(--conversation-composer-overhang) - var(--cpx-sys-space-3) - 1px);',
     )
     expect(conversation).toMatch(
-      /\.conversation-page \.workflow-page__composer-inner\s*\{[\s\S]*?width:\s*min\(var\(--page-content-max-width\),\s*var\(--session-content-w\)\);[\s\S]*?max-width:\s*var\(--page-content-max-width\);[\s\S]*?margin-inline:\s*auto;/,
+      /\.conversation-page \.workflow-main-scroll-footer \.chat-input__dropdown--suggestion\s*\{\s*width: 100%;\s*max-width: 100%;/,
     )
+    expect(page).toContain(
+      'subagent-timeline-summary tw:mx-auto tw:my-2 tw:flex tw:w-[min(var(--page-content-max-width),var(--session-content-w))]',
+    )
+    expect(conversation).toMatch(/\.right-dock-side-chat\s*\{\s*--session-content-w: 100%;/)
     expect(conversation).toMatch(
       /\.canonical-turn\s*\{[\s\S]*?width:\s*min\(var\(--page-content-max-width\),\s*var\(--session-content-w\)\);[\s\S]*?max-width:\s*var\(--page-content-max-width\);[\s\S]*?margin-inline:\s*auto;/,
     )

@@ -226,16 +226,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--cpx-sys-icon-size);
-    height: var(--cpx-sys-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     margin-right: 2px;
     vertical-align: -0.125em;
   }
 
   .md-file-reference__icon > svg {
     display: block;
-    width: var(--cpx-sys-icon-size);
-    height: var(--cpx-sys-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 
   .md-file-reference__label {
@@ -252,8 +252,8 @@
 
   .md-file-reference__target-icon {
     display: block;
-    width: var(--cpx-sys-icon-size);
-    height: var(--cpx-sys-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 
   .md-wide-block {
@@ -638,8 +638,8 @@
     cursor: pointer;
   }
   .md-directive-details__summary svg {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     transition: transform var(--cpx-sys-motion-disclosure) var(--cpx-sys-ease-disclosure);
   }
   .md-directive-details__summary:focus-visible {

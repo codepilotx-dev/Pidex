@@ -48,7 +48,7 @@ export const SUGGESTION_PANEL_CLASS =
   'new-session-suggestions tw:w-[var(--quick-chat-surface-width)] tw:max-w-full tw:[container-type:inline-size]'
 
 const SUGGESTION_ICON_CLASS =
-  'new-session-suggestion-icon tw:grid tw:size-icon tw:place-items-center tw:[color:var(--new-session-suggestion-tone)]'
+  'new-session-suggestion-icon tw:grid tw:size-[var(--inline-icon-size,1em)] tw:place-items-center tw:[color:var(--new-session-suggestion-tone)]'
 
 const SUGGESTION_FOCUS_CLASS =
   'tw:border-0 tw:cursor-pointer tw:[font:inherit] tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus'
@@ -123,7 +123,7 @@ export function NewSessionSuggestions({
             className={SUGGESTION_HEADING_ACTION_CLASS}
             onClick={onShowSuggestions}
           >
-            <ArrowLeft aria-hidden size={APP_ICON_SIZE} />
+            <ArrowLeft aria-hidden size="var(--inline-icon-size, 1em)" />
             返回建议
           </button>
         </div>
@@ -175,7 +175,7 @@ export function NewSessionSuggestions({
           className={SUGGESTION_HEADING_ACTION_CLASS}
           onClick={() => onShowAll(category)}
         >
-          <ArrowLeft aria-hidden size={APP_ICON_SIZE} />
+          <ArrowLeft aria-hidden size="var(--inline-icon-size, 1em)" />
           显示全部
         </button>
       </div>

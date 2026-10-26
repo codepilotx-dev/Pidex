@@ -225,9 +225,9 @@ export function DatePicker({
           type="button"
         >
           <CalendarDays
-            size={APP_ICON_SIZE}
+            size="var(--inline-icon-size, 1em)"
             aria-hidden="true"
-            className="ui-date-picker-trigger-icon tw:size-icon tw:shrink-0 tw:text-app-text-soft"
+            className="ui-date-picker-trigger-icon tw:size-[var(--inline-icon-size,1em)] tw:shrink-0 tw:text-app-text-soft"
           />
           <span
             className={cx(
@@ -238,9 +238,9 @@ export function DatePicker({
             {value ? displayDate(value, locale) : t(placeholder)}
           </span>
           <ChevronDown
-            size={APP_ICON_SIZES.sm}
+            size="var(--inline-icon-size, 1em)"
             aria-hidden="true"
-            className="ui-date-picker-chevron tw:size-icon-sm tw:shrink-0 tw:text-app-text-soft"
+            className="ui-date-picker-chevron tw:size-[var(--inline-icon-size,1em)] tw:shrink-0 tw:text-app-text-soft"
           />
         </button>
       </Popover.Trigger>

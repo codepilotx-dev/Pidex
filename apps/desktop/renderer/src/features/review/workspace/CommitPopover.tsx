@@ -123,7 +123,7 @@ export function CommitPopover({
               onClick={() => onCommit(message, includeUnstaged)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <ArrowUpToLine size={APP_ICON_SIZE} />
+                <ArrowUpToLine size="var(--inline-icon-size, 1em)" />
                 提交
               </span>
               <span className="shortcut">Ctrl+Enter</span>
@@ -134,7 +134,7 @@ export function CommitPopover({
               onClick={() => onCommitAndPush(message, includeUnstaged)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <ArrowUp size={APP_ICON_SIZE} />
+                <ArrowUp size="var(--inline-icon-size, 1em)" />
                 提交并推送
               </span>
             </Button>
@@ -144,7 +144,7 @@ export function CommitPopover({
               onClick={() => onPush()}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <ArrowDown size={APP_ICON_SIZE} />
+                <ArrowDown size="var(--inline-icon-size, 1em)" />
                 推送
               </span>
             </Button>

@@ -59,8 +59,8 @@ export function WorkspaceFileTree(props: WorkspaceFileTreeProps): React.ReactNod
             <header className="workspace-file-tree-group-header tw:sticky tw:top-0 tw:z-local tw:flex tw:h-8 tw:items-center tw:gap-2 tw:bg-app-dock tw:px-3 tw:text-app-text tw:type-label">
               <ChevronRight
                 aria-hidden="true"
-                className="right-dock-tree-chevron tw:inline-flex tw:size-icon-sm tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-meta tw:transition-transform tw:duration-state tw:ease-out"
-                size={APP_ICON_SIZES.sm}
+                className="right-dock-tree-chevron tw:inline-flex tw:size-[var(--inline-icon-size,1em)] tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-meta tw:transition-transform tw:duration-state tw:ease-out"
+                size="var(--inline-icon-size, 1em)"
               />
               <span className="tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
                 {folder.name}
@@ -429,20 +429,20 @@ function WorkspaceFileTreeContent({
         {file.type === 'directory' && loadingDirectories.has(key) ? (
           <LoaderCircle
             aria-hidden="true"
-            className="right-dock-tree-chevron is-spinning tw:inline-flex tw:size-icon-sm tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-meta"
+            className="right-dock-tree-chevron is-spinning tw:inline-flex tw:size-[var(--inline-icon-size,1em)] tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-meta"
             size={APP_ICON_SIZE}
           />
         ) : file.type === 'directory' && directoryErrors.has(key) ? (
           <RotateCcw
             aria-hidden="true"
-            className="right-dock-tree-chevron tw:inline-flex tw:size-icon-sm tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-meta"
+            className="right-dock-tree-chevron tw:inline-flex tw:size-[var(--inline-icon-size,1em)] tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-meta"
             size={APP_ICON_SIZE}
           />
         ) : file.type === 'directory' ? (
           <ChevronRight
             aria-hidden="true"
             className={cx(
-              'right-dock-tree-chevron tw:inline-flex tw:size-icon-sm tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-meta tw:transition-transform tw:duration-state tw:ease-out',
+              'right-dock-tree-chevron tw:inline-flex tw:size-[var(--inline-icon-size,1em)] tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-meta tw:transition-transform tw:duration-state tw:ease-out',
               expandedDirectories.has(key) && 'is-expanded tw:rotate-90',
             )}
             size={APP_ICON_SIZES.sm}

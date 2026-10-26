@@ -112,7 +112,7 @@ export function WorkflowPlanCard({
           <span className="workflow-plan-card__compact-title tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:type-row-title">
             {title}
           </span>
-          <PanelRight size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+          <PanelRight size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
         </button>
       </article>
     )

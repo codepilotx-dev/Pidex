@@ -2296,7 +2296,7 @@ function WorkspaceReviewSidebarImpl({
                     <span className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
                       {source.baseBranch}
                     </span>
-                    <ChevronDown size={APP_ICON_SIZES.sm} />
+                    <ChevronDown size="var(--inline-icon-size, 1em)" />
                   </button>
                 }
                 onOpenChange={setBranchPickerOpen}
@@ -2467,7 +2467,7 @@ function WorkspaceReviewSidebarImpl({
           className="tw:mx-2 tw:mb-2 tw:flex tw:@max-[625px]:grid tw:@max-[625px]:grid-cols-[auto_minmax(0,1fr)] tw:min-h-12 tw:shrink-0 tw:items-center tw:gap-3 tw:rounded-2xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-4 tw:py-4 tw:type-control"
           role="status"
         >
-          <Info className="tw:shrink-0 tw:text-app-accent" size={APP_ICON_SIZE} />
+          <Info className="tw:shrink-0 tw:text-app-accent" size="var(--inline-icon-size, 1em)" />
           <span className="tw:min-w-0 tw:flex-1">此差异较大，每次仅显示一个文件</span>
           <div className="tw:flex tw:items-center tw:gap-1 tw:@max-[625px]:col-start-2">
             <Tooltip content="上一个文件">

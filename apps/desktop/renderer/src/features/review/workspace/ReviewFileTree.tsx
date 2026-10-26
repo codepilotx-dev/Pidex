@@ -69,7 +69,7 @@ export function ReviewFileTreeRow({
           'tw:transition-transform tw:duration-state tw:ease-standard',
           collapsed ? 'tw:rotate-0' : 'is-expanded tw:rotate-90',
         )}
-        size={APP_ICON_SIZES.sm}
+        size="var(--inline-icon-size, 1em)"
       />
       <FolderTypeIcon
         aria-hidden="true"

@@ -46,7 +46,7 @@ function OptionContent({
   showSelectedIndicator: boolean
 }): React.ReactNode {
   return (
-    <div className="ui-select-item-inner settings-dropdown-item-inner tw:flex tw:w-full tw:min-w-0 tw:items-center tw:gap-2">
+    <div className="ui-select-item-inner settings-dropdown-item-inner tw:type-row-title tw:flex tw:w-full tw:min-w-0 tw:items-center tw:gap-2">
       {option.icon}
       <div className="ui-select-item-copy settings-dropdown-item-copy tw:grid tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:gap-1">
         <span className="ui-select-item-label settings-dropdown-item-label tw:truncate tw:type-row-title">
@@ -114,7 +114,7 @@ export function Select<T extends string>({
         <span className="ui-select-value tw:min-w-0 tw:truncate">
           {selected?.label ?? placeholder ?? ariaLabel}
         </span>
-        <ChevronDown size={APP_ICON_SIZES.sm} />
+        <ChevronDown size="var(--inline-icon-size, 1em)" />
       </Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content

@@ -157,7 +157,7 @@ function EnvironmentList({
         </span>
         <ChevronRight
           aria-hidden="true"
-          size={APP_ICON_SIZES.sm}
+          size="var(--inline-icon-size, 1em)"
           strokeWidth={APP_ICON_STROKE_WIDTH}
         />
       </button>
@@ -489,7 +489,7 @@ function EnvironmentDetail({
             type="button"
             onClick={() => navigate(routeBase)}
           >
-            <ArrowLeft size={APP_ICON_SIZE} />
+            <ArrowLeft size="var(--inline-icon-size, 1em)" />
             返回环境
           </button>
           <EnvironmentEmpty>项目不存在、已移除或当前不可用。</EnvironmentEmpty>
@@ -528,11 +528,11 @@ function EnvironmentDetail({
           type="button"
           onClick={() => navigate(routeBase)}
         >
-          <ArrowLeft size={APP_ICON_SIZE} />
+          <ArrowLeft size="var(--inline-icon-size, 1em)" />
           环境
-          <ChevronRight aria-hidden="true" size={APP_ICON_SIZES.sm} />
+          <ChevronRight aria-hidden="true" size="var(--inline-icon-size, 1em)" />
           <span>{project.name}</span>
-          <ChevronRight aria-hidden="true" size={APP_ICON_SIZES.sm} />
+          <ChevronRight aria-hidden="true" size="var(--inline-icon-size, 1em)" />
           <span>编辑</span>
         </button>
 

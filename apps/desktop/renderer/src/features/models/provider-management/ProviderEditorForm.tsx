@@ -798,7 +798,7 @@ export function ProviderEditorForm({
                     <span className="tw:text-app-text-meta tw:type-label">快速套用常用预设</span>
                     <Sparkles
                       aria-hidden
-                      size={APP_ICON_SIZE}
+                      size="var(--inline-icon-size, 1em)"
                       strokeWidth={APP_ICON_STROKE_WIDTH}
                     />
                   </div>
@@ -1289,12 +1289,12 @@ const ProviderModelCard = memo(function ProviderModelCard({
           </span>
           {model.reasoning ? (
             <span className="provider-editor-model-card-tag tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:px-2 tw:py-1 tw:[font-size:var(--cpx-sys-font-size-xs)] provider-editor-model-tag--reasoning">
-              <Brain aria-hidden size={APP_ICON_SIZE} /> Reasoning
+              <Brain aria-hidden size="var(--inline-icon-size, 1em)" /> Reasoning
             </span>
           ) : null}
           {model.imageInput ? (
             <span className="provider-editor-model-card-tag tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:px-2 tw:py-1 tw:[font-size:var(--cpx-sys-font-size-xs)] provider-editor-model-tag--vision">
-              <Eye aria-hidden size={APP_ICON_SIZE} /> Vision
+              <Eye aria-hidden size="var(--inline-icon-size, 1em)" /> Vision
             </span>
           ) : null}
         </button>
@@ -1536,7 +1536,7 @@ export function ModelEditor({
             type="button"
           >
             <ChevronRight
-              size={APP_ICON_SIZES.sm}
+              size="var(--inline-icon-size, 1em)"
               aria-hidden="true"
               className={advanced ? 'tw:rotate-90' : undefined}
             />
@@ -1706,7 +1706,7 @@ export function ModelEditor({
         >
           <ChevronRight
             aria-hidden
-            size={APP_ICON_SIZES.sm}
+            size="var(--inline-icon-size, 1em)"
             className={parametersOpen ? 'tw:rotate-90' : ''}
           />
           协议参数

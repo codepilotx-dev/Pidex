@@ -209,7 +209,7 @@ export function ProfileSettings(): React.ReactNode {
                   </div>
                 ) : null}
                 {githubOverview ? (
-                  <div className="profile-meta-line tw:mt-3 tw:flex tw:max-w-[640px] tw:flex-wrap tw:justify-center tw:gap-x-4 tw:gap-y-2 tw:text-app-text-soft tw:text-[length:var(--cpx-sys-font-size-xs)] tw:[&>span]:inline-flex tw:[&>span]:min-w-0 tw:[&>span]:items-center tw:[&>span]:gap-1 tw:[&>span]:[overflow-wrap:anywhere] tw:[&_svg]:size-icon-sm">
+                  <div className="profile-meta-line tw:mt-3 tw:flex tw:max-w-[640px] tw:flex-wrap tw:justify-center tw:gap-x-4 tw:gap-y-2 tw:text-app-text-soft tw:text-[length:var(--cpx-sys-font-size-xs)] tw:[&>span]:inline-flex tw:[&>span]:min-w-0 tw:[&>span]:items-center tw:[&>span]:gap-1 tw:[&>span]:[overflow-wrap:anywhere] tw:[&_svg]:size-[var(--inline-icon-size,1em)]">
                     <ProfileMeta
                       icon={<User size={APP_ICON_SIZES.sm} />}
                       value={`${githubOverview.user.followers} followers`}
@@ -549,7 +549,7 @@ function ProfileRepositoryRow({
       <span className="profile-repository-name tw:min-w-0 tw:flex-1 tw:truncate tw:text-app-text">
         {repository.fullName}
       </span>
-      <span className="profile-repository-count tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-text-soft tw:tabular-nums tw:[&_svg]:size-icon-sm">
+      <span className="profile-repository-count tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-text-soft tw:tabular-nums tw:[&_svg]:size-[var(--inline-icon-size,1em)]">
         <Star size={APP_ICON_SIZE} />
         {repository.stargazerCount.toLocaleString()}
       </span>
