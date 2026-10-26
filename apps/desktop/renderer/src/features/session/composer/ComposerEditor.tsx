@@ -9,6 +9,7 @@ import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
 import { useEditCommands } from '../../../components/ui/EditCommandProvider.js'
 import type { ComposerDocument, ComposerDocumentToken } from './ComposerTypes.js'
 import { composerDocumentsEqual } from './ComposerSkillToken.js'
+import { focusComposerIfAvailable } from './ComposerFocus.js'
 
 export const composerSchema = new Schema({
   nodes: {
@@ -88,12 +89,14 @@ export const composerSchema = new Schema({
 
 export type ComposerEditorHandle = {
   focus: () => void
+  focusIfAvailable: (returnFrom?: Element | null) => void
   insertText: (text: string) => void
   replaceTextRange: (start: number, end: number, text: string) => void
   replaceTextRangeWithToken: (start: number, end: number, token: ComposerDocumentToken) => void
 }
 
 export type ComposerEditorProps = {
+  focusKey?: string
   value: string
   document?: ComposerDocument
   placeholder: string
@@ -114,6 +117,7 @@ export type ComposerEditorProps = {
 export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorProps>(
   function ComposerEditor(
     {
+      focusKey,
       value,
       document,
       placeholder,
@@ -161,6 +165,10 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       forwardedRef,
       () => ({
         focus: () => viewRef.current?.focus(),
+        focusIfAvailable: (returnFrom) => {
+          const view = viewRef.current
+          if (view) focusComposerIfAvailable(view.dom, () => view.focus(), returnFrom)
+        },
         insertText: (text) => {
           const view = viewRef.current
           if (!view || !text) return
@@ -173,7 +181,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           const from = positionAtTextOffset(view.state.doc, start)
           const to = positionAtTextOffset(view.state.doc, end)
           view.dispatch(view.state.tr.insertText(text, from, to).scrollIntoView())
-          view.focus()
+          focusComposerIfAvailable(view.dom, () => view.focus())
         },
         replaceTextRangeWithToken: (start, end, token) => {
           const view = viewRef.current
@@ -332,6 +340,15 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       // The view owns its lifetime; callback changes flow through callbacksRef.
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [registerTarget])
+
+    useEffect(() => {
+      if (!focusKey) return
+      const frame = requestAnimationFrame(() => {
+        const view = viewRef.current
+        if (view) focusComposerIfAvailable(view.dom, () => view.focus())
+      })
+      return () => cancelAnimationFrame(frame)
+    }, [focusKey])
 
     useEffect(() => {
       const view = viewRef.current

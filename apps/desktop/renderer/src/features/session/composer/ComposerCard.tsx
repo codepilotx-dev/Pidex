@@ -615,6 +615,22 @@ export function ComposerCard({
   const filePickerRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    const picker = filePickerRef.current
+    let frame = 0
+    const restoreFocus = (): void => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => editorRef.current?.focusIfAvailable())
+    }
+    picker?.addEventListener('cancel', restoreFocus)
+    picker?.addEventListener('change', restoreFocus)
+    return () => {
+      cancelAnimationFrame(frame)
+      picker?.removeEventListener('cancel', restoreFocus)
+      picker?.removeEventListener('change', restoreFocus)
+    }
+  }, [])
+
+  useEffect(() => {
     const clearFileDrag = (): void => {
       fileDragDepthRef.current = 0
       setFileDragActive(false)
@@ -627,9 +643,6 @@ export function ComposerCard({
     }
   }, [])
 
-  useEffect(() => {
-    if (submitOutcome?.status === 'failed') editorRef.current?.focus()
-  }, [submitOutcome])
   const [selectionStart, setSelectionStart] = useState<number | null>(null)
   const suggestions = useComposerSuggestions(input, selectionStart, isComposing, draftKey ?? '')
   const suggestionRequest = suggestions.request
@@ -746,6 +759,12 @@ export function ComposerCard({
     hasProject: Boolean(workspace),
     onError: onCommandError,
   })
+
+  useEffect(() => {
+    if (subagentMode || submitting || executingCommandId) return
+    const frame = requestAnimationFrame(() => editorRef.current?.focusIfAvailable())
+    return () => cancelAnimationFrame(frame)
+  }, [subagentMode, submitting, executingCommandId, submitOutcome, draftKey])
 
   const slashMenuItems = useMemo(
     () =>
@@ -1086,7 +1105,7 @@ export function ComposerCard({
   function closeDropdown(reason?: 'outside' | 'escape'): void {
     setOpenDropdown(null)
     suggestions.dismiss()
-    if (reason !== 'outside') editorRef.current?.focus()
+    if (reason !== 'outside') editorRef.current?.focusIfAvailable()
   }
 
   function closeStatusPanel(): void {
@@ -1193,6 +1212,7 @@ export function ComposerCard({
     if (event.dataTransfer.files.length === 0) return
     event.preventDefault()
     onAddFiles(event.dataTransfer.files)
+    editorRef.current?.focusIfAvailable()
   }
 
   function getPermissionIcon(value: DesktopPermissionMode): React.ReactNode {
@@ -1428,12 +1448,6 @@ export function ComposerCard({
           COMPOSER_HIDE_USAGE_CHIP_CLASS,
           COMPOSER_HIDE_PLAN_CHIP_LABEL_CLASS,
         )}
-        inert={
-          submitting ||
-          executingCommandId === SHARED_SLASH_COMMANDS.plan.id ||
-          executingCommandId === 'goal' ||
-          undefined
-        }
       >
         {contextUsage?.compactionOperation &&
         (contextUsage.compactionOperation.status !== 'completed' ||
@@ -1521,6 +1535,7 @@ export function ComposerCard({
               ariaDescribedBy={inlineSubmitFailure ? submitErrorId : undefined}
               ariaExpanded={unifiedMenuOpen}
               ref={editorRef}
+              focusKey={subagentMode ? undefined : (draftKey ?? placement)}
               document={composerDocument}
               value={input}
               onChange={onInputChange}
@@ -2051,7 +2066,8 @@ export function ComposerCard({
               onClick={
                 showStopAction
                   ? handleInterrupt
-                  : () => {
+                  : (event) => {
+                      editorRef.current?.focusIfAvailable(event.currentTarget)
                       if (!handleDirectSlashSubmission()) onSubmit('default')
                     }
               }

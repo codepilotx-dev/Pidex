@@ -78,6 +78,18 @@ function composerCardProps(overrides: Partial<ComposerCardProps> = {}): Composer
 }
 
 describe('composer surface variant', () => {
+  test('发送、入队及模式切换不把整个输入区设为 inert', async () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard {...composerCardProps({ submitting: true, canSubmit: false })} />,
+    )
+    expect(html).not.toContain('inert=""')
+    const source = await Bun.file(
+      new URL('../src/features/session/composer/ComposerCard.tsx', import.meta.url),
+    ).text()
+    expect(source).not.toContain('inert={')
+    expect(source).toContain("picker?.addEventListener('cancel', restoreFocus)")
+    expect(source).toContain("picker?.addEventListener('change', restoreFocus)")
+  })
   test('没有上下文统计时不渲染用量圆环与空面板', () => {
     const html = renderToStaticMarkup(
       <ComposerCard {...composerCardProps({ showContextUsage: true })} />,
