@@ -1871,16 +1871,17 @@ export function DesktopLayout(): React.ReactNode {
       const capturedPins = { ...sidebarSessionPins }
       const result = await archiveSessions(targetSessionIds)
       if (result.succeededSessionIds.length > 0) {
-        try {
-          const terminalClient = await loadDesktopTerminalClient()
-          await Promise.all(
-            result.succeededSessionIds.map((targetSessionId) =>
-              terminalClient.closeThreadTerminal(targetSessionId, 'task-close'),
+        void loadDesktopTerminalClient()
+          .then((terminalClient) =>
+            Promise.all(
+              result.succeededSessionIds.map((targetSessionId) =>
+                terminalClient.closeThreadTerminal(targetSessionId, 'task-close'),
+              ),
             ),
           )
-        } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : String(error))
-        }
+          .catch((error) =>
+            setErrorMessage(error instanceof Error ? error.message : String(error)),
+          )
         setArchiveNoticeVisible(true)
         const archivedIdsForUndo = [...result.succeededSessionIds]
         setArchiveUndo(() => async () => {
@@ -3870,6 +3871,7 @@ function ArchiveConversationNotice({
   }, [onClose, onUndo, onOpenSettings])
 
   useEffect(() => {
+    let active = true
     const id = toastStore.show({
       id: 'archive-conversation-notice',
       tone: 'status',
@@ -3897,10 +3899,12 @@ function ArchiveConversationNotice({
           }
         : undefined,
       onDismiss: () => {
-        onCloseRef.current()
+        if (active) onCloseRef.current()
       },
     })
     return () => {
+      // StrictMode 重挂及撤销状态更新的清理不代表用户关闭。
+      active = false
       toastStore.dismiss(id)
     }
   }, [onUndo !== undefined, undoing])
