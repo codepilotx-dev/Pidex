@@ -71,6 +71,10 @@
 
 ### Fixed
 
+- [desktop] 按钮尺寸诊断脚本在 Bun 运行时下直接提示改用 node 运行，避免 Playwright 浏览器启动无限挂起；补充可视化服务启动与运行方式说明。
+
+- [desktop] 移除 Provider 账号管理测试重复导入的 bun:test 声明，恢复全仓 lint 零错误。
+
 - [desktop] 会话选区颜色公式移出自定义 highlight 规则，避免 Tailwind 嵌套声明触发 Electron DevTools Styles/Computed 解析异常；补编译链回归及真实 Desktop 重启验证，登记 C24U 闭环。
 
 - [desktop/agent] 暂停按钮首击立即显示停止中并锁定重复点击，已结束 Turn 的重复停止请求保持幂等，避免 Composer 闪现“当前没有运行中的 Turn”错误。

@@ -1,4 +1,13 @@
+// 按钮尺寸诊断脚本。Bun 运行时下 Playwright 的 chromium.launch 会无限挂起（事件循环级阻塞，
+// 连 launch timeout 都不会触发），必须用 node 运行：
+//   bun run dev:visual -- --port 47180 --strictPort
+//   node probe-temp.mjs
 import { chromium } from '@playwright/test'
+
+if (process.versions.bun !== undefined) {
+  console.error('Bun 运行时下 Playwright 浏览器启动会无限挂起，请改用 node 运行：node probe-temp.mjs')
+  process.exit(1)
+}
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
