@@ -215,25 +215,17 @@ const COMPOSER_TOP_BASE_CLASS = cx(
   'composer composer-input-surface composer-top',
   'tw:relative tw:z-2 tw:flex tw:min-h-0 tw:flex-col tw:justify-between tw:[container-type:inline-size]',
   'tw:px-3 tw:pt-3 tw:pb-1',
+  'tw:border-0 tw:bg-app-control tw:[backdrop-filter:none]',
   'tw:shadow-prominent tw:transition-[min-height] tw:duration-panel tw:ease-standard',
-  'tw:focus-within:border-app-border-strong',
   'tw:forced-colors:outline-1 tw:forced-colors:outline-solid tw:forced-colors:shadow-none',
 )
 const COMPOSER_TOP_DEFAULT_CLASS = cx(
   COMPOSER_TOP_BASE_CLASS,
-  'tw:order-2 tw:border tw:border-app-border-subtle tw:bg-app-panel',
+  'tw:order-2',
 )
-/*
- * Both home surfaces drop the shared `.composer` glass backdrop that
- * `styles/components/card.scss` still declares for the resting composer.
- */
 const COMPOSER_TOP_WORKING_CLASS = cx(
   COMPOSER_TOP_BASE_CLASS,
-  'tw:order-1 tw:border-0 tw:bg-app-control tw:[backdrop-filter:none]',
-)
-const COMPOSER_TOP_CODING_CLASS = cx(
-  COMPOSER_TOP_BASE_CLASS,
-  'tw:order-2 tw:border-0 tw:bg-app-control tw:[backdrop-filter:none]',
+  'tw:order-1',
 )
 const UTILITY_BAR_BASE_CLASS = cx(
   'composer-bottom composer-utility-bar',
@@ -1430,9 +1422,7 @@ export function ComposerCard({
         className={cx(
           utilityBarVariant === 'home' && surface === 'working'
             ? COMPOSER_TOP_WORKING_CLASS
-            : utilityBarVariant === 'home'
-              ? COMPOSER_TOP_CODING_CLASS
-              : COMPOSER_TOP_DEFAULT_CLASS,
+            : COMPOSER_TOP_DEFAULT_CLASS,
           COMPOSER_META_CHIP_HIDE_LABEL_CLASS,
           COMPOSER_HIDE_DIVIDER_CLASS,
           COMPOSER_HIDE_USAGE_CHIP_CLASS,

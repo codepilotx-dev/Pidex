@@ -32,31 +32,29 @@
 @layer primitives {
   /* ── Conversation geometry contract ── */
 
+  .quick-chat-view,
   .conversation-page {
     --cpx-sys-layout-conversation-max-width: 48rem;
     --page-content-max-width: var(--cpx-sys-layout-conversation-max-width);
+    --session-content-w: 100%;
+  }
+
+  .quick-chat-view,
+  .conversation-page .thread-scroll-layout__inner {
+    width: 100%;
+    max-width: calc(var(--page-content-max-width) + 2 * var(--cpx-sys-space-4));
+    margin-inline: auto;
+    padding-inline: var(--cpx-sys-space-4);
+  }
+
+  .conversation-page {
     --thread-scroll-footer-fade-height: 48px;
     --thread-scroll-content-bottom-gap: 24px;
     --conversation-rail-inline-start: var(--cpx-sys-space-2);
-    --conversation-inline-gutter: var(--cpx-sys-space-4);
-    --conversation-composer-overhang: var(--cpx-sys-space-6);
-    --session-content-w: calc(
-      100% - 2 * (var(--conversation-inline-gutter) + var(--conversation-composer-overhang))
-    );
     --session-timeline-width: 100%;
     --conversation-item-gap: var(--cpx-sys-space-4);
     --conversation-grouped-item-gap: 4px;
     --thread-resource-row-padding-x: 12px;
-  }
-
-  .conversation-page .workflow-main-scroll-frame {
-    container: conversation-panel / inline-size;
-  }
-
-  @container conversation-panel (width < 53.5rem) {
-    .conversation-page .thread-scroll-layout {
-      --page-content-max-width: 40rem;
-    }
   }
 
   /* Session header title keeps its row rhythm inside the conversation shell. */
@@ -84,18 +82,10 @@
   }
 
   .conversation-page .workflow-page__composer-inner {
-    width: min(
-      calc(var(--page-content-max-width) + 2 * var(--conversation-composer-overhang)),
-      calc(100% - 2 * var(--conversation-inline-gutter))
-    );
+    width: 100%;
     min-width: 0;
-    max-width: calc(var(--page-content-max-width) + 2 * var(--conversation-composer-overhang));
+    max-width: var(--page-content-max-width);
     margin-inline: auto;
-  }
-
-  .conversation-page .workflow-main-scroll-footer .composer-input {
-    /* Account for the surface's existing 12px padding and 1px border. */
-    padding-inline: calc(var(--conversation-composer-overhang) - var(--cpx-sys-space-3) - 1px);
   }
 
   .conversation-page .workflow-main-scroll-footer .chat-input__dropdown--suggestion {

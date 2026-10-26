@@ -275,9 +275,30 @@ describe('composer surface variant', () => {
     expect(home).toContain('data-composer-layout="multiline"')
     expect(home).toContain('data-composer-radius-variant="default"')
     expect(home).toContain('data-composer-utility-bar-variant="home"')
+    const surfaceClass = /class="(composer composer-input-surface composer-top[^"]*)"/
+    const defaultSurface = defaults.match(surfaceClass)?.[1]
+    expect(defaultSurface).toBeDefined()
+    expect(home.match(surfaceClass)?.[1]).toBe(defaultSurface)
+    expect(defaultSurface).toContain('tw:border-0 tw:bg-app-control tw:[backdrop-filter:none]')
+    expect(defaultSurface).toContain('tw:shadow-prominent')
     expect(singleLine).toContain('data-composer-layout="single-line"')
     expect(singleLine).toContain('data-composer-radius-variant="single-line"')
     expect(compact).toContain('data-composer-radius-variant="compact"')
+  })
+
+  test('首页与会话共享编辑区基础高度及底部留白', async () => {
+    const shell = await Bun.file(
+      new URL('../src/styles/features/composer-shell.css', import.meta.url),
+    ).text()
+    const home = await Bun.file(
+      new URL('../src/features/session/QuickChatView.tsx', import.meta.url),
+    ).text()
+    const thread = await Bun.file(
+      new URL('../src/features/session/conversation/ConversationPage.tsx', import.meta.url),
+    ).text()
+    expect(shell).toMatch(/\.composer-stack \.composer-editor-content\s*\{\s*min-height: 44px;/)
+    expect(home).toContain('tw:pb-4')
+    expect(thread).toContain('footerClassName="workflow-main-scroll-footer tw:px-0 tw:pb-4"')
   })
 
   test('Composer utility bar 只在有内容时渲染，首页默认显示项目、工作组和分支', () => {

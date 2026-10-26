@@ -58,9 +58,8 @@
     border-radius: var(--cpx-sys-radius-control) var(--cpx-sys-radius-control) 0 0;
   }
 
-  /* The editor content is mounted by ProseMirror, so the home surfaces clamp its
-     resting height through a descendant rule. */
-  .composer-stack[data-composer-utility-bar-variant='home'][data-surface] .composer-editor-content {
+  /* ProseMirror mounts the editor content; all placements share its resting height. */
+  .composer-stack .composer-editor-content {
     min-height: 44px;
     font: var(--cpx-sys-type-reading);
   }

@@ -543,7 +543,6 @@
   /* --- Quick chat surface geometry ---------------------------------- */
 
   .quick-chat-view {
-    --page-content-max-width: var(--cpx-sys-layout-conversation-max-width);
     --quick-chat-surface-width: min(var(--page-content-max-width), 100%);
     padding-top: var(--cpx-sys-space-4);
   }
@@ -582,6 +581,7 @@
     --new-session-suggestion-tone: var(--cpx-sys-color-accent);
   }
 
+  .quick-chat-view::-webkit-scrollbar,
   .thread-scroll-layout::-webkit-scrollbar,
   .conversation-turn-nav-list::-webkit-scrollbar {
     display: none;

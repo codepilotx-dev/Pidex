@@ -661,7 +661,7 @@ describe('non-color design token contracts', () => {
     expect(review).toMatch(/line-height:\s*var\(--cpx-sys-line-height-code\)/)
   })
 
-  test('conversation composer overhangs the reading column without shrinking the timeline twice', async () => {
+  test('home and conversation share a continuous reading column with a matching composer', async () => {
     const conversation = await read('../src/styles/primitives/conversation.css')
     const threadComposerDock = await read(
       '../src/features/session/conversation/ThreadComposerDock.tsx',
@@ -672,24 +672,29 @@ describe('non-color design token contracts', () => {
 
     expect(conversation).not.toContain('--conversation-shift-offset')
     expect(conversation).toMatch(
-      /\.conversation-page \.workflow-page__composer-inner\s*\{[\s\S]*?width:\s*min\([\s\S]*?calc\(var\(--page-content-max-width\) \+ 2 \* var\(--conversation-composer-overhang\)\),[\s\S]*?calc\(100% - 2 \* var\(--conversation-inline-gutter\)\)[\s\S]*?margin-inline:\s*auto;/,
+      /\.conversation-page \.workflow-page__composer-inner\s*\{\s*width: 100%;\s*min-width: 0;\s*max-width: var\(--page-content-max-width\);\s*margin-inline: auto;/,
     )
-    expect(conversation).toContain('container: conversation-panel / inline-size;')
-    expect(conversation).toContain('@container conversation-panel (width < 53.5rem)')
-    expect(conversation).toContain('--page-content-max-width: 40rem;')
-    expect(conversation).toContain('--cpx-sys-layout-conversation-max-width: 48rem;')
-    expect(conversation).toContain('--conversation-inline-gutter: var(--cpx-sys-space-4);')
-    expect(conversation).toContain('--conversation-composer-overhang: var(--cpx-sys-space-6);')
-    expect(conversation).toContain(
-      '100% - 2 * (var(--conversation-inline-gutter) + var(--conversation-composer-overhang))',
+    expect(conversation).toMatch(
+      /\.quick-chat-view,\s*\.conversation-page\s*\{\s*--cpx-sys-layout-conversation-max-width: 48rem;\s*--page-content-max-width: var\(--cpx-sys-layout-conversation-max-width\);\s*--session-content-w: 100%;/,
     )
+    expect(conversation).toMatch(
+      /\.quick-chat-view,\s*\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
+    )
+    expect(conversation).not.toContain('53.5rem')
+    expect(conversation).not.toContain('--page-content-max-width: 40rem;')
+    expect(conversation).not.toContain('--conversation-composer-overhang')
+    expect(conversation).not.toContain('--conversation-inline-gutter')
+    for (const homeView of ['QuickChatView', 'ChatNewSessionView', 'WorkingNewSessionView']) {
+      const source = await read(`../src/features/session/${homeView}.tsx`)
+      expect(source).not.toContain('tw:px-8')
+      expect(source).not.toContain('tw:max-w-none')
+      expect(source).not.toContain('scrollbar-gutter:stable')
+      expect(source).toContain('tw:w-[var(--quick-chat-surface-width)]')
+    }
     expect(conversation).toContain('--session-timeline-width: 100%;')
     expect(timeline).toContain('tw:w-[var(--session-timeline-width,var(--session-content-w,100%))]')
     expect(conversation).not.toContain('--conversation-content-inline-start')
     expect(conversation).not.toContain('@media (max-width: 760px)')
-    expect(conversation).toContain(
-      'padding-inline: calc(var(--conversation-composer-overhang) - var(--cpx-sys-space-3) - 1px);',
-    )
     expect(conversation).toMatch(
       /\.conversation-page \.workflow-main-scroll-footer \.chat-input__dropdown--suggestion\s*\{\s*width: 100%;\s*max-width: 100%;/,
     )

@@ -168,7 +168,7 @@ export function WorkingNewSessionView(): React.ReactNode {
       className="quick-chat-workspace working-chat-workspace tw:flex tw:h-full tw:w-full tw:min-h-0 tw:overflow-hidden"
     >
       <main
-        className="quick-chat-view working-chat-view tw:flex tw:h-full tw:max-w-none tw:w-full tw:min-h-full tw:flex-col tw:items-stretch tw:justify-center tw:overflow-x-hidden tw:overflow-y-auto tw:px-8 tw:pb-4 tw:text-app-text tw:[scrollbar-gutter:stable]"
+        className="quick-chat-view working-chat-view tw:flex tw:h-full tw:w-full tw:min-h-full tw:flex-col tw:items-stretch tw:justify-center tw:overflow-x-hidden tw:overflow-y-auto tw:pb-4 tw:text-app-text"
         onInputCapture={handleComposerInputCapture}
       >
         <section className="quick-chat-composer-region tw:flex tw:m-auto tw:w-full tw:min-w-0 tw:flex-[0_1_auto] tw:flex-col tw:items-center tw:justify-start tw:gap-8">

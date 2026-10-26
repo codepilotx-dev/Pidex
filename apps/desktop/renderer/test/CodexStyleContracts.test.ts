@@ -495,7 +495,7 @@ describe('Codex CPX design system token contract', () => {
     )
     expectSourceContains(
       composer,
-      '.composer-stack[data-composer-utility-bar-variant="home"][data-surface]',
+      '.composer-stack .composer-editor-content',
     )
     expectSourceContains(
       composer,
