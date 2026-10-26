@@ -1,7 +1,7 @@
 import type { DesktopComposerAttachment } from '../../../../shared/Types.js'
 
 export async function selectDroppedComposerAttachments(
-  files: FileList,
+  files: FileList | readonly File[],
   pathForFile: (file: File) => string,
   grantPaths: (paths: string[]) => Promise<DesktopComposerAttachment[]>,
 ): Promise<DesktopComposerAttachment[]> {

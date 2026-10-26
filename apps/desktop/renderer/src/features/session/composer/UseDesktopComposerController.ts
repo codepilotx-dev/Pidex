@@ -468,11 +468,13 @@ export function useDesktopComposerController({
 
   async function handleAddFiles(files: FileList): Promise<void> {
     if (files.length === 0) return
+    // The picker clears its live FileList as soon as this callback returns.
+    const selectedFiles = Array.from(files)
     const targetDraftKey = draftKey
     const generation = nextAttachmentGeneration(attachmentGenerationRef.current, targetDraftKey)
     const { selectDroppedComposerAttachments } = await import('./ComposerAttachmentSelection.js')
     const selected = await selectDroppedComposerAttachments(
-      files,
+      selectedFiles,
       (file) => desktopClient.getComposerFilePath(file),
       (paths) => desktopClient.grantComposerFilePaths(paths),
     )
