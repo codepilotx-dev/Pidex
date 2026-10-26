@@ -133,7 +133,6 @@ export function ProviderRequestSettingsForm({
   onCancel: () => void
   onDelete?: () => Promise<void>
 }): ReactNode {
-  const formId = useId()
   const protocols = providerProtocols(provider)
   const endpointOptions = [
     ...new Map(
@@ -156,6 +155,7 @@ export function ProviderRequestSettingsForm({
   const initial = useRef(source)
   const [draft, setDraft] = useState(source)
   const [saving, setSaving] = useState(false)
+  const saveQueue = useRef(Promise.resolve(true))
   const [error, setError] = useState<string | null>(null)
   const [advanced, setAdvanced] = useState(false)
   const [detecting, setDetecting] = useState(false)
@@ -191,8 +191,16 @@ export function ProviderRequestSettingsForm({
     setAddingEndpoint(false)
     setEndpointAddress('')
   }
-  async function save(nextDraft = draft): Promise<boolean> {
-    if (saving) return false
+  function save(nextDraft = draft): Promise<boolean> {
+    const pending = saveQueue.current.then(() => persist(nextDraft))
+    saveQueue.current = pending
+    return pending
+  }
+  function commit(nextDraft: typeof draft): void {
+    setDraft(nextDraft)
+    void save(nextDraft)
+  }
+  async function persist(nextDraft: typeof draft): Promise<boolean> {
     if (JSON.stringify(nextDraft) === JSON.stringify(initial.current) && !(addingEndpoint && endpointAddress.trim())) return true
     const config = provider.config
     if (!config) return false
@@ -290,10 +298,9 @@ export function ProviderRequestSettingsForm({
         address: nextDraft.address.trim(),
         name: nextDraft.name.trim(),
       }
-      setDraft(initial.current)
-      setAddingEndpoint(false)
-      setEndpointAddress('')
-      onDraftChange(false)
+      setDraft((current) =>
+        JSON.stringify(current) === JSON.stringify(nextDraft) ? initial.current : current,
+      )
       return true
     } catch (error) {
       setError(fullErrorMessage(error))
@@ -312,7 +319,7 @@ export function ProviderRequestSettingsForm({
   })
   function changeProtocol(value: string) {
     const protocol = value
-    setDraft({
+    commit({
       ...draft,
       endpoints:
         draft.protocol !== 'mixed'
@@ -408,18 +415,7 @@ export function ProviderRequestSettingsForm({
   const footer = (
     <footer className="tw:flex tw:shrink-0 tw:justify-end tw:gap-2 tw:border-t tw:border-app-border-subtle tw:px-4 tw:py-4">
       <Button color="secondary" size="sm" shape="default" disabled={saving} onClick={onCancel}>
-        取消
-      </Button>
-      <Button
-        color="primary"
-        size="sm"
-        shape="default"
-        disabled={saving || !dirty}
-        loading={saving}
-        type="submit"
-        form={formId}
-      >
-        保存配置
+        关闭
       </Button>
       {onDelete ? (
         <Button
@@ -436,7 +432,6 @@ export function ProviderRequestSettingsForm({
   )
   return (
     <form
-      id={formId}
       className="tw:grid tw:min-w-0 tw:gap-4"
       onSubmit={(event) => {
         event.preventDefault()
@@ -444,7 +439,7 @@ export function ProviderRequestSettingsForm({
       }}
     >
       <fieldset
-        disabled={saving || detecting}
+        disabled={detecting}
         className="tw:m-0 tw:grid tw:min-h-0 tw:min-w-0 tw:content-start tw:gap-4 tw:border-0 tw:p-0"
       >
         <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
@@ -484,6 +479,7 @@ export function ProviderRequestSettingsForm({
           <label className="tw:grid tw:gap-2 tw:type-label">
             供应商名称
             <Input
+              onBlur={() => void save()}
               value={draft.name}
               onChange={(event) => setDraft({ ...draft, name: event.target.value })}
             />
@@ -509,6 +505,7 @@ export function ProviderRequestSettingsForm({
                   ) : null}
                 </span>
                 <Input
+                  onBlur={() => void save()}
                   aria-label={
                     draft.protocol === option.value ? 'API 地址' : `${option.label} API 地址`
                   }
@@ -532,6 +529,7 @@ export function ProviderRequestSettingsForm({
             API 地址
             <Input
               aria-label="API 地址"
+              onBlur={() => void save()}
               value={draft.address}
               onChange={(event) => setDraft({ ...draft, address: event.target.value })}
             />
@@ -569,7 +567,7 @@ export function ProviderRequestSettingsForm({
                 color="primary"
                 disabled={!endpointProtocol || !endpointAddress.trim()}
                 onClick={() => {
-                  setDraft({
+                  commit({
                     ...draft,
                     endpoints: { ...draft.endpoints, [endpointProtocol]: endpointAddress.trim() },
                   })
@@ -608,7 +606,7 @@ export function ProviderRequestSettingsForm({
               <ToggleSwitch
                 ariaLabel="允许远程 HTTP"
                 checked={draft.allowHttp}
-                onChange={(allowHttp) => setDraft({ ...draft, allowHttp })}
+                onChange={(allowHttp) => commit({ ...draft, allowHttp })}
               />
             </div>
             {provider.config?.kind === 'builtin' ? (
@@ -616,6 +614,7 @@ export function ProviderRequestSettingsForm({
                 <label className="tw:grid tw:gap-2 tw:type-body-sm">
                   允许模型（逗号分隔，留空表示全部）
                   <Input
+                    onBlur={() => void save()}
                     value={draft.allowModels}
                     onChange={(event) => setDraft({ ...draft, allowModels: event.target.value })}
                   />
@@ -623,6 +622,7 @@ export function ProviderRequestSettingsForm({
                 <label className="tw:grid tw:gap-2 tw:type-body-sm">
                   排除模型（逗号分隔）
                   <Input
+                    onBlur={() => void save()}
                     value={draft.denyModels}
                     onChange={(event) => setDraft({ ...draft, denyModels: event.target.value })}
                   />
@@ -640,12 +640,13 @@ export function ProviderRequestSettingsForm({
                       { value: 'api-key', label: 'API Key' },
                       { value: 'none', label: '无需认证' },
                     ]}
-                    onChange={(auth) => setDraft({ ...draft, auth: auth as 'api-key' | 'none' })}
+                    onChange={(auth) => commit({ ...draft, auth: auth as 'api-key' | 'none' })}
                   />
                 </label>
                 <label className="tw:grid tw:gap-2 tw:type-label">
                   环境变量（逗号分隔）
                   <Input
+                    onBlur={() => void save()}
                     value={draft.env}
                     onChange={(event) => setDraft({ ...draft, env: event.target.value })}
                   />
@@ -659,6 +660,7 @@ export function ProviderRequestSettingsForm({
                   className="tw:min-h-24 tw:rounded-md tw:border tw:border-app-border tw:bg-app-control tw:p-3 tw:type-code"
                   aria-label="自定义请求头"
                   placeholder="每行 name: value"
+                  onBlur={() => void save()}
                   value={draft.headers}
                   onChange={(event) => setDraft({ ...draft, headers: event.target.value })}
                 />
