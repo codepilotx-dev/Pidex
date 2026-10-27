@@ -26,6 +26,7 @@ test('父进程退出后后台继续执行，重开复用同一实例并可显�
     expect(record.encryptedToken).not.toBe(token)
     const command = { executable: process.execPath, args: [join(import.meta.dir, 'fixtures/BackgroundAgent.ts')], cwd: import.meta.dir }
     const reused = await runtime.connect(command, process.env)
+    expect(runtime.origin).toBe(connection.origin)
     expect(reused.origin).toBe(connection.origin)
     const before = await tick(directory)
     await Bun.sleep(150)

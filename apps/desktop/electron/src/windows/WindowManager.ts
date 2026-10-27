@@ -1,4 +1,7 @@
-import { readFileSync } from 'node:fs'
+import {
+  DESKTOP_STARTUP_IPC_CHANNELS,
+  type DesktopStartupSnapshot,
+} from '@pidex/shared/desktop-startup-ipc'
 import { installVisualizationIsolation } from '../security/VisualizationIsolation.js'
 import { join, resolve } from 'node:path'
 import {
@@ -8,7 +11,7 @@ import {
   type DesktopPageZoomState,
   type DesktopResizeActivityPhase,
 } from '@pidex/shared/desktop-window-ipc'
-import { app, BrowserWindow, nativeImage, screen, shell, type WebContents } from 'electron'
+import { app, BrowserWindow, screen, shell, type WebContents } from 'electron'
 import type { DesktopChromeTheme } from '@pidex/shared/desktop-theme'
 import type { DesktopLogger } from '../logging/DesktopLogger.js'
 import { rendererConsoleRecord } from '../logging/RendererConsole.js'
@@ -18,11 +21,7 @@ import {
   isSafeExternalUrl,
   normalizeOrigin,
 } from '../security/Navigation.js'
-import {
-  createRendererApplicationUrl,
-  renderStartupPage,
-  type StartupStatusKind,
-} from './StartupPage.js'
+import { createRendererApplicationUrl, type StartupStatusKind } from './StartupPage.js'
 import {
   MAIN_WINDOW_MIN_HEIGHT,
   MAIN_WINDOW_MIN_WIDTH,
@@ -59,16 +58,12 @@ export class WindowManager {
   #normalWindowBounds: DesktopWindowBounds
   #allowedApplicationOrigin: string | undefined
   #navigationGeneration = 0
-  #startupPageActive = false
   #pageZoomPercent: number
-  #startupStatus: {
-    status: string
-    detail: string
-    kind: StartupStatusKind
-  } = {
-    status: '正在启动…',
-    detail: '',
-    kind: 'progress',
+  #startupSnapshot: DesktopStartupSnapshot = {
+    generation: 0,
+    revision: 0,
+    state: 'loading',
+    label: '正在启动…',
   }
 
   constructor(logger: DesktopLogger, moduleDirectory: string, options: WindowManagerOptions) {
@@ -137,21 +132,34 @@ export class WindowManager {
     this.#focusWindow(this.focusedWindow)
   }
 
-  createStartupWindow(): BrowserWindow {
-    const mainWindow = this.#ensureMainWindow()
-    this.#loadStartupPage(mainWindow)
-    return mainWindow
+  get startupSnapshot(): DesktopStartupSnapshot {
+    return this.#startupSnapshot
   }
 
-  showStartupStatus(status: string, detail = '', kind: StartupStatusKind = 'progress'): void {
-    this.#startupStatus = { status, detail, kind }
-    this.#sendStartupStatus()
+  showStartupStatus(
+    status: string,
+    _detail = '',
+    kind: StartupStatusKind = 'progress',
+    generation = this.#startupSnapshot.generation,
+  ): void {
+    this.publishStartupState({
+      generation,
+      state: kind === 'terminal-error' ? 'failed' : 'loading',
+      label: status,
+    })
+  }
+
+  publishStartupState(snapshot: Omit<DesktopStartupSnapshot, 'revision'>): void {
+    this.#startupSnapshot = { ...snapshot, revision: this.#startupSnapshot.revision + 1 }
+    this.broadcast(DESKTOP_STARTUP_IPC_CHANNELS.changed, this.#startupSnapshot)
   }
 
   async loadApplication(applicationOriginInput: string): Promise<void> {
     const navigationGeneration = ++this.#navigationGeneration
-    this.#startupPageActive = false
     const mainWindow = this.#ensureMainWindow()
+    mainWindow.once('ready-to-show', () => {
+      if (!mainWindow.isDestroyed()) mainWindow.show()
+    })
     const applicationOrigin = normalizeOrigin(applicationOriginInput)
     const applicationUrl = createRendererApplicationUrl(
       applicationOrigin,
@@ -175,6 +183,7 @@ export class WindowManager {
             return
           }
           cleanup()
+          this.#logger.info('desktop.application-document-loaded')
           resolveLoad()
         }
         const onFailed = (
@@ -211,18 +220,10 @@ export class WindowManager {
       }
     } catch (error) {
       if (navigationGeneration === this.#navigationGeneration && !mainWindow.isDestroyed()) {
-        this.#loadStartupPage(mainWindow)
+        this.#logger.error('desktop.application-document-failed')
       }
       throw error
     }
-  }
-
-  showApplication(): void {
-    this.#focusWindow(this.focusedWindow)
-  }
-
-  showReconnectWindow(): void {
-    this.createStartupWindow()
   }
 
   send(channel: string, ...args: unknown[]): void {
@@ -333,7 +334,20 @@ export class WindowManager {
     window.on('unresponsive', () => {
       this.#logger.warn('desktop.renderer-unresponsive')
     })
+    const createdAt = Date.now()
     window.webContents.on('console-message', (details) => {
+      if (
+        details.level === 'info' &&
+        ['desktop.business-root-mounted', 'desktop.startup-surface-committed'].includes(
+          details.message,
+        )
+      ) {
+        this.#logger.info(details.message, {
+          durationMs: Date.now() - createdAt,
+          generation: this.#startupSnapshot.generation,
+        })
+        return
+      }
       const record = rendererConsoleRecord(
         details.level,
         details.message,
@@ -482,98 +496,11 @@ export class WindowManager {
       }
     })
     if (primary && this.#options.initialWindowState.maximized) {
-      window.maximize()
+      window.once('ready-to-show', () => {
+        if (!window.isDestroyed()) window.maximize()
+      })
     }
     return window
-  }
-
-  #loadStartupPage(mainWindow: BrowserWindow): void {
-    const navigationGeneration = ++this.#navigationGeneration
-    this.#allowedApplicationOrigin = undefined
-    this.#startupPageActive = false
-    this.#setStartupBackground(mainWindow)
-    const page = `data:text/html;charset=utf-8,${encodeURIComponent(
-      renderStartupPage({
-        logoDataUrl: this.#resolveStartupLogoDataUrl(),
-        ...this.#options.startupTheme,
-      }),
-    )}`
-
-    if (!mainWindow.isVisible()) {
-      mainWindow.once('ready-to-show', () => {
-        if (!mainWindow.isDestroyed()) mainWindow.show()
-      })
-    } else {
-      mainWindow.show()
-    }
-
-    void mainWindow
-      .loadURL(page)
-      .then(() => {
-        if (mainWindow.isDestroyed() || navigationGeneration !== this.#navigationGeneration) {
-          return
-        }
-        this.#startupPageActive = true
-        mainWindow.show()
-        this.#sendStartupStatus()
-      })
-      .catch((error) => {
-        if (navigationGeneration !== this.#navigationGeneration) return
-        this.#logger.error('desktop.startup-page-load-failed', { error })
-        if (!mainWindow.isDestroyed()) mainWindow.show()
-      })
-  }
-
-  #sendStartupStatus(): void {
-    const mainWindow = this.mainWindow
-    if (!this.#startupPageActive || !mainWindow || mainWindow.isDestroyed()) {
-      return
-    }
-    const { status, detail, kind } = this.#startupStatus
-    const script = `window.updateStartupStatus?.(${JSON.stringify(status)}, ${JSON.stringify(detail)}, ${JSON.stringify(kind)})`
-    void mainWindow.webContents.executeJavaScript(script).catch((error) => {
-      this.#logger.warn('desktop.startup-status-update-failed', {
-        error,
-        status,
-      })
-    })
-  }
-
-  #resolveStartupLogoDataUrl(): string {
-    try {
-      const svgPath = this.#resolveBrandMarkSvgPath()
-      const svg = readFileSync(svgPath, 'utf-8')
-      const encoded = encodeURIComponent(svg)
-      return `data:image/svg+xml;charset=utf-8,${encoded}`
-    } catch (error) {
-      this.#logger.warn('desktop.startup-svg-load-failed', {
-        error,
-      })
-      const icon = nativeImage.createFromPath(this.#resolveWindowIconPath())
-      if (icon.isEmpty()) {
-        this.#logger.warn('desktop.startup-ico-fallback-failed')
-        return ''
-      }
-      return icon
-        .resize({
-          width: 112,
-          height: 112,
-          quality: 'best',
-        })
-        .toDataURL()
-    }
-  }
-
-  #resolveBrandMarkSvgPath(): string {
-    return app.isPackaged
-      ? join(process.resourcesPath, 'pidex-mark-green.svg')
-      : resolve(this.#moduleDirectory, '../../build/pidex-mark-green.svg')
-  }
-
-  #setStartupBackground(mainWindow: BrowserWindow): void {
-    if (!mainWindow.isDestroyed()) {
-      mainWindow.setBackgroundColor(this.#options.startupTheme.theme.surface)
-    }
   }
 
   #setThemeBackground(mainWindow: BrowserWindow): void {

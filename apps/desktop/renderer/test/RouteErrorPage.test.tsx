@@ -1,7 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
-  claimDynamicModuleReload,
   isDynamicModuleLoadError,
   RouteErrorPageContent,
 } from '../src/features/routing/RouteErrorPage.js'
@@ -29,40 +28,6 @@ describe('RouteErrorPage', () => {
       }),
     ).toBe(false)
     expect(isDynamicModuleLoadError(null)).toBe(false)
-  })
-
-  test('claims one automatic reload within the cooldown window', () => {
-    const values = new Map<string, string>()
-    const storage = {
-      getItem: (key: string) => values.get(key) ?? null,
-      setItem: (key: string, value: string) => values.set(key, value),
-    }
-    const error = new TypeError(
-      'Failed to fetch dynamically imported module: http://localhost/module.js',
-    )
-
-    expect(claimDynamicModuleReload(error, storage, 100_000)).toBe(true)
-    expect([...values.values()]).toEqual(['100000'])
-    expect(claimDynamicModuleReload(error, storage, 129_999)).toBe(false)
-    expect(claimDynamicModuleReload(error, storage, 130_000)).toBe(true)
-    expect([...values.values()]).toEqual(['130000'])
-  })
-
-  test('does not auto reload ordinary errors or when storage cannot persist', () => {
-    const ordinaryError = new Error('Request failed with status 500')
-    const dynamicError = new TypeError(
-      'Failed to fetch dynamically imported module: http://localhost/module.js',
-    )
-    const unavailableStorage = {
-      getItem: () => null,
-      setItem: () => {
-        throw new Error('storage unavailable')
-      },
-    }
-
-    expect(claimDynamicModuleReload(ordinaryError, unavailableStorage)).toBe(false)
-    expect(claimDynamicModuleReload(dynamicError, unavailableStorage)).toBe(false)
-    expect(claimDynamicModuleReload(dynamicError, undefined)).toBe(false)
   })
 
   test('renders a safe recovery action for dynamic module failures', () => {

@@ -31,8 +31,7 @@ export function swapStatusText(
     state.exit?.cancel()
     state.exit = null
     state.pending = null
-    // 文案未变化时不写 DOM：静态 splash handoff 用 MutationObserver 观察状态窗，
-    // 重复写入会再次触发自己，形成死循环并饿死定时器与 load 事件。
+    // 文案未变化时不写 DOM，避免重复播报。
     if (element.textContent !== nextText) element.textContent = nextText
     onSettled?.()
     return

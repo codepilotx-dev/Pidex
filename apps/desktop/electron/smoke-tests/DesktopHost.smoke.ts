@@ -15,6 +15,7 @@ import type { DesktopPetPresentation } from '@pidex/shared/desktop-pet-overlay'
 import type { DesktopSettingsPayload } from '@pidex/shared/desktop-settings-ipc'
 import type { DesktopDataLocationState } from '@pidex/shared/desktop-data-location-ipc'
 import type { DesktopEditIpcBridge } from '@pidex/shared/desktop-edit-ipc'
+import type { DesktopStartupIpcBridge } from '@pidex/shared/desktop-startup-ipc'
 
 declare global {
   interface Window {
@@ -43,7 +44,8 @@ declare global {
       getDesktopSettings(): Promise<DesktopSettingsPayload>
       saveDesktopSettings(settings: DesktopSettingsPayload): Promise<DesktopSettingsPayload>
       onDesktopSettingsChange(listener: (settings: DesktopSettingsPayload) => void): () => void
-    } & DesktopEditIpcBridge
+    } & DesktopEditIpcBridge &
+      DesktopStartupIpcBridge
   }
 }
 
@@ -62,8 +64,73 @@ test.describe('真实 Electron 宿主', () => {
   })
 
   test.afterEach(async () => {
+    await application
+      ?.evaluate(async ({ BrowserWindow }) => {
+        const window = BrowserWindow.getAllWindows()[0]
+        if (window)
+          await window.webContents.executeJavaScript('window.DesktopBridge?.stopBackendAndExit?.()')
+      })
+      .catch(() => undefined)
     await application?.close().catch(() => undefined)
     await rm(userDataDirectory, { force: true, recursive: true })
+  })
+
+  test('本地启动壳只交接一次，连接通知不导航或重挂工作台', async () => {
+    application = await launchDesktop(userDataDirectory, logDirectory)
+    const page = await application.firstWindow()
+    let navigations = 0
+    page.on('framenavigated', (frame) => {
+      if (frame === page.mainFrame()) navigations++
+    })
+    await waitForApplication(page)
+    await expect(
+      page.locator('.composer-editor-content[contenteditable="true"]').first(),
+    ).toBeVisible()
+    await expect(page.locator('#startup-splash')).toHaveCount(0)
+    const snapshot = await page.evaluate(() => window.DesktopBridge.getStartupSnapshot())
+    expect(snapshot.state).toBe('connected')
+    await page.evaluate(() => {
+      Object.assign(window, { __startupEditor: document.querySelector('.composer-editor-content') })
+    })
+    const before = navigations
+    await application.evaluate(
+      ({ BrowserWindow }, state) => {
+        BrowserWindow.getAllWindows()[0].webContents.send('startup:changed', state)
+      },
+      {
+        generation: snapshot.generation + 1,
+        revision: snapshot.revision + 1,
+        state: 'loading',
+        label: '正在重新连接…',
+      },
+    )
+    await expect(page.locator('#startup-connection-notice')).toBeVisible()
+    await expect(page.locator('#startup-splash')).toHaveCount(0)
+    await application.evaluate(
+      ({ BrowserWindow }, state) => {
+        BrowserWindow.getAllWindows()[0].webContents.send('startup:changed', state)
+      },
+      {
+        generation: snapshot.generation + 1,
+        revision: snapshot.revision + 2,
+        state: 'connected',
+        label: 'ready',
+      },
+    )
+    await expect(page.locator('#startup-connection-notice')).toBeHidden()
+    expect(
+      await page.evaluate(
+        () =>
+          (window as Window & { __startupEditor?: Element }).__startupEditor ===
+          document.querySelector('.composer-editor-content'),
+      ),
+    ).toBe(true)
+    expect(navigations).toBe(before)
+    await page.reload()
+    await expect(
+      page.locator('.composer-editor-content[contenteditable="true"]').first(),
+    ).toBeVisible()
+    await expect(page.locator('#startup-splash')).toHaveCount(0)
   })
 
   test('使用 preload 应用并持久化 V7 主题，且新路由均可达', async () => {

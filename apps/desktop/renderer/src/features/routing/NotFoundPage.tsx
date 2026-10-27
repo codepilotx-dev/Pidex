@@ -1,9 +1,13 @@
+import { startupSurfaceReadyRef } from '../../startup/StartupSplashHandoff.js'
 import type React from 'react'
 import { Link } from 'react-router-dom'
 
 export function NotFoundPage(): React.ReactNode {
   return (
-    <main className="not-found-page tw:grid tw:w-full tw:min-w-0 tw:min-h-full tw:content-center tw:justify-items-center tw:gap-3 tw:p-5 tw:bg-app-canvas tw:text-center tw:text-app-text">
+    <main
+      ref={startupSurfaceReadyRef}
+      className="not-found-page tw:grid tw:w-full tw:min-w-0 tw:min-h-full tw:content-center tw:justify-items-center tw:gap-3 tw:p-5 tw:bg-app-canvas tw:text-center tw:text-app-text"
+    >
       <span className="tw:text-app-text-meta tw:type-title-xl">404</span>
       <h1 className="tw:m-0 tw:text-app-text tw:type-title-sm">这个页面不存在</h1>
       <p className="tw:m-0 tw:max-w-[440px] tw:text-app-text-soft tw:type-body-sm">

@@ -2,7 +2,7 @@ import { defineConfig } from '@playwright/test'
 
 export default defineConfig({
   testDir: './smoke-tests',
-  testMatch: 'DesktopHost.smoke.ts',
+  testMatch: ['DesktopHost.smoke.ts', 'LocalRendererResources.smoke.ts'],
   fullyParallel: false,
   forbidOnly: true,
   retries: 0,

@@ -38,6 +38,11 @@ export class LocalBackgroundRuntime implements BackgroundRuntime {
   private readonly file: string
   private readonly lock: string
 
+  get origin(): string {
+    if (!this.record) throw new Error('后台 Agent 尚未初始化')
+    return `http://127.0.0.1:${this.record.port}`
+  }
+
   constructor(private readonly directory: string, private readonly encryption: TokenEncryption) {
     this.file = join(directory, 'desktop-agent.json')
     this.lock = join(directory, 'desktop-agent.lock')

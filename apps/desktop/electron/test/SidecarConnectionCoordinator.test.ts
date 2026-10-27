@@ -8,6 +8,30 @@ import { SidecarTerminationError } from '../src/sidecar/FailureDiagnostics'
 import type { ConnectionStatus, SidecarConnection } from '../src/sidecar/Supervisor'
 
 describe('DesktopAgentConnectionCoordinator', () => {
+  test('失败后只由显式 start 开启新代次，不自动重试或导航', async () => {
+    const sidecar = new FakeSidecar()
+    let fail = true
+    const coordinator = new DesktopAgentConnectionCoordinator({
+      supervisor: sidecar,
+      logger,
+      loadConnection: async () => {
+        if (fail) throw new Error('auth unavailable')
+      },
+      onConnected: () => undefined,
+      onReconnecting: () => undefined,
+      onTerminalFailure: () => undefined,
+      isRelocating: () => false,
+    })
+    await coordinator.start()
+    expect(coordinator.status.lifecycle).toBe('failed')
+    expect(sidecar.connectCount).toBe(1)
+    const failedGeneration = coordinator.generation
+    fail = false
+    await coordinator.start()
+    expect(coordinator.status.lifecycle).toBe('connected')
+    expect(coordinator.generation).toBeGreaterThan(failedGeneration)
+    expect(sidecar.connectCount).toBe(2)
+  })
   test('统一拥有连接、丢失、清理和重连状态', async () => {
     const sidecar = new FakeSidecar()
     const reconnecting: number[] = []

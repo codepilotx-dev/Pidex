@@ -1,126 +1,109 @@
-import { getEffectiveReducedMotion } from '../hooks/UsePrefersReducedMotion.js'
 import { swapStatusText } from './StatusTextSwap.js'
 
-// 静态启动遮罩 handoff：只有真实的可输入 ProseMirror 编辑器
-// （contenteditable + combobox）或显式 `data-startup-surface-ready` 标记才
-// 判定页面就绪；路由地址本身不再作为就绪证据。遮罩存在期间把 React 整窗
-// loader 的 `data-loading-label` 镜像到静态状态窗，冷启动全程只看到一个
-// 鲸鱼和连续滑动的真实阶段。20 秒 fail-safe 兜底 lazy chunk 或初始化异常。
-export const COMPOSER_READY_SELECTOR =
-  '.composer-editor-content[contenteditable="true"][role="combobox"]'
-export const SURFACE_READY_SELECTOR = '[data-startup-surface-ready="true"]'
-export const FULL_SCREEN_LOADING_SELECTOR = '[data-full-screen-loading="true"]'
-export const STATIC_STATUS_SELECTOR = '.full-screen-whale-loader__status'
 export const SPLASH_FADE_MS = 200
-export const SPLASH_FAILSAFE_MS = 20_000
+export const SPLASH_STALL_MS = 20_000
 export const PET_OVERLAY_HASH_PREFIX = '#/pet-overlay'
 
-export type SplashDisposition =
-  | { kind: 'finish' }
-  | { kind: 'remove-immediately' }
-  | { kind: 'mirror'; label: string | null }
-  | { kind: 'wait' }
+let shell: ReturnType<typeof createStartupShell> | undefined
+let retryConnection: (() => void) | undefined
 
-export function resolveSplashDisposition(input: {
-  hash: string
-  composerReady: boolean
-  surfaceReady: boolean
-  loaderPresent: boolean
-  loaderLabel: string | null
-}): SplashDisposition {
-  // 宠物窗口是透明独立窗口，明确排除不透明的整窗鲸鱼。
-  if (input.hash.startsWith(PET_OVERLAY_HASH_PREFIX)) {
-    return { kind: 'remove-immediately' }
+export function createStartupShell(splash: HTMLElement) {
+  let finished = false
+  let ready = false
+  let frame: number | undefined
+  const loading = new Set<symbol>()
+  const label = splash.querySelector<HTMLElement>('.full-screen-whale-loader__status')
+  const actions = document.getElementById('startup-actions')
+  const stalled = window.setTimeout(() => {
+    if (finished) return
+    if (actions) actions.hidden = false
+    const detail = document.getElementById('startup-detail')
+    if (detail) detail.textContent = '启动时间较长，可以继续等待或重新加载。'
+  }, SPLASH_STALL_MS)
+  const finishIfReady = () => {
+    if (!ready || finished || loading.size || frame !== undefined) return
+    frame = window.requestAnimationFrame(() => {
+      frame = undefined
+      if (!ready || finished || loading.size) return
+      finished = true
+      window.clearTimeout(stalled)
+      splash.removeAttribute('aria-busy')
+      const reduced = document.documentElement.dataset.reduceMotion
+      if (
+        reduced === 'on' ||
+        (reduced !== 'off' && window.matchMedia('(prefers-reduced-motion: reduce)').matches)
+      ) {
+        splash.remove()
+      } else {
+        splash.classList.add('full-screen-whale-loader--exiting')
+        window.setTimeout(() => splash.remove(), SPLASH_FADE_MS + 40)
+      }
+      console.info('desktop.startup-surface-committed')
+    })
   }
-  if (input.composerReady || input.surfaceReady) {
-    return { kind: 'finish' }
+  return {
+    active: () => !finished,
+    label(text: string) {
+      if (!finished && label) swapStatusText(label, text)
+    },
+    fail(text: string) {
+      if (finished) return
+      window.clearTimeout(stalled)
+      if (label) swapStatusText(label, text)
+      splash.setAttribute('role', 'alert')
+      if (actions) actions.hidden = false
+    },
+    ready() {
+      ready = true
+      finishIfReady()
+    },
+    loading(text: string) {
+      const token = Symbol()
+      loading.add(token)
+      if (!finished && label) swapStatusText(label, text)
+      return () => {
+        loading.delete(token)
+        finishIfReady()
+      }
+    },
   }
-  if (input.loaderPresent) {
-    return { kind: 'mirror', label: input.loaderLabel }
-  }
-  return { kind: 'wait' }
 }
 
 export function installStartupSplashHandoff(): void {
   const splash = document.getElementById('startup-splash')
-  if (!splash) return
-
-  let finished = false
-  let failsafeTimer: number | null = null
-
-  const stopWatching = (): void => {
-    observer.disconnect()
-    window.removeEventListener('hashchange', onDomChanged)
-    if (failsafeTimer !== null) {
-      window.clearTimeout(failsafeTimer)
-      failsafeTimer = null
-    }
-  }
-
-  // 正常模式 200ms 淡出；reduced-motion 下直接移除。幂等。
-  const finish = (): void => {
-    if (finished) return
-    finished = true
-    splash.removeAttribute('aria-busy')
-    stopWatching()
-    if (getEffectiveReducedMotion()) {
-      splash.remove()
-      return
-    }
-    splash.classList.add('full-screen-whale-loader--exiting')
-    window.setTimeout(() => splash.remove(), SPLASH_FADE_MS + 40)
-  }
-
-  // /pet-overlay 透明窗口例外：立即撤下，不经过淡出。
-  const removeImmediately = (): void => {
-    if (finished) return
-    finished = true
-    stopWatching()
+  if (!splash || shell) return
+  if (window.location.hash.startsWith(PET_OVERLAY_HASH_PREFIX)) {
     splash.remove()
+    return
   }
-
-  const onDomChanged = (): void => {
-    if (finished) return
-    const loader = document.querySelector(FULL_SCREEN_LOADING_SELECTOR)
-    const disposition = resolveSplashDisposition({
-      hash: window.location.hash,
-      composerReady: document.querySelector(COMPOSER_READY_SELECTOR) !== null,
-      surfaceReady: document.querySelector(SURFACE_READY_SELECTOR) !== null,
-      loaderPresent: loader !== null,
-      loaderLabel: loader?.getAttribute('data-loading-label') ?? null,
-    })
-    if (disposition.kind === 'finish') {
-      finish()
-      return
-    }
-    if (disposition.kind === 'remove-immediately') {
-      removeImmediately()
-      return
-    }
-    if (disposition.kind === 'mirror') {
-      // React 整窗 loader 挂载后，静态 splash 从无障碍树隐藏，由 React 的
-      // role="status" 负责播报，避免重复朗读；静态鲸鱼视觉上保持到 ready。
-      if (!splash.hasAttribute('aria-hidden')) {
-        splash.setAttribute('aria-hidden', 'true')
-      }
-      const status = splash.querySelector(STATIC_STATUS_SELECTOR)
-      if (status && typeof status.textContent === 'string') {
-        swapStatusText(status as HTMLElement, disposition.label ?? '')
-      }
-    }
-  }
-
-  // 除 childList/subtree 外监听相关 attribute，确保 data-loading-label 与
-  // ready marker 的变化能被捕获（路由切换经由 history.pushState 重渲染 DOM，
-  // 也会触发 childList 变更）。
-  const observer = new MutationObserver(onDomChanged)
-  observer.observe(document.documentElement, {
-    childList: true,
-    subtree: true,
-    attributes: true,
-    attributeFilter: ['data-loading-label', 'data-startup-surface-ready'],
+  shell = createStartupShell(splash)
+  document.getElementById('startup-reload')?.addEventListener('click', (event) => {
+    event.preventDefault()
+    if (retryConnection) retryConnection()
+    else window.location.reload()
   })
-  window.addEventListener('hashchange', onDomChanged)
-  failsafeTimer = window.setTimeout(finish, SPLASH_FAILSAFE_MS)
-  onDomChanged()
+  document.getElementById('startup-logs')?.addEventListener('click', (event) => {
+    event.preventDefault()
+    void window.DesktopBridge?.openLogDirectory().catch(() => {})
+  })
+}
+
+export const startupSplashActive = (): boolean => shell?.active() ?? false
+export const reportStartupLoading = (label: string): (() => void) =>
+  shell?.loading(label) ?? (() => {})
+export function reportStartupLabel(label: string): void {
+  retryConnection = undefined
+  const action = document.getElementById('startup-reload')
+  if (action) action.textContent = '重新加载'
+  shell?.label(label)
+}
+export function reportStartupFailure(label: string, retry?: () => void): void {
+  retryConnection = retry
+  const action = document.getElementById('startup-reload')
+  if (action) action.textContent = retry ? '重试连接' : '重新加载'
+  shell?.fail(label)
+}
+export const reportStartupReady = (): void => shell?.ready()
+export const startupSurfaceReadyRef = (element: HTMLElement | null): void => {
+  if (element) reportStartupReady()
 }

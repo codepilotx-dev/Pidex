@@ -15,11 +15,36 @@
     <style>
       /* 全窗鲸鱼加载契约：静态启动遮罩（id="startup-splash"）与 React
          FullScreenWhaleLoading 共用同一套 DOM/CSS，视觉与
-         electron/src/windows/StartupPage.ts 保持一致。静态阶段在入口 JS 与
+         本地应用壳保持一致。静态阶段在入口 JS 与
          主 CSS 完成前使用系统主题 fallback；React 接管后由
          --layer-canvas-fill / --color-token-text-secondary 与
          html[data-theme] 驱动，支持用户显式主题。由
          src/startup/StartupSplashHandoff.ts 的控制器移除。 */
+      #startup-actions[hidden],
+      #startup-connection-notice[hidden],
+      #startup-connection-retry[hidden] {
+        display: none;
+      }
+      #startup-actions {
+        text-align: center;
+      }
+      #startup-actions a {
+        color: inherit;
+        margin-inline: 8px;
+      }
+      #startup-detail {
+        margin: 0 0 12px;
+      }
+      #startup-connection-notice {
+        position: fixed;
+        top: 36px;
+        inset-inline: 0;
+        z-index: 99999;
+        padding: 8px;
+        text-align: center;
+        background: var(--cpx-sys-color-surface-canvas, var(--startup-splash-background));
+        color: var(--cpx-sys-color-fg-primary, var(--startup-splash-foreground));
+      }
       .full-screen-whale-loader {
         position: fixed;
         inset: 0;
@@ -203,7 +228,16 @@
         <div class="full-screen-whale-loader__status-viewport">
           <span class="full-screen-whale-loader__status">正在加载桌面界面…</span>
         </div>
+        <div id="startup-actions" hidden>
+          <p id="startup-detail"></p>
+          <a id="startup-reload" href="">重新加载</a>
+          <a id="startup-logs" href="#">打开日志</a>
+        </div>
       </div>
+    </div>
+    <div id="startup-connection-notice" role="status" aria-live="polite" hidden>
+      <span id="startup-connection-label"></span>
+      <a id="startup-connection-retry" href="#" hidden>重试连接</a>
     </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

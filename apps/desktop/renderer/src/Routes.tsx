@@ -1,3 +1,4 @@
+import { FullScreenWhaleLoading } from './components/ui/FullScreenWhaleLoading.js'
 import { lazy, Suspense, type ReactNode } from 'react'
 import { GitBoardProvider } from './features/git-board/GitBoardContext.js'
 import { createHashRouter, Navigate, useLocation } from 'react-router-dom'
@@ -107,7 +108,7 @@ const router = createHashRouter([
           {
             path: 'providers',
             element: (
-              <Suspense fallback={null}>
+              <Suspense fallback={<FullScreenWhaleLoading label="正在加载供应商…" />}>
                 <ProvidersView />
               </Suspense>
             ),
@@ -115,7 +116,7 @@ const router = createHashRouter([
           {
             path: 'git',
             element: (
-              <Suspense fallback={null}>
+              <Suspense fallback={<FullScreenWhaleLoading label="正在加载 Git 工作区…" />}>
                 <GitBoardView />
               </Suspense>
             ),

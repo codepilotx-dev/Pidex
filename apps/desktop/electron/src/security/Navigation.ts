@@ -19,7 +19,6 @@ export function isAllowedApplicationUrl(
   value: string,
   allowedApplicationOrigin: string | undefined,
 ): boolean {
-  if (value.startsWith('data:text/html')) return true
   return isApplicationOriginUrl(value, allowedApplicationOrigin)
 }
 

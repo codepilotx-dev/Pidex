@@ -56,6 +56,9 @@ export interface DesktopAgentConnectionCoordinatorOptions {
  * sidecar 生命周期；窗口、认证和重连编排通过回调注入，main.ts 只装配。
  */
 export class DesktopAgentConnectionCoordinator {
+  get generation(): number {
+    return this.#cycle
+  }
   readonly #options: DesktopAgentConnectionCoordinatorOptions
   #status: DesktopAgentConnectionStatus = {
     lifecycle: 'idle',
