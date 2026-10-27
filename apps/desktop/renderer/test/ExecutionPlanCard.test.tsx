@@ -50,10 +50,41 @@ describe('ExecutionPlanCard', () => {
     expect(html).not.toContain('先完成协议，再接入界面。')
     expect(html).not.toContain('<small')
     expect(html).not.toContain('<button')
+    // 完成项移除中划线强调，进行中项保留强调样式
+    expect(html).not.toContain('line-through')
   })
 
-  test('derives the current one-based step with lifecycle fallbacks', () => {
+  test('derives the current one-based step with lifecycle and out-of-order fallbacks', () => {
+    // 1. 首个进行中项优先
     expect(executionPlanStepPosition(executionPlanItem())).toBe(2)
+
+    // 乱序：第 1 步 pending，第 2 步 completed，第 3 步 in_progress -> 定位到首个进行中项（第 3 步）
+    expect(
+      executionPlanStepPosition(
+        executionPlanItem({
+          steps: [
+            { step: '更新协议', status: 'pending' },
+            { step: '接入时间线', status: 'completed' },
+            { step: '运行验证', status: 'in_progress' },
+          ],
+        }),
+      ),
+    ).toBe(3)
+
+    // 2. 首个未完成项（无进行中项时）：第 1 步 completed，第 2 步 pending，第 3 步 completed -> 首个未完成项为第 2 步
+    expect(
+      executionPlanStepPosition(
+        executionPlanItem({
+          steps: [
+            { step: '更新协议', status: 'completed' },
+            { step: '接入时间线', status: 'pending' },
+            { step: '运行验证', status: 'completed' },
+          ],
+        }),
+      ),
+    ).toBe(2)
+
+    // 3. 最后一步（全部完成时）
     expect(
       executionPlanStepPosition(
         executionPlanItem({
@@ -65,16 +96,8 @@ describe('ExecutionPlanCard', () => {
         }),
       ),
     ).toBe(2)
-    expect(
-      executionPlanStepPosition(
-        executionPlanItem({
-          steps: [
-            { step: '更新协议', status: 'completed' },
-            { step: '接入界面', status: 'pending' },
-          ],
-        }),
-      ),
-    ).toBe(2)
+
+    // 4. 空计划返回 0
     expect(executionPlanStepPosition(executionPlanItem({ steps: [] }))).toBe(0)
   })
 
@@ -208,6 +231,20 @@ describe('ExecutionPlanCard', () => {
         onReturnToBottom={() => undefined}
       />,
     )
+    const emptyPlanWithFilesHtml = renderToStaticMarkup(
+      <ComposerChangeSummary
+        active
+        additions={5}
+        canReturnToBottom={false}
+        changedFiles={changedFiles(1, 5, 0)}
+        deletions={0}
+        executionPlan={executionPlanItem({ steps: [] })}
+        failed={false}
+        onOpenReview={() => undefined}
+        onOpenReviewFile={() => undefined}
+        onReturnToBottom={() => undefined}
+      />,
+    )
     const fileOnlyHtml = renderToStaticMarkup(
       <ComposerChangeSummary
         active={false}
@@ -259,7 +296,8 @@ describe('ExecutionPlanCard', () => {
     expect(streamingHtml).toContain('composer-change-summary__separator')
     expect(streamingHtml).toContain('aria-label="执行计划进行中，已完成 1 / 3 步"')
     expect(streamingHtml).toContain('data-progress="33.33"')
-    expect(streamingHtml).toContain('lucide-loader-circle')
+    // 执行中摘要使用完成比例环形进度
+    expect(streamingHtml).toContain('composer-change-summary__plan-progress-ring')
     expect(streamingHtml).toContain('lucide-ellipsis')
     expect(streamingHtml).toContain('composer-change-summary__down-arrow')
     expect(streamingHtml).toContain('data-running="true"')
@@ -314,9 +352,14 @@ describe('ExecutionPlanCard', () => {
     expect(failedHtml).toContain('lucide-circle-x')
     expect(failedHtml).not.toContain('composer-change-summary__plan-progress-ring')
     expect(failedHtml).not.toContain('composer-change-summary__return')
-    expect(emptyPlanHtml).toContain('data-progress="0"')
-    expect(emptyPlanHtml).not.toContain('NaN')
-    expect(emptyPlanHtml).not.toContain('Infinity')
+
+    // 空计划不显示步骤入口：无文件时整体不渲染，有文件时仅显示文件摘要
+    expect(emptyPlanHtml).toBe('')
+    expect(emptyPlanHtml).not.toContain('composer-change-summary__plan')
+    expect(emptyPlanWithFilesHtml).not.toContain('composer-change-summary__plan')
+    expect(emptyPlanWithFilesHtml).not.toContain('composer-change-summary__separator')
+    expect(emptyPlanWithFilesHtml).toContain('1 个文件已更改')
+
     expect(fileOnlyHtml).toContain('1 个文件已更改')
     expect(fileOnlyHtml).toContain('<button')
     expect(fileOnlyHtml.match(/<button/g)).toHaveLength(2)
@@ -329,6 +372,40 @@ describe('ExecutionPlanCard', () => {
     expect(fileOnlyAtBottomHtml.match(/<button/g)).toHaveLength(1)
     expect(fileOnlyAtBottomHtml).not.toContain('composer-change-summary__return')
     expect(fileOnlyAtBottomHtml).not.toContain('composer-change-summary__return-presence')
+  })
+
+  test('supports popover mutual exclusion, escape dismissal and review/file jumps', async () => {
+    const componentSource = await Bun.file(
+      new URL('../src/features/session/composer/ComposerChangeSummary.tsx', import.meta.url),
+    ).text()
+
+    // 1. 复用受控 TooltipRoot 组合实现互斥
+    expect(componentSource).toContain("activePreview === 'plan'")
+    expect(componentSource).toContain("activePreview === 'files'")
+    expect(componentSource).toContain("setActivePreview(open ? 'plan' : null)")
+    expect(componentSource).toContain("setActivePreview(open ? 'files' : null)")
+    expect(componentSource).toContain('delayDuration={0}')
+    expect(componentSource).toContain('interactive')
+
+    // 2. 点击摘要打开 Review，点击文件定位对应变更
+    expect(componentSource).toMatch(/onClick=\{openReview\}/)
+    expect(componentSource).toMatch(/onClick=\{\(\)\s*=>\s*openReviewFile\(file\.path\)\}/)
+    expect(componentSource).toContain('onOpenReview()')
+    expect(componentSource).toContain('onOpenReviewFile(path)')
+
+    // 3. 浮层采用 Pidex raised surface、阴影与圆角外壳，长内容内部滚动
+    expect(componentSource).toContain('tw:bg-app-raised')
+    expect(componentSource).toContain('tw:shadow-lg')
+    expect(componentSource).toContain('tw:rounded-xl')
+    expect(componentSource).toContain('composer-change-summary__plan-popover')
+    expect(componentSource).toContain('composer-change-summary__files-popover')
+    expect(componentSource).toContain('composer-change-summary__files-list')
+
+    // 4. 旧绝对定位浮层包装与关闭计时器已移除
+    expect(componentSource).not.toContain('ComposerPlanPreviewPresence')
+    expect(componentSource).not.toContain('ComposerChangedFilesPreviewPresence')
+    expect(componentSource).not.toContain('PLAN_PREVIEW_CLOSE_DELAY_MS')
+    expect(componentSource).not.toContain('schedulePreviewClose')
   })
 })
 
