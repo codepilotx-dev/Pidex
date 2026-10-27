@@ -259,18 +259,23 @@ describe('canonical tool item display', () => {
     )
     expect(cleanCommandSummary('cd "C:\\Program Files" ; npm test')).toBe('npm test')
     expect(cleanCommandSummary('git status')).toBe('git status')
+    expect(
+      cleanCommandSummary('bun run typecheck 2>&1|grep -E"error TS" Ihead -20'),
+    ).toBe('bun run typecheck')
+    expect(cleanCommandSummary('bun run typecheck 2>&1|tail-20')).toBe('bun run typecheck')
+    expect(cleanCommandSummary('bun test 2>&1 | Select-String "FAIL"')).toBe('bun test')
   })
   test('formats command durations independently from semantic summaries', () => {
     expect(formatToolDuration(250)).toBe('1 秒')
     expect(formatToolDuration(84_000)).toBe('1 分 24 秒')
-    expect(buildToolItemDisplay(toolItem()).expandedLabel).toBe('已运行 bun test · 1 秒')
+    expect(buildToolItemDisplay(toolItem()).expandedLabel).toBe('已在 1 秒内运行 bun test')
     expect(
       buildToolSemanticSummary(
         toolItem({
           activity: undefined,
         }),
       ).collapsedLabel,
-    ).toBe('已运行 bun test · 1 秒')
+    ).toBe('已在 1 秒内运行 bun test')
     expect(
       buildToolSemanticSummary(
         toolItem({
@@ -288,7 +293,7 @@ describe('canonical tool item display', () => {
         }),
         { nowMs: 2_500 },
       ).collapsedLabel,
-    ).toBe('正在运行 bun test · 2 秒')
+    ).toBe('正在运行 bun test（已用时 2 秒）')
   })
 
   test('only allows an active command to expand after output arrives', () => {
@@ -330,8 +335,8 @@ describe('canonical tool item display', () => {
             workspacePath: 'src/ConversationPage.tsx',
           },
         },
-        '正在读取 src/ConversationPage.tsx',
-        '已读取 src/ConversationPage.tsx',
+        '正在查阅 src/ConversationPage.tsx',
+        '已查阅 src/ConversationPage.tsx',
         'read',
       ],
       [
@@ -350,8 +355,8 @@ describe('canonical tool item display', () => {
       ],
       [
         { type: 'read', subject: 'skill', target: { displayLabel: 'reverse-engineer-ui-feature' } },
-        '正在读取 reverse-engineer-ui-feature 技能',
-        '已读取 reverse-engineer-ui-feature 技能',
+        '正在研读 reverse-engineer-ui-feature 技能',
+        '已研读 reverse-engineer-ui-feature 技能',
         'skill',
       ],
       [{ type: 'web_search' }, '正在搜索网页', '已搜索网页', 'web-search'],
@@ -364,13 +369,13 @@ describe('canonical tool item display', () => {
       [
         { type: 'command', kind: 'skill_script', skillName: 'review', scriptName: 'check.py' },
         '正在运行 review 技能中的脚本 check.py',
-        '已运行 review 技能中的脚本 check.py · 1 秒',
+        '已在 1 秒内运行 review 技能中的脚本 check.py',
         'command',
       ],
       [
         { type: 'command', kind: 'current_time' },
         '正在检查当前日期和时间',
-        '已检查当前日期和时间 · 1 秒',
+        '已在 1 秒内完成检查当前日期和时间',
         'current-time',
       ],
     ] as const
@@ -462,7 +467,7 @@ describe('canonical tool item display', () => {
           state: 'interrupted',
         }),
       ).collapsedLabel,
-    ).toBe('已停止执行 bun test · 1 秒')
+    ).toBe('在 1 秒后停止运行 bun test')
     expect(
       buildToolSemanticSummary(
         toolItem({
@@ -477,7 +482,7 @@ describe('canonical tool item display', () => {
           tool: 'Read',
         }),
       ).collapsedLabel,
-    ).toBe('已停止读取 ConversationPage.tsx')
+    ).toBe('已停止查阅 ConversationPage.tsx')
     expect(
       buildToolItemDisplay(
         toolItem({
@@ -961,9 +966,9 @@ describe('canonical tool item display', () => {
       </TooltipProvider>,
     )
 
-    expect(collapsed.replace(/<[^>]*>/g, '')).toContain('已运行 bun test · 1 秒')
-    expect(collapsed).toContain('class="cpx-agent-activity__duration"> · 1 秒</span>')
-    expect(collapsed).not.toContain('title="已运行 bun test · 1 秒"')
+    expect(collapsed.replace(/<[^>]*>/g, '')).toContain('已在 1 秒内运行 bun test')
+    expect(collapsed).toContain('class="cpx-agent-activity__duration">1 秒</span>')
+    expect(collapsed).not.toContain('title="已在 1 秒内运行 bun test"')
     expect(collapsed).not.toContain('aria-label="执行内容"')
     expect(collapsed).toContain('ui-collapsible-content')
     expect(collapsed).toContain('data-state="closed"')
@@ -972,8 +977,8 @@ describe('canonical tool item display', () => {
     expect(collapsed).not.toContain('canonical-command-shell')
     expect(collapsed).toContain('lucide-chevron-right')
     expect(collapsed).not.toContain('lucide-chevron-down')
-    expect(expanded.replace(/<[^>]*>/g, '')).toContain('已运行 bun test · 1 秒')
-    expect(expanded).not.toContain('title="已运行 bun test · 1 秒"')
+    expect(expanded.replace(/<[^>]*>/g, '')).toContain('已在 1 秒内运行 bun test')
+    expect(expanded).not.toContain('title="已在 1 秒内运行 bun test"')
     expect(expanded).toContain('aria-label="执行内容"')
     expect(expanded).not.toContain('transition-[grid-template-rows]')
     expect(expanded).toContain('lucide-chevron-right')

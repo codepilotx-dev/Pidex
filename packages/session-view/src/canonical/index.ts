@@ -545,19 +545,12 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
     } else if (item.type === 'execution-plan') {
       executionPlanItems.push(item)
       contentBlocks.push({ kind: 'execution-plan', id: `execution-plan:${item.id}`, item })
-    } else if (isContextCompressionActivity(item)) {
-      postAssistantItems.push(item)
     } else if (item.type === 'question' && item.status !== 'pending') {
       processItems.push(item)
       appendProcessBlock(contentBlocks, item)
     } else if (item.type !== 'question') {
       processItems.push(item)
       appendProcessBlock(contentBlocks, item)
-    }
-  }
-  for (const item of postAssistantItems) {
-    if (isContextCompressionActivity(item)) {
-      contentBlocks.push({ kind: 'post', id: `post:${item.id}`, item })
     }
   }
 
@@ -610,6 +603,7 @@ function findLastProcessItemIndex(items: readonly Item[]): number {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
     if (!item) continue
+    // 压缩可能发生在回答之后，但不应把已有最终回复重新判为过程文本。
     if (isContextCompressionActivity(item)) continue
     if (item.type === 'text') {
       if (

@@ -133,7 +133,7 @@ const aggregateForTool = (item: Extract<Item, { type: 'tool' }>): Aggregate => {
           label: '停止创建文件',
           semanticKind: 'file-change',
         }
-      : { key: 'file-change', kind: 'file-change', label: '编辑文件', semanticKind: 'file-change' }
+      : { key: 'file-change', kind: 'file-change', label: '修改代码', semanticKind: 'file-change' }
   }
   if (descriptor?.type === 'tool') {
     const unnamed = descriptor.mode === 'call' && !descriptor.name
@@ -147,7 +147,7 @@ const aggregateForTool = (item: Extract<Item, { type: 'tool' }>): Aggregate => {
       return {
         key: 'exploration',
         kind: 'exploration',
-        label: '读取文件',
+        label: '查阅文件',
         semanticKind: 'exploration',
       }
     case 'command':
@@ -156,14 +156,14 @@ const aggregateForTool = (item: Extract<Item, { type: 'tool' }>): Aggregate => {
       return {
         key: 'web-search',
         kind: 'web-search',
-        label: '搜索网页',
+        label: '检索网络资料',
         semanticKind: 'web-search',
       }
     case 'file-change':
       return {
         key: 'file-change',
         kind: 'file-change',
-        label: '编辑文件',
+        label: '修改代码',
         semanticKind: 'file-change',
       }
     case 'integration':
@@ -197,7 +197,7 @@ function completedAggregates(items: readonly Item[]): Aggregate[] {
       values.set('file-change', {
         key: 'file-change',
         kind: 'file-change',
-        label: '编辑文件',
+        label: '修改代码',
         semanticKind: 'file-change',
       })
     }
@@ -218,6 +218,81 @@ function completedAggregates(items: readonly Item[]): Aggregate[] {
   )
 }
 
+export function formatProcessSummaryLabel(parts: readonly Aggregate[], active: boolean): string {
+  if (parts.length === 0) return '处理过程'
+
+  if (active) {
+    const kinds = new Set(parts.map((p) => p.kind))
+    if (kinds.has('exploration') && kinds.has('command')) {
+      return '正在查阅代码并执行命令…'
+    }
+    if (kinds.has('exploration') && kinds.has('file-change')) {
+      return '正在查阅并修改代码…'
+    }
+    if (kinds.has('file-change') && kinds.has('command')) {
+      return '正在修改代码并运行验证…'
+    }
+    if (parts.length === 1) {
+      const single = parts[0]
+      switch (single.kind) {
+        case 'exploration':
+          return '正在查阅相关文件…'
+        case 'command':
+          return '正在运行命令…'
+        case 'file-change':
+          return '正在修改代码…'
+        case 'web-search':
+          return '正在检索网络资料…'
+        case 'loaded-tool':
+          return '正在加载工具…'
+        default:
+          return `正在${single.label}…`
+      }
+    }
+    return `正在${parts.map((p) => p.label).join('与')}…`
+  }
+
+  // completed
+  const kinds = new Set(parts.map((p) => p.kind))
+  if (kinds.has('exploration') && kinds.has('command') && parts.length === 2) {
+    return '查阅了文件，并运行了命令'
+  }
+  if (kinds.has('exploration') && kinds.has('file-change') && parts.length === 2) {
+    return '查阅并修改了相关代码'
+  }
+  if (kinds.has('file-change') && kinds.has('command') && parts.length === 2) {
+    return '修改了代码，并完成了运行验证'
+  }
+  if (parts.length === 1) {
+    const single = parts[0]
+    switch (single.kind) {
+      case 'exploration':
+        return '查阅了文件'
+      case 'command':
+        return '运行了命令'
+      case 'file-change':
+        return '修改了代码'
+      case 'web-search':
+        return '检索了网络资料'
+      case 'stopped-file-creation':
+        return '停止了创建文件'
+      case 'loaded-tool':
+        return '加载了工具'
+      case 'tool':
+      case 'dynamic-tool':
+        return '调用了工具'
+      default:
+        return single.label
+    }
+  }
+
+  const labels = parts.map((p) => p.label)
+  if (labels.length === 2) {
+    return `${labels[0]}，并${labels[1]}`
+  }
+  return `${labels.slice(0, -1).join('、')}，并${labels.at(-1)}`
+}
+
 export function summarizeTurnProcessItems(
   items: readonly Item[],
   turnStatus: TurnStatus,
@@ -225,7 +300,7 @@ export function summarizeTurnProcessItems(
   const active = isActiveTurn(turnStatus)
   const parts = completedAggregates(items)
   const failed = items.some((item) => itemActivity(item) === 'failed')
-  const label = parts.length > 0 ? parts.map((part) => part.label).join('、') : '处理过程'
+  const label = formatProcessSummaryLabel(parts, active)
 
   if (active) {
     return {

@@ -109,7 +109,11 @@ export function cleanCommandSummary(command: string): string {
   const trimmed = command.trim()
   const cdPattern = /^cd\s+(?:"[^"]*"|'[^']*'|\S+)\s*(?:&&|;)\s*/i
   const stripped = trimmed.replace(cdPattern, '').trim()
-  return stripped || trimmed
+  const helperPipePattern =
+    /\s*(?:2>&1\s*)?(?:\||I)\s*(?:grep|head|tail|Select-String|sls|Out-String|more|less)\b.*$/i
+  const helperRedirectPattern = /\s*2>&1\s*(?:>|\/dev\/null).*$/i
+  const filtered = stripped.replace(helperPipePattern, '').replace(helperRedirectPattern, '').trim()
+  return filtered || stripped || trimmed
 }
 
 function commandStateSegments(
@@ -117,18 +121,46 @@ function commandStateSegments(
   target: readonly ToolActivitySegment[],
   duration: string | null,
 ): ToolActivitySegment[] {
-  const verb = stateVerb(item, {
-    completed: '已运行',
-    error: '运行失败',
-    interrupted: '已停止执行',
-    running: '正在运行',
-  })
   const segments: ToolActivitySegment[] = []
-  if (verb) {
-    segments.push({ kind: 'verb', text: `${verb} ` })
+  if (item.state === 'completed') {
+    if (duration) {
+      segments.push(
+        { kind: 'verb', text: '已在 ' },
+        { kind: 'duration', text: duration },
+        { kind: 'verb', text: '内运行 ' },
+        ...target,
+      )
+    } else {
+      segments.push({ kind: 'verb', text: '已运行 ' }, ...target)
+    }
+    return segments
   }
-  segments.push(...target)
-  if (duration) segments.push({ kind: 'duration', text: ` · ${duration}` })
+
+  if (isActiveToolState(item.state)) {
+    segments.push({ kind: 'verb', text: '正在运行 ' }, ...target)
+    if (duration) {
+      segments.push({ kind: 'duration', text: `（已用时 ${duration}）` })
+    }
+    return segments
+  }
+
+  if (item.state === 'interrupted') {
+    if (duration) {
+      segments.push(
+        { kind: 'verb', text: `在 ${duration}后停止运行 ` },
+        ...target,
+      )
+    } else {
+      segments.push({ kind: 'verb', text: '已停止运行 ' }, ...target)
+    }
+    return segments
+  }
+
+  // error
+  segments.push({ kind: 'verb', text: '运行失败 ' }, ...target)
+  if (duration) {
+    segments.push({ kind: 'duration', text: ` · ${duration}` })
+  }
   return segments
 }
 
@@ -166,10 +198,10 @@ export function buildToolSemanticSummary(
     case 'read': {
       const skill = activity.subject === 'skill'
       const verb = stateVerb(item, {
-        completed: '已读取',
-        error: '读取失败',
-        interrupted: '已停止读取',
-        running: '正在读取',
+        completed: skill ? '已研读' : '已查阅',
+        error: skill ? '研读失败' : '查阅失败',
+        interrupted: skill ? '已停止研读' : '已停止查阅',
+        running: skill ? '正在研读' : '正在查阅',
       })
       const segments: ToolActivitySegment[] = [{ kind: 'verb', text: verb }]
       if (activity.target) {
@@ -181,7 +213,7 @@ export function buildToolSemanticSummary(
         segments,
         skill ? 'skill' : 'read',
         skill ? 'loaded-tool' : 'exploration',
-        skill ? '技能' : '文件读取',
+        skill ? '技能' : '文件查阅',
       )
     }
     case 'search': {
@@ -253,13 +285,35 @@ export function buildToolSemanticSummary(
       const skillScript = activity.kind === 'skill_script'
       let segments: ToolActivitySegment[]
       if (special) {
-        const verb = stateVerb(item, {
-          completed: '已检查当前日期和时间',
-          error: '检查当前日期和时间失败',
-          interrupted: '已停止检查当前日期和时间',
-          running: '正在检查当前日期和时间',
-        })
-        segments = [{ kind: 'verb', text: verb }]
+        const duration = commandDuration(item, options.nowMs)
+        if (item.state === 'completed') {
+          if (duration) {
+            segments = [
+              { kind: 'verb', text: '已在 ' },
+              { kind: 'duration', text: duration },
+              { kind: 'verb', text: '内完成检查当前日期和时间' },
+            ]
+          } else {
+            segments = [{ kind: 'verb', text: '已检查当前日期和时间' }]
+          }
+        } else if (isActiveToolState(item.state)) {
+          segments = [{ kind: 'verb', text: '正在检查当前日期和时间' }]
+          if (duration) {
+            segments.push({ kind: 'duration', text: `（已用时 ${duration}）` })
+          }
+        } else if (item.state === 'interrupted') {
+          segments = [
+            {
+              kind: 'verb',
+              text: duration
+                ? `在 ${duration}后停止检查当前日期和时间`
+                : '已停止检查当前日期和时间',
+            },
+          ]
+        } else {
+          segments = [{ kind: 'verb', text: '检查当前日期和时间失败' }]
+          if (duration) segments.push({ kind: 'duration', text: ` · ${duration}` })
+        }
       } else if (skillScript) {
         const target: ToolActivitySegment[] = []
         if (activity.skillName) {
@@ -282,10 +336,7 @@ export function buildToolSemanticSummary(
           commandDuration(item, options.nowMs),
         )
       }
-      if (special) {
-        const duration = commandDuration(item, options.nowMs)
-        if (duration) segments.push({ kind: 'duration', text: ` · ${duration}` })
-      }
+
       return summary(
         segments,
         special ? 'current-time' : 'command',

@@ -103,7 +103,7 @@ describe('summarizeTurnProcessItems', () => {
       active: false,
       failed: false,
       kind: 'integration',
-      label: '使用 drive、加载工具、调用工具、编辑文件、读取文件、运行命令、搜索网页、调用工具',
+      label: '使用 drive、加载工具、调用工具、修改代码、查阅文件、运行命令、检索网络资料，并调用工具',
     })
     expect(result.summaryKey).toBe(
       'completed:ok:integration:drive|loaded-tool|tool|file-change|exploration|command|web-search|dynamic-tool',
@@ -125,7 +125,7 @@ describe('summarizeTurnProcessItems', () => {
       ),
     ).toMatchObject({
       kind: 'file-change',
-      label: '编辑文件',
+      label: '修改了代码',
     })
 
     const text = {
@@ -160,7 +160,7 @@ describe('summarizeTurnProcessItems', () => {
       active: true,
       failed: false,
       kind: 'exploration',
-      label: '读取文件、运行命令',
+      label: '正在查阅代码并执行命令…',
     })
     expect(result.summaryKey).toContain('read-1')
 
@@ -188,7 +188,7 @@ describe('summarizeTurnProcessItems', () => {
       ),
     ).toMatchObject({
       kind: 'exploration',
-      label: '读取文件',
+      label: '正在查阅相关文件…',
     })
 
     const completedReasoning = {
@@ -218,7 +218,7 @@ describe('summarizeTurnProcessItems', () => {
       active: false,
       failed: true,
       kind: 'command',
-      label: '运行命令',
+      label: '运行了命令',
     })
   })
 
@@ -241,7 +241,7 @@ describe('summarizeTurnProcessItems', () => {
     ).toMatchObject({
       failed: true,
       kind: 'file-change',
-      label: '停止创建文件',
+      label: '停止了创建文件',
     })
   })
 })

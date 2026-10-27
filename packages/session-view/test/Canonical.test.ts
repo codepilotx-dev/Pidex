@@ -1331,7 +1331,7 @@ describe('canonical thread state', () => {
     expect(entry?.contentBlocks.map((block) => block.kind)).toEqual(['process', 'assistant'])
   })
 
-  test('projects context compaction after the assistant result with stable turn and agent anchors', () => {
+  test('projects context compaction into the process without changing the final answer or anchors', () => {
     const explicitTurn = turn('turn-compaction-explicit')
     const latestTurn = turn('turn-compaction-latest')
     const explicitRoot = agent('agent-compaction-explicit-root', explicitTurn.id)
@@ -1397,8 +1397,9 @@ describe('canonical thread state', () => {
     expect(explicitEntry?.assistantResultItems.map((item) => item.id)).toEqual([
       'result-compaction-explicit',
     ])
-    expect(explicitEntry?.postAssistantItems.map((item) => item.id)).toEqual([explicitActivityId])
-    expect(explicitEntry?.contentBlocks.map((block) => block.kind)).toEqual(['assistant', 'post'])
+    expect(explicitEntry?.processItems.map((item) => item.id)).toEqual([explicitActivityId])
+    expect(explicitEntry?.postAssistantItems).toEqual([])
+    expect(explicitEntry?.contentBlocks.map((block) => block.kind)).toEqual(['process', 'assistant'])
 
     const withLatestFallback = applyThreadEnvelope(
       withExplicitAnchor,
