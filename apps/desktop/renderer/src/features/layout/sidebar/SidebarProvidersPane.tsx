@@ -82,11 +82,11 @@ export function SidebarProvidersPane(): React.ReactNode {
           }
         />
       </header>
-      <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:p-2">
+      <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:px-2 tw:pb-2">
         <SidebarRow
           active={onMarketRoute}
           asChild
-          layout="flex"
+          layout="grid"
           leading={<Store aria-hidden size={APP_ICON_SIZE} />}
         >
           <button
@@ -100,7 +100,7 @@ export function SidebarProvidersPane(): React.ReactNode {
         <SidebarRow
           active={creatingProvider}
           asChild
-          layout="flex"
+          layout="grid"
           leading={<Plus aria-hidden size={APP_ICON_SIZE} />}
         >
           <button
@@ -113,8 +113,8 @@ export function SidebarProvidersPane(): React.ReactNode {
         </SidebarRow>
       </div>
       <ScrollArea
-        className="sidebar-providers-scroll tw:min-h-0 tw:flex-1 tw:px-2 tw:pb-2 tw:pt-0"
-        contentClassName="tw:flex tw:flex-col tw:gap-4"
+        className="sidebar-providers-scroll tw:min-h-0 tw:flex-1 tw:overflow-x-hidden tw:scroll-pb-2"
+        contentClassName="tw:flex tw:min-w-0 tw:flex-col tw:gap-4 tw:px-2 tw:pb-2"
       >
         {loading ? (
           <SidebarEmptyRow role="status">{t('正在加载供应商…')}</SidebarEmptyRow>
@@ -144,10 +144,11 @@ export function SidebarProvidersPane(): React.ReactNode {
                       className="sidebar-nav-link tw:type-row-title tw:focus-visible:outline-2 tw:focus-visible:outline-offset-0 tw:focus-visible:outline-app-focus"
                       key={provider.providerID}
                       labelClassName="sidebar-item-label tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap"
-                      layout="flex"
+                      layout="grid"
                       leading={
                         <span className="tw:flex tw:size-4 tw:shrink-0 tw:items-center tw:justify-center">
                           <ProviderIcon
+                            className="tw:size-4 tw:shrink-0"
                             fallback={<BrainCircuit aria-hidden size={APP_ICON_SIZE} />}
                             imageClassName="tw:object-contain tw:[.dark-theme_&]:invert tw:[.dark-theme_&]:hue-rotate-180"
                             logoURL={provider.logoURL}

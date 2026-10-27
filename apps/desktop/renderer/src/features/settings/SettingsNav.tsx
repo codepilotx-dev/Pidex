@@ -130,7 +130,7 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
         <SidebarRow
           asChild
           className="settings-back-btn tw:mb-2 tw:type-row-title"
-          layout="flex"
+          layout="grid"
           leading={<ArrowLeft size={APP_ICON_SIZE} />}
         >
           <button onClick={onBack} type="button">
@@ -178,7 +178,7 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
             return (
               <section className="settings-nav-group tw:grid" key={group.title}>
                 <div className="settings-nav-group-title-row tw:min-w-0 tw:px-2 tw:py-1">
-                  <h2 className="settings-nav-group-title tw:m-0 tw:text-app-text-meta tw:type-row-title">
+                  <h2 className="settings-nav-group-title tw:m-0 tw:text-app-text-meta tw:type-body tw:normal-case">
                     {t(group.title)}
                   </h2>
                 </div>
@@ -195,8 +195,8 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
                             : 'settings-nav-item tw:type-row-title tw:whitespace-nowrap'
                         }
                         key={item.id}
-                        layout="flex"
-                        leading={<item.icon className="settings-nav-icon tw:text-current" />}
+                        layout="grid"
+                        leading={<item.icon size={APP_ICON_SIZE} className="settings-nav-icon tw:size-4 tw:text-current" />}
                       >
                         <button
                           disabled={pending}
