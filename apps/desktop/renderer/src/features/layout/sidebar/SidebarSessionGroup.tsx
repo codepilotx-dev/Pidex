@@ -779,12 +779,10 @@ function SidebarSessionGroupComponent({
                 {canShowMore ? (
                   <Button
                     aria-expanded={canCollapse}
-                    className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
-                    color="text"
+                    className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:[font:inherit]"
+                    variant="text"
                     onClick={() =>
-                      updateVisibleLimit((current) =>
-                        Math.min(current + pageSize, sessions.length),
-                      )
+                      updateVisibleLimit((current) => Math.min(current + pageSize, sessions.length))
                     }
                     size="compact"
                     type="button"
@@ -796,9 +794,9 @@ function SidebarSessionGroupComponent({
                 ) : null}
                 {canCollapse ? (
                   <Button
-                    className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
+                    className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:[font:inherit]"
                     onClick={() => updateVisibleLimit(initialLimit)}
-                    color="text"
+                    variant="text"
                     size="compact"
                     type="button"
                   >
@@ -942,7 +940,10 @@ function SidebarSessionWorkspaceMeta({ session }: { session: SessionListItem }):
   }
   return (
     <span className="sidebar-session-workspace-meta tw:flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
-      <Folder className="sidebar-session-workspace-meta__icon tw:flex-none" size="var(--inline-icon-size, 1em)" />
+      <Folder
+        className="sidebar-session-workspace-meta__icon tw:flex-none"
+        size="var(--inline-icon-size, 1em)"
+      />
       <span className="sidebar-session-workspace-meta__name tw:min-w-0 tw:overflow-hidden tw:whitespace-nowrap">
         {session.workspaceName}
       </span>

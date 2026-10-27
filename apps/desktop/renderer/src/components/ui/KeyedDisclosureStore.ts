@@ -62,7 +62,6 @@ export function createKeyedDisclosureStore({
   const stateStore = createStore<{ expandedKeys: ReadonlySet<string> }>()(() => ({
     expandedKeys: new Set(initialExpandedKeys),
   }))
-  const keyListeners = new Map<string, Set<() => void>>()
   let persistTimer: number | null = null
   let persistPending = false
   let destroyed = false
@@ -91,23 +90,14 @@ export function createKeyedDisclosureStore({
     persistTimer = globalThis.setTimeout(flush, persistDelayMs)
   }
 
-  const notifyKey = (key: string): void => {
-    for (const listener of keyListeners.get(key) ?? []) listener()
-  }
-
   const store: KeyedDisclosureStore = {
     getSnapshot: (key) => expandedSet().has(key),
     getExpandedKeys: normalizedExpandedKeys,
     getVersion: () => expandedSet(),
-    subscribe: (key, listener) => {
-      const bucket = keyListeners.get(key) ?? new Set<() => void>()
-      bucket.add(listener)
-      keyListeners.set(key, bucket)
-      return () => {
-        bucket.delete(listener)
-        if (bucket.size === 0) keyListeners.delete(key)
-      }
-    },
+    subscribe: (key, listener) =>
+      stateStore.subscribe((next, previous) => {
+        if (next.expandedKeys.has(key) !== previous.expandedKeys.has(key)) listener()
+      }),
     subscribeAll: (listener) => stateStore.subscribe(listener),
     setExpanded: (key, expanded) => {
       const current = expandedSet()
@@ -121,7 +111,6 @@ export function createKeyedDisclosureStore({
             ? new Set([...next].slice(-maxExpandedKeys))
             : next,
       })
-      notifyKey(key)
       schedulePersist()
     },
     replace: (nextExpandedKeys) => {
@@ -137,14 +126,12 @@ export function createKeyedDisclosureStore({
       }
       if (changedKeys.size === 0) return
       stateStore.setState({ expandedKeys: next })
-      for (const key of changedKeys) notifyKey(key)
     },
     flush,
     destroy: () => {
       if (destroyed) return
       flush()
       destroyed = true
-      keyListeners.clear()
       lifecycleStores.delete(store)
       releaseLifecycleListeners()
     },

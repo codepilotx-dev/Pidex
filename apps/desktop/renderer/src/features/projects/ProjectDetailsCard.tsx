@@ -92,7 +92,7 @@ export function ProjectDetailsCard({
             nativeTitle={false}
             isIconOnly
             iconSize="sm"
-            className="sidebar-project-hover-card-pin tw:inline-flex tw:flex-none tw:items-center tw:justify-center tw:justify-self-end"
+            className="sidebar-project-hover-card-pin tw:flex-none tw:justify-self-end"
             color={pinLabel ? 'text' : isPinned ? 'ghostActive' : 'ghostSecondary'}
             ref={pinRef}
             size="toolbar"
@@ -155,17 +155,19 @@ export function ProjectDetailsCard({
           ) : null,
         )}
       </div>
-      <Button
-        color="ghostSecondary"
-        className={cx('sidebar-project-hover-card-edit tw:mt-1', PROJECT_HOVER_CARD_ACTION_CLASS)}
-        size="compact"
+      <button
+        type="button"
+        className={cx(
+          'sidebar-project-hover-card-edit tw:mt-1 tw:inline-flex tw:type-control tw:rounded-xs tw:text-app-text-soft tw:gap-1 tw:select-none tw:transition-[background-color,border-color,color,opacity,transform,box-shadow] tw:duration-150 tw:ease-out tw:[-webkit-app-region:no-drag] tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-app-accent tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-app-main',
+          PROJECT_HOVER_CARD_ACTION_CLASS,
+        )}
         onClick={() => {
           onEdit()
         }}
       >
         <Settings aria-hidden="true" size={APP_ICON_SIZES.sm} />
         <span>编辑项目</span>
-      </Button>
+      </button>
     </SidebarHoverCardFrame>
   )
 }

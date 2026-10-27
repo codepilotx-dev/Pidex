@@ -14,7 +14,7 @@ import type {
   DesktopProviderDefinition,
   ModelProviderID,
 } from '../../../shared/Types.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import { fullErrorMessage, toUserErrorMessage } from '../../utils/Errors.js'
 import { ChevronRight, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
@@ -81,7 +81,12 @@ export function getProviderConnectionState({
 }
 
 export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactNode {
-  const settings = useDesktopSettings()
+  const subscribedProviderID = useDesktopSettingsField((state) => state.providerID)
+  const subscribedModel = useDesktopSettingsField((state) => state.model)
+  const settings = useMemo(
+    () => ({ providerID: subscribedProviderID, model: subscribedModel }),
+    [subscribedProviderID, subscribedModel],
+  )
   const providerPanel = useDesktopLayoutOutletContext()?.providerManagement
   const [searchParams, setSearchParams] = useSearchParams()
   const [providerID, setProviderID] = useState<ModelProviderID>(settings.providerID)
@@ -151,12 +156,19 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           id: item.provider.providerID,
           name: item.provider.displayName,
           logoURL: item.provider.logoURL,
-          source: item.provider.catalogOrigin === 'models-dev' ? 'models.dev' : item.provider.catalogOrigin === 'pi-remote' ? 'Pi 官方' : '内置',
+          source:
+            item.provider.catalogOrigin === 'models-dev'
+              ? 'models.dev'
+              : item.provider.catalogOrigin === 'pi-remote'
+                ? 'Pi 官方'
+                : '内置',
           modelCount: item.provider.modelCount ?? item.provider.defaultModels.length,
           current: item.current,
           canAddConnection: !isConfiguredProviderDirectoryItem(item),
-          connectionDisabled: item.provider.availability?.status === 'unavailable' &&
-            item.provider.catalogOrigin !== 'models-dev' && item.provider.catalogOrigin !== 'pi-remote',
+          connectionDisabled:
+            item.provider.availability?.status === 'unavailable' &&
+            item.provider.catalogOrigin !== 'models-dev' &&
+            item.provider.catalogOrigin !== 'pi-remote',
         })),
     [providers, configuration, providerQuery],
   )
@@ -294,9 +306,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     try {
       const outcome = await action()
       // 写入已成功，仅同步失败：提示成功并附带刷新警告，绝不提示保存失败。
-      onNotice(
-        outcome.syncWarning ? `${successMessage}${outcome.syncWarning}` : successMessage,
-      )
+      onNotice(outcome.syncWarning ? `${successMessage}${outcome.syncWarning}` : successMessage)
       window.dispatchEvent(new Event('desktop:model-provider-changed'))
       return true
     } catch (error) {
@@ -478,7 +488,9 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
       }
       provider={selectedProvider}
       onDraftChange={setConnectionDraftDirty}
-      onSaveDefinition={(definition) => saveProviderDefinition(definition, selectedProvider.providerID)}
+      onSaveDefinition={(definition) =>
+        saveProviderDefinition(definition, selectedProvider.providerID)
+      }
     />
   ) : null
 

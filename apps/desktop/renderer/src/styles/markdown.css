@@ -334,16 +334,6 @@
     pointer-events: auto;
   }
 
-  .md-code-action {
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .md-code-copy.is-copied {
-    color: var(--cpx-sys-color-success);
-  }
-
   .md-code-pre {
     padding: 0.9rem 1rem 0.85rem;
     font-size: var(--cpx-sys-font-size-code);
@@ -452,21 +442,8 @@
   }
 
   .md-table-copy {
-    display: inline-grid;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    place-items: center;
-    border: 1px solid var(--cpx-sys-color-border-subtle);
-    border-radius: 0;
-    color: var(--cpx-sys-color-fg-tertiary);
     opacity: 0;
     pointer-events: none;
-    cursor: pointer;
-    transition:
-      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
-      background var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
-      color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
   }
 
   .md-table-block:hover .md-table-copy,
@@ -474,15 +451,6 @@
   .md-table-copy.is-copied {
     opacity: 1;
     pointer-events: auto;
-  }
-
-  .md-table-copy:focus-visible {
-    outline: 2px solid var(--cpx-sys-color-border-focus);
-    outline-offset: 1px;
-  }
-
-  .md-table-copy.is-copied {
-    color: var(--cpx-sys-color-success);
   }
 
   .md-table-scroll {
@@ -791,13 +759,12 @@
     opacity: 0;
     pointer-events: none;
   }
-  .md-body--conversation .md-table-block:is(:hover, :has(:focus-visible)) .md-table-actions > button {
+  .md-body--conversation
+    .md-table-block:is(:hover, :has(:focus-visible))
+    .md-table-actions
+    > button {
     opacity: 1;
     pointer-events: auto;
-  }
-  .md-body--conversation .md-table-copy {
-    border-color: transparent;
-    border-radius: var(--cpx-sys-radius-control);
   }
   .md-body--conversation .md-table-copy.is-copied {
     opacity: 1;

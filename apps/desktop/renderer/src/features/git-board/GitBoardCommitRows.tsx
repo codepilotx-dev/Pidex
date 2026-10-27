@@ -1,28 +1,33 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useEffect, useState } from 'react'
 import { AlertCircle } from 'lucide-react'
 import type { DesktopWorkspace } from '../../../shared/Types.js'
 import { Button } from '../../components/ui/Button.js'
 import { OverflowTitle } from '../../components/ui/OverflowTitle.js'
-import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { usePrefersReducedMotion } from '../../hooks/UsePrefersReducedMotion.js'
 import {
   createSidebarSessionPagingState,
   setSidebarSessionVisibleLimit,
 } from '../layout/sidebar/SidebarSessionPaging.js'
+import { SidebarHoverCardProvider } from '../layout/sidebar/SidebarHoverCard.js'
 import { SidebarRow } from '../layout/sidebar/SidebarRow.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
 import { cx } from '../../utils/Cx.js'
-import { useGitBoard } from './GitBoardContext.js'
+import {
+  useGitBoard,
+  type GitBoardRepository,
+  type GitBoardReviewSelection,
+} from './GitBoardContext.js'
 import type { ReviewCommit } from '../review/source/ReviewAgentClient.js'
 import {
   GitBoardCommitHoverCard,
   buildGitBoardCommitHoverCardModel,
 } from './GitBoardCommitHoverCard.js'
 
-/** 与会话列表一致：侧栏每仓库默认渲染 5 条提交，“展开显示”按 5 条步进。 */
+/** 与会话列表一致：每仓库默认渲染 5 条提交，“展开显示”按 5 条步进。 */
 export const GIT_BOARD_COMMIT_VISIBLE_LIMIT = 5
 
-/** 侧栏提交子列表与“展开显示”按钮共用的缩进列，对齐会话行的 leading 占位。 */
+/** 提交子列表与“展开显示”按钮共用的缩进列，对齐会话行的 leading 占位。 */
 const COMMIT_LIST_CLASS =
   'sidebar-commit-list tw:m-0 tw:flex tw:list-none tw:flex-col tw:sidebar-row-gap tw:p-0'
 const COMMIT_ACTIONS_CLASS =
@@ -78,9 +83,10 @@ function GitBoardCommitRow({
         <GitBoardCommitHoverCard ariaLabel={`${t('提交详情')}：${model.shortSha}`} model={model}>
           <button
             type="button"
-            // 选中态以 aria-current 表达；同一仓库在“项目”区与分组区各渲染一次，两处同步高亮。
             aria-current={active ? 'true' : undefined}
             className="sidebar-commit-button tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus"
+            onMouseEnter={() => setHovered(true)}
+            onMouseLeave={() => setHovered(false)}
             onClick={onSelect}
           >
             <OverflowTitle active={hovered} reducedMotion={reducedMotion}>
@@ -94,34 +100,45 @@ function GitBoardCommitRow({
 }
 
 /**
- * 仓库行下方的提交子列表。数据来自 `GitBoardContext`（只为侧栏出现的仓库加载），
+ * 仓库列内的提交记录列表。数据来自 `GitBoardContext`，
  * 分页规则与会话列表一致：默认 5 条，展开时把需求条数上报给 Context 按需补拉。
- * 分页状态按“仓库 + 区域”重新挂载，同一仓库在项目区与分组区各自的展开互不影响。
  */
 export function GitBoardCommitRows({
   project,
-  type,
+  repository,
+  type = 'project',
+  onSelect,
 }: {
   project: DesktopWorkspace
-  /** `project` 表示“项目”区，`group` 表示自定义分组；仅用于区分同一仓库的两处渲染。 */
-  type: 'project' | 'group'
+  repository?: GitBoardRepository
+  /** 分页状态键后缀，缺省为 `project`。 */
+  type?: 'project' | 'group'
+  onSelect?: (selection: GitBoardReviewSelection) => void
 }) {
   const projectId = project.projectId!
   return (
-    <GitBoardCommitSection
-      key={`${projectId}:${type}`}
-      project={project}
-      groupKey={`${projectId}:${type}`}
-    />
+    <SidebarHoverCardProvider>
+      <GitBoardCommitSection
+        key={`${projectId}:${type}`}
+        project={project}
+        repository={repository}
+        groupKey={`${projectId}:${type}`}
+        onSelect={onSelect}
+      />
+    </SidebarHoverCardProvider>
   )
 }
 
 function GitBoardCommitSection({
   project,
+  repository: repositoryProp,
   groupKey,
+  onSelect,
 }: {
   project: DesktopWorkspace
+  repository?: GitBoardRepository
   groupKey: string
+  onSelect?: (selection: GitBoardReviewSelection) => void
 }) {
   const { t } = useLocale()
   const {
@@ -133,12 +150,24 @@ function GitBoardCommitSection({
     expandCommitHistory,
     ensureCommitHistory,
     refreshProject,
-  } = useGitBoard()
+  } = useGitBoard(
+    useShallow((state) => ({
+      repositories: state.repositories,
+      selectedRefs: state.selectedRefs,
+      supportsCommitRef: state.supportsCommitRef,
+      selectedReview: state.selectedReview,
+      selectReview: state.selectReview,
+      expandCommitHistory: state.expandCommitHistory,
+      ensureCommitHistory: state.ensureCommitHistory,
+      refreshProject: state.refreshProject,
+    })),
+  )
   const projectId = project.projectId!
-  const repository = repositories[projectId]
+  const repository = repositoryProp ?? repositories?.[projectId]
+  const handleSelect = onSelect ?? selectReview
   const commits = repository?.commits
   useEffect(() => {
-    ensureCommitHistory(projectId, GIT_BOARD_COMMIT_VISIBLE_LIMIT)
+    ensureCommitHistory?.(projectId, GIT_BOARD_COMMIT_VISIBLE_LIMIT)
   }, [projectId, ensureCommitHistory])
   const [paging, setPaging] = useState(() =>
     createSidebarSessionPagingState({
@@ -151,13 +180,13 @@ function GitBoardCommitSection({
   const hasMoreCommits = repository?.commitsComplete === false
   const canShowMore = visible.length < (commits?.length ?? 0) || hasMoreCommits
   const canCollapse = paging.visibleLimit > GIT_BOARD_COMMIT_VISIBLE_LIMIT
-  const selectedRef = selectedRefs[projectId]
+  const selectedRef = selectedRefs?.[projectId]
   const branchLabel = supportsCommitRef ? (selectedRef ?? 'HEAD') : 'HEAD'
 
   function showMore(): void {
     const nextLimit = paging.visibleLimit + GIT_BOARD_COMMIT_VISIBLE_LIMIT
     setPaging((current) => setSidebarSessionVisibleLimit(current, nextLimit))
-    expandCommitHistory(projectId, nextLimit)
+    expandCommitHistory?.(projectId, nextLimit)
   }
   function collapse(): void {
     setPaging((current) => setSidebarSessionVisibleLimit(current, GIT_BOARD_COMMIT_VISIBLE_LIMIT))
@@ -167,12 +196,16 @@ function GitBoardCommitSection({
     <div className="sidebar-commit-group tw:grid tw:min-w-0 tw:sidebar-row-gap">
       {repository?.historyError ? (
         <div role="alert" className={cx(COMMIT_STATUS_CLASS, 'tw:flex-wrap tw:whitespace-normal')}>
-          <AlertCircle aria-hidden="true" size="var(--inline-icon-size, 1em)" className="tw:shrink-0" />
+          <AlertCircle
+            aria-hidden="true"
+            size="var(--inline-icon-size, 1em)"
+            className="tw:shrink-0"
+          />
           <span className="tw:min-w-0 tw:flex-1">{t(repository.historyError)}</span>
           <Button
-            className="sidebar-show-more-button tw:w-auto tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
-            color="text"
-            onClick={() => refreshProject(projectId)}
+            className="sidebar-show-more-button tw:w-auto tw:min-w-0 tw:border-0 tw:[font:inherit]"
+            variant="text"
+            onClick={() => refreshProject?.(projectId)}
             size="compact"
             type="button"
           >
@@ -200,7 +233,7 @@ function GitBoardCommitSection({
                 commit={commit}
                 project={project}
                 onSelect={() =>
-                  selectReview({
+                  handleSelect?.({
                     project,
                     source: { kind: 'commit', commitSha: commit.sha },
                   })
@@ -215,8 +248,8 @@ function GitBoardCommitSection({
                 {canShowMore ? (
                   <Button
                     aria-expanded={canCollapse}
-                    className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
-                    color="text"
+                    className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:[font:inherit]"
+                    variant="text"
                     onClick={showMore}
                     size="compact"
                     type="button"
@@ -228,8 +261,8 @@ function GitBoardCommitSection({
                 ) : null}
                 {canCollapse ? (
                   <Button
-                    className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]"
-                    color="text"
+                    className="tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:[font:inherit]"
+                    variant="text"
                     onClick={collapse}
                     size="compact"
                     type="button"

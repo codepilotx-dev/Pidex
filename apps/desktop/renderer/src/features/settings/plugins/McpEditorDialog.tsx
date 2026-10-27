@@ -837,11 +837,7 @@ function ValueListField({
             </Button>
           </div>
         ))}
-        <Button
-          color="primary"
-          className="tw:w-full tw:justify-center"
-          onClick={() => onChange([...rows, createValueRow()])}
-        >
+        <Button color="primary" fullWidth onClick={() => onChange([...rows, createValueRow()])}>
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           {addLabel}
         </Button>
@@ -908,11 +904,7 @@ function MapListField({
             </Button>
           </div>
         ))}
-        <Button
-          color="primary"
-          className="tw:w-full tw:justify-center"
-          onClick={() => onChange([...rows, createMapRow()])}
-        >
+        <Button color="primary" fullWidth onClick={() => onChange([...rows, createMapRow()])}>
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           {addLabel}
         </Button>
@@ -972,7 +964,7 @@ function ToolApprovalListField({
         ))}
         <Button
           color="primary"
-          className="tw:w-full tw:justify-center"
+          fullWidth
           onClick={() => onChange([...rows, createMapRow('', 'auto')])}
         >
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />

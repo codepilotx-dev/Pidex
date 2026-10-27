@@ -28,7 +28,10 @@
 
 - 所有文字动作按钮及“图标 + 文字”动作按钮必须复用 `components/ui/Button`，并使用统一高度、内边距、圆角、边框和主题自适应背景。`primary` / `secondary` 只允许在真实 Action Button 内表达动作强调，不得用于把 selector、card、row、disclosure 或 toggle 伪装成动作按钮。
 - 危险、选中、禁用、加载和焦点状态可以保留语义差异。纯图标工具按钮、导航、标签页、分段控件和开关必须使用各自组件，禁止套用动作按钮容器。
-- HTML 的 `button` 语义不等于动作 Button 视觉语义。可点击卡片、缩略图、文件胶囊和实体行必须保留正确的原生 `button`/`a` 语义，并由 Feature 单独拥有几何、hover 和 focus；禁止附加 `.ui-button` 或 `.interactive-row`，禁止仅切换 Button 颜色变体掩盖冲突，也禁止改用 `div onClick` 规避约束。
+- Button 与 ButtonGroup 不输出任何默认 `class`（包括 `class=""`），也不存在 `ui-button`、`icon-button`、`data-ui` 之类身份标记；只有调用方显式传入 `className` 时才生成 `class`。不要给它们补回基础、尺寸、圆角、变体或状态 utility。
+- 外观全部由属性选择：`data-size`（高度、内边距、间距、默认图标）、`data-variant`（背景、文字、边框、状态）、`data-shape`（`round` 为默认，`pill` 为胶囊）、`data-icon-only`、`data-icon-size`、`data-layout`、`data-grow`、`data-shrink`、`data-color` 与 `data-position`。这些规则定义在 `Button.tsx`，由根部 `<ButtonStyles />` 挂载一次并处于 `primitives` 层，调用方 Tailwind utility 仍在 `utilities` 层覆盖。固定尺寸与内边距不得再以内联 `style` 下发。
+- `data-position="sidebar"` 是命名外观预设，携带整组侧栏入口外观（选中、悬停、展开态与文字色），绑定属性而非容器，右侧区域可直接复用；禁止在 Feature 样式里按该属性二次改样式。
+- HTML 的 `button` 语义不等于动作 Button 视觉语义。可点击卡片、缩略图、文件胶囊和实体行必须保留正确的原生 `button`/`a` 语义，并由 Feature 单独拥有几何、hover 和 focus；禁止附加 `.ui-button`、`.interactive-row` 或 Button 的 `data-size`/`data-variant` 组合，禁止仅切换 Button 颜色变体掩盖冲突，也禁止改用 `div onClick` 规避约束。
 - 修改 Renderer token、颜色、排版、圆角、阴影或样式白名单时，分别读取 `docs/design/renderer-token-system.md`、`docs/design/renderer-color-system.md` 和相关 style contract；非样式任务无需读取这些文档。
 
 ## Windows 标题栏

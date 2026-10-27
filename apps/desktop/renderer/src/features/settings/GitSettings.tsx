@@ -1,9 +1,17 @@
+import { useMemo } from 'react'
 import React, { useCallback, useEffect, useState } from 'react'
 import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
-import { isSettingsSaveShortcut, useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  isSettingsSaveShortcut,
+  useDesktopSettingsField,
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+} from './UseDesktopSettings.js'
 import {
   desktopClient,
   desktopClipboard,
@@ -24,8 +32,53 @@ const PR_MERGE_OPTIONS: Array<{ value: 'merge' | 'squash'; label: string }> = [
 ]
 
 export function GitSettings(): React.ReactNode {
-  const settings = useDesktopSettings()
-  const { draft } = settings
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedGitBranchPrefix = useDesktopSettingsDraftValue('gitBranchPrefix')
+  const subscribedGitPrMergeMethod = useDesktopSettingsDraftValue('gitPrMergeMethod')
+  const subscribedGitShowPrIconsInSidebar = useDesktopSettingsDraftValue('gitShowPrIconsInSidebar')
+  const subscribedGitDraftPullRequest = useDesktopSettingsDraftValue('gitDraftPullRequest')
+  const subscribedAllowForcePush = useDesktopSettingsDraftValue('allowForcePush')
+  const subscribedCommitMessagePrompt = useDesktopSettingsDraftValue('commitMessagePrompt')
+  const subscribedPullRequestPrompt = useDesktopSettingsDraftValue('pullRequestPrompt')
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const draft = useMemo(
+    () => ({
+      ...subscribedDraftActions,
+      values: {
+        gitBranchPrefix: subscribedGitBranchPrefix,
+        gitPrMergeMethod: subscribedGitPrMergeMethod,
+        gitShowPrIconsInSidebar: subscribedGitShowPrIconsInSidebar,
+        gitDraftPullRequest: subscribedGitDraftPullRequest,
+        allowForcePush: subscribedAllowForcePush,
+        commitMessagePrompt: subscribedCommitMessagePrompt,
+        pullRequestPrompt: subscribedPullRequestPrompt,
+      },
+      dirty: subscribedDraftDirty,
+      saving: subscribedDraftSaving,
+    }),
+    [
+      subscribedDraftActions,
+      subscribedGitBranchPrefix,
+      subscribedGitPrMergeMethod,
+      subscribedGitShowPrIconsInSidebar,
+      subscribedGitDraftPullRequest,
+      subscribedAllowForcePush,
+      subscribedCommitMessagePrompt,
+      subscribedPullRequestPrompt,
+      subscribedDraftDirty,
+      subscribedDraftSaving,
+    ],
+  )
+  const subscribedCommitMessagePrompt2 = useDesktopSettingsField((s) => s.commitMessagePrompt)
+  const subscribedPullRequestPrompt2 = useDesktopSettingsField((s) => s.pullRequestPrompt)
+  const settings = useMemo(
+    () => ({
+      commitMessagePrompt: subscribedCommitMessagePrompt2,
+      pullRequestPrompt: subscribedPullRequestPrompt2,
+    }),
+    [subscribedCommitMessagePrompt2, subscribedPullRequestPrompt2],
+  )
   const [saveError, setSaveError] = useState<string | null>(null)
   const save = useCallback(
     async (keys: Parameters<typeof draft.saveFields>[0]) => {

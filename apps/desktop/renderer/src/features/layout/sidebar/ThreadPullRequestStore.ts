@@ -1,5 +1,7 @@
 import type { ThreadPullRequestList, ThreadPullRequestSummary } from '@pidex/shared/thread'
-import { useEffect, useSyncExternalStore } from 'react'
+import { useEffect, useMemo } from 'react'
+import { useStore } from 'zustand/react'
+import { useShallow } from 'zustand/react/shallow'
 import { createStore } from 'zustand/vanilla'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 
@@ -105,12 +107,18 @@ function acquireRefreshLoop(): () => void {
 }
 
 export function useThreadPullRequests(threadIds: readonly string[]): ThreadPullRequestsSnapshot {
-  const snapshot = useSyncExternalStore(
-    threadPullRequestStore.subscribe,
-    threadPullRequestStore.getState,
-    threadPullRequestStore.getState,
-  )
   const key = threadIds.join('\u0000')
+  const ids = useMemo(() => (key ? key.split('\u0000') : []), [key])
+  const supported = useStore(threadPullRequestStore, (state) => state.supported)
+  const lists = useStore(
+    threadPullRequestStore,
+    useShallow((state) => ids.map((id) => state.byThread.get(id))),
+  )
+  const byThread = useMemo(
+    () => new Map(ids.flatMap((id, index) => (lists[index] ? [[id, lists[index]!] as const] : []))),
+    [ids, lists],
+  )
+  const snapshot = useMemo(() => ({ byThread, supported }), [byThread, supported])
   useEffect(() => {
     requestThreadPullRequests(key ? key.split('\u0000') : [])
     return acquireRefreshLoop()

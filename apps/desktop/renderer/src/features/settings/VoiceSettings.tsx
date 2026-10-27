@@ -3,7 +3,10 @@ import { desktopClient } from '../../services/desktop-client/index.js'
 import { Button } from '../../components/ui/Button.js'
 import { useSpeechStatus } from '../speech/UseSpeechStatus.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+} from './UseDesktopSettings.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsRow } from './SettingsRow.js'
@@ -42,8 +45,10 @@ function speechStatusDescription(
 
 export function VoiceSettings({ onNotice }: { onNotice?: (message: string) => void }) {
   const { t } = useLocale()
-  const { draft } = useDesktopSettings()
-  const preferredInputDeviceId = draft.values['desktop.voice.preferredInputDeviceId']
+  const draft = useDesktopSettingsDraftActions()
+  const preferredInputDeviceId = useDesktopSettingsDraftValue(
+    'desktop.voice.preferredInputDeviceId',
+  )
   const speech = useSpeechStatus()
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([])
   const refreshAudioInputs = useCallback(async () => {

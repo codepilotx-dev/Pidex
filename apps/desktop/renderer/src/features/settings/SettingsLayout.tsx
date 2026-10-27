@@ -1,10 +1,16 @@
+import { useMemo } from 'react'
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { SettingsPage } from './SettingsPage.js'
 import { GlobalErrorModal } from '../../components/GlobalErrorModal.js'
 import { useDesktopTheme } from '../theme/ThemeContext.js'
-import { createSettingsSaveShortcutHandler, useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  createSettingsSaveShortcutHandler,
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+} from './UseDesktopSettings.js'
 import { SETTINGS_ITEMS } from './SettingsRegistry.js'
 import {
   resolveSettingsSectionVisibility,
@@ -27,7 +33,20 @@ export function SettingsLayout({ activeTabOverride }: Props = {}): React.ReactNo
     activeTabOverride ?? (tab ? decodeURIComponent(tab) : projectId ? 'environment' : '')
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
-  const settings = useDesktopSettings()
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const settings = useMemo(
+    () => ({
+      draft: {
+        ...subscribedDraftActions,
+        values: {},
+        dirty: subscribedDraftDirty,
+        saving: subscribedDraftSaving,
+      },
+    }),
+    [subscribedDraftActions, subscribedDraftDirty, subscribedDraftSaving],
+  )
   const { t } = useLocale()
   const theme = useDesktopTheme()
   const { workspacePath, useSkill } = useDesktopLayoutOutletContext()

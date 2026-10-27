@@ -1,13 +1,28 @@
+import { useMemo } from 'react'
 import { useState } from 'react'
 import { SettingsContentArea } from './SettingsContentArea.js'
 import { SettingsSection } from './SettingsSection.js'
 import { SettingsRow } from './SettingsRow.js'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import { useDesktopSettingsField } from './UseDesktopSettings.js'
 import { PrWatchSettings } from './PrWatchSettings.js'
 
 export function CodeReviewSettings() {
-  const { draft } = useDesktopSettings()
+  const subscribedReviewDelivery = useDesktopSettingsField(
+    (state) => state.draft.values.reviewDelivery,
+  )
+  const subscribedSetValue = useDesktopSettingsField((state) => state.draft.setValue)
+  const subscribedSaveFields = useDesktopSettingsField((state) => state.draft.saveFields)
+  const { draft } = useMemo(
+    () => ({
+      draft: {
+        values: { reviewDelivery: subscribedReviewDelivery },
+        setValue: subscribedSetValue,
+        saveFields: subscribedSaveFields,
+      },
+    }),
+    [subscribedReviewDelivery, subscribedSetValue, subscribedSaveFields],
+  )
   const [error, setError] = useState<string | null>(null)
   return (
     <SettingsContentArea>

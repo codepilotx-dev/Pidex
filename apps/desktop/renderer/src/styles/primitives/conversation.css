@@ -674,7 +674,7 @@
     min-width: 0;
   }
 
-  /* 处理过程列表限高滚动，但隐藏滚动条；上下边界渐隐已移除。 */
+  /* 处理过程列表平铺展示，不再限制高度滚动；上下边界渐隐已移除。 */
   .cpx-agent-activity__list {
     scrollbar-width: none;
   }
@@ -823,9 +823,11 @@
   }
 
   .cpx-agent-activity__header:hover > .cpx-agent-activity__chevron,
-  .cpx-agent-activity__header:is(:focus-visible, :has(:focus-visible)) > .cpx-agent-activity__chevron,
+  .cpx-agent-activity__header:is(:focus-visible, :has(:focus-visible))
+    > .cpx-agent-activity__chevron,
   .cpx-agent-activity__item-header:hover > .cpx-agent-activity__chevron,
-  .cpx-agent-activity__item-header:is(:focus-visible, :has(:focus-visible)) > .cpx-agent-activity__chevron {
+  .cpx-agent-activity__item-header:is(:focus-visible, :has(:focus-visible))
+    > .cpx-agent-activity__chevron {
     opacity: 1;
   }
 
@@ -1085,7 +1087,8 @@
     gap: var(--cpx-sys-space-1);
   }
   .canonical-command-card__command:is(:hover, :has(:focus-visible)) .canonical-command-card__copy,
-  .canonical-command-card__output:is(:hover, :has(:focus-visible)) .canonical-command-card__actions {
+  .canonical-command-card__output:is(:hover, :has(:focus-visible))
+    .canonical-command-card__actions {
     opacity: 1;
     pointer-events: auto;
   }
@@ -1586,7 +1589,6 @@
     background: var(--cpx-sys-color-hover);
     color: var(--cpx-sys-color-fg-primary);
   }
-
 
   .canonical-patch-card__disclosure:focus-visible {
     outline: 2px solid var(--cpx-sys-color-border-focus);

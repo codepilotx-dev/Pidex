@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { PetInstallPreview } from '@pidex/agent-protocol'
@@ -36,7 +37,19 @@ export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
     setEnabled,
     settings,
     updatePet,
-  } = usePetCatalogController()
+  } = usePetCatalogController(
+    useShallow((state) => ({
+      busy: state.busy,
+      flushPendingSize: state.flushPendingSize,
+      pets: state.pets,
+      previewSize: state.previewSize,
+      refreshPets: state.refreshPets,
+      selectPet: state.selectPet,
+      setEnabled: state.setEnabled,
+      settings: state.settings,
+      updatePet: state.updatePet,
+    })),
+  )
   const busy = petsBusy || operationBusy
 
   const loadPreview = async (): Promise<void> => {

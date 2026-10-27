@@ -1,7 +1,14 @@
+import { useMemo } from 'react'
 import { useState, type ReactNode } from 'react'
 import { SettingsRow } from '../settings/SettingsRow.js'
 import { SettingsSection } from '../settings/SettingsSection.js'
-import { isSettingsSaveShortcut, useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import {
+  isSettingsSaveShortcut,
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+} from '../settings/UseDesktopSettings.js'
 import { Input } from '../../components/ui/Input.js'
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
@@ -11,7 +18,39 @@ export function WorktreePreferences({
 }: {
   onError: (message: string) => void
 }): ReactNode {
-  const { draft } = useDesktopSettings()
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedWorktreeRoot = useDesktopSettingsDraftValue('worktreeRoot')
+  const subscribedWorktreeFetchUpstream = useDesktopSettingsDraftValue('worktreeFetchUpstream')
+  const subscribedGitAutoDeleteWorktree = useDesktopSettingsDraftValue('gitAutoDeleteWorktree')
+  const subscribedGitAutoDeleteWorktreeLimit = useDesktopSettingsDraftValue(
+    'gitAutoDeleteWorktreeLimit',
+  )
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const { draft } = useMemo(
+    () => ({
+      draft: {
+        ...subscribedDraftActions,
+        values: {
+          worktreeRoot: subscribedWorktreeRoot,
+          worktreeFetchUpstream: subscribedWorktreeFetchUpstream,
+          gitAutoDeleteWorktree: subscribedGitAutoDeleteWorktree,
+          gitAutoDeleteWorktreeLimit: subscribedGitAutoDeleteWorktreeLimit,
+        },
+        dirty: subscribedDraftDirty,
+        saving: subscribedDraftSaving,
+      },
+    }),
+    [
+      subscribedDraftActions,
+      subscribedWorktreeRoot,
+      subscribedWorktreeFetchUpstream,
+      subscribedGitAutoDeleteWorktree,
+      subscribedGitAutoDeleteWorktreeLimit,
+      subscribedDraftDirty,
+      subscribedDraftSaving,
+    ],
+  )
   const { worktreeRoot, worktreeFetchUpstream, gitAutoDeleteWorktree, gitAutoDeleteWorktreeLimit } =
     draft.values
   const [confirmDisable, setConfirmDisable] = useState(false)

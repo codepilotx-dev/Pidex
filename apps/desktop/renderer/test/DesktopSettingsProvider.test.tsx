@@ -4,8 +4,8 @@ import { createContext } from 'react'
 import { defaultDesktopSettings } from '../src/features/settings/SettingsStorage.js'
 import {
   DesktopSettingsProvider,
-  useDesktopRuntimeSettings,
-  useDesktopSettings,
+  useDesktopRuntimeSettingsField,
+  useDesktopSettingsField,
   type UseDesktopRuntimeSettingsResult,
   type UseDesktopSettingsResult,
 } from '../src/features/settings/UseDesktopSettings.js'
@@ -21,18 +21,15 @@ describe('desktop settings provider', () => {
     )
     const script = new Bun.Transpiler({ loader: 'ts' }).transformSync(
       initialization.replaceAll('import.meta.hot', 'hot') +
-        '\nreturn [DesktopSettingsContext, DesktopRuntimeSettingsContext]',
+        '\nreturn [DesktopSettingsFieldStoreContext]',
     )
     const initialize = new Function('hot', 'createContext', script)
     const hot = { data: {} }
     const initial = initialize(hot, createContext)
     const reloaded = initialize(hot, createContext)
     expect(reloaded[0]).toBe(initial[0])
-    expect(reloaded[1]).toBe(initial[1])
-    expect(initial[0]).not.toBe(initial[1])
     const cold = initialize(undefined, createContext)
     expect(cold[0]).not.toBe(initial[0])
-    expect(cold[1]).not.toBe(initial[1])
   })
 
   test.each(['read-write', 'read-only'] as const)(
@@ -41,8 +38,8 @@ describe('desktop settings provider', () => {
       const settings: UseDesktopSettingsResult[] = []
       const runtime: UseDesktopRuntimeSettingsResult[] = []
       function Consumer() {
-        settings.push(useDesktopSettings())
-        runtime.push(useDesktopRuntimeSettings())
+        settings.push(useDesktopSettingsField((state) => state))
+        runtime.push(useDesktopRuntimeSettingsField((state) => state))
         return null
       }
 
@@ -69,7 +66,7 @@ describe('desktop settings provider', () => {
 
   test('requires a provider for desktop settings instead of creating fallback state', () => {
     function Consumer() {
-      useDesktopSettings()
+      useDesktopSettingsField((state) => state)
       return null
     }
 
@@ -80,12 +77,12 @@ describe('desktop settings provider', () => {
 
   test('requires a provider for runtime settings instead of creating fallback state', () => {
     function Consumer() {
-      useDesktopRuntimeSettings()
+      useDesktopRuntimeSettingsField((state) => state)
       return null
     }
 
     expect(() => renderToStaticMarkup(<Consumer />)).toThrow(
-      'useDesktopRuntimeSettings 必须在 DesktopSettingsProvider 内使用',
+      'useDesktopSettings 必须在 DesktopSettingsProvider 内使用',
     )
   })
 })

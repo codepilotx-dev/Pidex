@@ -200,7 +200,7 @@ export function CanonicalProcessGroup({
           contentClassName="cpx-agent-activity__content"
           id={contentId}
         >
-          <div className="cpx-agent-activity__list tw:max-h-56 tw:overflow-x-hidden tw:overflow-y-auto tw:[overflow-anchor:none]">
+          <div className="cpx-agent-activity__list tw:min-w-0">
             <div className="cpx-agent-activity__list-content tw:relative tw:grid tw:gap-[var(--conversation-grouped-item-gap,var(--cpx-sys-space-1))]">
               {children}
             </div>

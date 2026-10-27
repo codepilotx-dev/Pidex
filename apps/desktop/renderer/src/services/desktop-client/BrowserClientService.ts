@@ -1,3 +1,4 @@
+import { createStore } from 'zustand/vanilla'
 import type {
   DesktopBrowserIpcBridge,
   DesktopBrowserSnapshot,
@@ -22,6 +23,11 @@ type BrowserApi = Pick<
   | 'clearBrowserAllowedSites'
 >
 export type DesktopBrowserClient = BrowserApi & {
+  tabsStore: import('zustand/vanilla').StoreApi<{
+    tabs: ReadonlyMap<string, DesktopBrowserState>
+    selectedId: string | null
+    displayTabId: string | null
+  }>
   annotation(
     input: import('@pidex/shared/desktop-browser-ipc').DesktopBrowserAnnotationInput,
   ): Promise<import('@pidex/shared/desktop-browser-ipc').DesktopBrowserAnnotationResult>
@@ -65,11 +71,14 @@ export function createDesktopBrowserClient(
   bridge?: Partial<DesktopBrowserIpcBridge>,
   document?: Document,
 ): DesktopBrowserClient {
-  const states = new Map<string, DesktopBrowserState>()
+  const tabsStore = createStore<{
+    tabs: ReadonlyMap<string, DesktopBrowserState>
+    selectedId: string | null
+    displayTabId: string | null
+  }>(() => ({ tabs: new Map(), selectedId: null, displayTabId: null }))
+  const states = () => tabsStore.getState().tabs
   const clients = new Map<string, DesktopBrowserClient>()
-  const listeners = new Set<(tabs: DesktopBrowserState[]) => void>()
   const hosts = document && bridge ? new BrowserGuestHosts(bridge, document) : null
-  let selectedId: string | undefined
   let sourceThreadId: string | null = null
   const available = Boolean(
     bridge?.listDesktopBrowserTabs &&
@@ -81,7 +90,7 @@ export function createDesktopBrowserClient(
     throw new Error('内置浏览器仅在连接 Agent 的 Pidex 桌面应用中可用。')
   }
   const accept = (snapshot: DesktopBrowserSnapshot): DesktopBrowserState => {
-    const previous = states.get(snapshot.tabId)
+    const previous = states().get(snapshot.tabId)
     if (previous?.revision && snapshot.revision && snapshot.revision < previous.revision)
       return previous
     const state: DesktopBrowserState = {
@@ -89,15 +98,17 @@ export function createDesktopBrowserClient(
       allowedSites: [...snapshot.allowedSites],
       sitePermissions: snapshot.sitePermissions.map((p) => ({ ...p })),
     }
-    if (snapshot.open) states.set(snapshot.tabId, state)
-    else states.delete(snapshot.tabId)
+    const tabs = new Map(states())
+    if (snapshot.open) tabs.set(snapshot.tabId, state)
+    else tabs.delete(snapshot.tabId)
+    tabsStore.setState({ tabs })
     hosts?.update(snapshot)
-    for (const listener of listeners) listener([...states.values()])
     return state
   }
   bridge?.onDesktopBrowserStateChange?.(accept)
   const createClient = (fixedId?: string): DesktopBrowserClient => {
-    const id = () => fixedId ?? selectedId ?? states.keys().next().value ?? 'catalog'
+    const id = () =>
+      fixedId ?? tabsStore.getState().selectedId ?? states().keys().next().value ?? 'catalog'
     const tab = () => ({ tabId: id() })
     const apply = async (promise?: Promise<DesktopBrowserSnapshot>) =>
       accept(await (promise ?? unavailable()))
@@ -110,7 +121,7 @@ export function createDesktopBrowserClient(
           if (event.tabId === id()) listener(event)
         }) ?? (() => {}),
       utility: (operation) => {
-        const generation = states.get(id())?.generation
+        const generation = states().get(id())?.generation
         if (!generation) return Promise.reject(new Error('浏览器页面尚未连接'))
         return (
           bridge?.performDesktopBrowserUtility?.({ ...tab(), generation, operation }) ??
@@ -122,10 +133,11 @@ export function createDesktopBrowserClient(
         Promise.reject(new Error('浏览管理能力不可用')),
       onUtilityEvent: (listener) =>
         bridge?.onDesktopBrowserUtilityEvent?.((event) => {
-          if (event.tabId === id() && event.generation === states.get(id())?.generation)
+          if (event.tabId === id() && event.generation === states().get(id())?.generation)
             listener(event)
         }) ?? (() => {}),
       onDataChange: (listener) => bridge?.onDesktopBrowserDataChange?.(listener) ?? (() => {}),
+      tabsStore,
       available,
       getBrowserState: () => apply(bridge?.getDesktopBrowserState?.(tab())),
       openBrowser: async (url) => {
@@ -146,7 +158,7 @@ export function createDesktopBrowserClient(
       closeBrowser: () => apply(bridge?.closeDesktopBrowser?.(tab())),
       setBrowserBounds: async (bounds: DesktopBrowserBounds) => {
         hosts?.setBounds(id(), bounds)
-        return states.get(id()) ?? client.getBrowserState()
+        return states().get(id()) ?? client.getBrowserState()
       },
       setBrowserVisible: async (visible) => {
         return apply(bridge?.setDesktopBrowserVisible?.({ ...tab(), visible }))
@@ -156,23 +168,23 @@ export function createDesktopBrowserClient(
       },
       clearBrowserAllowedSites: () => apply(bridge?.clearDesktopBrowserAllowedSites?.(tab())),
       onBrowserStateChange: (listener) => {
-        const update = () => {
-          const state = states.get(id())
-          if (state) listener(state)
-        }
-        listeners.add(update)
-        return () => listeners.delete(update)
+        return tabsStore.subscribe((next, previous) => {
+          const state = next.tabs.get(id())
+          if (state && state !== previous.tabs.get(id())) listener(state)
+        })
       },
       listTabs: async () => {
         const snapshots = await (bridge?.listDesktopBrowserTabs?.() ?? unavailable())
         const ids = new Set(snapshots.map((s) => s.tabId))
-        for (const [tabId, state] of states)
+        for (const [tabId, state] of states())
           if (!ids.has(tabId)) {
-            states.delete(tabId)
+            const tabs = new Map(states())
+            tabs.delete(tabId)
+            tabsStore.setState({ tabs })
             hosts?.update({ ...state, tabId, open: false })
           }
         snapshots.forEach(accept)
-        return [...states.values()]
+        return [...states().values()]
       },
       createTab: async (sourceThreadId, url) => {
         const tabId = crypto.randomUUID()
@@ -192,16 +204,17 @@ export function createDesktopBrowserClient(
         }
         return scoped
       },
-      getTab: (tabId) => states.get(tabId) ?? null,
+      getTab: (tabId) => states().get(tabId) ?? null,
       setContext: (threadId) => {
         sourceThreadId = threadId
       },
       selectTab: (tabId) => {
-        selectedId = tabId
+        tabsStore.setState({ selectedId: tabId })
       },
       onTabsChange: (listener) => {
-        listeners.add(listener)
-        return () => listeners.delete(listener)
+        return tabsStore.subscribe((state, previous) => {
+          if (state.tabs !== previous.tabs) listener([...state.tabs.values()])
+        })
       },
       control: (threadId) => apply(bridge?.controlDesktopBrowser?.({ ...tab(), threadId })),
       layout: async (panel, order) => {

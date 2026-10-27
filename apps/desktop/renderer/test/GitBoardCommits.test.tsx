@@ -11,10 +11,7 @@ import {
   formatGitBoardCommitTime,
 } from '../src/features/git-board/GitBoardCommitHoverCard.js'
 import * as boardContext from '../src/features/git-board/GitBoardContext.js'
-import {
-  GitBoardProjectRow,
-  gitBoardCommitsDisclosureKey,
-} from '../src/features/git-board/GitBoardProjectRow.js'
+import { GitBoardProjectRow } from '../src/features/git-board/GitBoardProjectRow.js'
 import {
   gitBoardCommitLimitFor,
   GIT_BOARD_COMMIT_LIMIT_STEP,
@@ -274,75 +271,39 @@ test('选中的提交行通过 data-selected 保留短 SHA', () => {
   expect(html.match(/data-selected="true"/g)).toHaveLength(1)
 })
 
-test('仓库行标题默认折叠提交，展开后由同一入口收起且不显示箭头', () => {
+test('项目行仅作为纯选择入口，不在侧栏内展开提交记录', () => {
   const spy = spyOn(boardContext, 'useGitBoard').mockReturnValue(
     controller({
+      selectedProjectId: project.projectId,
       repositories: { [project.projectId!]: { result, commits: commits(2) } },
     }),
   )
   try {
-    const render = (expanded: boolean) =>
-      renderToStaticMarkup(
-        <DesktopSettingsProvider access="read-only">
-          <SidebarHoverCardProvider>
-            <GitBoardProjectRowHarness expanded={expanded} />
-          </SidebarHoverCardProvider>
-        </DesktopSettingsProvider>,
-      )
-    const collapsed = render(false)
-    const expanded = render(true)
-    // 与会话列表一致：进入页面时仓库行只显示仓库，不默认展开全部提交。
-    expect(collapsed).toContain('sidebar-project-commits-disclosure')
-    expect(collapsed).toContain('data-expanded="false"')
-    // 首次收起时不挂载提交内容，展开后才渲染。
-    expect(collapsed).not.toContain('提交标题 0')
-    expect(collapsed).toContain('aria-expanded="false"')
-    expect(expanded).toContain('提交标题 0')
-    expect(expanded).toContain('data-expanded="true"')
-    // 标题按钮是原生 button，由 disclosure store 驱动展开态。
-    expect(collapsed).toMatch(/<button[^>]*sidebar-project-button[^>]*>/)
-    expect(collapsed).not.toContain('sidebar-project-commits-chevron')
-    expect(expanded).not.toContain('sidebar-project-commits-chevron')
+    const html = renderToStaticMarkup(
+      <DesktopSettingsProvider access="read-only">
+        <GitBoardProjectRow project={project} />
+      </DesktopSettingsProvider>,
+    )
+    expect(html).not.toContain('sidebar-project-commits-disclosure')
+    expect(html).not.toContain('提交标题 0')
+    expect(html).not.toContain('aria-expanded')
+    expect(html).toContain('aria-current="page"')
+    expect(html).toMatch(/<button[^>]*sidebar-project-button[^>]*>/)
   } finally {
     spy.mockRestore()
   }
 })
 
-/** 项目行标题的展开/折叠由 disclosure store 驱动，这里验证初始折叠与展开渲染契约。 */
-function GitBoardProjectRowHarness({ expanded = false }: { expanded?: boolean }) {
-  const [store] = useState(() =>
-    createKeyedDisclosureStore({
-      initialExpandedKeys: expanded ? [gitBoardCommitsDisclosureKey('project', project)] : [],
-    }),
-  )
-  return (
-    <GitBoardProjectRow
-      project={project}
-      sessions={[]}
-      commitsDisclosureStore={store}
-      onArchiveSessions={async () => true}
-      onRemoveWorkspace={() => {}}
-      onReport={() => {}}
-      onCreateGroup={() => {}}
-    />
-  )
-}
-
-test('“项目”分组头不再粘在滚动视口顶部', () => {
+test('“项目”分组头不再粘在滚动视口顶部，且侧栏不直接渲染提交列表', () => {
   const spy = spyOn(boardContext, 'useGitBoard').mockReturnValue(
     controller({
-      repositories: { [project.projectId!]: { result, commits: commits(1) } },
+      repositories: { [project.projectId!]: { result, commits: commits(10) } },
     }),
   )
   try {
     const sidebar = renderToStaticMarkup(
       <DesktopSettingsProvider access="read-only">
-        <GitBoardSidebar
-          sessions={[]}
-          onArchiveSessions={async () => ({ succeededSessionIds: [], failedSessionIds: [] })}
-          onRemoveWorkspace={() => {}}
-          onReport={() => {}}
-        />
+        <GitBoardSidebar />
       </DesktopSettingsProvider>,
     )
     const headers = sidebar.match(/<div class="sidebar-section-header[^"]*"/g) ?? []
@@ -351,37 +312,9 @@ test('“项目”分组头不再粘在滚动视口顶部', () => {
       expect(header).not.toContain('tw:sticky')
       expect(header).not.toContain('tw:top-0')
     }
-    expect(sidebar).toContain('sidebar-project-commits-disclosure')
-  } finally {
-    spy.mockRestore()
-  }
-})
-
-test('侧栏项目区与分组区的仓库提交首次均收起', () => {
-  const state = addGitBoardGroup(defaultGitBoardState(), 'dev', '开发组', project.projectId)
-  const quickState = { ...state, quickProjectIds: [project.projectId] }
-  const sha = commits(2)[0]!.sha
-  const hook = controller({
-    state: quickState,
-    view: { id: null, name: '速览', projectIds: [project.projectId] },
-    repositories: { [project.projectId!]: { result, commits: commits(10) } },
-    selectedReview: { project, source: { kind: 'commit', commitSha: sha } },
-  })
-  const spy = spyOn(boardContext, 'useGitBoard').mockReturnValue(hook)
-  try {
-    const html = renderToStaticMarkup(
-      <DesktopSettingsProvider access="read-only">
-        <GitBoardSidebar
-          sessions={[]}
-          onArchiveSessions={async () => ({ succeededSessionIds: [], failedSessionIds: [] })}
-          onRemoveWorkspace={() => {}}
-          onReport={() => {}}
-        />
-      </DesktopSettingsProvider>,
-    )
-    expect(html.match(/sidebar-project-commits-disclosure/g)).toHaveLength(3)
-    expect(html).not.toContain('提交标题 0')
-    expect(html).not.toContain('展开显示')
+    expect(sidebar).not.toContain('sidebar-project-commits-disclosure')
+    expect(sidebar).not.toContain('提交标题 0')
+    expect(sidebar).not.toContain('展开显示')
   } finally {
     spy.mockRestore()
   }

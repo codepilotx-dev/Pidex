@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Settings } from 'lucide-react'
@@ -12,7 +13,14 @@ import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
 export function SidebarPetsPane(): ReactNode {
   const { t } = useLocale()
   const navigate = useNavigate()
-  const { busy, pets, selectPet, settings } = usePetCatalogController()
+  const { busy, pets, selectPet, selectedPetId } = usePetCatalogController(
+    useShallow((state) => ({
+      busy: state.busy,
+      pets: state.pets,
+      selectPet: state.selectPet,
+      selectedPetId: state.settings.selectedPetId,
+    })),
+  )
   return (
     <div className="sidebar-pets-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
       <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
@@ -40,7 +48,7 @@ export function SidebarPetsPane(): ReactNode {
           </SidebarEmptyRow>
         ) : (
           pets.map((pet) => {
-            const selected = pet.id === settings.selectedPetId
+            const selected = pet.id === selectedPetId
             return (
               <SidebarRow
                 active={selected}

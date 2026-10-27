@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { Calendar, ChevronDown, ChevronRight, History, Plus } from 'lucide-react'
@@ -20,7 +21,22 @@ const TAB_ICONS: Record<AutomationTab, typeof Calendar> = {
 }
 
 export function SidebarScheduledPane(): ReactNode {
-  const controller = useSharedAutomationController()
+  const controller = useSharedAutomationController(
+    useShallow((state) => ({
+      setQuery: state.setQuery,
+      runs: state.runs,
+      query: state.query,
+      cancelDraft: state.cancelDraft,
+      filter: state.filter,
+      setFilter: state.setFilter,
+      supported: state.supported,
+      loading: state.loading,
+      error: state.error,
+      refresh: state.refresh,
+      filteredAutomations: state.filteredAutomations,
+      markRunRead: state.markRunRead,
+    })),
+  )
   const location = useLocation()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()

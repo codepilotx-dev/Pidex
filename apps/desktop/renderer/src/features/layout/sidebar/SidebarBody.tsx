@@ -97,7 +97,7 @@ const SHOW_MORE_ACTIONS_CLASS =
   'sidebar-show-more-actions tw:grid tw:w-full tw:box-border tw:min-h-7 tw:items-center tw:gap-x-2 tw:grid-cols-[var(--sidebar-row-columns)] tw:rounded-md tw:px-2 tw:py-1 tw:text-left tw:text-app-text-meta tw:type-control tw:no-underline tw:transition-[background-color,box-shadow,color] tw:duration-feedback tw:ease-standard'
 const SHOW_MORE_ROW_CLASS = 'sidebar-row-main tw:min-w-0 tw:flex tw:items-center tw:gap-4'
 const SHOW_MORE_BUTTON_CLASS =
-  'tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:whitespace-nowrap tw:[font:inherit]'
+  'tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:[font:inherit]'
 const SHOW_MORE_LABEL_CLASS = 'tw:block tw:overflow-hidden tw:whitespace-nowrap'
 
 type Props = {
@@ -1533,7 +1533,7 @@ function SidebarShowMoreActions({
           <Button
             aria-expanded={canCollapse}
             className={SHOW_MORE_BUTTON_CLASS}
-            color="text"
+            variant="text"
             onClick={onShowMore}
             size="compact"
             type="button"
@@ -1544,7 +1544,7 @@ function SidebarShowMoreActions({
         {canCollapse ? (
           <Button
             className={SHOW_MORE_BUTTON_CLASS}
-            color="text"
+            variant="text"
             onClick={onCollapse}
             size="compact"
             type="button"

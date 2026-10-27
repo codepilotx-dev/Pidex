@@ -13,14 +13,54 @@ import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import {
   isSettingsSaveShortcut,
-  useDesktopSettings,
-  useDesktopRuntimeSettings,
+  useDesktopSettingsField,
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+  useDesktopRuntimeSettingsField,
 } from './UseDesktopSettings.js'
 
 export function PrWatchSettings(): React.ReactNode {
-  const settings = useDesktopSettings()
-  const runtime = useDesktopRuntimeSettings()
-  const { draft } = settings
+  const subscribedPrWatchInstructions = useDesktopRuntimeSettingsField(
+    (state) => state.values.prWatchInstructions,
+  )
+  const runtime = useMemo(
+    () => ({ values: { prWatchInstructions: subscribedPrWatchInstructions } }),
+    [subscribedPrWatchInstructions],
+  )
+  const subscribedProviderID = useDesktopSettingsField((s) => s.providerID)
+  const subscribedModel = useDesktopSettingsField((s) => s.model)
+  const settings = useMemo(
+    () => ({ providerID: subscribedProviderID, model: subscribedModel }),
+    [subscribedProviderID, subscribedModel],
+  )
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedPrWatchInstructions2 = useDesktopSettingsDraftValue('prWatchInstructions')
+  const subscribedPrWatchAutoMerge = useDesktopSettingsDraftValue('prWatchAutoMerge')
+  const subscribedPermissionConfig = useDesktopSettingsDraftValue('permissionConfig')
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const draft = useMemo(
+    () => ({
+      ...subscribedDraftActions,
+      values: {
+        prWatchInstructions: subscribedPrWatchInstructions2,
+        prWatchAutoMerge: subscribedPrWatchAutoMerge,
+        permissionConfig: subscribedPermissionConfig,
+      },
+      dirty: subscribedDraftDirty,
+      saving: subscribedDraftSaving,
+    }),
+    [
+      subscribedDraftActions,
+      subscribedPrWatchInstructions2,
+      subscribedPrWatchAutoMerge,
+      subscribedPermissionConfig,
+      subscribedDraftDirty,
+      subscribedDraftSaving,
+    ],
+  )
   const client = useMemo(() => environmentDomainClient(), [])
   const navigate = useNavigate()
   const [projects, setProjects] = useState<DesktopWorkspace[]>([])

@@ -1,3 +1,5 @@
+import { createStore } from 'zustand/vanilla'
+import { useFieldState } from '../../hooks/UseFieldState.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PetDescriptor } from '@pidex/agent-protocol'
 import type { DesktopPetSettings } from '../../../shared/Types.js'
@@ -31,8 +33,14 @@ export function usePetSettingsController({ onError, enabled = true }: Options): 
   updatePet: (patch: Partial<DesktopPetSettings>, autoSave?: boolean) => void
 } {
   const draft = useDesktopSettingsDraftActions()
-  const [pets, setPets] = useState<readonly PetDescriptor[]>([])
-  const [busy, setBusy] = useState(false)
+  const [stateStore] = useState(() =>
+    createStore(() => ({
+      pets: [] as readonly PetDescriptor[],
+      busy: false,
+    })),
+  )
+  const [pets, setPets] = useFieldState(stateStore, 'pets')
+  const [busy, setBusy] = useFieldState(stateStore, 'busy')
   const settings = useDesktopSettingsDraftValue('pet')
   const settingsRef = useRef(settings)
   settingsRef.current = settings

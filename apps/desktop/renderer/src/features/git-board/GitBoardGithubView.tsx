@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import type React from 'react'
 import type { DesktopGithubRepository } from '../../../shared/Types.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -52,7 +53,9 @@ export function GitBoardGithubView({
   onBusyChange?: (busy: boolean) => void
 }) {
   const { t } = useLocale()
-  const { registerGithubRefresh } = useGitBoard()
+  const { registerGithubRefresh } = useGitBoard(
+    useShallow((state) => ({ registerGithubRefresh: state.registerGithubRefresh })),
+  )
   const githubLogin = useGithubLogin({ active })
   const authenticated = githubLogin.authenticated
   const [list, setList] = useState<RepositoryListState>({ status: 'idle' })

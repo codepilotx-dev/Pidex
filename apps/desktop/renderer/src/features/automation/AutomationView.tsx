@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { Popover as Popover } from '../../components/ui/floating/Popover.js'
@@ -29,7 +30,11 @@ import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
-import { APP_ICON_SIZE, APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
+import {
+  APP_ICON_SIZE,
+  APP_ICON_SIZES,
+  APP_ICON_STROKE_WIDTH,
+} from '../../components/ui/IconTokens.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
@@ -94,7 +99,40 @@ function AutomationViewContent(): React.ReactNode {
   const creating = params.get('automationMode') === 'create'
   const scheduledTaskId = params.get('scheduledTaskId')
   const creatingScheduledTask = params.get('scheduledTaskMode') === 'create'
-  const controller = useSharedAutomationController()
+  const controller = useSharedAutomationController(
+    useShallow((state) => ({
+      query: state.query,
+      projects: state.projects,
+      filter: state.filter,
+      automations: state.automations,
+      draft: state.draft,
+      loading: state.loading,
+      beginCreate: state.beginCreate,
+      saveState: state.saveState,
+      draftError: state.draftError,
+      selected: state.selected,
+      cancelDraft: state.cancelDraft,
+      setQuery: state.setQuery,
+      supported: state.supported,
+      runs: state.runs,
+      error: state.error,
+      refresh: state.refresh,
+      runNow: state.runNow,
+      filteredAutomations: state.filteredAutomations,
+      targetLabel: state.targetLabel,
+      setPaused: state.setPaused,
+      setFilter: state.setFilter,
+      sessions: state.sessions,
+      remove: state.remove,
+      setDraft: state.setDraft,
+      scheduleError: state.scheduleError,
+      scheduleSummary: state.scheduleSummary,
+      create: state.create,
+      retrySave: state.retrySave,
+      markAllRunsRead: state.markAllRunsRead,
+      markRunRead: state.markRunRead,
+    })),
+  )
   const calendar = useCalendarController(controller.query, 'all')
   const [scheduledTask, setScheduledTask] = useState<ScheduledTask | null>(null)
   const [scheduledTaskLoading, setScheduledTaskLoading] = useState(false)
@@ -379,7 +417,8 @@ function AutomationViewContent(): React.ReactNode {
       next.delete('scheduledTaskId')
       next.delete('scheduledTaskMode')
       next.set('date', localDateValue(new Date(occurrence.scheduledFor)))
-      next.delete('taskId'); next.delete('occurrenceId')
+      next.delete('taskId')
+      next.delete('occurrenceId')
       next.set(
         occurrence.source.kind === 'task-schedule'
           ? 'taskId'

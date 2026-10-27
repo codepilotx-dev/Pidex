@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { startupSurfaceReadyRef } from '../../../startup/StartupSplashHandoff.js'
 import type React from 'react'
 import { useEffect, useState } from 'react'
@@ -14,7 +15,7 @@ import {
   useProviderManagementStore,
   useShallow,
 } from '../../provider-management/UseProviderManagementStore.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 
 export type ModelSetupGateDecision = 'loading' | 'recovery' | 'setup' | 'workbench'
 
@@ -64,7 +65,23 @@ export function RequireConfiguredModel(): React.ReactNode {
       providers: state.configuration.providers,
     })),
   )
-  const settings = useDesktopSettings()
+  const subscribedSettingsLoaded = useDesktopSettingsField((s) => s.settingsLoaded)
+  const subscribedFirstUseSetupCompleted = useDesktopSettingsField((s) => s.firstUseSetupCompleted)
+  const subscribedSaveFirstUseSetupCompleted = useDesktopSettingsField(
+    (s) => s.saveFirstUseSetupCompleted,
+  )
+  const settings = useMemo(
+    () => ({
+      settingsLoaded: subscribedSettingsLoaded,
+      firstUseSetupCompleted: subscribedFirstUseSetupCompleted,
+      saveFirstUseSetupCompleted: subscribedSaveFirstUseSetupCompleted,
+    }),
+    [
+      subscribedSettingsLoaded,
+      subscribedFirstUseSetupCompleted,
+      subscribedSaveFirstUseSetupCompleted,
+    ],
+  )
   const decision = resolveModelSetupGate(configuration, settings)
   const [setupDialogDismissed, setSetupDialogDismissed] = useState(false)
 

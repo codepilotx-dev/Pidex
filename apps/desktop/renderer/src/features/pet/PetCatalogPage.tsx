@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useCallback, useEffect, useState } from 'react'
 import type React from 'react'
 import { useNavigate } from 'react-router-dom'
@@ -33,7 +34,18 @@ export function PetCatalogPage(): React.ReactNode {
   const [query, setQuery] = useState('')
   const [version, setVersion] = useState<PetCatalogVersionFilter>('all')
 
-  const { busy, pets, refreshPets, selectPet, setEnabled, settings } = usePetCatalogController()
+  const { busy, pets, refreshPets, selectPet, setEnabled, enabled, selectedPetId } =
+    usePetCatalogController(
+      useShallow((state) => ({
+        busy: state.busy,
+        pets: state.pets,
+        refreshPets: state.refreshPets,
+        selectPet: state.selectPet,
+        setEnabled: state.setEnabled,
+        enabled: state.settings.enabled,
+        selectedPetId: state.settings.selectedPetId,
+      })),
+    )
 
   const loadCatalog = useCallback(async (refresh = false): Promise<void> => {
     setLoading(true)
@@ -151,9 +163,9 @@ export function PetCatalogPage(): React.ReactNode {
           onRefreshPets={refreshPets}
           onSelect={(id) => void selectPet(id)}
           onUpdateCatalog={setCatalog}
-          overlayEnabled={settings.enabled}
+          overlayEnabled={enabled}
           query={query}
-          selectedPetId={settings.selectedPetId}
+          selectedPetId={selectedPetId}
           version={version}
         />
       </PrimaryPageLayout>

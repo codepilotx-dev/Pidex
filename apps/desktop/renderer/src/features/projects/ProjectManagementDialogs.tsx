@@ -1,9 +1,10 @@
+import { useMemo } from 'react'
 import type React from 'react'
 import { lazy, Suspense, useState } from 'react'
 import type { DesktopWorkspace } from '../../../shared/Types.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { useEverOpened } from '../../hooks/UsePresenceRetention.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import { DEFAULT_PROJECT_APPEARANCE } from './ProjectAppearance.js'
 import { notifyProjectCatalogChanged, notifyProjectRemoved } from './ProjectCatalogEvents.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
@@ -40,7 +41,17 @@ export function ProjectManagementDialogs({
   const confirmationDialogMounted = useEverOpened(confirmRemoveOpen)
   const managerDialogMounted = useEverOpened(managerOpen)
   const [processingAction, setProcessingAction] = useState<'remove' | null>(null)
-  const { projectAppearances, setProjectAppearances } = useDesktopSettings()
+  const subscribedProjectAppearances = useDesktopSettingsField((state) => state.projectAppearances)
+  const subscribedSetProjectAppearances = useDesktopSettingsField(
+    (state) => state.setProjectAppearances,
+  )
+  const { projectAppearances, setProjectAppearances } = useMemo(
+    () => ({
+      projectAppearances: subscribedProjectAppearances,
+      setProjectAppearances: subscribedSetProjectAppearances,
+    }),
+    [subscribedProjectAppearances, subscribedSetProjectAppearances],
+  )
   const appearance = project.projectId
     ? (projectAppearances[project.projectId] ?? DEFAULT_PROJECT_APPEARANCE)
     : DEFAULT_PROJECT_APPEARANCE

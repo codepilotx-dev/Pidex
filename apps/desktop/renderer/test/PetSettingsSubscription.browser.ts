@@ -16,7 +16,7 @@ import {PetCatalogProvider, usePetCatalogController} from ${source('features/pet
 import {PetSettings} from ${source('features/settings/PetSettings.tsx')};
 window.listCalls = 0;
 function CatalogConsumer() {
-  const {pets} = usePetCatalogController();
+  const pets = usePetCatalogController(state => state.pets);
   window.navigate = useNavigate();
   return <output id="catalog">{pets.map(pet => pet.displayName).join(',')}</output>;
 }

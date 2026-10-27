@@ -1,5 +1,6 @@
+import { useStore } from 'zustand/react'
 import type React from 'react'
-import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { GitFork } from 'lucide-react'
 import {
   desktopClipboard,
@@ -43,11 +44,7 @@ export type GithubLoginController = {
 export function useGithubAccount(
   refresh: boolean,
 ): ReturnType<typeof desktopClient.getGithubAccountSnapshot> {
-  const { auth } = useSyncExternalStore(
-    desktopClient.onGithubAccountChange,
-    desktopClient.getGithubAccountSnapshot,
-    desktopClient.getGithubAccountSnapshot,
-  )
+  const auth = useStore(desktopClient.githubAccountStore, (state) => state.auth)
   useEffect(() => {
     if (!refresh) return
     // 账号快照有缓存；可见入口挂载时读取一次，确保首次打开就能拿到当前账号状态。

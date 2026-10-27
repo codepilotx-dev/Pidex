@@ -59,11 +59,10 @@ const FILE_PILL_DETAIL_CLASS =
 const FILE_PILL_DETAIL_ERROR_CLASS = 'tw:text-app-warning'
 /*
  * `attachment-item-remove` is an IconButton: its ghost surface, radius and
- * shadow come from the shared button contract, while the stylesheet only adds
- * the corner placement and the surface it takes on hover.
+ * shadow come from the shared button contract; only corner placement is local.
  */
 const ATTACHMENT_REMOVE_CLASS =
-  'attachment-item-remove tw:absolute tw:z-1 tw:-top-1.25 tw:-right-1.25 tw:hover:bg-app-control tw:hover:text-app-text'
+  'attachment-item-remove tw:absolute tw:z-1 tw:-top-1.25 tw:-right-1.25'
 
 type AttachmentHorizontalRowProps = {
   ariaLabel: string

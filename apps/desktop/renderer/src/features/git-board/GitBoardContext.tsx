@@ -1,3 +1,8 @@
+import { useStore } from 'zustand/react'
+import type { StoreApi } from 'zustand/vanilla'
+import { useControllerStore } from '../../hooks/UseControllerStore.js'
+import { createStore } from 'zustand/vanilla'
+import { useFieldState } from '../../hooks/UseFieldState.js'
 import {
   createContext,
   useCallback,
@@ -77,10 +82,27 @@ function useGitBoardController() {
   const draft = useDesktopSettingsDraftActions()
   const gitBoardStateValue = useDesktopSettingsDraftValue('gitBoardState')
   const hydrated = useRef(false)
-  const [ready, setReady] = useState(false)
+  const [stateStore] = useState(() =>
+    createStore(() => ({
+      ready: false,
+      state: (() => parseGitBoardState(null))(),
+      storageError: false,
+      activeGroupId: null as string | null,
+      selectedProjectId: null as string | null,
+      remoteView: 'board' as GitBoardRemoteView,
+      selectedRefs: {} as Record<string, string>,
+      supportsCommitRef: false,
+      capabilities: [] as readonly ProtocolCapability[],
+      repositories: {} as Record<string, GitBoardRepository>,
+      commitLimitByProject: {} as Record<string, number>,
+      selectedReview: null as GitBoardReviewSelection | null,
+      refreshing: false,
+    })),
+  )
+  const [ready, setReady] = useFieldState(stateStore, 'ready')
   const saveVersion = useRef(0)
-  const [state, setState] = useState(() => parseGitBoardState(null))
-  const [storageError, setStorageError] = useState(false)
+  const [state, setState] = useFieldState(stateStore, 'state')
+  const [storageError, setStorageError] = useFieldState(stateStore, 'storageError')
   const stateRef = useRef(state)
   const saveState = useCallback(
     (next: GitBoardState) => {
@@ -128,15 +150,41 @@ function useGitBoardController() {
     () => projectCatalogState.projects.filter((project) => project.projectId),
     [projectCatalogState.projects],
   )
-  const [activeGroupId, setActiveGroupId] = useState<string | null>(null)
-  const [remoteView, setRemoteView] = useState<GitBoardRemoteView>('board')
-  // 打开速览或分组时切回看板：分组与速览同属看板视图，不能与仓库页同时选中。
+  const [activeGroupId, setActiveGroupId] = useFieldState(stateStore, 'activeGroupId')
+  const [selectedProjectId, setSelectedProjectId] = useFieldState(stateStore, 'selectedProjectId')
+  const [remoteView, setRemoteView] = useFieldState(stateStore, 'remoteView')
+  // 打开分组或选中项目时切回看板视图，不能与 GitHub 仓库页同时选中。
   const openGroup = useCallback((groupId: string | null) => {
     setActiveGroupId(groupId)
+    setSelectedProjectId(groupId)
     setRemoteView('board')
   }, [])
+  const selectProject = useCallback((projectId: string | null) => {
+    setSelectedProjectId(projectId)
+    setActiveGroupId(projectId)
+    setRemoteView('board')
+    setSelectedReview((current) => (current?.project.projectId === projectId ? current : null))
+  }, [])
   const openRemoteView = useCallback(() => setRemoteView('github'), [])
-  const view = useMemo(() => gitBoardView(state, activeGroupId), [state, activeGroupId])
+  const selectedProject = useMemo(
+    () => projects.find((project) => project.projectId === selectedProjectId) ?? null,
+    [projects, selectedProjectId],
+  )
+  const view = useMemo(
+    () =>
+      selectedProjectId
+        ? {
+            id: selectedProjectId,
+            name: selectedProject?.name ?? gitBoardView(state, activeGroupId).name,
+            projectIds: [selectedProjectId],
+          }
+        : {
+            id: null,
+            name: 'Git 看板',
+            projectIds: [] as string[],
+          },
+    [activeGroupId, selectedProject, selectedProjectId, state],
+  )
   const toggleQuickView = useCallback(
     (projectId: string) => {
       if (!stateRef.current.quickProjectIds.includes(projectId)) openGroup(null)
@@ -144,16 +192,19 @@ function useGitBoardController() {
     },
     [update],
   )
-  const [selectedRefs, setSelectedRefs] = useState<Record<string, string>>({})
+  const [selectedRefs, setSelectedRefs] = useFieldState(stateStore, 'selectedRefs')
   const selectedRefsRef = useRef(selectedRefs)
-  const [supportsCommitRef, setSupportsCommitRef] = useState(false)
-  const [capabilities, setCapabilities] = useState<readonly ProtocolCapability[]>([])
-  const [repositories, setRepositories] = useState<Record<string, GitBoardRepository>>({})
+  const [supportsCommitRef, setSupportsCommitRef] = useFieldState(stateStore, 'supportsCommitRef')
+  const [capabilities, setCapabilities] = useFieldState(stateStore, 'capabilities')
+  const [repositories, setRepositories] = useFieldState(stateStore, 'repositories')
   /** 每仓库当前请求的提交条数；侧栏“展开显示”按需递增，切换分支时清零。 */
-  const [commitLimitByProject, setCommitLimitByProject] = useState<Record<string, number>>({})
+  const [commitLimitByProject, setCommitLimitByProject] = useFieldState(
+    stateStore,
+    'commitLimitByProject',
+  )
   const commitLimitByProjectRef = useRef(commitLimitByProject)
-  const [selectedReview, setSelectedReview] = useState<GitBoardReviewSelection | null>(null)
-  const [refreshing, setRefreshing] = useState(false)
+  const [selectedReview, setSelectedReview] = useFieldState(stateStore, 'selectedReview')
+  const [refreshing, setRefreshing] = useFieldState(stateStore, 'refreshing')
   /** 首次加载、自动刷新、手动刷新、切换分支与提交补拉共用的串行加载队列。 */
   const queueRef = useRef<GitBoardLoadQueue | null>(null)
   /** 能力探测结果与在途请求；每个页面会话只探测一次。 */
@@ -373,9 +424,11 @@ function useGitBoardController() {
         const id = task.projectId
         const previousRepository = repositoriesRef.current[id]
         const visible = visibleProjectIdsRef.current.includes(id)
-        // 提交历史只为侧栏中出现的仓库加载；主区域列不再展示提交。
+        // 当前选中仓库及按需展开历史的仓库加载提交记录。
         const loadHistory =
-          repositoryIdsRef.current.includes(id) || commitLimitByProjectRef.current[id] !== undefined
+          visible ||
+          repositoryIdsRef.current.includes(id) ||
+          commitLimitByProjectRef.current[id] !== undefined
         const repository = await loadGitBoardRepository(project, {
           selectedRef: selectedRefsRef.current[id],
           background: !task.manual,
@@ -422,17 +475,23 @@ function useGitBoardController() {
 
   // 目录重新读取但成员/路径未变时，不再强制重复扫描全部仓库。
   const projectTargetsKey = JSON.stringify(projects.map(({ projectId, path }) => [projectId, path]))
-  // 侧栏新增仓库（加入速览/分组/当前列）时才需要强制刷新，切换列本身不算。
-  const repositoryTargetsKey = JSON.stringify(repositoryIds)
   useEffect(() => {
     if (!active || !ready) return
     requestProjects(undefined, false)
-  }, [active, ready, projectTargetsKey, repositoryTargetsKey, requestProjects])
+  }, [active, ready, projectTargetsKey, requestProjects])
+
+  useEffect(() => {
+    if (!active || !ready || !selectedProjectId) return
+    queueRef.current?.request(selectedProjectId, 'full', { manual: false })
+  }, [active, ready, selectedProjectId])
 
   return {
     state,
     ready,
     view,
+    selectedProjectId,
+    selectedProject,
+    selectProject,
     remoteView,
     openGroup,
     openRemoteView,
@@ -462,13 +521,18 @@ function useGitBoardController() {
   }
 }
 
-const GitBoardContext = createContext<ReturnType<typeof useGitBoardController> | null>(null)
+const GitBoardContext = createContext<StoreApi<ReturnType<typeof useGitBoardController>> | null>(
+  null,
+)
 export function GitBoardProvider({ children }: { children: ReactNode }) {
-  const value = useGitBoardController()
+  const controller = useGitBoardController()
+  const value = useControllerStore(controller)
   return <GitBoardContext.Provider value={value}>{children}</GitBoardContext.Provider>
 }
-export function useGitBoard() {
+export function useGitBoard<T>(
+  selector: (state: ReturnType<typeof useGitBoardController>) => T,
+): T {
   const value = useContext(GitBoardContext)
   if (!value) throw new Error('GitBoardProvider required')
-  return value
+  return useStore(value, selector)
 }

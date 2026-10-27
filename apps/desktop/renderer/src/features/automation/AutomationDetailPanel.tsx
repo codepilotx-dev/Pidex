@@ -24,7 +24,24 @@ import {
 
 type Props = {
   creating: boolean
-  controller: AutomationController
+  controller: Pick<
+    AutomationController,
+    | 'selected'
+    | 'runs'
+    | 'draft'
+    | 'setDraft'
+    | 'scheduleError'
+    | 'scheduleSummary'
+    | 'projects'
+    | 'sessions'
+    | 'error'
+    | 'saveState'
+    | 'draftError'
+    | 'create'
+    | 'retrySave'
+    | 'markAllRunsRead'
+    | 'markRunRead'
+  >
   onClose: () => void
   exitPending: 'back' | 'close' | null
   onBack?: () => void
@@ -500,11 +517,36 @@ function FormField({
   )
 }
 
-function SaveIndicator({ controller }: { controller: AutomationController }): React.ReactNode {
+function SaveIndicator({
+  controller,
+}: {
+  controller: Pick<
+    AutomationController,
+    | 'selected'
+    | 'runs'
+    | 'draft'
+    | 'setDraft'
+    | 'scheduleError'
+    | 'scheduleSummary'
+    | 'projects'
+    | 'sessions'
+    | 'error'
+    | 'saveState'
+    | 'draftError'
+    | 'create'
+    | 'retrySave'
+    | 'markAllRunsRead'
+    | 'markRunRead'
+  >
+}): React.ReactNode {
   if (controller.saveState === 'saving')
     return (
       <span className="automation-save-state tw:inline-flex tw:items-center tw:gap-1">
-        <RotateCcw className="tw:size-[var(--inline-icon-size,1em)]" size="var(--inline-icon-size, 1em)" aria-hidden="true" />
+        <RotateCcw
+          className="tw:size-[var(--inline-icon-size,1em)]"
+          size="var(--inline-icon-size, 1em)"
+          aria-hidden="true"
+        />
         正在保存…
       </span>
     )
@@ -525,7 +567,11 @@ function SaveIndicator({ controller }: { controller: AutomationController }): Re
   if (controller.saveState === 'saved')
     return (
       <span className="automation-save-state tw:inline-flex tw:items-center tw:gap-1">
-        <Check className="tw:size-[var(--inline-icon-size,1em)]" size="var(--inline-icon-size, 1em)" aria-hidden="true" />
+        <Check
+          className="tw:size-[var(--inline-icon-size,1em)]"
+          size="var(--inline-icon-size, 1em)"
+          aria-hidden="true"
+        />
         已保存
       </span>
     )
@@ -542,7 +588,24 @@ function RunHistory({
   onOpenThread,
 }: {
   runs: readonly AutomationRun[]
-  controller: AutomationController
+  controller: Pick<
+    AutomationController,
+    | 'selected'
+    | 'runs'
+    | 'draft'
+    | 'setDraft'
+    | 'scheduleError'
+    | 'scheduleSummary'
+    | 'projects'
+    | 'sessions'
+    | 'error'
+    | 'saveState'
+    | 'draftError'
+    | 'create'
+    | 'retrySave'
+    | 'markAllRunsRead'
+    | 'markRunRead'
+  >
   onOpenThread: (id: string) => void
 }): React.ReactNode {
   return (

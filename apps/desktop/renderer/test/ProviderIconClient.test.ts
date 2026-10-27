@@ -11,7 +11,10 @@ describe('供应商图标客户端缓存', () => {
     let publish: ((change: DesktopProviderIconChange) => void) | undefined
     const store = createProviderIconStore({
       resolveProviderIcon: async ({ url }) => (url ? { source: CACHED_SOURCE } : { source: null }),
-      onProviderIconChange: (listener) => { publish = listener; return () => undefined },
+      onProviderIconChange: (listener) => {
+        publish = listener
+        return () => undefined
+      },
     })
     await store.loadProviderOverride('relay')
     expect(store.getProviderOverride('relay')).toEqual({ source: null, resolved: true })
@@ -30,10 +33,14 @@ describe('供应商图标客户端缓存', () => {
       resolveProviderIcon: async (input) => {
         calls.push(input)
         if (!input.url) return { source: MANUAL_SOURCE, override: true }
-        if (store.getProviderOverride('relay').source) return { source: MANUAL_SOURCE, override: true }
+        if (store.getProviderOverride('relay').source)
+          return { source: MANUAL_SOURCE, override: true }
         return { source: CACHED_SOURCE }
       },
-      onProviderIconChange: (listener) => { publish = listener; return () => undefined },
+      onProviderIconChange: (listener) => {
+        publish = listener
+        return () => undefined
+      },
     })
 
     expect(await store.loadProviderOverride('relay')).toBe(true)
@@ -116,7 +123,7 @@ describe('供应商图标客户端缓存', () => {
       },
     })
     let notifications = 0
-    const unsubscribe = store.subscribe(() => {
+    const unsubscribe = store.state.subscribe(() => {
       notifications += 1
     })
 

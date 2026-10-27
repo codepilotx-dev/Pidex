@@ -81,7 +81,7 @@ export function GitBoardDetails({
   return (
     <aside
       aria-label={t('变更详情')}
-      className="tw:flex tw:h-full tw:w-[45%] tw:min-w-[360px] tw:shrink-0 tw:flex-col tw:border-l tw:border-app-border-subtle tw:bg-app-main"
+      className="tw:flex tw:h-full tw:min-w-[360px] tw:flex-1 tw:flex-col tw:overflow-hidden tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-main"
     >
       <header className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-app-border-subtle tw:p-3">
         <div className="tw:min-w-0">

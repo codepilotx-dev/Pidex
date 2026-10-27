@@ -293,12 +293,8 @@ export function CodeBlock({
         ) : null}
         <Button
           isIconOnly
-          className={cx(
-            'md-code-action md-code-copy',
-            copied && 'is-copied',
-            'tw:inline-flex tw:size-6 tw:items-center tw:justify-center tw:text-app-text-soft tw:transition-colors tw:duration-[var(--cpx-sys-motion-exit)] tw:hover:bg-app-raised tw:hover:text-app-text tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent',
-          )}
-          color="ghostSecondary"
+          className="md-code-copy tw:transition-colors tw:duration-exit"
+          variant="ghost"
           size="xs"
           aria-label={copied ? '已复制代码' : copyLabel}
           title={copied ? '已复制代码' : copyLabel}

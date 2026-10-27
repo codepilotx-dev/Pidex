@@ -746,11 +746,7 @@ function MarkdownTable({
         ) : null}
         <Button
           isIconOnly
-          className={cx(
-            'md-table-copy',
-            context.presentation === 'conversation' && 'tw:size-6',
-            copied && 'is-copied',
-          )}
+          className={cx('md-table-copy tw:border', copied && 'is-copied')}
           variant={context.presentation === 'conversation' ? 'text' : 'ghost'}
           size={context.presentation === 'conversation' ? 'xs' : 'toolbar'}
           title={copied ? '已复制' : '复制表格'}

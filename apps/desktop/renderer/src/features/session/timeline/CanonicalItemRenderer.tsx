@@ -63,7 +63,13 @@ import { useLiveItemTail } from '../state/UseLiveItemTail.js'
 import { countStreamingItemRender } from '../state/StreamingPerfCounters.js'
 import { WorkflowPlanCard, type OpenPlanInDockRequest } from '../workflow/WorkflowPlanCard.js'
 import { AttachmentFilePill, AttachmentImageTile } from '../attachments/AttachmentRowPrimitives.js'
-import { UNKNOWN_FILE_PATH, fileDisplayName, fileMutationLabel, fileMutationTitle, type FileChangeDisplay } from './FileMutationPresentation.js'
+import {
+  UNKNOWN_FILE_PATH,
+  fileDisplayName,
+  fileMutationLabel,
+  fileMutationTitle,
+  type FileChangeDisplay,
+} from './FileMutationPresentation.js'
 import { useToolArtifactImageSource } from './UseToolArtifactImageSource.js'
 import {
   buildToolSemanticSummary,
@@ -124,7 +130,6 @@ const LazyLocalContextRows = React.lazy(async () => {
 
 type ItemOf<T extends Item['type']> = Extract<Item, { type: T }>
 type ToolItem = ItemOf<'tool'>
-
 
 export type FileMutationDisplay = {
   files: FileChangeDisplay[]
@@ -454,24 +459,29 @@ export function CanonicalUserInput({
       <div className="canonical-message-actions" aria-label="用户消息操作">
         <MessageSentTime sentAt={input.createdAt} />
         <CopyButton text={displayText} />
-        {editingAllowed ? <Tooltip content="修改并重新发送">
-          <Button
-            isIconOnly
-            aria-label="修改并重新发送"
-            color="ghostSecondary"
-            size="xs"
-            title="修改并重新发送"
-            disabled={sessionStatus === 'running' || sessionStatus === 'waiting' || sessionStatus === 'queued'}
-            onClick={startEditing}
-          >
-            <Pencil aria-hidden="true" size={APP_ICON_SIZE} />
-          </Button>
-        </Tooltip> : null}
+        {editingAllowed ? (
+          <Tooltip content="修改并重新发送">
+            <Button
+              isIconOnly
+              aria-label="修改并重新发送"
+              color="ghostSecondary"
+              size="xs"
+              title="修改并重新发送"
+              disabled={
+                sessionStatus === 'running' ||
+                sessionStatus === 'waiting' ||
+                sessionStatus === 'queued'
+              }
+              onClick={startEditing}
+            >
+              <Pencil aria-hidden="true" size={APP_ICON_SIZE} />
+            </Button>
+          </Tooltip>
+        ) : null}
       </div>
     </article>
   )
 }
-
 
 export function CanonicalItemRenderer({
   disclosure,
@@ -1128,7 +1138,12 @@ function ToolResultBlockView({
         <div className="canonical-tool-result-block canonical-tool-result-block--citation">
           <Globe2 aria-hidden="true" size="var(--inline-icon-size, 1em)" />
           {url ? (
-            <a className="tw:inline-flex tw:min-h-6 tw:min-w-6 tw:items-center" href={url} rel="noopener noreferrer" target="_blank">
+            <a
+              className="tw:inline-flex tw:min-h-6 tw:min-w-6 tw:items-center"
+              href={url}
+              rel="noopener noreferrer"
+              target="_blank"
+            >
               {block.title ?? url}
             </a>
           ) : (
@@ -1319,9 +1334,7 @@ export function PatchSummaryView({
           {canApplyPatch ? (
             <Button
               color="primary"
-              className="canonical-patch-card__action tw:[&&]:rounded-md"
               loading={pendingAction === patchAction}
-              shape="default"
               size="sm"
               onClick={() => void applyPatch()}
             >
@@ -1332,8 +1345,6 @@ export function PatchSummaryView({
           {onOpenReview ? (
             <Button
               color="secondary"
-              className="canonical-patch-card__action tw:[&&]:rounded-md"
-              shape="default"
               size="sm"
               onClick={() =>
                 onOpenReview(patch.files.length === 1 ? patch.files[0]?.path : undefined)
@@ -2169,7 +2180,6 @@ export function fileMutationDisplay(item: ToolItem): FileMutationDisplay | null 
     totalDeletions,
   }
 }
-
 
 function PatchFileButton({
   file,

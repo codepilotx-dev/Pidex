@@ -1,3 +1,5 @@
+import { createStore } from 'zustand/vanilla'
+import { useFieldState } from '../../hooks/UseFieldState.js'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { Automation, AutomationRun } from '@pidex/shared/automation'
 import type { DesktopSessionListItem, DesktopWorkspace } from '../../../shared/Types.js'
@@ -56,19 +58,36 @@ export function useAutomationController(
   selectedId: string | null,
   enabled = true,
 ): AutomationController {
-  const [supported, setSupported] = useState<boolean | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [automations, setAutomations] = useState<readonly Automation[]>([])
-  const [runs, setRuns] = useState<readonly AutomationRun[]>([])
-  const [projects, setProjects] = useState<readonly DesktopWorkspace[]>([])
-  const [sessions, setSessions] = useState<readonly DesktopSessionListItem[]>([])
-  const [draft, setDraftState] = useState<AutomationDraft | null>(null)
-  const [saveState, setSaveState] = useState<SaveState>('idle')
-  const [scheduleError, setScheduleError] = useState<string | null>(null)
-  const [scheduleSummary, setScheduleSummary] = useState<string | null>(null)
-  const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<AutomationFilter>('all')
+  const [stateStore] = useState(() =>
+    createStore(() => ({
+      supported: null as boolean | null,
+      loading: true,
+      error: null as string | null,
+      automations: [] as readonly Automation[],
+      runs: [] as readonly AutomationRun[],
+      projects: [] as readonly DesktopWorkspace[],
+      sessions: [] as readonly DesktopSessionListItem[],
+      draft: null as AutomationDraft | null,
+      saveState: 'idle' as SaveState,
+      scheduleError: null as string | null,
+      scheduleSummary: null as string | null,
+      query: '',
+      filter: 'all' as AutomationFilter,
+    })),
+  )
+  const [supported, setSupported] = useFieldState(stateStore, 'supported')
+  const [loading, setLoading] = useFieldState(stateStore, 'loading')
+  const [error, setError] = useFieldState(stateStore, 'error')
+  const [automations, setAutomations] = useFieldState(stateStore, 'automations')
+  const [runs, setRuns] = useFieldState(stateStore, 'runs')
+  const [projects, setProjects] = useFieldState(stateStore, 'projects')
+  const [sessions, setSessions] = useFieldState(stateStore, 'sessions')
+  const [draft, setDraftState] = useFieldState(stateStore, 'draft')
+  const [saveState, setSaveState] = useFieldState(stateStore, 'saveState')
+  const [scheduleError, setScheduleError] = useFieldState(stateStore, 'scheduleError')
+  const [scheduleSummary, setScheduleSummary] = useFieldState(stateStore, 'scheduleSummary')
+  const [query, setQuery] = useFieldState(stateStore, 'query')
+  const [filter, setFilter] = useFieldState(stateStore, 'filter')
   const refreshSequence = useRef(0)
   const saveSequence = useRef(0)
   const selected = automations.find((item) => item.id === selectedId) ?? null
@@ -319,6 +338,46 @@ export function useAutomationController(
       ),
     [projects],
   )
+  const retrySave = useCallback(() => {
+    if (selected && draft) void saveSelected(draft)
+  }, [selected, draft, saveSelected])
+  const runNow = useCallback(
+    (id: string) => mutate(() => desktopClient.runAutomation({ automationId: id })),
+    [mutate],
+  )
+  const setPaused = useCallback(
+    (automation: Automation, paused: boolean) =>
+      mutate(() =>
+        desktopClient.updateAutomation({
+          automationId: automation.id,
+          expectedRevision: automation.revision,
+          patch: { status: paused ? 'paused' : 'active' },
+        }),
+      ),
+    [mutate],
+  )
+  const remove = useCallback(
+    (automation: Automation) =>
+      mutate(() =>
+        desktopClient.deleteAutomation({
+          automationId: automation.id,
+          expectedRevision: automation.revision,
+        }),
+      ),
+    [mutate],
+  )
+  const markRunRead = useCallback(
+    (runId: string) => mutate(() => desktopClient.markAutomationRunRead({ runId })),
+    [mutate],
+  )
+  const markAllRunsRead = useCallback(
+    () => mutate(() => desktopClient.markAllAutomationRunsRead({})),
+    [mutate],
+  )
+  const targetLabel = useCallback(
+    (automation: Automation) => automationTargetLabel(automation, projectNames, sessions),
+    [projectNames, sessions],
+  )
   return {
     supported,
     loading,
@@ -344,28 +403,13 @@ export function useAutomationController(
     beginCreate,
     cancelDraft,
     create,
-    retrySave: () => {
-      if (selected && draft) void saveSelected(draft)
-    },
-    runNow: (id) => mutate(() => desktopClient.runAutomation({ automationId: id })),
-    setPaused: (automation, paused) =>
-      mutate(() =>
-        desktopClient.updateAutomation({
-          automationId: automation.id,
-          expectedRevision: automation.revision,
-          patch: { status: paused ? 'paused' : 'active' },
-        }),
-      ),
-    remove: (automation) =>
-      mutate(() =>
-        desktopClient.deleteAutomation({
-          automationId: automation.id,
-          expectedRevision: automation.revision,
-        }),
-      ),
-    markRunRead: (runId) => mutate(() => desktopClient.markAutomationRunRead({ runId })),
-    markAllRunsRead: () => mutate(() => desktopClient.markAllAutomationRunsRead({})),
-    targetLabel: (automation) => automationTargetLabel(automation, projectNames, sessions),
+    retrySave,
+    runNow,
+    setPaused,
+    remove,
+    markRunRead,
+    markAllRunsRead,
+    targetLabel,
   }
 }
 

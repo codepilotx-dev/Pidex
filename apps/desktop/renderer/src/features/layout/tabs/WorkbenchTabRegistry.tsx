@@ -1,6 +1,7 @@
+import { useStore } from 'zustand/react'
 import type { FileEditorViewState } from '../../editor/FileEditor.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
-import React, { Suspense, useEffect, useState, useCallback, type ReactNode } from 'react'
+import React, { Suspense, useEffect, useCallback, type ReactNode } from 'react'
 import {
   Bot,
   Folder,
@@ -76,10 +77,9 @@ function BrowserTabContent({
   context: WorkbenchTabRenderContext['browser']
 }): React.ReactNode {
   const client = desktopBrowserClient.forTab(tab.tabId)
-  const [state, setState] = useState<DesktopBrowserState | null>(() => client.getTab(tab.tabId))
+  const state = useStore(client.tabsStore, (state) => state.tabs.get(tab.tabId) ?? null)
   const onStateChange = useCallback(
     (next: DesktopBrowserState) => {
-      setState(next)
       context.onStateChange(next)
     },
     [context.onStateChange],

@@ -1,9 +1,15 @@
+import { useMemo } from 'react'
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { desktopBrowserClient } from '../../services/desktop-client/DesktopBrowserClient.js'
 import type { DesktopBrowserSitePermission } from '../../../shared/Types.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  useDesktopSettingsField,
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+} from './UseDesktopSettings.js'
 import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { SettingsSection } from './SettingsSection.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
@@ -13,8 +19,20 @@ import { SettingsRow } from './SettingsRow.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 
 export function BrowserSettings(): React.ReactNode {
-  const settings = useDesktopSettings()
-  const { browserAllowedSites, setBrowserAllowedSites, draft } = settings
+  const browserAllowedSites = useDesktopSettingsField((s) => s.browserAllowedSites)
+  const setBrowserAllowedSites = useDesktopSettingsField((s) => s.setBrowserAllowedSites)
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const draft = useMemo(
+    () => ({
+      ...subscribedDraftActions,
+      values: {},
+      dirty: subscribedDraftDirty,
+      saving: subscribedDraftSaving,
+    }),
+    [subscribedDraftActions, subscribedDraftDirty, subscribedDraftSaving],
+  )
   const [sitePermissions, setSitePermissions] = useState<DesktopBrowserSitePermission[]>([])
   const [allowAllSites, setAllowAllSites] = useState(false)
   const [allSitesSaving, setAllSitesSaving] = useState(false)

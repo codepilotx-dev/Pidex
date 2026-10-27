@@ -1,3 +1,4 @@
+import { createStore } from 'zustand/vanilla'
 import { AutomationControllerContext } from '../src/features/automation/AutomationControllerProvider.js'
 import type { AutomationController } from '../src/features/automation/UseAutomationController.js'
 import { SidebarScheduledPane } from '../src/features/layout/sidebar/SidebarScheduledPane.js'
@@ -26,7 +27,7 @@ describe('AutomationView', () => {
     } as unknown as AutomationController
     const html = renderToStaticMarkup(
       <MemoryRouter initialEntries={['/automations?automationId=task%2Fpublish']}>
-        <AutomationControllerContext.Provider value={controller}>
+        <AutomationControllerContext.Provider value={createStore(() => controller)}>
           <SidebarScheduledPane />
         </AutomationControllerContext.Provider>
       </MemoryRouter>,

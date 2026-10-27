@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { FitAddon } from '@xterm/addon-fit'
 import { Terminal } from '@xterm/xterm'
 import type {
@@ -9,7 +10,7 @@ import { Button } from '../../components/ui/Button.js'
 import { getEffectiveReducedMotion } from '../../hooks/UsePrefersReducedMotion.js'
 import { loadDesktopTerminalClient } from '../../services/desktop-client/index.js'
 import { getResizeActivityCoordinator } from '../layout/shell/ResizeActivityCoordinator.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import {
   consumeTerminalEvent,
   consumeTerminalSnapshot,
@@ -55,7 +56,13 @@ export function TerminalPanel({
   onDisplayPathChange,
 }: TerminalPanelProps): React.ReactNode {
   const terminalClient = use(loadTerminalClientResource())
-  const { draft } = useDesktopSettings()
+  const subscribedTerminalProfileId = useDesktopSettingsField(
+    (state) => state.draft.values.terminalProfileId,
+  )
+  const { draft } = useMemo(
+    () => ({ draft: { values: { terminalProfileId: subscribedTerminalProfileId } } }),
+    [subscribedTerminalProfileId],
+  )
   const profileId = draft.values.terminalProfileId
   const hostRef = useRef<HTMLDivElement>(null)
   const terminalRef = useRef<Terminal | null>(null)

@@ -1,11 +1,16 @@
-import { useEffect, useMemo, useSyncExternalStore } from 'react'
+import { useEffect } from 'react'
+import { useStore } from 'zustand/react'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 import type {
   DesktopProviderIconChange,
   DesktopProviderIconResolution,
 } from '@pidex/shared/desktop-provider-icon-ipc'
 
 export type ProviderIconBridge = {
-  resolveProviderIcon(input: { url: string; providerID?: string }): Promise<DesktopProviderIconResolution>
+  resolveProviderIcon(input: {
+    url: string
+    providerID?: string
+  }): Promise<DesktopProviderIconResolution>
   onProviderIconChange?(listener: (change: DesktopProviderIconChange) => void): () => void
 }
 
@@ -16,8 +21,12 @@ export type ProviderIconOverride = {
   resolved: boolean
 }
 
+type ProviderIconState = {
+  sources: ReadonlyMap<string, string>
+  overrides: ReadonlyMap<string, ProviderIconOverride>
+}
 export type ProviderIconStore = {
-  subscribe(listener: () => void): () => void
+  state: StoreApi<ProviderIconState>
   getSource(url: string): string | undefined
   getProviderOverride(providerID: string): ProviderIconOverride
   /** 解析供应商手动图标，返回是否处于手动覆盖状态。 */
@@ -34,42 +43,41 @@ const UNRESOLVED_OVERRIDE: ProviderIconOverride = { source: null, resolved: fals
  * 恢复默认后目录图标才重新参与加载与刷新。
  */
 export function createProviderIconStore(bridge: ProviderIconBridge): ProviderIconStore {
-  const sources = new Map<string, string>()
-  const overrides = new Map<string, ProviderIconOverride>()
+  const state = createStore<ProviderIconState>(() => ({ sources: new Map(), overrides: new Map() }))
+  const setSource = (url: string, source: string | null) => {
+    const sources = new Map(state.getState().sources)
+    if (source) sources.set(url, source)
+    else sources.delete(url)
+    state.setState({ sources })
+  }
+  const setOverride = (id: string, value: ProviderIconOverride) => {
+    state.setState({ overrides: new Map(state.getState().overrides).set(id, value) })
+  }
   const requestedURLs = new Set<string>()
   const inFlightProviders = new Map<string, Promise<boolean>>()
   const inFlightURLs = new Map<string, Promise<void>>()
-  const listeners = new Set<() => void>()
-
-  const notify = (): void => {
-    for (const listener of [...listeners]) listener()
-  }
 
   // 订阅与 React 挂载无关：宿主后台刷新发生在页面关闭期间也不能丢失。
   bridge.onProviderIconChange?.((change) => {
     if (change.providerID) {
-      const current = overrides.get(change.providerID)
+      const current = state.getState().overrides.get(change.providerID)
       const source = change.source ?? null
       if (current?.resolved && current.source === source) return
-      overrides.set(change.providerID, { source, resolved: true })
-      notify()
+      setOverride(change.providerID, { source, resolved: true })
+
       return
     }
-    if (sources.get(change.url) === (change.source ?? undefined)) return
-    if (change.source) sources.set(change.url, change.source)
-    else sources.delete(change.url)
-    notify()
+    if (state.getState().sources.get(change.url) === (change.source ?? undefined)) return
+    setSource(change.url, change.source ?? null)
   })
 
   return {
-    subscribe(listener) {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
-    getSource: (url) => sources.get(url),
-    getProviderOverride: (providerID) => overrides.get(providerID) ?? UNRESOLVED_OVERRIDE,
+    state,
+    getSource: (url) => state.getState().sources.get(url),
+    getProviderOverride: (providerID) =>
+      state.getState().overrides.get(providerID) ?? UNRESOLVED_OVERRIDE,
     loadProviderOverride(providerID) {
-      const known = overrides.get(providerID)
+      const known = state.getState().overrides.get(providerID)
       if (known?.resolved) return Promise.resolve(known.source !== null)
       const pending = inFlightProviders.get(providerID)
       if (pending) return pending
@@ -79,14 +87,14 @@ export function createProviderIconStore(bridge: ProviderIconBridge): ProviderIco
         .resolveProviderIcon({ url: '', providerID })
         .then((resolution) => {
           const source = resolution.source ?? null
-          overrides.set(providerID, { source, resolved: true })
-          notify()
+          setOverride(providerID, { source, resolved: true })
+
           return source !== null
         })
         .catch(() => {
           // 读取失败按“无手动图标”处理，回退到目录图标，避免整块图标消失。
-          overrides.set(providerID, { source: null, resolved: true })
-          notify()
+          setOverride(providerID, { source: null, resolved: true })
+
           return false
         })
         .finally(() => {
@@ -98,7 +106,7 @@ export function createProviderIconStore(bridge: ProviderIconBridge): ProviderIco
     loadCatalogueIcon(url, providerID) {
       const pending = inFlightURLs.get(url)
       if (pending) return pending
-      if (sources.has(url) || requestedURLs.has(url)) return Promise.resolve()
+      if (state.getState().sources.has(url) || requestedURLs.has(url)) return Promise.resolve()
 
       requestedURLs.add(url)
       let request: Promise<void>
@@ -110,20 +118,18 @@ export function createProviderIconStore(bridge: ProviderIconBridge): ProviderIco
             // 默认后会短暂显示旧的手动图标。
             requestedURLs.delete(url)
             if (providerID) {
-              overrides.set(providerID, {
+              setOverride(providerID, {
                 source: resolution.source ?? null,
                 resolved: true,
               })
-              notify()
             }
             return
           }
-          if (resolution.source) sources.set(url, resolution.source)
+          if (resolution.source) setSource(url, resolution.source)
         })
         .catch(() => undefined)
         .finally(() => {
           if (inFlightURLs.get(url) === request) inFlightURLs.delete(url)
-          notify()
         })
       inFlightURLs.set(url, request)
       return request
@@ -138,9 +144,10 @@ function resolveProviderIconBridge(): ProviderIconBridge | undefined {
   return bridge
 }
 
-const EMPTY_SUBSCRIBE = (): (() => void) => () => undefined
-const EMPTY_GET_SOURCE = (): string | undefined => undefined
-const EMPTY_GET_OVERRIDE = (): ProviderIconOverride => UNRESOLVED_OVERRIDE
+const EMPTY_STATE = createStore<ProviderIconState>(() => ({
+  sources: new Map(),
+  overrides: new Map(),
+}))
 
 let store: ProviderIconStore | undefined
 let storeBridge: ProviderIconBridge | undefined
@@ -167,19 +174,11 @@ export type ProviderIconSource = {
  */
 export function useProviderIconSource(logoURL?: string, providerID?: string): ProviderIconSource {
   const activeStore = getProviderIconStore()
-  const subscribe = useMemo(
-    () => (activeStore ? activeStore.subscribe : EMPTY_SUBSCRIBE),
-    [activeStore],
+  const overrideState = useStore(activeStore?.state ?? EMPTY_STATE, (state) =>
+    providerID ? (state.overrides.get(providerID) ?? UNRESOLVED_OVERRIDE) : UNRESOLVED_OVERRIDE,
   )
-  const overrideState = useSyncExternalStore(
-    subscribe,
-    () => (activeStore && providerID ? activeStore.getProviderOverride(providerID) : UNRESOLVED_OVERRIDE),
-    EMPTY_GET_OVERRIDE,
-  )
-  const urlSource = useSyncExternalStore(
-    subscribe,
-    () => (activeStore && logoURL ? activeStore.getSource(logoURL) : undefined),
-    EMPTY_GET_SOURCE,
+  const urlSource = useStore(activeStore?.state ?? EMPTY_STATE, (state) =>
+    logoURL ? state.sources.get(logoURL) : undefined,
   )
 
   useEffect(() => {

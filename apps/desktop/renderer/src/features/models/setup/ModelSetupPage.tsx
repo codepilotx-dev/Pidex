@@ -24,7 +24,7 @@ import {
   useShallow,
 } from '../../provider-management/UseProviderManagementStore.js'
 import type { ProviderConfigurationState } from '../../provider-management/Types.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import { ApiKeyEditorForm, type ApiKeyEditorValue } from '../ApiKeyEditorDialog.js'
 import { OAuthConnection } from '../provider-management/OAuthConnection.js'
 import { ProviderEditorDialog } from '../provider-management/ProviderEditorDialog.js'
@@ -40,7 +40,30 @@ export type ModelSetupStatus = 'loading' | 'ready' | 'saving' | 'error'
 
 export function ModelSetupPage(): React.ReactNode {
   const navigate = useNavigate()
-  const settings = useDesktopSettings()
+  const subscribedSettingsLoaded = useDesktopSettingsField((state) => state.settingsLoaded)
+  const subscribedFirstUseSetupCompleted = useDesktopSettingsField(
+    (state) => state.firstUseSetupCompleted,
+  )
+  const subscribedSaveFirstUseSetupCompleted = useDesktopSettingsField(
+    (state) => state.saveFirstUseSetupCompleted,
+  )
+  const subscribedSyncExternalSettingsPatch = useDesktopSettingsField(
+    (state) => state.syncExternalSettingsPatch,
+  )
+  const settings = useMemo(
+    () => ({
+      settingsLoaded: subscribedSettingsLoaded,
+      firstUseSetupCompleted: subscribedFirstUseSetupCompleted,
+      saveFirstUseSetupCompleted: subscribedSaveFirstUseSetupCompleted,
+      syncExternalSettingsPatch: subscribedSyncExternalSettingsPatch,
+    }),
+    [
+      subscribedSettingsLoaded,
+      subscribedFirstUseSetupCompleted,
+      subscribedSaveFirstUseSetupCompleted,
+      subscribedSyncExternalSettingsPatch,
+    ],
+  )
   const configuration = useProviderManagementStore(
     useShallow((state) => ({
       loaded: state.configuration.loaded,
@@ -142,7 +165,9 @@ export function ModelSetupPage(): React.ReactNode {
       settings.firstUseSetupCompleted !== undefined
     )
       return
-    const inferred = hasUsableTaskModel(configuration.currentProviderState, configuration.providers) ? 1 : 0
+    const inferred = hasUsableTaskModel(configuration.currentProviderState, configuration.providers)
+      ? 1
+      : 0
     void settings.saveFirstUseSetupCompleted(inferred).catch(() => undefined)
   }, [
     settings.firstUseSetupCompleted,
@@ -158,7 +183,8 @@ export function ModelSetupPage(): React.ReactNode {
     if (!configuration.loaded || providerId || providers.length === 0) return
     const preferred =
       providers.find(
-        (provider) => provider.providerID === configuration.currentProviderState?.selectedProviderID,
+        (provider) =>
+          provider.providerID === configuration.currentProviderState?.selectedProviderID,
       ) ??
       providers.find((provider) => isProviderConnected(provider, configuration)) ??
       providers[0]
@@ -171,7 +197,9 @@ export function ModelSetupPage(): React.ReactNode {
         (configuration.currentProviderState === null ||
           configuration.currentProviderState === undefined ||
           !hasUsableTaskModel(configuration.currentProviderState, configuration.providers)))
-    setStep(!fullGuideRequested && isProviderConnected(preferred, configuration) ? 'model' : 'provider')
+    setStep(
+      !fullGuideRequested && isProviderConnected(preferred, configuration) ? 'model' : 'provider',
+    )
     setStatus('ready')
   }, [providerId, providers, settings.firstUseSetupCompleted, configuration])
 
@@ -198,7 +226,8 @@ export function ModelSetupPage(): React.ReactNode {
         setModelId((current) =>
           nextModels.includes(current)
             ? current
-            : configuration.currentProviderState?.selectedProviderID === selectedProvider.providerID &&
+            : configuration.currentProviderState?.selectedProviderID ===
+                  selectedProvider.providerID &&
                 nextModels.includes(configuration.currentProviderState.model)
               ? configuration.currentProviderState.model
               : (nextModels[0] ?? ''),
@@ -468,12 +497,12 @@ export function ModelSetupPage(): React.ReactNode {
                       onClick={() => chooseProvider(provider)}
                       onMouseEnter={() => providerNav.setActive(index)}
                     >
-                        <ProviderIcon
-                          className="model-setup-provider-logo tw:grid tw:size-3.5 tw:shrink-0 tw:place-items-center tw:rounded-md tw:object-contain tw:[&_svg]:size-3.5 tw:[&_svg]:text-app-text-meta"
-                          fallback={<Server data-icon-kind="artwork" size={14} aria-hidden />}
-                          logoURL={provider.logoURL}
-                          providerID={provider.providerID}
-                        />
+                      <ProviderIcon
+                        className="model-setup-provider-logo tw:grid tw:size-3.5 tw:shrink-0 tw:place-items-center tw:rounded-md tw:object-contain tw:[&_svg]:size-3.5 tw:[&_svg]:text-app-text-meta"
+                        fallback={<Server data-icon-kind="artwork" size={14} aria-hidden />}
+                        logoURL={provider.logoURL}
+                        providerID={provider.providerID}
+                      />
                       <span className="model-setup-provider-copy tw:grid tw:min-w-0 tw:flex-1 tw:gap-1">
                         <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">
                           {provider.displayName}
@@ -650,7 +679,11 @@ export function ModelSetupPage(): React.ReactNode {
                         {metadata?.vision ? '图片' : null}
                       </span>
                       {modelId === id ? (
-                        <Check className="tw:size-[var(--inline-icon-size,1em)]" size={APP_ICON_SIZES.sm} aria-hidden />
+                        <Check
+                          className="tw:size-[var(--inline-icon-size,1em)]"
+                          size={APP_ICON_SIZES.sm}
+                          aria-hidden
+                        />
                       ) : null}
                     </button>
                   )

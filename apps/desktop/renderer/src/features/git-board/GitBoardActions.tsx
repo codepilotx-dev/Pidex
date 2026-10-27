@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { lazy, Suspense, useCallback, useState, type ReactNode } from 'react'
 import type { DesktopWorkspace } from '../../../shared/Types.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
@@ -33,7 +34,14 @@ export function useGitBoardActions(onBranchChanged: (projectId: string) => void)
   const allowForcePush = useDesktopSettingsField((settings) => settings.allowForcePush)
   const commitMessagePrompt = useDesktopSettingsField((settings) => settings.commitMessagePrompt)
   const pullRequestPrompt = useDesktopSettingsField((settings) => settings.pullRequestPrompt)
-  const { projects, repositories, capabilities, refreshProject } = useGitBoard()
+  const { projects, repositories, capabilities, refreshProject } = useGitBoard(
+    useShallow((state) => ({
+      projects: state.projects,
+      repositories: state.repositories,
+      capabilities: state.capabilities,
+      refreshProject: state.refreshProject,
+    })),
+  )
   const [workflow, setWorkflow] = useState<{ projectId: string; mode: WorkflowMode } | null>(null)
   const [checkoutProjectId, setCheckoutProjectId] = useState<string | null>(null)
   const [pending, setPending] = useState<Record<string, GitBoardAction | undefined>>({})

@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { desktopClient, loadDesktopTerminalClient } from '../../services/desktop-client/index.js'
 import React, { useCallback, useEffect, useState } from 'react'
 import { OpenTargetIcon } from '../../components/ui/OpenTargetIcon.js'
@@ -7,7 +8,12 @@ import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+} from './UseDesktopSettings.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
 import { permissionPresetViewForConfig } from './PermissionPresetView.js'
 import type {
@@ -67,7 +73,75 @@ type GeneralSettingsProps = {
 
 export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
   const { t } = useLocale()
-  const { draft } = useDesktopSettings()
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedLanguage = useDesktopSettingsDraftValue('language')
+  const subscribedNotifications = useDesktopSettingsDraftValue('notifications')
+  const subscribedPermissionConfig = useDesktopSettingsDraftValue('permissionConfig')
+  const subscribedEnableAutoReviewPermissionMode = useDesktopSettingsDraftValue(
+    'enableAutoReviewPermissionMode',
+  )
+  const subscribedEnableFullAccessPermissionMode = useDesktopSettingsDraftValue(
+    'enableFullAccessPermissionMode',
+  )
+  const subscribedShowContextUsage = useDesktopSettingsDraftValue('showContextUsage')
+  const subscribedDefaultOpenTargetId = useDesktopSettingsDraftValue('defaultOpenTargetId')
+  const subscribedTerminalProfileId = useDesktopSettingsDraftValue('terminalProfileId')
+  const subscribedReviewView = useDesktopSettingsDraftValue('reviewView')
+  const subscribedReviewDelivery = useDesktopSettingsDraftValue('reviewDelivery')
+  const subscribedRustSearchAndDiffKernels = useDesktopSettingsDraftValue(
+    'rustSearchAndDiffKernels',
+  )
+  const subscribedEnableParetoCodeRouter = useDesktopSettingsDraftValue('enableParetoCodeRouter')
+  const subscribedEnableFusionRouter = useDesktopSettingsDraftValue('enableFusionRouter')
+  const subscribedDefaultModeRequestUserInput = useDesktopSettingsDraftValue(
+    'defaultModeRequestUserInput',
+  )
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const { draft } = useMemo(
+    () => ({
+      draft: {
+        ...subscribedDraftActions,
+        values: {
+          language: subscribedLanguage,
+          notifications: subscribedNotifications,
+          permissionConfig: subscribedPermissionConfig,
+          enableAutoReviewPermissionMode: subscribedEnableAutoReviewPermissionMode,
+          enableFullAccessPermissionMode: subscribedEnableFullAccessPermissionMode,
+          showContextUsage: subscribedShowContextUsage,
+          defaultOpenTargetId: subscribedDefaultOpenTargetId,
+          terminalProfileId: subscribedTerminalProfileId,
+          reviewView: subscribedReviewView,
+          reviewDelivery: subscribedReviewDelivery,
+          rustSearchAndDiffKernels: subscribedRustSearchAndDiffKernels,
+          enableParetoCodeRouter: subscribedEnableParetoCodeRouter,
+          enableFusionRouter: subscribedEnableFusionRouter,
+          defaultModeRequestUserInput: subscribedDefaultModeRequestUserInput,
+        },
+        dirty: subscribedDraftDirty,
+        saving: subscribedDraftSaving,
+      },
+    }),
+    [
+      subscribedDraftActions,
+      subscribedLanguage,
+      subscribedNotifications,
+      subscribedPermissionConfig,
+      subscribedEnableAutoReviewPermissionMode,
+      subscribedEnableFullAccessPermissionMode,
+      subscribedShowContextUsage,
+      subscribedDefaultOpenTargetId,
+      subscribedTerminalProfileId,
+      subscribedReviewView,
+      subscribedReviewDelivery,
+      subscribedRustSearchAndDiffKernels,
+      subscribedEnableParetoCodeRouter,
+      subscribedEnableFusionRouter,
+      subscribedDefaultModeRequestUserInput,
+      subscribedDraftDirty,
+      subscribedDraftSaving,
+    ],
+  )
   const {
     permissionConfig,
     enableAutoReviewPermissionMode,

@@ -1,5 +1,6 @@
+import { useMemo } from 'react'
 import React from 'react'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import { useDesktopSettingsField } from './UseDesktopSettings.js'
 import type { DesktopPersonality } from '../../../shared/Types.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
@@ -23,7 +24,36 @@ type Props = {
 }
 
 export function PersonalizationSettings({ onError, onNotice }: Props = {}): React.ReactNode {
-  const { draft } = useDesktopSettings()
+  const subscribedSave = useDesktopSettingsField((state) => state.draft.save)
+  const subscribedPersonality = useDesktopSettingsField((state) => state.draft.values.personality)
+  const subscribedCustomInstructions = useDesktopSettingsField(
+    (state) => state.draft.values.customInstructions,
+  )
+  const subscribedSetValue = useDesktopSettingsField((state) => state.draft.setValue)
+  const subscribedAutoSave = useDesktopSettingsField((state) => state.draft.autoSave)
+  const subscribedSaving = useDesktopSettingsField((state) => state.draft.saving)
+  const { draft } = useMemo(
+    () => ({
+      draft: {
+        save: subscribedSave,
+        values: {
+          personality: subscribedPersonality,
+          customInstructions: subscribedCustomInstructions,
+        },
+        setValue: subscribedSetValue,
+        autoSave: subscribedAutoSave,
+        saving: subscribedSaving,
+      },
+    }),
+    [
+      subscribedSave,
+      subscribedPersonality,
+      subscribedCustomInstructions,
+      subscribedSetValue,
+      subscribedAutoSave,
+      subscribedSaving,
+    ],
+  )
 
   async function saveCustomInstructions(): Promise<void> {
     try {

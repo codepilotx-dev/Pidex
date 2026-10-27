@@ -38,7 +38,7 @@ import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { ThemeFontPicker } from './ThemeFontPicker.js'
 import { ThemePickerDropdown } from './ThemePickerDropdown.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import { useDesktopSettingsField } from './UseDesktopSettings.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
 
 type Props = {
@@ -921,7 +921,31 @@ function SharedFontRow({
 
 export function AppearanceSettings({ onError }: Props): React.ReactNode {
   const theme = useDesktopTheme()
-  const desktopSettings = useDesktopSettings()
+  const subscribedDiffMarkerStyle = useDesktopSettingsField(
+    (state) => state.draft.values.diffMarkerStyle,
+  )
+  const subscribedSetValue = useDesktopSettingsField((state) => state.draft.setValue)
+  const subscribedAutoSave = useDesktopSettingsField((state) => state.draft.autoSave)
+  const subscribedSave = useDesktopSettingsField((state) => state.draft.save)
+  const subscribedSaving = useDesktopSettingsField((state) => state.draft.saving)
+  const desktopSettings = useMemo(
+    () => ({
+      draft: {
+        values: { diffMarkerStyle: subscribedDiffMarkerStyle },
+        setValue: subscribedSetValue,
+        autoSave: subscribedAutoSave,
+        save: subscribedSave,
+        saving: subscribedSaving,
+      },
+    }),
+    [
+      subscribedDiffMarkerStyle,
+      subscribedSetValue,
+      subscribedAutoSave,
+      subscribedSave,
+      subscribedSaving,
+    ],
+  )
   const { t } = useLocale()
   const [resetting, setResetting] = useState(false)
   const [resetFailed, setResetFailed] = useState(false)
@@ -1093,7 +1117,11 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
                     type="button"
                   >
                     {t('高级')}
-                    {expanded ? <ChevronDown size="var(--inline-icon-size, 1em)" /> : <ChevronRight size="var(--inline-icon-size, 1em)" />}
+                    {expanded ? (
+                      <ChevronDown size="var(--inline-icon-size, 1em)" />
+                    ) : (
+                      <ChevronRight size="var(--inline-icon-size, 1em)" />
+                    )}
                   </button>
                 }
                 actions={

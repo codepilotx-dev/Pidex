@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import React from 'react'
 import { Download, RefreshCw, RotateCcw } from 'lucide-react'
 import type { ToolingID, ToolingPreference, ToolingStatus } from '@pidex/agent-protocol'
@@ -8,7 +9,12 @@ import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+} from './UseDesktopSettings.js'
 import { errorMessageOr as errorMessage } from '@pidex/shared/errors'
 
 type Props = {
@@ -48,7 +54,35 @@ const SOURCE_OPTIONS: readonly { value: ToolingPreference; label: string }[] = [
 ]
 
 export function WorkspaceDependenciesSettings({ onError, onNotice }: Props): React.ReactNode {
-  const { draft } = useDesktopSettings()
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedInstallPidexDependencies = useDesktopSettingsDraftValue(
+    'installPidexDependencies',
+  )
+  const subscribedWorkspaceDependenciesMigrated = useDesktopSettingsDraftValue(
+    'workspaceDependenciesMigrated',
+  )
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const { draft } = useMemo(
+    () => ({
+      draft: {
+        ...subscribedDraftActions,
+        values: {
+          installPidexDependencies: subscribedInstallPidexDependencies,
+          workspaceDependenciesMigrated: subscribedWorkspaceDependenciesMigrated,
+        },
+        dirty: subscribedDraftDirty,
+        saving: subscribedDraftSaving,
+      },
+    }),
+    [
+      subscribedDraftActions,
+      subscribedInstallPidexDependencies,
+      subscribedWorkspaceDependenciesMigrated,
+      subscribedDraftDirty,
+      subscribedDraftSaving,
+    ],
+  )
   const legacyManagedPreference = draft.values.installPidexDependencies
   const migrationComplete = draft.values.workspaceDependenciesMigrated
   const [statuses, setStatuses] = React.useState<readonly ToolingStatus[]>([])

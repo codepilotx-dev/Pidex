@@ -13,7 +13,7 @@ import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import { useDesktopSettingsField } from './UseDesktopSettings.js'
 import { Button } from '../../components/ui/Button.js'
 import { Input } from '../../components/ui/Input.js'
 
@@ -31,7 +31,19 @@ type Props = {
 }
 
 export function MemorySettings({ workspacePath }: Props): React.ReactNode {
-  const { draft } = useDesktopSettings()
+  const subscribedEnableMemory = useDesktopSettingsField((state) => state.draft.values.enableMemory)
+  const subscribedSetValue = useDesktopSettingsField((state) => state.draft.setValue)
+  const subscribedAutoSave = useDesktopSettingsField((state) => state.draft.autoSave)
+  const { draft } = useMemo(
+    () => ({
+      draft: {
+        values: { enableMemory: subscribedEnableMemory },
+        setValue: subscribedSetValue,
+        autoSave: subscribedAutoSave,
+      },
+    }),
+    [subscribedEnableMemory, subscribedSetValue, subscribedAutoSave],
+  )
   const normalizedWorkspacePath = workspacePath?.trim() ?? ''
   const hasWorkspace = normalizedWorkspacePath.length > 0
   const [memories, setMemories] = useState<DesktopProjectMemory[]>([])

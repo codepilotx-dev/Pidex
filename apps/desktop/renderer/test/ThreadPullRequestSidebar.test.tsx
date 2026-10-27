@@ -6,31 +6,41 @@ import { SidebarHoverCardProvider } from '../src/features/layout/sidebar/Sidebar
 import { DesktopSettingsProvider } from '../src/features/settings/UseDesktopSettings.js'
 import { mockSessionSnapshot, mockWorkspace } from '../src/services/desktop-client/Fixtures.js'
 import type { SessionListItem } from '../src/UiTypes.js'
-import { applyThreadPullRequestList } from '../src/features/layout/sidebar/ThreadPullRequestStore.js'
+import {
+  applyThreadPullRequestList,
+  threadPullRequestStore,
+} from '../src/features/layout/sidebar/ThreadPullRequestStore.js'
 import { threadPullRequestVisual } from '../src/features/layout/sidebar/ThreadPullRequestPresentation.js'
 
 function renderSessionRows(sessions: SessionListItem[]) {
-  return renderToStaticMarkup(
-    <DesktopSettingsProvider access="read-only">
-      <SidebarHoverCardProvider>
-        <SidebarSessionGroup
-          activeSessionId={null}
-          groupKey="pull-request"
-          now={0}
-          sessions={sessions}
-          pendingPermissionSessionIds={new Set()}
-          titleLoadingIds={new Set()}
-          sessionFallbackTitles={{}}
-          onArchiveSessions={async () => true}
-          onPinSession={() => {}}
-          onSelectSession={() => {}}
-          onToggleSessionUnread={() => {}}
-          onRenameSession={async () => true}
-          onUnpinSession={() => {}}
-        />
-      </SidebarHoverCardProvider>
-    </DesktopSettingsProvider>,
-  )
+  // 静态渲染读取 Zustand 的初始快照；夹具已在渲染前写入缓存。
+  const getInitialState = threadPullRequestStore.getInitialState
+  threadPullRequestStore.getInitialState = threadPullRequestStore.getState
+  try {
+    return renderToStaticMarkup(
+      <DesktopSettingsProvider access="read-only">
+        <SidebarHoverCardProvider>
+          <SidebarSessionGroup
+            activeSessionId={null}
+            groupKey="pull-request"
+            now={0}
+            sessions={sessions}
+            pendingPermissionSessionIds={new Set()}
+            titleLoadingIds={new Set()}
+            sessionFallbackTitles={{}}
+            onArchiveSessions={async () => true}
+            onPinSession={() => {}}
+            onSelectSession={() => {}}
+            onToggleSessionUnread={() => {}}
+            onRenameSession={async () => true}
+            onUnpinSession={() => {}}
+          />
+        </SidebarHoverCardProvider>
+      </DesktopSettingsProvider>,
+    )
+  } finally {
+    threadPullRequestStore.getInitialState = getInitialState
+  }
 }
 
 test('pull request status maps to the documented color and Chinese copy', () => {

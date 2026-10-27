@@ -195,8 +195,8 @@ export const SearchInput = forwardRef<HTMLInputElement, SearchInputProps>(functi
         <Button
           isIconOnly
           aria-label={onClose ? '清除并关闭搜索' : clearLabel}
-          className={cx('search-input-clear', variant === 'outlined' && 'tw:text-app-text-meta')}
-          color="ghostSecondary"
+          className="search-input-clear"
+          color={variant === 'outlined' ? 'ghost' : 'ghostSecondary'}
           onClick={handleClear}
           size="iconMd"
           title={onClose ? '清除并关闭搜索' : clearLabel}

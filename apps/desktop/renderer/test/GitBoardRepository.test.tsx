@@ -235,7 +235,7 @@ test('文件状态保留暂存和工作区的独立标识并复用冲突判定',
   ).toEqual(['!'])
 })
 
-test('卡片只显示文件名、状态，提交历史已移入侧栏，禁用旧服务端分支选择', () => {
+test('仓库列同时显示未提交改动与最近提交，禁用旧服务端分支选择', () => {
   const hook = spyOn(boardContext, 'useGitBoard').mockReturnValue(repositoryColumnContext())
   try {
     const html = renderToStaticMarkup(
@@ -252,10 +252,9 @@ test('卡片只显示文件名、状态，提交历史已移入侧栏，禁用�
     expect(html.slice(html.lastIndexOf('<button', fileNameIndex), fileNameIndex)).toContain('<svg')
     expect(html).not.toContain('src/nested/one.ts')
     expect(html).toContain('>M</span>')
-    // 主区域不再渲染“最近提交”区块；提交历史只在侧栏仓库行下方展示。
-    expect(html).not.toContain('最近提交')
-    expect(html).not.toContain('Commit subject')
-    expect(html).not.toContain('Author Name')
+    // 主区域仓库列并列展示“未提交改动”与“最近提交”。
+    expect(html).toContain('最近提交')
+    expect(html).toContain('Commit subject')
     expect(html).toContain('tw:w-[400px]')
     expect(html).toContain('tw:overflow-y-auto')
     expect(html).toContain('选择查看分支')
@@ -374,7 +373,7 @@ test('筛选栏显示匹配数量，空结果提供重置入口', () => {
   expect(empty).toContain('查看全部仓库')
 })
 
-test('仓库分节只剩未提交改动，仍复用共享折叠动画并默认展开', () => {
+test('仓库分节包含未提交改动与最近提交，复用共享折叠动画并默认展开', () => {
   const hook = spyOn(boardContext, 'useGitBoard').mockReturnValue(repositoryColumnContext())
   try {
     const html = renderToStaticMarkup(
@@ -385,10 +384,9 @@ test('仓库分节只剩未提交改动，仍复用共享折叠动画并默认�
         onBranchChange={() => {}}
       />,
     )
-    // 提交历史移入侧栏后，列内只有“未提交改动”一个分节。
-    expect(html.match(/class="ui-disclosure-content /g)).toHaveLength(1)
-    expect(html.match(/data-expanded="true"/g)).toHaveLength(1)
-    expect(html.match(/aria-expanded="true"/g)).toHaveLength(1)
+    expect(html.match(/class="ui-disclosure-content /g)).toHaveLength(2)
+    expect(html.match(/data-expanded="true"/g)).toHaveLength(2)
+    expect(html.match(/aria-expanded="true"/g)).toHaveLength(2)
     expect(html).not.toContain('<details')
   } finally {
     hook.mockRestore()
@@ -441,18 +439,26 @@ test('右侧只刷新当前分组，左侧刷新全部项目，空分组不请�
   expect(gitBoardRefreshTargets([project, other], [])).toEqual([])
 })
 
-test('页面直接使用速览或当前分组名称且不渲染说明与重复导航', () => {
+test('默认未选中项目展示空状态提示，选中项目后展示常驻左右分栏并移除多仓库筛选栏', () => {
   const controller = {
-    view: { id: null as string | null, name: '速览', projectIds: [] as string[] },
+    view: { id: null as string | null, name: 'Git 看板', projectIds: [] as string[] },
+    selectedProjectId: null as string | null,
+    selectedProject: null as typeof project | null,
     state: { quickProjectIds: [], quickCollapsed: false, groups: [] },
     projects: [project],
     repositories: {} as Record<string, { result: DesktopGitStatusResult }>,
+    selectedRefs: {} as Record<string, string>,
+    supportsCommitRef: false,
     capabilities: [] as string[],
     ready: true,
     refreshing: false,
     refreshView: () => {},
     refreshProject: () => {},
+    selectBranch: () => {},
     toggleQuickView: () => {},
+    selectedReview: null,
+    selectReview: () => {},
+    clearReview: () => {},
   }
   const hook = spyOn(boardContext, 'useGitBoard').mockReturnValue(
     controller as unknown as ReturnType<typeof boardContext.useGitBoard>,
@@ -464,20 +470,27 @@ test('页面直接使用速览或当前分组名称且不渲染说明与重复�
       </DesktopSettingsProvider>,
     )
   try {
-    const quick = render()
-    expect(quick).toContain('>速览</h1>')
-    expect(quick).not.toContain('primary-page-layout__description')
-    expect(quick).not.toContain('primary-page-layout__navigation')
-    expect(quick).not.toContain('Git 看板')
-    expect(quick).toContain('刷新')
-    controller.view = { id: 'test', name: '测试', projectIds: [project.projectId!] }
-    controller.projects = [project]
+    const empty = render()
+    expect(empty).toContain('>Git 看板</h1>')
+    expect(empty).toContain('从左侧选择一个项目查看 Git 状态')
+    expect(empty).not.toContain('>速览</h1>')
+    expect(empty).not.toContain('primary-page-layout__description')
+    expect(empty).not.toContain('primary-page-layout__navigation')
+    expect(empty).toContain('刷新')
+
+    controller.selectedProjectId = project.projectId!
+    controller.selectedProject = project
+    controller.view = {
+      id: project.projectId!,
+      name: project.name,
+      projectIds: [project.projectId!],
+    }
     controller.repositories = { [project.projectId!]: { result } }
-    const filtered = render()
-    expect(filtered).toContain('>测试</h1>')
-    expect(filtered).toContain('primary-page-layout__navigation')
-    expect(filtered).toContain('aria-label="仓库筛选"')
-    expect(filtered).toContain('匹配 1 / 1 个仓库')
+    const selected = render()
+    expect(selected).toContain(`>${project.name}</h1>`)
+    expect(selected).not.toContain('primary-page-layout__navigation')
+    expect(selected).not.toContain('aria-label="仓库筛选"')
+    expect(selected).toContain('选择未提交文件或提交记录查看变更详情')
   } finally {
     hook.mockRestore()
   }
@@ -620,9 +633,9 @@ test('冲突详情显示普通状态说明，仓库列继续展示冲突文件',
     )
     expect(column).toContain('存在未解决的冲突')
     expect(column).toContain('aria-label="冲突"')
-    // 冲突文件仍在列内展示，提交历史已移到侧栏。
+    // 冲突文件与最近提交均在列内展示。
     expect(column).toContain('>one.ts</span>')
-    expect(column).not.toContain(commit.subject)
+    expect(column).toContain(commit.subject)
     const details = renderToStaticMarkup(
       <DesktopSettingsProvider access="read-only">
         <GitBoardDetails
@@ -642,7 +655,6 @@ test('冲突详情显示普通状态说明，仓库列继续展示冲突文件',
   }
 })
 
-
 test('仅侧栏可见的仓库加载历史，不请求主区域 Diff 和分支', async () => {
   const status = spyOn(desktopClient, 'getWorkspaceGitStatus').mockResolvedValue(result)
   const summary = spyOn(reviewAgentClient, 'summary')
@@ -650,8 +662,12 @@ test('仅侧栏可见的仓库加载历史，不请求主区域 Diff 和分支',
   const commits = spyOn(reviewAgentClient, 'commits').mockResolvedValue([commit])
   try {
     const loaded = await loadGitBoardRepository(project, {
-      supportsCommitRef: true, supportsBranches: true, visible: false,
-      loadHistory: true, selectedRef: 'feature', isCancelled: () => false,
+      supportsCommitRef: true,
+      supportsBranches: true,
+      visible: false,
+      loadHistory: true,
+      selectedRef: 'feature',
+      isCancelled: () => false,
     })
     expect(loaded?.commits).toEqual([commit])
     expect(commits).toHaveBeenCalledWith(project.path, project.projectId, 'feature', 10)
@@ -672,15 +688,26 @@ test('展开提交只补拉历史，保留仓库状态与 Diff，失败后可重
   const commits = spyOn(reviewAgentClient, 'commits').mockRejectedValueOnce(new Error('retry'))
   const previous = { result, diffStats: { additions: 8, deletions: 2 }, commits: [commit] }
   const options = {
-    supportsCommitRef: true, supportsBranches: true, visible: true,
-    loadHistory: true, historyOnly: true, commitLimit: 20, isCancelled: () => false,
+    supportsCommitRef: true,
+    supportsBranches: true,
+    visible: true,
+    loadHistory: true,
+    historyOnly: true,
+    commitLimit: 20,
+    isCancelled: () => false,
   }
   try {
-    const failed = await loadGitBoardRepository(project, { ...options, previousRepository: previous })
+    const failed = await loadGitBoardRepository(project, {
+      ...options,
+      previousRepository: previous,
+    })
     expect(failed?.commits).toEqual([commit])
     expect(failed?.historyError).toBeDefined()
     commits.mockResolvedValue([commit])
-    const loaded = await loadGitBoardRepository(project, { ...options, previousRepository: failed! })
+    const loaded = await loadGitBoardRepository(project, {
+      ...options,
+      previousRepository: failed!,
+    })
     expect(loaded?.historyError).toBeUndefined()
     expect(loaded?.diffStats).toEqual(previous.diffStats)
     expect(loaded?.result).toBe(result)

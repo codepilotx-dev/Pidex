@@ -9,6 +9,9 @@ export const enUS: Record<string, string> = {
   加入看板: 'Add to board',
   从看板移除: 'Remove from board',
   '从左侧加入仓库，或打开一个分组': 'Add a repository from the sidebar or open a group',
+  '从左侧选择一个项目查看 Git 状态': 'Select a project from the sidebar to view Git status',
+  选择未提交文件或提交记录查看变更详情:
+    'Select an uncommitted file or commit to view change details',
   '看板保存失败，本次修改仅在当前窗口有效':
     'Could not save the board. Changes are available only in this window.',
   先将需要查看的仓库加入看板: 'Add repositories you want to view to the board',

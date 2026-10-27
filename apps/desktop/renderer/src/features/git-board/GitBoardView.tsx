@@ -1,10 +1,10 @@
-import { lazy, Suspense, useRef, useState, type ReactNode } from 'react'
+import { useShallow } from 'zustand/react/shallow'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
 import { ChevronDown, GitBranch, RefreshCw } from 'lucide-react'
 import type { DesktopWorkspace } from '../../../shared/Types.js'
 import { Tooltip } from '../../components/ui/Tooltip.js'
 import { Select } from '../../components/ui/Select.js'
 import { DisclosureController } from '../../components/ui/DisclosureController.js'
-import { useScrollEdgeState } from '../../hooks/UseScrollEdgeState.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import { Button } from '../../components/ui/Button.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
@@ -19,8 +19,7 @@ import {
   type GitBoardReviewSelection,
 } from './GitBoardContext.js'
 import { useGitBoardActions } from './GitBoardActions.js'
-import { filterGitBoardProjectIds, type GitBoardFilter } from './GitBoardFilter.js'
-import { GitBoardFilterBar, GitBoardFilterEmpty } from './GitBoardFilterBar.js'
+import { GitBoardCommitRows } from './GitBoardCommitRows.js'
 import { GitBoardGithubView } from './GitBoardGithubView.js'
 import {
   GIT_BOARD_ACTION_LABEL,
@@ -162,7 +161,17 @@ export function RepositoryColumn({
     selectBranch,
     supportsCommitRef,
     capabilities,
-  } = useGitBoard()
+    selectedReview,
+  } = useGitBoard(
+    useShallow((state) => ({
+      refreshView: state.refreshView,
+      selectedRefs: state.selectedRefs,
+      selectBranch: state.selectBranch,
+      supportsCommitRef: state.supportsCommitRef,
+      capabilities: state.capabilities,
+      selectedReview: state.selectedReview,
+    })),
+  )
   const result = repository?.result
   const status = result?.ok ? result.status : null
   const actionAvailability = gitBoardActionAvailability({
@@ -311,6 +320,11 @@ export function RepositoryColumn({
               {result.status.files.map((file) => (
                 <SidebarRow
                   key={file.path}
+                  active={
+                    selectedReview?.project.projectId === project.projectId &&
+                    selectedReview.source.kind === 'uncommitted' &&
+                    selectedReview.path === file.path
+                  }
                   asChild
                   layout="flex"
                   leadingMode="none"
@@ -345,6 +359,9 @@ export function RepositoryColumn({
                 </SidebarRow>
               ))}
             </BoardSection>
+            <BoardSection title={t('最近提交')} count={repository?.commits?.length ?? 0}>
+              <GitBoardCommitRows project={project} repository={repository} onSelect={onSelect} />
+            </BoardSection>
           </>
         )}
       </div>
@@ -352,103 +369,103 @@ export function RepositoryColumn({
   )
 }
 
-function GroupBoard({
-  filter,
-  projectIds,
-  onResetFilter,
-}: {
-  filter: GitBoardFilter
-  projectIds: readonly string[]
-  onResetFilter: () => void
-}) {
+function ProjectBoard() {
   const { t } = useLocale()
   const {
     view,
+    selectedProjectId,
+    selectedProject,
     projects,
     repositories,
-    state,
-    toggleQuickView,
     ready,
     selectedReview,
     selectReview,
     clearReview,
-  } = useGitBoard()
-  // 选中态来自 Context：侧栏提交行与列内的未提交文件行共享同一份右侧详情。
+  } = useGitBoard(
+    useShallow((state) => ({
+      view: state.view,
+      selectedProjectId: state.selectedProjectId,
+      selectedProject: state.selectedProject,
+      projects: state.projects,
+      repositories: state.repositories,
+      ready: state.ready,
+      selectedReview: state.selectedReview,
+      selectReview: state.selectReview,
+      clearReview: state.clearReview,
+    })),
+  )
+  const activeProjectId =
+    selectedProjectId !== undefined ? selectedProjectId : (view?.projectIds?.[0] ?? null)
+  const project =
+    selectedProject ??
+    (activeProjectId ? (projects.find((item) => item.projectId === activeProjectId) ?? null) : null)
   const selectedResult = selectedReview
     ? repositories[selectedReview.project.projectId!]?.result
     : undefined
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const edges = useScrollEdgeState(viewportRef, { axis: 'x', version: projectIds })
   const actions = useGitBoardActions((projectId) => {
     if (selectedReview?.project.projectId === projectId) clearReview()
   })
+
+  if (!activeProjectId) {
+    return (
+      <div
+        inert={ready === false}
+        className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:items-center tw:justify-center tw:overflow-hidden"
+      >
+        <p className="tw:m-auto tw:type-body-sm tw:text-app-text-meta">
+          {t('从左侧选择一个项目查看 Git 状态')}
+        </p>
+      </div>
+    )
+  }
+
+  if (!project) {
+    return (
+      <div
+        inert={ready === false}
+        className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:items-center tw:justify-center tw:overflow-hidden"
+      >
+        <p className="tw:m-auto tw:type-body-sm tw:text-app-text-meta">
+          {t('项目已移除或暂不可用')}
+        </p>
+      </div>
+    )
+  }
+
   return (
     <div
       inert={ready === false}
-      className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:overflow-hidden"
+      className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:gap-3 tw:overflow-hidden"
     >
-      <div className="tw:relative tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1">
-        <div
-          ref={viewportRef}
-          className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:gap-3 tw:overflow-x-auto tw:overflow-y-hidden tw:pb-3"
+      <RepositoryColumn
+        key={project.projectId}
+        project={project}
+        repository={repositories[project.projectId!]}
+        actionBusy={actions.isBusy(project.projectId!)}
+        actionError={actions.errorFor(project.projectId!)}
+        onSelect={selectReview}
+        onAction={(action) => actions.begin(project, action)}
+        onBranchChange={() => {
+          if (
+            selectedReview?.project.projectId === project.projectId &&
+            selectedReview.source.kind === 'commit'
+          )
+            clearReview()
+        }}
+      />
+      {selectedReview ? (
+        <Suspense
+          fallback={
+            <aside
+              aria-label={t('变更详情')}
+              className="tw:flex tw:h-full tw:min-w-[360px] tw:flex-1 tw:flex-col tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-main tw:p-4"
+            >
+              <p role="status" className="tw:m-0 tw:type-body-sm tw:text-app-text-meta">
+                {t('加载中')}
+              </p>
+            </aside>
+          }
         >
-          {!view.projectIds.length && (
-            <p className="tw:m-auto tw:type-body-sm tw:text-app-text-meta">
-              {t('从左侧加入仓库，或打开一个分组')}
-            </p>
-          )}
-          {view.projectIds.length > 0 && !projectIds.length && (
-            <GitBoardFilterEmpty filter={filter} onReset={onResetFilter} />
-          )}
-          {projectIds.map((id) => {
-            const project = projects.find((item) => item.projectId === id)
-            return project ? (
-              <RepositoryColumn
-                key={id}
-                project={project}
-                repository={repositories[id]}
-                actionBusy={actions.isBusy(project.projectId!)}
-                actionError={actions.errorFor(project.projectId!)}
-                onSelect={selectReview}
-                onAction={(action) => actions.begin(project, action)}
-                onBranchChange={() => {
-                  // 切换查看分支后旧提交不再属于当前历史；Context 也会清理该仓库的提交选中态。
-                  if (
-                    selectedReview?.project.projectId === id &&
-                    selectedReview.source.kind === 'commit'
-                  )
-                    clearReview()
-                }}
-              />
-            ) : (
-              <div
-                key={id}
-                className="tw:min-w-[360px] tw:p-4 tw:type-body-sm tw:text-app-text-meta"
-              >
-                {t('项目已移除或暂不可用')}
-                <Button variant="ghost" onClick={() => toggleQuickView(id)}>
-                  {t(state.quickProjectIds.includes(id) ? '从看板移除' : '在速览中打开')}
-                </Button>
-              </div>
-            )
-          })}
-        </div>
-        {!edges.atStart && (
-          <div
-            aria-hidden="true"
-            className="tw:pointer-events-none tw:absolute tw:inset-y-0 tw:bottom-7 tw:left-0 tw:w-4 tw:bg-linear-to-r tw:from-app-canvas tw:to-transparent tw:forced-colors:hidden"
-          />
-        )}
-        {!edges.atEnd && (
-          <div
-            aria-hidden="true"
-            className="tw:pointer-events-none tw:absolute tw:inset-y-0 tw:bottom-7 tw:right-0 tw:w-4 tw:bg-linear-to-l tw:from-app-canvas tw:to-transparent tw:forced-colors:hidden"
-          />
-        )}
-      </div>
-      {/* 详情跟随选中态渲染，而不是跟随当前列：点击不在看板中的仓库提交同样打开详情。 */}
-      {selectedReview && (
-        <Suspense fallback={<p role="status">{t('加载中')}</p>}>
           <GitBoardDetails
             key={`${selectedReview.project.projectId}:${JSON.stringify(selectedReview.source)}:${selectedReview.path ?? ''}`}
             {...selectedReview}
@@ -458,6 +475,15 @@ function GroupBoard({
             onClose={clearReview}
           />
         </Suspense>
+      ) : (
+        <aside
+          aria-label={t('变更详情')}
+          className="tw:flex tw:h-full tw:min-w-[360px] tw:flex-1 tw:flex-col tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-main tw:p-4"
+        >
+          <p className="tw:m-0 tw:type-body-sm tw:text-app-text-meta">
+            {t('选择未提交文件或提交记录查看变更详情')}
+          </p>
+        </aside>
       )}
       {actions.host}
     </div>
@@ -466,14 +492,44 @@ function GroupBoard({
 
 export function GitBoardView() {
   const { t } = useLocale()
-  const { view, remoteView, repositories, refreshView, refreshGithubRepositories, refreshing } =
-    useGitBoard()
-  const [filter, setFilter] = useState<GitBoardFilter>('all')
+  const {
+    view,
+    selectedProjectId,
+    selectedProject,
+    projects,
+    remoteView,
+    refreshView,
+    refreshGithubRepositories,
+    refreshing,
+  } = useGitBoard(
+    useShallow((state) => ({
+      view: state.view,
+      selectedProjectId: state.selectedProjectId,
+      selectedProject: state.selectedProject,
+      projects: state.projects,
+      remoteView: state.remoteView,
+      refreshView: state.refreshView,
+      refreshGithubRepositories: state.refreshGithubRepositories,
+      refreshing: state.refreshing,
+    })),
+  )
   const [githubSearch, setGithubSearch] = useState('')
   const [githubRefreshing, setGithubRefreshing] = useState(false)
-  const filteredProjectIds = filterGitBoardProjectIds(view.projectIds, repositories, filter)
-  // GitHub 仓库页是看板内的临时视图：只保留主导航与刷新，不渲染分组筛选栏。
   const githubView = remoteView === 'github'
+  const activeProjectId =
+    selectedProjectId !== undefined ? selectedProjectId : (view?.projectIds?.[0] ?? null)
+  const project =
+    selectedProject ??
+    (activeProjectId
+      ? (projects?.find((item) => item.projectId === activeProjectId) ?? null)
+      : null)
+  const pageTitle = githubView
+    ? t('GitHub 仓库')
+    : project
+      ? project.name
+      : activeProjectId && view?.name
+        ? view.name
+        : t('Git 看板')
   // 与宠物页一致的页头搜索：pill + outlined，占满页头搜索行。
   const githubHeaderSearch = (
     <div className="tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:gap-2">
@@ -494,18 +550,8 @@ export function GitBoardView() {
     <PrimaryPageLayout
       className="tw:overflow-y-hidden tw:[--page-content-max-width:100%] tw:[&.primary-page-layout]:[scrollbar-gutter:auto]"
       bodyClassName="tw:min-h-0 tw:basis-0 tw:overflow-hidden tw:pb-2"
-      title={githubView ? t('GitHub 仓库') : view.id === null ? t('速览') : view.name}
+      title={pageTitle}
       search={githubView ? githubHeaderSearch : undefined}
-      navigation={
-        !githubView && view.projectIds.length ? (
-          <GitBoardFilterBar
-            filter={filter}
-            matched={filteredProjectIds.length}
-            total={view.projectIds.length}
-            onChange={setFilter}
-          />
-        ) : undefined
-      }
       actions={
         githubView ? (
           <Tooltip content={t('刷新仓库列表')}>
@@ -529,16 +575,16 @@ export function GitBoardView() {
             </Button>
           </Tooltip>
         ) : (
-          <Tooltip content={t('刷新当前分组仓库')}>
+          <Tooltip content={t('刷新仓库')}>
             <Button
               isIconOnly
               nativeTitle={false}
-              title={t('刷新当前分组仓库')}
+              title={t('刷新仓库')}
               aria-busy={refreshing}
               variant="ghost"
               shape="pill"
               size="md"
-              disabled={refreshing}
+              disabled={refreshing || !activeProjectId}
               onClick={refreshView}
             >
               <RefreshCw
@@ -559,12 +605,7 @@ export function GitBoardView() {
           search={githubSearch}
         />
       ) : (
-        <GroupBoard
-          key={view.id ?? 'quick-view'}
-          filter={filter}
-          projectIds={filteredProjectIds}
-          onResetFilter={() => setFilter('all')}
-        />
+        <ProjectBoard key={activeProjectId ?? 'empty'} />
       )}
     </PrimaryPageLayout>
   )

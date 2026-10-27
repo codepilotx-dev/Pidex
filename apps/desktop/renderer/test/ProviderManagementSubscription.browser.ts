@@ -105,7 +105,7 @@ if (process.versions.bun) {
           }))
           builder.onLoad({ filter: /^settings$/, namespace: 'fixture' }, () => ({
             contents:
-              'export const useDesktopSettings = () => ({settingsLoaded: true, firstUseSetupCompleted: 1});',
+              'export const useDesktopSettingsField = selector => selector({settingsLoaded: true, firstUseSetupCompleted: 1});',
             loader: 'js',
           }))
         },
