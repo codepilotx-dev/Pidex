@@ -62,7 +62,6 @@ export function PetOverlayPage(): React.ReactNode {
     return (
       <main
         className="pet-overlay-page tw:relative tw:size-full tw:select-none tw:pointer-events-none"
-        data-startup-surface-ready="true"
       >
         <div
           className="pet-overlay-empty pet-overlay-interactive tw:absolute tw:top-2 tw:right-2 tw:left-2 tw:flex tw:max-h-55 tw:min-h-[70px] tw:flex-col tw:items-stretch tw:gap-2 tw:overflow-auto tw:rounded-xl tw:border tw:border-app-border tw:bg-app-raised tw:px-4 tw:py-3 tw:text-app-text tw:shadow-lg tw:backdrop-blur-none tw:pointer-events-auto"
@@ -78,7 +77,6 @@ export function PetOverlayPage(): React.ReactNode {
   return (
     <main
       className="pet-overlay-page tw:relative tw:size-full tw:select-none tw:pointer-events-none"
-      data-startup-surface-ready="true"
     >
       {notification || greeting ? (
         <section

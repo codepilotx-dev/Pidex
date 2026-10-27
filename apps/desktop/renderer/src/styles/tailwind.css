@@ -13,14 +13,8 @@
 @import './base.css';
 @import './design-system/tokens.css';
 @import './design-system/codex-semantic-tokens.css';
-@import './primitives/scroll-area.css';
-@import './primitives/skeleton.css';
-@import './primitives/search-input.css';
-@import './primitives/date-picker.css';
-@import './primitives/switch.css';
 @import './primitives/chrome.css';
 @import './primitives/right-dock.css';
-@import './primitives/button.css';
 @import './primitives/interaction.css';
 @import './primitives/overlays.css';
 @import './primitives/sidebar.css';
@@ -30,12 +24,8 @@
 @import './primitives/file-editor.css';
 @import './primitives/composer.css';
 @import './primitives/conversation.css';
-@import './components/card.css';
-@import './components/chip.css';
-@import './components/input.css';
 @import './components/interactive-row.css';
 @import './components/menu-item.css';
-@import './components/switch.css';
 @import './popover.css';
 @import './modal.css';
 @import './features/layout-workbench.css';

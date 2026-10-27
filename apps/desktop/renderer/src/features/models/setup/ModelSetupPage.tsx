@@ -1,3 +1,4 @@
+import { startupSurfaceReadyRef } from '../../../startup/StartupSplashHandoff.js'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { Check, ChevronLeft, Server } from 'lucide-react'
 import type React from 'react'
@@ -362,7 +363,7 @@ export function ModelSetupPage(): React.ReactNode {
   return (
     <div
       className="model-setup-page tw:grid tw:h-screen tw:w-full tw:min-w-0 tw:grid-rows-[36px_minmax(0,1fr)] tw:overflow-hidden tw:bg-app-canvas tw:text-app-text"
-      data-startup-surface-ready="true"
+      ref={startupSurfaceReadyRef}
     >
       <header className="model-setup-titlebar tw:flex tw:h-9 tw:[-webkit-app-region:drag] tw:min-w-0 tw:items-center tw:justify-between tw:border-b-[0.5px] tw:border-b-app-border-subtle">
         <span className="model-setup-brand tw:ps-4 tw:text-app-text-soft tw:type-control tw:tracking-[0.01em]">

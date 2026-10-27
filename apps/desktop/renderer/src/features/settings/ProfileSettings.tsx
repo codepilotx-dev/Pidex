@@ -463,8 +463,8 @@ function ProfileLoadingSkeleton(): React.ReactNode {
       <section className="profile-loading-stats" aria-hidden="true">
         {Array.from({ length: 5 }, (_, index) => (
           <div key={index}>
-            <SkeletonBlock />
-            <SkeletonBlock />
+            <SkeletonBlock className="tw:h-[18px] tw:w-[42px] tw:rounded-md" />
+            <SkeletonBlock className="tw:h-[14px] tw:w-[62px] tw:rounded-md" />
           </div>
         ))}
       </section>
@@ -472,7 +472,7 @@ function ProfileLoadingSkeleton(): React.ReactNode {
         <SkeletonBlock className="profile-loading-heading tw:h-5 tw:w-23 tw:rounded-md" />
         <div className="profile-loading-contributions tw:grid tw:grid-cols-12 tw:gap-1">
           {Array.from({ length: 84 }, (_, index) => (
-            <SkeletonBlock key={index} />
+            <SkeletonBlock key={index} className="tw:aspect-square tw:w-full tw:rounded-md" />
           ))}
         </div>
       </section>
@@ -482,12 +482,12 @@ function ProfileLoadingSkeleton(): React.ReactNode {
       >
         <div>
           {Array.from({ length: 5 }, (_, index) => (
-            <SkeletonBlock key={index} />
+            <SkeletonBlock key={index} className="tw:h-5 tw:w-full tw:rounded-md" />
           ))}
         </div>
         <div>
           {Array.from({ length: 5 }, (_, index) => (
-            <SkeletonBlock key={index} />
+            <SkeletonBlock key={index} className="tw:h-5 tw:w-full tw:rounded-md" />
           ))}
         </div>
       </section>

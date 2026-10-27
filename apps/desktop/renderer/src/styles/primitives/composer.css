@@ -290,4 +290,19 @@
       transform: translateY(0);
     }
   }
+
+  .composer {
+    border: 1px solid var(--cpx-sys-color-border-default);
+    border-radius: var(--cpx-comp-composer-radius);
+    background: var(--cpx-comp-surface-raised);
+    backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));
+    box-shadow: var(--cpx-comp-composer-shadow);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .composer {
+      backdrop-filter: none;
+      background: var(--cpx-comp-surface-floating);
+    }
+  }
 }

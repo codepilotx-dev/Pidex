@@ -191,9 +191,6 @@
     align-items: center;
     gap: 0;
   }
-  .file-breadcrumb-toolbar__open-group .icon-button {
-    border: 1px solid var(--cpx-sys-color-border-subtle);
-  }
 
   .file-breadcrumb-toolbar__open {
     border-radius: var(--cpx-sys-radius-md) 0 0 var(--cpx-sys-radius-md);
@@ -321,21 +318,5 @@
 
   .desktop-main-route {
     min-width: 0;
-  }
-
-  .file-breadcrumb-toolbar
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    ):hover,
-  .file-breadcrumb-toolbar
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    )[data-state='open'],
-  .file-breadcrumb-toolbar
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    )[data-active] {
-    background: var(--cpx-sys-color-hover);
-    color: var(--cpx-sys-color-fg-primary);
   }
 }

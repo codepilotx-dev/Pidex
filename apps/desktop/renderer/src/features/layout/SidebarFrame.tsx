@@ -244,11 +244,11 @@ export function SidebarFrame({
             tabIndex={0}
           />
         ) : null}
-        <div className="icon-button sidebar-brand-floating tw:hidden tw:text-app-text-meta">
+        <div className="sidebar-brand-floating tw:hidden tw:shrink-0 tw:text-app-text-meta">
           <Bot size={APP_ICON_SIZE} />
         </div>
         <History
-          className="icon-button sidebar-history-watermark tw:hidden tw:text-app-text-meta"
+          className="sidebar-history-watermark tw:hidden tw:shrink-0 tw:text-app-text-meta"
           size={APP_ICON_SIZE}
         />
       </motion.aside>

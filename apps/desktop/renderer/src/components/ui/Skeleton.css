@@ -1,0 +1,9 @@
+@layer primitives {
+  .ui-skeleton-block {
+    background-color: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-secondary) 7%,
+      var(--cpx-sys-color-surface-panel)
+    );
+  }
+}

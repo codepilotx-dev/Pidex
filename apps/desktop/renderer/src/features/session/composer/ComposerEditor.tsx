@@ -1,3 +1,4 @@
+import { reportStartupReady } from '../../../startup/StartupSplashHandoff.js'
 import { history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history'
 import { baseKeymap, splitBlock } from 'prosemirror-commands'
 import { keymap } from 'prosemirror-keymap'
@@ -301,6 +302,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       })
 
       viewRef.current = view
+      if (window.location.hash.split('?')[0] === '#/new' && view.editable) reportStartupReady()
       const unregisterEditTarget = registerTarget(view.dom, {
         getCapabilities: () => {
           const selection = view.state.selection

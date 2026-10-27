@@ -9,6 +9,12 @@
 
 ### Changed
 
+- [desktop/renderer] 收敛 Renderer 样式所有权：基础组件自身拥有外观与交互状态，按需就近维护私有样式（Button、ToggleSwitch、Input、Chip、SearchInput、DatePicker、ScrollArea、Skeleton）；清理跨层级后代选择器与重复样式规则，在 style-contracts 中登记组件样式入口并严格校验级联层级约束。
+
+- [desktop] 启动改为同源本地应用壳，认证就绪后挂载业务界面；加载遮罩仅在首屏提交后交接一次，重连保留工作台，组件错误与启动资源失败分别处理。
+
+- [desktop] 统一侧边栏行与面板外观规范：设置页侧栏改用与首页一致的纯白底色与统一边框；统一设置分类与供应商侧栏行样式至首页标准，统一使用 grid 网格布局、APP_ICON_SIZE (16px) 标准图标、8px 内容内边距与滚动条缓冲间距，并对齐分组标题对齐线。
+
 - [desktop] 优化下拉菜单浮层阴影与弹出贴合：将下拉菜单独立为细腻轻量的多层语义阴影（--cpx-comp-dropdown-menu-shadow），新增基于 data-side 的方向感知阴影（向上弹出时反向微投，避免向下覆盖遮挡底层触发按钮）；保持标准紧凑的 4px sideOffset 间距，消除浮层阴影造成底栏按钮加深看不清的问题。
 
 - [desktop] 渲染层状态管理全面重构为 Zustand 架构：将 Provider 管理、会话展示、输入框草稿、工作区标题及多面板状态迁移至模块化 Zustand store，补齐细粒度订阅与全量回归测试套件。

@@ -52,14 +52,6 @@
       width: 22rem;
     }
 
-    .primary-page-layout__header--with-search .primary-page-layout__search .search-input {
-      width: 15rem;
-    }
-
-    .primary-page-layout__header--with-search .primary-page-layout__search:has(.pet-catalog-filters) .search-input {
-      width: 100%;
-    }
-
     .primary-page-layout__header--with-search .primary-page-layout__actions {
       grid-column: 3;
       grid-row: 1;

@@ -1,9 +1,5 @@
 /*
- * ToggleSwitch 残余样式：旋钮的填充色与描边色来自 switch 组件调色板，并且必须在
- * 强制颜色（forced-colors）模式下保持可读——此时填充会解析为 ButtonText/GrayText，
- * 这两个系统颜色没有对应的 utility（GrayText 连组件令牌都没有）。视觉测试也会读取
- * 旋钮的 computed background-color / box-shadow，因此这些声明集中保留在此处，
- * 而不是被拆进 utilities。
+ * ToggleSwitch private styles: forced-colors and thumb fills that cannot be utility-based.
  */
 @layer primitives {
   .toggle-knob {

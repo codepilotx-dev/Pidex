@@ -136,7 +136,7 @@ export function FileBreadcrumbToolbar({
         <div className="file-breadcrumb-toolbar__open-group">
           <Button
             isIconOnly
-            color="ghostSecondary"
+            variant="outline"
             size="toolbar"
             className="file-breadcrumb-toolbar__open"
             disabled={!absolutePath || !preferredOpenTarget}
@@ -168,7 +168,7 @@ export function FileBreadcrumbToolbar({
               <Button
                 isIconOnly
                 className="file-breadcrumb-toolbar__open-menu"
-                color="ghostSecondary"
+                variant="outline"
                 disabled={!absolutePath || openTargets.length === 0}
                 size="toolbar"
                 title="选择外部打开方式"

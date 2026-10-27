@@ -69,6 +69,24 @@ describe('loading interaction primitives', () => {
     expect(textButtonHtml).not.toContain('tw:px-2')
   })
 
+  test('button asChild propagates visual and interactive data attributes to custom child element', () => {
+    const asChildHtml = renderToStaticMarkup(
+      <Button asChild variant="primary" size="sm" active>
+        <a href="#test" className="custom-link">
+          链接按钮
+        </a>
+      </Button>,
+    )
+
+    expect(asChildHtml).toContain('href="#test"')
+    expect(asChildHtml).toContain('custom-link')
+    expect(asChildHtml).toContain('ui-button')
+    expect(asChildHtml).toContain('data-variant="primary"')
+    expect(asChildHtml).toContain('data-color="primary"')
+    expect(asChildHtml).toContain('data-size="sm"')
+    expect(asChildHtml).toContain('data-active="true"')
+  })
+
   test('button and control primitives do not trim text-box metrics to avoid clipping CJK glyphs', async () => {
     const { readFile } = await import('node:fs/promises')
     const { resolve } = await import('node:path')
@@ -76,11 +94,11 @@ describe('loading interaction primitives', () => {
     const buttonHtml = renderToStaticMarkup(<Button>确认</Button>)
     expect(buttonHtml).not.toContain('tw:text-trim')
 
-    const buttonCss = await readFile(resolve(import.meta.dir, '../src/styles/primitives/button.css'), 'utf8')
+    const buttonCss = await readFile(resolve(import.meta.dir, '../src/components/ui/Button.css'), 'utf8')
     expect(buttonCss).not.toContain('text-box-trim')
     expect(buttonCss).not.toContain('text-box:')
 
-    const chipCss = await readFile(resolve(import.meta.dir, '../src/styles/components/chip.css'), 'utf8')
+    const chipCss = await readFile(resolve(import.meta.dir, '../src/components/ui/Chip.css'), 'utf8')
     // Ensure .chip-button does not apply to child > span which causes nested double padding
     expect(chipCss).not.toMatch(/\.chip-button\s*,\s*\.chip-button\s*>\s*span/)
     expect(chipCss).not.toContain('text-box-trim')
@@ -98,7 +116,7 @@ describe('loading interaction primitives', () => {
     expect(menuItemCss).not.toContain('text-box-trim')
     expect(menuItemCss).not.toContain('text-box:')
 
-    const inputCss = await readFile(resolve(import.meta.dir, '../src/styles/components/input.css'), 'utf8')
+    const inputCss = await readFile(resolve(import.meta.dir, '../src/components/ui/Input.css'), 'utf8')
     expect(inputCss).not.toContain('text-box-trim')
     expect(inputCss).not.toContain('text-box:')
 

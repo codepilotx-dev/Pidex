@@ -37,4 +37,27 @@
   .chip-dot-track {
     stroke-opacity: 0.2;
   }
+
+  .composer .chip-button:hover:not(:disabled) {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .composer .chip-button[aria-expanded='true'] {
+    background: var(--cpx-sys-color-selected);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .composer .chip-button[aria-expanded='true'] > svg:last-child {
+    transform: rotate(180deg);
+  }
+
+  .composer .chip-button > svg:last-child:not(.chip-button-spinner) {
+    transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+  }
+
+  .composer-plan-mode-chip.active,
+  .composer-plan-mode-chip:hover {
+    color: var(--cpx-sys-color-accent-fg);
+  }
 }

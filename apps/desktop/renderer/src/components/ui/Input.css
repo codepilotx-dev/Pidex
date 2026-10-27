@@ -1,0 +1,8 @@
+/*
+ * Input private styles: validation error borders.
+ */
+@layer primitives {
+  .ui-input[aria-invalid='true'] {
+    border-color: var(--cpx-comp-input-validation-error-border);
+  }
+}

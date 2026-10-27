@@ -78,6 +78,15 @@
     background-clip: padding-box;
   }
 
+  .lucide:not([data-icon-kind='artwork']) {
+    flex-shrink: 0;
+    stroke-width: var(--cpx-sys-icon-stroke-width);
+  }
+
+  .lucide[data-icon-kind='artwork'] {
+    --cpx-sys-icon-stroke-width: 2;
+  }
+
   button,
   input,
   select,

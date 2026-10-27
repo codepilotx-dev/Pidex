@@ -1,11 +1,3 @@
-/*
- * SearchInput residue.
- *
- * - `:focus-within` border mixes the accent into the subtle border with a 42%
- *   weight; there is no palette entry for that blend, so it stays a colour-mix.
- * - The native search cancel/decoration chrome needs vendor pseudo-elements.
- * - `forced-colors` needs a system colour keyword the utility set cannot name.
- */
 @layer primitives {
   .search-input:focus-within {
     border-color: color-mix(

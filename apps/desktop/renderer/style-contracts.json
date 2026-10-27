@@ -13,12 +13,33 @@
     "overrides"
   ],
   "directStyleImportAllowlist": [
+    "src/components/ui/Button.tsx -> src/components/ui/Button.css",
+    "src/components/ui/Chip.tsx -> src/components/ui/Chip.css",
+    "src/components/ui/DatePicker.tsx -> src/components/ui/DatePicker.css",
+    "src/components/ui/Input.tsx -> src/components/ui/Input.css",
+    "src/components/ui/ScrollArea.tsx -> src/components/ui/ScrollArea.css",
+    "src/components/ui/SearchInput.tsx -> src/components/ui/SearchInput.css",
+    "src/components/ui/Skeleton.tsx -> src/components/ui/Skeleton.css",
+    "src/components/ui/ToggleSwitch.tsx -> src/components/ui/ToggleSwitch.css",
     "src/features/pet/PetOverlayPage.tsx -> src/styles/lazy/pet-overlay.css",
     "src/features/terminal/TerminalPanel.tsx -> src/styles/lazy/terminal.css"
   ],
   "lazyStyleEntrypoints": {
     "src/styles/lazy/pet-overlay.css": "features",
     "src/styles/lazy/terminal.css": "vendor"
+  },
+  "componentStyleEntrypoints": {
+    "src/components/ui/Button.css": [
+      "primitives",
+      "overrides"
+    ],
+    "src/components/ui/Chip.css": "primitives",
+    "src/components/ui/DatePicker.css": "primitives",
+    "src/components/ui/Input.css": "primitives",
+    "src/components/ui/ScrollArea.css": "primitives",
+    "src/components/ui/SearchInput.css": "primitives",
+    "src/components/ui/Skeleton.css": "primitives",
+    "src/components/ui/ToggleSwitch.css": "primitives"
   },
   "customPropertyReferenceAllowlist": [
     "--radix-menubar-content-transform-origin",

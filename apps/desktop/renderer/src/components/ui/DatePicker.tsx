@@ -5,6 +5,7 @@ import { CalendarDays, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-rea
 import { cx } from '../../utils/Cx.js'
 import { useLocale } from '../../features/i18n/LocaleProvider.js'
 import type { AppLocale } from '../../features/i18n/Locale.js'
+import './DatePicker.css'
 
 export type DatePickerProps = {
   value: string

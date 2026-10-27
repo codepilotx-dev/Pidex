@@ -10,9 +10,8 @@
    *   route band, the `::before` backdrop and the right dock, so they stay in CSS.
    * - `z-index: 1` on the route groups is pinned by the
    *   style-contracts.json literalZIndexExceptions entry for this file.
-   * - `.workspace-shell-controls*` / `.workspace-panel-icon*` and the header
-   *   icon-button hover rule belong to the dock group's controls; they stay here
-   *   until that migration lands.
+   * - `.workspace-shell-controls*` / `.workspace-panel-icon*` belong to
+   *   the dock group's controls; they stay here until that migration lands.
    */
   .desktop-workspace-header {
     --workspace-header-route-end-inset: max(
@@ -65,21 +64,6 @@
       outline: 1px solid CanvasText;
       outline-offset: -1px;
     }
-  }
-  .desktop-workspace-header
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    ):hover,
-  .desktop-workspace-header
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    )[data-state='open'],
-  .desktop-workspace-header
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    )[data-active] {
-    background: var(--cpx-sys-color-hover);
-    color: var(--cpx-sys-color-fg-primary);
   }
 
   .workspace-panel-icon > path {

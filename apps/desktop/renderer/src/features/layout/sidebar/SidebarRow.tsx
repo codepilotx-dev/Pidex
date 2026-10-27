@@ -131,7 +131,7 @@ function renderRowContent({
           className={cx(
             'sidebar-row-leading tw:flex tw:min-w-0 tw:items-center',
             leadingMode === 'icon'
-              ? 'icon-button sidebar-item-icon tw:w-6 tw:shrink-0 tw:grow-0 tw:basis-6 tw:justify-center'
+              ? 'sidebar-item-icon tw:w-6 tw:shrink-0 tw:grow-0 tw:basis-6 tw:justify-center'
               : 'sidebar-row-leading-spacer tw:size-6 tw:w-6 tw:min-w-6 tw:shrink-0 tw:grow-0 tw:basis-6 tw:justify-center',
           )}
         >

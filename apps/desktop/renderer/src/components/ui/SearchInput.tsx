@@ -4,6 +4,7 @@ import { Search, X } from 'lucide-react'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from './IconTokens.js'
 import { Button } from './Button.js'
 import { cx } from '../../utils/Cx.js'
+import './SearchInput.css'
 
 export type SearchInputVariant = 'standard' | 'compact' | 'embedded' | 'outlined'
 export type SearchInputSize = 'sm' | 'md'

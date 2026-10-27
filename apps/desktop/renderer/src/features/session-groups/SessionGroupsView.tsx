@@ -24,6 +24,7 @@ import {
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import type { RpcResult } from '@pidex/agent-protocol'
 import { Button } from '../../components/ui/Button.js'
+import { Chip } from '../../components/ui/Chip.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 
 import { SearchInput } from '../../components/ui/SearchInput.js'
@@ -305,10 +306,10 @@ export function SessionGroupsView(): React.ReactNode {
               </div>
               <header className="session-group-detail__header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:pb-6 tw:@max-[760px]:flex-col tw:@max-[760px]:items-stretch">
                 <div className="session-group-detail__info tw:flex tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:flex-col tw:gap-1 tw:[&>h1]:mt-1 tw:[&>h1]:text-app-text tw:[&>h1]:type-title-xl tw:[&>p]:m-0 tw:[&>p]:text-app-text-soft tw:[&>p]:type-body">
-                  <span className="chip-semantic accent session-group-eyebrow tw:self-start">
+                  <Chip variant="accent" className="session-group-eyebrow tw:self-start">
                     <Sparkles size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
                     共享上下文
-                  </span>
+                  </Chip>
                   <h1>{detail.group.name}</h1>
                   <p>{detail.group.description || '这个组暂未设置详细说明。'}</p>
                 </div>
@@ -349,7 +350,7 @@ export function SessionGroupsView(): React.ReactNode {
                           key={entry.id}
                         >
                           <div className="session-group-context-card__header tw:flex tw:items-center tw:gap-2 tw:[&>strong]:text-app-text tw:[&>strong]:type-row-title">
-                            <span className="chip-semantic accent">{entry.section}</span>
+                            <Chip variant="accent">{entry.section}</Chip>
                             <strong>{entry.title}</strong>
                           </div>
                           <p>{entry.content}</p>
@@ -409,9 +410,9 @@ export function SessionGroupsView(): React.ReactNode {
                         <span className="session-group-member-card__title tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-app-text tw:type-row-title">
                           {member.title || member.threadId}
                         </span>
-                        <span className="chip-semantic info session-group-member-card__chip tw:self-start tw:type-caption">
+                        <Chip variant="info" className="session-group-member-card__chip tw:self-start tw:type-caption">
                           {member.workspaceLabel || '无项目'}
-                        </span>
+                        </Chip>
                       </Link>
                       <div className="session-group-member-card__actions">
                         <Button
@@ -672,14 +673,9 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
               <strong className="session-group-step__title tw:text-app-text tw:type-row-title">
                 {step.sourceThreadTitle || '未命名步骤'}
               </strong>
-              <span
-                className={cx(
-                  'chip-semantic',
-                  isFailed ? 'danger' : isCompleted ? 'success' : 'accent',
-                )}
-              >
+              <Chip variant={isFailed ? 'danger' : isCompleted ? 'success' : 'accent'}>
                 {statusLabel}
-              </span>
+              </Chip>
             </div>
             <div className="session-group-step__submeta tw:flex tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
               <span>{step.workspaceLabel || '默认工作区'}</span>
@@ -719,18 +715,17 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
                     : '进行中'
               return (
                 <li key={`${checkpoint.ordinal}:${checkpoint.kind}`}>
-                  <span
-                    className={cx(
-                      'chip-semantic',
+                  <Chip
+                    variant={
                       checkpoint.status === 'completed'
                         ? 'success'
                         : checkpoint.status === 'failed'
                           ? 'danger'
-                          : 'info',
-                    )}
+                          : 'info'
+                    }
                   >
                     {checkpointLabel}
-                  </span>
+                  </Chip>
                   <span className="session-group-step__checkpoint-text tw:flex-1">
                     {checkpoint.summary}
                   </span>

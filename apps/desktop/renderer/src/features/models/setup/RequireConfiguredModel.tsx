@@ -1,3 +1,4 @@
+import { startupSurfaceReadyRef } from '../../../startup/StartupSplashHandoff.js'
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { Outlet, useNavigate } from 'react-router-dom'
@@ -198,7 +199,7 @@ export function SetupRecoveryState({
   return (
     <main
       className="tw:grid tw:h-screen tw:w-full tw:place-content-center tw:justify-items-center tw:gap-5 tw:bg-app-canvas tw:p-8 tw:text-center"
-      data-startup-surface-ready="true"
+      ref={startupSurfaceReadyRef}
     >
       <div className="tw:max-w-md">
         <h1 className="tw:type-title-md tw:m-0 tw:text-app-text">本地 Agent 暂时不可用</h1>

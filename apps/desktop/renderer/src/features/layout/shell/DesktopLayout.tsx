@@ -1,3 +1,4 @@
+import { startupSurfaceReadyRef } from '../../../startup/StartupSplashHandoff.js'
 import { GitBoardSidebar } from '../../git-board/GitBoardSidebar.js'
 import { useGitBoard } from '../../git-board/GitBoardContext.js'
 import {
@@ -3389,7 +3390,7 @@ export function DesktopLayout(): React.ReactNode {
     >
       <div
         className="desktop-frame tw:flex tw:h-screen tw:min-h-0 tw:w-full tw:flex-col tw:overflow-hidden tw:bg-app-canvas tw:text-app-text"
-        data-startup-surface-ready={location.pathname !== '/new' ? 'true' : undefined}
+        ref={location.pathname !== '/new' && location.pathname !== '/' ? startupSurfaceReadyRef : undefined}
       >
         <a
           className="skip-to-main"

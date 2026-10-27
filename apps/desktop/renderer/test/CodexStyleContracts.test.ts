@@ -33,6 +33,7 @@ describe('Codex CPX design system token contract', () => {
       'src/features/session/summary/ThreadSummaryPanel.tsx',
     ])
     expect(checker).toContain('feature styles must not target .ui-button')
+    expect(checker).toContain('feature styles must not target .icon-button')
     expect(checker).toContain('legacy interactive-row escape modifier is forbidden')
     expect(checker).toContain('Button must not represent persistent pressed/selected state')
     expect(checker).toContain('Popover radio-group trigger must not use Button')
@@ -348,13 +349,12 @@ describe('Codex CPX design system token contract', () => {
   })
 
   test('keeps prominent elevation distinct from flat and transient surfaces', async () => {
-    const [systemTokens, componentTokens, cards, composer, summary, rightDock] = await Promise.all([
+    const [systemTokens, componentTokens, composer, summary, rightDock] = await Promise.all([
       Bun.file(new URL('../src/styles/design-system/tokens.css', import.meta.url)).text(),
       Bun.file(
         new URL('../src/styles/design-system/codex-semantic-tokens.css', import.meta.url),
       ).text(),
-      Bun.file(new URL('../src/styles/components/card.css', import.meta.url)).text(),
-      Bun.file(new URL('../src/styles/features/composer-shell.css', import.meta.url)).text(),
+      Bun.file(new URL('../src/styles/primitives/composer.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/primitives/session.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/features/layout-right-dock.css', import.meta.url)).text(),
     ])
@@ -368,7 +368,7 @@ describe('Codex CPX design system token contract', () => {
       componentTokens,
       '--cpx-comp-composer-shadow: var(--cpx-sys-shadow-prominent);',
     )
-    expect(cards).toMatch(/\.composer\s*\{[\s\S]*?box-shadow: var\(--cpx-comp-composer-shadow\);/)
+    expect(composer).toMatch(/\.composer\s*\{[\s\S]*?box-shadow: var\(--cpx-comp-composer-shadow\);/)
     expectSourceNotContains(composer, 'box-shadow: var(--cpx-sys-shadow-floating)')
     expect(summary).toMatch(
       /\.thread-summary-panel\s*\{[\s\S]*?box-shadow: var\(--cpx-sys-shadow-prominent\);/,
@@ -424,7 +424,6 @@ describe('Codex CPX design system token contract', () => {
       Bun.file(new URL('../src/styles/features/composer-shell.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/primitives/conversation.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/primitives/session.css', import.meta.url)).text(),
-      Bun.file(new URL('../src/styles/components/card.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/features/layout-right-dock.css', import.meta.url)).text(),
     ])
 
@@ -516,7 +515,6 @@ describe('Codex CPX design system token contract', () => {
     expectSourceContains(conversation, 'corner-shape: var(--cpx-sys-corner-shape);')
     expectSourceContains(summary, 'border-radius: var(--cpx-sys-radius-prominent);')
     expectSourceContains(summary, 'corner-shape: var(--cpx-sys-corner-shape);')
-    expectSourceNotContains(cards, '--cpx-sys-radius-prominent')
     expectSourceNotContains(rightDock, '--cpx-sys-radius-prominent')
   })
 

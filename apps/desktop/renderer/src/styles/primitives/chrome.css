@@ -26,4 +26,15 @@
   .auxiliary-titlebar button {
     -webkit-app-region: no-drag;
   }
+
+  .menubar-trigger:hover:not(:where(:disabled, [data-disabled])),
+  .menubar-trigger[data-highlighted]:not(:where(:disabled, [data-disabled])) {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .menubar-trigger[data-state='open'] {
+    background: var(--cpx-sys-color-selected);
+    color: var(--cpx-sys-color-fg-primary);
+  }
 }

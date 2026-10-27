@@ -873,29 +873,6 @@
     border-right: 0;
   }
 
-  .profile-loading-stats .ui-skeleton-block:first-child {
-    width: 42px;
-    height: 18px;
-    border-radius: var(--cpx-sys-radius-md);
-  }
-
-  .profile-loading-stats .ui-skeleton-block:last-child {
-    width: 62px;
-    height: 14px;
-    border-radius: var(--cpx-sys-radius-md);
-  }
-
-  .profile-loading-contributions .ui-skeleton-block {
-    width: 100%;
-    aspect-ratio: 1;
-    border-radius: var(--cpx-sys-radius-md);
-  }
-
-  .profile-loading-lower .ui-skeleton-block {
-    width: 100%;
-    height: 20px;
-    border-radius: var(--cpx-sys-radius-md);
-  }
 
   @media (max-width: 760px) {
     .profile-loading-stats {
@@ -1717,10 +1694,161 @@
     background: var(--cpx-sys-color-surface-canvas);
   }
 
+  /* ===== Settings Form Controls ===== */
+  .settings-input,
+  .settings-textarea,
+  .settings-input-number {
+    border-color: var(--cpx-sys-color-border-subtle);
+    border-radius: var(--cpx-comp-input-radius);
+    background: var(--cpx-sys-color-surface-canvas);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .settings-dropdown {
+    border-radius: var(--cpx-comp-button-radius-md);
+  }
+
+  /* --- Dropdown (Select) Controls --- */
+  .settings-dropdown.settings-dropdown-trigger {
+    display: inline-flex;
+    width: auto;
+    max-width: 100%;
+    min-width: 0;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--cpx-comp-input-gap);
+    border: 1px solid var(--cpx-sys-color-border-default);
+  }
+
+  .settings-dropdown *,
+  .settings-dropdown-content,
+  .settings-dropdown-content * {
+    outline: none;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  .settings-dropdown-value {
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    gap: var(--cpx-comp-input-gap);
+    min-width: 0;
+    font: var(--cpx-sys-type-control);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .settings-dropdown-icon {
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
+    color: var(--cpx-comp-input-placeholder-fg);
+    flex-shrink: 0;
+  }
+
+  /* --- Text Inputs --- */
+  .settings-input {
+    border: 1px solid var(--cpx-sys-color-border-default);
+    border-radius: var(--cpx-comp-input-radius);
+    corner-shape: var(--cpx-sys-corner-shape);
+    background: var(--cpx-sys-color-surface-recessed);
+    color: var(--cpx-sys-color-fg-primary);
+    padding: var(--cpx-comp-input-padding-block) var(--cpx-comp-input-padding-inline);
+    font: var(--cpx-sys-type-control);
+    outline: none;
+    transition:
+      background-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      border-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+  }
+
+  .settings-input-narrow {
+    min-width: 0;
+    width: 200px;
+    max-width: 100%;
+    padding: var(--cpx-comp-input-padding-block) var(--cpx-comp-input-padding-inline);
+  }
+
+  .settings-input-compact {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cpx-comp-input-gap);
+    min-width: 0;
+    width: auto;
+    padding: var(--cpx-sys-space-1) var(--cpx-comp-input-padding-inline);
+  }
+
+  .settings-input-number {
+    width: 40px;
+    border: none;
+    background: transparent;
+    text-align: right;
+    padding: 0;
+    font: var(--cpx-sys-type-control);
+    color: inherit;
+  }
+  .settings-input-number:focus {
+    outline: none;
+  }
+  .settings-input-number::-webkit-inner-spin-button,
+  .settings-input-number::-webkit-outer-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+
+  .settings-textarea {
+    width: min(360px, 48vw);
+    resize: vertical;
+    border: 1px solid var(--cpx-sys-color-border-default);
+    border-radius: var(--cpx-comp-input-radius);
+    background: var(--cpx-sys-color-surface-recessed);
+    color: var(--cpx-sys-color-fg-primary);
+    padding: var(--cpx-comp-input-padding-block) var(--cpx-comp-input-padding-inline);
+    font: var(--cpx-sys-type-control);
+    outline: none;
+    transition:
+      background-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      border-color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      color var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard),
+      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard);
+  }
+
+  .settings-code-textarea {
+    font: var(--cpx-sys-type-code);
+  }
+
+  .settings-input-unit {
+    color: var(--cpx-sys-color-fg-secondary);
+    font: var(--cpx-sys-type-body-sm);
+  }
+
+  /* --- Input Interaction States --- */
+  .settings-input:hover:not(:disabled),
+  .settings-textarea:hover:not(:disabled) {
+    border-color: var(--cpx-sys-color-border-strong);
+  }
+
+  .settings-input:focus-visible,
+  .settings-textarea:focus-visible {
+    border-color: var(--cpx-sys-color-border-focus);
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 1px;
+  }
+
+  .settings-input:disabled,
+  .settings-textarea:disabled {
+    border-color: var(--cpx-sys-color-border-subtle);
+    background: var(--cpx-comp-surface-panel);
+    color: var(--cpx-sys-color-fg-disabled);
+    outline: none;
+    cursor: default;
+    opacity: 0.55;
+  }
+
   /*
-   * Narrow settings viewport: every form control drops to full width. The
-   * classes come from `components/input.scss` (another migration group), so the
-   * rule keeps the two class selectors needed to outrank that base.
+   * Narrow settings viewport: every form control drops to full width.
    */
   @media (max-width: 900px) {
     .settings-input,

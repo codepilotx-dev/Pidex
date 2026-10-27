@@ -14,6 +14,8 @@ import { cx } from '../../utils/Cx.js'
 import { useResolvedButtonSize } from './TabStripButtonContext.js'
 import { Spinner, type SpinnerProps } from './Spinner.js'
 import type { AppIconSize } from './IconTokens.js'
+import { mergeRefs } from './floating/Primitives.js'
+import './Button.css'
 
 export type ButtonVariant =
   | 'primary'
@@ -411,6 +413,13 @@ const VARIANT_CLASS: Record<ButtonVariant, string> = {
   ),
 }
 
+const COLOR_TEXT_CLASSES: Partial<Record<ButtonColor, string>> = {
+  ghost: 'tw:text-app-text-meta',
+  ghostTertiary: 'tw:text-app-text-meta',
+  ghostSecondary: 'tw:text-app-text-soft',
+  ghostActive: 'tw:text-app-text',
+}
+
 const BASE_CLASS = cx(
   'ui-button',
   'tw:box-border tw:inline-flex tw:items-center tw:justify-center',
@@ -516,6 +525,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     sizeClass,
     radiusClass,
     variantClass,
+    color && COLOR_TEXT_CLASSES[color],
     isIcon && 'icon-button tw:aspect-square tw:shrink-0',
     fullWidth && 'tw:w-full',
     allowShrink && 'tw:min-w-0',
@@ -565,11 +575,26 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     const childElement = children as ReactElement<
       HTMLAttributes<HTMLElement> & { disabled?: boolean }
     >
+    const childRef = (childElement as any).ref
     return cloneElement(childElement, {
+      ref: ref || childRef ? (mergeRefs(ref, childRef) as any) : undefined,
       className: cx(baseClasses, childElement.props.className),
       'aria-busy': loading ? true : undefined,
       'aria-disabled': isDisabled ? true : undefined,
-    })
+      'data-active':
+        active || buttonProps['data-active'] || (childElement.props as any)['data-active'] || undefined,
+      'data-allow-shrink': allowShrink || undefined,
+      'data-color': color ?? variant,
+      'data-content-layout': contentLayout,
+      'data-icon-only': isIcon || undefined,
+      'data-icon-size': iconSize,
+      'data-loading': loading || undefined,
+      'data-radius': radius ?? (shape === 'pill' ? 'large' : 'default'),
+      'data-shape': shape,
+      'data-size': resolvedSize,
+      'data-uniform': uniform || isIcon || undefined,
+      'data-variant': variant,
+    } as any)
   }
 
   return (

@@ -2,6 +2,7 @@ import React from 'react'
 import { cx } from '../../utils/Cx.js'
 import { useScrollEdgeState } from '../../hooks/UseScrollEdgeState.js'
 import { mergeRefs } from './floating/Primitives.js'
+import './ScrollArea.css'
 
 type ScrollAreaProps = {
   children: React.ReactNode

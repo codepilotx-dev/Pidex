@@ -111,4 +111,11 @@
     border-bottom-color: var(--cpx-sys-color-border-subtle);
     background: var(--cpx-sys-color-surface-raised);
   }
+
+  .right-dock-search {
+    border-color: var(--cpx-sys-color-border-subtle);
+    border-radius: var(--cpx-comp-input-radius);
+    background: var(--cpx-sys-color-surface-canvas);
+    color: var(--cpx-sys-color-fg-primary);
+  }
 }

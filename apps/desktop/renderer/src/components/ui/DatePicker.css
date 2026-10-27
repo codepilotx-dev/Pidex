@@ -1,0 +1,9 @@
+@layer primitives {
+  @media (forced-colors: active) {
+    .ui-date-picker-day[aria-selected='true'] {
+      --cpx-sys-color-accent: Highlight;
+      --cpx-sys-color-fg-on-accent: HighlightText;
+      forced-color-adjust: none;
+    }
+  }
+}

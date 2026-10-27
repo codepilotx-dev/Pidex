@@ -8,8 +8,7 @@
  * - the sidebar density contract (`--sidebar-*`), i.e. runtime geometry that
  *   TSX utilities consume through `var()` and that
  *   `test/SidebarOriginLayout.browser.ts` reads back with getComputedStyle;
- * - subtree overrides that must reach every descendant regardless of the
- *   component class each child carries: the icon-button size override and the
+ * - subtree overrides that must reach every descendant: the
  *   "grabbing" cursor while a reorder item is being dragged;
  * - one `color-mix()` surface (sidebar session approval chip);
  * - rules whose consumers are owned by another migration group:
@@ -88,20 +87,11 @@
     );
   }
 
-  /* Every icon button inside the sidebar uses the 24px sidebar icon box. */
-  .desktop-sidebar .icon-button {
-    --button-size: var(--sidebar-icon-button-size);
-  }
-
   .sidebar-hover-card-surface {
     --sidebar-icon-size: var(--cpx-sys-icon-size-sm);
     --sidebar-icon-button-size: var(--cpx-sys-space-6);
     --sidebar-hover-leading-width: var(--sidebar-icon-size);
     --sidebar-hover-column-gap: var(--cpx-sys-space-2);
-  }
-
-  .sidebar-hover-card-surface .icon-button {
-    --button-size: var(--sidebar-icon-button-size);
   }
 
   /* While a reorder item is dragged the whole sidebar shows the grabbing cursor. */
@@ -295,5 +285,20 @@
    */
   .sidebar-session-list-extra {
     overflow: hidden;
+  }
+
+  .desktop-sidebar.is-floating {
+    border: var(--cpx-comp-surface-edge);
+    border-radius: var(--cpx-sys-radius-container);
+    background: var(--cpx-comp-glass-bg, var(--cpx-comp-surface-floating));
+    backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));
+    box-shadow: var(--cpx-sys-shadow-floating);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .desktop-sidebar.is-floating {
+      backdrop-filter: none;
+      background: var(--cpx-comp-surface-floating);
+    }
   }
 }

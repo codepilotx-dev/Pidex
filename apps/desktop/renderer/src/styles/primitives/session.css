@@ -648,4 +648,19 @@
       transform: translateY(0);
     }
   }
+
+  .thread-summary-error {
+    border: var(--cpx-comp-surface-edge);
+    border-radius: var(--cpx-sys-radius-container);
+    background: var(--cpx-comp-surface-raised);
+    backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));
+    box-shadow: var(--cpx-sys-shadow-raised);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .thread-summary-error {
+      backdrop-filter: none;
+      background: var(--cpx-comp-surface-floating);
+    }
+  }
 }
