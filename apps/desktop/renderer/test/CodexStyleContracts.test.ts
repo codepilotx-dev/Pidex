@@ -224,20 +224,28 @@ describe('Codex CPX design system token contract', () => {
     ])
 
     // primary：foreground 实底、反色文字；secondary：5% 弱背景、透明边框。
+    // 外观已从 utility 收回共享样式，按 data-variant 选择器验证同一分区。
     expectSourceContains(
       buttons,
-      'tw:border-app-border-strong tw:bg-app-primary-action tw:text-app-primary-action-foreground',
+      ":is(button, a)[data-size][data-variant][data-variant='primary'] {",
     )
+    expectSourceContains(buttons, 'background: var(--cpx-comp-button-primary-bg);')
+    expectSourceContains(buttons, 'color: var(--cpx-comp-button-primary-fg);')
     expectSourceContains(tokens, '--cpx-comp-button-primary-bg: var(--cpx-sys-color-fg-primary);')
     expectSourceContains(
       tokens,
       '--cpx-comp-button-primary-fg: var(--cpx-sys-color-surface-canvas);',
     )
     expectSourceContains(
-      buttons,
-      'tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_5%,transparent)]',
+      tokens,
+      '--cpx-comp-button-bg: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 5%, transparent);',
     )
-    expectSourceContains(buttons, 'tw:border-transparent tw:text-app-text')
+    expectSourceContains(
+      buttons,
+      ":is(button, a)[data-size][data-variant][data-variant='secondary'] {",
+    )
+    expectSourceContains(buttons, 'background: var(--cpx-comp-button-bg);')
+    expectSourceContains(buttons, 'color: var(--cpx-comp-button-fg);')
     // 设置行不再锁死 64px：行本身不携带固定高度，高度由 12px 块级内边距
     // 驱动（compact 档 8px）；`+` 兄弟行的 0.5px 分隔线仍是共享几何。
     expect(settings).not.toMatch(/\.settings-row\s*\{[\s\S]*?min-height: 64px;/)
@@ -321,19 +329,24 @@ describe('Codex CPX design system token contract', () => {
   })
 
   test('keeps primary routes and workbench panels on their shared alignment axes', async () => {
-    const [automationView, pets, pullRequests, setup, review, browser, primaryPageCss] = await Promise.all([
-      Bun.file(new URL('../src/features/automation/AutomationView.tsx', import.meta.url)).text(),
-      Bun.file(new URL('../src/features/pet/PetCatalogPage.tsx', import.meta.url)).text(),
-      Bun.file(
-        new URL('../src/features/pull-requests/PullRequestsPlaceholder.tsx', import.meta.url),
-      ).text(),
-      Bun.file(new URL('../src/features/models/setup/ModelSetupPage.tsx', import.meta.url)).text(),
-      Bun.file(
-        new URL('../src/features/review/workspace/WorkspaceReviewSidebar.tsx', import.meta.url),
-      ).text(),
-      Bun.file(new URL('../src/features/browser/DesktopBrowserPanel.tsx', import.meta.url)).text(),
-      Bun.file(new URL('../src/styles/features/primary-page.css', import.meta.url)).text(),
-    ])
+    const [automationView, pets, pullRequests, setup, review, browser, primaryPageCss] =
+      await Promise.all([
+        Bun.file(new URL('../src/features/automation/AutomationView.tsx', import.meta.url)).text(),
+        Bun.file(new URL('../src/features/pet/PetCatalogPage.tsx', import.meta.url)).text(),
+        Bun.file(
+          new URL('../src/features/pull-requests/PullRequestsPlaceholder.tsx', import.meta.url),
+        ).text(),
+        Bun.file(
+          new URL('../src/features/models/setup/ModelSetupPage.tsx', import.meta.url),
+        ).text(),
+        Bun.file(
+          new URL('../src/features/review/workspace/WorkspaceReviewSidebar.tsx', import.meta.url),
+        ).text(),
+        Bun.file(
+          new URL('../src/features/browser/DesktopBrowserPanel.tsx', import.meta.url),
+        ).text(),
+        Bun.file(new URL('../src/styles/features/primary-page.css', import.meta.url)).text(),
+      ])
 
     // 自动化页只通过共享 PrimaryPageLayout 渲染，不再覆盖其内部结构类名。
     expectSourceContains(automationView, '<PrimaryPageLayout')
@@ -368,7 +381,9 @@ describe('Codex CPX design system token contract', () => {
       componentTokens,
       '--cpx-comp-composer-shadow: var(--cpx-sys-shadow-prominent);',
     )
-    expect(composer).toMatch(/\.composer\s*\{[\s\S]*?box-shadow: var\(--cpx-comp-composer-shadow\);/)
+    expect(composer).toMatch(
+      /\.composer\s*\{[\s\S]*?box-shadow: var\(--cpx-comp-composer-shadow\);/,
+    )
     expectSourceNotContains(composer, 'box-shadow: var(--cpx-sys-shadow-floating)')
     expect(summary).toMatch(
       /\.thread-summary-panel\s*\{[\s\S]*?box-shadow: var\(--cpx-sys-shadow-prominent\);/,
@@ -476,7 +491,8 @@ describe('Codex CPX design system token contract', () => {
 
     // 圆角由语义角色 utility 表达，不再使用按档位缩放的局部变量。
     expectSourceNotContains(buttons, '--button-radius-scale')
-    expect(buttons).toMatch(/tw:rounded-(?:lg|md|2xl|full)/)
+    // 圆角按尺寸档位读取语义 token，胶囊形状统一读 full。
+    expect(buttons).toMatch(/border-radius: var\(--cpx-sys-radius-(?:xs|sm|md|full)\)/)
     expectSourceNotContains(buttons, '@supports (corner-shape: superellipse(1.5))')
     expectSourceContains(composer, '--composer-radius: var(--cpx-sys-radius-prominent);')
     expect(composer).toMatch(
@@ -492,10 +508,7 @@ describe('Codex CPX design system token contract', () => {
     expect(composer).not.toMatch(
       /\.composer-stack\[data-placement=['"]new-session['"]\][^{]*\{[^}]*--composer-radius/,
     )
-    expectSourceContains(
-      composer,
-      '.composer-stack .composer-editor-content',
-    )
+    expectSourceContains(composer, '.composer-stack .composer-editor-content')
     expectSourceContains(
       composer,
       '.composer-stack[data-composer-utility-bar-variant="home"][data-surface="coding"]',
@@ -540,9 +553,13 @@ describe('Codex CPX design system token contract', () => {
     expect(summary).toMatch(
       /\.thread-summary-popover\s*\{[\s\S]*?--thread-summary-inline-width: calc\(var\(--cpx-sys-space-1\) \* 75\);/,
     )
-    expect(threadSummary).toContain('thread-summary-popover tw:w-[var(--thread-summary-inline-width)]')
+    expect(threadSummary).toContain(
+      'thread-summary-popover tw:w-[var(--thread-summary-inline-width)]',
+    )
     expect(threadSummary).toContain('tw:[&]:p-0')
-    expect(threadSummary).toContain('thread-summary-panel tw:w-full tw:flex tw:min-h-0 tw:flex-col tw:gap-1')
+    expect(threadSummary).toContain(
+      'thread-summary-panel tw:w-full tw:flex tw:min-h-0 tw:flex-col tw:gap-1',
+    )
     expect(threadSummary).toContain('tw:overflow-y-auto tw:py-2')
     expect(threadSummary).toContain('tw:pb-2 tw:last:pb-0')
     expect(threadSummary).toContain('tw:max-w-[calc(100vw-24px)]')

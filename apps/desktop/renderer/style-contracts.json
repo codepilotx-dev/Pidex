@@ -13,7 +13,6 @@
     "overrides"
   ],
   "directStyleImportAllowlist": [
-    "src/components/ui/Button.tsx -> src/components/ui/Button.css",
     "src/components/ui/Chip.tsx -> src/components/ui/Chip.css",
     "src/components/ui/DatePicker.tsx -> src/components/ui/DatePicker.css",
     "src/components/ui/Input.tsx -> src/components/ui/Input.css",
@@ -29,10 +28,6 @@
     "src/styles/lazy/terminal.css": "vendor"
   },
   "componentStyleEntrypoints": {
-    "src/components/ui/Button.css": [
-      "primitives",
-      "overrides"
-    ],
     "src/components/ui/Chip.css": "primitives",
     "src/components/ui/DatePicker.css": "primitives",
     "src/components/ui/Input.css": "primitives",

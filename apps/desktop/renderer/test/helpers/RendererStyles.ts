@@ -30,6 +30,20 @@ export async function readNativeStyles(): Promise<string> {
 }
 
 /**
+ * Button renders its own static stylesheet at the renderer root. Harnesses that
+ * print Button markup without the React root must inject it explicitly.
+ */
+export async function renderButtonStyles(): Promise<string> {
+  const [{ createElement }, { renderToStaticMarkup }, { ButtonStyles }] = await Promise.all([
+    import('react'),
+    import('react-dom/server'),
+    import('../../src/components/ui/Button.js'),
+  ])
+  const markup = renderToStaticMarkup(createElement(ButtonStyles))
+  return markup.slice(markup.indexOf('>') + 1, markup.lastIndexOf('<')).replaceAll('&quot;', '"')
+}
+
+/**
  * The real entrypoint, compiled through Vite with the Tailwind plugin, so a
  * harness styles `<button class="tw:...">` exactly like the app does. There is no
  * Sass left in the renderer, so this is the whole stylesheet.

@@ -158,7 +158,7 @@ describe('automation calendar compact month & residing agenda', () => {
 
     // Monthly tasks button with secondary compact style
     expect(html).toContain('automation-calendar__tasks-trigger')
-    expect(html).toContain('data-color="secondary"')
+    expect(html).toContain('data-variant="secondary"')
     expect(html).toContain('data-size="compact"')
     expect(html).toContain('2 项任务')
 
@@ -172,15 +172,14 @@ describe('automation calendar compact month & residing agenda', () => {
     expect(nextIndex).toBeGreaterThan(todayIndex)
 
     // Navigation buttons are compact uniform height. Slice to the end of the
-    // opening tag: the utility class list is long, so a fixed window would
-    // depend on how many classes a button happens to carry.
+    // opening tag so the assertion is independent of attribute ordering.
     const openTagAt = (index: number) => html.slice(index, html.indexOf('>', index) + 1)
     const prevSnippet = openTagAt(prevIndex)
     expect(prevSnippet).toContain('data-size="compact"')
-    expect(prevSnippet).toContain('data-uniform="true"')
+    expect(prevSnippet).toContain('data-icon-only="true"')
     const nextSnippet = openTagAt(nextIndex)
     expect(nextSnippet).toContain('data-size="compact"')
-    expect(nextSnippet).toContain('data-uniform="true"')
+    expect(nextSnippet).toContain('data-icon-only="true"')
 
     // Toolbar and title-group use flex-end baseline alignment
     // （原 `automation-calendar.scss` 规则已迁到组件 utility）。

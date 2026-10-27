@@ -118,7 +118,8 @@ export function CommitPopover({
           <div className="review-popover-actions tw:flex tw:flex-col tw:gap-1 tw:border-t tw:border-app-border tw:pt-1">
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               disabled={false}
               onClick={() => onCommit(message, includeUnstaged)}
             >
@@ -130,7 +131,8 @@ export function CommitPopover({
             </Button>
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               onClick={() => onCommitAndPush(message, includeUnstaged)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
@@ -140,7 +142,8 @@ export function CommitPopover({
             </Button>
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               onClick={() => onPush()}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">

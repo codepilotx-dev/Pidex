@@ -265,7 +265,8 @@ describe('non-color design token contracts', () => {
     expect(session).toContain('tw:type-display')
     expect(markdown).toMatch(/\.md-body\s*\{[^}]*font:\s*var\(--cpx-sys-type-reading\);/s)
     expect(markdown).toMatch(/h2\s*\{[^}]*font:\s*var\(--cpx-sys-type-heading-lg\);/s)
-    expect(button).toContain('tw:type-control')
+    // Button 的 control 排版角色随通用规则收回静态样式，仍引用同一 role token。
+    expect(button).toMatch(/font:\s*var\(--cpx-sys-type-control\);/)
     // 用量指标卡仍在共享设置样式里，metric 角色 + tabular-nums 不变。
     expect(settings).toMatch(
       /\.usage-metric-card strong\s*\{[^}]*font:\s*var\(--cpx-sys-type-metric\);[^}]*font-variant-numeric:\s*tabular-nums;/s,
@@ -657,7 +658,9 @@ describe('non-color design token contracts', () => {
 
   test('review diff preserves shared code rhythm with a 24px floor for line actions', async () => {
     const review = await read('../src/styles/primitives/review.css')
-    expect(review).toContain('--review-diffs-line-height: max(24px, calc(1em * var(--cpx-sys-line-height-code)))')
+    expect(review).toContain(
+      '--review-diffs-line-height: max(24px, calc(1em * var(--cpx-sys-line-height-code)))',
+    )
     expect(review).toMatch(/line-height:\s*var\(--cpx-sys-line-height-code\)/)
   })
 
@@ -680,7 +683,9 @@ describe('non-color design token contracts', () => {
     expect(conversation).toMatch(
       /\.quick-chat-view > \.quick-chat-hero-region,\s*\.quick-chat-view > \.quick-chat-composer-region,\s*\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
     )
-    expect(conversation).not.toMatch(/\.quick-chat-view,\s*\.conversation-page \.thread-scroll-layout__inner/)
+    expect(conversation).not.toMatch(
+      /\.quick-chat-view,\s*\.conversation-page \.thread-scroll-layout__inner/,
+    )
     expect(conversation).not.toContain('53.5rem')
     expect(conversation).not.toContain('--page-content-max-width: 40rem;')
     expect(conversation).not.toContain('--conversation-composer-overhang')

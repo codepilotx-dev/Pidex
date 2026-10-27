@@ -23,8 +23,9 @@
 
 ## 体验与回归
 
-- 基础组件自身拥有其外观、交互状态与变体，调用方通过语义化 props 驱动；普通业务布局使用 TSX 中的 `tw:` utility，并消费 `styles/tailwind.css` 里的 `--cpx-sys-*` 映射。禁止通过跨层后代选择器覆盖基础组件外观。
-- 基础组件私有样式必须就近维护在 `components/ui/<Component>.css` 中并由组件 TSX 直接引入；规则放置于 `@layer primitives`（必要时允许 `@layer overrides`），禁止破坏级联层级或绕过样式契约。
+- 基础组件自身拥有其外观、交互状态与变体，调用方通过语义化 props 驱动，特殊差异允许通过显式传入的 `className` 覆盖，并合并冲突 utility；普通业务布局使用 TSX 中的 `tw:` utility，并消费 `styles/tailwind.css` 里的 `--cpx-sys-*` 映射。禁止通过跨层后代选择器覆盖基础组件外观。
+- Button 与 ButtonGroup 的基础规则、尺寸和变体统一在 `Button.tsx` 中定义，通过支持 `tw:` 前缀和自定义 utility 的冲突合并器接受调用方覆盖，不维护独立 Button 样式表。
+- 其他基础组件确需 CSS 的私有样式就近维护在 `components/ui/<Component>.css` 中并由组件 TSX 直接引入；规则放置于 `@layer primitives`（必要时允许 `@layer overrides`），禁止破坏级联层级或绕过样式契约。
 - 业务特征样式按所属功能置于 `styles/features/*.css`，共享宿主机制置于 `styles/primitives/*.css`（伪元素、运行时几何、第三方生成 DOM、`color-mix` 表面）；Renderer 不再编译 Sass，禁止新增 `.scss`。
 - 排版用 `tw:type-*` 角色；`tw:type-weight-*` 只能单独使用，不能与 `tw:type-*` 同元素。
 - UI 修改时按相关性验证桌面窗口尺寸、快捷键、键盘焦点、主题、reduced-motion、popover 定位和会话恢复。

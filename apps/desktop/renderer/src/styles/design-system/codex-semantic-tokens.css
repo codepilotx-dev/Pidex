@@ -18,22 +18,14 @@
     --cpx-comp-dropdown-focus-border: var(--cpx-sys-color-border-focus);
     --cpx-comp-dropdown-menu-radius: var(--cpx-sys-radius-floating);
     --cpx-comp-dropdown-menu-shadow:
-      0 4px 16px -4px rgb(0 0 0 / 12%),
-      0 2px 6px -2px rgb(0 0 0 / 8%),
-      0 0 1px 0 rgb(0 0 0 / 16%);
+      0 4px 16px -4px rgb(0 0 0 / 12%), 0 2px 6px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 16%);
     --cpx-comp-dropdown-menu-shadow-top:
-      0 -4px 16px -4px rgb(0 0 0 / 12%),
-      0 -2px 6px -2px rgb(0 0 0 / 8%),
-      0 0 1px 0 rgb(0 0 0 / 16%);
+      0 -4px 16px -4px rgb(0 0 0 / 12%), 0 -2px 6px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 16%);
     --cpx-comp-dropdown-menu-shadow-bottom: var(--cpx-comp-dropdown-menu-shadow);
     --cpx-comp-dropdown-menu-shadow-left:
-      -4px 0 16px -4px rgb(0 0 0 / 12%),
-      -2px 0 6px -2px rgb(0 0 0 / 8%),
-      0 0 1px 0 rgb(0 0 0 / 16%);
+      -4px 0 16px -4px rgb(0 0 0 / 12%), -2px 0 6px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 16%);
     --cpx-comp-dropdown-menu-shadow-right:
-      4px 0 16px -4px rgb(0 0 0 / 12%),
-      2px 0 6px -2px rgb(0 0 0 / 8%),
-      0 0 1px 0 rgb(0 0 0 / 16%);
+      4px 0 16px -4px rgb(0 0 0 / 12%), 2px 0 6px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 16%);
 
     /* 2. Button / IconButton Component */
     --cpx-comp-button-bg: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 5%, transparent);
@@ -63,6 +55,28 @@
       transparent
     );
     --cpx-comp-button-primary-disabled-bg: var(--cpx-sys-color-fg-disabled);
+
+    /* Hover and border ink the shared Button stylesheet selects by data-variant. */
+    --cpx-comp-button-secondary-hover-bg: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 10%,
+      transparent
+    );
+    --cpx-comp-button-accent-hover-bg: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 90%,
+      transparent
+    );
+    --cpx-comp-button-danger-outline-border: color-mix(
+      in srgb,
+      var(--cpx-sys-color-charts-red) 35%,
+      transparent
+    );
+    --cpx-comp-button-danger-outline-hover-bg: color-mix(
+      in srgb,
+      var(--cpx-sys-color-charts-red) 12%,
+      transparent
+    );
 
     /* 3. Input / SearchInput Component */
     --cpx-comp-input-bg: var(--cpx-sys-color-surface-control);

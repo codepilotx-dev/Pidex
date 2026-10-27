@@ -154,6 +154,10 @@ async function collectEntryGraph(entrypoint: string): Promise<Set<string>> {
   return visited
 }
 
+/*
+ * Static styles authored in TSX (`String.raw` blocks) are read with the style
+ * patterns; the script patterns still apply to the surrounding component code.
+ */
 function collectCustomPropertyDefinitions(source: string, isStyle: boolean): Set<string> {
   const definitions = new Set<string>()
   const patterns = isStyle
@@ -162,6 +166,7 @@ function collectCustomPropertyDefinitions(source: string, isStyle: boolean): Set
         /setProperty\(\s*['"](--[\w-]+)['"]/g,
         /['"](--[\w-]+)['"]\s*\??\s*:/g,
         /\[\s*['"](--[\w-]+)['"]\s*\]\s*=/g,
+        /(--[\w-]+)\s*:/g,
       ]
   for (const pattern of patterns) {
     for (const match of source.matchAll(pattern)) definitions.add(match[1])
@@ -424,6 +429,11 @@ for (const file of featureTokenStyleFiles) {
   }
   if (/\.icon-button\b/.test(source)) {
     errors.push(`feature styles must not target .icon-button: ${path}`)
+  }
+  if (/\[data-position=['"]?sidebar/.test(source)) {
+    errors.push(
+      `feature styles must not restyle the shared sidebar button preset; use data-position="sidebar": ${path}`,
+    )
   }
 }
 for (const file of featureTokenScriptFiles) {
@@ -1574,12 +1584,23 @@ for (const definition of customPropertyDefinitions) {
     errors.push(`forbidden legacy custom property definition: ${definition}`)
   }
 }
+const customPropertyReferenceSources = new Map<string, string[]>()
+for (const file of [...styleFiles, ...scriptFiles]) {
+  const source = await readFile(file, 'utf8')
+  for (const match of source.matchAll(/var\(\s*(--[\w-]+)/g)) {
+    const sources = customPropertyReferenceSources.get(match[1]) ?? []
+    sources.push(workspacePath(file))
+    customPropertyReferenceSources.set(match[1], sources)
+  }
+}
 for (const reference of customPropertyReferences) {
   if (
     !customPropertyDefinitions.has(reference) &&
     !allowedCustomPropertyReferences.has(reference)
   ) {
-    errors.push(`undefined custom property reference: ${reference}`)
+    errors.push(
+      `undefined custom property reference: ${reference} (${[...new Set(customPropertyReferenceSources.get(reference) ?? [])].join(', ')})`,
+    )
   }
 }
 for (const reference of allowedCustomPropertyReferences) {

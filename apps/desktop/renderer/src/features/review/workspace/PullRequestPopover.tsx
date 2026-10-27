@@ -140,7 +140,8 @@ export function PullRequestPopover({
           <div className="review-popover-actions tw:flex tw:flex-col tw:gap-1 tw:border-t tw:border-app-border tw:pt-1">
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               onClick={() => onCreateDraftPR(title, body, pushFirst)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
@@ -151,7 +152,8 @@ export function PullRequestPopover({
             </Button>
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               onClick={() => onCreatePR(title, body, pushFirst)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
@@ -161,7 +163,8 @@ export function PullRequestPopover({
             </Button>
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               onClick={() => onOpenPR()}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">

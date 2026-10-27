@@ -3,6 +3,7 @@ import { RouterProvider } from 'react-router-dom'
 import { router } from './Routes.js'
 import { DesktopThemeProvider } from './features/theme/DesktopThemeProvider.js'
 import { TooltipProvider } from './components/ui/Tooltip.js'
+import { ButtonStyles } from './components/ui/Button.js'
 import { AppContextMenu } from './components/ui/AppContextMenu.js'
 import { EditCommandProvider } from './components/ui/EditCommandProvider.js'
 import { Suspense, useEffect, useState } from 'react'
@@ -61,6 +62,7 @@ export function App(): React.ReactNode {
 
   return (
     <DesktopThemeProvider>
+      <ButtonStyles />
       <TooltipProvider>
         <EditCommandProvider>
           <AppContextMenu

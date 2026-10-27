@@ -114,7 +114,11 @@
 
   /* Developer-themeable Dropdown family contract. The data attributes mark only
    * dropdown/select surfaces; generic popovers, dialogs and tooltips stay intact. */
-  [data-theme-component='dropdown-trigger']:not(.interactive-row, .sidebar-row, .ui-button) {
+  [data-theme-component='dropdown-trigger']:not(
+    .interactive-row,
+    .sidebar-row,
+    :is(button, a)[data-size][data-variant]
+  ) {
     --cpx-comp-row-bg: var(--cpx-comp-dropdown-trigger-bg);
     --cpx-comp-row-fg: var(--cpx-comp-dropdown-trigger-fg);
     --cpx-comp-row-hover-bg: var(--cpx-comp-dropdown-trigger-hover-bg);
@@ -129,15 +133,16 @@
   [data-theme-component='dropdown-trigger']:not(
       .interactive-row,
       .sidebar-row,
-      .ui-button
+      :is(button, a)[data-size][data-variant]
     ):hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
     background: var(--cpx-comp-dropdown-trigger-hover-bg);
   }
 
-  [data-theme-component='dropdown-trigger']:not(.interactive-row, .sidebar-row, .ui-button):where(
-      [data-state='open'],
-      [aria-expanded='true']
-    ) {
+  [data-theme-component='dropdown-trigger']:not(
+      .interactive-row,
+      .sidebar-row,
+      :is(button, a)[data-size][data-variant]
+    ):where([data-state='open'], [aria-expanded='true']) {
     background: var(--cpx-comp-dropdown-trigger-open-bg);
   }
 

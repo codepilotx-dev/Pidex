@@ -10,12 +10,11 @@ import {
   type ReactNode,
 } from 'react'
 import type React from 'react'
-import { cx } from '../../utils/Cx.js'
+import { cn } from '../../utils/Cn.js'
 import { useResolvedButtonSize } from './TabStripButtonContext.js'
 import { Spinner, type SpinnerProps } from './Spinner.js'
 import type { AppIconSize } from './IconTokens.js'
 import { mergeRefs } from './floating/Primitives.js'
-import './Button.css'
 
 export type ButtonVariant =
   | 'primary'
@@ -45,8 +44,11 @@ export type ButtonColor =
   | 'text'
 
 export type ButtonContentLayout = 'default' | 'balanced'
-export type ButtonShape = 'default' | 'pill'
+
+/** `round` is the default corner family; `default` is an alias kept for callers. */
+export type ButtonShape = 'round' | 'default' | 'pill'
 export type ButtonRadius = 'default' | 'large'
+export type ButtonPosition = 'sidebar'
 
 export type ButtonSize =
   | 'xs'
@@ -90,6 +92,8 @@ export type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'color'>
   asChild?: boolean
   color?: ButtonColor
   contentLayout?: ButtonContentLayout
+  /** Named appearance preset; `sidebar` carries the whole sidebar entry look. */
+  'data-position'?: ButtonPosition
   fullWidth?: boolean
   iconSize?: AppIconSize
   isIconOnly?: boolean
@@ -106,186 +110,55 @@ export type ButtonProps = Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'color'>
 }
 
 /* -------------------------------------------------------------------------------------------------
- * Appearance Mappings (conforming to UI-Design / Codex specification)
+ * Attribute contract
  * -----------------------------------------------------------------------------------------------*/
 
-/* Height, padding, gap and min-height */
-const SIZE_BOX_CLASS: Record<ButtonSize, { standard: string; iconOnly: string; iconSize: number }> =
-  {
-    xs: {
-      standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
-      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
-      iconSize: 12,
-    },
-    sm: {
-      standard: 'tw:h-[30px] tw:min-h-[30px] tw:px-2.5 tw:gap-1.5',
-      iconOnly: 'tw:w-[30px] tw:h-[30px] tw:min-h-[30px] tw:p-0',
-      iconSize: 14,
-    },
-    md: {
-      standard: 'tw:h-9 tw:min-h-9 tw:px-3.5 tw:gap-2',
-      iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
-      iconSize: 16,
-    },
-    lg: {
-      standard: 'tw:h-[42px] tw:min-h-[42px] tw:px-4.5 tw:gap-2.5',
-      iconOnly: 'tw:w-[42px] tw:h-[42px] tw:min-h-[42px] tw:p-0',
-      iconSize: 18,
-    },
-    // Legacy aliases
-    compact: {
-      standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
-      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
-      iconSize: 12,
-    },
-    composer: {
-      standard: 'tw:h-7 tw:min-h-7 tw:px-2 tw:gap-1.5',
-      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-      iconSize: 16,
-    },
-    composerSm: {
-      standard: 'tw:h-7 tw:min-h-7 tw:px-1.5 tw:gap-1',
-      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-      iconSize: 12,
-    },
-    composerUtility: {
-      standard: 'tw:h-7 tw:min-h-7 tw:px-1.5 tw:gap-1.5',
-      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-      iconSize: 16,
-    },
-    default: {
-      standard: 'tw:h-6 tw:min-h-6 tw:px-2 tw:gap-1',
-      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
-      iconSize: 16,
-    },
-    icon: {
-      standard: 'tw:h-7 tw:min-h-7 tw:px-1 tw:gap-1',
-      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-      iconSize: 16,
-    },
-    iconLarge: {
-      standard: 'tw:h-9 tw:min-h-9 tw:px-0 tw:gap-2',
-      iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
-      iconSize: 20,
-    },
-    iconMd: {
-      standard: 'tw:h-6 tw:min-h-6 tw:px-0.5 tw:gap-1',
-      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
-      iconSize: 12,
-    },
-    iconSm: {
-      standard: 'tw:h-6 tw:min-h-6 tw:px-0.5 tw:gap-1',
-      iconOnly: 'tw:w-6 tw:h-6 tw:min-h-6 tw:p-0',
-      iconSize: 12,
-    },
-    large: {
-      standard: 'tw:h-9 tw:min-h-9 tw:px-5 tw:gap-2',
-      iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
-      iconSize: 20,
-    },
-    medium: {
-      standard: 'tw:h-8 tw:min-h-8 tw:px-4 tw:gap-1.5',
-      iconOnly: 'tw:w-8 tw:h-8 tw:min-h-8 tw:p-0',
-      iconSize: 16,
-    },
-    tabStripAction: {
-      standard: 'tw:h-9 tw:min-h-9 tw:px-2 tw:gap-1.5',
-      iconOnly: 'tw:w-9 tw:h-9 tw:min-h-9 tw:p-0',
-      iconSize: 16,
-    },
-    toolbar: {
-      standard: 'tw:h-7 tw:min-h-7 tw:px-2 tw:gap-1.5',
-      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-      iconSize: 16,
-    },
-    toolbarLabel: {
-      standard: 'tw:h-7 tw:min-h-7 tw:px-2.5 tw:gap-1.5',
-      iconOnly: 'tw:w-7 tw:h-7 tw:min-h-7 tw:p-0',
-      iconSize: 16,
-    },
-  }
+export const SPINNER_CLASS = 'tw:shrink-0'
 
-/* Radius specification: 5px (xs), 8px (sm), 10px (md/lg), pill (rounded-full) */
-const RADIUS_CLASSES: Record<ButtonShape, Record<ButtonSize, string>> = {
-  default: {
-    xs: 'tw:rounded-xs',
-    sm: 'tw:rounded-sm',
-    md: 'tw:rounded-md',
-    lg: 'tw:rounded-md',
-    compact: 'tw:rounded-xs',
-    composer: 'tw:rounded-full',
-    composerSm: 'tw:rounded-full',
-    composerUtility: 'tw:rounded-full',
-    default: 'tw:rounded-full',
-    icon: 'tw:rounded-sm',
-    iconLarge: 'tw:rounded-md',
-    iconMd: 'tw:rounded-xs',
-    iconSm: 'tw:rounded-xs',
-    large: 'tw:rounded-full',
-    medium: 'tw:rounded-md',
-    tabStripAction: 'tw:rounded-md',
-    toolbar: 'tw:rounded-sm',
-    toolbarLabel: 'tw:rounded-sm',
-  },
-  pill: {
-    xs: 'tw:rounded-full',
-    sm: 'tw:rounded-full',
-    md: 'tw:rounded-full',
-    lg: 'tw:rounded-full',
-    compact: 'tw:rounded-full',
-    composer: 'tw:rounded-full',
-    composerSm: 'tw:rounded-full',
-    composerUtility: 'tw:rounded-full',
-    default: 'tw:rounded-full',
-    icon: 'tw:rounded-full',
-    iconLarge: 'tw:rounded-full',
-    iconMd: 'tw:rounded-full',
-    iconSm: 'tw:rounded-full',
-    large: 'tw:rounded-full',
-    medium: 'tw:rounded-full',
-    tabStripAction: 'tw:rounded-full',
-    toolbar: 'tw:rounded-full',
-    toolbarLabel: 'tw:rounded-full',
-  },
-}
-
-/* Direct-child icon size per tier (`--button-icon-size*`) */
-const SIZE_ICON_CLASS: Record<ButtonSize, string> = {
-  xs: 'tw:[&>svg]:size-icon-sm',
-  sm: 'tw:[&>svg]:size-icon-sm',
-  md: 'tw:[&>svg]:size-icon',
-  lg: 'tw:[&>svg]:size-icon-lg',
-  compact: 'tw:[&>svg]:size-icon-sm',
-  composer: 'tw:[&>svg]:size-icon',
-  composerSm: 'tw:[&>svg]:size-icon-sm',
-  composerUtility: 'tw:[&>svg]:size-icon',
-  default: 'tw:[&>svg]:size-icon-md',
-  icon: 'tw:[&>svg]:size-icon',
-  iconLarge: 'tw:[&>svg]:size-icon-lg',
-  iconMd: 'tw:[&>svg]:size-icon-sm',
-  iconSm: 'tw:[&>svg]:size-icon-sm',
-  large: 'tw:[&>svg]:size-icon-lg',
-  medium: 'tw:[&>svg]:size-icon',
-  tabStripAction: 'tw:[&>svg]:size-icon',
-  toolbar: 'tw:[&>svg]:size-icon',
-  toolbarLabel: 'tw:[&>svg]:size-icon',
-}
-
-const ICON_OVERRIDE_ICON_CLASS: Record<AppIconSize, string> = {
-  sm: 'tw:[&>svg]:size-icon-sm',
-  md: 'tw:[&>svg]:size-icon-md',
-  lg: 'tw:[&>svg]:size-icon-lg',
-}
+export const ICON_SLOT_CLASS = 'tw:inline-flex tw:shrink-0 tw:items-center'
 
 /*
- * Text buttons scale both icon axes with the label using the UI locale's unit,
- * keeps square icon slots; artwork is excluded.
+ * Only real differences are emitted: `round` is the default corner family,
+ * `default` layout is the absence of `data-layout`, and the default icon size is
+ * the absence of `data-icon-size`.
  */
-const TEXT_ICON_CLASS = cx(
-  "tw:[&>svg:not([data-icon-kind='artwork'])]:size-[var(--inline-icon-size,1em)]",
-  "tw:[&>span>svg:not([data-icon-kind='artwork'])]:size-[var(--inline-icon-size,1em)]",
-  'tw:[&>.ui-spinner]:size-[var(--inline-icon-size,1em)]',
-)
+export type ButtonAppearance = {
+  'data-color'?: ButtonColor
+  'data-icon-only'?: true
+  'data-grow'?: true
+  'data-icon-size'?: AppIconSize
+  'data-layout'?: Exclude<ButtonContentLayout, 'default'>
+  'data-position'?: ButtonPosition
+  'data-shape': Exclude<ButtonShape, 'default'>
+  'data-shrink'?: true
+  'data-size': ButtonSize
+  'data-variant': ButtonVariant
+}
+
+const normalizeShape = (shape: ButtonShape | undefined): Exclude<ButtonShape, 'default'> =>
+  shape === 'pill' ? 'pill' : 'round'
+
+function resolveVariant(variant?: ButtonVariant, color?: ButtonColor): ButtonVariant {
+  if (variant) return variant
+  if (!color) return 'secondary'
+  if (color === 'text') return 'text'
+  if (color === 'primary') return 'primary'
+  if (color === 'accent') return 'accent'
+  if (color === 'accentSubtle') return 'subtle-accent'
+  if (color === 'dangerSolid') return 'danger'
+  if (color === 'danger') return 'danger-outline'
+  if (color === 'outline' || color === 'outlineActive') return 'outline'
+  if (
+    color === 'ghost' ||
+    color === 'ghostSecondary' ||
+    color === 'ghostActive' ||
+    color === 'ghostMuted' ||
+    color === 'ghostTertiary'
+  ) {
+    return 'ghost'
+  }
+  return 'secondary'
+}
 
 const ICON_OVERRIDE_SPINNER_SIZE: Record<AppIconSize, SpinnerProps['size']> = {
   sm: 'small',
@@ -312,146 +185,6 @@ const SIZE_SPINNER_SIZE: Record<ButtonSize, SpinnerProps['size']> = {
   tabStripAction: 'medium',
   toolbar: 'medium',
   toolbarLabel: 'medium',
-}
-
-/* Variant visual states */
-const PRIMARY_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:bg-app-primary-action-hover',
-  'tw:data-[state=open]:bg-app-primary-action-hover',
-  'tw:data-[active]:bg-app-primary-action-hover',
-  'tw:[&:active:not(:disabled)]:bg-app-primary-action-hover',
-)
-
-const ACCENT_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent)_90%,transparent)]',
-  'tw:data-[state=open]:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent)_90%,transparent)]',
-  'tw:data-[active]:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent)_90%,transparent)]',
-)
-
-const SECONDARY_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:border-app-border-strong',
-  'tw:[&:enabled:hover]:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_10%,transparent)]',
-  'tw:data-[state=open]:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_10%,transparent)]',
-  'tw:data-[active]:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_10%,transparent)]',
-)
-
-const OUTLINE_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:border-app-border-strong',
-  'tw:[&:enabled:hover]:text-app-text',
-  'tw:[&:enabled:hover]:bg-app-hover',
-  'tw:data-[state=open]:bg-app-hover',
-  'tw:data-[active]:bg-app-hover',
-)
-
-const GHOST_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:text-app-text',
-  'tw:[&:enabled:hover]:bg-app-hover',
-  'tw:data-[state=open]:bg-app-hover',
-  'tw:data-[active]:bg-app-hover',
-)
-
-const TEXT_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:text-app-text',
-  'tw:[&:enabled:hover]:bg-transparent',
-  'tw:data-[state=open]:text-app-text',
-  'tw:data-[state=open]:bg-transparent',
-  'tw:data-[active]:text-app-text',
-  'tw:data-[active]:bg-transparent',
-  'tw:[&:active:not(:disabled)]:text-app-text',
-  'tw:[&:active:not(:disabled)]:bg-transparent',
-)
-
-const SUBTLE_ACCENT_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:bg-app-accent-subtle-hover',
-  'tw:data-[state=open]:bg-app-accent-subtle-hover',
-  'tw:data-[active]:bg-app-accent-subtle-hover',
-)
-
-const DANGER_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:brightness-110',
-  'tw:data-[state=open]:brightness-110',
-  'tw:data-[active]:brightness-110',
-)
-
-const DANGER_OUTLINE_STATE_CLASS = cx(
-  'tw:[&:enabled:hover]:border-app-danger',
-  'tw:[&:enabled:hover]:bg-[color-mix(in_srgb,var(--cpx-sys-color-charts-red)_12%,transparent)]',
-  'tw:data-[state=open]:bg-[color-mix(in_srgb,var(--cpx-sys-color-charts-red)_12%,transparent)]',
-  'tw:data-[active]:bg-[color-mix(in_srgb,var(--cpx-sys-color-charts-red)_12%,transparent)]',
-)
-
-const VARIANT_CLASS: Record<ButtonVariant, string> = {
-  primary: cx(
-    'tw:border-app-border-strong tw:bg-app-primary-action tw:text-app-primary-action-foreground tw:shadow-xs',
-    PRIMARY_STATE_CLASS,
-  ),
-  accent: cx(
-    'tw:border-transparent tw:bg-app-accent tw:text-app-on-accent tw:shadow-xs',
-    ACCENT_STATE_CLASS,
-  ),
-  secondary: cx(
-    'tw:border-transparent tw:text-app-text tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_5%,transparent)] tw:shadow-xs',
-    SECONDARY_STATE_CLASS,
-  ),
-  outline: cx(
-    'tw:border-app-border-subtle tw:bg-transparent tw:text-app-text-soft',
-    OUTLINE_STATE_CLASS,
-  ),
-  ghost: cx('tw:border-transparent tw:bg-transparent tw:text-app-text-soft', GHOST_STATE_CLASS),
-  text: cx('tw:border-transparent tw:bg-transparent tw:text-app-text-soft', TEXT_STATE_CLASS),
-  danger: cx(
-    'tw:border-transparent tw:bg-app-danger tw:text-app-on-accent tw:shadow-xs',
-    DANGER_STATE_CLASS,
-  ),
-  'danger-outline': cx(
-    'tw:border-[color-mix(in_srgb,var(--cpx-sys-color-charts-red)_35%,transparent)] tw:bg-transparent tw:text-app-chart-red',
-    DANGER_OUTLINE_STATE_CLASS,
-  ),
-  'subtle-accent': cx(
-    'tw:border-app-accent-border tw:bg-app-accent-subtle tw:text-app-accent-fg',
-    SUBTLE_ACCENT_STATE_CLASS,
-  ),
-}
-
-const COLOR_TEXT_CLASSES: Partial<Record<ButtonColor, string>> = {
-  ghost: 'tw:text-app-text-meta',
-  ghostTertiary: 'tw:text-app-text-meta',
-  ghostSecondary: 'tw:text-app-text-soft',
-  ghostActive: 'tw:text-app-text',
-}
-
-const BASE_CLASS = cx(
-  'ui-button',
-  'tw:box-border tw:inline-flex tw:items-center tw:justify-center',
-  'tw:type-control tw:whitespace-nowrap tw:select-none tw:cursor-pointer',
-  'tw:transition-[background-color,border-color,color,opacity,transform,box-shadow] tw:duration-150 tw:ease-out',
-  'tw:[&>svg]:block tw:[&>svg]:shrink-0',
-  'tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-app-accent tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-app-main',
-  'tw:disabled:cursor-not-allowed tw:disabled:opacity-40 tw:disabled:pointer-events-none',
-  'tw:aria-disabled:cursor-not-allowed tw:aria-disabled:opacity-40 tw:aria-disabled:pointer-events-none',
-  'tw:aria-pressed:bg-app-selected tw:aria-pressed:text-app-text',
-)
-
-function resolveVariant(variant?: ButtonVariant, color?: ButtonColor): ButtonVariant {
-  if (variant) return variant
-  if (!color) return 'secondary'
-  if (color === 'text') return 'text'
-  if (color === 'primary') return 'primary'
-  if (color === 'accent') return 'accent'
-  if (color === 'accentSubtle') return 'subtle-accent'
-  if (color === 'dangerSolid') return 'danger'
-  if (color === 'danger') return 'danger-outline'
-  if (color === 'outline' || color === 'outlineActive') return 'outline'
-  if (
-    color === 'ghost' ||
-    color === 'ghostSecondary' ||
-    color === 'ghostActive' ||
-    color === 'ghostMuted' ||
-    color === 'ghostTertiary'
-  ) {
-    return 'ghost'
-  }
-  return 'secondary'
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -486,54 +219,47 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
   ref,
 ): React.ReactNode {
   const groupContext = useContext(ButtonGroupContext)
+  const position = buttonProps['data-position']
 
-  const rawSize = propSize ?? groupContext?.size ?? 'default'
-  const resolvedSize = useResolvedButtonSize(rawSize)
+  const resolvedSize = useResolvedButtonSize(propSize ?? groupContext?.size ?? 'default')
   const variant = resolveVariant(propVariant ?? groupContext?.variant, color)
-  const shape =
-    propShape ?? (radius === 'large' ? 'pill' : undefined) ?? groupContext?.shape ?? 'default'
+  const shape = normalizeShape(
+    propShape ?? (radius === 'large' ? 'pill' : undefined) ?? groupContext?.shape,
+  )
   const isDisabled = disabled || loading || Boolean(groupContext?.disabled)
   const isIcon = isIconOnly || uniform
-
-  const isCustomPadding = /(?:^|\s)tw:(?:p|px|pl)-/.test(className ?? '')
-  const sizeMeta = SIZE_BOX_CLASS[resolvedSize] ?? SIZE_BOX_CLASS.default
-  const sizeClass = isIcon
-    ? sizeMeta.iconOnly
-    : isCustomPadding
-      ? sizeMeta.standard.replace(new RegExp('\\btw:px-\\S+', 'g'), '').trim()
-      : sizeMeta.standard
-  const radiusClass = RADIUS_CLASSES[shape][resolvedSize] ?? RADIUS_CLASSES.default.default
-  const variantClass = VARIANT_CLASS[variant] ?? VARIANT_CLASS.secondary
 
   const spinnerSize = iconSize
     ? ICON_OVERRIDE_SPINNER_SIZE[iconSize]
     : SIZE_SPINNER_SIZE[resolvedSize]
+  const spinner = <Spinner className={SPINNER_CLASS} size={spinnerSize} aria-hidden="true" />
 
-  const spinner = (
-    <Spinner className="ui-button-spinner tw:shrink-0" size={spinnerSize} aria-hidden="true" />
-  )
+  /* The caller's class is the only class a Button emits. */
+  const hostClass = cn(className) || undefined
 
-  const iconClasses = isIcon
-    ? iconSize
-      ? ICON_OVERRIDE_ICON_CLASS[iconSize]
-      : SIZE_ICON_CLASS[resolvedSize]
-    : TEXT_ICON_CLASS
+  /*
+   * Ghost aliases map to the `ghost` variant; the alias itself survives as
+   * `data-color` so the tertiary ink difference stays a real attribute.
+   */
+  const colorAttribute =
+    variant === 'ghost' && color && color !== 'ghostSecondary' && color !== 'ghostActive'
+      ? color
+      : undefined
 
-  const baseClasses = cx(
-    BASE_CLASS,
-    contentLayout === 'balanced' ? 'tw:grid tw:grid-cols-[1fr_auto_1fr]' : 'tw:inline-flex',
-    sizeClass,
-    radiusClass,
-    variantClass,
-    color && COLOR_TEXT_CLASSES[color],
-    isIcon && 'icon-button tw:aspect-square tw:shrink-0',
-    fullWidth && 'tw:w-full',
-    allowShrink && 'tw:min-w-0',
-    iconClasses,
-    className,
-  )
+  const appearance: ButtonAppearance = {
+    'data-color': colorAttribute,
+    'data-grow': fullWidth || undefined,
+    'data-shrink': allowShrink || undefined,
+    'data-icon-only': isIcon || undefined,
+    'data-icon-size': iconSize,
+    'data-layout': contentLayout === 'balanced' ? 'balanced' : undefined,
+    'data-position': position,
+    'data-shape': shape,
+    'data-size': resolvedSize,
+    'data-variant': variant,
+  } as ButtonAppearance
 
-  const renderContent = () => {
+  const renderContent = (): ReactNode => {
     if (loading) {
       if (loadingText) {
         return (
@@ -543,9 +269,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
           </>
         )
       }
-      if (isIcon) {
-        return spinner
-      }
+      if (isIconOnly) return spinner
       return (
         <>
           {spinner}
@@ -557,13 +281,9 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     if (leftIcon || rightIcon) {
       return (
         <>
-          {leftIcon ? (
-            <span className="tw:inline-flex tw:shrink-0 tw:items-center">{leftIcon}</span>
-          ) : null}
+          {leftIcon ? <span className={ICON_SLOT_CLASS}>{leftIcon}</span> : null}
           {children}
-          {rightIcon ? (
-            <span className="tw:inline-flex tw:shrink-0 tw:items-center">{rightIcon}</span>
-          ) : null}
+          {rightIcon ? <span className={ICON_SLOT_CLASS}>{rightIcon}</span> : null}
         </>
       )
     }
@@ -578,46 +298,29 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     const childRef = (childElement as any).ref
     return cloneElement(childElement, {
       ref: ref || childRef ? (mergeRefs(ref, childRef) as any) : undefined,
-      className: cx(baseClasses, childElement.props.className),
+      className: cn(hostClass, childElement.props.className) || undefined,
       'aria-busy': loading ? true : undefined,
       'aria-disabled': isDisabled ? true : undefined,
       'data-active':
-        active || buttonProps['data-active'] || (childElement.props as any)['data-active'] || undefined,
-      'data-allow-shrink': allowShrink || undefined,
-      'data-color': color ?? variant,
-      'data-content-layout': contentLayout,
-      'data-icon-only': isIcon || undefined,
-      'data-icon-size': iconSize,
-      'data-loading': loading || undefined,
-      'data-radius': radius ?? (shape === 'pill' ? 'large' : 'default'),
-      'data-shape': shape,
-      'data-size': resolvedSize,
-      'data-uniform': uniform || isIcon || undefined,
-      'data-variant': variant,
+        active ||
+        buttonProps['data-active'] ||
+        (childElement.props as any)['data-active'] ||
+        undefined,
+      ...appearance,
     } as any)
   }
 
   return (
     <button
       {...buttonProps}
+      {...appearance}
       ref={ref}
       aria-busy={loading ? true : undefined}
       aria-label={
         isIcon && buttonProps.title ? buttonProps.title : (buttonProps['aria-label'] ?? undefined)
       }
-      className={baseClasses}
+      className={hostClass}
       data-active={active || buttonProps['data-active'] || undefined}
-      data-allow-shrink={allowShrink || undefined}
-      data-color={color ?? variant}
-      data-content-layout={contentLayout}
-      data-icon-only={isIcon || undefined}
-      data-icon-size={iconSize}
-      data-loading={loading || undefined}
-      data-radius={radius ?? (shape === 'pill' ? 'large' : 'default')}
-      data-shape={shape}
-      data-size={resolvedSize}
-      data-uniform={uniform || isIcon || undefined}
-      data-variant={variant}
       disabled={isDisabled}
       title={nativeTitle ? buttonProps.title : undefined}
       type={type}
@@ -628,6 +331,565 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 })
 
 Button.displayName = 'Button'
+
+/* -------------------------------------------------------------------------------------------------
+ * Shared button styles
+ * -----------------------------------------------------------------------------------------------*/
+
+/*
+ * Every appearance rule a Button owns lives here once and is mounted by the
+ * renderer root (`<ButtonStyles />`). Only native tags carrying the emitted
+ * attributes are matched, so native business rows, cards and other controls are
+ * never restyled and no identity class is needed.
+ *
+ * The block sits in the `primitives` cascade layer; caller utilities stay in
+ * `utilities`, so an explicit `className` keeps overriding these defaults.
+ */
+const BUTTON_STYLES = String.raw`
+@layer primitives {
+  /* Every shared Button reads one control typography role, never a local font. */
+  :is(button, a)[data-size][data-variant] {
+    --button-padding-inline: var(--cpx-comp-button-padding-inline);
+    box-sizing: border-box;
+    display: inline-flex;
+    min-inline-size: 0;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid transparent;
+    border-radius: var(--cpx-sys-radius-full);
+    margin: 0;
+    padding: var(--cpx-comp-button-padding-block) var(--button-padding-inline);
+    background: transparent;
+    color: var(--cpx-sys-color-fg-secondary);
+    white-space: nowrap;
+    font: var(--cpx-sys-type-control);
+    letter-spacing: var(--cpx-sys-letter-spacing-control);
+    text-decoration: none;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-app-region: no-drag;
+    transition-property: background-color, border-color, color, opacity, transform, box-shadow;
+    transition-duration: var(--cpx-sys-motion-feedback);
+    transition-timing-function: var(--cpx-sys-ease-standard);
+  }
+
+  :is(button, a)[data-size][data-variant]:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+
+  /*
+   * A shrinking label keeps the size's own inline padding on each side instead
+   * of collapsing into the border. The size sets --button-padding-inline.
+   */
+  :is(button, a)[data-size][data-variant][data-shrink] {
+    min-inline-size: 0;
+    padding-inline: max(
+      var(--button-padding-inline),
+      calc((100% - var(--button-padding-inline) * 2) * 0.9)
+    );
+  }
+
+  :is(button, a)[data-size][data-variant][data-grow] {
+    inline-size: 100%;
+  }
+
+  /* Disabled and loading buttons keep their state rules but take no pointer. */
+  :is(button, a)[data-size][data-variant]:is(:disabled, [aria-disabled='true']) {
+    cursor: not-allowed;
+    opacity: 0.4;
+    pointer-events: none;
+  }
+
+  :is(button, a)[data-size][data-variant][aria-pressed='true'] {
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  :is(button, a)[data-size][data-variant][aria-pressed='true']:not(:hover) {
+    background: var(--cpx-sys-color-selected);
+  }
+
+  /* Size tiers: height, inline padding, gap and corner family. */
+  :is(button, a)[data-size][data-variant][data-size='xs'],
+  :is(button, a)[data-size][data-variant][data-size='compact'] {
+    --button-box-size: 1.5rem;
+    --button-padding-inline: var(--cpx-comp-button-padding-inline-compact);
+    block-size: var(--button-box-size);
+    gap: var(--cpx-sys-space-1);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-xs);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='default'] {
+    --button-box-size: 1.5rem;
+    --button-padding-inline: var(--cpx-comp-button-padding-inline-compact);
+    block-size: var(--button-box-size);
+    gap: var(--cpx-sys-space-1);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-full);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='iconMd'],
+  :is(button, a)[data-size][data-variant][data-size='iconSm'] {
+    --button-box-size: 1.5rem;
+    --button-padding-inline: 0.125rem;
+    block-size: var(--button-box-size);
+    gap: var(--cpx-sys-space-1);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-xs);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='sm'] {
+    --button-box-size: 1.875rem;
+    --button-padding-inline: 0.625rem;
+    block-size: var(--button-box-size);
+    gap: var(--cpx-comp-button-gap-compact);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-sm);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='composer'] {
+    --button-box-size: var(--cpx-comp-button-size-toolbar);
+    --button-padding-inline: var(--cpx-sys-space-2);
+    block-size: var(--button-box-size);
+    gap: var(--cpx-comp-button-gap);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-full);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='composerSm'] {
+    --button-box-size: var(--cpx-comp-button-size-toolbar);
+    --button-padding-inline: 0.375rem;
+    block-size: var(--button-box-size);
+    gap: var(--cpx-sys-space-1);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-full);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='composerUtility'] {
+    --button-box-size: var(--cpx-comp-button-size-toolbar);
+    --button-padding-inline: 0.375rem;
+    block-size: var(--button-box-size);
+    gap: var(--cpx-comp-button-gap);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-full);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='icon'] {
+    --button-box-size: var(--cpx-comp-button-size-toolbar);
+    --button-padding-inline: var(--cpx-sys-space-1);
+    block-size: var(--button-box-size);
+    gap: var(--cpx-sys-space-1);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-sm);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='toolbar'] {
+    --button-box-size: var(--cpx-comp-button-size-toolbar);
+    --button-padding-inline: var(--cpx-sys-space-2);
+    block-size: var(--button-box-size);
+    gap: var(--cpx-comp-button-gap-compact);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-sm);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='toolbarLabel'] {
+    --button-box-size: var(--cpx-comp-button-size-toolbar);
+    --button-padding-inline: 0.625rem;
+    block-size: var(--button-box-size);
+    gap: var(--cpx-comp-button-gap-compact);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-sm);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='medium'] {
+    --button-box-size: var(--cpx-comp-button-size-medium);
+    --button-padding-inline: var(--cpx-sys-space-4);
+    block-size: var(--button-box-size);
+    gap: var(--cpx-comp-button-gap);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-md);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='md'] {
+    --button-box-size: var(--cpx-comp-button-size-large);
+    --button-padding-inline: 0.875rem;
+    block-size: var(--button-box-size);
+    gap: var(--cpx-sys-space-2);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-md);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='lg'] {
+    --button-box-size: 2.625rem;
+    --button-padding-inline: 1.125rem;
+    block-size: var(--button-box-size);
+    gap: var(--cpx-comp-button-gap);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-md);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='iconLarge'] {
+    --button-box-size: var(--cpx-comp-button-size-large);
+    --button-padding-inline: 0;
+    block-size: var(--button-box-size);
+    gap: var(--cpx-sys-space-2);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-md);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='large'] {
+    --button-box-size: var(--cpx-comp-button-size-large);
+    --button-padding-inline: var(--cpx-sys-space-5);
+    block-size: var(--button-box-size);
+    gap: var(--cpx-sys-space-2);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-full);
+  }
+
+  :is(button, a)[data-size][data-variant][data-size='tabStripAction'] {
+    --button-box-size: var(--cpx-comp-button-size-large);
+    --button-padding-inline: var(--cpx-sys-space-2);
+    block-size: var(--button-box-size);
+    gap: var(--cpx-comp-button-gap-compact);
+    padding-inline: var(--button-padding-inline);
+    border-radius: var(--cpx-sys-radius-md);
+  }
+
+  /*
+   * The pill shape collapses every tier into a capsule. Other shapes keep the
+   * tier's own corner family; round is the default and still emits the attribute.
+   */
+  :is(button, a)[data-size][data-variant][data-shape='pill'] {
+    border-radius: var(--cpx-sys-radius-full);
+  }
+
+  /* Icon slots, direct icons and spinners align and scale with the button. */
+  :is(button, a)[data-size][data-variant] > :is(svg, span) {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+  }
+
+  :is(button, a)[data-size][data-variant]:is([data-size='xs'], [data-size='sm'], [data-size='compact'], [data-size='composerSm'], [data-size='iconMd'], [data-size='iconSm']) > svg:not([data-icon-kind='artwork']) {
+    inline-size: var(--cpx-sys-icon-size-sm);
+    block-size: var(--cpx-sys-icon-size-sm);
+  }
+
+  :is(button, a)[data-size][data-variant]:is([data-size='default'], [data-size='md'], [data-size='composer'], [data-size='composerUtility'], [data-size='icon'], [data-size='medium'], [data-size='tabStripAction'], [data-size='toolbar'], [data-size='toolbarLabel']) > svg:not([data-icon-kind='artwork']) {
+    inline-size: var(--cpx-sys-icon-size);
+    block-size: var(--cpx-sys-icon-size);
+  }
+
+  :is(button, a)[data-size][data-variant]:is([data-size='lg'], [data-size='iconLarge'], [data-size='large']) > svg:not([data-icon-kind='artwork']) {
+    inline-size: var(--cpx-sys-icon-size-lg);
+    block-size: var(--cpx-sys-icon-size-lg);
+  }
+
+
+  /* An explicit icon size wins over the tier; artwork keeps its own box. */
+  :is(button, a)[data-size][data-variant][data-icon-size='sm'] > svg:not([data-icon-kind='artwork']) {
+    inline-size: var(--cpx-sys-icon-size-sm);
+    block-size: var(--cpx-sys-icon-size-sm);
+  }
+
+  :is(button, a)[data-size][data-variant][data-icon-size='md'] > svg:not([data-icon-kind='artwork']) {
+    inline-size: var(--cpx-sys-icon-size);
+    block-size: var(--cpx-sys-icon-size);
+  }
+
+  :is(button, a)[data-size][data-variant][data-icon-size='lg'] > svg:not([data-icon-kind='artwork']) {
+    inline-size: var(--cpx-sys-icon-size-lg);
+    block-size: var(--cpx-sys-icon-size-lg);
+  }
+
+  /* Label icons (and nested slots) scale with the label instead of the tier. */
+  :is(button, a)[data-size][data-variant]:not([data-icon-only]) :is(svg, span) > svg:not([data-icon-kind='artwork']) {
+    inline-size: var(--inline-icon-size, 1em);
+    block-size: var(--inline-icon-size, 1em);
+  }
+
+  :is(button, a)[data-size][data-variant]:not([data-icon-only]) > .ui-spinner {
+    inline-size: var(--inline-icon-size, 1em);
+    block-size: var(--inline-icon-size, 1em);
+  }
+
+  /* A trailing chevron belongs to the label, so it follows the font size. */
+  :is(button, a)[data-size][data-variant]:not([data-icon-only]) > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
+    inline-size: var(--inline-icon-size, 1em);
+    block-size: var(--inline-icon-size, 1em);
+  }
+
+  /* Icon-only buttons are square and carry no inline padding. */
+  :is(button, a)[data-size][data-variant][data-icon-only] {
+    --button-box-size: var(--cpx-comp-button-size-toolbar);
+    aspect-ratio: 1;
+    block-size: var(--button-box-size);
+    padding: 0;
+  }
+
+  :is(button, a)[data-size][data-variant][data-icon-only]:is([data-size='xs'], [data-size='compact'], [data-size='default'], [data-size='iconMd'], [data-size='iconSm']) {
+    --button-box-size: var(--cpx-comp-button-size-compact);
+  }
+
+  :is(button, a)[data-size][data-variant][data-icon-only][data-size='sm'] {
+    --button-box-size: 1.875rem;
+  }
+
+  :is(button, a)[data-size][data-variant][data-icon-only]:is([data-size='composer'], [data-size='composerSm'], [data-size='composerUtility'], [data-size='icon'], [data-size='toolbar'], [data-size='toolbarLabel']) {
+    --button-box-size: var(--cpx-comp-button-size-toolbar);
+  }
+
+  :is(button, a)[data-size][data-variant][data-icon-only][data-size='medium'] {
+    --button-box-size: var(--cpx-comp-button-size-medium);
+  }
+
+  :is(button, a)[data-size][data-variant][data-icon-only]:is([data-size='md'], [data-size='lg'], [data-size='iconLarge'], [data-size='large'], [data-size='tabStripAction']) {
+    --button-box-size: var(--cpx-comp-button-size-large);
+  }
+
+  /* A balanced label centers its text between symmetric icon slots. */
+  :is(button, a)[data-size][data-variant][data-layout='balanced'] {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+  }
+
+  /* Variant surfaces. */
+  :is(button, a)[data-size][data-variant][data-variant='primary'] {
+    border-color: var(--cpx-sys-color-border-strong);
+    background: var(--cpx-comp-button-primary-bg);
+    color: var(--cpx-comp-button-primary-fg);
+    box-shadow: var(--cpx-sys-shadow-resting);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='primary']:hover:not(:disabled, [aria-disabled='true']),
+  :is(button, a)[data-size][data-variant][data-variant='primary'][data-state='open'],
+  :is(button, a)[data-size][data-variant][data-variant='primary'][data-active] {
+    background: var(--cpx-comp-button-primary-hover-bg);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='accent'] {
+    border-color: transparent;
+    background: var(--cpx-sys-color-accent);
+    color: var(--cpx-sys-color-fg-on-accent);
+    box-shadow: var(--cpx-sys-shadow-resting);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='accent']:hover:not(:disabled, [aria-disabled='true']),
+  :is(button, a)[data-size][data-variant][data-variant='accent'][data-state='open'],
+  :is(button, a)[data-size][data-variant][data-variant='accent'][data-active] {
+    background: var(--cpx-comp-button-accent-hover-bg);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='secondary'] {
+    border-color: transparent;
+    background: var(--cpx-comp-button-bg);
+    color: var(--cpx-comp-button-fg);
+    box-shadow: var(--cpx-sys-shadow-resting);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='secondary']:hover:not(:disabled, [aria-disabled='true']) {
+    border-color: var(--cpx-sys-color-border-strong);
+    background: var(--cpx-comp-button-secondary-hover-bg);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='secondary']:is([data-state='open'], [data-active]) {
+    background: var(--cpx-comp-button-secondary-hover-bg);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='outline'] {
+    border-color: var(--cpx-sys-color-border-subtle);
+    background: transparent;
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='outline']:hover:not(:disabled, [aria-disabled='true']) {
+    border-color: var(--cpx-sys-color-border-strong);
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='outline']:is([data-state='open'], [data-active]) {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  :is(button, a)[data-size][data-variant]:is([data-variant='ghost'], [data-variant='text']) {
+    border-color: transparent;
+    background: transparent;
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  :is(button, a)[data-size][data-variant]:is([data-variant='ghost'], [data-variant='text']):hover:not(:disabled, [aria-disabled='true']) {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  :is(button, a)[data-size][data-variant]:is([data-variant='ghost'], [data-variant='text']):is([data-state='open'], [data-active]) {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  /* Text variants stay transparent on hover; only their ink changes. */
+  :is(button, a)[data-size][data-variant][data-variant='text']:hover:not(:disabled, [aria-disabled='true']),
+  :is(button, a)[data-size][data-variant][data-variant='text']:is([data-state='open'], [data-active]) {
+    background: transparent;
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='danger'] {
+    border-color: transparent;
+    background: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-fg-on-accent);
+    box-shadow: var(--cpx-sys-shadow-resting);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='danger']:hover:not(:disabled, [aria-disabled='true']),
+  :is(button, a)[data-size][data-variant][data-variant='danger']:is([data-state='open'], [data-active]) {
+    filter: brightness(1.1);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='danger-outline'] {
+    border-color: var(--cpx-comp-button-danger-outline-border);
+    background: transparent;
+    color: var(--cpx-sys-color-charts-red);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='danger-outline']:hover:not(:disabled, [aria-disabled='true']) {
+    border-color: var(--cpx-sys-color-danger);
+    background: var(--cpx-comp-button-danger-outline-hover-bg);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='danger-outline']:is([data-state='open'], [data-active]) {
+    background: var(--cpx-comp-button-danger-outline-hover-bg);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='subtle-accent'] {
+    border-color: var(--cpx-sys-color-accent-subtle-border);
+    background: var(--cpx-sys-color-accent-subtle-bg);
+    color: var(--cpx-sys-color-accent-fg);
+  }
+
+  :is(button, a)[data-size][data-variant][data-variant='subtle-accent']:hover:not(:disabled, [aria-disabled='true']),
+  :is(button, a)[data-size][data-variant][data-variant='subtle-accent']:is([data-state='open'], [data-active]) {
+    background: var(--cpx-sys-color-accent-subtle-hover-bg);
+  }
+
+  /* Ghost aliases keep the tertiary ink used by sidebar and summary actions. */
+  :is(button, a)[data-size][data-variant][data-color='ghost'],
+  :is(button, a)[data-size][data-variant][data-color='ghostTertiary'] {
+    color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  :is(button, a)[data-size][data-variant][data-color='ghostSecondary'] {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  :is(button, a)[data-size][data-variant][data-color='ghostActive'] {
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  @media (forced-colors: active) {
+    :is(button, a)[data-size][data-variant][data-variant='primary'] {
+      border-color: ButtonText;
+      background: ButtonFace;
+      color: ButtonText;
+    }
+
+    :is(button, a)[data-size][data-variant][data-variant='secondary'] {
+      border-color: ButtonText;
+      background: transparent;
+    }
+
+    :is(button, a)[data-size][data-variant][data-variant='text'] {
+      border-color: transparent;
+      background: transparent;
+      color: ButtonText;
+    }
+  }
+
+  /*
+   * The sidebar preset carries the whole sidebar entry look: ink, hover, expanded
+   * and selected states. It binds to the attribute rather than to a container, so
+   * the right dock can request the same look directly.
+   */
+  :is(button, a)[data-size][data-variant][data-position='sidebar'] {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  :is(button, a)[data-size][data-variant][data-position='sidebar']:hover,
+  :is(button, a)[data-size][data-variant][data-position='sidebar'][data-state='open'] {
+    background: var(--cpx-sys-color-hover);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  :is(button, a)[data-size][data-variant][data-position='sidebar']:is([data-active]:not(:hover), [aria-pressed='true']) {
+    background: var(--cpx-sys-color-selected);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  :is(button, a)[data-size][data-variant][data-position='sidebar']:is(:disabled, [aria-disabled='true']) {
+    background: transparent;
+    color: var(--cpx-sys-color-fg-disabled);
+  }
+
+  /* ButtonGroup: orientation, gap, segment seams and hover stacking. */
+  [role='group'][data-orientation][data-attached] {
+    display: inline-flex;
+    gap: var(--cpx-sys-space-2);
+  }
+
+  [role='group'][data-orientation='horizontal'][data-attached] {
+    flex-direction: row;
+    align-items: center;
+  }
+
+  [role='group'][data-orientation='vertical'][data-attached] {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  [role='group'][data-attached]:not([data-attached='false']) {
+    gap: 0;
+  }
+
+  [role='group'][data-attached]:not([data-attached='false']) > :not(:first-child) {
+    z-index: var(--cpx-sys-z-local);
+  }
+
+  [role='group'][data-attached]:not([data-attached='false']) > :is(:hover, :focus-visible) {
+    z-index: var(--cpx-sys-z-sticky);
+  }
+
+  [role='group'][data-attached]:not([data-attached='false'])[data-orientation='horizontal'] > :not(:first-child) {
+    margin-inline-start: -1px;
+    border-start-start-radius: 0;
+    border-end-start-radius: 0;
+  }
+
+  [role='group'][data-attached]:not([data-attached='false'])[data-orientation='horizontal'] > :not(:last-child) {
+    border-start-end-radius: 0;
+    border-end-end-radius: 0;
+  }
+
+  [role='group'][data-attached]:not([data-attached='false'])[data-orientation='vertical'] > :not(:first-child) {
+    margin-block-start: -1px;
+    border-start-start-radius: 0;
+    border-start-end-radius: 0;
+  }
+
+  [role='group'][data-attached]:not([data-attached='false'])[data-orientation='vertical'] > :not(:last-child) {
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+}
+`
+
+/** Mounts the shared button stylesheet once at the renderer root. */
+export function ButtonStyles(): React.ReactNode {
+  return <style dangerouslySetInnerHTML={{ __html: BUTTON_STYLES }} />
+}
 
 /* -------------------------------------------------------------------------------------------------
  * ButtonGroup Component Props
@@ -648,7 +910,7 @@ export interface ButtonGroupProps extends React.HTMLAttributes<HTMLDivElement> {
 export function ButtonGroup({
   attached = true,
   children,
-  className = '',
+  className,
   disabled,
   orientation = 'horizontal',
   shape,
@@ -656,22 +918,15 @@ export function ButtonGroup({
   variant,
   ...props
 }: ButtonGroupProps): React.ReactNode {
-  const isHorizontal = orientation === 'horizontal'
-
-  const groupClasses = cx(
-    'ui-button-group tw:inline-flex',
-    isHorizontal ? 'tw:flex-row tw:items-center' : 'tw:flex-col tw:items-stretch',
-    attached
-      ? isHorizontal
-        ? 'tw:[&>*:not(:first-child)]:rounded-l-none tw:[&>*:not(:last-child)]:rounded-r-none tw:[&>*:not(:first-child)]:-ml-px tw:[&>*:hover]:z-10 tw:[&>*:focus-visible]:z-20'
-        : 'tw:[&>*:not(:first-child)]:rounded-t-none tw:[&>*:not(:last-child)]:rounded-b-none tw:[&>*:not(:first-child)]:-mt-px tw:[&>*:hover]:z-10 tw:[&>*:focus-visible]:z-20'
-      : 'tw:gap-2',
-    className,
-  )
-
   return (
     <ButtonGroupContext.Provider value={{ attached, disabled, shape, size, variant }}>
-      <div role="group" className={groupClasses} {...props}>
+      <div
+        role="group"
+        {...props}
+        className={cn(className) || undefined}
+        data-attached={attached ? '' : 'false'}
+        data-orientation={orientation}
+      >
         {children}
       </div>
     </ButtonGroupContext.Provider>

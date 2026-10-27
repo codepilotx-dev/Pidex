@@ -1,13 +1,6 @@
+import { useStore } from 'zustand/react'
 import type React from 'react'
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Dropdown as DropdownMenu } from '../../../components/ui/floating/Dropdown.js'
 import {
@@ -98,11 +91,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
   const [logoutBusy, setLogoutBusy] = useState(false)
   const [usage, setUsage] = useState<ProviderUsageState>(EMPTY_USAGE)
-  const { auth: githubAuth } = useSyncExternalStore(
-    desktopClient.onGithubAccountChange,
-    desktopClient.getGithubAccountSnapshot,
-    desktopClient.getGithubAccountSnapshot,
-  )
+  const githubAuth = useStore(desktopClient.githubAccountStore, (state) => state.auth)
   const [petToggleBusy, setPetToggleBusy] = useState(false)
   const settingsActive = location.pathname.startsWith('/settings/')
   const usageAvailable = Boolean(configuredProviderID && model)
@@ -296,7 +285,8 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
               active={settingsActive || menuOpen}
               ref={accountMenuTriggerRef}
               aria-label={accountTriggerName}
-              className="sidebar-settings-link tw:data-[active=true]:bg-app-selected tw:data-[active=true]:text-app-text"
+              data-position="sidebar"
+              className="sidebar-settings-link"
             >
               {accountAvatar}
             </Button>

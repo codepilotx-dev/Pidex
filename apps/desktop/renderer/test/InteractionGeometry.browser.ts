@@ -16,7 +16,7 @@ import { ToggleSwitch } from '../src/components/ui/ToggleSwitch.js'
 import { PopoverItem } from '../src/components/ui/PopoverItem.js'
 import { Dropdown } from '../src/components/ui/floating/Dropdown.js'
 import { SidebarRow } from '../src/features/layout/sidebar/SidebarRow.js'
-import { compileEntryStyles, rendererRoot } from './helpers/RendererStyles.js'
+import { compileEntryStyles, renderButtonStyles, rendererRoot } from './helpers/RendererStyles.js'
 
 const noop = () => {}
 const examples = renderToString(
@@ -108,15 +108,16 @@ const examples = renderToString(
 const latinFont = (
   await readFile(resolve(rendererRoot, 'public/fonts/misans/MiSans-Regular.latin.woff2'))
 ).toString('base64')
+const buttonStyles = await renderButtonStyles()
 const css =
   (await compileEntryStyles()) +
   `@font-face{font-family:MiSans;font-weight:100 900;src:url(data:font/woff2;base64,${latinFont}) format('woff2')}`
 const html = `<!doctype html><html lang="zh-CN" data-reduce-motion="on"><meta charset="utf-8"><title>Pidex 图标与点击热区对照</title>
-<style>${css}</style><style>
+<style>${css}</style><style>${buttonStyles}</style><style>
 body{overflow:auto;padding:24px}main{display:grid;grid-template-columns:1fr 1fr;gap:32px}
 .examples{display:flex;flex-direction:column;align-items:start;gap:16px}.examples>.sidebar-row{width:240px}
 .nested{display:flex;gap:4px;align-items:center}.entity{padding:4px 12px}.close{flex:none}
-.before :is(.settings-nav-icon,.ui-button:not([data-icon-only]) .lucide,.ui-spinner,.popover-item-icon>svg,.popover-item-arrow,.ui-select-trigger>svg){width:16px;height:16px}.before .close{width:16px;height:16px;min-width:16px;min-height:16px}
+.before :is(.settings-nav-icon,button:not([data-icon-only]) .lucide,.ui-spinner,.popover-item-icon>svg,.popover-item-arrow,.ui-select-trigger>svg){width:16px;height:16px}.before .close{width:16px;height:16px;min-width:16px;min-height:16px}
 </style><h1>Pidex 同行图标与热区</h1><p>A 模拟旧固定尺寸；B 使用当前真实组件。独立图标保持原尺寸。</p>
 <label>字号 <select id="font"><option>11</option><option selected>14</option><option>16</option></select></label>
 <label>字体 <select id="family"><option>MiSans</option><option>Arial</option></select></label>
@@ -159,7 +160,7 @@ try {
           )
           const icons = await page
             .locator(
-              '.after .settings-nav-icon, .after .search-input-icon, .after .ui-button:not([data-icon-only]) .lucide, .after .ui-button-spinner, .after .popover-item-icon > svg, .after .popover-item-arrow, .after .ui-select-trigger svg',
+              '.after .settings-nav-icon, .after .search-input-icon, .after button:not([data-icon-only]) .lucide, .after .ui-spinner, .after .popover-item-icon > svg, .after .popover-item-arrow, .after .ui-select-trigger svg',
             )
             .evaluateAll((elements) =>
               elements.map((element) => {

@@ -1546,9 +1546,7 @@ export function ModelEditor({
             <Button
               variant="ghost"
               size="xs"
-              shape="default"
               isIconOnly
-              className="tw:[&&]:rounded-md"
               aria-label="回退高级配置"
               title="回退高级配置"
               disabled={!history.length}
@@ -1559,9 +1557,7 @@ export function ModelEditor({
             <Button
               variant="ghost"
               size="xs"
-              shape="default"
               isIconOnly
-              className="tw:[&&]:rounded-md"
               aria-label="重置高级配置"
               title="重置高级配置"
               disabled={!advancedDirty}
