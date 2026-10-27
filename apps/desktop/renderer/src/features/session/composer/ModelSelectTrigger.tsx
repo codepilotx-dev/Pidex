@@ -1,6 +1,5 @@
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../../components/ui/IconTokens.js'
 import React, { useEffect, useRef, useState } from 'react'
-import { mergeRefs } from '../../../components/ui/floating/Primitives.js'
 import { motion, type HTMLMotionProps } from 'motion/react'
 import { ChevronDown, Sparkles } from 'lucide-react'
 import { cx } from '../../../utils/Cx.js'
@@ -167,7 +166,7 @@ export type ModelSelectTriggerProps = Omit<HTMLMotionProps<'button'>, 'children'
   id?: string
 }
 
-export const ModelSelectTrigger = React.forwardRef<HTMLButtonElement, ModelSelectTriggerProps>(
+export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTriggerProps>(
   function ModelSelectTrigger(
     {
       modelName,
@@ -210,7 +209,7 @@ export const ModelSelectTrigger = React.forwardRef<HTMLButtonElement, ModelSelec
         transition={transition}
         type="button"
         id={id}
-        ref={mergeRefs(ref, buttonRef)}
+        ref={buttonRef}
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         title={tooltipTitle}
@@ -248,6 +247,11 @@ export const ModelSelectTrigger = React.forwardRef<HTMLButtonElement, ModelSelec
 
     return (
       <motion.div
+        ref={ref as React.Ref<HTMLDivElement>}
+        tabIndex={-1}
+        onFocus={(event) => {
+          if (event.target === event.currentTarget) buttonRef.current?.focus()
+        }}
         layout
         transition={transition}
         className={cx(CAPSULE_CLASS, active ? CAPSULE_ACTIVE_CLASS : CAPSULE_IDLE_CLASS, className)}
