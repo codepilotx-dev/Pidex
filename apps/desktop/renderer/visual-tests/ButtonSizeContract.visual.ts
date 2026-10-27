@@ -185,16 +185,6 @@ for (const uiFontSize of [11, 16]) {
 
     await expect(page.locator('.app-menubar')).toHaveCSS('height', '36px')
     await expect(page.locator('.desktop-workspace-header')).toHaveCSS('height', '46px')
-    const productModeTrigger = page.getByRole('button', {
-      name: '切换工作模式，当前为 Coding',
-      exact: true,
-    })
-    await expect(productModeTrigger).toHaveCSS('height', '24px')
-    await expect(productModeTrigger).toHaveCSS('border-radius', '9999px')
-    await expect(productModeTrigger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-    await expect(productModeTrigger).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
-    await expect(productModeTrigger).toHaveAttribute('aria-expanded', 'false')
-
     await expectBox(page.getByRole('button', { name: '搜索任务' }), 36)
     await expectBox(page.getByRole('button', { name: '查看活动 (Ctrl+Alt+U)', exact: true }), 36)
     const help = await metrics(page.getByRole('menuitem', { name: '帮助', exact: true }))
@@ -234,60 +224,6 @@ for (const uiFontSize of [11, 16]) {
     expect(danger.color).not.toBe(dangerSolid.color)
   })
 }
-
-test('composer mode menu preserves the current chat and applies the selected mode to new chats', async ({
-  page,
-}) => {
-  await page.setViewportSize({ width: 1440, height: 920 })
-  await prepareVisualTheme(page, 'dark')
-  await page.goto('/?visualCase=rich#/threads/visual-rich')
-  await waitForVisualPage(page, 'dark', page.locator('[data-canonical-thread-id="visual-rich"]'))
-  await page.getByRole('button', { name: '稍后', exact: true }).click()
-
-  const productModeTrigger = page.getByRole('button', {
-    name: '切换工作模式，当前为 Coding',
-    exact: true,
-  })
-  await expect(productModeTrigger).toHaveCSS('height', '24px')
-  await expect(productModeTrigger).toHaveCSS('border-radius', '9999px')
-  await expect(productModeTrigger).toHaveCSS('background-color', 'rgba(0, 0, 0, 0)')
-  await expect(productModeTrigger).toHaveCSS('border-top-color', 'rgba(0, 0, 0, 0)')
-  await expect(productModeTrigger).toHaveAttribute('aria-expanded', 'false')
-
-  await productModeTrigger.click()
-  const productModeMenu = page.getByRole('listbox', { name: '工作模式', exact: true })
-  await expect(productModeMenu).toBeVisible()
-  await expect(productModeTrigger).toHaveAttribute('aria-expanded', 'true')
-  const selectedBackground = await page.evaluate(() => {
-    const probe = document.createElement('div')
-    probe.style.background = 'var(--cpx-sys-color-selected)'
-    document.body.append(probe)
-    const background = getComputedStyle(probe).backgroundColor
-    probe.remove()
-    return background
-  })
-  await expect(productModeTrigger).toHaveCSS('background-color', selectedBackground)
-  await expect(productModeMenu.getByRole('option', { selected: true })).toHaveCount(1)
-  await expect(productModeMenu.getByRole('option', { name: /Coding/ })).toHaveAttribute(
-    'aria-selected',
-    'true',
-  )
-  await expect(productModeMenu.getByRole('option', { name: /Chat/ })).toBeVisible()
-  await expect(productModeMenu.getByRole('option', { name: /Working/ })).toBeVisible()
-  await expect(productModeMenu.getByText('构建、调试并发布', { exact: true })).toBeVisible()
-
-  await productModeMenu.getByRole('option', { name: /Working/ }).click()
-  await expect(productModeMenu).toHaveCount(0)
-  await expect(page).toHaveURL(/#\/threads\/visual-rich$/u)
-  await expect(
-    page.getByRole('button', { name: '切换工作模式，当前为 Working', exact: true }),
-  ).toBeVisible()
-  await page.getByRole('button', { name: '新建聊天', exact: true }).click()
-  await expect(page).toHaveURL(/#\/new\?surface=working$/u)
-  await expect(
-    page.getByRole('button', { name: '切换工作模式，当前为 Working', exact: true }),
-  ).toBeVisible()
-})
 
 for (const mode of ['light', 'dark'] as const) {
   test(`icon buttons follow their current theme hover, active and focus styles (${mode})`, async ({

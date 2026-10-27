@@ -92,13 +92,12 @@ test('WCAG 2.2 AA: command menu open state', async ({ page }, testInfo) => {
 test('WCAG 2.2 AA: dropdown and menubar open states', async ({ page }, testInfo) => {
   await preparePage(page, '/?visualCase=rich#/threads/visual-rich')
 
-  const modeTrigger = page.getByRole('button', {
-    name: /切换工作模式，当前为/,
+  const permissionTrigger = page.getByRole('button', {
+    name: '选择权限模式',
   })
-  await modeTrigger.click()
+  await permissionTrigger.click()
   await expect(page.getByRole('listbox')).toBeVisible()
-  const modeOptions = page.getByRole('option')
-  await expect(modeOptions).toHaveCount(3)
+  expect(await page.getByRole('option').count()).toBeGreaterThan(0)
   await expect(page.getByRole('option', { selected: true })).toHaveCount(1)
   await expectNoWcagViolations(page, testInfo)
   await page.keyboard.press('Escape')

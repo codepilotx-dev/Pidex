@@ -38,7 +38,6 @@ import {
   Plus,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Square,
   Target,
   Wrench,
@@ -62,9 +61,7 @@ import type {
   DesktopContextUsage,
   DesktopComposerAttachment,
   DesktopModelProviderSummary,
-  LocalRouterMode,
   ModelProviderID,
-  SidebarProductMode,
 } from '../../../../shared/Types.js'
 import type { ModelPreset } from '../../../ModelPresets.js'
 import { Button } from '../../../components/ui/Button.js'
@@ -73,17 +70,20 @@ import { Spinner } from '../../../components/ui/Spinner.js'
 import { SessionFollowUpDock } from '../SessionFollowUpDock.js'
 import { SearchablePopoverContent } from '../../../components/ui/SearchablePopoverContent.js'
 import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
-import { ComposerModeSwitcher, COMPOSER_CHIP_TRIGGER_CLASS } from './ComposerModeSwitcher.js'
 import { ProjectSwitcherPopover } from './ProjectSwitcherPopover.js'
 import { ChatInputDropdown } from './ChatInputDropdown.js'
 import { BranchSelectPopover } from './BranchSelectPopover.js'
 import { ModelPickerPopover } from './ModelPickerPopover.js'
-import { ModelSelectTrigger } from './ModelSelectTrigger.js'
-import { resolveThinkingLabel, resolveThinkingOptions } from './ThinkingLevelPopover.js'
+import { ModelReasoningControl, ModelSelectTrigger } from './ModelSelectTrigger.js'
+import {
+  resolveThinkingLabel,
+  resolveThinkingOptions,
+} from './ThinkingLevelPopover.js'
+import { MotionConfig } from 'motion/react'
+import { resolveComposerFooterFit, useComposerFooterFit } from './ComposerFooterLayout.js'
 import { ComposerStatusOverlay } from './ComposerStatusOverlay.js'
 import { ComposerGoalRow } from './ComposerGoalRow.js'
 import { ContextUsagePanel } from './ContextUsagePanel.js'
-import { ComputerControlChip } from './ComputerControlChip.js'
 import { usePluginCatalog } from '../../plugins/UsePluginCatalog.js'
 import type { ComposerEditorHandle, ComposerEditorProps } from './ComposerEditor.js'
 import {
@@ -164,7 +164,7 @@ type ProviderModelOption = {
 }
 
 type ComposerDropdown =
-  'context' | 'permission' | 'model' | 'project' | 'session-group' | 'mode' | 'branch' | 'plugin'
+  'context' | 'permission' | 'model' | 'project' | 'session-group' | 'branch' | 'plugin'
 
 /*
  * Permission chips are plain `chip-button` triggers whose colors come from
@@ -180,15 +180,21 @@ const PERMISSION_CHIP_CLASS_NAMES: Record<DesktopPermissionMode, string> = {
 }
 
 /*
- * The permission trigger reuses the mode switcher's borderless chip silhouette
- * (see `COMPOSER_CHIP_TRIGGER_CLASS`) so both toolbar triggers render
- * identically; `permission-select-trigger` stays as the query hook for the
- * permission menu and its tests.
+ * The permission trigger reuses the borderless chip silhouette so toolbar
+ * triggers render identically; `permission-select-trigger` stays as the query
+ * hook for the permission menu and its tests.
  */
+const COMPOSER_CHIP_TRIGGER_CLASS = cx(
+  'tw:min-w-0 tw:border tw:border-transparent tw:bg-transparent',
+  'tw:transition-[background,border-color,color] tw:duration-feedback tw:ease-standard',
+  'tw:hover:bg-app-hover tw:hover:border-transparent',
+  'tw:data-[state=open]:bg-app-selected tw:data-[state=open]:border-transparent',
+  'tw:[&>svg:first-child]:block tw:[&>svg:first-child]:size-[var(--inline-icon-size,1em)] tw:[&>svg:first-child]:shrink-0',
+)
 const PERMISSION_TRIGGER_CLASS = cx('permission-select-trigger', COMPOSER_CHIP_TRIGGER_CLASS)
 const PERMISSION_TRIGGER_OPEN_CLASS = 'tw:bg-app-selected'
 const PERMISSION_TRIGGER_LABEL_CLASS =
-  'permission-select-trigger-label tw:min-w-0 tw:truncate tw:@max-[480px]:hidden'
+  'permission-select-trigger-label composer-footer-label tw:min-w-0 tw:truncate'
 const PERMISSION_ITEM_ICON_CLASS =
   'permission-select-item-icon tw:mt-0 tw:inline-flex tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text tw:[&>svg]:block tw:[&>svg]:size-icon tw:[&>svg]:[stroke-width:var(--cpx-sys-icon-stroke-width)]'
 const PERMISSION_ITEM_BODY_CLASS =
@@ -233,7 +239,8 @@ const UTILITY_BAR_BASE_CLASS = cx(
   'tw:border-0 tw:whitespace-nowrap',
   'tw:forced-colors:outline-1 tw:forced-colors:outline-solid tw:forced-colors:shadow-none',
   'tw:[&_.meta-chip]:h-7 tw:[&_.meta-chip]:flex-none tw:[&_.meta-chip]:rounded-full tw:[&_.meta-chip]:px-2 tw:[&_.meta-chip]:transition-all',
-  'tw:@max-[475px]:[&_.meta-chip_span]:hidden',
+  // 首页托盘是独立命名容器；折叠规则放在其内容包装层（容器不能查询自身）。
+  'tw:@container/composer-tray',
 )
 const UTILITY_BAR_DEFAULT_CLASS = cx(
   UTILITY_BAR_BASE_CLASS,
@@ -250,28 +257,31 @@ const UTILITY_BAR_HOME_CODING_CLASS = cx(
   'tw:order-1 tw:min-h-0 tw:mx-3 tw:mt-0 tw:-mb-5 tw:px-2 tw:pt-2 tw:pb-6 tw:bg-app-underlay',
 )
 const UTILITY_BAR_SIDE_TASK_CLASS = 'tw:[&_.meta-chip]:pointer-events-none'
-const UTILITY_BAR_DEFAULT_CONTENT_CLASS =
-  'tw:flex tw:w-full tw:min-w-0 tw:items-center tw:gap-2 tw:overflow-x-auto'
+const UTILITY_BAR_DEFAULT_CONTENT_CLASS = cx(
+  'tw:flex tw:w-full tw:min-w-0 tw:items-center tw:gap-2 tw:overflow-x-auto',
+  // 折叠规则在容器（utility bar）的后代上生效；只隐藏明确标记的标签与箭头。
+)
 const UTILITY_BAR_DYNAMIC_CONTENT_CLASS =
   'tw:flex tw:w-full tw:min-w-0 tw:flex-col tw:divide-y tw:divide-app-border-subtle'
+/*
+ * The footer is the single container every toolbar breakpoint reads (`composer-footer`);
+ * label/chevron collapse are CSS there, while the model region and context ring are
+ * allocated by `ComposerFooterLayout` from real measurements.
+ */
 const TOOLBAR_CLASS =
-  'composer-toolbar tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:pt-2 tw:@max-[420px]:gap-1'
+  'composer-toolbar tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:pt-2 tw:@container/composer-footer'
 const TOOLBAR_LEFT_CLASS =
-  'toolbar-left tw:flex tw:min-w-0 tw:items-center tw:gap-1.5 tw:@max-[420px]:gap-1'
+  'toolbar-left tw:flex tw:shrink-0 tw:items-center tw:gap-1.5 tw:@max-[420px]/composer-footer:gap-1'
 const TOOLBAR_RIGHT_CLASS =
-  'toolbar-right tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:justify-end tw:gap-1.5 tw:@max-[420px]:gap-1'
+  'toolbar-right tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:justify-end tw:gap-1.5 tw:@max-[420px]/composer-footer:gap-1'
 const TOOLBAR_DIVIDER_CLASS =
-  'toolbar-divider tw:inline-block tw:h-3.5 tw:w-px tw:shrink-0 tw:bg-app-border-subtle'
-const COMPOSER_META_CHIP_HIDE_LABEL_CLASS = 'tw:@max-[475px]:[&_.meta-chip_span]:hidden'
-const COMPOSER_HIDE_DIVIDER_CLASS = 'tw:@max-[300px]:[&_.toolbar-divider]:hidden'
-const COMPOSER_HIDE_USAGE_CHIP_CLASS = 'tw:@max-[300px]:[&_.context-usage-chip]:hidden'
+  'toolbar-divider tw:inline-block tw:h-3.5 tw:w-px tw:shrink-0 tw:bg-app-border-subtle tw:@max-[300px]/composer-footer:hidden'
+const COMPOSER_MODE_CHIP_LABEL_CLASS = 'composer-footer-label'
 
 /** 上下文用量圆环按 12px 槽位绘制；进度由描边虚线长度表达，避免低分辨率下的圆孔失真。 */
 const CONTEXT_RING_VIEWBOX = 12
 const CONTEXT_RING_RADIUS = 5
 const CONTEXT_RING_CIRCUMFERENCE = 2 * Math.PI * CONTEXT_RING_RADIUS
-const COMPOSER_HIDE_PLAN_CHIP_LABEL_CLASS =
-  'tw:@max-[475px]:[&_.composer-plan-mode-chip>span:last-child]:hidden'
 
 type Props = {
   draftKey: ComposerDraftKey
@@ -282,9 +292,6 @@ type Props = {
   planModeActive?: boolean
   goalModeEnabled?: boolean
   onGoalModeChange?: (enabled: boolean) => void
-  localRouterMode?: LocalRouterMode
-  enableParetoCodeRouter?: boolean
-  enableFusionRouter?: boolean
   thinkingMode: DesktopThinkingMode
   modelVariant?: string
   modelVariantOptions?: Option<string>[]
@@ -347,7 +354,6 @@ type Props = {
   ) => void
   onPermissionChange: (value: DesktopPermissionMode) => void | Promise<void>
   onPlanModeChange?: (active: boolean) => void | Promise<void>
-  onLocalRouterModeChange?: (mode: LocalRouterMode) => void
   onSubmit: (delivery?: ComposerDeliveryIntent) => void
   queuedCompactionSupported?: boolean
   onCancelCompaction?: () => Promise<void>
@@ -376,8 +382,6 @@ type Props = {
   onCompositionEnd?: () => void
   submitShortcut?: ComposerSubmitShortcut
   surface?: ComposerSurface
-  productMode?: SidebarProductMode
-  onProductModeChange?: (mode: SidebarProductMode) => void
   layout?: ComposerLayout
   radiusVariant?: ComposerRadiusVariant
   utilityBarVariant?: ComposerUtilityBarVariant
@@ -416,9 +420,6 @@ export function ComposerCard({
   planModeActive = false,
   goalModeEnabled = false,
   onGoalModeChange,
-  localRouterMode = 'off',
-  enableParetoCodeRouter = false,
-  enableFusionRouter = false,
   thinkingMode,
   modelVariant,
   modelVariantOptions,
@@ -478,7 +479,6 @@ export function ComposerCard({
   onStartReview,
   onPermissionChange,
   onPlanModeChange,
-  onLocalRouterModeChange,
   onSubmit,
   onCompact,
   queuedCompactionSupported = false,
@@ -507,16 +507,12 @@ export function ComposerCard({
   onCompositionEnd,
   submitShortcut = 'enter',
   surface,
-  productMode,
-  onProductModeChange,
   layout = 'multiline',
   radiusVariant = 'default',
   utilityBarVariant = 'default',
   workingPlugin,
   onWorkingPluginChange,
 }: Props): React.ReactNode {
-  const effectiveProductMode =
-    productMode ?? (surface === 'chat' ? 'chat' : surface === 'working' ? 'working' : 'coding')
   const editorRef = useRef<ComposerEditorHandle | null>(null)
   const menuId = useId()
   const menuItemId = (key: string): string => `${menuId}-item-${encodeURIComponent(key)}`
@@ -900,10 +896,21 @@ export function ComposerCard({
             },
           ]
         : []
+    /* 底栏空间不足时模型快捷入口会隐藏；加号菜单保留模型/推理命令作为进入模型弹层的入口。 */
+    const modelActions = builtinSlashCommands
+      .filter(
+        (command) =>
+          command.availability.visible && ['model', 'reasoning'].includes(command.id),
+      )
+      .map((command) => ({
+        ...composerCommandMenuItem(command, executeCommand, onSkillSelect),
+        section: '添加',
+      }))
     const items: ComposerMenuItem[] = [
       ...contextActions.filter((item) => item.command?.id === 'goal'),
       ...attachmentActions,
       ...contextActions.filter((item) => item.command?.id === SHARED_SLASH_COMMANDS.plan.id),
+      ...modelActions,
     ]
     if (!subagentMode)
       items.push(
@@ -1253,6 +1260,49 @@ export function ComposerCard({
   const hasQueuedFollowUps = (queuedFollowUps?.length ?? 0) > 0
   const utilityBarOverridden = statusPanelOpen || activeThreadGoal != null || hasQueuedFollowUps
   const showUtilityBar = utilityBarOverridden || placement !== 'thread'
+
+  // 底栏空间分配：测量节点不参与交互与无障碍树，模型区文字/图标/隐藏由实际宽度决定。
+  const footerRef = useRef<HTMLDivElement | null>(null)
+  const toolbarLeftRef = useRef<HTMLDivElement | null>(null)
+  const toolbarRightRef = useRef<HTMLDivElement | null>(null)
+  const sendButtonRef = useRef<HTMLButtonElement | null>(null)
+  const modelTextProbeRef = useRef<HTMLDivElement | null>(null)
+  const modelIconProbeRef = useRef<HTMLDivElement | null>(null)
+  const [modelHeld, setModelHeld] = useState(false)
+  const [ringHeld, setRingHeld] = useState(false)
+  const heldModelModeRef = useRef<'text' | 'icon'>('text')
+  const showRing = showContextUsage && contextUsage != null
+  const footerMetrics = useComposerFooterFit(
+    {
+      footer: footerRef,
+      left: toolbarLeftRef,
+      right: toolbarRightRef,
+      send: sendButtonRef,
+      modelText: modelTextProbeRef,
+      modelIcon: modelIconProbeRef,
+    },
+    `${selectedModelLabel}|${selectedThinkingLabel}|${showThinkingOptions}|${showRing}|${planModeActive}|${goalModeEnabled}|${capabilities.dictation}`,
+  )
+  const footerFit = resolveComposerFooterFit(footerMetrics, {
+    hasRing: showRing,
+    holdModel: modelHeld || openDropdown === 'model',
+    holdRing: ringHeld || contextPreviewOpen,
+    heldModelMode: heldModelModeRef.current,
+  })
+  if (footerFit.modelMode !== 'hidden') heldModelModeRef.current = footerFit.modelMode
+  const handleThinkingSelect = useCallback(
+    (value: string): void => {
+      if (onModelVariantChange) onModelVariantChange(value)
+      else if (
+        value === 'default' ||
+        value === 'enabled' ||
+        value === 'adaptive' ||
+        value === 'disabled'
+      )
+        onThinkingChange(value)
+    },
+    [onModelVariantChange, onThinkingChange],
+  )
   return (
     <div
       className={COMPOSER_STACK_CLASS}
@@ -1443,10 +1493,6 @@ export function ComposerCard({
           utilityBarVariant === 'home' && surface === 'working'
             ? COMPOSER_TOP_WORKING_CLASS
             : COMPOSER_TOP_DEFAULT_CLASS,
-          COMPOSER_META_CHIP_HIDE_LABEL_CLASS,
-          COMPOSER_HIDE_DIVIDER_CLASS,
-          COMPOSER_HIDE_USAGE_CHIP_CLASS,
-          COMPOSER_HIDE_PLAN_CHIP_LABEL_CLASS,
         )}
       >
         {contextUsage?.compactionOperation &&
@@ -1676,8 +1722,8 @@ export function ComposerCard({
           />
         </ChatInputDropdown>
 
-        <div className={TOOLBAR_CLASS}>
-          <div className={TOOLBAR_LEFT_CLASS}>
+        <div ref={footerRef} className={TOOLBAR_CLASS}>
+          <div ref={toolbarLeftRef} className={TOOLBAR_LEFT_CLASS}>
             <Button
               isIconOnly
               active={buttonContextOpen}
@@ -1694,7 +1740,6 @@ export function ComposerCard({
             >
               <Plus size={APP_ICON_SIZE} />
             </Button>
-            <ComposerModeSwitcher mode={effectiveProductMode} onModeChange={onProductModeChange} />
             <Select.Root
               open={openDropdown === 'permission'}
               value={permissionMode as string}
@@ -1842,7 +1887,7 @@ export function ComposerCard({
                       strokeWidth={APP_ICON_STROKE_WIDTH}
                     />
                   </span>
-                  <span>目标</span>
+                  <span className={COMPOSER_MODE_CHIP_LABEL_CLASS}>目标</span>
                 </button>
               </>
             ) : null}
@@ -1887,46 +1932,7 @@ export function ComposerCard({
                       />
                     ) : null}
                   </span>
-                  <span>计划</span>
-                </button>
-              </>
-            ) : null}
-            {localRouterMode !== 'off' ? (
-              <>
-                <span className={TOOLBAR_DIVIDER_CLASS} />
-                <button
-                  aria-pressed="true"
-                  className={cx(
-                    'chip-button composer-plan-mode-chip active tw:group tw:relative tw:bg-app-selected tw:text-app-accent-fg tw:type-secondary tw:hover:bg-app-selected',
-                  )}
-                  onClick={() => {
-                    onLocalRouterModeChange?.('off')
-                  }}
-                  title={localRouterMode === 'pareto-code' ? 'Pareto Code Router' : 'Fusion Router'}
-                  type="button"
-                >
-                  <span
-                    aria-hidden="true"
-                    className={cx(
-                      'composer-plan-mode-chip-icon tw:relative tw:inline-flex tw:size-icon-sm tw:shrink-0 tw:items-center tw:justify-center',
-                    )}
-                  >
-                    <Sparkles
-                      className={cx(
-                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-0',
-                      )}
-                      size={APP_ICON_SIZE}
-                      strokeWidth={APP_ICON_STROKE_WIDTH}
-                    />
-                    <X
-                      className={cx(
-                        'composer-plan-mode-chip-icon-exit tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:rounded-full tw:bg-[color-mix(in_srgb,currentColor_18%,transparent)] tw:p-0 tw:opacity-0 tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-100',
-                      )}
-                      size={APP_ICON_SIZES.sm}
-                      strokeWidth={APP_ICON_STROKE_WIDTH}
-                    />
-                  </span>
-                  <span>{localRouterMode === 'pareto-code' ? 'Pareto' : 'Fusion'}</span>
+                  <span className={COMPOSER_MODE_CHIP_LABEL_CLASS}>计划</span>
                 </button>
               </>
             ) : null}
@@ -1941,12 +1947,10 @@ export function ComposerCard({
                 />
               </Suspense>
             ) : null}
-
-            <ComputerControlChip threadId={routedSessionId ?? null} />
           </div>
 
-          <div className={TOOLBAR_RIGHT_CLASS}>
-            {showContextUsage && contextUsage ? (
+          <div ref={toolbarRightRef} className={TOOLBAR_RIGHT_CLASS}>
+            {showRing && footerFit.showRing ? (
               <Popover.Root open={contextPreviewOpen} onOpenChange={setContextPreviewOpen}>
                 <Popover.Anchor asChild>
                   <span
@@ -1959,8 +1963,12 @@ export function ComposerCard({
                       if (!contextPreviewRef.current?.contains(event.relatedTarget as Node | null))
                         setContextPreviewOpen(false)
                     }}
-                    onFocus={() => setContextPreviewOpen(true)}
+                    onFocus={() => {
+                      setRingHeld(true)
+                      setContextPreviewOpen(true)
+                    }}
                     onBlur={(event) => {
+                      setRingHeld(false)
                       if (!contextPreviewRef.current?.contains(event.relatedTarget))
                         setContextPreviewOpen(false)
                     }}
@@ -2015,33 +2023,57 @@ export function ComposerCard({
               selectedProviderID={selectedProviderID}
               side="top"
               sideOffset={4}
+              /*
+               * 空间不足时模型快捷入口让位；弹层保持挂载并锚定到零尺寸锚点，
+               * 加号菜单里的「模型/推理」命令仍可打开模型设置。紧凑状态同时把
+               * 推理控件挪进弹层，隐藏推理标签后仍能修改等级。
+               */
               trigger={
-                <ModelSelectTrigger
-                  isOpen={openDropdown === 'model'}
-                  loading={modelCatalogLoading}
-                  modelName={selectedModelLabel}
-                  onThinkingChange={(value) => {
-                    if (onModelVariantChange) onModelVariantChange(value)
-                    else if (
-                      value === 'default' ||
-                      value === 'enabled' ||
-                      value === 'adaptive' ||
-                      value === 'disabled'
-                    )
-                      onThinkingChange(value)
-                  }}
-                  onThinkingPreviewChange={setThinkingPreviewMode}
-                  showThinkingOptions={showThinkingOptions}
-                  thinkingLabel={selectedThinkingLabel}
-                  thinkingMode={modelVariant ?? thinkingMode}
-                  thinkingOptions={modelVariantOptions ?? thinkingOptions}
-                  thinkingPreviewMode={thinkingPreviewMode}
-                  tooltipTitle={
-                    showThinkingOptions
-                      ? `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle} · 推理强度：${selectedThinkingLabel}`
-                      : `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle}`
-                  }
-                />
+                footerFit.modelMode === 'hidden' ? (
+                  <span
+                    aria-hidden="true"
+                    className="composer-model-anchor tw:pointer-events-none tw:inline-block tw:size-0 tw:shrink-0"
+                    data-composer-model-anchor="true"
+                  />
+                ) : (
+                  <ModelSelectTrigger
+                    isOpen={openDropdown === 'model'}
+                    loading={modelCatalogLoading}
+                    modelName={selectedModelLabel}
+                    compact={footerFit.modelMode === 'icon'}
+                    onHeldChange={setModelHeld}
+                    onThinkingChange={handleThinkingSelect}
+                    onThinkingPreviewChange={setThinkingPreviewMode}
+                    showThinkingOptions={showThinkingOptions}
+                    thinkingLabel={selectedThinkingLabel}
+                    thinkingMode={modelVariant ?? thinkingMode}
+                    thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                    thinkingPreviewMode={thinkingPreviewMode}
+                    tooltipTitle={
+                      showThinkingOptions
+                        ? `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle} · 推理强度：${selectedThinkingLabel}`
+                        : `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle}`
+                    }
+                  />
+                )
+              }
+              reasoningControl={
+                footerFit.modelMode !== 'text' &&
+                showThinkingOptions &&
+                (modelVariantOptions ?? thinkingOptions).length > 0 &&
+                selectedThinkingLabel ? (
+                  <ModelReasoningControl
+                    thinkingLabel={selectedThinkingLabel}
+                    thinkingMode={modelVariant ?? thinkingMode}
+                    thinkingPreviewMode={thinkingPreviewMode}
+                    thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                    onThinkingChange={handleThinkingSelect}
+                    onThinkingPreviewChange={setThinkingPreviewMode}
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                  />
+                ) : undefined
               }
               onOpenChange={(open) => {
                 if (!open) setThinkingPreviewMode(null)
@@ -2053,8 +2085,38 @@ export function ComposerCard({
               onOpenModelSettings={onOpenModelSettings}
             />
 
+            {/* 隐藏测量节点：渲染模型区完整/图标两种状态的实际宽度，不参与交互与无障碍树；
+                放在真实触发器之后，保证选择器首个命中仍是可见入口。 */}
+            <MotionConfig reducedMotion="always">
+              <div
+                aria-hidden="true"
+                className="tw:pointer-events-none tw:invisible tw:absolute tw:left-0 tw:top-0"
+              >
+                <div ref={modelTextProbeRef} className="tw:inline-flex tw:w-max">
+                  <ModelSelectTrigger
+                    id="model-select-trigger-probe-text"
+                    modelName={selectedModelLabel}
+                    showThinkingOptions={showThinkingOptions}
+                    thinkingLabel={selectedThinkingLabel}
+                    thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                    onThinkingChange={() => {}}
+                  />
+                </div>
+                <div ref={modelIconProbeRef} className="tw:inline-flex tw:w-max">
+                  <ModelSelectTrigger
+                    id="model-select-trigger-probe-icon"
+                    compact
+                    modelName={selectedModelLabel}
+                    showThinkingOptions={showThinkingOptions}
+                    thinkingLabel={selectedThinkingLabel}
+                  />
+                </div>
+              </div>
+            </MotionConfig>
+
             <Button
               isIconOnly
+              ref={sendButtonRef}
               aria-label={
                 stopping ? '正在停止' : submitting ? '正在发送' : showStopAction ? '停止' : '发送'
               }

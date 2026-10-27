@@ -4,7 +4,6 @@ import { Dropdown, matchesDropdownSearch } from '../src/components/ui/floating/D
 import { ContextMenu, menuKeyDown, selectMenuItem } from '../src/components/ui/floating/Menu.js'
 import { computeFloatingPosition } from '../src/components/ui/floating/UseFloatingPosition.js'
 import { buildPopoverSizingStyle } from '../src/components/ui/PopoverSizing.js'
-import { ComposerModeSwitcher } from '../src/features/session/composer/ComposerModeSwitcher.js'
 import { ReasoningMenu } from '../src/features/session/composer/ReasoningMenu.js'
 import { DropdownActions } from '../src/components/ui/DropdownActions.js'
 import { describe, expect, test } from 'bun:test'
@@ -735,8 +734,7 @@ describe('UI-Design native floating behavior', () => {
     expect(html).not.toContain('tw:flex')
     expect(html).not.toContain('tw:px-2.5')
   })
-  test('composer mode and reasoning use native selection menus; model panel keeps a flush frame', async () => {
-    const mode = renderToStaticMarkup(createElement(ComposerModeSwitcher, { mode: 'coding' }))
+  test('composer reasoning uses native selection menus; model panel keeps a flush frame', async () => {
     const reasoning = renderToStaticMarkup(
       createElement(ReasoningMenu, {
         trigger: createElement('button', null, '默认'),
@@ -745,7 +743,6 @@ describe('UI-Design native floating behavior', () => {
         onThinkingChange: () => {},
       }),
     )
-    expect(mode).toContain('aria-haspopup="listbox"')
     expect(reasoning).toContain('aria-haspopup="listbox"')
     const model = await Bun.file(
       new URL('../src/features/session/composer/ModelPickerPopover.tsx', import.meta.url),

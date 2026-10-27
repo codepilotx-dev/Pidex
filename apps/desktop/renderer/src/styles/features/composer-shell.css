@@ -3,6 +3,29 @@
  * flattening its nesting: the renderer no longer compiles Sass.
  */
 @layer features {
+  @container composer-footer (width <= 475px) {
+    .composer-footer-label {
+      display: none;
+    }
+  }
+
+  @container composer-footer (width <= 420px) {
+    .composer-footer-secondary-chevron {
+      display: none;
+    }
+  }
+
+  @container composer-tray (width <= 475px) {
+    .meta-chip-label {
+      display: none;
+    }
+  }
+
+  @container composer-tray (width <= 420px) {
+    .meta-chip-chevron {
+      display: none;
+    }
+  }
   @charset "UTF-8";
 
   /*

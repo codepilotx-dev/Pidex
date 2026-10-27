@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import type { DesktopThreadGoal, DesktopWorkspace } from '../shared/Types.js'
 import { ComposerCard } from '../src/features/session/composer/ComposerCard.js'
+import { ModelSelectTrigger } from '../src/features/session/composer/ModelSelectTrigger.js'
 import { ComposerStatusOverlay } from '../src/features/session/composer/ComposerStatusOverlay.js'
 import {
   ContextUsagePanel,
@@ -78,6 +79,20 @@ function composerCardProps(overrides: Partial<ComposerCardProps> = {}): Composer
 }
 
 describe('composer surface variant', () => {
+  test('紧凑模型入口只显示图标但保留模型与推理的完整无障碍名称', () => {
+    const html = renderToStaticMarkup(
+      <ModelSelectTrigger
+        compact
+        modelName="provider/long-model"
+        showThinkingOptions
+        thinkingLabel="高"
+      />,
+    )
+    expect(html).toContain('data-compact="true"')
+    expect(html).toContain('aria-label="模型与推理设置：provider/long-model，高"')
+    expect(html).not.toContain('composer-model-trigger-name-model')
+    expect(html).not.toContain('composer-model-trigger-effort-btn')
+  })
   test('发送、入队及模式切换不把整个输入区设为 inert', async () => {
     const html = renderToStaticMarkup(
       <ComposerCard {...composerCardProps({ submitting: true, canSubmit: false })} />,
@@ -607,23 +622,42 @@ describe('composer surface variant', () => {
     expect(html).not.toContain('重新加载模型')
   })
 
-  test('ComposerCard 底栏在加号之后渲染模式切换胶囊，支持 Coding/Working/Chat', () => {
-    const coding = renderToStaticMarkup(
-      <ComposerCard {...composerCardProps({ productMode: 'coding' })} />,
+  test('ComposerCard 底栏不再渲染模式切换、本地路由与电脑控制入口', () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard {...composerCardProps({ routedSessionId: 'thread-1' })} />,
     )
-    const chat = renderToStaticMarkup(
-      <ComposerCard {...composerCardProps({ productMode: 'chat' })} />,
-    )
-    const working = renderToStaticMarkup(
-      <ComposerCard {...composerCardProps({ productMode: 'working' })} />,
-    )
+    expect(html).not.toContain('composer-mode-trigger')
+    expect(html).not.toContain('Pareto')
+    expect(html).not.toContain('Fusion')
+    expect(html).not.toContain('电脑控制中')
+  })
 
-    expect(coding).toContain('composer-mode-trigger')
-    expect(coding).toContain('>Coding</span>')
-    expect(chat).toContain('composer-mode-trigger')
-    expect(chat).toContain('>Chat</span>')
-    expect(working).toContain('composer-mode-trigger')
-    expect(working).toContain('>Working</span>')
+  test('底栏断点读取 composer-footer 容器宽度并保留图标入口的无障碍名称', async () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          planModeActive: true,
+          onPlanModeChange: () => {},
+          showContextUsage: true,
+          contextUsage: { usedTokens: 12_000, contextWindow: 200_000, usedPercent: 6 },
+        })}
+      />,
+    )
+    // 命名容器在工具栏自身，断点按底栏内容宽度生效。
+    expect(html).toContain('tw:@container/composer-footer')
+    // 权限与计划文字在 ≤475px 隐藏；次级箭头在 ≤420px 隐藏。
+    const shell = await Bun.file(
+      new URL('../src/styles/features/composer-shell.css', import.meta.url),
+    ).text()
+    expect(shell).toMatch(/@container composer-footer \(width <= 475px\)\s*\{\s*\.composer-footer-label\s*\{\s*display: none;/)
+    expect(shell).toMatch(/@container composer-footer \(width <= 420px\)\s*\{\s*\.composer-footer-secondary-chevron\s*\{\s*display: none;/)
+    expect(html).toContain('composer-footer-label')
+    expect(html).toContain('composer-footer-secondary-chevron')
+    // 隐藏文字后图标入口仍可操作且有无障碍名称。
+    expect(html).toContain('aria-label="选择权限模式"')
+    expect(html).toContain('aria-label="退出计划模式"')
+    expect(html).toContain('aria-label="上下文窗口使用量：已用 6%，剩余 94%"')
+    expect(html).toContain('aria-label="模型：未选择模型"')
   })
 })
 

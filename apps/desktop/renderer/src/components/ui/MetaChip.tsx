@@ -33,8 +33,12 @@ export const MetaChip = forwardRef<HTMLButtonElement, Props>(function MetaChip(
       type={type}
     >
       {icon}
-      <span className="tw:min-w-0 tw:truncate tw:tabular-nums">{label}</span>
-      <ChevronDown size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
+      <span className="meta-chip-label tw:min-w-0 tw:truncate tw:tabular-nums">{label}</span>
+      <ChevronDown
+        className="meta-chip-chevron"
+        size="var(--inline-icon-size, 1em)"
+        strokeWidth={APP_ICON_STROKE_WIDTH}
+      />
     </button>
   )
 })

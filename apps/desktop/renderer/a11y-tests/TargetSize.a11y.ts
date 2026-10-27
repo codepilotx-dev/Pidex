@@ -43,17 +43,13 @@ for (const [name, route] of routes) {
   })
 }
 
-test('target-size: opened command, product-mode and model menus', async ({ page }) => {
+test('target-size: opened command and model menus', async ({ page }) => {
   await prepare(page, '/?visualCase=rich#/threads/visual-rich')
   await page.keyboard.press('Control+K')
   await expect(page.getByRole('searchbox', { name: '搜索任务' })).toBeVisible()
   await checkTargets(page)
   await page.keyboard.press('Escape')
-  await page.getByRole('button', { name: /切换工作模式，当前为/ }).click()
-  await expect(page.getByRole('listbox')).toBeVisible()
-  await checkTargets(page)
-  await page.keyboard.press('Escape')
-  await page.locator('.composer-model-trigger-name-btn').click()
+  await page.locator('#model-select-trigger').click()
   await expect(page.locator('.composer-model-panel-content')).toBeVisible()
   await checkTargets(page)
 })

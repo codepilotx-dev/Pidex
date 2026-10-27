@@ -9,12 +9,12 @@ test('hover turns the selected row into capability tags and hides its check', as
   const trigger = page.locator('.composer-model-trigger-capsule:visible')
   await waitForVisualPage(page, 'dark', trigger)
 
-  // 触发器宽度跟随内容、封顶 20rem；短名称不撑出空白。
+  // 触发器宽度跟随内容、封顶 16rem；短名称不撑出空白。
   const capsuleBox = await trigger.boundingBox()
   expect(capsuleBox).not.toBeNull()
-  expect(Math.round(capsuleBox!.width)).toBeLessThan(320)
+  expect(Math.round(capsuleBox!.width)).toBeLessThan(256)
   expect(Math.round(capsuleBox!.width)).toBeGreaterThan(0)
-  await expect(trigger).toHaveCSS('max-width', '320px')
+  await expect(trigger).toHaveCSS('max-width', '256px')
 
   await trigger.locator('.composer-model-trigger-name-btn').click()
   const panel = page.locator('.composer-model-panel')

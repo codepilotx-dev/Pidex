@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { useSearchParams } from 'react-router-dom'
-import type { DesktopWorkspace, SidebarProductMode } from '../../../shared/Types.js'
+import type { DesktopWorkspace } from '../../../shared/Types.js'
 import {
   getEffectiveReducedMotion,
   usePrefersReducedMotion,
@@ -40,30 +40,16 @@ export function QuickChatView(): React.ReactNode {
     setSidebarProductMode(urlSurface)
   }, [setSidebarProductMode, sidebarProductMode, urlSurface])
 
-  const handleModeChange = useCallback(
-    (mode: SidebarProductMode) => {
-      setSidebarProductMode(mode)
-      setSearchParams(normalizeNewSessionSurfaceSearch(search, mode), { replace: true })
-    },
-    [search, setSearchParams, setSidebarProductMode],
-  )
-
   return (
     <AnimatePresence initial={false} mode="wait">
       <NewSessionPresence key="unified-home" kind="surface" reducedMotion={reducedMotion}>
-        <CodingQuickChatView onModeChange={handleModeChange} surface={surface} />
+        <CodingQuickChatView surface={surface} />
       </NewSessionPresence>
     </AnimatePresence>
   )
 }
 
-function CodingQuickChatView({
-  surface,
-  onModeChange,
-}: {
-  surface: NewSessionSurface
-  onModeChange?: (mode: SidebarProductMode) => void
-}): React.ReactNode {
+function CodingQuickChatView({ surface }: { surface: NewSessionSurface }): React.ReactNode {
   const { t } = useLocale()
   const {
     branchName,
@@ -214,8 +200,6 @@ function CodingQuickChatView({
               <DesktopComposer
                 {...composerProps}
                 placeholder={composerPlaceholder}
-                productMode={surface}
-                onProductModeChange={onModeChange}
                 surface={surface}
               />
             </div>

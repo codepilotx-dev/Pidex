@@ -15,9 +15,7 @@ import type {
   DesktopUserMessageInput,
   DesktopGoalSubmission,
   DesktopWorkspace,
-  LocalRouterMode,
   ModelProviderID,
-  SidebarProductMode,
 } from '../../../../shared/Types.js'
 import { THINKING_MODE_OPTIONS } from '../../settings/SettingsStorage.js'
 import type { ModelPreset } from '../../../ModelPresets.js'
@@ -72,8 +70,6 @@ export type DesktopComposerProps = {
   capabilities?: Partial<ComposerCapabilities>
   submitShortcut?: ComposerSubmitShortcut
   surface?: ComposerSurface
-  productMode?: SidebarProductMode
-  onProductModeChange?: (mode: SidebarProductMode) => void
   layout?: ComposerLayout
   radiusVariant?: ComposerRadiusVariant
   utilityBarVariant?: ComposerUtilityBarVariant
@@ -86,9 +82,6 @@ export type DesktopComposerProps = {
   sessionStatus: DesktopSessionStatus
   permissionMode: DesktopPermissionMode
   planModeActive: boolean
-  localRouterMode: LocalRouterMode
-  enableParetoCodeRouter: boolean
-  enableFusionRouter: boolean
   enableAutoReviewPermissionMode: boolean
   enableFullAccessPermissionMode: boolean
   codingModel?: string
@@ -148,7 +141,6 @@ export type DesktopComposerProps = {
   ) => void
   onPermissionChange: (value: DesktopPermissionMode) => void | Promise<void>
   onPlanModeChange: (active: boolean) => void | Promise<void>
-  onLocalRouterModeChange: (mode: LocalRouterMode) => void
   onThinkingChange: (value: DesktopThinkingMode) => void
   createSessionForWorkspace: (
     target?: DesktopWorkspace | null,
@@ -189,8 +181,6 @@ export function DesktopComposer({
   capabilities,
   submitShortcut,
   surface,
-  productMode,
-  onProductModeChange,
   layout,
   radiusVariant,
   utilityBarVariant,
@@ -203,9 +193,6 @@ export function DesktopComposer({
   sessionStatus,
   permissionMode,
   planModeActive,
-  localRouterMode,
-  enableParetoCodeRouter,
-  enableFusionRouter,
   enableAutoReviewPermissionMode,
   enableFullAccessPermissionMode,
   codingModel,
@@ -257,7 +244,6 @@ export function DesktopComposer({
   onStartReview,
   onPermissionChange,
   onPlanModeChange,
-  onLocalRouterModeChange,
   onThinkingChange,
   createSessionForWorkspace,
   submitToSession,
@@ -412,8 +398,6 @@ export function DesktopComposer({
       }}
       submitShortcut={submitShortcut}
       surface={surface}
-      productMode={productMode}
-      onProductModeChange={onProductModeChange}
       layout={layout}
       radiusVariant={radiusVariant}
       utilityBarVariant={utilityBarVariant}
@@ -423,9 +407,6 @@ export function DesktopComposer({
       submitOutcome={lastSubmitOutcome}
       goalModeEnabled={goalModeEnabled}
       onGoalModeChange={setGoalModeEnabled}
-      localRouterMode={localRouterMode}
-      enableParetoCodeRouter={enableParetoCodeRouter}
-      enableFusionRouter={enableFusionRouter}
       modelVariant={modelVariant}
       modelVariantOptions={modelVariantOptions}
       onModelVariantChange={onModelVariantChange}
@@ -501,7 +482,6 @@ export function DesktopComposer({
       onStartReview={onStartReview}
       onPermissionChange={onPermissionChange}
       onPlanModeChange={handlePlanModeChange}
-      onLocalRouterModeChange={onLocalRouterModeChange}
       onSubmit={handleSubmit}
       onCompact={handleCompact}
       queuedCompactionSupported={desktopClient.supportsQueuedCompaction()}

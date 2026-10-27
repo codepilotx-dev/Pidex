@@ -93,7 +93,6 @@ import type {
   DesktopPermissionMode,
   DesktopUserMessageInput,
   DesktopWorkspace,
-  LocalRouterMode,
 } from '../../../../shared/Types.js'
 import type { Attachment, LocalContextReference } from '@pidex/shared/thread'
 import {
@@ -338,8 +337,6 @@ export function DesktopLayout(): React.ReactNode {
       installPidexDependencies,
       enableMemory,
       rustSearchAndDiffKernels,
-      enableParetoCodeRouter,
-      enableFusionRouter,
       enableAutoReviewPermissionMode,
       enableFullAccessPermissionMode,
       recentWorkspaces,
@@ -353,7 +350,6 @@ export function DesktopLayout(): React.ReactNode {
       commitMessagePrompt,
       pullRequestPrompt,
       sidebarSessionPins,
-      sidebarProductMode,
     },
     permissionMode,
     settingsLoaded,
@@ -363,7 +359,6 @@ export function DesktopLayout(): React.ReactNode {
     setReviewView,
     setSidebarSessionPins,
     setSidebarTimelineEnabled,
-    setSidebarProductMode,
   } = settings
   const taskNotificationState = useSystemNotifications(
     settingsLoaded ? settings.values.notifications : undefined,
@@ -599,19 +594,15 @@ export function DesktopLayout(): React.ReactNode {
     renameSession,
     setSessionPermissionMode,
     setSessionPlanModeActive,
-    setSessionLocalRouterMode,
     activeSessionItem,
     permissionMode: effectivePermissionMode,
     planModeActive,
-    localRouterMode: effectiveLocalRouterMode,
   } = session
   // 侧栏聊天列表只用于 Git 看板的项目活跃度排序，看板不额外请求聊天历史。
   const { registerActivitySessions } = useGitBoard()
   useEffect(() => {
     registerActivitySessions(sessions)
   }, [registerActivitySessions, sessions])
-  const isBrowserMockSession = sessionId?.startsWith('browser-mock-') === true
-  const localRouterAvailable = !sessionId || isBrowserMockSession
 
   const effectiveRightDockVisible =
     (isHomeOrConversationRoute && rightDockVisible) || visibleProviderTab !== null
@@ -1846,15 +1837,6 @@ export function DesktopLayout(): React.ReactNode {
     [sessionId, setSessionPlanModeActive],
   )
 
-  const handleLocalRouterModeChange = useCallback(
-    (mode: LocalRouterMode): void => {
-      // Pareto/Fusion 仍是 Browser Mock 的本地能力；真实 Agent Thread 暂不提交该设置。
-      if (!sessionId?.startsWith('browser-mock-')) return
-      void setSessionLocalRouterMode(sessionId, mode)
-    },
-    [sessionId, setSessionLocalRouterMode],
-  )
-
   const handleSelectSession = useCallback(
     (sessionItem: SessionListItem): void => {
       beginConversationSwitch(sessionItem.id)
@@ -2355,8 +2337,6 @@ export function DesktopLayout(): React.ReactNode {
           input,
           messages: isConversationRoute ? [] : messages,
           placement: isQuickChatPage ? 'new-session' : 'thread',
-          productMode: sidebarProductMode,
-          onProductModeChange: setSidebarProductMode,
           layout: 'multiline',
           radiusVariant: 'default',
           utilityBarVariant: isQuickChatPage ? 'home' : 'default',
@@ -2365,9 +2345,6 @@ export function DesktopLayout(): React.ReactNode {
           sessionStatus,
           permissionMode: effectivePermissionMode,
           planModeActive,
-          localRouterMode: effectiveLocalRouterMode,
-          enableParetoCodeRouter: localRouterAvailable && (enableParetoCodeRouter ?? false),
-          enableFusionRouter: localRouterAvailable && (enableFusionRouter ?? false),
           enableAutoReviewPermissionMode: enableAutoReviewPermissionMode ?? false,
           enableFullAccessPermissionMode: enableFullAccessPermissionMode ?? false,
           codingModel,
@@ -2427,7 +2404,6 @@ export function DesktopLayout(): React.ReactNode {
           onStartReview: handleStartAiReview,
           onPermissionChange: handlePermissionChange,
           onPlanModeChange: handlePlanModeChange,
-          onLocalRouterModeChange: handleLocalRouterModeChange,
           onThinkingChange: handleThinkingChange,
           createSessionForWorkspace,
           submitToSession,
@@ -2498,9 +2474,6 @@ export function DesktopLayout(): React.ReactNode {
         sessionStatus={sideChatContext.status}
         permissionMode={sideSettings.permissionMode}
         planModeActive={sideChatContext.planModeActive ?? sideSettings.planModeActive}
-        localRouterMode={effectiveLocalRouterMode}
-        enableParetoCodeRouter={localRouterAvailable && (enableParetoCodeRouter ?? false)}
-        enableFusionRouter={localRouterAvailable && (enableFusionRouter ?? false)}
         enableAutoReviewPermissionMode={enableAutoReviewPermissionMode ?? false}
         enableFullAccessPermissionMode={enableFullAccessPermissionMode ?? false}
         codingModel={codingModel}
@@ -2601,7 +2574,6 @@ export function DesktopLayout(): React.ReactNode {
           await desktopClient.setSessionPlanModeActive(tab.threadId, active)
           updateSideChatSettings(tab.id, { planModeActive: active })
         }}
-        onLocalRouterModeChange={() => undefined}
         onThinkingChange={(value) => {
           updateSideChatSettings(tab.id, {
             thinkingMode: value,

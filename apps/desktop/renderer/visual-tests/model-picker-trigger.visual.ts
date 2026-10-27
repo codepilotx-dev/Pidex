@@ -56,6 +56,6 @@ test('trigger width follows the selected model with a smooth transition', async 
   expect(longState.text).toBe('workbuddy/deepseek-v4.1-flash')
   expect(longState.modelClipped).toBe(false)
   expect(longState.prefixClipped).toBe(false)
-  expect(longState.width).toBeLessThanOrEqual(320)
+  expect(longState.width).toBeLessThanOrEqual(256)
   await page.screenshot({ path: 'test-results/model-trigger-long.png' })
 })
