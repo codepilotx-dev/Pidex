@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowDown, Check, CircleX, LoaderCircle } from 'lucide-react'
+import { ArrowDown, Check, CircleX, Ellipsis, LoaderCircle } from 'lucide-react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import type { ExecutionPlanItem } from '@pidex/shared/thread'
 
@@ -401,6 +401,29 @@ function ComposerPlanPreviewPresence({
   )
 }
 
+function EllipsisAnimationIcon({
+  className,
+  size = APP_ICON_SIZE,
+  strokeWidth = APP_ICON_STROKE_WIDTH,
+}: {
+  className?: string
+  size?: number
+  strokeWidth?: number
+}): React.ReactNode {
+  return (
+    <Ellipsis
+      aria-hidden="true"
+      className={
+        className
+          ? `composer-change-summary__ellipsis composer-change-summary__animation-icon ${className}`
+          : 'composer-change-summary__ellipsis composer-change-summary__animation-icon'
+      }
+      size={size}
+      strokeWidth={strokeWidth}
+    />
+  )
+}
+
 function ComposerReturnToBottomPresence({
   onReturnToBottom,
   reducedMotion,
@@ -462,11 +485,7 @@ function ComposerReturnToBottomPresence({
         type="button"
       >
         {running ? (
-          <span aria-hidden="true" className="composer-change-summary__thinking-dots">
-            <span />
-            <span />
-            <span />
-          </span>
+          <EllipsisAnimationIcon />
         ) : null}
         <ArrowDown
           aria-hidden="true"

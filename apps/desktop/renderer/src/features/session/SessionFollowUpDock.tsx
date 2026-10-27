@@ -27,15 +27,13 @@ const DOCK_CLASS = cx(
   'session-follow-up-dock tw:flex tw:max-h-[30dvh] tw:w-full tw:min-w-0 tw:flex-col',
   'tw:overflow-hidden',
 )
-const HEADER_CLASS =
-  'session-follow-up-header tw:flex tw:min-h-9 tw:items-center tw:justify-between tw:gap-3 tw:px-3 tw:pb-1 tw:pt-2 tw:text-app-text-meta tw:type-label'
 const PAUSED_CLASS =
   'session-follow-up-paused tw:mx-2 tw:mb-1 tw:flex tw:min-h-9 tw:items-center tw:justify-between tw:gap-3 tw:rounded-control tw:bg-app-hover tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-secondary'
 const LIST_CLASS =
-  'session-follow-up-list tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:gap-px tw:overflow-y-auto tw:px-2 tw:pb-1'
+  'session-follow-up-list tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:gap-px tw:overflow-y-auto tw:px-2 tw:py-1'
 const ITEM_CLASS = cx(
-  'session-follow-up-item tw:grid tw:min-h-11 tw:grid-cols-[auto_minmax(0,1fr)_auto] tw:items-center tw:gap-2',
-  'tw:rounded-control tw:px-2 tw:py-1.5',
+  'session-follow-up-item tw:grid tw:min-h-8 tw:grid-cols-[auto_minmax(0,1fr)_auto] tw:items-center tw:gap-2',
+  'tw:rounded-control tw:px-2 tw:py-1',
   'tw:transition-colors tw:duration-state tw:ease-standard tw:hover:bg-app-hover',
 )
 const PREVIEW_CLASS =
@@ -45,7 +43,7 @@ const ACTIONS_CLASS =
   'session-follow-up-actions tw:flex tw:min-w-max tw:shrink-0 tw:items-center tw:gap-1'
 const EDIT_INPUT_CLASS = cx(
   'session-follow-up-edit-input tw:min-w-0 tw:flex-1 tw:rounded-control tw:border tw:border-app-border',
-  'tw:bg-app-raised tw:px-2 tw:py-1 tw:text-app-text tw:[font:inherit]',
+  'tw:bg-app-raised tw:px-2 tw:py-0.5 tw:text-app-text tw:[font:inherit]',
   'tw:focus-visible:outline-solid tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus tw:focus-visible:outline-offset-1',
 )
 
@@ -76,10 +74,6 @@ export function SessionFollowUpDock({
 
   return (
     <section aria-label="消息队列" className={DOCK_CLASS} data-composer-utility-item="queue">
-      <div className={HEADER_CLASS}>
-        <span>待发送</span>
-        <span className="tw:tabular-nums">{items.length} 条</span>
-      </div>
       {pauseReason ? (
         <div className={PAUSED_CLASS} role="status">
           <span>

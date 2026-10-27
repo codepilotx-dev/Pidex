@@ -325,7 +325,7 @@
     outline-offset: 2px;
   }
 
-  .composer-change-summary__thinking-dots,
+  .composer-change-summary__ellipsis,
   .composer-change-summary__down-arrow {
     position: absolute;
     transition:
@@ -333,31 +333,36 @@
       transform var(--cpx-sys-motion-enter) var(--cpx-sys-ease-standard);
   }
 
-  .composer-change-summary__thinking-dots {
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--cpx-sys-space-1);
+  .composer-change-summary__ellipsis {
     opacity: 1;
     transform: scale(1);
   }
 
-  .composer-change-summary__thinking-dots span {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--cpx-sys-radius-full);
-    background: currentcolor;
-    animation: composer-change-summary-dot-bounce var(--cpx-sys-motion-loading)
+  .composer-change-summary__ellipsis circle {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: composer-change-summary-ellipsis-bounce var(--cpx-sys-motion-loading)
       var(--cpx-sys-ease-standard) infinite;
   }
 
-  .composer-change-summary__thinking-dots span:nth-child(2) {
-    animation-delay: 0.2s;
+  .composer-change-summary__ellipsis circle[cx='5'] {
+    animation-delay: 0s;
   }
 
-  .composer-change-summary__thinking-dots span:nth-child(3) {
-    animation-delay: 0.4s;
+  .composer-change-summary__ellipsis circle[cx='12'] {
+    animation-delay: 0.16s;
+  }
+
+  .composer-change-summary__ellipsis circle[cx='19'] {
+    animation-delay: 0.32s;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .composer-change-summary__ellipsis circle {
+      transform: none;
+      opacity: 1;
+      animation: none;
+    }
   }
 
   .composer-change-summary__down-arrow {
@@ -371,7 +376,7 @@
   }
 
   .composer-change-summary__return[data-running='true']:is(:hover, :focus-visible)
-    .composer-change-summary__thinking-dots {
+    .composer-change-summary__ellipsis {
     opacity: 0;
     transform: scale(0.75);
   }
@@ -433,6 +438,20 @@
   .composer-change-summary__file-row:focus-visible {
     outline: 2px solid var(--cpx-sys-color-border-focus);
     outline-offset: 1px;
+  }
+
+  @keyframes composer-change-summary-ellipsis-bounce {
+    0%,
+    80%,
+    100% {
+      transform: translateY(0) scale(0.75);
+      opacity: 0.35;
+    }
+
+    40% {
+      transform: translateY(-2px) scale(1.2);
+      opacity: 1;
+    }
   }
 
   @keyframes composer-change-summary-spin {
