@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useState, type ReactNode } from 'react'
 import type { DesktopWorkspace } from '../../../shared/Types.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import { useGitBoard } from './GitBoardContext.js'
 import { GitBoardCheckoutDialog } from './GitBoardCheckoutDialog.js'
 import type { GitBoardAction } from './GitBoardRepositoryMenu.js'
@@ -29,7 +29,10 @@ export function useGitBoardActions(onBranchChanged: (projectId: string) => void)
   errorFor: (projectId: string) => string | undefined
   host: ReactNode
 } {
-  const settings = useDesktopSettings()
+  const gitBranchPrefix = useDesktopSettingsField((settings) => settings.gitBranchPrefix)
+  const allowForcePush = useDesktopSettingsField((settings) => settings.allowForcePush)
+  const commitMessagePrompt = useDesktopSettingsField((settings) => settings.commitMessagePrompt)
+  const pullRequestPrompt = useDesktopSettingsField((settings) => settings.pullRequestPrompt)
   const { projects, repositories, capabilities, refreshProject } = useGitBoard()
   const [workflow, setWorkflow] = useState<{ projectId: string; mode: WorkflowMode } | null>(null)
   const [checkoutProjectId, setCheckoutProjectId] = useState<string | null>(null)
@@ -130,10 +133,10 @@ export function useGitBoardActions(onBranchChanged: (projectId: string) => void)
             mode={workflow.mode}
             workspace={workflowProject}
             gitStatus={workflowResult?.ok ? workflowResult.status : null}
-            gitBranchPrefix={settings.gitBranchPrefix}
-            allowForcePush={settings.allowForcePush}
-            commitMessagePrompt={settings.commitMessagePrompt}
-            pullRequestPrompt={settings.pullRequestPrompt}
+            gitBranchPrefix={gitBranchPrefix}
+            allowForcePush={allowForcePush}
+            commitMessagePrompt={commitMessagePrompt}
+            pullRequestPrompt={pullRequestPrompt}
             onClose={() => setWorkflow(null)}
             onError={(message) => {
               const projectId = workflowProject.projectId!

@@ -106,7 +106,8 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     providers,
     providerState,
     apiKeys,
-    snapshot,
+    configuration,
+    usageSources,
     busyProviderIds,
     modelTestResults,
     refreshingProviderData,
@@ -117,17 +118,33 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
   const busy = busyProviderIds.includes(providerID)
 
-  const configuredGroups = useMemo(() => selectConfiguredProviderGroups(snapshot), [snapshot])
-  const orphanCredentials = useMemo(() => selectOrphanProviderCredentials(snapshot), [snapshot])
+  const selectorInput = useMemo(
+    () => ({
+      providers: configuration.providers,
+      currentProviderState: configuration.currentProviderState,
+      credentials: configuration.credentials,
+      apiKeys: configuration.apiKeys,
+      usageSources,
+    }),
+    [configuration, usageSources],
+  )
+  const configuredGroups = useMemo(
+    () => selectConfiguredProviderGroups(selectorInput),
+    [selectorInput],
+  )
+  const orphanCredentials = useMemo(
+    () => selectOrphanProviderCredentials(configuration),
+    [configuration],
+  )
 
   const marketProviders = useMemo(
     () =>
       projectProviderDirectory(providers, {
         query: providerQuery,
-        currentProviderId: snapshot.currentProviderState?.selectedProviderID,
-        currentProviderState: snapshot.currentProviderState,
-        apiKeys: snapshot.apiKeys,
-        credentials: snapshot.credentials,
+        currentProviderId: configuration.currentProviderState?.selectedProviderID,
+        currentProviderState: configuration.currentProviderState,
+        apiKeys: configuration.apiKeys,
+        credentials: configuration.credentials,
       })
         .filter((item) => item.provider.providerKind !== 'custom')
         .map((item) => ({
@@ -141,7 +158,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
           connectionDisabled: item.provider.availability?.status === 'unavailable' &&
             item.provider.catalogOrigin !== 'models-dev' && item.provider.catalogOrigin !== 'pi-remote',
         })),
-    [providers, snapshot, providerQuery],
+    [providers, configuration, providerQuery],
   )
 
   const routeState = useMemo(
@@ -270,13 +287,16 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
 
   async function mutateKey(
     id: string,
-    action: () => Promise<unknown>,
+    action: () => Promise<{ syncWarning: string | null }>,
     successMessage: string,
   ): Promise<boolean> {
     setBusyKeyId(id)
     try {
-      await action()
-      onNotice(successMessage)
+      const outcome = await action()
+      // 写入已成功，仅同步失败：提示成功并附带刷新警告，绝不提示保存失败。
+      onNotice(
+        outcome.syncWarning ? `${successMessage}${outcome.syncWarning}` : successMessage,
+      )
       window.dispatchEvent(new Event('desktop:model-provider-changed'))
       return true
     } catch (error) {
@@ -353,10 +373,11 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   async function testSingleApiKey(key: DesktopApiKeySummary): Promise<void> {
     setBusyKeyId(key.id)
     try {
-      const result = await providerManagementStore.testApiKey(key.id)
+      const { value: result, syncWarning } = await providerManagementStore.testApiKey(key.id)
       onNotice(
         result.message ?? (result.ok ? 'API Key 鉴权通过，测试成功。' : 'API Key 测试失败。'),
       )
+      if (syncWarning) onNotice(syncWarning)
       window.dispatchEvent(new Event('desktop:model-provider-changed'))
     } catch (error) {
       onError(error instanceof Error ? error.message : 'API Key 测试失败，请稍后重试。')
@@ -416,8 +437,8 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const deleteConfirmation = deleteKey
     ? getApiKeyDeleteConfirmation(
         deleteKey,
-        [...snapshot.apiKeys],
-        snapshot.providers.find((p) => p.providerID === deleteKey.providerId)?.displayName,
+        [...configuration.apiKeys],
+        configuration.providers.find((p) => p.providerID === deleteKey.providerId)?.displayName,
       )
     : null
 

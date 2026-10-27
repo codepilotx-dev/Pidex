@@ -20,7 +20,7 @@ function Harness() {
       <Popover.Trigger asChild><ModelSelectTrigger modelName="fixture/model" isOpen={open}
         showThinkingOptions thinkingLabel="默认" thinkingOptions={[{ value: 'high', label: '高' }]}
         onThinkingChange={() => {}} /></Popover.Trigger>
-      <Popover.Portal><Popover.Content><input aria-label="搜索模型" /></Popover.Content></Popover.Portal>
+      <Popover.Portal><Popover.Content align="end"><input aria-label="搜索模型" /></Popover.Content></Popover.Portal>
     </Popover.Root>
     <output id="changes">{changes}</output>
     <ApiKeyQuickAdd busy={false} maskedValue="***old" onAdd={async key => {

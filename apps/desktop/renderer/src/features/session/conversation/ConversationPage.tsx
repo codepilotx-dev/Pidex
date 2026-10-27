@@ -2,6 +2,7 @@ import { chooseSessionGroupForThread } from '../../session-groups/SessionGroupAc
 import React from 'react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { useNavigate } from 'react-router-dom'
+import { useStore } from 'zustand/react'
 import { Dropdown as DropdownMenu } from '../../../components/ui/floating/Dropdown.js'
 import { commandMenuActionStore } from '../../search/CommandMenuActionStore.js'
 import {
@@ -28,7 +29,11 @@ import {
 import { Button } from '../../../components/ui/Button.js'
 import type { DesktopPermissionRequest, DesktopSessionStatus } from '../../../../shared/Types.js'
 import { useQuickChatContext } from '../QuickChatContext.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsField,
+} from '../../settings/UseDesktopSettings.js'
 import { WorkspaceHeaderItem } from '../../layout/workspace-header/index.js'
 import { useHeightTransition } from '../../../hooks/UseHeightTransition.js'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
@@ -193,18 +198,15 @@ export function ConversationPage(): React.ReactNode {
     layoutResizeActive,
     dockedPlanItemId,
   } = useQuickChatContext()
-  const {
-    diffMarkerStyle,
-    reviewView,
-    draft: settingsDraft,
-    setSidebarSessionPins,
-  } = useDesktopSettings()
-  const canonicalConversation = useCanonicalThreadConversation(activeSessionId)
-  const environmentActions = React.useSyncExternalStore(
-    commandMenuActionStore.subscribe,
-    commandMenuActionStore.getSnapshot,
-    commandMenuActionStore.getServerSnapshot,
+  const diffMarkerStyle = useDesktopSettingsField((settings) => settings.diffMarkerStyle)
+  const reviewView = useDesktopSettingsField((settings) => settings.reviewView)
+  const setSidebarSessionPins = useDesktopSettingsField(
+    (settings) => settings.setSidebarSessionPins,
   )
+  const settingsDraft = useDesktopSettingsDraftActions()
+  const terminalProfileId = useDesktopSettingsDraftValue('terminalProfileId')
+  const canonicalConversation = useCanonicalThreadConversation(activeSessionId)
+  const environmentActions = useStore(commandMenuActionStore, (state) => state.actions)
   const [selectedLaunchActionId, setSelectedLaunchActionId] = React.useState('')
   const launchActions = environmentActions.filter(
     (action) =>
@@ -1350,7 +1352,7 @@ export function ConversationPage(): React.ReactNode {
     onOpenWorkspacePath,
     navigate,
     settingsDraft.setValue,
-    settingsDraft.values.terminalProfileId,
+    terminalProfileId,
     setSidebarSessionPins,
     threadSummary,
     threadSummaryModel,
@@ -1531,7 +1533,7 @@ export function ConversationPage(): React.ReactNode {
         <React.Suspense fallback={null}>
           <ConversationEnvironmentControls
             gitAvailable={Boolean(gitStatus)}
-            terminalProfileId={settingsDraft.values.terminalProfileId}
+            terminalProfileId={terminalProfileId}
             threadId={activeSessionId}
             workspacePath={workspacePath}
             onOpenEnvironmentSettings={() => {

@@ -5,13 +5,35 @@ import type {
   ConfiguredProviderGroup,
   ProviderConnection,
   ProviderConnectionKind,
-  ProviderManagementSnapshot,
+  ProviderConfigurationState,
+  ProviderUsageQueryPartition,
 } from './Types.js'
 
-export function selectOrphanProviderCredentials(snapshot: ProviderManagementSnapshot) {
-  if (!snapshot.loaded || snapshot.configurationError || snapshot.error) return []
-  const known = new Set(snapshot.providers.map((provider) => String(provider.providerID)))
-  return snapshot.credentials.filter((credential) => !known.has(String(credential.providerId)))
+/** 目录与凭据投影的输入；不依赖用量查询状态。 */
+export type ProviderConfigurationInput = Pick<
+  ProviderConfigurationState,
+  | 'loaded'
+  | 'error'
+  | 'configurationError'
+  | 'providers'
+  | 'currentProviderState'
+  | 'credentials'
+  | 'apiKeys'
+>
+
+export type ProviderConnectionsInput = Pick<
+  ProviderConfigurationState,
+  'providers' | 'currentProviderState' | 'credentials' | 'apiKeys'
+> & { usageSources: readonly UsageSourceDescriptor[] }
+
+export type ProviderAnalyticsInput = ProviderConnectionsInput & {
+  usageResults: ProviderUsageQueryPartition['results']
+}
+
+export function selectOrphanProviderCredentials(configuration: ProviderConfigurationInput) {
+  if (!configuration.loaded || configuration.configurationError || configuration.error) return []
+  const known = new Set(configuration.providers.map((provider) => String(provider.providerID)))
+  return configuration.credentials.filter((credential) => !known.has(String(credential.providerId)))
 }
 
 const usageConnectionKind = (source: UsageSourceDescriptor): ProviderConnectionKind | null => {
@@ -35,9 +57,9 @@ const connectionIdentity = (connection: ProviderConnection): string =>
     : `${connection.origin}:${connection.kind}:${connection.id}`
 
 export function selectProviderConnections(
-  snapshot: ProviderManagementSnapshot,
+  input: ProviderConnectionsInput,
 ): readonly ProviderConnection[] {
-  const connections: ProviderConnection[] = snapshot.credentials.map((credential) => ({
+  const connections: ProviderConnection[] = input.credentials.map((credential) => ({
     id: `credential:${credential.id}`,
     kind: credential.kind === 'oauth' ? 'oauth' : 'inference-key',
     origin: 'credential',
@@ -49,9 +71,9 @@ export function selectProviderConnections(
   }))
   const identities = new Set(connections.map(connectionIdentity))
 
-  for (const provider of snapshot.providers) {
-    const current = snapshot.currentProviderState?.selectedProviderID === provider.providerID
-    const source = current ? snapshot.currentProviderState?.apiKeySource : null
+  for (const provider of input.providers) {
+    const current = input.currentProviderState?.selectedProviderID === provider.providerID
+    const source = current ? input.currentProviderState?.apiKeySource : null
     if (!source || source === 'secureStorage') continue
     const projected: ProviderConnection = {
       id: `env:${provider.providerID}:${source}`,
@@ -65,7 +87,7 @@ export function selectProviderConnections(
     connections.push(projected)
   }
 
-  for (const source of snapshot.usageSources) {
+  for (const source of input.usageSources) {
     const kind = usageConnectionKind(source)
     if (kind === null) continue
     const projected: ProviderConnection = {
@@ -97,17 +119,17 @@ const connectionPriority = (connection: ProviderConnection): number => {
 }
 
 export function selectConfiguredProviderGroups(
-  snapshot: ProviderManagementSnapshot,
+  input: ProviderConnectionsInput,
 ): readonly ConfiguredProviderGroup[] {
-  const connections = selectProviderConnections(snapshot)
-  const currentProviderId = snapshot.currentProviderState?.selectedProviderID
-  return snapshot.providers
+  const connections = selectProviderConnections(input)
+  const currentProviderId = input.currentProviderState?.selectedProviderID
+  return input.providers
     .flatMap((provider) => {
       const providerConnections = connections
         .filter((connection) => connection.providerIds.includes(provider.providerID))
         .sort((left, right) => connectionPriority(left) - connectionPriority(right))
       if (providerConnections.length === 0) return []
-      const usageSources = snapshot.usageSources.filter((source) =>
+      const usageSources = input.usageSources.filter((source) =>
         source.providerIds.some((providerId) => String(providerId) === String(provider.providerID)),
       )
       return [
@@ -115,7 +137,7 @@ export function selectConfiguredProviderGroups(
           provider,
           current: provider.providerID === currentProviderId,
           configured: true as const,
-          apiKeys: snapshot.apiKeys.filter((key) => key.providerId === provider.providerID),
+          apiKeys: input.apiKeys.filter((key) => key.providerId === provider.providerID),
           oauthAvailable: provider.authMethods?.includes('oauth') ?? false,
           usageSources,
           connections: providerConnections,
@@ -140,22 +162,19 @@ const analyticsPriority = (source: AnalyticsSource): number => {
   return 3
 }
 
-export function selectAnalyticsSources(
-  snapshot: ProviderManagementSnapshot,
-): readonly AnalyticsSource[] {
+export function selectAnalyticsSources(input: ProviderAnalyticsInput): readonly AnalyticsSource[] {
   const configuredProviderIds = new Set(
-    selectProviderConnections(snapshot)
+    selectProviderConnections(input)
       .flatMap((connection) => connection.providerIds)
       .map(String),
   )
-  const resultById = new Map(snapshot.usageResults.map((result) => [result.sourceId, result]))
-  return snapshot.usageSources
+  return input.usageSources
     .filter((descriptor) =>
       descriptor.providerIds.some((providerId) => configuredProviderIds.has(String(providerId))),
     )
     .map((descriptor) => ({
       descriptor,
-      result: resultById.get(descriptor.sourceId) ?? null,
+      result: input.usageResults[descriptor.sourceId] ?? null,
       connected: descriptor.connection.kind !== 'none',
       metered: descriptor.queryPolicy === 'metered',
     }))
@@ -167,8 +186,8 @@ export function selectAnalyticsSources(
 }
 
 export function providerCredentialsFor(
-  snapshot: ProviderManagementSnapshot,
+  configuration: ProviderConfigurationInput,
   providerId: ModelProviderID,
 ) {
-  return snapshot.credentials.filter((credential) => credential.providerId === providerId)
+  return configuration.credentials.filter((credential) => credential.providerId === providerId)
 }

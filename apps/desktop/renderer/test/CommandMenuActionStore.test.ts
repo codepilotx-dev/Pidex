@@ -30,13 +30,13 @@ describe('命令菜单动作注册表', () => {
     const disposeFirst = store.register(action('first', { order: 10 }))
     const disposeSameOrder = store.register(action('same-order', { order: 10 }))
 
-    expect(store.getSnapshot().map((item) => item.id)).toEqual(['first', 'same-order', 'second'])
+    expect(store.getState().actions.map((item) => item.id)).toEqual(['first', 'same-order', 'second'])
 
     disposeFirst()
-    expect(store.getSnapshot().map((item) => item.id)).toEqual(['same-order', 'second'])
+    expect(store.getState().actions.map((item) => item.id)).toEqual(['same-order', 'second'])
     disposeSecond()
     disposeSameOrder()
-    expect(store.getSnapshot()).toEqual([])
+    expect(store.getState().actions).toEqual([])
   })
 
   test('更新动作时保留原注册顺序', () => {
@@ -47,8 +47,8 @@ describe('命令菜单动作注册表', () => {
 
     store.update(token, action('updated', { order: 10, label: '已更新' }))
 
-    expect(store.getSnapshot().map((item) => item.id)).toEqual(['updated', 'after'])
-    expect(store.getSnapshot()[0]?.label).toBe('已更新')
+    expect(store.getState().actions.map((item) => item.id)).toEqual(['updated', 'after'])
+    expect(store.getState().actions[0]?.label).toBe('已更新')
   })
 
   test('清理后的旧动作引用不会执行，并允许重新注册新周期', async () => {
@@ -62,7 +62,7 @@ describe('命令菜单动作注册表', () => {
         },
       }),
     ])
-    const staleAction = store.getSnapshot()[0]
+    const staleAction = store.getState().actions[0]
 
     disposeOld()
     await staleAction?.execute()
@@ -73,7 +73,7 @@ describe('命令菜单动作注册表', () => {
         },
       }),
     ])
-    await store.getSnapshot()[0]?.execute()
+    await store.getState().actions[0]?.execute()
 
     expect(oldRuns).toBe(0)
     expect(newRuns).toBe(1)
@@ -94,8 +94,8 @@ describe('命令菜单动作注册表', () => {
     )
 
     for (const query of ['移交', '工作树', 'HANDOFF', 'worktree', '进行中']) {
-      expect(filterCommandMenuActions(store.getSnapshot(), query)).toHaveLength(1)
+      expect(filterCommandMenuActions(store.getState().actions, query)).toHaveLength(1)
     }
-    expect(filterCommandMenuActions(store.getSnapshot(), '不存在')).toEqual([])
+    expect(filterCommandMenuActions(store.getState().actions, '不存在')).toEqual([])
   })
 })

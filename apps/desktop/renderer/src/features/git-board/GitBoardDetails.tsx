@@ -4,7 +4,7 @@ import type { DesktopReviewSource, DesktopWorkspace } from '../../../shared/Type
 import { Tooltip } from '../../components/ui/Tooltip.js'
 import { Button } from '../../components/ui/Button.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import { useCodeWrapPreference } from '../syntax/WrapPreference.js'
 import { ReviewDiffReadOnlyInline } from '../review/diff/ReviewDiffSurface.js'
 import {
@@ -28,7 +28,7 @@ export function GitBoardDetails({
   onClose: () => void
 }) {
   const { t } = useLocale()
-  const { diffMarkerStyle } = useDesktopSettings()
+  const diffMarkerStyle = useDesktopSettingsField((settings) => settings.diffMarkerStyle)
   const [wrapLines] = useCodeWrapPreference()
   const [summary, setSummary] = useState<ReviewSummarySnapshot | null>(null)
   const [selectedPath, setSelectedPath] = useState(path ?? '')

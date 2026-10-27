@@ -43,7 +43,8 @@ import {
 import { ProviderBalanceCards } from '../../settings/usage/ProviderBalanceCards.js'
 import {
   providerManagementStore,
-  useProviderManagementSnapshot,
+  providerUsagePartitionKey,
+  useProviderManagementStore,
   type ConfiguredProviderGroup,
   type ProviderConnection,
 } from '../../provider-management/index.js'
@@ -184,7 +185,15 @@ export function ProviderConnectionSection({
   const customConfig = isCustom && provider.config?.kind === 'custom' ? provider.config : null
 
   const oauthAvailable = provider.authMethods?.includes('oauth') ?? group?.oauthAvailable ?? false
-  const snapshot = useProviderManagementSnapshot()
+  const timeZone = useMemo(localTimeZone, [])
+  const currentProviderState = useProviderManagementStore(
+    (state) => state.configuration.currentProviderState,
+  )
+  const usagePartition = useProviderManagementStore(
+    (state) => state.usageQueries[providerUsagePartitionKey('today', timeZone)],
+  )
+  const usageResults = usagePartition?.results
+  const refreshingSourceIds = usagePartition?.refreshingSourceIds ?? []
   const activeConnection = group?.connections.find(
     (connection) =>
       connection.origin === 'credential' &&
@@ -196,8 +205,8 @@ export function ProviderConnectionSection({
   const configured =
     providerDetailStatus(
       provider,
-      snapshot.currentProviderState?.selectedProviderID === provider.providerID
-        ? snapshot.currentProviderState
+      currentProviderState?.selectedProviderID === provider.providerID
+        ? currentProviderState
         : null,
       group,
     ).label === '已配置'
@@ -254,10 +263,9 @@ export function ProviderConnectionSection({
   }
 
 
-  const timeZone = useMemo(localTimeZone, [])
   const usageResultById = useMemo(
-    () => new Map(snapshot.usageResults.map((source) => [source.sourceId, source])),
-    [snapshot.usageResults],
+    () => new Map(Object.entries(usageResults ?? {})),
+    [usageResults],
   )
   // 只查询当前供应商已连接且可查询的来源；不带 force 走共享缓存。
   const connectedQueryableSourceIds = useMemo(
@@ -340,7 +348,7 @@ export function ProviderConnectionSection({
   }
 
   const refreshingUsage = connectedQueryableSourceIds.some((sourceId) =>
-    snapshot.refreshingSourceIds.includes(sourceId),
+    refreshingSourceIds.includes(sourceId),
   )
 
   const oauthActive = activeConnection?.kind === 'oauth'
@@ -647,7 +655,7 @@ export function ProviderConnectionSection({
                             credentialName={usageCredentialName(source, sourceResult, apiKeys)}
                             descriptor={source}
                             key={source.sourceId}
-                            loading={snapshot.refreshingSourceIds.includes(source.sourceId)}
+                            loading={refreshingSourceIds.includes(source.sourceId)}
                             result={sourceResult}
                           />
                         )
@@ -662,10 +670,14 @@ export function ProviderConnectionSection({
                             }}
                             onChanged={onRefresh}
                             onConnect={(input) =>
-                              providerManagementStore.connectUsageCredential(input)
+                              providerManagementStore
+                                .connectUsageCredential(input)
+                                .then(() => undefined)
                             }
                             onDisconnect={(sourceId) =>
-                              providerManagementStore.disconnectUsageCredential({ sourceId })
+                              providerManagementStore
+                                .disconnectUsageCredential({ sourceId })
+                                .then(() => undefined)
                             }
                           />
                         )

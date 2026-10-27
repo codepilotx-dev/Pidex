@@ -7,9 +7,12 @@ import { FullScreenWhaleLoading } from '../../../components/ui/FullScreenWhaleLo
 import { useDialogFocusRestore } from '../../../components/ui/UseDialogFocusRestore.js'
 import type { DesktopModelProviderSummary } from '../../../../shared/Types.js'
 import { isExecutableDesktopProvider } from '../../../services/desktop-client/ProviderAdapters.js'
-import type { ProviderManagementSnapshot } from '../../provider-management/Types.js'
+import type { ProviderConfigurationState } from '../../provider-management/Types.js'
 import { providerManagementStore } from '../../provider-management/ProviderManagementStore.js'
-import { useProviderManagementSnapshot } from '../../provider-management/UseProviderManagementSnapshot.js'
+import {
+  useProviderManagementStore,
+  useShallow,
+} from '../../provider-management/UseProviderManagementStore.js'
 import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
 
 export type ModelSetupGateDecision = 'loading' | 'recovery' | 'setup' | 'workbench'
@@ -32,8 +35,8 @@ export function hasUsableTaskModel(
 }
 
 export function resolveModelSetupGate(
-  snapshot: Pick<
-    ProviderManagementSnapshot,
+  configuration: Pick<
+    ProviderConfigurationState,
     'loaded' | 'configurationError' | 'currentProviderState' | 'providers'
   >,
   settings: {
@@ -41,40 +44,50 @@ export function resolveModelSetupGate(
     firstUseSetupCompleted: 0 | 1 | undefined
   },
 ): ModelSetupGateDecision {
-  if (!snapshot.loaded || !settings.settingsLoaded) return 'loading'
-  if (snapshot.configurationError || !snapshot.currentProviderState) return 'recovery'
+  if (!configuration.loaded || !settings.settingsLoaded) return 'loading'
+  if (configuration.configurationError || !configuration.currentProviderState) return 'recovery'
   if (settings.firstUseSetupCompleted === 0) return 'setup'
   if (settings.firstUseSetupCompleted === 1) return 'workbench'
-  return hasUsableTaskModel(snapshot.currentProviderState, snapshot.providers)
+  return hasUsableTaskModel(configuration.currentProviderState, configuration.providers)
     ? 'workbench'
     : 'setup'
 }
 
 export function RequireConfiguredModel(): React.ReactNode {
-  const snapshot = useProviderManagementSnapshot()
+  const configuration = useProviderManagementStore(
+    useShallow((state) => ({
+      loaded: state.configuration.loaded,
+      error: state.configuration.error,
+      configurationError: state.configuration.configurationError,
+      currentProviderState: state.configuration.currentProviderState,
+      providers: state.configuration.providers,
+    })),
+  )
   const settings = useDesktopSettings()
-  const decision = resolveModelSetupGate(snapshot, settings)
+  const decision = resolveModelSetupGate(configuration, settings)
   const [setupDialogDismissed, setSetupDialogDismissed] = useState(false)
 
   useEffect(() => {
     if (
       !settings.settingsLoaded ||
-      !snapshot.loaded ||
-      snapshot.configurationError ||
-      !snapshot.currentProviderState ||
+      !configuration.loaded ||
+      configuration.configurationError ||
+      !configuration.currentProviderState ||
       settings.firstUseSetupCompleted !== undefined
     )
       return
-    const inferred = hasUsableTaskModel(snapshot.currentProviderState, snapshot.providers) ? 1 : 0
+    const inferred = hasUsableTaskModel(configuration.currentProviderState, configuration.providers)
+      ? 1
+      : 0
     void settings.saveFirstUseSetupCompleted(inferred).catch(() => undefined)
   }, [
     settings.firstUseSetupCompleted,
     settings.saveFirstUseSetupCompleted,
     settings.settingsLoaded,
-    snapshot.configurationError,
-    snapshot.currentProviderState,
-    snapshot.providers,
-    snapshot.loaded,
+    configuration.configurationError,
+    configuration.currentProviderState,
+    configuration.providers,
+    configuration.loaded,
   ])
 
   useEffect(() => {
@@ -86,14 +99,14 @@ export function RequireConfiguredModel(): React.ReactNode {
   if (decision === 'loading') {
     return (
       <SetupBootState
-        label={resolveModelSetupLoadingLabel(snapshot.loaded, settings.settingsLoaded)}
+        label={resolveModelSetupLoadingLabel(configuration.loaded, settings.settingsLoaded)}
       />
     )
   }
   if (decision === 'recovery') {
     return (
       <SetupRecoveryState
-        message={snapshot.configurationError ?? snapshot.error}
+        message={configuration.configurationError ?? configuration.error}
         onRetry={() => void providerManagementStore.refresh()}
       />
     )

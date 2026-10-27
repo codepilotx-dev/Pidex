@@ -1,3 +1,4 @@
+import { createStore, type StoreApi } from 'zustand/vanilla'
 import type {
   ComposerDocument,
   ComposerDraft,
@@ -15,33 +16,62 @@ type ComposerDraftHandoff = {
   replacement: ComposerDraft
 }
 
+type ComposerDraftState = {
+  drafts: Readonly<Record<string, ComposerDraft>>
+  submitOutcomes: Readonly<Record<string, ComposerSubmitOutcome>>
+}
+
+/**
+ * 会话内共享的草稿注册表。状态可订阅；草稿读取保持深拷贝，
+ * 避免调用方直接改写 Store 内对象。
+ */
 export class ComposerDraftStore {
-  readonly #drafts = new Map<ComposerDraftKey, ComposerDraft>()
-  readonly #submitOutcomes = new Map<ComposerDraftKey, ComposerSubmitOutcome>()
-  readonly #listeners = new Set<() => void>()
+  readonly #store: StoreApi<ComposerDraftState>
   readonly #createClientId: CreateClientId
+  /** 仅由 get() 惰性创建、尚未写入的草稿；不参与订阅快照。 */
+  readonly #lazy = new Map<ComposerDraftKey, ComposerDraft>()
 
   constructor(createClientId: CreateClientId = defaultCreateClientId) {
     this.#createClientId = createClientId
+    this.#store = createStore<ComposerDraftState>()(() => ({
+      drafts: {},
+      submitOutcomes: {},
+    }))
+  }
+
+  get store(): StoreApi<ComposerDraftState> {
+    return this.#store
+  }
+
+  subscribe = (listener: () => void): (() => void) => this.#store.subscribe(listener)
+
+  #read(key: ComposerDraftKey): ComposerDraft | undefined {
+    return this.#store.getState().drafts[key] ?? this.#lazy.get(key)
+  }
+
+  #write(key: ComposerDraftKey, draft: ComposerDraft): ComposerDraft {
+    const next = cloneDraft(draft)
+    this.#lazy.delete(key)
+    this.#store.setState((state) => ({ drafts: { ...state.drafts, [key]: next } }))
+    return cloneDraft(next)
   }
 
   get(key: ComposerDraftKey): ComposerDraft {
-    const existing = this.#drafts.get(key)
+    const existing = this.#read(key)
     if (existing) return cloneDraft(existing)
+    // 读取即创建属于初始化而非内容变更：先留在本地，首次写入才进入 Store。
     const created = createEmptyComposerDraft(this.#createClientId())
-    this.#drafts.set(key, created)
+    this.#lazy.set(key, created)
     return cloneDraft(created)
   }
 
   peek(key: ComposerDraftKey): ComposerDraft | undefined {
-    const draft = this.#drafts.get(key)
+    const draft = this.#read(key)
     return draft ? cloneDraft(draft) : undefined
   }
 
   set(key: ComposerDraftKey, draft: ComposerDraft): ComposerDraft {
-    const next = cloneDraft(draft)
-    this.#drafts.set(key, next)
-    return cloneDraft(next)
+    return this.#write(key, draft)
   }
 
   update(key: ComposerDraftKey, update: (draft: ComposerDraft) => ComposerDraft): ComposerDraft {
@@ -52,7 +82,6 @@ export class ComposerDraftStore {
     update: (draft: ComposerDraft) => ComposerDraft,
   ): ComposerDraft {
     const next = this.update(key, update)
-    this.#emit()
     return next
   }
 
@@ -66,7 +95,6 @@ export class ComposerDraftStore {
         tokens: [],
       },
     })
-    this.#emit()
     return next
   }
 
@@ -79,18 +107,19 @@ export class ComposerDraftStore {
       skillInvocation,
       skills: skillInvocation ? [{ ...skillInvocation }] : [],
     }))
-    this.#emit()
     return next
   }
 
   /** Hand a draft to its new session and rotate the source identity atomically. */
   handoff(from: ComposerDraftKey, to: ComposerDraftKey): ComposerDraftHandoff | undefined {
-    const submitted = this.#drafts.get(from)
+    const submitted = this.#read(from)
     if (!submitted) return undefined
     const replacement = createEmptyComposerDraft(this.#createClientId())
-    this.#drafts.set(to, submitted)
-    this.#drafts.set(from, replacement)
-    this.#emit()
+    this.#lazy.delete(from)
+    this.#lazy.delete(to)
+    this.#store.setState((state) => ({
+      drafts: { ...state.drafts, [to]: submitted, [from]: replacement },
+    }))
     return {
       submitted: cloneDraft(submitted),
       replacement: cloneDraft(replacement),
@@ -99,13 +128,13 @@ export class ComposerDraftStore {
 
   clear(key: ComposerDraftKey): ComposerDraft {
     const next = createEmptyComposerDraft(this.#createClientId())
-    this.#drafts.set(key, next)
+    this.#lazy.delete(key)
+    this.#store.setState((state) => ({ drafts: { ...state.drafts, [key]: next } }))
     return cloneDraft(next)
   }
 
   setSkills(key: ComposerDraftKey, skills: ComposerSkillInvocation[]): ComposerDraft {
     const next = this.update(key, (current) => ({ ...current, skills, skillInvocation: undefined }))
-    this.#emit()
     return next
   }
 
@@ -127,7 +156,7 @@ export class ComposerDraftStore {
     consumedClientId: string,
     options: { clearContent: boolean; browserAnnotations?: ComposerDraft['browserAnnotations'] },
   ): ComposerDraft {
-    const current = this.#drafts.get(key)
+    const current = this.#read(key)
     if (!current || current.clientId !== consumedClientId) {
       return current ? cloneDraft(current) : this.get(key)
     }
@@ -152,38 +181,38 @@ export class ComposerDraftStore {
         remaining.some((annotation) => annotation.id === id),
       ),
     )
-    this.#drafts.set(key, next)
-    this.#emit()
+    this.#store.setState((state) => ({ drafts: { ...state.drafts, [key]: next } }))
     return cloneDraft(next)
   }
 
   delete(key: ComposerDraftKey): void {
-    this.#drafts.delete(key)
-    this.clearSubmitOutcome(key)
+    this.#lazy.delete(key)
+    this.#store.setState((state) => {
+      if (!(key in state.drafts) && !(key in state.submitOutcomes)) return state
+      const { [key]: _draft, ...drafts } = state.drafts
+      const { [key]: _outcome, ...submitOutcomes } = state.submitOutcomes
+      return { drafts, submitOutcomes }
+    })
   }
 
   getSubmitOutcome(key: ComposerDraftKey): ComposerSubmitOutcome | null {
-    return this.#submitOutcomes.get(key) ?? null
+    return this.#store.getState().submitOutcomes[key] ?? null
   }
 
   setSubmitOutcome(key: ComposerDraftKey, outcome: ComposerSubmitOutcome): void {
-    this.#submitOutcomes.set(key, outcome)
-    this.#emit()
+    this.#store.setState((state) => ({
+      submitOutcomes: { ...state.submitOutcomes, [key]: outcome },
+    }))
   }
 
   clearSubmitOutcome(key: ComposerDraftKey): void {
-    if (!this.#submitOutcomes.delete(key)) return
-    this.#emit()
+    if (!(key in this.#store.getState().submitOutcomes)) return
+    this.#store.setState((state) => {
+      const { [key]: _removed, ...submitOutcomes } = state.submitOutcomes
+      return { submitOutcomes }
+    })
   }
 
-  subscribe(listener: () => void): () => void {
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
-  }
-
-  #emit(): void {
-    for (const listener of this.#listeners) listener()
-  }
 }
 
 /** Session-memory draft registry shared by every Composer placement. */

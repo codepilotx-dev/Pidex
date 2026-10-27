@@ -255,11 +255,15 @@ describe('usage billing renderer', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>
         <ProviderUsagePanel
-          data={{
-            range: '7d',
-            timeZone: 'Asia/Shanghai',
-            generatedAt: 1_722_000_000_000,
-            sources,
+          partitions={{
+            '7d': {
+              range: '7d',
+              timeZone: 'Asia/Shanghai',
+              generatedAt: 1_722_000_000_000,
+              results: Object.fromEntries(sources.map((item) => [item.sourceId, item])),
+              refreshingSourceIds: [],
+              error: null,
+            },
           }}
           descriptors={[vercelDescriptor, failedDescriptor]}
           error={null}
@@ -286,57 +290,62 @@ describe('usage billing renderer', () => {
   })
 
   it('keeps currencies separate, renders balance-only sources, and omits unsupported providers', () => {
-    const html = renderToStaticMarkup(
-      <MemoryRouter>
-        <ProviderUsagePanel
-          data={{
-            range: '7d',
-            timeZone: 'Asia/Shanghai',
-            generatedAt: 1_722_000_000_000,
-            sources: [
-              source({
-                sourceId: 'source-a',
-                displayName: 'Source A',
-                providerId: 'openai',
-                costs: [{ currency: 'USD', amount: '0.1' }],
-              }),
-              source({
-                sourceId: 'source-b',
-                displayName: 'Source B',
-                providerId: 'anthropic',
-                costs: [
-                  { currency: 'USD', amount: '0.2' },
-                  { currency: 'CNY', amount: '1.5' },
-                ],
-              }),
+    const results = [
+      source({
+        sourceId: 'source-a',
+        displayName: 'Source A',
+        providerId: 'openai',
+        costs: [{ currency: 'USD', amount: '0.1' }],
+      }),
+      source({
+        sourceId: 'source-b',
+        displayName: 'Source B',
+        providerId: 'anthropic',
+        costs: [
+          { currency: 'USD', amount: '0.2' },
+          { currency: 'CNY', amount: '1.5' },
+        ],
+      }),
+      {
+        sourceId: 'deepseek',
+        providerIds: [protocolProviderId('deepseek')],
+        displayName: 'DeepSeek 余额',
+        scope: 'api-key',
+        stability: 'official',
+        status: 'available',
+        checkedAt: 1_722_000_000_000,
+        connection: { kind: 'provider-key', disconnectible: false },
+        groups: [
+          {
+            id: 'account',
+            label: '账户余额',
+            balances: [
               {
-                sourceId: 'deepseek',
-                providerIds: [protocolProviderId('deepseek')],
-                displayName: 'DeepSeek 余额',
-                scope: 'api-key',
-                stability: 'official',
-                status: 'available',
-                checkedAt: 1_722_000_000_000,
-                connection: { kind: 'provider-key', disconnectible: false },
-                groups: [
-                  {
-                    id: 'account',
-                    label: '账户余额',
-                    balances: [
-                      {
-                        currency: 'CNY',
-                        total: '88.5',
-                        components: [
-                          { label: '充值余额', amount: '60' },
-                          { label: '赠送余额', amount: '28.5' },
-                        ],
-                      },
-                    ],
-                    quotaWindows: [],
-                  },
+                currency: 'CNY',
+                total: '88.5',
+                components: [
+                  { label: '充值余额', amount: '60' },
+                  { label: '赠送余额', amount: '28.5' },
                 ],
               },
             ],
+            quotaWindows: [],
+          },
+        ],
+      },
+    ] as unknown as ProviderUsageSource[]
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ProviderUsagePanel
+          partitions={{
+            '7d': {
+              range: '7d',
+              timeZone: 'Asia/Shanghai',
+              generatedAt: 1_722_000_000_000,
+              results: Object.fromEntries(results.map((item) => [item.sourceId, item])),
+              refreshingSourceIds: [],
+              error: null,
+            },
           }}
           descriptors={[
             descriptor({

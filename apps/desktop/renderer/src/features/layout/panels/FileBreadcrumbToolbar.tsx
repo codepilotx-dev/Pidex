@@ -21,6 +21,7 @@ import { desktopClient } from '../../../services/desktop-client/index.js'
 import {
   loadExternalOpenTargets,
   openPathWithExternalTarget,
+  useExternalOpenTargets,
 } from '../../../services/ExternalOpenTargetsStore.js'
 import type { MarkdownFileViewMode } from '../dock/RightDockState.js'
 
@@ -52,7 +53,6 @@ export function FileBreadcrumbToolbar({
   onToggleMarkdownViewMode,
 }: FileBreadcrumbToolbarProps): React.ReactNode {
   const [openTargetMenu, setOpenTargetMenu] = useState(false)
-  const [openTargets, setOpenTargets] = useState<DesktopExternalOpenTarget[]>([])
   const segments = useMemo(
     () => buildBreadcrumbSegments(path, workspace, workspacePath),
     [path, workspace, workspacePath],
@@ -61,38 +61,17 @@ export function FileBreadcrumbToolbar({
     () => resolveAbsolutePath(workspacePath, path),
     [path, workspacePath],
   )
+  const openTargets = useExternalOpenTargets(absolutePath)
   const preferredOpenTarget = openTargets.find((target) => target.preferred) ?? openTargets[0]
-
-  function rememberPreferredTarget(target: DesktopExternalOpenTarget): void {
-    const next = openTargets.map((candidate) => ({
-      ...candidate,
-      preferred: candidate.id === target.id,
-    }))
-    setOpenTargets(next)
-  }
 
   function openWithTarget(target: DesktopExternalOpenTarget): void {
     if (!absolutePath) return
-    rememberPreferredTarget(target)
     void openPathWithExternalTarget(absolutePath, target.id)
   }
 
   useEffect(() => {
-    if (!absolutePath) {
-      setOpenTargets([])
-      return
-    }
-    let active = true
-    void loadExternalOpenTargets(absolutePath)
-      .then((targets) => {
-        if (active) setOpenTargets(targets)
-      })
-      .catch(() => {
-        if (active) setOpenTargets([])
-      })
-    return () => {
-      active = false
-    }
+    if (!absolutePath) return
+    void loadExternalOpenTargets(absolutePath).catch(() => undefined)
   }, [absolutePath])
 
   return (

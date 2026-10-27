@@ -28,6 +28,7 @@ import {
   openPathWithExternalTarget,
   openPathWithPreferredExternalTarget,
   prefetchExternalOpenTargets,
+  useExternalOpenTargets,
 } from '../../services/ExternalOpenTargetsStore.js'
 import { cx } from '../../utils/Cx.js'
 import { FileTypeIcon } from '../layout/FileTypeIcon.js'
@@ -1232,7 +1233,7 @@ function FileReferenceButton({
   title: string
 }): React.ReactNode {
   const absolutePath = resolveWorkspacePath(context.cwd, reference.path)
-  const [openTargets, setOpenTargets] = React.useState<DesktopExternalOpenTarget[]>([])
+  const openTargets = useExternalOpenTargets(absolutePath)
   const [loadingTargets, setLoadingTargets] = React.useState(false)
   const canCopyContents = context.canCopyFileReferenceContents?.(reference) ?? false
 
@@ -1244,8 +1245,7 @@ function FileReferenceButton({
     if (!absolutePath) return
     setLoadingTargets(true)
     void loadExternalOpenTargets(absolutePath)
-      .then(setOpenTargets)
-      .catch(() => setOpenTargets([]))
+      .catch(() => undefined)
       .finally(() => setLoadingTargets(false))
   }
   const open = (preview: boolean): void => {
@@ -1257,16 +1257,7 @@ function FileReferenceButton({
   }
   const openWithTarget = (targetId: string): void => {
     if (!absolutePath) return
-    void openPathWithExternalTarget(absolutePath, targetId)
-      .then((selected) => {
-        setOpenTargets((current) =>
-          current.map((target) => ({
-            ...target,
-            preferred: target.id === selected.id,
-          })),
-        )
-      })
-      .catch(() => undefined)
+    void openPathWithExternalTarget(absolutePath, targetId).catch(() => undefined)
   }
   const preferredTarget = openTargets.find((target) => target.preferred) ?? openTargets[0]
   const targetActions: AppContextMenuAction[] =

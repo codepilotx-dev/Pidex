@@ -1,3 +1,4 @@
+import { createStore } from 'zustand/vanilla'
 import type { WorkbenchTabId } from '../dock/RightDockState.js'
 import { syncStylesheets } from './CloneStylesheets.js'
 
@@ -9,6 +10,14 @@ export interface AuxiliaryWindowEntry {
 }
 
 export type AuxiliaryWindowListener = () => void
+
+/**
+ * 浮动标签列表是可订阅展示状态；真实子窗口对象与 DOM 容器仍由服务实例持有，
+ * 不进入 Store。
+ */
+export const auxiliaryWindowsStore = createStore<{
+  floatingTabIds: readonly WorkbenchTabId[]
+}>(() => ({ floatingTabIds: [] }))
 
 export class AuxiliaryWindowService {
   private readonly windows = new Map<WorkbenchTabId, AuxiliaryWindowEntry>()
@@ -163,6 +172,7 @@ export class AuxiliaryWindowService {
   }
 
   private notifyListeners(): void {
+    auxiliaryWindowsStore.setState({ floatingTabIds: this.getFloatingTabIds() })
     for (const listener of this.listeners) {
       try {
         listener()

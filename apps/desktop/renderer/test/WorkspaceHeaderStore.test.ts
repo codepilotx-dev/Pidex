@@ -20,9 +20,9 @@ describe('workspace header store', () => {
       node: '插件',
     })
 
-    expect(store.getSnapshot()).toHaveLength(1)
+    expect(store.getState().items).toHaveLength(1)
     unregister()
-    expect(store.getSnapshot()).toEqual([])
+    expect(store.getState().items).toEqual([])
     expect(notifications).toBe(2)
     unsubscribe()
   })
@@ -47,9 +47,9 @@ describe('workspace header store', () => {
     })
 
     cleanupFirst()
-    expect(store.getSnapshot().map((item) => item.node)).toEqual(['replacement'])
+    expect(store.getState().items.map((item) => item.node)).toEqual(['replacement'])
     cleanupReplacement()
-    expect(store.getSnapshot()).toEqual([])
+    expect(store.getState().items).toEqual([])
   })
 
   test('isolates route scopes and sorts by order then registration sequence', () => {
@@ -64,10 +64,10 @@ describe('workspace header store', () => {
     }
 
     expect(
-      selectWorkspaceHeaderItems(store.getSnapshot(), '/plugins', 'right').map((item) => item.id),
+      selectWorkspaceHeaderItems(store.getState().items, '/plugins', 'right').map((item) => item.id),
     ).toEqual(['last', 'first', 'second'])
     expect(
-      selectWorkspaceHeaderItems(store.getSnapshot(), '/settings').map((item) => item.id),
+      selectWorkspaceHeaderItems(store.getState().items, '/settings').map((item) => item.id),
     ).toEqual(['other'])
   })
 
@@ -104,7 +104,7 @@ describe('workspace header store', () => {
     })
 
     expect(
-      selectWorkspaceHeaderItems(store.getSnapshot(), '/models').map((item) => item.node),
+      selectWorkspaceHeaderItems(store.getState().items, '/models').map((item) => item.node),
     ).toEqual(['new', 'second'])
   })
 })

@@ -18,22 +18,38 @@ function snapshot(id, full = false) {
     view: { messages: [], toolLog: [], pendingPermissions: [], contextUsage: null }, updatedAt: '2026-01-01' };
 }
 let deferredB;
+let sessionListener;
 window.records = [];
 window.deferB = () => { window.releaseB = undefined; deferredB = new Promise(resolve => { window.releaseB = resolve }); };
 window.failB = false;
 export const desktopClient = {
   listSessions: async () => ['a', 'b'].map(id => snapshot(id)),
   getSessionCatalogStatus: async () => ({ state: 'ready', error: null }),
-  onWorkflowEvent: () => () => {}, onSessionStoreChange: () => () => {},
+  onWorkflowEvent: () => () => {},
+  onSessionStoreChange: listener => { sessionListener = listener; return () => { sessionListener = undefined }; },
   markSessionRead: async () => {}, setActiveSession: async () => {},
   getSession: async id => { if (id === 'b') { if (deferredB) { const gate = deferredB; deferredB = null; await gate; } if (window.failB) throw Error('B history failed'); } return snapshot(id, true); },
   getModelProviderState: async () => ({ selectedProviderID: 'global', model: 'global-model', modelConfigured: true, variant: 'high' }),
-  createSession: async options => { window.createdOptions = options; await new Promise(resolve => { window.releaseCreate = resolve }); return { sessionId: 'created', workspace, standalone: false }; },
+  createSession: async options => {
+    window.createdOptions = options;
+    window.releaseCreate = undefined;
+    await new Promise(resolve => { window.releaseCreate = resolve });
+    const id = window.creationId ?? 'created';
+    if (window.emitCreationEvent !== false) {
+      const created = snapshot(id, true);
+      created.item.sessionName = 'Canonical created title';
+      created.item.status = 'running';
+      sessionListener?.({sessions: [snapshot('a'), snapshot('b'), created]});
+    }
+    return { sessionId: id, workspace, standalone: false };
+  },
   sendUserMessage: async (id, input, model, inputId) => { window.records.push({ id, input, model, inputId, delivery: 'start' }); },
   submitSessionFollowUp: async (id, input, delivery, inputId, model) => { window.records.push({ id, input, model, inputId, delivery }); return delivery === 'steer' ? 'steered' : 'queued'; },
   saveModelProvider: async () => { throw Error('Default model must not be changed'); },
-  listModelProviders: async () => [],
-  fetchProviderModels: async () => ({ models: [] }),
+  listModelProviders: async () => ['home-provider', 'other-home'].map(providerID => ({
+    providerID, apiKeyConfigured: true, defaultModels: ['home-draft', 'later-home'] })),
+  fetchProviderModels: async () => ({ models: ['home-draft', 'later-home'], modelMetadata: {
+    'home-draft': {variants: ['home-variant']}, 'later-home': {variants: ['adaptive']} } }),
   getRecentNewThreadModel: async () => null,
   saveRecentNewThreadModel: async () => {},
   resolveFirstAvailableModel: async () => ({ providerID: 'home-provider', id: 'home-draft' }),
@@ -60,6 +76,8 @@ function Harness() {
     <output id="selection">{JSON.stringify(state.modelSelection)}</output>
     <output id="loading">{String(state.modelSelectionLoading)}</output>
     <output id="error">{state.modelSelectionError ?? ''}</output>
+    <ul id="sessions">{state.sessions.map(session => <li key={session.id} data-id={session.id}
+      data-status={session.status}>{session.sessionName}</li>)}</ul>
     <button onClick={() => state.activateSessionById('a')}>A</button>
     <button onClick={() => state.activateSessionById('b')}>B</button>
     <button onClick={state.reloadModelSelection}>Retry</button>
@@ -73,7 +91,7 @@ async function buildHarness() {
     target: 'browser',
     format: 'esm',
     tsconfig: resolve(rendererRoot, 'tsconfig.app.json'),
-    define: { 'process.env.NODE_ENV': '"development"' },
+    define: { 'process.env.NODE_ENV': '"development"', 'import.meta.env': '{"DEV":true}', 'import.meta.hot': 'undefined' },
     plugins: [
       {
         name: 'submission-harness',
@@ -85,17 +103,17 @@ async function buildHarness() {
                     rendererRoot,
                     'src/shims/core',
                     args.path.slice('@pidex/core/'.length).replace(/[.]js$/, '.ts'),
-                  ),
+                  ).replaceAll('\\', '/'),
                   namespace: 'file',
                 }
-              : undefined,
+              : {path: Bun.resolveSync(args.path, args.resolveDir || rendererRoot).replaceAll('\\', '/'), namespace: 'file'},
           )
           builder.onResolve({ filter: /^react(?:\/.*)?$/ }, (args) => ({
-            path: Bun.resolveSync(args.path, rendererRoot),
+            path: Bun.resolveSync(args.path, rendererRoot).replaceAll('\\', '/'),
             namespace: 'file',
           }))
           builder.onResolve({ filter: /^react-dom\/client$/ }, (args) => ({
-            path: Bun.resolveSync(args.path, rendererRoot),
+            path: Bun.resolveSync(args.path, rendererRoot).replaceAll('\\', '/'),
             namespace: 'file',
           }))
           builder.onResolve({ filter: /^submission-harness$/ }, () => ({
@@ -137,6 +155,7 @@ try {
   const page = await browser.newPage()
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
+  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
   await page.route('http://session-test.local/**', (route) =>
     route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }),
   )
@@ -217,6 +236,9 @@ try {
   await page.evaluate('releaseCreate()')
   assert.equal(await page.evaluate('creation'), 'created')
   await expect(page.locator('#session')).toHaveText('created')
+  await expect(page.locator('#sessions li[data-id="created"]')).toHaveCount(1)
+  await expect(page.locator('#sessions li[data-id="created"]')).toHaveText('Canonical created title')
+  await expect(page.locator('#sessions li[data-id="created"]')).toHaveAttribute('data-status', 'running')
   assert.deepEqual(await page.evaluate('store.getSnapshot("created").selection'), {
     providerID: 'home-provider',
     model: 'home-draft',
@@ -235,9 +257,15 @@ try {
     providerBaseURL: undefined,
     localRouterMode: undefined,
   })
+  await page.evaluate(`window.emitCreationEvent = false; window.creationId = 'created-without-event'; window.releaseCreate = undefined; window.creation = api.createSessionForWorkspace({projectId:'project',name:'Test',path:'/test'}); void 0`)
+  await page.waitForFunction('typeof releaseCreate === "function"')
+  await page.evaluate('releaseCreate()')
+  assert.equal(await page.evaluate('creation'), 'created-without-event')
+  await expect(page.locator('#sessions li[data-id="created-without-event"]')).toHaveCount(1)
+  await expect(page.locator('#sessions li')).toHaveCount(4)
   assert.deepEqual(errors, [])
   console.log(
-    'Target-session normal, queue, edit, delayed history, error/retry captured model+variant and home draft creation binding passed.',
+    'Target-session model binding and creation event/list reconciliation passed.',
   )
 } finally {
   await browser.close()

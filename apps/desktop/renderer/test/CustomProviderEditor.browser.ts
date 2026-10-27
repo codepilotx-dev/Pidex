@@ -42,9 +42,41 @@ function summary(config) {
 `
 
 const storeMock = `
-const snapshot = {loaded: true, providers: [], currentProviderState: null, apiKeys: [], credentials: [], usageSources: [], usageResults: [], refreshingSourceIds: []};
-export const useProviderManagementSnapshot = () => snapshot;
-export const providerManagementStore = {refresh: async () => ({...snapshot, providers: Object.values(window.__providers), configurationError: window.__failRefresh ? (window.__failRefresh = false, '模拟刷新失败') : null}), refreshAllProviderData: async () => {window.__catalogRefreshes = (window.__catalogRefreshes ?? 0) + 1; return snapshot;}, querySources: async () => {window.__queries = (window.__queries ?? 0) + 1; return {};}};
+const state = {
+  configuration: {loaded: true, loading: false, error: null, configurationError: null,
+    providers: [], currentProviderState: null, credentials: [], apiKeys: [], lastError: null},
+  usageSources: {loaded: true, loading: false, error: null, sources: [], lastError: null},
+  usageQueries: {},
+};
+export const providerUsagePartitionKey = (range, timeZone) => range + '\\u0000' + timeZone;
+export const useShallow = selector => selector;
+export const useProviderManagementStore = selector => selector(state);
+const write = value => ({value, syncWarning: null, operationId: 'fixture-op'});
+export const providerManagementStore = {
+  getState: () => state,
+  subscribe: () => () => {},
+  ensureLoaded: async () => {},
+  refresh: async () => {
+    state.configuration = {...state.configuration,
+      providers: Object.values(window.__providers),
+      configurationError: window.__failRefresh ? (window.__failRefresh = false, '模拟刷新失败') : null};
+    return state.configuration;
+  },
+  refreshSources: async () => state.usageSources,
+  refreshAllProviderData: async () => {window.__catalogRefreshes = (window.__catalogRefreshes ?? 0) + 1;},
+  querySources: async () => {window.__queries = (window.__queries ?? 0) + 1; return {sources: [], generatedAt: Date.now(), range: 'today', timeZone: 'Asia/Shanghai'};},
+  createApiKey: async input => write({id: 'fixture-created', providerId: input.providerId}),
+  updateApiKey: async input => write({id: input.credentialId}),
+  testApiKey: async () => write({ok: true}),
+  setActiveCredential: async () => write({}),
+  setCredentialEnabled: async () => write({}),
+  reorderApiKeys: async () => write([]),
+  deleteCredential: async () => write([]),
+  connectUsageCredential: async () => write({}),
+  disconnectUsageCredential: async () => write({}),
+  dispose: () => {},
+  getDiagnostics: () => [],
+};
 `
 
 const harness = `

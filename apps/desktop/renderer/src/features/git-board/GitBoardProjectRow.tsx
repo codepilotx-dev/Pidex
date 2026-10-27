@@ -27,7 +27,7 @@ import {
   type AppContextMenuAction as ContextMenuAction,
 } from '../../components/ui/AppContextMenu.js'
 import { cx } from '../../utils/Cx.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import {
   DEFAULT_PROJECT_APPEARANCE,
   PROJECT_APPEARANCE_COLOR_CLASS,
@@ -76,7 +76,7 @@ export function GitBoardProjectRow({
   commitsDisclosureStore: KeyedDisclosureStore
 }) {
   const { state, update, repositories, toggleQuickView } = useGitBoard()
-  const { projectAppearances } = useDesktopSettings()
+  const projectAppearances = useDesktopSettingsField((settings) => settings.projectAppearances)
   const [managedProject, setManagedProject] = useState(project)
   const [menuOpen, setMenuOpen] = useState(false)
   const [managerOpen, setManagerOpen] = useState(false)

@@ -1,38 +1,26 @@
-import { useSyncExternalStore } from 'react'
+import { useStore } from 'zustand/react'
+import { createStore } from 'zustand/vanilla'
 
-type Listener = () => void
-
-const listeners = new Set<Listener>()
-let pendingModelCatalogRequests = 0
-
-function emitModelCatalogLoadingChange(): void {
-  for (const listener of listeners) {
-    listener()
-  }
+type ModelCatalogLoadingState = {
+  pendingRequests: number
 }
 
-function subscribe(listener: Listener): () => void {
-  listeners.add(listener)
-  return () => {
-    listeners.delete(listener)
-  }
-}
-
-function getSnapshot(): boolean {
-  return pendingModelCatalogRequests > 0
-}
+/** 模型目录请求的共享加载计数；只保存可订阅的计数，请求本身由调用方持有。 */
+export const modelCatalogLoadingStore = createStore<ModelCatalogLoadingState>()(() => ({
+  pendingRequests: 0,
+}))
 
 export function useModelCatalogLoading(): boolean {
-  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  return useStore(modelCatalogLoadingStore, (state) => state.pendingRequests > 0)
 }
 
 export async function withModelCatalogLoading<T>(operation: () => Promise<T>): Promise<T> {
-  pendingModelCatalogRequests += 1
-  emitModelCatalogLoadingChange()
+  modelCatalogLoadingStore.setState((state) => ({ pendingRequests: state.pendingRequests + 1 }))
   try {
     return await operation()
   } finally {
-    pendingModelCatalogRequests = Math.max(0, pendingModelCatalogRequests - 1)
-    emitModelCatalogLoadingChange()
+    modelCatalogLoadingStore.setState((state) => ({
+      pendingRequests: Math.max(0, state.pendingRequests - 1),
+    }))
   }
 }

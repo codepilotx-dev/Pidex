@@ -1,5 +1,6 @@
 import type { ThreadPullRequestList, ThreadPullRequestSummary } from '@pidex/shared/thread'
 import { useEffect, useSyncExternalStore } from 'react'
+import { createStore } from 'zustand/vanilla'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 
 const REFRESH_INTERVAL_MS = 60_000
@@ -11,29 +12,30 @@ export type ThreadPullRequestsSnapshot = {
   readonly supported: boolean | null
 }
 
-const EMPTY_SNAPSHOT: ThreadPullRequestsSnapshot = { byThread: new Map(), supported: null }
+type ThreadPullRequestsState = ThreadPullRequestsSnapshot
 
-let snapshot: ThreadPullRequestsSnapshot = EMPTY_SNAPSHOT
+const EMPTY_BY_THREAD: ReadonlyMap<string, readonly ThreadPullRequestSummary[]> = new Map()
+
+export const threadPullRequestStore = createStore<ThreadPullRequestsState>()(() => ({
+  byThread: EMPTY_BY_THREAD,
+  supported: null,
+}))
+
+/** 需要在 60 秒周期内刷新的已渲染会话；请求协调留在模块内，不进订阅快照。 */
 const requested = new Set<string>()
-const listeners = new Set<() => void>()
 let flushTimer: ReturnType<typeof setTimeout> | null = null
 let interval: ReturnType<typeof setInterval> | null = null
 let inFlight = false
-
-const notify = (): void => {
-  for (const listener of listeners) listener()
-}
+let subscriberCount = 0
 
 function apply(threads: readonly ThreadPullRequestList[]): void {
-  const byThread = new Map(snapshot.byThread)
+  const byThread = new Map(threadPullRequestStore.getState().byThread)
   for (const thread of threads) byThread.set(thread.threadId, thread.items)
-  snapshot = { byThread, supported: true }
-  notify()
+  threadPullRequestStore.setState({ byThread, supported: true })
 }
 
 function markUnsupported(): void {
-  snapshot = { byThread: snapshot.byThread, supported: false }
-  notify()
+  threadPullRequestStore.setState({ supported: false })
 }
 
 /** 关联/解除关联返回的最新列表直接回填，避免等待下一轮刷新。 */
@@ -83,31 +85,35 @@ const onVisibilityChange = (): void => {
   if (document.visibilityState === 'visible') void flush()
 }
 
-function subscribe(listener: () => void): () => void {
-  listeners.add(listener)
-  if (listeners.size === 1) {
+function acquireRefreshLoop(): () => void {
+  subscriberCount += 1
+  if (subscriberCount === 1) {
     interval = setInterval(() => {
       if (document.visibilityState === 'visible') void flush()
     }, REFRESH_INTERVAL_MS)
     document.addEventListener('visibilitychange', onVisibilityChange)
   }
   return () => {
-    listeners.delete(listener)
-    if (listeners.size === 0 && interval !== null) {
+    subscriberCount -= 1
+    if (subscriberCount > 0) return
+    if (interval !== null) {
       clearInterval(interval)
       interval = null
-      document.removeEventListener('visibilitychange', onVisibilityChange)
     }
+    document.removeEventListener('visibilitychange', onVisibilityChange)
   }
 }
 
-const getSnapshot = (): ThreadPullRequestsSnapshot => snapshot
-
 export function useThreadPullRequests(threadIds: readonly string[]): ThreadPullRequestsSnapshot {
-  const current = useSyncExternalStore(subscribe, getSnapshot, getSnapshot)
+  const snapshot = useSyncExternalStore(
+    threadPullRequestStore.subscribe,
+    threadPullRequestStore.getState,
+    threadPullRequestStore.getState,
+  )
   const key = threadIds.join('\u0000')
   useEffect(() => {
     requestThreadPullRequests(key ? key.split('\u0000') : [])
+    return acquireRefreshLoop()
   }, [key])
-  return current
+  return snapshot
 }

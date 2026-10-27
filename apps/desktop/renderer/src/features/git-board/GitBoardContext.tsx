@@ -11,7 +11,11 @@ import {
 import type { ProtocolCapability } from '@pidex/agent-protocol'
 import type { DesktopReviewSource, DesktopWorkspace } from '../../../shared/Types.js'
 import type { SessionListItem } from '../../UiTypes.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsField,
+} from '../settings/UseDesktopSettings.js'
 import { useLocation } from 'react-router-dom'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { notifyProjectCatalogChanged } from '../projects/ProjectCatalogEvents.js'
@@ -69,7 +73,9 @@ export function gitBoardRepositoryIds(
 
 function useGitBoardController() {
   const active = useLocation().pathname === '/git'
-  const { settingsLoaded, draft } = useDesktopSettings()
+  const settingsLoaded = useDesktopSettingsField((settings) => settings.settingsLoaded)
+  const draft = useDesktopSettingsDraftActions()
+  const gitBoardStateValue = useDesktopSettingsDraftValue('gitBoardState')
   const hydrated = useRef(false)
   const [ready, setReady] = useState(false)
   const saveVersion = useRef(0)
@@ -93,7 +99,7 @@ function useGitBoardController() {
   )
   useEffect(() => {
     if (!settingsLoaded || hydrated.current) return
-    const stored = draft.values.gitBoardState
+    const stored = gitBoardStateValue
     let legacy: string | null = null
     try {
       legacy = window.localStorage.getItem(GIT_BOARD_STORAGE_KEY)
@@ -106,7 +112,7 @@ function useGitBoardController() {
     setState(next)
     setReady(true)
     if (stored == null && legacy !== null) saveState(next)
-  }, [settingsLoaded, draft.values.gitBoardState, saveState])
+  }, [settingsLoaded, gitBoardStateValue, saveState])
   const update = useCallback(
     (change: (current: GitBoardState) => GitBoardState) => {
       if (!hydrated.current) return

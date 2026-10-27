@@ -132,11 +132,12 @@ describe('fixed Codex UI themes', () => {
     )
     expect(light['--cpx-sys-color-fg-primary']).toBe('var(--cpx-ref-gray-12)')
     expect(light['--cpx-sys-color-fg-secondary']).toBe('var(--cpx-ref-gray-11)')
-    expect(light['--cpx-sys-color-border-subtle']).toBe('var(--cpx-ref-gray-a6)')
-    expect(light['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a7)')
-    expect(light['--cpx-sys-color-border-strong']).toBe('var(--cpx-ref-gray-a8)')
-    expect(light['--cpx-sys-color-hover']).toBe('var(--cpx-ref-gray-a3)')
-    expect(light['--cpx-sys-color-selected']).toBe('var(--cpx-ref-gray-a4)')
+    expect(light['--cpx-sys-color-border-subtle']).toBe('var(--cpx-ref-gray-a5)')
+    expect(light['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a6)')
+    expect(light['--cpx-sys-color-border-strong']).toBe('var(--cpx-ref-gray-a7)')
+    expect(light['--cpx-sys-color-hover']).toBe('var(--cpx-ref-gray-a2)')
+    expect(light['--cpx-sys-color-active']).toBe('var(--cpx-ref-gray-a2)')
+    expect(light['--cpx-sys-color-selected']).toBe('var(--cpx-ref-gray-a3)')
     expect(light['--cpx-sys-color-diff-added-line']).not.toBe(
       light['--cpx-sys-color-surface-editor'],
     )
@@ -157,11 +158,12 @@ describe('fixed Codex UI themes', () => {
     expect(dark['--cpx-sys-color-fg-primary']).toBe('var(--cpx-ref-gray-12)')
     expect(dark['--cpx-sys-color-surface-panel']).not.toBe(dark['--cpx-sys-color-surface-canvas'])
     expect(dark['--cpx-sys-color-fg-secondary']).toBe('var(--cpx-ref-gray-11)')
-    expect(dark['--cpx-sys-color-border-subtle']).toBe('var(--cpx-ref-gray-a6)')
-    expect(dark['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a7)')
-    expect(dark['--cpx-sys-color-border-strong']).toBe('var(--cpx-ref-gray-a8)')
-    expect(dark['--cpx-sys-color-hover']).toBe('var(--cpx-ref-gray-a3)')
-    expect(dark['--cpx-sys-color-selected']).toBe('var(--cpx-ref-gray-a4)')
+    expect(dark['--cpx-sys-color-border-subtle']).toBe('var(--cpx-ref-gray-a5)')
+    expect(dark['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a6)')
+    expect(dark['--cpx-sys-color-border-strong']).toBe('var(--cpx-ref-gray-a7)')
+    expect(dark['--cpx-sys-color-hover']).toBe('var(--cpx-ref-gray-a2)')
+    expect(dark['--cpx-sys-color-active']).toBe('var(--cpx-ref-gray-a2)')
+    expect(dark['--cpx-sys-color-selected']).toBe('var(--cpx-ref-gray-a3)')
     expect(dark['--cpx-sys-color-fg-on-accent']).toBe('var(--cpx-ref-blue-contrast)')
   })
 
@@ -635,7 +637,7 @@ describe('fixed Codex UI themes', () => {
     // Neutral roles stay pinned to CSS reference palettes
     expect(customAccent['--cpx-sys-color-surface-panel']).toBe('var(--cpx-ref-gray-2)')
     expect(customAccent['--cpx-sys-color-fg-primary']).toBe('var(--cpx-ref-gray-12)')
-    expect(customAccent['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a7)')
+    expect(customAccent['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a6)')
 
     // Accent roles diverge to custom derived values
     expect(customAccent['--cpx-sys-color-accent']).toBe('#e02e2a')

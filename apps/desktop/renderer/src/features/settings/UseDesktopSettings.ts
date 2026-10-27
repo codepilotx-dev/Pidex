@@ -1,4 +1,6 @@
 import { CONFIG_UPDATED_EVENT, desktopClient } from '../../services/desktop-client/index.js'
+import { useStore } from 'zustand/react'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 import { LocaleProvider } from '../i18n/LocaleProvider.js'
 import {
   createContext,
@@ -198,6 +200,8 @@ export type UseDesktopSettingsResult = {
   syncExternalSettingsPatch: (patch: Partial<StoredDesktopSettings>) => void
   saveFirstUseSetupCompleted: (value: 0 | 1) => Promise<void>
   draft: DesktopSettingsDraft
+  /** 与 `draft` 相同的动作，但 identity 稳定，供草稿字段订阅读取。 */
+  draftActions: DesktopSettingsDraftActions
   flushDesktopSettings: () => Promise<void>
 }
 
@@ -234,6 +238,14 @@ type DesktopSettingsDraftSetter = <Key extends keyof StoredDesktopSettings>(
     | StoredDesktopSettings[Key]
     | ((current: StoredDesktopSettings[Key]) => StoredDesktopSettings[Key]),
 ) => void
+
+export type DesktopSettingsDraftActions = {
+  setValue: DesktopSettingsDraftSetter
+  save: () => Promise<StoredDesktopSettings>
+  saveFields: (keys: readonly (keyof StoredDesktopSettings)[]) => Promise<StoredDesktopSettings>
+  reset: () => void
+  autoSave: () => void
+}
 
 export type DesktopSettingsDraft = {
   values: StoredDesktopSettings
@@ -326,9 +338,18 @@ export function createDesktopSettingsDraft(
   }
 }
 
+/** 设置字段的订阅快照：Provider 每次提交后写入，供字段 selector 读取。 */
+type DesktopSettingsFieldSnapshot = {
+  settings: UseDesktopSettingsResult
+  runtime: UseDesktopRuntimeSettingsResult
+}
+
+type DesktopSettingsFieldStore = StoreApi<DesktopSettingsFieldSnapshot>
+
 type DesktopSettingsHotData = {
   desktopSettingsContext?: Context<UseDesktopSettingsResult | null>
   desktopRuntimeSettingsContext?: Context<UseDesktopRuntimeSettingsResult | null>
+  desktopSettingsFieldStoreContext?: Context<DesktopSettingsFieldStore | null>
 }
 
 const hotData = import.meta.hot?.data as DesktopSettingsHotData | undefined
@@ -339,11 +360,15 @@ const DesktopSettingsContext =
 const DesktopRuntimeSettingsContext =
   hotData?.desktopRuntimeSettingsContext ??
   createContext<UseDesktopRuntimeSettingsResult | null>(null)
+const DesktopSettingsFieldStoreContext =
+  hotData?.desktopSettingsFieldStoreContext ??
+  createContext<DesktopSettingsFieldStore | null>(null)
 
 if (import.meta.hot) {
   const data = import.meta.hot.data as DesktopSettingsHotData
   data.desktopSettingsContext = DesktopSettingsContext
   data.desktopRuntimeSettingsContext = DesktopRuntimeSettingsContext
+  data.desktopSettingsFieldStoreContext = DesktopSettingsFieldStoreContext
 }
 
 export function DesktopSettingsProvider({
@@ -354,15 +379,66 @@ export function DesktopSettingsProvider({
   access?: DesktopSettingsAccess
 }): ReactNode {
   const state = useDesktopSettingsState(access)
+  const [fieldStore] = useState(() => createStore<DesktopSettingsFieldSnapshot>()(() => state))
+  // Provider 是唯一写入口：提交后把最新快照写入字段 Store，避免渲染期写外部 Store。
+  useEffect(() => {
+    fieldStore.setState(state)
+  })
   return createElement(
-    DesktopRuntimeSettingsContext.Provider,
-    { value: state.runtime },
+    DesktopSettingsFieldStoreContext.Provider,
+    { value: fieldStore },
     createElement(
-      DesktopSettingsContext.Provider,
-      { value: state.settings },
-      createElement(LocaleProvider, { preference: state.runtime.values.language }, children),
+      DesktopRuntimeSettingsContext.Provider,
+      { value: state.runtime },
+      createElement(
+        DesktopSettingsContext.Provider,
+        { value: state.settings },
+        createElement(LocaleProvider, { preference: state.runtime.values.language }, children),
+      ),
     ),
   )
+}
+
+function useDesktopSettingsFieldStore(): DesktopSettingsFieldStore {
+  const store = useContext(DesktopSettingsFieldStoreContext)
+  if (!store) {
+    throw new Error('useDesktopSettings 必须在 DesktopSettingsProvider 内使用')
+  }
+  return store
+}
+
+/** 按字段订阅设置；聚合字段用 `useShallow`，字段本身保持引用稳定。 */
+export function useDesktopSettingsField<T>(
+  selector: (state: UseDesktopSettingsResult) => T,
+): T {
+  return useStore(useDesktopSettingsFieldStore(), (state) => selector(state.settings))
+}
+
+/** 按字段订阅运行时设置。 */
+export function useDesktopRuntimeSettingsField<T>(
+  selector: (state: UseDesktopRuntimeSettingsResult) => T,
+): T {
+  return useStore(useDesktopSettingsFieldStore(), (state) => selector(state.runtime))
+}
+
+/** 按键订阅设置草稿值；只在该键变化时重渲染。 */
+export function useDesktopSettingsDraftValue<Key extends keyof StoredDesktopSettings>(
+  key: Key,
+): StoredDesktopSettings[Key] {
+  return useDesktopSettingsField((settings) => settings.draft.values[key])
+}
+
+export function useDesktopSettingsDraftDirty(): boolean {
+  return useDesktopSettingsField((settings) => settings.draft.dirty)
+}
+
+export function useDesktopSettingsDraftSaving(): boolean {
+  return useDesktopSettingsField((settings) => settings.draft.saving)
+}
+
+/** 稳定的草稿动作集合；identity 在挂载期内不变。 */
+export function useDesktopSettingsDraftActions(): DesktopSettingsDraftActions {
+  return useDesktopSettingsField((settings) => settings.draftActions)
 }
 
 export function useDesktopSettings(): UseDesktopSettingsResult {
@@ -1015,7 +1091,7 @@ function useDesktopSettingsState(
       throw new Error('此窗口不允许保存桌面设置')
     }
     const snapshot = mergeDesktopSettingsDraft(
-      effectiveSettings,
+      effectiveSettingsRef.current,
       draftValuesRef.current,
       draftDirtyKeysRef.current,
     )
@@ -1031,12 +1107,12 @@ function useDesktopSettingsState(
     } finally {
       setDraftSaving(false)
     }
-  }, [applySettingsSnapshot, effectiveSettings, access])
+  }, [applySettingsSnapshot, access])
 
   const resetDraft = useCallback((): void => {
-    setDraftValues(cloneDesktopSettings(effectiveSettings))
+    setDraftValues(cloneDesktopSettings(effectiveSettingsRef.current))
     draftDirtyKeysRef.current.clear()
-  }, [effectiveSettings])
+  }, [])
 
   const saveDraftRef = useRef(saveDraft)
   saveDraftRef.current = saveDraft
@@ -1071,6 +1147,18 @@ function useDesktopSettingsState(
       void saveDraftRef.current()
     }, 0)
   }, [])
+
+  /** 草稿动作与页面状态分离：identity 稳定，消费者可按键订阅而无需整份 draft。 */
+  const draftActions = useMemo<DesktopSettingsDraftActions>(
+    () => ({
+      setValue: setDraftValue,
+      save: saveDraft,
+      saveFields,
+      reset: resetDraft,
+      autoSave,
+    }),
+    [setDraftValue, saveDraft, saveFields, resetDraft, autoSave],
+  )
 
   const draft = useMemo<DesktopSettingsDraft>(
     () => ({
@@ -1261,6 +1349,7 @@ function useDesktopSettingsState(
     syncExternalSettingsPatch,
     saveFirstUseSetupCompleted,
     draft,
+    draftActions,
     flushDesktopSettings,
   }
   return { settings, runtime }

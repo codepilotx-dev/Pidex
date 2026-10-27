@@ -2,7 +2,10 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PetDescriptor } from '@pidex/agent-protocol'
 import type { DesktopPetSettings } from '../../../shared/Types.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+} from '../settings/UseDesktopSettings.js'
 import {
   getPetPresentationBridge,
   presentationFromPetSettings,
@@ -27,10 +30,10 @@ export function usePetSettingsController({ onError, enabled = true }: Options): 
   settings: DesktopPetSettings
   updatePet: (patch: Partial<DesktopPetSettings>, autoSave?: boolean) => void
 } {
-  const { draft } = useDesktopSettings()
+  const draft = useDesktopSettingsDraftActions()
   const [pets, setPets] = useState<readonly PetDescriptor[]>([])
   const [busy, setBusy] = useState(false)
-  const settings = draft.values.pet
+  const settings = useDesktopSettingsDraftValue('pet')
   const settingsRef = useRef(settings)
   settingsRef.current = settings
   const committedPresentationRef = useRef(presentationFromPetSettings(settings))

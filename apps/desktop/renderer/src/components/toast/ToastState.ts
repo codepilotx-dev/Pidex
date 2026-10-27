@@ -1,4 +1,5 @@
 import type React from 'react'
+import { createStore } from 'zustand/vanilla'
 
 export type ToastTone = 'error' | 'status' | 'info'
 
@@ -125,19 +126,13 @@ export function createToastStore(options?: {
   const maxToasts = options?.maxToasts ?? MAX_TOASTS
   const dedupeWindow = options?.dedupeWindowMs ?? DEDUPE_WINDOW_MS
 
-  let state: ToastStoreState = {
+  const store = createStore<ToastStoreState>()(() => ({
     toasts: [],
     isHovered: false,
-  }
-
-  const listeners = new Set<() => void>()
+  }))
   let dismissTimer: ReturnType<typeof setTimeout> | null = null
 
-  function notify(): void {
-    for (const listener of listeners) {
-      listener()
-    }
-  }
+  const getState = (): ToastStoreState => store.getState()
 
   function clearTimer(): void {
     if (dismissTimer !== null) {
@@ -148,14 +143,15 @@ export function createToastStore(options?: {
 
   function syncTimer(): void {
     clearTimer()
+    const { toasts, isHovered } = getState()
     // 规则 1：当存活的 Toast 数量 > 1 时，立即取消/冻结自动消失
-    if (state.toasts.length > 1) {
+    if (toasts.length > 1) {
       return
     }
 
     // 规则 2：当存活的 Toast 仅剩 1 条时，在非悬停状态下启动 5 秒倒计时
-    if (state.toasts.length === 1 && !state.isHovered) {
-      const singleToast = state.toasts[0]
+    if (toasts.length === 1 && !isHovered) {
+      const singleToast = toasts[0]
       if (!singleToast) return
       const duration = singleToast.duration || defaultDuration
       dismissTimer = setTimeout(() => {
@@ -172,6 +168,7 @@ export function createToastStore(options?: {
         ? toastOptions.message
         : String(toastOptions.id ?? ''))
     const now = Date.now()
+    const state = getState()
 
     // 规则 3：相同内容去重（短时间窗口内更新现有条目，不重复入栈）
     if (textKey) {
@@ -190,8 +187,7 @@ export function createToastStore(options?: {
           action: toastOptions.action,
           secondaryAction: toastOptions.secondaryAction,
         }
-        state = { ...state, toasts: updated }
-        notify()
+        store.setState({ toasts: updated })
         syncTimer()
         return existing.id
       }
@@ -228,49 +224,41 @@ export function createToastStore(options?: {
       }
     }
 
-    state = { ...state, toasts: nextToasts }
-    notify()
+    store.setState({ toasts: nextToasts })
     syncTimer()
     return id
   }
 
   function dismiss(id: string): void {
+    const state = getState()
     const item = state.toasts.find((t) => t.id === id)
     if (!item) return
     item.onDismiss?.()
-    state = {
-      ...state,
-      toasts: state.toasts.filter((t) => t.id !== id),
-    }
-    notify()
+    store.setState({ toasts: state.toasts.filter((t) => t.id !== id) })
     syncTimer()
   }
 
   function dismissAll(): void {
+    const state = getState()
     const current = [...state.toasts]
-    state = { ...state, toasts: [] }
+    store.setState({ toasts: [] })
     for (const item of current) {
       item.onDismiss?.()
     }
-    notify()
     syncTimer()
   }
 
   function setHovered(hovered: boolean): void {
-    if (state.isHovered === hovered) return
-    state = { ...state, isHovered: hovered }
-    notify()
+    if (getState().isHovered === hovered) return
+    store.setState({ isHovered: hovered })
     syncTimer()
   }
 
   return {
-    getState: () => state,
-    subscribe: (listener: () => void) => {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
+    getState,
+    getInitialState: store.getInitialState,
+    setState: store.setState,
+    subscribe: store.subscribe,
     show,
     dismiss,
     dismissAll,

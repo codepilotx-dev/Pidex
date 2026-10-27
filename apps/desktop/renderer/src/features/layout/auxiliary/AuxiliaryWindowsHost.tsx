@@ -1,12 +1,13 @@
 import type React from 'react'
-import { memo, useSyncExternalStore } from 'react'
+import { memo } from 'react'
+import { useStore } from 'zustand/react'
 import type { WorkbenchTabId, WorkbenchTabsState } from '../dock/RightDockState.js'
 import {
   getWorkbenchTabDefinition,
   getWorkbenchTabDisplayTitle,
   type WorkbenchTabRenderContext,
 } from '../tabs/WorkbenchTabRegistry.js'
-import { auxiliaryWindowService } from './AuxiliaryWindowService.js'
+import { auxiliaryWindowService, auxiliaryWindowsStore } from './AuxiliaryWindowService.js'
 import { AuxiliaryWindowPortal } from './AuxiliaryWindowPortal.js'
 import { WorkbenchTabErrorBoundary } from '../panels/WorkbenchPanelStates.js'
 
@@ -23,10 +24,8 @@ export const AuxiliaryWindowsHost = memo(function AuxiliaryWindowsHost({
   panelContext,
   onDockBack,
 }: AuxiliaryWindowsHostProps): React.ReactNode {
-  // 订阅辅助窗口服务状态变动
-  useSyncExternalStore(auxiliaryWindowService.subscribe.bind(auxiliaryWindowService), () =>
-    auxiliaryWindowService.getFloatingTabIds().join(','),
-  )
+  // 浮动列表来自 Store；真实窗口对象仍按需从服务读取。
+  useStore(auxiliaryWindowsStore, (state) => state.floatingTabIds)
 
   if (!floatingTabIds || floatingTabIds.length === 0) {
     return null

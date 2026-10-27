@@ -1,6 +1,8 @@
 import type { FileEditorViewState } from '../../editor/FileEditor.js'
 import { desktopBrowserClient } from '../../../services/desktop-client/DesktopBrowserClient.js'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useStore } from 'zustand/react'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 import { SIDEBAR_MAX_WIDTH, useDesktopLayout } from '../UseDesktopLayout.js'
 import {
   applyWorkbenchTabsAction,
@@ -68,6 +70,21 @@ import {
   type SidebarPane,
 } from '../sidebar/SidebarNavigation.js'
 
+type WorkbenchShellState = {
+  panelState: WorkbenchTabsState
+  layoutState: WorkbenchLayoutState | null
+}
+
+function useWorkbenchPanelState(store: StoreApi<WorkbenchShellState>): WorkbenchTabsState {
+  return useStore(store, (state) => state.panelState)
+}
+
+function useWorkbenchLayoutState(
+  store: StoreApi<WorkbenchShellState>,
+): WorkbenchLayoutState | null {
+  return useStore(store, (state) => state.layoutState)
+}
+
 const NON_NATIVE_RESIZE_SETTLE_MS = 500
 
 export function useWorkbenchShellController({
@@ -87,8 +104,55 @@ export function useWorkbenchShellController({
     setSidebarCollapsed,
     setSidebarWidth: setSidebarWidthLegacy,
   } = layout
-  const [workbenchPanelState, setWorkbenchPanelState] = useState<WorkbenchTabsState>(
-    createDefaultWorkbenchTabsState,
+  /**
+   * 工作台面板与布局是跨面板共享的展示状态；用实例级 Store 承载，
+   * 让后续订阅者按字段读取，同时保留控制器内的拖拽与持久化机制。
+   */
+  const [workbenchStore] = useState(() =>
+    createStore<{
+      panelState: WorkbenchTabsState
+      layoutState: WorkbenchLayoutState | null
+    }>()(() => ({
+      panelState: createDefaultWorkbenchTabsState(),
+      layoutState: null,
+    })),
+  )
+  const workbenchPanelState = useWorkbenchPanelState(workbenchStore)
+  const workbenchLayoutState = useWorkbenchLayoutState(workbenchStore)
+  const setWorkbenchPanelState = useMemo(
+    () =>
+      (
+        updater:
+          | WorkbenchTabsState
+          | ((current: WorkbenchTabsState) => WorkbenchTabsState),
+      ): void => {
+        workbenchStore.setState((state) => ({
+          panelState:
+            typeof updater === 'function'
+              ? (updater as (current: WorkbenchTabsState) => WorkbenchTabsState)(state.panelState)
+              : updater,
+        }))
+      },
+    [workbenchStore],
+  )
+  const setWorkbenchLayoutState = useMemo(
+    () =>
+      (
+        updater:
+          | WorkbenchLayoutState
+          | null
+          | ((current: WorkbenchLayoutState | null) => WorkbenchLayoutState | null),
+      ): void => {
+        workbenchStore.setState((state) => ({
+          layoutState:
+            typeof updater === 'function'
+              ? (updater as (
+                  current: WorkbenchLayoutState | null,
+                ) => WorkbenchLayoutState | null)(state.layoutState)
+              : updater,
+        }))
+      },
+    [workbenchStore],
   )
   const workspaceRef = useRef<HTMLDivElement>(null)
   const workspaceMeasuredRef = useRef(false)
@@ -112,10 +176,6 @@ export function useWorkbenchShellController({
   )
   /** 拖拽期间的原始指针尺寸；越界判定只读它，松手/取消后回到已提交布局。 */
   const [rightDockDragRaw, setRightDockDragRaw] = useState<number | null>(null)
-
-  const [workbenchLayoutState, setWorkbenchLayoutState] = useState<WorkbenchLayoutState | null>(
-    null,
-  )
 
   const workspaceView = getWorkspaceView(workbenchPanelState)
   const committedWorkspaceLayout = getWorkbenchWorkspaceLayout(workbenchPanelState)
@@ -203,25 +263,25 @@ export function useWorkbenchShellController({
       }
       return next
     })
-  }, [])
+  }, [setWorkbenchPanelState])
 
   const dispatchLayoutAction = useCallback((action: WorkbenchLayoutAction): void => {
     setWorkbenchLayoutState((current) =>
       current != null ? applyWorkbenchLayoutAction(current, action) : current,
     )
-  }, [])
+  }, [setWorkbenchLayoutState])
 
   const setWorkspaceLayout = useCallback((layout: WorkspaceLayout): void => {
     setWorkbenchPanelState((current) =>
       applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
     )
-  }, [])
+  }, [setWorkbenchPanelState])
 
   const stepWorkspaceLayout = useCallback((): void => {
     setWorkbenchPanelState((current) =>
       applyWorkbenchTabsAction(current, { type: 'stepWorkspaceLayout' }),
     )
-  }, [])
+  }, [setWorkbenchPanelState])
 
   const moveRightDockFocusToMain = useCallback((): void => {
     const activeElement = document.activeElement
@@ -276,7 +336,7 @@ export function useWorkbenchShellController({
       }
       return next
     })
-  }, [])
+  }, [setWorkbenchPanelState, workbenchStore])
 
   const closePanel = useCallback(
     (target: WorkbenchPanelTarget): void => {
@@ -430,7 +490,7 @@ export function useWorkbenchShellController({
       applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
     )
     return false
-  }, [])
+  }, [setWorkbenchPanelState])
 
   const handleResetRightDockWidth = useCallback((): void => {
     const defaultWidth = getResponsiveRightDockDefaultWidth(
@@ -703,7 +763,7 @@ export function useWorkbenchShellController({
       observer.disconnect()
       clearPendingSettlement()
     }
-  }, [moveRightDockFocusToMain])
+  }, [moveRightDockFocusToMain, setWorkbenchLayoutState, resizeActivityCoordinator])
 
   useEffect(() => {
     if (workspaceMeasuredRef.current) return
@@ -745,7 +805,7 @@ export function useWorkbenchShellController({
         },
       }
     })
-  }, [rightDockVisible, bottomPanelState.open, sidebarCollapsed, workbenchLayoutState])
+  }, [rightDockVisible, bottomPanelState.open, sidebarCollapsed, workbenchLayoutState, setWorkbenchLayoutState])
 
   useEffect(() => {
     const previous = previousWorkspaceLayoutRef.current

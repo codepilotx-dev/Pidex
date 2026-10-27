@@ -7,7 +7,7 @@ import {
   getEffectiveReducedMotion,
   usePrefersReducedMotion,
 } from '../../hooks/UsePrefersReducedMotion.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import {
   normalizeNewSessionSurfaceSearch,
   parseNewSessionSurface,
@@ -22,7 +22,8 @@ import { useLocale } from '../i18n/LocaleProvider.js'
 
 export function QuickChatView(): React.ReactNode {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { sidebarProductMode, setSidebarProductMode } = useDesktopSettings()
+  const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
+  const setSidebarProductMode = useDesktopSettingsField((settings) => settings.setSidebarProductMode)
   const search = searchParams.toString()
   const urlSurface = parseNewSessionSurface(search)
   const surface = urlSurface ?? sidebarProductMode

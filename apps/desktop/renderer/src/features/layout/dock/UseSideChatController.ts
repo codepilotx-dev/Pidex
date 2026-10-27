@@ -104,13 +104,16 @@ export function useSideChatController({
   inputRef.current = sideChatInput
   attachmentsRef.current = sideChatAttachments
 
-  useEffect(
-    () =>
-      sessionModelSelections.subscribe(() => {
-        setSideChatTabsVersion((version) => version + 1)
-      }),
-    [],
-  )
+  useEffect(() => {
+    // 只有当前侧边聊天的模型选择变化才需要重算标签；其他会话的更新不触发重渲染。
+    let previous = sideChatSelectionSignature(tabsBySourceRef.current)
+    return sessionModelSelections.subscribe(() => {
+      const next = sideChatSelectionSignature(tabsBySourceRef.current)
+      if (next === previous) return
+      previous = next
+      setSideChatTabsVersion((version) => version + 1)
+    })
+  }, [])
 
   const readSideChatSettings = useCallback(
     (tabId: string): SideChatComposerSettings | undefined => {
@@ -612,4 +615,22 @@ function sameAttachmentIds(
     left.length === right.length &&
     left.every((attachment, index) => attachment.id === right[index]?.id)
   )
+}
+
+/**
+ * 侧边聊天标签只关心自身会话的模型选择；用签名比较过滤掉其他会话的更新，
+ * 避免每一条模型选择广播都让整个侧边聊天面板重渲染。
+ */
+function sideChatSelectionSignature(tabsBySource: Map<string, SideChatTab[]>): string {
+  const parts: string[] = []
+  for (const tabs of tabsBySource.values()) {
+    for (const tab of tabs) {
+      const threadId = tab.threadId
+      const state = sessionModelSelections.getSnapshot(threadId)
+      parts.push(
+        `${threadId}\u0000${state.selection?.providerID ?? ''}\u0000${state.selection?.model ?? ''}\u0000${state.selection?.variant ?? ''}\u0000${state.loading}\u0000${state.error ?? ''}`,
+      )
+    }
+  }
+  return parts.join('\u0001')
 }

@@ -18,13 +18,15 @@ import {
   type ProviderUsageSource,
 } from '../../../utils/UsageFormatters.js'
 import { ProviderBalanceCards } from './ProviderBalanceCards.js'
+import type { ProviderUsageQueryPartition } from '../../provider-management/Types.js'
 
 type ProviderRange = RpcParams<'usage/provider/query'>['range']
-type ProviderUsageResult = RpcResult<'usage/provider/query'>
 type UsageSourceDescriptor = RpcResult<'usage/source/list'>['sources'][number]
+type ProviderUsagePartition = ProviderUsageQueryPartition
 
 type Props = {
-  data: ProviderUsageResult | null
+  /** 按查询范围分区的真实结果；每个范围独立保留结果、错误与刷新状态。 */
+  partitions: Partial<Record<ProviderRange, ProviderUsagePartition>>
   descriptors: readonly UsageSourceDescriptor[]
   error: string | null
   loading: boolean
@@ -42,8 +44,11 @@ const RANGE_OPTIONS = [
   { value: '30d', label: '30 天' },
 ] as const
 
+/** 汇总按页面默认范围展示，避免把不同范围的结果相加。 */
+const SUMMARY_RANGE: ProviderRange = '7d'
+
 export function ProviderUsagePanel({
-  data,
+  partitions,
   descriptors,
   error,
   loading,
@@ -59,9 +64,13 @@ export function ProviderUsagePanel({
     () => new Map(descriptors.map((source) => [source.sourceId, source])),
     [descriptors],
   )
+  const summaryResults = useMemo(
+    () => Object.values(partitions[SUMMARY_RANGE]?.results ?? {}),
+    [partitions],
+  )
   const sourceById = useMemo(
-    () => new Map((data?.sources ?? []).map((source) => [source.sourceId, source])),
-    [data],
+    () => new Map(summaryResults.map((source) => [source.sourceId, source])),
+    [summaryResults],
   )
   const analyticsDescriptors = useMemo(
     () =>
@@ -151,7 +160,7 @@ export function ProviderUsagePanel({
           {error}
         </div>
       ) : null}
-      {loading && !data ? <ProviderUsageSkeleton /> : null}
+      {loading && summaryResults.length === 0 ? <ProviderUsageSkeleton /> : null}
 
       {!loading && descriptors.length === 0 ? (
         <div className="usage-empty-state" role="status">
@@ -177,6 +186,7 @@ export function ProviderUsagePanel({
 
       <div className="provider-usage-list">
         {visibleAnalytics.map((descriptor) => {
+          const range = sourceRanges[descriptor.sourceId] ?? '7d'
           const isSourceLoading =
             loading &&
             (refreshingSourceIds.length === 0 || refreshingSourceIds.includes(descriptor.sourceId))
@@ -185,16 +195,14 @@ export function ProviderUsagePanel({
               descriptor={descriptor}
               key={descriptor.sourceId}
               loading={isSourceLoading}
-              onRangeChange={(range) => handleSourceRangeChange(descriptor.sourceId, range)}
-              onRefresh={() =>
-                onRefresh([descriptor.sourceId], true, sourceRanges[descriptor.sourceId] ?? '7d')
-              }
+              onRangeChange={(nextRange) => handleSourceRangeChange(descriptor.sourceId, nextRange)}
+              onRefresh={() => onRefresh([descriptor.sourceId], true, range)}
               providerName={
                 providerNames[String(descriptor.canonicalProviderId)] ??
                 String(descriptor.canonicalProviderId)
               }
-              range={sourceRanges[descriptor.sourceId] ?? '7d'}
-              source={sourceById.get(descriptor.sourceId)}
+              range={range}
+              source={partitions[range]?.results[descriptor.sourceId]}
             />
           )
         })}

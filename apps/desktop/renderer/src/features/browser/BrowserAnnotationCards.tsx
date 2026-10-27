@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useStore } from 'zustand/react'
 import type { BrowserAnnotation } from '@pidex/shared/browser-annotation'
 import type { ComposerDraftKey } from '../session/composer/ComposerTypes.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
@@ -101,10 +102,8 @@ export function BrowserAnnotationCard({
 }
 
 export function BrowserAnnotationDraftCards({ draftKey }: { draftKey: ComposerDraftKey }) {
-  const [, update] = useState(0)
-  useEffect(() => composerDraftStore.subscribe(() => update((v) => v + 1)), [])
-  const draft = composerDraftStore.get(draftKey)
-  if (!draft.browserAnnotations?.length) return null
+  const draft = useStore(composerDraftStore.store, (state) => state.drafts[draftKey])
+  if (!draft?.browserAnnotations?.length) return null
   return (
     <div
       className="browser-annotation-cards tw:flex tw:max-h-80 tw:flex-col tw:gap-2 tw:overflow-auto tw:p-2"

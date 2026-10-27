@@ -1,7 +1,11 @@
-import { sessionModelSelections, type SessionModelSelection } from './SessionModelSelectionStore.js'
+import {
+  sessionModelSelections,
+  useSessionModelSelection,
+  type SessionModelSelection,
+} from './SessionModelSelectionStore.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import { toUserErrorMessage } from '../../../utils/Errors.js'
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ThreadCreationSurface } from '@pidex/shared/thread'
 import type {
   DesktopComposerAttachment,
@@ -24,12 +28,11 @@ import type {
   LocalRouterMode,
   ModelProviderID,
 } from '../../../../shared/Types.js'
-import type { Message, SessionListItem, SessionViewState, ToolLogEntry } from '../../../UiTypes.js'
+import type { Message, SessionListItem, SessionViewState } from '../../../UiTypes.js'
 import { sessionViewFallbackTitle } from '../../../UiTypes.js'
 import {
   activateSession,
   archiveSessionsAction,
-  closeSessionAction,
   createSessionForWorkspaceAction,
   decidePermissionAction,
   interruptSessionAction,
@@ -51,11 +54,14 @@ import {
   applySessionView,
   createEmptySessionView,
   setSessionView,
-  toggleToolLogEntry as toggleToolLogEntryInView,
-  type SessionViewRefs,
   type SessionViewStateSetters,
   type UpdateSessionView,
 } from './SessionViewState.js'
+import {
+  createSessionDisplayStore,
+  useSessionDisplayField,
+  type SessionDisplayStore,
+} from './SessionDisplayStore.js'
 import { sortSessionsByRecency } from './SessionSorting.js'
 import type { ComposerDraftContentSnapshot, ComposerDraftKey } from '../composer/ComposerTypes.js'
 import {
@@ -100,8 +106,6 @@ export type UseSessionStateResult = {
   messages: Message[]
   events: DesktopSessionEvent[]
   workflowEvents: DesktopWorkflowEvent[]
-  toolLog: ToolLogEntry[]
-  pendingPermissions: DesktopPermissionRequest[]
   pendingPermissionSessionIds: ReadonlySet<string>
   contextUsage: DesktopContextUsage | null
   queuedFollowUps: DesktopQueuedFollowUp[]
@@ -110,7 +114,6 @@ export type UseSessionStateResult = {
   permissionMode: DesktopPermissionMode
   planModeActive: boolean
   localRouterMode: LocalRouterMode
-  canSubmit: boolean
   input: string
   setInput: (value: string) => void
   composerAttachments: DesktopComposerAttachment[]
@@ -135,7 +138,6 @@ export type UseSessionStateResult = {
     projectlessPrompt?: string,
     creationSurface?: ThreadCreationSurface,
   ) => Promise<string | null>
-  submit: (target?: DesktopWorkspace | null) => Promise<void>
   submitToSession: (
     targetSessionId: string,
     value: DesktopUserMessageInput,
@@ -157,7 +159,6 @@ export type UseSessionStateResult = {
       'grantScope' | 'computerGrant' | 'grantOptionId'
     >,
   ) => Promise<void>
-  closeSession: (targetSessionId: string) => Promise<CloseSessionResult | null>
   updateSessionMetadata: (
     targetSessionId: string,
     patch: DesktopSessionMetadataPatch,
@@ -176,7 +177,6 @@ export type UseSessionStateResult = {
     targetSessionId: string,
     mode: LocalRouterMode,
   ) => Promise<SessionListItem | null>
-  toggleToolLogEntry: (entryId: string) => void
 }
 
 export function useSessionState(options: UseSessionStateOptions): UseSessionStateResult {
@@ -200,10 +200,14 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     onOpenDrawerPermissions,
   } = options
 
-  const [sessionId, setSessionId] = useState<string | null>(null)
-  const modelSelectionState = useSyncExternalStore(sessionModelSelections.subscribe, () =>
-    sessionModelSelections.getSnapshot(sessionId),
-  )
+  /**
+   * 会话展示状态进入按窗口实例创建的 Zustand Store：消费者可按字段订阅，
+   * 跨会话的 per-session view 缓存仍留在 refs，只投影活动会话字段。
+   */
+  const [displayStore] = useState<SessionDisplayStore>(createSessionDisplayStore)
+  const sessionId = useSessionDisplayField(displayStore, (state) => state.sessionId)
+  const setSessionId = displayStore.setSessionId
+  const modelSelectionState = useSessionModelSelection(sessionId)
   const reloadModelSelection = useCallback(() => {
     void sessionModelSelections
       .load(sessionId)
@@ -223,26 +227,39 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     },
     [sessionId],
   )
-  const [sessionsHydrated, setSessionsHydrated] = useState(false)
-  const [catalogStatus, setCatalogStatus] = useState<DesktopSessionCatalogStatus>({
-    state: 'loading',
-  })
-  const [sessions, setSessions] = useState<SessionListItem[]>([])
-  const [sessionFallbackTitles, setSessionFallbackTitles] = useState<Record<string, string>>({})
-  const [sessionStatus, setSessionStatus] = useState<DesktopSessionStatus>('idle')
-  const [messages, setMessages] = useState<Message[]>([])
-  const [events, setEvents] = useState<DesktopSessionEvent[]>([])
-  const [workflowEvents, setWorkflowEvents] = useState<DesktopWorkflowEvent[]>([])
-  const [toolLog, setToolLog] = useState<ToolLogEntry[]>([])
-  const [pendingPermissions, setPendingPermissions] = useState<DesktopPermissionRequest[]>([])
-  const [pendingPermissionSessionIds, setPendingPermissionSessionIds] = useState<Set<string>>(
-    () => new Set(),
+  const sessionsHydrated = useSessionDisplayField(displayStore, (state) => state.sessionsHydrated)
+  const catalogStatus = useSessionDisplayField(displayStore, (state) => state.catalogStatus)
+  const sessions = useSessionDisplayField(displayStore, (state) => state.sessions)
+  const sessionFallbackTitles = useSessionDisplayField(
+    displayStore,
+    (state) => state.sessionFallbackTitles,
   )
-  const [contextUsage, setContextUsage] = useState<DesktopContextUsage | null>(null)
-  const [queuedFollowUps, setQueuedFollowUps] = useState<DesktopQueuedFollowUp[]>([])
-  const [queuePauseReason, setQueuePauseReason] = useState<DesktopQueuePauseReason | null>(null)
-  const [input, setInput] = useState('')
-  const [composerAttachments, setComposerAttachments] = useState<DesktopComposerAttachment[]>([])
+  const sessionStatus = useSessionDisplayField(displayStore, (state) => state.sessionStatus)
+  const messages = useSessionDisplayField(displayStore, (state) => state.messages)
+  const events = useSessionDisplayField(displayStore, (state) => state.events)
+  const workflowEvents = useSessionDisplayField(displayStore, (state) => state.workflowEvents)
+  const pendingPermissionSessionIds = useSessionDisplayField(
+    displayStore,
+    (state) => state.pendingPermissionSessionIds,
+  )
+  const contextUsage = useSessionDisplayField(displayStore, (state) => state.contextUsage)
+  const queuedFollowUps = useSessionDisplayField(displayStore, (state) => state.queuedFollowUps)
+  const queuePauseReason = useSessionDisplayField(displayStore, (state) => state.queuePauseReason)
+  const input = useSessionDisplayField(displayStore, (state) => state.input)
+  const composerAttachments = useSessionDisplayField(
+    displayStore,
+    (state) => state.composerAttachments,
+  )
+  const setSessionsHydrated = displayStore.setSessionsHydrated
+  const setCatalogStatus = displayStore.setCatalogStatus
+  const setSessions = displayStore.setSessions
+  const setSessionFallbackTitles = displayStore.setSessionFallbackTitles
+  const setSessionStatus = displayStore.setSessionStatus
+  const setPendingPermissionSessionIds = displayStore.setPendingPermissionSessionIds
+  const setQueuedFollowUps = displayStore.setQueuedFollowUps
+  const setQueuePauseReason = displayStore.setQueuePauseReason
+  const setInput = displayStore.setInput
+  const setComposerAttachments = displayStore.setComposerAttachments
   const activeSessionItem = useMemo(
     () => sessions.find((session) => session.id === sessionId) ?? null,
     [sessions, sessionId],
@@ -276,16 +293,13 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
 
   const viewSetters = useMemo<SessionViewStateSetters>(
     () => ({
-      setEvents,
-      setWorkflowEvents,
-      setMessages,
-      setToolLog,
-      setPendingPermissions,
-      setContextUsage,
+      setEvents: displayStore.setEvents,
+      setWorkflowEvents: displayStore.setWorkflowEvents,
+      setMessages: displayStore.setMessages,
+      setContextUsage: displayStore.setContextUsage,
     }),
-    [],
+    [displayStore],
   )
-  const viewRefs = useMemo<SessionViewRefs>(() => ({ activeSessionIdRef, sessionViewsRef }), [])
   const actionContext = useMemo<SessionActionContext>(
     () => ({
       activeSessionIdRef,
@@ -298,7 +312,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       setSessionId,
       setSessionStatus,
     }),
-    [viewSetters],
+    [viewSetters, setSessions, setSessionId, setSessionStatus],
   )
 
   useEffect(() => {
@@ -316,7 +330,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       [key]: value,
     }
     setInput(value)
-  }, [])
+  }, [setInput])
 
   const setScopedComposerAttachments = useCallback(
     (
@@ -333,7 +347,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       }
       setComposerAttachments(next)
     },
-    [],
+    [setComposerAttachments],
   )
 
   const appendComposerAttachmentsForDraft = useCallback(
@@ -354,7 +368,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
         setComposerAttachments(next)
       }
     },
-    [],
+    [setComposerAttachments],
   )
 
   const removeComposerAttachmentForDraft = useCallback(
@@ -370,7 +384,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
         setComposerAttachments(next)
       }
     },
-    [],
+    [setComposerAttachments],
   )
 
   const clearComposerDraftIfUnchanged = useCallback(
@@ -398,13 +412,13 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       }
       return true
     },
-    [],
+    [setInput, setComposerAttachments],
   )
 
   const syncPendingPermissionSessionIds = useCallback((): void => {
     const next = buildPendingPermissionSessionIds(sessionViewsRef.current)
     setPendingPermissionSessionIds((current) => (sameSessionIdSet(current, next) ? current : next))
-  }, [])
+  }, [setPendingPermissionSessionIds])
 
   const updateSessionView = useCallback<UpdateSessionView>(
     (targetSessionId, updater) => {
@@ -422,14 +436,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
         ),
       )
     },
-    [syncPendingPermissionSessionIds, viewRefs, viewSetters],
-  )
-
-  const toggleToolLogEntry = useCallback(
-    (entryId: string): void => {
-      toggleToolLogEntryInView(viewRefs, updateSessionView, entryId)
-    },
-    [updateSessionView, viewRefs],
+    [syncPendingPermissionSessionIds, viewSetters, setSessionFallbackTitles],
   )
 
   const handleWorkflowEvent = useCallback(
@@ -533,7 +540,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     return () => {
       unsubscribe()
     }
-  }, [viewSetters])
+  }, [viewSetters, setSessions, setSessionId, setSessionStatus, setSessionsHydrated, setCatalogStatus, setSessionFallbackTitles, setPendingPermissionSessionIds, setQueuedFollowUps, setQueuePauseReason, setInput, setComposerAttachments])
 
   useEffect(() => {
     const unsubscribe = desktopClient.onReconciliationError?.((error) => {
@@ -609,7 +616,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     return () => {
       disposed = true
     }
-  }, [viewSetters])
+  }, [viewSetters, setSessions, setSessionId, setSessionStatus, setSessionsHydrated, setCatalogStatus, setSessionFallbackTitles, setPendingPermissionSessionIds, setQueuedFollowUps, setQueuePauseReason, setInput, setComposerAttachments])
 
   const settingsSnapshot = useMemo<SessionSettingsSnapshot>(
     () => ({
@@ -740,12 +747,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
         }
       )
     },
-    [actionContext, viewSetters],
-  )
-
-  const canSubmit = useMemo(
-    () => Boolean(sessionId && modelSelectionState.selection?.model && input.trim()),
-    [input, sessionId, modelSelectionState.selection],
+    [actionContext, viewSetters, setSessionStatus, setQueuedFollowUps, setQueuePauseReason, setInput, setComposerAttachments],
   )
 
   const submitToSession = useCallback(
@@ -795,15 +797,6 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     [settingsSnapshot],
   )
 
-  const submit = useCallback(
-    async (target?: DesktopWorkspace | null): Promise<void> => {
-      const targetSessionId = sessionId ?? (await createSessionForWorkspace(target ?? null))
-      if (!targetSessionId) return
-      await submitToSession(targetSessionId, { text: input })
-    },
-    [createSessionForWorkspace, input, sessionId, submitToSession],
-  )
-
   const interrupt = useCallback(async (): Promise<void> => {
     await interruptSessionAction(onErrorRef, sessionId)
   }, [sessionId])
@@ -830,12 +823,6 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       )
     },
     [sessionId],
-  )
-
-  const closeSession = useCallback(
-    async (targetSessionId: string): Promise<CloseSessionResult | null> =>
-      closeSessionAction(actionContext, sessions, targetSessionId),
-    [actionContext, sessions],
   )
 
   const updateSessionMetadata = useCallback(
@@ -892,8 +879,6 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     messages,
     events,
     workflowEvents,
-    toolLog,
-    pendingPermissions,
     pendingPermissionSessionIds,
     contextUsage,
     queuedFollowUps,
@@ -902,7 +887,6 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     permissionMode: effectivePermissionMode,
     planModeActive: effectivePlanModeActive,
     localRouterMode: effectiveLocalRouterMode,
-    canSubmit,
     input,
     setInput: setScopedInput,
     composerAttachments,
@@ -912,18 +896,15 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     clearComposerDraftIfUnchanged,
     activateSessionById,
     createSessionForWorkspace,
-    submit,
     submitToSession,
     interrupt,
     decidePermission,
-    closeSession,
     updateSessionMetadata,
     archiveSessions,
     renameSession,
     setSessionPermissionMode,
     setSessionPlanModeActive,
     setSessionLocalRouterMode,
-    toggleToolLogEntry,
   }
 }
 

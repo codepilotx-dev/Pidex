@@ -1,4 +1,6 @@
 import type { DesktopExternalOpenTarget } from '../../shared/Types.js'
+import { useStore } from 'zustand/react'
+import { createStore } from 'zustand/vanilla'
 import { desktopClient, type DesktopClient } from './desktop-client/index.js'
 import { AgentRpcError } from './AgentRpcClient.js'
 
@@ -24,6 +26,25 @@ export type ExternalOpenTargetsStore = {
   ): Promise<DesktopExternalOpenTarget>
 }
 
+type ExternalOpenTargetsState = {
+  byPath: Readonly<Record<string, readonly DesktopExternalOpenTarget[]>>
+}
+
+const EMPTY_TARGETS: readonly DesktopExternalOpenTarget[] = []
+
+/** 已加载的外部打开目标按路径共享；同一文件的多视图据此同步首选目标。 */
+export const externalOpenTargetsStateStore = createStore<ExternalOpenTargetsState>()(() => ({
+  byPath: {},
+}))
+
+export function useExternalOpenTargets(targetPath: string | null): readonly DesktopExternalOpenTarget[] {
+  const key = targetPath ? cacheKey(targetPath) : ''
+  return useStore(
+    externalOpenTargetsStateStore,
+    (state) => (key ? state.byPath[key] : undefined) ?? EMPTY_TARGETS,
+  )
+}
+
 export function shouldFallbackToExternalOpen(error: unknown): boolean {
   return (
     error instanceof AgentRpcError &&
@@ -43,6 +64,12 @@ export function createExternalOpenTargetsStore(
     options.ttlMs === undefined ? DEFAULT_EXTERNAL_OPEN_TARGETS_TTL_MS : Math.max(0, options.ttlMs)
   const entries = new Map<string, ExternalOpenTargetsCacheEntry>()
 
+  function publish(key: string, targets: readonly DesktopExternalOpenTarget[]): void {
+    externalOpenTargetsStateStore.setState((state) => ({
+      byPath: { ...state.byPath, [key]: targets },
+    }))
+  }
+
   function loadExternalOpenTargets(targetPath: string): Promise<DesktopExternalOpenTarget[]> {
     const key = cacheKey(targetPath)
     const existing = entries.get(key)
@@ -56,6 +83,7 @@ export function createExternalOpenTargetsStore(
       .listExternalOpenTargets(targetPath)
       .then((targets) => {
         entry.expiresAt = now() + ttlMs
+        publish(key, targets)
         return targets
       })
       .catch((error) => {
@@ -98,6 +126,7 @@ export function createExternalOpenTargetsStore(
       entry.request = Promise.resolve(nextTargets)
       entry.expiresAt = now() + ttlMs
     }
+    publish(key, nextTargets)
     return nextTargets.find((candidate) => candidate.id === targetId) ?? target
   }
 

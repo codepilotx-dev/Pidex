@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { PetDescriptor } from '@pidex/agent-protocol'
 import { desktopClient } from '../../services/desktop-client/index.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsDraftValue } from '../settings/UseDesktopSettings.js'
 import type { DesktopPermissionDecision, DesktopSessionSnapshot } from '../../../shared/Types.js'
 import {
   projectPetNotifications,
@@ -25,8 +25,7 @@ export function usePetOverlayController(): {
   respond: (notification: PetNotification, decision: DesktopPermissionDecision) => Promise<void>
   size: number
 } {
-  const { draft } = useDesktopSettings()
-  const preferences = draft.values.pet
+  const preferences = useDesktopSettingsDraftValue('pet')
   const [pets, setPets] = useState<readonly PetDescriptor[]>([])
   const [sessions, setSessions] = useState<readonly DesktopSessionSnapshot[]>([])
   const [notifications, setNotifications] = useState<PetNotification[]>([])

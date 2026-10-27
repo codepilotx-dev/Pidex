@@ -12,7 +12,8 @@ import { withModelCatalogLoading } from '../../hooks/UseModelCatalogLoading.js'
 import { fullErrorMessage } from '../../utils/Errors.js'
 import {
   providerManagementStore,
-  useProviderManagementSnapshot,
+  useProviderManagementStore,
+  useShallow,
 } from '../provider-management/index.js'
 
 type Options = {
@@ -32,7 +33,12 @@ const MODEL_TEST_CONCURRENCY = 4
 export type ModelCenterInitialLoadState = 'loading' | 'ready' | 'error'
 
 export function useModelCenterController({ onInitialProviderState, onError, onNotice }: Options) {
-  const snapshot = useProviderManagementSnapshot()
+  const { configuration, usageSources } = useProviderManagementStore(
+    useShallow((state) => ({
+      configuration: state.configuration,
+      usageSources: state.usageSources.sources,
+    })),
+  )
   const handlers = useRef({ onInitialProviderState, onError, onNotice })
   handlers.current = { onInitialProviderState, onError, onNotice }
   const initialStateApplied = useRef(false)
@@ -43,15 +49,11 @@ export function useModelCenterController({ onInitialProviderState, onError, onNo
   const refreshing = useRef(false)
 
   useEffect(() => {
-    if (!initialStateApplied.current && snapshot.currentProviderState) {
+    if (!initialStateApplied.current && configuration.currentProviderState) {
       initialStateApplied.current = true
-      handlers.current.onInitialProviderState(snapshot.currentProviderState)
+      handlers.current.onInitialProviderState(configuration.currentProviderState)
     }
-  }, [snapshot.currentProviderState])
-
-  useEffect(() => {
-    if (snapshot.error) handlers.current.onError(snapshot.error)
-  }, [snapshot.error])
+  }, [configuration.currentProviderState])
 
   const setPending = (providerId: string, pending: boolean) => {
     if (pending) pendingProviders.current.add(providerId)
@@ -138,10 +140,11 @@ export function useModelCenterController({ onInitialProviderState, onError, onNo
     if (provider.availability?.status === 'unavailable') return
     setPending(provider.providerID, true)
     try {
-      const result = await withModelCatalogLoading(() =>
+      await withModelCatalogLoading(() =>
         providerManagementStore.refreshAllProviderData(provider.providerID),
       )
-      if (result.error) handlers.current.onError(`模型目录刷新异常：${result.error}`)
+      const { configuration: next } = providerManagementStore.getState()
+      if (next.error) handlers.current.onError(`模型目录刷新异常：${next.error}`)
       else {
         const catalog = await loadProviderModels(provider.providerID)
         handlers.current.onNotice(`模型目录已刷新，共 ${catalog.models.length} 个可用模型。`)
@@ -164,8 +167,9 @@ export function useModelCenterController({ onInitialProviderState, onError, onNo
     refreshing.current = true
     setRefreshingProviderData(true)
     try {
-      const result = await providerManagementStore.refreshAllProviderData()
-      if (!result.error) handlers.current.onNotice('供应商目录已从 Pi / models.dev 更新。')
+      await providerManagementStore.refreshAllProviderData()
+      const { configuration: next } = providerManagementStore.getState()
+      if (!next.error) handlers.current.onNotice('供应商目录已从 Pi / models.dev 更新。')
     } catch (error) {
       handlers.current.onError(fullErrorMessage(error))
     } finally {
@@ -199,18 +203,19 @@ export function useModelCenterController({ onInitialProviderState, onError, onNo
     return saved
   }
 
-  const initialLoadState: ModelCenterInitialLoadState = !snapshot.loaded
+  const initialLoadState: ModelCenterInitialLoadState = !configuration.loaded
     ? 'loading'
-    : snapshot.error && snapshot.providers.length === 0
+    : configuration.error && configuration.providers.length === 0
       ? 'error'
       : 'ready'
 
   return {
     initialLoadState,
-    providers: snapshot.providers,
-    providerState: snapshot.currentProviderState,
-    apiKeys: snapshot.apiKeys,
-    snapshot,
+    providers: configuration.providers,
+    providerState: configuration.currentProviderState,
+    apiKeys: configuration.apiKeys,
+    configuration,
+    usageSources,
     busyProviderIds,
     modelTestResults,
     refreshingProviderData,

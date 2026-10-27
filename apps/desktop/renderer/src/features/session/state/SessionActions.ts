@@ -181,8 +181,10 @@ export async function createSessionForWorkspaceAction(
     context.setSessionStatus('idle')
     applySessionView(nextView, context.viewSetters)
     const now = new Date()
-    context.setSessions((current) =>
-      sortSessionsByRecency([
+    context.setSessions((current) => {
+      // createSession 已先发布目录事件；只在事件尚未到达时补位，保留服务端状态。
+      if (current.some((item) => item.id === session.sessionId)) return current
+      return sortSessionsByRecency([
         {
           id: session.sessionId,
           sessionName: initialSessionName ?? normalizeOptionalText(settings.sessionName) ?? null,
@@ -204,8 +206,8 @@ export async function createSessionForWorkspaceAction(
           createdAt: now.toISOString(),
         },
         ...current,
-      ]),
-    )
+      ])
+    })
     return session.sessionId
   } catch (error) {
     context.onErrorRef.current(errorMessageOf(error, 'thread-create'))

@@ -1,5 +1,6 @@
 import type React from 'react'
-import { useSyncExternalStore, useState, useRef, useLayoutEffect, useEffect } from 'react'
+import { useStore } from 'zustand/react'
+import { useState, useRef, useLayoutEffect, useEffect } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
 import { CheckCheck, CircleAlert, X } from 'lucide-react'
 import { toastStore, calculateCardTransform, toastExpiryDelayMs, type ToastItem } from './ToastState.js'
@@ -10,27 +11,28 @@ import { Toast } from '../ui/Toast.js'
 import { ToastContent } from './ToastContent.js'
 
 export function ToastStack(): React.ReactNode {
-  const state = useSyncExternalStore(toastStore.subscribe, toastStore.getState, toastStore.getState)
+  const toasts = useStore(toastStore, (state) => state.toasts)
+  const isHovered = useStore(toastStore, (state) => state.isHovered)
   const reducedMotion = usePrefersReducedMotion()
   const [heights, setHeights] = useState<Record<string, number>>({})
   const [isBtnHovered, setIsBtnHovered] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const isExpanded = state.isHovered && state.toasts.length > 1
-  const heightArray = state.toasts.map((t) => heights[t.id] ?? 40)
+  const isExpanded = isHovered && toasts.length > 1
+  const heightArray = toasts.map((t) => heights[t.id] ?? 40)
 
   let totalExpandedHeight = 0
-  for (let i = 0; i < state.toasts.length; i++) {
-    totalExpandedHeight += (heightArray[i] ?? 40) + (i < state.toasts.length - 1 ? 8 : 0)
+  for (let i = 0; i < toasts.length; i++) {
+    totalExpandedHeight += (heightArray[i] ?? 40) + (i < toasts.length - 1 ? 8 : 0)
   }
 
   // 折叠状态下高度：顶部卡片高度 + 24px 露出余量
   const collapsedHeight = (heightArray[0] ?? 40) + 24
 
-  const topToastId = state.toasts[0]?.id
+  const topToastId = toasts[0]?.id
   const topToastHeight = topToastId ? (heights[topToastId] ?? 40) : 40
 
-  if (state.toasts.length === 0) {
+  if (toasts.length === 0) {
     return null
   }
 
@@ -55,7 +57,7 @@ export function ToastStack(): React.ReactNode {
         style={{ height: topToastHeight }}
       >
         <AnimatePresence>
-          {state.toasts.length > 1 ? (
+          {toasts.length > 1 ? (
             <motion.button
               type="button"
               title="全部标记为已读"
@@ -98,7 +100,7 @@ export function ToastStack(): React.ReactNode {
                     transition={{ duration: 0.12 }}
                     className="tw:type-label tw:text-app-text"
                   >
-                    {state.toasts.length}
+                    {toasts.length}
                   </motion.span>
                 )}
               </AnimatePresence>
@@ -113,7 +115,7 @@ export function ToastStack(): React.ReactNode {
         style={{ height: totalExpandedHeight }}
       >
         <AnimatePresence initial={false}>
-          {state.toasts.map((toast, index) => {
+          {toasts.map((toast, index) => {
             const transform = calculateCardTransform(index, isExpanded, heightArray, 8, 0)
 
             return (

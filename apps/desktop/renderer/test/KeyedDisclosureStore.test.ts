@@ -58,7 +58,7 @@ describe('keyed disclosure store', () => {
     store.replace(['b', 'c'])
 
     expect(calls).toBe(1)
-    expect(store.getVersion()).toBe(1)
+    expect([...store.getVersion()].sort()).toEqual(['b', 'c'])
   })
 
   test('coalesces a rapid toggle burst and flushes the final snapshot', async () => {

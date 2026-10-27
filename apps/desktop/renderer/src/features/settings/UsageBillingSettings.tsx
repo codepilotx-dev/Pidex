@@ -4,8 +4,10 @@ import { useSearchParams } from 'react-router-dom'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import {
   providerManagementStore,
+  providerUsagePartitionKey,
   selectAnalyticsSources,
-  useProviderManagementSnapshot,
+  useProviderManagementStore,
+  useShallow,
 } from '../provider-management/index.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
@@ -16,7 +18,6 @@ type UsageTab = 'application' | 'accounts'
 type LocalRange = RpcParams<'usage/local/get'>['range']
 type ProviderRange = RpcParams<'usage/provider/query'>['range']
 type LocalUsageResult = RpcResult<'usage/local/get'>
-type ProviderUsageResult = RpcResult<'usage/provider/query'>
 
 const TAB_OPTIONS = [
   { value: 'application', label: '应用用量' },
@@ -29,8 +30,26 @@ function localTimeZone(): string {
 
 export function UsageBillingSettings(): React.ReactNode {
   const [searchParams, setSearchParams] = useSearchParams()
-  const providerManagement = useProviderManagementSnapshot()
-  const analyticsSources = selectAnalyticsSources(providerManagement)
+  const timeZone = localTimeZone()
+  const { configuration, usageSources, partitions } = useProviderManagementStore(
+    useShallow((state) => ({
+      configuration: state.configuration,
+      usageSources: state.usageSources.sources,
+      partitions: state.usageQueries,
+    })),
+  )
+  const analyticsSources = useMemo(
+    () =>
+      selectAnalyticsSources({
+        providers: configuration.providers,
+        currentProviderState: configuration.currentProviderState,
+        credentials: configuration.credentials,
+        apiKeys: configuration.apiKeys,
+        usageSources,
+        usageResults: partitions[providerUsagePartitionKey('7d', timeZone)]?.results ?? {},
+      }),
+    [configuration, usageSources, partitions, timeZone],
+  )
   const tab: UsageTab = searchParams.get('view') === 'accounts' ? 'accounts' : 'application'
   const selectedProviderId = searchParams.get('provider') ?? undefined
   const selectedSourceId = searchParams.get('source') ?? undefined
@@ -62,28 +81,28 @@ export function UsageBillingSettings(): React.ReactNode {
   const providerNames = useMemo(
     () =>
       Object.fromEntries(
-        providerManagement.providers.map((provider) => [
+        configuration.providers.map((provider) => [
           String(provider.providerID),
           provider.displayName,
         ]),
       ),
-    [providerManagement.providers],
+    [configuration.providers],
   )
   const [localRange, setLocalRange] = useState<LocalRange>('30d')
   const [localData, setLocalData] = useState<LocalUsageResult | null>(null)
   const [localLoading, setLocalLoading] = useState(false)
   const [localError, setLocalError] = useState<string | null>(null)
   const localRequest = useRef(0)
-  const timeZone = localTimeZone()
-  const providerData: ProviderUsageResult | null =
-    providerManagement.usageGeneratedAt !== null
-      ? {
-          range: '7d',
-          timeZone,
-          generatedAt: providerManagement.usageGeneratedAt,
-          sources: [...providerManagement.usageResults],
-        }
-      : null
+  const usageError = useMemo(
+    () => Object.values(partitions).find((partition) => partition.error)?.error ?? null,
+    [partitions],
+  )
+  const refreshingSourceIds = useMemo(
+    () => [
+      ...new Set(Object.values(partitions).flatMap((partition) => partition.refreshingSourceIds)),
+    ],
+    [partitions],
+  )
 
   const changeTab = useCallback(
     (nextTab: UsageTab): void => {
@@ -152,9 +171,9 @@ export function UsageBillingSettings(): React.ReactNode {
 
   useEffect(() => {
     if (tab !== 'accounts') return
-    if (!providerManagement.loaded) return
+    if (!configuration.loaded) return
     void loadProviderUsage({ range: '7d', sourceIds: querySourceIds })
-  }, [loadProviderUsage, providerManagement.loaded, querySourceIdsKey, tab])
+  }, [loadProviderUsage, configuration.loaded, querySourceIdsKey, tab])
 
   const clearProviderFilter = useCallback((): void => {
     setSearchParams((current) => {
@@ -169,12 +188,7 @@ export function UsageBillingSettings(): React.ReactNode {
   return (
     <SettingsContentArea>
       <div
-        aria-busy={
-          localLoading ||
-          providerManagement.loading ||
-          providerManagement.refreshingSources ||
-          undefined
-        }
+        aria-busy={localLoading || configuration.loading || undefined}
         className="settings-content-inner usage-billing-settings tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]"
       >
         <div className="settings-page-header usage-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:flex tw:items-start tw:justify-between tw:gap-4 tw:@max-[900px]:flex-col tw:@max-[900px]:items-stretch">
@@ -208,10 +222,9 @@ export function UsageBillingSettings(): React.ReactNode {
           />
         ) : (
           <ProviderUsagePanel
-            data={providerData}
             descriptors={analyticsSources.map((source) => source.descriptor)}
-            error={providerManagement.error}
-            loading={providerManagement.refreshingSources || providerManagement.loading}
+            error={usageError}
+            loading={configuration.loading || refreshingSourceIds.length > 0}
             onClearFilter={clearProviderFilter}
             onRefresh={(sourceIds, force, range) =>
               void loadProviderUsage({
@@ -221,8 +234,13 @@ export function UsageBillingSettings(): React.ReactNode {
                 force,
               })
             }
+            partitions={{
+              today: partitions[providerUsagePartitionKey('today', timeZone)],
+              '7d': partitions[providerUsagePartitionKey('7d', timeZone)],
+              '30d': partitions[providerUsagePartitionKey('30d', timeZone)],
+            }}
             providerNames={providerNames}
-            refreshingSourceIds={providerManagement.refreshingSourceIds}
+            refreshingSourceIds={refreshingSourceIds}
             selectedProviderId={selectedProviderId}
             selectedSourceId={selectedSourceId}
           />

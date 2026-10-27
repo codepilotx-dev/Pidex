@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useStore } from 'zustand/react'
+import { shallow } from 'zustand/vanilla/shallow'
 import type {
   DesktopComposerAttachment,
   DesktopInstalledSkill,
@@ -32,6 +34,7 @@ import { createTaskSession, executeComposerSubmitTransaction } from './ComposerS
 import { composerDraftStore } from './ComposerDraftStore.js'
 import { annotationAttachments } from '../../browser/BrowserAnnotationDraft.js'
 import {
+  composerDocumentsEqual,
   createComposerDocumentWithSkill,
   skillInvocationsFromComposerDocument,
 } from './ComposerSkillToken.js'
@@ -161,33 +164,36 @@ export function useDesktopComposerController({
   onError,
 }: ControllerOptions) {
   const navigate = useNavigate()
-  const [goalModeEnabled, updateGoalModeEnabled] = useState(() =>
-    Boolean(composerDraftStore.get(draftKey).goalModeEnabled),
-  )
   function setGoalModeEnabled(enabled: boolean): void {
     composerDraftStore.update(draftKey, (draft) => ({ ...draft, goalModeEnabled: enabled }))
-    updateGoalModeEnabled(enabled)
   }
   const [isComposing, setIsComposing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lastSubmitOutcome, setLastSubmitOutcome] = useState<ComposerSubmitOutcome | null>(null)
   const [fileAttachmentsAvailable, setFileAttachmentsAvailable] = useState(false)
-  const [, setDraftStoreVersion] = useState(0)
+  const draft = useStore(composerDraftStore.store, (state) => state.drafts[draftKey])
+  const storedSubmitOutcome = useStore(
+    composerDraftStore.store,
+    (state) => state.submitOutcomes[draftKey],
+  )
+  const activeDraft = draft ?? composerDraftStore.get(draftKey)
+  const goalModeEnabled = Boolean(activeDraft.goalModeEnabled)
   const composingRef = useRef(false)
   const submittingRef = useRef(false)
   const attachmentGenerationRef = useRef(new Map<ComposerDraftKey, number>())
-  const initialDraftRef = useRef(composerDraftStore.get(draftKey))
-  const draftClientIdRef = useRef(initialDraftRef.current.clientId)
+  const draftClientIdRef = useRef(activeDraft.clientId)
   const activeDraftKeyRef = useRef<ComposerDraftKey>(draftKey)
   const [skillCommands, setSkillCommands] = useState<ComposerSkillCommand[]>([])
   const [runtimeSkillsLoaded, setRuntimeSkillsLoaded] = useState(false)
   const [runtimeSkillsError, setRuntimeSkillsError] = useState<string | null>(null)
   const [skillsReloadVersion, setSkillsReloadVersion] = useState(0)
-  const [selectedSkillTokens, setSelectedSkillTokens] = useState<ComposerSkillCommand[]>(() =>
-    restoreSkillTokens(draftSkills(initialDraftRef.current), []),
+  const selectedSkillTokens = useMemo(
+    () => restoreSkillTokens(draftSkills(activeDraft), skillCommands),
+    [activeDraft, skillCommands],
   )
-  const [contextTokens, setContextTokens] = useState<ComposerDocumentToken[]>(() =>
-    contextTokensFromDocument(initialDraftRef.current.document.tokens),
+  const contextTokens = useMemo(
+    () => contextTokensFromDocument(activeDraft.document.tokens),
+    [activeDraft.document.tokens],
   )
 
   const activeSkillToken = selectedSkillTokens[0] ?? null
@@ -206,7 +212,7 @@ export function useDesktopComposerController({
   const workingPluginSkillUnavailable = false
 
   const submissionAttachments = annotationAttachments({
-    ...composerDraftStore.get(draftKey),
+    ...activeDraft,
     attachments,
   })
   const hasAttachmentErrors = hasBlockingComposerAttachmentErrors(submissionAttachments)
@@ -216,7 +222,7 @@ export function useDesktopComposerController({
   )
   const hasComposerContent =
     Boolean(input.trim()) ||
-    Boolean(composerDraftStore.get(draftKey).browserAnnotations?.length) ||
+    Boolean(activeDraft.browserAnnotations?.length) ||
     attachments.length > 0 ||
     activeSkillToken !== null ||
     contextTokens.length > 0
@@ -273,47 +279,40 @@ export function useDesktopComposerController({
     }
   }, [])
 
-  // Execution location is only offered when creating a task in a project. A failed
-  useEffect(
-    () =>
-      composerDraftStore.subscribe(() => {
-        setDraftStoreVersion((value) => value + 1)
-        const currentDraft = composerDraftStore.get(draftKey)
-        draftClientIdRef.current = currentDraft.clientId
-        updateGoalModeEnabled(Boolean(currentDraft.goalModeEnabled))
-        setSelectedSkillTokens(restoreSkillTokens(draftSkills(currentDraft), skillCommands))
-        setContextTokens((current) =>
-          sameContextTokens(current, contextTokensFromDocument(currentDraft.document.tokens)),
-        )
-      }),
-    [draftKey, skillCommands],
-  )
+  // 只同步提交身份；Skill、上下文和 Goal 直接从草稿派生，避免双向 effect 回写。
+  useEffect(() => {
+    if (activeDraftKeyRef.current !== draftKey) {
+      activeDraftKeyRef.current = draftKey
+      setLastSubmitOutcome(null)
+    }
+    draftClientIdRef.current = activeDraft.clientId
+  }, [activeDraft.clientId, draftKey])
 
   useEffect(() => {
-    if (activeDraftKeyRef.current === draftKey) return
-    activeDraftKeyRef.current = draftKey
-    const nextDraft = composerDraftStore.get(draftKey)
-    updateGoalModeEnabled(Boolean(nextDraft.goalModeEnabled))
-    setSelectedSkillTokens(restoreSkillTokens(draftSkills(nextDraft), skillCommands))
-    setContextTokens(contextTokensFromDocument(nextDraft.document.tokens))
-    setLastSubmitOutcome(null)
-    draftClientIdRef.current = nextDraft.clientId
-  }, [draftKey, skillCommands])
-
-  useEffect(() => {
+    const current = composerDraftStore.get(draftKey)
+    const collaborationMode = planModeActive ? 'plan' : 'default'
+    // Store 写入会通知当前 Composer，派生内容未变时不能再次写回。
+    if (
+      current.clientId === draftClientIdRef.current &&
+      current.collaborationMode === collaborationMode &&
+      composerDocumentsEqual(current.document, composerDocument) &&
+      current.attachments.length === attachments.length &&
+      current.attachments.every((attachment, index) => shallow(attachment, attachments[index]))
+    ) {
+      return
+    }
     composerDraftStore.update(draftKey, (current) => ({
       ...current,
       clientId: draftClientIdRef.current,
       document: composerDocument,
       attachments,
-      collaborationMode: planModeActive ? 'plan' : 'default',
+      collaborationMode,
     }))
   }, [activeSkills, attachments, composerDocument, draftKey, planModeActive])
 
   useEffect(() => {
     if (subagentMode) {
       setSkillCommands([])
-      setSelectedSkillTokens([])
       setRuntimeSkillsLoaded(true)
       return
     }
@@ -330,9 +329,6 @@ export function useDesktopComposerController({
           if (!cancelled && request === generation) {
             setSkillCommands(commands)
             setRuntimeSkillsLoaded(true)
-            setSelectedSkillTokens(
-              restoreSkillTokens(draftSkills(composerDraftStore.get(draftKey)), commands),
-            )
           }
         })
         .catch((error) => {
@@ -458,7 +454,6 @@ export function useDesktopComposerController({
     composerDraftStore.clearSubmitOutcome(acceptedDraftKey)
     if (activeDraftKeyRef.current === acceptedDraftKey) {
       if (clearContent) {
-        setSelectedSkillTokens([])
         setGoalModeEnabled(false)
       }
       draftClientIdRef.current = nextDraft.clientId
@@ -557,7 +552,6 @@ export function useDesktopComposerController({
     handleRemoveAttachment,
     handleComposerDocumentChange: (document: ComposerDraft['document']) => {
       composerDraftStore.update(draftKey, (current) => ({ ...current, document }))
-      setContextTokens(contextTokensFromDocument(document.tokens))
       const skills = skillInvocationsFromComposerDocument(document)
       const currentSkills = draftSkills(composerDraftStore.get(draftKey))
       if (
@@ -566,19 +560,16 @@ export function useDesktopComposerController({
       )
         return
       composerDraftStore.setSkills(draftKey, skills)
-      setSelectedSkillTokens(restoreSkillTokens(skills, skillCommands))
       if (!skills.length && workingPlugin) onWorkingPluginChange?.(null)
     },
     handleSkillDeselect: () => {
       composerDraftStore.setSkills(draftKey, [])
-      setSelectedSkillTokens([])
     },
     handleSkillSelect: (skill: ComposerSkillCommand) => {
-      const nextDraft = composerDraftStore.addSkill(draftKey, {
+      composerDraftStore.addSkill(draftKey, {
         name: skill.skill.name,
         path: skill.skill.path,
       })
-      setSelectedSkillTokens(restoreSkillTokens(draftSkills(nextDraft), skillCommands))
     },
     handleSubmit,
     handleCompositionEnd: () => {
@@ -592,7 +583,7 @@ export function useDesktopComposerController({
     hasConversationMessages,
     isComposing,
     isSubmitting,
-    lastSubmitOutcome: composerDraftStore.getSubmitOutcome(draftKey) ?? lastSubmitOutcome,
+    lastSubmitOutcome: storedSubmitOutcome ?? lastSubmitOutcome,
     permissionOptions,
     permissionUnavailableReason: permissionView.unavailableReason,
     selectedSkillToken,
@@ -618,27 +609,6 @@ export function contextTokensFromDocument(
       token.kind === 'browser' ||
       token.kind === 'plugin',
   )
-}
-
-function sameContextTokens(
-  current: ComposerDocumentToken[],
-  next: ComposerDocumentToken[],
-): ComposerDocumentToken[] {
-  return current.length === next.length &&
-    current.every((token, index) => {
-      const candidate = next[index]
-      return (
-        candidate &&
-        token.id === candidate.id &&
-        token.kind === candidate.kind &&
-        token.label === candidate.label &&
-        token.value === candidate.value &&
-        token.from === candidate.from &&
-        token.to === candidate.to
-      )
-    })
-    ? current
-    : next
 }
 
 const runtimeSkillCache = new Map<string, DesktopInstalledSkill[]>()

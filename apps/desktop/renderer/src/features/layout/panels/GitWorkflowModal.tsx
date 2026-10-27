@@ -11,7 +11,7 @@ import { cx } from '../../../utils/Cx.js'
 import { useDialogFocusRestore } from '../../../components/ui/UseDialogFocusRestore.js'
 import { useLastNonNull } from '../../../hooks/UsePresenceRetention.js'
 import { environmentDomainClient } from '../../../services/desktop-client/EnvironmentDomainClient.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 
 export type GitWorkflowMode = 'branch' | 'commitPush' | 'commit' | 'push' | 'pullRequest'
 
@@ -45,7 +45,7 @@ export function GitWorkflowModal({
   onRefreshWorkspace,
 }: Props): React.ReactNode {
   const retainedMode = useLastNonNull(currentMode)
-  const settings = useDesktopSettings()
+  const gitDraftPullRequest = useDesktopSettingsField((settings) => settings.gitDraftPullRequest)
   const open = currentMode !== null
   const mode = open ? currentMode : retainedMode
   const [branchName, setBranchName] = useState(gitBranchPrefix)
@@ -56,7 +56,7 @@ export function GitWorkflowModal({
   const [prTitle, setPrTitle] = useState('')
   const [prTitleEdited, setPrTitleEdited] = useState(false)
   const [prBody, setPrBody] = useState('')
-  const [draftPr, setDraftPr] = useState(settings.gitDraftPullRequest)
+  const [draftPr, setDraftPr] = useState(gitDraftPullRequest)
   const [localError, setLocalError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -85,7 +85,7 @@ export function GitWorkflowModal({
     setPrTitle(gitStatus?.branchName ?? '')
     setPrTitleEdited(false)
     setPrBody('')
-    setDraftPr(settings.gitDraftPullRequest)
+    setDraftPr(gitDraftPullRequest)
   }, [open, currentMode, workspace?.path])
 
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths])

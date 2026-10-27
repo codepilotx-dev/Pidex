@@ -1,4 +1,6 @@
-import { useSyncExternalStore } from 'react'
+import { useMemo } from 'react'
+import { useStore } from 'zustand/react'
+import { createStore } from 'zustand/vanilla'
 import type { DesktopFilePreview, DesktopFileRevision } from '../../../shared/Types.js'
 import { desktopClient, WORKSPACE_FILE_CHANGED_EVENT } from '../../services/desktop-client/index.js'
 import { AgentRpcError } from '../../services/AgentRpcClient.js'
@@ -38,10 +40,13 @@ export type FileDocumentSnapshot = {
   dirty: boolean
 }
 
-type Listener = () => void
-
-const documents = new Map<string, FileDocumentSnapshot>()
-const listeners = new Map<string, Set<Listener>>()
+/**
+ * 已加载文件的共享快照按 key 存放；请求去重、保存串行与自动保存计时器留在
+ * 模块内，只把可订阅的数据交给 Store。
+ */
+const fileDocumentStateStore = createStore<{
+  documents: Readonly<Record<string, FileDocumentSnapshot>>
+}>(() => ({ documents: {} }))
 const loadPromises = new Map<string, Promise<FileDocumentSnapshot>>()
 const savePromises = new Map<string, Promise<boolean>>()
 const autosaveTimers = new Map<string, number>()
@@ -97,19 +102,22 @@ function snapshotFor(
   scope: FileDocumentScope = {},
 ): FileDocumentSnapshot {
   const key = fileDocumentKey(workspacePath, path, scope)
-  const existing = documents.get(key)
+  const existing = fileDocumentStateStore.getState().documents[key]
   if (existing) {
     return existing
   }
 
   const initial = initialSnapshot(workspacePath, path, scope)
-  documents.set(key, initial)
+  fileDocumentStateStore.setState((state) => ({
+    documents: { ...state.documents, [key]: initial },
+  }))
   return initial
 }
 
 function publish(next: FileDocumentSnapshot): FileDocumentSnapshot {
-  documents.set(next.key, next)
-  for (const listener of listeners.get(next.key) ?? []) listener()
+  fileDocumentStateStore.setState((state) => ({
+    documents: { ...state.documents, [next.key]: next },
+  }))
   return next
 }
 
@@ -328,19 +336,16 @@ export function useFileDocument(
   scope: FileDocumentScope = {},
 ): FileDocumentSnapshot {
   const key = fileDocumentKey(workspacePath, path, scope)
-  return useSyncExternalStore(
-    (listener) => {
-      const bucket = listeners.get(key) ?? new Set<Listener>()
-      bucket.add(listener)
-      listeners.set(key, bucket)
-      return () => {
-        bucket.delete(listener)
-        if (bucket.size === 0) listeners.delete(key)
-      }
-    },
-    () => snapshotFor(workspacePath, path, scope),
-    () => snapshotFor(workspacePath, path, scope),
+  const current = useStore(fileDocumentStateStore, (state) => state.documents[key])
+  // 未加载的文档返回稳定的初始快照；注册由 prefetch/save 路径按需写入 Store。
+  const initial = useMemo(
+    () => initialSnapshot(workspacePath, path, scope),
+    // key 已唯一决定 workspacePath/path/scope；scope 默认值是每次渲染的新对象，
+    // 把它写进依赖会让 memo 失效。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [key],
   )
+  return current ?? initial
 }
 
 export function startFileDocumentExternalChecks(
@@ -463,7 +468,7 @@ export function resolveFileDocumentConflict(
 }
 
 export async function saveAllFileDocuments(): Promise<boolean> {
-  const dirty = [...documents.values()].filter((document) => document.dirty)
+  const dirty = Object.values(fileDocumentStateStore.getState().documents).filter((document) => document.dirty)
   const results = await Promise.all(
     dirty.map((document) =>
       saveFileDocument(document.workspacePath, document.path, {
@@ -476,7 +481,7 @@ export async function saveAllFileDocuments(): Promise<boolean> {
 }
 
 export function hasDirtyFileDocuments(): boolean {
-  return [...documents.values()].some((document) => document.dirty)
+  return Object.values(fileDocumentStateStore.getState().documents).some((document) => document.dirty)
 }
 
 export function isFileDocumentDirty(

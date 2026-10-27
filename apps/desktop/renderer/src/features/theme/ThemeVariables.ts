@@ -212,11 +212,11 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
 
     // System Layer: Borders
     '--cpx-sys-color-border-subtle': isNeutralDefault
-      ? 'var(--cpx-ref-gray-a6)'
+      ? 'var(--cpx-ref-gray-a5)'
       : roles.borderLight,
-    '--cpx-sys-color-border-default': isNeutralDefault ? 'var(--cpx-ref-gray-a7)' : roles.border,
+    '--cpx-sys-color-border-default': isNeutralDefault ? 'var(--cpx-ref-gray-a6)' : roles.border,
     '--cpx-sys-color-border-strong': isNeutralDefault
-      ? 'var(--cpx-ref-gray-a8)'
+      ? 'var(--cpx-ref-gray-a7)'
       : roles.borderHeavy,
     '--cpx-sys-color-border-focus': isNeutralDefault
       ? 'color-mix(in srgb, var(--cpx-sys-color-accent) 50%, transparent)'
@@ -285,13 +285,13 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
     '--cpx-sys-glass-bg': isNeutralDefault
       ? 'var(--cpx-ref-gray-surface)'
       : `color-mix(in srgb, ${roles.raised} 85%, transparent)`,
-    '--cpx-sys-glass-border': isNeutralDefault ? 'var(--cpx-ref-gray-a6)' : roles.borderLight,
+    '--cpx-sys-glass-border': isNeutralDefault ? 'var(--cpx-ref-gray-a5)' : roles.borderLight,
     '--cpx-sys-glass-shadow': shadowFloating,
 
     // System Layer: Interactive states
-    '--cpx-sys-color-hover': isNeutralDefault ? 'var(--cpx-ref-gray-a3)' : interactionHover,
-    '--cpx-sys-color-active': isNeutralDefault ? 'var(--cpx-ref-gray-a5)' : interactionSelected,
-    '--cpx-sys-color-selected': isNeutralDefault ? 'var(--cpx-ref-gray-a4)' : interactionSelected,
+    '--cpx-sys-color-hover': isNeutralDefault ? 'var(--cpx-ref-gray-a2)' : interactionHover,
+    '--cpx-sys-color-active': isNeutralDefault ? 'var(--cpx-ref-gray-a2)' : interactionHover,
+    '--cpx-sys-color-selected': isNeutralDefault ? 'var(--cpx-ref-gray-a3)' : interactionSelected,
 
     // System Layer: Diff semantic tones
     '--cpx-sys-color-diff-added-fg': added.foreground,
@@ -341,12 +341,12 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
 
     // Component Layer: genuinely component-specific runtime overrides
     '--cpx-comp-switch-thumb-fill': '#ffffff',
-    '--cpx-comp-scrollbar-slider-bg': isNeutralDefault ? 'var(--cpx-ref-gray-a7)' : roles.border,
+    '--cpx-comp-scrollbar-slider-bg': isNeutralDefault ? 'var(--cpx-ref-gray-a6)' : roles.border,
     '--cpx-comp-scrollbar-slider-hover-bg': isNeutralDefault
-      ? 'var(--cpx-ref-gray-a8)'
+      ? 'var(--cpx-ref-gray-a7)'
       : roles.borderHeavy,
     '--cpx-comp-scrollbar-slider-active-bg': isNeutralDefault
-      ? 'var(--cpx-ref-gray-a8)'
+      ? 'var(--cpx-ref-gray-a7)'
       : roles.borderHeavy,
     '--cpx-comp-glass-filter': 'blur(16px)',
   }

@@ -78,7 +78,7 @@ export function ProviderConnectionDialog({
     selected?.kind === 'billing' || selected?.kind === 'usage-oauth' ? selected.source : null
 
   async function connected(): Promise<void> {
-    await providerManagementStore.refreshConnections()
+    await Promise.all([providerManagementStore.refreshSources(), providerManagementStore.refresh()])
     await onConnected()
     setSelectedId(null)
     onOpenChange(false)
@@ -217,9 +217,13 @@ export function ProviderConnectionDialog({
                 connectionMethod: selectedSource.connectionMethod,
               }}
               onChanged={connected}
-              onConnect={(input) => providerManagementStore.connectUsageCredential(input)}
+              onConnect={(input) =>
+                providerManagementStore.connectUsageCredential(input).then(() => undefined)
+              }
               onDisconnect={(sourceId) =>
-                providerManagementStore.disconnectUsageCredential({ sourceId })
+                providerManagementStore
+                  .disconnectUsageCredential({ sourceId })
+                  .then(() => undefined)
               }
             />
           ) : null}
