@@ -1,3 +1,5 @@
+import { SidebarDropList, useSidebarDragList } from './SidebarDragContext.js'
+import { sortSessionsForSidebar } from '../../session/state/SessionSorting.js'
 import type React from 'react'
 import { memo, useEffect, useId, useMemo, useState } from 'react'
 import {
@@ -53,8 +55,6 @@ const SESSION_KEY_SEPARATOR = '|'
 type Props = {
   /** 项目行在默认区域的全局拖放序号。 */
   dropIndex?: number
-  onItemDragStart?: (sessionId: string) => void
-  onItemDragEnd?: () => void
   currentSectionId?: string | null
   onMoveProjectToSection?: (project: DesktopWorkspace, sectionId: string) => void
   onMoveProjectToDefault?: (project: DesktopWorkspace) => void
@@ -91,8 +91,6 @@ type Props = {
 
 function SidebarProjectGroupComponent({
   dropIndex,
-  onItemDragStart,
-  onItemDragEnd,
   currentSectionId = null,
   onMoveProjectToSection,
   onMoveProjectToDefault,
@@ -137,6 +135,16 @@ function SidebarProjectGroupComponent({
   useEffect(() => setManagedProject(project), [project])
 
   const projectKey = sidebarProjectKey(managedProject)
+  const parentList = useSidebarDragList()
+  const headerOrder = sortSessionsForSidebar(bucket.allSessions, {
+    sort,
+    needsInputSessionIds: pendingPermissionSessionIds,
+    unreadSessionIds: new Set(
+      bucket.allSessions.filter((session) => session.unreadAt).map((session) => session.id),
+    ),
+    scopeKey: `project:${projectKey}`,
+    manualOrderByScope,
+  }).map((session) => `session:${session.id}`)
   const disclosureKey = sidebarProjectDisclosureKey(managedProject)
   const isExpanded = useDisclosureExpanded(disclosureStore, disclosureKey)
   const projectSessionsId = useId()
@@ -357,23 +365,42 @@ function SidebarProjectGroupComponent({
               </>
             }
           >
-            <SidebarProjectHoverCard
-              appearance={appearance}
-              conversationCount={countedProjectSessions.length}
-              openCount={openCount}
-              unreadCount={unreadCount}
-              isPinned={isPinned}
-              isUnavailable={isUnavailable}
-              project={managedProject}
-              projectKey={projectKey}
-              onEdit={() => setManagerOpen(true)}
-              onOpenFolder={(path) => {
-                void desktopClient.openPathWithDefaultTarget(path)
+            <SidebarDropList
+              className="tw:flex tw:min-w-0 tw:flex-1"
+              list={{
+                key: `project:${projectKey}`,
+                instanceId: `${parentList?.instanceId ?? parentList?.key}:header:${projectKey}`,
+                destination: { kind: 'project', projectKey, index: 0 },
+                sessionsOnly: true,
+                order: headerOrder,
+                sessionKeys: bucket.allSessions.map((session) => `session:${session.id}`),
+                onReorder: (order) => {
+                  onManualOrderChange?.(
+                    `project:${projectKey}`,
+                    order.map((key) => key.slice(8)),
+                  )
+                  onSortChange?.('manual')
+                },
               }}
-              onTogglePinned={togglePinned}
             >
-              {projectButton}
-            </SidebarProjectHoverCard>
+              <SidebarProjectHoverCard
+                appearance={appearance}
+                conversationCount={countedProjectSessions.length}
+                openCount={openCount}
+                unreadCount={unreadCount}
+                isPinned={isPinned}
+                isUnavailable={isUnavailable}
+                project={managedProject}
+                projectKey={projectKey}
+                onEdit={() => setManagerOpen(true)}
+                onOpenFolder={(path) => {
+                  void desktopClient.openPathWithDefaultTarget(path)
+                }}
+                onTogglePinned={togglePinned}
+              >
+                {projectButton}
+              </SidebarProjectHoverCard>
+            </SidebarDropList>
           </SidebarRow>
         }
       />
@@ -418,8 +445,6 @@ function SidebarProjectGroupComponent({
             titleLoadingIds={titleLoadingIds}
             unavailableProjectKeys={projectUnavailableKeys}
             groupKey={`project:${projectKey}`}
-            onItemDragEnd={onItemDragEnd}
-            onItemDragStart={onItemDragStart}
             onMoveToDefault={onMoveToDefault}
             onMoveToSection={onMoveToSection}
             manualOrderByScope={manualOrderByScope}

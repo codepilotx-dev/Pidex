@@ -94,6 +94,8 @@ type Props = {
   session: SessionListItem
   onRename?: (title: string) => Promise<boolean>
   onUnlinkPullRequest?: (item: ThreadPullRequestSummary) => void
+  /** 拖动排序期间不弹出悬浮卡，避免遮挡插入提示。 */
+  suppressOpen?: boolean
 }
 
 export function SidebarSessionHoverCard({
@@ -105,6 +107,7 @@ export function SidebarSessionHoverCard({
   session,
   onRename,
   onUnlinkPullRequest,
+  suppressOpen = false,
 }: Props): React.ReactNode {
   const model = buildSidebarSessionHoverCardModel(session, fallbackTitle, now, pullRequests)
   const [open, setOpen] = useState(false)
@@ -124,6 +127,13 @@ export function SidebarSessionHoverCard({
     if (!open) return
     void refreshThreadPullRequests([session.id])
   }, [open, session.id])
+
+  // 开始拖动时关闭已打开的悬浮卡；拖动期间不再弹开。
+  useEffect(() => {
+    if (!suppressOpen) return
+    setEditing(false)
+    setOpen(false)
+  }, [suppressOpen])
 
   // 标题重生成期间不渲染悬浮卡，但 hooks 必须无条件执行，否则标题状态翻转会改变 hook 顺序。
   if (regeneratingTitle) {
@@ -169,7 +179,7 @@ export function SidebarSessionHoverCard({
 
   return (
     <SidebarHoverCard
-      lockOpen={editing}
+      lockOpen={editing || suppressOpen}
       open={open}
       onAnchorKeyDown={(event) => {
         if (event.key !== 'F2' || !onRename) return

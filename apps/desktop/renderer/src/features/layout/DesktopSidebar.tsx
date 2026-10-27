@@ -798,8 +798,18 @@ export function DesktopSidebar({
         onSetSectionSort={(sectionId, sort) =>
           updateSidebarCustomization((current) => setSidebarSectionSort(current, sectionId, sort))
         }
+        onReorderSections={(order) =>
+          updateSidebarCustomization((current) => orderSidebarSections(current, order))
+        }
         onReorderSectionItems={(sectionId, keys) =>
-          updateSidebarCustomization((current) => setSidebarSectionItems(current, sectionId, keys))
+          updateSidebarCustomization((current) =>
+            setSidebarSectionItems(current, sectionId, [
+              ...keys,
+              ...(
+                current.sections.find((section) => section.id === sectionId)?.itemKeys ?? []
+              ).filter((key) => !keys.includes(key)),
+            ]),
+          )
         }
         onMoveItemsToSection={(itemKeys, sectionId, index) => {
           moveItemsToDestination(itemKeys, sectionId, index)
