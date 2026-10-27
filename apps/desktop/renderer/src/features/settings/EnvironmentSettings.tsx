@@ -40,7 +40,7 @@ import { LocalEnvironmentProjectSettings } from './local-environment/LocalEnviro
 import { SettingsContentArea } from './SettingsContentArea.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsSection } from './SettingsSection.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import { useDesktopSettingsField } from './UseDesktopSettings.js'
 import {
   filterEnvironmentProjects,
   isProjectSettingsConflict,
@@ -75,7 +75,7 @@ function EnvironmentList({
   embedded,
 }: Props & { routeBase: string }): React.ReactNode {
   const navigate = useNavigate()
-  const { projectAppearances } = useDesktopSettings()
+  const projectAppearances = useDesktopSettingsField((settings) => settings.projectAppearances)
   const [projects, setProjects] = useState<DesktopWorkspace[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)

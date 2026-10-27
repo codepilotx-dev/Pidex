@@ -22,12 +22,6 @@
   .context-menu-switch:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
     background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 20%, transparent);
   }
-  .chat-input__dropdown-switch:active:not(
-      :where(:disabled, [data-disabled], [aria-disabled='true'])
-    ),
-  .context-menu-switch:active:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
-    background: var(--cpx-sys-color-selected);
-  }
   .chat-input__dropdown-switch:focus-visible,
   .context-menu-switch:focus-visible {
     outline: 2px solid var(--cpx-sys-color-border-focus);
@@ -57,20 +51,6 @@
       :where(:disabled, [data-disabled], [aria-disabled='true'])
     ) {
     background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 8%, var(--cpx-sys-color-accent));
-  }
-  .chat-input__dropdown-switch[data-state='checked']:active:not(:where(:disabled, [data-disabled])),
-  .chat-input__dropdown-switch[aria-checked='true']:active:not(
-      :where(:disabled, [data-disabled], [aria-disabled='true'])
-    ),
-  .context-menu-switch[data-state='checked']:active:not(:where(:disabled, [data-disabled])),
-  .context-menu-switch[aria-checked='true']:active:not(
-      :where(:disabled, [data-disabled], [aria-disabled='true'])
-    ) {
-    background: color-mix(
-      in srgb,
-      var(--cpx-sys-color-fg-primary) 14%,
-      var(--cpx-sys-color-accent)
-    );
   }
   .chat-input__dropdown-switch:disabled,
   .chat-input__dropdown-switch[data-disabled],

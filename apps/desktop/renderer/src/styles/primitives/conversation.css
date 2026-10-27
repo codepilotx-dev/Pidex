@@ -39,7 +39,8 @@
     --session-content-w: 100%;
   }
 
-  .quick-chat-view,
+  .quick-chat-view > .quick-chat-hero-region,
+  .quick-chat-view > .quick-chat-composer-region,
   .conversation-page .thread-scroll-layout__inner {
     width: 100%;
     max-width: calc(var(--page-content-max-width) + 2 * var(--cpx-sys-space-4));
@@ -1586,9 +1587,6 @@
     color: var(--cpx-sys-color-fg-primary);
   }
 
-  .canonical-patch-card__disclosure:active:not(:disabled) {
-    background: var(--cpx-sys-color-selected);
-  }
 
   .canonical-patch-card__disclosure:focus-visible {
     outline: 2px solid var(--cpx-sys-color-border-focus);

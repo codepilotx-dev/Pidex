@@ -10,7 +10,7 @@ import type { SessionListItem } from '../../UiTypes.js'
 import { AnchoredPopover } from '../../components/ui/AnchoredPopover.js'
 import { Button } from '../../components/ui/Button.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import {
   buildProjectSessionBuckets,
   isSidebarProjectUnavailable,
@@ -70,7 +70,7 @@ function ProjectDetailsTrigger({
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const editFrameRef = useRef<number | null>(null)
-  const { projectAppearances } = useDesktopSettings()
+  const projectAppearances = useDesktopSettingsField((settings) => settings.projectAppearances)
   useEffect(() => setManagedProject(project), [project])
   useEffect(
     () => () => {

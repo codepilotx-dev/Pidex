@@ -57,7 +57,7 @@ export function ReviewFileTreeRow({
     <button
       aria-expanded={!collapsed}
       aria-level={row.depth + 1}
-      className="review-file-tree-dir tw:relative tw:flex tw:h-[29px] tw:min-h-[29px] tw:w-full tw:items-center tw:gap-2 tw:border-0 tw:bg-transparent tw:rounded-lg tw:py-0 tw:pr-2 tw:pl-0 tw:text-left tw:text-app-text-soft tw:type-control tw:cursor-pointer tw:transition-[color,background-color] tw:duration-feedback tw:ease-standard tw:hover:bg-app-hover tw:hover:text-app-text tw:active:bg-app-selected tw:[&>svg]:flex-none"
+      className="review-file-tree-dir tw:relative tw:flex tw:h-[29px] tw:min-h-[29px] tw:w-full tw:items-center tw:gap-2 tw:border-0 tw:bg-transparent tw:rounded-lg tw:py-0 tw:pr-2 tw:pl-0 tw:text-left tw:text-app-text-soft tw:type-control tw:cursor-pointer tw:transition-[color,background-color] tw:duration-feedback tw:ease-standard tw:hover:bg-app-hover tw:hover:text-app-text tw:[&>svg]:flex-none"
       role="treeitem"
       style={{ paddingLeft: `${16 + row.depth * 14}px` }}
       type="button"

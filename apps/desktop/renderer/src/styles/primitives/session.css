@@ -319,9 +319,6 @@
     color: var(--cpx-sys-color-fg-primary);
   }
 
-  .composer-change-summary__return:active {
-    transform: scale(0.95);
-  }
 
   .composer-change-summary__return:focus-visible {
     outline: 2px solid var(--cpx-sys-color-border-focus);

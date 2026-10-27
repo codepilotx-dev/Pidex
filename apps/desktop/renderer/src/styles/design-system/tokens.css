@@ -312,14 +312,14 @@
       transparent
     );
 
-    --cpx-sys-color-border-subtle: var(--cpx-ref-gray-a6);
-    --cpx-sys-color-border-default: var(--cpx-ref-gray-a7);
-    --cpx-sys-color-border-strong: var(--cpx-ref-gray-a8);
+    --cpx-sys-color-border-subtle: var(--cpx-ref-gray-a5);
+    --cpx-sys-color-border-default: var(--cpx-ref-gray-a6);
+    --cpx-sys-color-border-strong: var(--cpx-ref-gray-a7);
     --cpx-sys-color-border-focus: color-mix(in srgb, var(--cpx-sys-color-accent) 50%, transparent);
 
-    --cpx-sys-color-hover: var(--cpx-ref-gray-a3);
-    --cpx-sys-color-active: var(--cpx-ref-gray-a5);
-    --cpx-sys-color-selected: var(--cpx-ref-gray-a4);
+    --cpx-sys-color-hover: var(--cpx-ref-gray-a2);
+    --cpx-sys-color-active: var(--cpx-ref-gray-a2);
+    --cpx-sys-color-selected: var(--cpx-ref-gray-a3);
 
     --cpx-sys-color-accent: var(--cpx-ref-blue-9);
     --cpx-sys-color-accent-subtle-bg: var(--cpx-ref-blue-a3);

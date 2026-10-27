@@ -985,7 +985,7 @@ export const InfoTooltip = forwardRef<HTMLButtonElement, InfoTooltipProps>(
           ref={ref}
           type="button"
           aria-label={ariaLabel}
-          className={`tw:inline-flex tw:items-center tw:justify-center tw:w-6 tw:h-6 tw:rounded-full tw:text-app-text-meta tw:hover:text-app-text tw:hover:bg-app-hover tw:active:scale-95 tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-app-focus tw:transition tw:duration-150 tw:cursor-help tw:select-none tw:shrink-0 ${className}`}
+          className={`tw:inline-flex tw:items-center tw:justify-center tw:w-6 tw:h-6 tw:rounded-full tw:text-app-text-meta tw:hover:text-app-text tw:hover:bg-app-hover tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-app-focus tw:transition tw:duration-150 tw:cursor-help tw:select-none tw:shrink-0 ${className}`}
         >
           <Info size={size} className={iconClassName} strokeWidth={strokeWidth} />
         </button>

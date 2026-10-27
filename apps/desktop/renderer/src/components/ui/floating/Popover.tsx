@@ -327,7 +327,7 @@ const PopoverClose = forwardRef<HTMLElement, PopoverCloseProps>(
         type="button"
         ref={ref as React.Ref<HTMLButtonElement>}
         aria-label={props['aria-label'] ?? t('Close popover')}
-        className={`tw:flex tw:items-center tw:justify-center ${children ? '' : 'tw:w-6 tw:h-6 -mr-1 -mt-0.5 tw:rounded-control'} tw:text-[var(--cpx-sys-color-fg-tertiary)] tw:hover:text-[var(--cpx-sys-color-fg-primary)] tw:hover:bg-[var(--cpx-sys-color-hover)] tw:active:scale-95 tw:transition-colors tw:duration-150 tw:cursor-pointer ${className}`}
+        className={`tw:flex tw:items-center tw:justify-center ${children ? '' : 'tw:w-6 tw:h-6 -mr-1 -mt-0.5 tw:rounded-control'} tw:text-[var(--cpx-sys-color-fg-tertiary)] tw:hover:text-[var(--cpx-sys-color-fg-primary)] tw:hover:bg-[var(--cpx-sys-color-hover)] tw:transition-colors tw:duration-150 tw:cursor-pointer ${className}`}
         onClick={(event) => {
           onClick?.(event as React.MouseEvent<HTMLButtonElement>)
           if (!event.defaultPrevented) context.setOpen(false)

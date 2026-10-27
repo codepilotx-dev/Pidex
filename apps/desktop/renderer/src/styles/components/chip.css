@@ -50,12 +50,6 @@
     color: var(--cpx-sys-color-fg-primary);
   }
 
-  .composer .chip-button:active:not(:disabled),
-  .menubar-trigger:active:not(:where(:disabled, [data-disabled])) {
-    background: var(--cpx-sys-color-selected);
-    color: var(--cpx-sys-color-fg-primary);
-  }
-
   /* An open chip trigger exposes aria-expanded and needs the same selected
      background the meta chip already owns, plus a
      flipped chevron that signals the open menu. */

@@ -12,7 +12,7 @@ import { SettingsContentArea } from './SettingsContentArea.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
-import { usePetSettingsController } from '../pet/UsePetSettingsController.js'
+import { usePetCatalogController } from '../pet/PetCatalogProvider.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
 
 type Props = {
@@ -36,7 +36,7 @@ export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
     setEnabled,
     settings,
     updatePet,
-  } = usePetSettingsController({ onError })
+  } = usePetCatalogController()
   const busy = petsBusy || operationBusy
 
   const loadPreview = async (): Promise<void> => {

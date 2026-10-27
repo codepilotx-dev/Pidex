@@ -678,8 +678,9 @@ describe('non-color design token contracts', () => {
       /\.quick-chat-view,\s*\.conversation-page\s*\{\s*--cpx-sys-layout-conversation-max-width: 48rem;\s*--page-content-max-width: var\(--cpx-sys-layout-conversation-max-width\);\s*--session-content-w: 100%;/,
     )
     expect(conversation).toMatch(
-      /\.quick-chat-view,\s*\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
+      /\.quick-chat-view > \.quick-chat-hero-region,\s*\.quick-chat-view > \.quick-chat-composer-region,\s*\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
     )
+    expect(conversation).not.toMatch(/\.quick-chat-view,\s*\.conversation-page \.thread-scroll-layout__inner/)
     expect(conversation).not.toContain('53.5rem')
     expect(conversation).not.toContain('--page-content-max-width: 40rem;')
     expect(conversation).not.toContain('--conversation-composer-overhang')

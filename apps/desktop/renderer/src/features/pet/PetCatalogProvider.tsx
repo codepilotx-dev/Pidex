@@ -9,7 +9,7 @@ export function PetCatalogProvider({ children }: { children: ReactNode }): React
   const location = useLocation()
   const [error, setError] = useState<string | null>(null)
   const controller = usePetSettingsController({
-    enabled: location.pathname === '/pets',
+    enabled: location.pathname === '/pets' || location.pathname === '/settings/pets',
     onError: setError,
   })
   return (

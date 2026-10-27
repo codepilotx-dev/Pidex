@@ -2290,7 +2290,7 @@ function WorkspaceReviewSidebarImpl({
                 size="md"
                 trigger={
                   <button
-                    className="review-branch-range__trigger tw:inline-flex tw:min-w-0 tw:max-w-[54%] tw:items-center tw:gap-1 tw:rounded-md tw:px-2 tw:py-1 tw:text-app-text-soft tw:hover:bg-app-hover tw:hover:text-app-text tw:active:bg-app-selected"
+                    className="review-branch-range__trigger tw:inline-flex tw:min-w-0 tw:max-w-[54%] tw:items-center tw:gap-1 tw:rounded-md tw:px-2 tw:py-1 tw:text-app-text-soft tw:hover:bg-app-hover tw:hover:text-app-text"
                     type="button"
                   >
                     <span className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">

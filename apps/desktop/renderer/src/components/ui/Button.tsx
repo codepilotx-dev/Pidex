@@ -324,7 +324,6 @@ const ACCENT_STATE_CLASS = cx(
   'tw:[&:enabled:hover]:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent)_90%,transparent)]',
   'tw:data-[state=open]:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent)_90%,transparent)]',
   'tw:data-[active]:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent)_90%,transparent)]',
-  'tw:[&:active:not(:disabled)]:bg-[color-mix(in_srgb,var(--cpx-sys-color-accent)_80%,transparent)]',
 )
 
 const SECONDARY_STATE_CLASS = cx(
@@ -332,7 +331,6 @@ const SECONDARY_STATE_CLASS = cx(
   'tw:[&:enabled:hover]:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_10%,transparent)]',
   'tw:data-[state=open]:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_10%,transparent)]',
   'tw:data-[active]:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_10%,transparent)]',
-  'tw:[&:active:not(:disabled)]:bg-app-active',
 )
 
 const OUTLINE_STATE_CLASS = cx(
@@ -341,7 +339,6 @@ const OUTLINE_STATE_CLASS = cx(
   'tw:[&:enabled:hover]:bg-app-hover',
   'tw:data-[state=open]:bg-app-hover',
   'tw:data-[active]:bg-app-hover',
-  'tw:[&:active:not(:disabled)]:bg-app-active',
 )
 
 const GHOST_STATE_CLASS = cx(
@@ -349,7 +346,6 @@ const GHOST_STATE_CLASS = cx(
   'tw:[&:enabled:hover]:bg-app-hover',
   'tw:data-[state=open]:bg-app-hover',
   'tw:data-[active]:bg-app-hover',
-  'tw:[&:active:not(:disabled)]:bg-app-active',
 )
 
 const TEXT_STATE_CLASS = cx(
@@ -367,14 +363,12 @@ const SUBTLE_ACCENT_STATE_CLASS = cx(
   'tw:[&:enabled:hover]:bg-app-accent-subtle-hover',
   'tw:data-[state=open]:bg-app-accent-subtle-hover',
   'tw:data-[active]:bg-app-accent-subtle-hover',
-  'tw:[&:active:not(:disabled)]:bg-app-accent-subtle-active',
 )
 
 const DANGER_STATE_CLASS = cx(
   'tw:[&:enabled:hover]:brightness-110',
   'tw:data-[state=open]:brightness-110',
   'tw:data-[active]:brightness-110',
-  'tw:[&:active:not(:disabled)]:brightness-95',
 )
 
 const DANGER_OUTLINE_STATE_CLASS = cx(
@@ -424,8 +418,8 @@ const BASE_CLASS = cx(
   'tw:transition-[background-color,border-color,color,opacity,transform,box-shadow] tw:duration-150 tw:ease-out',
   'tw:[&>svg]:block tw:[&>svg]:shrink-0',
   'tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-app-accent tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-app-main',
-  'tw:disabled:cursor-not-allowed tw:disabled:opacity-40 tw:disabled:active:scale-100 tw:disabled:pointer-events-none',
-  'tw:aria-disabled:cursor-not-allowed tw:aria-disabled:opacity-40 tw:aria-disabled:active:scale-100 tw:aria-disabled:pointer-events-none',
+  'tw:disabled:cursor-not-allowed tw:disabled:opacity-40 tw:disabled:pointer-events-none',
+  'tw:aria-disabled:cursor-not-allowed tw:aria-disabled:opacity-40 tw:aria-disabled:pointer-events-none',
   'tw:aria-pressed:bg-app-selected tw:aria-pressed:text-app-text',
 )
 
@@ -518,7 +512,6 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
 
   const baseClasses = cx(
     BASE_CLASS,
-    variant !== 'text' && 'tw:active:scale-[0.98]',
     contentLayout === 'balanced' ? 'tw:grid tw:grid-cols-[1fr_auto_1fr]' : 'tw:inline-flex',
     sizeClass,
     radiusClass,

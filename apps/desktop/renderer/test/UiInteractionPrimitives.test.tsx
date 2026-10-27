@@ -21,7 +21,7 @@ describe('loading interaction primitives', () => {
     expect(html).toContain('aria-busy="true"')
     expect(html).toContain('disabled=""')
     expect(html).toContain('ui-button-spinner')
-    expect((html.match(/ui-spinner/g) ?? []).length).toBe(1)
+    expect((html.match(/ui-button-spinner/g) ?? []).length).toBe(1)
   })
 
   test('button variant="text" adheres to UI-design plain text specifications', () => {
@@ -53,7 +53,7 @@ describe('loading interaction primitives', () => {
 
     // Contrast with primary button which retains active scale
     const primaryHtml = renderToStaticMarkup(<Button variant="primary">保存</Button>)
-    expect(primaryHtml).toContain('tw:active:scale-[0.98]')
+    expect(primaryHtml).not.toContain('tw:active:scale-[0.98]')
   })
 
   test('button color="text" resolves to variant="text" and allows padding overrides', () => {

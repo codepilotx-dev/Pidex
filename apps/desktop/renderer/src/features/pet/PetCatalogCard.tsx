@@ -37,7 +37,7 @@ export function PetCatalogCard({
 
   return (
     <article
-      className="pet-catalog-card tw:flex tw:min-w-0 tw:items-center tw:gap-3 tw:rounded-item tw:border-0 tw:bg-transparent tw:p-3 tw:shadow-none tw:transition-[background-color] tw:duration-state tw:ease-standard tw:hover:bg-app-hover tw:active:bg-app-active"
+      className="pet-catalog-card tw:flex tw:min-w-0 tw:items-center tw:gap-3 tw:rounded-item tw:border-0 tw:bg-transparent tw:p-3 tw:shadow-none tw:transition-[background-color] tw:duration-state tw:ease-standard tw:hover:bg-app-hover"
       data-pet-id={pet.id}
       data-pet-installed={installed}
     >
