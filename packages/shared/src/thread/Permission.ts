@@ -123,21 +123,21 @@ export const PERMISSION_PRESETS: readonly PermissionPreset[] = [
     id: 'default',
     label: '请求批准',
     description:
-      '工作区内低风险操作直接执行；外部文件编辑、外部目录命令、检测到的联网与风险操作由你批准。授权仅在当前项目生效。',
+      '工作区内安全操作直接执行，外部与风险操作由你批准。',
     config: DEFAULT_PERMISSION_CONFIG,
   },
   {
     id: 'auto-review',
     label: '帮我批准',
     description:
-      '低风险操作自动执行，包括工作区外低风险操作；联网与风险操作交 Guardian，无法判断或不可用时询问你。',
+      '低风险操作自动执行，联网与风险操作由 Guardian 把关。',
     config: AUTO_REVIEW_PERMISSION_CONFIG,
   },
   {
     id: 'full-access',
     label: '完全访问',
     description:
-      '允许访问本机文件、互联网、执行命令及调用工具和 MCP，不进行权限审批；Plan 模式仍独立生效。不提供 OS 沙箱或网络隔离。',
+      '直接执行所有操作且不经审批；不提供沙箱或网络隔离。',
     config: FULL_ACCESS_PERMISSION_CONFIG,
   },
 ]
@@ -145,7 +145,7 @@ export const PERMISSION_PRESETS: readonly PermissionPreset[] = [
 export const CUSTOM_PERMISSION_PRESET = {
   id: 'custom',
   label: '自定义',
-  description: '分别配置内建文件访问范围、审批策略与审批者。',
+  description: '手动配置文件访问范围、审批策略与审批者。',
 } as const
 
 export const PERMISSION_PRESET_OPTIONS: ReadonlyArray<{

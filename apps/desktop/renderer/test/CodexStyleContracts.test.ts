@@ -14,6 +14,7 @@ describe('Codex CPX design system token contract', () => {
     expect(buildPopoverSizingStyle({ size: 'sm' })).toEqual({ '--popover-width': '220px' })
     expect(buildPopoverSizingStyle({ size: 'md' })).toEqual({ '--popover-width': '280px' })
     expect(buildPopoverSizingStyle({ size: 'lg' })).toEqual({ '--popover-width': '360px' })
+    expect(buildPopoverSizingStyle({ size: 'auto' })).toEqual({ '--popover-width': 'auto' })
     expect(buildPopoverSizingStyle()).toEqual(buildPopoverSizingStyle({ size: 'md' }))
   })
   test('guards interaction semantics and visual ownership without broad exceptions', async () => {

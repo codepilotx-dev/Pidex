@@ -1776,17 +1776,17 @@ export function ComposerCard({
               </Select.Trigger>
               <Select.Portal>
                 <Select.Content
-                  size="md"
+                  size="auto"
                   align="start"
-                  className="popover-surface permission-select-content tw:max-h-[min(320px,calc(100vh_-_96px))] tw:overflow-hidden"
+                  className="popover-surface permission-select-content tw:max-h-[min(440px,calc(100vh_-_96px))] tw:overflow-hidden"
                   data-theme-component="dropdown-surface"
                   collisionPadding={6}
 
-                  side="bottom"
+                  side="top"
                   sideOffset={4}
-                  style={buildPopoverSizingStyle({ size: 'md' })}
+                  style={buildPopoverSizingStyle({ size: 'auto' })}
                 >
-                  <div className="permission-select-scroll-area tw:grid tw:max-h-[max(80px,calc(min(320px,calc(100vh-96px))-12px))] tw:overflow-x-hidden tw:overflow-y-auto">
+                  <div className="permission-select-scroll-area tw:grid tw:max-h-[max(80px,calc(min(440px,calc(100vh-96px))-12px))] tw:overflow-x-hidden tw:overflow-y-auto">
                     <div className="permission-select-scroll-content tw:grid tw:min-w-0">
                       {permissionUnavailableReason ? (
                         <p
@@ -2001,6 +2001,7 @@ export function ComposerCard({
                     size="md"
                     side="top"
                     align="end"
+                    sideOffset={4}
                     aria-label="上下文窗口使用量"
                     onOpenAutoFocus={(event) => event.preventDefault()}
                     onCloseAutoFocus={(event) => event.preventDefault()}

@@ -17,7 +17,23 @@
     --cpx-comp-dropdown-item-disabled-fg: var(--cpx-sys-color-fg-disabled);
     --cpx-comp-dropdown-focus-border: var(--cpx-sys-color-border-focus);
     --cpx-comp-dropdown-menu-radius: var(--cpx-sys-radius-floating);
-    --cpx-comp-dropdown-menu-shadow: var(--cpx-sys-shadow-floating);
+    --cpx-comp-dropdown-menu-shadow:
+      0 4px 16px -4px rgb(0 0 0 / 12%),
+      0 2px 6px -2px rgb(0 0 0 / 8%),
+      0 0 1px 0 rgb(0 0 0 / 16%);
+    --cpx-comp-dropdown-menu-shadow-top:
+      0 -4px 16px -4px rgb(0 0 0 / 12%),
+      0 -2px 6px -2px rgb(0 0 0 / 8%),
+      0 0 1px 0 rgb(0 0 0 / 16%);
+    --cpx-comp-dropdown-menu-shadow-bottom: var(--cpx-comp-dropdown-menu-shadow);
+    --cpx-comp-dropdown-menu-shadow-left:
+      -4px 0 16px -4px rgb(0 0 0 / 12%),
+      -2px 0 6px -2px rgb(0 0 0 / 8%),
+      0 0 1px 0 rgb(0 0 0 / 16%);
+    --cpx-comp-dropdown-menu-shadow-right:
+      4px 0 16px -4px rgb(0 0 0 / 12%),
+      2px 0 6px -2px rgb(0 0 0 / 8%),
+      0 0 1px 0 rgb(0 0 0 / 16%);
 
     /* 2. Button / IconButton Component */
     --cpx-comp-button-bg: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 5%, transparent);

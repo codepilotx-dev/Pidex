@@ -18,6 +18,11 @@
   [data-popover-size='lg'] {
     --popover-width: 360px;
   }
+  [data-popover-size='auto'] {
+    --popover-width: auto;
+    --popover-min-width: 220px;
+    --popover-max-width: min(420px, calc(100vw - 16px));
+  }
 
   [data-popover-size]:is(
     .popover-surface,
@@ -26,8 +31,8 @@
     .thread-summary-popover
   ) {
     width: var(--popover-width);
-    min-width: 0;
-    max-width: calc(100vw - 16px);
+    min-width: var(--popover-min-width, 0);
+    max-width: var(--popover-max-width, calc(100vw - 16px));
     border: 1px solid var(--cpx-comp-dropdown-menu-border, var(--cpx-sys-color-border-default));
     border-radius: var(--cpx-comp-dropdown-menu-radius);
     background: var(--cpx-comp-dropdown-menu-bg, var(--cpx-comp-surface-floating));
@@ -62,6 +67,49 @@
     left: -7px;
     top: calc(var(--popover-arrow-y, 50%) - 3px);
     transform: rotate(-90deg);
+  }
+
+  /* Direction-aware floating shadow: project outward/away from the anchor so the
+   * shadow never falls back across or darkens the trigger button. */
+  [data-side='top']:is(
+    .popover-surface,
+    .sidebar-context-menu-content,
+    .sidebar-hover-card-surface,
+    .thread-summary-popover,
+    .settings-dropdown-content,
+    .permission-select-content
+  ) {
+    --cpx-comp-dropdown-menu-shadow: var(--cpx-comp-dropdown-menu-shadow-top);
+  }
+  [data-side='bottom']:is(
+    .popover-surface,
+    .sidebar-context-menu-content,
+    .sidebar-hover-card-surface,
+    .thread-summary-popover,
+    .settings-dropdown-content,
+    .permission-select-content
+  ) {
+    --cpx-comp-dropdown-menu-shadow: var(--cpx-comp-dropdown-menu-shadow-bottom);
+  }
+  [data-side='left']:is(
+    .popover-surface,
+    .sidebar-context-menu-content,
+    .sidebar-hover-card-surface,
+    .thread-summary-popover,
+    .settings-dropdown-content,
+    .permission-select-content
+  ) {
+    --cpx-comp-dropdown-menu-shadow: var(--cpx-comp-dropdown-menu-shadow-left);
+  }
+  [data-side='right']:is(
+    .popover-surface,
+    .sidebar-context-menu-content,
+    .sidebar-hover-card-surface,
+    .thread-summary-popover,
+    .settings-dropdown-content,
+    .permission-select-content
+  ) {
+    --cpx-comp-dropdown-menu-shadow: var(--cpx-comp-dropdown-menu-shadow-right);
   }
 
   /* Developer-themeable Dropdown family contract. The data attributes mark only
@@ -140,6 +188,7 @@
     --popover-available-height: calc(100vh - 96px);
     z-index: var(--cpx-sys-z-popover);
     width: var(--popover-width, 280px);
+    min-width: var(--popover-min-width, 0);
     max-width: var(--popover-max-width, var(--popover-default-max-width));
     max-height: var(
       --popover-max-height,
@@ -170,7 +219,7 @@
     border: var(--cpx-comp-surface-edge);
     background: var(--cpx-comp-dropdown-menu-bg, var(--cpx-comp-surface-floating));
     backdrop-filter: var(--cpx-comp-dropdown-menu-backdrop-filter, blur(16px));
-    box-shadow: var(--cpx-sys-shadow-floating);
+    box-shadow: var(--cpx-comp-dropdown-menu-shadow, var(--cpx-sys-shadow-floating));
   }
 
   @media (prefers-reduced-motion: reduce) {
