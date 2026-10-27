@@ -32,7 +32,7 @@ import {
   type AppContextMenuAction as ContextMenuAction,
 } from '../../../components/ui/AppContextMenu.js'
 import { cx } from '../../../utils/Cx.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import {
   DEFAULT_PROJECT_APPEARANCE,
   PROJECT_APPEARANCE_COLOR_CLASS,
@@ -132,7 +132,7 @@ function SidebarProjectGroupComponent({
   const [managerOpen, setManagerOpen] = useState(false)
   const [managedProject, setManagedProject] = useState(project)
   const [processingAction, setProcessingAction] = useState<'archive' | null>(null)
-  const { projectAppearances } = useDesktopSettings()
+  const projectAppearances = useDesktopSettingsField((settings) => settings.projectAppearances)
 
   useEffect(() => setManagedProject(project), [project])
 

@@ -7,7 +7,7 @@ import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { Popover } from '../../../components/ui/floating/Popover.js'
 import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import { newSessionPath } from '../../session/NewSessionSurface.js'
 import { canShowSidebarTooltip, type SidebarShellController } from '../SidebarShellState.js'
@@ -49,12 +49,16 @@ export function SidebarNavigationRail({
   onOpenWhatsNew,
   onReport,
 }: Props): ReactNode {
-  const {
-    sidebarProductMode,
-    sidebarTimelineEnabled,
-    sidebarCustomization,
-    setSidebarCustomization,
-  } = useDesktopSettings()
+  const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
+  const sidebarTimelineEnabled = useDesktopSettingsField(
+    (settings) => settings.sidebarTimelineEnabled,
+  )
+  const sidebarCustomization = useDesktopSettingsField(
+    (settings) => settings.sidebarCustomization,
+  )
+  const setSidebarCustomization = useDesktopSettingsField(
+    (settings) => settings.setSidebarCustomization,
+  )
   const { t } = useLocale()
   const navigate = useNavigate()
   const location = useLocation()

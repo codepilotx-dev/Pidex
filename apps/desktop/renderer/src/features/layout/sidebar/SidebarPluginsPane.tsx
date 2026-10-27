@@ -161,7 +161,7 @@ export function SidebarPluginsPane({
             <div key={item.id}>
               <SidebarRow
                 active={searchParams.get('plugin') === item.id}
-                className="sidebar-nav-link tw:group tw:active:bg-app-active tw:type-row-title"
+                className="sidebar-nav-link tw:group tw:type-row-title"
                 labelClassName="sidebar-item-label tw:min-w-0"
                 layout="flex"
                 leading={

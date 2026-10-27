@@ -33,7 +33,11 @@ import {
   sidebarPinnedProjectKey,
   sidebarPinnedSessionKey,
 } from './sidebar/SidebarViewModel.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsField,
+  type UseDesktopSettingsResult,
+} from '../settings/UseDesktopSettings.js'
+import { useShallow } from 'zustand/react/shallow'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { useEverOpened } from '../../hooks/UsePresenceRetention.js'
 import {
@@ -178,7 +182,7 @@ export function DesktopSidebar({
     sidebarActivityShowPinned,
     setSidebarActivityShowPinned,
     syncExternalSettingsPatch,
-  } = useDesktopSettings()
+  } = useDesktopSettingsField(useShallow(sidebarSettingsSelector))
   const sidebarCustomizationRef = useRef(sidebarCustomization)
   sidebarCustomizationRef.current = sidebarCustomization
   const persistSidebarDisclosuresRef = useRef(syncExternalSettingsPatch)
@@ -867,6 +871,42 @@ export function DesktopSidebar({
       ) : null}
     </div>
   )
+}
+
+/** 侧栏只依赖这些设置字段；用 `useShallow` 组合一次订阅，避免无关设置触发重渲染。 */
+function sidebarSettingsSelector(settings: UseDesktopSettingsResult) {
+  return {
+    collapsedSidebarSections: settings.collapsedSidebarSections,
+    collapsedSidebarProjectPaths: settings.collapsedSidebarProjectPaths,
+    setSidebarManualOrder: settings.setSidebarManualOrder,
+    setRecentWorkspaces: settings.setRecentWorkspaces,
+    setSidebarOrganization: settings.setSidebarOrganization,
+    setSidebarProjectSort: settings.setSidebarProjectSort,
+    sidebarCustomization: settings.sidebarCustomization,
+    setSidebarCustomization: settings.setSidebarCustomization,
+    sidebarSessionPins: settings.sidebarSessionPins,
+    setSidebarSessionPins: settings.setSidebarSessionPins,
+    sidebarManualOrder: settings.sidebarManualOrder,
+    sidebarOrganization: settings.sidebarOrganization,
+    sidebarShowScheduledSessions: settings.sidebarShowScheduledSessions,
+    setSidebarShowScheduledSessions: settings.setSidebarShowScheduledSessions,
+    sidebarProjectSort: settings.sidebarProjectSort,
+    sidebarSort: settings.sidebarSort,
+    setSidebarSort: settings.setSidebarSort,
+    sidebarTimelineEnabled: settings.sidebarTimelineEnabled,
+    sidebarProductMode: settings.sidebarProductMode,
+    sidebarTimelinePriorityEnabled: settings.sidebarTimelinePriorityEnabled,
+    setSidebarTimelinePriorityEnabled: settings.setSidebarTimelinePriorityEnabled,
+    sidebarActivityShowScheduled: settings.sidebarActivityShowScheduled,
+    setSidebarActivityShowScheduled: settings.setSidebarActivityShowScheduled,
+    sidebarActivityShowWork: settings.sidebarActivityShowWork,
+    setSidebarActivityShowWork: settings.setSidebarActivityShowWork,
+    sidebarActivityShowChat: settings.sidebarActivityShowChat,
+    setSidebarActivityShowChat: settings.setSidebarActivityShowChat,
+    sidebarActivityShowPinned: settings.sidebarActivityShowPinned,
+    setSidebarActivityShowPinned: settings.setSidebarActivityShowPinned,
+    syncExternalSettingsPatch: settings.syncExternalSettingsPatch,
+  }
 }
 
 function sidebarDisclosureSignature(

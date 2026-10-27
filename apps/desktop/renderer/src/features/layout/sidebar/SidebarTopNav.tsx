@@ -2,7 +2,7 @@ import type React from 'react'
 import { useEffect, useState } from 'react'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import type { ProtocolCapability } from '@pidex/agent-protocol'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import {
   Bell,
   BrainCircuit,
@@ -18,6 +18,7 @@ import {
 } from 'lucide-react'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { Button } from '../../../components/ui/Button.js'
+import { Select } from '../../../components/ui/Select.js'
 import type { SidebarProductMode } from '../../../../shared/Types.js'
 import type { AppView } from '../../../UiTypes.js'
 import { newSessionPath } from '../../session/NewSessionSurface.js'
@@ -26,7 +27,7 @@ import type { NewSessionSurface } from '../../session/NewSessionSurface.js'
 import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { Popover as Popover } from '../../../components/ui/floating/Popover.js'
 import { cx } from '../../../utils/Cx.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import { SidebarRow } from './SidebarRow.js'
 
@@ -274,133 +275,145 @@ export function SidebarHeader({
 }): React.ReactNode {
   const { t } = useLocale()
   const navigate = useNavigate()
-  const {
-    sidebarProductMode,
-    sidebarTimelineEnabled,
-    setSidebarTimelineEnabled,
-    sidebarActivityCoachmarkDismissed,
-    setSidebarActivityCoachmarkDismissed,
-  } = useDesktopSettings()
+  const location = useLocation()
+  const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
+  const setSidebarProductMode = useDesktopSettingsField(
+    (settings) => settings.setSidebarProductMode,
+  )
+  const sidebarTimelineEnabled = useDesktopSettingsField(
+    (settings) => settings.sidebarTimelineEnabled,
+  )
+  const setSidebarTimelineEnabled = useDesktopSettingsField(
+    (settings) => settings.setSidebarTimelineEnabled,
+  )
+  const sidebarActivityCoachmarkDismissed = useDesktopSettingsField(
+    (settings) => settings.sidebarActivityCoachmarkDismissed,
+  )
+  const setSidebarActivityCoachmarkDismissed = useDesktopSettingsField(
+    (settings) => settings.setSidebarActivityCoachmarkDismissed,
+  )
   const timelineToggleLabel = t(sidebarTimelineEnabled ? '关闭活动视图' : '查看活动')
   const timelineToggleTitle = `${timelineToggleLabel} (Ctrl+Alt+U)`
 
-  const handleNewChat = (): void => {
-    navigate(newSessionPath(sidebarProductMode))
-  }
-
   return (
-    <header
-      className="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:h-9 tw:min-h-9 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-b-transparent tw:data-[scroll-overlap=true]:border-b-app-border-subtle"
-      data-scroll-overlap={scrollOverlapping ? 'true' : 'false'}
-    >
-      <div className="sidebar-header-left tw:flex tw:min-w-0 tw:flex-1 tw:items-center">
-        <Button
-          aria-label={t('新建聊天')}
-          className="sidebar-new-chat-button tw:w-full tw:min-w-0 tw:justify-start tw:text-app-text tw:type-row-title tw:whitespace-nowrap"
-          variant="ghost"
-          size="md"
-          onClick={handleNewChat}
-          title={t('新建聊天')}
-        >
-          <SquarePen aria-hidden="true" size={APP_ICON_SIZE} />
-          <span className="sidebar-new-chat-label tw:min-w-0 tw:overflow-hidden tw:whitespace-nowrap">
-            {t('新聊天')}
-          </span>
-        </Button>
-      </div>
-      {showActions ? (
-        <div className="sidebar-header-actions tw:flex tw:min-w-0 tw:shrink-0 tw:items-center tw:gap-1">
-          <Popover.Root
-            open={
-              !sidebarActivityCoachmarkDismissed &&
-              !sidebarTimelineEnabled &&
-              unreadActivityCount >= 2
-            }
-            onOpenChange={(open) => {
-              if (!open) setSidebarActivityCoachmarkDismissed(true)
+    <>
+      <header
+        className="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:h-9 tw:min-h-9 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-b-transparent tw:data-[scroll-overlap=true]:border-b-app-border-subtle"
+        data-scroll-overlap={scrollOverlapping ? 'true' : 'false'}
+      >
+        <div className="sidebar-header-left tw:flex tw:min-w-0 tw:flex-1 tw:items-center">
+          <Select<SidebarProductMode>
+            ariaLabel={t('产品模式')}
+            value={sidebarProductMode}
+            options={SIDEBAR_PRODUCT_MODE_ORDER.map((value) => ({
+              value,
+              label: SIDEBAR_PRODUCT_MODE_META[value].label,
+              detail: t(SIDEBAR_PRODUCT_MODE_META[value].description),
+            }))}
+            triggerClassName="sidebar-product-mode-select tw:h-7 tw:max-w-full tw:border-transparent tw:bg-transparent tw:shadow-none tw:type-section-title tw:hover:bg-app-hover tw:data-[state=open]:bg-app-selected"
+            onValueChange={(value) => {
+              setSidebarProductMode(value)
+              navigate(newSessionPath(value))
             }}
-          >
-            <Popover.Anchor asChild>
-              <div className="tw:inline-flex">
-                <Tooltip content={timelineToggleTitle} side="bottom">
-                  <Button
-                    isIconOnly
-                    aria-label={timelineToggleLabel}
-                    aria-keyshortcuts="Control+Alt+U"
-                    aria-pressed={sidebarTimelineEnabled}
-                    active={sidebarTimelineEnabled}
-                    className="sidebar-timeline-toggle-button tw:text-app-text-meta tw:hover:text-app-text tw:data-[active=true]:bg-app-selected tw:data-[active=true]:text-app-text"
-                    color="ghost"
-                    iconSize="md"
-                    size="md"
-                    onClick={() => {
-                      if (!sidebarActivityCoachmarkDismissed) {
-                        setSidebarActivityCoachmarkDismissed(true)
-                      }
-                      setSidebarTimelineEnabled((v) => !v)
-                    }}
-                    title={timelineToggleTitle}
-                  >
-                    <Bell aria-hidden="true" size={APP_ICON_SIZE}>
-                      {hasUnread && (
-                        <circle
-                          cx="18"
-                          cy="4"
-                          r="4.5"
-                          fill="var(--cpx-sys-color-accent)"
-                          stroke="none"
-                        />
-                      )}
-                    </Bell>
-                  </Button>
-                </Tooltip>
-              </div>
-            </Popover.Anchor>
-            <Popover.Portal>
-              <Popover.Content
-                size="md"
-                align="start"
-                side="right"
-                sideOffset={12}
-                className="sidebar-activity-coachmark tw:z-50 tw:outline-none"
-              >
-                <div className="tw:flex tw:flex-col tw:gap-2">
-                  <div className="tw:flex tw:items-start tw:justify-between tw:gap-3">
-                    <span className="tw:type-row-title tw:text-app-text">{t('查看活动')}</span>
+          />
+        </div>
+        {showActions ? (
+          <div className="sidebar-header-actions tw:flex tw:min-w-0 tw:shrink-0 tw:items-center tw:gap-1">
+            <Popover.Root
+              open={
+                !sidebarActivityCoachmarkDismissed &&
+                !sidebarTimelineEnabled &&
+                unreadActivityCount >= 2
+              }
+              onOpenChange={(open) => {
+                if (!open) setSidebarActivityCoachmarkDismissed(true)
+              }}
+            >
+              <Popover.Anchor asChild>
+                <div className="tw:inline-flex">
+                  <Tooltip content={timelineToggleTitle} side="bottom">
                     <Button
                       isIconOnly
-                      aria-label={t('关闭')}
-                      title={t('关闭')}
+                      aria-label={timelineToggleLabel}
+                      aria-keyshortcuts="Control+Alt+U"
+                      aria-pressed={sidebarTimelineEnabled}
+                      active={sidebarTimelineEnabled}
+                      className="sidebar-timeline-toggle-button"
                       color="ghost"
-                      size="compact"
-                      onClick={() => setSidebarActivityCoachmarkDismissed(true)}
+                      size="sm"
+                      onClick={() => {
+                        if (!sidebarActivityCoachmarkDismissed) {
+                          setSidebarActivityCoachmarkDismissed(true)
+                        }
+                        setSidebarTimelineEnabled((v) => !v)
+                      }}
+                      title={timelineToggleTitle}
                     >
-                      <X size={APP_ICON_SIZES.sm} />
+                      <Bell aria-hidden="true" size={APP_ICON_SIZE}>
+                        {hasUnread && (
+                          <circle
+                            cx="18"
+                            cy="4"
+                            r="4.5"
+                            fill="var(--cpx-sys-color-accent)"
+                            stroke="none"
+                          />
+                        )}
+                      </Bell>
                     </Button>
-                  </div>
-                  <p className="tw:m-0 tw:type-body-sm tw:text-app-text">
-                    {t('查看未读、进行中或待回复的聊天')}
-                  </p>
+                  </Tooltip>
                 </div>
-                <Popover.Arrow className="tw:fill-app-raised" />
-              </Popover.Content>
-            </Popover.Portal>
-          </Popover.Root>
-          <Button
-            isIconOnly
-            aria-haspopup="dialog"
-            className="sidebar-search-button tw:text-app-text-meta tw:hover:text-app-text"
-            color="ghost"
-            iconSize="md"
-            size="md"
-            onClick={onOpenCommandMenu}
-            title={t('搜索任务')}
-          >
-            <Search size={APP_ICON_SIZE} />
-          </Button>
-        </div>
-      ) : null}
-    </header>
+              </Popover.Anchor>
+              <Popover.Portal>
+                <Popover.Content
+                  size="md"
+                  align="start"
+                  side="right"
+                  sideOffset={12}
+                  className="sidebar-activity-coachmark tw:z-50 tw:outline-none"
+                >
+                  <div className="tw:flex tw:flex-col tw:gap-2">
+                    <div className="tw:flex tw:items-start tw:justify-between tw:gap-3">
+                      <span className="tw:type-row-title tw:text-app-text">{t('查看活动')}</span>
+                      <Button
+                        isIconOnly
+                        aria-label={t('关闭')}
+                        title={t('关闭')}
+                        color="ghost"
+                        size="compact"
+                        onClick={() => setSidebarActivityCoachmarkDismissed(true)}
+                      >
+                        <X size={APP_ICON_SIZES.sm} />
+                      </Button>
+                    </div>
+                    <p className="tw:m-0 tw:type-body-sm tw:text-app-text">
+                      {t('查看未读、进行中或待回复的聊天')}
+                    </p>
+                  </div>
+                  <Popover.Arrow className="tw:fill-app-raised" />
+                </Popover.Content>
+              </Popover.Portal>
+            </Popover.Root>
+            <Button
+              isIconOnly
+              aria-haspopup="dialog"
+              className="sidebar-search-button"
+              color="ghost"
+              size="sm"
+              onClick={onOpenCommandMenu}
+              title={t('搜索任务')}
+            >
+              <Search size={APP_ICON_SIZE} />
+            </Button>
+          </div>
+        ) : null}
+      </header>
+      <SidebarNewTaskNav
+        label="新聊天"
+        isActiveView={(view) => view === 'new' && location.pathname === '/new'}
+        scrollOverlapping={scrollOverlapping}
+      />
+    </>
   )
 }
 
@@ -410,7 +423,7 @@ export function SidebarTopNav({
   showProjects,
 }: Props): React.ReactNode {
   const { t } = useLocale()
-  const { sidebarProductMode } = useDesktopSettings()
+  const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
   const { scrollableItems } = splitSidebarTopNavItems(
     getSidebarTopNavItems({
       showProjects,
@@ -444,7 +457,7 @@ export function SidebarNewTaskNav({
   scrollOverlapping: boolean
 }): React.ReactNode {
   const { t } = useLocale()
-  const { sidebarProductMode } = useDesktopSettings()
+  const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
   const { fixedItems } = splitSidebarTopNavItems(
     getSidebarTopNavItems({
       showProjects: false,

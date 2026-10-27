@@ -49,7 +49,11 @@ import {
   type ProviderUsageSource,
 } from '../../../utils/UsageFormatters.js'
 import { cx } from '../../../utils/Cx.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsField,
+} from '../../settings/UseDesktopSettings.js'
 
 type PopoverUsageRow = {
   id: string
@@ -85,7 +89,10 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
   const location = useLocation()
   const navigate = useNavigate()
   const { t } = useLocale()
-  const { draft, model, providerID: configuredProviderID } = useDesktopSettings()
+  const model = useDesktopSettingsField((settings) => settings.model)
+  const configuredProviderID = useDesktopSettingsField((settings) => settings.providerID)
+  const draftActions = useDesktopSettingsDraftActions()
+  const petEnabled = useDesktopSettingsDraftValue('pet').enabled
   const [menuOpen, setMenuOpen] = useState(false)
   const accountMenuTriggerRef = useRef<HTMLButtonElement>(null)
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
@@ -99,7 +106,6 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
   const [petToggleBusy, setPetToggleBusy] = useState(false)
   const settingsActive = location.pathname.startsWith('/settings/')
   const usageAvailable = Boolean(configuredProviderID && model)
-  const petEnabled = draft.values.pet.enabled
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null)
   const updateIndicator = buildDesktopUpdateIndicatorModel(updateStatus)
 
@@ -192,17 +198,17 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
         }
         await bridge.hidePetOverlay()
       }
-      draft.setValue('pet', (current) => ({
+      draftActions.setValue('pet', (current) => ({
         ...current,
         enabled: nextEnabled,
       }))
-      draft.autoSave()
+      draftActions.autoSave()
     } catch (error) {
       onReport(error instanceof Error ? error.message : String(error))
     } finally {
       setPetToggleBusy(false)
     }
-  }, [draft, onReport, petEnabled, petToggleBusy])
+  }, [draftActions, onReport, petEnabled, petToggleBusy])
 
   const usageRows = useMemo<PopoverUsageRow[]>(() => buildUsageRows(usage), [usage])
   const githubAuthenticated = githubAuth?.authenticated === true

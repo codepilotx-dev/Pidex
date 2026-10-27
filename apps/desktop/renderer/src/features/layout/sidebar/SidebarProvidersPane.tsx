@@ -13,7 +13,7 @@ import {
   updateModelCenterSearchParams,
 } from '../../models/ModelCenterState.js'
 import { ProviderIcon } from '../../models/ProviderIcon.js'
-import { useProviderManagementSnapshot } from '../../provider-management/index.js'
+import { useProviderManagementStore, useShallow } from '../../provider-management/index.js'
 import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
 
 export function SidebarProvidersPane(): React.ReactNode {
@@ -21,7 +21,17 @@ export function SidebarProvidersPane(): React.ReactNode {
   const navigate = useNavigate()
   const location = useLocation()
   const [searchParams] = useSearchParams()
-  const snapshot = useProviderManagementSnapshot()
+  const configuration = useProviderManagementStore(
+    useShallow((state) => ({
+      loaded: state.configuration.loaded,
+      loading: state.configuration.loading,
+      error: state.configuration.error,
+      providers: state.configuration.providers,
+      currentProviderState: state.configuration.currentProviderState,
+      apiKeys: state.configuration.apiKeys,
+      credentials: state.configuration.credentials,
+    })),
+  )
   const [query, setQuery] = useState('')
   const onProvidersRoute = location.pathname === '/providers'
   const selectedProviderId = onProvidersRoute ? searchParams.get('provider') : null
@@ -29,19 +39,19 @@ export function SidebarProvidersPane(): React.ReactNode {
   const onMarketRoute = onProvidersRoute && !selectedProviderId && !creatingProvider
   const items = useMemo(
     () =>
-      projectProviderDirectory(snapshot.providers, {
+      projectProviderDirectory(configuration.providers, {
         query,
-        currentProviderId: snapshot.currentProviderState?.selectedProviderID,
-        currentProviderState: snapshot.currentProviderState,
-        apiKeys: snapshot.apiKeys,
-        credentials: snapshot.credentials,
+        currentProviderId: configuration.currentProviderState?.selectedProviderID,
+        currentProviderState: configuration.currentProviderState,
+        apiKeys: configuration.apiKeys,
+        credentials: configuration.credentials,
       }).sort((left, right) =>
         left.provider.displayName.localeCompare(right.provider.displayName, 'zh-CN', {
           numeric: true,
           sensitivity: 'base',
         }),
       ),
-    [snapshot, query],
+    [configuration, query],
   )
 
   function selectProvider(providerId: string): void {
@@ -52,8 +62,9 @@ export function SidebarProvidersPane(): React.ReactNode {
     navigate(`/providers?${next.toString()}`)
   }
 
-  const loading = !snapshot.loaded && snapshot.loading
-  const error = snapshot.error && snapshot.providers.length === 0 ? snapshot.error : null
+  const loading = !configuration.loaded && configuration.loading
+  const error =
+    configuration.error && configuration.providers.length === 0 ? configuration.error : null
 
   return (
     <div className="sidebar-providers-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
