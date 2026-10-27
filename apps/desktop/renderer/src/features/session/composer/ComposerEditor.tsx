@@ -3,7 +3,7 @@ import { history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history'
 import { baseKeymap, splitBlock } from 'prosemirror-commands'
 import { keymap } from 'prosemirror-keymap'
 import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
-import { AllSelection, EditorState, NodeSelection, TextSelection } from 'prosemirror-state'
+import { AllSelection, EditorState, NodeSelection, Plugin, TextSelection } from 'prosemirror-state'
 import type { Transaction } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
@@ -11,6 +11,11 @@ import { useEditCommands } from '../../../components/ui/EditCommandProvider.js'
 import type { ComposerDocument, ComposerDocumentToken } from './ComposerTypes.js'
 import { composerDocumentsEqual } from './ComposerSkillToken.js'
 import { focusComposerIfAvailable } from './ComposerFocus.js'
+
+/** 只读编辑器的文档不可变：仍可选中/复制，但不应用任何改动。 */
+const readOnlyPlugin = new Plugin({
+  filterTransaction: (transaction) => transaction.docChanged === false,
+})
 
 export const composerSchema = new Schema({
   nodes: {
@@ -105,6 +110,8 @@ export type ComposerEditorProps = {
   ariaDescribedBy?: string
   ariaActiveDescendant?: string
   ariaExpanded: boolean
+  /** 只读模式：保留内容与焦点，但不接受编辑、粘贴或快捷键提交。 */
+  readOnly?: boolean
   onChange: (value: string) => void
   onDocumentChange?: (document: ComposerDocument) => void
   onTokenActivate?: (token: ComposerDocumentToken) => void
@@ -126,6 +133,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       ariaDescribedBy,
       ariaActiveDescendant,
       ariaExpanded,
+      readOnly = false,
       onChange,
       onDocumentChange,
       onTokenActivate,
@@ -221,6 +229,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
             'Mod-y': redo,
           }),
           keymap(baseKeymap),
+          ...(readOnly ? [readOnlyPlugin] : []),
         ],
       })
 
@@ -230,6 +239,8 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           'aria-label': '消息输入框',
           role: 'combobox',
           'aria-autocomplete': 'list',
+          'aria-readonly': readOnly ? 'true' : undefined,
+          'data-composer-readonly': readOnly ? 'true' : undefined,
           spellcheck: 'true',
           class: 'composer-editor-content',
         },
@@ -341,7 +352,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       }
       // The view owns its lifetime; callback changes flow through callbacksRef.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [registerTarget])
+    }, [registerTarget, readOnly])
 
     useEffect(() => {
       if (!focusKey) return

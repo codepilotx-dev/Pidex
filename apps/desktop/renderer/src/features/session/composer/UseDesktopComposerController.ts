@@ -32,6 +32,14 @@ import type {
 import { createComposerDocument } from './ComposerTypes.js'
 import { createTaskSession, executeComposerSubmitTransaction } from './ComposerSubmitTransaction.js'
 import { composerDraftStore } from './ComposerDraftStore.js'
+import {
+  createPendingSubmission,
+  isOnPendingSubmissionPage,
+  pendingSubmissionStore,
+  startPendingSubmission,
+  type PendingSubmission,
+} from '../state/PendingSubmissionStore.js'
+import { QUICK_CHAT_PATH } from '../../layout/shell/UseWorkbenchRouteController.js'
 import { annotationAttachments } from '../../browser/BrowserAnnotationDraft.js'
 import {
   composerDocumentsEqual,
@@ -83,6 +91,8 @@ type ControllerOptions = {
   ) => Promise<string | null>
   /** Global error notification for failures that block sending. */
   onError?: (message: string) => void
+  /** Current route path; defaults to the window hash so pending checks follow replace navigation. */
+  readPathname?: () => string
   submitToSession: (
     targetSessionId: string,
     value: DesktopUserMessageInput,
@@ -162,6 +172,7 @@ export function useDesktopComposerController({
   createSessionForWorkspace,
   submitToSession,
   onError,
+  readPathname = () => (typeof window === 'undefined' ? '' : window.location.hash.replace(/^#/, '')),
 }: ControllerOptions) {
   const navigate = useNavigate()
   function setGoalModeEnabled(enabled: boolean): void {
@@ -389,9 +400,26 @@ export function useDesktopComposerController({
     }
     composerDraftStore.set(sourceDraftKey, draft)
     const isNewSession = placement === 'new-session'
+    let pendingSubmission: PendingSubmission | null = null
+    let pendingSessionId: string | null = null
     const outcome = await executeComposerSubmitTransaction({
       draft,
       targetSessionId: isNewSession ? null : routedSessionId,
+      // 校验通过后立即登记 pending 并进入临时会话页；创建不再阻塞首屏。
+      onPrepared: isNewSession
+        ? (prepared) => {
+            const submission = createPendingSubmission({
+              prepared,
+              sourceDraftKey,
+              workspace,
+            })
+            pendingSubmission = submission
+            startPendingSubmission({
+              submission,
+              navigate: (path) => navigate(path, { replace: true }),
+            })
+          }
+        : undefined,
       createSession: isNewSession
         ? (initialSessionName, projectlessPrompt) =>
             createTaskSession({
@@ -407,16 +435,28 @@ export function useDesktopComposerController({
                 ),
             })
         : undefined,
+      // 创建成功后先交接草稿，再用真实会话页替换临时路由。
+      onSessionCreated: isNewSession
+        ? (nextSessionId) => {
+            pendingSessionId = nextSessionId
+            const handoff = composerDraftStore.handoff(
+              sourceDraftKey,
+              draftTargetKey(nextSessionId),
+            )
+            if (handoff) draftClientIdRef.current = handoff.submitted.clientId
+            if (pendingSubmission) {
+              pendingSubmissionStore.update(pendingSubmission.submissionId, {
+                sessionId: nextSessionId,
+                stage: 'sending',
+              })
+            }
+          }
+        : undefined,
       // Keep navigation before submission so the routed page owns all
       // streaming state from the first response event onward.
-      navigateToSession: (nextSessionId) => {
-        const targetDraftKey: ComposerDraftKey = `session:${nextSessionId}`
-        const handoff = composerDraftStore.handoff(sourceDraftKey, targetDraftKey)
-        if (handoff && activeDraftKeyRef.current === sourceDraftKey) {
-          draftClientIdRef.current = handoff.replacement.clientId
-        }
-        navigate(sessionPath(nextSessionId))
-      },
+      navigateToSession: isNewSession
+        ? (nextSessionId) => navigate(sessionPath(nextSessionId), { replace: true })
+        : undefined,
       submitToSession: async (targetSessionId, value, metadata) => {
         const result = await submitToSession(targetSessionId, value, {
           delivery,
@@ -430,9 +470,13 @@ export function useDesktopComposerController({
     })
     setLastSubmitOutcome(outcome)
 
+    if (pendingSubmission) settlePendingSubmission(pendingSubmission, outcome)
+
     if (outcome.status === 'failed') {
-      const failureDraftKey: ComposerDraftKey = outcome.sessionId
-        ? `session:${outcome.sessionId}`
+      // 创建失败且用户仍停留该 pending 页时，草稿回到来源页而不是发往不存在的会话。
+      const failedSessionId = outcome.sessionId ?? pendingSessionId
+      const failureDraftKey: ComposerDraftKey = failedSessionId
+        ? draftTargetKey(failedSessionId)
         : sourceDraftKey
       composerDraftStore.setSubmitOutcome(failureDraftKey, outcome)
       if (outcome.phase === 'send') {
@@ -442,7 +486,7 @@ export function useDesktopComposerController({
     }
 
     const acceptedDraftKey: ComposerDraftKey = isNewSession
-      ? `session:${outcome.sessionId}`
+      ? draftTargetKey(outcome.sessionId)
       : sourceDraftKey
     const clearContent = onDraftAccepted
       ? onDraftAccepted(acceptedDraftKey, snapshot) !== false
@@ -459,6 +503,40 @@ export function useDesktopComposerController({
       draftClientIdRef.current = nextDraft.clientId
     }
     if (workingPlugin) onWorkingPluginChange?.(null)
+  }
+
+  /**
+   * pending 页只负责首屏展示：创建失败时退回来源页并保留原稿，
+   * 发送失败时真实会话页已经接上，这里只移除启动提示。
+   */
+  function settlePendingSubmission(
+    submission: PendingSubmission,
+    outcome: ComposerSubmitOutcome,
+  ): void {
+    const stillOnPendingPage = isOnPendingSubmissionPage(
+      readPathname(),
+      submission.submissionId,
+    )
+    if (outcome.status !== 'failed') {
+      pendingSubmissionStore.remove(submission.submissionId)
+      return
+    }
+    if (outcome.sessionId) {
+      // 发送失败：草稿已在真实会话页，保持可重试并移除启动提示。
+      pendingSubmissionStore.remove(submission.submissionId)
+      return
+    }
+    if (stillOnPendingPage) {
+      // 创建失败：退回来源页，原稿写入来源草稿键后再清理临时目标。
+      composerDraftStore.revertHandoff(
+        submission.sourceDraftKey,
+        draftTargetKey(submission.submissionId),
+        draft,
+      )
+      composerDraftStore.setSubmitOutcome(submission.sourceDraftKey, outcome)
+      navigate(sourceDraftPath(submission.sourceDraftKey), { replace: true })
+    }
+    pendingSubmissionStore.remove(submission.submissionId)
   }
 
   async function handleAddFiles(files: FileList): Promise<void> {
@@ -689,6 +767,14 @@ function attachmentKindLabel(kind: DesktopComposerAttachment['kind']): string {
 
 function sessionPath(sessionId: string): string {
   return `/threads/${encodeURIComponent(sessionId)}`
+}
+
+function draftTargetKey(sessionId: string): ComposerDraftKey {
+  return `session:${sessionId}`
+}
+
+function sourceDraftPath(sourceDraftKey: ComposerDraftKey): string {
+  return sourceDraftKey === 'home' ? QUICK_CHAT_PATH : sessionPath(sourceDraftKey.slice(8))
 }
 
 function draftSkills(draft: ComposerDraft): ComposerSkillInvocation[] {

@@ -22,11 +22,14 @@ export type ComposerDeliveryStatus = 'sent' | 'queued'
 type SubmitTransactionOptions = {
   draft: ComposerDraft
   targetSessionId?: string | null
+  /** 校验通过、开始创建前调用；用于在校验失败前不登记任何临时状态。 */
+  onPrepared?: (prepared: PreparedComposerSubmission) => void
   createSession?: (
     initialSessionName?: string,
     projectlessPrompt?: string,
   ) => Promise<string | null>
   navigateToSession?: (sessionId: string) => void
+  onSessionCreated?: (sessionId: string) => void
   submitToSession: (
     sessionId: string,
     input: DesktopUserMessageInput,
@@ -122,12 +125,15 @@ function escapeMarkdownLabel(value: string): string {
 export async function executeComposerSubmitTransaction({
   draft,
   targetSessionId,
+  onPrepared,
   createSession,
   navigateToSession,
+  onSessionCreated,
   submitToSession,
 }: SubmitTransactionOptions): Promise<ComposerSubmitOutcome> {
   const prepared = prepareComposerSubmission(draft)
   if ('status' in prepared) return prepared
+  onPrepared?.(prepared)
 
   let sessionId = targetSessionId ?? null
   if (!sessionId) {
@@ -142,6 +148,7 @@ export async function executeComposerSubmitTransaction({
     if (!sessionId) {
       return failed('create', '无法创建新会话')
     }
+    onSessionCreated?.(sessionId)
     navigateToSession?.(sessionId)
   }
 

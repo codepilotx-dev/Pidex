@@ -40,3 +40,20 @@ export function useConversationItemContext(): ConversationItemContextValue {
   }
   return context
 }
+
+/**
+ * 可复用的消息展示只依赖可选上下文：pending 首条消息等尚未进入 canonical
+ * 投影的呈现可以在没有完整回调的环境里退化展示，而不是抛出错误。
+ */
+export const OPTIONAL_CONVERSATION_ITEM_CONTEXT: ConversationItemContextValue = {
+  canCopyFileReferenceContents: () => false,
+  onCopyFileReferenceContents: () => undefined,
+  onOpenFileReference: () => undefined,
+  onSubmitEditedUserMessage: async () => undefined,
+  sessionStatus: 'idle',
+  workspacePath: null,
+}
+
+export function useOptionalConversationItemContext(): ConversationItemContextValue {
+  return useContext(ConversationItemContext) ?? OPTIONAL_CONVERSATION_ITEM_CONTEXT
+}

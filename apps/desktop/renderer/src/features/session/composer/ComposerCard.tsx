@@ -287,6 +287,8 @@ type Props = {
   draftKey: ComposerDraftKey
   input: string
   canSubmit: boolean
+  /** 首次提交仍在创建会话：冻结输入区并隐藏停止入口。 */
+  creationPending?: boolean
   sessionStatus: DesktopSessionStatus
   permissionMode: DesktopPermissionMode
   planModeActive?: boolean
@@ -415,6 +417,7 @@ export function ComposerCard({
   draftKey,
   input,
   canSubmit,
+  creationPending = false,
   sessionStatus,
   permissionMode,
   planModeActive = false,
@@ -1237,7 +1240,7 @@ export function ComposerCard({
   }
 
   const isRunning = sessionStatus === 'running' || sessionStatus === 'waiting'
-  const showStopAction = isRunning && !canSubmit
+  const showStopAction = isRunning && !canSubmit && !creationPending
   const stopping = showStopAction && isStopping
   useEffect(() => {
     if (isRunning) return
@@ -1580,6 +1583,7 @@ export function ComposerCard({
               ariaControls={unifiedMenuOpen ? menuId : undefined}
               ariaDescribedBy={inlineSubmitFailure ? submitErrorId : undefined}
               ariaExpanded={unifiedMenuOpen}
+              readOnly={creationPending}
               ref={editorRef}
               focusKey={subagentMode ? undefined : (draftKey ?? placement)}
               document={composerDocument}

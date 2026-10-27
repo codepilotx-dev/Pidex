@@ -77,6 +77,8 @@ export type DesktopComposerProps = {
   onWorkingPluginChange?: (plugin: WorkingPlugin | null) => void
   onWorkingPluginAvailabilityChange?: (available: boolean) => void
   onSkillTokenActivate?: (skill: { name: string; path: string }) => void
+  /** 首次提交仍在创建会话：冻结输入区并隐藏停止入口。 */
+  creationPending?: boolean
   placeholder?: string
   routedSessionId: string | null
   sessionStatus: DesktopSessionStatus
@@ -165,6 +167,8 @@ export type DesktopComposerProps = {
   threadGoal?: DesktopThreadGoal | null
   /** Global error notification for failures that block sending. */
   onError?: (message: string) => void
+  /** Current route path used to decide whether a failed creation should navigate back. */
+  readPathname?: () => string
   onGoalPause?: () => void
   onGoalResume?: () => void
   onGoalComplete?: () => void
@@ -189,6 +193,7 @@ export function DesktopComposer({
   onWorkingPluginAvailabilityChange,
   onSkillTokenActivate,
   placeholder: placeholderOverride,
+  creationPending = false,
   routedSessionId,
   sessionStatus,
   permissionMode,
@@ -248,6 +253,7 @@ export function DesktopComposer({
   createSessionForWorkspace,
   submitToSession,
   onError,
+  readPathname,
   queuedFollowUps,
   queuePauseReason,
   onFollowUpEdit,
@@ -319,6 +325,7 @@ export function DesktopComposer({
     createSessionForWorkspace,
     submitToSession,
     onError,
+    readPathname,
   })
 
   useEffect(() => {
@@ -404,6 +411,7 @@ export function DesktopComposer({
       workingPlugin={workingPlugin}
       onWorkingPluginChange={handleWorkingPluginChange}
       submitting={isSubmitting}
+      creationPending={creationPending}
       submitOutcome={lastSubmitOutcome}
       goalModeEnabled={goalModeEnabled}
       onGoalModeChange={setGoalModeEnabled}

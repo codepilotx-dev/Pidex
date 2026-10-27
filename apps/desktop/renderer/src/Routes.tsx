@@ -10,6 +10,7 @@ import { RouteErrorPage } from './features/routing/RouteErrorPage.js'
 import { RequireConfiguredModel } from './features/models/setup/RequireConfiguredModel.js'
 import { AutomationView } from './features/automation/AutomationView.js'
 import { ConversationPage } from './features/session/conversation/ConversationPage.js'
+import { PendingSubmissionPage } from './features/session/conversation/PendingSubmissionPage.js'
 import { PluginsView } from './features/plugins/PluginsView.js'
 import { ProjectsView } from './features/projects/ProjectsView.js'
 import { PullRequestsPlaceholder } from './features/pull-requests/PullRequestsPlaceholder.js'
@@ -98,6 +99,7 @@ const router = createHashRouter([
           { index: true, element: <Navigate to="/new" replace /> },
           { path: 'new', element: <QuickChatView /> },
           { path: 'threads/:threadId', element: <ConversationPage /> },
+          { path: 'pending/:submissionId', element: <PendingSubmissionPage /> },
           { path: 'projects', element: <ProjectsView /> },
           { path: 'projects/:projectId', element: <ProjectsView /> },
           { path: 'workflows', element: <SessionGroupsView /> },

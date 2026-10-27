@@ -1,10 +1,6 @@
 import React from 'react'
 
 import { cx } from '../../../utils/Cx.js'
-import {
-  distanceFromThreadBottom,
-  scrollOffsetForThreadBottomDistance,
-} from './UseThreadScrollController.js'
 
 export type ThreadScrollLayoutProps = {
   children: React.ReactNode
@@ -20,9 +16,16 @@ const THREAD_FOOTER_GAP_PX = 16
 /**
  * Owns the thread's only scrolling element and its sticky footer.
  *
- * The footer remains in normal flow, so the last virtualized row is never
- * covered by the composer. Its measured height is also exposed as a scroll
- * padding token for focus navigation and imperative scrolling.
+ * Layout follows the single-scroller contract: the scroll container is bounded
+ * by its parent, the content column keeps a `min-height: 100%` growth floor and
+ * never shrinks, and the footer stays in normal flow at the bottom with
+ * `position: sticky`. The last virtualized row is therefore never covered by the
+ * composer, and the footer's measured height is exposed as a scroll padding token
+ * for focus navigation and imperative scrolling.
+ *
+ * Measurement only publishes geometry. Follow/hold decisions belong to
+ * `useThreadScrollController`, so a footer resize can never steal the reader's
+ * position on its own.
  */
 export function ThreadScrollLayout({
   children,
@@ -33,9 +36,8 @@ export function ThreadScrollLayout({
   footerClassName,
 }: ThreadScrollLayoutProps): React.ReactNode {
   const measuredInsetRef = React.useRef(THREAD_FOOTER_GAP_PX)
-  const previousFooterHeightRef = React.useRef(0)
-  const previousViewportHeightRef = React.useRef(0)
   const writtenInsetRef = React.useRef<string | null>(null)
+  const hasFooter = Boolean(footer)
 
   const writeMeasuredInset = React.useCallback(
     (focusWithin: boolean): void => {
@@ -47,12 +49,17 @@ export function ThreadScrollLayout({
     [scrollRef],
   )
 
+  // The effect depends on `hasFooter` instead of the slot element itself: the
+  // footer is inline JSX from the host, so a new node identity on every render
+  // would rebuild the observer on each streaming frame.
   React.useLayoutEffect(() => {
     const scrollElement = scrollRef.current
     const footerElement = footerRef.current
     if (!scrollElement) return
-    if (!footerElement) {
+    if (!hasFooter || !footerElement) {
+      writtenInsetRef.current = '0px'
       scrollElement.style.setProperty('--thread-scroll-footer-height', '0px')
+      scrollElement.style.setProperty('--thread-scroll-padding-bottom', '0px')
       return
     }
     writtenInsetRef.current = null
@@ -60,6 +67,8 @@ export function ThreadScrollLayout({
     let measureFrame: number | null = null
     let observedFooterHeight: number | null = null
     let observedViewportHeight: number | null = null
+    let appliedFooterHeight = -1
+    let appliedViewportHeight = -1
 
     const measureLayout = (): void => {
       measureFrame = null
@@ -69,34 +78,18 @@ export function ThreadScrollLayout({
       const viewportHeight = Math.ceil(observedViewportHeight ?? scrollElement.clientHeight)
       observedFooterHeight = null
       observedViewportHeight = null
-      const previousFooterHeight = previousFooterHeightRef.current
-      const footerHeightDelta = footerHeight - previousFooterHeight
-      const scrollSize = scrollElement.scrollHeight
-      const previousDistance = Math.max(
-        0,
-        distanceFromThreadBottom({
-          scrollOffset: scrollElement.scrollTop,
-          scrollSize,
-          viewportSize: viewportHeight,
-        }) - footerHeightDelta,
-      )
-      previousFooterHeightRef.current = footerHeight
-      measuredInsetRef.current = footerHeight + THREAD_FOOTER_GAP_PX
-      scrollElement.style.setProperty('--thread-scroll-footer-height', `${footerHeight}px`)
-      if (previousViewportHeightRef.current !== viewportHeight) {
-        previousViewportHeightRef.current = viewportHeight
+
+      if (appliedFooterHeight !== footerHeight) {
+        appliedFooterHeight = footerHeight
+        measuredInsetRef.current = footerHeight + THREAD_FOOTER_GAP_PX
+        writtenInsetRef.current = null
+        scrollElement.style.setProperty('--thread-scroll-footer-height', `${footerHeight}px`)
+      }
+      if (appliedViewportHeight !== viewportHeight) {
+        appliedViewportHeight = viewportHeight
         scrollElement.style.setProperty('--thread-scroll-viewport-height', `${viewportHeight}px`)
       }
       writeMeasuredInset(footerElement.contains(document.activeElement))
-
-      if (previousFooterHeight === 0 || previousFooterHeight === footerHeight) {
-        return
-      }
-
-      scrollElement.scrollTop = scrollOffsetForThreadBottomDistance(
-        { scrollSize, viewportSize: viewportHeight },
-        previousDistance,
-      )
     }
 
     const scheduleMeasure = (entries: ResizeObserverEntry[]): void => {
@@ -119,7 +112,7 @@ export function ThreadScrollLayout({
       observer?.disconnect()
       if (measureFrame !== null) cancelAnimationFrame(measureFrame)
     }
-  }, [footer, footerRef, scrollRef, writeMeasuredInset])
+  }, [footerRef, hasFooter, scrollRef, writeMeasuredInset])
 
   const handleFooterFocusCapture = React.useCallback((): void => {
     writeMeasuredInset(true)
@@ -136,22 +129,22 @@ export function ThreadScrollLayout({
     <div
       ref={scrollRef}
       className={[
-        'thread-scroll-layout tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:w-full tw:flex-1 tw:overflow-x-hidden tw:overflow-y-auto tw:overscroll-contain tw:[overflow-anchor:none] tw:[scroll-padding-block-end:var(--thread-scroll-padding-bottom)] ',
+        'thread-scroll-layout tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-x-hidden tw:overflow-y-auto tw:overscroll-contain tw:[overflow-anchor:none] tw:[scrollbar-gutter:stable] tw:[scroll-padding-block-end:var(--thread-scroll-padding-bottom)] ',
         className,
       ]
         .filter(Boolean)
         .join(' ')}
       data-component="thread-scroll-layout"
     >
-      <div className="thread-scroll-layout__inner tw:flex tw:min-w-0 tw:min-h-full tw:flex-col">
-        <div className="thread-scroll-layout__content tw:flex tw:min-w-0 tw:min-h-0 tw:flex-[1_0_auto] tw:flex-col">
+      <div className="thread-scroll-layout__inner tw:flex tw:min-w-0 tw:min-h-full tw:shrink-0 tw:flex-col">
+        <div className="thread-scroll-layout__content tw:flex tw:min-w-0 tw:shrink-0 tw:flex-col">
           {children}
         </div>
-        {footer ? (
+        {hasFooter ? (
           <footer
             ref={footerRef}
             className={cx(
-              'thread-scroll-layout__footer tw:sticky tw:bottom-0 tw:isolate tw:z-3 tw:flex tw:w-full tw:flex-none tw:justify-center tw:pointer-events-none tw:[&>*]:pointer-events-auto',
+              'thread-scroll-layout__footer tw:sticky tw:bottom-0 tw:isolate tw:z-3 tw:mt-auto tw:flex tw:w-full tw:shrink-0 tw:justify-center tw:pointer-events-none tw:[&>*]:pointer-events-auto',
               footerClassName ?? 'tw:px-4 tw:pb-4',
             )}
             onFocusCapture={handleFooterFocusCapture}

@@ -133,6 +133,35 @@ export class ComposerDraftStore {
     return cloneDraft(next)
   }
 
+  /** 删除已交接到真实会话但尚未发送的草稿，不为其生成替代草稿。 */
+  discard(key: ComposerDraftKey): void {
+    this.#lazy.delete(key)
+    this.#store.setState((state) => {
+      if (!(key in state.drafts)) return state
+      const { [key]: _discarded, ...drafts } = state.drafts
+      return { drafts }
+    })
+  }
+
+  /**
+   * 撤销一次尚未发送的交手：把草稿放回来源页，并放弃已经交给目标会话的副本。
+   * 只在尚未进入真实会话时使用，避免覆盖目标页正在使用的草稿。
+   */
+  revertHandoff(
+    from: ComposerDraftKey,
+    to: ComposerDraftKey,
+    submitted: ComposerDraft,
+  ): ComposerDraft {
+    this.#lazy.delete(from)
+    this.#lazy.delete(to)
+    this.#store.setState((state) => {
+      const { [to]: _target, ...drafts } = state.drafts
+      const restored = cloneDraft(submitted)
+      return { drafts: { ...drafts, [from]: restored } }
+    })
+    return cloneDraft(submitted)
+  }
+
   setSkills(key: ComposerDraftKey, skills: ComposerSkillInvocation[]): ComposerDraft {
     const next = this.update(key, (current) => ({ ...current, skills, skillInvocation: undefined }))
     return next

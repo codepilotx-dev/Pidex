@@ -1,7 +1,7 @@
 import { chooseSessionGroupForThread } from '../../session-groups/SessionGroupActions.js'
 import React from 'react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
 import { useStore } from 'zustand/react'
 import { Dropdown as DropdownMenu } from '../../../components/ui/floating/Dropdown.js'
 import { commandMenuActionStore } from '../../search/CommandMenuActionStore.js'
@@ -75,6 +75,13 @@ import { ThreadComposerDock } from './ThreadComposerDock.js'
 import { ThreadScrollLayout } from './ThreadScrollLayout.js'
 import { ConversationTurnNavRail, type TurnNavigationReason } from './ConversationTurnNavRail.js'
 import { useConversationTurnRowVisibility } from './UseConversationTurnRowVisibility.js'
+import { PendingSubmissionMessages } from './PendingSubmissionView.js'
+import {
+  hasPendingInput,
+  pendingSubmissionStore,
+  shouldDeferThreadLoading,
+  type PendingSubmission,
+} from '../state/PendingSubmissionStore.js'
 import { useThreadBookmarks } from './UseThreadBookmarks.js'
 import {
   ThreadSummaryErrorBoundary,
@@ -265,9 +272,62 @@ export function ConversationPage(): React.ReactNode {
     if (!activeSessionId) return
     return () => desktopClient.publishCanonicalSessionStatus(activeSessionId, null)
   }, [activeSessionId])
+  const { submissionId: routeSubmissionId } = useParams()
+  const pendingSubmissions = useStore(pendingSubmissionStore.store, (state) => state.submissions)
+  const pendingSubmission = routeSubmissionId
+    ? (pendingSubmissions[routeSubmissionId] ?? null)
+    : null
+  // 记录本次首条消息：canonical projection 出现同一 inputId 前后都引用该提交。
+  const handedOffSubmissionRef = React.useRef<{
+    threadId: string
+    inputId: string
+    submission: PendingSubmission
+  } | null>(null)
+  if (handedOffSubmissionRef.current?.threadId !== activeSessionId) {
+    handedOffSubmissionRef.current = null
+  }
+  if (pendingSubmission && activeSessionId) {
+    handedOffSubmissionRef.current = {
+      threadId: activeSessionId,
+      inputId: pendingSubmission.submissionId,
+      submission: pendingSubmission,
+    }
+  }
+  const handoff =
+    handedOffSubmissionRef.current?.threadId === activeSessionId
+      ? handedOffSubmissionRef.current
+      : null
   const isThreadLoading =
     isConversationLoading ||
     (canonicalConversation.loading && canonicalConversation.turns.length === 0)
+  const deferThreadLoading = shouldDeferThreadLoading({
+    firstInputId: pendingSubmission?.submissionId ?? handoff?.inputId,
+    isCurrentFirstSubmit: Boolean(pendingSubmission || handoff),
+    loading: canonicalConversation.loading,
+    turnCount: canonicalConversation.turns.length,
+    error: canonicalConversation.error,
+  })
+  // 同一批历史里已经包含首条消息时直接展示 canonical 投影，避免消息重复。
+  const firstInputInProjection = handoff
+    ? hasPendingInput(canonicalConversation.state?.inputsById.keys() ?? [], handoff.inputId)
+    : true
+  if (handoff && firstInputInProjection) handedOffSubmissionRef.current = null
+  /**
+   * 首次提交在两个阶段只显示一份用户消息：尚未建立会话时展示 pending 快照，
+   * 真实页面在 canonical 投影出现同一 inputId 前继续展示它。
+   */
+  const firstSubmittedMessage = isThreadLoading
+    ? null
+    : pendingSubmission ? (
+        <PendingSubmissionMessages submission={pendingSubmission} />
+      ) : handoff && !firstInputInProjection ? (
+        <PendingSubmissionMessages submission={handoff.submission} />
+      ) : null
+  // pending 路由刷新后记录已不存在：回到新聊天页，不自动重发。
+  const isUnknownPendingRoute = Boolean(routeSubmissionId) && !pendingSubmission
+  React.useEffect(() => {
+    if (isUnknownPendingRoute) navigate('/new', { replace: true })
+  }, [isUnknownPendingRoute, navigate])
   const effectiveSessionStatus = canonicalAuxiliary.sessionStatus ?? sessionStatus
   const navigateToForkTarget = React.useCallback(
     (targetThreadId: string) => {
@@ -309,7 +369,26 @@ export function ConversationPage(): React.ReactNode {
   const inlineInputRef = React.useRef<HTMLInputElement | null>(null)
   const activeSessionIdRef = React.useRef(activeSessionId)
   activeSessionIdRef.current = activeSessionId
-
+  // 从 pending 路由接管后继续展示提交快照，直到 canonical 投影出现同一 inputId。
+  const recordHandedOffSubmission = React.useCallback(
+    (submission: PendingSubmission, threadId: string) => {
+      handedOffSubmissionRef.current = {
+        threadId,
+        inputId: submission.submissionId,
+        submission,
+      }
+    },
+    [],
+  )
+  React.useEffect(() => {
+    if (!pendingSubmission || !activeSessionId) return
+    recordHandedOffSubmission(pendingSubmission, activeSessionId)
+  }, [activeSessionId, pendingSubmission, recordHandedOffSubmission])
+  // 创建阶段暂停编辑与发送，但不显示可用的停止按钮；成功后按正常会话解锁。
+  const pendingCreationLocked = Boolean(pendingSubmission) && !pendingSubmission?.sessionId
+  const composerPropsForPage = composerProps
+    ? { ...composerProps, creationPending: pendingCreationLocked }
+    : null
   React.useEffect(() => {
     setIsInlineEditing(false)
     skipNextBlurSaveRef.current = false
@@ -1363,7 +1442,7 @@ export function ConversationPage(): React.ReactNode {
   ])
 
   const composerFooter =
-    !isThreadLoading && composerProps ? (
+    !isThreadLoading && composerPropsForPage ? (
       <ThreadComposerDock ref={composerTransition.ref} style={composerTransition.style}>
         <AnimatePresence initial={false}>
           {showComposerStatusSummary ? (
@@ -1413,7 +1492,7 @@ export function ConversationPage(): React.ReactNode {
         </AnimatePresence>
         {!activePermissionRequest && !pendingPlanApproval ? (
           <DesktopComposer
-            {...composerProps}
+            {...composerPropsForPage}
             canForkConversation={Boolean(
               conversationFork.onForkFromMessage && latestConversationForkPoint,
             )}
@@ -1463,6 +1542,7 @@ export function ConversationPage(): React.ReactNode {
     <ConversationItemContext.Provider value={conversationItemContextValue}>
       <CanonicalThreadView
         active={effectiveSessionStatus === 'running' || effectiveSessionStatus === 'waiting'}
+        deferInitialLoading={deferThreadLoading}
         diffMarkerStyle={diffMarkerStyle}
         error={canonicalConversation.error}
         hasOlder={canonicalConversation.hasOlder}
@@ -1571,7 +1651,7 @@ export function ConversationPage(): React.ReactNode {
               onToggleBookmark={toggleThreadBookmark}
             />
             <ThreadScrollLayout
-              className="workflow-main-scroll-area tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:overflow-hidden"
+              className="workflow-main-scroll-area tw:flex tw:min-h-0 tw:flex-1 tw:flex-col"
               footer={composerFooter}
               footerClassName="workflow-main-scroll-footer tw:px-0 tw:pb-4"
               footerRef={threadFooterRef}
@@ -1606,7 +1686,7 @@ export function ConversationPage(): React.ReactNode {
                     className="session-timeline-wrapper tw:relative tw:mx-auto tw:flex tw:h-auto tw:w-full tw:min-h-0 tw:flex-[1_0_auto] tw:flex-col tw:[container-type:inline-size]"
                     onContextMenu={handleConversationContextMenu}
                   >
-                    <div className="session-timeline-main tw:flex tw:min-w-0 tw:min-h-0 tw:flex-[1_0_auto] tw:flex-col tw:overflow-visible">
+                    <div className="session-timeline-main tw:flex tw:flex-auto tw:min-w-0 tw:min-h-0 tw:flex-col tw:overflow-visible">
                       {isThreadLoading ? (
                         <FullScreenWhaleLoading label="正在加载会话内容…" variant="contained" />
                       ) : (
@@ -1634,6 +1714,7 @@ export function ConversationPage(): React.ReactNode {
                               ))}
                             </div>
                           ) : null}
+                          {firstSubmittedMessage}
                           {canonicalThreadView}
                         </div>
                       )}

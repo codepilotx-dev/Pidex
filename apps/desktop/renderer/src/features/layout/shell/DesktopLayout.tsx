@@ -2111,6 +2111,8 @@ export function DesktopLayout(): React.ReactNode {
   const isConversationLoading =
     isConversationRoute &&
     (!sessionsHydrated || sessionId !== routedSessionId || gitDetection === 'loading')
+  // pending 页没有真实会话：不等工作区就绪就直接显示已提交消息与启动状态。
+  const isPendingSubmissionRoute = location.pathname.startsWith('/pending/')
   const branchName = getDesktopComposerBranchName(currentWorkspace)
   const quickChatRecentTasks = useMemo(() => {
     const workspaceKey = currentWorkspace?.path.replace(/\\/g, '/').toLowerCase() ?? null
@@ -2556,6 +2558,7 @@ export function DesktopLayout(): React.ReactNode {
           onChooseWorkspace: handleChooseWorkspace,
           onInputChange: setInput,
           onInterrupt: interrupt,
+          readPathname: () => location.pathname,
           onProviderModelChange: handleProviderModelChange,
           onProviderOpen: handleProviderOpen,
           onProviderSearch: handleProviderSearch,
@@ -3825,7 +3828,8 @@ export function DesktopLayout(): React.ReactNode {
             planModeActive,
             providerModelOptions,
             sessionStatus,
-            composerProps: isConversationLoading ? null : composerProps,
+            composerProps:
+              isConversationLoading && !isPendingSubmissionRoute ? null : composerProps,
             composerDraft: {
               value: input,
               replace: setInput,

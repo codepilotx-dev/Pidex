@@ -121,7 +121,7 @@ export function SideChatThreadPanel({
       data-side-chat-thread-id={tab.threadId}
     >
       <ThreadScrollLayout
-        className="right-dock-side-chat__timeline tw:min-h-0 tw:flex-1"
+        className="right-dock-side-chat__timeline tw:flex tw:min-h-0 tw:flex-1 tw:flex-col"
         footer={
           !creating && !expired ? (
             <ThreadComposerDock ref={surfaceRef}>

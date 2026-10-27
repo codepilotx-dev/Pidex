@@ -1,5 +1,5 @@
 import React from 'react'
-import { ArrowDown, Check, CircleX, Ellipsis, LoaderCircle } from 'lucide-react'
+import { ArrowDown, Check, CircleX, Ellipsis } from 'lucide-react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import type { ExecutionPlanItem } from '@pidex/shared/thread'
 
@@ -10,14 +10,17 @@ import {
 } from '../../../components/ui/IconTokens.js'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 import {
-  enterTween,
-  exitTween,
   fastTween,
-  floatingSurfaceMotion,
   instantTween,
   motionTransition,
   standardTween,
 } from '../../motion/MotionTransitions.js'
+import {
+  TooltipContent,
+  TooltipPortal,
+  TooltipRoot,
+  TooltipTrigger,
+} from '../../../components/ui/Tooltip.js'
 import { ExecutionPlanCard } from '../workflow/ExecutionPlanCard.js'
 import type { ConversationChangedFile } from './ConversationChangeSummary.js'
 
@@ -34,11 +37,10 @@ type ComposerChangeSummaryProps = {
   onReturnToBottom: () => void
 }
 
-const PLAN_PREVIEW_CLOSE_DELAY_MS = 120
 const RETURN_BUTTON_ENTER_DELAY_SECONDS = 0.06
 
 type ComposerPlanLifecycle = ExecutionPlanItem['status'] | 'failed'
-type ComposerSummaryPreview = { kind: 'plan'; planId: string } | { kind: 'files' } | null
+type ComposerSummaryPreviewKind = 'plan' | 'files' | null
 
 export function ComposerChangeSummary({
   executionPlan,
@@ -55,81 +57,28 @@ export function ComposerChangeSummary({
   const reducedMotion = usePrefersReducedMotion()
   const planPanelId = React.useId()
   const filesPanelId = React.useId()
-  const [activePreview, setActivePreview] = React.useState<ComposerSummaryPreview>(null)
+  const [activePreview, setActivePreview] = React.useState<ComposerSummaryPreviewKind>(null)
   const summaryRef = React.useRef<HTMLDivElement | null>(null)
-  const planButtonRef = React.useRef<HTMLButtonElement | null>(null)
-  const changesButtonRef = React.useRef<HTMLButtonElement | null>(null)
-  const closeTimerRef = React.useRef<number | null>(null)
-
-  React.useEffect(
-    () => () => {
-      if (closeTimerRef.current === null) return
-      window.clearTimeout(closeTimerRef.current)
-    },
-    [],
-  )
+  const planPopoverRef = React.useRef<HTMLDivElement | null>(null)
+  const filesPopoverRef = React.useRef<HTMLDivElement | null>(null)
 
   const changedFileCount = changedFiles.length
-  if (!executionPlan && changedFileCount <= 0) return null
-
-  function clearPreviewCloseTimer(): void {
-    if (closeTimerRef.current === null) return
-    window.clearTimeout(closeTimerRef.current)
-    closeTimerRef.current = null
-  }
-
-  function openPlanPreview(planId: string): void {
-    clearPreviewCloseTimer()
-    setActivePreview({ kind: 'plan', planId })
-  }
-
-  function openFilesPreview(): void {
-    clearPreviewCloseTimer()
-    setActivePreview({ kind: 'files' })
-  }
-
-  function schedulePreviewClose(): void {
-    clearPreviewCloseTimer()
-    closeTimerRef.current = window.setTimeout(() => {
-      closeTimerRef.current = null
-      setActivePreview(null)
-    }, PLAN_PREVIEW_CLOSE_DELAY_MS)
-  }
-
-  function schedulePreviewCloseUnlessFocused(): void {
-    const activeElement = document.activeElement
-    if (
-      activeElement === planButtonRef.current ||
-      activeElement === changesButtonRef.current ||
-      planButtonRef.current?.matches(':hover') ||
-      changesButtonRef.current?.matches(':hover') ||
-      summaryRef.current?.querySelector('.composer-change-summary__files-card:hover') ||
-      (activeElement instanceof HTMLElement &&
-        activeElement.closest('.composer-change-summary__files-card'))
-    ) {
-      return
-    }
-    schedulePreviewClose()
-  }
+  const hasPlan = executionPlan !== null && executionPlan.steps.length > 0
+  if (!hasPlan && changedFileCount <= 0) return null
 
   function openReview(): void {
-    clearPreviewCloseTimer()
     setActivePreview(null)
     onOpenReview()
   }
 
   function openReviewFile(path: string): void {
-    clearPreviewCloseTimer()
     setActivePreview(null)
     onOpenReviewFile(path)
   }
 
   const currentStep = executionPlan ? executionPlanStepPosition(executionPlan) : 0
-  const planExpanded =
-    executionPlan !== null &&
-    activePreview?.kind === 'plan' &&
-    activePreview.planId === executionPlan.id
-  const filesExpanded = changedFileCount > 0 && activePreview?.kind === 'files'
+  const planExpanded = hasPlan && activePreview === 'plan'
+  const filesExpanded = changedFileCount > 0 && activePreview === 'files'
   const diffStatsAvailable = additions !== null && deletions !== null
   const formattedAdditions = formatSummaryNumber(additions ?? 0)
   const formattedDeletions = formatSummaryNumber(deletions ?? 0)
@@ -146,7 +95,7 @@ export function ComposerChangeSummary({
         ? '执行出错'
         : planLifecycle === 'interrupted'
           ? '执行已中断'
-          : executionPlan
+          : hasPlan
             ? `第 ${currentStep} / ${executionPlan.steps.length} 步`
             : ''
 
@@ -155,30 +104,6 @@ export function ComposerChangeSummary({
       className="composer-change-summary tw:relative tw:flex tw:w-full tw:max-w-full tw:items-center tw:justify-center tw:self-center tw:gap-2 tw:box-border tw:rounded-xl tw:pointer-events-auto"
       ref={summaryRef}
     >
-      <AnimatePresence initial={false} mode="wait">
-        {executionPlan && planExpanded ? (
-          <ComposerPlanPreviewPresence
-            key={`plan:${executionPlan.id}`}
-            id={planPanelId}
-            item={executionPlan}
-            reducedMotion={reducedMotion}
-            onPointerEnter={clearPreviewCloseTimer}
-            onPointerLeave={schedulePreviewCloseUnlessFocused}
-          />
-        ) : filesExpanded ? (
-          <ComposerChangedFilesPreviewPresence
-            key="files"
-            files={changedFiles}
-            id={filesPanelId}
-            reducedMotion={reducedMotion}
-            onFocus={clearPreviewCloseTimer}
-            onOpenFile={openReviewFile}
-            onPointerEnter={clearPreviewCloseTimer}
-            onPointerLeave={schedulePreviewCloseUnlessFocused}
-            onRequestClose={schedulePreviewCloseUnlessFocused}
-          />
-        ) : null}
-      </AnimatePresence>
       <motion.div
         className="composer-change-summary__bar-shell tw:flex tw:w-fit tw:min-w-0 tw:max-w-full tw:flex-[0_1_auto]"
         layout="position"
@@ -186,26 +111,63 @@ export function ComposerChangeSummary({
       >
         <div
           aria-label="任务变更摘要"
-          className="composer-change-summary__bar tw:relative tw:inline-flex tw:z-1 tw:h-8 tw:min-h-8 tw:w-auto tw:min-w-0 tw:max-w-full tw:flex-[1_1_auto] tw:items-center tw:justify-center tw:gap-0 tw:box-border tw:overflow-hidden tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-canvas tw:p-0 tw:text-app-text-meta tw:type-body-sm tw:shadow-sm"
+          className="composer-change-summary__bar tw:relative tw:inline-flex tw:z-1 tw:h-8 tw:min-h-8 tw:w-auto tw:min-w-0 tw:max-w-full tw:flex-[1_1_auto] tw:items-center tw:justify-center tw:gap-0 tw:box-border tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-0 tw:text-app-text tw:type-body-sm tw:shadow-lg tw:backdrop-blur-md"
           role="group"
         >
-          {executionPlan ? (
-            <button
-              type="button"
-              aria-controls={planPanelId}
-              aria-expanded={planExpanded}
-              className="composer-change-summary__plan tw:inline-flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-none tw:items-center tw:gap-2 tw:rounded-none tw:border-0 tw:bg-transparent tw:py-0 tw:ps-4 tw:pe-0 tw:only:ps-4 tw:only:pe-4 tw:text-inherit tw:whitespace-nowrap tw:enabled:hover:bg-transparent tw:enabled:hover:text-app-text tw:enabled:hover:shadow-none tw:aria-expanded:bg-transparent tw:aria-expanded:text-app-text tw:aria-expanded:shadow-none"
-              ref={planButtonRef}
-              onBlur={schedulePreviewClose}
-              onFocus={() => openPlanPreview(executionPlan.id)}
-              onPointerEnter={() => openPlanPreview(executionPlan.id)}
-              onPointerLeave={schedulePreviewCloseUnlessFocused}
+          {hasPlan ? (
+            <TooltipRoot
+              delayDuration={0}
+              interactive
+              open={planExpanded}
+              onOpenChange={(open) => setActivePreview(open ? 'plan' : null)}
             >
-              <ExecutionPlanStatusIcon steps={executionPlan.steps} status={planLifecycle} />
-              {planStatusText}
-            </button>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-controls={planPanelId}
+                  aria-expanded={planExpanded}
+                  className="composer-change-summary__plan tw:inline-flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-none tw:items-center tw:gap-2 tw:rounded-none tw:border-0 tw:bg-transparent tw:py-0 tw:ps-4 tw:pe-0 tw:only:ps-4 tw:only:pe-4 tw:text-inherit tw:whitespace-nowrap tw:enabled:hover:bg-transparent tw:enabled:hover:text-app-text tw:enabled:hover:shadow-none tw:aria-expanded:bg-transparent tw:aria-expanded:text-app-text tw:aria-expanded:shadow-none"
+                  onBlur={(e) => {
+                    const related = e.relatedTarget as Node | null
+                    if (
+                      (related && planPopoverRef.current?.contains(related)) ||
+                      planPopoverRef.current?.matches(':hover')
+                    ) {
+                      e.preventDefault()
+                    }
+                  }}
+                  onClick={(e) => {
+                    e.preventDefault()
+                    setActivePreview((prev) => (prev === 'plan' ? null : 'plan'))
+                  }}
+                >
+                  <ExecutionPlanStatusIcon steps={executionPlan.steps} status={planLifecycle} />
+                  {planStatusText}
+                </button>
+              </TooltipTrigger>
+              <TooltipPortal>
+                <TooltipContent
+                  align="center"
+                  aria-label="执行计划"
+                  className="composer-change-summary__plan-popover tw:z-tooltip tw:box-border tw:w-max tw:min-w-[min(16rem,calc(100vw-var(--cpx-sys-space-4)))] tw:max-w-[min(22rem,calc(100vw-var(--cpx-sys-space-4)))] tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:text-app-text tw:shadow-lg tw:backdrop-blur-md"
+                  id={planPanelId}
+                  ref={planPopoverRef}
+                  side="top"
+                  sideOffset={8}
+                  variant="unstyled"
+                  onBlurCapture={(e) => {
+                    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) {
+                      return
+                    }
+                    setActivePreview(null)
+                  }}
+                >
+                  <ExecutionPlanCard item={executionPlan} />
+                </TooltipContent>
+              </TooltipPortal>
+            </TooltipRoot>
           ) : null}
-          {executionPlan && changedFileCount > 0 ? (
+          {hasPlan && changedFileCount > 0 ? (
             <span
               aria-hidden="true"
               className="composer-change-summary__separator tw:mx-2 tw:flex-none tw:text-app-text-meta"
@@ -214,36 +176,109 @@ export function ComposerChangeSummary({
             </span>
           ) : null}
           {changedFileCount > 0 ? (
-            <button
-              type="button"
-              aria-controls={filesPanelId}
-              aria-expanded={filesExpanded}
-              aria-label={
-                diffStatsAvailable
-                  ? `打开审阅面板，${changedFileCount} 个文件已更改，新增 ${formattedAdditions} 行，删除 ${formattedDeletions} 行`
-                  : `打开审阅面板，${changedFileCount} 个文件已更改，增删行数统计暂不可用`
-              }
-              className="composer-change-summary__changes tw:inline-flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-[1_1_auto] tw:items-center tw:gap-2 tw:overflow-hidden tw:rounded-none tw:border-0 tw:bg-transparent tw:py-0 tw:ps-0 tw:pe-4 tw:text-ellipsis tw:text-inherit tw:whitespace-nowrap tw:only:ps-4 tw:only:pe-4 tw:enabled:hover:bg-transparent tw:enabled:hover:text-app-text tw:enabled:hover:shadow-none tw:aria-expanded:bg-transparent tw:aria-expanded:text-app-text tw:aria-expanded:shadow-none"
-              ref={changesButtonRef}
-              onBlur={schedulePreviewClose}
-              onClick={openReview}
-              onFocus={openFilesPreview}
-              onPointerEnter={openFilesPreview}
-              onPointerLeave={schedulePreviewCloseUnlessFocused}
+            <TooltipRoot
+              delayDuration={0}
+              interactive
+              open={filesExpanded}
+              onOpenChange={(open) => setActivePreview(open ? 'files' : null)}
             >
-              {changedFileCount} 个文件已更改
-              {diffStatsAvailable ? (
-                <span
-                  aria-hidden="true"
-                  className="composer-change-summary__diff tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:tabular-nums"
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-controls={filesPanelId}
+                  aria-expanded={filesExpanded}
+                  aria-label={
+                    diffStatsAvailable
+                      ? `打开审阅面板，${changedFileCount} 个文件已更改，新增 ${formattedAdditions} 行，删除 ${formattedDeletions} 行`
+                      : `打开审阅面板，${changedFileCount} 个文件已更改，增删行数统计暂不可用`
+                  }
+                  className="composer-change-summary__changes tw:inline-flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-[1_1_auto] tw:items-center tw:gap-2 tw:overflow-hidden tw:rounded-none tw:border-0 tw:bg-transparent tw:py-0 tw:ps-0 tw:pe-4 tw:text-ellipsis tw:text-inherit tw:whitespace-nowrap tw:only:ps-4 tw:only:pe-4 tw:enabled:hover:bg-transparent tw:enabled:hover:text-app-text tw:enabled:hover:shadow-none tw:aria-expanded:bg-transparent tw:aria-expanded:text-app-text tw:aria-expanded:shadow-none"
+                  onBlur={(e) => {
+                    const related = e.relatedTarget as Node | null
+                    if (
+                      (related && filesPopoverRef.current?.contains(related)) ||
+                      filesPopoverRef.current?.matches(':hover')
+                    ) {
+                      e.preventDefault()
+                    }
+                  }}
+                  onClick={openReview}
                 >
-                  <strong className="tw:text-app-success tw:type-weight-label">
-                    +{formattedAdditions}
-                  </strong>
-                  <em className="tw:text-app-danger tw:not-italic">-{formattedDeletions}</em>
-                </span>
-              ) : null}
-            </button>
+                  {changedFileCount} 个文件已更改
+                  {diffStatsAvailable ? (
+                    <span
+                      aria-hidden="true"
+                      className="composer-change-summary__diff tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:tabular-nums"
+                    >
+                      <strong className="tw:text-app-success tw:type-weight-label">
+                        +{formattedAdditions}
+                      </strong>
+                      <em className="tw:text-app-danger tw:not-italic">-{formattedDeletions}</em>
+                    </span>
+                  ) : null}
+                </button>
+              </TooltipTrigger>
+              <TooltipPortal>
+                <TooltipContent
+                  align="center"
+                  aria-label="修改文件"
+                  className="composer-change-summary__files-popover tw:z-tooltip tw:box-border tw:w-max tw:min-w-[min(16rem,calc(100vw-var(--cpx-sys-space-4)))] tw:max-w-[min(22rem,calc(100vw-var(--cpx-sys-space-4)))] tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:text-app-text tw:shadow-lg tw:backdrop-blur-md"
+                  id={filesPanelId}
+                  ref={filesPopoverRef}
+                  side="top"
+                  sideOffset={8}
+                  variant="unstyled"
+                  onBlurCapture={(e) => {
+                    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) {
+                      return
+                    }
+                    setActivePreview(null)
+                  }}
+                >
+                  <div
+                    className="composer-change-summary__files-list tw:grid tw:w-full tw:max-h-[min(18rem,calc(100vh-var(--cpx-sys-space-8)))] tw:gap-1 tw:overflow-y-auto tw:[scrollbar-gutter:stable] tw:p-1.5 tw:[&>[role=listitem]]:w-full tw:[&>[role=listitem]]:min-w-0"
+                    role="list"
+                  >
+                    {changedFiles.map((file) => {
+                      const statsAvailable = file.additions !== null && file.deletions !== null
+                      const fileName = basenameOf(file.path)
+                      return (
+                        <div key={file.path} role="listitem">
+                          <button
+                            aria-label={
+                              statsAvailable
+                                ? `${file.path}，新增 ${file.additions} 行，删除 ${file.deletions} 行`
+                                : `${file.path}，增删行数统计暂不可用`
+                            }
+                            className="composer-change-summary__file-row"
+                            title={file.path}
+                            type="button"
+                            onClick={() => openReviewFile(file.path)}
+                          >
+                            <span className="composer-change-summary__file-name tw:flex-[1_1_auto] tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-start">
+                              {fileName}
+                            </span>
+                            {statsAvailable ? (
+                              <span
+                                aria-hidden="true"
+                                className="composer-change-summary__file-diff tw:inline-flex tw:flex-none tw:ms-auto tw:items-center tw:gap-2 tw:text-app-text-meta tw:type-caption tw:tabular-nums"
+                              >
+                                <strong className="tw:text-app-success tw:type-weight-label">
+                                  +{formatSummaryNumber(file.additions ?? 0)}
+                                </strong>
+                                <em className="tw:text-app-danger tw:not-italic">
+                                  -{formatSummaryNumber(file.deletions ?? 0)}
+                                </em>
+                              </span>
+                            ) : null}
+                          </button>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </TooltipContent>
+              </TooltipPortal>
+            </TooltipRoot>
           ) : null}
         </div>
       </motion.div>
@@ -258,146 +293,6 @@ export function ComposerChangeSummary({
         ) : null}
       </AnimatePresence>
     </div>
-  )
-}
-
-function ComposerChangedFilesPreviewPresence({
-  files,
-  id,
-  onFocus,
-  onOpenFile,
-  onPointerEnter,
-  onPointerLeave,
-  onRequestClose,
-  reducedMotion,
-}: {
-  files: readonly ConversationChangedFile[]
-  id: string
-  onFocus: () => void
-  onOpenFile: (path: string) => void
-  onPointerEnter: () => void
-  onPointerLeave: () => void
-  onRequestClose: () => void
-  reducedMotion: boolean
-}): React.ReactNode {
-  const isPresent = useIsPresent()
-  const surfaceMotion = floatingSurfaceMotion('top')
-
-  return (
-    <motion.div
-      animate={surfaceMotion.animate}
-      aria-hidden={!isPresent ? true : undefined}
-      aria-label="修改文件"
-      className="composer-change-summary__files-preview tw:absolute tw:inset-0 tw:pointer-events-none tw:data-[presence=present]:[&_.composer-change-summary__files-card]:pointer-events-auto"
-      data-presence={isPresent ? 'present' : 'exiting'}
-      exit={{
-        ...surfaceMotion.exit,
-        transition: motionTransition(reducedMotion, exitTween),
-      }}
-      id={id}
-      inert={!isPresent ? true : undefined}
-      initial={reducedMotion ? false : surfaceMotion.initial}
-      role="region"
-      style={{ pointerEvents: isPresent ? undefined : 'none' }}
-      transition={motionTransition(reducedMotion, enterTween)}
-      onBlurCapture={(event) => {
-        if (
-          event.relatedTarget instanceof Node &&
-          event.currentTarget.contains(event.relatedTarget)
-        ) {
-          return
-        }
-        onRequestClose()
-      }}
-      onFocusCapture={onFocus}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
-    >
-      <div className="composer-change-summary__files-card tw:absolute tw:z-0 tw:bottom-[calc(100%+var(--cpx-sys-space-1))] tw:left-1/2 tw:w-max tw:min-w-[min(16rem,100%)] tw:max-w-[min(20rem,100%)] tw:-translate-x-1/2 tw:overflow-hidden tw:rounded-none tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-1 tw:text-app-text tw:pointer-events-none tw:shadow-none tw:[backdrop-filter:none]">
-        <div
-          className="composer-change-summary__files-list tw:grid tw:w-full tw:max-h-72 tw:gap-2 tw:overflow-y-auto tw:[scrollbar-gutter:stable] tw:[&>[role=listitem]]:w-full tw:[&>[role=listitem]]:min-w-0"
-          role="list"
-        >
-          {files.map((file) => {
-            const statsAvailable = file.additions !== null && file.deletions !== null
-            const fileName = basenameOf(file.path)
-            return (
-              <div key={file.path} role="listitem">
-                <button
-                  aria-label={
-                    statsAvailable
-                      ? `${file.path}，新增 ${file.additions} 行，删除 ${file.deletions} 行`
-                      : `${file.path}，增删行数统计暂不可用`
-                  }
-                  className="composer-change-summary__file-row"
-                  title={file.path}
-                  type="button"
-                  onClick={() => onOpenFile(file.path)}
-                >
-                  <span className="composer-change-summary__file-name tw:flex-[1_1_auto] tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-start">
-                    {fileName}
-                  </span>
-                  {statsAvailable ? (
-                    <span
-                      aria-hidden="true"
-                      className="composer-change-summary__file-diff tw:inline-flex tw:flex-none tw:ms-auto tw:items-center tw:gap-2 tw:text-app-text-meta tw:type-caption tw:tabular-nums"
-                    >
-                      <strong className="tw:text-app-success tw:type-weight-label">
-                        +{formatSummaryNumber(file.additions ?? 0)}
-                      </strong>
-                      <em className="tw:text-app-danger tw:not-italic">
-                        -{formatSummaryNumber(file.deletions ?? 0)}
-                      </em>
-                    </span>
-                  ) : null}
-                </button>
-              </div>
-            )
-          })}
-        </div>
-      </div>
-    </motion.div>
-  )
-}
-
-function ComposerPlanPreviewPresence({
-  id,
-  item,
-  onPointerEnter,
-  onPointerLeave,
-  reducedMotion,
-}: {
-  id: string
-  item: ExecutionPlanItem
-  onPointerEnter: () => void
-  onPointerLeave: () => void
-  reducedMotion: boolean
-}): React.ReactNode {
-  const isPresent = useIsPresent()
-  const surfaceMotion = floatingSurfaceMotion('top')
-
-  return (
-    <motion.div
-      animate={surfaceMotion.animate}
-      aria-hidden={!isPresent ? true : undefined}
-      aria-label="执行计划"
-      className="composer-change-summary__plan-preview tw:absolute tw:inset-0 tw:pointer-events-none tw:data-[presence=present]:[&_.execution-plan-card]:pointer-events-auto"
-      data-presence={isPresent ? 'present' : 'exiting'}
-      exit={{
-        ...surfaceMotion.exit,
-        transition: motionTransition(reducedMotion, exitTween),
-      }}
-      id={id}
-      inert={!isPresent ? true : undefined}
-      initial={reducedMotion ? false : surfaceMotion.initial}
-      role="region"
-      style={{ pointerEvents: isPresent ? undefined : 'none' }}
-      transition={motionTransition(reducedMotion, enterTween)}
-      onPointerEnter={onPointerEnter}
-      onPointerLeave={onPointerLeave}
-    >
-      <ExecutionPlanCard item={item} />
-    </motion.div>
   )
 }
 
@@ -514,12 +409,13 @@ export function executionPlanStepPosition(item: ExecutionPlanItem): number {
   const total = item.steps.length
   if (total === 0) return 0
 
-  const activeIndex = item.steps.findIndex((step) => step.status === 'in_progress')
-  if (activeIndex >= 0) return activeIndex + 1
-  if (item.status === 'completed') return total
+  const inProgressIndex = item.steps.findIndex((step) => step.status === 'in_progress')
+  if (inProgressIndex >= 0) return inProgressIndex + 1
 
-  const completed = item.steps.filter((step) => step.status === 'completed').length
-  return Math.min(Math.max(completed + 1, 1), total)
+  const unfinishedIndex = item.steps.findIndex((step) => step.status !== 'completed')
+  if (unfinishedIndex >= 0) return unfinishedIndex + 1
+
+  return total
 }
 
 function ExecutionPlanStatusIcon({
@@ -549,7 +445,7 @@ function ExecutionPlanStatusIcon({
         status === 'failed'
           ? ' composer-change-summary__plan-icon--error tw:text-app-danger'
           : status === 'streaming'
-            ? ' composer-change-summary__plan-icon--running tw:text-app-accent-fg tw:[&>svg]:animate-[composer-change-summary-spin_var(--cpx-sys-motion-loading)_var(--cpx-sys-ease-linear)_infinite]'
+            ? ' composer-change-summary__plan-icon--running tw:text-app-accent-fg'
             : status === 'completed'
               ? ' composer-change-summary__plan-icon--completed tw:text-app-success'
               : ' tw:text-app-accent-fg'
@@ -559,8 +455,6 @@ function ExecutionPlanStatusIcon({
     >
       {status === 'failed' ? (
         <CircleX aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-      ) : status === 'streaming' ? (
-        <LoaderCircle aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       ) : status === 'completed' ? (
         <Check aria-hidden="true" size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
       ) : (
