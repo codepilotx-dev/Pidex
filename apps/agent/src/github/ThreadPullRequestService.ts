@@ -13,7 +13,11 @@ import { GitCommandRunner } from '../git/GitCommandRunner'
 import type { GithubService } from './GithubService'
 import { watchIdentity, watchReady } from './PullRequestWatchService'
 
-/** Status freshness window, shared with the renderer's 60s sidebar refresh. */
+/**
+ * Request de-dup window for remote status and local environment probes. The
+ * renderer schedules low-frequency refreshes; this window only stops burst
+ * duplicate work (hover card + focus) and bounds failed retries.
+ */
 const CACHE_TTL_MS = 60_000
 /** Bounds GitHub API fan-out while the sidebar refreshes many threads at once. */
 const MAX_CONCURRENT_REFRESHES = 4
@@ -44,6 +48,17 @@ export type ThreadPullRequestGitRunner = {
 }
 
 const EMPTY_ENVIRONMENT: ThreadEnvironment = { repo: null, branch: null }
+
+/** Cache stamps are always >= 1, so `undefined` alone means "never consulted". */
+const isFresh = (stamp: number | undefined, now: number): boolean =>
+  stamp !== undefined && now - stamp < CACHE_TTL_MS
+
+/** Collapses differently-cased Windows paths onto one probe key. */
+const environmentDirectoryKey = (cwd: string): string =>
+  process.platform === 'win32' ? cwd.toLowerCase() : cwd
+
+/** Probe stamps start at 1 so a zero second clock still marks a completed probe. */
+const probeStamp = (now: number): number => Math.max(now, 1)
 
 const identityKey = (input: { owner: string; repository: string; number: number }): string =>
   `${input.owner.toLowerCase()}/${input.repository.toLowerCase()}#${input.number}`
@@ -113,8 +128,14 @@ export class ThreadPullRequestService {
   private readonly git: ThreadPullRequestGitRunner
   private readonly now: () => number
   private readonly statusCache = new Map<string, ResolvedStatus>()
+  /** Last request time per PR identity; recorded for failed reads too. */
+  private readonly statusAttempts = new Map<string, number>()
   private readonly statusInFlight = new Map<string, Promise<ResolvedStatus>>()
+  /** Probes are shared per resolved working directory, not per thread. */
   private readonly environmentCache = new Map<string, { at: number; value: ThreadEnvironment }>()
+  private readonly environmentInFlight = new Map<string, Promise<ThreadEnvironment>>()
+  private readonly threadDirectories = new Map<string, string>()
+  private readonly activeProbes = new Set<string>()
 
   constructor(
     private readonly db: AgentDatabase,
@@ -178,13 +199,23 @@ export class ThreadPullRequestService {
     }))
   }
 
+  /**
+   * Sidebar read. `refreshEnvironment` defaults to true so callers that want a
+   * fresh local probe (window focus, hover card, environment change) keep the
+   * previous behavior; background polling passes false to only refresh GitHub
+   * status against the cached environment.
+   */
   async read(input: {
     threadIds: readonly string[]
+    refreshEnvironment?: boolean
     resolveCwd: (threadId: string) => Promise<string | null>
   }): Promise<{ threads: ThreadPullRequestList[] }> {
     const unique = [...new Set(input.threadIds)]
+    const refreshEnvironment = input.refreshEnvironment !== false
     const threads = await runLimited(
-      unique.map((threadId) => () => this.readThread(threadId, input.resolveCwd)),
+      unique.map(
+        (threadId) => () => this.readThread(threadId, refreshEnvironment, input.resolveCwd),
+      ),
       MAX_CONCURRENT_REFRESHES,
     )
     return { threads }
@@ -192,6 +223,7 @@ export class ThreadPullRequestService {
 
   private async readThread(
     threadId: string,
+    refreshEnvironment: boolean,
     resolveCwd: (threadId: string) => Promise<string | null>,
   ): Promise<ThreadPullRequestList> {
     if (!this.db.getThread(threadId) || !this.repository().available()) {
@@ -201,43 +233,82 @@ export class ThreadPullRequestService {
     // No visible association means nothing to sort or refresh: skip the
     // repository probe entirely instead of paying for it on every sidebar read.
     if (records.length === 0) return { threadId, items: [] }
-    const environment = await this.resolveEnvironment(threadId, resolveCwd)
+    const environment = refreshEnvironment
+      ? await this.resolveEnvironment(threadId, resolveCwd)
+      : await this.knownEnvironment(threadId)
     const statuses = await this.refresh(records)
     return { threadId, items: this.order(records, statuses, environment) }
   }
 
+  /**
+   * Active read: resolves the thread's current cwd first, so switching to a
+   * worktree never reuses the previous directory's probe result. The cache and
+   * in-flight map are keyed by that resolved directory, letting sibling threads
+   * in one directory share a single probe.
+   */
   private async resolveEnvironment(
     threadId: string,
     resolveCwd: (threadId: string) => Promise<string | null>,
   ): Promise<ThreadEnvironment> {
-    const cached = this.environmentCache.get(threadId)
-    if (cached && this.now() - cached.at < CACHE_TTL_MS) return cached.value
-    const value = await this.probeEnvironment(threadId, resolveCwd)
-    this.environmentCache.set(threadId, { at: this.now(), value })
-    return value
+    const cwd = await this.resolveThreadCwd(threadId, resolveCwd)
+    if (!cwd) return this.knownEnvironment(threadId)
+    return this.directoryEnvironment(cwd)
   }
 
-  private cachedEnvironment(threadId: string): ThreadEnvironment {
-    return this.environmentCache.get(threadId)?.value ?? EMPTY_ENVIRONMENT
+  /** Cached environment for a thread, falling back to unknown ordering. */
+  private async knownEnvironment(threadId: string): Promise<ThreadEnvironment> {
+    const directory = this.threadDirectories.get(threadId)
+    if (!directory) return EMPTY_ENVIRONMENT
+    return this.directoryEnvironment(directory)
   }
 
-  private async probeEnvironment(
+  private async directoryEnvironment(cwd: string): Promise<ThreadEnvironment> {
+    const key = environmentDirectoryKey(cwd)
+    const cached = this.environmentCache.get(key)
+    if (cached && isFresh(cached.at, this.now())) return cached.value
+    const inFlight = this.environmentInFlight.get(key)
+    if (inFlight) return inFlight
+    const promise = this.probeEnvironment(cwd)
+      .then((value) => {
+        this.environmentCache.set(key, { at: probeStamp(this.now()), value })
+        return value
+      })
+      .finally(() => this.environmentInFlight.delete(key))
+    this.environmentInFlight.set(key, promise)
+    return promise
+  }
+
+  /**
+   * Every active read resolves the thread's current cwd and registers it, even
+   * when the probe itself is still throttled: that is how background polling
+   * and mutation results follow the thread into a new worktree.
+   */
+  private async resolveThreadCwd(
     threadId: string,
     resolveCwd: (threadId: string) => Promise<string | null>,
-  ): Promise<ThreadEnvironment> {
+  ): Promise<string | null> {
     let cwd: string | null = null
     try {
       cwd = await resolveCwd(threadId)
     } catch {
       cwd = null
     }
-    if (!cwd) return EMPTY_ENVIRONMENT
+    if (cwd) this.threadDirectories.set(threadId, cwd)
+    return cwd
+  }
+
+  private async probeEnvironment(cwd: string): Promise<ThreadEnvironment> {
+    const key = environmentDirectoryKey(cwd)
+    if (this.activeProbes.has(key)) return this.directoryEnvironment(cwd)
+    this.activeProbes.add(key)
     try {
       const repo = await this.github.repositoryIdentity(cwd)
       const branch = await this.currentBranch(cwd)
       return { repo, branch }
     } catch {
       return EMPTY_ENVIRONMENT
+    } finally {
+      this.activeProbes.delete(key)
     }
   }
 
@@ -264,12 +335,19 @@ export class ThreadPullRequestService {
     return statuses
   }
 
+  /**
+   * Remote status is de-duplicated by the last attempt, not the last success:
+   * failures are cached too, so an expired cache cannot trigger a retry storm
+   * (hover card, focus and the background timer share the same window).
+   */
   private statusFor(record: ThreadPullRequestRecord): Promise<ResolvedStatus> {
     const key = identityKey(record)
     const cached = this.statusCache.get(key)
-    if (cached && this.now() - cached.checkedAt < CACHE_TTL_MS) return Promise.resolve(cached)
+    if (cached && isFresh(this.statusAttempts.get(key), this.now())) return Promise.resolve(cached)
     const inFlight = this.statusInFlight.get(key)
     if (inFlight) return inFlight
+    // Stamp before awaiting: a failed or slow request still occupies the window.
+    this.statusAttempts.set(key, this.now())
     const promise = this.fetchStatus(record)
       .then((status) => {
         this.statusCache.set(key, status)
@@ -280,6 +358,7 @@ export class ThreadPullRequestService {
     return promise
   }
 
+  /** GitHub failure keeps the existing unknown/stale status instead of throwing. */
   private async fetchStatus(record: ThreadPullRequestRecord): Promise<ResolvedStatus> {
     const previous = this.statusCache.get(identityKey(record))
     try {
@@ -398,6 +477,6 @@ export class ThreadPullRequestService {
   private async readThreadView(threadId: string): Promise<ThreadPullRequestList> {
     const records = this.visible(threadId)
     const statuses = await this.refresh(records)
-    return { threadId, items: this.order(records, statuses, this.cachedEnvironment(threadId)) }
+    return { threadId, items: this.order(records, statuses, await this.knownEnvironment(threadId)) }
   }
 }

@@ -79,10 +79,13 @@ export function createAgentGitApi({
     projectId ? loadProjectById(projectId) : loadProjectForPath(workspacePath)
 
   // 非仓库项目只自动探测一次 / 五小时；手动刷新可绕过，进行中的自动探测共用请求。
-  const gitStatusRequests = new Map<string, {
-    expiresAt: number
-    promise: Promise<DesktopGitStatusResult>
-  }>()
+  const gitStatusRequests = new Map<
+    string,
+    {
+      expiresAt: number
+      promise: Promise<DesktopGitStatusResult>
+    }
+  >()
 
   let activeGithubLoginId: string | null = null
   let activeGithubLoginMode: Parameters<GitApi['startGithubLogin']>[0]['mode'] = 'browser'
@@ -301,14 +304,20 @@ export function createAgentGitApi({
         return { ok: false, error: operationError(error) }
       }
     },
-    listThreadPullRequests: async (threadIds): Promise<DesktopThreadPullRequestsResult> => {
+    listThreadPullRequests: async (
+      threadIds,
+      options,
+    ): Promise<DesktopThreadPullRequestsResult> => {
       try {
         return await withRequiredAgent(async () => {
           requireAgentCapability('github.threadPullRequests.v1')
           if (threadIds.length === 0) return { ok: true as const, threads: [] }
           const result = await rpc.call<{ threads: ThreadPullRequestList[] }>(
             'github/thread/pullRequests',
-            { threadIds },
+            {
+              threadIds,
+              ...(options?.refreshEnvironment === false ? { refreshEnvironment: false } : {}),
+            },
           )
           return { ok: true as const, threads: result.threads }
         })

@@ -2268,8 +2268,8 @@ export function createAgentSessionDesktopClient(
     clearGithubUserStatus: () => loadAgentGitApi().then((api) => api.clearGithubUserStatus()),
     pushWorkspaceBranch: (input) => loadAgentGitApi().then((api) => api.pushWorkspaceBranch(input)),
     createPullRequest: (input) => loadAgentGitApi().then((api) => api.createPullRequest(input)),
-    listThreadPullRequests: (threadIds) =>
-      loadAgentGitApi().then((api) => api.listThreadPullRequests(threadIds)),
+    listThreadPullRequests: (threadIds, options) =>
+      loadAgentGitApi().then((api) => api.listThreadPullRequests(threadIds, options)),
     linkThreadPullRequest: (input) =>
       loadAgentGitApi().then((api) => api.linkThreadPullRequest(input)),
     unlinkThreadPullRequest: (input) =>

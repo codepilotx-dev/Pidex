@@ -156,10 +156,7 @@ describe('thread pull request associations', () => {
       })
 
     const first = await read()
-    expect(first.threads.map((entry) => entry.items.map((item) => item.number))).toEqual([
-      [7],
-      [],
-    ])
+    expect(first.threads.map((entry) => entry.items.map((item) => item.number))).toEqual([[7], []])
     for (let cycle = 0; cycle < 3; cycle += 1) {
       now += 60_000
       const repeated = await read()
@@ -171,7 +168,9 @@ describe('thread pull request associations', () => {
     expect(published).toEqual([])
     expect(db.repositories.threadPullRequests.list(sibling.id)).toEqual([])
     expect(
-      db.sqlite.query("SELECT method FROM events WHERE method = 'thread/pull-requests/updated'").all(),
+      db.sqlite
+        .query("SELECT method FROM events WHERE method = 'thread/pull-requests/updated'")
+        .all(),
     ).toHaveLength(1)
     db.close()
   })
@@ -451,6 +450,224 @@ describe('thread pull request associations', () => {
     now += 60_000
     await read()
     expect(counts.watchReads).toBeGreaterThan(reads)
+    db.close()
+  })
+})
+
+describe('thread pull request environment probes', () => {
+  type ProbeCounts = { identity: number; git: string[]; branches: Map<string, string> }
+
+  const probingFixture = async (options: { now?: () => number } = {}) => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-thread-pr-probe-'))
+    paths.push(root)
+    const historyPath = join(root, 'history.sqlite')
+    const profilePath = join(root, 'profile.sqlite')
+    const db = new AgentDatabase({ historyPath, profilePath })
+    const thread = db.repositories.threads.createThread('会话')
+    const counts: ProbeCounts = { identity: 0, git: [], branches: new Map() }
+    const github = {
+      readPullRequest: async () => ({ pullRequest: restPullRequest }),
+      readWatch: async () => watch(),
+      repositoryIdentity: async () => {
+        counts.identity += 1
+        return { owner: 'octocat', repository: 'fixture' }
+      },
+    } as never
+    const git = {
+      run: async (input: { cwd: string }) => {
+        counts.git.push(input.cwd)
+        return { code: 0, stdout: `${counts.branches.get(input.cwd) ?? 'feature'}\n`, stderr: '' }
+      },
+    }
+    const service = new ThreadPullRequestService(
+      db,
+      github,
+      { publish: () => Effect.succeed(undefined) } as never,
+      { git, ...(options.now ? { now: options.now } : {}) },
+    )
+    const link = async (threadId: string, number: number, headRef: string) => {
+      db.repositories.threadPullRequests.upsert({
+        threadId,
+        owner: 'octocat',
+        repository: 'fixture',
+        number,
+        url: `https://github.com/octocat/fixture/pull/${number}`,
+        title: `PR ${number}`,
+        headRef,
+        origin: 'manual',
+      })
+      // 用一次主动读取建立缓存，模拟侧栏已经展示过该会话。
+      await service.read({ threadIds: [threadId], resolveCwd: async () => 'C:\\repo' })
+    }
+    return { db, thread, service, counts, link }
+  }
+
+  test('后台读取只刷新远端状态，不产生任何 Git 调用', async () => {
+    let now = 0
+    const { db, thread, service, counts, link } = await probingFixture({ now: () => now })
+    await link(thread.id, 7, 'feature')
+    const probes = counts.identity
+    const gitCalls = counts.git.length
+    expect(probes).toBe(1)
+    expect(gitCalls).toBeGreaterThan(0)
+
+    now += 60_000
+    const result = await service.read({
+      threadIds: [thread.id],
+      refreshEnvironment: false,
+      resolveCwd: async () => 'C:\\repo',
+    })
+
+    expect(result.threads[0]!.items.map((item) => [item.number, item.primary])).toEqual([[7, true]])
+    expect(counts.git).toHaveLength(gitCalls)
+    expect(counts.identity).toBe(probes)
+    db.close()
+  })
+
+  test('同一工作目录的多个会话只探测一次', async () => {
+    const { db, thread, service, counts } = await probingFixture()
+    const sibling = db.repositories.threads.createThread('同目录会话')
+    const linkOf = (threadId: string, number: number) =>
+      db.repositories.threadPullRequests.upsert({
+        threadId,
+        owner: 'octocat',
+        repository: 'fixture',
+        number,
+        url: `https://github.com/octocat/fixture/pull/${number}`,
+        title: `PR ${number}`,
+        headRef: 'feature',
+        origin: 'manual',
+      })
+    linkOf(thread.id, 7)
+    linkOf(sibling.id, 8)
+
+    const result = await service.read({
+      threadIds: [thread.id, sibling.id],
+      resolveCwd: async () => 'C:\\repo',
+    })
+
+    expect(counts.identity).toBe(1)
+    expect(counts.git).toEqual(['C:\\repo'])
+    expect(result.threads.map((entry) => entry.items[0]?.primary)).toEqual([true, true])
+    db.close()
+  })
+
+  test('会话切换到新工作目录后不使用旧目录的探测结果', async () => {
+    const { db, thread, service, counts, link } = await probingFixture()
+    counts.branches.set('C:\\repo', 'feature')
+    counts.branches.set('C:\\repo-worktree', 'other')
+    await link(thread.id, 7, 'feature')
+    expect(counts.identity).toBe(1)
+
+    const switched = await service.read({
+      threadIds: [thread.id],
+      resolveCwd: async () => 'C:\\repo-worktree',
+    })
+
+    expect(counts.identity).toBe(2)
+    expect(counts.git).toEqual(['C:\\repo', 'C:\\repo-worktree'])
+    expect(switched.threads[0]!.items[0]).toMatchObject({ number: 7, primary: true })
+    // 后续后台读取沿用切换后的目录缓存，且不再触发 Git。
+    await service.read({
+      threadIds: [thread.id],
+      refreshEnvironment: false,
+      resolveCwd: async () => 'C:\\repo-worktree',
+    })
+    expect(counts.git).toHaveLength(2)
+    db.close()
+  })
+
+  test('远端查询失败后按请求窗口重试，过期缓存不引起连续重试', async () => {
+    let now = 0
+    const root = await mkdtemp(join(tmpdir(), 'pidex-thread-pr-failure-'))
+    paths.push(root)
+    const historyPath = join(root, 'history.sqlite')
+    const profilePath = join(root, 'profile.sqlite')
+    const db = new AgentDatabase({ historyPath, profilePath })
+    const thread = db.repositories.threads.createThread('会话')
+    const counts = { watchReads: 0 }
+    const github = {
+      readPullRequest: async () => ({ pullRequest: restPullRequest }),
+      readWatch: async () => {
+        counts.watchReads += 1
+        throw new Error('rate limited')
+      },
+      repositoryIdentity: async () => ({ owner: 'octocat', repository: 'fixture' }),
+    } as never
+    const service = new ThreadPullRequestService(
+      db,
+      github,
+      { publish: () => Effect.succeed(undefined) } as never,
+      { git: { run: async () => ({ code: 0, stdout: 'feature\n', stderr: '' }) }, now: () => now },
+    )
+    db.repositories.threadPullRequests.upsert({
+      threadId: thread.id,
+      owner: 'octocat',
+      repository: 'fixture',
+      number: 7,
+      url: 'https://github.com/octocat/fixture/pull/7',
+      title: 'PR 7',
+      headRef: 'feature',
+      origin: 'manual',
+    })
+    const read = (refreshEnvironment = true) =>
+      service.read({
+        threadIds: [thread.id],
+        refreshEnvironment,
+        resolveCwd: async () => 'C:\\repo',
+      })
+
+    const failed = await read()
+    expect(failed.threads[0]!.items[0]).toMatchObject({
+      number: 7,
+      primary: true,
+      status: { state: 'unknown', stale: true },
+    })
+    expect(counts.watchReads).toBe(1)
+
+    now += 30_000
+    await read()
+    await read(false)
+    expect(counts.watchReads).toBe(1)
+
+    now += 60_000
+    await read(false)
+    expect(counts.watchReads).toBe(2)
+    db.close()
+  })
+
+  test('后台读取使用已缓存环境排序，排序结果与主动读取一致', async () => {
+    let now = 0
+    const { db, thread, service, link } = await probingFixture({ now: () => now })
+    const other = db.repositories.threads.createThread('其他分支会话')
+    db.repositories.threadPullRequests.upsert({
+      threadId: other.id,
+      owner: 'octocat',
+      repository: 'fixture',
+      number: 8,
+      url: 'https://github.com/octocat/fixture/pull/8',
+      title: 'PR 8',
+      headRef: 'other',
+      origin: 'manual',
+    })
+    await link(thread.id, 7, 'feature')
+    const order = (entry: {
+      readonly items: ReadonlyArray<{ number: number; primary: boolean }>
+    }) => entry.items.map((item) => [item.number, item.primary])
+
+    const active = await service.read({
+      threadIds: [thread.id, other.id],
+      resolveCwd: async () => 'C:\\repo',
+    })
+    now += 60_000
+    const background = await service.read({
+      threadIds: [thread.id, other.id],
+      refreshEnvironment: false,
+      resolveCwd: async () => 'C:\\repo',
+    })
+
+    expect(background.threads.map(order)).toEqual(active.threads.map(order))
+    expect(background.threads[0]!.items[0]).toMatchObject({ number: 7, primary: true })
     db.close()
   })
 })

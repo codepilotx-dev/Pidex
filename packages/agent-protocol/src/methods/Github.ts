@@ -477,7 +477,15 @@ export const GithubRpcMethods = {
     exactResult: true,
   }),
   'github/thread/pullRequests': defineMethod({
-    params: Schema.Struct({ threadIds: Schema.Array(OpaqueIDSchema) }),
+    params: Schema.Struct({
+      threadIds: Schema.Array(OpaqueIDSchema),
+      /**
+       * Read the thread's local repository/branch before ranking. Defaults to
+       * true for older callers; background polling passes false so remote status
+       * refreshes never spawn local Git processes.
+       */
+      refreshEnvironment: Schema.optional(Schema.Boolean),
+    }),
     result: ThreadPullRequestBatchResultSchema,
     errors: ThreadPullRequestErrors,
     capability: 'github.threadPullRequests.v1',

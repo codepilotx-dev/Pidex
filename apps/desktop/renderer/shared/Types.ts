@@ -416,6 +416,14 @@ export type CreatePullRequestInput = {
   threadId?: string
 }
 
+export type ListThreadPullRequestsOptions = {
+  /**
+   * 是否在读取前探测会话当前目录的仓库与分支；默认 true。
+   * 后台轮询传 false，仅刷新远端 PR 状态而复用已缓存的本地环境。
+   */
+  refreshEnvironment?: boolean
+}
+
 export type DesktopThreadPullRequestsResult =
   { ok: true; threads: ThreadPullRequestList[] } | { ok: false; error: string; errorCode?: string }
 
@@ -1991,7 +1999,10 @@ export type DesktopApi = {
     input: RestoreSessionTurnChangesInput,
   ): Promise<DesktopGitOperationResult>
   createPullRequest(input: CreatePullRequestInput): Promise<DesktopPullRequestResult>
-  listThreadPullRequests(threadIds: string[]): Promise<DesktopThreadPullRequestsResult>
+  listThreadPullRequests(
+    threadIds: string[],
+    options?: ListThreadPullRequestsOptions,
+  ): Promise<DesktopThreadPullRequestsResult>
   linkThreadPullRequest(
     input: LinkThreadPullRequestInput,
   ): Promise<DesktopThreadPullRequestMutationResult>

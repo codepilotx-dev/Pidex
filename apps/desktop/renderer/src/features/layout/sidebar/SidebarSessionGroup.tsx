@@ -57,7 +57,12 @@ import { desktopClient, desktopClipboard } from '../../../services/desktop-clien
 import { InputDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { useSidebarActivityPreview } from './UseSidebarActivityPreview.js'
 import type { ThreadPullRequestSummary } from '@pidex/shared/thread'
-import { applyThreadPullRequestList, useThreadPullRequests } from './ThreadPullRequestStore.js'
+import {
+  applyThreadPullRequestList,
+  useThreadPullRequestEnvironments,
+  useThreadPullRequestLifecycle,
+  useThreadPullRequests,
+} from './ThreadPullRequestStore.js'
 import {
   threadPullRequestIcon,
   threadPullRequestTitle,
@@ -165,8 +170,6 @@ function SidebarSessionGroupComponent({
   const [linkValue, setLinkValue] = useState('')
   const [linkError, setLinkError] = useState<string | null>(null)
   const [linking, setLinking] = useState(false)
-  const sessionIds = useMemo(() => sessions.map((session) => session.id), [sessions])
-  const pullRequests = useThreadPullRequests(sessionIds)
   const reducedMotion = usePrefersReducedMotion()
   const needsInputSessionIds = pendingPermissionSessionIds
   const unreadSessionIds = useMemo(
@@ -207,6 +210,39 @@ function SidebarSessionGroupComponent({
   )
   /** 所在折叠区域收起时回到默认分页；不在折叠区域内（例如独立渲染）时按展开处理。 */
   const disclosureExpanded = useDisclosureContentExpanded() ?? true
+  const visibleSessions =
+    pagination === 'all' ? orderedSessions : [...baseSessions, ...extraSessions]
+  /**
+   * 只订阅展开且处于当前分页内的会话：折叠区域收起或会话被分页隐藏时
+   * 不再请求 PR 状态，也不会占用后台刷新周期。
+   */
+  const displayedSessions = useMemo(
+    () =>
+      displayedSidebarSessions(
+        disclosureExpanded,
+        { baseSessions, extraSessions },
+        pagination === 'all' ? orderedSessions : undefined,
+      ),
+    [baseSessions, disclosureExpanded, extraSessions, orderedSessions, pagination],
+  )
+  const displayedSessionIds = useMemo(
+    () => displayedSessions.map((session) => session.id),
+    [displayedSessions],
+  )
+  const pullRequests = useThreadPullRequests(displayedSessionIds)
+  useThreadPullRequestLifecycle()
+  useThreadPullRequestEnvironments(
+    useMemo(
+      () =>
+        displayedSessions.map((session) => ({
+          threadId: session.id,
+          cwd: session.executionEnvironment?.cwd ?? session.workspacePath,
+          revision: session.executionEnvironment?.revision,
+          branch: session.gitBranch,
+        })),
+      [displayedSessions],
+    ),
+  )
 
   function updateVisibleLimit(resolution: number | ((visibleLimit: number) => number)): void {
     setPaging((current) => setSidebarSessionVisibleLimit(current, resolution))
@@ -714,8 +750,6 @@ function SidebarSessionGroupComponent({
     )
   }
 
-  const visibleSessions =
-    pagination === 'all' ? orderedSessions : [...baseSessions, ...extraSessions]
   const reorderValues = orderedSessions.map((session) => session.id)
   const sessionListClassName =
     'sidebar-session-list tw:m-0 tw:flex tw:list-none tw:flex-col tw:sidebar-row-gap tw:p-0'
@@ -867,6 +901,19 @@ function SidebarSessionGroupComponent({
 }
 
 export const SidebarSessionGroup = memo(SidebarSessionGroupComponent)
+
+/**
+ * 当前展示范围：折叠区域收起时为空。侧栏 PR 标记只为这里的会话订阅刷新，
+ * 被分页隐藏或折叠的会话不请求、也不占用后台周期。
+ */
+export function displayedSidebarSessions<T>(
+  expanded: boolean,
+  paged: { baseSessions: readonly T[]; extraSessions: readonly T[] },
+  paginationAll?: readonly T[],
+): readonly T[] {
+  if (!expanded) return []
+  return paginationAll ?? [...paged.baseSessions, ...paged.extraSessions]
+}
 
 export function sessionReadStatusActionLabel(
   session: Pick<SessionListItem, 'unreadAt'>,

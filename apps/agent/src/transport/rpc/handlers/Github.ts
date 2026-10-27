@@ -227,6 +227,8 @@ export const githubHandlers = {
           : []
         return runtime.dependencies.threadPullRequests.read({
           threadIds,
+          // 缺省保持主动读取语义；后台轮询显式传 false 复用本地环境缓存。
+          refreshEnvironment: params.refreshEnvironment !== false,
           resolveCwd: (threadId) => resolveThreadCwd(runtime, threadId),
         })
       }

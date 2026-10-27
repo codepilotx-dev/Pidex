@@ -1221,7 +1221,7 @@ export function createBrowserMockDesktopClient(
       ok: false,
       error: '浏览器 mock 模式不会创建 Pull Request。',
     }),
-    listThreadPullRequests: async (threadIds) => ({
+    listThreadPullRequests: async (threadIds, _options) => ({
       ok: true,
       threads: threadIds.map((threadId) => ({ threadId, items: [] })),
     }),

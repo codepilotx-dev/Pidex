@@ -50,6 +50,7 @@ import {
 } from '../src/features/layout/sidebar/SidebarSessionHoverCard.js'
 import { countOpenProjectSessions } from '../src/features/layout/sidebar/SidebarProjectHoverCard.js'
 import {
+  displayedSidebarSessions,
   getSidebarSessionDisplayGroups,
   sessionReadStatusActionLabel,
 } from '../src/features/layout/sidebar/SidebarSessionGroup.js'
@@ -820,6 +821,18 @@ describe('sidebar view model', () => {
       canShowMore: true,
       canCollapse: true,
     })
+  })
+
+  test('只有展开且在当前分页内的会话进入 PR 订阅范围', () => {
+    const items: string[] = Array.from({ length: 8 }, (_, index) => `session-${index}`)
+    const paged = getSidebarSessionDisplayGroups(items, 5, 5)
+
+    expect(displayedSidebarSessions(true, paged)).toEqual(items.slice(0, 5))
+    expect(displayedSidebarSessions(true, { ...paged, extraSessions: items.slice(5, 8) })).toEqual(
+      items,
+    )
+    expect(displayedSidebarSessions(false, paged)).toEqual([])
+    expect(displayedSidebarSessions(true, paged, items)).toEqual(items)
   })
 
   test('recent session paging collapses to its five-item default', () => {
