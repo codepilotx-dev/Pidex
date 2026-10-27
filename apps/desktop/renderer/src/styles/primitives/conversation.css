@@ -197,7 +197,7 @@
   }
 
   .canonical-turn__process {
-    gap: var(--cpx-sys-space-4);
+    gap: var(--cpx-sys-space-2);
   }
 
   .canonical-turn__process > .cpx-agent-activity > .cpx-agent-activity__header,
@@ -661,26 +661,14 @@
     margin-block: var(--conversation-grouped-item-gap, var(--cpx-sys-space-1)) 0;
   }
 
-  .cpx-agent-activity[data-state='failed'] > .cpx-agent-activity__header {
-    color: var(--cpx-sys-color-danger);
-  }
-
-  .cpx-agent-activity[data-state='active'] > .cpx-agent-activity__header {
-    color: var(--cpx-sys-color-accent-fg);
-  }
-
   .execution-plan-card__edge-fade {
     position: relative;
     min-width: 0;
   }
 
-  /* 处理过程列表平铺展示，不再限制高度滚动；上下边界渐隐已移除。 */
+  /* 工具列表独立滚动，展开详情不应把整个会话不断撑高。 */
   .cpx-agent-activity__list {
-    scrollbar-width: none;
-  }
-
-  .cpx-agent-activity__list::-webkit-scrollbar {
-    display: none;
+    max-height: 224px;
   }
 
   /* Path steps colour their grouped children from the parent state. */
@@ -704,7 +692,7 @@
     > .canonical-process-card
     > .canonical-process-card__summary,
   .cpx-agent-activity__path-step[data-state='running'] > .canonical-subagent-card {
-    color: var(--cpx-sys-color-accent-fg);
+    color: var(--cpx-sys-color-fg-secondary);
   }
 
   .cpx-agent-activity__path-step[data-state='completed']
@@ -725,7 +713,7 @@
     > .canonical-process-card
     > .canonical-process-card__summary,
   .cpx-agent-activity__path-step[data-state='failed'] > .canonical-subagent-card {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-fg-secondary);
   }
 
   /*
@@ -909,7 +897,7 @@
   }
 
   .cpx-agent-activity__item[data-state='error'] > .cpx-agent-activity__item-header {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-fg-secondary);
   }
 
   .cpx-agent-activity__file-link {
@@ -974,7 +962,7 @@
 
   .cpx-agent-activity__file-changes[data-state='error'],
   .cpx-agent-activity__file-changes[data-state='interrupted'] {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-fg-secondary);
   }
 
   .cpx-agent-activity__review-indicator {
@@ -1111,6 +1099,12 @@
     width: 100%;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+
+  /* 长输出按块跳过屏外文本排版，避免展开首帧和高度动画重复布局整个日志。 */
+  .canonical-command-card__output-chunk {
+    display: block;
+    content-visibility: auto;
   }
   .canonical-command-card .canonical-command-shell__scroller {
     max-height: 144px;
@@ -1466,7 +1460,7 @@
 
   .canonical-lifecycle-tool[data-state='error'],
   .canonical-lifecycle-tool[data-state='interrupted'] {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-fg-secondary);
   }
 
   /* Blocker and patch cards keep the shared card shell (patch root is pinned). */

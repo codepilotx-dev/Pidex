@@ -628,7 +628,7 @@ describe('non-color design token contracts', () => {
     )
     expect(markdown).toMatch(/\.md-body\s*\{[\s\S]*?font:\s*var\(--cpx-sys-type-reading\);/)
     expect(conversation).toMatch(
-      /\.canonical-turn__process\s*\{\s*gap:\s*var\(--cpx-sys-space-4\);/,
+      /\.canonical-turn__process\s*\{\s*gap:\s*var\(--cpx-sys-space-2\);/,
     )
     expect(markdown).toMatch(
       /\.md-table-block table\s*\{[\s\S]*?font:\s*var\(--cpx-sys-type-body\);/,

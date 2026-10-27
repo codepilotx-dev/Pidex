@@ -12,6 +12,7 @@ import type { Item } from '@pidex/shared/thread'
 import type { DesktopDiffMarkerStyle } from '../../../../shared/Types.js'
 import type { VirtualizerHandle } from 'virtua'
 import { FullScreenWhaleLoading } from '../../../components/ui/FullScreenWhaleLoading.js'
+import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import {
   Collapsible,
   CollapsibleContent,
@@ -200,11 +201,12 @@ export function CanonicalProcessGroup({
           contentClassName="cpx-agent-activity__content"
           id={contentId}
         >
-          <div className="cpx-agent-activity__list tw:min-w-0">
-            <div className="cpx-agent-activity__list-content tw:relative tw:grid tw:gap-[var(--conversation-grouped-item-gap,var(--cpx-sys-space-1))]">
-              {children}
-            </div>
-          </div>
+          <ScrollArea
+            className="cpx-agent-activity__list tw:min-w-0 tw:[scrollbar-width:thin]"
+            contentClassName="cpx-agent-activity__list-content tw:relative tw:grid tw:gap-[var(--conversation-grouped-item-gap,var(--cpx-sys-space-1))]"
+          >
+            {children}
+          </ScrollArea>
         </CollapsibleContent>
       </div>
     </Collapsible>

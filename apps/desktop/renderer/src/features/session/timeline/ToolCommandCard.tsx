@@ -8,6 +8,20 @@ import { CopyButton } from './CopyButton.js'
 
 type ToolItem = Extract<Item, { type: 'tool' }>
 
+export function commandOutputChunks(output: string): Array<{ text: string; lineCount: number }> {
+  const lines = output.split('\n')
+  const chunks: Array<{ text: string; lineCount: number }> = []
+  for (let start = 0; start < lines.length; start += 64) {
+    const chunk = lines.slice(start, start + 64)
+    const last = start + 64 >= lines.length
+    chunks.push({
+      text: chunk.join('\n') + (last ? '' : '\n'),
+      lineCount: chunk.length - (last && chunk.at(-1) === '' ? 1 : 0),
+    })
+  }
+  return chunks
+}
+
 export function isShellTool(tool: string | null | undefined): boolean {
   if (!tool) return false
   const leaf = tool.split(/[./]/).at(-1)?.toLowerCase() ?? ''
@@ -107,6 +121,10 @@ export function ToolCommandCard({
   const wasExpandedRef = React.useRef(false)
   const edge = useScrollEdgeState(scrollerRef, { contentRef, version: output })
   const exitCode = readCommandExitCode(item.output)
+  const outputChunks = React.useMemo(
+    () => commandOutputChunks(output ?? (active ? '等待输出' : '无输出')),
+    [output, active],
+  )
   const StatusIcon =
     item.state === 'interrupted'
       ? CircleStop
@@ -210,7 +228,15 @@ export function ToolCommandCard({
               className="canonical-command-card__output-text"
               data-wrapped={wrapped}
             >
-              {output ?? (active ? '等待输出' : '无输出')}
+              {outputChunks.map((chunk, index) => (
+                <span
+                  key={index}
+                  className="canonical-command-card__output-chunk"
+                  style={{ containIntrinsicBlockSize: `auto ${chunk.lineCount}lh` }}
+                >
+                  {chunk.text}
+                </span>
+              ))}
             </pre>
           </div>
         </div>

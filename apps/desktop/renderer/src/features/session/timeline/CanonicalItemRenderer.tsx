@@ -44,6 +44,7 @@ import { Button } from '../../../components/ui/Button.js'
 
 import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
+import { Collapsible, CollapsibleContent } from '../../../components/ui/Collapsible.js'
 import {
   type KeyedDisclosureStore,
   useDisclosureExpanded,
@@ -797,80 +798,81 @@ export function ToolItemView({
   }, [disclosure, requestedExpanded, view.canExpand])
 
   return (
-    <div
-      className="cpx-agent-activity__item tw:min-w-0 tw:text-app-text-soft"
-      data-expandable={view.canExpand ? 'true' : 'false'}
-      data-expanded={expanded ? 'true' : 'false'}
-      data-presentation={presentation}
-      data-state={item.state}
-    >
-      <ToolActivityHeader
-        canExpand={view.canExpand}
-        contentId={contentId}
-        expanded={expanded}
-        label={expanded ? view.expandedLabel : view.collapsedLabel}
-        onToggle={() => {
-          if (!view.canExpand) return
-          if (disclosure) {
-            disclosure.onExpandedChange(disclosure.id, !expanded)
-          } else {
-            setLocalExpanded(!expanded)
-          }
-        }}
+    <Collapsible open={expanded} asChild>
+      <div
+        className="cpx-agent-activity__item tw:min-w-0 tw:text-app-text-soft"
+        data-expandable={view.canExpand ? 'true' : 'false'}
+        data-expanded={expanded ? 'true' : 'false'}
+        data-presentation={presentation}
+        data-state={item.state}
       >
-        {view.active ? (
-          <LoaderCircle
-            size={APP_ICON_SIZES.sm}
-            className="canonical-spin cpx-agent-activity__icon"
-            aria-hidden="true"
-          />
-        ) : item.state === 'interrupted' ? (
-          <CircleStop
-            size={APP_ICON_SIZES.sm}
-            className="cpx-agent-activity__icon"
-            aria-hidden="true"
-          />
-        ) : view.failed ? (
-          <CircleAlert
-            size={APP_ICON_SIZES.sm}
-            className="cpx-agent-activity__icon"
-            aria-hidden="true"
-          />
-        ) : (
-          <SummaryIcon
-            size={APP_ICON_SIZES.sm}
-            className="cpx-agent-activity__icon"
-            aria-hidden="true"
-          />
-        )}
-        {view.semanticSummary ? (
-          <ToolActivityLabel summary={view.semanticSummary} />
-        ) : (
-          <span className="cpx-agent-activity__label">
-            {expanded ? view.expandedLabel : view.collapsedLabel}
-          </span>
-        )}
-        <ChevronRight
-          size={APP_ICON_SIZES.sm}
-          className="cpx-agent-activity__chevron"
-          aria-hidden="true"
-        />
-      </ToolActivityHeader>
-      <DisclosureContent
-        contentClassName="cpx-agent-activity__details"
-        expanded={expanded}
-        id={contentId}
-        mountPolicy="until-exit"
-      >
-        <ToolExecutionCard
+        <ToolActivityHeader
+          canExpand={view.canExpand}
+          contentId={contentId}
           expanded={expanded}
-          item={item}
-          presentation={presentation}
-          threadId={threadId}
-          view={view}
-        />
-      </DisclosureContent>
-    </div>
+          label={expanded ? view.expandedLabel : view.collapsedLabel}
+          onToggle={() => {
+            if (!view.canExpand) return
+            if (disclosure) {
+              disclosure.onExpandedChange(disclosure.id, !expanded)
+            } else {
+              setLocalExpanded(!expanded)
+            }
+          }}
+        >
+          {view.active ? (
+            <LoaderCircle
+              size={APP_ICON_SIZES.sm}
+              className="canonical-spin cpx-agent-activity__icon"
+              aria-hidden="true"
+            />
+          ) : item.state === 'interrupted' ? (
+            <CircleStop
+              size={APP_ICON_SIZES.sm}
+              className="cpx-agent-activity__icon"
+              aria-hidden="true"
+            />
+          ) : view.failed ? (
+            <CircleAlert
+              size={APP_ICON_SIZES.sm}
+              className="cpx-agent-activity__icon"
+              aria-hidden="true"
+            />
+          ) : (
+            <SummaryIcon
+              size={APP_ICON_SIZES.sm}
+              className="cpx-agent-activity__icon"
+              aria-hidden="true"
+            />
+          )}
+          {view.semanticSummary ? (
+            <ToolActivityLabel summary={view.semanticSummary} />
+          ) : (
+            <span className="cpx-agent-activity__label">
+              {expanded ? view.expandedLabel : view.collapsedLabel}
+            </span>
+          )}
+          <ChevronRight
+            size={APP_ICON_SIZES.sm}
+            className="cpx-agent-activity__chevron"
+            aria-hidden="true"
+          />
+        </ToolActivityHeader>
+        <CollapsibleContent
+          contentClassName="cpx-agent-activity__details"
+          expanded={expanded}
+          id={contentId}
+        >
+          <ToolExecutionCard
+            expanded={expanded}
+            item={item}
+            presentation={presentation}
+            threadId={threadId}
+            view={view}
+          />
+        </CollapsibleContent>
+      </div>
+    </Collapsible>
   )
 }
 

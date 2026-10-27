@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
+  commandOutputChunks,
   commandOutputFollowing,
   commandOutputScrollTop,
   isCommandOutputAtBottom,
@@ -97,6 +98,19 @@ function resultCardEnvelope(overrides: { card?: Record<string, unknown> } = {}) 
 }
 
 describe('canonical tool item display', () => {
+  test('chunks long output without changing whitespace or line height estimates', () => {
+    for (const count of [0, 1, 63, 64, 65, 128, 4000]) {
+      for (const suffix of ['', '\n']) {
+        const output = Array.from({ length: count }, (_, i) => `  ${i} 中文\tvalue\r`).join('\n') + suffix
+        const chunks = commandOutputChunks(output)
+        expect(chunks.map((chunk) => chunk.text).join('')).toBe(output)
+        expect(chunks.every((chunk) => chunk.lineCount <= 64)).toBe(true)
+        expect(chunks.reduce((sum, chunk) => sum + chunk.lineCount, 0)).toBe(
+          output === '' ? 0 : output.split('\n').length - (output.endsWith('\n') ? 1 : 0),
+        )
+      }
+    }
+  })
   test('routes command and result details by activity before shell-name fallback', () => {
     expect(toolDetailKind(toolItem())).toBe('command')
     for (const kind of ['generic', 'format', 'test', 'lint', 'skill_script'] as const) {
@@ -951,7 +965,8 @@ describe('canonical tool item display', () => {
     expect(collapsed).toContain('class="cpx-agent-activity__duration"> · 1 秒</span>')
     expect(collapsed).not.toContain('title="已运行 bun test · 1 秒"')
     expect(collapsed).not.toContain('aria-label="执行内容"')
-    expect(collapsed).toContain('data-mount-policy="until-exit"')
+    expect(collapsed).toContain('ui-collapsible-content')
+    expect(collapsed).toContain('data-state="closed"')
     expect(collapsed).toContain('aria-hidden="true"')
     expect(collapsed).toContain('inert')
     expect(collapsed).not.toContain('canonical-command-shell')
@@ -960,6 +975,7 @@ describe('canonical tool item display', () => {
     expect(expanded.replace(/<[^>]*>/g, '')).toContain('已运行 bun test · 1 秒')
     expect(expanded).not.toContain('title="已运行 bun test · 1 秒"')
     expect(expanded).toContain('aria-label="执行内容"')
+    expect(expanded).not.toContain('transition-[grid-template-rows]')
     expect(expanded).toContain('lucide-chevron-right')
     expect(expanded).not.toContain('lucide-chevron-down')
   })

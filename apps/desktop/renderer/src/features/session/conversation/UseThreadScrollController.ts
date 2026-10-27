@@ -289,13 +289,15 @@ function readMetrics(
   }
 }
 
-function isDisclosureGridTransition(
-  event: TransitionEvent,
-): event is TransitionEvent & { target: HTMLElement } {
+export function isDisclosureMotion(event: TransitionEvent | AnimationEvent): boolean {
   return (
-    event.propertyName === 'grid-template-rows' &&
     event.target instanceof HTMLElement &&
-    event.target.classList.contains('ui-disclosure-content')
+    ('propertyName' in event
+      ? event.propertyName === 'grid-template-rows' &&
+        event.target.classList.contains('ui-disclosure-content')
+      : (event.animationName === 'ui-collapsible-open' ||
+          event.animationName === 'ui-collapsible-close') &&
+        event.target.classList.contains('ui-collapsible-content'))
   )
 }
 
@@ -826,8 +828,8 @@ export function useThreadScrollController({
     const observer = new ResizeObserver(([entry]) => {
       if (entry) handleContentResize(entry)
     })
-    const handleDisclosureTransitionRun = (event: TransitionEvent): void => {
-      if (!isDisclosureGridTransition(event)) return
+    const handleDisclosureTransitionRun = (event: TransitionEvent | AnimationEvent): void => {
+      if (!isDisclosureMotion(event)) return
       if (activeDisclosureTransitionDepthRef.current === 0) {
         const transitionMetrics = readMetrics(listRef.current, scrollRef.current)
         const shouldFollow =
@@ -841,8 +843,8 @@ export function useThreadScrollController({
       }
       activeDisclosureTransitionDepthRef.current += 1
     }
-    const handleDisclosureTransitionComplete = (event: TransitionEvent): void => {
-      if (!isDisclosureGridTransition(event)) return
+    const handleDisclosureTransitionComplete = (event: TransitionEvent | AnimationEvent): void => {
+      if (!isDisclosureMotion(event)) return
       activeDisclosureTransitionDepthRef.current = Math.max(
         0,
         activeDisclosureTransitionDepthRef.current - 1,
@@ -870,11 +872,17 @@ export function useThreadScrollController({
     content.addEventListener('transitionrun', handleDisclosureTransitionRun)
     content.addEventListener('transitionend', handleDisclosureTransitionComplete)
     content.addEventListener('transitioncancel', handleDisclosureTransitionComplete)
+    content.addEventListener('animationstart', handleDisclosureTransitionRun)
+    content.addEventListener('animationend', handleDisclosureTransitionComplete)
+    content.addEventListener('animationcancel', handleDisclosureTransitionComplete)
     return () => {
       observer.disconnect()
       content.removeEventListener('transitionrun', handleDisclosureTransitionRun)
       content.removeEventListener('transitionend', handleDisclosureTransitionComplete)
       content.removeEventListener('transitioncancel', handleDisclosureTransitionComplete)
+      content.removeEventListener('animationstart', handleDisclosureTransitionRun)
+      content.removeEventListener('animationend', handleDisclosureTransitionComplete)
+      content.removeEventListener('animationcancel', handleDisclosureTransitionComplete)
       if (contentResizeFrameRef.current !== null) {
         cancelAnimationFrame(contentResizeFrameRef.current)
         contentResizeFrameRef.current = null
