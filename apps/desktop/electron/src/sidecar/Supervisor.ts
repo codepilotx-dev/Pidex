@@ -44,6 +44,7 @@ const SHUTDOWN_TIMEOUT_MS = 4_000
 const SIGTERM_TIMEOUT_MS = 2_000
 const PROCESS_TREE_TIMEOUT_MS = 2_000
 const WATCHDOG_INTERVAL_MS = 2_000
+const WATCHDOG_PROBE_TIMEOUT_MS = 2_000
 const WATCHDOG_FAILURE_LIMIT = 3
 
 export type AgentConnectionState = 'connected' | 'disconnected' | 'unknown'
@@ -297,7 +298,9 @@ export class SidecarSupervisor {
     }
   }
 
-  get ownsBackend(): boolean { return Boolean(this.#backgroundRuntime || this.#owned) }
+  get ownsBackend(): boolean {
+    return Boolean(this.#backgroundRuntime || this.#owned)
+  }
 
   async invalidate(): Promise<void> {
     this.#clearWatchdog()
@@ -324,7 +327,7 @@ export class SidecarSupervisor {
         connection.origin,
         this.#fetch,
         this.#token,
-        1_000,
+        WATCHDOG_PROBE_TIMEOUT_MS,
         connection.instanceToken,
       )
         .then(() => {
@@ -336,7 +339,9 @@ export class SidecarSupervisor {
           if (watchdogEpoch !== this.#watchdogEpoch) return
           if (!this.#isConnectionCurrent(connection)) return
           failures += 1
-          this.#logger.warn('sidecar.watchdog-error', {
+          // 单次超时通常是 sidecar 事件循环短暂繁忙，降为 debug；连续失败才告警。
+          const log = failures > 1 ? this.#logger.warn : this.#logger.debug
+          log.call(this.#logger, 'sidecar.watchdog-error', {
             origin: connection.origin,
             failures,
             message: formatError(error),
