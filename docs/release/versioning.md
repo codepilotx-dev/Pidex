@@ -51,13 +51,13 @@ Git 标签格式：`v<根 package.json 的 version>`。
 
 ## 变更记录
 
-- 所有变更记录写于根 `CHANGELOG.md`。
-- 日常开发写入 `Unreleased` 区段。
+- 发布日志写于根 `CHANGELOG.md`，是否记录由 Agent 按根 `AGENTS.md` 的实际影响标准判断，不要求每个任务或 PR 新增条目。
+- 日常开发只维护 `Unreleased`，同一功能优先合并为最终行为说明；细小样式、内部重构、普通文档与测试更新通常省略，已发布历史不随日常修改重写。
 - 准备发布时，`version:prepare` 将 `Unreleased` 归档到带日期的版本标题。
 - 分类固定为：`Added`、`Changed`、`Fixed`、`Deprecated`、`Removed`、`Security`。
 - 每条记录格式：`- [作用域] 中文说明`。
 
-> 修改记录、生成文件或配置必须逐项列出；生成文件需说明生成来源或目的。
+> 日志面向用户与集成方说明值得关注的结果；实现细节、生成文件清单和验收过程留在提交、PR 或对应文档中。
 
 ## 人工发布步骤
 
@@ -145,7 +145,7 @@ GitHub 的 `Protect main` 与 `Protect dev` 当前要求上述六个命名作业
 | 命令                                                             | 说明                                                                                   |
 | ---------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
 | `bun run version:check`                                          | 验证四 manifest 一致、lockfile 一致、CHANGELOG 结构有效                                |
-| `bun run version:check -- --base <git-sha>`                      | 验证 PR 中 `Unreleased` 有新增说明                                                     |
+| `bun run version:check -- --base <git-sha>`                      | 按需检查 `Unreleased` 是否有新增说明，不作为每个 PR 的必需门禁                         |
 | `bun run version:check -- --tag <v版本>`                         | 额外验证标签与 manifest 版本一致                                                       |
 | `bun run version:prepare -- <新版本>`                            | 归档 `Unreleased`、同步 manifest、刷新 lockfile                                        |
 | `bun run version:prepare -- <新版本> --stable`                   | 同上，但允许无预发布后缀的稳定版                                                       |

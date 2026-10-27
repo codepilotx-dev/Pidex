@@ -148,6 +148,8 @@ describe('release workflows', () => {
       expect(workflow).not.toContain('labeled')
     }
     expect(prRulesWorkflow).toContain('changelog-check:')
+    expect(prRulesWorkflow).toContain('run: bun run version:check')
+    expect(prRulesWorkflow).not.toContain('version:check -- --base')
     expect(prRulesWorkflow).not.toContain('release-pr-policy')
     expect(prRulesWorkflow).not.toContain('RELEASE_BOT_LOGIN')
     expect(packageWorkflow).not.toContain('release-pr-policy:')

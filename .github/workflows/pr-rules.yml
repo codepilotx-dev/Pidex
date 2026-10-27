@@ -29,9 +29,3 @@ jobs:
         run: bun install --frozen-lockfile
       - name: Version consistency check
         run: bun run version:check
-      - name: Changelog Unreleased entry check
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
-        shell: pwsh
-        run: |
-          $baseSha = "${{ github.event.pull_request.base.sha }}"
-          bun run version:check -- --base $baseSha
