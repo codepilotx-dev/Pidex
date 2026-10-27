@@ -195,6 +195,35 @@ describe('canonical thread switch', () => {
     expect(markup).toContain('dateTime="1970-01-01T00:00:00.001Z"')
     expect(markup).not.toContain('skills/mmx-cli/SKILL.md')
   })
+  test('正式用户消息只保留外壳上的唯一操作栏', () => {
+    const input = {
+      id: 'input-actions',
+      threadId: 'thread-actions',
+      turnId: 'turn-actions',
+      content: '检查操作栏',
+      delivery: 'start',
+      mode: 'chat',
+      model: { providerID: 'openai', id: 'gpt-5' },
+      permissionConfig: {
+        sandboxMode: 'workspace-write',
+        approvalPolicy: 'on-request',
+        approvalsReviewer: 'user',
+      },
+      state: 'completed',
+      createdAt: 1,
+    } as React.ComponentProps<typeof CanonicalUserInput>['input']
+    const markup = renderToStaticMarkup(
+      <CanonicalTestProviders>
+        <CanonicalUserInput
+          input={input}
+          attachments={[]}
+          contextReferences={[]}
+          registerInputRow={() => undefined}
+        />
+      </CanonicalTestProviders>,
+    )
+    expect(markup.match(/aria-label="用户消息操作"/g)).toHaveLength(1)
+  })
   test('does not expose state from the previous thread', () => {
     const state = {
       thread: { id: 'thread-a' },
@@ -716,7 +745,7 @@ describe('canonical thread switch', () => {
       totalDeletions: 0,
       createdAt: 3_000,
     } as const
-    const postAssistantActivity = {
+    const compactionActivity = {
       id: 'context-compression-post',
       messageID: 'message-context-compression-post',
       turnId: 'turn-1',
@@ -735,13 +764,13 @@ describe('canonical thread switch', () => {
         elapsedSeconds: 359,
         error: null,
       },
-      items: [processText, planTool, tool, answer, patch, postAssistantActivity],
+      items: [processText, planTool, tool, answer, patch, compactionActivity],
       userItems: [],
       attachments: [],
-      processItems: [processText, planTool, tool],
+      processItems: [processText, planTool, tool, compactionActivity],
       assistantResultItems: [answer],
       patchItems: [patch],
-      postAssistantItems: [postAssistantActivity],
+      postAssistantItems: [],
       planItem: null,
       executionPlanItems: [],
       blockers: [],
@@ -850,10 +879,10 @@ describe('canonical thread switch', () => {
     const workStatusIndex = visibleText.indexOf('已处理 5m 59s')
     const processTextIndex = visibleText.indexOf('中间处理说明标记')
     const lifecycleIndex = visibleText.indexOf('已更新计划')
-    const commandsIndex = visibleText.indexOf('bun test · 1 秒')
+    const commandsIndex = visibleText.indexOf('bun test')
     const answerIndex = visibleText.indexOf('最终回复标记')
     const patchIndex = visibleText.indexOf('已编辑 1 个文件')
-    const postAssistantIndex = visibleText.indexOf('上下文已自动压缩标记')
+    const compactionIndex = visibleText.indexOf('上下文已自动压缩标记')
     expect(processTextIndex).toBeGreaterThan(-1)
     expect(workStatusIndex).toBeGreaterThan(-1)
     expect(workStatusIndex).toBeLessThan(processTextIndex)
@@ -861,16 +890,20 @@ describe('canonical thread switch', () => {
     expect(commandsIndex).toBeGreaterThan(lifecycleIndex)
     expect(answerIndex).toBeGreaterThan(commandsIndex)
     expect(patchIndex).toBeGreaterThan(answerIndex)
-    expect(postAssistantIndex).toBeGreaterThan(patchIndex)
+    expect(compactionIndex).toBeGreaterThan(commandsIndex)
+    expect(compactionIndex).toBeLessThan(answerIndex)
+    expect(
+      markup.slice(markup.indexOf('canonical-turn__process'), markup.indexOf('canonical-turn__result')),
+    ).toContain('上下文已自动压缩标记')
     expect(markup).not.toContain('运行了 1 条命令')
     expect(markup).not.toContain('canonical-process-group--commands')
     expect(markup).toContain('cpx-agent-activity__item')
     expect(markup).toContain('data-presentation="grouped"')
-    expect(multiCommandMarkup).toContain('运行命令')
+    expect(multiCommandMarkup).toContain('运行了命令')
     expect(multiCommandMarkup).not.toContain('cpx-agent-activity__path-step')
     expect(multiCommandMarkup).not.toContain('canonical-process-group--commands')
     expect(multiCommandMarkup).not.toContain('canonical-command-shell')
-    expect(activeWithAnswerMarkup).toContain('运行命令')
+    expect(activeWithAnswerMarkup).toContain('运行了命令')
     expect(activeWithAnswerMarkup).not.toContain('正在思考')
     expect(activeWithAnswerMarkup).not.toContain('lucide-loader-circle')
     expect(activeWithAnswerMarkup).toContain('data-expandable="true"')
@@ -883,13 +916,13 @@ describe('canonical thread switch', () => {
     )
     const processSection = nestedBoundaryMarkup.slice(processSectionStart, processSectionEnd)
     expect(processSection).toContain('中间处理说明标记')
-    expect(processSection).toContain('运行命令')
+    expect(processSection).toContain('运行了命令')
     expect(processSection).toContain('继续处理说明标记')
     expect(processSection).toContain('已更新计划')
     expect(processSection.indexOf('中间处理说明标记')).toBeLessThan(
-      processSection.indexOf('运行命令'),
+      processSection.indexOf('运行了命令'),
     )
-    expect(processSection.indexOf('运行命令')).toBeLessThan(
+    expect(processSection.indexOf('运行了命令')).toBeLessThan(
       processSection.indexOf('继续处理说明标记'),
     )
     expect(processSection.indexOf('继续处理说明标记')).toBeLessThan(
@@ -902,6 +935,7 @@ describe('canonical thread switch', () => {
     expect(collapsedMarkup).toContain('aria-expanded="false"')
     expect(collapsedMarkup).not.toContain('中间处理说明标记')
     expect(collapsedMarkup).not.toContain('bun test')
+    expect(collapsedMarkup).not.toContain('上下文已自动压缩标记')
     expect(collapsedMarkup).toContain('aria-hidden="true"')
     expect(collapsedMarkup).toContain('inert')
     expect(collapsedMarkup).toContain('最终回复标记')
@@ -945,7 +979,7 @@ describe('canonical thread switch', () => {
     const integrationTool = tool('gh-1', { type: 'integration', source: 'GitHub' })
 
     const runningSummary = summarizeTurnProcessItems([readTool, cmdTool], 'running')
-    expect(runningSummary.label).toBe('读取文件、运行命令')
+    expect(runningSummary.label).toBe('正在查阅代码并执行命令…')
     expect(runningSummary.active).toBe(true)
 
     const integrationSummary = summarizeTurnProcessItems([integrationTool], 'completed')

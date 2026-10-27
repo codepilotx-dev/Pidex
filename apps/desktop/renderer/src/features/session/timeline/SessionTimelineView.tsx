@@ -226,7 +226,7 @@ export function SessionTimelineView<T>({
 
   return (
     <div
-      className="session-timeline-container tw:relative tw:mx-auto tw:min-w-0 tw:max-w-none tw:w-[var(--session-timeline-width,var(--session-content-w,100%))]"
+      className="session-timeline-container tw:relative tw:flex-auto tw:mx-auto tw:min-w-0 tw:max-w-none tw:w-[var(--session-timeline-width,var(--session-content-w,100%))]"
       data-component="session-timeline"
       data-session-key={sessionKey}
       data-scroll-mode={scrollController.mode}
@@ -243,7 +243,7 @@ export function SessionTimelineView<T>({
             item === TIMELINE_BOTTOM_SENTINEL ? (
               <div
                 aria-hidden="true"
-                className="session-timeline-bottom-sentinel tw:relative tw:w-full tw:h-[calc(var(--thread-scroll-footer-fade-height)+var(--thread-scroll-content-bottom-gap))] tw:pointer-events-none"
+                className="session-timeline-bottom-sentinel tw:relative tw:w-full tw:flex-none tw:h-[calc(var(--thread-scroll-footer-fade-height)+var(--thread-scroll-content-bottom-gap))] tw:pointer-events-none"
                 key="timeline-bottom-sentinel"
               >
                 <div

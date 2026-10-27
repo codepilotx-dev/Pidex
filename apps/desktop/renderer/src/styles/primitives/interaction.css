@@ -1,13 +1,5 @@
-/* Text icon slots own their geometry; artwork and standalone icon buttons do not inherit it. */
-@layer overrides {
-  :root {
-    --inline-icon-size: 1em;
-  }
-
-  :root[lang='en-US'] {
-    --inline-icon-size: 1cap;
-  }
-
+@layer reset {
+  /* 基础点击尺寸不得覆盖组件声明的行高。 */
   :where(
     button,
     [role='button'],
@@ -20,6 +12,17 @@
   ) {
     min-width: 24px;
     min-height: 24px;
+  }
+}
+
+/* Text icon slots own their geometry; artwork and standalone icon buttons do not inherit it. */
+@layer overrides {
+  :root {
+    --inline-icon-size: 1em;
+  }
+
+  :root[lang='en-US'] {
+    --inline-icon-size: 1cap;
   }
 
   :where(

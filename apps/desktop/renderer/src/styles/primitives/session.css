@@ -302,8 +302,9 @@
     overflow: hidden;
     border: 1px solid var(--cpx-sys-color-border-subtle);
     border-radius: var(--cpx-sys-radius-full);
-    background: var(--cpx-sys-color-surface-canvas);
-    box-shadow: var(--cpx-sys-shadow-resting);
+    background: var(--cpx-sys-color-surface-raised);
+    box-shadow: var(--cpx-sys-shadow-floating);
+    backdrop-filter: var(--cpx-sys-blur-md);
     color: var(--cpx-sys-color-fg-primary);
     cursor: pointer;
     transition:
@@ -541,6 +542,9 @@
    * `--thread-scroll-padding-bottom`/`-footer-height`/`-viewport-height` as
    * inline styles; the two fade values are read by the bottom sentinel and by
    * the sticky footer's fade pseudo-element in `_canonical-conversation.scss`.
+   *
+   * The gutter is reserved on every host (main thread and side chats) so that
+   * gaining or losing the scrollbar never changes the reading column width.
    */
   .thread-scroll-layout {
     --thread-scroll-footer-fade-height: 32px;
@@ -548,6 +552,8 @@
     --thread-scroll-footer-height: 0px;
     --thread-scroll-padding-bottom: 16px;
     --thread-scroll-viewport-height: 100%;
+
+    scrollbar-gutter: stable;
   }
 
   /* --- Thread summary geometry -------------------------------------- */
@@ -597,8 +603,11 @@
     --new-session-suggestion-tone: var(--cpx-sys-color-accent);
   }
 
+  /*
+   * The global hide rule must not win over ConversationPage's visible thin
+   * scrollbar; only non-conversation hosts keep the hidden scrollbar.
+   */
   .quick-chat-view::-webkit-scrollbar,
-  .thread-scroll-layout::-webkit-scrollbar,
   .conversation-turn-nav-list::-webkit-scrollbar {
     display: none;
     width: 0;

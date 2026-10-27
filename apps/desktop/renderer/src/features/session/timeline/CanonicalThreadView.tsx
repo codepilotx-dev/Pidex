@@ -90,6 +90,8 @@ export type CanonicalThreadViewProps = {
   threadId: string
   active: boolean
   loading: boolean
+  /** 首次提交尚未出现时，不展示整块加载画面，只保留已提交消息。 */
+  deferInitialLoading?: boolean
   loadingOlder: boolean
   hasOlder: boolean
   error: string | null
@@ -508,6 +510,7 @@ function CanonicalThreadViewComponent({
   threadId,
   active,
   loading,
+  deferInitialLoading = false,
   loadingOlder,
   hasOlder,
   error,
@@ -585,7 +588,7 @@ function CanonicalThreadViewComponent({
     ],
   )
 
-  if (loading && turns.length === 0) {
+  if (loading && turns.length === 0 && !deferInitialLoading) {
     return <FullScreenWhaleLoading label="正在加载会话内容…" variant="contained" />
   }
 

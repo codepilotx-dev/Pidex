@@ -40,12 +40,23 @@
   }
 
   .quick-chat-view > .quick-chat-hero-region,
-  .quick-chat-view > .quick-chat-composer-region,
-  .conversation-page .thread-scroll-layout__inner {
+  .quick-chat-view > .quick-chat-composer-region {
     width: 100%;
     max-width: calc(var(--page-content-max-width) + 2 * var(--cpx-sys-space-4));
     margin-inline: auto;
     padding-inline: var(--cpx-sys-space-4);
+  }
+
+  /*
+   * The settled conversation geometry (`--session-content-w`) already excludes
+   * the rail and dock clearance that the shell computes. Padding here would
+   * shrink the reading column a second time and push the sticky footer out of
+   * the scroll content width.
+   */
+  .conversation-page .thread-scroll-layout__inner {
+    width: 100%;
+    max-width: var(--session-content-w);
+    margin-inline: auto;
   }
 
   .conversation-page {
@@ -109,6 +120,7 @@
     margin-inline: 0;
   }
 
+  /* The scrollbar gutter is reserved, so the thumb is always visible chrome. */
   .conversation-page .thread-scroll-layout {
     scrollbar-width: thin;
     scrollbar-color: var(--cpx-sys-color-border-subtle) transparent;
@@ -132,6 +144,7 @@
   .conversation-page .thread-scroll-layout__footer {
     position: sticky;
     bottom: 0;
+    margin-top: auto;
     padding: 0 0 var(--cpx-sys-space-3);
   }
 
@@ -152,13 +165,13 @@
   /* ── Turn shell ── */
 
   /*
-   * The turn owns the conversation container query and the rendering isolation
-   * used by the virtualized timeline, plus the reading rhythm that every
-   * narrative block inherits from.
+   * The turn owns the conversation container query and the reading rhythm that
+   * every narrative block inherits from. It intentionally does not opt into
+   * `content-visibility`: the virtualizer already bounds the mounted row range,
+   * and browser placeholder measurement stacked on top of virtua's dynamic
+   * measurement produced large gaps and scroll jumping.
    */
   .canonical-turn {
-    content-visibility: auto;
-    contain-intrinsic-block-size: auto 420px;
     container-type: inline-size;
     display: grid;
     gap: var(--cpx-sys-space-4);
@@ -197,7 +210,7 @@
   }
 
   .canonical-turn__process {
-    gap: var(--cpx-sys-space-2);
+    gap: var(--cpx-sys-space-3);
   }
 
   .canonical-turn__process > .cpx-agent-activity > .cpx-agent-activity__header,
@@ -664,6 +677,21 @@
   .execution-plan-card__edge-fade {
     position: relative;
     min-width: 0;
+  }
+  .execution-plan-card__edge-fade[data-scrollable='true'][data-at-start='false'] {
+    mask-image: linear-gradient(to bottom, transparent, black var(--edge-fade-distance, var(--cpx-sys-space-4)));
+  }
+  .execution-plan-card__edge-fade[data-scrollable='true'][data-at-end='false'] {
+    mask-image: linear-gradient(to top, transparent, black var(--edge-fade-distance, var(--cpx-sys-space-4)));
+  }
+  .execution-plan-card__edge-fade[data-scrollable='true'][data-at-start='false'][data-at-end='false'] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--edge-fade-distance, var(--cpx-sys-space-4)),
+      black calc(100% - var(--edge-fade-distance, var(--cpx-sys-space-4))),
+      transparent
+    );
   }
 
   /* 工具列表独立滚动，展开详情不应把整个会话不断撑高。 */

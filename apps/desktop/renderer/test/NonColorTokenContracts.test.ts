@@ -628,7 +628,7 @@ describe('non-color design token contracts', () => {
     )
     expect(markdown).toMatch(/\.md-body\s*\{[\s\S]*?font:\s*var\(--cpx-sys-type-reading\);/)
     expect(conversation).toMatch(
-      /\.canonical-turn__process\s*\{\s*gap:\s*var\(--cpx-sys-space-2\);/,
+      /\.canonical-turn__process\s*\{\s*gap:\s*var\(--cpx-sys-space-3\);/,
     )
     expect(markdown).toMatch(
       /\.md-table-block table\s*\{[\s\S]*?font:\s*var\(--cpx-sys-type-body\);/,
@@ -681,7 +681,11 @@ describe('non-color design token contracts', () => {
       /\.quick-chat-view,\s*\.conversation-page\s*\{\s*--cpx-sys-layout-conversation-max-width: 48rem;\s*--page-content-max-width: var\(--cpx-sys-layout-conversation-max-width\);\s*--session-content-w: 100%;/,
     )
     expect(conversation).toMatch(
-      /\.quick-chat-view > \.quick-chat-hero-region,\s*\.quick-chat-view > \.quick-chat-composer-region,\s*\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
+      /\.quick-chat-view > \.quick-chat-hero-region,\s*\.quick-chat-view > \.quick-chat-composer-region\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
+    )
+    // 会话内层列只跟随已结算的正文宽度，不再叠加第二层内边距。
+    expect(conversation).toMatch(
+      /\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: var\(--session-content-w\);\s*margin-inline: auto;/,
     )
     expect(conversation).not.toMatch(
       /\.quick-chat-view,\s*\.conversation-page \.thread-scroll-layout__inner/,

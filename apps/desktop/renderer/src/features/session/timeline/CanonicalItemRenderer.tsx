@@ -52,7 +52,6 @@ import {
 import { CodeBlock } from '../../syntax/CodeBlock.js'
 import { MarkdownMessage } from '../../markdown/index.js'
 import { ConversationMarkdownErrorBoundary } from '../conversation/ConversationTurnErrorBoundary.js'
-import { CollapsibleUserMarkdown } from '../conversation/CollapsibleUserMarkdown.js'
 import { subagentStatusLabel } from '../subagents/SubagentStatusLabel.js'
 import { useScrollEdgeState } from '../../../hooks/UseScrollEdgeState.js'
 import {
@@ -89,6 +88,7 @@ import {
 import { scheduleDraftFromTool, ScheduleDraftCard } from './ScheduleDraftCard.js'
 import { QuestionItemView } from './QuestionItemView.js'
 import { CopyButton } from './CopyButton.js'
+import { CanonicalUserMessageContent } from './CanonicalUserMessageContent.js'
 import { isShellTool, ToolCommandCard, toolDetailKind } from './ToolCommandCard.js'
 export { isShellTool } from './ToolCommandCard.js'
 import { cx } from '../../../utils/Cx.js'
@@ -221,6 +221,8 @@ export type CanonicalItemRendererProps = {
   threadId?: string
 }
 
+export { CanonicalUserMessageContent } from './CanonicalUserMessageContent.js'
+
 export function CanonicalUserInput({
   attachments,
   contextReferences,
@@ -237,16 +239,12 @@ export function CanonicalUserInput({
     [input.id, registerInputRow],
   )
   const {
-    canCopyFileReferenceContents,
-    onCopyFileReferenceContents,
-    onOpenFileReference,
     onOpenAttachment,
     onOpenLocalContext,
     onSubmitEditedUserMessage,
     canEditUserMessage,
     editableInputId,
     sessionStatus,
-    workspacePath,
   } = useConversationItemContext()
   const editingAllowed = Boolean(canEditUserMessage && editableInputId === input.id)
   const operationRef = React.useRef(crypto.randomUUID())
@@ -425,38 +423,16 @@ export function CanonicalUserInput({
 
   return (
     <article ref={inputRef} data-input-navigation-id={input.id} className="canonical-user-message">
-      {attachments.length > 0 ? (
-        <React.Suspense fallback={null}>
-          <LazyThreadAttachmentRows attachments={attachments} onOpen={onOpenAttachment} />
-        </React.Suspense>
-      ) : null}
-      {contextReferences.length > 0 ? (
-        <React.Suspense fallback={null}>
-          <LazyLocalContextRows references={contextReferences} onOpen={onOpenLocalContext} />
-        </React.Suspense>
-      ) : null}
-      <div className="canonical-user-message__bubble" data-user-message-bubble>
-        <CollapsibleUserMarkdown
-          inlinePrefix={
-            input.skills?.length ? (
-              <>
-                {input.skills.map((skill) => (
-                  <React.Fragment key={skill.path}>
-                    <span className="composer-inline-skill-token">
-                      <span className="composer-inline-skill-token-label">${skill.name}</span>
-                    </span>{' '}
-                  </React.Fragment>
-                ))}
-              </>
-            ) : undefined
-          }
-          canCopyFileReferenceContents={canCopyFileReferenceContents}
-          cwd={workspacePath}
-          onCopyFileReferenceContents={onCopyFileReferenceContents}
-          onOpenFileReference={onOpenFileReference}
-          text={input.content}
-        />
-      </div>
+      <CanonicalUserMessageContent
+        attachments={attachments}
+        content={input.content}
+        contextReferences={contextReferences}
+        createdAt={input.createdAt}
+        onOpenAttachment={onOpenAttachment}
+        onOpenLocalContext={onOpenLocalContext}
+        skills={input.skills}
+        withActions={false}
+      />
       <div className="canonical-message-actions" aria-label="用户消息操作">
         <MessageSentTime sentAt={input.createdAt} />
         <CopyButton text={displayText} />
