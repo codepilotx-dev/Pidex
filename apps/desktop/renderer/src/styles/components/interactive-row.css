@@ -7,29 +7,16 @@
    *
    * This file is the shared row primitive for the menu / dropdown family and is
    * consumed by components owned by several batches:
-   *   `.interactive-row*`      -> ui/PopoverItem.tsx, ui/SearchablePopoverContent.tsx,
-   *                               features/session/summary/ThreadSummaryPanel.tsx
-   *   `.popover-item*`, `.rich` -> PopoverItem.tsx, SearchablePopoverContent.tsx and the
-   *                               sub-trigger markup rendered directly by SidebarFooter,
-   *                               ReviewSourceMenu, ConversationPage, InlineApprovalCard
+   *   `.interactive-row*`      -> features/session/summary/ThreadSummaryPanel.tsx
    *   `.menubar-item`          -> features/layout/MenuBar.tsx (layout batch)
    *   `.settings-dropdown-item`/`.permission-select-item` -> ui/Select.tsx, ComposerCard.tsx
    *   `.chat-input__dropdown-item` -> ComposerCommandMenu.tsx
    *   `.sidebar-context-menu-*` -> ui/AppContextMenu.tsx (layout moved to utilities there)
    *
-   * The row box cannot move to `tw:` utilities yet: `menu-item.scss` still drives
-   * `display`/`gap` per `.popover-menu--*` container, so a `tw:flex`/`tw:grid` on the
-   * row would outrank those container variants. The interaction states are driven by
-   * the `--cpx-comp-row-*` variables that `popover.scss` re-points per dropdown theme
-   * (`[data-theme-component='dropdown-surface'|'dropdown-trigger']`), so they cannot
-   * be replaced by static utilities either.
-   *
-   * `.rm-model-menu .rm-menu-item` / `.rm-sub-trigger` had no TSX consumer and were
-   * removed. The `data-reduce-motion` block moved to the global rule in styles/base.css.
+   * `.popover-item*` and `.popover-sub-trigger` row layout and interaction states
+   * are unified and managed by `SidebarRow`.
    */
   .interactive-row,
-  .popover-item,
-  .popover-sub-trigger,
   .menubar-item,
   .settings-dropdown-item,
   .permission-select-item,
@@ -64,10 +51,6 @@
   }
   .interactive-row > svg,
   .interactive-row svg,
-  .popover-item > svg,
-  .popover-item svg,
-  .popover-sub-trigger > svg,
-  .popover-sub-trigger svg,
   .menubar-item > svg,
   .menubar-item svg,
   .settings-dropdown-item > svg,
@@ -83,8 +66,6 @@
     flex-shrink: 0;
   }
   .interactive-row > svg,
-  .popover-item > svg,
-  .popover-sub-trigger > svg,
   .menubar-item > svg,
   .settings-dropdown-item > svg,
   .permission-select-item > svg,
@@ -101,8 +82,6 @@
   }
 
   .interactive-row--menu,
-  .popover-item,
-  .popover-sub-trigger,
   .menubar-item,
   .settings-dropdown-item,
   .permission-select-item,
@@ -116,8 +95,6 @@
   }
 
   .interactive-row--rich,
-  .popover-item.rich,
-  .popover-item--rich,
   .permission-select-item {
     --interactive-row-current-min-height: var(--cpx-comp-row-height-menu-rich, 44px);
     --interactive-row-current-padding-block: var(--cpx-comp-row-padding-block-rich, 6px);
@@ -128,8 +105,6 @@
   }
 
   .interactive-row:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])),
-  .popover-item:hover:not(:where(:disabled, [data-disabled])),
-  .popover-sub-trigger:hover:not(:where([data-disabled])),
   .settings-dropdown-item:hover:not(:where(:disabled, [data-disabled])),
   .permission-select-item:hover:not(:where([data-disabled])),
   .chat-input__dropdown-item:hover:not(:where(:disabled)),
@@ -140,8 +115,6 @@
   }
 
   .interactive-row[data-highlighted],
-  .popover-item[data-highlighted],
-  .popover-sub-trigger[data-highlighted],
   .menubar-item[data-highlighted],
   .settings-dropdown-item[data-highlighted],
   .permission-select-item[data-highlighted],
@@ -153,8 +126,6 @@
   }
 
   .interactive-row:active:not(:where(:disabled, [data-disabled], [aria-disabled='true'])),
-  .popover-item:active:not(:where(:disabled, [data-disabled])),
-  .popover-sub-trigger:active:not(:where([data-disabled])),
   .menubar-item:active:not(:where([data-disabled])),
   .settings-dropdown-item:active:not(:where(:disabled, [data-disabled])),
   .permission-select-item:active:not(:where([data-disabled])),
@@ -170,8 +141,6 @@
     outline-offset: 1px;
   }
 
-  .popover-item:focus-visible,
-  .popover-sub-trigger:focus-visible,
   .menubar-item:focus-visible,
   .settings-dropdown-item:focus-visible,
   .permission-select-item:focus-visible,
@@ -184,7 +153,6 @@
 
   .interactive-row[data-state='open'],
   .interactive-row[aria-expanded='true'],
-  .popover-sub-trigger[data-state='open'],
   .sidebar-context-menu-sub-trigger[data-state='open'] {
     background: var(--cpx-comp-row-open-bg, var(--cpx-sys-color-selected));
     color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
@@ -195,9 +163,6 @@
   .interactive-row[aria-selected='true'],
   .interactive-row[aria-current='page'],
   .interactive-row[data-state='checked'],
-  .popover-item.selected,
-  .popover-item.active,
-  .popover-item[aria-selected='true'],
   .settings-dropdown-item[aria-selected='true'],
   .settings-dropdown-item[data-state='checked'],
   .permission-select-item[aria-selected='true'],
@@ -209,10 +174,6 @@
   }
 
   :is(
-    .popover-item[data-state='checked'],
-    .popover-item[aria-selected='true'],
-    .popover-item[aria-checked='true'],
-    .popover-item:has(.popover-item-check),
     .settings-dropdown-item:has(.settings-dropdown-item-indicator),
     .permission-select-item:has(.permission-select-item-indicator)
   ) {
@@ -220,10 +181,6 @@
     color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
   }
   :is(
-      .popover-item[data-state='checked'],
-      .popover-item[aria-selected='true'],
-      .popover-item[aria-checked='true'],
-      .popover-item:has(.popover-item-check),
       .settings-dropdown-item:has(.settings-dropdown-item-indicator),
       .permission-select-item:has(.permission-select-item-indicator)
     ):where(:hover, [data-highlighted]):not(:where(:disabled, [data-disabled])) {
@@ -231,10 +188,6 @@
     color: var(--cpx-comp-row-hover-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
   }
   :is(
-      .popover-item[data-state='checked'],
-      .popover-item[aria-selected='true'],
-      .popover-item[aria-checked='true'],
-      .popover-item:has(.popover-item-check),
       .settings-dropdown-item:has(.settings-dropdown-item-indicator),
       .permission-select-item:has(.permission-select-item-indicator)
     ):active:not(:where(:disabled, [data-disabled])) {
@@ -253,9 +206,6 @@
   .interactive-row:disabled,
   .interactive-row[data-disabled],
   .interactive-row[aria-disabled='true'],
-  .popover-item:disabled,
-  .popover-item[data-disabled],
-  .popover-sub-trigger[data-disabled],
   .menubar-item[data-disabled],
   .settings-dropdown-item:disabled,
   .settings-dropdown-item[data-disabled],
@@ -275,8 +225,6 @@
 
   @media (forced-colors: active) {
     :is(
-      .popover-item,
-      .popover-sub-trigger,
       .menubar-item,
       .settings-dropdown-item,
       .permission-select-item,

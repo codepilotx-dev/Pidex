@@ -174,8 +174,6 @@
 
   .popover-surface[data-theme-component='dropdown-surface']
     :where(
-      .popover-item,
-      .popover-sub-trigger,
       .menubar-item,
       .settings-dropdown-item,
       .permission-select-item,
@@ -358,8 +356,6 @@
     -webkit-app-region: no-drag;
   }
 
-  .popover-item,
-  .popover-sub-trigger,
   .sidebar-context-menu-item,
   .sidebar-context-menu-sub-trigger,
   .settings-dropdown-item,
@@ -398,16 +394,7 @@
   }
 
   /* --- Popover item interaction states --- */
-  .popover-item:hover:not(:disabled) .popover-item-icon,
-  .popover-item.active .popover-item-icon,
-  .popover-item[data-highlighted] .popover-item-icon,
   .permission-select-item[data-highlighted] .permission-select-item-icon {
-    color: var(--cpx-sys-color-fg-primary);
-  }
-
-  .popover-item:hover:not(:disabled) .popover-item-arrow,
-  .popover-item.active .popover-item-arrow,
-  .popover-item[data-highlighted] .popover-item-arrow {
     color: var(--cpx-sys-color-fg-primary);
   }
 
@@ -525,8 +512,6 @@
    * expressed in components/ui/Tooltip.tsx and styles/primitives/overlays.css. */
   @media (forced-colors: active) {
     :is(
-      .popover-item,
-      .popover-sub-trigger,
       .sidebar-context-menu-item,
       .sidebar-context-menu-sub-trigger,
       .settings-dropdown-item,

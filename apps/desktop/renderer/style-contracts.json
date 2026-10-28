@@ -18,6 +18,7 @@
     "src/components/ui/Input.tsx -> src/components/ui/Input.css",
     "src/components/ui/ScrollArea.tsx -> src/components/ui/ScrollArea.css",
     "src/components/ui/SearchInput.tsx -> src/components/ui/SearchInput.css",
+    "src/components/ui/SidebarRow.tsx -> src/components/ui/SidebarRow.css",
     "src/components/ui/Skeleton.tsx -> src/components/ui/Skeleton.css",
     "src/components/ui/ToggleSwitch.tsx -> src/components/ui/ToggleSwitch.css",
     "src/features/pet/PetOverlayPage.tsx -> src/styles/lazy/pet-overlay.css",
@@ -33,6 +34,7 @@
     "src/components/ui/Input.css": "primitives",
     "src/components/ui/ScrollArea.css": "primitives",
     "src/components/ui/SearchInput.css": "primitives",
+    "src/components/ui/SidebarRow.css": "primitives",
     "src/components/ui/Skeleton.css": "primitives",
     "src/components/ui/ToggleSwitch.css": "primitives"
   },
@@ -104,9 +106,6 @@
   },
   "interactionContract": {
     "interactiveRowAllowedFiles": [
-      "src/components/ui/DropdownActions.tsx",
-      "src/components/ui/PopoverItem.tsx",
-      "src/components/ui/SearchablePopoverContent.tsx",
       "src/features/session/summary/ThreadSummaryPanel.tsx"
     ]
   }
