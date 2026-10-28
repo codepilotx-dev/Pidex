@@ -15,7 +15,7 @@ import { RadioGroup, RadioItem } from '../src/components/ui/RadioGroup.js'
 import { ToggleSwitch } from '../src/components/ui/ToggleSwitch.js'
 import { PopoverItem } from '../src/components/ui/PopoverItem.js'
 import { Dropdown } from '../src/components/ui/floating/Dropdown.js'
-import { SidebarRow } from '../src/features/layout/sidebar/SidebarRow.js'
+import { SidebarRow } from '../src/components/ui/SidebarRow.js'
 import { compileEntryStyles, renderButtonStyles, rendererRoot } from './helpers/RendererStyles.js'
 
 const noop = () => {}

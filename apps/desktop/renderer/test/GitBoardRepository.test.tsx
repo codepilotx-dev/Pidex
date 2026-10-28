@@ -1,7 +1,7 @@
 import { expect, spyOn, test } from 'bun:test'
 import { GitBoardDetails } from '../src/features/git-board/GitBoardDetails.js'
 import { AgentRpcError } from '../src/services/AgentRpcClient.js'
-import { SidebarRow } from '../src/features/layout/sidebar/SidebarRow.js'
+import { SidebarRow } from '../src/components/ui/SidebarRow.js'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { desktopClient } from '../src/services/desktop-client/index.js'
 import { reviewAgentClient } from '../src/features/review/source/ReviewAgentClient.js'

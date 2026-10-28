@@ -25,7 +25,7 @@ import {
   APP_ICON_STROKE_WIDTH,
 } from '../src/components/ui/IconTokens.js'
 import { FileTypeIcon, FolderTypeIcon } from '../src/features/layout/FileTypeIcon.js'
-import { SidebarRow } from '../src/features/layout/sidebar/SidebarRow.js'
+import { SidebarRow } from '../src/components/ui/SidebarRow.js'
 import { PluginIcon } from '../src/features/plugins/PluginIcon.js'
 import { ProviderLogo } from '../src/features/session/composer/ProviderLogos.js'
 

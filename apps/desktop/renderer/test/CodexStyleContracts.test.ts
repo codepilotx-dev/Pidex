@@ -27,9 +27,6 @@ describe('Codex CPX design system token contract', () => {
     }
 
     expect(manifest.interactionContract.interactiveRowAllowedFiles).toEqual([
-      'src/components/ui/DropdownActions.tsx',
-      'src/components/ui/PopoverItem.tsx',
-      'src/components/ui/SearchablePopoverContent.tsx',
       'src/features/session/summary/ThreadSummaryPanel.tsx',
     ])
     expect(checker).toContain('feature styles must not target .ui-button')
@@ -99,13 +96,14 @@ describe('Codex CPX design system token contract', () => {
   })
 
   test('maps Dropdown states and searchable gutters through shared contracts', async () => {
-    const [tokens, popover, rows, select, searchablePopover, projectSwitcher, branchSwitcher] =
+    const [tokens, popover, rows, sidebarRow, select, searchablePopover, projectSwitcher, branchSwitcher] =
       await Promise.all([
         Bun.file(
           new URL('../src/styles/design-system/codex-semantic-tokens.css', import.meta.url),
         ).text(),
         Bun.file(new URL('../src/styles/popover.css', import.meta.url)).text(),
         Bun.file(new URL('../src/styles/components/interactive-row.css', import.meta.url)).text(),
+        Bun.file(new URL('../src/components/ui/SidebarRow.css', import.meta.url)).text(),
         Bun.file(new URL('../src/components/ui/Select.tsx', import.meta.url)).text(),
         Bun.file(
           new URL('../src/components/ui/SearchablePopoverContent.tsx', import.meta.url),
@@ -126,7 +124,7 @@ describe('Codex CPX design system token contract', () => {
     expectSourceContains(popover, ".popover-surface[data-theme-component='dropdown-surface']")
     expectSourceContains(popover, '--cpx-comp-row-hover-bg: var(--cpx-comp-dropdown-item-hover-bg)')
     expectSourceContains(rows, '--cpx-comp-row-selected-bg, var(--cpx-sys-color-selected)')
-    expectSourceContains(rows, '.popover-item[aria-selected="true"]')
+    expectSourceContains(sidebarRow, '.sidebar-row[aria-selected="true"]')
     expectSourceContains(rows, '.settings-dropdown-item:has(.settings-dropdown-item-indicator)')
     expectSourceContains(rows, '.permission-select-item:has(.permission-select-item-indicator)')
     expectSourceContains(rows, '--cpx-comp-row-bg, transparent')
@@ -700,7 +698,7 @@ describe('UI-Design native floating behavior', () => {
       ),
     )
     expect(html.match(/\bpopover-item-check\b/g)).toHaveLength(1)
-    expect(html).toMatch(/popover-item-trailing[^>]*>\s*<svg/)
+    expect(html).toMatch(/sidebar-row-trailing[^>]*>\s*<svg/)
   })
   test('search fills the available frame width at every preset without intrinsic sizing', () => {
     for (const size of ['sm', 'md', 'lg'] as const) {
