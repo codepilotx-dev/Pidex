@@ -11,7 +11,7 @@ import { SearchInput } from '../../components/ui/SearchInput.js'
 import { cx } from '../../utils/Cx.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
 import { FileTypeIcon } from '../layout/FileTypeIcon.js'
-import { SidebarRow } from '../layout/sidebar/SidebarRow.js'
+import { SidebarRow } from '../../components/ui/SidebarRow.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import {
   useGitBoard,

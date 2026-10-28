@@ -9,7 +9,7 @@ import {
   PROJECT_APPEARANCE_MARKER_CLASS,
   ProjectAppearanceGlyph,
 } from '../projects/ProjectAppearance.js'
-import { SidebarRow } from '../layout/sidebar/SidebarRow.js'
+import { SidebarRow } from '../../components/ui/SidebarRow.js'
 import { useGitBoard } from './GitBoardContext.js'
 
 export function GitBoardProjectRow({ project }: { project: DesktopWorkspace }) {

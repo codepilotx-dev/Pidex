@@ -1,13 +1,24 @@
-import type React from 'react'
-import { useMemo, useState } from 'react'
+import React, { useMemo, useState } from 'react'
 import { Check, Folder, FolderPlus, FolderX, GitFork } from 'lucide-react'
-import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
+import {
+  APP_ICON_SIZE,
+  APP_ICON_SIZES,
+  APP_ICON_STROKE_WIDTH,
+} from '../../../components/ui/IconTokens.js'
+import type { PopoverSizingProps } from '../../../components/ui/PopoverSizing.js'
 import {
   SearchablePopoverAction,
   SearchablePopoverContent,
 } from '../../../components/ui/SearchablePopoverContent.js'
-import type { PopoverSizingProps } from '../../../components/ui/PopoverSizing.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import type { DesktopWorkspace } from '../../../../shared/Types.js'
+
+type ProjectOption = {
+  value: string
+  workspace: DesktopWorkspace | null
+  textValue?: string
+  filter?: boolean
+}
 
 type Props = {
   recentWorkspaces: DesktopWorkspace[]
@@ -42,7 +53,7 @@ export function ProjectSwitcherPopover({
   size,
 }: Props): React.ReactNode {
   const [search, setSearch] = useState('')
-  const options = useMemo(
+  const options: ProjectOption[] = useMemo(
     () => [
       ...recentWorkspaces.map((item) => ({
         value: item.path,
@@ -55,7 +66,7 @@ export function ProjectSwitcherPopover({
   )
 
   return (
-    <SearchablePopoverContent
+    <SearchablePopoverContent<ProjectOption>
       align={align}
       className={className}
       contentLabel="切换项目"
@@ -90,8 +101,10 @@ export function ProjectSwitcherPopover({
       open={open}
       options={options}
       renderOption={(option, selected) => (
-        <>
-          <span className="popover-item-leading">
+        <SidebarRow
+          active={selected}
+          className="popover-item"
+          leading={
             <span className="popover-item-icon">
               {option.workspace ? (
                 <Folder size={APP_ICON_SIZE} />
@@ -99,12 +112,19 @@ export function ProjectSwitcherPopover({
                 <FolderX size={APP_ICON_SIZE} />
               )}
             </span>
-          </span>
+          }
+          trailing={
+            selected ? (
+              <Check
+                className="popover-item-check"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            ) : null
+          }
+        >
           <span className="popover-item-label">{option.workspace?.name ?? '不使用项目'}</span>
-          <span className="popover-item-trailing">
-            {selected ? <Check size={APP_ICON_SIZES.sm} /> : null}
-          </span>
-        </>
+        </SidebarRow>
       )}
       search={search}
       searchLabel="搜索项目"
@@ -114,12 +134,14 @@ export function ProjectSwitcherPopover({
       sideOffset={sideOffset}
       trigger={trigger}
       size={size}
-
       onOpenChange={onOpenChange}
       onSearchChange={setSearch}
       onSelect={(option) => {
-        if (option.workspace) onOpenWorkspace(option.workspace)
-        else onClearWorkspace()
+        if (option.workspace) {
+          onOpenWorkspace(option.workspace)
+        } else {
+          onClearWorkspace()
+        }
         onOpenChange(false)
       }}
     />

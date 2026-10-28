@@ -1,26 +1,27 @@
+import './SidebarRow.css'
 import { Children, cloneElement, forwardRef } from 'react'
 import type { HTMLAttributes, ReactElement, ReactNode, Ref } from 'react'
-import { cx } from '../../../utils/Cx.js'
+import { cx } from '../../utils/Cx.js'
 
-type SidebarRowLeadingMode = 'icon' | 'spacer' | 'none'
-type SidebarRowIndent = 'none' | 'session'
-type SidebarRowLayout = 'flex' | 'grid'
+export type SidebarRowLeadingMode = 'icon' | 'spacer' | 'none'
+export type SidebarRowIndent = 'none' | 'session'
+export type SidebarRowLayout = 'flex' | 'grid'
 
-type Props = HTMLAttributes<HTMLElement> & {
+export type SidebarRowProps = HTMLAttributes<HTMLElement> & {
   active?: boolean
   as?: 'div' | 'li'
   asChild?: boolean
   className?: string
   indent?: SidebarRowIndent
   labelClassName?: string
-  layout: SidebarRowLayout
+  layout?: SidebarRowLayout
   leading?: ReactNode
   leadingMode?: SidebarRowLeadingMode
   trailing?: ReactNode
   children: ReactNode
 }
 
-export const SidebarRow = forwardRef<HTMLElement, Props>(function SidebarRow(
+export const SidebarRow = forwardRef<HTMLElement, SidebarRowProps>(function SidebarRow(
   {
     active = false,
     as = 'div',
@@ -29,7 +30,7 @@ export const SidebarRow = forwardRef<HTMLElement, Props>(function SidebarRow(
     className,
     indent = 'none',
     labelClassName,
-    layout,
+    layout = 'grid',
     leading,
     leadingMode = leading ? 'icon' : 'spacer',
     trailing,
@@ -44,16 +45,14 @@ export const SidebarRow = forwardRef<HTMLElement, Props>(function SidebarRow(
     active ? 'selected' : undefined,
     indent === 'session' ? 'sidebar-row--session' : undefined,
     leadingMode === 'none' ? 'sidebar-row--no-leading' : undefined,
-    // Row shell: 30px row, 8px gutter, 10px radius, 2px column gap between the
+    // Row shell: 30px row, 8px gutter, 10px radius, 4px column gap between the
     // leading slot, the label and the trailing slot.
-    'tw:relative tw:grid tw:w-full tw:box-border tw:min-h-[var(--sidebar-row-height,30px)] tw:items-center tw:gap-x-2 tw:rounded-md tw:px-2 tw:text-left tw:text-app-text tw:type-body tw:no-underline tw:select-none tw:cursor-pointer tw:outline-none tw:transition-colors tw:duration-feedback tw:ease-out',
+    'tw:relative tw:grid tw:w-full tw:box-border tw:min-h-[var(--sidebar-row-height,30px)] tw:items-center tw:gap-x-1 tw:rounded-md tw:px-2 tw:text-left tw:type-body tw:no-underline tw:select-none tw:cursor-pointer tw:outline-none tw:transition-colors tw:duration-feedback tw:ease-out',
     leadingMode === 'none'
       ? trailing != null
         ? 'tw:grid-cols-[minmax(0,1fr)_auto]'
         : 'tw:grid-cols-1'
-      : 'tw:grid-cols-[var(--sidebar-row-columns)]',
-    active ? 'tw:bg-app-selected' : 'tw:bg-transparent',
-    'tw:hover:bg-app-hover',
+      : 'tw:grid-cols-[var(--sidebar-row-columns,var(--sidebar-leading-width,var(--cpx-sys-space-6,24px))_minmax(0,1fr)_auto)]',
     className,
   )
   // Selection is also published as a data attribute so descendants can react with
@@ -107,7 +106,7 @@ export const SidebarRow = forwardRef<HTMLElement, Props>(function SidebarRow(
 function renderRowContent({
   children,
   labelClassName,
-  layout,
+  layout: _layout,
   leading,
   leadingMode,
   trailing,
@@ -147,7 +146,7 @@ function renderRowContent({
         {children}
       </span>
       {hasTrailing ? (
-        <span className="sidebar-row-trailing tw:flex tw:w-full tw:min-w-0 tw:items-center tw:justify-end">
+        <span className="sidebar-row-trailing tw:flex tw:w-full tw:min-w-0 tw:items-center tw:justify-end tw:gap-x-1">
           {trailing}
         </span>
       ) : null}
@@ -171,7 +170,7 @@ export function SidebarEmptyRow({
         'tw:grid tw:w-full tw:box-border tw:min-h-[var(--sidebar-row-height,30px)] tw:items-center tw:rounded-md tw:px-2 tw:py-1',
         // The empty row keeps the shared row grid (3-column template), matching
         // the former `.sidebar-row--flex` shell.
-        'tw:grid-cols-[var(--sidebar-row-columns)] tw:gap-x-2',
+        'tw:grid-cols-[var(--sidebar-row-columns,var(--sidebar-leading-width,var(--cpx-sys-space-6,24px))_minmax(0,1fr)_auto)] tw:gap-x-1',
         className,
       )}
     >

@@ -12,7 +12,7 @@ import { SidebarBody } from './sidebar/SidebarBody.js'
 import { useSidebarActivity } from './sidebar/UseSidebarActivity.js'
 import { archiveSidebarActivity, sessionNeedsStop } from './sidebar/SidebarActivityActions.js'
 import { SidebarDockedPanes } from './sidebar/SidebarDockedPanes.js'
-import { SidebarEmptyRow } from './sidebar/SidebarRow.js'
+import { SidebarEmptyRow } from '../../components/ui/SidebarRow.js'
 import type { DesktopFileEntry } from '../../../shared/Types.js'
 import type {
   WorkbenchPanelSnapshot,

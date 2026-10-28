@@ -3,6 +3,7 @@ import { Dropdown } from './floating/Dropdown.js'
 import { ChevronRight } from 'lucide-react'
 import { APP_ICON_STROKE_WIDTH, APP_ICON_SIZES } from './IconTokens.js'
 import type { PopoverSizingProps } from './PopoverSizing.js'
+import { SidebarRow } from './SidebarRow.js'
 import { cx } from '../../utils/Cx.js'
 export type SearchablePopoverOption = {
   disabled?: boolean
@@ -91,9 +92,7 @@ export function SearchablePopoverContent<Option extends SearchablePopoverOption>
                 }}
                 asChild
               >
-                <div className="interactive-row interactive-row--menu popover-item tw:w-full tw:min-w-0 tw:items-center tw:text-left">
-                  {renderOption(option, option.value === selectedValue)}
-                </div>
+                {renderOption(option, option.value === selectedValue)}
               </Dropdown.Item>
             ))}
           </div>
@@ -102,6 +101,7 @@ export function SearchablePopoverContent<Option extends SearchablePopoverOption>
     </Dropdown.Root>
   )
 }
+
 type ActionProps = React.ButtonHTMLAttributes<HTMLButtonElement> & {
   icon?: React.ReactNode
   withArrow?: boolean
@@ -115,25 +115,25 @@ export function SearchablePopoverAction({
   ...buttonProps
 }: ActionProps): React.ReactNode {
   return (
-    <button
-      {...buttonProps}
-      className={cx('interactive-row', 'interactive-row--menu', 'popover-item', className)}
-      type="button"
-    >
-      <span className="popover-item-leading">
-        {icon ? <span className="popover-item-icon">{icon}</span> : null}
-      </span>
-      <span className="popover-item-label">{children}</span>
-      <span className="popover-item-trailing">
-        {withArrow ? (
+    <SidebarRow
+      asChild
+      className={cx('popover-item', className)}
+      leading={icon ? <span className="popover-item-icon">{icon}</span> : undefined}
+      leadingMode={icon ? 'icon' : 'none'}
+      trailing={
+        withArrow ? (
           <ChevronRight
             aria-hidden="true"
             className="popover-item-arrow"
             size={APP_ICON_SIZES.sm}
             strokeWidth={APP_ICON_STROKE_WIDTH}
           />
-        ) : null}
-      </span>
-    </button>
+        ) : undefined
+      }
+    >
+      <button {...buttonProps} type="button">
+        <span className="popover-item-label">{children}</span>
+      </button>
+    </SidebarRow>
   )
 }

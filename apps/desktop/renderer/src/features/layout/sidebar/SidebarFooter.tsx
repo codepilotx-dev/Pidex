@@ -25,7 +25,7 @@ import { desktopClient } from '../../../services/desktop-client/index.js'
 import type { DesktopUpdateStatus, ModelProviderID } from '../../../../shared/Types.js'
 import { PopoverItem, PopoverSeparator } from '../../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
-import { SidebarRow } from './SidebarRow.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import {
   buildDesktopUpdateIndicatorModel,
@@ -355,17 +355,22 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
         <div className="popover-section">
           {usageAvailable ? (
             <DropdownMenu.Sub>
-              <DropdownMenu.SubTrigger className="popover-item popover-sub-trigger" tabIndex={-1}>
-                <span className="popover-item-leading">
+              <SidebarRow
+                asChild
+                className="popover-item popover-sub-trigger"
+                leading={
                   <span className="popover-item-icon">
                     <Gauge size={APP_ICON_SIZE} />
                   </span>
-                </span>
-                <span className="popover-item-label">{t('剩余用量')}</span>
-                <span className="popover-item-trailing">
+                }
+                trailing={
                   <ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />
-                </span>
-              </DropdownMenu.SubTrigger>
+                }
+              >
+                <DropdownMenu.SubTrigger tabIndex={-1}>
+                  <span className="popover-item-label">{t('剩余用量')}</span>
+                </DropdownMenu.SubTrigger>
+              </SidebarRow>
               <DropdownMenu.Portal>
                 <DropdownMenu.SubContent
                   size="sm"
@@ -470,17 +475,22 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
         <PopoverSeparator />
         <div className="popover-section">
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="popover-item popover-sub-trigger" tabIndex={-1}>
-              <span className="popover-item-leading">
+            <SidebarRow
+              asChild
+              className="popover-item popover-sub-trigger"
+              leading={
                 <span className="popover-item-icon">
                   <HelpCircle size={APP_ICON_SIZE} />
                 </span>
-              </span>
-              <span className="popover-item-label">{t('帮助')}</span>
-              <span className="popover-item-trailing">
+              }
+              trailing={
                 <ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />
-              </span>
-            </DropdownMenu.SubTrigger>
+              }
+            >
+              <DropdownMenu.SubTrigger tabIndex={-1}>
+                <span className="popover-item-label">{t('帮助')}</span>
+              </DropdownMenu.SubTrigger>
+            </SidebarRow>
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 size="sm"

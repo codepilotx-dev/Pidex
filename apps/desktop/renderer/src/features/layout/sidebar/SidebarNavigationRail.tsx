@@ -14,7 +14,7 @@ import { canShowSidebarTooltip, type SidebarShellController } from '../SidebarSh
 import { SidebarFooter } from './SidebarFooter.js'
 import { getSidebarTopNavItems, type SidebarCapabilityState } from './SidebarTopNav.js'
 import type { SidebarPane } from './SidebarNavigation.js'
-import { SidebarRow } from './SidebarRow.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { setSidebarDestinationHidden } from './SidebarCustomization.js'
 
 type Props = {

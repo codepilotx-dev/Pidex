@@ -3,7 +3,7 @@ import { ScrollArea } from '../../components/ui/ScrollArea.js'
 import { ArrowLeft } from 'lucide-react'
 import { SearchInput } from '../../components/ui/SearchInput.js'
 import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
-import { SidebarRow } from '../layout/sidebar/SidebarRow.js'
+import { SidebarRow } from '../../components/ui/SidebarRow.js'
 import {
   SETTINGS_GROUPS,
   SETTINGS_SEARCH_DOCUMENTS,

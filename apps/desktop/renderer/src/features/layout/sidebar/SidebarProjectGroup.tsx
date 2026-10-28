@@ -27,7 +27,7 @@ import {
 import { DropdownActions } from '../../../components/ui/DropdownActions.js'
 import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
-import { SidebarRow } from './SidebarRow.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { SidebarSessionGroup } from './SidebarSessionGroup.js'
 import {
   AppContextMenu as SidebarContextMenu,

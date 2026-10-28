@@ -2,6 +2,7 @@ import { Dropdown as Menu } from './floating/Dropdown.js'
 import { ChevronRight } from 'lucide-react'
 import type { AppContextMenuAction } from './AppContextMenu.js'
 import { PopoverItem, PopoverSeparator } from './PopoverItem.js'
+import { SidebarRow } from './SidebarRow.js'
 import { APP_ICON_SIZE } from './IconTokens.js'
 import { buildPopoverSizingStyle } from './PopoverSizing.js'
 
@@ -24,13 +25,17 @@ export function DropdownActions({ actions }: { actions: readonly AppContextMenuA
       )
     return (
       <Menu.Sub key={index}>
-        <Menu.SubTrigger className="interactive-row interactive-row--menu popover-item tw:w-full tw:min-w-0 tw:items-center tw:text-left">
-          <span className="popover-item-leading">{action.icon}</span>
-          <span className="popover-item-label">{action.label}</span>
-          <span className="popover-item-trailing">
-            <ChevronRight size={APP_ICON_SIZE} />
-          </span>
-        </Menu.SubTrigger>
+        <SidebarRow
+          asChild
+          className="popover-item popover-sub-trigger"
+          leading={action.icon ? <span className="popover-item-icon">{action.icon}</span> : undefined}
+          leadingMode={action.icon ? 'icon' : 'none'}
+          trailing={<ChevronRight size={APP_ICON_SIZE} />}
+        >
+          <Menu.SubTrigger tabIndex={-1}>
+            <span className="popover-item-label">{action.label}</span>
+          </Menu.SubTrigger>
+        </SidebarRow>
         <Menu.Portal>
           <Menu.SubContent
             size="sm"

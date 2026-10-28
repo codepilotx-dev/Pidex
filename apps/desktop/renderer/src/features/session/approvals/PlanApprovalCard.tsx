@@ -5,6 +5,7 @@ import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { Button } from '../../../components/ui/Button.js'
 import { Dropdown } from '../../../components/ui/Dropdown.js'
 import { Dropdown as DropdownMenu } from '../../../components/ui/floating/Dropdown.js'
+import { PopoverItem } from '../../../components/ui/PopoverItem.js'
 import { RequestCard } from './RequestCard.js'
 import type { OpenPlanInDockRequest } from '../workflow/WorkflowPlanCard.js'
 
@@ -142,13 +143,12 @@ export function PlanApprovalCard({
                       </Button>
                     }
                   >
-                    <DropdownMenu.Item
-                      className="popover-item"
+                    <PopoverItem
                       disabled={disabled}
-                      onSelect={() => void act(() => ({ action: 'implementFresh' }))}
+                      onClick={() => void act(() => ({ action: 'implementFresh' }))}
                     >
                       在新聊天中实施
-                    </DropdownMenu.Item>
+                    </PopoverItem>
                   </Dropdown>
                 ) : null}
               </div>

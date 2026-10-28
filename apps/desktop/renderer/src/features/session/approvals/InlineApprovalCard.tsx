@@ -12,7 +12,7 @@ import type {
 } from '../../../../shared/Types.js'
 import { Button } from '../../../components/ui/Button.js'
 import { Dropdown } from '../../../components/ui/Dropdown.js'
-import { PopoverRadioItem } from '../../../components/ui/PopoverItem.js'
+import { PopoverItem, PopoverRadioItem } from '../../../components/ui/PopoverItem.js'
 import { AskUserQuestionApproval } from './AskUserQuestionApproval.js'
 import { useQuestionSkipCapability } from './UseQuestionSkipCapability.js'
 import { ASK_USER_QUESTION_NAV_BUTTON_CLASS, RequestCard } from './RequestCard.js'
@@ -329,18 +329,17 @@ export function InlineApprovalCard({
           {grantOptions
             .filter((option) => option.scope === 'session')
             .map((option) => (
-              <DropdownMenu.Item
+              <PopoverItem
                 key={option.id}
-                className="popover-item"
                 disabled={disabled}
-                onSelect={() =>
+                onClick={() =>
                   void act(() =>
                     onDecide(request, 'allow', false, undefined, { grantOptionId: option.id }),
                   )
                 }
               >
                 {option.label}
-              </DropdownMenu.Item>
+              </PopoverItem>
             ))}
         </Dropdown>
       ) : null}

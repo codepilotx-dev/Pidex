@@ -1,0 +1,109 @@
+@layer primitives {
+  .sidebar-row {
+    --sidebar-leading-width: var(--cpx-sys-space-6, 24px);
+    --sidebar-row-columns: var(--sidebar-leading-width) minmax(0, 1fr) auto;
+    --sidebar-row-height: 30px;
+    --sidebar-row-radius: var(--cpx-sys-radius-md);
+    background: var(--cpx-comp-row-bg, transparent);
+    color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
+    -webkit-app-region: no-drag;
+  }
+
+  .sidebar-row:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])),
+  .sidebar-row[data-highlighted]:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: var(--cpx-comp-row-hover-bg, var(--cpx-sys-color-hover));
+    color: var(--cpx-comp-row-hover-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
+  }
+
+  .sidebar-row:active:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: var(--cpx-comp-row-pressed-bg, var(--cpx-sys-color-active));
+    color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
+  }
+
+  .sidebar-row:focus-visible {
+    outline: none;
+    box-shadow: var(--cpx-sys-focus-ring-inset);
+  }
+
+  .sidebar-row[data-state='open'],
+  .sidebar-row[aria-expanded='true'] {
+    background: var(--cpx-comp-row-open-bg, var(--cpx-sys-color-selected));
+    color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
+  }
+
+  .sidebar-row.selected,
+  .sidebar-row.active,
+  .sidebar-row[data-selected='true'],
+  .sidebar-row[aria-selected='true'],
+  .sidebar-row[aria-current='page'],
+  .sidebar-row[data-state='checked'] {
+    background: var(--cpx-comp-row-selected-bg, var(--cpx-sys-color-selected));
+    color: var(--cpx-comp-row-selected-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
+  }
+
+  /* Items with check indicators maintain a transparent idle background so selection is marked by the checkmark */
+  :is(
+    .sidebar-row[data-state='checked'],
+    .sidebar-row[aria-selected='true'],
+    .sidebar-row[aria-checked='true'],
+    .sidebar-row:has(.popover-item-check)
+  ) {
+    background: var(--cpx-comp-row-bg, transparent);
+    color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
+  }
+
+  :is(
+    .sidebar-row[data-state='checked'],
+    .sidebar-row[aria-selected='true'],
+    .sidebar-row[aria-checked='true'],
+    .sidebar-row:has(.popover-item-check)
+  ):where(:hover, [data-highlighted]):not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: var(--cpx-comp-row-hover-bg, var(--cpx-sys-color-hover));
+    color: var(--cpx-comp-row-hover-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
+  }
+
+  :is(
+    .sidebar-row[data-state='checked'],
+    .sidebar-row[aria-selected='true'],
+    .sidebar-row[aria-checked='true'],
+    .sidebar-row:has(.popover-item-check)
+  ):active:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: var(--cpx-comp-row-pressed-bg, var(--cpx-sys-color-active));
+    color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
+  }
+
+  .sidebar-row:disabled,
+  .sidebar-row[data-disabled],
+  .sidebar-row[aria-disabled='true'] {
+    color: var(--cpx-comp-row-disabled-fg, var(--cpx-sys-color-fg-disabled));
+    background: transparent;
+    outline: none;
+    box-shadow: none;
+    transform: none;
+    cursor: default;
+    opacity: var(--cpx-comp-row-disabled-opacity, 0.55);
+  }
+
+  .sidebar-row:is(:hover, [data-highlighted], :active, .active):not(:where(:disabled, [data-disabled], [aria-disabled='true'])) .popover-item-arrow {
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .sidebar-row[data-color='red'],
+  .sidebar-row[data-danger='true'],
+  .sidebar-row.danger {
+    color: var(--cpx-sys-color-danger);
+  }
+
+  .sidebar-row:is(.rich, .sidebar-row--rich) {
+    --sidebar-row-height: var(--cpx-comp-row-height-menu-rich, 44px);
+    padding-top: var(--cpx-comp-row-padding-block-rich, 6px);
+    padding-bottom: var(--cpx-comp-row-padding-block-rich, 6px);
+  }
+
+  @media (forced-colors: active) {
+    .sidebar-row:is([data-highlighted], :focus-visible) {
+      outline: 2px solid Highlight;
+      outline-offset: -2px;
+    }
+  }
+}

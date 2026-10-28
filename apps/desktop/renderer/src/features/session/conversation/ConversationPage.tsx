@@ -27,6 +27,7 @@ import {
   APP_ICON_SIZES,
 } from '../../../components/ui/IconTokens.js'
 import { Button } from '../../../components/ui/Button.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import type { DesktopPermissionRequest, DesktopSessionStatus } from '../../../../shared/Types.js'
 import { useQuickChatContext } from '../QuickChatContext.js'
 import {
@@ -1775,19 +1776,16 @@ function SessionSubmenu({
 }): React.ReactNode {
   return (
     <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger
+      <SidebarRow
+        asChild
         className="popover-item popover-sub-trigger"
-        disabled={disabled}
-        tabIndex={-1}
+        leading={<span className="popover-item-icon">{icon}</span>}
+        trailing={<ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />}
       >
-        <span className="popover-item-leading">
-          <span className="popover-item-icon">{icon}</span>
-        </span>
-        <span className="popover-item-label">{label}</span>
-        <span className="popover-item-trailing">
-          <ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />
-        </span>
-      </DropdownMenu.SubTrigger>
+        <DropdownMenu.SubTrigger disabled={disabled} tabIndex={-1}>
+          <span className="popover-item-label">{label}</span>
+        </DropdownMenu.SubTrigger>
+      </SidebarRow>
       <DropdownMenu.Portal>
         <DropdownMenu.SubContent
           size="sm"

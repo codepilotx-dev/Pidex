@@ -10,7 +10,7 @@ import {
   setSidebarSessionVisibleLimit,
 } from '../layout/sidebar/SidebarSessionPaging.js'
 import { SidebarHoverCardProvider } from '../layout/sidebar/SidebarHoverCard.js'
-import { SidebarRow } from '../layout/sidebar/SidebarRow.js'
+import { SidebarRow } from '../../components/ui/SidebarRow.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
 import { cx } from '../../utils/Cx.js'
 import {

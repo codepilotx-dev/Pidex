@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Dropdown as DropdownMenu } from '../../components/ui/floating/Dropdown.js'
 import { Dropdown } from '../../components/ui/Dropdown.js'
 import { PopoverItem } from '../../components/ui/PopoverItem.js'
+import { SidebarRow } from '../../components/ui/SidebarRow.js'
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import { buildPopoverSizingStyle } from '../../components/ui/PopoverSizing.js'
 import { cx } from '../../utils/Cx.js'
@@ -132,24 +133,26 @@ export function ThemePickerDropdown({
 
       {/* 2. 二级子菜单：Codex 主题 */}
       <DropdownMenu.Sub>
-        <DropdownMenu.SubTrigger
-          className="popover-item popover-sub-trigger tw:w-full tw:min-w-0 tw:items-center tw:text-left"
-          tabIndex={-1}
-        >
-          <span className="popover-item-leading">
+        <SidebarRow
+          asChild
+          className="popover-item popover-sub-trigger"
+          leading={
             <span className="popover-item-icon">
               <ThemeBadge />
             </span>
-          </span>
-          <span className="popover-item-label">{t('Codex 主题')}</span>
-          <span className="popover-item-trailing">
+          }
+          trailing={
             <ChevronRight
               className="popover-item-arrow"
               size={APP_ICON_SIZES.sm}
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
-          </span>
-        </DropdownMenu.SubTrigger>
+          }
+        >
+          <DropdownMenu.SubTrigger tabIndex={-1}>
+            <span className="popover-item-label">{t('Codex 主题')}</span>
+          </DropdownMenu.SubTrigger>
+        </SidebarRow>
         <DropdownMenu.Portal>
           <DropdownMenu.SubContent
             aria-label={t('Codex 主题列表')}

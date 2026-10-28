@@ -12,7 +12,7 @@ import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { Button } from '../../../components/ui/Button.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
-import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
+import { SidebarEmptyRow, SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 
 const TAB_ICONS: Record<AutomationTab, typeof Calendar> = {

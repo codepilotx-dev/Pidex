@@ -29,7 +29,7 @@ import { Popover as Popover } from '../../../components/ui/floating/Popover.js'
 import { cx } from '../../../utils/Cx.js'
 import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
-import { SidebarRow } from './SidebarRow.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 
 type SidebarNavAvailability =
   | { kind: 'always' }

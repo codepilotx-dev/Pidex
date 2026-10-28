@@ -29,7 +29,7 @@ import {
 } from '../../../components/ui/KeyedDisclosureStore.js'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 import { fastTween, motionTransition, standardTween } from '../../motion/MotionTransitions.js'
-import { SidebarEmptyRow } from './SidebarRow.js'
+import { SidebarEmptyRow } from '../../../components/ui/SidebarRow.js'
 import { SidebarHoverCardProvider } from './SidebarHoverCard.js'
 import { DropdownActions } from '../../../components/ui/DropdownActions.js'
 import { SidebarProjectGroup } from './SidebarProjectGroup.js'

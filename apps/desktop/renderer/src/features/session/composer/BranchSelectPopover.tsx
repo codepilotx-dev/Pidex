@@ -1,11 +1,16 @@
 import React from 'react'
 import { Check, GitBranch, Plus } from 'lucide-react'
 import {
+  APP_ICON_SIZE,
+  APP_ICON_SIZES,
+  APP_ICON_STROKE_WIDTH,
+} from '../../../components/ui/IconTokens.js'
+import type { PopoverSizingProps } from '../../../components/ui/PopoverSizing.js'
+import {
   SearchablePopoverAction,
   SearchablePopoverContent,
 } from '../../../components/ui/SearchablePopoverContent.js'
-import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
-import type { PopoverSizingProps } from '../../../components/ui/PopoverSizing.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 
 type BranchSelectPopoverProps = {
   align?: 'start' | 'center' | 'end'
@@ -52,6 +57,7 @@ export function BranchSelectPopover({
     }
     return [...branchSet]
   }, [branches, currentBranchName])
+
   const options = React.useMemo(
     () => visibleBranches.map((branch) => ({ value: branch })),
     [visibleBranches],
@@ -79,12 +85,24 @@ export function BranchSelectPopover({
       open={open}
       options={options}
       renderOption={(option, selected) => (
-        <>
-          <span className="popover-item-leading">
+        <SidebarRow
+          active={selected}
+          className="popover-item"
+          leading={
             <span className="popover-item-icon">
               <GitBranch size={APP_ICON_SIZE} />
             </span>
-          </span>
+          }
+          trailing={
+            selected ? (
+              <Check
+                className="popover-item-check"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            ) : null
+          }
+        >
           <span className="popover-item-label">
             {currentBranchDetail && selected ? (
               <span className="environment-branch-label tw:flex tw:min-w-0 tw:flex-col tw:gap-1">
@@ -102,10 +120,7 @@ export function BranchSelectPopover({
               <span title={option.value}>{option.value}</span>
             )}
           </span>
-          <span className="popover-item-trailing">
-            {selected ? <Check size={APP_ICON_SIZES.sm} /> : null}
-          </span>
-        </>
+        </SidebarRow>
       )}
       search={branchSearch}
       searchLabel="搜索分支"
@@ -115,7 +130,6 @@ export function BranchSelectPopover({
       sideOffset={sideOffset}
       trigger={trigger}
       size={size}
-
       onOpenChange={onOpenChange}
       onSearchChange={onBranchSearchChange}
       onSelect={(option) => {

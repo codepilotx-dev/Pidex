@@ -14,7 +14,7 @@ import {
 } from '../../models/ModelCenterState.js'
 import { ProviderIcon } from '../../models/ProviderIcon.js'
 import { useProviderManagementStore, useShallow } from '../../provider-management/index.js'
-import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
+import { SidebarEmptyRow, SidebarRow } from '../../../components/ui/SidebarRow.js'
 
 export function SidebarProvidersPane(): React.ReactNode {
   const { t } = useLocale()

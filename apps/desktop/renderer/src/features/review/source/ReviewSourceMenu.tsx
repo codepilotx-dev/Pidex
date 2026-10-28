@@ -8,6 +8,7 @@ import {
   PopoverRadioItem,
 } from '../../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
 import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import {
@@ -155,12 +156,16 @@ export function ReviewSourceMenu({
 function ReviewCommitSourceSubmenu({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
     <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger className="popover-item popover-sub-trigger" tabIndex={-1}>
-        <span className="popover-item-label">已提交</span>
-        <span className="popover-item-trailing">
-          <ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />
-        </span>
-      </DropdownMenu.SubTrigger>
+      <SidebarRow
+        asChild
+        className="popover-item popover-sub-trigger"
+        leadingMode="none"
+        trailing={<ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />}
+      >
+        <DropdownMenu.SubTrigger tabIndex={-1}>
+          <span className="popover-item-label">已提交</span>
+        </DropdownMenu.SubTrigger>
+      </SidebarRow>
       <DropdownMenu.Portal>
         <DropdownMenu.SubContent
           size="lg"

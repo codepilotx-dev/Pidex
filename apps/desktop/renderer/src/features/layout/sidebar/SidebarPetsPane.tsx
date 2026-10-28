@@ -8,7 +8,7 @@ import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import { usePetCatalogController } from '../../pet/PetCatalogProvider.js'
 import { PetSprite } from '../../pet/PetSprite.js'
-import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
+import { SidebarEmptyRow, SidebarRow } from '../../../components/ui/SidebarRow.js'
 
 export function SidebarPetsPane(): ReactNode {
   const { t } = useLocale()

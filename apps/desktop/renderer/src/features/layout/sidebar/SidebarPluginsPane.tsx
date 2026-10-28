@@ -18,7 +18,7 @@ import {
 } from '../../plugins/PluginCatalog.js'
 import { catalogBrowseParams, type CatalogTab } from '../../plugins/CatalogDetailsDeepLink.js'
 import { usePluginCatalog } from '../../plugins/UsePluginCatalog.js'
-import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
+import { SidebarEmptyRow, SidebarRow } from '../../../components/ui/SidebarRow.js'
 
 const CATALOG_TABS: ReadonlyArray<{ value: CatalogTab; label: string }> = [
   { value: 'plugins', label: '插件' },

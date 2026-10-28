@@ -38,7 +38,7 @@ import { SkeletonBlock } from '../../../components/ui/Skeleton.js'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 import { useHeightTransition } from '../../../hooks/UseHeightTransition.js'
 import { sortSessionsForSidebar } from '../../session/state/SessionSorting.js'
-import { SidebarRow } from './SidebarRow.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { SidebarStatusPill } from './SidebarStatusPill.js'
 import { SidebarReorderItem } from './SidebarReorderItem.js'
 import {
