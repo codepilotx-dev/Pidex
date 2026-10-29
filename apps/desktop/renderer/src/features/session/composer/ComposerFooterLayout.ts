@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import type { RefObject } from 'react'
 
 /*
@@ -105,8 +105,8 @@ function sameMetrics(
 /**
  * One ResizeObserver over the footer's fixed nodes; measurements coalesce into
  * animation frames and stop when the unmeasured parts do not move. Returns
- * `null` until the first measurement, so the first paint always shows the full
- * text state instead of guessing.
+ * `null` until the first measurement; measure before paint so the initial
+ * toolbar already uses the available space.
  */
 export function useComposerFooterFit(
   nodes: ComposerFooterNodeRefs,
@@ -115,7 +115,7 @@ export function useComposerFooterFit(
   const [metrics, setMetrics] = useState<ComposerFooterMetrics | null>(null)
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (typeof ResizeObserver === 'undefined') return
     const current = nodesRef.current
     if (!current.footer.current) return

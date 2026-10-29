@@ -298,16 +298,17 @@ export function ConversationPage(): React.ReactNode {
     handedOffSubmissionRef.current?.threadId === activeSessionId
       ? handedOffSubmissionRef.current
       : null
-  const isThreadLoading =
-    isConversationLoading ||
-    (canonicalConversation.loading && canonicalConversation.turns.length === 0)
   const deferThreadLoading = shouldDeferThreadLoading({
     firstInputId: pendingSubmission?.submissionId ?? handoff?.inputId,
     isCurrentFirstSubmit: Boolean(pendingSubmission || handoff),
-    loading: canonicalConversation.loading,
+    loading: isConversationLoading || canonicalConversation.loading,
     turnCount: canonicalConversation.turns.length,
     error: canonicalConversation.error,
   })
+  const isThreadLoading =
+    !deferThreadLoading &&
+    (isConversationLoading ||
+      (canonicalConversation.loading && canonicalConversation.turns.length === 0))
   // 同一批历史里已经包含首条消息时直接展示 canonical 投影，避免消息重复。
   const firstInputInProjection = handoff
     ? hasPendingInput(canonicalConversation.state?.inputsById.keys() ?? [], handoff.inputId)

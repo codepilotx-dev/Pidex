@@ -260,6 +260,11 @@
   }
 
   /* --- Suggestion menu scroll masks ----------------------------------- */
+  .chat-input__suggestion-menu,
+  .chat-input__suggestion-vlist {
+    scrollbar-color: var(--cpx-sys-color-border-subtle) transparent;
+  }
+
   .chat-input__suggestion-menu[data-scroll-mask='top'] {
     mask-image: linear-gradient(to bottom, transparent, currentColor var(--cpx-sys-space-3));
   }

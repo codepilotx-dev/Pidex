@@ -149,8 +149,6 @@ type Props = {
   manualOrderByScope: Record<string, string[]>
   unavailableWorkspacePaths: Set<string>
   workspace: DesktopWorkspace | null
-  /** 位于滚动视口最前端的次级导航与加载/错误提示。 */
-  scrollHeader: React.ReactNode
   /** 滚动视口是否已滚过固定入口（scrollTop > 0），驱动动态分隔线。 */
   onScrollOverlapChange: (overlapping: boolean) => void
   projectCatalogState: SidebarProjectCatalogState
@@ -253,7 +251,6 @@ function SidebarBodyContent({
   manualOrderByScope,
   unavailableWorkspacePaths,
   workspace,
-  scrollHeader,
   onScrollOverlapChange,
   projectCatalogState,
   scrollModeKey,
@@ -760,12 +757,11 @@ function SidebarBodyContent({
   return (
     <SidebarHoverCardProvider>
       <ScrollArea
-        className="sidebar-scroll-area tw:min-h-0 tw:flex-1 tw:overflow-x-hidden tw:scroll-pb-2 tw:forced-colors:[scrollbar-color:auto]"
+        className="sidebar-scroll-area tw:min-h-0 tw:flex-1 tw:overflow-x-hidden tw:scroll-pb-2 tw:[scrollbar-width:thin] tw:[overflow-anchor:none] tw:forced-colors:[scrollbar-color:auto]"
         contentClassName="sidebar-scroll-content tw:min-w-0 tw:pb-2"
         viewportRef={scrollViewportRef}
         onScroll={onScroll}
       >
-        {scrollHeader}
         {/* 次级导航与时间线/任务主体之间的分组间距，不再占用整个滚动视口的外边距 */}
         <SidebarDragSurface
           className="sidebar-scroll-main tw:min-w-0 tw:pt-2"

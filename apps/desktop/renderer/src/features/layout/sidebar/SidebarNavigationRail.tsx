@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Ellipsis, Home, Pin, PinOff } from 'lucide-react'
 import { Button } from '../../../components/ui/Button.js'
@@ -16,6 +16,7 @@ import { getSidebarTopNavItems, type SidebarCapabilityState } from './SidebarTop
 import type { SidebarPane } from './SidebarNavigation.js'
 import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { setSidebarDestinationHidden } from './SidebarCustomization.js'
+import { reportStartupLoading } from '../../../startup/StartupSplashHandoff.js'
 
 type Props = {
   shell: SidebarShellController
@@ -52,6 +53,11 @@ export function SidebarNavigationRail({
   onOpenWhatsNew,
   onReport,
 }: Props): ReactNode {
+  const settingsLoaded = useDesktopSettingsField((settings) => settings.settingsLoaded)
+  const initiallyReady = settingsLoaded && capabilityState.status !== 'unknown'
+  useLayoutEffect(() => {
+    if (!initiallyReady) return reportStartupLoading('正在加载侧栏导航…')
+  }, [initiallyReady])
   const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
   const sidebarTimelineEnabled = useDesktopSettingsField(
     (settings) => settings.sidebarTimelineEnabled,
@@ -209,7 +215,9 @@ export function SidebarNavigationRail({
 
   return (
     <nav
-      className="sidebar-navigation-rail tw:flex tw:h-full tw:flex-col tw:items-center tw:py-2"
+      className={`sidebar-navigation-rail tw:flex tw:h-full tw:flex-col tw:items-center tw:py-2${initiallyReady ? '' : ' tw:invisible'}`}
+      aria-busy={!initiallyReady || undefined}
+      inert={!initiallyReady || undefined}
       aria-label={t('应用导航')}
     >
       <ScrollArea

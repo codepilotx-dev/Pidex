@@ -99,18 +99,4 @@
   :where(.ui-checkbox, .ui-radio-item) {
     min-height: 24px;
   }
-
-  .sidebar-resizer,
-  .right-dock-resize-handle {
-    width: 24px;
-  }
-
-  .bottom-panel > .workbench-dock-frame__target {
-    padding-top: 24px;
-  }
-
-  .bottom-panel-resize-handle {
-    top: 0;
-    height: 24px;
-  }
 }

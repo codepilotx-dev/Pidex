@@ -81,7 +81,7 @@ export function CodingHeadingTransition({
   return (
     <h1
       ref={headingRef}
-      className="quick-chat-heading tw:m-0 tw:max-w-full tw:px-2 tw:py-1 tw:text-balance tw:text-app-text tw:[font:inherit] tw:tracking-normal tw:select-none"
+      className="quick-chat-heading tw:m-0 tw:w-full tw:max-w-full tw:px-2 tw:py-1 tw:text-balance tw:text-app-text tw:[font:inherit] tw:tracking-normal tw:select-none"
     >
       {displayedKey === transitionKey ? children : stableContentRef.current}
     </h1>

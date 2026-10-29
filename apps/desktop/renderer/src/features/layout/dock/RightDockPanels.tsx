@@ -384,7 +384,7 @@ export function RightDockFilesPanel({
               aria-valuemax={treeResize.maximumWidth}
               aria-valuemin={FILE_TREE_MIN_WIDTH}
               aria-valuenow={treeWidth}
-              className="right-dock-editor-tree-resize-handle tw:relative tw:z-local tw:w-6 tw:min-w-6 tw:grow-0 tw:shrink-0 tw:basis-6 tw:cursor-col-resize tw:touch-none tw:focus-visible:outline-none"
+              className="right-dock-editor-tree-resize-handle tw:relative tw:z-local tw:w-2 tw:min-w-2 tw:grow-0 tw:shrink-0 tw:basis-2 tw:cursor-col-resize tw:touch-none tw:focus-visible:outline-none"
               role="separator"
               tabIndex={0}
               title="拖拽调整文件树宽度，双击恢复默认宽度"
@@ -708,7 +708,7 @@ export function RightDockFilePreviewPanel({
               aria-valuemax={treeResize.maximumWidth}
               aria-valuemin={FILE_TREE_MIN_WIDTH}
               aria-valuenow={treeWidth}
-              className="right-dock-editor-tree-resize-handle tw:relative tw:z-local tw:w-6 tw:min-w-6 tw:grow-0 tw:shrink-0 tw:basis-6 tw:cursor-col-resize tw:touch-none tw:focus-visible:outline-none"
+              className="right-dock-editor-tree-resize-handle tw:relative tw:z-local tw:w-2 tw:min-w-2 tw:grow-0 tw:shrink-0 tw:basis-2 tw:cursor-col-resize tw:touch-none tw:focus-visible:outline-none"
               role="separator"
               tabIndex={0}
               title="拖拽调整文件树宽度，双击恢复默认宽度"

@@ -70,7 +70,7 @@ export function PendingSubmissionMessages({
           </article>
           <p className={PENDING_STATUS_CLASS} role="status" aria-live="polite">
             <Spinner />
-            <span>正在开启聊天…</span>
+            <span>正在开启会话…</span>
           </p>
         </div>
       </div>

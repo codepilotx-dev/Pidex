@@ -23,7 +23,7 @@ const DROPDOWN_CLASS = cx(
   'tw:bottom-[calc(100%+var(--cpx-sys-space-1))]',
 )
 const DROPDOWN_SUGGESTION_CLASS = cx(
-  'popover-surface chat-input__dropdown chat-input__dropdown--suggestion tw:absolute tw:left-0 tw:z-popover',
+  'popover-surface chat-input__dropdown chat-input__dropdown--suggestion tw:absolute tw:left-0 tw:z-popover tw:w-full tw:max-w-full',
   'tw:bottom-[calc(100%+var(--cpx-sys-space-2))]',
 )
 const DROPDOWN_BOTTOM_CLASS = cx(
@@ -31,7 +31,7 @@ const DROPDOWN_BOTTOM_CLASS = cx(
   'tw:bottom-auto tw:top-[calc(100%+var(--cpx-sys-space-1))]',
 )
 const DROPDOWN_SUGGESTION_BOTTOM_CLASS = cx(
-  'popover-surface chat-input__dropdown chat-input__dropdown--bottom chat-input__dropdown--suggestion tw:absolute tw:left-0 tw:z-popover',
+  'popover-surface chat-input__dropdown chat-input__dropdown--bottom chat-input__dropdown--suggestion tw:absolute tw:left-0 tw:z-popover tw:w-full tw:max-w-full',
   'tw:bottom-auto tw:top-[calc(100%+var(--cpx-sys-space-2))]',
 )
 

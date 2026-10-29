@@ -1,7 +1,7 @@
 import { sortSessionsByRecency } from '../session/state/SessionSorting.js'
 import { mergeCatalogProjects } from './sidebar/UseSidebarProjectCatalog.js'
 import type React from 'react'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   DesktopRemovedWorkspace,
   DesktopSessionCatalogStatus,
@@ -12,7 +12,8 @@ import { SidebarBody } from './sidebar/SidebarBody.js'
 import { useSidebarActivity } from './sidebar/UseSidebarActivity.js'
 import { archiveSidebarActivity, sessionNeedsStop } from './sidebar/SidebarActivityActions.js'
 import { SidebarDockedPanes } from './sidebar/SidebarDockedPanes.js'
-import { SidebarEmptyRow } from '../../components/ui/SidebarRow.js'
+import { FullScreenWhaleLoading } from '../../components/ui/FullScreenWhaleLoading.js'
+import { reportStartupLoading } from '../../startup/StartupSplashHandoff.js'
 import type { DesktopFileEntry } from '../../../shared/Types.js'
 import type {
   WorkbenchPanelSnapshot,
@@ -154,6 +155,7 @@ export function DesktopSidebar({
   const [sidebarScrollOverlapping, setSidebarScrollOverlapping] = useState(false)
   const sidebarScrollPositionsRef = useRef<Map<SidebarScrollModeKey, number>>(new Map())
   const {
+    settingsLoaded,
     collapsedSidebarSections,
     collapsedSidebarProjectPaths,
     setSidebarManualOrder,
@@ -215,11 +217,11 @@ export function DesktopSidebar({
     [projectCatalogState.projects, recentWorkspaces],
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     sidebarDisclosureState.registerProjects(mergedProjects)
   }, [mergedProjects, sidebarDisclosureState])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const signature = sidebarDisclosureSignature(
       collapsedSidebarSections,
       collapsedSidebarProjectPaths,
@@ -673,6 +675,17 @@ export function DesktopSidebar({
     [setSidebarManualOrder],
   )
 
+  const initiallyReady = useEverOpened(
+    settingsLoaded && catalogStatus.state !== 'loading' && projectCatalogState.status !== 'loading',
+  )
+  useLayoutEffect(() => {
+    if (!initiallyReady) return reportStartupLoading('正在加载侧栏…')
+  }, [initiallyReady])
+
+  if (!initiallyReady) {
+    return <FullScreenWhaleLoading label="正在加载侧栏…" variant="contained" />
+  }
+
   return (
     <div
       {...dropHandlers}
@@ -707,13 +720,6 @@ export function DesktopSidebar({
       />
       <SidebarBody
         onScrollOverlapChange={setSidebarScrollOverlapping}
-        scrollHeader={
-          <>
-            {catalogStatus.state === 'loading' ? (
-              <SidebarEmptyRow role="status">正在加载任务目录…</SidebarEmptyRow>
-            ) : null}
-          </>
-        }
         projectCatalogState={projectCatalogState}
         scrollModeKey={sidebarScrollModeKey}
         scrollPositions={sidebarScrollPositionsRef.current}
@@ -894,6 +900,7 @@ export function DesktopSidebar({
 /** 侧栏只依赖这些设置字段；用 `useShallow` 组合一次订阅，避免无关设置触发重渲染。 */
 function sidebarSettingsSelector(settings: UseDesktopSettingsResult) {
   return {
+    settingsLoaded: settings.settingsLoaded,
     collapsedSidebarSections: settings.collapsedSidebarSections,
     collapsedSidebarProjectPaths: settings.collapsedSidebarProjectPaths,
     setSidebarManualOrder: settings.setSidebarManualOrder,

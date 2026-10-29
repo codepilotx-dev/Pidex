@@ -6,7 +6,7 @@ import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
 import { AllSelection, EditorState, NodeSelection, Plugin, TextSelection } from 'prosemirror-state'
 import type { Transaction } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react'
 import { useEditCommandActions } from '../../../components/ui/EditCommandProvider.js'
 import type { ComposerDocument, ComposerDocumentToken } from './ComposerTypes.js'
 import { composerDocumentsEqual } from './ComposerSkillToken.js'
@@ -210,7 +210,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       [],
     )
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       const mount = mountRef.current
       if (!mount) return
 
