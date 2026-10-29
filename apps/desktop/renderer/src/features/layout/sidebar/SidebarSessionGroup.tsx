@@ -1,7 +1,7 @@
 import { chooseSessionGroupForThread } from '../../session-groups/SessionGroupActions.js'
 import { buildThreadDeepLink } from '@pidex/shared/thread-reference'
 import type React from 'react'
-import { lazy, memo, Suspense, useEffect, useMemo, useId, useState } from 'react'
+import { lazy, memo, Suspense, useMemo, useId, useState } from 'react'
 import {
   Archive,
   Clock3,
@@ -156,7 +156,13 @@ function SidebarSessionGroupComponent({
   const [paging, setPaging] = useState(() =>
     createSidebarSessionPagingState({ groupKey, initialLimit }),
   )
-  const visibleLimit = paging.visibleLimit
+  const disclosureExpanded = useDisclosureContentExpanded() ?? true
+  const currentPaging =
+    pagination === 'all'
+      ? paging
+      : syncSidebarSessionPaging(paging, { disclosureExpanded, groupKey, initialLimit })
+  if (currentPaging !== paging) setPaging(currentPaging)
+  const visibleLimit = currentPaging.visibleLimit
   const [renameSession, setRenameSession] = useState<SessionListItem | null>(null)
   const renameDialogMounted = useEverOpened(renameSession !== null)
   const [renameValue, setRenameValue] = useState('')
@@ -212,8 +218,6 @@ function SidebarSessionGroupComponent({
     () => new Set(extraSessions.map((session) => session.id)),
     [extraSessions],
   )
-  /** 所在折叠区域收起时回到默认分页；不在折叠区域内（例如独立渲染）时按展开处理。 */
-  const disclosureExpanded = useDisclosureContentExpanded() ?? true
   const visibleSessions =
     pagination === 'all' ? orderedSessions : [...baseSessions, ...extraSessions]
   /**
@@ -251,13 +255,6 @@ function SidebarSessionGroupComponent({
   function updateVisibleLimit(resolution: number | ((visibleLimit: number) => number)): void {
     setPaging((current) => setSidebarSessionVisibleLimit(current, resolution))
   }
-
-  useEffect(() => {
-    if (pagination === 'all') return
-    setPaging((current) =>
-      syncSidebarSessionPaging(current, { disclosureExpanded, groupKey, initialLimit }),
-    )
-  }, [disclosureExpanded, groupKey, initialLimit, pagination])
 
   async function unlinkPullRequest(
     threadId: string,
@@ -745,12 +742,10 @@ function SidebarSessionGroupComponent({
     'sidebar-session-list tw:m-0 tw:flex tw:list-none tw:flex-col tw:sidebar-row-gap tw:p-0'
   const sessionRows = visibleSessions.map((session, index) => renderSessionRow(session, index))
   const visibleSessionKey = visibleSessions.map((session) => session.id).join('\u0000')
-  const heightTransition = useHeightTransition([
-    visibleSessionKey,
-    hasOverflow,
-    canShowMore,
-    canCollapse,
-  ])
+  const heightTransition = useHeightTransition(
+    [visibleSessionKey, hasOverflow, canShowMore, canCollapse],
+    disclosureExpanded,
+  )
 
   return (
     <div

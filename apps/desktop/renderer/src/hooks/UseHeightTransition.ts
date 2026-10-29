@@ -2,7 +2,7 @@ import React from 'react'
 
 import { getEffectiveReducedMotion } from './UsePrefersReducedMotion.js'
 
-export function useHeightTransition(dependencies: React.DependencyList): {
+export function useHeightTransition(dependencies: React.DependencyList, enabled = true): {
   ref: React.RefObject<HTMLDivElement | null>
   style: React.CSSProperties
 } {
@@ -14,6 +14,12 @@ export function useHeightTransition(dependencies: React.DependencyList): {
   React.useLayoutEffect(() => {
     const el = ref.current
     if (!el) return
+    if (!enabled) {
+      previousHeight.current = null
+      setHeight(null)
+      setTransitioning(false)
+      return
+    }
 
     const startHeight =
       height === null
@@ -62,7 +68,7 @@ export function useHeightTransition(dependencies: React.DependencyList): {
       el.removeEventListener('transitioncancel', finishTransition)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, dependencies)
+  }, [enabled, ...dependencies])
 
   return {
     ref,

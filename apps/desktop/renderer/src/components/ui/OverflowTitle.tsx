@@ -1,5 +1,5 @@
 import type React from 'react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cx } from '../../utils/Cx.js'
 
 const TITLE_SCROLL_MIN_SECONDS = 4
@@ -64,7 +64,7 @@ export function OverflowTitle({
   const trackRef = useRef<HTMLSpanElement>(null)
   const [overflowDistance, setOverflowDistance] = useState<number | null>(null)
 
-  useLayoutEffect(() => {
+  useEffect(() => {
     const viewport = viewportRef.current
     const track = trackRef.current
     if (!viewport || !track) return
@@ -78,8 +78,10 @@ export function OverflowTitle({
       setOverflowDistance((current) => (current === nextDistance ? current : nextDistance))
     }
 
-    updateOverflowDistance()
-    if (typeof ResizeObserver === 'undefined') return
+    if (typeof ResizeObserver === 'undefined') {
+      updateOverflowDistance()
+      return
+    }
 
     const observer = new ResizeObserver(updateOverflowDistance)
     observer.observe(viewport)
