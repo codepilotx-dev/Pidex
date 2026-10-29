@@ -1,4 +1,5 @@
 import { isRecord } from '@pidex/shared/guards'
+import { QUESTION_CHOICES_READ_MAX } from '@pidex/shared/thread'
 export type AskUserQuestionOption = {
   id?: string
   label: string
@@ -336,7 +337,12 @@ export function parseAskUserQuestions(input: Record<string, unknown>): AskUserQu
     const question = stringValue(rawQuestion.question)
     const header = stringValue(rawQuestion.header)
     const rawOptions = rawQuestion.options
-    if (!question || !Array.isArray(rawOptions) || rawOptions.length > 3 || rawOptions.length === 1)
+    if (
+      !question ||
+      !Array.isArray(rawOptions) ||
+      rawOptions.length > QUESTION_CHOICES_READ_MAX ||
+      rawOptions.length === 1
+    )
       return null
 
     const options: AskUserQuestionOption[] = []

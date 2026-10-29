@@ -2,6 +2,7 @@ import { subagentToolDefinitions } from '../../subagent/ToolDefinitions'
 import type { AgentToolResult } from '../harness/AgentTypes'
 import { Type, type TSchema } from '@earendil-works/pi-ai'
 import { AgentError } from '../../Domain'
+import { QUESTION_CHOICES_WRITE_MAX } from '@pidex/shared/thread'
 import { taskArrangementInput } from '../../tool/TaskSchedule/Definitions'
 import { secretScrubber } from '../../security/SecretScrubber'
 import { requestPermissionsDefinition, type ToolDefinition } from '../../tool/ToolRegistry'
@@ -256,7 +257,7 @@ export function createLifecycleTools(
                   description: Type.String({ minLength: 1 }),
                   recommended: Type.Optional(Type.Boolean()),
                 }),
-                { maxItems: 3, anyOf: [{ maxItems: 0 }, { minItems: 2 }] },
+                { maxItems: QUESTION_CHOICES_WRITE_MAX, anyOf: [{ maxItems: 0 }, { minItems: 2 }] },
               ),
               multiSelect: Type.Optional(Type.Boolean()),
             }),

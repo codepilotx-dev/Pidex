@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { QUESTION_CHOICES_WRITE_MAX } from '@pidex/shared/thread'
 
 export const questionOptionSchema = z
   .object({
@@ -15,7 +16,7 @@ export const richQuestionSchema = z
     question: z.string().trim().min(1),
     options: z
       .array(questionOptionSchema)
-      .max(3)
+      .max(QUESTION_CHOICES_WRITE_MAX)
       .refine((options) => options.length !== 1, '提供零项或二至三项选项'),
     multiSelect: z
       .boolean()

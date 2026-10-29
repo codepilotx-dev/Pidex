@@ -3,6 +3,7 @@ import { AgentError } from '../Domain'
 import type { ComputerUseService } from '../computer/ComputerUseService'
 import type { ApprovalService } from '../permission/ApprovalService'
 import type { QuestionService } from '../session/QuestionService'
+import { storedQuestions } from '../session/QuestionService'
 import type { ThreadService } from '../session/ThreadService'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
@@ -141,47 +142,7 @@ export class InteractionService {
 
     if (!requestedKinds || requestedKinds.has('question')) {
       for (const row of repository.pendingQuestions(threadID)) {
-        const questions = Array.isArray(row.payload.questions)
-          ? row.payload.questions.flatMap((entry) => {
-              const question = record(entry, 'question')
-              if (
-                typeof question.id !== 'string' ||
-                typeof question.header !== 'string' ||
-                typeof question.prompt !== 'string' ||
-                !Array.isArray(question.choices)
-              )
-                return []
-              const choices = question.choices.flatMap((entry) => {
-                const choice = record(entry, 'choice')
-                return typeof choice.id === 'string' &&
-                  typeof choice.label === 'string' &&
-                  typeof choice.description === 'string'
-                  ? [
-                      {
-                        id: choice.id,
-                        label: choice.label,
-                        description: choice.description,
-                        recommended: choice.recommended === true,
-                      },
-                    ]
-                  : []
-              })
-              return choices.length <= 3
-                ? [
-                    {
-                      id: question.id,
-                      header: question.header,
-                      prompt: question.prompt,
-                      choices,
-                      allowFreeform: true,
-                      required: true,
-                      minAnswers: typeof question.minAnswers === 'number' ? question.minAnswers : 1,
-                      maxAnswers: typeof question.maxAnswers === 'number' ? question.maxAnswers : 1,
-                    },
-                  ]
-                : []
-            })
-          : []
+        const questions = storedQuestions(row.payload)
         if (questions.length === 0) continue
         interactions.push({
           interactionId: row.id,

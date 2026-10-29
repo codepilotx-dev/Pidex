@@ -1,4 +1,5 @@
 import { Effect } from 'effect'
+import { QUESTION_CHOICES_READ_MAX } from '@pidex/shared/thread'
 import { AgentError } from '../Domain'
 import type { PendingApproval, PlanCheckpoint } from '../orchestration/AgentRuntimeTypes'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
@@ -43,7 +44,12 @@ type StoredAnswer = {
   answers: Array<{ questionId: string; choiceIds: string[]; text?: string; skipped?: true }>
 }
 
-const storedQuestions = (payload: Record<string, unknown>): InteractionQuestion[] => {
+/**
+ * 把已落库的 question payload 归一化为 InteractionQuestion。写入侧上限只约束
+ * 模型，读取侧必须接受任何构建写入的问题，否则同一份共享数据会出现“看得到
+ * 卡片却无法作答”。InteractionService.listPending 复用本函数。
+ */
+export const storedQuestions = (payload: Record<string, unknown>): InteractionQuestion[] => {
   if (!Array.isArray(payload.questions)) return []
   return payload.questions.flatMap((value) => {
     const question = record(value)
@@ -69,7 +75,7 @@ const storedQuestions = (payload: Record<string, unknown>): InteractionQuestion[
           ]
         : []
     })
-    if (choices.length > 3) return []
+    if (choices.length > QUESTION_CHOICES_READ_MAX) return []
     return [
       {
         id: question.id,

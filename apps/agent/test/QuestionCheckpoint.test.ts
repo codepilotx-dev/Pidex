@@ -4,7 +4,7 @@ import { RpcMethods, decodeServerRequestResult } from '@pidex/agent-protocol'
 import { ThreadReadViewRepository } from '../src/session/ThreadReadViewRepository'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { QuestionService } from '../src/session/QuestionService'
+import { QuestionService, storedQuestions } from '../src/session/QuestionService'
 import { createLifecycleTools } from '../src/orchestration/pi/PiToolAdapter'
 import { EventHub } from '../src/storage/events/EventHub'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
@@ -50,6 +50,22 @@ describe('问题 checkpoint', () => {
         },
       ])[0]?.choices.map((choice) => choice.recommended),
     ).toEqual([false, true])
+    // 写入侧契约不变：模型仍只能提交 2 至 3 个选项。
+    expect(
+      requestUserInputSchema.safeParse({
+        questions: [
+          {
+            id: 'wide',
+            header: '方向',
+            question: '哪些方向？',
+            options: [1, 2, 3, 4].map((index) => ({
+              label: `选项 ${index}`,
+              description: '说明',
+            })),
+          },
+        ],
+      }).success,
+    ).toBe(false)
     const service = new QuestionService(db, hub)
     const id = await service.checkpoint(thread.id, turn.turnID, turn.agentID, {
       kind: 'clarification',
@@ -530,6 +546,70 @@ describe('问题 checkpoint', () => {
 
     reply.mockRestore()
     track.mockRestore()
+    service.dispose()
+  })
+
+  /**
+   * 共享 ~/.pidex 时，其它构建可能写入超过本构建写入上限的选项。读取侧必须
+   * 接受并允许作答，否则会出现“卡片可见但永久无法回答”。
+   */
+  test('读取侧接受超出写入上限的选项并允许作答', async () => {
+    const db = new AgentDatabase(join(tmpdir(), `cpx-question-wide-${crypto.randomUUID()}.sqlite`))
+    databases.push(db)
+    const hub = await Effect.runPromise(EventHub.make)
+    const thread = db.createThread()
+    const input = {
+      content: '澄清',
+      model: Model.Ref.make({ providerID: Provider.ID.make('openai'), id: Model.ID.make('test') }),
+      permissionConfig: {
+        sandboxMode: 'workspace-write' as const,
+        approvalPolicy: 'on-request' as const,
+        approvalsReviewer: 'user' as const,
+      },
+      strategy: 'queue' as const,
+      taskMode: 'chat' as const,
+    }
+    const turn = db.createTurn(thread.id, input)
+    db.startTurnExecution(turn.turnID, { ...input, id: turn.inputID })
+    const choices = ['a', 'b', 'c', 'd', 'e'].map((id) => ({
+      id,
+      label: `选项 ${id}`,
+      description: id,
+      recommended: false,
+    }))
+    const questions = [
+      {
+        id: 'optimization_axis',
+        header: '方向',
+        prompt: '主要指哪个方向？',
+        choices,
+        allowFreeform: true,
+        required: true,
+        minAnswers: 1,
+        maxAnswers: 1,
+      },
+    ]
+    // 直接落库，模拟其它构建写入的 payload。
+    const { question } = db.createResumableQuestion({
+      threadID: thread.id,
+      turnID: turn.turnID,
+      agentID: turn.agentID,
+      toolCallID: 'call-wide',
+      payload: { questions, question: questions[0]!.prompt, options: choices.map((c) => c.label) },
+      payloadVersion: 2,
+      checkpoint: { payload: { state: '', interruption: null }, version: 1 },
+    })
+    expect(storedQuestions({ questions })[0]?.choices).toHaveLength(5)
+
+    const service = new QuestionService(db, hub)
+    await service.reply(
+      question.id,
+      { answers: [{ questionId: 'optimization_axis', choiceIds: ['e'] }] },
+      false,
+      'user',
+      false,
+    )
+    expect(db.repositories.interactions.isQuestionPending(question.id)).toBe(false)
     service.dispose()
   })
 })

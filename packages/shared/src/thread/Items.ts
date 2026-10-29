@@ -171,6 +171,15 @@ export const QuestionChoiceSchema = Schema.Struct({
 export type QuestionChoice = typeof QuestionChoiceSchema.Type
 
 const QuestionTextSchema = Schema.String.check(Schema.isMinLength(1))
+
+/** 模型可写入的单题选项上限；工具 schema 与写入校验共用。 */
+export const QUESTION_CHOICES_WRITE_MAX = 3
+/**
+ * 读取侧选项上限：必须不低于任何写入方上限，否则其它构建写入的问题会被
+ * 静默丢弃或解码失败。保留防御性上限，避免异常数据撑爆界面。
+ */
+export const QUESTION_CHOICES_READ_MAX = 10
+
 export const InteractionQuestionChoiceSchema = Schema.Struct({
   id: QuestionTextSchema,
   label: QuestionTextSchema,
@@ -184,10 +193,10 @@ export const InteractionQuestionSchema = Schema.Struct({
   choices: Schema.Array(InteractionQuestionChoiceSchema)
     .check(
       Schema.makeFilter((choices) => choices.length !== 1, {
-        expected: 'zero or two to three choices',
+        expected: 'zero or at least two choices',
       }),
     )
-    .check(Schema.isMaxLength(3)),
+    .check(Schema.isMaxLength(QUESTION_CHOICES_READ_MAX)),
   allowFreeform: Schema.Literal(true),
   required: Schema.Literal(true),
   minAnswers: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
