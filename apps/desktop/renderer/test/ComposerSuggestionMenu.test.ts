@@ -17,7 +17,10 @@ import {
   type ComposerSlashCommand,
 } from '../src/features/session/composer/ComposerSlashCommands.js'
 import type { ComposerMenuItem } from '../src/features/session/composer/ComposerCommandMenu.js'
-import { computeDropdownMaxHeight } from '../src/features/session/composer/ChatInputDropdown.js'
+import {
+  ChatInputDropdown,
+  computeDropdownMaxHeight,
+} from '../src/features/session/composer/ChatInputDropdown.js'
 
 const item = (key: string, extra: Partial<ComposerMenuItem> = {}): ComposerMenuItem => ({
   key,
@@ -181,5 +184,29 @@ describe('composer suggestion routing and selection', () => {
     expect(mergeSlashCommands([builtin], [skill])).toEqual([builtin])
     expect(parseSlashInvocation('/plan', [builtin]).kind).toBe('builtin')
     expect(parseSlashInvocation('/plan task', [builtin]).kind).toBe('unknown')
+  })
+  test('建议浮层跨页面保持 100% 输入框等宽与统一暗色滚动条', async () => {
+    const html = renderToStaticMarkup(
+      createElement(
+        ChatInputDropdown,
+        {
+          open: true,
+          side: 'top',
+          size: 'lg',
+          suggestion: true,
+          onClose: () => {},
+        },
+        createElement('div', null, 'menu'),
+      ),
+    )
+    expect(html).toContain('chat-input__dropdown--suggestion')
+    expect(html).toContain('tw:w-full')
+    expect(html).toContain('tw:max-w-full')
+    const composerCss = await Bun.file(
+      new URL('../src/styles/primitives/composer.css', import.meta.url),
+    ).text()
+    expect(composerCss).toMatch(
+      /\.chat-input__suggestion-menu,\s*\.chat-input__suggestion-vlist\s*\{\s*scrollbar-color:\s*var\(--cpx-sys-color-border-subtle\)\s+transparent;\s*\}/,
+    )
   })
 })

@@ -117,6 +117,21 @@ function sidebarNavItems(
 }
 
 describe('Codex 侧栏导航', () => {
+  test('首次加载整批呈现侧栏，刷新不再插入会挤动列表的加载行', () => {
+    const sidebar = readFileSync(
+      new URL('../src/features/layout/DesktopSidebar.tsx', import.meta.url), 'utf8',
+    )
+    expect(sidebar).toContain('const initiallyReady = useEverOpened(')
+    expect(sidebar).toContain(
+      "settingsLoaded && catalogStatus.state !== 'loading' && projectCatalogState.status !== 'loading'",
+    )
+    expect(sidebar).toContain("if (!initiallyReady) return reportStartupLoading('正在加载侧栏…')")
+    expect(sidebar).toContain('<FullScreenWhaleLoading label="正在加载侧栏…" variant="contained" />')
+    expect(sidebar.indexOf('if (!initiallyReady) {')).toBeLessThan(sidebar.indexOf('<SidebarBody'))
+    expect(sidebar).not.toContain('正在加载任务目录…')
+    expect(sidebar).not.toContain('scrollHeader=')
+  })
+
   test('全部固定后更多仍可用，首页忽略隐藏配置，宠物可固定且能力过滤保持生效', () => {
     const settings = settingsStorage.defaultDesktopSettings()
     const stored = spyOn(settingsStorage, 'readStoredDesktopSettings').mockReturnValue({
@@ -204,6 +219,9 @@ describe('Codex 侧栏导航', () => {
         onReport: () => {},
       }),
     )
+    expect(rail).toContain('aria-busy="true"')
+    expect(rail).toContain('inert=""')
+    expect(rail).toContain('tw:invisible')
     expect(rail).toContain('aria-label="首页"')
     expect(rail).not.toContain('title="首页"')
     expect(rail).not.toContain('aria-label="项目"')

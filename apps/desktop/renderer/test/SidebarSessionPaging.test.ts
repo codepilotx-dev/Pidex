@@ -34,16 +34,17 @@ test('展开状态下的同步保持当前分页（数据刷新与排序变化�
   expect(next.visibleLimit).toBe(20)
 })
 
-test('收起后回到默认条数，再次展开仍是默认条数', () => {
+test('收起期间保留内容高度，再次展开前恢复默认条数', () => {
   const expanded = setSidebarSessionVisibleLimit(state(), 20)
   const collapsed = syncSidebarSessionPaging(expanded, input({ disclosureExpanded: false }))
 
-  expect(collapsed.visibleLimit).toBe(INITIAL_LIMIT)
+  expect(collapsed.visibleLimit).toBe(20)
+  expect(syncSidebarSessionPaging(collapsed, input({ disclosureExpanded: false }))).toBe(collapsed)
 
   const reopened = syncSidebarSessionPaging(collapsed, input())
 
-  expect(reopened).toBe(collapsed)
   expect(reopened.visibleLimit).toBe(INITIAL_LIMIT)
+  expect(syncSidebarSessionPaging(reopened, input())).toBe(reopened)
 })
 
 test('手动展开后的条数保持不变，直到用户收起或折叠区收起', () => {

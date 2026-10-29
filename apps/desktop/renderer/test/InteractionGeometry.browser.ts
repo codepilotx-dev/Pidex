@@ -100,7 +100,7 @@ const examples = renderToString(
       {
         className: 'sidebar-fixture desktop-sidebar tw:relative tw:flex tw:w-60 tw:flex-col',
       },
-      h('div', { className: 'sidebar-resizer', 'aria-hidden': 'true' }),
+      h('div', { className: 'sidebar-resizer tw:w-1.5', 'aria-hidden': 'true' }),
     ),
   ),
 )
@@ -221,7 +221,7 @@ try {
             await page
               .locator('.after .sidebar-fixture .sidebar-resizer')
               .evaluate((e) => e.getBoundingClientRect().width),
-            24,
+            6,
           )
           const entity = await page.locator('.after .entity').boundingBox()
           const close = await page.locator('.after .close').boundingBox()

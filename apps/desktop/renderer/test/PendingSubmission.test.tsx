@@ -113,7 +113,7 @@ describe('pending message rendering', () => {
     const markup = render(pendingFrom())
     expect(markup).toContain('首次发送的消息')
     expect(markup).toContain('role="status"')
-    expect(markup).toContain('正在开启聊天…')
+    expect(markup).toContain('正在开启会话…')
     expect(markup).toContain('data-pending-submission="draft-1"')
     expect(markup).toContain('canonical-user-message__bubble')
     expect(markup).not.toContain('正在加载会话内容')
