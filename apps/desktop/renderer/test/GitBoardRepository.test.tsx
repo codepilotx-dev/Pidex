@@ -13,6 +13,7 @@ import {
 import {
   GitBoardView,
   RepositoryColumn,
+  RepositoryToolbar,
   gitBoardFileStatuses as reExportedGitBoardFileStatuses,
 } from '../src/features/git-board/GitBoardView.js'
 import {
@@ -243,6 +244,12 @@ test('仓库列同时显示未提交改动与最近提交，禁用旧服务端�
         project={project}
         repository={{ result, commits: [commit], diffStats: { additions: 12, deletions: 3 } }}
         onSelect={() => {}}
+      />,
+    )
+    const toolbar = renderToStaticMarkup(
+      <RepositoryToolbar
+        project={project}
+        repository={{ result, commits: [commit] }}
         onBranchChange={() => {}}
       />,
     )
@@ -255,19 +262,20 @@ test('仓库列同时显示未提交改动与最近提交，禁用旧服务端�
     // 主区域仓库列并列展示“未提交改动”与“最近提交”。
     expect(html).toContain('最近提交')
     expect(html).toContain('Commit subject')
-    expect(html).toContain('tw:w-[400px]')
+    expect(html).toContain('tw:w-[360px]')
+    expect(html).toContain('tw:border-r')
     expect(html).toContain('tw:overflow-y-auto')
-    expect(html).toContain('选择查看分支')
-    expect(html).toContain('disabled=""')
-    expect(html).toContain('lucide-chevron-down')
-    expect(html).not.toContain('当前工作区')
-    expect(html).not.toContain('从看板移除')
-    expect(html).toContain('↑ 0 ↓ 0')
+    expect(toolbar).toContain('选择查看分支')
+    expect(toolbar).toContain('disabled=""')
+    expect(toolbar).toContain('lucide-chevron-down')
+    expect(toolbar).not.toContain('当前工作区')
+    expect(toolbar).not.toContain('从看板移除')
+    expect(toolbar).toContain('↑ 0 ↓ 0')
     expect(html).toContain('+12</span>')
     expect(html).toContain('-3</span>')
     expect(html).toContain('tw:ml-auto tw:inline-flex')
-    // 列头提供仓库操作菜单；能力缺失时在列内说明禁用原因。
-    expect(html).toContain('aria-label="board：仓库操作"')
+    // 工具栏提供仓库操作菜单；能力缺失时在列内说明禁用原因。
+    expect(toolbar).toContain('aria-label="board：仓库操作"')
     expect(html).toContain('当前服务不支持：提交、推送、创建分支、签出分支、Fetch、Pull')
   } finally {
     hook.mockRestore()

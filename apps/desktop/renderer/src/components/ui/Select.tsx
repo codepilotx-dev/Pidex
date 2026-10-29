@@ -49,7 +49,10 @@ function OptionContent({
     <div className="ui-select-item-inner settings-dropdown-item-inner tw:type-row-title tw:flex tw:w-full tw:min-w-0 tw:items-center tw:gap-2">
       {option.icon}
       <div className="ui-select-item-copy settings-dropdown-item-copy tw:grid tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:gap-1">
-        <span className="ui-select-item-label settings-dropdown-item-label tw:truncate tw:type-row-title">
+        <span
+          className="ui-select-item-label settings-dropdown-item-label tw:truncate tw:type-row-title"
+          title={typeof option.label === 'string' ? option.label : undefined}
+        >
           {option.label}
         </span>
         {option.detail ? (
@@ -111,7 +114,10 @@ export function Select<T extends string>({
         data-variant={variant}
         {...focus.triggerInteractionProps}
       >
-        <span className="ui-select-value tw:min-w-0 tw:truncate">
+        <span
+          className="ui-select-value tw:min-w-0 tw:truncate"
+          title={typeof selected?.label === 'string' ? selected.label : undefined}
+        >
           {selected?.label ?? placeholder ?? ariaLabel}
         </span>
         <ChevronDown size="var(--inline-icon-size, 1em)" />
@@ -140,7 +146,10 @@ export function Select<T extends string>({
                   .join(' ')}
                 asChild
               >
-                <div className="ui-select-item settings-dropdown-item">
+                <div
+                  className="ui-select-item settings-dropdown-item"
+                  title={typeof option.label === 'string' ? option.label : undefined}
+                >
                   <OptionContent
                     option={option}
                     selected={option.value === value}

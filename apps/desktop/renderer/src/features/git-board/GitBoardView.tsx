@@ -1,6 +1,6 @@
 import { useShallow } from 'zustand/react/shallow'
 import { lazy, Suspense, useState, type ReactNode } from 'react'
-import { ChevronDown, GitBranch, RefreshCw } from 'lucide-react'
+import { ChevronDown, Cloud, GitBranch, RefreshCw } from 'lucide-react'
 import type { DesktopWorkspace } from '../../../shared/Types.js'
 import { Tooltip } from '../../components/ui/Tooltip.js'
 import { Select } from '../../components/ui/Select.js'
@@ -137,21 +137,17 @@ function BoardSection({
   )
 }
 
-export function RepositoryColumn({
+export function RepositoryToolbar({
   project,
   repository,
   actionBusy = false,
-  actionError,
-  onSelect,
   onBranchChange,
   onAction,
 }: {
   project: DesktopWorkspace
   repository?: GitBoardRepository
   actionBusy?: boolean
-  actionError?: string
-  onSelect: (selection: GitBoardReviewSelection) => void
-  onBranchChange: () => void
+  onBranchChange?: () => void
   onAction?: (action: GitBoardAction) => void
 }) {
   const { t } = useLocale()
@@ -161,13 +157,125 @@ export function RepositoryColumn({
     selectBranch,
     supportsCommitRef,
     capabilities,
-    selectedReview,
   } = useGitBoard(
     useShallow((state) => ({
       refreshView: state.refreshView,
       selectedRefs: state.selectedRefs,
       selectBranch: state.selectBranch,
       supportsCommitRef: state.supportsCommitRef,
+      capabilities: state.capabilities,
+    })),
+  )
+  const result = repository?.result
+  const status = result?.ok ? result.status : null
+  const selectedRef = supportsCommitRef ? (selectedRefs[project.projectId!] ?? 'HEAD') : 'HEAD'
+  const branchOptions = [
+    {
+      value: 'HEAD',
+      label: `${status?.branchName ?? 'detached HEAD'} (HEAD)`,
+      icon: <GitBranch size={14} className="tw:shrink-0 tw:text-app-text-meta" />,
+    },
+    ...(repository?.branches ?? []).map((branch) => ({
+      value: branch.name,
+      label: branch.name,
+      icon: branch.remote ? (
+        <Cloud size={14} className="tw:shrink-0 tw:text-app-text-meta" />
+      ) : (
+        <GitBranch size={14} className="tw:shrink-0 tw:text-app-text-meta" />
+      ),
+    })),
+  ]
+  if (!branchOptions.some((branch) => branch.value === selectedRef)) {
+    branchOptions.push({
+      value: selectedRef,
+      label: selectedRef,
+      icon: <GitBranch size={14} className="tw:shrink-0 tw:text-app-text-meta" />,
+    })
+  }
+
+  return (
+    <div className="tw:flex tw:items-center tw:gap-2">
+      {status && (
+        <Tooltip
+          content={`${status.branchName ?? 'detached HEAD'} · ${status.upstream ?? t('未设置上游')}`}
+        >
+          <span className="tw:shrink-0 tw:whitespace-nowrap tw:type-caption tw:text-app-text-meta">
+            {`↑ ${status.ahead} ↓ ${status.behind}`}
+          </span>
+        </Tooltip>
+      )}
+      {status && (
+        <div className="tw:flex tw:items-center tw:gap-1">
+          <Tooltip
+            content={t(
+              !supportsCommitRef
+                ? '当前服务不支持按分支查看'
+                : (repository?.branchError ?? '选择查看分支'),
+            )}
+          >
+            <span className="tw:min-w-0">
+              <Select
+                value={selectedRef}
+                options={branchOptions}
+                ariaLabel={t('选择查看分支')}
+                searchable
+                size="lg"
+                disabled={!supportsCommitRef || !repository?.branches}
+                triggerClassName="tw:w-auto tw:max-w-[220px]"
+                onValueChange={(ref) => {
+                  onBranchChange?.()
+                  selectBranch(project.projectId!, ref)
+                }}
+              />
+            </span>
+          </Tooltip>
+          {repository?.branchError && (
+            <Tooltip content={t(repository.branchError)}>
+              <Button
+                isIconOnly
+                nativeTitle={false}
+                variant="text"
+                title={t('重试')}
+                onClick={refresh}
+              >
+                <RefreshCw size={14} />
+              </Button>
+            </Tooltip>
+          )}
+        </div>
+      )}
+      <GitBoardRepositoryMenu
+        available={status !== null}
+        busy={actionBusy}
+        capabilities={capabilities}
+        projectName={project.name}
+        onAction={(action) => onAction?.(action)}
+      />
+    </div>
+  )
+}
+
+export function RepositoryColumn({
+  project,
+  repository,
+  actionBusy = false,
+  actionError,
+  onSelect,
+}: {
+  project: DesktopWorkspace
+  repository?: GitBoardRepository
+  actionBusy?: boolean
+  actionError?: string
+  onSelect: (selection: GitBoardReviewSelection) => void
+}) {
+  const { t } = useLocale()
+  const {
+    refreshView: refresh,
+    capabilities,
+    selectedReview,
+  } = useGitBoard(
+    useShallow((state) => ({
+      refreshView: state.refreshView,
       capabilities: state.capabilities,
       selectedReview: state.selectedReview,
     })),
@@ -190,95 +298,27 @@ export function RepositoryColumn({
         : actionBusy
           ? t('正在执行仓库操作…')
           : null
-  const selectedRef = supportsCommitRef ? (selectedRefs[project.projectId!] ?? 'HEAD') : 'HEAD'
-  const branchOptions = [
-    { value: 'HEAD', label: `${status?.branchName ?? 'detached HEAD'} (HEAD)` },
-    ...(repository?.branches ?? []).map((branch) => ({
-      value: branch.name,
-      label: branch.name,
-      detail: t(branch.remote ? '远端分支' : '本地分支'),
-    })),
-  ]
-  if (!branchOptions.some((branch) => branch.value === selectedRef))
-    branchOptions.push({ value: selectedRef, label: selectedRef })
+
   return (
     <section
       aria-label={project.name}
       aria-busy={actionBusy || undefined}
-      className="tw:flex tw:h-full tw:min-h-0 tw:w-[400px] tw:min-w-[400px] tw:flex-none tw:flex-col tw:overflow-hidden tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-panel"
+      className="tw:flex tw:h-full tw:min-h-0 tw:w-[360px] tw:min-w-[360px] tw:flex-none tw:flex-col tw:overflow-hidden tw:border-r tw:border-app-border-subtle tw:pr-3"
     >
-      <header className="tw:shrink-0 tw:border-b tw:border-app-border-subtle tw:p-4">
-        <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
-          <Tooltip content={project.path}>
-            <h2 className="tw:m-0 tw:truncate tw:type-title-sm">{project.name}</h2>
-          </Tooltip>
-          <span className="tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1">
-            {status && (
-              <Tooltip
-                content={`${status.branchName ?? 'detached HEAD'} · ${status.upstream ?? t('未设置上游')}`}
-              >
-                <span className="tw:shrink-0 tw:whitespace-nowrap tw:type-caption tw:text-app-text-meta">{`↑ ${status.ahead} ↓ ${status.behind}`}</span>
-              </Tooltip>
-            )}
-            <GitBoardRepositoryMenu
-              available={status !== null}
-              busy={actionBusy}
-              capabilities={capabilities}
-              projectName={project.name}
-              onAction={(action) => onAction?.(action)}
-            />
-          </span>
-        </div>
-        {status && (
-          <div className="tw:mt-2 tw:flex tw:min-w-0 tw:items-center tw:gap-2 tw:type-caption tw:text-app-text-meta">
-            <GitBranch size={14} />
-            <Tooltip
-              content={t(
-                !supportsCommitRef
-                  ? '当前服务不支持按分支查看'
-                  : (repository?.branchError ?? '选择查看分支'),
-              )}
-            >
-              <span className="tw:min-w-0 tw:flex-1">
-                <Select
-                  value={selectedRef}
-                  options={branchOptions}
-                  ariaLabel={t('选择查看分支')}
-                  searchable
-                  disabled={!supportsCommitRef || !repository?.branches}
-                  triggerClassName="tw:w-full"
-                  onValueChange={(ref) => {
-                    onBranchChange()
-                    selectBranch(project.projectId!, ref)
-                  }}
-                />
-              </span>
-            </Tooltip>
-            {repository?.branchError && (
-              <Tooltip content={t(repository.branchError)}>
-                <Button
-                  isIconOnly
-                  nativeTitle={false}
-                  variant="text"
-                  title={t('重试')}
-                  onClick={refresh}
-                >
-                  <RefreshCw size={14} />
-                </Button>
-              </Tooltip>
-            )}
+      <div className="tw:min-h-0 tw:flex-1 tw:overflow-y-auto tw:py-2 tw:pl-1 tw:pr-1">
+        {actionError && (
+          <div
+            role="alert"
+            className="tw:mb-3 tw:rounded-md tw:bg-app-danger/10 tw:p-2 tw:type-caption tw:text-app-danger"
+          >
+            {actionError}
           </div>
         )}
         {actionCaption && (
-          <p className="tw:m-0 tw:mt-2 tw:type-caption tw:text-app-text-meta">{actionCaption}</p>
-        )}
-        {actionError && (
-          <p role="alert" className="tw:m-0 tw:mt-2 tw:type-caption tw:text-app-danger">
-            {actionError}
+          <p className="tw:m-0 tw:mb-3 tw:px-1 tw:type-caption tw:text-app-text-meta">
+            {actionCaption}
           </p>
         )}
-      </header>
-      <div className="tw:min-h-0 tw:flex-1 tw:overflow-y-auto tw:py-3 tw:pl-3 tw:pr-1">
         {repository?.refreshError && result?.ok && (
           // 刷新失败时保留上一份仓库数据，只在这里提供重试入口。
           <div
@@ -292,10 +332,12 @@ export function RepositoryColumn({
           </div>
         )}
         {!result ? (
-          <p role="status">{t('加载中')}</p>
+          <p role="status" className="tw:px-2 tw:py-3 tw:type-body-sm tw:text-app-text-meta">
+            {t('加载中')}
+          </p>
         ) : !result.ok ? (
-          <div role="alert">
-            <p>{result.ok === false ? result.error : ''}</p>
+          <div role="alert" className="tw:p-2">
+            <p className="tw:type-body-sm tw:text-app-danger">{result.ok === false ? result.error : ''}</p>
             <Button variant="text" onClick={refresh}>
               {t('重试')}
             </Button>
@@ -369,7 +411,13 @@ export function RepositoryColumn({
   )
 }
 
-function ProjectBoard() {
+function ProjectBoard({
+  actionBusy,
+  actionError,
+}: {
+  actionBusy?: boolean
+  actionError?: string
+}) {
   const { t } = useLocale()
   const {
     view,
@@ -402,9 +450,6 @@ function ProjectBoard() {
   const selectedResult = selectedReview
     ? repositories[selectedReview.project.projectId!]?.result
     : undefined
-  const actions = useGitBoardActions((projectId) => {
-    if (selectedReview?.project.projectId === projectId) clearReview()
-  })
 
   if (!activeProjectId) {
     return (
@@ -435,30 +480,22 @@ function ProjectBoard() {
   return (
     <div
       inert={ready === false}
-      className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:gap-3 tw:overflow-hidden"
+      className="tw:flex tw:min-h-0 tw:min-w-0 tw:flex-1 tw:overflow-hidden"
     >
       <RepositoryColumn
         key={project.projectId}
         project={project}
         repository={repositories[project.projectId!]}
-        actionBusy={actions.isBusy(project.projectId!)}
-        actionError={actions.errorFor(project.projectId!)}
+        actionBusy={actionBusy}
+        actionError={actionError}
         onSelect={selectReview}
-        onAction={(action) => actions.begin(project, action)}
-        onBranchChange={() => {
-          if (
-            selectedReview?.project.projectId === project.projectId &&
-            selectedReview.source.kind === 'commit'
-          )
-            clearReview()
-        }}
       />
       {selectedReview ? (
         <Suspense
           fallback={
             <aside
               aria-label={t('变更详情')}
-              className="tw:flex tw:h-full tw:min-w-[360px] tw:flex-1 tw:flex-col tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-main tw:p-4"
+              className="tw:flex tw:h-full tw:min-w-[360px] tw:flex-1 tw:flex-col tw:items-center tw:justify-center tw:overflow-hidden tw:bg-app-main tw:p-4"
             >
               <p role="status" className="tw:m-0 tw:type-body-sm tw:text-app-text-meta">
                 {t('加载中')}
@@ -478,14 +515,13 @@ function ProjectBoard() {
       ) : (
         <aside
           aria-label={t('变更详情')}
-          className="tw:flex tw:h-full tw:min-w-[360px] tw:flex-1 tw:flex-col tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-main tw:p-4"
+          className="tw:flex tw:h-full tw:min-w-[360px] tw:flex-1 tw:flex-col tw:items-center tw:justify-center tw:overflow-hidden tw:bg-app-main tw:p-4"
         >
           <p className="tw:m-0 tw:type-body-sm tw:text-app-text-meta">
             {t('选择未提交文件或提交记录查看变更详情')}
           </p>
         </aside>
       )}
-      {actions.host}
     </div>
   )
 }
@@ -497,22 +533,31 @@ export function GitBoardView() {
     selectedProjectId,
     selectedProject,
     projects,
+    repositories,
     remoteView,
     refreshView,
     refreshGithubRepositories,
     refreshing,
+    selectedReview,
+    clearReview,
   } = useGitBoard(
     useShallow((state) => ({
       view: state.view,
       selectedProjectId: state.selectedProjectId,
       selectedProject: state.selectedProject,
       projects: state.projects,
+      repositories: state.repositories,
       remoteView: state.remoteView,
       refreshView: state.refreshView,
       refreshGithubRepositories: state.refreshGithubRepositories,
       refreshing: state.refreshing,
+      selectedReview: state.selectedReview,
+      clearReview: state.clearReview,
     })),
   )
+  const actions = useGitBoardActions((projectId) => {
+    if (selectedReview?.project.projectId === projectId) clearReview()
+  })
   const [githubSearch, setGithubSearch] = useState('')
   const [githubRefreshing, setGithubRefreshing] = useState(false)
   const githubView = remoteView === 'github'
@@ -575,25 +620,42 @@ export function GitBoardView() {
             </Button>
           </Tooltip>
         ) : (
-          <Tooltip content={t('刷新仓库')}>
-            <Button
-              isIconOnly
-              nativeTitle={false}
-              title={t('刷新仓库')}
-              aria-busy={refreshing}
-              variant="ghost"
-              shape="pill"
-              size="md"
-              disabled={refreshing || !activeProjectId}
-              onClick={refreshView}
-            >
-              <RefreshCw
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                className={refreshing ? 'tw:animate-spin' : undefined}
+          <div className="tw:flex tw:items-center tw:gap-2">
+            {project && (
+              <RepositoryToolbar
+                project={project}
+                repository={repositories[project.projectId!]}
+                actionBusy={actions.isBusy(project.projectId!)}
+                onAction={(action) => actions.begin(project, action)}
+                onBranchChange={() => {
+                  if (
+                    selectedReview?.project.projectId === project.projectId &&
+                    selectedReview.source.kind === 'commit'
+                  )
+                    clearReview()
+                }}
               />
-            </Button>
-          </Tooltip>
+            )}
+            <Tooltip content={t('刷新仓库')}>
+              <Button
+                isIconOnly
+                nativeTitle={false}
+                title={t('刷新仓库')}
+                aria-busy={refreshing}
+                variant="ghost"
+                shape="pill"
+                size="md"
+                disabled={refreshing || !activeProjectId}
+                onClick={refreshView}
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  size={APP_ICON_SIZE}
+                  className={refreshing ? 'tw:animate-spin' : undefined}
+                />
+              </Button>
+            </Tooltip>
+          </div>
         )
       }
     >
@@ -605,7 +667,14 @@ export function GitBoardView() {
           search={githubSearch}
         />
       ) : (
-        <ProjectBoard key={activeProjectId ?? 'empty'} />
+        <>
+          <ProjectBoard
+            key={activeProjectId ?? 'empty'}
+            actionBusy={project ? actions.isBusy(project.projectId!) : false}
+            actionError={project ? actions.errorFor(project.projectId!) : undefined}
+          />
+          {actions.host}
+        </>
       )}
     </PrimaryPageLayout>
   )
