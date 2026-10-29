@@ -438,8 +438,9 @@ export function ModelPickerPopover({
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
       <Popover.Trigger asChild>{trigger}</Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
+      {open ? (
+        <Popover.Portal>
+          <Popover.Content
           size="lg"
           align={align}
           side={side}
@@ -743,7 +744,8 @@ export function ModelPickerPopover({
             </div>
           </div>
         </Popover.Content>
-      </Popover.Portal>
+        </Popover.Portal>
+      ) : null}
     </Popover.Root>
   )
 }

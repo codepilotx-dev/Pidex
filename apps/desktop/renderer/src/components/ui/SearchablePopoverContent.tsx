@@ -61,8 +61,9 @@ export function SearchablePopoverContent<Option extends SearchablePopoverOption>
   return (
     <Dropdown.Root value={selectedValue} open={open} onOpenChange={onOpenChange}>
       <Dropdown.Trigger asChild>{trigger}</Dropdown.Trigger>
-      <Dropdown.Portal>
-        <Dropdown.Content
+      {open ? (
+        <Dropdown.Portal>
+          <Dropdown.Content
           size={size}
           align={align}
           side={side}
@@ -97,7 +98,8 @@ export function SearchablePopoverContent<Option extends SearchablePopoverOption>
             ))}
           </div>
         </Dropdown.Content>
-      </Dropdown.Portal>
+        </Dropdown.Portal>
+      ) : null}
     </Dropdown.Root>
   )
 }
