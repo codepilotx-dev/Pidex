@@ -340,11 +340,12 @@ export function mockSessionSnapshot(
 }
 
 const PERFORMANCE_TURN_COUNTS = new Set([10, 100, 250, 500])
-const PERFORMANCE_SESSION_COUNTS = new Set([10, 30, 50, 100])
+const PERFORMANCE_SESSION_COUNTS = new Set([10, 30, 50, 100, 500, 1000])
 
 export type BrowserPerformanceFixture = {
   activeSessionId: string
   sessions: DesktopSessionSnapshot[]
+  projects: DesktopWorkspace[]
 }
 
 export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | null {
@@ -354,7 +355,10 @@ export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | n
 
   const search = new URLSearchParams(window.location.search)
   const performanceCase = search.get('performanceCase')
-  if (performanceCase !== 'desktop-ux' && performanceCase !== 'nested-scroll-edge-fade') {
+  if (
+    performanceCase !== 'desktop-ux' && performanceCase !== 'nested-scroll-edge-fade' &&
+    performanceCase !== 'sidebar-dnd'
+  ) {
     return null
   }
 
@@ -463,6 +467,9 @@ export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | n
   return {
     activeSessionId: sessions[0]!.item.id,
     sessions,
+    projects: performanceCase === 'sidebar-dnd'
+      ? [...new Map(sessions.map((snapshot) => [snapshot.workspace.path, snapshot.workspace])).values()]
+      : [],
   }
 }
 

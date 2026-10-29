@@ -1278,12 +1278,18 @@ describe('workbench dynamic tab state', () => {
   test('workspace layout cycles split → chat → split', () => {
     let state = open(createDefaultWorkbenchTabsState(), review)
     expect(getWorkbenchWorkspaceLayout(state)).toBe('split')
+    const { sidebar, tabsById, right, bottom } = state
 
     state = applyWorkbenchPanelAction(state, { type: 'stepWorkspaceLayout' })
     expect(getWorkbenchWorkspaceLayout(state)).toBe('chat')
 
     state = applyWorkbenchPanelAction(state, { type: 'stepWorkspaceLayout' })
     expect(getWorkbenchWorkspaceLayout(state)).toBe('split')
+    // 布局切换不改变侧栏输入与文件回调依赖，允许跳过无关渲染。
+    expect(state.sidebar).toBe(sidebar)
+    expect(state.tabsById).toBe(tabsById)
+    expect(state.right.tabIds).toBe(right.tabIds)
+    expect(state.bottom).toBe(bottom)
   })
 
   test('hiding tabs keeps mounted tabs, their active selection, and the remembered mode', () => {

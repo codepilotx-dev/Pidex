@@ -177,6 +177,26 @@ export function createBrowserMockDesktopClient(
   if (visualFixture?.item.id === 'visual-scroll-edge' || performanceFixture) {
     settings = { ...settings, collapsedSidebarSections: [] }
   }
+  if (performanceFixture?.projects.length) {
+    settings = {
+      ...settings,
+      recentWorkspaces: performanceFixture.projects.map((project, index) => ({
+        ...project, pinnedAt: index === 0 ? new Date().toISOString() : null,
+      })),
+      sidebarSessionPins: Object.fromEntries(performanceFixture.sessions.slice(0, 5)
+        .map((session) => [session.item.id, new Date().toISOString()])),
+      sidebarCustomization: {
+        ...settings.sidebarCustomization!,
+        sections: [0, 1].map((index) => ({
+          id: `performance-section-${index}`, title: `性能分组 ${index + 1}`,
+          itemKeys: performanceFixture.sessions.slice(-40 + index * 20, index === 0 ? -20 : undefined)
+            .map((session) => `session:${session.item.id}`),
+          sort: 'manual', collapsed: false,
+        })),
+        sectionOrder: ['performance-section-0', 'performance-section-1'],
+      },
+    }
+  }
   let configDocument: Record<string, JsonValue> = {
     desktop: { ...settings } as unknown as JsonValue,
   }
@@ -1122,7 +1142,7 @@ export function createBrowserMockDesktopClient(
     }),
     listProjects: async (folderPath) => {
       if (folderPath) return [{ ...mockWorkspace(folderPath), projectId: `mock:${folderPath}` }]
-      return []
+      return performanceFixture?.projects ?? []
     },
     updateProject: async (input) => ({
       ...mockWorkspace(''),

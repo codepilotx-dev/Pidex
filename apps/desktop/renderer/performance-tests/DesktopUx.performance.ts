@@ -568,8 +568,8 @@ async function measureSidebarDrop(
     steps: 8,
   })
   await expect(draggedRow).toHaveAttribute('data-dragging', 'true')
-  await expect(draggedRow.locator('..')).not.toHaveText(orderBefore)
   await page.mouse.up()
+  await expect(draggedRow.locator('..')).not.toHaveText(orderBefore)
   return page.evaluate(() => {
     const targetWindow = window as typeof window & {
       __pidexDropReady?: Promise<{
