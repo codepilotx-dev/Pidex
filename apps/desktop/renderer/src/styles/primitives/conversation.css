@@ -48,15 +48,14 @@
   }
 
   /*
-   * The settled conversation geometry (`--session-content-w`) already excludes
-   * the rail and dock clearance that the shell computes. Padding here would
-   * shrink the reading column a second time and push the sticky footer out of
-   * the scroll content width.
+   * Keep the timeline and sticky composer inside the same padded column,
+   * including when auto margins collapse in a narrow workspace.
    */
   .conversation-page .thread-scroll-layout__inner {
     width: 100%;
-    max-width: var(--session-content-w);
+    max-width: calc(var(--page-content-max-width) + 2 * var(--cpx-sys-space-4));
     margin-inline: auto;
+    padding-inline: var(--cpx-sys-space-4);
   }
 
   .conversation-page {

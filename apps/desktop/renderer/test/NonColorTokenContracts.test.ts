@@ -687,9 +687,9 @@ describe('non-color design token contracts', () => {
     expect(conversation).toMatch(
       /\.quick-chat-view > \.quick-chat-hero-region,\s*\.quick-chat-view > \.quick-chat-composer-region\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
     )
-    // 会话内层列只跟随已结算的正文宽度，不再叠加第二层内边距。
+    // 消息与吸底输入框共用带最小左右留白的列，窄窗口也不能贴边。
     expect(conversation).toMatch(
-      /\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: var\(--session-content-w\);\s*margin-inline: auto;/,
+      /\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
     )
     expect(conversation).not.toMatch(
       /\.quick-chat-view,\s*\.conversation-page \.thread-scroll-layout__inner/,
