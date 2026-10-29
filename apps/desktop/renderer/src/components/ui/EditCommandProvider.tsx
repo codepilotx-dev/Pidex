@@ -26,13 +26,18 @@ export type CapturedEditCommandContext = {
   adapter?: EditCommandAdapter
 }
 
-type EditCommandContextValue = {
-  activeCapabilities: EditCommandCapabilities
-  activeContext: CapturedEditCommandContext | null
+export type EditCommandActions = {
   captureContext: (target: EventTarget | null) => CapturedEditCommandContext | null
   perform: (action: DesktopEditAction, context?: CapturedEditCommandContext | null) => Promise<void>
   registerTarget: (element: HTMLElement, adapter: EditCommandAdapter) => () => void
 }
+
+export type EditCommandState = {
+  activeCapabilities: EditCommandCapabilities
+  activeContext: CapturedEditCommandContext | null
+}
+
+export type EditCommandContextValue = EditCommandState & EditCommandActions
 
 const EMPTY_CAPABILITIES: EditCommandCapabilities = {
   undo: false,
@@ -44,24 +49,71 @@ const EMPTY_CAPABILITIES: EditCommandCapabilities = {
   selectAll: false,
 }
 
-const EditCommandContext = createContext<EditCommandContextValue>({
-  activeCapabilities: EMPTY_CAPABILITIES,
-  activeContext: null,
+const EditCommandActionContext = createContext<EditCommandActions>({
   captureContext: () => null,
   perform: async () => undefined,
   registerTarget: () => () => undefined,
 })
 
+const EditCommandStateContext = createContext<EditCommandState>({
+  activeCapabilities: EMPTY_CAPABILITIES,
+  activeContext: null,
+})
+
+function areCapabilitiesEqual(a: EditCommandCapabilities, b: EditCommandCapabilities): boolean {
+  return (
+    a.undo === b.undo &&
+    a.redo === b.redo &&
+    a.cut === b.cut &&
+    a.copy === b.copy &&
+    a.paste === b.paste &&
+    a.delete === b.delete &&
+    a.selectAll === b.selectAll
+  )
+}
+
 export function EditCommandProvider({ children }: { children: ReactNode }): ReactNode {
   const adaptersRef = useRef(new WeakMap<HTMLElement, EditCommandAdapter>())
   const activeContextRef = useRef<CapturedEditCommandContext | null>(null)
-  const [activeContext, setActiveContext] = useState<CapturedEditCommandContext | null>(null)
-  const [, setCapabilityVersion] = useState(0)
+  const activeTargetRef = useRef<EventTarget | null>(null)
+  const activeCapabilitiesRef = useRef<EditCommandCapabilities>(EMPTY_CAPABILITIES)
 
-  const updateActiveContext = useCallback((next: CapturedEditCommandContext | null): void => {
-    activeContextRef.current = next
-    setActiveContext(next)
+  const [state, setState] = useState<EditCommandState>({
+    activeCapabilities: EMPTY_CAPABILITIES,
+    activeContext: null,
+  })
+
+  const syncCapabilities = useCallback((): void => {
+    const current = activeContextRef.current
+    const nextCaps = current ? current.getCapabilities() : EMPTY_CAPABILITIES
+    if (!areCapabilitiesEqual(activeCapabilitiesRef.current, nextCaps)) {
+      activeCapabilitiesRef.current = nextCaps
+      setState((prev) => ({
+        ...prev,
+        activeCapabilities: nextCaps,
+      }))
+    }
   }, [])
+
+  const updateActiveContext = useCallback(
+    (next: CapturedEditCommandContext | null, target?: EventTarget | null): void => {
+      activeTargetRef.current = target ?? null
+      activeContextRef.current = next
+      const nextCaps = next ? next.getCapabilities() : EMPTY_CAPABILITIES
+      const capsEqual = areCapabilitiesEqual(activeCapabilitiesRef.current, nextCaps)
+      activeCapabilitiesRef.current = nextCaps
+      setState((prev) => {
+        if (prev.activeContext === next && capsEqual) {
+          return prev
+        }
+        return {
+          activeCapabilities: nextCaps,
+          activeContext: next,
+        }
+      })
+    },
+    [],
+  )
 
   const registerTarget = useCallback(
     (element: HTMLElement, adapter: EditCommandAdapter): (() => void) => {
@@ -69,7 +121,7 @@ export function EditCommandProvider({ children }: { children: ReactNode }): Reac
       return () => {
         adaptersRef.current.delete(element)
         if (activeContextRef.current?.adapter === adapter) {
-          updateActiveContext(null)
+          updateActiveContext(null, null)
         }
       }
     },
@@ -79,23 +131,24 @@ export function EditCommandProvider({ children }: { children: ReactNode }): Reac
   const captureContext = useCallback(
     (target: EventTarget | null): CapturedEditCommandContext | null => {
       const next = resolveEditCommandContext(target, adaptersRef.current)
-      updateActiveContext(next)
+      updateActiveContext(next, target)
       return next
     },
     [updateActiveContext],
   )
 
   const perform = useCallback(
-    async (action: DesktopEditAction, context = activeContextRef.current): Promise<void> => {
-      if (!context?.getCapabilities()[action]) return
+    async (action: DesktopEditAction, context?: CapturedEditCommandContext | null): Promise<void> => {
+      const targetContext = context ?? activeContextRef.current
+      if (!targetContext?.getCapabilities()[action]) return
 
       await new Promise<void>((resolve) => {
         window.setTimeout(resolve, 0)
       })
-      context.restore()
+      targetContext.restore()
 
-      if (context.adapter?.perform?.(action)) {
-        setCapabilityVersion((version) => version + 1)
+      if (targetContext.adapter?.perform?.(action)) {
+        syncCapabilities()
         return
       }
 
@@ -105,63 +158,86 @@ export function EditCommandProvider({ children }: { children: ReactNode }): Reac
       } else {
         performBrowserEditAction(action)
       }
-      setCapabilityVersion((version) => version + 1)
+      syncCapabilities()
     },
-    [],
+    [syncCapabilities],
   )
 
   useEffect(() => {
-    const refreshCapabilities = (): void => {
-      if (activeContextRef.current) {
-        setCapabilityVersion((version) => version + 1)
-      }
-    }
     const handleFocusIn = (event: FocusEvent): void => {
       const target = event.target
       if (target instanceof Element && target.closest('[data-edit-command-preserve-target]')) {
         return
       }
+      if (target === activeTargetRef.current && activeContextRef.current) {
+        syncCapabilities()
+        return
+      }
       const next = resolveEditCommandContext(target, adaptersRef.current)
-      if (next) updateActiveContext(next)
+      if (next) updateActiveContext(next, target)
     }
+
     const handlePointerDown = (event: PointerEvent): void => {
       const target = event.target
       if (target instanceof Element && target.closest('[data-edit-command-preserve-target]')) {
         return
       }
+      if (target === activeTargetRef.current && activeContextRef.current) {
+        syncCapabilities()
+        return
+      }
       const next = resolveEditCommandContext(target, adaptersRef.current)
-      updateActiveContext(next)
+      updateActiveContext(next, target)
     }
 
     document.addEventListener('focusin', handleFocusIn, true)
     document.addEventListener('pointerdown', handlePointerDown, true)
-    document.addEventListener('selectionchange', refreshCapabilities)
-    document.addEventListener('input', refreshCapabilities, true)
+    document.addEventListener('selectionchange', syncCapabilities)
+    document.addEventListener('input', syncCapabilities, true)
     return () => {
       document.removeEventListener('focusin', handleFocusIn, true)
       document.removeEventListener('pointerdown', handlePointerDown, true)
-      document.removeEventListener('selectionchange', refreshCapabilities)
-      document.removeEventListener('input', refreshCapabilities, true)
+      document.removeEventListener('selectionchange', syncCapabilities)
+      document.removeEventListener('input', syncCapabilities, true)
     }
-  }, [updateActiveContext])
+  }, [syncCapabilities, updateActiveContext])
 
-  const activeCapabilities = activeContext ? activeContext.getCapabilities() : EMPTY_CAPABILITIES
-  const value = useMemo<EditCommandContextValue>(
+  const actionsValue = useMemo<EditCommandActions>(
     () => ({
-      activeCapabilities,
-      activeContext,
       captureContext,
       perform,
       registerTarget,
     }),
-    [activeCapabilities, activeContext, captureContext, perform, registerTarget],
+    [captureContext, perform, registerTarget],
   )
 
-  return <EditCommandContext.Provider value={value}>{children}</EditCommandContext.Provider>
+  return (
+    <EditCommandActionContext.Provider value={actionsValue}>
+      <EditCommandStateContext.Provider value={state}>
+        {children}
+      </EditCommandStateContext.Provider>
+    </EditCommandActionContext.Provider>
+  )
+}
+
+export function useEditCommandActions(): EditCommandActions {
+  return useContext(EditCommandActionContext)
+}
+
+export function useEditCommandState(): EditCommandState {
+  return useContext(EditCommandStateContext)
 }
 
 export function useEditCommands(): EditCommandContextValue {
-  return useContext(EditCommandContext)
+  const actions = useContext(EditCommandActionContext)
+  const state = useContext(EditCommandStateContext)
+  return useMemo(
+    () => ({
+      ...state,
+      ...actions,
+    }),
+    [state, actions],
+  )
 }
 
 function resolveEditCommandContext(

@@ -6,7 +6,7 @@ import { cx } from '../../utils/Cx.js'
 import { useFloatingFocusModality } from '../../utils/FloatingFocus.js'
 import { APP_ICON_STROKE_WIDTH, APP_ICON_SIZES } from './IconTokens.js'
 import { buildPopoverSizingStyle, type PopoverSizingProps } from './PopoverSizing.js'
-import { type CapturedEditCommandContext, useEditCommands } from './EditCommandProvider.js'
+import { type CapturedEditCommandContext, useEditCommandActions } from './EditCommandProvider.js'
 
 export type AppContextMenuItemColor = 'red' | 'gray' | 'amber'
 
@@ -80,7 +80,7 @@ export function AppContextMenu({
   onOpenChange,
   includeEditActions = true,
 }: AppContextMenuProps): ReactNode {
-  const editCommands = useEditCommands()
+  const editCommands = useEditCommandActions()
   const focusModality = useFloatingFocusModality()
   const [editContext, setEditContext] = useState<CapturedEditCommandContext | null>(null)
   const editActions = useMemo(

@@ -7,7 +7,7 @@ import { AllSelection, EditorState, NodeSelection, Plugin, TextSelection } from 
 import type { Transaction } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { useEditCommands } from '../../../components/ui/EditCommandProvider.js'
+import { useEditCommandActions } from '../../../components/ui/EditCommandProvider.js'
 import type { ComposerDocument, ComposerDocumentToken } from './ComposerTypes.js'
 import { composerDocumentsEqual } from './ComposerSkillToken.js'
 import { focusComposerIfAvailable } from './ComposerFocus.js'
@@ -145,7 +145,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     },
     forwardedRef,
   ) {
-    const { registerTarget } = useEditCommands()
+    const { registerTarget } = useEditCommandActions()
     const mountRef = useRef<HTMLDivElement | null>(null)
     const viewRef = useRef<EditorView | null>(null)
     const callbacksRef = useRef({
