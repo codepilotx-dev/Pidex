@@ -143,6 +143,8 @@ describe('non-color design token contracts', () => {
         'var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-md) / var(--cpx-sys-line-height-body) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-control':
         'var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-sm) / var(--cpx-sys-line-height-control) var(--cpx-sys-font-family-sans)',
+      '--cpx-sys-type-page-title':
+        'var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-2xl) / var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-sm':
         'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) / var(--cpx-sys-line-height-heading-sm) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-md':
@@ -218,6 +220,7 @@ describe('non-color design token contracts', () => {
       'body-lg': 'body-lg',
       reading: 'reading',
       'row-title': 'row-title',
+      'page-title': 'page-title',
       control: 'control',
       metric: 'metric',
       code: 'code',
@@ -261,8 +264,8 @@ describe('non-color design token contracts', () => {
       ])
 
     // 页面/区块标题的排版角色随迁移落到 TSX：语义类名旁挂 `type-*` utility。
-    expect(generalSettings).toMatch(/className="settings-page-title [^"]*tw:type-title-xl/)
-    expect(settingsSection).toMatch(/className="settings-section-title [^"]*tw:type-title-sm/)
+    expect(generalSettings).toMatch(/className="settings-page-title [^"]*tw:type-page-title/)
+    expect(settingsSection).toMatch(/className="settings-section-title [^"]*tw:type-row-title/)
     expect(settings).toMatch(
       /\.settings-management-row-title\s*\{[^}]*font:\s*var\(--cpx-sys-type-row-title\);/s,
     )

@@ -193,7 +193,7 @@ export function UsageBillingSettings(): React.ReactNode {
       >
         <div className="settings-page-header usage-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:flex tw:items-start tw:justify-between tw:gap-4 tw:@max-[900px]:flex-col tw:@max-[900px]:items-stretch">
           <div>
-            <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+            <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
               用量与成本
             </h2>
             <p className="usage-page-description tw:mt-1 tw:mr-0 tw:mb-0 tw:ml-0 tw:text-app-text-soft tw:type-body-sm">

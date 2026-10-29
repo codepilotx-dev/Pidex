@@ -261,7 +261,7 @@ function EnvironmentList({
         {!embedded ? (
           <header className="settings-page-header environment-page-heading tw:mt-0 tw:mx-0 tw:mb-8 tw:flex tw:items-start tw:justify-between tw:gap-5 tw:[&>div]:min-w-0 tw:@max-[720px]:flex-col">
             <div>
-              <h1 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+              <h1 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
                 环境
               </h1>
               <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
@@ -538,7 +538,7 @@ function EnvironmentDetail({
 
         <header className="settings-page-header environment-page-heading tw:mt-0 tw:mx-0 tw:mb-8 tw:flex tw:items-start tw:justify-between tw:gap-5 tw:[&>div]:min-w-0 tw:@max-[720px]:flex-col">
           <div>
-            <h1 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+            <h1 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
               项目环境
             </h1>
             <p

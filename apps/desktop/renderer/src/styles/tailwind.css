@@ -370,6 +370,11 @@
   letter-spacing: var(--cpx-sys-letter-spacing-row-title);
 }
 
+@utility type-page-title {
+  font: var(--cpx-sys-type-page-title);
+  letter-spacing: var(--cpx-sys-letter-spacing-heading-lg);
+}
+
 @utility type-title-sm {
   font: var(--cpx-sys-type-heading-sm);
   letter-spacing: var(--cpx-sys-letter-spacing-heading-sm);

@@ -20,7 +20,7 @@ export function SettingsPanelFallback({ label }: Props = {}): React.ReactNode {
         >
           {label == null ? null : (
             <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-0 tw:grid tw:gap-2">
-              <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+              <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
                 {t(label)}
               </h2>
             </div>

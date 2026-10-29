@@ -55,7 +55,7 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 
 | 角色         | 默认字号 / 行高 / 字重 / 字距                 | 内容职责                                 | 默认前景色                         |
 | ------------ | --------------------------------------------- | ---------------------------------------- | ---------------------------------- |
-| `display`    | `28 / 1.14 / 600 / -0.70px`                   | Coding、Working 与 Chat 首页 Hero        | `fg-primary`                       |
+| `display`    | `28 / 1.20 / 600 / -0.70px`                   | Coding、Working 与 Chat 首页 Hero        | `fg-primary`                       |
 | `caption`    | `12 / 1.40 / 400 / 0px`                       | 时间、路径、计数和辅助状态               | `fg-tertiary`                      |
 | `label`      | `12 / 1.30 / 500 / 0.45px`                    | 分组名、字段标签和短状态标签             | 按上下文选择 secondary 或 tertiary |
 | `body-sm`    | `13 / 1.45 / 400 / 0px`                       | 次级说明、工具活动和侧栏辅助文字         | `fg-secondary`                     |
@@ -64,18 +64,21 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 | `row-title`  | `14 / 1.50 / 500 / -0.05px`                   | 设置行、卡片行和普通对象名称             | `fg-primary`                       |
 | `reading`    | `14 / 1.50 / 400 / -0.05px`                   | 用户消息、Agent 最终回答和 Markdown 长文 | `fg-primary`                       |
 | `body-lg`    | `16 / 1.50 / 400 / -0.12px`                   | 首页 Prompt 和短引导正文                 | `fg-primary`                       |
-| `heading-sm` | `16 / 1.25 / 600 / -0.25px`                   | Section、Dialog、Popover 和 Markdown H3  | `fg-primary`                       |
-| `heading-md` | `18 / 1.25 / 600 / -0.25px`                   | 重点卡片和详情页局部主标题               | `fg-primary`                       |
-| `heading-lg` | `20 / 1.20 / 600 / -0.45px`                   | Markdown H2 和强信息分区                 | `fg-primary`                       |
-| `heading-xl` | `24 / 1.14 / 600 / -0.70px`                   | 一级页面、Setup 主标题和 Markdown H1     | `fg-primary`                       |
+| `page-title` | `20 / 1.20 / 500 / -0.45px`                   | 设置页面主标题和对应加载占位             | `fg-primary`                       |
+| `heading-sm` | `18 / 1.25 / 600 / -0.25px`                   | Section、Dialog、Popover 和 Markdown H3  | `fg-primary`                       |
+| `heading-md` | `20 / 1.33 / 600 / -0.25px`                   | 重点卡片和详情页局部主标题               | `fg-primary`                       |
+| `heading-lg` | `24 / 1.20 / 600 / -0.45px`                   | Markdown H2 和强信息分区                 | `fg-primary`                       |
+| `heading-xl` | `28 / 1.20 / 600 / -0.70px`                   | 一级页面、Setup 主标题和 Markdown H1     | `fg-primary`                       |
 | `metric`     | `20 / 1.20 / 600 / -0.45px`                   | 金额、用量和统计值；使用 tabular figures | `fg-primary`                       |
 | `code`       | `13 / 1.50 / 400 / 0px`（随代码字号动态更新） | 代码、命令、Diff 和终端                  | 按语法或上下文选择                 |
+
+设置页主标题使用 `page-title`（Tailwind：`tw:type-page-title`），分组标题与行标题使用 `row-title`，说明使用 `body-sm`，辅助元信息保留 `caption`；通过分组间距与对齐区分层级。
 
 普通正文使用 `400`，控件、标签和行标题使用 `500`，结构标题、指标和真正的强调使用 `600`。选中态通过背景和前景色表达，不得为了选中而改变普通列表项字重。UI 文本不得借用 `reading` 获取额外行距，工具活动也不得借用 `body` 与最终回答争夺层级。
 
 会话 Markdown 使用 `--cpx-sys-line-height-prose`（1.625）和正常字距；全局 `reading` 默认值保持不变。会话标题按正文字号的 1.5 / 1.25 / 1.125 倍显示，行内代码使用 `--cpx-sys-radius-inline-code`（6px），不改变其他 UI 宿主的排版。
 
-界面字号与代码字号设置仍是两个独立主题输入。UI 默认字号是 `14px`，运行时先计算 `delta = uiFontSize - 14`，再将同一差值应用到 `12 / 13 / 14 / 16 / 18 / 20 / 24 / 28px` 完整刻度，因此所有语义角色在 UI 字号 `11–16px` 范围内保持相对层级。代码字号在 `8–24px` 范围独立更新 `--cpx-sys-font-size-code`，不参与 UI delta；新设置默认使用 `13px`，已有用户设置原样保留。
+界面字号与代码字号设置仍是两个独立主题输入。UI 默认字号是 `14px`，运行时按 `Math.round(base * uiFontSize / 14)` 对 `12 / 13 / 14 / 16 / 18 / 20 / 24 / 28px` 完整刻度进行比例缩放，因此所有语义角色在 UI 字号 `11–16px` 范围内保持相对层级。代码字号在 `8–24px` 范围独立更新 `--cpx-sys-font-size-code`，不参与 UI 比例缩放；新设置默认使用 `13px`，已有用户设置原样保留。
 
 颜色与排版角色互相独立：正文和关键值使用 `--cpx-sys-color-fg-primary`，说明使用 `fg-secondary`，时间、路径和其他辅助元信息使用 `fg-tertiary`，`fg-disabled` 只用于真实禁用态。业务成功、警告和错误继续使用对应 tone，不以异常字号或额外粗体代替状态语义。
 

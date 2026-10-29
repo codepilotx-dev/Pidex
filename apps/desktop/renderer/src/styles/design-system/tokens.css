@@ -480,6 +480,8 @@
       var(--cpx-sys-line-height-body) var(--cpx-sys-font-family-sans);
     --cpx-sys-type-control: var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-sm) /
       var(--cpx-sys-line-height-control) var(--cpx-sys-font-family-sans);
+    --cpx-sys-type-page-title: var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-2xl) /
+      var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans);
     --cpx-sys-type-heading-sm: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) /
       var(--cpx-sys-line-height-heading-sm) var(--cpx-sys-font-family-sans);
     --cpx-sys-type-heading-md: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) /

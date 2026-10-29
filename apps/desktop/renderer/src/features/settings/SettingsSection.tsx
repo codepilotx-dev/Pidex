@@ -40,7 +40,7 @@ export function SettingsSectionHeader({
     >
       <div className="settings-section-header-copy tw:min-w-0 tw:flex-1">
         {title ? (
-          <h3 className="settings-section-title tw:m-0 tw:text-app-text tw:type-title-sm">
+          <h3 className="settings-section-title tw:m-0 tw:text-app-text tw:type-row-title">
             {typeof title === 'string' ? t(title) : title}
           </h3>
         ) : null}

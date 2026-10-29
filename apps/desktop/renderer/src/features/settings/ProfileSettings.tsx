@@ -145,7 +145,7 @@ export function ProfileSettings(): React.ReactNode {
             <ProfileLoadingSkeleton />
           ) : (
             <>
-              <section className="profile-hero tw:mx-auto tw:flex tw:max-w-[732px] tw:flex-col tw:items-center tw:text-center tw:[&>h1]:m-0 tw:[&>h1]:w-full tw:[&>h1]:truncate tw:[&>h1]:px-2 tw:[&>h1]:text-app-text tw:[&>h1]:type-title-xl tw:[&>h1]:tracking-[0.003em]">
+              <section className="profile-hero tw:mx-auto tw:flex tw:max-w-[732px] tw:flex-col tw:items-center tw:text-center tw:[&>h1]:m-0 tw:[&>h1]:w-full tw:[&>h1]:truncate tw:[&>h1]:px-2 tw:[&>h1]:text-app-text tw:[&>h1]:type-page-title">
                 <div className="profile-avatar-wrap tw:relative tw:mx-auto tw:mt-0 tw:mb-4 tw:size-20">
                   <div
                     className="profile-avatar tw:inline-flex tw:size-20 tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-pill tw:bg-app-accent tw:text-app-text tw:text-[length:var(--cpx-sys-font-size-3xl)] tw:[&_img]:block tw:[&_img]:size-full tw:[&_img]:object-cover tw:[&_svg]:size-3.5"

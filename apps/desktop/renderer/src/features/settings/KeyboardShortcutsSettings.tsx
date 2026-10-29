@@ -381,7 +381,7 @@ export function KeyboardShortcutsSettings(): React.ReactNode {
     <SettingsContentArea>
       <div className="settings-content-inner keyboard-shortcuts-settings tw:max-w-wide tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+          <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
             键盘快捷键
           </h2>
         </div>
