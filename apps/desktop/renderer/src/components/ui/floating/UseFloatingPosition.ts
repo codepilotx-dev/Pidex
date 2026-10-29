@@ -128,6 +128,41 @@ export interface FloatingCoordinates {
   actualPlacement: FloatingPlacement
 }
 
+export interface FloatingUpdateScheduler {
+  /** 合并调度一次定位更新：待执行帧内的重复通知只测量一次。 */
+  schedule: () => void
+  /** 取消待执行的更新（关闭或卸载时调用，之后不再测量）。 */
+  dispose: () => void
+}
+
+/**
+ * 将 scroll/resize/ResizeObserver 等高频定位通知合并到同一动画帧执行，
+ * 避免一轮事件里重复触发 getBoundingClientRect 的强制同步布局。
+ */
+export function createFloatingUpdateScheduler(
+  update: () => void,
+  host: {
+    requestAnimationFrame: (callback: () => void) => number
+    cancelAnimationFrame: (handle: number) => void
+  },
+): FloatingUpdateScheduler {
+  let handle: number | undefined
+  return {
+    schedule() {
+      if (handle !== undefined) return
+      handle = host.requestAnimationFrame(() => {
+        handle = undefined
+        update()
+      })
+    },
+    dispose() {
+      if (handle === undefined) return
+      host.cancelAnimationFrame(handle)
+      handle = undefined
+    },
+  }
+}
+
 export function useFloatingPosition({
   anchor,
   contentRef,
@@ -213,12 +248,14 @@ export function useFloatingPosition({
     }
   }, [isOpen, updatePosition])
 
-  // 监听窗口尺寸变化、全局滚动以及内容尺寸动态变更
+  // 监听窗口尺寸变化、全局滚动以及内容尺寸动态变更；通知合并到同一帧测量，
+  // 卸载或关闭时取消待执行任务，之后不再测量。
   useEffect(() => {
     if (!isOpen) return
 
+    const scheduler = createFloatingUpdateScheduler(updatePosition, window)
     const handleScrollOrResize = () => {
-      updatePosition()
+      scheduler.schedule()
     }
 
     window.addEventListener('resize', handleScrollOrResize)
@@ -229,13 +266,14 @@ export function useFloatingPosition({
     let ro: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined') {
       ro = new ResizeObserver(() => {
-        updatePosition()
+        scheduler.schedule()
       })
       if (contentEl) ro.observe(contentEl)
       if (anchorEl instanceof Element) ro.observe(anchorEl)
     }
 
     return () => {
+      scheduler.dispose()
       window.removeEventListener('resize', handleScrollOrResize)
       window.removeEventListener('scroll', handleScrollOrResize, true)
       ro?.disconnect()
