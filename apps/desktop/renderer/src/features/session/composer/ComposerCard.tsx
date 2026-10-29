@@ -116,6 +116,7 @@ import {
   type ComposerSlashCommandId,
 } from './ComposerSlashCommands.js'
 import { useComposerSlashCommands } from './UseComposerSlashCommands.js'
+import { isDictationShortcut } from './UseComposerDictation.js'
 import { isComposerInputEmpty } from './ComposerTypes.js'
 import {
   ApprovalRulesDialog,
@@ -523,6 +524,17 @@ export function ComposerCard({
   const capabilities = useMemo(
     () => ({ ...DEFAULT_COMPOSER_CAPABILITIES, ...capabilityOverrides }),
     [capabilityOverrides],
+  )
+  const dictationControlRef = useRef<{
+    toggle: () => void
+    cancel: () => void
+    isActive: boolean
+  } | null>(null)
+  const registerDictationControl = useCallback(
+    (control: { toggle: () => void; cancel: () => void; isActive: boolean } | null) => {
+      dictationControlRef.current = control
+    },
+    [],
   )
   const dictationToggleRef = useRef<(() => void) | null>(null)
   const registerDictationToggle = useCallback((toggle: (() => void) | null) => {
@@ -1624,14 +1636,13 @@ export function ComposerCard({
               }}
               onKeyDown={(event) => {
                 if (event.isComposing || event.keyCode === 229) return false
-                if (
-                  event.ctrlKey &&
-                  event.shiftKey &&
-                  !event.altKey &&
-                  event.key.toLowerCase() === 'd'
-                ) {
+                if (capabilities.dictation && isDictationShortcut(event)) {
                   event.preventDefault()
-                  dictationToggleRef.current?.()
+                  if (dictationControlRef.current) {
+                    dictationControlRef.current.toggle()
+                  } else {
+                    dictationToggleRef.current?.()
+                  }
                   return true
                 }
                 if (unifiedMenuOpen) {
@@ -1666,8 +1677,13 @@ export function ComposerCard({
                   }
                 }
 
-                // Escape: dismiss dropdowns or interrupt session
+                // Escape: cancel active dictation, dismiss dropdowns, or interrupt session
                 if (event.key === 'Escape') {
+                  if (capabilities.dictation && dictationControlRef.current?.isActive) {
+                    event.preventDefault()
+                    dictationControlRef.current.cancel()
+                    return true
+                  }
                   if (unifiedMenuOpen) {
                     event.preventDefault()
                     closeDropdown()
@@ -1959,16 +1975,6 @@ export function ComposerCard({
               </>
             ) : null}
 
-            {capabilities.dictation ? (
-              <Suspense fallback={null}>
-                <ComposerDictationControl
-                  draftKey={draftKey}
-                  editorRef={editorRef}
-                  enabled
-                  registerToggle={registerDictationToggle}
-                />
-              </Suspense>
-            ) : null}
           </div>
 
           <div ref={toolbarRightRef} className={TOOLBAR_RIGHT_CLASS}>
@@ -2136,6 +2142,18 @@ export function ComposerCard({
                 </div>
               </div>
             </MotionConfig>
+
+            {capabilities.dictation ? (
+              <Suspense fallback={null}>
+                <ComposerDictationControl
+                  draftKey={draftKey}
+                  editorRef={editorRef}
+                  enabled
+                  registerControl={registerDictationControl}
+                  registerToggle={registerDictationToggle}
+                />
+              </Suspense>
+            ) : null}
 
             <Button
               isIconOnly
