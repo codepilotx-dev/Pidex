@@ -55,7 +55,7 @@
       .permission-select-content,
       .appearance-color-popover,
       .thread-summary-popover
-    ):not(.ui-dialog-surface)[data-state='open'] {
+    ):not(.ui-dialog-surface):not([data-warm-handoff='true'])[data-state='open'] {
     opacity: 1;
     translate: 0 0;
     transition:

@@ -270,10 +270,13 @@ export function ConversationTurnNavRail({
   const lastPreviewCloseAtRef = React.useRef(Number.NEGATIVE_INFINITY)
   const previewAnchorRef = React.useRef<HTMLElement | null>(null)
   const previewCloseTimerRef = React.useRef<number | null>(null)
+  const previewItemIdRef = React.useRef<string | null>(null)
   const previewCardRef = React.useRef<HTMLDivElement | null>(null)
   const [hasInlineClearance, setHasInlineClearance] = React.useState(false)
   const [previewItemId, setPreviewItemId] = React.useState<string | null>(null)
+  const [previewWarm, setPreviewWarm] = React.useState(false)
   const [scrubItemId, setScrubItemId] = React.useState<string | null>(null)
+  previewItemIdRef.current = previewItemId
   const edges = useScrollEdgeState(listRef, { version: `${hasInlineClearance}:${items.length}` })
   const indexes = React.useMemo(
     () => new Map(items.map((item, index) => [item.id, index])),
@@ -320,17 +323,22 @@ export function ConversationTurnNavRail({
       clearHoverTimer()
       cancelPreviewClose()
       previewAnchorRef.current = buttonRefs.current.get(itemId) ?? null
+      const alreadyOpen = previewItemIdRef.current === itemId
+      // 已有预览驻留或仍在预热窗口内都算预热；前者同时修掉划过相邻刻度仍等 150ms 的缺陷。
       const isHandoff =
+        previewItemIdRef.current !== null ||
         performance.now() - lastPreviewCloseAtRef.current <= TURN_NAV_HANDOFF_WINDOW_MS
-      if (immediate || isHandoff) {
+      const show = (): void => {
+        if (!alreadyOpen) setPreviewWarm(isHandoff)
         setPreviewItemId(itemId)
+      }
+      if (immediate || isHandoff) {
+        show()
         return
       }
       hoverTimerRef.current = window.setTimeout(() => {
         hoverTimerRef.current = null
-        if (hoveredItemIdRef.current === itemId) {
-          setPreviewItemId(itemId)
-        }
+        if (hoveredItemIdRef.current === itemId) show()
       }, TURN_NAV_HOVER_DELAY_MS)
     },
     [cancelPreviewClose, clearHoverTimer],
@@ -684,6 +692,7 @@ export function ConversationTurnNavRail({
             anchor={previewAnchorRef}
             aria-label="用户消息预览"
             className="conversation-turn-preview-tooltip tw:animate-none tw:w-auto tw:border-0 tw:bg-transparent tw:p-0 tw:shadow-none"
+            data-warm-handoff={previewWarm ? 'true' : undefined}
             onBlurCapture={schedulePreviewClose}
             onFocusCapture={cancelPreviewClose}
             onOpenAutoFocus={(event) => {

@@ -255,8 +255,15 @@ function UsageSegmentBar({
   ariaLabel: string
   segments: readonly UsageBarSegment[]
 }): React.ReactNode {
-  const [highlightedId, setHighlightedId] = useState<string | null>(null)
-  const activeId = segments.some((segment) => segment.id === highlightedId) ? highlightedId : null
+  // 悬停高亮要 0ms 响应，浮层则遵循冷启动延迟与预热瞬切，二者不能共用一份状态。
+  const [hoveredSegmentId, setHoveredSegmentId] = useState<string | null>(null)
+  const [activeTooltipId, setActiveTooltipId] = useState<string | null>(null)
+  const activeHoverId = segments.some((segment) => segment.id === hoveredSegmentId)
+    ? hoveredSegmentId
+    : null
+  const activeTooltipSegmentId = segments.some((segment) => segment.id === activeTooltipId)
+    ? activeTooltipId
+    : null
 
   // shortcut: 4px 最小宽度保证低占比色块仍可悬停；需要像素级严格比例时改用扩展热区。
   return (
@@ -270,21 +277,32 @@ function UsageSegmentBar({
           align="center"
           content={segment.tooltip}
           key={segment.id}
-          open={activeId === segment.id}
+          onOpenChange={(open) => {
+            setActiveTooltipId((current) => {
+              if (open) return segment.id
+              // 旧分段的关闭回调不能清空刚接管的新分段。
+              return current === segment.id ? null : current
+            })
+          }}
+          open={activeTooltipSegmentId === segment.id}
           side="top"
         >
           <button
             aria-label={segment.ariaLabel}
             className="context-usage-panel-segment tw:h-full tw:min-w-1 tw:shrink-0 tw:cursor-help tw:rounded-none tw:border-0 tw:p-0 tw:outline-none tw:transition-opacity tw:duration-feedback tw:ease-standard tw:focus-visible:outline-1 tw:focus-visible:outline-app-focus tw:motion-reduce:transition-none"
-            data-active={activeId === segment.id}
+            data-active={activeHoverId === segment.id}
             data-usage-bar-source={segment.id}
-            onBlur={() => setHighlightedId(null)}
-            onFocus={() => setHighlightedId(segment.id)}
-            onMouseEnter={() => setHighlightedId(segment.id)}
-            onMouseLeave={() => setHighlightedId(null)}
+            onBlur={() =>
+              setHoveredSegmentId((current) => (current === segment.id ? null : current))
+            }
+            onFocus={() => setHoveredSegmentId(segment.id)}
+            onMouseEnter={() => setHoveredSegmentId(segment.id)}
+            onMouseLeave={() =>
+              setHoveredSegmentId((current) => (current === segment.id ? null : current))
+            }
             style={{
               background: segment.color,
-              opacity: activeId && activeId !== segment.id ? 0.3 : 1,
+              opacity: activeHoverId && activeHoverId !== segment.id ? 0.3 : 1,
               width: `${segment.widthPercent.toFixed(2)}%`,
             }}
             type="button"

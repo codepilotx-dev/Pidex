@@ -14,7 +14,7 @@ import {
   useTooltipContext,
 } from '../src/components/ui/Tooltip.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../src/components/ui/IconTokens.js'
-import { expectSourceContains } from './SourceContract.js'
+import { expectSourceContains, expectSourceNotContains } from './SourceContract.js'
 
 describe('Tooltip positioning geometry & auto-flip', () => {
   const baseViewport = {
@@ -480,6 +480,31 @@ describe('Tooltip interaction & lifecycle regressions', () => {
     const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
     expectSourceContains(source, 'useTopLayer(contentRef, context.open || present)')
     expectSourceContains(source, '<AnimatePresence onExitComplete={() => setPresent(false)}>')
+  })
+
+  test('trigger never mutates the provider warm state; ownership lives in Root', async () => {
+    const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
+    // 触发器只读 isWarm 决定是否走进入延迟，提前置预热会让冷启动首帧被误判成 warm。
+    expectSourceNotContains(source, 'provider.notifyWarm()')
+    expectSourceNotContains(source, 'provider.resetWarmTimer()')
+    expectSourceContains(source, 'claimOpen(contentId')
+    expectSourceContains(source, 'releaseOpen(contentId, generation)')
+    expectSourceContains(source, 'registerExiting(contentId, ownerGenerationRef.current')
+  })
+
+  test('warm open skips the entrance animation and is marked for CSS', async () => {
+    const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
+    expectSourceContains(source, "data-warm-handoff={warm ? 'true' : undefined}")
+    expectSourceContains(source, 'initial={warm ? false : getInitialAnimation()}')
+    expectSourceContains(source, "warm ? { duration: 0 }")
+    expectSourceContains(source, "if (!context.open && !present) return null")
+  })
+
+  test('overlay entry transition excludes warm handoff surfaces', async () => {
+    const source = await Bun.file(
+      new URL('../src/styles/primitives/overlays.css', import.meta.url),
+    ).text()
+    expectSourceContains(source, ":not([data-warm-handoff='true'])[data-state='open']")
   })
 
   test('delay priority: delayDuration overrides delay, delay overrides provider, fallback to 120', () => {

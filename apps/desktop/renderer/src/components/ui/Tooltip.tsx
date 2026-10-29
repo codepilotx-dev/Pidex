@@ -176,22 +176,45 @@ export function computeTooltipPosition({
 /* -------------------------------------------------------------------------------------------------
  * Tooltip Provider Context
  * -----------------------------------------------------------------------------------------------*/
+export type TooltipOpenMode = 'cold' | 'warm'
+
+/** 单次打开的不可变会话快照：模式在提交瞬间确定，打开期间不再随 Provider 变化。 */
+export interface TooltipOpenSession {
+  id: string
+  mode: TooltipOpenMode
+}
+
+/** requestClose 关闭业务状态，abortExit 立即终止退场呈现（不再等待 AnimatePresence）。 */
+export interface TooltipOpenHandlers {
+  requestClose: () => void
+  abortExit: () => void
+}
+
+interface TooltipOwner extends TooltipOpenHandlers {
+  id: string
+  generation: number
+}
+
 interface TooltipProviderContextValue {
   delayDuration: number
   skipDelayDuration: number
   readonly isWarm: boolean
-  notifyWarm: () => void
-  resetWarmTimer: () => void
-  registerOpen: (id: string, closeFn: () => void) => () => void
+  claimOpen: (id: string, handlers: TooltipOpenHandlers) => number
+  releaseOpen: (id: string, generation: number) => void
+  registerExiting: (
+    id: string,
+    lastGeneration: number | null,
+    abortExit: () => void,
+  ) => () => void
 }
 
 const TooltipProviderContext = createContext<TooltipProviderContextValue>({
   delayDuration: 120,
   skipDelayDuration: 300,
   isWarm: false,
-  notifyWarm: () => {},
-  resetWarmTimer: () => {},
-  registerOpen: () => () => {},
+  claimOpen: () => 0,
+  releaseOpen: () => {},
+  registerExiting: () => () => {},
 })
 
 export interface TooltipProviderProps {
@@ -209,10 +232,11 @@ export function TooltipProvider({
 }: TooltipProviderProps) {
   const isWarmRef = useRef(false)
   const warmTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const activeTooltipRef = useRef<{ id: string; close: () => void } | null>(null)
+  const generationRef = useRef(0)
+  const activeOwnerRef = useRef<TooltipOwner | null>(null)
+  const exitingAbortersRef = useRef(new Map<string, () => void>())
 
-  const notifyWarm = useCallback(() => {
-    isWarmRef.current = true
+  const clearWarmTimer = useCallback(() => {
     if (warmTimerRef.current) {
       clearTimeout(warmTimerRef.current)
       warmTimerRef.current = null
@@ -220,38 +244,79 @@ export function TooltipProvider({
   }, [])
 
   const resetWarmTimer = useCallback(() => {
-    if (warmTimerRef.current) clearTimeout(warmTimerRef.current)
+    clearWarmTimer()
     warmTimerRef.current = setTimeout(() => {
       isWarmRef.current = false
       warmTimerRef.current = null
     }, skipDelayDuration)
-  }, [skipDelayDuration])
+  }, [clearWarmTimer, skipDelayDuration])
 
-  const registerOpen = useCallback((id: string, closeFn: () => void) => {
-    if (activeTooltipRef.current && activeTooltipRef.current.id !== id) {
-      activeTooltipRef.current.close()
-    }
-    activeTooltipRef.current = { id, close: closeFn }
-    return () => {
-      if (activeTooltipRef.current?.id === id) {
-        activeTooltipRef.current = null
+  // 抢占关闭：新所有者接管时，旧所有者与仍在退场的浮层必须在本次提交内让出屏幕。
+  const claimOpen = useCallback(
+    (id: string, handlers: TooltipOpenHandlers): number => {
+      const generation = ++generationRef.current
+      isWarmRef.current = true
+      clearWarmTimer()
+      const previous = activeOwnerRef.current
+      activeOwnerRef.current = { id, generation, ...handlers }
+      if (previous && previous.id !== id) {
+        previous.abortExit()
+        previous.requestClose()
       }
-    }
-  }, [])
+      for (const [exitingId, abortExit] of exitingAbortersRef.current) {
+        if (exitingId === id) continue
+        abortExit()
+      }
+      exitingAbortersRef.current.clear()
+      return generation
+    },
+    [clearWarmTimer],
+  )
+
+  const releaseOpen = useCallback(
+    (id: string, generation: number) => {
+      const owner = activeOwnerRef.current
+      // 已被新浮层抢占时，旧所有者的清理不得影响继任者的预热态。
+      if (!owner || owner.id !== id || owner.generation !== generation) return
+      activeOwnerRef.current = null
+      resetWarmTimer()
+    },
+    [resetWarmTimer],
+  )
+
+  const registerExiting = useCallback(
+    (id: string, lastGeneration: number | null, abortExit: () => void) => {
+      const owner = activeOwnerRef.current
+      const preempted =
+        (owner !== null && owner.id !== id) ||
+        (lastGeneration !== null && generationRef.current !== lastGeneration)
+      if (preempted) {
+        abortExit()
+        return () => {}
+      }
+      exitingAbortersRef.current.set(id, abortExit)
+      return () => {
+        if (exitingAbortersRef.current.get(id) === abortExit) {
+          exitingAbortersRef.current.delete(id)
+        }
+      }
+    },
+    [],
+  )
 
   useEffect(() => {
     return () => {
-      if (warmTimerRef.current) clearTimeout(warmTimerRef.current)
+      clearWarmTimer()
     }
-  }, [])
+  }, [clearWarmTimer])
 
   const value = useMemo<TooltipProviderContextValue>(() => {
     const contextObj = {
       delayDuration,
       skipDelayDuration,
-      notifyWarm,
-      resetWarmTimer,
-      registerOpen,
+      claimOpen,
+      releaseOpen,
+      registerExiting,
     }
     Object.defineProperty(contextObj, 'isWarm', {
       get() {
@@ -261,7 +326,7 @@ export function TooltipProvider({
       configurable: false,
     })
     return contextObj as TooltipProviderContextValue
-  }, [delayDuration, skipDelayDuration, notifyWarm, resetWarmTimer, registerOpen])
+  }, [delayDuration, skipDelayDuration, claimOpen, releaseOpen, registerExiting])
 
   return (
     <TooltipProviderContext.Provider value={value}>
@@ -282,6 +347,9 @@ interface TooltipContextValue {
   disableHoverableContent: boolean
   cancelCloseTimer: () => void
   startCloseTimer: () => void
+  openMode: TooltipOpenMode
+  present: boolean
+  setPresent: (present: boolean) => void
 }
 
 const TooltipContext = createContext<TooltipContextValue | null>(null)
@@ -350,6 +418,29 @@ export function TooltipRoot({
   const triggerRef = useRef<HTMLElement | null>(null)
   const contentId = useId()
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [present, setPresentState] = useState(isOpen)
+  const isOpenRef = useRef(isOpen)
+  isOpenRef.current = isOpen
+  const previousOpenRef = useRef(isOpen)
+  const openSessionRef = useRef<TooltipOpenSession | null>(null)
+  const ownerGenerationRef = useRef(0)
+
+  // 在 closed -> open 的渲染期快照模式：此刻 Provider 的 isWarm 尚未被本次打开改写，
+  // StrictMode 重渲染与并发中断重渲染都不会把冷启动自我污染成预热。
+  if (isOpen && (!previousOpenRef.current || openSessionRef.current === null)) {
+    openSessionRef.current = { id: contentId, mode: provider.isWarm ? 'warm' : 'cold' }
+  } else if (!isOpen && !present && openSessionRef.current !== null) {
+    // 退场呈现结束前保留快照，避免退场途中改变呈现属性。
+    openSessionRef.current = null
+  }
+  previousOpenRef.current = isOpen
+  const openMode: TooltipOpenMode = openSessionRef.current?.mode ?? 'cold'
+
+  const setPresent = useCallback((next: boolean) => {
+    // 旧浮层的退场回调可能晚于新浮层的重新打开，不能凭过期信号清空当前呈现。
+    if (!next && isOpenRef.current) return
+    setPresentState(next)
+  }, [])
 
   const cancelCloseTimer = useCallback(() => {
     if (closeTimerRef.current) {
@@ -362,18 +453,20 @@ export function TooltipRoot({
     disableHoverableContent ??
     (hoverable !== undefined ? !hoverable : interactive !== undefined ? !interactive : true)
 
+  // 打开所有权只在开合转换时申领；回调身份波动不应重新抢占。
+  const ownerHandlersRef = useRef({ setOpen, cancelCloseTimer })
+  ownerHandlersRef.current = { setOpen, cancelCloseTimer }
+
   const startCloseTimer = useCallback(() => {
     cancelCloseTimer()
     if (isContentHoverDisabled) {
       setOpen(false)
-      provider.resetWarmTimer()
     } else {
       closeTimerRef.current = setTimeout(() => {
         setOpen(false)
-        provider.resetWarmTimer()
       }, 150)
     }
-  }, [cancelCloseTimer, isContentHoverDisabled, setOpen, provider])
+  }, [cancelCloseTimer, isContentHoverDisabled, setOpen])
 
   useEffect(() => {
     return () => {
@@ -381,16 +474,30 @@ export function TooltipRoot({
     }
   }, [cancelCloseTimer])
 
-  useEffect(() => {
-    if (!isOpen) {
-      cancelCloseTimer()
-      return
-    }
-    return provider.registerOpen(contentId, () => {
-      cancelCloseTimer()
-      setOpen(false)
+  useLayoutEffect(() => {
+    if (!isOpen) return
+    setPresentState(true)
+    const generation = provider.claimOpen(contentId, {
+      requestClose: () => {
+        const handlers = ownerHandlersRef.current
+        handlers.cancelCloseTimer()
+        handlers.setOpen(false)
+      },
+      abortExit: () => setPresentState(false),
     })
-  }, [isOpen, contentId, provider, setOpen, cancelCloseTimer])
+    ownerGenerationRef.current = generation
+    return () => {
+      provider.releaseOpen(contentId, generation)
+    }
+  }, [isOpen, contentId, provider])
+
+  // 退场期间登记可中断句柄：被新浮层抢占时必须在本次提交内同步卸载旧呈现。
+  useLayoutEffect(() => {
+    if (isOpen || !present) return
+    return provider.registerExiting(contentId, ownerGenerationRef.current, () =>
+      setPresentState(false),
+    )
+  }, [isOpen, present, contentId, provider])
 
   // 全局 Escape 键监听，确保悬停打开时按 Escape 也可立即关闭 Tooltip
   useEffect(() => {
@@ -420,6 +527,9 @@ export function TooltipRoot({
       disableHoverableContent: isContentHoverDisabled,
       cancelCloseTimer,
       startCloseTimer,
+      openMode,
+      present,
+      setPresent,
     }),
     [
       isOpen,
@@ -429,6 +539,9 @@ export function TooltipRoot({
       isContentHoverDisabled,
       cancelCloseTimer,
       startCloseTimer,
+      openMode,
+      present,
+      setPresent,
     ],
   )
 
@@ -483,13 +596,12 @@ export const TooltipTrigger = forwardRef<HTMLElement, TooltipTriggerProps>(
       context.cancelCloseTimer()
       clearEnterTimer()
 
+      // 只读预热态：预热窗口由 Provider 依据已提交的打开会话维护。
       if (provider.isWarm) {
         context.setOpen(true)
-        provider.notifyWarm()
       } else {
         enterTimerRef.current = setTimeout(() => {
           context.setOpen(true)
-          provider.notifyWarm()
         }, delay)
       }
     }
@@ -515,7 +627,6 @@ export const TooltipTrigger = forwardRef<HTMLElement, TooltipTriggerProps>(
       clearEnterTimer()
       context.cancelCloseTimer()
       context.setOpen(true)
-      provider.notifyWarm()
     }
 
     const handleBlur = (e: React.FocusEvent<HTMLElement>) => {
@@ -523,7 +634,6 @@ export const TooltipTrigger = forwardRef<HTMLElement, TooltipTriggerProps>(
       clearEnterTimer()
       if (e.defaultPrevented) return
       context.setOpen(false)
-      provider.resetWarmTimer()
     }
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
@@ -590,6 +700,8 @@ export interface TooltipPortalProps {
 
 export function TooltipPortal({ children, container }: TooltipPortalProps) {
   const context = useContext(TooltipContext)
+  // 关闭且退场呈现已结束时不留空 Portal 宿主。
+  if (context && !context.open && !context.present) return null
   if (typeof document === 'undefined') {
     return <>{children}</>
   }
@@ -649,10 +761,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
     const [actualSide, setActualSide] = useState<TooltipSide>(side)
     const [arrowOffset, setArrowOffset] = useState<number>(10)
     const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
-    const [present, setPresent] = useState(context.open)
-    useLayoutEffect(() => {
-      if (context.open) setPresent(true)
-    }, [context.open])
+    const { present, setPresent } = context
     // 退出动画结束前留在顶层，避免落回浮层内部撑大滚动范围。
     const popover = useTopLayer(contentRef, context.open || present)
     const reducedMotion = usePrefersReducedMotion()
@@ -781,6 +890,11 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
       }
     }
 
+    const warm = context.openMode === 'warm'
+
+    // 抢占关闭时 present 已被同步置 false：连 AnimatePresence 边界一起卸载，避免双影重叠。
+    if (!context.open && !present) return null
+
     return (
       <AnimatePresence onExitComplete={() => setPresent(false)}>
         {context.open && (
@@ -792,7 +906,8 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
             role="tooltip"
             data-side={actualSide}
             data-state="open"
-            initial={getInitialAnimation()}
+            data-warm-handoff={warm ? 'true' : undefined}
+            initial={warm ? false : getInitialAnimation()}
             animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
             exit={{
               ...getExitAnimation(),
@@ -801,9 +916,11 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
                 : { duration: 0.13, ease: 'easeIn' },
             }}
             transition={
-              reducedMotion
-                ? { duration: 0.08 }
-                : { duration: 0.15, ease: [0.16, 1, 0.3, 1] }
+              warm
+                ? { duration: 0 }
+                : reducedMotion
+                  ? { duration: 0.08 }
+                  : { duration: 0.15, ease: [0.16, 1, 0.3, 1] }
             }
             style={{
               // 原生 popover 的默认居中不能覆盖按锚点计算的坐标。
