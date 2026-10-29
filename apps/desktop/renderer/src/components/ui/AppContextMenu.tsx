@@ -32,9 +32,17 @@ export type AppContextMenuAction =
       layout: AppContextMenuLayout
     }
 
+/**
+ * 菜单动作输入：数组立即生效；构建函数仅在菜单请求打开或已打开时调用，
+ * 关闭期间不构建动作、不渲染条目，供长列表行避免无谓的重复构建。
+ */
+export type AppContextMenuActionsInput =
+  | AppContextMenuAction[]
+  | (() => AppContextMenuAction[])
+
 export type AppContextMenuProps = {
   trigger: ReactNode
-  actions: AppContextMenuAction[]
+  actions: AppContextMenuActionsInput
   layout: AppContextMenuLayout
   itemSize?: '1' | '2'
   variant?: 'solid' | 'soft'
@@ -43,6 +51,15 @@ export type AppContextMenuProps = {
 } & Omit<PopoverSizingProps, 'size'> & {
     size?: PopoverSizingProps['size']
   }
+
+/** 解析菜单动作：关闭时返回空数组且不调用构建函数，打开时取最新结果。 */
+export function resolveAppContextMenuActions(
+  actions: AppContextMenuActionsInput,
+  open: boolean,
+): AppContextMenuAction[] {
+  if (!open) return []
+  return typeof actions === 'function' ? actions() : actions
+}
 
 /*
  * Row layout moved from `styles/components/menu-item.scss`
@@ -82,6 +99,7 @@ export function AppContextMenu({
 }: AppContextMenuProps): ReactNode {
   const editCommands = useEditCommandActions()
   const focusModality = useFloatingFocusModality()
+  const [open, setOpen] = useState(false)
   const [editContext, setEditContext] = useState<CapturedEditCommandContext | null>(null)
   const editActions = useMemo(
     () =>
@@ -92,7 +110,9 @@ export function AppContextMenu({
         : [],
     [editCommands, editContext, includeEditActions],
   )
-  const mergedActions = useMemo(() => mergeActions(actions, editActions), [actions, editActions])
+  // 构建函数只在菜单打开期间调用；关闭时不生成动作、不渲染条目。
+  const menuActions = resolveAppContextMenuActions(actions, open)
+  const mergedActions = useMemo(() => mergeActions(menuActions, editActions), [menuActions, editActions])
 
   function handleContextMenu(event: MouseEvent<HTMLSpanElement>): void {
     if (event.defaultPrevented) return
@@ -103,15 +123,17 @@ export function AppContextMenu({
         })
       : []
     setEditContext(nextContext)
-    if (mergeActions(actions, nextEditActions).length === 0) {
+    const candidate = typeof actions === 'function' ? actions() : actions
+    if (mergeActions(candidate, nextEditActions).length === 0) {
       event.preventDefault()
     }
   }
 
   return (
     <ContextMenu.Root
-      onOpenChange={(open) => {
-        onOpenChange?.(open)
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        onOpenChange?.(nextOpen)
       }}
     >
       <ContextMenu.Trigger
@@ -121,22 +143,24 @@ export function AppContextMenu({
       >
         {trigger}
       </ContextMenu.Trigger>
-      <ContextMenu.Portal>
-        <ContextMenu.Content
-          size={size}
-          className={`app-context-menu-content app-context-menu-root sidebar-context-menu-content app-context-menu--${layout}`}
-          collisionPadding={6}
-          data-size={itemSize}
-          data-variant={variant}
-          onCloseAutoFocus={(event) => {
-            setEditContext(null)
-            focusModality.suppressFocusRingOnClose(event)
-          }}
-          style={buildPopoverSizingStyle({ size })}
-        >
-          {mergedActions.map((action, index) => renderAction(action, index, layout))}
-        </ContextMenu.Content>
-      </ContextMenu.Portal>
+      {open ? (
+        <ContextMenu.Portal>
+          <ContextMenu.Content
+            size={size}
+            className={`app-context-menu-content app-context-menu-root sidebar-context-menu-content app-context-menu--${layout}`}
+            collisionPadding={6}
+            data-size={itemSize}
+            data-variant={variant}
+            onCloseAutoFocus={(event) => {
+              setEditContext(null)
+              focusModality.suppressFocusRingOnClose(event)
+            }}
+            style={buildPopoverSizingStyle({ size })}
+          >
+            {mergedActions.map((action, index) => renderAction(action, index, layout))}
+          </ContextMenu.Content>
+        </ContextMenu.Portal>
+      ) : null}
     </ContextMenu.Root>
   )
 }
