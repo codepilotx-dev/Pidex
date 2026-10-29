@@ -340,6 +340,7 @@ export function SidebarHeader({
                       active={sidebarTimelineEnabled}
                       className="sidebar-timeline-toggle-button"
                       color="ghost"
+                      iconSize="md"
                       size="sm"
                       onClick={() => {
                         if (!sidebarActivityCoachmarkDismissed) {
@@ -399,6 +400,7 @@ export function SidebarHeader({
               aria-haspopup="dialog"
               className="sidebar-search-button"
               color="ghost"
+              iconSize="md"
               size="sm"
               onClick={onOpenCommandMenu}
               title={t('搜索任务')}
@@ -468,7 +470,7 @@ export function SidebarNewTaskNav({
   return (
     <nav
       aria-label={t('新建对话')}
-      className="sidebar-new-task-nav sidebar-top-nav tw:flex tw:flex-col tw:flex-none tw:gap-0.5 tw:border-b tw:border-b-transparent tw:px-2 tw:data-[scroll-overlap=true]:border-b-app-border-subtle"
+      className="sidebar-new-task-nav sidebar-top-nav tw:flex tw:flex-col tw:flex-none tw:gap-0.5 tw:border-b tw:border-b-transparent tw:p-2 tw:data-[scroll-overlap=true]:border-b-app-border-subtle"
       data-scroll-overlap={scrollOverlapping ? 'true' : 'false'}
     >
       <SidebarNavItems

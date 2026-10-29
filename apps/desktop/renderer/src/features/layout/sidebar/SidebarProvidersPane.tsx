@@ -82,7 +82,7 @@ export function SidebarProvidersPane(): React.ReactNode {
           }
         />
       </header>
-      <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:px-2 tw:pb-2">
+      <div className="tw:flex tw:shrink-0 tw:flex-col tw:sidebar-row-gap tw:p-2">
         <SidebarRow
           active={onMarketRoute}
           asChild

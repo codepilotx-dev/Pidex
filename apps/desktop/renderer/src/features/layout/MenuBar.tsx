@@ -173,8 +173,7 @@ function AppMenu({
   return (
     <Menubar.Menu value={value}>
       <Menubar.Trigger
-        data-theme-component="dropdown-trigger"
-        className="menubar-trigger tw:rounded-md tw:border-0 tw:bg-transparent tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-control tw:whitespace-nowrap tw:outline-none"
+        asChild
         {...focusModality.triggerInteractionProps}
         onPointerDown={(event) => {
           focusModality.triggerInteractionProps.onPointerDown()
@@ -189,7 +188,9 @@ function AppMenu({
         }}
         ref={triggerRef}
       >
-        {label}
+        <Button className="menubar-trigger" color="ghost" size="toolbar">
+          {label}
+        </Button>
       </Menubar.Trigger>
       <Menubar.Portal>
         <Menubar.Content

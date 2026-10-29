@@ -764,7 +764,7 @@ function SidebarBodyContent({
       >
         {/* 次级导航与时间线/任务主体之间的分组间距，不再占用整个滚动视口的外边距 */}
         <SidebarDragSurface
-          className="sidebar-scroll-main tw:min-w-0 tw:pt-2"
+          className="sidebar-scroll-main tw:min-w-0 tw:pt-0"
           onClickCapture={handleSelectionClick}
           onKeyDown={(event) => {
             if (!drag.getSession() && !event.defaultPrevented)
