@@ -4,7 +4,7 @@ import {
   type ThreadListItem,
   type ThreadSettingsPatch,
 } from '@pidex/shared/thread'
-import { AgentError } from '../Domain'
+import { AgentError, decodeStoredTaskMode } from '../Domain'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
 import { normalizeThreadTitle } from './ThreadTitleService'
@@ -29,7 +29,7 @@ type ThreadRow = {
   has_scheduled_run: number
   is_scheduled_session: number
   is_fork: number
-  task_mode: ThreadListItem['settings']['taskMode']
+  task_mode: string
   sandbox_mode: ThreadListItem['settings']['permissionConfig']['sandboxMode']
   approval_policy: string
   approvals_reviewer: ThreadListItem['settings']['permissionConfig']['approvalsReviewer']
@@ -92,7 +92,7 @@ export class ThreadHistoryService {
       archivedAt: row.archived_at,
       unreadAt: row.unread_at,
       settings: {
-        taskMode: row.task_mode,
+        taskMode: decodeStoredTaskMode(row.task_mode),
         permissionConfig: {
           sandboxMode: row.sandbox_mode,
           approvalPolicy: decodeApprovalPolicy(row.approval_policy),

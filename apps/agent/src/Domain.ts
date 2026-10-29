@@ -5,6 +5,10 @@ export type { PermissionConfig } from '@pidex/shared/thread'
 /** SQLite-private delivery encoding; public RPC/view models expose InputDelivery. */
 export type StoredInputDelivery = 'start' | 'queue' | 'guide'
 export type TaskMode = 'chat' | 'plan'
+
+/** Decode stored modes without rewriting historical or newer-client values. */
+export const decodeStoredTaskMode = (value: unknown): TaskMode =>
+  value === 'plan' ? 'plan' : 'chat'
 export type TurnStatus =
   | 'queued'
   | 'running'

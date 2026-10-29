@@ -556,12 +556,7 @@ export class SubagentRepository {
     const timestamp = now()
     const model = input.model ?? previousRun.model
     const permission = input.permission ?? previousRun.permissionConfig
-    const taskMode =
-      (
-        this.db.sqlite
-          .query('SELECT task_mode FROM threads WHERE id = ?')
-          .get(task.childThreadId) as { task_mode: 'chat' | 'plan' } | null
-      )?.task_mode ?? 'chat'
+    const taskMode = this.db.getThreadSettings(task.childThreadId)?.taskMode ?? 'chat'
     const turnID = crypto.randomUUID()
     const agentID = crypto.randomUUID()
     const inputID = crypto.randomUUID()

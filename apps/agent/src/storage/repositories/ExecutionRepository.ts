@@ -1,6 +1,6 @@
 import { Effect } from 'effect'
 import { encodeApprovalPolicy } from '@pidex/shared/thread'
-import { AgentError } from '../../Domain'
+import { AgentError, decodeStoredTaskMode } from '../../Domain'
 import type {
   AgentExecution,
   EventEnvelope,
@@ -9,7 +9,6 @@ import type {
   PermissionConfig,
   StoredInputDelivery,
   SubmitMessage,
-  TaskMode,
   ToolInvocation,
   TurnStatus,
 } from '../../Domain'
@@ -446,7 +445,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         id: string
         content: string
         model_ref: string
-        task_mode: TaskMode
+        task_mode: string
         skills: string | null
       } & PermissionColumns
     >
@@ -455,7 +454,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       content: row.content,
       model: parse<ModelRef>(row.model_ref),
       permissionConfig: permissionConfigFromRow(row),
-      taskMode: row.task_mode,
+      taskMode: decodeStoredTaskMode(row.task_mode),
       ...(row.skills ? { skills: parse<NonNullable<SubmitMessage['skills']>>(row.skills) } : {}),
     }))
   }
@@ -576,7 +575,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       sandbox_mode: PermissionConfig['sandboxMode']
       approval_policy: string
       approvals_reviewer: PermissionConfig['approvalsReviewer']
-      task_mode: TaskMode
+      task_mode: string
       created_at: number
     }>
     const requeuedSteers: Array<{ turnID: string; agentID: string; inputID: string }> = []
@@ -601,7 +600,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
             nextTurnID,
             threadID,
             nextAgentID,
-            mailbox.task_mode,
+            decodeStoredTaskMode(mailbox.task_mode),
             mailbox.sandbox_mode,
             mailbox.approval_policy,
             mailbox.approvals_reviewer,
@@ -1010,7 +1009,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
   }
 
   queuedInput(inputID: string) {
-    return this.sqlite
+    const row = this.sqlite
       .query(
         `
         SELECT i.id, i.thread_id, i.turn_id, i.content, i.model_ref, i.sandbox_mode, i.approval_policy,
@@ -1027,10 +1026,11 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           content: string
           model_ref: string
           strategy: StoredInputDelivery
-          task_mode: TaskMode
+          task_mode: string
           queue_position: number | null
         } & PermissionColumns)
       | null
+    return row ? { ...row, task_mode: decodeStoredTaskMode(row.task_mode) } : null
   }
 
   private eventByID(id: number): EventEnvelope | null {
@@ -1237,7 +1237,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           content: string
           model_ref: string
           strategy: StoredInputDelivery
-          task_mode: TaskMode
+          task_mode: string
           skills: string | null
         } & PermissionColumns)
       | null
@@ -1248,7 +1248,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       model: parse(row.model_ref),
       permissionConfig: permissionConfigFromRow(row),
       strategy: row.strategy,
-      taskMode: row.task_mode,
+      taskMode: decodeStoredTaskMode(row.task_mode),
       ...(row.skills ? { skills: parse(row.skills) } : {}),
     } as SubmitMessage & { id: string }
   }

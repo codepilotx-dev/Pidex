@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { Effect } from 'effect'
+import { Effect, Schema } from 'effect'
+import { RpcMethods } from '@pidex/agent-protocol'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -588,5 +589,112 @@ describe('Thread 历史', () => {
     expect(byId.get(active.id)?.pendingPlanApproval).toBe(false)
     expect(byId.get(superseded.id)?.latestTurnStatus).toBe('completed')
     expect(byId.get(active.id)?.latestTurnStatus).toBe('running')
+  })
+})
+
+describe('历史 task_mode 读取兼容', () => {
+  test('旧模式与未知模式不影响列表编码和分页，读取不改写原值', async () => {
+    const { db, projection, history } = await makeHistory()
+    const modes = ['chat', 'plan', 'grill', 'future-mode']
+    const ids = modes.map((mode, index) => {
+      const thread = db.createThread(mode)
+      db.sqlite
+        .query('UPDATE threads SET task_mode = ?, archived_at = ?, updated_at = ? WHERE id = ?')
+        .run(mode, index >= 2 ? 100 : null, index + 1, thread.id)
+      return thread.id
+    })
+    for (const archived of [false, true, undefined]) {
+      const seen: string[] = []
+      let cursor: string | undefined
+      do {
+        const page = projection.listPage({
+          ...(archived === undefined ? {} : { archived }),
+          limit: 1,
+          ...(cursor ? { cursor } : {}),
+        })
+        expect(() => Schema.encodeSync(RpcMethods['thread/list'].result)(page)).not.toThrow()
+        for (const thread of page.threads) {
+          const index = ids.indexOf(thread.id)
+          expect(thread.settings.taskMode).toBe(modes[index] === 'plan' ? 'plan' : 'chat')
+          expect(history.getListItem(thread.id)?.settings.taskMode).toBe(thread.settings.taskMode)
+          seen.push(thread.id)
+        }
+        cursor = page.nextCursor ?? undefined
+      } while (cursor)
+      expect(seen).toEqual(
+        [...(archived === undefined ? ids : archived ? ids.slice(2) : ids.slice(0, 2))].reverse(),
+      )
+    }
+    expect(
+      ids.map(
+        (id) =>
+          (
+            db.sqlite.query('SELECT task_mode FROM threads WHERE id = ?').get(id) as {
+              task_mode: string
+            }
+          ).task_mode,
+      ),
+    ).toEqual(modes)
+  })
+
+  test('详情、历史和恢复输入兼容旧模式，权限更新保留原模式，显式模式更新正常保存', async () => {
+    const { db, projection } = await makeHistory()
+    const thread = db.createThread('旧模式历史')
+    const turn = db.createTurn(thread.id, input('保留这条消息'))
+    db.sqlite.query("UPDATE threads SET task_mode = 'grill' WHERE id = ?").run(thread.id)
+    db.sqlite.query("UPDATE inputs SET task_mode = 'grill' WHERE turn_id = ?").run(turn.turnID)
+    db.sqlite.query("UPDATE turns SET mode = 'grill' WHERE id = ?").run(turn.turnID)
+    const streamPosition = { streamId: 'fixture', sequence: 0 }
+    const snapshot = projection.snapshot(thread.id)!
+    expect(snapshot.thread.settings.taskMode).toBe('chat')
+    expect(snapshot.inputs[0]?.mode).toBe('chat')
+    expect(snapshot.turns[0]?.mode).toBe('chat')
+    expect(() =>
+      Schema.encodeSync(RpcMethods['thread/read'].result)({ snapshot, streamPosition }),
+    ).not.toThrow()
+    const page = projection.historyPage(thread.id)!
+    expect(() =>
+      Schema.encodeSync(RpcMethods['thread/history/read'].result)({ ...page, streamPosition }),
+    ).not.toThrow()
+    expect(db.getTurnInput(turn.turnID)?.taskMode).toBe('chat')
+    expect(db.getThreadSettings(thread.id)?.taskMode).toBe('chat')
+    expect(db.queuedInput(turn.inputID)?.task_mode).toBe('chat')
+    db.sqlite.query("UPDATE inputs SET status = 'mailbox' WHERE id = ?").run(turn.inputID)
+    expect(db.guideMailbox(turn.turnID)[0]?.taskMode).toBe('chat')
+    db.updateThreadSettings(thread.id, {
+      permissionConfig: { ...input('').permissionConfig, approvalsReviewer: 'user' },
+    })
+    expect(db.sqlite.query('SELECT task_mode FROM threads WHERE id = ?').get(thread.id)).toEqual({
+      task_mode: 'grill',
+    })
+    expect(
+      db.sqlite.query('SELECT task_mode, content FROM inputs WHERE id = ?').get(turn.inputID),
+    ).toEqual({ task_mode: 'grill', content: '保留这条消息' })
+    expect(db.sqlite.query('SELECT mode FROM turns WHERE id = ?').get(turn.turnID)).toEqual({
+      mode: 'grill',
+    })
+    db.updateThreadSettings(thread.id, { taskMode: 'chat' })
+    expect(db.sqlite.query('SELECT task_mode FROM threads WHERE id = ?').get(thread.id)).toEqual({
+      task_mode: 'chat',
+    })
+  })
+
+  test('RPC 写入仍拒绝旧模式和未知模式', () => {
+    expect(() =>
+      Schema.decodeUnknownSync(RpcMethods['thread/settings/update'].params)({
+        threadId: 'fixture',
+        settings: { taskMode: 'chat' },
+        operationId: 'fixture',
+      }),
+    ).not.toThrow()
+    for (const taskMode of ['grill', 'future-mode']) {
+      expect(() =>
+        Schema.decodeUnknownSync(RpcMethods['thread/settings/update'].params)({
+          threadId: 'fixture',
+          settings: { taskMode },
+          operationId: 'fixture',
+        }),
+      ).toThrow()
+    }
   })
 })

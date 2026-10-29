@@ -4,7 +4,7 @@ import {
   hasThreadEditStorage,
   ThreadEditRepository,
 } from '../storage/repositories/ThreadEditRepository'
-import { AgentError } from '../Domain'
+import { AgentError, decodeStoredTaskMode } from '../Domain'
 import type {
   ApprovalRequest,
   AgentExecution as WireAgentExecution,
@@ -474,7 +474,7 @@ export class ThreadProjection {
         : {}),
       ...(workspace ? { workspace } : {}),
       settings: {
-        taskMode: String(row.task_mode) as Thread['settings']['taskMode'],
+        taskMode: decodeStoredTaskMode(row.task_mode),
         permissionConfig: {
           sandboxMode: String(
             row.sandbox_mode,
@@ -534,7 +534,7 @@ export class ThreadProjection {
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
-      mode: String(row.task_mode) as Input['mode'],
+      mode: decodeStoredTaskMode(row.task_mode),
       model: parse(String(row.model_ref)),
       permissionConfig: {
         sandboxMode: String(row.sandbox_mode) as Input['permissionConfig']['sandboxMode'],
@@ -563,7 +563,7 @@ export class ThreadProjection {
       threadId: String(row.thread_id),
       sourceInputID: inputs[0]?.id ?? '',
       status: turnStatus(status),
-      mode: String(row.mode) as Turn['mode'],
+      mode: decodeStoredTaskMode(row.mode),
       model: parse(String(row.model_ref)),
       permissionConfig: {
         sandboxMode: String(row.sandbox_mode) as Turn['permissionConfig']['sandboxMode'],
@@ -752,7 +752,7 @@ export class ThreadProjection {
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
-      mode: String(row.task_mode) as Input['mode'],
+      mode: decodeStoredTaskMode(row.task_mode),
       model: parse(String(row.model_ref)),
       permissionConfig: {
         sandboxMode: String(row.sandbox_mode) as Input['permissionConfig']['sandboxMode'],
@@ -783,7 +783,7 @@ export class ThreadProjection {
         threadId: String(row.thread_id),
         sourceInputID: turnInputs[0]?.id ?? '',
         status: turnStatus(turnStatusStr),
-        mode: String(row.mode) as Turn['mode'],
+        mode: decodeStoredTaskMode(row.mode),
         model: parse(String(row.model_ref)),
         permissionConfig: {
           sandboxMode: String(row.sandbox_mode) as Turn['permissionConfig']['sandboxMode'],
@@ -1030,7 +1030,7 @@ export class ThreadProjection {
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
-      mode: String(row.task_mode) as Input['mode'],
+      mode: decodeStoredTaskMode(row.task_mode),
       model: parse(String(row.model_ref)),
       permissionConfig: {
         sandboxMode: String(row.sandbox_mode) as Input['permissionConfig']['sandboxMode'],
@@ -1060,7 +1060,7 @@ export class ThreadProjection {
         threadId: String(row.thread_id),
         sourceInputID: turnInputs[0]?.id ?? '',
         status: turnStatus(turnStatusStr),
-        mode: String(row.mode) as Turn['mode'],
+        mode: decodeStoredTaskMode(row.mode),
         model: parse(String(row.model_ref)),
         permissionConfig: {
           sandboxMode: String(row.sandbox_mode) as Turn['permissionConfig']['sandboxMode'],
@@ -1291,7 +1291,7 @@ export class ThreadProjection {
         unreadAt: row.unread_at == null ? null : Number(row.unread_at),
         pendingPlanApproval: Number(row.pending_plan_approval) === 1,
         settings: {
-          taskMode: String(row.task_mode) as ThreadListItem['settings']['taskMode'],
+          taskMode: decodeStoredTaskMode(row.task_mode),
           permissionConfig: {
             sandboxMode: String(
               row.sandbox_mode,
