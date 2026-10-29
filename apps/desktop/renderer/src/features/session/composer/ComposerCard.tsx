@@ -1877,9 +1877,9 @@ export function ComposerCard({
                   >
                     <Target
                       className={cx(
-                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-0 tw:group-focus-visible:opacity-0',
+                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-0 tw:group-focus-visible:opacity-0',
                       )}
-                      size={APP_ICON_SIZE}
+                      size={APP_ICON_SIZES.sm}
                       strokeWidth={APP_ICON_STROKE_WIDTH}
                     />
                     <X
@@ -1919,10 +1919,10 @@ export function ComposerCard({
                   >
                     <ListChecks
                       className={cx(
-                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:transition-opacity tw:duration-state tw:ease-out',
+                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:transition-opacity tw:duration-state tw:ease-out',
                         'tw:group-hover:opacity-0 tw:group-focus-visible:opacity-0',
                       )}
-                      size={APP_ICON_SIZE}
+                      size={APP_ICON_SIZES.sm}
                       strokeWidth={APP_ICON_STROKE_WIDTH}
                     />
                     {planModeActive ? (
