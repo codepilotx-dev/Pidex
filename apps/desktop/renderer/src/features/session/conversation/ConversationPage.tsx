@@ -128,7 +128,7 @@ import {
 } from './SessionReferenceActions.js'
 export { deriveConversationTurnNavItems } from './TurnNavigationModel.js'
 export type { ConversationTurnNavItem } from './TurnNavigationModel.js'
-import { DesktopComposer } from '../composer/DesktopComposer.js'
+import { SessionBoundComposer } from '../composer/DesktopComposer.js'
 
 const ConversationEnvironmentControls = React.lazy(() =>
   import('../workflow/ConversationEnvironmentControls.js').then((module) => ({
@@ -1492,7 +1492,7 @@ export function ConversationPage(): React.ReactNode {
           ) : null}
         </AnimatePresence>
         {!activePermissionRequest && !pendingPlanApproval ? (
-          <DesktopComposer
+          <SessionBoundComposer
             {...composerPropsForPage}
             canForkConversation={Boolean(
               conversationFork.onForkFromMessage && latestConversationForkPoint,

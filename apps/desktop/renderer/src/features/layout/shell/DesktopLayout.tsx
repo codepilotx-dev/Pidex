@@ -27,7 +27,7 @@ import {
 import type React from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { normalizePathForComparison } from '../../../utils/PathUtils.js'
-import type { DesktopComposerProps } from '../../session/composer/DesktopComposer.js'
+import type { SessionBoundComposerProps } from '../../session/composer/SessionBoundComposer.js'
 import { getDesktopComposerBranchName } from '../../session/composer/ComposerWorkspacePresentation.js'
 import { composerDraftStore } from '../../session/composer/ComposerDraftStore.js'
 import { isBuiltinSkill } from '../../plugins/BuiltinSkillPresentation.js'
@@ -761,8 +761,7 @@ export function DesktopLayout(): React.ReactNode {
     queuedFollowUps,
     queuePauseReason,
     pendingPermissionSessionIds,
-    input,
-    setInput,
+    inputBinding,
     composerAttachments,
     setComposerAttachments,
     appendComposerAttachmentsForDraft,
@@ -1009,9 +1008,9 @@ export function DesktopLayout(): React.ReactNode {
     setWorkspaceState(null)
     setDiffState(NO_WORKSPACE_DIFF)
     setSelectedFile(null)
-    setInput('')
+    inputBinding.replace('')
     setComposerAttachments([])
-  }, [activateSessionById, navigate, setDiffState, setInput, setSelectedFile, setWorkspaceState])
+  }, [activateSessionById, inputBinding, navigate, setDiffState, setSelectedFile, setWorkspaceState])
 
   const handleGithubWorkspaceCloned = useCallback(
     (selected: DesktopWorkspace): void => {
@@ -1059,7 +1058,7 @@ export function DesktopLayout(): React.ReactNode {
         setWorkspaceState(null)
         setDiffState('未选择项目。')
         setSelectedFile(null)
-        setInput('')
+        inputBinding.replace('')
         setComposerAttachments([])
         return
       }
@@ -1071,16 +1070,16 @@ export function DesktopLayout(): React.ReactNode {
         navigate(QUICK_CHAT_PATH)
       }
       activateSessionById(null)
-      setInput('')
+      inputBinding.replace('')
       setComposerAttachments([])
     },
     [
       activateSessionById,
       currentWorkspace,
       handleOpenRecentWorkspace,
+      inputBinding,
       navigate,
       setDiffState,
-      setInput,
       setSelectedFile,
       setWorkspaceState,
     ],
@@ -1328,10 +1327,11 @@ export function DesktopLayout(): React.ReactNode {
     (text: string): void => {
       const trimmed = text.trim()
       if (!trimmed) return
-      const separator = input.trim() ? '\n\n' : ''
-      setInput(`${input}${separator}${trimmed}`)
+      const current = inputBinding.store.getState().input
+      const separator = current.trim() ? '\n\n' : ''
+      inputBinding.replace(`${current}${separator}${trimmed}`)
     },
-    [input, setInput],
+    [inputBinding],
   )
 
   const activeSideTaskId = useMemo(() => {
@@ -1517,15 +1517,15 @@ export function DesktopLayout(): React.ReactNode {
 
   const handleNewConversation = useCallback(async (): Promise<void> => {
     activateSessionById(null)
-    setInput('')
+    inputBinding.replace('')
     setComposerAttachments([])
     navigate(QUICK_CHAT_PATH)
-  }, [activateSessionById, navigate, setComposerAttachments, setInput])
+  }, [activateSessionById, inputBinding, navigate, setComposerAttachments])
 
   const handleUseSkill = useCallback(
     (skill: DesktopInstalledSkill): void => {
       activateSessionById(null)
-      setInput('')
+      inputBinding.replace('')
       setComposerAttachments([])
       composerDraftStore.setSkillInvocation('home', {
         name: skill.name,
@@ -1533,7 +1533,7 @@ export function DesktopLayout(): React.ReactNode {
       })
       navigate(QUICK_CHAT_PATH)
     },
-    [activateSessionById, navigate, setComposerAttachments, setInput],
+    [activateSessionById, inputBinding, navigate, setComposerAttachments],
   )
 
   const handleOpenSkillPreview = useCallback(
@@ -3564,11 +3564,11 @@ export function DesktopLayout(): React.ReactNode {
     </SidebarFrame>
   )
 
-  const composerProps = useMemo<DesktopComposerProps | null>(
+  const composerProps = useMemo<SessionBoundComposerProps | null>(
     () =>
       isQuickChatPage || isConversationRoute
         ? {
-            input,
+            inputBinding,
             messages: isConversationRoute ? [] : messages,
             placement: isQuickChatPage ? 'new-session' : 'thread',
             layout: 'multiline',
@@ -3619,7 +3619,7 @@ export function DesktopLayout(): React.ReactNode {
             onOpenAttachment: handleOpenDraftAttachment,
             onDraftAccepted: clearComposerDraftIfUnchanged,
             onChooseWorkspace: handleChooseWorkspace,
-            onInputChange: setInput,
+            onInputChange: inputBinding.replace,
             onInterrupt: interrupt,
             readPathname: () => location.pathname,
             onProviderModelChange: handleProviderModelChange,
@@ -3653,7 +3653,7 @@ export function DesktopLayout(): React.ReactNode {
     [
       isQuickChatPage,
       isConversationRoute,
-      input,
+      inputBinding,
       messages,
       mainComposerDraftKey,
       routedSessionId,
@@ -3701,7 +3701,6 @@ export function DesktopLayout(): React.ReactNode {
       handleOpenDraftAttachment,
       clearComposerDraftIfUnchanged,
       handleChooseWorkspace,
-      setInput,
       interrupt,
       location,
       handleProviderModelChange,
@@ -3853,8 +3852,8 @@ export function DesktopLayout(): React.ReactNode {
       sessionStatus,
       composerProps: isConversationLoading && !isPendingSubmissionRoute ? null : composerProps,
       composerDraft: {
-        value: input,
-        replace: setInput,
+        store: inputBinding.store,
+        replace: inputBinding.replace,
       },
       bottomPanelVisible: effectiveBottomPanelVisible,
       layoutResizeActive: rightResizePhase !== 'idle',
@@ -3932,8 +3931,7 @@ export function DesktopLayout(): React.ReactNode {
       sessionStatus,
       isPendingSubmissionRoute,
       composerProps,
-      input,
-      setInput,
+      inputBinding,
       effectiveBottomPanelVisible,
       rightResizePhase,
       isHomeOrConversationRoute,

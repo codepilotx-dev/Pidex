@@ -1,5 +1,5 @@
 import type React from 'react'
-import { DesktopComposer } from './composer/DesktopComposer.js'
+import { SessionBoundComposer } from './composer/DesktopComposer.js'
 import { useQuickChatContext } from './QuickChatContext.js'
 
 const CHAT_COMPOSER_PLACEHOLDER = '给 Pidex 发消息'
@@ -18,7 +18,7 @@ export function ChatNewSessionView(): React.ReactNode {
           </div>
           {composerProps ? (
             <div className="chat-composer tw:static tw:m-0 tw:flex tw:w-[var(--quick-chat-surface-width)] tw:max-w-full tw:flex-col tw:items-center tw:gap-3 tw:pointer-events-auto">
-              <DesktopComposer
+              <SessionBoundComposer
                 {...composerProps}
                 placeholder={CHAT_COMPOSER_PLACEHOLDER}
                 surface="chat"

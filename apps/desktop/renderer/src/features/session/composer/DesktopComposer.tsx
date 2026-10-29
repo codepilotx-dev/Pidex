@@ -43,6 +43,7 @@ import { hasTaskPlanningInvocation } from './ComposerSkillToken.js'
 
 export { loadCachedRuntimeSkills } from './UseDesktopComposerController.js'
 export { getDesktopComposerBranchName } from './ComposerWorkspacePresentation.js'
+export { SessionBoundComposer, type SessionBoundComposerProps } from './SessionBoundComposer.js'
 export type {
   ComposerCapabilities,
   ComposerCollaborationMode,

@@ -91,6 +91,11 @@ export type UseSessionStateOptions = {
   onOpenDrawerPermissions: () => void
 }
 
+export type SessionInputBinding = {
+  store: SessionDisplayStore
+  replace: (value: string) => void
+}
+
 export type UseSessionStateResult = {
   modelSelection: SessionModelSelection | null
   modelSelectionLoading: boolean
@@ -114,7 +119,7 @@ export type UseSessionStateResult = {
   permissionMode: DesktopPermissionMode
   planModeActive: boolean
   localRouterMode: LocalRouterMode
-  input: string
+  inputBinding: SessionInputBinding
   setInput: (value: string) => void
   composerAttachments: DesktopComposerAttachment[]
   setComposerAttachments: (
@@ -245,7 +250,6 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
   const contextUsage = useSessionDisplayField(displayStore, (state) => state.contextUsage)
   const queuedFollowUps = useSessionDisplayField(displayStore, (state) => state.queuedFollowUps)
   const queuePauseReason = useSessionDisplayField(displayStore, (state) => state.queuePauseReason)
-  const input = useSessionDisplayField(displayStore, (state) => state.input)
   const composerAttachments = useSessionDisplayField(
     displayStore,
     (state) => state.composerAttachments,
@@ -331,6 +335,14 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     }
     setInput(value)
   }, [setInput])
+
+  const inputBinding = useMemo<SessionInputBinding>(
+    () => ({
+      store: displayStore,
+      replace: setScopedInput,
+    }),
+    [displayStore, setScopedInput],
+  )
 
   const setScopedComposerAttachments = useCallback(
     (
@@ -887,7 +899,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     permissionMode: effectivePermissionMode,
     planModeActive: effectivePlanModeActive,
     localRouterMode: effectiveLocalRouterMode,
-    input,
+    inputBinding,
     setInput: setScopedInput,
     composerAttachments,
     setComposerAttachments: setScopedComposerAttachments,

@@ -13,7 +13,7 @@ import {
   parseNewSessionSurface,
   type NewSessionSurface,
 } from './NewSessionSurface.js'
-import { DesktopComposer } from './composer/DesktopComposer.js'
+import { SessionBoundComposer } from './composer/DesktopComposer.js'
 import { useQuickChatContext } from './QuickChatContext.js'
 import { enterTween, exitTween, motionTransition } from '../motion/MotionTransitions.js'
 import { CodingHeadingTransition } from './CodingHeadingTransition.js'
@@ -198,7 +198,7 @@ function CodingQuickChatView({ surface }: { surface: NewSessionSurface }): React
         <section className="quick-chat-composer-region tw:flex tw:w-full tw:min-w-0 tw:flex-col tw:items-center tw:justify-end tw:gap-3">
           {composerProps ? (
             <div className="chat-composer tw:static tw:m-0 tw:flex tw:w-[var(--quick-chat-surface-width)] tw:max-w-full tw:flex-col tw:items-center tw:gap-3 tw:pointer-events-auto">
-              <DesktopComposer
+              <SessionBoundComposer
                 {...composerProps}
                 placeholder={composerPlaceholder}
                 surface={surface}

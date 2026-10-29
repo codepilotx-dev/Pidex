@@ -15,7 +15,8 @@ import type {
 } from '../../../shared/Types.js'
 import type { OpenPlanInDockRequest } from './workflow/WorkflowPlanCard.js'
 import type { MarkdownFileOpenOptions, MarkdownFileReference } from '../markdown/index.js'
-import type { DesktopComposerProps } from './composer/DesktopComposer.js'
+import type { SessionDisplayStore } from './state/SessionDisplayStore.js'
+import type { SessionBoundComposerProps } from './composer/SessionBoundComposer.js'
 import type { NewSessionRecentTask } from './NewSessionSuggestions.js'
 import type { Attachment, LocalContextReference } from '@pidex/shared/thread'
 import type { ThreadArtifactPreviewInput } from './attachments/AttachmentPreviewDescriptor.js'
@@ -28,7 +29,7 @@ export type ProviderModelOption = {
 }
 
 export type QuickChatComposerDraftBridge = {
-  value: string
+  store: SessionDisplayStore
   replace: (value: string) => void
   focus?: () => void
 }
@@ -110,7 +111,7 @@ export type QuickChatContextValue = {
     >,
   ) => void | Promise<void>
   sessionStatus: DesktopSessionStatus
-  composerProps: DesktopComposerProps | null
+  composerProps: SessionBoundComposerProps | null
   composerDraft?: QuickChatComposerDraftBridge
   bottomPanelVisible: boolean
   /** 右工作区处于内容全宽：聊天区域被隐藏，摘要浮层需要随之关闭。 */
