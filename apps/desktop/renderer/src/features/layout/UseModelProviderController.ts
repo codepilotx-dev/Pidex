@@ -79,9 +79,12 @@ export function useModelProviderController({
       })
   }, [modelProviders, providerState])
   const selectedProviderID = providerID
-  const selectedProviderModelPresets =
-    providerModelOptions.find((provider) => provider.providerID === selectedProviderID)
-      ?.modelPresets ?? []
+  const selectedProviderModelPresets = useMemo(
+    () =>
+      providerModelOptions.find((provider) => provider.providerID === selectedProviderID)
+        ?.modelPresets ?? [],
+    [providerModelOptions, selectedProviderID],
+  )
   const resolvedSelectedModelPreset = resolveModelPresetId(
     model,
     undefined,
@@ -97,7 +100,10 @@ export function useModelProviderController({
       ? providerState.modelMetadata?.[model]
       : undefined) ?? selectedProviderSummary?.modelMetadata?.[model]
   const selectedVariant = selection?.variant ?? 'default'
-  const variantOptions = buildVariantOptions(selectedModelMetadata?.variants)
+  const variantOptions = useMemo(
+    () => buildVariantOptions(selectedModelMetadata?.variants),
+    [selectedModelMetadata?.variants],
+  )
   const deepSeekThinkingControls = isDeepSeekThinkingModel({
     providerID: selectedProviderID,
     model,

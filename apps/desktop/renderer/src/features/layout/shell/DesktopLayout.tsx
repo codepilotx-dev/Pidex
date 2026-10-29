@@ -105,6 +105,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  memo,
   useRef,
   useState,
 } from 'react'
@@ -282,6 +283,12 @@ function normalizePathForCompare(path: string): string {
 
 /** Incrementing counter to sequence directory probe requests */
 let directoryProbeRequestId = 0
+
+const MemoGitBoardSidebar = memo(GitBoardSidebar)
+const MemoSidebarScheduledPane = memo(SidebarScheduledPane)
+const MemoSidebarPluginsPane = memo(SidebarPluginsPane)
+const MemoSidebarProvidersPane = memo(SidebarProvidersPane)
+const MemoSidebarPetsPane = memo(SidebarPetsPane)
 
 export function DesktopLayout(): React.ReactNode {
   const location = useLocation()
@@ -1931,28 +1938,53 @@ export function DesktopLayout(): React.ReactNode {
     setWhatsNewDialogOpen(true)
   }, [])
 
-  const menuActions = useAppMenuActions({
-    client: desktopClient,
-    bridge: window.DesktopBridge,
-    browserAvailable,
-    browserOpen: Boolean(browserState?.open),
-    canNavigateBack,
-    canNavigateForward,
-    navigate,
-    newChat: handleCreateSession,
-    openFolder: handleChooseWorkspace,
-    toggleSidebar: toggleSidebarCollapsed,
-    togglePanel: isHomeOrConversationRoute ? togglePanel : () => undefined,
-    stepWorkspaceLayout: isHomeOrConversationRoute ? stepWorkspaceLayout : () => undefined,
-    openFiles: isHomeOrConversationRoute ? handleOpenFilesDock : () => undefined,
-    openBrowser: isHomeOrConversationRoute ? handleOpenBrowser : () => undefined,
-    reloadBrowser: handleReloadBrowser,
-    navigateBack,
-    navigateForward,
-    setMaximized: setIsWindowMaximized,
-    openWhatsNew: openWhatsNewDialog,
-    onError: setErrorMessage,
-  })
+  const menuActions = useAppMenuActions(
+    useMemo(
+      () => ({
+        client: desktopClient,
+        bridge: window.DesktopBridge,
+        browserAvailable,
+        browserOpen: Boolean(browserState?.open),
+        canNavigateBack,
+        canNavigateForward,
+        navigate,
+        newChat: handleCreateSession,
+        openFolder: handleChooseWorkspace,
+        toggleSidebar: toggleSidebarCollapsed,
+        togglePanel: isHomeOrConversationRoute ? togglePanel : () => undefined,
+        stepWorkspaceLayout: isHomeOrConversationRoute ? stepWorkspaceLayout : () => undefined,
+        openFiles: isHomeOrConversationRoute ? handleOpenFilesDock : () => undefined,
+        openBrowser: isHomeOrConversationRoute ? handleOpenBrowser : () => undefined,
+        reloadBrowser: handleReloadBrowser,
+        navigateBack,
+        navigateForward,
+        setMaximized: setIsWindowMaximized,
+        openWhatsNew: openWhatsNewDialog,
+        onError: setErrorMessage,
+      }),
+      [
+        browserAvailable,
+        browserState?.open,
+        canNavigateBack,
+        canNavigateForward,
+        navigate,
+        handleCreateSession,
+        handleChooseWorkspace,
+        toggleSidebarCollapsed,
+        isHomeOrConversationRoute,
+        togglePanel,
+        stepWorkspaceLayout,
+        handleOpenFilesDock,
+        handleOpenBrowser,
+        handleReloadBrowser,
+        navigateBack,
+        navigateForward,
+        setIsWindowMaximized,
+        openWhatsNewDialog,
+        setErrorMessage,
+      ],
+    ),
+  )
 
   const {
     providerState,
@@ -2308,24 +2340,35 @@ export function DesktopLayout(): React.ReactNode {
     }
   }, [])
 
-  const menuBar = (
-    <MenuBar
-      sidebarCollapsed={sidebarShell.mode !== 'docked'}
-      isMaximized={isWindowMaximized}
-      canNavigateBack={canNavigateBack}
-      canNavigateForward={canNavigateForward}
-      onToggleSidebar={toggleSidebarCollapsed}
-      onClose={() => {
-        void desktopClient.closeWindow()
-      }}
-      onMinimize={() => {
-        void desktopClient.minimizeWindow()
-      }}
-      onToggleMaximize={() => {
-        void desktopClient.toggleWindowMaximized().then((next) => setIsWindowMaximized(next))
-      }}
-      {...menuActions}
-    />
+  const menuBar = useMemo(
+    () => (
+      <MenuBar
+        sidebarCollapsed={sidebarShell.mode !== 'docked'}
+        isMaximized={isWindowMaximized}
+        canNavigateBack={canNavigateBack}
+        canNavigateForward={canNavigateForward}
+        onToggleSidebar={toggleSidebarCollapsed}
+        onClose={() => {
+          void desktopClient.closeWindow()
+        }}
+        onMinimize={() => {
+          void desktopClient.minimizeWindow()
+        }}
+        onToggleMaximize={() => {
+          void desktopClient.toggleWindowMaximized().then((next) => setIsWindowMaximized(next))
+        }}
+        {...menuActions}
+      />
+    ),
+    [
+      sidebarShell.mode,
+      isWindowMaximized,
+      canNavigateBack,
+      canNavigateForward,
+      toggleSidebarCollapsed,
+      setIsWindowMaximized,
+      menuActions,
+    ],
   )
 
   const displayedSidebarPane = sidebarShell.pane
@@ -2340,62 +2383,25 @@ export function DesktopLayout(): React.ReactNode {
   const providersSidebarMounted = useEverOpened(displayedSidebarPane === 'providers')
   const petsSidebarMounted = useEverOpened(displayedSidebarPane === 'pets')
 
-  const appSidebarContent = (
-    <DesktopSidebar
-      active={displayedSidebarPane === 'chats' || displayedSidebarPane === 'activity'}
-      pane={retainedTaskPane}
-      activeSessionId={sessionId}
-      catalogStatus={catalogStatus}
-      pendingPermissionSessionIds={pendingPermissionSessionIds}
-      titleLoadingIds={titleLoadingIds}
-      recentWorkspaces={recentWorkspaces}
-      removedWorkspaces={removedWorkspaces}
-      sessionFallbackTitles={sidebarSessionFallbackTitles}
-      sessions={sessions}
-      unavailableWorkspacePaths={unavailableWorkspacePaths}
-      workspace={currentWorkspace}
-      onChooseWorkspace={() => void handleChooseWorkspace()}
-      onCreateSession={(workspaceItem) => {
-        sidebarShell.closePreview()
-        void handleCreateSession(workspaceItem)
-      }}
-      onOpenCommandMenu={() => setCommandMenuOpen(true)}
-      onOpenWhatsNew={openWhatsNewDialog}
-      onPinWorkspace={handlePinWorkspace}
-      onRemoveWorkspace={handleRemoveWorkspace}
-      onUnpinWorkspace={handleUnpinWorkspace}
-      onSelectSession={(session) => {
-        sidebarShell.closePreview()
-        handleSelectSession(session)
-      }}
-      onArchiveSessions={handleArchiveSessions}
-      onRenameSession={async (targetSessionId, title) =>
-        Boolean(await renameSession(targetSessionId, title))
-      }
-      onError={handleErrorMessage}
-      onReport={setNoticeMessage}
-      dockedPanesState={workbenchPanelState.sidebar}
-      dockedTabsById={workbenchPanelState.tabsById}
-      workspaceFiles={workspaceFiles}
-      onSelectDockedTab={(tabId) => handleSelectPanelTab('sidebar', tabId)}
-      onCloseDockedTab={(tabId) => closePanelTab('sidebar', tabId)}
-      onMoveDockedTab={movePanelTab}
-      onPopOutDockedTab={popOutPanelTab}
-      onOpenFile={(file) => handleOpenFilePreview('sidebar', file)}
-      onAddComposerFiles={handleAddComposerFiles}
-    />
-  )
-
-  const settingsSidebarContent = (
-    <SettingsSidebarContent
-      activeTab={settingsActiveTab}
-      workspacePath={currentWorkspace?.path ?? null}
-      onBack={handleSettingsBack}
-      onTabChange={(tab) => {
-        sidebarShell.closePreview()
-        handleSettingsTabChange(tab)
-      }}
-    />
+  const settingsSidebarContent = useMemo(
+    () => (
+      <SettingsSidebarContent
+        activeTab={settingsActiveTab}
+        workspacePath={currentWorkspace?.path ?? null}
+        onBack={handleSettingsBack}
+        onTabChange={(tab) => {
+          sidebarShell.closePreview()
+          handleSettingsTabChange(tab)
+        }}
+      />
+    ),
+    [
+      settingsActiveTab,
+      currentWorkspace?.path,
+      sidebarShell.closePreview,
+      handleSettingsTabChange,
+      handleSettingsBack,
+    ],
   )
 
   const handleFollowUpEdit = useCallback(
@@ -2431,162 +2437,6 @@ export function DesktopLayout(): React.ReactNode {
     }
   }, [sessionId])
 
-  const sidebar = (
-    <SidebarFrame
-      rail={
-        <SidebarNavigationRail
-          shell={sidebarShell}
-          activePane={activeSidebarPane}
-          capabilityState={sidebarCapabilities}
-          onOpenWhatsNew={openWhatsNewDialog}
-          onReport={setNoticeMessage}
-        />
-      }
-      collapsed={sidebarCollapsed}
-      contentKind={isSettingsRoute ? 'settings' : 'tasks'}
-      defaultWidth={340}
-      maxWidth={sidebarMaxWidth}
-      minWidth={sidebarMinWidth}
-      width={sidebarWidth}
-      onCollapse={collapseSidebar}
-      onSetWidth={setSidebarWidth}
-      shell={sidebarShell}
-    >
-      <div
-        className="sidebar-panel-content"
-        hidden={
-          displayedSidebarPane === 'git' ||
-          displayedSidebarPane === 'settings' ||
-          displayedSidebarPane === 'scheduled' ||
-          displayedSidebarPane === 'plugins' ||
-          displayedSidebarPane === 'providers' ||
-          displayedSidebarPane === 'pets' ||
-          displayedSidebarPane === null
-        }
-      >
-        {appSidebarContent}
-      </div>
-      <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'settings'}>
-        {settingsSidebarContent}
-      </div>
-      {displayedSidebarPane === 'git' ? (
-        <div className="sidebar-panel-content">
-          <GitBoardSidebar
-            sessions={sessions}
-            onArchiveSessions={handleArchiveSessions}
-            onRemoveWorkspace={handleRemoveWorkspace}
-            onReport={setNoticeMessage}
-          />
-        </div>
-      ) : null}
-      {scheduledSidebarMounted ? (
-        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'scheduled'}>
-          <SidebarScheduledPane />
-        </div>
-      ) : null}
-      {pluginsSidebarMounted ? (
-        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'plugins'}>
-          <SidebarPluginsPane workspacePath={currentWorkspace?.path ?? null} />
-        </div>
-      ) : null}
-      {providersSidebarMounted ? (
-        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'providers'}>
-          <SidebarProvidersPane />
-        </div>
-      ) : null}
-      {petsSidebarMounted ? (
-        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'pets'}>
-          <SidebarPetsPane />
-        </div>
-      ) : null}
-    </SidebarFrame>
-  )
-
-  const composerProps: DesktopComposerProps | null =
-    isQuickChatPage || isConversationRoute
-      ? {
-          input,
-          messages: isConversationRoute ? [] : messages,
-          placement: isQuickChatPage ? 'new-session' : 'thread',
-          layout: 'multiline',
-          radiusVariant: 'default',
-          utilityBarVariant: isQuickChatPage ? 'home' : 'default',
-          draftKey: mainComposerDraftKey,
-          routedSessionId,
-          sessionStatus,
-          permissionMode: effectivePermissionMode,
-          planModeActive,
-          enableAutoReviewPermissionMode: enableAutoReviewPermissionMode ?? false,
-          enableFullAccessPermissionMode: enableFullAccessPermissionMode ?? false,
-          codingModel,
-          thinkingMode: session.modelSelection?.thinkingMode ?? 'default',
-          modelVariant: selectedVariant,
-          modelVariantOptions: variantOptions,
-          onModelVariantChange: handleVariantChange,
-          modelSelectionError: session.modelSelectionError ?? selectedModelUnavailableMessage,
-          threadGoal: activeSessionItem?.threadGoal ?? null,
-          onGoalPause: handleGoalPause,
-          onGoalResume: handleGoalResume,
-          onGoalComplete: handleGoalComplete,
-          onGoalClear: handleGoalClear,
-          onRetryModelSelection: () => {
-            session.reloadModelSelection()
-            void refreshProviderState()
-          },
-          selectedProviderID,
-          selectedModelPreset: resolvedSelectedModelPreset,
-          modelConfigured: modelConfigured && (!routedSessionId || routedSessionId === sessionId),
-          modelCatalogLoading: modelCatalogLoading || session.modelSelectionLoading,
-          selectedModelMetadata,
-          showThinkingOptions,
-          deepSeekThinkingControls,
-          showContextUsage,
-          contextUsage: isConversationRoute ? null : contextUsage,
-          modelPresets: selectedProviderModelPresets,
-          providerOptions: providerModelOptions,
-          allProviders: modelProviders,
-          recentWorkspaces,
-          contextTasks: composerContextTasks,
-          browserContext: composerBrowserContext,
-          workspace: currentWorkspace,
-          attachments: composerAttachments,
-          onAttachmentsChange: setComposerAttachments,
-          onAppendAttachmentsForDraft: appendComposerAttachmentsForDraft,
-          onRemoveAttachmentForDraft: removeComposerAttachmentForDraft,
-          onOpenAttachment: handleOpenDraftAttachment,
-          onDraftAccepted: clearComposerDraftIfUnchanged,
-          onChooseWorkspace: handleChooseWorkspace,
-          onInputChange: setInput,
-          onInterrupt: interrupt,
-          readPathname: () => location.pathname,
-          onProviderModelChange: handleProviderModelChange,
-          onProviderOpen: handleProviderOpen,
-          onProviderSearch: handleProviderSearch,
-          onOpenWorkspace: handleOpenRecentWorkspace,
-          onCloneGithub: () => setGithubRepositoryModalOpen(true),
-          onClearWorkspace: handleClearWorkspace,
-          onOpenMcpSettings: () => navigate('/settings/plugins?tab=mcps'),
-          onOpenModelSettings: () => navigate('/providers'),
-          onOpenSideChat: sideChatSupported ? handleOpenSideChat : undefined,
-          onSkillTokenActivate: (invocation) => {
-            void handleActivateComposerSkill(invocation)
-          },
-          onBranchSelect: handleBranchSelect,
-          onCreateBranch: handleCreateBranch,
-          onStartReview: handleStartAiReview,
-          onPermissionChange: handlePermissionChange,
-          onPlanModeChange: handlePlanModeChange,
-          onThinkingChange: handleThinkingChange,
-          createSessionForWorkspace,
-          submitToSession,
-          onError: handleErrorMessage,
-          queuedFollowUps,
-          queuePauseReason,
-          onFollowUpEdit: (followUpId, value) => void handleFollowUpEdit(followUpId, value),
-          onFollowUpRemove: (followUpId) => void handleFollowUpRemove(followUpId),
-          onFollowUpResume: () => void handleFollowUpResume(),
-        }
-      : null
   const renderSideChatComposer = (
     tab: Extract<import('../dock/RightDockState.js').WorkbenchTabDescriptor, { kind: 'side-chat' }>,
     sideChatContext: import('../../session/conversation/SideChatThreadPanel.js').SideChatComposerRenderContext,
@@ -2840,7 +2690,12 @@ export function DesktopLayout(): React.ReactNode {
         }),
       )
     },
-    [handleFileLoadError, workbenchPanelState],
+    [
+      handleFileLoadError,
+      workbenchPanelState.tabsById,
+      workbenchPanelState.right.tabIds,
+      workbenchPanelState.bottom.tabIds,
+    ],
   )
 
   const handleOpenFilePreview = useCallback(
@@ -3552,6 +3407,541 @@ export function DesktopLayout(): React.ReactNode {
     ],
   )
 
+  const closeSidebarPreview = sidebarShell.closePreview
+  // 保持元素身份，工作区布局更新无需重新遍历侧栏；侧栏自身订阅仍正常更新。
+  const appSidebarContent = useMemo(
+    () => (
+      <DesktopSidebar
+        active={displayedSidebarPane === 'chats' || displayedSidebarPane === 'activity'}
+        pane={retainedTaskPane}
+        activeSessionId={sessionId}
+        catalogStatus={catalogStatus}
+        pendingPermissionSessionIds={pendingPermissionSessionIds}
+        titleLoadingIds={titleLoadingIds}
+        recentWorkspaces={recentWorkspaces}
+        removedWorkspaces={removedWorkspaces}
+        sessionFallbackTitles={sidebarSessionFallbackTitles}
+        sessions={sessions}
+        unavailableWorkspacePaths={unavailableWorkspacePaths}
+        workspace={currentWorkspace}
+        onChooseWorkspace={() => void handleChooseWorkspace()}
+        onCreateSession={(workspaceItem) => {
+          closeSidebarPreview()
+          void handleCreateSession(workspaceItem)
+        }}
+        onOpenCommandMenu={() => setCommandMenuOpen(true)}
+        onOpenWhatsNew={openWhatsNewDialog}
+        onPinWorkspace={handlePinWorkspace}
+        onRemoveWorkspace={handleRemoveWorkspace}
+        onUnpinWorkspace={handleUnpinWorkspace}
+        onSelectSession={(session) => {
+          closeSidebarPreview()
+          handleSelectSession(session)
+        }}
+        onArchiveSessions={handleArchiveSessions}
+        onRenameSession={async (targetSessionId, title) =>
+          Boolean(await renameSession(targetSessionId, title))
+        }
+        onError={handleErrorMessage}
+        onReport={setNoticeMessage}
+        dockedPanesState={workbenchPanelState.sidebar}
+        dockedTabsById={workbenchPanelState.tabsById}
+        workspaceFiles={workspaceFiles}
+        onSelectDockedTab={(tabId) => handleSelectPanelTab('sidebar', tabId)}
+        onCloseDockedTab={(tabId) => closePanelTab('sidebar', tabId)}
+        onMoveDockedTab={movePanelTab}
+        onPopOutDockedTab={popOutPanelTab}
+        onOpenFile={(file) => handleOpenFilePreview('sidebar', file)}
+        onAddComposerFiles={handleAddComposerFiles}
+      />
+    ),
+    [
+      displayedSidebarPane,
+      retainedTaskPane,
+      sessionId,
+      catalogStatus,
+      pendingPermissionSessionIds,
+      titleLoadingIds,
+      recentWorkspaces,
+      removedWorkspaces,
+      sidebarSessionFallbackTitles,
+      sessions,
+      unavailableWorkspacePaths,
+      currentWorkspace,
+      handleChooseWorkspace,
+      closeSidebarPreview,
+      handleCreateSession,
+      setCommandMenuOpen,
+      openWhatsNewDialog,
+      handlePinWorkspace,
+      handleRemoveWorkspace,
+      handleUnpinWorkspace,
+      handleSelectSession,
+      handleArchiveSessions,
+      renameSession,
+      handleErrorMessage,
+      setNoticeMessage,
+      workbenchPanelState.sidebar,
+      workbenchPanelState.tabsById,
+      workspaceFiles,
+      handleSelectPanelTab,
+      closePanelTab,
+      movePanelTab,
+      popOutPanelTab,
+      handleOpenFilePreview,
+      handleAddComposerFiles,
+    ],
+  )
+
+  const sidebar = (
+    <SidebarFrame
+      rail={
+        <SidebarNavigationRail
+          shell={sidebarShell}
+          activePane={activeSidebarPane}
+          capabilityState={sidebarCapabilities}
+          onOpenWhatsNew={openWhatsNewDialog}
+          onReport={setNoticeMessage}
+        />
+      }
+      collapsed={sidebarCollapsed}
+      contentKind={isSettingsRoute ? 'settings' : 'tasks'}
+      defaultWidth={340}
+      maxWidth={sidebarMaxWidth}
+      minWidth={sidebarMinWidth}
+      width={sidebarWidth}
+      onCollapse={collapseSidebar}
+      onSetWidth={setSidebarWidth}
+      shell={sidebarShell}
+    >
+      <div
+        className="sidebar-panel-content"
+        hidden={
+          displayedSidebarPane === 'git' ||
+          displayedSidebarPane === 'settings' ||
+          displayedSidebarPane === 'scheduled' ||
+          displayedSidebarPane === 'plugins' ||
+          displayedSidebarPane === 'providers' ||
+          displayedSidebarPane === 'pets' ||
+          displayedSidebarPane === null
+        }
+      >
+        {appSidebarContent}
+      </div>
+      <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'settings'}>
+        {settingsSidebarContent}
+      </div>
+      {displayedSidebarPane === 'git' ? (
+        <div className="sidebar-panel-content">
+          <MemoGitBoardSidebar
+            sessions={sessions}
+            onArchiveSessions={handleArchiveSessions}
+            onRemoveWorkspace={handleRemoveWorkspace}
+            onReport={setNoticeMessage}
+          />
+        </div>
+      ) : null}
+      {scheduledSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'scheduled'}>
+          <MemoSidebarScheduledPane />
+        </div>
+      ) : null}
+      {pluginsSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'plugins'}>
+          <MemoSidebarPluginsPane workspacePath={currentWorkspace?.path ?? null} />
+        </div>
+      ) : null}
+      {providersSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'providers'}>
+          <MemoSidebarProvidersPane />
+        </div>
+      ) : null}
+      {petsSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'pets'}>
+          <MemoSidebarPetsPane />
+        </div>
+      ) : null}
+    </SidebarFrame>
+  )
+
+  const composerProps = useMemo<DesktopComposerProps | null>(
+    () =>
+      isQuickChatPage || isConversationRoute
+        ? {
+            input,
+            messages: isConversationRoute ? [] : messages,
+            placement: isQuickChatPage ? 'new-session' : 'thread',
+            layout: 'multiline',
+            radiusVariant: 'default',
+            utilityBarVariant: isQuickChatPage ? 'home' : 'default',
+            draftKey: mainComposerDraftKey,
+            routedSessionId,
+            sessionStatus,
+            permissionMode: effectivePermissionMode,
+            planModeActive,
+            enableAutoReviewPermissionMode: enableAutoReviewPermissionMode ?? false,
+            enableFullAccessPermissionMode: enableFullAccessPermissionMode ?? false,
+            codingModel,
+            thinkingMode: session.modelSelection?.thinkingMode ?? 'default',
+            modelVariant: selectedVariant,
+            modelVariantOptions: variantOptions,
+            onModelVariantChange: handleVariantChange,
+            modelSelectionError: session.modelSelectionError ?? selectedModelUnavailableMessage,
+            threadGoal: activeSessionItem?.threadGoal ?? null,
+            onGoalPause: handleGoalPause,
+            onGoalResume: handleGoalResume,
+            onGoalComplete: handleGoalComplete,
+            onGoalClear: handleGoalClear,
+            onRetryModelSelection: () => {
+              session.reloadModelSelection()
+              void refreshProviderState()
+            },
+            selectedProviderID,
+            selectedModelPreset: resolvedSelectedModelPreset,
+            modelConfigured: modelConfigured && (!routedSessionId || routedSessionId === sessionId),
+            modelCatalogLoading: modelCatalogLoading || session.modelSelectionLoading,
+            selectedModelMetadata,
+            showThinkingOptions,
+            deepSeekThinkingControls,
+            showContextUsage,
+            contextUsage: isConversationRoute ? null : contextUsage,
+            modelPresets: selectedProviderModelPresets,
+            providerOptions: providerModelOptions,
+            allProviders: modelProviders,
+            recentWorkspaces,
+            contextTasks: composerContextTasks,
+            browserContext: composerBrowserContext,
+            workspace: currentWorkspace,
+            attachments: composerAttachments,
+            onAttachmentsChange: setComposerAttachments,
+            onAppendAttachmentsForDraft: appendComposerAttachmentsForDraft,
+            onRemoveAttachmentForDraft: removeComposerAttachmentForDraft,
+            onOpenAttachment: handleOpenDraftAttachment,
+            onDraftAccepted: clearComposerDraftIfUnchanged,
+            onChooseWorkspace: handleChooseWorkspace,
+            onInputChange: setInput,
+            onInterrupt: interrupt,
+            readPathname: () => location.pathname,
+            onProviderModelChange: handleProviderModelChange,
+            onProviderOpen: handleProviderOpen,
+            onProviderSearch: handleProviderSearch,
+            onOpenWorkspace: handleOpenRecentWorkspace,
+            onCloneGithub: () => setGithubRepositoryModalOpen(true),
+            onClearWorkspace: handleClearWorkspace,
+            onOpenMcpSettings: () => navigate('/settings/plugins?tab=mcps'),
+            onOpenModelSettings: () => navigate('/providers'),
+            onOpenSideChat: sideChatSupported ? handleOpenSideChat : undefined,
+            onSkillTokenActivate: (invocation) => {
+              void handleActivateComposerSkill(invocation)
+            },
+            onBranchSelect: handleBranchSelect,
+            onCreateBranch: handleCreateBranch,
+            onStartReview: handleStartAiReview,
+            onPermissionChange: handlePermissionChange,
+            onPlanModeChange: handlePlanModeChange,
+            onThinkingChange: handleThinkingChange,
+            createSessionForWorkspace,
+            submitToSession,
+            onError: handleErrorMessage,
+            queuedFollowUps,
+            queuePauseReason,
+            onFollowUpEdit: (followUpId, value) => void handleFollowUpEdit(followUpId, value),
+            onFollowUpRemove: (followUpId) => void handleFollowUpRemove(followUpId),
+            onFollowUpResume: () => void handleFollowUpResume(),
+          }
+        : null,
+    [
+      isQuickChatPage,
+      isConversationRoute,
+      input,
+      messages,
+      mainComposerDraftKey,
+      routedSessionId,
+      sessionStatus,
+      effectivePermissionMode,
+      planModeActive,
+      enableAutoReviewPermissionMode,
+      enableFullAccessPermissionMode,
+      codingModel,
+      session.modelSelection?.thinkingMode,
+      selectedVariant,
+      variantOptions,
+      handleVariantChange,
+      session.modelSelectionError,
+      selectedModelUnavailableMessage,
+      activeSessionItem,
+      handleGoalPause,
+      handleGoalResume,
+      handleGoalComplete,
+      handleGoalClear,
+      session.reloadModelSelection,
+      refreshProviderState,
+      selectedProviderID,
+      resolvedSelectedModelPreset,
+      modelConfigured,
+      sessionId,
+      modelCatalogLoading,
+      session.modelSelectionLoading,
+      selectedModelMetadata,
+      showThinkingOptions,
+      deepSeekThinkingControls,
+      showContextUsage,
+      contextUsage,
+      selectedProviderModelPresets,
+      providerModelOptions,
+      modelProviders,
+      recentWorkspaces,
+      composerContextTasks,
+      composerBrowserContext,
+      currentWorkspace,
+      composerAttachments,
+      setComposerAttachments,
+      appendComposerAttachmentsForDraft,
+      removeComposerAttachmentForDraft,
+      handleOpenDraftAttachment,
+      clearComposerDraftIfUnchanged,
+      handleChooseWorkspace,
+      setInput,
+      interrupt,
+      location,
+      handleProviderModelChange,
+      handleProviderOpen,
+      handleProviderSearch,
+      handleOpenRecentWorkspace,
+      setGithubRepositoryModalOpen,
+      handleClearWorkspace,
+      navigate,
+      sideChatSupported,
+      handleOpenSideChat,
+      handleActivateComposerSkill,
+      handleBranchSelect,
+      handleCreateBranch,
+      handleStartAiReview,
+      handlePermissionChange,
+      handlePlanModeChange,
+      handleThinkingChange,
+      createSessionForWorkspace,
+      submitToSession,
+      handleErrorMessage,
+      queuedFollowUps,
+      queuePauseReason,
+      handleFollowUpEdit,
+      handleFollowUpRemove,
+      handleFollowUpResume,
+    ],
+  )
+
+  const quickChatContextValue = useMemo<React.ContextType<typeof QuickChatContext>>(
+    () => ({
+      isConversationRoute,
+      isConversationLoading,
+      activeSessionId: activeSessionItem?.id ?? null,
+      activeSessionPinnedAt: activeSessionItem
+        ? (sidebarSessionPins[activeSessionItem.id] ?? null)
+        : null,
+      sessionTitle: quickChatSessionTitle,
+      editableSessionTitle: quickChatEditableSessionTitle,
+      titleRegenerating: regeneratingActiveSessionTitle,
+      projectDetailsTrigger:
+        isConversationRoute && !isConversationLoading && activeSessionItem?.id === sessionId ? (
+          <ConversationProjectDetails
+            session={activeSessionItem}
+            currentWorkspace={currentWorkspace}
+            projects={recentWorkspaces}
+            sessions={sessions}
+            unavailableWorkspacePaths={unavailableWorkspacePaths}
+            onPinWorkspace={handlePinWorkspace}
+            onUnpinWorkspace={handleUnpinWorkspace}
+            onRemoveWorkspace={handleRemoveWorkspace}
+            onArchiveSessions={handleArchiveSessions}
+            onReport={setNoticeMessage}
+          />
+        ) : null,
+      workspaceName: currentWorkspace?.name ?? null,
+      workspacePath: currentWorkspace?.path ?? null,
+      activeProjectId: currentWorkspace?.projectId ?? null,
+      branchName,
+      branches: currentWorkspace?.branches ?? EMPTY_BRANCHES,
+      diff: workspace.diff,
+      gitStatus,
+      gitDetection,
+      reviewSource: reviewTabState.source,
+      reviewSummary:
+        publishedReviewSummary?.workspacePath === currentWorkspace?.path
+          ? publishedReviewSummary?.snapshot
+          : null,
+      recentWorkspaces,
+      recentTasks: quickChatRecentTasks,
+      onArchiveSession: () => {
+        if (!activeSessionItem) return
+        void handleArchiveSessions([activeSessionItem.id])
+      },
+      onCreateBranch: handleCreateBranch,
+      onOpenAutomation: () => navigate('/automations'),
+      onOpenWorkspacePath: handleOpenWorkspacePath,
+      onOpenRightDock: (_tool, source) => {
+        if (source)
+          setReviewTabState((current) => ({
+            ...current,
+            source,
+            selectedFile: null,
+            selectedCommentId: null,
+            scrollTop: 0,
+            diffExpansion: { mode: 'all' },
+          }))
+        handleOpenReview()
+      },
+      onOpenPatchReview: handleOpenPatchReview,
+      onOpenPlanInRightDock: handleOpenPlanDock,
+      canCopyFileReferenceContents: canCopyMarkdownFileReferenceContents,
+      onCopyFileReferenceContents: handleCopyMarkdownFileReferenceContents,
+      onOpenFileReference: handleOpenMarkdownFileReference,
+      onOpenAttachment: handleOpenThreadAttachment,
+      onOpenLocalContext: handleOpenThreadLocalContext,
+      onOpenArtifact: handleOpenArtifact,
+      onActivateBrowserTab: handleActivateBrowserTab,
+      browserTabs,
+      threadGoal: activeSessionItem?.threadGoal ?? null,
+      onGoalPause: handleGoalPause,
+      onGoalResume: handleGoalResume,
+      onSubmitEditedUserMessage: handleSubmitEditedUserMessage,
+      onAppendComposerText: handleAppendComposerText,
+      onAppendSideChatText: handleAppendSideChatText,
+      onOpenSideChat: handleOpenSideChat,
+      sideChatAvailable: sideChatSupported,
+      onOpenSubagent: handleOpenSubagent,
+      onAddComposerFiles: handleAddComposerFiles,
+      onRefreshDiff: handleRefreshDiff,
+      onRenameSession: async (title) => {
+        const targetSessionId = activeSessionItem?.id
+        if (!targetSessionId) return false
+        return Boolean(await renameSession(targetSessionId, title))
+      },
+      onRefreshSessionTitle: async () =>
+        activeSessionItem ? regenerateSessionTitle(activeSessionItem.id) : false,
+      onToggleSidebar: toggleSidebarCollapsed,
+      onToggleSessionPinned: () => {
+        if (!activeSessionItem) return
+        setSidebarSessionPins((current) => {
+          if (current[activeSessionItem.id]) {
+            const { [activeSessionItem.id]: _removed, ...next } = current
+            return next
+          }
+          return {
+            ...current,
+            [activeSessionItem.id]: new Date().toISOString(),
+          }
+        })
+      },
+      onCommitOrPush: handleCommitOrPush,
+      onGitOperation: (operation) => setGitWorkflowMode(operation),
+      onOpenTerminal: () => {
+        if (!terminalVisible) toggleIntegratedTerminal()
+      },
+      onCreatePullRequest: handleCreatePullRequest,
+      onChooseWorkspace: handleChooseWorkspace,
+      onCloneGithub: () => setGithubRepositoryModalOpen(true),
+      onOpenWorkspace: handleOpenRecentWorkspace,
+      onBranchSelect: handleBranchSelect,
+      onClearWorkspace: handleClearWorkspace,
+      onDecidePermission: (request, behavior, alwaysAllow, updatedInput, decisionExtras) => {
+        return decidePermission(request, behavior, alwaysAllow, updatedInput, decisionExtras)
+      },
+      permissionMode: effectivePermissionMode,
+      planModeActive,
+      providerModelOptions,
+      sessionStatus,
+      composerProps: isConversationLoading && !isPendingSubmissionRoute ? null : composerProps,
+      composerDraft: {
+        value: input,
+        replace: setInput,
+      },
+      bottomPanelVisible: effectiveBottomPanelVisible,
+      layoutResizeActive: rightResizePhase !== 'idle',
+      onToggleBottomPanel: isHomeOrConversationRoute ? toggleBottomPanelVisible : () => undefined,
+      dockedPlanItemId,
+    }),
+    [
+      isConversationRoute,
+      isConversationLoading,
+      activeSessionItem,
+      sidebarSessionPins,
+      quickChatSessionTitle,
+      quickChatEditableSessionTitle,
+      regeneratingActiveSessionTitle,
+      sessionId,
+      currentWorkspace,
+      recentWorkspaces,
+      sessions,
+      unavailableWorkspacePaths,
+      handlePinWorkspace,
+      handleUnpinWorkspace,
+      handleRemoveWorkspace,
+      handleArchiveSessions,
+      setNoticeMessage,
+      branchName,
+      workspace.diff,
+      gitStatus,
+      gitDetection,
+      reviewTabState.source,
+      publishedReviewSummary,
+      quickChatRecentTasks,
+      handleCreateBranch,
+      navigate,
+      handleOpenWorkspacePath,
+      setReviewTabState,
+      handleOpenReview,
+      handleOpenPatchReview,
+      handleOpenPlanDock,
+      canCopyMarkdownFileReferenceContents,
+      handleCopyMarkdownFileReferenceContents,
+      handleOpenMarkdownFileReference,
+      handleOpenThreadAttachment,
+      handleOpenThreadLocalContext,
+      handleOpenArtifact,
+      handleActivateBrowserTab,
+      browserTabs,
+      handleGoalPause,
+      handleGoalResume,
+      handleSubmitEditedUserMessage,
+      handleAppendComposerText,
+      handleAppendSideChatText,
+      handleOpenSideChat,
+      sideChatSupported,
+      handleOpenSubagent,
+      handleAddComposerFiles,
+      handleRefreshDiff,
+      renameSession,
+      regenerateSessionTitle,
+      toggleSidebarCollapsed,
+      setSidebarSessionPins,
+      handleCommitOrPush,
+      setGitWorkflowMode,
+      terminalVisible,
+      toggleIntegratedTerminal,
+      handleCreatePullRequest,
+      handleChooseWorkspace,
+      setGithubRepositoryModalOpen,
+      handleOpenRecentWorkspace,
+      handleBranchSelect,
+      handleClearWorkspace,
+      decidePermission,
+      effectivePermissionMode,
+      planModeActive,
+      providerModelOptions,
+      sessionStatus,
+      isPendingSubmissionRoute,
+      composerProps,
+      input,
+      setInput,
+      effectiveBottomPanelVisible,
+      rightResizePhase,
+      isHomeOrConversationRoute,
+      toggleBottomPanelVisible,
+      dockedPlanItemId,
+    ],
+  )
+
   const rightDockNode = renderWorkbenchPanel('right')
   const bottomPanelNode = renderWorkbenchPanel('bottom')
 
@@ -3705,143 +4095,7 @@ export function DesktopLayout(): React.ReactNode {
           </Suspense>
         ) : null}
 
-        <QuickChatContext.Provider
-          value={{
-            isConversationRoute,
-            isConversationLoading,
-            sidebarCollapsed: sidebarShell.mode === 'collapsed',
-            activeSessionId: activeSessionItem?.id ?? null,
-            activeSessionPinnedAt: activeSessionItem
-              ? (sidebarSessionPins[activeSessionItem.id] ?? null)
-              : null,
-            sessionTitle: quickChatSessionTitle,
-            editableSessionTitle: quickChatEditableSessionTitle,
-            titleRegenerating: regeneratingActiveSessionTitle,
-            projectDetailsTrigger:
-              isConversationRoute &&
-              !isConversationLoading &&
-              activeSessionItem?.id === sessionId ? (
-                <ConversationProjectDetails
-                  session={activeSessionItem}
-                  currentWorkspace={currentWorkspace}
-                  projects={recentWorkspaces}
-                  sessions={sessions}
-                  unavailableWorkspacePaths={unavailableWorkspacePaths}
-                  onPinWorkspace={handlePinWorkspace}
-                  onUnpinWorkspace={handleUnpinWorkspace}
-                  onRemoveWorkspace={handleRemoveWorkspace}
-                  onArchiveSessions={handleArchiveSessions}
-                  onReport={setNoticeMessage}
-                />
-              ) : null,
-            workspaceName: currentWorkspace?.name ?? null,
-            workspacePath: currentWorkspace?.path ?? null,
-            activeProjectId: currentWorkspace?.projectId ?? null,
-            branchName,
-            branches: currentWorkspace?.branches ?? EMPTY_BRANCHES,
-            diff: workspace.diff,
-            gitStatus,
-            gitDetection,
-            reviewSource: reviewTabState.source,
-            reviewSummary:
-              publishedReviewSummary?.workspacePath === currentWorkspace?.path
-                ? publishedReviewSummary?.snapshot
-                : null,
-            recentWorkspaces,
-            recentTasks: quickChatRecentTasks,
-            onArchiveSession: () => {
-              if (!activeSessionItem) return
-              void handleArchiveSessions([activeSessionItem.id])
-            },
-            onCreateBranch: handleCreateBranch,
-            onOpenAutomation: () => navigate('/automations'),
-            onOpenWorkspacePath: handleOpenWorkspacePath,
-            onOpenRightDock: (_tool, source) => {
-              if (source)
-                setReviewTabState((current) => ({
-                  ...current,
-                  source,
-                  selectedFile: null,
-                  selectedCommentId: null,
-                  scrollTop: 0,
-                  diffExpansion: { mode: 'all' },
-                }))
-              handleOpenReview()
-            },
-            onOpenPatchReview: handleOpenPatchReview,
-            onOpenPlanInRightDock: handleOpenPlanDock,
-            canCopyFileReferenceContents: canCopyMarkdownFileReferenceContents,
-            onCopyFileReferenceContents: handleCopyMarkdownFileReferenceContents,
-            onOpenFileReference: handleOpenMarkdownFileReference,
-            onOpenAttachment: handleOpenThreadAttachment,
-            onOpenLocalContext: handleOpenThreadLocalContext,
-            onOpenArtifact: handleOpenArtifact,
-            onActivateBrowserTab: handleActivateBrowserTab,
-            browserTabs,
-            threadGoal: activeSessionItem?.threadGoal ?? null,
-            onGoalPause: handleGoalPause,
-            onGoalResume: handleGoalResume,
-            onSubmitEditedUserMessage: handleSubmitEditedUserMessage,
-            onAppendComposerText: handleAppendComposerText,
-            onAppendSideChatText: handleAppendSideChatText,
-            onOpenSideChat: handleOpenSideChat,
-            sideChatAvailable: sideChatSupported,
-            onOpenSubagent: handleOpenSubagent,
-            onAddComposerFiles: handleAddComposerFiles,
-            onRefreshDiff: handleRefreshDiff,
-            onRenameSession: async (title) => {
-              const targetSessionId = activeSessionItem?.id
-              if (!targetSessionId) return false
-              return Boolean(await renameSession(targetSessionId, title))
-            },
-            onRefreshSessionTitle: async () =>
-              activeSessionItem ? regenerateSessionTitle(activeSessionItem.id) : false,
-            onToggleSidebar: toggleSidebarCollapsed,
-            onToggleSessionPinned: () => {
-              if (!activeSessionItem) return
-              setSidebarSessionPins((current) => {
-                if (current[activeSessionItem.id]) {
-                  const { [activeSessionItem.id]: _removed, ...next } = current
-                  return next
-                }
-                return {
-                  ...current,
-                  [activeSessionItem.id]: new Date().toISOString(),
-                }
-              })
-            },
-            onCommitOrPush: handleCommitOrPush,
-            onGitOperation: (operation) => setGitWorkflowMode(operation),
-            onOpenTerminal: () => {
-              if (!terminalVisible) toggleIntegratedTerminal()
-            },
-            onCreatePullRequest: handleCreatePullRequest,
-            onChooseWorkspace: handleChooseWorkspace,
-            onCloneGithub: () => setGithubRepositoryModalOpen(true),
-            onOpenWorkspace: handleOpenRecentWorkspace,
-            onBranchSelect: handleBranchSelect,
-            onClearWorkspace: handleClearWorkspace,
-            onDecidePermission: (request, behavior, alwaysAllow, updatedInput, decisionExtras) => {
-              return decidePermission(request, behavior, alwaysAllow, updatedInput, decisionExtras)
-            },
-            permissionMode: effectivePermissionMode,
-            planModeActive,
-            providerModelOptions,
-            sessionStatus,
-            composerProps:
-              isConversationLoading && !isPendingSubmissionRoute ? null : composerProps,
-            composerDraft: {
-              value: input,
-              replace: setInput,
-            },
-            bottomPanelVisible: effectiveBottomPanelVisible,
-            layoutResizeActive: rightResizePhase !== 'idle',
-            onToggleBottomPanel: isHomeOrConversationRoute
-              ? toggleBottomPanelVisible
-              : () => undefined,
-            dockedPlanItemId,
-          }}
-        >
+        <QuickChatContext.Provider value={quickChatContextValue}>
           <WorkspaceHeaderProvider routeScope={location.pathname}>
             <WorkbenchShellView
               menuBar={menuBar}

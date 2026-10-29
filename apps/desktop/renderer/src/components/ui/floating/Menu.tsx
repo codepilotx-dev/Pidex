@@ -5,6 +5,7 @@ import React, {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type HTMLAttributes,
@@ -452,6 +453,7 @@ export const ContextTrigger = forwardRef<
   HTMLAttributes<HTMLDivElement> & { asChild?: boolean; disabled?: boolean }
 >(({ asChild = false, disabled, onContextMenu, onKeyDown, children, ...props }, ref) => {
   const root = useMenu()
+  const triggerRef = useMemo(() => mergeRefs(ref, root.triggerRef), [ref, root.triggerRef])
   const Component = asChild ? Slot : 'div'
   const touchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const cancelTouch = () => {
@@ -464,7 +466,7 @@ export const ContextTrigger = forwardRef<
   return (
     <Component
       {...props}
-      ref={mergeRefs(ref, root.triggerRef)}
+      ref={triggerRef}
       onContextMenu={(event) => {
         onContextMenu?.(event as React.MouseEvent<HTMLDivElement>)
         if (disabled || event.defaultPrevented) return

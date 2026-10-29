@@ -558,6 +558,10 @@ export function useWorkbenchShellController({
     sidebarShell.toggle()
   }, [sidebarShell.toggle])
 
+  const toggleBottomPanelVisible = useCallback((): void => {
+    togglePanel('bottom')
+  }, [togglePanel])
+
   useEffect(() => {
     const workspaceElement = workspaceRef.current
     if (!workspaceElement) return
@@ -886,7 +890,7 @@ export function useWorkbenchShellController({
     handleSetBottomPanelHeight,
     handleResetBottomPanelHeight,
     handleOpenPlanDock,
-    toggleBottomPanelVisible: () => togglePanel('bottom'),
+    toggleBottomPanelVisible,
     togglePanel,
     closePanel,
     movePanelTab,

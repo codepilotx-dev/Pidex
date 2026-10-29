@@ -36,7 +36,6 @@ export type QuickChatComposerDraftBridge = {
 export type QuickChatContextValue = {
   isConversationRoute: boolean
   isConversationLoading: boolean
-  sidebarCollapsed: boolean
   activeSessionId: string | null
   activeSessionPinnedAt: string | null
   sessionTitle: string | null

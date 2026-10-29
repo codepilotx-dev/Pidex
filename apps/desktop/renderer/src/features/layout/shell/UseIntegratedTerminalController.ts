@@ -104,19 +104,20 @@ export function useIntegratedTerminalController({
     togglePanel,
   ])
 
+  const toggleAction = resolveIntegratedTerminalToggleAction(
+    effectiveThreadId,
+    state,
+    terminalAvailable,
+  )
   const toggleIntegratedTerminal = useCallback((): void => {
-    const action = resolveIntegratedTerminalToggleAction(
-      effectiveThreadId,
-      state,
-      terminalAvailable,
-    )
+    const action = toggleAction
     if (action === 'unavailable') return
     if (action === 'hide-bottom') {
       togglePanel('bottom')
       return
     }
     openIntegratedTerminal()
-  }, [effectiveThreadId, openIntegratedTerminal, state, terminalAvailable, togglePanel])
+  }, [openIntegratedTerminal, toggleAction, togglePanel])
 
   useEffect(() => {
     const onOpen = (event: Event): void => {

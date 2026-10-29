@@ -7,6 +7,7 @@ import React, {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type HTMLAttributes,
@@ -57,6 +58,8 @@ interface SlotProps extends HTMLAttributes<HTMLElement> {
 // Only the clone boundary needs loose props: the child chooses the DOM element.
 export const Slot = forwardRef<HTMLElement, SlotProps>(({ children, ...props }, ref) => {
   const child = Children.only(children) as React.ReactElement<Record<string, any>>
+  const childRef = child.props.ref as Ref<HTMLElement> | undefined
+  const composedRef = useMemo(() => mergeRefs(ref, childRef), [ref, childRef])
   const merged: Record<string, any> = { ...props, ...child.props }
   for (const name of Object.keys(props)) {
     const parentValue = (props as Record<string, any>)[name]
@@ -70,7 +73,7 @@ export const Slot = forwardRef<HTMLElement, SlotProps>(({ children, ...props }, 
   }
   merged.className = [props.className, child.props.className].filter(Boolean).join(' ')
   merged.style = { ...props.style, ...child.props.style }
-  merged.ref = mergeRefs(ref, child.props.ref as Ref<HTMLElement> | undefined)
+  merged.ref = composedRef
   // State and accessibility attributes belong to the primitive.
   for (const name of Object.keys(props)) {
     if (name.startsWith('aria-') || name.startsWith('data-') || name === 'disabled')

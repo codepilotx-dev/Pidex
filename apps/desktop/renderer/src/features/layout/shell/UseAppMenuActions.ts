@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import type {
   FileMenuAction,
   HelpMenuAction,
@@ -182,7 +182,7 @@ export function createAppMenuActions(options: Options) {
 }
 
 export function useAppMenuActions(options: Options) {
-  const actions = createAppMenuActions(options)
+  const actions = useMemo(() => createAppMenuActions(options), [options])
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (document.querySelector('[role="dialog"], [role="alertdialog"], dialog[open]')) return
