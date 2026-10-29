@@ -6,4 +6,45 @@
       var(--cpx-sys-color-surface-panel)
     );
   }
+
+  /*
+   * 扫光高光：只在显式启用（data-shimmer='true'）时绘制，禁用态不存在高光层。
+   * 低对比度渐变经 transform 从左向右 1.6s 循环，不动画宽高、不逐帧更新 React。
+   */
+  .ui-skeleton-region[data-shimmer='true'] .ui-skeleton-block::after,
+  .ui-skeleton-block[data-shimmer='true']::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      100deg,
+      transparent 30%,
+      color-mix(in srgb, var(--cpx-sys-color-fg-secondary) 9%, transparent) 50%,
+      transparent 70%
+    );
+    animation: ui-skeleton-shimmer 1.6s linear infinite;
+  }
+
+  @keyframes ui-skeleton-shimmer {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+
+  /* 应用减少动画开关显式开启：停用扫光并隐藏高光层。 */
+  :root[data-reduce-motion='on'] :where(.ui-skeleton-region[data-shimmer='true']) .ui-skeleton-block::after,
+  :root[data-reduce-motion='on'] .ui-skeleton-block[data-shimmer='true']::after {
+    content: none;
+  }
+
+  /* 未显式设置 reduce-motion 时跟随系统偏好；显式 'off' 不受系统设置影响。 */
+  @media (prefers-reduced-motion: reduce) {
+    :root:not([data-reduce-motion='off']) :where(.ui-skeleton-region[data-shimmer='true']) .ui-skeleton-block::after,
+    :root:not([data-reduce-motion='off']) .ui-skeleton-block[data-shimmer='true']::after {
+      content: none;
+    }
+  }
 }

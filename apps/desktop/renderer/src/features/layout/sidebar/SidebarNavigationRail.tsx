@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Ellipsis, Home, Pin, PinOff } from 'lucide-react'
 import { Button } from '../../../components/ui/Button.js'
@@ -7,8 +7,10 @@ import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { Popover } from '../../../components/ui/floating/Popover.js'
 import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { SkeletonBlock, SkeletonRegion } from '../../../components/ui/Skeleton.js'
 import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
+import { useEverOpened } from '../../../hooks/UsePresenceRetention.js'
 import { newSessionPath } from '../../session/NewSessionSurface.js'
 import { canShowSidebarTooltip, type SidebarShellController } from '../SidebarShellState.js'
 import { SidebarFooter } from './SidebarFooter.js'
@@ -16,7 +18,6 @@ import { getSidebarTopNavItems, type SidebarCapabilityState } from './SidebarTop
 import type { SidebarPane } from './SidebarNavigation.js'
 import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { setSidebarDestinationHidden } from './SidebarCustomization.js'
-import { reportStartupLoading } from '../../../startup/StartupSplashHandoff.js'
 
 type Props = {
   shell: SidebarShellController
@@ -46,18 +47,52 @@ const OTHER_RAIL_DESTINATION_IDS = new Set<SidebarRailDestinationId>([
   'pets',
 ])
 
-export function SidebarNavigationRail({
+/** 载入中的入口骨架布局：与真实导航轨上、下两组入口数量对齐。 */
+const RAIL_SKELETON_GROUP_COUNTS = [3, 3] as const
+
+export function SidebarNavigationRail(props: Props): ReactNode {
+  const settingsLoaded = useDesktopSettingsField((settings) => settings.settingsLoaded)
+  const initiallyReady = useEverOpened(
+    settingsLoaded && props.capabilityState.status !== 'unknown',
+  )
+  const { t } = useLocale()
+  return (
+    <nav
+      className="sidebar-navigation-rail tw:flex tw:h-full tw:flex-col tw:items-center tw:py-2"
+      aria-label={t('应用导航')}
+    >
+      {initiallyReady ? (
+        <SidebarNavigationRailBody {...props} />
+      ) : (
+        <SkeletonRegion
+          className="tw:flex tw:w-full tw:flex-col tw:items-center tw:gap-2 tw:pt-1"
+          label="正在加载侧栏导航"
+          shimmer
+        >
+          {RAIL_SKELETON_GROUP_COUNTS.map((count, groupIndex) => (
+            <div className="tw:flex tw:flex-col tw:items-center tw:gap-2" key={groupIndex}>
+              {Array.from({ length: count }, (_, index) => (
+                <SkeletonBlock
+                  className="tw:size-[var(--sidebar-icon-button-size)] tw:rounded-md"
+                  key={index}
+                />
+              ))}
+            </div>
+          ))}
+        </SkeletonRegion>
+      )}
+    </nav>
+  )
+}
+
+/** 就绪后的导航轨内容：入口能力过滤、固定与更多分组、底部页脚。 */
+export function SidebarNavigationRailBody({
   shell,
   activePane,
   capabilityState,
   onOpenWhatsNew,
   onReport,
 }: Props): ReactNode {
-  const settingsLoaded = useDesktopSettingsField((settings) => settings.settingsLoaded)
-  const initiallyReady = settingsLoaded && capabilityState.status !== 'unknown'
-  useLayoutEffect(() => {
-    if (!initiallyReady) return reportStartupLoading('正在加载侧栏导航…')
-  }, [initiallyReady])
   const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
   const sidebarTimelineEnabled = useDesktopSettingsField(
     (settings) => settings.sidebarTimelineEnabled,
@@ -214,12 +249,7 @@ export function SidebarNavigationRail({
   }
 
   return (
-    <nav
-      className={`sidebar-navigation-rail tw:flex tw:h-full tw:flex-col tw:items-center tw:py-2${initiallyReady ? '' : ' tw:invisible'}`}
-      aria-busy={!initiallyReady || undefined}
-      inert={!initiallyReady || undefined}
-      aria-label={t('应用导航')}
-    >
+    <>
       <ScrollArea
         className="sidebar-rail-destinations tw:w-full tw:min-h-0 tw:flex-1 tw:mb-3"
         contentClassName="tw:flex tw:flex-col tw:items-center tw:gap-1"
@@ -351,6 +381,6 @@ export function SidebarNavigationRail({
           onReport={onReport}
         />
       </div>
-    </nav>
+    </>
   )
 }

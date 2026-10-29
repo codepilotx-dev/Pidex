@@ -12,8 +12,7 @@ import { SidebarBody } from './sidebar/SidebarBody.js'
 import { useSidebarActivity } from './sidebar/UseSidebarActivity.js'
 import { archiveSidebarActivity, sessionNeedsStop } from './sidebar/SidebarActivityActions.js'
 import { SidebarDockedPanes } from './sidebar/SidebarDockedPanes.js'
-import { FullScreenWhaleLoading } from '../../components/ui/FullScreenWhaleLoading.js'
-import { reportStartupLoading } from '../../startup/StartupSplashHandoff.js'
+import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import type { DesktopFileEntry } from '../../../shared/Types.js'
 import type {
   WorkbenchPanelSnapshot,
@@ -678,12 +677,9 @@ export function DesktopSidebar({
   const initiallyReady = useEverOpened(
     settingsLoaded && catalogStatus.state !== 'loading' && projectCatalogState.status !== 'loading',
   )
-  useLayoutEffect(() => {
-    if (!initiallyReady) return reportStartupLoading('正在加载侧栏…')
-  }, [initiallyReady])
 
   if (!initiallyReady) {
-    return <FullScreenWhaleLoading label="正在加载侧栏…" variant="contained" />
+    return <SidebarLoadingSkeleton />
   }
 
   return (
@@ -893,6 +889,45 @@ export function DesktopSidebar({
           />
         </Suspense>
       ) : null}
+    </div>
+  )
+}
+
+/** 侧栏首载骨架：沿用真实容器的宽度、间距与主题占位，不预留滚动条空槽。 */
+function SidebarLoadingSkeleton(): React.ReactNode {
+  return (
+    <SkeletonRegion
+      className="sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2"
+      label="正在加载侧栏"
+      shimmer
+    >
+      <div className="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:h-9 tw:min-h-9 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2">
+        <SkeletonBlock className="tw:h-4 tw:w-20 tw:rounded-sm" />
+        <div className="tw:flex tw:shrink-0 tw:items-center tw:gap-1">
+          <SkeletonBlock className="tw:size-7 tw:rounded-md" />
+          <SkeletonBlock className="tw:size-7 tw:rounded-md" />
+        </div>
+      </div>
+      <div className="tw:mx-2 tw:mt-4 tw:flex tw:min-w-0 tw:flex-1 tw:flex-col tw:gap-6">
+        <SidebarSkeletonListGroup />
+        <SidebarSkeletonListGroup />
+      </div>
+    </SkeletonRegion>
+  )
+}
+
+const SIDEBAR_SKELETON_ROW_WIDTHS = ['tw:w-[88%]', 'tw:w-[64%]', 'tw:w-[76%]'] as const
+
+function SidebarSkeletonListGroup(): React.ReactNode {
+  return (
+    <div className="tw:flex tw:min-w-0 tw:flex-col tw:gap-px">
+      <SkeletonBlock className="tw:mx-1 tw:mb-1.5 tw:h-3 tw:w-16 tw:flex-none tw:rounded-sm" />
+      {SIDEBAR_SKELETON_ROW_WIDTHS.map((widthClassName) => (
+        <SkeletonBlock
+          className={`tw:h-[var(--sidebar-row-height)] tw:rounded-md ${widthClassName}`}
+          key={widthClassName}
+        />
+      ))}
     </div>
   )
 }

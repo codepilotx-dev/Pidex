@@ -3,7 +3,10 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
 import { DesktopSettingsProvider } from '../src/features/settings/UseDesktopSettings.js'
-import { SidebarNavigationRail } from '../src/features/layout/sidebar/SidebarNavigationRail.js'
+import {
+  SidebarNavigationRail,
+  SidebarNavigationRailBody,
+} from '../src/features/layout/sidebar/SidebarNavigationRail.js'
 import { SidebarHeader, SidebarNewTaskNav } from '../src/features/layout/sidebar/SidebarTopNav.js'
 import type { SidebarShellController } from '../src/features/layout/SidebarShellState.js'
 import {
@@ -117,19 +120,54 @@ function sidebarNavItems(
 }
 
 describe('Codex 侧栏导航', () => {
-  test('首次加载整批呈现侧栏，刷新不再插入会挤动列表的加载行', () => {
+  test('首次加载用贴近布局的骨架替代鲸鱼动画，就绪后直接切换真实内容', () => {
     const sidebar = readFileSync(
       new URL('../src/features/layout/DesktopSidebar.tsx', import.meta.url), 'utf8',
     )
+    // 就绪判定沿用原有加载条件并用 useEverOpened 固定：首次就绪前渲染骨架，
+    // 之后刷新保留真实内容不回退；加载失败沿用现有错误展示（非 loading 即就绪）。
     expect(sidebar).toContain('const initiallyReady = useEverOpened(')
     expect(sidebar).toContain(
       "settingsLoaded && catalogStatus.state !== 'loading' && projectCatalogState.status !== 'loading'",
     )
-    expect(sidebar).toContain("if (!initiallyReady) return reportStartupLoading('正在加载侧栏…')")
-    expect(sidebar).toContain('<FullScreenWhaleLoading label="正在加载侧栏…" variant="contained" />')
+    expect(sidebar).toContain('return <SidebarLoadingSkeleton />')
+    expect(sidebar).toContain('label="正在加载侧栏"')
+    expect(sidebar).toContain('shimmer')
     expect(sidebar.indexOf('if (!initiallyReady) {')).toBeLessThan(sidebar.indexOf('<SidebarBody'))
+    // 不再登记全屏启动动画等待，也不再渲染鲸鱼加载组件。
+    expect(sidebar).not.toContain('reportStartupLoading')
+    expect(sidebar).not.toContain('FullScreenWhaleLoading')
     expect(sidebar).not.toContain('正在加载任务目录…')
     expect(sidebar).not.toContain('scrollHeader=')
+  })
+
+  test('导航轨首载显示入口骨架，移除整列隐藏与启动等待登记', () => {
+    const rail = readFileSync(
+      new URL('../src/features/layout/sidebar/SidebarNavigationRail.tsx', import.meta.url),
+      'utf8',
+    )
+    expect(rail).toContain('const initiallyReady = useEverOpened(')
+    expect(rail).not.toContain('reportStartupLoading')
+    expect(rail).not.toContain('tw:invisible')
+    expect(rail).not.toContain('inert=')
+    expect(rail).toContain('label="正在加载侧栏导航"')
+    expect(rail).toContain('shimmer')
+  })
+
+  test('折叠切换不重建未变化会话行，右键菜单惰性构建动作', () => {
+    const group = readFileSync(
+      new URL('../src/features/layout/sidebar/SidebarSessionGroup.tsx', import.meta.url),
+      'utf8',
+    )
+    // 行组件 memo 化：折叠上下文、分页等分组级状态不进入行 props，
+    // 折叠切换时未变化的行按浅比较直接复用。
+    expect(group).toContain('const SidebarSessionRow = memo(')
+    expect(group.split('useDisclosureContentExpanded(').length - 1).toBe(1)
+    // 右键菜单以构建函数惰性传入，关闭期间不构建动作、不渲染条目。
+    expect(group).toContain('actions={() => buildActions(session)}')
+    // PR 后台订阅继续随可见性启停。
+    expectSourceContains(group, 'displayedSidebarSessions(')
+    expectSourceContains(group, 'disclosureExpanded,')
   })
 
   test('全部固定后更多仍可用，首页忽略隐藏配置，宠物可固定且能力过滤保持生效', () => {
@@ -147,7 +185,7 @@ describe('Codex 侧栏导航', () => {
         createElement(MemoryRouter, null,
           createElement(DesktopSettingsProvider, null,
             createElement(TooltipProvider, null,
-              createElement(SidebarNavigationRail, {
+              createElement(SidebarNavigationRailBody, {
                 shell: { mode: 'docked' } as unknown as SidebarShellController,
                 activePane: 'chats', capabilityState,
                 onOpenWhatsNew: () => {}, onReport: () => {},
@@ -184,7 +222,7 @@ describe('Codex 侧栏导航', () => {
           createElement(
             TooltipProvider,
             null,
-            createElement(SidebarNavigationRail, {
+            createElement(SidebarNavigationRailBody, {
               shell: { mode: 'docked' } as unknown as SidebarShellController,
               activePane: 'pets',
               capabilityState: readySidebarCapabilities('pets.management.v1'),
@@ -220,9 +258,10 @@ describe('Codex 侧栏导航', () => {
       }),
     )
     expect(rail).toContain('aria-busy="true"')
-    expect(rail).toContain('inert=""')
-    expect(rail).toContain('tw:invisible')
-    expect(rail).toContain('aria-label="首页"')
+    expect(rail).toContain('data-shimmer="true"')
+    expect(rail).not.toContain('tw:invisible')
+    expect(rail).not.toContain('inert=')
+    expect(rail).not.toContain('aria-label="首页"')
     expect(rail).not.toContain('title="首页"')
     expect(rail).not.toContain('aria-label="项目"')
     expect(rail).not.toContain('aria-label="设置"')
