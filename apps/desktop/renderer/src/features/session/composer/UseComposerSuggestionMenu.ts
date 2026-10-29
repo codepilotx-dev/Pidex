@@ -5,6 +5,8 @@ import {
   resolveComposerMenuActiveKey,
 } from './ComposerSuggestionMenu.js'
 
+const EMPTY_SUGGESTION_ITEMS: ComposerMenuItem[] = []
+
 export function useComposerSuggestionMenu(
   source: ComposerMenuItem[],
   keyword: string,
@@ -25,8 +27,11 @@ export function useComposerSuggestionMenu(
     setState({ scope, query: keyword, category: next, key: null })
   }
   const items = useMemo(
-    () => buildComposerSuggestionItems(source, keyword, category, setCategory),
-    [source, keyword, category, scope],
+    () =>
+      open
+        ? buildComposerSuggestionItems(source, keyword, category, setCategory)
+        : EMPTY_SUGGESTION_ITEMS,
+    [open, source, keyword, category, scope],
   )
   const selected = resolveComposerMenuActiveKey(
     items,

@@ -412,6 +412,8 @@ const ComposerDictationControl = lazy(async () => {
   return { default: module.ComposerDictationControl }
 })
 
+const EMPTY_MENU_ITEMS: ComposerMenuItem[] = []
+
 export function ComposerCard({
   draftKey,
   input,
@@ -765,26 +767,36 @@ export function ComposerCard({
   }, [subagentMode, submitting, executingCommandId, submitOutcome, draftKey])
 
   const slashMenuItems = useMemo(
-    () =>
-      mergeSlashCommands(
+    () => {
+      if (!activeSlashQuery) return []
+      return mergeSlashCommands(
         builtinSlashCommands,
         capabilities.skills && !subagentMode ? skillCommands : [],
-      ).map((command) => composerCommandMenuItem(command, executeCommand, onSkillSelect)),
+      ).map((command) => composerCommandMenuItem(command, executeCommand, onSkillSelect))
+    },
     [
+      activeSlashQuery,
       builtinSlashCommands,
+      capabilities.skills,
       executeCommand,
       onSkillSelect,
       skillCommands,
-      capabilities.skills,
       subagentMode,
     ],
   )
   const skillMenuItems = useMemo((): ComposerMenuItem[] => {
     if (!capabilities.skills || subagentMode) return []
-    const items = skillCommands.map((command) =>
-      composerCommandMenuItem(command, executeCommand, onSkillSelect),
-    )
-    if (skillCatalogLoading || skillCatalogError || !items.length) {
+    if (!activeSkillQuery && !activeSlashQuery) return []
+    const items = activeSkillQuery
+      ? skillCommands.map((command) =>
+          composerCommandMenuItem(command, executeCommand, onSkillSelect),
+        )
+      : []
+    if (
+      skillCatalogLoading ||
+      skillCatalogError ||
+      (!skillCommands.length && (activeSkillQuery || activeSlashQuery))
+    ) {
       items.push({
         key: 'skills:status',
         section: '技能',
@@ -812,38 +824,43 @@ export function ComposerCard({
     }
     return items
   }, [
-    executeCommand,
-    onSkillSelect,
-    skillCommands,
-    skillCatalogLoading,
-    skillCatalogError,
-    onReloadSkillCatalog,
+    activeSkillQuery,
+    activeSlashQuery,
     capabilities.skills,
+    executeCommand,
+    onReloadSkillCatalog,
+    onSkillSelect,
+    skillCatalogError,
+    skillCatalogLoading,
+    skillCommands,
     subagentMode,
   ])
   const reviewMenuItems = useMemo(
-    (): ComposerMenuItem[] => [
-      {
-        key: 'code-review-uncommitted',
-        label: '审阅未提交的更改',
-        description: '审查当前工作树和暂存区中的变更',
-        icon: <ShieldCheck size={APP_ICON_SIZE} />,
-        matchText: '代码审查 review uncommitted',
-        onSelect: () => onStartReview?.({ type: 'uncommittedChanges' }),
-      },
-      ...branches
-        .filter((candidate) => candidate && candidate !== branchName)
-        .slice(0, 6)
-        .map((branch) => ({
-          key: `code-review-branch:${branch}`,
-          label: `与 ${branch} 比较`,
-          description: '从 merge-base 开始审阅当前分支的变更',
-          icon: <GitBranch size={APP_ICON_SIZE} />,
-          matchText: `代码审查 branch review ${branch}`,
-          onSelect: () => onStartReview?.({ type: 'baseBranch', branch }),
-        })),
-    ],
-    [branchName, branches, onStartReview],
+    (): ComposerMenuItem[] => {
+      if (!reviewMenuRequested) return []
+      return [
+        {
+          key: 'code-review-uncommitted',
+          label: '审阅未提交的更改',
+          description: '审查当前工作树和暂存区中的变更',
+          icon: <ShieldCheck size={APP_ICON_SIZE} />,
+          matchText: '代码审查 review uncommitted',
+          onSelect: () => onStartReview?.({ type: 'uncommittedChanges' }),
+        },
+        ...branches
+          .filter((candidate) => candidate && candidate !== branchName)
+          .slice(0, 6)
+          .map((branch) => ({
+            key: `code-review-branch:${branch}`,
+            label: `与 ${branch} 比较`,
+            description: '从 merge-base 开始审阅当前分支的变更',
+            icon: <GitBranch size={APP_ICON_SIZE} />,
+            matchText: `代码审查 branch review ${branch}`,
+            onSelect: () => onStartReview?.({ type: 'baseBranch', branch }),
+          })),
+      ]
+    },
+    [reviewMenuRequested, branchName, branches, onStartReview],
   )
 
   const { plugins } = usePluginCatalog(workspace?.path)
@@ -1091,16 +1108,18 @@ export function ComposerCard({
     workspace,
   ])
   const activeMenuKeyword = suggestionRequest?.query ?? ''
-  const sourceMenuItems = reviewMenuRequested
-    ? reviewMenuItems
-    : activeSkillQuery
-      ? skillMenuItems
-      : activeContextRequest
-        ? mentionMenuItems
-        : [
-            ...slashMenuItems,
-            ...skillMenuItems.filter((item) => item.status || item.key === 'skills:retry'),
-          ]
+  const sourceMenuItems = !suggestionRequest
+    ? EMPTY_MENU_ITEMS
+    : reviewMenuRequested
+      ? reviewMenuItems
+      : activeSkillQuery
+        ? skillMenuItems
+        : activeContextRequest
+          ? mentionMenuItems
+          : [
+              ...slashMenuItems,
+              ...skillMenuItems.filter((item) => item.status || item.key === 'skills:retry'),
+            ]
   const unifiedMenuOpen = Boolean(suggestionRequest)
   const menuScope = `${draftKey}:${suggestionRequest?.kind}:${suggestionRequest?.start}`
   const {
