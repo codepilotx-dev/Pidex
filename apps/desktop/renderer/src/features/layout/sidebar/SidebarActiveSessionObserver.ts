@@ -74,7 +74,7 @@ export function observeActiveSidebarSession({
   }
 
   const suppressForUserInput = (): void => {
-    if (programmaticScrollRef.current) return
+    // 程序滚动不会产生这些输入事件；用户开始拖动时必须立即停止自动追踪。
     suppressedActiveIdRef.current = activeSessionId
     if (animationFrame !== null) {
       window.cancelAnimationFrame(animationFrame)
@@ -92,6 +92,7 @@ export function observeActiveSidebarSession({
   })
   viewport.addEventListener('pointerdown', suppressForUserInput, {
     passive: true,
+    capture: true,
   })
   viewport.addEventListener('keydown', handleKeyDown, true)
 
@@ -104,7 +105,7 @@ export function observeActiveSidebarSession({
   return () => {
     viewport.removeEventListener('wheel', suppressForUserInput)
     viewport.removeEventListener('touchstart', suppressForUserInput)
-    viewport.removeEventListener('pointerdown', suppressForUserInput)
+    viewport.removeEventListener('pointerdown', suppressForUserInput, true)
     viewport.removeEventListener('keydown', handleKeyDown, true)
     mutationObserver?.disconnect()
     stopResizeObserver()
