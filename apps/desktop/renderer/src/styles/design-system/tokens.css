@@ -412,7 +412,7 @@
       monospace;
 
     --cpx-sys-font-size-ui: 14px;
-    --cpx-sys-font-size-code: 13px;
+    --cpx-sys-font-size-code: 12px;
     --cpx-sys-font-size-xs: 12px;
     --cpx-sys-font-size-sm: 13px;
     --cpx-sys-font-size-md: 14px;
@@ -430,10 +430,10 @@
     --cpx-sys-line-height-body: 1.5;
     --cpx-sys-line-height-body-lg: 1.5;
     --cpx-sys-line-height-heading-sm: 1.25;
-    --cpx-sys-line-height-heading-md: 1.25;
+    --cpx-sys-line-height-heading-md: 1.33;
     --cpx-sys-line-height-heading-lg: 1.2;
-    --cpx-sys-line-height-heading-xl: 1.14;
-    --cpx-sys-line-height-display: 1.14;
+    --cpx-sys-line-height-heading-xl: 1.2;
+    --cpx-sys-line-height-display: 1.2;
     --cpx-sys-line-height-tight: var(--cpx-sys-line-height-caption);
     --cpx-sys-line-height-normal: var(--cpx-sys-line-height-body);
     --cpx-sys-line-height-relaxed: var(--cpx-sys-line-height-body-lg);
@@ -480,13 +480,13 @@
       var(--cpx-sys-line-height-body) var(--cpx-sys-font-family-sans);
     --cpx-sys-type-control: var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-sm) /
       var(--cpx-sys-line-height-control) var(--cpx-sys-font-family-sans);
-    --cpx-sys-type-heading-sm: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-lg) /
+    --cpx-sys-type-heading-sm: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) /
       var(--cpx-sys-line-height-heading-sm) var(--cpx-sys-font-family-sans);
-    --cpx-sys-type-heading-md: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) /
+    --cpx-sys-type-heading-md: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) /
       var(--cpx-sys-line-height-heading-md) var(--cpx-sys-font-family-sans);
-    --cpx-sys-type-heading-lg: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) /
+    --cpx-sys-type-heading-lg: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-3xl) /
       var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans);
-    --cpx-sys-type-heading-xl: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-3xl) /
+    --cpx-sys-type-heading-xl: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-4xl) /
       var(--cpx-sys-line-height-heading-xl) var(--cpx-sys-font-family-sans);
     --cpx-sys-type-metric: var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) /
       var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans);

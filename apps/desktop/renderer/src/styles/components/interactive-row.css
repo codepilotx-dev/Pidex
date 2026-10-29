@@ -96,8 +96,10 @@
 
   .interactive-row--rich,
   .permission-select-item {
-    --interactive-row-current-min-height: var(--cpx-comp-row-height-menu-rich, 44px);
+    --interactive-row-current-min-height: var(--cpx-comp-row-height-menu-rich, 40px);
     --interactive-row-current-padding-block: var(--cpx-comp-row-padding-block-rich, 6px);
+    --interactive-row-current-padding-inline: 12px;
+    --interactive-row-current-gap: 8px;
   }
 
   .permission-select-scroll-content {

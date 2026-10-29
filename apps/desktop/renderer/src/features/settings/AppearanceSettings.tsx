@@ -1145,6 +1145,7 @@ export function AppearanceSettings({ onError }: Props): React.ReactNode {
             <div className="settings-card tw:overflow-hidden tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:shadow-none">
               <SettingsRow
                 title="界面字号"
+                description="界面字号调整文字；整体缩放同时调整文字、图标与布局。"
                 control={
                   <NumberInput
                     ariaLabel="界面字号"

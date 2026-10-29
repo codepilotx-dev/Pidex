@@ -441,10 +441,10 @@ const BUTTON_STYLES = String.raw`
   }
 
   :is(button, a)[data-size][data-variant][data-size='sm'] {
-    --button-box-size: 1.875rem;
+    --button-box-size: 1.75rem;
     --button-padding-inline: 0.625rem;
     block-size: var(--button-box-size);
-    gap: var(--cpx-comp-button-gap-compact);
+    gap: var(--cpx-sys-space-1);
     padding-inline: var(--button-padding-inline);
     border-radius: var(--cpx-sys-radius-sm);
   }
@@ -513,17 +513,17 @@ const BUTTON_STYLES = String.raw`
   }
 
   :is(button, a)[data-size][data-variant][data-size='md'] {
-    --button-box-size: var(--cpx-comp-button-size-large);
-    --button-padding-inline: 0.875rem;
+    --button-box-size: var(--cpx-comp-button-size-medium);
+    --button-padding-inline: 0.75rem;
     block-size: var(--button-box-size);
-    gap: var(--cpx-sys-space-2);
+    gap: var(--cpx-comp-button-gap);
     padding-inline: var(--button-padding-inline);
     border-radius: var(--cpx-sys-radius-md);
   }
 
   :is(button, a)[data-size][data-variant][data-size='lg'] {
-    --button-box-size: 2.625rem;
-    --button-padding-inline: 1.125rem;
+    --button-box-size: var(--cpx-comp-button-size-large);
+    --button-padding-inline: 0.75rem;
     block-size: var(--button-box-size);
     gap: var(--cpx-comp-button-gap);
     padding-inline: var(--button-padding-inline);
@@ -572,53 +572,42 @@ const BUTTON_STYLES = String.raw`
     align-items: center;
   }
 
-  :is(button, a)[data-size][data-variant]:is([data-size='xs'], [data-size='sm'], [data-size='compact'], [data-size='composerSm'], [data-size='iconMd'], [data-size='iconSm']) > svg:not([data-icon-kind='artwork']) {
+  :is(button, a)[data-size][data-variant]:is([data-size='xs'], [data-size='sm'], [data-size='compact'], [data-size='composerSm'], [data-size='iconMd'], [data-size='iconSm']) > :is(svg:not([data-icon-kind='artwork']), span > svg:not([data-icon-kind='artwork'])) {
     inline-size: var(--cpx-sys-icon-size-sm);
     block-size: var(--cpx-sys-icon-size-sm);
   }
 
-  :is(button, a)[data-size][data-variant]:is([data-size='default'], [data-size='md'], [data-size='composer'], [data-size='composerUtility'], [data-size='icon'], [data-size='medium'], [data-size='tabStripAction'], [data-size='toolbar'], [data-size='toolbarLabel']) > svg:not([data-icon-kind='artwork']) {
+  :is(button, a)[data-size][data-variant]:is([data-size='default'], [data-size='md'], [data-size='composer'], [data-size='composerUtility'], [data-size='icon'], [data-size='medium'], [data-size='tabStripAction'], [data-size='toolbar'], [data-size='toolbarLabel']) > :is(svg:not([data-icon-kind='artwork']), span > svg:not([data-icon-kind='artwork'])) {
     inline-size: var(--cpx-sys-icon-size);
     block-size: var(--cpx-sys-icon-size);
   }
 
-  :is(button, a)[data-size][data-variant]:is([data-size='lg'], [data-size='iconLarge'], [data-size='large']) > svg:not([data-icon-kind='artwork']) {
+  :is(button, a)[data-size][data-variant]:is([data-size='lg'], [data-size='iconLarge'], [data-size='large']) > :is(svg:not([data-icon-kind='artwork']), span > svg:not([data-icon-kind='artwork'])) {
     inline-size: var(--cpx-sys-icon-size-lg);
     block-size: var(--cpx-sys-icon-size-lg);
   }
 
 
   /* An explicit icon size wins over the tier; artwork keeps its own box. */
-  :is(button, a)[data-size][data-variant][data-icon-size='sm'] > svg:not([data-icon-kind='artwork']) {
+  :is(button, a)[data-size][data-variant][data-icon-size='sm'] > :is(svg:not([data-icon-kind='artwork']), span > svg:not([data-icon-kind='artwork'])) {
     inline-size: var(--cpx-sys-icon-size-sm);
     block-size: var(--cpx-sys-icon-size-sm);
   }
 
-  :is(button, a)[data-size][data-variant][data-icon-size='md'] > svg:not([data-icon-kind='artwork']) {
+  :is(button, a)[data-size][data-variant][data-icon-size='md'] > :is(svg:not([data-icon-kind='artwork']), span > svg:not([data-icon-kind='artwork'])) {
     inline-size: var(--cpx-sys-icon-size);
     block-size: var(--cpx-sys-icon-size);
   }
 
-  :is(button, a)[data-size][data-variant][data-icon-size='lg'] > svg:not([data-icon-kind='artwork']) {
+  :is(button, a)[data-size][data-variant][data-icon-size='lg'] > :is(svg:not([data-icon-kind='artwork']), span > svg:not([data-icon-kind='artwork'])) {
     inline-size: var(--cpx-sys-icon-size-lg);
     block-size: var(--cpx-sys-icon-size-lg);
   }
 
-  /* Label icons (and nested slots) scale with the label instead of the tier. */
-  :is(button, a)[data-size][data-variant]:not([data-icon-only]) :is(svg, span) > svg:not([data-icon-kind='artwork']) {
-    inline-size: var(--inline-icon-size, 1em);
-    block-size: var(--inline-icon-size, 1em);
-  }
-
-  :is(button, a)[data-size][data-variant]:not([data-icon-only]) > .ui-spinner {
-    inline-size: var(--inline-icon-size, 1em);
-    block-size: var(--inline-icon-size, 1em);
-  }
-
-  /* A trailing chevron belongs to the label, so it follows the font size. */
+  /* Trailing disclosure markers keep the small functional icon size. */
   :is(button, a)[data-size][data-variant]:not([data-icon-only]) > :is(.lucide-chevron-down, .lucide-chevron-up, .lucide-chevron-right):last-child {
-    inline-size: var(--inline-icon-size, 1em);
-    block-size: var(--inline-icon-size, 1em);
+    inline-size: var(--cpx-sys-icon-size-sm);
+    block-size: var(--cpx-sys-icon-size-sm);
   }
 
   /* Icon-only buttons are square and carry no inline padding. */
@@ -634,7 +623,7 @@ const BUTTON_STYLES = String.raw`
   }
 
   :is(button, a)[data-size][data-variant][data-icon-only][data-size='sm'] {
-    --button-box-size: 1.875rem;
+    --button-box-size: 1.75rem;
   }
 
   :is(button, a)[data-size][data-variant][data-icon-only]:is([data-size='composer'], [data-size='composerSm'], [data-size='composerUtility'], [data-size='icon'], [data-size='toolbar'], [data-size='toolbarLabel']) {

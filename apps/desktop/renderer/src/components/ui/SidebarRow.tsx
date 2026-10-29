@@ -47,7 +47,7 @@ export const SidebarRow = forwardRef<HTMLElement, SidebarRowProps>(function Side
     leadingMode === 'none' ? 'sidebar-row--no-leading' : undefined,
     // Row shell: 30px row, 8px gutter, 10px radius, 4px column gap between the
     // leading slot, the label and the trailing slot.
-    'tw:relative tw:grid tw:w-full tw:box-border tw:min-h-[var(--sidebar-row-height,30px)] tw:items-center tw:gap-x-1 tw:rounded-md tw:px-2 tw:text-left tw:type-body tw:no-underline tw:select-none tw:cursor-pointer tw:outline-none tw:transition-colors tw:duration-feedback tw:ease-out',
+    'tw:relative tw:grid tw:w-full tw:box-border tw:h-[var(--sidebar-row-height,30px)] tw:min-h-[var(--sidebar-row-height,30px)] tw:items-center tw:gap-x-1 tw:rounded-md tw:px-2 tw:text-left tw:type-body tw:no-underline tw:select-none tw:cursor-pointer tw:outline-none tw:transition-colors tw:duration-feedback tw:ease-out',
     leadingMode === 'none'
       ? trailing != null
         ? 'tw:grid-cols-[minmax(0,1fr)_auto]'
@@ -167,7 +167,7 @@ export function SidebarEmptyRow({
         'sidebar-row--flex',
         'sidebar-empty-row',
         'tw:type-body-sm tw:text-app-text-soft',
-        'tw:grid tw:w-full tw:box-border tw:min-h-[var(--sidebar-row-height,30px)] tw:items-center tw:rounded-md tw:px-2 tw:py-1',
+        'tw:grid tw:w-full tw:box-border tw:h-[var(--sidebar-row-height,30px)] tw:min-h-[var(--sidebar-row-height,30px)] tw:items-center tw:rounded-md tw:px-2 tw:py-1',
         // The empty row keeps the shared row grid (3-column template), matching
         // the former `.sidebar-row--flex` shell.
         'tw:grid-cols-[var(--sidebar-row-columns,var(--sidebar-leading-width,var(--cpx-sys-space-6,24px))_minmax(0,1fr)_auto)] tw:gap-x-1',

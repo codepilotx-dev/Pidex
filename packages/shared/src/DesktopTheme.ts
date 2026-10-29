@@ -269,7 +269,7 @@ export const DEFAULT_APPEARANCE_SETTINGS: DesktopThemeSettingsV8 = {
   pointerCursorEnabled: false,
   reduceMotion: 'system',
   fontSmoothingEnabled: true,
-  fontSizes: { ui: 14, code: 13 },
+  fontSizes: { ui: 14, code: 12 },
 }
 
 export type AppearanceMigrationBackup = {

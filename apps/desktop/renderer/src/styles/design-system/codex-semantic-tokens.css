@@ -238,13 +238,13 @@
     /* Interactive Row Profiles */
     --cpx-comp-row-bg: transparent;
     --cpx-comp-row-fg: var(--cpx-sys-color-fg-primary);
-    --cpx-comp-row-height-nav: calc(var(--cpx-sys-font-size-md) + 16px);
+    --cpx-comp-row-height-nav: calc(var(--cpx-sys-font-size-md) * 1.5 + 10px);
     --cpx-comp-row-height-menu: calc(var(--cpx-sys-font-size-md) + 18px);
-    --cpx-comp-row-height-menu-rich: 44px;
+    --cpx-comp-row-height-menu-rich: 40px;
     --cpx-comp-row-height-toolbar: 28px;
     --cpx-comp-row-height-composer: 28px;
     --cpx-comp-row-radius: var(--cpx-sys-radius-lg);
-    --cpx-comp-row-padding-inline: 8px;
+    --cpx-comp-row-padding-inline: 6px;
     --cpx-comp-row-padding-block: 5px;
     --cpx-comp-row-padding-block-rich: 6px;
     --cpx-comp-row-gap: 6px;
@@ -290,10 +290,10 @@
     /* Menu */
     --cpx-comp-menu-surface-padding: 4px;
     --cpx-comp-menu-item-padding-block: 5px;
-    --cpx-comp-menu-item-padding-inline: 8px;
+    --cpx-comp-menu-item-padding-inline: 6px;
     --cpx-comp-menu-item-gap: 6px;
     --cpx-comp-menu-item-gap-y: 2px;
-    --cpx-comp-menu-rich-item-height: 44px;
+    --cpx-comp-menu-rich-item-height: 40px;
     --cpx-comp-menu-rich-item-padding-block: 6px;
     --cpx-comp-menu-icon-size: var(--cpx-sys-icon-size);
     --cpx-comp-menu-font: var(--cpx-sys-type-body);
@@ -302,10 +302,10 @@
     /* Dropdown (trigger + menu surface) */
     --cpx-comp-dropdown-menu-padding: 4px;
     --cpx-comp-dropdown-item-padding-block: 5px;
-    --cpx-comp-dropdown-item-padding-inline: 8px;
+    --cpx-comp-dropdown-item-padding-inline: 6px;
     --cpx-comp-dropdown-item-gap: 6px;
     --cpx-comp-dropdown-item-gap-y: 2px;
-    --cpx-comp-dropdown-rich-item-height: 44px;
+    --cpx-comp-dropdown-rich-item-height: 40px;
     --cpx-comp-dropdown-rich-item-padding-block: 6px;
     --cpx-comp-dropdown-icon-size: var(--cpx-sys-icon-size);
 
@@ -316,7 +316,7 @@
     --cpx-comp-icon-stroke-width: var(--cpx-sys-icon-stroke-width);
 
     /* Navigation row */
-    --cpx-comp-nav-row-height: calc(var(--cpx-sys-font-size-md) + 16px);
+    --cpx-comp-nav-row-height: calc(var(--cpx-sys-font-size-md) * 1.5 + 10px);
     --cpx-comp-nav-row-padding-block: 5px;
     --cpx-comp-nav-row-padding-inline: 5px;
     --cpx-comp-nav-section-gap: 18px;

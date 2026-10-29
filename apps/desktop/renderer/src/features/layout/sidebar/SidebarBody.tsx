@@ -81,9 +81,9 @@ const PINNED_INITIAL_LIMIT = 10
 const PINNED_LIMIT_STEP = 10
 const CUSTOM_SECTION_INITIAL_LIMIT = 10
 
-/* 分组标题行：sticky 30px 头部、8px gutter、右侧 4.286em trailing 列。 */
+/* 分组标题行：sticky 30px 头部、8px gutter、右侧 60px trailing 列。 */
 const SECTION_HEADER_CLASS =
-  'sidebar-section-header tw:sticky tw:top-0 tw:z-local tw:grid tw:min-h-[var(--sidebar-row-height)] tw:w-full tw:grid-cols-[minmax(0,1fr)_var(--sidebar-trailing-width)] tw:items-center tw:gap-x-2 tw:rounded-md tw:px-2 tw:select-none tw:focus-within:outline-none tw:group'
+  'sidebar-section-header tw:sticky tw:top-0 tw:z-local tw:grid tw:h-[var(--sidebar-row-height)] tw:min-h-[var(--sidebar-row-height)] tw:w-full tw:grid-cols-[minmax(0,1fr)_var(--sidebar-trailing-width)] tw:items-center tw:gap-x-2 tw:rounded-md tw:px-2 tw:select-none tw:focus-within:outline-none tw:group'
 const SECTION_TITLE_CLASS =
   'sidebar-section-title tw:flex tw:min-w-0 tw:items-center tw:type-body tw:normal-case tw:text-app-text-meta'
 const SECTION_TOGGLE_CLASS =

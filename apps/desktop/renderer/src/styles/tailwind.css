@@ -89,13 +89,13 @@
   --text-lg: var(--cpx-sys-font-size-lg);
   --text-lg--line-height: var(--cpx-sys-line-height-body-lg);
   --text-xl: var(--cpx-sys-font-size-xl);
-  --text-xl--line-height: var(--cpx-sys-line-height-heading-md);
+  --text-xl--line-height: var(--cpx-sys-line-height-heading-sm);
   --text-2xl: var(--cpx-sys-font-size-2xl);
-  --text-2xl--line-height: var(--cpx-sys-line-height-heading-lg);
+  --text-2xl--line-height: var(--cpx-sys-line-height-heading-md);
   --text-3xl: var(--cpx-sys-font-size-3xl);
-  --text-3xl--line-height: var(--cpx-sys-line-height-heading-xl);
+  --text-3xl--line-height: var(--cpx-sys-line-height-heading-lg);
   --text-4xl: var(--cpx-sys-font-size-4xl);
-  --text-4xl--line-height: var(--cpx-sys-line-height-display);
+  --text-4xl--line-height: var(--cpx-sys-line-height-heading-xl);
   --text-code: var(--cpx-sys-font-size-code);
   --text-code--line-height: var(--cpx-sys-line-height-code);
 

@@ -80,7 +80,7 @@
     --sidebar-row-radius: var(--cpx-sys-radius-md);
     --sidebar-indent-step: var(--cpx-sys-space-4);
     --sidebar-section-gap: var(--cpx-sys-space-4);
-    --sidebar-trailing-width: 4.286em;
+    --sidebar-trailing-width: 60px;
     --sidebar-row-columns: var(--sidebar-leading-width) minmax(0, 1fr) auto;
     --sidebar-session-content-indent: calc(
       var(--sidebar-inline-gutter) + var(--sidebar-indent-step)

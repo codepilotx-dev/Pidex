@@ -18,13 +18,24 @@
 /* Text icon slots own their geometry; artwork and standalone icon buttons do not inherit it. */
 @layer overrides {
   :root {
-    --inline-icon-size: 1em;
+    --inline-icon-size: var(--cpx-sys-icon-size, 16px);
   }
 
-  :root[lang='en-US'] {
-    --inline-icon-size: 1cap;
+  :where(
+    button,
+    [role='button'],
+    [role='tab'],
+    [role='menuitem'],
+    [role='menuitemradio'],
+    [role='menuitemcheckbox'],
+    [role='option'],
+    input[type='range']
+  ) {
+    min-width: 24px;
+    min-height: 24px;
   }
 
+  /* 普通前置图标固定 16px */
   :where(
       .sidebar-row-leading,
       .review-file-tree-dir,
@@ -53,27 +64,35 @@
   :where(
     .settings-nav-icon,
     .attachment-file-pill__icon,
-    .popover-item-check,
-    .popover-item-arrow,
-    .sidebar-context-menu-arrow,
     .settings-dropdown-icon,
-    .ui-select-item-indicator,
     .search-input-icon,
     .ui-date-picker-trigger-icon,
-    .ui-date-picker-chevron,
-    .right-dock-tree-chevron,
     .right-dock-tree-file-icon,
     .right-dock-tab-icon,
     .sidebar-session-workspace-meta__icon,
     .sidebar-session-hover-card-device-icon,
-    .composer-model-trigger-chevron,
     .review-file-icon,
-    .canonical-turn-activity__chevron,
     .canonical-result-card__reference > svg,
     .canonical-tool-result-block--citation > svg
   ) {
-    width: var(--inline-icon-size, 1em);
-    height: var(--inline-icon-size, 1em);
+    width: var(--inline-icon-size, 16px);
+    height: var(--inline-icon-size, 16px);
+    flex-shrink: 0;
+  }
+
+  /* 小型功能标记固定 12px，特化覆盖普通槽位 */
+  :where(
+    .popover-item-check,
+    .popover-item-arrow,
+    .sidebar-context-menu-arrow,
+    .ui-select-item-indicator,
+    .ui-date-picker-chevron,
+    .right-dock-tree-chevron,
+    .composer-model-trigger-chevron,
+    .canonical-turn-activity__chevron
+  ) {
+    width: var(--cpx-sys-icon-size-sm, 12px);
+    height: var(--cpx-sys-icon-size-sm, 12px);
     flex-shrink: 0;
   }
 
