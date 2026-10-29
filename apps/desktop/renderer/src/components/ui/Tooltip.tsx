@@ -700,8 +700,8 @@ export interface TooltipPortalProps {
 
 export function TooltipPortal({ children, container }: TooltipPortalProps) {
   const context = useContext(TooltipContext)
-  // 关闭且退场呈现已结束时不留空 Portal 宿主。
-  if (context && !context.open && !context.present) return null
+  // 抢占可独立于受控 open 终止呈现，且不留空 Portal 宿主。
+  if (context && !context.present) return null
   if (typeof document === 'undefined') {
     return <>{children}</>
   }
@@ -763,7 +763,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
     const [position, setPosition] = useState<{ top: number; left: number } | null>(null)
     const { present, setPresent } = context
     // 退出动画结束前留在顶层，避免落回浮层内部撑大滚动范围。
-    const popover = useTopLayer(contentRef, context.open || present)
+    const popover = useTopLayer(contentRef, present)
     const reducedMotion = usePrefersReducedMotion()
     const sideOffset = propSideOffset ?? offset ?? 7
 
@@ -893,7 +893,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
     const warm = context.openMode === 'warm'
 
     // 抢占关闭时 present 已被同步置 false：连 AnimatePresence 边界一起卸载，避免双影重叠。
-    if (!context.open && !present) return null
+    if (!present) return null
 
     return (
       <AnimatePresence onExitComplete={() => setPresent(false)}>

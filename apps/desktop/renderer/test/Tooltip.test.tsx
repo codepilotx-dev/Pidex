@@ -478,7 +478,7 @@ describe('Controlled state and events contract', () => {
 describe('Tooltip interaction & lifecycle regressions', () => {
   test('exit animation retains the native top layer until presence completes', async () => {
     const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
-    expectSourceContains(source, 'useTopLayer(contentRef, context.open || present)')
+    expectSourceContains(source, 'useTopLayer(contentRef, present)')
     expectSourceContains(source, '<AnimatePresence onExitComplete={() => setPresent(false)}>')
   })
 
@@ -497,7 +497,15 @@ describe('Tooltip interaction & lifecycle regressions', () => {
     expectSourceContains(source, "data-warm-handoff={warm ? 'true' : undefined}")
     expectSourceContains(source, 'initial={warm ? false : getInitialAnimation()}')
     expectSourceContains(source, "warm ? { duration: 0 }")
-    expectSourceContains(source, "if (!context.open && !present) return null")
+    expectSourceContains(source, '...getExitAnimation(), transition: reducedMotion ? { duration: 0.08 } : { duration: 0.13, ease: \'easeIn\' }')
+  })
+
+  test('forced removal gates content and portal independently of controlled open', async () => {
+    const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
+    expectSourceContains(source, 'abortExit: () => setPresentState(false)')
+    expectSourceContains(source, 'if (context && !context.present) return null')
+    expectSourceContains(source, 'if (!present) return null')
+    expectSourceNotContains(source, 'if (!context.open && !present) return null')
   })
 
   test('overlay entry transition excludes warm handoff surfaces', async () => {
