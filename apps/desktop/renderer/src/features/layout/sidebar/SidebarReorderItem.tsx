@@ -83,7 +83,11 @@ export const SidebarReorderItem = forwardRef<HTMLElement, Props>(function Sideba
   const handleObserver = useRef<MutationObserver | null>(null)
   // 视口外的条目禁用 sortable：dnd-kit 对 disabled 条目不做 shape 测量、
   // 碰撞检测在 accept 之前短路，但注册与插入 index 计算不受影响。
-  // 代价：视口外行不可抓取、不可作为落点；键盘排序不能以视口外行为落点
+  // 只禁 droppable 侧：draggable 保持启用，滚动翻转时 Accessibility 插件
+  // 不会因 draggable.disabled 变化重扫全部条目并写 aria-disabled
+  // （全局 [aria-disabled] 选择器匹配会引发大树样式失效）。
+  // 视口外行无法被指针命中；键盘聚焦会把行滚入视口，droppable 随之恢复。
+  // 代价：视口外行不可作为落点；键盘排序不能以视口外行为落点
   // （跨长列表排序走 Alt+Arrow，不经 dnd-kit）。无 provider 时始终启用。
   const viewportGate = useSidebarViewportGate()
   const [inViewport, setInViewport] = useState(() => !viewportGate)
@@ -93,7 +97,7 @@ export const SidebarReorderItem = forwardRef<HTMLElement, Props>(function Sideba
     group: list?.instanceId ?? list?.key,
     index: list?.order.indexOf(value) ?? 0,
     data: list ? { list, key: value } : undefined,
-    disabled: !list || !inViewport,
+    disabled: !list ? true : { droppable: !inViewport, draggable: false },
     accept: (source) => {
       const data = source.data as SidebarRegisteredItem
       if ((data.list?.key === 'sections') !== (list?.key === 'sections')) return false

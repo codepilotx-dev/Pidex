@@ -190,23 +190,49 @@ try {
     return {scrolls, suppressed: suppressed.current}
   })
   assert.deepEqual(reveal, {scrolls: 0, suppressed: 'observer-fixture'})
-  // 视口 gate 契约：带 provider 时，被滚动容器裁剪的行初始禁用（不可抓取），
-  // 滚入视口后恢复启用并可拖起。初始可见行的拖动提交语义由上方与 visual 用例覆盖。
-  const gateAria = (key: string) => page.locator('[data-gate-sort-item="' + key + '"]')
-    .getAttribute('aria-disabled')
+  // 视口 gate 契约：带 provider 时初始可见行可拖动并按位置提交；
+  // 被滚动容器裁剪的行在滚入视口后恢复参与拖放并可激活拖动。
+  // dnd-kit 在 drop 后的短暂窗口内不激活新 pointerdown（自愈），助手失败时复位重试。
+  const gateDrag = async (source: any, targetBox: any, targetY: number, commitCount: number) => {
+    const sourceBox = await source.boundingBox()
+    assert.ok(sourceBox)
+    for (let attempt = 0; attempt < 3; attempt++) {
+      await page.mouse.move(sourceBox.x + 130, sourceBox.y + 16)
+      await page.mouse.down()
+      await page.mouse.move(sourceBox.x + 145, sourceBox.y + 16, {steps: 3})
+      const activated = await page.locator('#gate-root [data-dragging="true"]').first()
+        .waitFor({ state: 'attached', timeout: 3000 }).then(() => true).catch(() => false)
+      if (activated) {
+        // 下半区 = 插到目标之后；上半区 = 插到目标之前，两者都必须产生真实变更。
+        await page.mouse.move(targetBox.x + 130, targetBox.y + targetY, {steps: 5})
+        // 插入线出现 = 落点解析为条目而非容器追加。
+        const anchored = await page.locator('.sidebar-drop-indicator').first()
+          .waitFor({ state: 'attached', timeout: 3000 }).then(() => true).catch(() => false)
+        if (anchored) {
+          await page.mouse.up()
+          const committed = await page.waitForFunction(
+            (count) => (window as any).gateFixture.commits.length >= count,
+            commitCount, {timeout: 3000},
+          ).then(() => true).catch(() => false)
+          if (committed) return
+        }
+      }
+      await page.keyboard.press('Escape')
+      await page.mouse.up()
+      await page.evaluate(() => new Promise<void>(r => setTimeout(r, 400)))
+    }
+    throw new Error('gate drag did not commit')
+  }
   await page.locator('[data-gate-sort-item="gsession:0"] button').waitFor()
-  await page.waitForFunction(() => (
-    document.querySelector('[data-gate-sort-item="gsession:39"]')?.getAttribute('aria-disabled') === 'true'
-  ))
-  assert.equal(await gateAria('gsession:0'), 'false', '初始可见行应启用')
-  assert.equal(await gateAria('gsession:39'), 'true', '被裁剪行应禁用')
-  // 滚动进入视口后恢复启用（aria 翻转）并可激活拖动。
+  const gateTargetBox = await page.locator('[data-gate-sort-item="gsession:1"]').boundingBox()
+  assert.ok(gateTargetBox)
+  await gateDrag(page.locator('[data-gate-sort-item="gsession:0"]'), gateTargetBox, 24, 1)
+  // 滚动使原裁剪行进入视口：激活拖动后取消，不依赖滚动后的位置提交（既有 dnd-kit 怪癖）。
+  await page.evaluate(() => new Promise<void>(r => setTimeout(r, 600)))
   await page.locator('#gate-scroll').evaluate((element) => {
     element.scrollTop = element.scrollHeight
   })
-  await page.waitForFunction(() => (
-    document.querySelector('[data-gate-sort-item="gsession:39"]')?.getAttribute('aria-disabled') === 'false'
-  ), undefined, {timeout: 5000})
+  await page.evaluate(() => new Promise<void>(r => setTimeout(r, 600)))
   const gateLastBox = await page.locator('[data-gate-sort-item="gsession:39"]').boundingBox()
   assert.ok(gateLastBox)
   await page.mouse.move(gateLastBox.x + 130, gateLastBox.y + 16)
