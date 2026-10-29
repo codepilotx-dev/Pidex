@@ -446,20 +446,20 @@ describe('fixed Codex UI themes', () => {
       },
       reduceMotion: 'system',
       pointerCursorEnabled: false,
-      fontSizes: { ui: 14, code: 13 },
+      fontSizes: { ui: 14, code: 12 },
     })
     expect(migrated.chromeThemes.light).not.toHaveProperty('opaqueWindows')
     expect(migrated.chromeThemes.dark).not.toHaveProperty('opaqueWindows')
   })
 
-  test('uses code size 13 for new settings without migrating a saved size 12', () => {
-    expect(DEFAULT_DESKTOP_THEME_SETTINGS.fontSizes.code).toBe(13)
+  test('uses code size 12 for new settings without migrating a saved size 13', () => {
+    expect(DEFAULT_DESKTOP_THEME_SETTINGS.fontSizes.code).toBe(12)
     expect(
       normalizeDesktopThemeSettings({
         ...DEFAULT_DESKTOP_THEME_SETTINGS,
-        fontSizes: { ui: 14, code: 12 },
+        fontSizes: { ui: 14, code: 13 },
       }).fontSizes,
-    ).toEqual({ ui: 14, code: 12 })
+    ).toEqual({ ui: 14, code: 13 })
   })
 
   test('keeps separate light and dark selections and rejects mismatches', () => {

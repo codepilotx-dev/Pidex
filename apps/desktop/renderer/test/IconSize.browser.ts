@@ -45,6 +45,10 @@ const sizes: [ButtonSize, number, number][] = [
   ['tabStripAction', 36, 16],
   ['toolbar', 28, 16],
   ['toolbarLabel', 28, 16],
+  ['xs', 24, 12],
+  ['sm', 28, 12],
+  ['md', 32, 16],
+  ['lg', 36, 20],
 ]
 const expected = (size: number | 'em', content: string) =>
   `<div data-expected-icon-size="${size}">${content}</div>`
@@ -143,18 +147,29 @@ const icon = renderToString(h(Plus, { size: APP_ICON_SIZE }))
 const arrow = renderToString(
   h(ChevronRight, { className: 'popover-item-arrow', size: APP_ICON_SIZES.sm }),
 )
-const compound = expected(
-  'em',
-  renderToString(
-    h(Button, {
-      children: [
-        h(Plus, { key: 'leading' }),
-        '菜单',
-        h(ChevronRight, { key: 'trailing', id: 'compound-trailing' }),
-      ],
-    }),
-  ),
-)
+const compound =
+  expected(
+    16,
+    renderToString(
+      h(Button, {
+        children: [
+          h(Plus, { key: 'leading' }),
+          '菜单',
+        ],
+      }),
+    ),
+  ) +
+  expected(
+    12,
+    renderToString(
+      h(Button, {
+        children: [
+          '折叠',
+          h(ChevronRight, { key: 'trailing', id: 'compound-trailing' }),
+        ],
+      }),
+    ),
+  )
 const forward = expected(
   16,
   renderToString(
@@ -208,9 +223,9 @@ try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } })
   await page.setContent(`<html lang="zh-CN" data-reduce-motion="on"><head><style>${css}</style></head><body>
     <section id="buttons">${buttons}${states}${overrides}${send}${compound}${forward}</section>
-    <div style="position:relative;height:32px;width:280px"><aside class="desktop-sidebar" style="--sidebar-current-width:280px">${expected('em', `<span class="sidebar-indicator">${sidebarStatus}</span>`)}${expected('em', nav)}${sidebarActions}${expected(20, renderToString(h(Button, { isIconOnly: true, iconSize: 'lg', size: 'toolbar', color: 'ghost', title: '显式尺寸', children: h(Plus) })))}</aside></div>
+    <div style="position:relative;height:32px;width:280px"><aside class="desktop-sidebar" style="--sidebar-current-width:280px">${expected(16, `<span class="sidebar-indicator">${sidebarStatus}</span>`)}${expected(16, nav)}${sidebarActions}${expected(20, renderToString(h(Button, { isIconOnly: true, iconSize: 'lg', size: 'toolbar', color: 'ghost', title: '显式尺寸', children: h(Plus) })))}</aside></div>
     <div class="popover-menu popover-menu--grid">
-      ${['', 'rich'].map((kind) => `<div class="popover-item ${kind}"><span class="popover-item-leading"><span class="popover-item-icon" data-expected-icon-size="em">${icon}</span></span><span class="popover-item-label">菜单</span><span class="popover-item-trailing" data-expected-icon-size="em">${arrow}</span></div>`).join('')}
+      ${['', 'rich'].map((kind) => `<div class="popover-item ${kind}"><span class="popover-item-leading"><span class="popover-item-icon" data-expected-icon-size="16">${icon}</span></span><span class="popover-item-label">菜单</span><span class="popover-item-trailing" data-expected-icon-size="12">${arrow}</span></div>`).join('')}
     </div>
     <div id="fallback" data-expected-icon-size="16">${fallback}</div><div id="resolved" data-expected-icon-size="16">${resolvedFiles}</div>
     ${expected(20, empty)}
@@ -352,7 +367,23 @@ try {
     await page.locator('html').evaluate((element, theme) => {
       element.className = theme
     }, theme)
-    await checkIcons()
+    for (const lang of ['zh-CN', 'en-US']) {
+      await page.locator('html').evaluate((element, lang) => {
+        element.setAttribute('lang', lang)
+      }, lang)
+      for (const fontSize of ['11px', '14px', '16px']) {
+        await page.locator('html').evaluate((element, size) => {
+          element.style.setProperty('--cpx-sys-font-size-ui', size)
+          element.style.setProperty('--cpx-sys-font-size-md', size)
+        }, fontSize)
+        for (const font of ['sans-serif', 'Arial', 'MiSans']) {
+          await page.locator('html').evaluate((element, font) => {
+            element.style.setProperty('--cpx-sys-font-family-sans', font)
+          }, font)
+          await checkIcons()
+        }
+      }
+    }
     assert.equal(
       await page
         .locator('.plugin-logo__image:visible')

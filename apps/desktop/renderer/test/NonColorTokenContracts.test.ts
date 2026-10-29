@@ -89,7 +89,7 @@ describe('non-color design token contracts', () => {
       ),
     )
     const expected: Record<string, string> = {
-      '--cpx-sys-font-size-code': '13px',
+      '--cpx-sys-font-size-code': '12px',
       '--cpx-sys-font-size-xs': '12px',
       '--cpx-sys-font-size-sm': '13px',
       '--cpx-sys-font-size-md': '14px',
@@ -108,10 +108,10 @@ describe('non-color design token contracts', () => {
       '--cpx-sys-line-height-body': '1.5',
       '--cpx-sys-line-height-body-lg': '1.5',
       '--cpx-sys-line-height-heading-sm': '1.25',
-      '--cpx-sys-line-height-heading-md': '1.25',
+      '--cpx-sys-line-height-heading-md': '1.33',
       '--cpx-sys-line-height-heading-lg': '1.2',
-      '--cpx-sys-line-height-heading-xl': '1.14',
-      '--cpx-sys-line-height-display': '1.14',
+      '--cpx-sys-line-height-heading-xl': '1.2',
+      '--cpx-sys-line-height-display': '1.2',
       '--cpx-sys-line-height-reading': 'var(--cpx-sys-line-height-body)',
       '--cpx-sys-line-height-code': '1.5',
     }
@@ -144,13 +144,13 @@ describe('non-color design token contracts', () => {
       '--cpx-sys-type-control':
         'var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-sm) / var(--cpx-sys-line-height-control) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-sm':
-        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-lg) / var(--cpx-sys-line-height-heading-sm) var(--cpx-sys-font-family-sans)',
+        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) / var(--cpx-sys-line-height-heading-sm) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-md':
-        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) / var(--cpx-sys-line-height-heading-md) var(--cpx-sys-font-family-sans)',
+        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) / var(--cpx-sys-line-height-heading-md) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-lg':
-        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) / var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans)',
+        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-3xl) / var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-xl':
-        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-3xl) / var(--cpx-sys-line-height-heading-xl) var(--cpx-sys-font-family-sans)',
+        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-4xl) / var(--cpx-sys-line-height-heading-xl) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-metric':
         'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) / var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-code':
@@ -168,7 +168,7 @@ describe('non-color design token contracts', () => {
     }
   })
 
-  test('DesktopThemeProvider applies one UI-size delta to the complete scale including 4xl', async () => {
+  test('DesktopThemeProvider applies proportional scaling to the complete scale including 4xl', async () => {
     const provider = await read('../src/features/theme/DesktopThemeProvider.tsx')
     const scaleBlock = provider.match(/const scale = \{([\s\S]*?)\n  \}/)?.[1]
     expect(scaleBlock, 'DesktopThemeProvider must declare its UI font scale').toBeDefined()
@@ -187,14 +187,18 @@ describe('non-color design token contracts', () => {
       '3xl': 24,
       '4xl': 28,
     })
-    expect(provider).toContain('const delta = uiFontSize - 14')
-    expect(provider).toContain('`${base + delta}px`')
+    expect(provider).toContain('Math.round((base * uiFontSize) / 14)')
     expect(provider).toContain("'--cpx-sys-font-size-4xl'")
 
     for (const uiFontSize of [11, 14, 16]) {
-      const delta = uiFontSize - 14
-      const derived = [...scale.values()].map((base) => base + delta)
-      expect(derived).toEqual([12, 13, 14, 16, 18, 20, 24, 28].map((base) => base + delta))
+      const derived = [...scale.values()].map((base) => Math.round((base * uiFontSize) / 14))
+      expect(derived).toEqual(
+        uiFontSize === 11
+          ? [9, 10, 11, 13, 14, 16, 19, 22]
+          : uiFontSize === 14
+            ? [12, 13, 14, 16, 18, 20, 24, 28]
+            : [14, 15, 16, 18, 21, 23, 27, 32],
+      )
     }
   })
 
