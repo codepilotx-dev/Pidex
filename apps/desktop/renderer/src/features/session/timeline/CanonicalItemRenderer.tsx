@@ -88,6 +88,7 @@ import {
 import { scheduleDraftFromTool, ScheduleDraftCard } from './ScheduleDraftCard.js'
 import { QuestionItemView } from './QuestionItemView.js'
 import { CopyButton } from './CopyButton.js'
+import { ReasoningItemView } from './ReasoningItemView.js'
 import { CanonicalUserMessageContent } from './CanonicalUserMessageContent.js'
 import { isShellTool, ToolCommandCard, toolDetailKind } from './ToolCommandCard.js'
 export { isShellTool } from './ToolCommandCard.js'
@@ -542,7 +543,7 @@ function CanonicalItemRendererContentComponent({
         <TextItemView item={item} showAssistantActions={showAssistantActions} threadId={threadId} />
       )
     case 'reasoning':
-      return null
+      return <ReasoningItemView item={item} disclosure={disclosure} threadId={threadId} />
     case 'activity':
       return <ActivityItemView disclosure={disclosure} item={item} />
     case 'tool': {

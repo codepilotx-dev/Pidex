@@ -677,6 +677,23 @@
     position: relative;
     min-width: 0;
   }
+
+  .reasoning-node__shimmer {
+    position: absolute;
+    inset: 0;
+    overflow: hidden;
+    color: var(--cpx-sys-color-fg-primary);
+    pointer-events: none;
+  }
+
+  .reasoning-node__sweep {
+    animation: reasoning-node-sweep calc(var(--cpx-sys-motion-loading) * 2) var(--cpx-sys-ease-linear) infinite;
+  }
+
+  @keyframes reasoning-node-sweep {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(100%); }
+  }
   .execution-plan-card__edge-fade[data-scrollable='true'][data-at-start='false'] {
     mask-image: linear-gradient(to bottom, transparent, black var(--edge-fade-distance, var(--cpx-sys-space-4)));
   }

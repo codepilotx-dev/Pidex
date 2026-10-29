@@ -35,6 +35,7 @@
 @import './features/composer-shell.css';
 @import './features/composer-controls.css';
 @import './features/composer-status.css';
+@import './features/conversation-reasoning.css';
 @import './features/primary-page.css';
 @import './role-weight.css';
 @import './markdown.css';

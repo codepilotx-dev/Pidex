@@ -1,6 +1,6 @@
 import { ConversationItemContext } from './ConversationItemContext.js'
 import { ModelSwitchDivider } from './ModelSwitchDivider.js'
-import { ReasoningStatusHeading } from './ReasoningStatusHeading.js'
+import { ReasoningWaitingIndicator } from './ReasoningWaitingIndicator.js'
 import { cx } from '../../../utils/Cx.js'
 import { historicalDeliveryText } from './StructuredDeliveryText.js'
 import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
@@ -320,13 +320,19 @@ export function buildProcessActivityModel(
   const showThinkingFallback =
     sliceActive &&
     !hasBlockingRequest &&
-    (!lastUnit || (lastUnit.kind === 'standalone' && !isProcessItemActive(lastUnit.item)))
+    (!lastUnit ||
+      (lastUnit.kind === 'standalone' &&
+        (lastUnit.item.type === 'reasoning' || !isProcessItemActive(lastUnit.item))))
 
   return { activeGroupKey, showThinkingFallback, units }
 }
 
 export function projectProcessItem(item: Item): ProcessActivityProjection {
-  if (item.type === 'reasoning') return { kind: 'hidden' }
+  if (item.type === 'reasoning') {
+    return item.status !== 'streaming' && !item.text.trim()
+      ? { kind: 'hidden' }
+      : { kind: 'standalone', item }
+  }
   if (item.type === 'text') return { kind: 'standalone', item }
   if (item.type === 'activity' && item.activity === 'context-compression') {
     return { kind: 'standalone', item }
@@ -836,6 +842,7 @@ function CanonicalConversationTurnComponent({
   )
   const hasVisibleActivityContent =
     processActivity.units.length > 0 || processActivity.showThinkingFallback
+  const lastProcessUnit = processActivity.units.at(-1)
   const turnActivityDisclosureId = `turn-activity:${entry.turn.id}`
   const canCollapseTurnActivity = activitySliceClosed && hasVisibleActivityContent
   const syntheticPatch =
@@ -881,13 +888,10 @@ function CanonicalConversationTurnComponent({
         )
       })}
       {processActivity.showThinkingFallback ? (
-        <div className="canonical-turn__thinking" role="status" aria-live="polite">
-          <LoaderCircle size={APP_ICON_SIZES.sm} className="canonical-spin" aria-hidden="true" />
-          <ReasoningStatusHeading
-            item={processItems.findLast((item) => item.type === 'reasoning')}
-            threadId={threadId}
-          />
-        </div>
+        <ReasoningWaitingIndicator
+          item={lastProcessUnit?.kind === 'standalone' ? lastProcessUnit.item : undefined}
+          threadId={threadId}
+        />
       ) : null}
     </section>
   ) : null

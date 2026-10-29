@@ -17,6 +17,8 @@ import {
   CanonicalUserInput,
 } from '../src/features/session/timeline/CanonicalItemRenderer.js'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
+import { liveItemTailStore } from '../src/features/session/state/LiveItemTailStore.js'
+import { ReasoningWaitingIndicator } from '../src/features/session/timeline/ReasoningWaitingIndicator.js'
 import { createKeyedDisclosureStore } from '../src/components/ui/KeyedDisclosureStore.js'
 import {
   isCurrentCanonicalThreadRequest,
@@ -31,7 +33,7 @@ function disclosureStore(...expandedKeys: string[]) {
   return createKeyedDisclosureStore({ initialExpandedKeys: expandedKeys })
 }
 
-test('ordinary reasoning never renders an activity row, including historical items', () => {
+test('reasoning nodes survive completion and interruption and preserve expansion', () => {
   for (const status of ['streaming', 'completed', 'interrupted'] as const) {
     const item: Extract<Item, { type: 'reasoning' }> = {
       id: 'reasoning-hidden',
@@ -39,19 +41,68 @@ test('ordinary reasoning never renders an activity row, including historical ite
       turnId: 'turn',
       agentId: 'agent',
       type: 'reasoning',
-      text: '不应出现在活动列表中的内容',
+      text: '**完整思考内容**',
       status,
     }
-    expect(
+    const render = (expanded: boolean) =>
       renderToStaticMarkup(
         <CanonicalItemRenderer
           item={item}
+          disclosure={{
+            id: `process-item:${item.id}`,
+            store: disclosureStore(...(expanded ? [`process-item:${item.id}`] : [])),
+          }}
           dockedPlanItemId={null}
           onOpenPlanInRightDock={() => {}}
           onOpenSubagent={() => {}}
         />,
-      ),
-    ).toBe('')
+      )
+    const collapsed = render(false)
+    expect(collapsed).toContain(
+      status === 'streaming' ? '正在思考' : status === 'interrupted' ? '思考已中断' : '思考',
+    )
+    expect(collapsed.includes('reasoning-node__preview')).toBe(status === 'streaming')
+    const expanded = render(true)
+    expect(expanded).toContain('**完整思考内容**')
+    expect(expanded).not.toContain('reasoning-node__preview')
+    expect(expanded).toContain('aria-expanded="true"')
+  }
+})
+
+test('reasoning tail reveals the node and removes only its active waiting indicator', () => {
+  const item = {
+    id: 'reasoning-tail',
+    type: 'reasoning',
+    text: '',
+    status: 'streaming',
+  } as Extract<Item, { type: 'reasoning' }>
+  const render = () =>
+    renderToStaticMarkup(
+      <CanonicalItemRenderer
+        item={item}
+        threadId="reasoning-test"
+        dockedPlanItemId={null}
+        onOpenPlanInRightDock={() => {}}
+        onOpenSubagent={() => {}}
+      />,
+    )
+  const waiting = (reasoning = item) =>
+    renderToStaticMarkup(<ReasoningWaitingIndicator item={reasoning} threadId="reasoning-test" />)
+  try {
+    expect(render()).toBe('')
+    expect(waiting()).toContain('正在思考')
+    liveItemTailStore.append('reasoning-test', item.id, 'reasoning', '追加内容')
+    expect(render()).toContain('追加内容')
+    expect(waiting()).toBe('')
+    item.text = '已有内容'
+    expect(render()).toContain('已有内容追加内容')
+    item.text += liveItemTailStore.read('reasoning-test', item.id)
+    liveItemTailStore.clearThread('reasoning-test')
+    expect(render()).toContain('已有内容追加内容')
+    expect(render()).not.toContain('追加内容追加内容')
+    expect(waiting({ ...item, status: 'completed' })).toContain('正在思考')
+  } finally {
+    liveItemTailStore.clearThread('reasoning-test')
   }
 })
 
@@ -416,7 +467,7 @@ describe('canonical thread switch', () => {
     })
   })
 
-  test('uses commentary as a hard boundary and excludes reasoning even with exploration', () => {
+  test('uses commentary and reasoning as hard boundaries, excluding empty terminal reasoning', () => {
     const tool = (
       id: string,
       state: 'completed' | 'error' = 'completed',
@@ -460,12 +511,10 @@ describe('canonical thread switch', () => {
     expect(model.units).toMatchObject([
       { kind: 'activity', item: { id: 'failed-edit' } },
       { kind: 'standalone', item: { id: 'commentary-1' } },
-      {
-        kind: 'group',
-        items: [{ id: 'command-1' }, { id: 'command-2' }],
-      },
+      { kind: 'activity', item: { id: 'command-1' } },
+      { kind: 'standalone', item: { id: 'reasoning-1' } },
+      { kind: 'activity', item: { id: 'command-2' } },
     ])
-    expect(JSON.stringify(model)).not.toContain('reasoning-1')
 
     const exploration = {
       ...tool('read-1'),
@@ -486,19 +535,36 @@ describe('canonical thread switch', () => {
       }),
     ).toMatchObject({
       units: [
-        {
-          kind: 'group',
-          items: [{ id: 'read-1' }, { id: 'command-after-read' }],
-        },
+        { kind: 'activity', item: { id: 'read-1' } },
+        { kind: 'standalone', item: { id: 'reasoning-1' } },
+        { kind: 'activity', item: { id: 'command-after-read' } },
       ],
     })
 
     expect(
       buildProcessActivityModel([reasoning], { activitySliceClosed: true, turnActive: false }),
-    ).toEqual({ activeGroupKey: null, showThinkingFallback: false, units: [] })
+    ).toMatchObject({
+      activeGroupKey: null,
+      showThinkingFallback: false,
+      units: [{ kind: 'standalone', item: reasoning }],
+    })
     expect(
       buildProcessActivityModel([reasoning], { activitySliceClosed: false, turnActive: true }),
-    ).toEqual({ activeGroupKey: null, showThinkingFallback: true, units: [] })
+    ).toMatchObject({
+      activeGroupKey: null,
+      showThinkingFallback: true,
+      units: [{ kind: 'standalone', item: reasoning }],
+    })
+
+    for (const status of ['completed', 'interrupted'] as const) {
+      const empty = { ...reasoning, text: ' \n', status }
+      expect(
+        buildProcessActivityModel([tool('before'), empty, tool('after')], {
+          activitySliceClosed: true,
+          turnActive: false,
+        }).units,
+      ).toMatchObject([{ kind: 'group', items: [{ id: 'before' }, { id: 'after' }] }])
+    }
 
     const runningCommand = {
       ...tool('running-command'),
@@ -512,9 +578,12 @@ describe('canonical thread switch', () => {
         turnActive: true,
       }),
     ).toMatchObject({
-      activeGroupKey: 'process-group:running-command',
-      showThinkingFallback: false,
-      units: [{ kind: 'group', items: [{ id: 'running-command' }] }],
+      activeGroupKey: null,
+      showThinkingFallback: true,
+      units: [
+        { kind: 'group', items: [{ id: 'running-command' }] },
+        { kind: 'standalone', item: reasoning },
+      ],
     })
 
     expect(
@@ -893,7 +962,10 @@ describe('canonical thread switch', () => {
     expect(compactionIndex).toBeGreaterThan(commandsIndex)
     expect(compactionIndex).toBeLessThan(answerIndex)
     expect(
-      markup.slice(markup.indexOf('canonical-turn__process'), markup.indexOf('canonical-turn__result')),
+      markup.slice(
+        markup.indexOf('canonical-turn__process'),
+        markup.indexOf('canonical-turn__result'),
+      ),
     ).toContain('上下文已自动压缩标记')
     expect(markup).not.toContain('运行了 1 条命令')
     expect(markup).not.toContain('canonical-process-group--commands')
