@@ -185,9 +185,9 @@ export function useComposerDictation({
       }
     }
 
-    // Throttled schedule: sleep between frames (~30 FPS in normal mode, ~8 FPS under reduced motion)
+    // Throttled schedule: sleep between frames (~15 FPS in normal mode, ~4 FPS under reduced motion)
     // to avoid high-refresh display CPU spin.
-    const minInterval = isReduced ? 120 : 32
+    const minInterval = isReduced ? 250 : 64
     if (frameTimeoutRef.current !== null) {
       clearTimeout(frameTimeoutRef.current)
       frameTimeoutRef.current = null
@@ -203,11 +203,12 @@ export function useComposerDictation({
   }, [])
 
   const startWaveformLoop = useCallback(() => {
-    stopWaveform()
+    if (animationFrameRef.current !== null) cancelAnimationFrame(animationFrameRef.current)
+    if (frameTimeoutRef.current !== null) clearTimeout(frameTimeoutRef.current)
     if (typeof requestAnimationFrame === 'function') {
       animationFrameRef.current = requestAnimationFrame(drawWaveform)
     }
-  }, [drawWaveform, stopWaveform])
+  }, [drawWaveform])
 
   const bindWaveformCanvas = useCallback(
     (canvas: HTMLCanvasElement | null) => {
