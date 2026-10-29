@@ -45,6 +45,7 @@ import {
   type SidebarScrollModeKey,
 } from './sidebar/UseSidebarScrollController.js'
 import { useSidebarProjectCatalog } from './sidebar/UseSidebarProjectCatalog.js'
+import { useSidebarFolderDrop } from './sidebar/UseSidebarFolderDrop.js'
 import {
   createSidebarDisclosureStore,
   sidebarSectionDisclosureKey,
@@ -148,6 +149,7 @@ export function DesktopSidebar({
   onOpenFile,
   onAddComposerFiles,
 }: Props): React.ReactNode {
+  const { isDragActive, dropHandlers } = useSidebarFolderDrop(active, onError ?? onReport)
   const [relativeNow, setRelativeNow] = useState(() => Date.now())
   const [sidebarScrollOverlapping, setSidebarScrollOverlapping] = useState(false)
   const sidebarScrollPositionsRef = useRef<Map<SidebarScrollModeKey, number>>(new Map())
@@ -672,7 +674,13 @@ export function DesktopSidebar({
   )
 
   return (
-    <div className="sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2">
+    <div
+      {...dropHandlers}
+      data-sidebar-file-drop-active={isDragActive || undefined}
+      className={`sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2 ${
+        isDragActive ? 'tw:ring-2 tw:ring-inset tw:ring-app-accent' : ''
+      }`}
+    >
       <InputDialog
         open={pendingSectionKeys !== null}
         title="新建分区"

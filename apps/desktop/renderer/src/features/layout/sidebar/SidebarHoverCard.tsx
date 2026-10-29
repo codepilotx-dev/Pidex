@@ -1,4 +1,5 @@
 import type React from 'react'
+import { useOptionalSidebarDragController, useSidebarDragSession } from './SidebarDragContext.js'
 import {
   cloneElement,
   createContext,
@@ -56,6 +57,10 @@ export function SidebarHoverCardProvider({
   children: React.ReactNode
 }): React.ReactNode {
   const coordinator = useMemo(createSidebarHoverCardCoordinator, [])
+  const session = useSidebarDragSession()
+  useEffect(() => {
+    if (session) coordinator.closeAll()
+  }, [coordinator, session])
 
   useEffect(() => () => coordinator.dispose(), [coordinator])
 
@@ -75,6 +80,7 @@ export function SidebarHoverCard({
   renderOverlay,
 }: Props): React.ReactNode {
   const coordinator = useSidebarHoverCardCoordinator()
+  const drag = useOptionalSidebarDragController()
   const anchorRef = useRef<HTMLElement | null>(null)
   const contentId = useId()
   const lockOpenRef = useRef(lockOpen)
@@ -108,7 +114,8 @@ export function SidebarHoverCard({
   }
 
   function applyOpenChange(nextOpen: boolean): void {
-    if (lockOpenRef.current && !nextOpen) return
+    if (nextOpen && drag?.getSession()) return
+    if (lockOpenRef.current && !nextOpen && !drag?.getSession()) return
     const restoreFocus =
       !nextOpen && document.getElementById(contentId)?.contains(document.activeElement)
     onOpenChangeRef.current(nextOpen)
@@ -120,10 +127,12 @@ export function SidebarHoverCard({
   }
 
   function openImmediately(): void {
+    if (drag?.getSession()) return
     coordinator.openImmediately(contentId)
   }
 
   function openAfterDelay(): void {
+    if (drag?.getSession()) return
     coordinator.openAfterDelay(contentId)
   }
 
@@ -172,7 +181,7 @@ export function SidebarHoverCard({
   return (
     <>
       {anchor}
-      {open
+      {open && !drag?.getSession()
         ? renderOverlay({
             anchorRef,
             closeAfterDelay,
@@ -211,6 +220,7 @@ function useSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator {
 
 function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
   dispose: () => void
+  closeAll: () => void
 } {
   const registrations = new Map<string, HoverCardRegistration>()
   let activeId: string | null = null
@@ -253,6 +263,13 @@ function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
   }
 
   return {
+    closeAll() {
+      clearOpenTimer()
+      clearCloseTimer()
+      const id = activeId
+      activeId = null
+      if (id) registrations.get(id)?.setOpen(false)
+    },
     closeAfterDelay(id) {
       if (pendingId === id) clearOpenTimer()
       if (activeId !== id || registrations.get(id)?.isLocked()) return

@@ -1,6 +1,8 @@
 import type React from 'react'
-import { useEffect, useId, useMemo, useRef, useState } from 'react'
-import { ChevronDown, Ellipsis, Plus, RefreshCw, SquarePen, X } from 'lucide-react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
+import {
+  ChevronDown, Ellipsis, Folder, List, MessageSquare, Plus, RefreshCw, SquarePen, X,
+} from 'lucide-react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import type {
@@ -38,18 +40,21 @@ import { getSidebarSessionDisplayGroups, SidebarSessionGroup } from './SidebarSe
 import {
   SidebarDragProvider,
   SidebarDropList,
-  SidebarDragOverlay,
-  SidebarDropIndicator,
+  SidebarDragPreview,
+  SidebarDragFeedback,
   type SidebarDragOverlayModel,
-  useSidebarDragEvents,
   resolveSidebarDragSelection,
-  useSidebarDrag,
+  useSidebarDragController,
+  useSidebarDragSession,
+  useSidebarDragRejected,
   type SidebarDragList,
 } from './SidebarDragContext.js'
+import { SidebarViewportGateProvider } from './SidebarViewportGate.js'
 import {
   anchorToInsertIndex,
   resolveSidebarDisplayOrder,
   type SidebarDropOperation,
+  type SidebarDragSession,
 } from './SidebarDragRules.js'
 import {
   buildSidebarPinnedItems,
@@ -194,9 +199,22 @@ type Props = {
 export function SidebarBody(props: Props): React.ReactNode {
   return (
     <SidebarDragProvider>
-      <SidebarBodyContent {...props} />
+      <SidebarViewportGateProvider>
+        <SidebarBodyContent {...props} />
+      </SidebarViewportGateProvider>
     </SidebarDragProvider>
   )
+}
+
+function SidebarDragSurface({ className, ...props }: React.HTMLAttributes<HTMLDivElement>): React.ReactNode {
+  const rejected = useSidebarDragRejected()
+  return <div {...props} className={cx(className, rejected && 'sidebar-drop-rejected')} />
+}
+
+function SidebarPinnedPresence({ hasItems, children }: { hasItems: boolean; children: React.ReactNode }): React.ReactNode {
+  const session = useSidebarDragSession()
+  const visible = hasItems || Boolean(session && !session.state.keys[0]?.startsWith('section:'))
+  return <AnimatePresence initial={false}>{visible ? children : null}</AnimatePresence>
 }
 
 function SidebarBodyContent({
@@ -279,7 +297,7 @@ function SidebarBodyContent({
   onMoveSessionToDefault,
 }: Props): React.ReactNode {
   const reducedMotion = usePrefersReducedMotion()
-  const drag = useSidebarDrag()
+  const drag = useSidebarDragController()
   const [visibleProjectLimit, setVisibleProjectLimit] = useState(5)
   const [visiblePinnedLimit, setVisiblePinnedLimit] = useState(PINNED_INITIAL_LIMIT)
   const scrollViewportRef = useRef<HTMLDivElement>(null)
@@ -317,7 +335,7 @@ function SidebarBodyContent({
     () => projectWorkspaces.map(sidebarProjectKey),
     [projectWorkspaces],
   )
-  const projectOrder = resolveSidebarDisplayOrder(drag.session, {
+  const projectOrder = resolveSidebarDisplayOrder(drag.getSession(), {
     containerKey: 'default-projects',
     order: canonicalProjectOrder.map((key) => `project:${key}`),
   })
@@ -336,7 +354,7 @@ function SidebarBodyContent({
           (left, right) => pinnedAtMs(right.pinnedAt) - pinnedAtMs(left.pinnedAt),
         )
       : pinnedItems
-  const pinnedOrder = resolveSidebarDisplayOrder(drag.session, {
+  const pinnedOrder = resolveSidebarDisplayOrder(drag.getSession(), {
     containerKey: 'pinned',
     order: sortedPinnedItems.map((item) => item.key),
   })
@@ -357,7 +375,7 @@ function SidebarBodyContent({
   )
   const orderedSections = orderItemsByKeys(
     customSections,
-    resolveSidebarDisplayOrder(drag.session, {
+    resolveSidebarDisplayOrder(drag.getSession(), {
       containerKey: 'sections',
       order: customSections.map((section) => `section:${section.id}`),
     }),
@@ -435,29 +453,36 @@ function SidebarBodyContent({
       projectKeys: allItemKeys.filter((item) => item.startsWith('project:')),
     })
   }
-  const dropIndicatorModel = useSidebarDragEvents({
-    select: selectDragItems,
-    commit: applyDropOperation,
-  })
 
   /** 浮层只展示业务数据：标题与多选数量，不读取 DOM。 */
-  const dragOverlayModel = useMemo<SidebarDragOverlayModel | null>(() => {
-    const items = drag.session?.state.keys ?? []
-    const firstKey = items[0]
+  const getDragOverlayModel = useCallback((source: SidebarDragSession | null): SidebarDragOverlayModel | null => {
+    const items = source?.state.keys ?? []
+    const firstKey = items.find((key) => source?.sourceDisplayId.endsWith(`::${key}`)) ?? items[0]
     if (!firstKey) return null
     const sessionId = firstKey.startsWith('session:') ? firstKey.slice(8) : null
     const projectKey = firstKey.startsWith('project:') ? firstKey.slice(8) : null
+    const session = sessionId ? [
+      ...recentSessions,
+      ...pinnedSessions,
+      ...[...projectSessionBuckets.values()].flatMap((bucket) => bucket.allSessions),
+      ...customSections.flatMap((section) => section.entries.flatMap((entry) =>
+        entry.kind === 'session' ? [entry.session] : [],
+      )),
+    ].find((item) => item.id === sessionId) : null
     const title = sessionId
-      ? sessionResolvedTitle(
-          recentSessions.find((item) => item.id === sessionId) ?? ({ id: sessionId } as never),
-          sessionFallbackTitles[sessionId],
-        )
+      ? session ? sessionResolvedTitle(session, sessionFallbackTitles[sessionId])
+        : (sessionFallbackTitles[sessionId] ?? '聊天')
       : projectKey
-        ? (projectWorkspaces.find((item) => sidebarProjectKey(item) === projectKey)?.name ??
+        ? ([...projectWorkspaces, ...pinnedWorkspaces].find((item) => sidebarProjectKey(item) === projectKey)?.name ??
           '项目')
         : (customSections.find((item) => `section:${item.id}` === firstKey)?.title ?? '分组')
-    return { title, count: items.length }
-  }, [customSections, drag.session, projectWorkspaces, recentSessions, sessionFallbackTitles])
+    const icon = sessionId ? <MessageSquare size={APP_ICON_SIZE} />
+      : projectKey ? <Folder size={APP_ICON_SIZE} /> : <List size={APP_ICON_SIZE} />
+    return { title, icon, count: items.length }
+  }, [
+    customSections, pinnedSessions, pinnedWorkspaces, projectSessionBuckets,
+    projectWorkspaces, recentSessions, sessionFallbackTitles,
+  ])
 
   function applyDropOperation(
     operation: SidebarDropOperation,
@@ -742,22 +767,19 @@ function SidebarBodyContent({
       >
         {scrollHeader}
         {/* 次级导航与时间线/任务主体之间的分组间距，不再占用整个滚动视口的外边距 */}
-        <div
-          className={cx(
-            'sidebar-scroll-main tw:min-w-0 tw:pt-2',
-            drag.rejected && 'sidebar-drop-rejected',
-          )}
+        <SidebarDragSurface
+          className="sidebar-scroll-main tw:min-w-0 tw:pt-2"
           onClickCapture={handleSelectionClick}
           onKeyDown={(event) => {
-            if (!drag.isDragging && !event.defaultPrevented)
+            if (!drag.getSession() && !event.defaultPrevented)
               moveFocusOnArrowKey(event, '.sidebar-session-button, .sidebar-project-button')
           }}
         >
-          <SidebarDragOverlay
-            model={dragOverlayModel}
+          <SidebarDragPreview
+            getModel={getDragOverlayModel}
             maxWidth={scrollViewportRef.current?.clientWidth}
           />
-          <SidebarDropIndicator indicator={dropIndicatorModel} />
+          <SidebarDragFeedback select={selectDragItems} commit={applyDropOperation} />
           {timeline ? (
             <Timeline
               showPriority={showActivityPriority}
@@ -802,9 +824,7 @@ function SidebarBodyContent({
                 onReorder: () => {},
               }}
             >
-              <AnimatePresence initial={false}>
-                {pinnedItems.length > 0 ||
-                (drag.isDragging && !drag.session?.state.keys[0]?.startsWith('section:')) ? (
+              <SidebarPinnedPresence hasItems={pinnedItems.length > 0}>
                   <SidebarSectionPresence key="pinned" reducedMotion={reducedMotion}>
                     <SidebarDropList
                       list={{
@@ -850,8 +870,7 @@ function SidebarBodyContent({
                       </SidebarSection>
                     </SidebarDropList>
                   </SidebarSectionPresence>
-                ) : null}
-              </AnimatePresence>
+              </SidebarPinnedPresence>
 
               <SidebarDropList
                 className="tw:flex tw:min-w-0 tw:flex-col tw:gap-4"
@@ -1042,7 +1061,7 @@ function SidebarBodyContent({
               </SidebarSection>
             </SidebarDropList>
           )}
-        </div>
+        </SidebarDragSurface>
       </ScrollArea>
     </SidebarHoverCardProvider>
   )
@@ -1660,8 +1679,8 @@ function SidebarCustomSection({
   onUnpinSession: (session: SessionListItem) => void
 }): React.ReactNode {
   const reducedMotion = usePrefersReducedMotion()
-  const drag = useSidebarDrag()
-  const entryOrder = resolveSidebarDisplayOrder(drag.session, {
+  const drag = useSidebarDragController()
+  const entryOrder = resolveSidebarDisplayOrder(drag.getSession(), {
     containerKey: `section:${section.id}`,
     order: section.entries.map((entry) => entry.key),
   })

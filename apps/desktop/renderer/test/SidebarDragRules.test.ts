@@ -7,6 +7,7 @@ import {
 } from '../src/features/layout/sidebar/SidebarDragContext.js'
 import {
   anchorToInsertIndex,
+  dropAnchorKey,
   canAcceptSidebarDrop,
   firstForeignAnchor,
   previewSidebarDrop,
@@ -143,6 +144,33 @@ function dropContainer(
 }
 
 describe('侧栏拖放临时顺序与最终操作', () => {
+  test('同一目标的上下半区给出不同锚点，预览与提交位置一致', () => {
+    const order = ['a', 'b', 'c', 'd']
+    const drag = dragSession(dragState(['a']), 'pinned', order)
+    const target = dropContainer('pinned', order, { kind: 'pinned', index: 0 })
+    const before = dropAnchorKey('before', 'c', order, ['a'])
+    const after = dropAnchorKey('after', 'c', order, ['a'])
+    expect(before).toBe('c')
+    expect(after).toBe('d')
+    expect(previewSidebarDrop(drag, target, before).lists.pinned).toEqual(['b', 'a', 'c', 'd'])
+    expect(previewSidebarDrop(drag, target, after).lists.pinned).toEqual(['b', 'c', 'a', 'd'])
+    expect(dropAnchorKey('after', 'd', order, ['a'])).toBeNull()
+    expect(dropAnchorKey('after', 'b', order, ['a', 'c'])).toBe('d')
+  })
+
+  test('跨容器放到中间时不会提交到列表开头', () => {
+    const drag = dragSession(dragState(['session:a']), 'recent', ['session:a'])
+    const target = dropContainer('pinned', ['session:b', 'session:c'], { kind: 'pinned', index: 0 })
+    const next = previewSidebarDrop(drag, target, 'session:c')
+    expect(resolveSidebarDrop({
+      session: drag, target, canceled: false, sourcePersistedOrder: drag.sourceOrder,
+      nextOrder: next.lists.pinned,
+    })).toEqual({
+      status: 'commit',
+      operations: [{ kind: 'moveToPinned', keys: ['session:a'], anchorKey: 'session:c' }],
+    })
+  })
+
   test('同容器排序只移动指定条目并保留其余顺序', () => {
     expect(reorderSidebarKeys(['a', 'b', 'c', 'd'], ['b'], 3)).toEqual({
       order: ['a', 'c', 'd', 'b'],
@@ -161,7 +189,7 @@ describe('侧栏拖放临时顺序与最终操作', () => {
     ])
   })
 
-  test('跨容器预览只写目标容器的临时顺序', () => {
+  test('跨容器预览仅用于提交，显示列表保持原位', () => {
     const drag = dragSession(dragState(['session:a']), 'default', ['session:a', 'session:z'])
     const preview = previewSidebarDrop(
       drag,
@@ -174,9 +202,12 @@ describe('侧栏拖放临时顺序与最终操作', () => {
     )
     expect(preview.lists['section:work']).toEqual(['session:b', 'session:a'])
     expect(preview.lists.default).toEqual(['session:a', 'session:z'])
+    expect(resolveSidebarDisplayOrder(preview, {
+      containerKey: 'default', order: ['session:z', 'session:a'],
+    })).toEqual(['session:a', 'session:z'])
     expect(
       resolveSidebarDisplayOrder(preview, { containerKey: 'section:work', order: ['session:b'] }),
-    ).toEqual(['session:b', 'session:a'])
+    ).toEqual(['session:b'])
     // 未登记的容器继续使用持久化顺序
     expect(resolveSidebarDisplayOrder(preview, { containerKey: 'pinned', order: ['x'] })).toEqual([
       'x',
@@ -273,7 +304,8 @@ describe('侧栏拖放临时顺序与最终操作', () => {
   })
 
   test('链点表示插入到某项之前，无链点表示追加', () => {
-    expect(firstForeignAnchor(['a', 'b', 'c'], ['c'])).toBe('a')
+    expect(firstForeignAnchor(['a', 'b', 'c'], ['c'])).toBeNull()
+    expect(firstForeignAnchor(['a', 'b', 'c', 'd'], ['b', 'c'])).toBe('d')
     expect(firstForeignAnchor(['a', 'b'], ['a', 'b'])).toBeNull()
     // 把 a 插到 b 之前：未移动条目为 b,c，a 的位置是 0。
     expect(anchorToInsertIndex(['a', 'b', 'c'], ['a'], 'b')).toBe(0)
@@ -285,13 +317,13 @@ describe('侧栏拖放临时顺序与最终操作', () => {
   test('落点区域：项目行边缘排序、中间接收；普通条目上下半区', () => {
     expect(
       resolveSidebarDropRegion({ isProjectEntry: true, offsetY: 3, height: 40, hasOwnItems: true }),
-    ).toBe('sort-edge')
+    ).toBe('before')
     expect(
       resolveSidebarDropRegion({ isProjectEntry: true, offsetY: 20, height: 40, hasOwnItems: true }),
     ).toBe('receive')
     expect(
       resolveSidebarDropRegion({ isProjectEntry: true, offsetY: 38, height: 40, hasOwnItems: true }),
-    ).toBe('sort-edge')
+    ).toBe('after')
     expect(
       resolveSidebarDropRegion({ isProjectEntry: false, offsetY: 5, height: 30, hasOwnItems: true }),
     ).toBe('before')
@@ -361,7 +393,7 @@ describe('侧栏拖放临时顺序与最终操作', () => {
           kind: 'moveToSection',
           keys: ['session:a'],
           sectionId: 'work',
-          anchorKey: 'session:b',
+          anchorKey: 'session:c',
         },
       ],
     })

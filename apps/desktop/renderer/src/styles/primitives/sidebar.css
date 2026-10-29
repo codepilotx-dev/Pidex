@@ -99,7 +99,8 @@
     cursor: grabbing;
   }
 
-  .desktop-sidebar:has(.sidebar-reorder-item[data-dragging='true']) * {
+  .desktop-sidebar:has(.sidebar-reorder-item[data-dragging='true'])
+    :is(.sidebar-reorder-item, .sidebar-session-button, .sidebar-project-button, .sidebar-section-toggle) {
     cursor: grabbing;
   }
 

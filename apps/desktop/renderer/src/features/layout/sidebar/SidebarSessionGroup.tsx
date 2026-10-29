@@ -20,7 +20,7 @@ import {
   PinOff,
   Split,
 } from 'lucide-react'
-import { SidebarDropList, useOptionalSidebarDrag } from './SidebarDragContext.js'
+import { SidebarDropList, useOptionalSidebarDragController } from './SidebarDragContext.js'
 import { resolveSidebarDisplayOrder } from './SidebarDragRules.js'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { ProjectAppearanceGlyph } from '../../projects/ProjectAppearance.js'
@@ -161,7 +161,7 @@ function SidebarSessionGroupComponent({
   const renameDialogMounted = useEverOpened(renameSession !== null)
   const [renameValue, setRenameValue] = useState('')
   const [renaming, setRenaming] = useState(false)
-  const drag = useOptionalSidebarDrag()
+  const drag = useOptionalSidebarDragController()
   const instanceId = useId()
   const [linkSessionId, setLinkSessionId] = useState<string | null>(null)
   const [linkValue, setLinkValue] = useState('')
@@ -186,10 +186,22 @@ function SidebarSessionGroupComponent({
           }),
     [groupKey, manualOrderByScope, needsInputSessionIds, sessions, sort, unreadSessionIds],
   )
-  const orderKeys = resolveSidebarDisplayOrder(drag?.session ?? null, {
+  const orderKeys = resolveSidebarDisplayOrder(drag?.getSession() ?? null, {
     containerKey: groupKey,
     order: sortedSessions.map((session) => `session:${session.id}`),
   })
+  // 项目容器的高频 accept/判权用集合缓存，与 sessionKeys 同源构建。
+  const projectSessionKeys = useMemo(
+    () =>
+      groupKey.startsWith('project:')
+        ? sessions.map((session) => `session:${session.id}`)
+        : undefined,
+    [groupKey, sessions],
+  )
+  const projectSessionKeySet = useMemo(
+    () => (projectSessionKeys ? new Set(projectSessionKeys) : undefined),
+    [projectSessionKeys],
+  )
   const orderedSessions = [...sortedSessions].sort(
     (left, right) =>
       orderKeys.indexOf(`session:${left.id}`) - orderKeys.indexOf(`session:${right.id}`),
@@ -479,7 +491,7 @@ function SidebarSessionGroupComponent({
         }}
         onKeyDown={(event) => {
           if (
-            drag?.isDragging ||
+            drag?.getSession() ||
             !event.altKey ||
             (event.key !== 'ArrowUp' && event.key !== 'ArrowDown')
           ) {
@@ -529,7 +541,6 @@ function SidebarSessionGroupComponent({
             session={session}
             onRename={(title) => onRenameSession(session.id, title)}
             onUnlinkPullRequest={(item) => void unlinkPullRequest(session.id, item)}
-            suppressOpen={drag?.isDragging ?? false}
           >
             {sessionButton}
           </SidebarSessionHoverCard>
@@ -556,10 +567,12 @@ function SidebarSessionGroupComponent({
         }
         leadingMode={showConversationIcon ? 'icon' : sessionIndent === 'gutter' ? 'none' : 'spacer'}
         onMouseOver={(event) => {
+          if (drag?.getSession()) return
           if (!event.currentTarget.contains(event.target as Node)) return
           setHoveredSessionId(session.id)
         }}
         onMouseOut={(event) => {
+          if (drag?.getSession()) return
           if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
           setHoveredSessionId((current) => (current === session.id ? null : current))
           setConfirmArchiveSessionId((current) => (current === session.id ? null : current))
@@ -756,9 +769,8 @@ function SidebarSessionGroupComponent({
               ? { kind: 'project', projectKey: groupKey.slice(8), index: 0 }
               : { kind: 'default', index: 0 },
             order: orderedSessions.map((session) => `session:${session.id}`),
-            sessionKeys: groupKey.startsWith('project:')
-              ? sessions.map((session) => `session:${session.id}`)
-              : undefined,
+            sessionKeys: projectSessionKeys,
+            sessionKeySet: projectSessionKeySet,
             onReorder: (order) =>
               persistManualOrder(
                 order.filter((key) => key.startsWith('session:')).map((key) => key.slice(8)),

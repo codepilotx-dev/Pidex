@@ -146,6 +146,15 @@ function SidebarProjectGroupComponent({
     manualOrderByScope,
   }).map((session) => `session:${session.id}`)
   const disclosureKey = sidebarProjectDisclosureKey(managedProject)
+  // 项目接收区的高频 accept/判权用集合缓存，与 sessionKeys 同源构建。
+  const headerSessionKeys = useMemo(
+    () => bucket.allSessions.map((session) => `session:${session.id}`),
+    [bucket.allSessions],
+  )
+  const headerSessionKeySet = useMemo(
+    () => new Set(headerSessionKeys),
+    [headerSessionKeys],
+  )
   const isExpanded = useDisclosureExpanded(disclosureStore, disclosureKey)
   const projectSessionsId = useId()
   const projectSessions = bucket.displaySessions
@@ -373,7 +382,8 @@ function SidebarProjectGroupComponent({
                 destination: { kind: 'project', projectKey, index: 0 },
                 sessionsOnly: true,
                 order: headerOrder,
-                sessionKeys: bucket.allSessions.map((session) => `session:${session.id}`),
+                sessionKeys: headerSessionKeys,
+                sessionKeySet: headerSessionKeySet,
                 onReorder: (order) => {
                   onManualOrderChange?.(
                     `project:${projectKey}`,

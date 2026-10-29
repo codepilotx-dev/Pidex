@@ -186,7 +186,10 @@ export function SidebarSessionHoverCard({
         event.preventDefault()
         startRename()
       }}
-      onOpenChange={setOpen}
+      onOpenChange={(nextOpen) => {
+        setOpen(nextOpen)
+        if (!nextOpen) setEditing(false)
+      }}
       renderOverlay={(interactionProps) => (
         <SidebarSessionHoverCardOverlay
           {...interactionProps}

@@ -64,14 +64,16 @@ export type SidebarDropContainer = {
   order: readonly string[]
   /** 真实项目容器允许接收的聊天 key。 */
   sessionKeys?: readonly string[]
+  /** `sessionKeys` 的集合缓存；高频 accept 回调与判权用它做 O(1) 成员检查。 */
+  sessionKeySet?: ReadonlySet<string>
 }
 
-/** 显示顺序：本次拖动的临时顺序优先，否则使用持久化顺序。 */
+/** 拖动中列表保持原位，临时顺序仅供放下提交，避免落点随预览反复移动。 */
 export function resolveSidebarDisplayOrder(
   session: SidebarDragSession | null,
   list: SidebarSortList,
 ): readonly string[] {
-  return session?.lists[list.containerKey] ?? list.order
+  return session?.sourceContainerKey === list.containerKey ? session.sourceOrder : list.order
 }
 
 /**
@@ -92,9 +94,8 @@ export function resolveSidebarDropRegion({
   hasOwnItems: boolean
 }): SidebarDropRegion {
   if (isProjectEntry) {
-    if (hasOwnItems && (offsetY < PROJECT_EDGE_SIZE || offsetY > height - PROJECT_EDGE_SIZE)) {
-      return 'sort-edge'
-    }
+    if (hasOwnItems && offsetY < PROJECT_EDGE_SIZE) return 'before'
+    if (hasOwnItems && offsetY > height - PROJECT_EDGE_SIZE) return 'after'
     return 'receive'
   }
   return offsetY < height / 2 ? 'before' : 'after'
@@ -103,9 +104,20 @@ export function resolveSidebarDropRegion({
 export const PROJECT_EDGE_SIZE = 7
 
 /** 由区域与目标条目 key 计算插入锚点；容器区域表示追加。 */
-export function dropAnchorKey(region: SidebarDropRegion, itemKey: string | null): string | null {
+export function dropAnchorKey(
+  region: SidebarDropRegion,
+  itemKey: string | null,
+  order: readonly string[],
+  movingKeys: readonly string[],
+): string | null {
   if (!itemKey) return null
-  return region === 'before' ? itemKey : region === 'after' ? itemKey : null
+  const index = order.indexOf(itemKey)
+  if (index < 0) return null
+  if (region !== 'before' && region !== 'after' && region !== 'sort-edge') return null
+  return (
+    order.slice(index + (region === 'after' ? 1 : 0))
+      .find((key) => !movingKeys.includes(key)) ?? null
+  )
 }
 
 /**
@@ -117,11 +129,12 @@ export function previewSidebarDrop(
   target: SidebarDropContainer,
   anchorKey: string | null,
 ): SidebarDragSession {
-  const index = anchorKey ? target.order.indexOf(anchorKey) : target.order.length
+  const remaining = target.order.filter((key) => !session.state.keys.includes(key))
+  const index = anchorKey ? remaining.indexOf(anchorKey) : remaining.length
   const moved = reorderSidebarKeys(
     target.order,
     session.state.keys,
-    index < 0 ? target.order.length : index,
+    index < 0 ? remaining.length : index,
   )
   const sourceOrder = session.sourceOrder
   const unchanged =
@@ -152,6 +165,14 @@ export function reorderSidebarKeys(
   return { order: next, changed: !sameKeyOrder(order, next) }
 }
 
+/** 项目容器是否接收单个聊天 key；优先命中集合缓存，回退到数组扫描。 */
+export function sidebarSessionKeyAllowed(
+  container: Pick<SidebarDropContainer, 'sessionKeys' | 'sessionKeySet'>,
+  key: string,
+): boolean {
+  return container.sessionKeySet?.has(key) ?? container.sessionKeys?.includes(key) ?? false
+}
+
 /**
  * 载荷是否允许落在该目标。
  *
@@ -160,7 +181,7 @@ export function reorderSidebarKeys(
  */
 export function canAcceptSidebarDrop(
   state: SidebarDragState,
-  target: Pick<SidebarDropContainer, 'key' | 'destination' | 'sessionKeys'> & {
+  target: Pick<SidebarDropContainer, 'key' | 'destination' | 'sessionKeys' | 'sessionKeySet'> & {
     acceptsSections?: boolean
   },
 ): boolean {
@@ -171,7 +192,7 @@ export function canAcceptSidebarDrop(
   if (target.acceptsSections) return false
   if (target.destination.kind !== 'project') return true
   if (state.projectKeys.length > 0 || state.sessionKeys.length === 0) return false
-  const allowed = new Set(target.sessionKeys ?? [])
+  const allowed = target.sessionKeySet ?? new Set(target.sessionKeys ?? [])
   return state.sessionKeys.every((key) => allowed.has(key))
 }
 
@@ -246,7 +267,7 @@ function commitMoveOperation(
 }
 
 /**
- * 目标显示顺序中，第一个不属于拖动载荷的条目 key。
+ * 目标临时顺序中，拖动条目之后的第一个条目 key。
  *
  * 它表示“插入到该条目之前”；null 表示追加到末尾。
  * 用业务 key 表达锚点，提交前再转换为保存接口所需的索引。
@@ -255,10 +276,8 @@ export function firstForeignAnchor(
   order: readonly string[],
   keys: readonly string[],
 ): string | null {
-  for (const key of order) {
-    if (!keys.includes(key)) return key
-  }
-  return null
+  const lastMoved = order.findLastIndex((key) => keys.includes(key))
+  return lastMoved < 0 ? null : (order[lastMoved + 1] ?? null)
 }
 
 /** 把锚点转换为现有保存接口所需的插入索引。 */
