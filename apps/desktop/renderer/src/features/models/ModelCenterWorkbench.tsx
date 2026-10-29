@@ -22,7 +22,7 @@ import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutl
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
-import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
+import { ModelCenterInitialSkeleton } from './ModelCenterInitialSkeleton.js'
 import { useSearchParams } from 'react-router-dom'
 import { ProviderCatalog } from './ProviderCatalog.js'
 import { ProviderDetail } from './ProviderDetail.js'
@@ -767,63 +767,5 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         onCancel={() => setDeleteKey(null)}
       />
     </>
-  )
-}
-
-type ModelCenterInitialSkeletonProps = {
-  view: 'catalog' | 'detail'
-}
-
-function ModelCenterInitialSkeleton({ view }: ModelCenterInitialSkeletonProps): React.ReactNode {
-  if (view === 'detail') {
-    return (
-      <SkeletonRegion
-        className="model-center-initial-skeleton tw:grid tw:min-w-0 tw:gap-3"
-        label="正在加载 Provider 详情"
-      >
-        <header className="model-center-skeleton-provider-header tw:flex tw:min-h-10 tw:min-w-0 tw:items-center tw:gap-3">
-          <SkeletonBlock className="model-center-skeleton-back tw:size-9 tw:rounded-md" />
-          <SkeletonBlock className="model-center-skeleton-provider-logo tw:size-10 tw:rounded-md" />
-          <div className="tw:grid tw:min-w-0 tw:flex-1 tw:gap-2">
-            <SkeletonBlock className="model-center-skeleton-provider-title tw:h-[18px] tw:w-[min(150px,72%)]" />
-            <SkeletonBlock className="model-center-skeleton-provider-copy tw:h-3.5 tw:w-[min(210px,88%)]" />
-          </div>
-        </header>
-        <SkeletonBlock className="tw:h-24 tw:rounded-md" />
-        <SkeletonBlock className="tw:h-9 tw:w-[min(360px,100%)] tw:rounded-md" />
-        <div className="tw:grid tw:min-w-0 tw:gap-2">
-          {Array.from({ length: 6 }, (_, index) => (
-            <SkeletonBlock className="tw:h-14 tw:rounded-md" key={index} />
-          ))}
-        </div>
-      </SkeletonRegion>
-    )
-  }
-
-  return (
-    <SkeletonRegion
-      className="model-center-initial-skeleton tw:grid tw:min-w-0 tw:gap-3"
-      label="正在加载 Provider 目录"
-    >
-      <div className="model-center-heading model-center-skeleton-heading tw:grid tw:gap-2">
-        <SkeletonBlock className="model-center-skeleton-page-title tw:h-7 tw:w-[min(190px,52%)] tw:rounded-md" />
-        <SkeletonBlock className="model-center-skeleton-page-copy tw:h-[18px] tw:w-[min(460px,78%)] tw:rounded-md" />
-      </div>
-      <div className="model-center-skeleton-provider-grid tw:grid tw:min-w-0 tw:grid-cols-2 tw:gap-4 tw:@max-[900px]:grid-cols-1">
-        {Array.from({ length: 6 }, (_, index) => (
-          <div
-            className="model-center-skeleton-provider-card tw:grid tw:min-h-[78px] tw:min-w-0 tw:grid-cols-[auto_minmax(0,1fr)_auto] tw:items-center tw:gap-3 tw:rounded-lg tw:border tw:border-app-border-subtle tw:p-4"
-            key={index}
-          >
-            <SkeletonBlock className="model-center-skeleton-logo tw:size-9 tw:rounded-md" />
-            <div className="tw:grid tw:min-w-0 tw:gap-2">
-              <SkeletonBlock className="model-center-skeleton-name tw:h-[18px] tw:w-[min(150px,72%)]" />
-              <SkeletonBlock className="model-center-skeleton-meta tw:h-3.5 tw:w-[min(210px,88%)]" />
-            </div>
-            <SkeletonBlock className="model-center-skeleton-status tw:h-3.5 tw:w-16" />
-          </div>
-        ))}
-      </div>
-    </SkeletonRegion>
   )
 }

@@ -12,6 +12,7 @@ import { cx } from '../../utils/Cx.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
 import { FileTypeIcon } from '../layout/FileTypeIcon.js'
 import { SidebarRow } from '../../components/ui/SidebarRow.js'
+import { GitBoardRepositorySkeleton } from './GitBoardSkeleton.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import {
   useGitBoard,
@@ -332,9 +333,7 @@ export function RepositoryColumn({
           </div>
         )}
         {!result ? (
-          <p role="status" className="tw:px-2 tw:py-3 tw:type-body-sm tw:text-app-text-meta">
-            {t('加载中')}
-          </p>
+          <GitBoardRepositorySkeleton />
         ) : !result.ok ? (
           <div role="alert" className="tw:p-2">
             <p className="tw:type-body-sm tw:text-app-danger">{result.ok === false ? result.error : ''}</p>
