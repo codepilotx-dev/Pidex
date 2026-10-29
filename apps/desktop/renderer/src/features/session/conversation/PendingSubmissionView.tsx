@@ -4,7 +4,10 @@ import type { Attachment } from '@pidex/shared/thread'
 import type { DesktopComposerAttachment } from '../../../../shared/Types.js'
 import { Spinner } from '../../../components/ui/Spinner.js'
 import { CanonicalUserMessageContent } from '../timeline/CanonicalUserMessageContent.js'
-import { useOptionalConversationItemContext } from '../timeline/ConversationItemContext.js'
+import {
+  ConversationItemContext,
+  useOptionalConversationItemContext,
+} from '../timeline/ConversationItemContext.js'
 import type { PendingSubmission } from '../state/PendingSubmissionStore.js'
 
 const CONTENT_WIDTH_CLASS =
@@ -45,12 +48,15 @@ export function PendingSubmissionMessages({
 }): React.ReactNode {
   const context = useOptionalConversationItemContext()
   return (
-    <div className={CONTENT_WIDTH_CLASS}>
-      <div className={PENDING_CONTENT_CLASS} data-pending-submission={submission.submissionId}>
-        <article
-          className="canonical-user-message"
-          data-input-navigation-id={submission.submissionId}
-        >
+    // 子树用严格的 CanonicalUserMessageContent，这里把可选上下文重新提供出去，
+    // 使 pending 首条消息在没有外层 Provider 时也能降级展示而不是抛错。
+    <ConversationItemContext.Provider value={context}>
+      <div className={CONTENT_WIDTH_CLASS}>
+        <div className={PENDING_CONTENT_CLASS} data-pending-submission={submission.submissionId}>
+          <article
+            className="canonical-user-message"
+            data-input-navigation-id={submission.submissionId}
+          >
           <CanonicalUserMessageContent
             attachments={(submission.input.attachments ?? []).map(pendingAttachmentDisplay)}
             content={submission.input.text}
@@ -61,12 +67,13 @@ export function PendingSubmissionMessages({
             skills={submission.input.skills}
             withActions={false}
           />
-        </article>
-        <p className={PENDING_STATUS_CLASS} role="status" aria-live="polite">
-          <Spinner />
-          <span>正在开启聊天…</span>
-        </p>
+          </article>
+          <p className={PENDING_STATUS_CLASS} role="status" aria-live="polite">
+            <Spinner />
+            <span>正在开启聊天…</span>
+          </p>
+        </div>
       </div>
-    </div>
+    </ConversationItemContext.Provider>
   )
 }

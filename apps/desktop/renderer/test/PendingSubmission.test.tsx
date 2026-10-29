@@ -14,7 +14,6 @@ import {
 } from '../src/features/session/state/PendingSubmissionStore.js'
 import { PendingSubmissionMessages } from '../src/features/session/conversation/PendingSubmissionView.js'
 import { prepareComposerSubmission, executeComposerSubmitTransaction } from '../src/features/session/composer/ComposerSubmitTransaction.js'
-import { ConversationItemContext } from '../src/features/session/timeline/ConversationItemContext.js'
 
 function draft(overrides: Partial<ComposerDraft> = {}): ComposerDraft {
   return {
@@ -102,21 +101,12 @@ describe('pending submission snapshot', () => {
 })
 
 describe('pending message rendering', () => {
+  /**
+   * 生产路径上 pending 消息与 canonical 时间线是兄弟节点，可能在没有
+   * ConversationItemContext.Provider 的位置渲染；严格 context 会整页崩溃。
+   */
   function render(submission: ReturnType<typeof pendingFrom>): string {
-    return renderToStaticMarkup(
-      <ConversationItemContext.Provider
-        value={{
-          canCopyFileReferenceContents: () => false,
-          onCopyFileReferenceContents: () => undefined,
-          onOpenFileReference: () => undefined,
-          onSubmitEditedUserMessage: async () => undefined,
-          sessionStatus: 'idle',
-          workspacePath: null,
-        }}
-      >
-        <PendingSubmissionMessages submission={submission} />
-      </ConversationItemContext.Provider>,
-    )
+    return renderToStaticMarkup(<PendingSubmissionMessages submission={submission} />)
   }
 
   test('立即展示提交内容与启动状态，且不显示停止入口', () => {

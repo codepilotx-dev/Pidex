@@ -1540,42 +1540,40 @@ export function ConversationPage(): React.ReactNode {
     ],
   )
   const canonicalThreadView = activeSessionId ? (
-    <ConversationItemContext.Provider value={conversationItemContextValue}>
-      <CanonicalThreadView
-        active={effectiveSessionStatus === 'running' || effectiveSessionStatus === 'waiting'}
-        deferInitialLoading={deferThreadLoading}
-        diffMarkerStyle={diffMarkerStyle}
-        error={canonicalConversation.error}
-        hasOlder={canonicalConversation.hasOlder}
-        initialScrollOffset={initialTimelineScrollTop}
-        layoutResizeActive={layoutResizeActive}
-        listRef={timelineListRef}
-        navigationRef={timelineNavigationRef}
-        loading={canonicalConversation.loading}
-        loadingOlder={canonicalConversation.loadingOlder || canonicalConversation.loadingDirectory}
-        historyError={canonicalConversation.directoryError}
-        onCanReturnToBottomChange={handleCanReturnToBottomChange}
-        onApplyPatch={applyThreadPatch}
-        onLoadOlder={
-          canonicalConversation.directoryError
-            ? loadDirectoryPreservingAnchor
-            : loadOlderPreservingAnchor
-        }
-        onOpenPatchReview={onOpenPatchReview}
-        onOpenPlanInRightDock={onOpenPlanInRightDock}
-        onOpenSubagent={onOpenSubagent}
-        onReload={canonicalConversation.reload}
-        onScroll={handleTimelineScroll}
-        registerTurnRow={registerTurnRow}
-        dockedPlanItemId={dockedPlanItemId}
-        latestPlanItemId={selectCanonicalLatestPlanItemId(canonicalConversation.state)}
-        pendingPlanItemId={pendingPlanApproval?.planItemId ?? null}
-        readThreadPatchDiff={desktopClient.readThreadPatchDiff}
-        scrollRef={threadScrollRef}
-        threadId={activeSessionId}
-        turns={canonicalConversation.turns}
-      />
-    </ConversationItemContext.Provider>
+    <CanonicalThreadView
+      active={effectiveSessionStatus === 'running' || effectiveSessionStatus === 'waiting'}
+      deferInitialLoading={deferThreadLoading}
+      diffMarkerStyle={diffMarkerStyle}
+      error={canonicalConversation.error}
+      hasOlder={canonicalConversation.hasOlder}
+      initialScrollOffset={initialTimelineScrollTop}
+      layoutResizeActive={layoutResizeActive}
+      listRef={timelineListRef}
+      navigationRef={timelineNavigationRef}
+      loading={canonicalConversation.loading}
+      loadingOlder={canonicalConversation.loadingOlder || canonicalConversation.loadingDirectory}
+      historyError={canonicalConversation.directoryError}
+      onCanReturnToBottomChange={handleCanReturnToBottomChange}
+      onApplyPatch={applyThreadPatch}
+      onLoadOlder={
+        canonicalConversation.directoryError
+          ? loadDirectoryPreservingAnchor
+          : loadOlderPreservingAnchor
+      }
+      onOpenPatchReview={onOpenPatchReview}
+      onOpenPlanInRightDock={onOpenPlanInRightDock}
+      onOpenSubagent={onOpenSubagent}
+      onReload={canonicalConversation.reload}
+      onScroll={handleTimelineScroll}
+      registerTurnRow={registerTurnRow}
+      dockedPlanItemId={dockedPlanItemId}
+      latestPlanItemId={selectCanonicalLatestPlanItemId(canonicalConversation.state)}
+      pendingPlanItemId={pendingPlanApproval?.planItemId ?? null}
+      readThreadPatchDiff={desktopClient.readThreadPatchDiff}
+      scrollRef={threadScrollRef}
+      threadId={activeSessionId}
+      turns={canonicalConversation.turns}
+    />
   ) : null
   return (
     <section
@@ -1715,8 +1713,10 @@ export function ConversationPage(): React.ReactNode {
                               ))}
                             </div>
                           ) : null}
-                          {firstSubmittedMessage}
-                          {canonicalThreadView}
+                          <ConversationItemContext.Provider value={conversationItemContextValue}>
+                            {firstSubmittedMessage}
+                            {canonicalThreadView}
+                          </ConversationItemContext.Provider>
                         </div>
                       )}
                     </div>
