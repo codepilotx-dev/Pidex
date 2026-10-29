@@ -16,10 +16,25 @@
       /* 全窗鲸鱼加载契约：静态启动遮罩（id="startup-splash"）与 React
          FullScreenWhaleLoading 共用同一套 DOM/CSS，视觉与
          本地应用壳保持一致。静态阶段在入口 JS 与
-         主 CSS 完成前使用系统主题 fallback；React 接管后由
-         --layer-canvas-fill / --color-token-text-secondary 与
-         html[data-theme] 驱动，支持用户显式主题。由
+         主 CSS 完成前使用启动主题或系统主题 fallback；静态遮罩
+         始终使用启动颜色，React 加载组件使用应用主题 token。由
          src/startup/StartupSplashHandoff.ts 的控制器移除。 */
+      :root {
+        --startup-splash-background: #ffffff;
+        --startup-splash-foreground: #1f1f1f;
+      }
+
+      html:has(#startup-splash),
+      body:has(#startup-splash) {
+        background: var(--startup-splash-background);
+        color: var(--startup-splash-foreground);
+      }
+
+      #startup-splash {
+        background: var(--startup-splash-background);
+        color: color-mix(in srgb, var(--startup-splash-foreground) 65%, transparent);
+      }
+
       #startup-actions[hidden],
       #startup-connection-notice[hidden],
       #startup-connection-retry[hidden] {
@@ -159,6 +174,11 @@
       }
 
       @media (prefers-color-scheme: dark) {
+        html:not([data-theme]) {
+          --startup-splash-background: #181818;
+          --startup-splash-foreground: #ffffff;
+        }
+
         html:not([data-theme]) .full-screen-whale-loader {
           background: #181818;
           color: rgb(255 255 255 / 65%);
