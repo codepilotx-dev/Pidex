@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { Split, LoaderCircle, X } from 'lucide-react'
 
 import { Button } from '../../../../components/ui/Button.js'
+import { toUserErrorMessage } from '../../../../utils/Errors.js'
 
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../../../components/ui/IconTokens.js'
 import { useDialogFocusRestore } from '../../../../components/ui/UseDialogFocusRestore.js'
@@ -190,7 +191,7 @@ function ForkProgress({
       ) : null}
       {operation?.status === 'failed' ? (
         <p className="tw:m-0 tw:type-body-sm tw:text-app-text-soft" role="alert">
-          {operation.errorCode ?? '分叉操作失败。'}
+          {toUserErrorMessage(operation.errorCode ?? '分叉操作失败。')}
         </p>
       ) : null}
     </div>

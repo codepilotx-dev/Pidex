@@ -1,4 +1,5 @@
 import React from 'react'
+import { toUserErrorMessage } from '../../../../utils/Errors.js'
 
 import { GlobalErrorModal } from '../../../../components/GlobalErrorModal.js'
 import {
@@ -273,7 +274,7 @@ export function useConversationForkController({
 
 function reportError(error: string): void {
   if (typeof window === 'undefined') return
-  window.dispatchEvent(new CustomEvent('desktop:error', { detail: error }))
+  window.dispatchEvent(new CustomEvent('desktop:error', { detail: toUserErrorMessage(error) }))
 }
 
 function message(cause: unknown): string {

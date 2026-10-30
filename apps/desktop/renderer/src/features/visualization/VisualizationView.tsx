@@ -15,9 +15,13 @@ export function VisualizationView({
   item: Extract<Item, { type: 'tool' }>
   threadId?: string
 }) {
-  const envelope = React.useMemo(
-    () => (item.state === 'completed' ? visualizationFromBlocks(item.resultBlocks) : null),
-    [item.state, item.resultBlocks],
+  const envelopeJson = JSON.stringify(
+    item.state === 'completed' ? visualizationFromBlocks(item.resultBlocks) : null,
+  )
+  // Projection refreshes may recreate identical blocks after the iframe is ready.
+  const envelope = React.useMemo<VisualizationEnvelope | null>(
+    () => JSON.parse(envelopeJson),
+    [envelopeJson],
   )
   const preview = item.visualizationPreview
   const document = envelope?.document
@@ -49,7 +53,10 @@ export function VisualizationView({
     setError(null)
     setReady(false)
     setFollowUp(null)
-    if (!envelope) return
+    if (!envelope) {
+      if (item.state === 'completed') setError('交互界面结果不完整，请让 AI 重新生成。')
+      return
+    }
     if (!threadId) {
       setError('无法确定界面所属聊天。')
       return
@@ -65,7 +72,7 @@ export function VisualizationView({
     return () => {
       cancelled = true
     }
-  }, [envelope, threadId, reload])
+  }, [envelope, item.state, threadId, reload])
 
   React.useEffect(() => {
     const update = () => {
