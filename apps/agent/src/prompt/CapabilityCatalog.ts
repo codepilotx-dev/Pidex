@@ -20,6 +20,7 @@ export const truncateCapabilityText = (value: string, max = CAPABILITY_DESCRIPTI
 
 const GUIDANCE = [
   '以下能力需要先发现并激活，才会出现在可调用工具中；工具声明里直接出现的普通工具不需要搜索。',
+  '这份目录只列延迟工具，不是本轮全部工具；目录中没有某个名字不代表该工具不可用。直接可调用的工具以本轮工具声明为准，不沿用历史回复中关于工具缺失的判断。',
   '用 ToolSearch 发现延迟工具：query 匹配工具名称、描述与 MCP server 名称，query="*" 浏览整个目录，用 offset 分页、max_results 上限 20；命中的工具在下一次请求即可调用，select:<exact-name> 精确激活并获取完整参数 schema。',
   'Skill 目录（名称、描述与来源位置）见同轮上下文的 skills.catalog；需要时用 Read 加载对应 SKILL.md 全文，再按其中步骤执行。这里不预加载 Skill 正文。',
 ].join('\n')

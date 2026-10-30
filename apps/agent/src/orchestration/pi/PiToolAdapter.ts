@@ -244,7 +244,13 @@ export function createLifecycleTools(
     add(
       lifecycleTool(
         'request_user_input',
-        '向用户提出 1 至 3 个必须回答的问题，默认一次一题。每题提供 2 至 3 个选项，或空选项列表供纯文字回答；界面允许自由输入。Plan 模式必须等待用户回答，不设置 autoResolutionMs。',
+        [
+          '向用户提出 1 至 5 个必须回答的问题，默认一次一题。每题提供 2 至 5 个选项，或空选项列表供纯文字回答；界面始终允许自由输入。',
+          'multiSelect=true 表示多选，用户可同时勾选多个选项并补充自由文本。recommended=true 标记推荐项，界面会预选它；没有推荐项时用户必须自行选择。',
+          '回答中的 selectedChoices 是宿主匹配的选项 ID 与文案，以它确认选择；choiceIds 是不透明标识，不猜测零基或一基索引。自由文字 text 与 skipped 状态分别保留，不用选项文案覆盖。',
+          '用户选择“跳过”时该题以 skipped: true 返回：它只是暂定假设，不是已确认决策。依赖它的后续结论必须标注依赖关系，并在假设被修改或否定时重新验证。',
+          'Plan 与 Grill 模式必须等待用户回答，不设置 autoResolutionMs。',
+        ].join('\n'),
         Type.Object({
           questions: Type.Array(
             Type.Object({
@@ -261,7 +267,7 @@ export function createLifecycleTools(
               ),
               multiSelect: Type.Optional(Type.Boolean()),
             }),
-            { minItems: 1, maxItems: 3 },
+            { minItems: 1, maxItems: 5 },
           ),
           autoResolutionMs: Type.Optional(Type.Integer({ minimum: 60_000, maximum: 240_000 })),
         }),
@@ -428,7 +434,7 @@ export function createLifecycleTools(
           '把边界明确、有独立产出、能隔离大量中间信息或适合并行的问题委派给一个或多个并行子代理。',
           '委派前先判断：小型、强耦合或能直接用工具并发完成的工作应由你自己完成。尊重用户和适用仓库规则对并行或委派的明确要求；数量上限由宿主按队列执行，模型不需要自行预设默认数量。',
           'agents 中每个 task 都必须是自包含的任务描述：包含目标、范围、关键背景、约束与预期证据，且不得假设子代理能看到本会话未显式提供的上下文。不要为了获得一段总结而创建子代理。',
-          'Plan 模式只能创建 explorer 子代理。共享工作区中的写任务必须明确文件范围，避免同时修改同一文件。递归深度上限由宿主限制。',
+          'Plan 与 Grill 模式只能创建 explorer 子代理。共享工作区中的写任务必须明确文件范围，避免同时修改同一文件。递归深度上限由宿主限制。',
         ].join('\n'),
         Type.Unsafe(
           subagentToolDefinitions.find((definition) => definition.sdkName === 'spawn_agents')!

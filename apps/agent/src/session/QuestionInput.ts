@@ -17,17 +17,14 @@ export const richQuestionSchema = z
     options: z
       .array(questionOptionSchema)
       .max(QUESTION_CHOICES_WRITE_MAX)
-      .refine((options) => options.length !== 1, '提供零项或二至三项选项'),
-    multiSelect: z
-      .boolean()
-      .refine((value) => !value, 'Plan 问题仅支持单选')
-      .optional(),
+      .refine((options) => options.length !== 1, '提供零项或二至五项选项'),
+    multiSelect: z.boolean().optional(),
   })
   .strict()
 
 export const requestUserInputSchema = z
   .object({
-    questions: z.array(richQuestionSchema).min(1).max(3),
+    questions: z.array(richQuestionSchema).min(1).max(5),
     autoResolutionMs: z.number().int().min(60_000).max(240_000).optional(),
   })
   .strict()
@@ -65,5 +62,7 @@ export const interactionQuestions = (questions: readonly RichQuestion[]): Intera
     allowFreeform: true,
     required: true,
     minAnswers: 1,
-    maxAnswers: 1,
+    // QuestionService 以 choiceIds.length + (text ? 1 : 0) 计数：多选可全选所有
+    // 预设项并附加一段自由文本，因此上限是选项数加一。
+    maxAnswers: question.multiSelect ? question.options.length + 1 : 1,
   }))
