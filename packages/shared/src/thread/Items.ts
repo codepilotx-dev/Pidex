@@ -204,7 +204,7 @@ export const InteractionQuestionSchema = Schema.Struct({
 })
 export const InteractionQuestionAnswerSchema = Schema.Struct({
   questionId: QuestionTextSchema,
-  choiceIds: Schema.Array(QuestionTextSchema).check(Schema.isMaxLength(1)),
+  choiceIds: Schema.Array(QuestionTextSchema).check(Schema.isMaxLength(QUESTION_CHOICES_READ_MAX)),
   text: Schema.optional(Schema.String),
   skipped: Schema.optional(Schema.Literal(true)),
 })

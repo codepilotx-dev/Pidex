@@ -262,7 +262,7 @@ export const PendingQuestionInteractionSchema = Schema.Struct({
   toolCallId: Schema.optional(OpaqueIDSchema),
   questions: Schema.Array(InteractionQuestionSchema)
     .check(Schema.isMinLength(1))
-    .check(Schema.isMaxLength(3)),
+    .check(Schema.isMaxLength(5)),
   autoResolutionMs: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 60_000, maximum: 240_000 })),
   ),
@@ -342,7 +342,7 @@ export const QuestionInteractionResponseSchema = Schema.Union([
     resolution: Schema.Literals(['user', 'auto']),
     answers: Schema.Array(AgentThread.InteractionQuestionAnswerSchema)
       .check(Schema.isMinLength(1))
-      .check(Schema.isMaxLength(3)),
+      .check(Schema.isMaxLength(5)),
   }),
   Schema.Struct({ kind: Schema.Literal('question'), status: Schema.Literal('ignored') }),
 ])
