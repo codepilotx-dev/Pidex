@@ -475,6 +475,13 @@ test('controller enforces window/generation, shares device state, and isolates c
     const result = await controller.data(owner, { action: 'clear', categories: ['siteData'] })
     expect(native[0].dataTypes).not.toContain('cache')
     expect(result.cleared[0]).toMatchObject({ ok: true, message: '站点数据已清除，请按需刷新网页' })
+    await expect(controller.setVisible({ id: 2 }, 'tab:1', true)).rejects.toThrow('不属于')
+    await controller.close(owner, 'tab:1')
+    for (const visible of [true, false]) {
+      await expect(controller.setVisible(owner, 'tab:1', visible)).resolves.toMatchObject({
+        tabId: 'tab:1', open: false,
+      })
+    }
   } finally {
     controller.dispose()
   }
