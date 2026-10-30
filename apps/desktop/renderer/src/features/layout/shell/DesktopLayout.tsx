@@ -716,12 +716,14 @@ export function DesktopLayout(): React.ReactNode {
     return lastSlash >= 0 ? upstream.slice(lastSlash + 1) : upstream
   }, [gitStatus?.upstream])
   const [homePlanModeActive, setHomePlanModeActive] = useState(false)
+  const [homeGrillModeActive, setHomeGrillModeActive] = useState(false)
   const [homeLocalRouterMode, setHomeLocalRouterMode] = useState<'off'>('off')
 
   const session = useSessionState({
     permissionMode,
     permissionConfig: settings.values.permissionConfig,
     planModeActive: homePlanModeActive,
+    grillModeActive: homeGrillModeActive,
     localRouterMode: homeLocalRouterMode,
     providerID: defaultProviderID,
     providerBaseURL,
@@ -776,9 +778,11 @@ export function DesktopLayout(): React.ReactNode {
     renameSession,
     setSessionPermissionMode,
     setSessionPlanModeActive,
+    setSessionGrillModeActive,
     activeSessionItem,
     permissionMode: effectivePermissionMode,
     planModeActive,
+    grillModeActive,
   } = session
   // 侧栏聊天列表只用于 Git 看板的项目活跃度排序，看板不额外请求聊天历史。
   const { registerActivitySessions } = useGitBoard(
@@ -2032,12 +2036,26 @@ export function DesktopLayout(): React.ReactNode {
   const handlePlanModeChange = useCallback(
     async (active: boolean): Promise<void> => {
       if (!sessionId) {
+        if (active) setHomeGrillModeActive(false)
         setHomePlanModeActive(active)
         return
       }
       if (!(await setSessionPlanModeActive(sessionId, active))) throw new Error('计划模式未更新')
     },
     [sessionId, setSessionPlanModeActive],
+  )
+
+  const handleGrillModeChange = useCallback(
+    async (active: boolean): Promise<void> => {
+      if (!sessionId) {
+        if (active) setHomePlanModeActive(false)
+        setHomeGrillModeActive(active)
+        return
+      }
+      if (!(await setSessionGrillModeActive(sessionId, active)))
+        throw new Error('深度访谈模式未更新')
+    },
+    [sessionId, setSessionGrillModeActive],
   )
 
   const handleSelectSession = useCallback(
@@ -3579,6 +3597,7 @@ export function DesktopLayout(): React.ReactNode {
             sessionStatus,
             permissionMode: effectivePermissionMode,
             planModeActive,
+            grillModeActive,
             enableAutoReviewPermissionMode: enableAutoReviewPermissionMode ?? false,
             enableFullAccessPermissionMode: enableFullAccessPermissionMode ?? false,
             codingModel,
@@ -3639,6 +3658,7 @@ export function DesktopLayout(): React.ReactNode {
             onStartReview: handleStartAiReview,
             onPermissionChange: handlePermissionChange,
             onPlanModeChange: handlePlanModeChange,
+            onGrillModeChange: handleGrillModeChange,
             onThinkingChange: handleThinkingChange,
             createSessionForWorkspace,
             submitToSession,
@@ -3660,6 +3680,7 @@ export function DesktopLayout(): React.ReactNode {
       sessionStatus,
       effectivePermissionMode,
       planModeActive,
+      grillModeActive,
       enableAutoReviewPermissionMode,
       enableFullAccessPermissionMode,
       codingModel,
@@ -3718,6 +3739,7 @@ export function DesktopLayout(): React.ReactNode {
       handleStartAiReview,
       handlePermissionChange,
       handlePlanModeChange,
+      handleGrillModeChange,
       handleThinkingChange,
       createSessionForWorkspace,
       submitToSession,

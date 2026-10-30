@@ -133,24 +133,32 @@ export function enterQuestionAction(
   return currentQuestionIndex >= questionCount - 1 ? 'confirm-and-submit' : 'confirm-and-next'
 }
 
+/**
+ * Only an explicit recommended option is preselected. Without one the user must
+ * choose, so Enter can never submit an option the model did not actually propose.
+ */
 export function initialQuestionState(question: {
-  options: Array<{ id?: string; label: string }>
+  options: Array<{ id?: string; label: string; recommended?: boolean }>
   multiSelect?: boolean
 }): QuestionState {
-  const firstOption = question.multiSelect ? undefined : question.options[0]
+  const recommended = question.options
+    .filter((option) => option.recommended === true)
+    .map(questionOptionId)
   return {
-    selected: firstOption ? [questionOptionId(firstOption)] : [],
+    selected: question.multiSelect ? recommended : recommended.slice(0, 1),
     custom: '',
     answered: false,
   }
 }
 
-/**
- * Plan 澄清题不预选答案：recommended 只是建议，不等于用户选择，选中必须来自
- * 用户显式操作。语义与 Chat 提问（预选首项）分开。
- */
-export function initialPlanQuestionState(): QuestionState {
-  return { selected: [], custom: '', answered: false }
+/** Structured interviews share one default; the blank form is kept for tests and callers. */
+export function initialPlanQuestionState(question?: {
+  options: Array<{ id?: string; label: string; recommended?: boolean }>
+  multiSelect?: boolean
+}): QuestionState {
+  return question
+    ? initialQuestionState(question)
+    : { selected: [], custom: '', answered: false }
 }
 
 export function toggleMultiSelectOption(current: QuestionState, label: string): QuestionState {
@@ -328,7 +336,9 @@ export function shouldDeferAskUserQuestionShortcutToTextEntry(
 
 export function parseAskUserQuestions(input: Record<string, unknown>): AskUserQuestion[] | null {
   const rawQuestions =
-    Array.isArray(input.questions) && input.questions.length > 0 ? input.questions : null
+    Array.isArray(input.questions) && input.questions.length > 0 && input.questions.length <= 5
+      ? input.questions
+      : null
   if (!rawQuestions) return null
 
   const questions: AskUserQuestion[] = []

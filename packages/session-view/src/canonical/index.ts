@@ -722,7 +722,7 @@ function applyEnvelopePayload(
       return
     case 'thread/settings/updated':
       state.thread = { ...state.thread, settings: envelope.payload.settings }
-      if (envelope.payload.settings.taskMode === 'chat') state.pendingPlanApproval = null
+      if (envelope.payload.settings.taskMode !== 'plan') state.pendingPlanApproval = null
       return
     case 'turn/queued':
       state.pendingPlanApproval = null

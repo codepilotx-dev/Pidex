@@ -85,6 +85,7 @@ export type DesktopComposerProps = {
   sessionStatus: DesktopSessionStatus
   permissionMode: DesktopPermissionMode
   planModeActive: boolean
+  grillModeActive?: boolean
   enableAutoReviewPermissionMode: boolean
   enableFullAccessPermissionMode: boolean
   codingModel?: string
@@ -144,6 +145,7 @@ export type DesktopComposerProps = {
   ) => void
   onPermissionChange: (value: DesktopPermissionMode) => void | Promise<void>
   onPlanModeChange: (active: boolean) => void | Promise<void>
+  onGrillModeChange?: (active: boolean) => void | Promise<void>
   onThinkingChange: (value: DesktopThinkingMode) => void
   createSessionForWorkspace: (
     target?: DesktopWorkspace | null,
@@ -199,6 +201,7 @@ export function DesktopComposer({
   sessionStatus,
   permissionMode,
   planModeActive,
+  grillModeActive = false,
   enableAutoReviewPermissionMode,
   enableFullAccessPermissionMode,
   codingModel,
@@ -250,6 +253,7 @@ export function DesktopComposer({
   onStartReview,
   onPermissionChange,
   onPlanModeChange,
+  onGrillModeChange,
   onThinkingChange,
   createSessionForWorkspace,
   submitToSession,
@@ -310,6 +314,7 @@ export function DesktopComposer({
     enableAutoReviewPermissionMode,
     enableFullAccessPermissionMode,
     planModeActive,
+    grillModeActive,
     sessionBusy: sessionStatus === 'running' || sessionStatus === 'waiting',
     modelConfigured,
     selectedModelMetadata,
@@ -363,8 +368,16 @@ export function DesktopComposer({
 
   async function handlePlanModeChange(active: boolean): Promise<void> {
     await onPlanModeChange(active)
-    if (active) setGoalModeEnabled(false)
-    if (active && workingPlugin) onWorkingPluginChange?.(null)
+    if (!active) return
+    setGoalModeEnabled(false)
+    if (workingPlugin) onWorkingPluginChange?.(null)
+  }
+
+  async function handleGrillModeChange(active: boolean): Promise<void> {
+    await onGrillModeChange?.(active)
+    if (!active) return
+    setGoalModeEnabled(false)
+    if (workingPlugin) onWorkingPluginChange?.(null)
   }
 
   function handleSkillSelectWithWorkingPluginClear(
@@ -398,6 +411,8 @@ export function DesktopComposer({
       permissionMode={effectivePermissionMode}
       permissionUnavailableReason={permissionUnavailableReason}
       planModeActive={planModeActive}
+      grillModeActive={grillModeActive}
+      onGrillModeChange={handleGrillModeChange}
       placement={placement}
       capabilities={{
         ...effectiveCapabilities,
@@ -494,11 +509,6 @@ export function DesktopComposer({
       onSubmit={handleSubmit}
       onCompact={handleCompact}
       queuedCompactionSupported={desktopClient.supportsQueuedCompaction()}
-      onCancelCompaction={async () => {
-        const operation = contextUsage?.compactionOperation
-        if (routedSessionId && operation)
-          await desktopClient.cancelCompaction(routedSessionId, operation.operationId)
-      }}
       onCommandError={handleCommandError}
       onThinkingChange={onThinkingChange}
       onSkillSelect={handleSkillSelectWithWorkingPluginClear}

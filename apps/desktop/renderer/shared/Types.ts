@@ -212,7 +212,7 @@ export type DesktopGoalSubmission = Omit<
 
 export type DesktopUserMessageInput = {
   text: string
-  taskMode?: 'chat' | 'plan'
+  taskMode?: 'chat' | 'plan' | 'grill'
   skills?: readonly import('@pidex/agent-protocol').SkillSelection[]
   attachments?: DesktopComposerAttachment[]
   retainedAttachmentIds?: string[]
@@ -1256,6 +1256,7 @@ export type DesktopSessionListItem = {
   permissionMode: DesktopPermissionMode
   collaborationMode?: DesktopCollaborationMode
   planModeActive?: boolean
+  grillModeActive?: boolean
   providerID?: ModelProviderID
   model: string | null
   effort?: string | null
@@ -1280,6 +1281,7 @@ export type DesktopSessionSettingsSnapshot = {
   permissionConfig: DesktopPermissionConfig
   collaborationMode?: DesktopCollaborationMode
   planModeActive?: boolean
+  grillModeActive?: boolean
   providerID?: ModelProviderID
   providerBaseURL?: string
   model?: string
@@ -1393,6 +1395,7 @@ export type CreateDesktopSessionOptions = {
   permissionConfig?: DesktopPermissionConfig
   collaborationMode?: DesktopCollaborationMode
   planModeActive?: boolean
+  grillModeActive?: boolean
   providerID?: ModelProviderID
   providerBaseURL?: string
   model?: string
@@ -2088,6 +2091,7 @@ export type DesktopApi = {
     mode: DesktopPermissionMode,
   ): Promise<DesktopSessionSnapshot>
   setSessionPlanModeActive(sessionId: string, active: boolean): Promise<DesktopSessionSnapshot>
+  setSessionGrillModeActive(sessionId: string, active: boolean): Promise<DesktopSessionSnapshot>
   setSessionLocalRouterMode(
     sessionId: string,
     mode: LocalRouterMode,

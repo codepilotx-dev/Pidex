@@ -38,6 +38,7 @@ import {
   interruptSessionAction,
   renameSessionAction,
   setSessionLocalRouterModeAction,
+  setSessionGrillModeActiveAction,
   setSessionPermissionModeAction,
   setSessionPlanModeActiveAction,
   submitSessionMessageAction,
@@ -73,6 +74,7 @@ export type UseSessionStateOptions = {
   permissionMode: DesktopPermissionMode
   permissionConfig: DesktopPermissionConfig
   planModeActive: boolean
+  grillModeActive: boolean
   localRouterMode: LocalRouterMode
   providerID: ModelProviderID
   providerBaseURL: string
@@ -118,6 +120,7 @@ export type UseSessionStateResult = {
   activeSessionItem: SessionListItem | null
   permissionMode: DesktopPermissionMode
   planModeActive: boolean
+  grillModeActive: boolean
   localRouterMode: LocalRouterMode
   inputBinding: SessionInputBinding
   setInput: (value: string) => void
@@ -178,6 +181,10 @@ export type UseSessionStateResult = {
     targetSessionId: string,
     active: boolean,
   ) => Promise<SessionListItem | null>
+  setSessionGrillModeActive: (
+    targetSessionId: string,
+    active: boolean,
+  ) => Promise<SessionListItem | null>
   setSessionLocalRouterMode: (
     targetSessionId: string,
     mode: LocalRouterMode,
@@ -189,6 +196,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     permissionMode,
     permissionConfig,
     planModeActive,
+    grillModeActive,
     localRouterMode,
     providerID,
     providerBaseURL,
@@ -270,6 +278,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
   )
   const effectivePermissionMode = activeSessionItem?.permissionMode ?? permissionMode
   const effectivePlanModeActive = activeSessionItem?.planModeActive ?? planModeActive
+  const effectiveGrillModeActive = activeSessionItem?.grillModeActive ?? grillModeActive
   const effectiveLocalRouterMode = activeSessionItem?.id.startsWith('browser-mock-')
     ? (activeSessionItem.localRouterMode ?? localRouterMode)
     : 'off'
@@ -635,6 +644,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       permissionMode: effectivePermissionMode,
       permissionConfig,
       planModeActive: effectivePlanModeActive,
+      grillModeActive: effectiveGrillModeActive,
       localRouterMode: effectiveLocalRouterMode,
       providerID,
       providerBaseURL,
@@ -870,6 +880,12 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     [actionContext, sessions],
   )
 
+  const setSessionGrillModeActive = useCallback(
+    async (targetSessionId: string, active: boolean): Promise<SessionListItem | null> =>
+      setSessionGrillModeActiveAction(actionContext, sessions, targetSessionId, active),
+    [actionContext, sessions],
+  )
+
   const setSessionLocalRouterMode = useCallback(
     async (targetSessionId: string, mode: LocalRouterMode): Promise<SessionListItem | null> =>
       setSessionLocalRouterModeAction(actionContext, sessions, targetSessionId, mode),
@@ -898,6 +914,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     activeSessionItem,
     permissionMode: effectivePermissionMode,
     planModeActive: effectivePlanModeActive,
+    grillModeActive: effectiveGrillModeActive,
     localRouterMode: effectiveLocalRouterMode,
     inputBinding,
     setInput: setScopedInput,
@@ -916,6 +933,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     renameSession,
     setSessionPermissionMode,
     setSessionPlanModeActive,
+    setSessionGrillModeActive,
     setSessionLocalRouterMode,
   }
 }

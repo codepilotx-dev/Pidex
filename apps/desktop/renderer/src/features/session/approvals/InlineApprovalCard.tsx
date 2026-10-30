@@ -90,8 +90,8 @@ export type InlineApprovalCardProps = {
   onInterrupt?: () => void | Promise<void>
   request: DesktopPermissionRequest
   currentPermissionMode?: DesktopPermissionMode
-  /** 所属 Turn 的 canonical 模式：Plan 澄清走逐题显式确认。 */
-  taskMode?: 'chat' | 'plan'
+  /** 所属 Turn 的 canonical 模式：Chat、Plan、Grill 共用逐题显式确认。 */
+  taskMode?: 'chat' | 'plan' | 'grill'
   onDecide: (
     request: DesktopPermissionRequest,
     behavior: 'allow' | 'deny',

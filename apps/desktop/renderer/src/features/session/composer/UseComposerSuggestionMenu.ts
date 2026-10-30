@@ -39,7 +39,14 @@ export function useComposerSuggestionMenu(
   )
   const activeKey = open ? selected : null
   function setActiveKey(key: string | null): void {
-    setState({ scope, query: keyword, category, key })
+    setState((previous) =>
+      previous.scope === scope &&
+      previous.query === keyword &&
+      previous.category === category &&
+      previous.key === key
+        ? previous
+        : { scope, query: keyword, category, key },
+    )
   }
   return {
     items,

@@ -12,6 +12,7 @@ import type {
   DesktopPermissionConfig,
   DesktopPermissionRequest,
   DesktopSessionMetadataPatch,
+  DesktopSessionSnapshot,
   DesktopSessionStatus,
   DesktopThinkingMode,
   DesktopUserMessageInput,
@@ -40,6 +41,7 @@ export type SessionSettingsSnapshot = {
   permissionMode: DesktopPermissionMode
   permissionConfig: DesktopPermissionConfig
   planModeActive: boolean
+  grillModeActive: boolean
   localRouterMode: LocalRouterMode
   providerID: ModelProviderID
   providerBaseURL: string
@@ -155,6 +157,7 @@ export async function createSessionForWorkspaceAction(
       localRouterMode: settings.localRouterMode,
       permissionConfig: settings.permissionConfig,
       planModeActive: settings.planModeActive,
+      grillModeActive: settings.grillModeActive,
       providerID: settings.providerID,
       providerBaseURL: normalizeOptionalText(settings.providerBaseURL),
       model: normalizeOptionalText(settings.model),
@@ -194,6 +197,7 @@ export async function createSessionForWorkspaceAction(
           standalone: session.standalone,
           permissionMode: settings.permissionMode,
           planModeActive: settings.planModeActive,
+          grillModeActive: settings.grillModeActive,
           localRouterMode: settings.localRouterMode,
           model: normalizeOptionalText(settings.model) ?? null,
           thinkingMode: settings.thinkingMode,
@@ -565,8 +569,30 @@ export async function setSessionPlanModeActiveAction(
   targetSessionId: string,
   active: boolean,
 ): Promise<SessionListItem | null> {
+  return applySessionModeAction(context, sessions, targetSessionId, () =>
+    desktopClient.setSessionPlanModeActive(targetSessionId, active),
+  )
+}
+
+export async function setSessionGrillModeActiveAction(
+  context: SessionActionContext,
+  sessions: SessionListItem[],
+  targetSessionId: string,
+  active: boolean,
+): Promise<SessionListItem | null> {
+  return applySessionModeAction(context, sessions, targetSessionId, () =>
+    desktopClient.setSessionGrillModeActive(targetSessionId, active),
+  )
+}
+
+async function applySessionModeAction(
+  context: SessionActionContext,
+  sessions: SessionListItem[],
+  targetSessionId: string,
+  apply: () => Promise<DesktopSessionSnapshot>,
+): Promise<SessionListItem | null> {
   try {
-    const snapshot = await desktopClient.setSessionPlanModeActive(targetSessionId, active)
+    const snapshot = await apply()
     const updatedItem = snapshot.item
     context.setSessions(
       sortSessionsByRecency(

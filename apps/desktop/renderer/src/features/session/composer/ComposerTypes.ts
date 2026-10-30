@@ -20,7 +20,7 @@ export type WorkingPlugin = never
 
 export type ComposerExecutionMode = 'local' | 'worktree' | 'cloud'
 
-export type ComposerCollaborationMode = 'default' | 'plan'
+export type ComposerCollaborationMode = 'default' | 'plan' | 'grill'
 
 export type ComposerSubmitShortcut = 'enter' | 'multiline-ctrl-enter' | 'ctrl-enter'
 

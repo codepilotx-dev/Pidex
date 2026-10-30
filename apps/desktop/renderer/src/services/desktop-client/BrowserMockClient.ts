@@ -1526,12 +1526,24 @@ export function createBrowserMockDesktopClient(
       const collaborationMode = collaborationModeFromPlanModeActive(active)
       const next = {
         ...snapshot,
-        item: { ...snapshot.item, collaborationMode, planModeActive: active },
+        item: { ...snapshot.item, collaborationMode, planModeActive: active, grillModeActive: false },
         settings: {
           ...snapshot.settings,
           collaborationMode,
           planModeActive: active,
+          grillModeActive: false,
         },
+      }
+      sessions.set(sessionId, next)
+      emitSessionStoreChange()
+      return next
+    },
+    setSessionGrillModeActive: async (sessionId, active) => {
+      const snapshot = requireMockSession(sessions, sessionId)
+      const next = {
+        ...snapshot,
+        item: { ...snapshot.item, planModeActive: false, grillModeActive: active },
+        settings: { ...snapshot.settings, planModeActive: false, grillModeActive: active },
       }
       sessions.set(sessionId, next)
       emitSessionStoreChange()

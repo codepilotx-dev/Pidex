@@ -32,7 +32,7 @@ type AgentTurnQueueClientDependencies = {
     sessionId: string,
   ) => Promise<ModelRef>
   permissionConfigForSession: (sessionId: string) => PermissionConfig
-  taskModeForSession: (sessionId: string) => 'chat' | 'plan'
+  taskModeForSession: (sessionId: string) => 'chat' | 'plan' | 'grill'
   queueVersionForSession: (sessionId: string) => number | undefined
   loadThreadSnapshot: (sessionId: string) => Promise<ThreadSnapshot>
   refreshSession: (sessionId: string) => Promise<DesktopSessionSnapshot>
@@ -78,8 +78,8 @@ export function createAgentTurnQueueClient({
         )
       )
         throw new Error('当前任务正在执行，请等待本轮结束后提交目标')
-      if ((input.taskMode ?? taskModeForSession(sessionId)) === 'plan')
-        throw new Error('请先退出计划模式再提交目标')
+      if ((input.taskMode ?? taskModeForSession(sessionId)) !== 'chat')
+        throw new Error('请先退出计划或访谈模式再提交目标')
     }
     if (input.skills?.length) requireSkillInvocationCapability?.()
     const { attachmentIds, contextReferenceIds } = await importMessageContext(sessionId, input)
@@ -90,8 +90,9 @@ export function createAgentTurnQueueClient({
       const current = await loadThreadSnapshot(sessionId)
       const activeTurn = findActiveTurn(current)
       if (activeTurn) {
-        if (input.taskMode === 'plan' && activeTurn.mode !== 'plan')
-          throw new Error('当前轮次仍在实施，请等待结束或选择排队发送计划任务')
+        const taskMode = input.taskMode ?? taskModeForSession(sessionId)
+        if (taskMode !== 'chat' && activeTurn.mode !== taskMode)
+          throw new Error('当前轮次模式不同，请等待结束或选择排队发送')
         await rpc.call('turn/steer', {
           threadId: sessionId,
           turnId: activeTurn.id,
@@ -210,7 +211,7 @@ export function createAgentTurnQueueClient({
     model: string | DesktopModelSelection | undefined,
     goal?: TurnGoal,
     skills?: DesktopUserMessageInput['skills'],
-    taskMode?: 'chat' | 'plan',
+    taskMode?: 'chat' | 'plan' | 'grill',
   ): Promise<void> {
     await rpc.call('turn/start', {
       threadId: sessionId,

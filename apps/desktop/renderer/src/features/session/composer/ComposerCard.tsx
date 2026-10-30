@@ -273,7 +273,7 @@ const TOOLBAR_CLASS =
 const TOOLBAR_LEFT_CLASS =
   'toolbar-left tw:flex tw:shrink-0 tw:items-center tw:gap-1.5 tw:@max-[420px]/composer-footer:gap-1'
 const TOOLBAR_RIGHT_CLASS =
-  'toolbar-right tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:justify-end tw:gap-1.5 tw:@max-[420px]/composer-footer:gap-1'
+  'toolbar-right tw:ml-auto tw:flex tw:shrink-0 tw:items-center tw:justify-end tw:gap-1.5 tw:@max-[420px]/composer-footer:gap-1'
 const TOOLBAR_DIVIDER_CLASS =
   'toolbar-divider tw:inline-block tw:h-3.5 tw:w-px tw:shrink-0 tw:bg-app-border-subtle tw:@max-[300px]/composer-footer:hidden'
 const COMPOSER_MODE_CHIP_LABEL_CLASS = 'composer-footer-label'
@@ -292,6 +292,7 @@ type Props = {
   sessionStatus: DesktopSessionStatus
   permissionMode: DesktopPermissionMode
   planModeActive?: boolean
+  grillModeActive?: boolean
   goalModeEnabled?: boolean
   onGoalModeChange?: (enabled: boolean) => void
   thinkingMode: DesktopThinkingMode
@@ -356,9 +357,9 @@ type Props = {
   ) => void
   onPermissionChange: (value: DesktopPermissionMode) => void | Promise<void>
   onPlanModeChange?: (active: boolean) => void | Promise<void>
+  onGrillModeChange?: (active: boolean) => void | Promise<void>
   onSubmit: (delivery?: ComposerDeliveryIntent) => void
   queuedCompactionSupported?: boolean
-  onCancelCompaction?: () => Promise<void>
   onCompact?: () => Promise<void>
   onCommandError?: (message: string) => void
   onThinkingChange: (value: DesktopThinkingMode) => void
@@ -423,6 +424,7 @@ export function ComposerCard({
   sessionStatus,
   permissionMode,
   planModeActive = false,
+  grillModeActive = false,
   goalModeEnabled = false,
   onGoalModeChange,
   thinkingMode,
@@ -484,10 +486,10 @@ export function ComposerCard({
   onStartReview,
   onPermissionChange,
   onPlanModeChange,
+  onGrillModeChange,
   onSubmit,
   onCompact,
   queuedCompactionSupported = false,
-  onCancelCompaction,
   onCommandError,
   onThinkingChange,
   onSkillSelect,
@@ -687,9 +689,11 @@ export function ComposerCard({
     ? '加载模型列表中……'
     : goalModeEnabled
       ? '粘贴你的计划或目标…'
-      : planModeActive
-        ? 'Describe your task to generate a plan...'
-        : placeholder
+      : grillModeActive
+        ? '描述你的想法，通过深度提问厘清需求…'
+        : planModeActive
+          ? 'Describe your task to generate a plan...'
+          : placeholder
   const selectedProvider = providerOptions.find(
     (provider) => provider.providerID === selectedProviderID,
   )
@@ -740,6 +744,7 @@ export function ComposerCard({
   } = useComposerSlashCommands({
     capabilities,
     planModeActive,
+    grillModeActive,
     goalModeEnabled,
     hasConversationMessages,
     hasThread: Boolean(routedSessionId),
@@ -757,6 +762,7 @@ export function ComposerCard({
     onOpenMcp: onOpenMcpSettings,
     onApprove: approvalReview.supported ? () => setApprovalRetryOpen(true) : undefined,
     onPlanModeChange,
+    onGrillModeChange,
     onGoalModeChange,
     onOpenReview: suggestions.openReview,
     onCompact,
@@ -901,12 +907,14 @@ export function ComposerCard({
       .filter(
         (command) =>
           command.availability.visible &&
-          ['goal', SHARED_SLASH_COMMANDS.plan.id].includes(command.id),
+          ['goal', SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id].includes(
+            command.id,
+          ),
       )
       .sort(
         (a, b) =>
-          ['goal', SHARED_SLASH_COMMANDS.plan.id].indexOf(a.id) -
-          ['goal', SHARED_SLASH_COMMANDS.plan.id].indexOf(b.id),
+          ['goal', SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id].indexOf(a.id) -
+          ['goal', SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id].indexOf(b.id),
       )
       .map((command) => ({
         ...composerCommandMenuItem(command, executeCommand, onSkillSelect),
@@ -941,6 +949,7 @@ export function ComposerCard({
       ...contextActions.filter((item) => item.command?.id === 'goal'),
       ...attachmentActions,
       ...contextActions.filter((item) => item.command?.id === SHARED_SLASH_COMMANDS.plan.id),
+      ...contextActions.filter((item) => item.command?.id === SHARED_SLASH_COMMANDS.grill.id),
       ...modelActions,
     ]
     if (!subagentMode)
@@ -1181,7 +1190,9 @@ export function ComposerCard({
     }
     if (
       item.command?.source === 'builtin' &&
-      [SHARED_SLASH_COMMANDS.plan.id, 'goal'].includes(item.command.id)
+      [SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id, 'goal'].includes(
+        item.command.id,
+      )
     ) {
       const request = suggestionRequest
       const originalInput = input
@@ -1228,7 +1239,11 @@ export function ComposerCard({
       onCommandError?.(parsed.reason)
       return true
     }
-    if ([SHARED_SLASH_COMMANDS.plan.id, 'goal'].includes(parsed.command.id)) {
+    if (
+      [SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id, 'goal'].includes(
+        parsed.command.id,
+      )
+    ) {
       const originalInput = input
       void executeCommand(parsed.command).then((succeeded) => {
         if (
@@ -1314,7 +1329,7 @@ export function ComposerCard({
       modelText: modelTextProbeRef,
       modelIcon: modelIconProbeRef,
     },
-    `${selectedModelLabel}|${selectedThinkingLabel}|${showThinkingOptions}|${showRing}|${planModeActive}|${goalModeEnabled}|${capabilities.dictation}`,
+    `${selectedModelLabel}|${selectedThinkingLabel}|${showThinkingOptions}|${showRing}|${planModeActive}|${grillModeActive}|${goalModeEnabled}|${capabilities.dictation}`,
   )
   const footerFit = resolveComposerFooterFit(footerMetrics, {
     hasRing: showRing,
@@ -1528,45 +1543,6 @@ export function ComposerCard({
             : COMPOSER_TOP_DEFAULT_CLASS,
         )}
       >
-        {contextUsage?.compactionOperation &&
-        (contextUsage.compactionOperation.status !== 'completed' ||
-          contextUsage.compactionOperation.reason === 'target-unmet') ? (
-          <div
-            className="tw:mx-1 tw:mb-2 tw:flex tw:items-center tw:gap-2 tw:type-caption tw:text-app-text-meta"
-            role="status"
-          >
-            <span>
-              {
-                {
-                  completed: '上下文已压缩到安全范围，未完全达到压缩目标',
-                  queued: '已排队，当前回复和工具完成后压缩',
-                  running: '正在压缩上下文…',
-                  skipped: '上下文已压缩，暂无新增内容需要压缩',
-                  failed: '上下文压缩失败，请减少输入或检查模型后重试',
-                  cancelled: '上下文压缩已取消',
-                  interrupted: '压缩因进程重启中断，请重新发起',
-                }[contextUsage.compactionOperation.status]
-              }
-            </span>
-            {['queued', 'running'].includes(contextUsage.compactionOperation.status) &&
-            onCancelCompaction ? (
-              <Button
-                variant="secondary"
-                onClick={() =>
-                  void onCancelCompaction().catch((error) =>
-                    onCommandError?.(error instanceof Error ? error.message : '取消压缩失败'),
-                  )
-                }
-              >
-                取消压缩
-              </Button>
-            ) : null}
-          </div>
-        ) : executingCommandId === 'compact' ? (
-          <div className="tw:mx-1 tw:mb-2 tw:type-caption tw:text-app-text-meta" role="status">
-            正在压缩上下文…
-          </div>
-        ) : null}
         {inlineSubmitFailure ? (
           <div
             className="composer-submit-error tw:mx-1 tw:mt-0 tw:mb-2 tw:text-app-warning tw:type-caption"
@@ -1709,6 +1685,13 @@ export function ComposerCard({
                     event.preventDefault()
                     void Promise.resolve(onPlanModeChange?.(false)).catch((error: unknown) =>
                       onCommandError?.(error instanceof Error ? error.message : '计划模式未更新'),
+                    )
+                    return true
+                  }
+                  if (grillModeActive) {
+                    event.preventDefault()
+                    void Promise.resolve(onGrillModeChange?.(false)).catch((error: unknown) =>
+                      onCommandError?.(error instanceof Error ? error.message : '深度访谈模式未更新'),
                     )
                     return true
                   }
@@ -1926,6 +1909,49 @@ export function ComposerCard({
                     />
                   </span>
                   <span className={COMPOSER_MODE_CHIP_LABEL_CLASS}>目标</span>
+                </button>
+              </>
+            ) : null}
+            {!subagentMode && grillModeActive && onGrillModeChange ? (
+              <>
+                <span className={TOOLBAR_DIVIDER_CLASS} />
+                <button
+                  aria-pressed="true"
+                  aria-label="退出深度访谈"
+                  className={cx(
+                    'chip-button composer-plan-mode-chip tw:group tw:relative tw:gap-1 tw:px-1 tw:text-app-text-meta tw:hover:text-app-text-meta tw:type-secondary',
+                  )}
+                  onClick={() => {
+                    void Promise.resolve(onGrillModeChange(false)).catch((error: unknown) =>
+                      onCommandError?.(error instanceof Error ? error.message : '深度访谈模式未更新'),
+                    )
+                  }}
+                  title="退出深度访谈"
+                  type="button"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cx(
+                      'composer-plan-mode-chip-icon tw:relative tw:inline-flex tw:size-icon-sm tw:shrink-0 tw:items-center tw:justify-center',
+                    )}
+                  >
+                    <MessagesSquare
+                      className={cx(
+                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:transition-opacity tw:duration-state tw:ease-out',
+                        'tw:group-hover:opacity-0 tw:group-focus-visible:opacity-0',
+                      )}
+                      size={APP_ICON_SIZES.sm}
+                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                    />
+                    <X
+                      className={cx(
+                        'composer-plan-mode-chip-icon-exit tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:p-0 tw:opacity-0 tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-100 tw:group-focus-visible:opacity-100',
+                      )}
+                      size={APP_ICON_SIZES.sm}
+                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                    />
+                  </span>
+                  <span className={COMPOSER_MODE_CHIP_LABEL_CLASS}>访谈</span>
                 </button>
               </>
             ) : null}
@@ -2330,6 +2356,8 @@ function composerSlashCommandIcon(id: ComposerSlashCommandId): React.ReactNode {
       return <Brain size={APP_ICON_SIZE} />
     case SHARED_SLASH_COMMANDS.plan.id:
       return <ListChecks size={APP_ICON_SIZE} />
+    case SHARED_SLASH_COMMANDS.grill.id:
+      return <MessagesSquare size={APP_ICON_SIZE} />
     case 'goal':
       return <Target size={APP_ICON_SIZE} />
     case 'review':

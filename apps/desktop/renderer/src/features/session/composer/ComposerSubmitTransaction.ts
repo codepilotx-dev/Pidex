@@ -11,7 +11,7 @@ import {
   hasTaskPlanningInvocation,
   skillInvocationsFromComposerDocument,
 } from './ComposerSkillToken.js'
-import { planTaskFromInput } from './ComposerSlashCommands.js'
+import { grillTaskFromInput, planTaskFromInput } from './ComposerSlashCommands.js'
 import {
   annotationAttachments,
   validateAnnotationCapacity,
@@ -42,14 +42,16 @@ export function prepareComposerSubmission(
 ): PreparedComposerSubmission | ComposerSubmitOutcome {
   const snapshot = cloneDraft(draft)
   const planTask = planTaskFromInput(snapshot.document.text)
-  if (planTask !== null) {
-    const prefixLength = snapshot.document.text.indexOf(planTask)
+  const grillTask = grillTaskFromInput(snapshot.document.text)
+  if (planTask !== null || grillTask !== null) {
+    const directTask = planTask ?? grillTask!
+    const prefixLength = snapshot.document.text.indexOf(directTask)
     snapshot.document = {
-      text: planTask,
+      text: directTask,
       tokens: snapshot.document.tokens.map((token) => ({
         ...token,
-        from: Math.max(0, Math.min(planTask.length, token.from - prefixLength)),
-        to: Math.max(0, Math.min(planTask.length, token.to - prefixLength)),
+        from: Math.max(0, Math.min(directTask.length, token.from - prefixLength)),
+        to: Math.max(0, Math.min(directTask.length, token.to - prefixLength)),
       })),
     }
     snapshot.goalModeEnabled = false
@@ -73,7 +75,8 @@ export function prepareComposerSubmission(
       : skillInvocationsFromComposerDocument(snapshot.document))
   const hasContent = Boolean(text.trim()) || attachments.length > 0 || skills.length > 0
   const planning = hasTaskPlanningInvocation(snapshot.document, skills)
-  if (planning) snapshot.goalModeEnabled = false
+  const grilling = grillTask !== null || snapshot.collaborationMode === 'grill'
+  if (planning || grilling) snapshot.goalModeEnabled = false
 
   if (!hasContent) {
     return failed('prepare', '请输入消息或添加附件')
@@ -87,7 +90,11 @@ export function prepareComposerSubmission(
     input: {
       text,
       taskMode:
-        planning || planTask !== null || snapshot.collaborationMode === 'plan' ? 'plan' : 'chat',
+        planning || planTask !== null || snapshot.collaborationMode === 'plan'
+          ? 'plan'
+          : grilling
+            ? 'grill'
+            : 'chat',
       attachments,
       ...(skills.length ? { skills } : {}),
     },

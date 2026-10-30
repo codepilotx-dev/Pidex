@@ -6,6 +6,7 @@ import type { ComposerSlashCommand, ComposerSlashCommandId } from './ComposerSla
 type UseComposerSlashCommandsOptions = {
   capabilities: ComposerCapabilities
   planModeActive: boolean
+  grillModeActive?: boolean
   goalModeEnabled: boolean
   hasConversationMessages: boolean
   hasThread: boolean
@@ -20,6 +21,7 @@ type UseComposerSlashCommandsOptions = {
   onOpenMcp?: () => void
   onApprove?: () => void | Promise<void>
   onPlanModeChange?: (active: boolean) => void | Promise<void>
+  onGrillModeChange?: (active: boolean) => void | Promise<void>
   onGoalModeChange?: (active: boolean) => void
   onOpenReview: () => void
   onCompact?: () => Promise<void>
@@ -38,6 +40,7 @@ type UseComposerSlashCommandsOptions = {
 export function useComposerSlashCommands({
   capabilities,
   planModeActive,
+  grillModeActive = false,
   goalModeEnabled,
   hasConversationMessages,
   hasThread,
@@ -52,6 +55,7 @@ export function useComposerSlashCommands({
   onOpenMcp,
   onApprove,
   onPlanModeChange,
+  onGrillModeChange,
   onGoalModeChange,
   onOpenReview,
   onCompact,
@@ -107,7 +111,22 @@ export function useComposerSlashCommands({
         Boolean(onPlanModeChange),
         async () => {
           await onPlanModeChange?.(!planModeActive)
-          if (!planModeActive) onGoalModeChange?.(false)
+          if (!planModeActive) {
+            onGoalModeChange?.(false)
+          }
+        },
+      ),
+      command(
+        SHARED_SLASH_COMMANDS.grill.id,
+        '深度访谈',
+        grillModeActive ? '关闭深度访谈' : '通过深度提问厘清需求',
+        !subagentMode,
+        Boolean(onGrillModeChange),
+        async () => {
+          await onGrillModeChange?.(!grillModeActive)
+          if (!grillModeActive) {
+            onGoalModeChange?.(false)
+          }
         },
       ),
       command(
@@ -118,6 +137,7 @@ export function useComposerSlashCommands({
         Boolean(onGoalModeChange),
         async () => {
           if (planModeActive) await onPlanModeChange?.(false)
+          if (grillModeActive) await onGrillModeChange?.(false)
           if (!goalModeEnabled) onGoalModeChange?.(true)
         },
       ),
@@ -212,6 +232,7 @@ export function useComposerSlashCommands({
       canReview,
       compactEnabled,
       goalModeEnabled,
+      grillModeActive,
       hasConversationMessages,
       hasThread,
       onCompact,
@@ -221,6 +242,7 @@ export function useComposerSlashCommands({
       onChooseProject,
       onClearProject,
       onGoalModeChange,
+      onGrillModeChange,
       onOpenMcp,
       onApprove,
       onOpenModel,
@@ -273,7 +295,7 @@ function command(
   return {
     id,
     trigger:
-      id === SHARED_SLASH_COMMANDS.plan.id || id === SHARED_SLASH_COMMANDS.status.id
+      id === 'plan' || id === 'grill' || id === 'status'
         ? SHARED_SLASH_COMMANDS[id].trigger
         : id,
     title,

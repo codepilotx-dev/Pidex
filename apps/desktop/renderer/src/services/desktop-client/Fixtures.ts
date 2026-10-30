@@ -290,6 +290,7 @@ export function mockSessionSnapshot(
     planModeActive: options.planModeActive,
   })
   const planModeActive = planModeActiveFromCollaborationMode(collaborationMode)
+  const grillModeActive = options.grillModeActive === true && !planModeActive
   const permissionConfig =
     options.permissionConfig ?? desktopPermissionModeToPermissionConfig('default')
   const permissionMode = permissionModeFromDesktopConfig(permissionConfig)
@@ -305,6 +306,7 @@ export function mockSessionSnapshot(
       permissionMode,
       collaborationMode,
       planModeActive,
+      grillModeActive,
       model: options.model ?? null,
       thinkingMode: options.thinkingMode ?? 'default',
       hasSystemPrompt: Boolean(options.systemPrompt),
@@ -319,6 +321,7 @@ export function mockSessionSnapshot(
       permissionConfig,
       collaborationMode,
       planModeActive,
+      grillModeActive,
       model: options.model,
       sessionName: options.sessionName,
       thinkingMode: options.thinkingMode ?? 'default',

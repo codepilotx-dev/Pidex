@@ -59,7 +59,10 @@ export type ParsedSlashInvocation =
   | { kind: 'disabled'; command: ComposerSlashCommand; reason: string }
   | { kind: 'unknown' }
 
-export { parsePlanTaskFromInput as planTaskFromInput } from '@pidex/shared/slash-commands'
+export {
+  parseGrillTaskFromInput as grillTaskFromInput,
+  parsePlanTaskFromInput as planTaskFromInput,
+} from '@pidex/shared/slash-commands'
 
 export function skillToComposerCommand(skill: DesktopInstalledSkill): ComposerSkillCommand {
   return {

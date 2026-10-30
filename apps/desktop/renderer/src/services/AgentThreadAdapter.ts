@@ -70,6 +70,7 @@ export function agentThreadListItemToDesktop(
   const workspace = threadWorkspaceToDesktopWorkspace(thread.workspace, project)
   const standalone = thread.projectID === null
   const planModeActive = thread.settings.taskMode === 'plan'
+  const grillModeActive = thread.settings.taskMode === 'grill'
   return {
     id: thread.id,
     projectId: thread.projectID,
@@ -94,6 +95,7 @@ export function agentThreadListItemToDesktop(
     permissionMode: permissionModeFromPermissionConfig(thread.settings.permissionConfig),
     collaborationMode: collaborationModeFromPlanModeActive(planModeActive),
     planModeActive,
+    grillModeActive,
     model: null,
     reviewModel: null,
     thinkingMode: 'default',
@@ -121,6 +123,7 @@ export function agentThreadListItemToDesktopSnapshot(
       permissionConfig: thread.settings.permissionConfig,
       collaborationMode: item.collaborationMode,
       planModeActive: item.planModeActive,
+      grillModeActive: item.grillModeActive,
       thinkingMode: 'default',
       sessionName: item.sessionName ?? undefined,
       additionalDirectories: [],
@@ -153,6 +156,7 @@ export function agentThreadSnapshotToDesktop(
   const workspace = threadWorkspaceToDesktopWorkspace(snapshot.thread.workspace, project)
   const standalone = snapshot.thread.projectID === null
   const planModeActive = snapshot.thread.settings.taskMode === 'plan'
+  const grillModeActive = snapshot.thread.settings.taskMode === 'grill'
   const events = snapshotEvents(snapshot)
   const latestMessage = events
     .slice()
@@ -188,6 +192,7 @@ export function agentThreadSnapshotToDesktop(
     permissionMode: permissionModeFromPermissionConfig(snapshot.thread.settings.permissionConfig),
     collaborationMode: collaborationModeFromPlanModeActive(planModeActive),
     planModeActive,
+    grillModeActive,
     providerID: latestModel?.providerID,
     model: latestModel?.id ?? null,
     reviewModel: null,
@@ -209,6 +214,7 @@ export function agentThreadSnapshotToDesktop(
       permissionConfig: snapshot.thread.settings.permissionConfig,
       collaborationMode: item.collaborationMode,
       planModeActive,
+      grillModeActive,
       providerID: latestModel?.providerID,
       model: latestModel?.id,
       variant,

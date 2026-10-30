@@ -1253,8 +1253,9 @@ export function createAgentSessionDesktopClient(
     refreshTimers.set(sessionId, timer)
   }
 
-  function taskModeForSession(sessionId: string): 'chat' | 'plan' {
-    return sessionSnapshots.get(sessionId)?.item.planModeActive ? 'plan' : 'chat'
+  function taskModeForSession(sessionId: string): 'chat' | 'plan' | 'grill' {
+    const item = sessionSnapshots.get(sessionId)?.item
+    return item?.grillModeActive ? 'grill' : item?.planModeActive ? 'plan' : 'chat'
   }
 
   function permissionConfigForSession(sessionId: string) {
@@ -1276,6 +1277,7 @@ export function createAgentSessionDesktopClient(
   ): Promise<DesktopSessionSnapshot> {
     const current = sessionSnapshots.get(sessionId) ?? (await loadAgentSessionSnapshot(sessionId))
     const planModeActive = settings.taskMode === 'plan'
+    const grillModeActive = settings.taskMode === 'grill'
     const collaborationMode = collaborationModeFromPlanModeActive(planModeActive)
     const permissionMode = permissionModeFromConfig(settings.permissionConfig)
     const snapshot: DesktopSessionSnapshot = {
@@ -1285,12 +1287,14 @@ export function createAgentSessionDesktopClient(
         collaborationMode,
         permissionMode,
         planModeActive,
+        grillModeActive,
       },
       settings: {
         ...current.settings,
         collaborationMode,
         permissionConfig: settings.permissionConfig,
         planModeActive,
+        grillModeActive,
       },
     }
     sessionSnapshots.set(sessionId, snapshot)
@@ -3486,7 +3490,11 @@ export function createAgentSessionDesktopClient(
           const advancedPermission: PermissionConfig =
             options.permissionConfig ?? stored.permissionConfig
           const settings: ThreadSettings = {
-            taskMode: planModeActiveFromCollaborationMode(collaborationMode) ? 'plan' : 'chat',
+            taskMode: planModeActiveFromCollaborationMode(collaborationMode)
+              ? 'plan'
+              : options.grillModeActive === true
+                ? 'grill'
+                : 'chat',
             permissionConfig: advancedPermission,
           }
           const supportsCreationSurface = agentCapabilities.has('thread.creation-surface.v1')
@@ -3748,6 +3756,14 @@ export function createAgentSessionDesktopClient(
             taskMode: active ? 'plan' : 'chat',
           }),
         () => mockClient.setSessionPlanModeActive(sessionId, active),
+      ),
+    setSessionGrillModeActive: (sessionId, active) =>
+      withAgentOrMock(
+        () =>
+          updateThreadSettings(sessionId, {
+            taskMode: active ? 'grill' : 'chat',
+          }),
+        () => mockClient.setSessionGrillModeActive(sessionId, active),
       ),
     setSessionLocalRouterMode: (sessionId, mode) =>
       withUnsupportedAgentFallback('setSessionLocalRouterMode', () =>

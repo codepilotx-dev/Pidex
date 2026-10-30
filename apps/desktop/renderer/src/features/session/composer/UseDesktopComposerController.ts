@@ -64,6 +64,7 @@ type ControllerOptions = {
   enableAutoReviewPermissionMode: boolean
   enableFullAccessPermissionMode: boolean
   planModeActive: boolean
+  grillModeActive: boolean
   sessionBusy: boolean
   modelConfigured: boolean
   selectedModelMetadata?: DesktopModelMetadata
@@ -156,6 +157,7 @@ export function useDesktopComposerController({
   enableAutoReviewPermissionMode,
   enableFullAccessPermissionMode,
   planModeActive,
+  grillModeActive,
   sessionBusy,
   modelConfigured,
   selectedModelMetadata,
@@ -301,7 +303,7 @@ export function useDesktopComposerController({
 
   useEffect(() => {
     const current = composerDraftStore.get(draftKey)
-    const collaborationMode = planModeActive ? 'plan' : 'default'
+    const collaborationMode = grillModeActive ? 'grill' : planModeActive ? 'plan' : 'default'
     // Store 写入会通知当前 Composer，派生内容未变时不能再次写回。
     if (
       current.clientId === draftClientIdRef.current &&
@@ -319,7 +321,7 @@ export function useDesktopComposerController({
       attachments,
       collaborationMode,
     }))
-  }, [activeSkills, attachments, composerDocument, draftKey, planModeActive])
+  }, [activeSkills, attachments, composerDocument, draftKey, grillModeActive, planModeActive])
 
   useEffect(() => {
     if (subagentMode) {
@@ -395,7 +397,7 @@ export function useDesktopComposerController({
       attachments,
       skills: draftSkills(composerDraftStore.get(sourceDraftKey)),
       skillInvocation: undefined,
-      collaborationMode: planModeActive ? 'plan' : 'default',
+      collaborationMode: grillModeActive ? 'grill' : planModeActive ? 'plan' : 'default',
       goalModeEnabled,
     }
     composerDraftStore.set(sourceDraftKey, draft)
