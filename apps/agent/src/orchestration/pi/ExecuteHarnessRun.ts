@@ -317,6 +317,14 @@ export async function executeHarnessRun(
   }
   request.signal.addEventListener('abort', onAbort, { once: true })
   try {
+    // The frozen turn owns exposure; session history may belong to another mode.
+    const restored = (await dependencies.session.buildContext()).activeToolNames ?? []
+    await harness.setActiveTools([
+      ...new Set([
+        ...tools.map((tool) => tool.name),
+        ...restored.filter((name) => deferredToolCatalog.has(name)),
+      ]),
+    ])
     const images = promptImages(request)
     let message: AssistantMessage = await harness.prompt(
       promptContext(request, bundle.contextItems),

@@ -1218,6 +1218,8 @@ export class AgentHarness<
           },
           '',
         )
+      let summaryLimit = 13107
+      let tailLimit = 20000
       for (let attempt = 0; attempt < 2; attempt += 1) {
         signal?.throwIfAborted()
         const available = (attempt ? budget.triggerTokens - 1 : budget.targetTokens) - fixedTokens
@@ -1228,10 +1230,10 @@ export class AgentHarness<
             '固定提示词、工具或最新输入过大，无法腾出安全上下文空间',
           )
         }
-        const summaryTokens = Math.min(13107, model.maxTokens, Math.floor(available / 2))
+        const summaryTokens = Math.min(summaryLimit, model.maxTokens, Math.floor(available / 2))
         const preparationResult = prepareCompaction(entries, {
           ...DEFAULT_COMPACTION_SETTINGS,
-          keepRecentTokens: Math.min(20000, available - summaryTokens),
+          keepRecentTokens: Math.min(tailLimit, available - summaryTokens),
           summaryTokens,
         })
         if (!preparationResult.ok) throw preparationResult.error
@@ -1307,7 +1309,12 @@ export class AgentHarness<
           fixedTokens: (estimate.fixedTokens ?? 0) + extraPrefixTokens,
         }
         if (after.usedTokens >= after.triggerTokens) {
-          if (!attempt) continue
+          if (!attempt) {
+            // A larger retry budget repeats oversized summaries and retained tails.
+            summaryLimit = Math.max(1, Math.floor(summaryTokens / 2))
+            tailLimit = Math.floor(preparation.settings.keepRecentTokens / 2)
+            continue
+          }
           throw new AgentHarnessError(
             'compaction',
             '压缩后仍超过安全触发线，请减少输入或调整模型额度',
