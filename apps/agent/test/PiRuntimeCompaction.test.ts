@@ -210,6 +210,34 @@ describe('Harness runtime provider errors', () => {
 })
 
 describe('Harness runtime context compaction', () => {
+  test('32K 模型的首份摘要超预算时收紧摘要与保留量后重试，仍只写入成功摘要', async () => {
+    const summaryBudgets: number[] = []
+    const setup = await createRuntime({
+      history: 'x'.repeat(200_000),
+      shouldAutoCompact: true,
+      responses: [
+        (_context, options) => {
+          summaryBudgets.push(options!.maxTokens!)
+          return fauxAssistantMessage('oversized'.repeat(20_000))
+        },
+        (_context, options) => {
+          summaryBudgets.push(options!.maxTokens!)
+          return fauxAssistantMessage('精简的需求共识摘要')
+        },
+        fauxAssistantMessage('访谈继续'),
+      ],
+    })
+    setup.request.model = { ...setup.request.model, contextWindow: 32768, maxTokens: 8192 }
+    try {
+      await expect(setup.runtime.run(setup.request)).resolves.toMatchObject({ output: '访谈继续' })
+      expect(summaryBudgets).toHaveLength(2)
+      expect(summaryBudgets[1]!).toBeLessThan(summaryBudgets[0]!)
+      expect(setup.compacted).toEqual(['automatic'])
+      expect((await setup.session.getBranch()).filter((entry) => entry.type === 'compaction')).toHaveLength(1)
+    } finally {
+      await setup.runtime.dispose()
+    }
+  })
   test.each([true, false])(
     'checks compaction between tool batches with permission %s',
     async (allowed) => {

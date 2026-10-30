@@ -68,7 +68,7 @@ describe('工作区工具', () => {
     ).not.toContain('request_user_input')
   })
 
-  test('普通模式直接应用补丁，Plan 模式拒绝写入', async () => {
+  test('普通模式直接应用补丁，Plan 和 Grill 即使完全访问也拒绝写入', async () => {
     const root = await mkdtemp(join(tmpdir(), 'pidex-workspace-'))
     paths.push(root)
     const file = join(root, 'source.txt')
@@ -95,17 +95,28 @@ describe('工作区工具', () => {
     )
     expect(patch).toMatchObject({ operation: 'edit', path: 'source.txt' })
     expect(await Bun.file(file).text()).toBe('after')
-    await expect(
-      executor.execute(
-        'Edit',
-        {
+    for (const taskMode of ['plan', 'grill'] as const) {
+      const readOnlyContext = {
+        ...context,
+        taskMode,
+        permissionConfig: {
+          sandboxMode: 'danger-full-access' as const,
+          approvalPolicy: 'never' as const,
+          approvalsReviewer: 'user' as const,
+        },
+      }
+      await expect(
+        executor.execute('Edit', {
           path: 'source.txt',
           edits: [{ oldText: 'after', newText: 'blocked' }],
-        },
-        { ...context, taskMode: 'plan' },
-      ),
-    ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
-    expect(await Bun.file(file).text()).toBe('after')
+        }, readOnlyContext),
+      ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
+      expect(await Bun.file(file).text()).toBe('after')
+      await expect(
+        executor.execute('Write', { file_path: 'probe.txt', content: 'test' }, readOnlyContext),
+      ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
+      expect(await Bun.file(join(root, 'probe.txt')).exists()).toBe(false)
+    }
   })
 
   test('拒绝工作区外路径并以 UTF-8 读取文件', async () => {

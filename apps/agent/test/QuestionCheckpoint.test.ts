@@ -10,6 +10,7 @@ import { EventHub } from '../src/storage/events/EventHub'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import { Model, Provider } from '@pidex/model-schema'
 import { interactionQuestions, requestUserInputSchema } from '../src/session/QuestionInput'
+import { QUESTION_CHOICES_WRITE_MAX } from '@pidex/shared/thread'
 import { QuestionAutoResolutionScheduler } from '../src/interaction/QuestionAutoResolutionScheduler'
 
 const databases: AgentDatabase[] = []
@@ -196,10 +197,14 @@ describe('问题 checkpoint', () => {
         ],
       })
       const restored = new QuestionService(reopened, hub)
-      expect(JSON.parse(restored.claimResolvedCheckpoint(turn.turnID)!.approval.answer!)).toEqual({
+      const answerForModel = JSON.parse(restored.claimResolvedCheckpoint(turn.turnID)!.approval.answer!)
+      expect(answerForModel).toMatchObject({
         resolution: 'user',
         answers,
       })
+      expect(answerForModel.answers[0].selectedChoices).toEqual([])
+      if (!skipAll)
+        expect(answerForModel.answers[1].selectedChoices).toEqual([{ id: 'format:1', label: 'B' }])
       restored.dispose()
     },
   )
@@ -240,7 +245,70 @@ describe('问题 checkpoint', () => {
     ).rejects.toThrow()
   })
 
-  test('rich questions 按结构化 answers 恢复，不压平多题答案', async () => {
+  test('request_user_input 接受 5 题 5 选项，并按多选推导 maxAnswers', async () => {
+    const received: unknown[] = []
+    const [tool] = createLifecycleTools(
+      {
+        requestUserInput: async (input) => {
+          received.push(input)
+          return { paused: true }
+        },
+      },
+      { exposedTools: ['request_user_input'] } as never,
+    )
+    const questions = Array.from({ length: 5 }, (_, questionIndex) => ({
+      id: `q${questionIndex}`,
+      header: `题${questionIndex}`,
+      question: `问题 ${questionIndex}`,
+      options: Array.from({ length: QUESTION_CHOICES_WRITE_MAX }, (_, optionIndex) => ({
+        label: `选项 ${optionIndex}`,
+        description: '说明',
+      })),
+      ...(questionIndex === 0 ? { multiSelect: true } : {}),
+    }))
+    await tool!.execute('question-five', { questions } as never, new AbortController().signal)
+    expect(received).toEqual([{ questions }])
+
+    const derived = interactionQuestions(questions)
+    expect(derived[0]?.maxAnswers).toBe(QUESTION_CHOICES_WRITE_MAX + 1)
+    expect(derived[1]?.maxAnswers).toBe(1)
+    expect(interactionQuestions([{ ...questions[0]!, multiSelect: false }])[0]?.maxAnswers).toBe(1)
+
+    await expect(
+      tool!.execute(
+        'question-six',
+        { questions: [...questions, questions[0]] } as never,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow()
+    await expect(
+      tool!.execute(
+        'question-single-option',
+        { questions: [{ ...questions[1]!, options: [questions[1]!.options[0]!] }] } as never,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow()
+    // 写入侧契约不变：超过共享写入上限仍被拒绝。
+    await expect(
+      tool!.execute(
+        'question-over-write-max',
+        {
+          questions: [
+            {
+              ...questions[1]!,
+              options: Array.from({ length: QUESTION_CHOICES_WRITE_MAX + 1 }, (_, index) => ({
+                label: `选项 ${index}`,
+                description: '说明',
+              })),
+            },
+          ],
+        } as never,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow()
+  })
+
+  test('多选经 RPC 契约校验、持久化与恢复，单选仍拒绝多项', async () => {
     const db = new AgentDatabase(
       join(tmpdir(), `pidex-question-rich-${crypto.randomUUID()}.sqlite`),
     )
@@ -268,6 +336,7 @@ describe('问题 checkpoint', () => {
           id: 'delivery',
           header: '发送方式',
           question: '下一条消息如何处理？',
+          multiSelect: true,
           options: [
             { label: 'Steer', description: '进入当前 Turn' },
             { label: '排队', description: '等待下一 Turn' },
@@ -298,16 +367,33 @@ describe('问题 checkpoint', () => {
     expect(row.tool_call_id).toBe('question-call')
     expect(JSON.parse(row.payload).questions).toHaveLength(2)
 
-    await questions.reply(id, [
-      { questionId: 'delivery', choiceIds: ['delivery:0'] },
+    const answers = [
+      { questionId: 'delivery', choiceIds: ['delivery:0', 'delivery:1'], text: '补充说明' },
       { questionId: 'persist', choiceIds: [], text: '需要持久化' },
-    ])
+    ]
+    const request = Schema.decodeUnknownSync(RpcMethods['interaction/respond'].params)({
+      interactionId: id, expectedVersion: 2, operationId: crypto.randomUUID(),
+      response: { kind: 'question', status: 'answered', resolution: 'user', answers },
+    })
+    if (request.response.kind !== 'question' || request.response.status !== 'answered')
+      throw new Error('expected question answer')
+    await expect(questions.reply(id, [
+      answers[0], { questionId: 'persist', choiceIds: ['persist:0', 'persist:1'] },
+    ])).rejects.toMatchObject({ code: 'INVALID_QUESTION_ANSWER' })
+    await questions.reply(id, request.response.answers)
     const checkpoint = questions.claimResolvedCheckpoint(turn.turnID)
     expect(JSON.parse(checkpoint!.approval.answer!)).toEqual({
       resolution: 'user',
       answers: [
-        { questionId: 'delivery', choiceIds: ['delivery:0'] },
-        { questionId: 'persist', choiceIds: [], text: '需要持久化' },
+        {
+          ...answers[0],
+          question: '下一条消息如何处理？',
+          selectedChoices: [
+            { id: 'delivery:0', label: 'Steer' },
+            { id: 'delivery:1', label: '排队' },
+          ],
+        },
+        { ...answers[1], question: '是否持久化？', selectedChoices: [] },
       ],
     })
   })

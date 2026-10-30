@@ -68,6 +68,20 @@ describe('ToolExposurePlan finalize_result exposure', () => {
     expect(plan.exposed).toContain('submit_plan')
   })
 
+  test('Grill 主 Agent 只读调查、可提问与派发 Explorer，但不暴露计划提交', () => {
+    const plan = exposure({ taskMode: 'grill', profile: 'main', sandboxMode: 'danger-full-access' })
+    expect(plan.allows('request_user_input')).toBe(true)
+    expect(plan.allows('spawn_agents')).toBe(true)
+    expect(plan.allows('submit_plan')).toBe(false)
+    expect(plan.allows('submit_schedule_plan')).toBe(false)
+    expect(plan.allows('update_plan')).toBe(false)
+    expect(plan.allows('update_goal')).toBe(false)
+    expect(plan.allows('request_permissions')).toBe(false)
+    expect(plan.exposed).toContain('Read')
+    expect(plan.exposed).not.toContain('Write')
+    expect(plan.exposed).not.toContain('Edit')
+  })
+
   test('submit_plan 只属于 Plan 主 Agent', () => {
     expect(exposure({ taskMode: 'chat', profile: 'main' }).allows('submit_plan')).toBe(false)
     for (const profile of ['default', 'explorer', 'worker'] as const) {

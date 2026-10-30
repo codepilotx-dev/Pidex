@@ -408,13 +408,13 @@ describe('统一权限真值', () => {
     ).toMatchObject({ action: 'allow', risk: 'low' })
   })
 
-  test('Plan 强制只读并禁止 Shell、权限提升和外部副作用', () => {
+  test.each(['plan', 'grill'] as const)('%s 强制只读并禁止 Shell、权限提升和外部副作用', (taskMode) => {
     const catalog = new ToolRegistry()
     const engine = new PermissionDecisionEngine()
     expect(
       engine.evaluate(
         invocation({
-          taskMode: 'plan',
+          taskMode,
           permissionConfig: {
             sandboxMode: 'danger-full-access',
             approvalPolicy: 'on-failure',
@@ -431,7 +431,7 @@ describe('统一权限真值', () => {
       engine.evaluate(
         invocation({
           name: 'Write',
-          taskMode: 'plan',
+          taskMode,
           input: { file_path: 'x', content: 'x' },
         }),
         catalog.get('Write'),
@@ -441,7 +441,7 @@ describe('统一权限真值', () => {
       engine.evaluate(
         invocation({
           name: 'request_permissions',
-          taskMode: 'plan',
+          taskMode,
           input: { scope: 'turn', justification: 'need' },
         }),
         catalog.get('request_permissions'),

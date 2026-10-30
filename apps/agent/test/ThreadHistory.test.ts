@@ -595,7 +595,7 @@ describe('Thread 历史', () => {
 describe('历史 task_mode 读取兼容', () => {
   test('旧模式与未知模式不影响列表编码和分页，读取不改写原值', async () => {
     const { db, projection, history } = await makeHistory()
-    const modes = ['chat', 'plan', 'grill', 'future-mode']
+    const modes = ['chat', 'plan', 'legacy-mode', 'future-mode']
     const ids = modes.map((mode, index) => {
       const thread = db.createThread(mode)
       db.sqlite
@@ -641,9 +641,9 @@ describe('历史 task_mode 读取兼容', () => {
     const { db, projection } = await makeHistory()
     const thread = db.createThread('旧模式历史')
     const turn = db.createTurn(thread.id, input('保留这条消息'))
-    db.sqlite.query("UPDATE threads SET task_mode = 'grill' WHERE id = ?").run(thread.id)
-    db.sqlite.query("UPDATE inputs SET task_mode = 'grill' WHERE turn_id = ?").run(turn.turnID)
-    db.sqlite.query("UPDATE turns SET mode = 'grill' WHERE id = ?").run(turn.turnID)
+    db.sqlite.query("UPDATE threads SET task_mode = 'legacy-mode' WHERE id = ?").run(thread.id)
+    db.sqlite.query("UPDATE inputs SET task_mode = 'legacy-mode' WHERE turn_id = ?").run(turn.turnID)
+    db.sqlite.query("UPDATE turns SET mode = 'legacy-mode' WHERE id = ?").run(turn.turnID)
     const streamPosition = { streamId: 'fixture', sequence: 0 }
     const snapshot = projection.snapshot(thread.id)!
     expect(snapshot.thread.settings.taskMode).toBe('chat')
@@ -665,13 +665,13 @@ describe('历史 task_mode 读取兼容', () => {
       permissionConfig: { ...input('').permissionConfig, approvalsReviewer: 'user' },
     })
     expect(db.sqlite.query('SELECT task_mode FROM threads WHERE id = ?').get(thread.id)).toEqual({
-      task_mode: 'grill',
+      task_mode: 'legacy-mode',
     })
     expect(
       db.sqlite.query('SELECT task_mode, content FROM inputs WHERE id = ?').get(turn.inputID),
-    ).toEqual({ task_mode: 'grill', content: '保留这条消息' })
+    ).toEqual({ task_mode: 'legacy-mode', content: '保留这条消息' })
     expect(db.sqlite.query('SELECT mode FROM turns WHERE id = ?').get(turn.turnID)).toEqual({
-      mode: 'grill',
+      mode: 'legacy-mode',
     })
     db.updateThreadSettings(thread.id, { taskMode: 'chat' })
     expect(db.sqlite.query('SELECT task_mode FROM threads WHERE id = ?').get(thread.id)).toEqual({
@@ -687,7 +687,7 @@ describe('历史 task_mode 读取兼容', () => {
         operationId: 'fixture',
       }),
     ).not.toThrow()
-    for (const taskMode of ['grill', 'future-mode']) {
+    for (const taskMode of ['legacy-mode', 'future-mode']) {
       expect(() =>
         Schema.decodeUnknownSync(RpcMethods['thread/settings/update'].params)({
           threadId: 'fixture',

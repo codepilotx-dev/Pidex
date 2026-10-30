@@ -136,7 +136,7 @@ describe('BrowserService', () => {
           taskMode: 'plan',
         },
       ),
-    ).rejects.toThrow('Plan 模式')
+    ).rejects.toThrow('Plan 与 Grill 模式')
     await expect(
       executor.execute(
         'BrowserNavigate',
