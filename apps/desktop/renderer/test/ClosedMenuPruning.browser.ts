@@ -9,12 +9,13 @@ const source = (path: string) =>
   JSON.stringify(resolve(rendererRoot, 'src', path).replaceAll('\\', '/'))
 
 const harness = `
-import React, { StrictMode, useState, useMemo, useCallback } from 'react';
+import React, { StrictMode, useState, useMemo, useCallback, useLayoutEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { flushSync } from 'react-dom';
 import { SearchablePopoverContent } from ${source('components/ui/SearchablePopoverContent.tsx')};
 import { ModelPickerPopover } from ${source('features/session/composer/ModelPickerPopover.tsx')};
 import { useComposerSuggestionMenu } from ${source('features/session/composer/UseComposerSuggestionMenu.ts')};
+import { ComposerCommandMenu } from ${source('features/session/composer/ComposerCommandMenu.tsx')};
 import {
   parseSlashInvocation,
   type ComposerSlashCommand,
@@ -50,6 +51,8 @@ const fixture = (window.fixture = {
   suggestionMenuScope: 'default:slash:0',
   lastSuggestionItems: [],
   lastSuggestionActiveKey: null,
+  suggestionMenuCommits: 0,
+  setSuggestionMenuActiveKey: null,
 
   parseSlashInvocation,
   resolveComposerSuggestionRequest,
@@ -177,7 +180,7 @@ function SuggestionMenuTestComponent() {
   fixture.setSuggestionMenuKeyword = (next) => flushSync(() => setKeyword(next));
   fixture.suggestionMenuOpen = open;
 
-  const { items, activeKey, activeItem } = useComposerSuggestionMenu(
+  const { items, activeKey, activeItem, setActiveKey } = useComposerSuggestionMenu(
     open ? SAMPLE_MENU_ITEMS : [],
     keyword,
     scope,
@@ -186,11 +189,15 @@ function SuggestionMenuTestComponent() {
 
   fixture.lastSuggestionItems = items;
   fixture.lastSuggestionActiveKey = activeKey;
+  fixture.setSuggestionMenuActiveKey = (key) => flushSync(() => setActiveKey(key));
+  useLayoutEffect(() => { fixture.suggestionMenuCommits++; });
 
   return (
     <div id="suggestion-menu-container">
       <span id="suggestion-items-count">{items.length}</span>
       <span id="suggestion-active-key">{activeKey ?? 'none'}</span>
+      {open ? <ComposerCommandMenu id="test-suggestions" items={items} keyword={keyword}
+        activeKey={activeKey} onActiveKeyChange={setActiveKey} onItemSelect={() => {}} /> : null}
     </div>
   );
 }
@@ -289,6 +296,7 @@ try {
     }),
   )
   await page.goto('http://127.0.0.1/closed-menu-pruning-test')
+  await page.addStyleTag({ content: '#test-suggestions { max-height: 70px; overflow: auto; } #test-suggestions button { display: block; height: 40px; }' })
   await page.addScriptTag({ content: script })
   await page.evaluate(() => (window as any).fixture.mount())
   await settle(page)
@@ -417,6 +425,30 @@ try {
     (window as any).fixture.lastSuggestionItems.length
   )
   assert.ok(openItemsCount > 0, 'Items must be populated when suggestion menu is open')
+
+  await page.evaluate(() => {
+    const fixture = (window as any).fixture
+    fixture.setSuggestionMenuActiveKey(fixture.lastSuggestionActiveKey)
+  })
+  await settle(page)
+  const commitsBeforeHover = await page.evaluate(() => (window as any).fixture.suggestionMenuCommits)
+  await page.evaluate(() => {
+    const fixture = (window as any).fixture
+    for (let index = 0; index < 30; index++)
+      fixture.setSuggestionMenuActiveKey(fixture.lastSuggestionActiveKey)
+  })
+  await settle(page)
+  assert.equal(await page.evaluate(() => (window as any).fixture.suggestionMenuCommits),
+    commitsBeforeHover, 'Repeated hover over the same option must not commit another render')
+
+  const menu = page.locator('#test-suggestions')
+  assert.equal(await menu.getAttribute('data-scroll-mask'), 'bottom')
+  await menu.evaluate((element) => { element.scrollTop = 30 })
+  await settle(page)
+  assert.equal(await menu.getAttribute('data-scroll-mask'), 'both')
+  await menu.evaluate((element) => { element.scrollTop = element.scrollHeight })
+  await settle(page)
+  assert.equal(await menu.getAttribute('data-scroll-mask'), 'top')
 
   // Close suggestion menu
   await page.evaluate(() => (window as any).fixture.setSuggestionMenuOpen(false))

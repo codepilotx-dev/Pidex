@@ -730,6 +730,20 @@ describe('desktop thread settings client', () => {
     })
     expect(permissionSnapshot.item.permissionMode).toBe('full-access')
     expect(permissionSnapshot.item.planModeActive).toBe(false)
+
+    const grillUpdate = client.setSessionGrillModeActive('session-1', true)
+    await client.sendUserMessage('session-1', { text: '访谈首轮' })
+    const grillSnapshot = await grillUpdate
+    expect(grillSnapshot.item.grillModeActive).toBe(true)
+    expect(grillSnapshot.item.planModeActive).toBe(false)
+    await client.sendUserMessage('session-1', { text: '访谈后续轮次' })
+    expect(turnStarts.slice(-2)).toEqual([
+      expect.objectContaining({ taskMode: 'grill' }),
+      expect.objectContaining({ taskMode: 'grill' }),
+    ])
+    const planSnapshot = await client.setSessionPlanModeActive('session-1', true)
+    expect(planSnapshot.item.grillModeActive).toBe(false)
+    expect(planSnapshot.item.planModeActive).toBe(true)
   })
 
   test('returns explicit unsupported errors instead of entering the mock map', async () => {
@@ -1154,6 +1168,13 @@ describe('desktop thread settings client', () => {
     })
     expect(steerParams).not.toHaveProperty('strategy')
     expect(steerParams).not.toHaveProperty('model')
+    for (const taskMode of ['plan', 'grill'] as const) {
+      steerParams = null
+      await expect(client.submitSessionFollowUp(
+        'thread-active', { text: '改为只读调查', taskMode }, 'steer',
+      )).rejects.toThrow('当前轮次模式不同')
+      expect(steerParams).toBeNull()
+    }
   })
 
   test('reports unavailable without mock fallback and preserves browser mock behavior', async () => {

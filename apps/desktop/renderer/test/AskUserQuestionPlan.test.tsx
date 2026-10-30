@@ -50,7 +50,7 @@ const textQuestion: AskUserQuestion = {
 
 const render = (
   questions: AskUserQuestion[],
-  taskMode: 'chat' | 'plan',
+  taskMode: 'chat' | 'plan' | 'grill',
   extra: Record<string, unknown> = {},
 ) =>
   renderToStaticMarkup(
@@ -70,35 +70,35 @@ const render = (
 const buttonWithLabel = (html: string, label: string): string =>
   html.match(new RegExp(`<button[^>]*>${label}`))?.[0] ?? ''
 
-test('plan clarifications start with no answer and keep recommendation separate', () => {
+test('only explicit recommendations are preselected', () => {
   expect(initialPlanQuestionState()).toEqual({ selected: [], custom: '', answered: false })
   expect(hasQuestionAnswer(initialPlanQuestionState())).toBe(false)
-  // Chat 提问仍预选首项，Plan 不预选。
   expect(initialQuestionState(clientQuestion).selected).toEqual(['desktop'])
+  expect(initialQuestionState(phaseQuestion).selected).toEqual([])
 
   const html = render([clientQuestion, phaseQuestion], 'plan')
-  expect(html).not.toContain('aria-checked="true"')
-  expect((html.match(/aria-checked="false"/gu) ?? []).length).toBe(2)
+  expect((html.match(/aria-checked="true"/gu) ?? []).length).toBe(1)
+  expect((html.match(/aria-checked="false"/gu) ?? []).length).toBe(1)
   expect(html).toContain('需要你确认')
   expect(html).toContain('推荐')
 })
 
-test('plan clarifications require an explicit answer before advancing', () => {
-  const html = render([clientQuestion, phaseQuestion], 'plan')
+test('questions without a recommendation require an explicit answer before advancing', () => {
+  const html = render([phaseQuestion, clientQuestion], 'plan')
   expect(html).toContain('1 / 2')
   expect(html).toContain('自己回答')
   expect(buttonWithLabel(html, '下一题')).toContain('disabled')
-  // 结束等待只能通过明确动作，没有跳过。
   expect(html).toContain('停止本轮')
-  expect(html).not.toContain('>跳过<')
-  expect(html).not.toContain('跳过当前问题')
+  // 跳过代表暂定假设，Plan 与 Grill 都允许。
+  expect(buttonWithLabel(html, '跳过')).not.toContain('disabled')
 })
 
 test('plan last question submits and marks question navigation state', () => {
   const html = render([clientQuestion, phaseQuestion], 'plan')
+  // 推荐项只是预选，仍需用户确认后才算已答。
   expect(html).toContain('第 1 题（待答）')
   expect(html).toContain('第 2 题（待答）')
-  expect(html).toContain('data-answered="false"')
+  expect((html.match(/data-answered="false"/gu) ?? []).length).toBe(2)
 })
 
 test('plan text-only questions render the input without an empty option list', () => {
@@ -109,11 +109,14 @@ test('plan text-only questions render the input without an empty option list', (
   expect(html).not.toContain('自己回答')
 })
 
-test('chat questions keep first-option selection, pagination and skip semantics', () => {
-  const html = render([clientQuestion, phaseQuestion], 'chat')
-  expect((html.match(/aria-checked="true"/gu) ?? []).length).toBe(1)
-  expect(html).toContain('1 of 2')
-  expect(html).toContain('跳过当前问题')
-  expect(html).not.toContain('停止本轮')
-  expect(html).not.toContain('需要你确认')
+test('chat, plan and grill share the same question card', () => {
+  for (const taskMode of ['chat', 'plan', 'grill'] as const) {
+    const html = render([clientQuestion, phaseQuestion], taskMode)
+    expect((html.match(/aria-checked="true"/gu) ?? []).length).toBe(1)
+    expect(html).toContain('1 / 2')
+    expect(html).toContain('跳过当前问题')
+    expect(html).toContain('需要你确认')
+  }
+  expect(render([clientQuestion], 'chat')).toContain('>拒绝')
+  expect(render([clientQuestion], 'grill')).toContain('停止本轮')
 })

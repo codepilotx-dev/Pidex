@@ -128,6 +128,31 @@ describe('composer submit transaction', () => {
       expect(source.document.text).toBe('/plan 设计权限系统\n保留现有数据')
     },
   )
+  test('仅 /grill 与访谈模式提交 Grill，技能与旧别名不切换模式', () => {
+    const prepared = prepareComposerSubmission(
+      draft({ document: createComposerDocument('/grill 澄清需求'), goalModeEnabled: true }),
+    )
+    expect('input' in prepared && prepared.input).toMatchObject({
+      text: '澄清需求',
+      taskMode: 'grill',
+    })
+    expect('goal' in prepared).toBe(false)
+    const skill = prepareComposerSubmission(
+      draft({
+        skills: [{ name: 'grill-me', path: 'builtin://grill-me/SKILL.md' }],
+        goalModeEnabled: true,
+      }),
+    )
+    expect('input' in skill && skill.input.taskMode).toBe('chat')
+    expect('goal' in skill).toBe(true)
+    const alias = prepareComposerSubmission(
+      draft({ document: createComposerDocument('/grill-me 澄清需求') }),
+    )
+    expect('input' in alias && alias.input.taskMode).toBe('chat')
+    const selected = prepareComposerSubmission(draft({ collaborationMode: 'grill' }))
+    expect('input' in selected && selected.input.taskMode).toBe('grill')
+  })
+
   test('serializes plugin-only references with stable identity and preserves stale drafts', () => {
     const store = new ComposerDraftStore(() => 'plugin-draft')
     store.update('home', (current) => ({

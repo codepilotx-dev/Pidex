@@ -209,6 +209,21 @@ describe('composer surface variant', () => {
     expect(render(true)).toContain('aria-label="退出计划模式"')
     expect(render(true, true)).not.toContain('title="退出计划模式"')
   })
+  test('Grill 仅开启后显示可退出标记，子 Agent 不展示', () => {
+    const render = (grillModeActive: boolean, subagentMode = false) =>
+      renderToStaticMarkup(
+        <ComposerCard
+          {...composerCardProps({
+            grillModeActive,
+            placement: subagentMode ? 'side-task' : 'new-session',
+            onGrillModeChange: () => {},
+          })}
+        />,
+      )
+    expect(render(false)).not.toContain('title="退出深度访谈"')
+    expect(render(true)).toContain('aria-label="退出深度访谈"')
+    expect(render(true, true)).not.toContain('title="退出深度访谈"')
+  })
   test('Goal 与 Plan 输入状态互斥，动作不删除持久化目标', async () => {
     const changes: string[] = []
     let commands: ReturnType<typeof useComposerSlashCommands>['commands'] = []
@@ -256,6 +271,57 @@ describe('composer surface variant', () => {
     failPlan = true
     expect(await executeCommand!(commands.find((command) => command.id === 'plan')!)).toBe(false)
     expect(changes).toEqual([])
+  })
+  test('Grill 与 Plan、Goal 三者互斥', async () => {
+    const changes: string[] = []
+    let taskMode = 'plan'
+    let commands: ReturnType<typeof useComposerSlashCommands>['commands'] = []
+    function Harness({ plan, grill }: { plan: boolean; grill: boolean }) {
+      commands = useComposerSlashCommands({
+        capabilities: DEFAULT_COMPOSER_CAPABILITIES,
+        planModeActive: plan,
+        grillModeActive: grill,
+        goalModeEnabled: false,
+        hasConversationMessages: true,
+        hasThread: true,
+        canReview: false,
+        subagentMode: false,
+        sessionBusy: false,
+        reasoningAvailable: false,
+        showThreadActions: false,
+        showNewSessionActions: false,
+        canFork: false,
+        hasProject: false,
+        onOpenModel: () => {},
+        onOpenReasoning: () => {},
+        onOpenStatus: () => {},
+        onOpenReview: () => {},
+        onGoalModeChange: (active) => changes.push(`goal:${active}`),
+        onPlanModeChange: (active) => {
+          taskMode = active ? 'plan' : 'chat'
+          changes.push(`plan:${active}`)
+        },
+        onGrillModeChange: (active) => {
+          taskMode = active ? 'grill' : 'chat'
+          changes.push(`grill:${active}`)
+        },
+      }).commands
+      return null
+    }
+    renderToStaticMarkup(<Harness plan grill={false} />)
+    await commands.find((command) => command.id === 'grill')?.execute()
+    expect(changes).toEqual(['grill:true', 'goal:false'])
+    expect(taskMode).toBe('grill')
+    changes.length = 0
+    renderToStaticMarkup(<Harness plan={false} grill />)
+    await commands.find((command) => command.id === 'plan')?.execute()
+    expect(changes).toEqual(['plan:true', 'goal:false'])
+    expect(taskMode).toBe('plan')
+    changes.length = 0
+    renderToStaticMarkup(<Harness plan={false} grill />)
+    await commands.find((command) => command.id === 'goal')?.execute()
+    expect(changes).toEqual(['grill:false', 'goal:true'])
+    expect(taskMode).toBe('chat')
   })
   test('Coding、Working 与 Chat 输出各自的 data-surface 标记', () => {
     const coding = renderToStaticMarkup(

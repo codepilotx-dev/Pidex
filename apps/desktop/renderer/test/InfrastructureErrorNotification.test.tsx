@@ -12,6 +12,12 @@ import { Command } from 'cmdk'
 import { CommandMenuTaskGroup } from '../src/features/search/CommandMenuDialog.js'
 
 describe('toUserErrorMessage sanitization and mapping', () => {
+  test('历史不能完整分叉时给出可操作提示，不直出错误码', () => {
+    for (const error of ['HISTORY_UNSUPPORTED', { code: 'HISTORY_UNSUPPORTED' }]) {
+      expect(toUserErrorMessage(error)).toContain('选择较早的已完成回复')
+      expect(toUserErrorMessage(error)).not.toContain('HISTORY_UNSUPPORTED')
+    }
+  })
   test('桌面 IPC 处理器未加载时提示完整重启，而非展示底层错误', () => {
     const message = toUserErrorMessage(new Error("Error invoking remote method 'desktop-provider-icon:website': Error: No handler registered for 'desktop-provider-icon:website'"))
     expect(message).toContain('完全退出并重新启动 Pidex')

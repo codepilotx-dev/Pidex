@@ -45,9 +45,9 @@ describe('Plan 交互在主聊天、侧边聊天与子 Agent 间复用', () => {
     )
     expectSourceContains(sideChatPanel, '<InlineApprovalCard')
     // 组件层只认 taskMode，不再靠 plan 专用 variant 分支。
-    expectSourceContains(inlineApproval, "taskMode?: 'chat' | 'plan'")
+    expectSourceContains(inlineApproval, "taskMode?: 'chat' | 'plan' | 'grill'")
     expectSourceContains(inlineApproval, 'taskMode={taskMode}')
-    expectSourceContains(questionForm, "taskMode?: 'chat' | 'plan'")
+    expectSourceContains(questionForm, "taskMode?: 'chat' | 'plan' | 'grill'")
     expectSourceContains(questionForm, 'initialPlanQuestionState')
     expectSourceNotContains(questionForm, "variant === 'plan'")
   })
