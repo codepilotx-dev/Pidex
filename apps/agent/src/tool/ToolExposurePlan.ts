@@ -1,5 +1,5 @@
 import type { SubagentProfile, TaskMode } from '../Domain'
-import { MAX_SUBAGENT_DEPTH, type SandboxMode } from '@pidex/shared/thread'
+import { MAX_SUBAGENT_DEPTH, isReadOnlyTaskMode, type SandboxMode } from '@pidex/shared/thread'
 import { isGranularApprovalPolicy, type PermissionConfig } from '@pidex/shared/thread'
 import type { ToolCatalog } from './ToolRegistry'
 
@@ -71,7 +71,7 @@ export function createToolExposurePlan(
   input: ToolExposureInput,
 ): ToolExposurePlan {
   const profile = input.profile ?? 'main'
-  const sandboxMode = input.taskMode === 'plan' ? 'read-only' : input.sandboxMode
+  const sandboxMode = isReadOnlyTaskMode(input.taskMode) ? 'read-only' : input.sandboxMode
   const definitions = catalog.list(input.taskMode, sandboxMode, profile)
   const eager = definitions
     .filter((tool) => tool.visibility === 'eager')
@@ -83,7 +83,7 @@ export function createToolExposurePlan(
   if (input.hasProjectSources) lifecycle.push('project_source_list', 'project_source_read')
   if (profile !== 'main') lifecycle.push('finalize_result')
   else {
-    if (input.taskMode === 'plan' || input.defaultModeRequestUserInput)
+    if (isReadOnlyTaskMode(input.taskMode) || input.defaultModeRequestUserInput)
       lifecycle.push('request_user_input')
     // Plan 主 Agent 以结构化 submit_plan 交付最终方案；<proposed_plan> 仅作兼容回退。
     if (input.taskMode === 'plan') lifecycle.push('submit_plan')

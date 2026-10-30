@@ -7,7 +7,7 @@ import {
   type ToolInvocation,
 } from '../Domain'
 import { WorkspaceService, type WorkspaceFileRevision } from '../workspace/WorkspaceService'
-import type { PermissionConfig, SandboxMode } from '@pidex/shared/thread'
+import { isReadOnlyTaskMode, type PermissionConfig, type SandboxMode } from '@pidex/shared/thread'
 import type { Model } from '@pidex/model-schema'
 import type { ToolExecutionMode as PiToolExecutionMode } from '../orchestration/harness/AgentTypes'
 import type { Tool as PiAiTool } from '@earendil-works/pi-ai'
@@ -1094,7 +1094,10 @@ export const toolMayMutate = (tool: ToolCatalogEntry) =>
   tool.capabilities.externalState
 const isShell = (tool: ToolCatalogEntry) => tool.sdkName === 'Bash' || tool.sdkName === 'PowerShell'
 export const toolAllowedInTaskMode = (tool: ToolCatalogEntry, mode: TaskMode) =>
-  tool.allowedModes.includes(mode) && (mode !== 'plan' || !toolMayMutate(tool))
+  // Grill mirrors Plan's read-only investigation surface; mutating tools stay out
+  // even if a definition forgets to narrow its allowedModes.
+  (tool.allowedModes.includes(mode) || (mode === 'grill' && tool.allowedModes.includes('plan'))) &&
+  (!isReadOnlyTaskMode(mode) || !toolMayMutate(tool))
 export const toolAllowedForFileAccess = (tool: ToolCatalogEntry, profile: FileAccessProfile) =>
   profile !== 'read-only' ||
   isShell(tool) ||

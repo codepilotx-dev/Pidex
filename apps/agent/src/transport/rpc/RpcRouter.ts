@@ -318,7 +318,7 @@ export const submitMessage = (raw: unknown): SubmitMessage => {
     model: body.model,
     permissionConfig: supportedPermissionConfig(body.permissionConfig),
     strategy: 'start',
-    taskMode: enumValue<TaskMode>(body.taskMode, ['chat', 'plan'], 'taskMode'),
+    taskMode: enumValue<TaskMode>(body.taskMode, ['chat', 'plan', 'grill'], 'taskMode'),
   }
 }
 

@@ -10,7 +10,7 @@ import type {
   SubagentTask,
 } from '@pidex/shared/thread'
 import { encodeApprovalPolicy } from '@pidex/shared/thread'
-import { AgentError, type AgentExecution, type EventEnvelope } from '../Domain'
+import { AgentError, type AgentExecution, type EventEnvelope, type TaskMode } from '../Domain'
 import { subagentCollaborationAvailable } from './SubagentCollaborationRepository'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 
@@ -38,7 +38,7 @@ export type SpawnSubagentInput = {
   allowedTools?: readonly string[]
   workspaceMode: 'shared' | 'worktree'
   workspaceRoot: string
-  taskMode?: 'chat' | 'plan'
+  taskMode?: TaskMode
 }
 
 export type SubagentClaim = {
@@ -215,7 +215,7 @@ export class SubagentRepository {
     content?: string
     model: Model.Ref
     permission: PermissionConfig
-    taskMode: 'chat' | 'plan'
+    taskMode: TaskMode
     sequence: number
     timestamp: number
   }) {

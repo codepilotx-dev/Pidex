@@ -1,4 +1,5 @@
 import { Effect } from 'effect'
+import { isReadOnlyTaskMode } from '@pidex/shared/thread'
 import { AgentError } from '../Domain'
 import type { ComputerUseService } from '../computer/ComputerUseService'
 import type { ApprovalService } from '../permission/ApprovalService'
@@ -365,7 +366,7 @@ export class InteractionService {
           String(invocation.input.windowRef),
           invocation.authorizationScope!.fingerprint,
           computerGrant === 'persistent',
-          invocation.taskMode === 'plan',
+          isReadOnlyTaskMode(invocation.taskMode),
           invocation.permissionConfig,
         )
       }

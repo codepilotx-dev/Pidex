@@ -35,6 +35,7 @@ import { secretScrubber } from '../security/SecretScrubber'
 import { proposedPlanTitle } from './plan/ProposedPlanStreamParser'
 import {
   formatStructuredPlanMarkdown,
+  isReadOnlyTaskMode,
   type ContextUsageBreakdownEntry,
   type PermissionConfig,
   type StructuredPlan,
@@ -1660,7 +1661,8 @@ export class AgentRuntimeService implements AgentRuntime {
             return { __piPause: true, status: 'waiting_for_user' }
           },
           requestPermissions: async (input, toolCallID) => {
-            if (request.taskMode === 'plan') throw new Error('Plan 模式禁止请求或提升权限')
+            if (isReadOnlyTaskMode(request.taskMode))
+              throw new Error('Plan 与 Grill 模式禁止请求或提升权限')
             const decision = await this.options.toolExecutor.previewApproval(
               'request_permissions',
               input,
@@ -1761,7 +1763,7 @@ export class AgentRuntimeService implements AgentRuntime {
             executeSubagentTool('spawn_agents', input, toolCallID, async (input) => {
               const agents = Array.isArray(input.agents) ? input.agents : []
               if (
-                request.taskMode === 'plan' &&
+                isReadOnlyTaskMode(request.taskMode) &&
                 agents.some(
                   (agent) =>
                     !agent ||
@@ -1769,7 +1771,7 @@ export class AgentRuntimeService implements AgentRuntime {
                     (agent as Record<string, unknown>).profile !== 'explorer',
                 )
               )
-                throw new Error('Plan 模式只能创建 Explorer 子 Agent')
+                throw new Error('Plan 与 Grill 模式只能创建 Explorer 子 Agent')
               return request.delegation?.spawn(input as never, {
                 permissionConfig: effectivePermissionConfig,
                 ...(request.allowedTools ? { allowedTools: request.allowedTools } : {}),
@@ -1939,7 +1941,7 @@ export class AgentRuntimeService implements AgentRuntime {
       {
         taskMode: request.taskMode,
         sandboxMode:
-          request.taskMode === 'plan'
+          isReadOnlyTaskMode(request.taskMode)
             ? 'read-only'
             : 'permissionConfig' in request
               ? request.permissionConfig.sandboxMode

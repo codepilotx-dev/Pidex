@@ -25,6 +25,7 @@ import { createToolExposurePlan, type ToolExposureInput } from './ToolExposurePl
 import {
   DEFAULT_PERMISSION_CONFIG,
   isFullAccessPermissionConfig,
+  isReadOnlyTaskMode,
   type AdditionalPermissions,
   type PermissionConfig,
   type PermissionGrantScope,
@@ -350,8 +351,8 @@ export class ToolExecutor {
         : canonicalName === 'request_permissions'
           ? await this.normalizePermissionRequest(parsedInput, context)
           : parsedInput
-    if (context.taskMode === 'plan' && canonicalName === 'request_permissions') {
-      throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式禁止请求或提升权限', 403)
+    if (isReadOnlyTaskMode(context.taskMode) && canonicalName === 'request_permissions') {
+      throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 与 Grill 模式禁止请求或提升权限', 403)
     }
     if (canonicalName === 'request_permissions' && typeof normalized.escalationToken === 'string') {
       throw new AgentError(
@@ -436,7 +437,7 @@ export class ToolExecutor {
     let workspace = context.workspace.withFileAccess(
       executionPolicyFromV4(permissionConfig).fileAccess,
     )
-    const skipProjectHooks = context.skipHooks || context.taskMode === 'plan'
+    const skipProjectHooks = context.skipHooks || isReadOnlyTaskMode(context.taskMode)
     if (this.options?.userConfigPath) {
       workspace.grantEditorAlias('@pidex/config.json', this.options.userConfigPath)
     }
@@ -619,7 +620,7 @@ export class ToolExecutor {
         409,
       )
     }
-    if (context.taskMode === 'plan' && this.options?.hooks) {
+    if (isReadOnlyTaskMode(context.taskMode) && this.options?.hooks) {
       this.options.logger?.info('hook.skipped', {
         context: {
           threadId: context.threadID,
@@ -652,7 +653,10 @@ export class ToolExecutor {
             },
           )) ?? [])
     const denied = hookResults.find(({ result }) => result.decision === 'deny')
-    if (denied && !(isFullAccessPermissionConfig(permissionConfig) && context.taskMode !== 'plan'))
+    if (
+      denied &&
+      !(isFullAccessPermissionConfig(permissionConfig) && !isReadOnlyTaskMode(context.taskMode))
+    )
       throw new AgentError('HOOK_DENIED', denied.result.reason ?? 'PreToolUse Hook 拒绝执行', 403)
     const narrowed = hookResults
       .map(({ result }) => result.narrowedInput)
@@ -1050,7 +1054,7 @@ export class ToolExecutor {
       ...(context.agentID ? { agentId: context.agentID } : {}),
       ...(context.toolCallID ? { toolCallId: context.toolCallID } : {}),
     }
-    if (context.taskMode === 'plan') {
+    if (isReadOnlyTaskMode(context.taskMode)) {
       options.logger?.warn('shell.execution.failed', {
         context: logContext,
         details: {
@@ -1061,7 +1065,7 @@ export class ToolExecutor {
           durationMs: 0,
         },
       })
-      throw new AgentError('PLAN_SHELL_DISABLED', 'Plan 模式禁止执行 Bash 或 PowerShell', 403)
+      throw new AgentError('PLAN_SHELL_DISABLED', 'Plan 与 Grill 模式禁止执行 Bash 或 PowerShell', 403)
     }
     const permissionConfig = context.permissionConfig ?? DEFAULT_PERMISSION_CONFIG
     const executionPolicy = executionPolicyFromV4(permissionConfig)
@@ -1456,8 +1460,8 @@ export class ToolExecutor {
     },
     context: ToolExecutionContext,
   ) {
-    if (context.taskMode === 'plan')
-      throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式禁止请求或提升权限', 403)
+    if (isReadOnlyTaskMode(context.taskMode))
+      throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 与 Grill 模式禁止请求或提升权限', 403)
     if (!['tool-call', 'turn', 'session'].includes(String(input.scope))) {
       throw new AgentError('INVALID_TOOL_INPUT', '权限 scope 无效', 400)
     }

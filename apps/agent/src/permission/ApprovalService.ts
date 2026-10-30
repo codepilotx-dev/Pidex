@@ -1,4 +1,4 @@
-import { isFullAccessPermissionConfig } from '@pidex/shared/thread'
+import { isFullAccessPermissionConfig, isReadOnlyTaskMode } from '@pidex/shared/thread'
 import { Effect } from 'effect'
 import { createHash } from 'node:crypto'
 import { AgentError, type PermissionDecision, type ToolInvocation } from '../Domain'
@@ -192,7 +192,7 @@ export class ApprovalService {
     const tool = (invocation.toolPolicy ??
       this.tools.get(invocation.name)) as import('../tool/ToolRegistry').ToolCatalogEntry
     if (
-      invocation.taskMode !== 'plan' &&
+      !isReadOnlyTaskMode(invocation.taskMode) &&
       isFullAccessPermissionConfig(invocation.permissionConfig)
     ) {
       const decision = this.decisions.evaluate(invocation, tool)

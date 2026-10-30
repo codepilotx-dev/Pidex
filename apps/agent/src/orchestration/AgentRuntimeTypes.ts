@@ -1,4 +1,4 @@
-import type { ContextCompactionOperation } from '@pidex/shared/thread'
+import { isReadOnlyTaskMode, type ContextCompactionOperation } from '@pidex/shared/thread'
 import type {
   ModelRef,
   PermissionConfig,
@@ -186,5 +186,5 @@ export interface AgentRuntime {
 export function isMainAgentRequestUserInputEnabled(
   request: Pick<AgentRuntimeRequest, 'taskMode' | 'defaultModeRequestUserInput'>,
 ) {
-  return request.taskMode === 'plan' || request.defaultModeRequestUserInput === true
+  return isReadOnlyTaskMode(request.taskMode) || request.defaultModeRequestUserInput === true
 }

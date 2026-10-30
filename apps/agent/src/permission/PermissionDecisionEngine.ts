@@ -1,4 +1,8 @@
-import { isGranularApprovalPolicy, matchPermissionPreset } from '@pidex/shared/thread'
+import {
+  isGranularApprovalPolicy,
+  isReadOnlyTaskMode,
+  matchPermissionPreset,
+} from '@pidex/shared/thread'
 import type { PermissionDecision, ToolInvocation } from '../Domain'
 import type { ToolCatalogEntry } from '../tool/ToolRegistry'
 import { toolAllowedForFileAccess, toolAllowedInTaskMode } from '../tool/ToolRegistry'
@@ -113,13 +117,13 @@ export class PermissionDecisionEngine {
       reason,
     })
     const preset = matchPermissionPreset(invocation.permissionConfig)
-    const fullAccess = preset === 'full-access' && invocation.taskMode !== 'plan'
+    const fullAccess = preset === 'full-access' && !isReadOnlyTaskMode(invocation.taskMode)
     if (!fullAccess && invocation.permissionFacts?.denyReason)
       return deny(invocation.permissionFacts.denyReason)
     if (!toolAllowedInTaskMode(tool, invocation.taskMode))
       return deny(`工具 ${tool.sdkName} 不允许在 ${invocation.taskMode} 模式执行`)
-    if (invocation.taskMode === 'plan' && tool.sdkName === 'request_permissions')
-      return deny('Plan 模式禁止请求或提升权限')
+    if (isReadOnlyTaskMode(invocation.taskMode) && tool.sdkName === 'request_permissions')
+      return deny('Plan 与 Grill 模式禁止请求或提升权限')
     if (!toolAllowedForFileAccess(tool, executionPolicy.fileAccess))
       return deny(
         `${executionPolicy.fileAccess} 文件访问范围禁止 ${tool.capabilities.filesystem} 能力`,
@@ -127,8 +131,8 @@ export class PermissionDecisionEngine {
     const requested = requestedPermissions(invocation.input)
     if (executionPolicy.fileAccess === 'read-only' && requested.writePaths.length)
       return deny('只读文件访问范围禁止写入路径')
-    if (invocation.taskMode === 'plan' && requested.networkDomains.length)
-      return deny('Plan 模式禁止 Shell 网络权限')
+    if (isReadOnlyTaskMode(invocation.taskMode) && requested.networkDomains.length)
+      return deny('Plan 与 Grill 模式禁止 Shell 网络权限')
     // The durable checkpoint field remains named `sandbox` for v4/SQLite
     // compatibility. Its value is the centrally interpreted execution policy.
     const sandbox: ResolvedExecutionPolicy = {

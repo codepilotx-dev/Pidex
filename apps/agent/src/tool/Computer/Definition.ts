@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isReadOnlyTaskMode } from '@pidex/shared/thread'
 import type { ComputerAction, ComputerResult } from '@pidex/agent-protocol'
 import { AgentError } from '../../Domain'
 import type { ComputerUseService } from '../../computer/ComputerUseService'
@@ -110,7 +111,7 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
         authorizationScope: computer.inspect(
           identity(context),
           value.windowRef,
-          context.taskMode === 'plan',
+          isReadOnlyTaskMode(context.taskMode),
           undefined,
           context.permissionConfig,
         ),
@@ -120,7 +121,7 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
           identity(context),
           value.windowRef,
           context.signal,
-          context.taskMode === 'plan',
+          isReadOnlyTaskMode(context.taskMode),
           context.permissionConfig,
           context.computerGrant,
         ),

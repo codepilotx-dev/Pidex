@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { isFullAccessPermissionConfig } from '@pidex/shared/thread'
+import { isFullAccessPermissionConfig, isReadOnlyTaskMode } from '@pidex/shared/thread'
 import type { BrowserOperation, BrowserResult } from '@pidex/agent-protocol'
 import type { BrowserService } from '../../browser/BrowserService'
 import { AgentError } from '../../Domain'
@@ -98,10 +98,15 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
         identity(context),
         i.tabId,
         i.operation,
-        context.taskMode !== 'plan' && isFullAccessPermissionConfig(context.permissionConfig),
+        !isReadOnlyTaskMode(context.taskMode) &&
+          isFullAccessPermissionConfig(context.permissionConfig),
       )
-      if (context.taskMode === 'plan' && scope.ruleRequiresApproval)
-        throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式只能读取已授权的浏览器站点', 403)
+      if (isReadOnlyTaskMode(context.taskMode) && scope.ruleRequiresApproval)
+        throw new AgentError(
+          'TOOL_NOT_ALLOWED_IN_MODE',
+          'Plan 与 Grill 模式只能读取已授权的浏览器站点',
+          403,
+        )
       return {
         authorizationScope: scope,
         permissionFacts: {
@@ -117,7 +122,8 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
         i.tabId,
         i.operation as BrowserOperation,
         context.signal,
-        context.taskMode !== 'plan' && isFullAccessPermissionConfig(context.permissionConfig),
+        !isReadOnlyTaskMode(context.taskMode) &&
+          isFullAccessPermissionConfig(context.permissionConfig),
       )
     },
     auditResult: (value) => {
@@ -155,8 +161,12 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
       ),
       inspectInput: (value, context) => {
         const v = value as { action: string; tabId?: string }
-        if (context.taskMode === 'plan' && v.action !== 'list')
-          throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式只能查询浏览器标签', 403)
+        if (isReadOnlyTaskMode(context.taskMode) && v.action !== 'list')
+          throw new AgentError(
+            'TOOL_NOT_ALLOWED_IN_MODE',
+            'Plan 与 Grill 模式只能查询浏览器标签',
+            403,
+          )
         if (['takeover', 'release', 'close'].includes(v.action) && !v.tabId)
           throw new AgentError('INVALID_REQUEST', '缺少标签 ID', 400)
         if (v.action === 'takeover' || v.action === 'release')
@@ -191,7 +201,8 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
             threadId,
             v.tabId,
             undefined,
-            context.taskMode !== 'plan' && isFullAccessPermissionConfig(context.permissionConfig),
+            !isReadOnlyTaskMode(context.taskMode) &&
+              isFullAccessPermissionConfig(context.permissionConfig),
           )
           await browser.close(v.tabId)
           return { closed: true }

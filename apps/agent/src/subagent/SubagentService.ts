@@ -1,12 +1,13 @@
 import type { Model } from '@pidex/model-schema'
 import {
   MAX_SUBAGENT_DEPTH,
+  isReadOnlyTaskMode,
   type PermissionConfig,
   type SubagentProfile,
 } from '@pidex/shared/thread'
 import { Effect } from 'effect'
 import type { AgentModelCatalog } from '../provider/AgentModelCatalog'
-import { AgentError } from '../Domain'
+import { AgentError, type TaskMode } from '../Domain'
 import {
   SafeBoundaryInterrupt,
   type AgentRuntime,
@@ -63,7 +64,7 @@ type RootContext = {
   threadID: string
   turnID: string
   agentID: string
-  taskMode: 'chat' | 'plan'
+  taskMode: TaskMode
   model: Model.Ref
   permissionConfig: PermissionConfig
   allowedTools?: readonly string[]
@@ -384,8 +385,8 @@ export class SubagentService {
   ) {
     if (!agents.length || agents.length > 4)
       throw new AgentError('SUBAGENT_BATCH_LIMIT', '每批只能创建 1 到 4 个子 Agent', 409)
-    if (root.taskMode === 'plan' && agents.some((agent) => agent.profile !== 'explorer')) {
-      throw new AgentError('PLAN_SUBAGENT_RESTRICTED', 'Plan 模式只能创建 Explorer', 409)
+    if (isReadOnlyTaskMode(root.taskMode) && agents.some((agent) => agent.profile !== 'explorer')) {
+      throw new AgentError('PLAN_SUBAGENT_RESTRICTED', 'Plan 与 Grill 模式只能创建 Explorer', 409)
     }
     const parent = this.db.getAgentExecution(root.agentID)
     if (!parent || parent.depth >= MAX_SUBAGENT_DEPTH)
@@ -440,7 +441,9 @@ export class SubagentService {
         // persisted worktree mode remains readable for legacy tasks only.
         workspaceMode: 'shared',
         workspaceRoot: root.workspaceRoot,
-        taskMode: root.taskMode,
+        // Grill interviews delegate read-only research; the child runs as a Plan
+        // explorer so it never inherits the interview protocol as its own mode.
+        taskMode: root.taskMode === 'grill' ? 'plan' : root.taskMode,
       }
     })
     // Repository creation is synchronous; wrapping the complete batch ensures
@@ -847,12 +850,12 @@ export class SubagentService {
               }),
             }
           : null
-      const parentMode =
-        (
-          this.db.sqlite.query('SELECT mode FROM turns WHERE id = ?').get(task.parentTurnId) as {
-            mode: 'chat' | 'plan'
-          } | null
-        )?.mode ?? 'chat'
+      const parentTurnMode = (
+        this.db.sqlite.query('SELECT mode FROM turns WHERE id = ?').get(task.parentTurnId) as {
+          mode: TaskMode
+        } | null
+      )?.mode
+      const parentMode = parentTurnMode === 'grill' ? 'plan' : (parentTurnMode ?? 'chat')
       const instructionSources = await new InstructionDiscoveryService().discover(
         workspace.rootPath,
       )
