@@ -1,4 +1,4 @@
-export type SharedSlashCommandId = 'plan' | 'status'
+export type SharedSlashCommandId = 'plan' | 'grill' | 'status'
 
 export type SharedSlashCommandArgumentMode = 'none' | 'optional-text'
 
@@ -14,6 +14,11 @@ export const SHARED_SLASH_COMMANDS = {
     trigger: 'plan',
     argumentMode: 'optional-text',
   },
+  grill: {
+    id: 'grill',
+    trigger: 'grill',
+    argumentMode: 'optional-text',
+  },
   status: {
     id: 'status',
     trigger: 'status',
@@ -23,4 +28,8 @@ export const SHARED_SLASH_COMMANDS = {
 
 export function parsePlanTaskFromInput(input: string): string | null {
   return /^\/plan\s+([\s\S]*\S)\s*$/iu.exec(input)?.[1] ?? null
+}
+
+export function parseGrillTaskFromInput(input: string): string | null {
+  return /^\/grill\s+([\s\S]*\S)\s*$/iu.exec(input)?.[1] ?? null
 }

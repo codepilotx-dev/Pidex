@@ -1,14 +1,19 @@
-import type { PermissionConfig, ShellReview, ThreadSettings } from '@pidex/shared/thread'
+import type {
+  PermissionConfig,
+  ShellReview,
+  TaskMode as SharedTaskMode,
+  ThreadSettings,
+} from '@pidex/shared/thread'
 import type { Model } from '@pidex/model-schema'
 
 export type { PermissionConfig } from '@pidex/shared/thread'
 /** SQLite-private delivery encoding; public RPC/view models expose InputDelivery. */
 export type StoredInputDelivery = 'start' | 'queue' | 'guide'
-export type TaskMode = 'chat' | 'plan'
+export type TaskMode = SharedTaskMode
 
 /** Decode stored modes without rewriting historical or newer-client values. */
 export const decodeStoredTaskMode = (value: unknown): TaskMode =>
-  value === 'plan' ? 'plan' : 'chat'
+  value === 'plan' || value === 'grill' ? value : 'chat'
 export type TurnStatus =
   | 'queued'
   | 'running'
