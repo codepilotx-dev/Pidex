@@ -341,6 +341,72 @@ test('preserves plan approval on snapshot/history hydration and clears it on new
   expect(createCanonicalThreadState(page([])).pendingPlanApproval).toBeNull()
 })
 
+test('queue lifecycle clears both indexes without deleting history or reviving on replay', () => {
+  const queuedTurn = { ...turn('queued'), status: 'queued' as const, startedAt: null }
+  const queuedInput = {
+    ...input(queuedTurn.sourceInputID, queuedTurn.id, 1),
+    state: 'queued' as const,
+  }
+  const initial = createCanonicalThreadState({
+    ...page([]),
+    queue: { version: 1, pauseReason: null, turns: [queuedTurn], inputs: [queuedInput] },
+  })
+  const events = [
+    durable(11, 'turn/started', {
+      turn: { ...queuedTurn, status: 'running' },
+      input: { ...queuedInput, state: 'active' },
+    }),
+    ...(['turn/completed', 'turn/failed', 'turn/interrupted'] as const).map((type) =>
+      durable(11, type, { turn: { ...queuedTurn, status: type.slice(5) as Turn['status'] } }),
+    ),
+    durable(11, 'queue/updated', {
+      threadId: thread.id,
+      action: 'removed',
+      inputId: queuedInput.id,
+      version: 2,
+    }),
+    durable(11, 'queue/updated', {
+      threadId: thread.id,
+      action: 'removed',
+      turnId: queuedTurn.id,
+      version: 2,
+    }),
+  ]
+  for (const event of events) {
+    let state = applyThreadEnvelope(initial, event)
+    expect(state.queue.turnIds).toEqual([])
+    expect(state.queue.inputIds).toEqual([])
+    expect(state.inputsById.has(queuedInput.id)).toBe(true)
+    expect(state.turnsById.has(queuedTurn.id)).toBe(true)
+    if (event.type === 'queue/updated') {
+      expect(state.inputsById.get(queuedInput.id)?.state).toBe('cancelled')
+      expect(state.turnsById.get(queuedTurn.id)?.status).toBe('cancelled')
+      expect(selectVisibleTurnEntries(state)).toEqual([])
+      expect(selectRenderTurnEntries(state)).toEqual([])
+      expect(selectRenderTurnEntries(reconcileLatestThreadPage(state, page([])))).toEqual([])
+      const cancelledPage = {
+        ...page([
+          {
+            turn: { ...queuedTurn, status: 'cancelled' as const },
+            inputs: [queuedInput],
+            messages: [],
+            agents: [],
+            items: [],
+            approvals: [],
+          },
+        ]),
+      }
+      expect(selectRenderTurnEntries(createCanonicalThreadState(cancelledPage))).toEqual([])
+      expect(selectRenderTurnEntries(prependOlderThreadPage(state, cancelledPage))).toEqual([])
+    } else {
+      expect(selectVisibleTurnEntries(state).map((entry) => entry.id)).toEqual([queuedTurn.id])
+    }
+    state = applyThreadEnvelope(state, event)
+    expect(state.queue.turnIds).toEqual([])
+    expect(state.queue.inputIds).toEqual([])
+  }
+})
+
 function turn(id: string, sourceInputID = `input-${id}`): Turn {
   return {
     id,
@@ -1399,7 +1465,10 @@ describe('canonical thread state', () => {
     ])
     expect(explicitEntry?.processItems.map((item) => item.id)).toEqual([explicitActivityId])
     expect(explicitEntry?.postAssistantItems).toEqual([])
-    expect(explicitEntry?.contentBlocks.map((block) => block.kind)).toEqual(['process', 'assistant'])
+    expect(explicitEntry?.contentBlocks.map((block) => block.kind)).toEqual([
+      'process',
+      'assistant',
+    ])
 
     const withLatestFallback = applyThreadEnvelope(
       withExplicitAnchor,
