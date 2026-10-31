@@ -413,17 +413,16 @@
     gap: var(--cpx-sys-space-2);
   }
 
+  .appearance-theme-badge {
+    font-size: 10px;
+  }
+
   .appearance-color-swatch {
-    width: 14px;
-    height: 14px;
-    flex: 0 0 14px;
-    margin: 0;
-    padding: 0;
-    border: 0;
+    position: relative;
     border-radius: var(--cpx-sys-radius-pill);
     background: var(--appearance-color-swatch-background);
     cursor: pointer;
-    box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 10%, transparent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, currentColor 18%, transparent);
   }
 
   .appearance-color-palette-square {

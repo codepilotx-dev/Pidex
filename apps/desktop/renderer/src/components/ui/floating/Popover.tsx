@@ -34,6 +34,7 @@ import {
 
 export type PopoverSide = 'top' | 'bottom' | 'left' | 'right'
 export type PopoverAlign = 'start' | 'center' | 'end'
+export type PopoverVariant = 'default' | 'unstyled'
 
 interface PopoverContextValue {
   open: boolean
@@ -131,8 +132,10 @@ export interface PopoverContentProps extends HTMLAttributes<HTMLDivElement>, Dis
   side?: PopoverSide
   align?: PopoverAlign
   sideOffset?: number
-  /** UI-Design 的三档浮层尺寸。 */
+  /** UI-Design 的三档浮层尺寸。仅在 variant 为 default 时生效。 */
   size?: PopoverSize
+  /** 浮层外观变体：default（标准 popover 卡片外壳）或 unstyled（纯净定位外壳，完全由子组件自行绘制卡片与阴影）。 */
+  variant?: PopoverVariant
   asChild?: boolean
   anchor?: HTMLElement | null | React.RefObject<HTMLElement | null>
   collisionPadding?: FloatingCollisionPadding
@@ -147,6 +150,7 @@ const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
       align = 'start',
       sideOffset = 8,
       size = 'md',
+      variant = 'default',
       asChild = false,
       anchor,
       collisionPadding = 8,
@@ -217,6 +221,7 @@ const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
     }, [context.open])
     if (!context.open) return null
     const Component = asChild ? Slot : 'div'
+    const isUnstyled = variant === 'unstyled'
     const [actualSide, actualAlign = 'center'] = (coords?.actualPlacement ?? side).split('-')
     const anchorRect = anchorElement?.getBoundingClientRect()
     const arrowStyle =
@@ -236,11 +241,12 @@ const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
         aria-label={props['aria-label'] ?? 'Popover'}
         tabIndex={-1}
         data-state="open"
-        data-popover-size={size}
+        data-popover-size={isUnstyled ? undefined : size}
+        data-variant={variant}
         data-side={actualSide}
         data-align={actualAlign}
         style={{ ...floatingStyle, ...arrowStyle, ...style }}
-        className={`popover-surface popover ${asChild ? '' : 'tw:p-3.5'} tw:text-app-text ${className}`}
+        className={isUnstyled ? className : `popover-surface popover ${asChild ? '' : 'tw:p-3.5'} tw:text-app-text ${className}`}
       />
     )
   },

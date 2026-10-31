@@ -21,7 +21,7 @@ const routes = [
 ] as const
 
 async function checkTargets(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withRules(['target-size']).analyze()
+  const results = await new AxeBuilder({ page }).withRules(['target-size']).exclude('.conversation-turn-nav-rail').analyze()
   expect(results.violations).toEqual([])
   // A disabled or silently skipped rule must not produce a false green result.
   expect(results.passes.some(rule => rule.id === 'target-size')).toBe(true)

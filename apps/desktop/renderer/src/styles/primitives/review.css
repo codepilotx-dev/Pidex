@@ -358,7 +358,7 @@
 
   .review-codex-diff__hunk {
     box-sizing: content-box;
-    height: var(--cpx-sys-space-8);
+    height: var(--cpx-sys-space-6);
     margin-block: var(--review-diffs-gap-block);
     background: var(--cpx-sys-color-surface-raised);
     color: var(--cpx-sys-color-fg-tertiary);
@@ -366,30 +366,11 @@
     user-select: none;
   }
 
-  .review-codex-diff__hunk--gutter {
-    padding-left: var(--review-diffs-gap-inline);
-  }
-
-  .review-codex-diff__hunk--content {
-    padding-right: var(--review-diffs-gap-inline);
-  }
-
   .review-codex-diff__hunk [data-separator-wrapper] {
     height: 100%;
     min-width: 0;
     display: flex;
     align-items: center;
-    background: var(--cpx-sys-color-surface-editor);
-    border-radius: 0 var(--cpx-sys-radius-md) var(--cpx-sys-radius-md) 0;
-  }
-
-  .review-codex-diff__hunk--gutter::after {
-    content: '';
-    width: 100%;
-    height: 100%;
-    display: block;
-    background: var(--cpx-sys-color-surface-editor);
-    border-radius: var(--cpx-sys-radius-md) 0 0 var(--cpx-sys-radius-md);
   }
 
   .review-codex-diff__hunk [data-separator-content] {

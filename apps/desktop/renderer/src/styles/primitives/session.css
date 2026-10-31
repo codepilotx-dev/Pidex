@@ -210,6 +210,10 @@
     }
   }
 
+  .conversation-turn-preview-card {
+    box-shadow: var(--cpx-comp-dropdown-menu-shadow);
+  }
+
   /* --- Turn preview markdown ---------------------------------------- */
 
   .preview-card-assistant-text .md-body {

@@ -64,7 +64,7 @@ function OptionContent({
       {showSelectedIndicator && selected ? (
         <Check
           aria-hidden="true"
-          className="ui-select-item-indicator settings-dropdown-item-indicator tw:inline-flex tw:shrink-0 tw:items-center tw:justify-center tw:text-app-accent-fg"
+          className="ui-select-item-indicator settings-dropdown-item-indicator tw:inline-flex tw:shrink-0 tw:items-center tw:justify-center"
           size={APP_ICON_SIZES.sm}
         />
       ) : null}

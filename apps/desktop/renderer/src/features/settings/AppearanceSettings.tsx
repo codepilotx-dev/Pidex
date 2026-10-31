@@ -159,7 +159,7 @@ function ColorControl({
   }
 
   return (
-    <div className="appearance-color-control tw:flex tw:h-7 tw:w-24 tw:shrink-0 tw:items-center tw:gap-2 tw:rounded-pill tw:border tw:border-app-border tw:bg-transparent tw:px-2 tw:text-app-text tw:has-[:focus-visible]:outline-solid tw:has-[:focus-visible]:outline-2 tw:has-[:focus-visible]:outline-offset-1 tw:has-[:focus-visible]:outline-app-focus">
+    <div className="appearance-color-control tw:flex tw:h-7 tw:w-28 tw:shrink-0 tw:items-center tw:gap-2 tw:rounded-pill tw:border tw:border-app-border tw:bg-app-control tw:px-1.5 tw:text-app-text tw:transition-[background-color,border-color,color] tw:hover:border-app-border-strong tw:has-[:focus-visible]:outline-solid tw:has-[:focus-visible]:outline-2 tw:has-[:focus-visible]:outline-offset-1 tw:has-[:focus-visible]:outline-app-focus">
       <AnchoredPopover
         data-popover-size="md"
         align="end"
@@ -169,7 +169,7 @@ function ColorControl({
         trigger={
           <button
             aria-label={`${ariaLabel}颜色选择器`}
-            className="appearance-color-swatch"
+            className="appearance-color-swatch tw:size-5"
             style={
               {
                 '--appearance-color-swatch-background': normalizedValue,
@@ -618,7 +618,13 @@ function SharedFontPreview({
   variants: readonly DesktopThemeVariant[]
 }) {
   return (
-    <div className="appearance-font-preview tw:grid tw:gap-4 tw:p-4 tw:@max-[760px]:grid-cols-1 tw:@[761px]:grid-cols-2">
+    <div
+      className={`appearance-font-preview tw:grid tw:gap-4 tw:p-4 ${
+        variants.length > 1
+          ? 'tw:@max-[760px]:grid-cols-1 tw:@[761px]:grid-cols-2'
+          : 'tw:grid-cols-1'
+      }`}
+    >
       {variants.map((variant) => (
         <ThemePreview
           codeThemeId={settings.codeThemeIds[variant]}
@@ -740,49 +746,49 @@ function VariantThemeEditor({
   return (
     <article
       aria-busy={section === 'visual' && needsThemeSeeds && !themeSeedsReady}
-      className="appearance-theme-editor settings-card tw:overflow-hidden tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:shadow-none tw:[&>.settings-row]:min-h-12"
+      className="appearance-theme-editor settings-card tw:overflow-hidden tw:rounded-container tw:border tw:border-app-border-subtle tw:bg-app-panel tw:shadow-none"
       data-section={section}
     >
-      <SettingsRow
-        title={`${variantLabel}主题`}
-        control={
-          section === 'visual' ? (
-            <ThemePickerDropdown
-              ariaLabel={`${variantLabel}代码主题`}
-              onChange={(nextId) => {
-                const nextCodeThemeId =
-                  nextId as DesktopThemeSettings['codeThemeIds'][typeof variant]
-                void Promise.resolve(loadChromeThemeSeed(nextCodeThemeId, variant))
-                  .then((seed) => {
-                    onUpdate((current) => {
-                      const currentTheme = current.chromeThemes[variant]
-                      return {
-                        ...current,
-                        codeThemeIds: {
-                          ...current.codeThemeIds,
-                          [variant]: nextCodeThemeId,
-                        },
-                        chromeThemes: {
-                          ...current.chromeThemes,
-                          [variant]: mergeChromeThemeSeed(currentTheme, seed),
-                        },
-                      }
-                    })
-                  })
-                  .catch((error) => {
-                    onError(error instanceof Error ? error.message : '无法加载代码主题')
-                  })
-              }}
-              themeSeeds={themeSeeds}
-              themes={themes}
-              value={codeThemeId}
-              variant={variant}
-            />
-          ) : undefined
-        }
-      />
-
       <div className="appearance-theme-editor-rows tw:[&>.settings-row]:px-4 tw:@max-[760px]:[&_.settings-row]:items-start tw:@max-[760px]:[&_.settings-row-control]:w-full tw:@max-[760px]:[&_.settings-row-control]:justify-start">
+        <SettingsRow
+          title={`${variantLabel}主题`}
+          size="compact"
+          control={
+            section === 'visual' ? (
+              <ThemePickerDropdown
+                ariaLabel={`${variantLabel}代码主题`}
+                onChange={(nextId) => {
+                  const nextCodeThemeId =
+                    nextId as DesktopThemeSettings['codeThemeIds'][typeof variant]
+                  void Promise.resolve(loadChromeThemeSeed(nextCodeThemeId, variant))
+                    .then((seed) => {
+                      onUpdate((current) => {
+                        const currentTheme = current.chromeThemes[variant]
+                        return {
+                          ...current,
+                          codeThemeIds: {
+                            ...current.codeThemeIds,
+                            [variant]: nextCodeThemeId,
+                          },
+                          chromeThemes: {
+                            ...current.chromeThemes,
+                            [variant]: mergeChromeThemeSeed(currentTheme, seed),
+                          },
+                        }
+                      })
+                    })
+                    .catch((error) => {
+                      onError(error instanceof Error ? error.message : '无法加载代码主题')
+                    })
+                }}
+                themeSeeds={themeSeeds}
+                themes={themes}
+                value={codeThemeId}
+                variant={variant}
+              />
+            ) : undefined
+          }
+        />
         {section === 'visual' ? (
           <>
             <SettingsRow

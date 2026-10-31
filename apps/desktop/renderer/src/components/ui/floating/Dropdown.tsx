@@ -499,7 +499,7 @@ const DropdownItem = forwardRef<HTMLDivElement, DropdownItemProps>(
               <Check
                 size="var(--inline-icon-size, 1em)"
                 strokeWidth={2.8}
-                className="tw:text-[var(--cpx-sys-color-accent)] tw:flex-shrink-0 tw:ml-1.5"
+                className="tw:flex-shrink-0 tw:ml-1.5"
               />
             )}
           </>

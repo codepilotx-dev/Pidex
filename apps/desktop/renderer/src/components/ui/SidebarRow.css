@@ -9,7 +9,7 @@
     -webkit-app-region: no-drag;
   }
 
-  .sidebar-row:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])),
+  .sidebar-row:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'], [data-menu-item])),
   .sidebar-row[data-highlighted]:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
     background: var(--cpx-comp-row-hover-bg, var(--cpx-sys-color-hover));
     color: var(--cpx-comp-row-hover-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
@@ -57,7 +57,7 @@
     .sidebar-row[aria-selected='true'],
     .sidebar-row[aria-checked='true'],
     .sidebar-row:has(.popover-item-check)
-  ):where(:hover, [data-highlighted]):not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+  ):where(:hover:not([data-menu-item]), [data-highlighted]):not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
     background: var(--cpx-comp-row-hover-bg, var(--cpx-sys-color-hover));
     color: var(--cpx-comp-row-hover-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
   }
@@ -84,7 +84,7 @@
     opacity: var(--cpx-comp-row-disabled-opacity, 0.55);
   }
 
-  .sidebar-row:is(:hover, [data-highlighted], :active, .active):not(:where(:disabled, [data-disabled], [aria-disabled='true'])) .popover-item-arrow {
+  .sidebar-row:is(:hover:not([data-menu-item]), [data-highlighted], :active, .active):not(:where(:disabled, [data-disabled], [aria-disabled='true'])) .popover-item-arrow {
     color: var(--cpx-sys-color-fg-primary);
   }
 
