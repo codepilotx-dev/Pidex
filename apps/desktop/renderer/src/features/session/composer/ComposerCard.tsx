@@ -242,19 +242,15 @@ const UTILITY_BAR_BASE_CLASS = cx(
   // 首页托盘是独立命名容器；折叠规则放在其内容包装层（容器不能查询自身）。
   'tw:@container/composer-tray',
 )
-const UTILITY_BAR_DEFAULT_CLASS = cx(
+const UTILITY_BAR_TOP_CLASS = cx(
   UTILITY_BAR_BASE_CLASS,
-  'tw:order-1 tw:min-h-11.5 tw:mx-3 tw:mt-0 tw:-mb-px tw:px-2 tw:pt-1 tw:pb-2',
+  'tw:order-1 tw:min-h-0 tw:mx-3 tw:mt-0 tw:-mb-px tw:px-1 tw:py-1',
   'tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-surface-recessed)_92%,transparent)]',
   'tw:animate-[composer-utility-enter_var(--cpx-sys-motion-enter)_var(--cpx-sys-ease-out)_both]',
 )
 const UTILITY_BAR_HOME_WORKING_CLASS = cx(
   UTILITY_BAR_BASE_CLASS,
   'tw:order-2 tw:min-h-0 tw:mx-3 tw:-mt-px tw:mb-0 tw:p-2 tw:bg-app-underlay',
-)
-const UTILITY_BAR_HOME_CODING_CLASS = cx(
-  UTILITY_BAR_BASE_CLASS,
-  'tw:order-1 tw:min-h-0 tw:mx-3 tw:mt-0 tw:-mb-5 tw:px-2 tw:pt-2 tw:pb-6 tw:bg-app-underlay',
 )
 const UTILITY_BAR_SIDE_TASK_CLASS = 'tw:[&_.meta-chip]:pointer-events-none'
 const UTILITY_BAR_DEFAULT_CONTENT_CLASS = cx(
@@ -1417,9 +1413,7 @@ export function ComposerCard({
           className={cx(
             utilityBarVariant === 'home' && surface === 'working'
               ? UTILITY_BAR_HOME_WORKING_CLASS
-              : utilityBarVariant === 'home'
-                ? UTILITY_BAR_HOME_CODING_CLASS
-                : UTILITY_BAR_DEFAULT_CLASS,
+              : UTILITY_BAR_TOP_CLASS,
             placement === 'side-task' && UTILITY_BAR_SIDE_TASK_CLASS,
           )}
           data-composer-utility-bar="true"

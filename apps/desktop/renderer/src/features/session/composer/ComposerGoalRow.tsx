@@ -47,7 +47,7 @@ const compactNumber = (value: number) =>
   new Intl.NumberFormat('zh-CN', { notation: 'compact', maximumFractionDigits: 1 }).format(value)
 
 const ROW_CLASS =
-  'composer-goal-row tw:flex tw:w-full tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:px-2 tw:py-1'
+  'composer-goal-row tw:flex tw:w-full tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:px-2 tw:py-0.5'
 
 export function ComposerGoalRow({
   goal,
