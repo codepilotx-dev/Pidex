@@ -9,7 +9,7 @@ import { ApprovalRules, permissionRuleMatches } from '../src/permission/Approval
 import { ApprovalService } from '../src/permission/ApprovalService'
 import { PermissionDecisionEngine } from '../src/permission/PermissionDecisionEngine'
 import { ConfigService } from '../src/config/ConfigService'
-import { AgentDatabase } from '../src/storage/database/AgentDatabase'
+import { AgentDatabase, SCHEMA_VERSION } from '../src/storage/database/AgentDatabase'
 import { EventHub } from '../src/storage/events/EventHub'
 import { ToolExecutor } from '../src/tool/ToolExecutor'
 import { ToolRegistry } from '../src/tool/ToolRegistry'
@@ -579,7 +579,7 @@ describe('权限规则存储', () => {
     db.sqlite.exec('DROP TABLE permission_chat_rules; DROP TABLE permission_grant_revocations;')
     expect(filterAdvertisedCapabilities(db)).not.toContain('permission.rules.v1')
     expect(db.sqlite.query('PRAGMA user_version').get() as { user_version: number }).toEqual({
-      user_version: 66,
+      user_version: SCHEMA_VERSION,
     })
   })
 })
@@ -668,7 +668,9 @@ describe('项目内精确授权', () => {
     const restored = new ApprovalRules(reopened, f.tools, f.config)
     expect((await restored.list(f.thread.id)).rules).toHaveLength(1)
     expect((await restored.evaluate(f.invocation)).effect).toBeNull()
-    expect(reopened.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: 66 })
+    expect(reopened.sqlite.query('PRAGMA user_version').get()).toEqual({
+      user_version: SCHEMA_VERSION,
+    })
     expect(reopened.sqlite.query('SELECT value FROM future_data').get()).toEqual({ value: 'keep' })
   })
 })

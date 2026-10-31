@@ -1,3 +1,4 @@
+import { QueuedGoalRepository } from '../src/storage/repositories/QueuedGoalRepository'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -431,4 +432,110 @@ describe('ThreadGoalService', () => {
     expect(projection.snapshot(countThread.id)?.goal ?? null).toBeNull()
     db.close()
   })
+})
+
+test('排队目标跨重启保留，执行时原子生效，失败回滚且编辑删除不改变当前目标', async () => {
+  const fixtureValue = await fixture()
+  let db = fixtureValue.db
+  const thread = db.createThread('排队目标')
+  const initial = fixtureValue.service.admitInTransaction({
+    threadId: thread.id,
+    objective: '原目标',
+    expectedVersion: null,
+  }).goal
+  const first = db.createTurn(thread.id, submit('第一个目标'))
+  const second = db.createTurn(thread.id, submit('第二个目标'))
+  new QueuedGoalRepository(db).put(first.inputID, { objective: '第一个目标' })
+  new QueuedGoalRepository(db).put(second.inputID, { objective: '第二个目标', tokenBudget: 123 })
+  expect(fixtureValue.service.get(thread.id).goal?.objective).toBe('原目标')
+  db.close()
+  db = new AgentDatabase(fixtureValue.path)
+  const service = new ThreadGoalService(db, await Effect.runPromise(EventHub.make))
+  const pending = new QueuedGoalRepository(db)
+  expect(pending.get(first.inputID)?.objective).toBe('第一个目标')
+  expect(
+    new ThreadProjection(db).snapshot(thread.id)?.inputs.find((input) => input.id === first.inputID)
+      ?.goal?.objective,
+  ).toBe('第一个目标')
+  const input = db.getTurnInput(first.turnID)!
+  expect(() =>
+    db.startTurnExecution(first.turnID, input, () => {
+      service.applyInputInTransaction(thread.id, input.id, 'chat')
+      throw new Error('模拟启动失败')
+    }),
+  ).toThrow('模拟启动失败')
+  expect(db.getTurnStatus(first.turnID)).toBe('queued')
+  expect(service.get(thread.id).goal?.objective).toBe('原目标')
+  expect(pending.get(input.id)?.objective).toBe('第一个目标')
+  const started = db.startTurnExecution(first.turnID, input, () =>
+    service.applyInputInTransaction(thread.id, input.id, 'chat'),
+  )!
+  expect(started.events[0]?.method).toBe('thread/goal/updated')
+  expect(service.get(thread.id).goal?.objective).toBe('第一个目标')
+  expect(pending.get(input.id)).toBeUndefined()
+  expect(db.startTurnExecution(first.turnID, input)).toBeNull()
+  await expect(
+    service.set({
+      threadId: thread.id,
+      status: 'paused',
+      expectedVersion: initial.version,
+      operationId: 'stale',
+    }),
+  ).rejects.toMatchObject({ code: 'CONFLICT' })
+  db.updateQueuedInput(thread.id, second.inputID, '编辑后的目标', { operationID: 'edit' })
+  expect(pending.get(second.inputID)).toMatchObject({ objective: '编辑后的目标', tokenBudget: 123 })
+  expect(service.get(thread.id).goal?.objective).toBe('第一个目标')
+  db.removeQueuedInput(thread.id, second.inputID, { operationID: 'remove' })
+  expect(pending.get(second.inputID)).toBeUndefined()
+  expect(service.get(thread.id).goal?.objective).toBe('第一个目标')
+  db.close()
+})
+
+test('Plan 和 Grill 启动时暂停目标，Chat 保留目标，只有 Chat 可自动续跑', async () => {
+  const { db, service } = await fixture()
+  const thread = db.createThread()
+  service.admitInTransaction({ threadId: thread.id, objective: '持续工作', expectedVersion: null })
+  for (const taskMode of ['plan', 'grill'] as const) {
+    const turn = db.createTurn(thread.id, { ...submit('规划或访谈'), taskMode })
+    db.startTurnExecution(turn.turnID, db.getTurnInput(turn.turnID)!, () =>
+      service.applyInputInTransaction(thread.id, turn.inputID, taskMode),
+    )
+    expect(service.get(thread.id).goal?.status).toBe('paused')
+    expect(db.repositories.threadGoalContinuations.canContinue(thread.id, taskMode)).toBe(false)
+    await service.set({
+      threadId: thread.id,
+      status: 'active',
+      expectedVersion: service.get(thread.id).goal!.version,
+      operationId: `resume-${taskMode}`,
+    })
+  }
+  expect(service.applyInputInTransaction(thread.id, 'ordinary-chat', 'chat')).toBeUndefined()
+  expect(service.get(thread.id).goal?.status).toBe('active')
+  expect(db.repositories.threadGoalContinuations.canContinue(thread.id, 'chat')).toBe(true)
+  const queued = db.createTurn(thread.id, submit('用户排队输入'))
+  expect(db.repositories.threadGoalContinuations.canContinue(thread.id, 'chat')).toBe(false)
+  db.removeQueuedInput(thread.id, queued.inputID, { operationID: 'remove-user' })
+  db.close()
+})
+
+test('66→67 新增队列目标表，未知对象和更高版本原样保留', async () => {
+  const { db, path } = await fixture()
+  db.sqlite.exec(
+    "DROP TABLE queued_goal_intents; CREATE TABLE future_goal_data (value TEXT); INSERT INTO future_goal_data VALUES ('keep'); PRAGMA user_version = 66",
+  )
+  db.close()
+  const migrated = new AgentDatabase(path)
+  expect(new QueuedGoalRepository(migrated).available()).toBe(true)
+  expect(filterAdvertisedCapabilities(migrated)).toContain('queue.goal.v1')
+  expect(migrated.sqlite.query('SELECT value FROM future_goal_data').get()).toEqual({
+    value: 'keep',
+  })
+  migrated.sqlite.exec('DROP TABLE queued_goal_intents; PRAGMA user_version = 99')
+  migrated.close()
+  const future = new AgentDatabase(path)
+  expect(future.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: 99 })
+  expect(filterAdvertisedCapabilities(future)).not.toContain('queue.goal.v1')
+  expect(new QueuedGoalRepository(future).available()).toBe(false)
+  expect(future.sqlite.query('SELECT value FROM future_goal_data').get()).toEqual({ value: 'keep' })
+  future.close()
 })
