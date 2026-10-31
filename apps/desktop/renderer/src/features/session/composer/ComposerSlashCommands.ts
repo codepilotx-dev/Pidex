@@ -60,6 +60,7 @@ export type ParsedSlashInvocation =
   | { kind: 'unknown' }
 
 export {
+  parseGoalTaskFromInput as goalTaskFromInput,
   parseGrillTaskFromInput as grillTaskFromInput,
   parsePlanTaskFromInput as planTaskFromInput,
 } from '@pidex/shared/slash-commands'

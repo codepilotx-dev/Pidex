@@ -1074,7 +1074,7 @@ export function DiscoveredModelCard({
               <span>保存中</span>
             </span>
           ) : isSelected ? (
-            <span className="tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:bg-app-accent tw:text-app-on-accent tw:px-2 tw:py-0.5 tw:type-caption tw:shadow-sm">
+            <span className="tw:inline-flex tw:items-center tw:gap-1 tw:rounded-full tw:bg-app-hover tw:text-app-text tw:px-2 tw:py-0.5 tw:type-caption tw:shadow-sm">
               <Check size="var(--inline-icon-size, 1em)" strokeWidth={2.5} />
               <span>已添加</span>
             </span>

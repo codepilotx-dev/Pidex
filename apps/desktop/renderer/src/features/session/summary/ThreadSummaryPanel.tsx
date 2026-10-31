@@ -78,8 +78,8 @@ type ThreadSummaryActions = {
   onMoveToWorktree?: () => void
   onRetryGitDetection?: () => void
   pushEnabled?: boolean
-  onGoalPause?: () => void
-  onGoalResume?: () => void
+  onGoalPause?: () => void | Promise<void>
+  onGoalResume?: () => void | Promise<void>
   onOpenArtifact?: (artifact: ThreadSummaryArtifact) => void
   onOpenAttachment?: (attachment: Attachment) => void
   onOpenLocalContext?: (reference: LocalContextReference) => void
@@ -714,8 +714,8 @@ function GoalHeaderAction({
   onGoalResume,
 }: {
   goal: ThreadSummaryViewModel['goal']
-  onGoalPause?: () => void
-  onGoalResume?: () => void
+  onGoalPause?: () => void | Promise<void>
+  onGoalResume?: () => void | Promise<void>
 }): React.ReactNode {
   if (!goal) return null
   const paused = goal.status === 'paused'
@@ -728,7 +728,9 @@ function GoalHeaderAction({
         aria-label={label}
         className="tw:inline-flex tw:size-6 tw:items-center tw:justify-center tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text-meta tw:[font:inherit] tw:cursor-pointer tw:outline-none tw:hover:bg-app-hover tw:hover:text-app-text tw:focus-visible:outline-1 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus tw:[&>svg]:size-icon-sm"
         type="button"
-        onClick={action}
+        onClick={() => {
+          void Promise.resolve(action()).catch(() => undefined)
+        }}
       >
         {paused ? (
           <Play aria-hidden="true" size={APP_ICON_SIZES.sm} />

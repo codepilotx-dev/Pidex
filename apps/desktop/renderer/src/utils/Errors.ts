@@ -20,6 +20,9 @@ export function toUserErrorMessage(error: unknown, context?: ErrorContext): stri
     return '桌面主进程尚未加载此功能，请完全退出并重新启动 Pidex；刷新页面不会更新主进程。'
   }
 
+  if (errorCode === 'QUEUE_VERSION_CONFLICT') return '队列已变化，已刷新最新状态，请重试。'
+  if (errorCode === 'GOAL_VERSION_CONFLICT') return message || '目标已变化，请刷新后重试。'
+
   // Safe domain conflicts carry actionable messages; do not collapse them into internal errors.
   if (errorCode === 'CONFLICT' && message && message !== 'CONFLICT') return message
 

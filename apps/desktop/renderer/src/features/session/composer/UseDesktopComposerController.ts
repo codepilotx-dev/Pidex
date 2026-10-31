@@ -65,6 +65,7 @@ type ControllerOptions = {
   enableFullAccessPermissionMode: boolean
   planModeActive: boolean
   grillModeActive: boolean
+  confirmGoalSubmission?: (objective: string, hasAttachments: boolean) => Promise<boolean>
   sessionBusy: boolean
   modelConfigured: boolean
   selectedModelMetadata?: DesktopModelMetadata
@@ -158,6 +159,7 @@ export function useDesktopComposerController({
   enableFullAccessPermissionMode,
   planModeActive,
   grillModeActive,
+  confirmGoalSubmission,
   sessionBusy,
   modelConfigured,
   selectedModelMetadata,
@@ -174,7 +176,8 @@ export function useDesktopComposerController({
   createSessionForWorkspace,
   submitToSession,
   onError,
-  readPathname = () => (typeof window === 'undefined' ? '' : window.location.hash.replace(/^#/, '')),
+  readPathname = () =>
+    typeof window === 'undefined' ? '' : window.location.hash.replace(/^#/, ''),
 }: ControllerOptions) {
   const navigate = useNavigate()
   function setGoalModeEnabled(enabled: boolean): void {
@@ -239,12 +242,7 @@ export function useDesktopComposerController({
     attachments.length > 0 ||
     activeSkillToken !== null ||
     contextTokens.length > 0
-  const goalSubmitDisabledReason =
-    goalModeEnabled && sessionBusy
-      ? '当前任务正在执行，请等待本轮结束后提交目标'
-      : goalModeEnabled && !input.trim()
-        ? '请输入目标内容'
-        : null
+  const goalSubmitDisabledReason = goalModeEnabled && !input.trim() ? '请输入目标内容' : null
   const canSubmit =
     !goalSubmitDisabledReason &&
     resolveComposerCanSubmit({
@@ -460,6 +458,15 @@ export function useDesktopComposerController({
         ? (nextSessionId) => navigate(sessionPath(nextSessionId), { replace: true })
         : undefined,
       submitToSession: async (targetSessionId, value, metadata) => {
+        if (
+          metadata.goal &&
+          confirmGoalSubmission &&
+          !(await confirmGoalSubmission(
+            metadata.goal.objective,
+            Boolean(value.attachments?.length),
+          ))
+        )
+          throw new Error('已取消目标提交，草稿已保留')
         const result = await submitToSession(targetSessionId, value, {
           delivery,
           inputId: metadata.inputId,

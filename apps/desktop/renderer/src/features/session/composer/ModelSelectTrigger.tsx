@@ -1,20 +1,15 @@
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../../components/ui/IconTokens.js'
 import React, { useEffect, useRef, useState } from 'react'
-import { motion, type HTMLMotionProps } from 'motion/react'
 import { ChevronDown, Sparkles } from 'lucide-react'
 import { cx } from '../../../utils/Cx.js'
 import { ReasoningMenu } from './ReasoningMenu.js'
 import type { ThinkingOption } from './ThinkingLevelPopover.js'
-import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
-import { layoutTween, motionTransition } from '../../motion/MotionTransitions.js'
 import { splitComposerModelName } from './ComposerModelName.js'
 
 /*
  * Capsule trigger for the integrated model picker. The chevron follows the
  * capsule through the `group` utility so the hover hand-off does not need a
- * descendant selector. The capsule hugs its content with a 16rem cap, and the
- * existing motion layout animates width changes when the selected model changes,
- * so long names neither leave dead space nor snap the composer layout. Only
+ * descendant selector. The capsule hugs its content with a 16rem cap; long
  * names beyond the cap collapse the vendor prefix and truncate.
  *
  * `compact` swaps the text/effort region for a single sparkle icon; the footer
@@ -62,10 +57,8 @@ const COMPACT_ICON_CLASS = 'tw:shrink-0'
 export type ModelReasoningControlProps = {
   thinkingLabel: string
   thinkingMode: string
-  thinkingPreviewMode?: string | null
   thinkingOptions: ThinkingOption[]
   onThinkingChange: (mode: string) => void
-  onThinkingPreviewChange?: (mode: string | null) => void
   /** Reports the menu being open or the trigger holding focus so callers can hold it. */
   onHeldChange?: (held: boolean) => void
   /** Controlled open state; the capsule trigger drives it so the layout stays stable. */
@@ -84,10 +77,8 @@ export type ModelReasoningControlProps = {
 export function ModelReasoningControl({
   thinkingLabel,
   thinkingMode,
-  thinkingPreviewMode,
   thinkingOptions,
   onThinkingChange,
-  onThinkingPreviewChange,
   onHeldChange,
   open: controlledOpen,
   onOpenChange,
@@ -108,10 +99,8 @@ export function ModelReasoningControl({
       open={open}
       onOpenChange={setOpen}
       thinkingMode={thinkingMode}
-      thinkingPreviewMode={thinkingPreviewMode}
       thinkingOptions={thinkingOptions}
       onThinkingChange={onThinkingChange}
-      onThinkingPreviewChange={onThinkingPreviewChange}
       side={side}
       sideOffset={sideOffset}
       align={align}
@@ -142,7 +131,7 @@ export function ModelReasoningControl({
   )
 }
 
-export type ModelSelectTriggerProps = Omit<HTMLMotionProps<'button'>, 'children'> & {
+export type ModelSelectTriggerProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
   modelName: string
   tooltipTitle?: string
   loading?: boolean
@@ -150,14 +139,13 @@ export type ModelSelectTriggerProps = Omit<HTMLMotionProps<'button'>, 'children'
   showThinkingOptions?: boolean
   thinkingLabel?: string
   thinkingMode?: string
-  thinkingPreviewMode?: string | null
   thinkingOptions?: ThinkingOption[]
   onThinkingChange?: (mode: string) => void
-  onThinkingPreviewChange?: (mode: string | null) => void
   /**
    * Render the single smart/reasoning icon instead of the model name and
-   * reasoning label. The footer space allocator flips this when the text
-   * capsule does not fit; clicking the icon still opens the model popover.
+   * reasoning label. The footer space allocator decides when to request it,
+   * and `ModelPickerPopover` re-exposes the reasoning control in its panel so
+   * the level stays editable.
    */
   compact?: boolean
   /** Reports open reasoning menu or keyboard focus so the allocator holds this trigger. */
@@ -176,10 +164,8 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
       showThinkingOptions = false,
       thinkingLabel,
       thinkingMode = 'default',
-      thinkingPreviewMode,
       thinkingOptions = [],
       onThinkingChange,
-      onThinkingPreviewChange,
       compact = false,
       onHeldChange,
       className = '',
@@ -192,8 +178,6 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
     const [reasoningHeld, setReasoningHeld] = useState(false)
     const [focused, setFocused] = useState(false)
     const buttonRef = useRef<HTMLButtonElement>(null)
-    const reducedMotion = usePrefersReducedMotion()
-    const transition = motionTransition(reducedMotion, layoutTween)
 
     const active = isOpen || effortMenuOpen
     const { prefix, model } = splitComposerModelName(modelName)
@@ -204,9 +188,7 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
     // The capsule always opens the model popover; compact keeps the name as
     // accessible text while the visible content becomes the icon.
     const nameButton = (
-      <motion.button
-        layout="position"
-        transition={transition}
+      <button
         type="button"
         id={id}
         ref={buttonRef}
@@ -242,18 +224,16 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
             <span className={NAME_MODEL_CLASS}>{model}</span>
           </span>
         )}
-      </motion.button>
+      </button>
     )
 
     return (
-      <motion.div
+      <div
         ref={ref as React.Ref<HTMLDivElement>}
         tabIndex={-1}
         onFocus={(event) => {
           if (event.target === event.currentTarget) buttonRef.current?.focus()
         }}
-        layout
-        transition={transition}
         className={cx(CAPSULE_CLASS, active ? CAPSULE_ACTIVE_CLASS : CAPSULE_IDLE_CLASS, className)}
         data-compact={compact ? 'true' : undefined}
         onClick={(event) => {
@@ -266,31 +246,25 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
           <>
             {nameButton}
             {showThinkingOptions && thinkingLabel && onThinkingChange ? (
-              <motion.div
-                layout="position"
-                transition={transition}
+              <div
                 className={EFFORT_WRAP_CLASS}
                 onClick={(event) => event.stopPropagation()}
               >
                 <ModelReasoningControl
                   thinkingLabel={thinkingLabel}
                   thinkingMode={thinkingMode}
-                  thinkingPreviewMode={thinkingPreviewMode}
                   thinkingOptions={thinkingOptions}
                   onThinkingChange={onThinkingChange}
-                  onThinkingPreviewChange={onThinkingPreviewChange}
                   onHeldChange={setReasoningHeld}
                   open={effortMenuOpen}
                   onOpenChange={setEffortMenuOpen}
                 />
-              </motion.div>
+              </div>
             ) : null}
           </>
         )}
 
-        <motion.span
-          layout="position"
-          transition={transition}
+        <span
           aria-hidden="true"
           className={cx(CHEVRON_WRAP_CLASS, CHEVRON_FOOTER_CLASS)}
         >
@@ -299,8 +273,8 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
             strokeWidth={APP_ICON_STROKE_WIDTH}
             className={cx(CHEVRON_CLASS, isOpen && CHEVRON_OPEN_CLASS)}
           />
-        </motion.span>
-      </motion.div>
+        </span>
+      </div>
     )
   },
 )

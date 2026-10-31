@@ -1302,6 +1302,10 @@ function WorkspaceReviewSidebarImpl({
   }, [activeSessionId, commentIdentity, projectId, source, workspacePath])
 
   React.useEffect(() => {
+    if (reviewRootRef.current === null || reviewRootRef.current.offsetParent === null) {
+      staleGitChangeRef.current = true
+      return
+    }
     void refreshReviewDiff()
   }, [refreshReviewDiff, isRefreshing])
 

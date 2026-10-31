@@ -1199,32 +1199,31 @@ export function DesktopLayout(): React.ReactNode {
   )
 
   const handleSetGoalStatus = useCallback(
-    (status: 'active' | 'paused' | 'complete'): void => {
+    async (status: 'active' | 'paused' | 'complete'): Promise<void> => {
       if (!sessionId) return
-      desktopClient
-        .setSessionGoal(sessionId, { status })
-        .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)))
+      try {
+        await desktopClient.setSessionGoal(sessionId, { status })
+      } catch (cause) {
+        setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      }
     },
     [sessionId],
   )
-
-  const handleGoalPause = useCallback((): void => {
-    handleSetGoalStatus('paused')
-  }, [handleSetGoalStatus])
-
-  const handleGoalResume = useCallback((): void => {
-    handleSetGoalStatus('active')
-  }, [handleSetGoalStatus])
-
-  const handleGoalComplete = useCallback((): void => {
-    handleSetGoalStatus('complete')
-  }, [handleSetGoalStatus])
-
-  const handleGoalClear = useCallback((): void => {
+  const handleGoalPause = useCallback(() => handleSetGoalStatus('paused'), [handleSetGoalStatus])
+  const handleGoalResume = useCallback(() => handleSetGoalStatus('active'), [handleSetGoalStatus])
+  const handleGoalComplete = useCallback(
+    () => handleSetGoalStatus('complete'),
+    [handleSetGoalStatus],
+  )
+  const handleGoalClear = useCallback(async (): Promise<void> => {
     if (!sessionId) return
-    desktopClient
-      .clearSessionGoal(sessionId)
-      .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)))
+    try {
+      await desktopClient.clearSessionGoal(sessionId)
+    } catch (cause) {
+      setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+      throw cause
+    }
   }, [sessionId])
 
   const handleOpenThreadAttachment = useCallback(
@@ -2429,6 +2428,7 @@ export function DesktopLayout(): React.ReactNode {
         await desktopClient.updateQueuedFollowUp(sessionId, followUpId, value)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : String(error))
+        throw error
       }
     },
     [sessionId],
@@ -2441,6 +2441,7 @@ export function DesktopLayout(): React.ReactNode {
         await desktopClient.removeQueuedFollowUp(sessionId, followUpId)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : String(error))
+        throw error
       }
     },
     [sessionId],
@@ -2465,11 +2466,15 @@ export function DesktopLayout(): React.ReactNode {
       (option) => option.providerID === sideSettings.providerID,
     )
     const sideModelPresets = sideProviderOption?.modelPresets ?? modelPresets
-    const sideSelectedModelPreset = resolveModelPresetId(
-      sideSettings.model,
-      sideSettings.selectedModelPreset,
-      sideModelPresets,
-    )
+    const sideSelectedModelPreset =
+      resolveModelPresetId(
+        sideSettings.model,
+        sideSettings.selectedModelPreset,
+        sideModelPresets,
+      ) ||
+      sideSettings.model ||
+      sideSettings.selectedModelPreset ||
+      ''
     const sideProviderSummary =
       modelProviders.find((provider) => provider.providerID === sideSettings.providerID) ??
       (providerState?.provider.providerID === sideSettings.providerID
@@ -2502,7 +2507,8 @@ export function DesktopLayout(): React.ReactNode {
       sideDeepSeekThinkingControls ||
       sideProviderSummary?.kind === 'anthropic' ||
       sideModelMetadata?.reasoning === true ||
-      Boolean(sideModelMetadata?.variants?.length)
+      Boolean(sideModelMetadata?.variants?.length) ||
+      (Boolean(sideSettings.thinkingMode) && sideSettings.thinkingMode !== 'default')
     return (
       <DesktopComposer
         input={sideChatInput}
@@ -3665,9 +3671,9 @@ export function DesktopLayout(): React.ReactNode {
             onError: handleErrorMessage,
             queuedFollowUps,
             queuePauseReason,
-            onFollowUpEdit: (followUpId, value) => void handleFollowUpEdit(followUpId, value),
-            onFollowUpRemove: (followUpId) => void handleFollowUpRemove(followUpId),
-            onFollowUpResume: () => void handleFollowUpResume(),
+            onFollowUpEdit: handleFollowUpEdit,
+            onFollowUpRemove: handleFollowUpRemove,
+            onFollowUpResume: handleFollowUpResume,
           }
         : null,
     [

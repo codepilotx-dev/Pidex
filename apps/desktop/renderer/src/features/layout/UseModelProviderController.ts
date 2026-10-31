@@ -85,11 +85,14 @@ export function useModelProviderController({
         ?.modelPresets ?? [],
     [providerModelOptions, selectedProviderID],
   )
-  const resolvedSelectedModelPreset = resolveModelPresetId(
-    model,
-    undefined,
-    selectedProviderModelPresets,
-  )
+  const resolvedSelectedModelPreset =
+    resolveModelPresetId(
+      model,
+      undefined,
+      selectedProviderModelPresets,
+    ) ||
+    model ||
+    ''
   const selectedProviderSummary =
     modelProviders.find((provider) => provider.providerID === selectedProviderID) ??
     (providerState && providerState.provider.providerID === selectedProviderID
@@ -113,7 +116,9 @@ export function useModelProviderController({
     deepSeekThinkingControls ||
     selectedProviderSummary?.kind === 'anthropic' ||
     selectedModelMetadata?.reasoning === true ||
-    Boolean(selectedModelMetadata?.variants?.length)
+    Boolean(selectedModelMetadata?.variants?.length) ||
+    Boolean(selection?.variant) ||
+    (Boolean(selection?.thinkingMode) && selection?.thinkingMode !== 'default')
   const selectedModelAvailable = Boolean(
     model &&
     selectedProviderSummary &&

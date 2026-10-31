@@ -9,6 +9,7 @@ import type {
   DesktopSessionStatus,
 } from '../../../../shared/Types.js'
 import {
+  agentQueuedInputToDesktop,
   agentTurnStatusToDesktopStatus,
   approvalToRequest,
   latestItemContextUsage,
@@ -17,7 +18,6 @@ import {
   toolToRequest,
 } from '../../../services/AgentThreadAdapter.js'
 import { sessionTitleFromContent } from '../../../UiTypes.js'
-import { desktopUserMessageInputToPreviewText } from '../../../../shared/DesktopUserMessage.js'
 
 export type SourceLink = {
   label: string
@@ -161,17 +161,10 @@ function selectQueuedFollowUps(state: CanonicalThreadState): DesktopQueuedFollow
   }
   return orderedInputIds.flatMap((inputId) => {
     const input = state.inputsById.get(inputId)
-    if (!input) return []
-    return [
-      {
-        id: input.id,
-        input: { text: input.content, ...(input.skills ? { skills: input.skills } : {}) },
-        previewText: input.skills?.length
-          ? desktopUserMessageInputToPreviewText({ text: input.content, skills: input.skills })
-          : input.content,
-        createdAt: new Date(input.createdAt).toISOString(),
-      },
-    ]
+    if (!input || input.state !== 'queued') return []
+    const turn = input.turnId ? state.turnsById.get(input.turnId) : undefined
+    if (turn && turn.status !== 'queued') return []
+    return [agentQueuedInputToDesktop(input)]
   })
 }
 

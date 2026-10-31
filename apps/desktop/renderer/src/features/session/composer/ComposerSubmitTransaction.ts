@@ -11,7 +11,11 @@ import {
   hasTaskPlanningInvocation,
   skillInvocationsFromComposerDocument,
 } from './ComposerSkillToken.js'
-import { grillTaskFromInput, planTaskFromInput } from './ComposerSlashCommands.js'
+import {
+  goalTaskFromInput,
+  grillTaskFromInput,
+  planTaskFromInput,
+} from './ComposerSlashCommands.js'
 import {
   annotationAttachments,
   validateAnnotationCapacity,
@@ -41,10 +45,11 @@ export function prepareComposerSubmission(
   draft: ComposerDraft,
 ): PreparedComposerSubmission | ComposerSubmitOutcome {
   const snapshot = cloneDraft(draft)
+  const goalTask = goalTaskFromInput(snapshot.document.text)
   const planTask = planTaskFromInput(snapshot.document.text)
   const grillTask = grillTaskFromInput(snapshot.document.text)
-  if (planTask !== null || grillTask !== null) {
-    const directTask = planTask ?? grillTask!
+  if (planTask !== null || grillTask !== null || goalTask !== null) {
+    const directTask = planTask ?? grillTask ?? goalTask!
     const prefixLength = snapshot.document.text.indexOf(directTask)
     snapshot.document = {
       text: directTask,
@@ -54,7 +59,9 @@ export function prepareComposerSubmission(
         to: Math.max(0, Math.min(directTask.length, token.to - prefixLength)),
       })),
     }
-    snapshot.goalModeEnabled = false
+    snapshot.goalModeEnabled = goalTask !== null
+    snapshot.collaborationMode =
+      goalTask !== null ? 'default' : planTask !== null ? 'plan' : 'grill'
   }
   if (Object.keys(snapshot.browserAnnotationFeedback ?? {}).length)
     return failed('prepare', '请先保存或取消正在编辑的批注反馈')
@@ -68,6 +75,8 @@ export function prepareComposerSubmission(
   if (snapshot.goalModeEnabled && !snapshot.document.text.trim()) {
     return failed('prepare', '请输入目标内容')
   }
+  if (snapshot.goalModeEnabled && snapshot.document.text.trim().length > 4000)
+    return failed('prepare', '目标内容不能超过 4000 字符')
   const skills =
     snapshot.skills ??
     (snapshot.skillInvocation
@@ -76,7 +85,7 @@ export function prepareComposerSubmission(
   const hasContent = Boolean(text.trim()) || attachments.length > 0 || skills.length > 0
   const planning = hasTaskPlanningInvocation(snapshot.document, skills)
   const grilling = grillTask !== null || snapshot.collaborationMode === 'grill'
-  if (planning || grilling) snapshot.goalModeEnabled = false
+  if (goalTask === null && (planning || grilling)) snapshot.goalModeEnabled = false
 
   if (!hasContent) {
     return failed('prepare', '请输入消息或添加附件')
@@ -90,9 +99,11 @@ export function prepareComposerSubmission(
     input: {
       text,
       taskMode:
-        planning || planTask !== null || snapshot.collaborationMode === 'plan'
+        !snapshot.goalModeEnabled &&
+        grillTask === null &&
+        (planning || planTask !== null || snapshot.collaborationMode === 'plan')
           ? 'plan'
-          : grilling
+          : !snapshot.goalModeEnabled && grilling
             ? 'grill'
             : 'chat',
       attachments,

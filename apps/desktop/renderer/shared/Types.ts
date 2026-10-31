@@ -212,6 +212,7 @@ export type DesktopGoalSubmission = Omit<
 
 export type DesktopUserMessageInput = {
   text: string
+  goal?: DesktopGoalSubmission
   taskMode?: 'chat' | 'plan' | 'grill'
   skills?: readonly import('@pidex/agent-protocol').SkillSelection[]
   attachments?: DesktopComposerAttachment[]

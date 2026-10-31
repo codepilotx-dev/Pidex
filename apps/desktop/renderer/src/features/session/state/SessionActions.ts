@@ -235,9 +235,10 @@ export async function submitSessionMessageAction(
   },
 ): Promise<'sent' | 'queued' | 'steered' | null> {
   if (!canSubmit || !sessionId) return null
-  const delivery = options?.goal
-    ? 'start'
-    : resolveSessionMessageDelivery(options?.sessionStatus, options?.delivery)
+  const delivery =
+    options?.goal || input.goal || input.taskMode === 'plan' || input.taskMode === 'grill'
+      ? 'follow-up'
+      : resolveSessionMessageDelivery(options?.sessionStatus, options?.delivery)
   const modelSelection: DesktopModelSelection = {
     variant: settings.variant,
     providerID: settings.providerID,
@@ -249,7 +250,7 @@ export async function submitSessionMessageAction(
     if (delivery === 'follow-up') {
       return await desktopClient.submitSessionFollowUp(
         sessionId,
-        input,
+        { ...input, ...(options?.goal ? { goal: options.goal } : {}) },
         'follow-up',
         options?.inputId,
         modelSelection,

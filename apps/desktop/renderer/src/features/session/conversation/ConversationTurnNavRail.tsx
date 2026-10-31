@@ -147,7 +147,7 @@ function PreviewCard({
 
   return (
     <div
-      className="conversation-turn-preview-card tw:box-border tw:w-80 tw:max-w-[calc(100vw-16px)] tw:rounded-xl tw:border-[0.5px] tw:border-app-border tw:bg-app-raised tw:p-2 tw:text-app-text tw:type-caption tw:shadow-lg"
+      className="conversation-turn-preview-card tw:box-border tw:w-80 tw:max-w-[calc(100vw-16px)] tw:rounded-xl tw:border-[0.5px] tw:border-app-border tw:bg-app-raised tw:p-2 tw:text-app-text tw:type-caption"
       data-thread-user-message-navigation-tooltip-preview
     >
       <span className="tw:sr-only">
@@ -361,15 +361,29 @@ export function ConversationTurnNavRail({
       frame.querySelector<HTMLElement>('.canonical-turn-error') ??
       frame.querySelector<HTMLElement>('.workflow-page__composer-inner') ??
       frame.querySelector<HTMLElement>('.session-timeline-container')
-    const observedContent = resolveContent()
-    if (!observedContent) return
 
     let frameId: number | null = null
+    let currentObservedContent: HTMLElement | null = null
+
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => updateVisibility())
+
     const updateVisibility = (): void => {
       if (frameId !== null) return
       frameId = window.requestAnimationFrame(() => {
         frameId = null
         const content = resolveContent()
+        if (content !== currentObservedContent) {
+          if (currentObservedContent) {
+            observer?.unobserve(currentObservedContent)
+            currentObservedContent.removeEventListener('transitionend', updateVisibility)
+          }
+          currentObservedContent = content
+          if (content) {
+            observer?.observe(content)
+            content.addEventListener('transitionend', updateVisibility)
+          }
+        }
         if (!content) return
         const frameRect = frame.getBoundingClientRect()
         const contentRect = content.getBoundingClientRect()
@@ -379,11 +393,16 @@ export function ConversationTurnNavRail({
       })
     }
 
-    updateVisibility()
-    const observer =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateVisibility)
     observer?.observe(frame)
-    observer?.observe(observedContent)
+    updateVisibility()
+
+    // 初次挂载时消息内容可能处于异步拉取或首帧虚拟化阶段，通过 childList 监听正文挂载，确保一挂载立即点亮导轨
+    const contentMountObserver =
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver(() => updateVisibility())
+    contentMountObserver?.observe(frame, { childList: true, subtree: true })
+
     const styleHost = frame.closest<HTMLElement>('.workflow-page__main')
     const styleObserver =
       typeof MutationObserver === 'undefined' || !styleHost
@@ -395,14 +414,16 @@ export function ConversationTurnNavRail({
         attributes: true,
       })
     }
-    observedContent.addEventListener('transitionend', updateVisibility)
     window.addEventListener('resize', updateVisibility)
 
     return () => {
       if (frameId !== null) window.cancelAnimationFrame(frameId)
       observer?.disconnect()
+      contentMountObserver?.disconnect()
       styleObserver?.disconnect()
-      observedContent.removeEventListener('transitionend', updateVisibility)
+      if (currentObservedContent) {
+        currentObservedContent.removeEventListener('transitionend', updateVisibility)
+      }
       window.removeEventListener('resize', updateVisibility)
     }
   }, [items.length])
@@ -436,10 +457,10 @@ export function ConversationTurnNavRail({
         scrubSessionRef.current
       )
         return
-      const top = index * 24
+      const top = index * 10
       if (top < list.scrollTop) {
         virtualizerRef.current?.scrollToIndex(index, { align: 'start' })
-      } else if (top + 24 > list.scrollTop + list.clientHeight) {
+      } else if (top + 10 > list.scrollTop + list.clientHeight) {
         virtualizerRef.current?.scrollToIndex(index, { align: 'end' })
       }
     }
@@ -583,7 +604,7 @@ export function ConversationTurnNavRail({
           ref={virtualizerRef}
           data={items}
           scrollRef={listRef}
-          itemSize={24}
+          itemSize={10}
           bufferSize={60}
           keepMounted={keepMounted}
         >
@@ -602,7 +623,7 @@ export function ConversationTurnNavRail({
                 }`}
                 aria-posinset={index + 1}
                 aria-setsize={items.length}
-                className="conversation-turn-nav-item tw:relative tw:flex tw:h-6 tw:min-h-6 tw:w-9 tw:min-w-9 tw:shrink-0 tw:items-center tw:justify-start tw:border-none tw:bg-transparent tw:p-0 tw:cursor-pointer tw:outline-none tw:focus-visible:rounded-md tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus"
+                className="conversation-turn-nav-item tw:relative tw:flex tw:h-2.5 tw:min-h-2.5 tw:w-9 tw:min-w-9 tw:shrink-0 tw:items-center tw:justify-start tw:border-none tw:bg-transparent tw:p-0 tw:cursor-pointer tw:outline-none tw:focus-visible:rounded-md tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus"
                 data-neighbor-distance={
                   visualIndex === undefined ? undefined : Math.abs(index - visualIndex)
                 }
@@ -691,6 +712,7 @@ export function ConversationTurnNavRail({
             align="center"
             anchor={previewAnchorRef}
             aria-label="用户消息预览"
+            variant="unstyled"
             className="conversation-turn-preview-tooltip tw:animate-none tw:w-auto tw:border-0 tw:bg-transparent tw:p-0 tw:shadow-none"
             data-warm-handoff={previewWarm ? 'true' : undefined}
             onBlurCapture={schedulePreviewClose}

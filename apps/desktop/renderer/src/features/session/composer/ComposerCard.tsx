@@ -63,7 +63,7 @@ import type {
   DesktopModelProviderSummary,
   ModelProviderID,
 } from '../../../../shared/Types.js'
-import type { ModelPreset } from '../../../ModelPresets.js'
+import { getModelDisplayLabel, type ModelPreset } from '../../../ModelPresets.js'
 import { Button } from '../../../components/ui/Button.js'
 import { MetaChip } from '../../../components/ui/MetaChip.js'
 import { Spinner } from '../../../components/ui/Spinner.js'
@@ -369,14 +369,15 @@ type Props = {
   contextDropdownSide?: 'top' | 'bottom'
   queuedFollowUps?: DesktopQueuedFollowUp[]
   queuePauseReason?: DesktopQueuePauseReason | null
-  onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void
-  onFollowUpRemove?: (followUpId: string) => void
+  onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void | Promise<void>
+  onFollowUpRemove?: (followUpId: string) => void | Promise<void>
   onFollowUpResume?: () => void
+  onGoalEdit?: (objective: string) => Promise<void>
   threadGoal?: DesktopThreadGoal | null
-  onGoalPause?: () => void
-  onGoalResume?: () => void
-  onGoalComplete?: () => void
-  onGoalClear?: () => void
+  onGoalPause?: () => void | Promise<void>
+  onGoalResume?: () => void | Promise<void>
+  onGoalComplete?: () => void | Promise<void>
+  onGoalClear?: () => void | Promise<void>
   placement?: ComposerPlacement
   capabilities?: Partial<ComposerCapabilities>
   submitting?: boolean
@@ -502,6 +503,7 @@ export function ComposerCard({
   onFollowUpRemove,
   onFollowUpResume,
   threadGoal,
+  onGoalEdit,
   onGoalPause,
   onGoalResume,
   onGoalComplete,
@@ -614,9 +616,7 @@ export function ComposerCard({
       active = false
     }
   }, [])
-  const [thinkingPreviewMode, setThinkingPreviewMode] = useState<string | null>(null)
   useEffect(() => {
-    setThinkingPreviewMode(null)
     setOpenDropdown(null)
     setStatusPanelOpen(false)
     stoppingRef.current = false
@@ -685,38 +685,48 @@ export function ComposerCard({
     reloadContext,
   } = useComposerWorkspaceContext(workspace, Boolean(activeContextRequest))
   const selectedPermission = permissionOptions.find((option) => option.value === permissionMode)
-  const composerPlaceholder = modelCatalogLoading
-    ? '加载模型列表中……'
-    : goalModeEnabled
-      ? '粘贴你的计划或目标…'
-      : grillModeActive
-        ? '描述你的想法，通过深度提问厘清需求…'
-        : planModeActive
-          ? 'Describe your task to generate a plan...'
-          : placeholder
   const selectedProvider = providerOptions.find(
     (provider) => provider.providerID === selectedProviderID,
   )
   const selectedModel =
     modelPresets.find((preset) => preset.id === selectedModelPreset) ??
     selectedProvider?.modelPresets.find((preset) => preset.id === selectedModelPreset)
-  const selectedModelLabel = modelCatalogLoading
-    ? '加载模型列表中……'
-    : !modelConfigured
-      ? '配置模型'
-      : (selectedModel?.label ?? '未选择模型')
-  const selectedModelTitle = modelCatalogLoading
-    ? '加载模型列表中……'
-    : !modelConfigured
-      ? '打开模型配置'
-      : (selectedModel?.label ?? '未选择模型')
+  const resolvedModelLabel =
+    selectedModel?.label ??
+    (selectedModelPreset && selectedModelPreset !== 'default' && selectedModelPreset !== '__custom__'
+      ? getModelDisplayLabel(selectedModelPreset)
+      : undefined)
+  const selectedModelLabel =
+    resolvedModelLabel ??
+    (modelCatalogLoading
+      ? '加载模型列表中……'
+      : !modelConfigured
+        ? '配置模型'
+        : '未选择模型')
+  const selectedModelTitle =
+    resolvedModelLabel ??
+    (modelCatalogLoading
+      ? '加载模型列表中……'
+      : !modelConfigured
+        ? '打开模型配置'
+        : '未选择模型')
+  const composerPlaceholder =
+    modelCatalogLoading && !modelConfigured && !resolvedModelLabel
+      ? '加载模型列表中……'
+      : goalModeEnabled
+        ? '粘贴你的计划或目标…'
+        : grillModeActive
+          ? '描述你的想法，通过深度提问厘清需求…'
+          : planModeActive
+            ? 'Describe your task to generate a plan...'
+            : placeholder
   const effectiveThinkingOptions = resolveThinkingOptions(
     modelVariantOptions ? false : deepSeekThinkingControls,
     modelVariantOptions ?? thinkingOptions,
   )
   const selectedThinkingLabel = resolveThinkingLabel(
     effectiveThinkingOptions,
-    thinkingPreviewMode ?? modelVariant ?? thinkingMode,
+    modelVariant ?? thinkingMode,
   )
   const composerDocument = useMemo(
     () =>
@@ -784,24 +794,21 @@ export function ComposerCard({
     return () => cancelAnimationFrame(frame)
   }, [subagentMode, submitting, executingCommandId, submitOutcome, draftKey])
 
-  const slashMenuItems = useMemo(
-    () => {
-      if (!activeSlashQuery) return []
-      return mergeSlashCommands(
-        builtinSlashCommands,
-        capabilities.skills && !subagentMode ? skillCommands : [],
-      ).map((command) => composerCommandMenuItem(command, executeCommand, onSkillSelect))
-    },
-    [
-      activeSlashQuery,
+  const slashMenuItems = useMemo(() => {
+    if (!activeSlashQuery) return []
+    return mergeSlashCommands(
       builtinSlashCommands,
-      capabilities.skills,
-      executeCommand,
-      onSkillSelect,
-      skillCommands,
-      subagentMode,
-    ],
-  )
+      capabilities.skills && !subagentMode ? skillCommands : [],
+    ).map((command) => composerCommandMenuItem(command, executeCommand, onSkillSelect))
+  }, [
+    activeSlashQuery,
+    builtinSlashCommands,
+    capabilities.skills,
+    executeCommand,
+    onSkillSelect,
+    skillCommands,
+    subagentMode,
+  ])
   const skillMenuItems = useMemo((): ComposerMenuItem[] => {
     if (!capabilities.skills || subagentMode) return []
     if (!activeSkillQuery && !activeSlashQuery) return []
@@ -1428,6 +1435,8 @@ export function ComposerCard({
               {activeThreadGoal ? (
                 <ComposerGoalRow
                   goal={activeThreadGoal}
+                  onEdit={onGoalEdit}
+                  sessionBusy={sessionStatus === 'running' || sessionStatus === 'waiting'}
                   onPause={onGoalPause}
                   onResume={onGoalResume}
                   onComplete={onGoalComplete}
@@ -2000,7 +2009,6 @@ export function ComposerCard({
                 </button>
               </>
             ) : null}
-
           </div>
 
           <div ref={toolbarRightRef} className={TOOLBAR_RIGHT_CLASS}>
@@ -2098,12 +2106,10 @@ export function ComposerCard({
                     compact={footerFit.modelMode === 'icon'}
                     onHeldChange={setModelHeld}
                     onThinkingChange={handleThinkingSelect}
-                    onThinkingPreviewChange={setThinkingPreviewMode}
                     showThinkingOptions={showThinkingOptions}
                     thinkingLabel={selectedThinkingLabel}
                     thinkingMode={modelVariant ?? thinkingMode}
                     thinkingOptions={modelVariantOptions ?? thinkingOptions}
-                    thinkingPreviewMode={thinkingPreviewMode}
                     tooltipTitle={
                       showThinkingOptions
                         ? `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle} · 推理强度：${selectedThinkingLabel}`
@@ -2120,10 +2126,8 @@ export function ComposerCard({
                   <ModelReasoningControl
                     thinkingLabel={selectedThinkingLabel}
                     thinkingMode={modelVariant ?? thinkingMode}
-                    thinkingPreviewMode={thinkingPreviewMode}
                     thinkingOptions={modelVariantOptions ?? thinkingOptions}
                     onThinkingChange={handleThinkingSelect}
-                    onThinkingPreviewChange={setThinkingPreviewMode}
                     side="bottom"
                     align="start"
                     sideOffset={4}
@@ -2131,7 +2135,6 @@ export function ComposerCard({
                 ) : undefined
               }
               onOpenChange={(open) => {
-                if (!open) setThinkingPreviewMode(null)
                 setOpenDropdown(open ? 'model' : null)
               }}
               onProviderModelChange={onProviderModelChange}

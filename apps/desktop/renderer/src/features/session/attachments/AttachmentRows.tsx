@@ -1,6 +1,8 @@
+import { useRef } from 'react'
 import type { Attachment } from '@pidex/shared/thread'
 import {
   AttachmentFilePill,
+  AttachmentFileRow,
   AttachmentHorizontalRow,
   AttachmentImageTile,
 } from './AttachmentRowPrimitives.js'
@@ -70,17 +72,16 @@ export function ThreadAttachmentRows({
         </AttachmentHorizontalRow>
       ) : null}
       {files.length > 0 ? (
-        <AttachmentHorizontalRow ariaLabel="文件附件" reverse>
+        <AttachmentFileRow ariaLabel="文件附件">
           {files.map((attachment) => (
             <AttachmentFilePill
-              detail={formatAttachmentDetail(attachment)}
               key={attachment.id}
               name={attachment.name}
               onOpen={onOpen ? () => onOpen(attachment) : undefined}
               onRemove={onRemove ? () => onRemove(attachment.id) : undefined}
             />
           ))}
-        </AttachmentHorizontalRow>
+        </AttachmentFileRow>
       ) : null}
     </div>
   )
@@ -92,10 +93,12 @@ function SentBrowserAnnotation({
   annotation: BrowserAnnotation
   image: Attachment
 }) {
-  const state = useThreadAttachmentImageSource(image)
+  const containerRef = useRef<HTMLElement>(null)
+  const state = useThreadAttachmentImageSource(image, containerRef)
   return (
     <BrowserAnnotationCard
       annotation={annotation}
+      containerRef={containerRef}
       source={state.status === 'ready' ? state.source : undefined}
     />
   )
@@ -110,10 +113,12 @@ function ThreadAttachmentImageTile({
   onOpen?: (attachment: Attachment) => void
   onRemove?: (attachmentId: string) => void
 }): React.ReactNode {
-  const state = useThreadAttachmentImageSource(attachment)
+  const containerRef = useRef<HTMLDivElement>(null)
+  const state = useThreadAttachmentImageSource(attachment, containerRef)
 
   return (
     <AttachmentImageTile
+      containerRef={containerRef}
       errorMessage={state.status === 'error' ? state.message : undefined}
       name={attachment.name}
       onOpen={onOpen ? () => onOpen(attachment) : undefined}
@@ -122,15 +127,4 @@ function ThreadAttachmentImageTile({
       status={state.status}
     />
   )
-}
-
-function formatAttachmentDetail(attachment: Attachment): string {
-  const size = formatByteSize(attachment.sizeBytes)
-  return `${attachment.mediaType} · ${size}`
-}
-
-function formatByteSize(sizeBytes: number): string {
-  if (sizeBytes < 1024) return `${sizeBytes} B`
-  if (sizeBytes < 1024 * 1024) return `${Math.round(sizeBytes / 1024)} KB`
-  return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`
 }

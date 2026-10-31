@@ -286,18 +286,32 @@ export function agentQueuedFollowUpsToDesktop(snapshot: ThreadSnapshot): Desktop
   return [...orderedInputIds, ...remainingInputIds].flatMap((inputId) => {
     const input = queuedInputs.get(inputId)
     if (!input) return []
-    return [
-      {
-        id: input.id,
-        input: { text: input.content, ...(input.skills ? { skills: input.skills } : {}) },
-        previewText: [
-          ...(input.skills?.map((skill) => `$${skill.name}`) ?? []),
-          input.content,
-        ].join(' '),
-        createdAt: iso(input.createdAt),
-      },
-    ]
+    return [agentQueuedInputToDesktop(input)]
   })
+}
+
+export function agentQueuedInputToDesktop(input: Input): DesktopQueuedFollowUp {
+  return {
+    id: input.id,
+    input: {
+      text: input.content,
+      taskMode: input.mode,
+      ...(input.goal ? { goal: input.goal } : {}),
+      ...(input.skills ? { skills: input.skills } : {}),
+    },
+    previewText: [
+      ...(input.goal
+        ? ['目标']
+        : input.mode === 'plan'
+          ? ['计划']
+          : input.mode === 'grill'
+            ? ['访谈']
+            : []),
+      ...(input.skills?.map((skill) => `$${skill.name}`) ?? []),
+      input.content,
+    ].join(' '),
+    createdAt: iso(input.createdAt),
+  }
 }
 
 function queuePauseReasonFromSnapshot(snapshot: ThreadSnapshot): DesktopQueuePauseReason | null {

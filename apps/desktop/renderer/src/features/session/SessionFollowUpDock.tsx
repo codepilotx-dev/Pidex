@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
+import { useRef, useState } from 'react'
 import type React from 'react'
 import { Check, MessageSquareText, MoreHorizontal, Play, Trash2, X } from 'lucide-react'
 import {
@@ -18,8 +19,8 @@ import type {
 export type SessionFollowUpDockProps = {
   items: DesktopQueuedFollowUp[]
   pauseReason?: DesktopQueuePauseReason | null
-  onEdit: (followUpId: string, input: DesktopUserMessageInput) => void
-  onRemove: (followUpId: string) => void
+  onEdit: (followUpId: string, input: DesktopUserMessageInput) => void | Promise<void>
+  onRemove: (followUpId: string) => void | Promise<void>
   onResume: () => void
 }
 
@@ -56,137 +57,196 @@ export function SessionFollowUpDock({
 }: SessionFollowUpDockProps): React.ReactNode {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editingText, setEditingText] = useState('')
+  const [goalEdit, setGoalEdit] = useState<DesktopQueuedFollowUp | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const removingRef = useRef(new Set<string>())
+  const [removingIds, setRemovingIds] = useState(new Set<string>())
 
-  if (items.length === 0) return null
+  if (items.length === 0 && !error) return null
 
   function beginEdit(item: DesktopQueuedFollowUp): void {
     setEditingId(item.id)
     setEditingText(item.input.text)
   }
 
+  async function removeItem(id: string): Promise<void> {
+    if (removingRef.current.has(id)) return
+    removingRef.current.add(id)
+    setRemovingIds(new Set(removingRef.current))
+    setError(null)
+    try {
+      await onRemove(id)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '移除失败，请重试')
+    } finally {
+      removingRef.current.delete(id)
+      setRemovingIds(new Set(removingRef.current))
+    }
+  }
+
+  async function saveEdit(item: DesktopQueuedFollowUp): Promise<void> {
+    if (saving) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onEdit(item.id, { ...item.input, text: editingText.trim() })
+      setEditingId(null)
+      setEditingText('')
+      setGoalEdit(null)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '编辑失败')
+    } finally {
+      setSaving(false)
+    }
+  }
   function finishEdit(item: DesktopQueuedFollowUp): void {
-    const text = editingText.trim()
-    if (!text) return
-    onEdit(item.id, { ...item.input, text })
-    setEditingId(null)
-    setEditingText('')
+    if (!editingText.trim() || saving) return
+    if (item.input.goal) {
+      setGoalEdit(item)
+      return
+    }
+    void saveEdit(item)
   }
 
   return (
-    <section aria-label="消息队列" className={DOCK_CLASS} data-composer-utility-item="queue">
-      {pauseReason ? (
-        <div className={PAUSED_CLASS} role="status">
-          <span>
-            {pauseReason === 'interrupted'
-              ? '队列因你中断了任务而暂停'
-              : '队列因上一项执行失败而暂停'}
-          </span>
-          <Button
-            color="ghostSecondary"
-            className="session-follow-up-resume"
-            size="composerSm"
-            onClick={onResume}
-          >
-            <Play aria-hidden="true" size={APP_ICON_SIZE} />
-            继续队列
-          </Button>
-        </div>
-      ) : null}
-      <div className={LIST_CLASS} role="list">
-        {items.map((item, index) => {
-          const isEditing = editingId === item.id
-          return (
-            <div
-              aria-label={`排队消息 ${index + 1}：${item.previewText}`}
-              className={ITEM_CLASS}
-              key={item.id}
-              role="listitem"
+    <>
+      <section aria-label="消息队列" className={DOCK_CLASS} data-composer-utility-item="queue">
+        {pauseReason ? (
+          <div className={PAUSED_CLASS} role="status">
+            <span>
+              {pauseReason === 'interrupted'
+                ? '队列因你中断了任务而暂停'
+                : '队列因上一项执行失败而暂停'}
+            </span>
+            <Button
+              color="ghostSecondary"
+              className="session-follow-up-resume"
+              size="composerSm"
+              onClick={onResume}
             >
-              <span aria-hidden="true" className={ICON_CLASS}>
-                <MessageSquareText size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
-              </span>
-              {isEditing ? (
-                <input
-                  aria-label="编辑排队消息"
-                  autoFocus
-                  className={EDIT_INPUT_CLASS}
-                  onChange={(event) => setEditingText(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter') {
-                      event.preventDefault()
-                      finishEdit(item)
-                    } else if (event.key === 'Escape') {
-                      setEditingId(null)
-                    }
-                  }}
-                  value={editingText}
-                />
-              ) : (
-                <span className={PREVIEW_CLASS} title={item.previewText}>
-                  {item.previewText}
+              <Play aria-hidden="true" size={APP_ICON_SIZE} />
+              继续队列
+            </Button>
+          </div>
+        ) : null}
+        <div className={LIST_CLASS} role="list">
+          {items.map((item, index) => {
+            const isEditing = editingId === item.id
+            return (
+              <div
+                aria-label={`排队消息 ${index + 1}：${item.previewText}`}
+                className={ITEM_CLASS}
+                key={item.id}
+                role="listitem"
+              >
+                <span aria-hidden="true" className={ICON_CLASS}>
+                  <MessageSquareText size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
                 </span>
-              )}
-              <div aria-label="队列操作" className={ACTIONS_CLASS}>
                 {isEditing ? (
-                  <>
-                    <Button
-                      isIconOnly
-                      aria-label="保存编辑"
-                      className="session-follow-up-action"
-                      color="ghostSecondary"
-                      disabled={!editingText.trim()}
-                      onClick={() => finishEdit(item)}
-                      size="iconMd"
-                      title="保存编辑"
-                    >
-                      <Check size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                    </Button>
-                    <Button
-                      isIconOnly
-                      aria-label="取消编辑"
-                      className="session-follow-up-action"
-                      color="ghostSecondary"
-                      onClick={() => setEditingId(null)}
-                      size="iconMd"
-                      title="取消编辑"
-                    >
-                      <X size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                    </Button>
-                  </>
+                  <input
+                    aria-label="编辑排队消息"
+                    autoFocus
+                    className={EDIT_INPUT_CLASS}
+                    onChange={(event) => setEditingText(event.target.value)}
+                    onKeyDown={(event) => {
+                      if (event.key === 'Enter') {
+                        event.preventDefault()
+                        finishEdit(item)
+                      } else if (event.key === 'Escape') {
+                        setEditingId(null)
+                      }
+                    }}
+                    value={editingText}
+                  />
                 ) : (
-                  <>
-                    <Button
-                      isIconOnly
-                      aria-label="移除排队消息"
-                      className="session-follow-up-action"
-                      color="ghostSecondary"
-                      onClick={() => onRemove(item.id)}
-                      size="iconMd"
-                      title="移除"
-                    >
-                      <Trash2 size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                    </Button>
-                    <Button
-                      isIconOnly
-                      aria-label="编辑排队消息"
-                      className="session-follow-up-action"
-                      color="ghostSecondary"
-                      onClick={() => beginEdit(item)}
-                      size="iconMd"
-                      title="更多：编辑消息"
-                    >
-                      <MoreHorizontal
-                        size={APP_ICON_SIZES.sm}
-                        strokeWidth={APP_ICON_STROKE_WIDTH}
-                      />
-                    </Button>
-                  </>
+                  <span className={PREVIEW_CLASS} title={item.previewText}>
+                    {item.previewText}
+                  </span>
                 )}
+                <div aria-label="队列操作" className={ACTIONS_CLASS}>
+                  {isEditing ? (
+                    <>
+                      <Button
+                        isIconOnly
+                        aria-label="保存编辑"
+                        className="session-follow-up-action"
+                        color="ghostSecondary"
+                        disabled={!editingText.trim()}
+                        onClick={() => finishEdit(item)}
+                        size="iconMd"
+                        title="保存编辑"
+                      >
+                        <Check size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                      </Button>
+                      <Button
+                        isIconOnly
+                        aria-label="取消编辑"
+                        className="session-follow-up-action"
+                        color="ghostSecondary"
+                        onClick={() => setEditingId(null)}
+                        size="iconMd"
+                        title="取消编辑"
+                      >
+                        <X size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <Button
+                        isIconOnly
+                        aria-label="移除排队消息"
+                        className="session-follow-up-action"
+                        color="ghostSecondary"
+                        loading={removingIds.has(item.id)}
+                        onClick={() => void removeItem(item.id)}
+                        size="iconMd"
+                        title={removingIds.has(item.id) ? '正在移除…' : '移除'}
+                      >
+                        <Trash2 size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                      </Button>
+                      <Button
+                        isIconOnly
+                        aria-label="编辑排队消息"
+                        disabled={removingIds.has(item.id)}
+                        className="session-follow-up-action"
+                        color="ghostSecondary"
+                        onClick={() => beginEdit(item)}
+                        size="iconMd"
+                        title="更多：编辑消息"
+                      >
+                        <MoreHorizontal
+                          size={APP_ICON_SIZES.sm}
+                          strokeWidth={APP_ICON_STROKE_WIDTH}
+                        />
+                      </Button>
+                    </>
+                  )}
+                </div>
               </div>
-            </div>
-          )
-        })}
-      </div>
-    </section>
+            )
+          })}
+        </div>
+      </section>
+      {error && !goalEdit ? <p role="alert">{error}</p> : null}
+      <ConfirmationDialog
+        open={goalEdit !== null}
+        title="修改排队目标？"
+        description={
+          <>
+            该输入开始执行时替换当前目标。<p>{editingText}</p>
+            {error ? <p role="alert">{error}</p> : null}
+          </>
+        }
+        actionLabel={saving ? '保存中…' : '确认保存'}
+        actionDisabled={saving || !editingText.trim() || editingText.trim().length > 4000}
+        onCancel={() => {
+          if (!saving) setGoalEdit(null)
+        }}
+        onAction={() => {
+          if (goalEdit) void saveEdit(goalEdit)
+        }}
+      />
+    </>
   )
 }

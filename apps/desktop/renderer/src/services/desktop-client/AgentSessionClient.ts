@@ -116,6 +116,8 @@ const RENDERER_PROTOCOL = 'thread-rpc-v4' as const
  */
 const SESSION_STATUS_RECONCILE_INTERVAL_MS = 30_000
 export const RENDERER_CAPABILITIES = [
+  'thread.goal.v1',
+  'queue.goal.v1',
   'visualizations.v1',
   'artifacts.read.v1',
   'rpc.typed.v1',
@@ -435,24 +437,24 @@ export function createAgentSessionDesktopClient(
     return operation()
   }
 
-  /**
-   * Goal mutations are optimistic-concurrency guarded. On conflict we refresh the
-   * canonical snapshot and surface a retryable message instead of overwriting the
-   * newer version the other writer produced.
-   */
-  async function runGoalMutation<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation()
-    } catch (error) {
-      if (error instanceof AgentRpcError && error.errorCode === 'CONFLICT') {
-        await refreshAgentSessionStoreChange().catch(() => emitSessionStoreChange())
-        const conflict = new Error('目标已被其他操作更新，已刷新为最新状态，请重试。') as Error & {
-          code: string
-        }
-        conflict.code = 'GOAL_VERSION_CONFLICT'
-        throw conflict
+  /** Retry status-only mutations once; callers verify that the target goal has not changed. */
+  async function runGoalMutation<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+    retryConflict = false,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await operation()
+      } catch (error) {
+        if (!(error instanceof AgentRpcError) || error.errorCode !== 'CONFLICT') throw error
+        await loadAgentSessionSnapshot(sessionId).catch(() => null)
+        emitSessionStoreChange()
+        if (retryConflict && attempt === 0) continue
+        throw Object.assign(new Error(`${error.message}；已刷新最新状态，请重试。`), {
+          code: 'GOAL_VERSION_CONFLICT',
+        })
       }
-      throw error
     }
   }
 
@@ -1544,6 +1546,7 @@ export function createAgentSessionDesktopClient(
   }
 
   const turnQueueClient = createAgentTurnQueueClient({
+    supportsGoalQueue: () => agentCapabilities.has('queue.goal.v1'),
     rpc,
     requireSkillInvocationCapability: () => requireAgentCapability('skills.invocation.v1'),
     awaitPendingSettingsUpdate,
@@ -3815,7 +3818,7 @@ export function createAgentSessionDesktopClient(
               ...(goal ? { goal: { ...goal, expectedVersion: current?.version ?? null } } : {}),
             })
           }
-          if (goal) await runGoalMutation(submit)
+          if (goal) await runGoalMutation(sessionId, submit)
           else await submit()
         },
         () => mockClient.sendUserMessage(sessionId, input, model, inputId, goal),
@@ -3929,69 +3932,107 @@ export function createAgentSessionDesktopClient(
         },
         () => mockClient.getSessionGoal(sessionId),
       ),
-    setSessionGoal: (sessionId, input) =>
-      withAgentOrMock(
+    setSessionGoal: (sessionId, input) => {
+      let originalGoal: { id: string; objective: string } | null | undefined
+      return withAgentOrMock(
         async () =>
-          runGoalMutation(async () => {
-            if (!agentCapabilities.has('thread.goal.v1'))
-              unsupportedAgentOperation('setSessionGoal (thread.goal.v1)')
-            const current = (await rpc.call('thread/goal/get', { threadId: sessionId })).goal
-            const snapshot = (await rpc.call('thread/read', { threadId: sessionId })).snapshot
-            const running = snapshot.turns.some((turn) =>
-              [
-                'queued',
-                'running',
-                'waiting-permission',
-                'waiting-question',
-                'waiting-subagents',
-              ].includes(turn.status),
-            )
-            if (input.objective?.trim() && input.status !== 'paused' && !running) {
-              await turnQueueClient.submitMessage(
-                sessionId,
-                { text: input.objective.trim() },
-                'start',
-                {
-                  goal: {
-                    objective: input.objective.trim(),
-                    expectedVersion: current?.version ?? null,
-                    ...(input.tokenBudget === undefined ? {} : { tokenBudget: input.tokenBudget }),
-                  },
-                },
+          runGoalMutation(
+            sessionId,
+            async () => {
+              if (!agentCapabilities.has('thread.goal.v1'))
+                unsupportedAgentOperation('setSessionGoal (thread.goal.v1)')
+              const current = (await rpc.call('thread/goal/get', { threadId: sessionId })).goal
+              if (
+                originalGoal !== undefined &&
+                (originalGoal?.id !== current?.id || originalGoal?.objective !== current?.objective)
               )
-              return (await rpc.call('thread/goal/get', { threadId: sessionId })).goal!
-            }
-            const result = await rpc.call('thread/goal/set', {
-              threadId: sessionId,
-              expectedVersion: current?.version ?? null,
-              operationId: crypto.randomUUID(),
-              ...(input.objective === undefined ? {} : { objective: input.objective }),
-              ...(input.status === undefined ? {} : { status: input.status }),
-              ...(input.tokenBudget === undefined ? {} : { tokenBudget: input.tokenBudget }),
-            })
-            await refreshAgentSessionStoreChange().catch(() => emitSessionStoreChange())
-            return result.goal
-          }),
+                throw Object.assign(new Error('目标已被替换，已刷新，请确认新目标后重试。'), {
+                  code: 'GOAL_VERSION_CONFLICT',
+                })
+              originalGoal = current
+              const snapshot = input.objective?.trim()
+                ? (await rpc.call('thread/read', { threadId: sessionId })).snapshot
+                : null
+              const running = snapshot?.turns.some((turn) =>
+                [
+                  'queued',
+                  'running',
+                  'waiting-permission',
+                  'waiting-question',
+                  'waiting-subagents',
+                ].includes(turn.status),
+              )
+              if (input.objective?.trim() && input.status !== 'paused' && !running) {
+                await turnQueueClient.submitMessage(
+                  sessionId,
+                  { text: input.objective.trim() },
+                  'start',
+                  {
+                    goal: {
+                      objective: input.objective.trim(),
+                      expectedVersion: current?.version ?? null,
+                      ...(input.tokenBudget === undefined
+                        ? {}
+                        : { tokenBudget: input.tokenBudget }),
+                    },
+                  },
+                )
+                return (await rpc.call('thread/goal/get', { threadId: sessionId })).goal!
+              }
+              const result = await rpc.call('thread/goal/set', {
+                threadId: sessionId,
+                expectedVersion: current?.version ?? null,
+                operationId: crypto.randomUUID(),
+                ...(input.objective === undefined ? {} : { objective: input.objective }),
+                ...(input.status === undefined ? {} : { status: input.status }),
+                ...(input.tokenBudget === undefined ? {} : { tokenBudget: input.tokenBudget }),
+              })
+              await loadAgentSessionSnapshot(sessionId)
+              emitSessionStoreChange()
+              return result.goal
+            },
+            input.objective === undefined && input.tokenBudget === undefined,
+          ),
         () => mockClient.setSessionGoal(sessionId, input),
-      ),
-    clearSessionGoal: (sessionId) =>
-      withAgentOrMock(
+      )
+    },
+    clearSessionGoal: (sessionId) => {
+      let originalGoal: { id: string; objective: string } | null | undefined
+      return withAgentOrMock(
         async () =>
-          runGoalMutation(async () => {
-            if (!agentCapabilities.has('thread.goal.v1'))
-              unsupportedAgentOperation('clearSessionGoal (thread.goal.v1)')
-            const current = (await rpc.call('thread/goal/get', { threadId: sessionId })).goal
-            if (!current) return true
-            await rpc.call('thread/goal/clear', {
-              threadId: sessionId,
-              expectedVersion: current.version,
-              operationId: crypto.randomUUID(),
-            })
-            await refreshAgentSessionStoreChange().catch(() => emitSessionStoreChange())
-            return true
-          }),
+          runGoalMutation(
+            sessionId,
+            async () => {
+              if (!agentCapabilities.has('thread.goal.v1'))
+                unsupportedAgentOperation('clearSessionGoal (thread.goal.v1)')
+              const current = (await rpc.call('thread/goal/get', { threadId: sessionId })).goal
+              if (!current) {
+                await loadAgentSessionSnapshot(sessionId)
+                emitSessionStoreChange()
+                return true
+              }
+              if (
+                originalGoal &&
+                (originalGoal.id !== current.id || originalGoal.objective !== current.objective)
+              )
+                throw Object.assign(new Error('目标已被替换，已刷新，请确认新目标后重试。'), {
+                  code: 'GOAL_VERSION_CONFLICT',
+                })
+              originalGoal = current
+              await rpc.call('thread/goal/clear', {
+                threadId: sessionId,
+                expectedVersion: current.version,
+                operationId: crypto.randomUUID(),
+              })
+              await loadAgentSessionSnapshot(sessionId)
+              emitSessionStoreChange()
+              return true
+            },
+            true,
+          ),
         () => mockClient.clearSessionGoal(sessionId),
-      ),
+      )
+    },
     listThreadBookmarks: (sessionId) =>
       withAgentOrMock(
         async () => {

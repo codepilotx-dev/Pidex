@@ -121,7 +121,7 @@ const MODEL_ROW_TRAILING_CLASS =
   'composer-model-row-trailing tw:flex tw:shrink-0 tw:items-center tw:gap-2'
 const MODEL_MARK_CLASS = cx(
   'composer-model-row-mark tw:flex tw:size-4.5 tw:shrink-0 tw:items-center tw:justify-center',
-  'tw:text-app-accent-fg',
+  'tw:text-app-text',
 )
 const CAPABILITIES_CLASS =
   'composer-model-capabilities tw:hidden tw:shrink-0 tw:items-center tw:gap-1 tw:group-hover:flex'

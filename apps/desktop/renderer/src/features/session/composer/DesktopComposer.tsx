@@ -1,5 +1,6 @@
 import { desktopClient } from '../../../services/desktop-client/index.js'
-import { useEffect } from 'react'
+import { useEffect, useState, useRef } from 'react'
+import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
 import type React from 'react'
 import type {
   DesktopComposerAttachment,
@@ -164,18 +165,18 @@ export type DesktopComposerProps = {
   ) => Promise<'sent' | 'queued' | 'steered' | null>
   queuedFollowUps?: DesktopQueuedFollowUp[]
   queuePauseReason?: DesktopQueuePauseReason | null
-  onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void
-  onFollowUpRemove?: (followUpId: string) => void
+  onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void | Promise<void>
+  onFollowUpRemove?: (followUpId: string) => void | Promise<void>
   onFollowUpResume?: () => void
   threadGoal?: DesktopThreadGoal | null
   /** Global error notification for failures that block sending. */
   onError?: (message: string) => void
   /** Current route path used to decide whether a failed creation should navigate back. */
   readPathname?: () => string
-  onGoalPause?: () => void
-  onGoalResume?: () => void
-  onGoalComplete?: () => void
-  onGoalClear?: () => void
+  onGoalPause?: () => void | Promise<void>
+  onGoalResume?: () => void | Promise<void>
+  onGoalComplete?: () => void | Promise<void>
+  onGoalClear?: () => void | Promise<void>
   subagentMode?: boolean
 }
 
@@ -272,6 +273,25 @@ export function DesktopComposer({
   subagentMode = false,
 }: DesktopComposerProps): React.ReactNode {
   const effectiveCapabilities = { ...capabilities, dictation: capabilities?.dictation ?? true }
+  const [goalConfirmation, setGoalConfirmation] = useState<string | null>(null)
+  const goalConfirmationResolver = useRef<((confirmed: boolean) => void) | null>(null)
+  const goalEditSubmission = useRef<{
+    threadId: string
+    objective: string
+    inputId: string
+  } | null>(null)
+  useEffect(
+    () => () => {
+      goalConfirmationResolver.current?.(false)
+      goalConfirmationResolver.current = null
+    },
+    [draftKey],
+  )
+  function settleGoalConfirmation(confirmed: boolean) {
+    goalConfirmationResolver.current?.(confirmed)
+    goalConfirmationResolver.current = null
+    setGoalConfirmation(null)
+  }
   const {
     branchName,
     canSubmit,
@@ -304,6 +324,15 @@ export function DesktopComposer({
     taskPlanningAvailable,
     unsupportedAttachmentReason,
   } = useDesktopComposerController({
+    confirmGoalSubmission: async (objective, hasAttachments) => {
+      const currentGoal = routedSessionId ? await desktopClient.getSessionGoal(routedSessionId) : threadGoal
+      if (!currentGoal || (currentGoal.objective === objective && !hasAttachments))
+        return Promise.resolve(true)
+      return new Promise<boolean>((resolve) => {
+        goalConfirmationResolver.current = resolve
+        setGoalConfirmation(objective)
+      })
+    },
     input,
     messages,
     hasConversationMessages: hasConversationMessagesOverride,
@@ -403,127 +432,157 @@ export function DesktopComposer({
   }, [modelSelectionError, onError, routedSessionId, draftKey])
 
   return (
-    <ComposerCard
-      draftKey={draftKey}
-      input={input}
-      canSubmit={canSubmit}
-      sessionStatus={sessionStatus}
-      permissionMode={effectivePermissionMode}
-      permissionUnavailableReason={permissionUnavailableReason}
-      planModeActive={planModeActive}
-      grillModeActive={grillModeActive}
-      onGrillModeChange={handleGrillModeChange}
-      placement={placement}
-      capabilities={{
-        ...effectiveCapabilities,
-        fileAttachments:
-          fileAttachmentsAvailable && (effectiveCapabilities?.fileAttachments ?? true),
-      }}
-      submitShortcut={submitShortcut}
-      surface={surface}
-      layout={layout}
-      radiusVariant={radiusVariant}
-      utilityBarVariant={utilityBarVariant}
-      workingPlugin={workingPlugin}
-      onWorkingPluginChange={handleWorkingPluginChange}
-      submitting={isSubmitting}
-      creationPending={creationPending}
-      submitOutcome={lastSubmitOutcome}
-      goalModeEnabled={goalModeEnabled}
-      onGoalModeChange={setGoalModeEnabled}
-      modelVariant={modelVariant}
-      modelVariantOptions={modelVariantOptions}
-      onModelVariantChange={onModelVariantChange}
-      thinkingMode={thinkingMode}
-      selectedProviderID={selectedProviderID ?? 'anthropic'}
-      selectedModelPreset={selectedModelPreset}
-      modelConfigured={modelConfigured}
-      modelCatalogLoading={modelCatalogLoading}
-      submitDisabledReason={unsupportedAttachmentReason ?? modelSelectionError ?? undefined}
-      showThinkingOptions={showThinkingOptions}
-      deepSeekThinkingControls={deepSeekThinkingControls}
-      showContextUsage={showContextUsage}
-      contextUsage={contextUsage}
-      modelPresets={modelPresets}
-      providerOptions={providerOptions}
-      allProviders={allProviders}
-      permissionOptions={permissionOptions}
-      thinkingOptions={THINKING_MODE_OPTIONS}
-      branchName={branchName}
-      branches={workspace?.branches ?? []}
-      recentWorkspaces={recentWorkspaces}
-      contextTasks={contextTasks}
-      browserContext={browserContext}
-      workspace={workspace}
-      attachments={attachments}
-      skillCommands={skillCommands}
-      skillCatalogLoading={skillCatalogLoading}
-      skillCatalogError={skillCatalogError}
-      onReloadSkillCatalog={reloadSkillCatalog}
-      document={composerDocument}
-      selectedSkillToken={activeSkillToken ?? undefined}
-      hasConversationMessages={hasConversationMessages}
-      placeholder={
-        placeholderOverride ??
-        (modelCatalogLoading
-          ? '加载模型列表中……'
-          : hasConversationMessages
-            ? '要求后续变更'
-            : '随心输入')
-      }
-      onChooseWorkspace={() => void onChooseWorkspace()}
-      onInputChange={onInputChange}
-      onDocumentChange={handleComposerDocumentChangeWithInput}
-      onSkillTokenActivate={onSkillTokenActivate}
-      onCompositionStart={handleCompositionStart}
-      onCompositionEnd={handleCompositionEnd}
-      onInterrupt={async () => {
-        try {
-          await onInterrupt()
-        } catch (error) {
-          handleCommandError(error instanceof Error ? error.message : String(error))
-          throw error
+    <>
+      <ComposerCard
+        draftKey={draftKey}
+        input={input}
+        canSubmit={canSubmit}
+        sessionStatus={sessionStatus}
+        permissionMode={effectivePermissionMode}
+        permissionUnavailableReason={permissionUnavailableReason}
+        planModeActive={planModeActive}
+        grillModeActive={grillModeActive}
+        onGrillModeChange={handleGrillModeChange}
+        placement={placement}
+        capabilities={{
+          ...effectiveCapabilities,
+          fileAttachments:
+            fileAttachmentsAvailable && (effectiveCapabilities?.fileAttachments ?? true),
+        }}
+        submitShortcut={submitShortcut}
+        surface={surface}
+        layout={layout}
+        radiusVariant={radiusVariant}
+        utilityBarVariant={utilityBarVariant}
+        workingPlugin={workingPlugin}
+        onWorkingPluginChange={handleWorkingPluginChange}
+        submitting={isSubmitting}
+        creationPending={creationPending}
+        submitOutcome={lastSubmitOutcome}
+        goalModeEnabled={goalModeEnabled}
+        onGoalModeChange={setGoalModeEnabled}
+        modelVariant={modelVariant}
+        modelVariantOptions={modelVariantOptions}
+        onModelVariantChange={onModelVariantChange}
+        thinkingMode={thinkingMode}
+        selectedProviderID={selectedProviderID ?? 'anthropic'}
+        selectedModelPreset={selectedModelPreset}
+        modelConfigured={modelConfigured}
+        modelCatalogLoading={modelCatalogLoading}
+        submitDisabledReason={unsupportedAttachmentReason ?? modelSelectionError ?? undefined}
+        showThinkingOptions={showThinkingOptions}
+        deepSeekThinkingControls={deepSeekThinkingControls}
+        showContextUsage={showContextUsage}
+        contextUsage={contextUsage}
+        modelPresets={modelPresets}
+        providerOptions={providerOptions}
+        allProviders={allProviders}
+        permissionOptions={permissionOptions}
+        thinkingOptions={THINKING_MODE_OPTIONS}
+        branchName={branchName}
+        branches={workspace?.branches ?? []}
+        recentWorkspaces={recentWorkspaces}
+        contextTasks={contextTasks}
+        browserContext={browserContext}
+        workspace={workspace}
+        attachments={attachments}
+        skillCommands={skillCommands}
+        skillCatalogLoading={skillCatalogLoading}
+        skillCatalogError={skillCatalogError}
+        onReloadSkillCatalog={reloadSkillCatalog}
+        document={composerDocument}
+        selectedSkillToken={activeSkillToken ?? undefined}
+        hasConversationMessages={hasConversationMessages}
+        placeholder={
+          placeholderOverride ??
+          (modelCatalogLoading && !modelConfigured && !selectedModelPreset
+            ? '加载模型列表中……'
+            : hasConversationMessages
+              ? '要求后续变更'
+              : '随心输入')
         }
-      }}
-      onProviderModelChange={onProviderModelChange}
-      onProviderOpen={onProviderOpen}
-      onProviderSearch={onProviderSearch}
-      onAddFiles={(files) => void handleAddFiles(files)}
-      onAddFilePaths={handleAddFilePaths}
-      onRemoveAttachment={handleRemoveAttachment}
-      onOpenAttachment={onOpenAttachment}
-      onOpenWorkspace={(workspaceItem) => void onOpenWorkspace(workspaceItem)}
-      onCloneGithub={onCloneGithub}
-      onClearWorkspace={onClearWorkspace}
-      onOpenMcpSettings={onOpenMcpSettings}
-      onOpenModelSettings={onOpenModelSettings}
-      onOpenSideChat={onOpenSideChat}
-      onForkConversation={onForkConversation}
-      canForkConversation={canForkConversation}
-      onArchiveConversation={onArchiveConversation}
-      onBranchSelect={(branch) => void onBranchSelect(branch)}
-      onCreateBranch={onCreateBranch}
-      onStartReview={onStartReview}
-      onPermissionChange={onPermissionChange}
-      onPlanModeChange={handlePlanModeChange}
-      onSubmit={handleSubmit}
-      onCompact={handleCompact}
-      queuedCompactionSupported={desktopClient.supportsQueuedCompaction()}
-      onCommandError={handleCommandError}
-      onThinkingChange={onThinkingChange}
-      onSkillSelect={handleSkillSelectWithWorkingPluginClear}
-      routedSessionId={routedSessionId}
-      contextDropdownSide="top"
-      queuedFollowUps={queuedFollowUps}
-      queuePauseReason={queuePauseReason}
-      onFollowUpEdit={onFollowUpEdit}
-      onFollowUpRemove={onFollowUpRemove}
-      onFollowUpResume={onFollowUpResume}
-      threadGoal={threadGoal}
-      onGoalPause={onGoalPause}
-      onGoalResume={onGoalResume}
-      onGoalComplete={onGoalComplete}
-      onGoalClear={onGoalClear}
-    />
+        onChooseWorkspace={() => void onChooseWorkspace()}
+        onInputChange={onInputChange}
+        onDocumentChange={handleComposerDocumentChangeWithInput}
+        onSkillTokenActivate={onSkillTokenActivate}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
+        onInterrupt={async () => {
+          try {
+            await onInterrupt()
+          } catch (error) {
+            handleCommandError(error instanceof Error ? error.message : String(error))
+            throw error
+          }
+        }}
+        onProviderModelChange={onProviderModelChange}
+        onProviderOpen={onProviderOpen}
+        onProviderSearch={onProviderSearch}
+        onAddFiles={(files) => void handleAddFiles(files)}
+        onAddFilePaths={handleAddFilePaths}
+        onRemoveAttachment={handleRemoveAttachment}
+        onOpenAttachment={onOpenAttachment}
+        onOpenWorkspace={(workspaceItem) => void onOpenWorkspace(workspaceItem)}
+        onCloneGithub={onCloneGithub}
+        onClearWorkspace={onClearWorkspace}
+        onOpenMcpSettings={onOpenMcpSettings}
+        onOpenModelSettings={onOpenModelSettings}
+        onOpenSideChat={onOpenSideChat}
+        onForkConversation={onForkConversation}
+        canForkConversation={canForkConversation}
+        onArchiveConversation={onArchiveConversation}
+        onBranchSelect={(branch) => void onBranchSelect(branch)}
+        onCreateBranch={onCreateBranch}
+        onStartReview={onStartReview}
+        onPermissionChange={onPermissionChange}
+        onPlanModeChange={handlePlanModeChange}
+        onSubmit={handleSubmit}
+        onCompact={handleCompact}
+        queuedCompactionSupported={desktopClient.supportsQueuedCompaction()}
+        onCommandError={handleCommandError}
+        onThinkingChange={onThinkingChange}
+        onSkillSelect={handleSkillSelectWithWorkingPluginClear}
+        routedSessionId={routedSessionId}
+        contextDropdownSide="top"
+        queuedFollowUps={queuedFollowUps}
+        queuePauseReason={queuePauseReason}
+        onFollowUpEdit={onFollowUpEdit}
+        onFollowUpRemove={onFollowUpRemove}
+        onFollowUpResume={onFollowUpResume}
+        threadGoal={threadGoal}
+        onGoalEdit={async (objective) => {
+          if (!routedSessionId) throw new Error('当前任务不可用')
+          const previousEdit = goalEditSubmission.current
+          const edit =
+            previousEdit?.threadId === routedSessionId && previousEdit.objective === objective
+              ? previousEdit
+              : { threadId: routedSessionId, objective, inputId: crypto.randomUUID() }
+          goalEditSubmission.current = edit
+          const result = await submitToSession(
+            routedSessionId,
+            { text: objective, taskMode: 'chat', goal: { objective } },
+            { inputId: edit.inputId, goal: { objective }, propagateError: true },
+          )
+          if (!result) throw new Error('目标提交失败')
+          goalEditSubmission.current = null
+        }}
+        onGoalPause={onGoalPause}
+        onGoalResume={onGoalResume}
+        onGoalComplete={onGoalComplete}
+        onGoalClear={onGoalClear}
+      />
+      <ConfirmationDialog
+        open={goalConfirmation !== null}
+        title="替换目标？"
+        description={
+          <>
+            该输入开始执行时替换当前目标。<p>{goalConfirmation}</p>
+          </>
+        }
+        actionLabel="确认提交"
+        onCancel={() => settleGoalConfirmation(false)}
+        onAction={() => settleGoalConfirmation(true)}
+      />
+    </>
   )
 }
