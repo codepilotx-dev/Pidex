@@ -1,5 +1,4 @@
 import { createReadStream, watch as watchFileSystem, type FSWatcher } from 'node:fs'
-import { createHash } from 'node:crypto'
 import { lstat, mkdtemp, readlink, realpath, rm, stat, unlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
@@ -703,42 +702,25 @@ export class GitReviewService {
   }
 
   private async hashWorktreeFiles(rootPath: string, paths: readonly string[]) {
-    const hashable: string[] = []
+    // ponytail: 用 stat 指纹代替逐文件内容哈希。万级变更集上 hash-object 需要整树读文件，
+    // 是刷新慢的主因；size+mtimeNs+ctimeNs 的变化是内容变化的超集，只会多失效不会漏。
+    const hashes = new Map<string, string>()
     for (const path of paths) {
-      const metadata = await lstat(resolve(rootPath, path)).catch((cause) => {
+      const metadata = await lstat(resolve(rootPath, path), { bigint: true }).catch((cause) => {
         if (cause && typeof cause === 'object' && 'code' in cause && cause.code === 'ENOENT')
           return null
         throw cause
       })
-      if (metadata?.isFile() || metadata?.isSymbolicLink()) hashable.push(path)
-    }
-    const hashes = new Map<string, string>()
-    const regularPaths = hashable.filter((path) => !/[\r\n]/.test(path))
-    if (regularPaths.length > 0) {
-      const output = await this.git(
-        rootPath,
-        ['hash-object', '--no-filters', '--stdin-paths'],
-        `${regularPaths.join('\n')}\n`,
-        [0],
-      )
-      const oids = output.stdout.trim().split(/\r?\n/)
-      regularPaths.forEach((path, index) => hashes.set(path, oids[index] ?? ''))
-    }
-    for (const path of hashable) {
-      if (!/[\r\n]/.test(path)) continue
-      const entry = await this.safeUntrackedEntry(rootPath, path)
-      if (!entry) continue
-      const hash = createHash('sha1')
-      if (entry.kind === 'symlink') {
-        const bytes = Buffer.from(entry.target, 'utf8')
-        hash.update(`blob ${bytes.byteLength}\0`, 'utf8')
-        hash.update(bytes)
-      } else {
-        const metadata = await stat(entry.path)
-        hash.update(`blob ${metadata.size}\0`, 'utf8')
-        for await (const chunk of createReadStream(entry.path)) hash.update(chunk)
+      if (!metadata || !(metadata.isFile() || metadata.isSymbolicLink())) continue
+      if (metadata.isSymbolicLink()) {
+        const target = await readlink(resolve(rootPath, path), 'utf8').catch(() => '')
+        hashes.set(
+          path,
+          `symlink:${metadata.size}:${metadata.mtimeNs}:${metadata.ctimeNs}:${target}`,
+        )
+        continue
       }
-      hashes.set(path, hash.digest('hex'))
+      hashes.set(path, `${metadata.size}:${metadata.mtimeNs}:${metadata.ctimeNs}`)
     }
     return hashes
   }
@@ -771,7 +753,10 @@ export class GitReviewService {
     return { additions: lines, deletions: 0, binary: false }
   }
 
-  private async buildFileSummaries(rootPath: string, resolved: ResolvedSource) {
+  private async buildFileSummaries(
+    rootPath: string,
+    resolved: ResolvedSource,
+  ): Promise<{ files: ReviewFileSummary[]; worktreeHashes: Map<string, string> }> {
     const metadata = parseRawNumstatDiff(
       (
         await this.git(rootPath, [
@@ -860,7 +845,7 @@ export class GitReviewService {
         revision,
       })
     }
-    return files
+    return { files, worktreeHashes }
   }
 
   private cacheKey(projectId: string, source: ReviewSource) {
@@ -868,44 +853,13 @@ export class GitReviewService {
   }
 
   private async repositoryFingerprint(rootPath: string, gitDirectory: string) {
+    // 内容级变化已由 status stdout 和 index 状态覆盖；旧的逐文件 lstat 指纹在万级
+    // 变更集上是前后各一轮全树 I/O，且只比 git status 多发现与 diff 无关的纯 touch。
     const [indexState, status] = await Promise.all([
       fileState(resolve(gitDirectory, 'index')),
       this.git(rootPath, ['status', '--porcelain=v2', '--branch', '-z', '--untracked-files=all']),
     ])
-    const records = status.stdout.split('\0')
-    const paths: string[] = []
-    for (let index = 0; index < records.length; index += 1) {
-      const record = records[index]
-      if (!record || record.startsWith('# ')) continue
-      if (record.startsWith('? ')) {
-        paths.push(record.slice(2))
-        continue
-      }
-      const ordinary = /^1 [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (.*)$/.exec(record)
-      if (ordinary?.[1]) {
-        paths.push(ordinary[1])
-        continue
-      }
-      const renamed = /^2 [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (.*)$/.exec(record)
-      if (renamed?.[1]) {
-        paths.push(renamed[1])
-        index += 1
-        continue
-      }
-      const unmerged = /^u [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ [^ ]+ (.*)$/.exec(record)
-      if (unmerged?.[1]) paths.push(unmerged[1])
-    }
-    const worktreeStates = await Promise.all(
-      paths.map(async (path) => {
-        const normalized = normalizedPath(path)
-        const absolute = resolve(rootPath, normalized)
-        const containment = relative(rootPath, absolute)
-        return containment.startsWith('..') || isAbsolute(containment)
-          ? `${normalized}\0denied`
-          : `${normalized}\0${await this.worktreeState(rootPath, normalized)}`
-      }),
-    )
-    return sha256(`${indexState}\0${status.stdout}\0${worktreeStates.sort().join('\0')}`)
+    return sha256(`${indexState}\0${status.stdout}`)
   }
 
   private async worktreeState(rootPath: string, path: string) {
@@ -961,9 +915,15 @@ export class GitReviewService {
       phase = 'pre-scan'
       const beforeFingerprint = await this.repositoryFingerprint(rootPath, gitDirectory)
       phase = 'diff-scan'
-      const summaryFiles = await this.buildFileSummaries(rootPath, resolved)
+      const { files: summaryFiles, worktreeHashes } = await this.buildFileSummaries(
+        rootPath,
+        resolved,
+      )
       phase = 'post-scan'
       await this.assertStableRepositoryState(rootPath, gitDirectory)
+      // after 指纹先于 worktreeStates 采集，让基线 lstat 排在最后的 status 之后，
+      // 从而与 diff-scan 期间的 stat 哈希对比出构建中途的内容变化。
+      const afterFingerprint = await this.repositoryFingerprint(rootPath, gitDirectory)
       const worktreeStates = new Map(
         await Promise.all(
           summaryFiles.map(
@@ -977,7 +937,13 @@ export class GitReviewService {
       const deletions = files.reduce((total, file) => total + (file.deletions ?? 0), 0)
       const changedBytes = files.reduce((total, file) => total + file.changedBytes, 0)
       const changedLines = additions + deletions
-      const afterFingerprint = await this.repositoryFingerprint(rootPath, gitDirectory)
+      const scanChanged =
+        worktreeHashes.size > 0 &&
+        files.some((file) => {
+          const state = worktreeStates.get(file.path)
+          if (state === undefined || state === 'denied' || state === 'missing') return false
+          return worktreeHashes.get(file.path) !== state
+        })
       phase = 'finalize'
       let sourceChanged = false
       if (source.kind === 'branch') {
@@ -1021,6 +987,7 @@ export class GitReviewService {
         fileDiffBatchRequests: new Map(),
         stale:
           beforeFingerprint !== afterFingerprint ||
+          scanChanged ||
           sourceChanged ||
           (this.projectEpochs.get(projectId) ?? 0) !== epoch,
       }
