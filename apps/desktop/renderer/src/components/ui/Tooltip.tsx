@@ -558,6 +558,7 @@ export function TooltipRoot({
 export interface TooltipTriggerProps
   extends React.ButtonHTMLAttributes<HTMLElement> {
   asChild?: boolean
+  shortcut?: ReactNode
 }
 
 export const TooltipTrigger = forwardRef<HTMLElement, TooltipTriggerProps>(
@@ -723,6 +724,7 @@ export interface TooltipContentProps extends HTMLAttributes<HTMLDivElement> {
   collisionPadding?: number
   variant?: TooltipVariant
   asChild?: boolean
+  shortcut?: ReactNode
 }
 
 const VARIANT_STYLES: Record<TooltipVariant, string> = {
@@ -750,6 +752,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
       className = '',
       style,
       asChild: _asChild,
+      shortcut,
       onMouseEnter,
       onMouseLeave,
       ...props
@@ -937,7 +940,16 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
             onMouseLeave={handleMouseLeave}
           >
             <TooltipPositionContext.Provider value={positionContextValue}>
-              {children}
+              {shortcut ? (
+                <span className="tooltip-with-shortcut tw:inline-flex tw:items-center tw:gap-1.5">
+                  <span>{children}</span>
+                  <kbd className="tooltip-shortcut-badge tw:inline-flex tw:items-center tw:justify-center tw:rounded-xs tw:bg-[color-mix(in_srgb,currentColor_16%,transparent)] tw:px-1.5 tw:py-0.5 tw:font-sans tw:type-caption tw:leading-none tw:text-inherit">
+                    {shortcut}
+                  </kbd>
+                </span>
+              ) : (
+                children
+              )}
             </TooltipPositionContext.Provider>
           </motion.div>
         )}
@@ -968,6 +980,7 @@ TooltipArrow.displayName = 'Tooltip.Arrow'
 export interface TooltipProps {
   children: ReactNode
   content: ReactNode
+  shortcut?: ReactNode
   side?: TooltipSide
   align?: TooltipAlign
   offset?: number
@@ -991,6 +1004,7 @@ export interface TooltipProps {
 export function Tooltip({
   children,
   content,
+  shortcut,
   side = 'top',
   align = 'center',
   offset,
@@ -1040,6 +1054,7 @@ export function Tooltip({
           sideOffset={sideOffset}
           variant={variant}
           className={className}
+          shortcut={shortcut}
         >
           {content}
         </TooltipContent>

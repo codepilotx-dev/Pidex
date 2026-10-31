@@ -204,7 +204,7 @@ export function ComposerDictationControl({
 
     const tooltipContent =
       dictation.status?.state === 'ready'
-        ? '听写 · Ctrl+Shift+D'
+        ? '听写'
         : (dictation.status?.error?.message ?? '语音模型尚未准备好。')
 
     return (
@@ -217,8 +217,7 @@ export function ComposerDictationControl({
           disabled={!dictation.available}
           onClick={dictation.toggle}
           size="composer"
-          title={tooltipContent}
-        >
+          >
           <Mic size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
         </Button>
       </Tooltip>

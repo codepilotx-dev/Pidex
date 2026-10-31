@@ -5,6 +5,7 @@ import {
 } from '../../../components/ui/IconTokens.js'
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Popover as Popover } from '../../../components/ui/floating/Popover.js'
+import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { Brain, Check, ChevronLeft, Eye, Plus, Search, X } from 'lucide-react'
 import type { DesktopModelMetadata, DesktopModelProviderSummary, ModelProviderID } from '../../../../shared/Types.js'
 import { sortModelPresetsByName, type ModelPreset } from '../../../ModelPresets.js'
@@ -435,9 +436,18 @@ export function ModelPickerPopover({
     handleProviderSelect(hubProviderID as ModelProviderID)
   }
 
+  const isAnchorOnly =
+    React.isValidElement(trigger) && Boolean((trigger.props as Record<string, any>)?.[ 'data-composer-model-anchor'])
+
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      {isAnchorOnly ? (
+        <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      ) : (
+        <Tooltip content="选择推理强度" shortcut="Ctrl+Shift+M" side="top" disabled={open}>
+          <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+        </Tooltip>
+      )}
       {open ? (
         <Popover.Portal>
           <Popover.Content
