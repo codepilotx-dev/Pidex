@@ -95,6 +95,7 @@ export const Capabilities = [
   'thread.side-chat.v1',
   'thread.creation-surface.v1',
   'thread.goal.v1',
+  'queue.goal.v1',
   'thread.bookmarks.v1',
   'thread.execution.v2',
   'worktree.manage.v1',

@@ -1027,7 +1027,13 @@ export const TurnStartParamsSchema = Schema.Struct({
   ),
 })
 
+export const QueueGoalIntentSchema = Schema.Struct({
+  objective: NonEmptyStringSchema,
+  tokenBudget: Schema.optional(Schema.NullOr(NonNegativeIntSchema)),
+})
+
 export const QueueAddParamsSchema = Schema.Struct({
+  goal: Schema.optional(QueueGoalIntentSchema),
   threadId: OpaqueIDSchema,
   inputId: OpaqueIDSchema,
   ...TurnContentFields,
