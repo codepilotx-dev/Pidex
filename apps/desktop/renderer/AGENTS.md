@@ -24,6 +24,6 @@
 
 ## 测试与验证
 
-- 首屏体积策略：首屏 JS/CSS 体积只作信息统计、不设体积门禁；完整功能、视觉和交互效果优先（允许更长加载时间），禁止为缩减体积删除或降级已要求的效果。
+- 首屏体积策略：首屏 JS/CSS 体积只作信息统计、不设体积门禁；完整功能、视觉和交互效果优先（允许更长加载时间），未经用户明确要求，禁止为缩减体积擅自删除或降级已要求的效果。
 - 测试重点：聚焦状态转换、client contract 和具体回归，统一放在现有 `test/` 目录。
 - 验证命令：类型检查 `bun run --cwd apps/desktop/renderer typecheck`；完整测试 `bun run --cwd apps/desktop/renderer test`；样式变化时运行 `bun run --cwd apps/desktop/renderer css:check`；UI、lazy import、Vite、TypeScript project reference 或 asset pipeline 变化时运行 `bun run build:renderer`。禁止为了通过检查而盲目更新 CSS、style 或 test 基线。

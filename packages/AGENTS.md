@@ -15,7 +15,7 @@
 ## Provider 与上游代码 (`pi-ai`)
 
 - 单一基础引擎：Provider、模型目录、请求与 OAuth 统一由 `pi-ai` 提供。Pidex 只维护 Pi 配置门面、加密活动凭据绑定和产品编排（Pi Provider 配置解析、自定义 Provider factory、模型缓存与凭据适配保持为独立模块）；禁止恢复独立/平行 Provider plugin 或 runtime，禁止恢复运行时 npm 安装、任意文件插件、不受限 dynamic import 或外部插件执行。
-- 回退与凭据红线：禁止恢复 API Key 自动轮换或自动切换，禁止用笼统的 `failover` 表述引入新的凭据或 Provider 自动切换策略；除非任务明确改变，必须保留当前可从代码定位的非凭据回退行为、Provider 注册顺序、安全过滤、静态 allowlist 和错误规范化。
+- 回退与凭据红线：未经明确架构决策，禁止恢复 API Key 自动轮换或自动切换，禁止用笼统的 `failover` 表述引入新的凭据或 Provider 自动切换策略；除非任务明确改变，必须保留当前可从代码定位的非凭据回退行为、Provider 注册顺序、安全过滤、静态 allowlist 和错误规范化。
 - 上游代码治理：修改包含上游来源的 package 时必须遵守对应 `UPSTREAM.md`，保留上游署名和许可证并优先复制或改造已有上游实现；package 上游同步时必须更新来源、导入日期及 checksum/revision。
 
 ## 公开接口与兼容策略
