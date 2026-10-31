@@ -372,7 +372,7 @@ describe('composer surface variant', () => {
     const defaultSurface = defaults.match(surfaceClass)?.[1]
     expect(defaultSurface).toBeDefined()
     expect(home.match(surfaceClass)?.[1]).toBe(defaultSurface)
-    expect(defaultSurface).toContain('tw:border-0 tw:bg-app-control tw:[backdrop-filter:none]')
+    expect(defaultSurface).toContain('tw:border-0 tw:bg-app-raised tw:[backdrop-filter:none]')
     expect(defaultSurface).toContain('tw:shadow-prominent')
     expect(singleLine).toContain('data-composer-layout="single-line"')
     expect(singleLine).toContain('data-composer-radius-variant="single-line"')
@@ -611,7 +611,7 @@ describe('composer surface variant', () => {
     expect(html).not.toContain('>配置模型<')
   })
 
-  test('模型与推理强度渲染为统一入口', () => {
+  test('模型与推理强度拆分为模型入口和独立 Signal 入口', () => {
     const html = renderToStaticMarkup(
       <ComposerCard
         {...composerCardProps({
@@ -632,8 +632,12 @@ describe('composer surface variant', () => {
 
     expect(html).toContain('composer-model-trigger-capsule')
     expect(html).toContain('>Claude Sonnet</span>')
-    expect(html).toContain('composer-model-trigger-effort-wrap')
-    expect(html).toContain('>高</span>')
+    // 推理强度不再嵌在模型胶囊内，由独立 Signal 入口承载。
+    expect(html).not.toContain('composer-model-trigger-effort-wrap')
+    expect(html).toContain('composer-signal-trigger-btn')
+    expect(html).toContain(
+      'aria-label="模型运行时参数设置：Claude Sonnet；思考：高；上下文：模型默认"',
+    )
     expect(html).toContain('aria-label="模型与推理设置：Claude Sonnet，高"')
     expect(html).not.toContain('composer-thinking-chip')
   })
@@ -683,7 +687,7 @@ describe('composer surface variant', () => {
       />,
     )
     expect(html).toContain('帮我批准')
-    expect(html).toContain('aria-label="选择权限模式"')
+    expect(html).toContain('aria-label="更改权限"')
     expect(html).toContain(reason)
   })
 
@@ -763,7 +767,7 @@ describe('composer surface variant', () => {
     expect(html).toContain('composer-footer-label')
     expect(html).toContain('composer-footer-secondary-chevron')
     // 隐藏文字后图标入口仍可操作且有无障碍名称。
-    expect(html).toContain('aria-label="选择权限模式"')
+    expect(html).toContain('aria-label="更改权限"')
     expect(html).toContain('aria-label="退出计划模式"')
     expect(html).toContain('aria-label="上下文窗口使用量：已用 6%，剩余 94%"')
     expect(html).toContain('aria-label="模型：未选择模型"')

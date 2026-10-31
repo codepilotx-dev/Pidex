@@ -61,10 +61,12 @@ import type {
   DesktopContextUsage,
   DesktopComposerAttachment,
   DesktopModelProviderSummary,
+  DesktopModelMetadata,
   ModelProviderID,
 } from '../../../../shared/Types.js'
 import { getModelDisplayLabel, type ModelPreset } from '../../../ModelPresets.js'
 import { Button } from '../../../components/ui/Button.js'
+import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { MetaChip } from '../../../components/ui/MetaChip.js'
 import { Spinner } from '../../../components/ui/Spinner.js'
 import { SessionFollowUpDock } from '../SessionFollowUpDock.js'
@@ -73,6 +75,8 @@ import { ProjectSwitcherPopover } from './ProjectSwitcherPopover.js'
 import { ChatInputDropdown } from './ChatInputDropdown.js'
 import { BranchSelectPopover } from './BranchSelectPopover.js'
 import { ModelPickerPopover } from './ModelPickerPopover.js'
+import { ModelRuntimeParametersPopover } from './ModelRuntimeParametersPopover.js'
+import { ContextThinkingSignalIcon } from './ContextThinkingSignalIcon.js'
 import { ModelReasoningControl, ModelSelectTrigger } from './ModelSelectTrigger.js'
 import {
   resolveThinkingLabel,
@@ -164,7 +168,14 @@ type ProviderModelOption = {
 }
 
 type ComposerDropdown =
-  'context' | 'permission' | 'model' | 'project' | 'session-group' | 'branch' | 'plugin'
+  | 'context'
+  | 'permission'
+  | 'model'
+  | 'project'
+  | 'session-group'
+  | 'branch'
+  | 'plugin'
+  | 'runtimeParams'
 
 /*
  * Permission chips are plain `chip-button` triggers whose colors come from
@@ -221,7 +232,7 @@ const COMPOSER_TOP_BASE_CLASS = cx(
   'composer composer-input-surface composer-top',
   'tw:relative tw:z-2 tw:flex tw:min-h-0 tw:flex-col tw:justify-between tw:[container-type:inline-size]',
   'tw:px-3 tw:pt-3 tw:pb-1',
-  'tw:border-0 tw:bg-app-control tw:[backdrop-filter:none]',
+  'tw:border-0 tw:bg-app-raised tw:[backdrop-filter:none]',
   'tw:shadow-prominent tw:transition-[min-height] tw:duration-panel tw:ease-standard',
   'tw:forced-colors:outline-1 tw:forced-colors:outline-solid tw:forced-colors:shadow-none',
 )
@@ -245,7 +256,7 @@ const UTILITY_BAR_BASE_CLASS = cx(
 const UTILITY_BAR_TOP_CLASS = cx(
   UTILITY_BAR_BASE_CLASS,
   'tw:order-1 tw:min-h-0 tw:mx-3 tw:mt-0 tw:-mb-px tw:px-1 tw:py-1',
-  'tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-surface-recessed)_92%,transparent)]',
+  'tw:bg-app-panel',
   'tw:animate-[composer-utility-enter_var(--cpx-sys-motion-enter)_var(--cpx-sys-ease-out)_both]',
 )
 const UTILITY_BAR_HOME_WORKING_CLASS = cx(
@@ -299,6 +310,9 @@ type Props = {
   selectedModelPreset: string
   modelConfigured?: boolean
   modelCatalogLoading?: boolean
+  selectedModelMetadata?: DesktopModelMetadata
+  maxContextTokens?: number | null
+  onMaxContextTokensChange?: (tokens: number | null) => void
   submitDisabledReason?: string
   showThinkingOptions: boolean
   deepSeekThinkingControls: boolean
@@ -433,6 +447,9 @@ export function ComposerCard({
   selectedModelPreset,
   modelConfigured = true,
   modelCatalogLoading = false,
+  selectedModelMetadata,
+  maxContextTokens,
+  onMaxContextTokensChange,
   submitDisabledReason,
   showThinkingOptions,
   deepSeekThinkingControls,
@@ -1308,7 +1325,7 @@ export function ComposerCard({
     })
   }
 
-  const usedPercent = contextUsage ? Math.min(100, Math.max(0, contextUsage.usedPercent ?? 0)) : 0
+  const usedPercent = contextUsage ? Math.max(0, contextUsage.usedPercent ?? 0) : 0
   const activeThreadGoal = threadGoal?.status === 'complete' ? null : threadGoal
   const hasQueuedFollowUps = (queuedFollowUps?.length ?? 0) > 0
   const utilityBarOverridden = statusPanelOpen || activeThreadGoal != null || hasQueuedFollowUps
@@ -1751,22 +1768,29 @@ export function ComposerCard({
 
         <div ref={footerRef} className={TOOLBAR_CLASS}>
           <div ref={toolbarLeftRef} className={TOOLBAR_LEFT_CLASS}>
-            <Button
-              isIconOnly
-              active={buttonContextOpen}
-              aria-expanded={buttonContextOpen}
-              color={buttonContextOpen ? 'ghostActive' : 'ghostSecondary'}
-              size="composer"
-              title="添加文件等内容"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                if (buttonContextOpen) closeDropdown()
-                else suggestions.openPlus()
-                editorRef.current?.focus()
-              }}
+            <Tooltip
+              content="添加文件等内容"
+              shortcut="@"
+              side="top"
+              disabled={buttonContextOpen}
             >
-              <Plus size={APP_ICON_SIZE} />
-            </Button>
+              <Button
+                isIconOnly
+                active={buttonContextOpen}
+                aria-expanded={buttonContextOpen}
+                color={buttonContextOpen ? 'ghostActive' : 'ghostSecondary'}
+                size="composer"
+                aria-label="添加文件等内容"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  if (buttonContextOpen) closeDropdown()
+                  else suggestions.openPlus()
+                  editorRef.current?.focus()
+                }}
+              >
+                <Plus size={APP_ICON_SIZE} />
+              </Button>
+            </Tooltip>
             <Select.Root
               open={openDropdown === 'permission'}
               value={permissionMode as string}
@@ -1785,22 +1809,28 @@ export function ComposerCard({
                 closeDropdown()
               }}
             >
-              <Select.Trigger
-                aria-label="选择权限模式"
-                data-theme-component="dropdown-trigger"
-                className={cx(
-                  'chip-button',
-                  getPermissionClassName(permissionMode),
-                  PERMISSION_TRIGGER_CLASS,
-                  openDropdown === 'permission' && PERMISSION_TRIGGER_OPEN_CLASS,
-                )}
-                title={permissionUnavailableReason ?? '选择权限模式'}
+              <Tooltip
+                content={permissionUnavailableReason ?? '更改权限'}
+                side="top"
+                disabled={openDropdown === 'permission'}
               >
-                {getPermissionIcon(permissionMode)}
-                <span className={PERMISSION_TRIGGER_LABEL_CLASS}>
-                  {selectedPermission?.label ?? '请求批准'}
-                </span>
-              </Select.Trigger>
+                <Select.Trigger
+                  aria-label="更改权限"
+                  aria-description={permissionUnavailableReason}
+                  data-theme-component="dropdown-trigger"
+                  className={cx(
+                    'chip-button',
+                    getPermissionClassName(permissionMode),
+                    PERMISSION_TRIGGER_CLASS,
+                    openDropdown === 'permission' && PERMISSION_TRIGGER_OPEN_CLASS,
+                  )}
+                >
+                  {getPermissionIcon(permissionMode)}
+                  <span className={PERMISSION_TRIGGER_LABEL_CLASS}>
+                    {selectedPermission?.label ?? '请求批准'}
+                  </span>
+                </Select.Trigger>
+              </Tooltip>
               <Select.Portal>
                 <Select.Content
                   size="auto"
@@ -2013,7 +2043,7 @@ export function ComposerCard({
               <Popover.Root open={contextPreviewOpen} onOpenChange={setContextPreviewOpen}>
                 <Popover.Anchor asChild>
                   <span
-                    aria-label={`上下文窗口使用量：已用 ${usedPercent}%，剩余 ${100 - usedPercent}%`}
+                    aria-label={`上下文窗口使用量：已用 ${usedPercent}%，剩余 ${Math.max(0, 100 - usedPercent)}%`}
                     className="context-usage-chip tw:group tw:relative tw:inline-flex tw:size-3 tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-soft"
                     role="img"
                     tabIndex={0}
@@ -2069,7 +2099,10 @@ export function ComposerCard({
                     className="context-usage-popover tw:z-tooltip tw:overflow-visible tw:text-left tw:whitespace-normal tw:before:absolute tw:before:inset-x-0 tw:before:h-2 tw:before:content-[''] tw:data-[side=top]:before:top-full tw:data-[side=bottom]:before:bottom-full"
                     role="tooltip"
                   >
-                    <ContextUsagePanel contextUsage={contextUsage} />
+                    <ContextUsagePanel
+                      contextUsage={contextUsage}
+                      maxContextTokens={maxContextTokens}
+                    />
                   </Popover.Content>
                 </Popover.Portal>
               </Popover.Root>
@@ -2140,6 +2173,35 @@ export function ComposerCard({
               onOpenModelSettings={onOpenModelSettings}
             />
 
+            {footerFit.modelMode !== 'hidden' ? (
+              <ModelRuntimeParametersPopover
+                modelName={selectedModelTitle}
+                physicalWindow={
+                  selectedModelMetadata?.contextWindow ?? contextUsage?.contextWindow ?? 128_000
+                }
+                physicalInputLimit={contextUsage?.budget?.physicalInputBudgetTokens}
+                maxContextTokens={maxContextTokens}
+                onMaxContextTokensChange={(tokens) => {
+                  onMaxContextTokensChange?.(tokens)
+                }}
+                showThinkingOptions={showThinkingOptions}
+                thinkingMode={modelVariant ?? thinkingMode}
+                thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                onThinkingChange={handleThinkingSelect}
+                open={openDropdown === 'runtimeParams'}
+                onOpenChange={(open) => {
+                  setOpenDropdown(open ? 'runtimeParams' : null)
+                }}
+                onHeldChange={(held) => {
+                  if (held) setModelHeld(true)
+                  else if (openDropdown !== 'model') setModelHeld(false)
+                }}
+                side="top"
+                align="end"
+                sideOffset={4}
+              />
+            ) : null}
+
             {/* 隐藏测量节点：渲染模型区完整/图标两种状态的实际宽度，不参与交互与无障碍树；
                 放在真实触发器之后，保证选择器首个命中仍是可见入口。 */}
             <MotionConfig reducedMotion="always">
@@ -2147,24 +2209,32 @@ export function ComposerCard({
                 aria-hidden="true"
                 className="tw:pointer-events-none tw:invisible tw:absolute tw:left-0 tw:top-0"
               >
-                <div ref={modelTextProbeRef} className="tw:inline-flex tw:w-max">
+                <div ref={modelTextProbeRef} className="tw:inline-flex tw:items-center tw:gap-1.5 tw:w-max">
                   <ModelSelectTrigger
                     id="model-select-trigger-probe-text"
                     modelName={selectedModelLabel}
-                    showThinkingOptions={showThinkingOptions}
-                    thinkingLabel={selectedThinkingLabel}
-                    thinkingOptions={modelVariantOptions ?? thinkingOptions}
-                    onThinkingChange={() => {}}
                   />
+                  <span className="tw:inline-flex tw:size-7 tw:items-center tw:justify-center">
+                    <ContextThinkingSignalIcon
+                      showThinkingOptions={showThinkingOptions}
+                      thinkingMode={modelVariant ?? thinkingMode}
+                      thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                    />
+                  </span>
                 </div>
-                <div ref={modelIconProbeRef} className="tw:inline-flex tw:w-max">
+                <div ref={modelIconProbeRef} className="tw:inline-flex tw:items-center tw:gap-1.5 tw:w-max">
                   <ModelSelectTrigger
                     id="model-select-trigger-probe-icon"
                     compact
                     modelName={selectedModelLabel}
-                    showThinkingOptions={showThinkingOptions}
-                    thinkingLabel={selectedThinkingLabel}
                   />
+                  <span className="tw:inline-flex tw:size-7 tw:items-center tw:justify-center">
+                    <ContextThinkingSignalIcon
+                      showThinkingOptions={showThinkingOptions}
+                      thinkingMode={modelVariant ?? thinkingMode}
+                      thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                    />
+                  </span>
                 </div>
               </div>
             </MotionConfig>

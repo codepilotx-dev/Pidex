@@ -21,6 +21,39 @@ describe('request context budget', () => {
     expect(() => contextBudget({ ...model, maxTokens: 200_000 })).toThrow('模型输入与输出额度')
   })
 
+  test('calculates effective window budget with maxContextTokens and preserves headroom for large maxTokens', () => {
+    const millionModel = fauxProvider({
+      models: [{ id: 'large', contextWindow: 1_000_000, maxTokens: 8_192 }],
+    }).getModel()
+
+    expect(contextBudget(millionModel, 500_000)).toMatchObject({
+      contextWindowTokens: 1_000_000,
+      inputBudgetTokens: 500_000,
+      triggerTokens: 400_000,
+      targetTokens: 275_000,
+    })
+
+    const largeOutputModel = fauxProvider({
+      models: [{ id: 'large-output', contextWindow: 1_000_000, maxTokens: 128_000 }],
+    }).getModel()
+
+    expect(() => contextBudget(largeOutputModel, 128_000)).not.toThrow()
+    expect(contextBudget(largeOutputModel, 128_000)).toMatchObject({
+      contextWindowTokens: 1_000_000,
+      inputBudgetTokens: 128_000,
+      triggerTokens: 102_400,
+      targetTokens: 70_400,
+    })
+
+    expect(() => contextBudget(largeOutputModel, 200_000)).not.toThrow()
+    expect(contextBudget(largeOutputModel, 200_000)).toMatchObject({
+      contextWindowTokens: 1_000_000,
+      inputBudgetTokens: 200_000,
+      triggerTokens: 160_000,
+      targetTokens: 110_000,
+    })
+  })
+
   test('anchors real cache-inclusive usage, estimates new tool results and invalidates changed requests', () => {
     const usage = new RequestContextUsage()
     const request: Context = {

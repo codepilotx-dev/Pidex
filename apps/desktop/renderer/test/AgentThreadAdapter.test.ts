@@ -1853,9 +1853,9 @@ test('Agent context budget replaces stale totals while preserving breakdown and 
   )
   expect(usage).toMatchObject({
     usedTokens: 42000,
-    usedPercent: 21,
-    contextWindow: 200000,
-    remainingTokens: 158000,
+    usedPercent: (42000 / 131904) * 100,
+    contextWindow: 131904,
+    remainingTokens: 89904,
     averageCacheHitRate: 0.95,
     breakdown: [{ source: 'messages', chars: 12000 }],
     promptCacheReadTokens: 139400,
@@ -1864,4 +1864,50 @@ test('Agent context budget replaces stale totals while preserving breakdown and 
     reasoningTokens: 323,
     budget,
   })
+})
+
+test('Agent context usage preserves over-limit percentages after a lower session cap', () => {
+  const usage = contextStateUsage(
+    {
+      budget: {
+        contextWindowTokens: 200_000,
+        inputBudgetTokens: 160_000,
+        outputReserveTokens: 32_000,
+        usedTokens: 150_000,
+        triggerTokens: 160_000,
+        targetTokens: 110_000,
+        source: 'estimated' as const,
+        sampledAt: 1,
+      },
+      operation: null,
+    },
+    null,
+    100_000,
+  )
+  expect(usage?.usedPercent).toBe(150)
+  expect(usage?.remainingPercent).toBe(-50)
+})
+
+test('running turn keeps the frozen budget and is flagged for next-round display', () => {
+  const usage = contextStateUsage(
+    {
+      budget: {
+        contextWindowTokens: 200_000,
+        inputBudgetTokens: 160_000,
+        outputReserveTokens: 32_000,
+        usedTokens: 20_000,
+        triggerTokens: 128_000,
+        targetTokens: 88_000,
+        source: 'estimated' as const,
+        sampledAt: 1,
+      },
+      operation: null,
+    },
+    null,
+    64_000,
+    true,
+  )
+  expect(usage?.budgetFrozen).toBe(true)
+  expect(usage?.contextWindow).toBe(160_000)
+  expect(usage?.usedPercent).toBeCloseTo(12.5, 6)
 })

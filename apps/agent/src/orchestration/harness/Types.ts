@@ -1011,6 +1011,7 @@ interface AgentHarnessOptionsBase<
   toolExecution?: ToolExecutionMode
   steeringMode?: QueueMode
   followUpMode?: QueueMode
+  maxContextTokens?: number | null
 }
 
 export type AgentHarnessOptions<

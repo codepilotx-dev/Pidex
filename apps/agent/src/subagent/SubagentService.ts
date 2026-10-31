@@ -26,6 +26,7 @@ import { globalEventSequence } from '../storage/events/EventPublisher'
 import { WorkspaceService } from '../workspace/WorkspaceService'
 import { SubagentCollaborationRepository } from './SubagentCollaborationRepository'
 import { SubagentRepository, type SpawnSubagentInput } from './SubagentRepository'
+import { probeThreadContextLimitsStorageCapabilities } from '../storage/database/StorageCapabilities'
 import type { AttachmentService } from './AttachmentService'
 import type { LocalContextPathService } from '../local-context/LocalContextPathService'
 import {
@@ -850,12 +851,45 @@ export class SubagentService {
               }),
             }
           : null
-      const parentTurnMode = (
-        this.db.sqlite.query('SELECT mode FROM turns WHERE id = ?').get(task.parentTurnId) as {
-          mode: TaskMode
-        } | null
-      )?.mode
-      const parentMode = parentTurnMode === 'grill' ? 'plan' : (parentTurnMode ?? 'chat')
+      const parentTurn = this.db.sqlite
+        .query('SELECT mode, model_ref FROM turns WHERE id = ?')
+        .get(task.parentTurnId) as { mode: TaskMode; model_ref: string | null } | null
+      const parentMode = parentTurn?.mode === 'grill' ? 'plan' : (parentTurn?.mode ?? 'chat')
+      let inheritedLimit: number | null = null
+      let parentModel: { providerID: string; id: string } | null = null
+      if (parentTurn?.model_ref) {
+        try {
+          parentModel = JSON.parse(parentTurn.model_ref)
+        } catch {}
+      }
+      const parentSettings = this.db.repositories.threads.getThreadSettings(task.parentThreadId)
+      if (
+        parentModel &&
+        parentModel.providerID === run.model.providerID &&
+        parentModel.id === run.model.id
+      ) {
+        inheritedLimit = parentSettings?.maxContextTokens ?? null
+      } else if (this.db.repositories.modelRuntimePreferences.available()) {
+        const pref = this.db.repositories.modelRuntimePreferences.get(
+          String(run.model.providerID),
+          String(run.model.id),
+        )
+        inheritedLimit = pref?.maxContextTokens ?? null
+      }
+      if (
+        inheritedLimit != null &&
+        probeThreadContextLimitsStorageCapabilities(this.db.sqlite).threadContextLimits
+      ) {
+        this.db.sqlite
+          .query(
+            `INSERT INTO thread_context_limits (thread_id, max_context_tokens, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(thread_id) DO UPDATE SET
+               max_context_tokens = excluded.max_context_tokens,
+               updated_at = excluded.updated_at`,
+          )
+          .run(task.childThreadId, inheritedLimit, Date.now())
+      }
       const instructionSources = await new InstructionDiscoveryService().discover(
         workspace.rootPath,
       )
@@ -957,6 +991,7 @@ export class SubagentService {
         content: input.content,
         taskMode: parentMode,
         fallbackModel: run.model,
+        maxContextTokens: inheritedLimit,
         permissionConfig,
         signal: controller.signal,
         workspace,

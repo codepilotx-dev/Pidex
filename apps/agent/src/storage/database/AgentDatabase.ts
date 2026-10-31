@@ -6,6 +6,7 @@ import { PlanApprovalRepository } from '../repositories/PlanApprovalRepository'
 import { ScheduleDraftRepository } from '../repositories/ScheduleDraftRepository'
 import { TaskScheduleRepository } from '../repositories/TaskScheduleRepository'
 import { PermissionRuleRepository } from '../repositories/PermissionRuleRepository'
+import { ModelRuntimePreferenceRepository } from '../repositories/ModelRuntimePreferenceRepository'
 import { credentialRepositoryDatabase } from '../repositories/CredentialRepository'
 import { ContextRepository } from '../repositories/ContextRepository'
 import { executionRepository } from '../repositories/ExecutionRepository'
@@ -103,6 +104,7 @@ export class AgentDatabase extends RepositoryDatabase {
       scheduleDrafts: new ScheduleDraftRepository(this),
       taskSchedules: new TaskScheduleRepository(this),
       permissionRules: new PermissionRuleRepository(this),
+      modelRuntimePreferences: new ModelRuntimePreferenceRepository(this),
     }
     this.artifacts = new ArtifactRepository(sqlite)
     this.repositories.planApprovals.recover()

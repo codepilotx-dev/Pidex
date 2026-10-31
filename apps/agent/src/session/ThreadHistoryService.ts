@@ -9,6 +9,7 @@ import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
 import { normalizeThreadTitle } from './ThreadTitleService'
 import { THREAD_ORIGIN_PROJECTION_SQL } from '../storage/repositories/ThreadRepository'
+import { probeThreadContextLimitsStorageCapabilities } from '../storage/database/StorageCapabilities'
 
 export type ThreadMetadataPatch = {
   title?: string | null
@@ -33,6 +34,7 @@ type ThreadRow = {
   sandbox_mode: ThreadListItem['settings']['permissionConfig']['sandboxMode']
   approval_policy: string
   approvals_reviewer: ThreadListItem['settings']['permissionConfig']['approvalsReviewer']
+  max_context_tokens?: number | null
   created_at: number
   updated_at: number
 }
@@ -60,15 +62,20 @@ export class ThreadHistoryService {
   ) {}
 
   getListItem(threadID: string): ThreadListItem | null {
+    const { threadContextLimits: hasLimits } = probeThreadContextLimitsStorageCapabilities(
+      this.db.sqlite,
+    )
     const row = this.db.sqlite
       .query(
         `
       SELECT t.id, t.project_id, t.git_branch, t.title, t.preview, t.first_user_message, t.message_count, t.archived_at,
         t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.created_at, t.updated_at,
         read_state.unread_at, ${THREAD_ORIGIN_PROJECTION_SQL},
-        (SELECT u.status FROM turns AS u WHERE u.thread_id = t.id ORDER BY u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_status
+        (SELECT u.status FROM turns AS u WHERE u.thread_id = t.id ORDER BY u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_status,
+        ${hasLimits ? 'l.max_context_tokens' : 'NULL AS max_context_tokens'}
       FROM threads AS t
       LEFT JOIN thread_read_state AS read_state ON read_state.thread_id = t.id
+      ${hasLimits ? 'LEFT JOIN thread_context_limits AS l ON l.thread_id = t.id' : ''}
       WHERE t.id = ?
     `,
       )
@@ -98,6 +105,9 @@ export class ThreadHistoryService {
           approvalPolicy: decodeApprovalPolicy(row.approval_policy),
           approvalsReviewer: row.approvals_reviewer,
         },
+        ...(row.max_context_tokens != null
+          ? { maxContextTokens: Number(row.max_context_tokens) }
+          : {}),
       },
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -202,6 +212,27 @@ export class ThreadHistoryService {
     const result = this.db.updateThreadSettings(threadID, patch)
     if (result.event) await Effect.runPromise(this.hub.publish(result.event))
     return { threadId: threadID, settings: result.settings, version: result.version }
+  }
+
+  async saveModelRuntimePreference(input: {
+    providerId: string
+    modelId: string
+    threadId?: string
+    variant?: string | null
+    maxContextTokens?: number | null
+  }) {
+    const result = this.db.transaction(() => {
+      if (input.threadId && !this.db.getThread(input.threadId))
+        throw new AgentError('INVALID_REQUEST', '会话不存在', 400)
+      const settings = input.threadId && input.maxContextTokens !== undefined
+        ? this.db.updateThreadSettings(input.threadId, { maxContextTokens: input.maxContextTokens })
+        : null
+      const preference = this.db.repositories.modelRuntimePreferences.set(input)
+      const event = this.db.insertEvent(null, null, 'provider/modelPreferences/updated', { preference })
+      return { preference, events: [...(settings?.event ? [settings.event] : []), event] }
+    })
+    for (const event of result.events) await Effect.runPromise(this.hub.publish(event))
+    return { preference: result.preference }
   }
 
   async remove(threadID: string) {

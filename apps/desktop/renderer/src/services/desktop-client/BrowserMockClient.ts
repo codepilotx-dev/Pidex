@@ -206,6 +206,16 @@ export function createBrowserMockDesktopClient(
   let browserState: DesktopBrowserState = emptyBrowserState()
   let githubLoginMode: DesktopGithubAuthMode = 'browser'
   const sessions = new Map<string, DesktopSessionSnapshot>()
+  const mockModelPreferences = new Map<
+    string,
+    {
+      providerID: string
+      modelID: string
+      variant: string | null
+      maxContextTokens: number | null
+      updatedAt: number
+    }
+  >()
   const sideChatSessionIds = new Set<string>()
   const approvalRules = new Map<string, PermissionRule[]>()
   let mockApprovalRuleVersion = 1
@@ -1548,6 +1558,34 @@ export function createBrowserMockDesktopClient(
       sessions.set(sessionId, next)
       emitSessionStoreChange()
       return next
+    },
+    setSessionMaxContextTokens: async (sessionId, maxContextTokens) => {
+      const snapshot = requireMockSession(sessions, sessionId)
+      const next = {
+        ...snapshot,
+        settings: { ...snapshot.settings, maxContextTokens },
+      }
+      sessions.set(sessionId, next)
+      emitSessionStoreChange()
+      return next
+    },
+    getModelRuntimePreferences: async () => {
+      return Array.from(mockModelPreferences.values())
+    },
+    setModelRuntimePreference: async (input) => {
+      const key = `${input.providerID}:${input.modelID}`
+      const existing = mockModelPreferences.get(key)
+      mockModelPreferences.set(key, {
+        providerID: input.providerID,
+        modelID: input.modelID,
+        variant: input.variant !== undefined ? input.variant : (existing?.variant ?? null),
+        maxContextTokens:
+          input.maxContextTokens !== undefined
+            ? input.maxContextTokens
+            : (existing?.maxContextTokens ?? null),
+        updatedAt: Date.now(),
+      })
+      return { ok: true }
     },
     setSessionLocalRouterMode: async (sessionId, mode) => {
       const snapshot = requireMockSession(sessions, sessionId)

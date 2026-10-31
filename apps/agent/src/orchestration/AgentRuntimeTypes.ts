@@ -121,6 +121,7 @@ export interface AgentRuntimeRequest {
   signal: AbortSignal
   workspace: WorkspaceService
   defaultCwd?: string
+  maxContextTokens?: number | null
   resume?: PlanCheckpoint
   /** Durable gate acquired before starting a fresh runtime (for example Hook trust). */
   startupGateLeaseID?: string

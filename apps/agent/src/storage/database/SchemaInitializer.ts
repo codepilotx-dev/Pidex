@@ -25,8 +25,13 @@ import { PR_WATCH_SCHEMA } from '../../github/PullRequestWatchService'
 import { SUBAGENT_COLLABORATION_SCHEMA } from '../../subagent/SubagentCollaborationRepository'
 import { AUTOMATION_HOST_AUDIT_SCHEMA } from '../../automation/AutomationHostAuditRepository'
 import { PERMISSION_RULES_SCHEMA } from '../repositories/PermissionRuleRepository'
+import { MODEL_RUNTIME_PREFERENCE_SCHEMA } from '../repositories/ModelRuntimePreferenceRepository'
 
 import { PROFILE_APPLICATION_ID, PROFILE_SCHEMA_VERSION, SCHEMA_VERSION } from './Schema'
+
+const THREAD_CONTEXT_LIMITS_SCHEMA = [
+  'CREATE TABLE thread_context_limits (thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE, max_context_tokens INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
+] as const
 
 const TASK_CONTEXT_SCHEMA = [
   'CREATE TABLE task_context_state (task_id TEXT PRIMARY KEY REFERENCES taskboard_tasks(id) ON DELETE CASCADE, evidence_revision INTEGER NOT NULL DEFAULT 0, context_revision INTEGER NOT NULL DEFAULT 1, summarized_through_evidence_revision INTEGER NOT NULL DEFAULT 0, frozen_at INTEGER, promoted_context_revision INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
@@ -188,6 +193,8 @@ export const FINAL_SCHEMA = [
   ...BROWSER_SCHEMA,
   ...BROWSER_DATA_SCHEMA,
   ...PERMISSION_RULES_SCHEMA,
+  ...MODEL_RUNTIME_PREFERENCE_SCHEMA,
+  ...THREAD_CONTEXT_LIMITS_SCHEMA,
   'CREATE INDEX agent_checkpoints_thread ON agent_checkpoints(thread_id, updated_at DESC)',
   'CREATE INDEX agent_compactions_thread ON agent_compactions(thread_id, created_at DESC)',
   'CREATE UNIQUE INDEX agent_executions_run_sequence_unique ON agent_executions(subagent_run_id, run_sequence) WHERE subagent_run_id IS NOT NULL',
@@ -1435,7 +1442,7 @@ export const HISTORY_SCHEMA = [
   SEMANTIC_VIEW_SQL,
 ]
 
-class SchemaInitializer {
+export class SchemaInitializer {
   constructor(
     readonly sqlite: Database,
     readonly kind: 'history' | 'profile',
@@ -1480,6 +1487,12 @@ class SchemaInitializer {
         ? {
             // prepareStorage rebuilds former mixed v17 databases. Keep the
             // sequential registry entry for already-split prerelease stores.
+            67: () =>
+              this.sqlite.exec(
+                [...MODEL_RUNTIME_PREFERENCE_SCHEMA, ...THREAD_CONTEXT_LIMITS_SCHEMA]
+                  .map((sql) => sql.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '))
+                  .join(';'),
+              ),
             66: () =>
               this.sqlite.exec(
                 QUEUED_GOAL_SCHEMA.map((sql) =>

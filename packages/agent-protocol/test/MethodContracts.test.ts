@@ -3582,6 +3582,40 @@ const fixtures = {
     { credentialId },
     { credential: providerCredentialSummary, ok: true, message: 'API Key 可用。' },
   ),
+  'provider/modelPreferences/list': methodFixture(
+    'provider/modelPreferences/list',
+    {},
+    {
+      preferences: [
+        {
+          providerId,
+          modelId: modelRef.id,
+          variant: 'high',
+          maxContextTokens: 500_000,
+          updatedAt: 1,
+        },
+      ],
+    },
+  ),
+  'provider/modelPreferences/set': methodFixture(
+    'provider/modelPreferences/set',
+    {
+      providerId,
+      modelId: modelRef.id,
+      variant: 'high',
+      maxContextTokens: 500_000,
+      operationId: 'operation:model-preferences-set',
+    },
+    {
+      preference: {
+        providerId,
+        modelId: modelRef.id,
+        variant: 'high',
+        maxContextTokens: 500_000,
+        updatedAt: 1,
+      },
+    },
+  ),
   'auth/session/start': methodFixture(
     'auth/session/start',
     {
@@ -6285,7 +6319,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(349)
+    expect(methods).toHaveLength(351)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6653,7 +6687,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(328)
+    expect(Object.keys(RpcMethods)).toHaveLength(330)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })

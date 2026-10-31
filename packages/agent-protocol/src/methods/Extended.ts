@@ -1,6 +1,8 @@
 import { Credential, Model, Provider } from '@pidex/model-schema'
 import {
+  MaxContextTokensSchema,
   ModelCatalogSchema,
+  ModelRuntimePreferenceSchema,
   SubagentProjectionSchema,
   SubagentRunSchema,
   SubagentTaskSchema,
@@ -1176,6 +1178,33 @@ export const ExtendedRpcMethods = {
     capability: 'provider.auth.pi.v1',
     exactParams: true,
     exactResult: true,
+    mutation: true,
+  }),
+
+  'provider/modelPreferences/list': defineMethod({
+    params: Schema.Struct({}),
+    result: Schema.Struct({
+      preferences: Schema.Array(ModelRuntimePreferenceSchema),
+    }),
+    errors: ['RATE_LIMITED', 'INTERNAL_ERROR'] as const,
+    capability: 'model.preferences.v1',
+    mutation: false,
+  }),
+
+  'provider/modelPreferences/set': defineMethod({
+    params: Schema.Struct({
+      ...OperationParamsSchema.fields,
+      providerId: Provider.ID,
+      modelId: Model.ID,
+      threadId: Schema.optional(Schema.String),
+      variant: Schema.optional(Schema.NullOr(Schema.String)),
+      maxContextTokens: Schema.optional(Schema.NullOr(MaxContextTokensSchema)),
+    }),
+    result: Schema.Struct({
+      preference: ModelRuntimePreferenceSchema,
+    }),
+    errors: ['INVALID_REQUEST', 'RATE_LIMITED', 'INTERNAL_ERROR'] as const,
+    capability: 'model.preferences.v1',
     mutation: true,
   }),
 

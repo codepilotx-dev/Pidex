@@ -1837,6 +1837,12 @@ export class AgentRuntimeService implements AgentRuntime {
       const resumedContent = request.resume
         ? `<interaction_resolution toolCallId=${JSON.stringify(request.resume.toolCallID ?? 'unknown')}>${JSON.stringify({ answer: request.resume.answer, decision: request.resume.decision ?? null })}</interaction_resolution>\n继续处理已恢复的 Pi session；复用上述 toolCallId 的处理结果，不得重复执行该 ID，也不得自行换工具或等价命令绕过用户拒绝。此限制不禁止用户后续明确要求再次执行相同命令：那是新的工具调用，必须使用新的 toolCallId 并重新判权，不能复用一次批准。若用户给出调整要求，必须据此处理。`
         : request.content
+      const threadLimit = this.options.db.repositories.threads.getThreadSettings(request.threadID)
+        ?.maxContextTokens
+      // 客户端把“未设置”以 null 传上来；null 不能遮住会话设置，否则会话额度永远进不了预算。
+      const requestedLimit =
+        typeof request.maxContextTokens === 'number' ? request.maxContextTokens : undefined
+      const maxContextTokens = requestedLimit ?? threadLimit ?? null
       let result: Awaited<ReturnType<typeof executeHarnessRun>>
       try {
         result = await executeHarnessRun(runtimeOptions, {
@@ -1853,6 +1859,7 @@ export class AgentRuntimeService implements AgentRuntime {
           ...(request.defaultCwd ? { defaultCwd: request.defaultCwd } : {}),
           model,
           policyModel: request.fallbackModel,
+          maxContextTokens,
           ...(resolved.ref.variant
             ? {
                 thinkingLevel: String(
@@ -2061,12 +2068,15 @@ export class AgentRuntimeService implements AgentRuntime {
     const frozen = this.options.db.repositories.runtimeCompositions.get(row.turn_id)?.snapshot
     const session = await this.repo.openForThread(row.session_id, threadID)
     const storage = session.getStorage() as SqlitePiSessionStorage
+    const maxContextTokens =
+      this.options.db.repositories.threads.getThreadSettings(threadID)?.maxContextTokens ?? null
     const harness = new AgentHarness({
       session,
       models: this.options.models,
       model,
       tools: [],
       systemPrompt: promptText ?? frozen?.prompt.instructions ?? '',
+      maxContextTokens,
     })
     const beforeCount = (await session.getEntries()).length
     const result = await harness.compact(

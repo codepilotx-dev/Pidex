@@ -104,7 +104,8 @@ export function filterAdvertisedCapabilities(
         (scheduleDrafts && automations && automationRuns && scheduledTasks)) &&
       // 规则管理写入依赖独立表；高版本未知库缺少表时只隐藏能力，不擅自修库。
       (capability !== 'permission.rules.v1' ||
-        (permissionRules.chatRules && permissionRules.legacyGrantRevocations)),
+        (permissionRules.chatRules && permissionRules.legacyGrantRevocations)) &&
+      (capability !== 'model.preferences.v1' || tables.has('model_runtime_preferences')),
   )
 }
 

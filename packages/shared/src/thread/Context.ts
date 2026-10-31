@@ -3,6 +3,7 @@ import { Schema } from 'effect'
 export const ContextBudgetSchema = Schema.Struct({
   contextWindowTokens: Schema.Number,
   inputBudgetTokens: Schema.Number,
+  physicalInputBudgetTokens: Schema.optional(Schema.Number),
   outputReserveTokens: Schema.Number,
   usedTokens: Schema.Number,
   fixedTokens: Schema.optional(Schema.Number),

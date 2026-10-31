@@ -232,6 +232,7 @@ export type PermissionColumns = {
 
 export type ThreadSettingsColumns = PermissionColumns & {
   task_mode: string
+  max_context_tokens?: number | null
 }
 
 export const permissionConfigFromRow = (row: PermissionColumns): PermissionConfig => ({
@@ -243,6 +244,7 @@ export const permissionConfigFromRow = (row: PermissionColumns): PermissionConfi
 export const threadSettingsFromRow = (row: ThreadSettingsColumns): ThreadSettings => ({
   taskMode: decodeStoredTaskMode(row.task_mode),
   permissionConfig: permissionConfigFromRow(row),
+  ...(row.max_context_tokens != null ? { maxContextTokens: Number(row.max_context_tokens) } : {}),
 })
 
 export const defaultThreadSettings = (): ThreadSettings => ({

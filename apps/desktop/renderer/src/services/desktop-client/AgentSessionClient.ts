@@ -129,6 +129,7 @@ export const RENDERER_CAPABILITIES = [
   'interaction.questionSkip.v1',
   'interaction.scopedGrants.v1',
   'permission.rules.v1',
+  'model.preferences.v1',
   'interaction.questionPause.v1',
   'mcp.elicitation.v1',
   'approval.retry.v1',
@@ -1297,6 +1298,7 @@ export function createAgentSessionDesktopClient(
         permissionConfig: settings.permissionConfig,
         planModeActive,
         grillModeActive,
+        maxContextTokens: settings.maxContextTokens ?? null,
       },
     }
     sessionSnapshots.set(sessionId, snapshot)
@@ -3767,6 +3769,45 @@ export function createAgentSessionDesktopClient(
             taskMode: active ? 'grill' : 'chat',
           }),
         () => mockClient.setSessionGrillModeActive(sessionId, active),
+      ),
+    setSessionMaxContextTokens: (sessionId, maxContextTokens) =>
+      withAgentOrMock(
+        () =>
+          updateThreadSettings(sessionId, {
+            maxContextTokens,
+          }),
+        () => mockClient.setSessionMaxContextTokens(sessionId, maxContextTokens),
+      ),
+    getModelRuntimePreferences: () =>
+      withAgentOrMock(
+        async () => {
+          const res = await rpc.call('provider/modelPreferences/list', {})
+          return res.preferences.map((p) => ({
+            providerID: String(p.providerId),
+            modelID: String(p.modelId),
+            variant: p.variant,
+            maxContextTokens: p.maxContextTokens,
+            updatedAt: p.updatedAt,
+          }))
+        },
+        () => mockClient.getModelRuntimePreferences?.() ?? Promise.resolve([]),
+      ),
+    setModelRuntimePreference: (input) =>
+      withAgentOrMock(
+        async () => {
+          await rpc.call('provider/modelPreferences/set', {
+            providerId: input.providerID as any,
+            modelId: input.modelID as any,
+            ...(input.threadId ? { threadId: input.threadId } : {}),
+            operationId: crypto.randomUUID(),
+            ...(input.variant !== undefined ? { variant: input.variant } : {}),
+            ...(input.maxContextTokens !== undefined
+              ? { maxContextTokens: input.maxContextTokens }
+              : {}),
+          })
+          return { ok: true }
+        },
+        () => mockClient.setModelRuntimePreference?.(input) ?? Promise.resolve({ ok: true }),
       ),
     setSessionLocalRouterMode: (sessionId, mode) =>
       withUnsupportedAgentFallback('setSessionLocalRouterMode', () =>

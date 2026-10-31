@@ -72,6 +72,7 @@ export const Capabilities = [
   'model.health.v1',
   'model.operations.v1',
   'model.recommendations.v1',
+  'model.preferences.v1',
   'model.media-input.v1',
   'pets.management.v1',
   'release-notes.read.v1',

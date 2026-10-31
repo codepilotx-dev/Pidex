@@ -101,6 +101,8 @@ export type DesktopComposerProps = {
   modelConfigured: boolean
   modelCatalogLoading?: boolean
   selectedModelMetadata?: DesktopModelMetadata
+  maxContextTokens?: number | null
+  onMaxContextTokensChange?: (tokens: number | null) => void
   showThinkingOptions: boolean
   deepSeekThinkingControls: boolean
   showContextUsage: boolean
@@ -219,6 +221,8 @@ export function DesktopComposer({
   modelConfigured,
   modelCatalogLoading = false,
   selectedModelMetadata,
+  maxContextTokens,
+  onMaxContextTokensChange,
   showThinkingOptions,
   deepSeekThinkingControls,
   showContextUsage,
@@ -474,6 +478,9 @@ export function DesktopComposer({
         selectedModelPreset={selectedModelPreset}
         modelConfigured={modelConfigured}
         modelCatalogLoading={modelCatalogLoading}
+        selectedModelMetadata={selectedModelMetadata}
+        maxContextTokens={maxContextTokens}
+        onMaxContextTokensChange={onMaxContextTokensChange}
         submitDisabledReason={unsupportedAttachmentReason ?? modelSelectionError ?? undefined}
         showThinkingOptions={showThinkingOptions}
         deepSeekThinkingControls={deepSeekThinkingControls}

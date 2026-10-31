@@ -47,6 +47,7 @@ export interface HarnessRuntimeRequest {
   model: Model<any>
   policyModel: ModelRef
   thinkingLevel?: ThinkingLevel
+  maxContextTokens?: number | null
   collaborationMessages?: () => Array<{
     id: string
     kind: string

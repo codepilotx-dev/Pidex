@@ -14,13 +14,14 @@ import {
 
 type Props = {
   contextUsage: DesktopContextUsage | null
+  maxContextTokens?: number | null
 }
 
 /**
  * Composer 圆环浮层：保留纵向详细布局，展示来源明细和缓存读写数据。
  * /status 使用下方独立的单行指标组件，两处共享同一份上下文统计。
  */
-export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
+export function ContextUsagePanel({ contextUsage, maxContextTokens }: Props): React.ReactNode {
   if (!contextUsage) return null
 
   const usedPercent = Math.min(100, Math.max(0, contextUsage.usedPercent ?? 0))
@@ -38,6 +39,20 @@ export function ContextUsagePanel({ contextUsage }: Props): React.ReactNode {
           {metrics.totalLabel}
         </span>
       </div>
+      {contextUsage.budget ? (
+        <div className="tw:mb-2 tw:type-caption tw:text-app-text-meta">
+          输入额度 {formatCompactNumber(contextUsage.contextWindow)} tokens · 压缩触发线 {formatCompactNumber(contextUsage.budget.triggerTokens)} tokens · 来源 {contextUsage.budget.source}
+          <div>物理窗口 {formatCompactNumber(contextUsage.budget.contextWindowTokens)} tokens；运行中沿用当前轮预算，修改下一轮生效。</div>
+          {contextUsage.budgetFrozen ? (
+            <div>
+              当前轮沿用冻结预算；下一轮生效额度{' '}
+              {maxContextTokens == null
+                ? '模型默认'
+                : `${formatCompactNumber(maxContextTokens)} tokens`}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="context-usage-panel-track tw:flex tw:h-2 tw:overflow-hidden tw:rounded-indicator tw:bg-app-border">
         {metrics.segments.length > 0 ? (
           metrics.segments.map((segment, index) => (
@@ -168,7 +183,7 @@ function buildUsagePanelMetrics(contextUsage: DesktopContextUsage) {
   )
   const totalLabel = `${formatCompactNumber(contextUsage.usedTokens)}/${formatCompactNumber(
     contextUsage.contextWindow,
-  )} (${formatPercentValue(usedPercent / 100)})`
+  )} (${formatPercentValue((contextUsage.usedPercent ?? 0) / 100)})`
   const contextBarSegments: UsageBarSegment[] =
     segments.length > 0
       ? segments.map((segment, index) => {

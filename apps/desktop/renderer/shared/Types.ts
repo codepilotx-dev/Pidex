@@ -1211,7 +1211,10 @@ export type DesktopSessionMessage = AgentSessionMessage
 
 export type DesktopToolLogEntry = AgentToolLogEntry
 
-export type DesktopContextUsage = AgentContextUsage
+export type DesktopContextUsage = AgentContextUsage & {
+  /** 运行中展示的额度来自当前轮冻结预算，而不是下一轮即将生效的设置。 */
+  budgetFrozen?: boolean
+}
 
 export type DesktopSessionListItem = {
   storageSource?: 'local' | undefined
@@ -1297,6 +1300,7 @@ export type DesktopSessionSettingsSnapshot = {
   installPidexDependencies?: boolean
   enableMemory?: boolean
   rustSearchAndDiffKernels?: boolean
+  maxContextTokens?: number | null
 }
 
 export type DesktopQueuedFollowUp = {
@@ -2093,6 +2097,26 @@ export type DesktopApi = {
   ): Promise<DesktopSessionSnapshot>
   setSessionPlanModeActive(sessionId: string, active: boolean): Promise<DesktopSessionSnapshot>
   setSessionGrillModeActive(sessionId: string, active: boolean): Promise<DesktopSessionSnapshot>
+  setSessionMaxContextTokens(
+    sessionId: string,
+    maxContextTokens: number | null,
+  ): Promise<DesktopSessionSnapshot>
+  getModelRuntimePreferences?(): Promise<
+    Array<{
+      providerID: string
+      modelID: string
+      variant: string | null
+      maxContextTokens: number | null
+      updatedAt: number
+    }>
+  >
+  setModelRuntimePreference?(input: {
+    providerID: string
+    modelID: string
+    threadId?: string
+    variant?: string | null
+    maxContextTokens?: number | null
+  }): Promise<{ ok: true }>
   setSessionLocalRouterMode(
     sessionId: string,
     mode: LocalRouterMode,

@@ -14,6 +14,7 @@ export type SessionModelSelection = {
   model: string
   thinkingMode: DesktopThinkingMode
   variant?: string
+  maxContextTokens?: number | null
 }
 export type SessionModelSelectionState = {
   selection: SessionModelSelection | null
@@ -110,9 +111,15 @@ export const sessionModelSelections = {
   },
   set(id: string | null, selection: SessionModelSelection) {
     pending.delete(id)
-    const { providerID, model, thinkingMode, variant } = selection
+    const { providerID, model, thinkingMode, variant, maxContextTokens } = selection
     write(id, {
-      selection: { providerID, model, thinkingMode, ...(variant ? { variant } : {}) },
+      selection: {
+        providerID,
+        model,
+        thinkingMode,
+        ...(variant ? { variant } : {}),
+        ...(maxContextTokens !== undefined ? { maxContextTokens } : {}),
+      },
       loading: false,
       error: null,
     })
@@ -153,6 +160,7 @@ export const sessionModelSelections = {
             model: history.model,
             thinkingMode: history.thinkingMode ?? 'default',
             variant: history.variant,
+            maxContextTokens: history.maxContextTokens ?? null,
           }
         }
         const defaults = await desktopClient.getModelProviderState()

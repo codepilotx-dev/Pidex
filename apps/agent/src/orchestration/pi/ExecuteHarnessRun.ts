@@ -121,6 +121,7 @@ export async function executeHarnessRun(
     ...(dependencies.resources ? { resources: dependencies.resources } : {}),
     model: request.model,
     thinkingLevel: request.thinkingLevel ?? 'off',
+    ...(request.maxContextTokens !== undefined ? { maxContextTokens: request.maxContextTokens } : {}),
     systemPrompt: bundle.instructions,
     tools,
     activeToolNames: tools.map((tool) => tool.name),

@@ -245,6 +245,7 @@ export class AgentHarness<
   private activeToolNames: string[]
   private readonly deferredToolCatalog: DeferredToolCatalog<TTool> | undefined
   private toolExecution: import('./AgentTypes.ts').ToolExecutionMode
+  private maxContextTokens: number | null | undefined
   private restoredActiveTools = false
   private activationQueue: Promise<void> = Promise.resolve()
   private steerQueue: UserMessage[] = []
@@ -267,6 +268,7 @@ export class AgentHarness<
     this.toolContext = options.toolContext
     this.deferredToolCatalog = options.deferredToolCatalog
     this.toolExecution = options.toolExecution ?? 'parallel'
+    this.maxContextTokens = options.maxContextTokens
     this.validateUniqueNames(
       (options.tools ?? []).map((tool) => tool.name),
       'Duplicate tool name(s)',
@@ -541,7 +543,13 @@ export class AgentHarness<
   ): StreamFn {
     return async (model, context, streamOptions) => {
       const generation = await this.contextGeneration()
-      let budget = this.requestUsage.snapshot(model, context, generation)
+      let budget = this.requestUsage.snapshot(
+        model,
+        context,
+        generation,
+        'estimated',
+        this.maxContextTokens,
+      )
       this.lastBudget = budget
       await this.contextCompaction?.onBudget(budget)
       if (this.contextCompaction && (await this.contextCompaction.canCompact())) {
@@ -1194,7 +1202,7 @@ export class AgentHarness<
         tools: turnState.activeTools,
         messages: originalLlm,
       }
-      const budget = contextBudget(model)
+      const budget = contextBudget(model, this.maxContextTokens)
       const entries = (await this.session.getBranch()).filter(
         (entry) =>
           !(
@@ -1302,6 +1310,7 @@ export class AgentHarness<
           { ...context, messages: [...rebuilt, ...extras] },
           '',
           'compaction-estimate',
+          this.maxContextTokens,
         )
         const after = {
           ...estimate,

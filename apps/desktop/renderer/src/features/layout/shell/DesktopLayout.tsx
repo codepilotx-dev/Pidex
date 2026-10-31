@@ -885,6 +885,20 @@ export function DesktopLayout(): React.ReactNode {
     ? `session:${routedSessionId}`
     : 'home'
   const lastWorkspaceRestoreAttemptedRef = useRef(false)
+  /** 路由先于会话目录到达时（分叉、刚刚新建）先等待目录刷新，再判断是否真的不存在。 */
+  const unknownRoutedSessionRef = useRef<{
+    id: string
+    timer: ReturnType<typeof setTimeout>
+  } | null>(null)
+  useEffect(
+    () => () => {
+      const pending = unknownRoutedSessionRef.current
+      if (!pending) return
+      clearTimeout(pending.timer)
+      unknownRoutedSessionRef.current = null
+    },
+    [],
+  )
   const conversationSwitchTargetRef = useRef<string | null>(null)
   const beginConversationSwitch = useCallback((targetSessionId: string) => {
     if (conversationSwitchTargetRef.current === targetSessionId) return
@@ -914,9 +928,24 @@ export function DesktopLayout(): React.ReactNode {
       setWorkspaceState(null)
       setDiffState('未选择项目。')
       setSelectedFile(null)
-      setErrorMessage(`找不到对话：${routedSessionId}`)
-      navigate(QUICK_CHAT_PATH, { replace: true })
+      // 分叉/新建的会话可能先于目录刷新被路由到：先等待一次目录刷新，
+      // 只有确认目录里仍不存在时才报错并退回首页。
+      if (unknownRoutedSessionRef.current?.id !== routedSessionId) {
+        unknownRoutedSessionRef.current = {
+          id: routedSessionId,
+          timer: setTimeout(() => {
+            unknownRoutedSessionRef.current = null
+            setErrorMessage(`找不到对话：${routedSessionId}`)
+            navigate(QUICK_CHAT_PATH, { replace: true })
+          }, 1500),
+        }
+      }
       return
+    }
+    const pendingUnknownRouted = unknownRoutedSessionRef.current
+    if (pendingUnknownRouted) {
+      clearTimeout(pendingUnknownRouted.timer)
+      unknownRoutedSessionRef.current = null
     }
 
     if (routedSession.archivedAt) {
@@ -2030,6 +2059,8 @@ export function DesktopLayout(): React.ReactNode {
     selectedVariant,
     variantOptions,
     handleVariantChange,
+    maxContextTokens,
+    handleMaxContextTokensChange,
     selectedModelUnavailableMessage,
     refreshProviderState,
   } = useModelProviderController({
@@ -3546,17 +3577,18 @@ export function DesktopLayout(): React.ReactNode {
     ],
   )
 
+  const rail = (
+    <SidebarNavigationRail
+      shell={sidebarShell}
+      activePane={activeSidebarPane}
+      capabilityState={sidebarCapabilities}
+      onOpenWhatsNew={openWhatsNewDialog}
+      onReport={setNoticeMessage}
+    />
+  )
+
   const sidebar = (
     <SidebarFrame
-      rail={
-        <SidebarNavigationRail
-          shell={sidebarShell}
-          activePane={activeSidebarPane}
-          capabilityState={sidebarCapabilities}
-          onOpenWhatsNew={openWhatsNewDialog}
-          onReport={setNoticeMessage}
-        />
-      }
       collapsed={sidebarCollapsed}
       contentKind={isSettingsRoute ? 'settings' : 'tasks'}
       defaultWidth={340}
@@ -3640,6 +3672,8 @@ export function DesktopLayout(): React.ReactNode {
             modelVariant: selectedVariant,
             modelVariantOptions: variantOptions,
             onModelVariantChange: handleVariantChange,
+            maxContextTokens,
+            onMaxContextTokensChange: handleMaxContextTokensChange,
             modelSelectionError: session.modelSelectionError ?? selectedModelUnavailableMessage,
             threadGoal: activeSessionItem?.threadGoal ?? null,
             onGoalPause: handleGoalPause,
@@ -4156,6 +4190,7 @@ export function DesktopLayout(): React.ReactNode {
           <WorkspaceHeaderProvider routeScope={location.pathname}>
             <WorkbenchShellView
               menuBar={menuBar}
+              rail={rail}
               primarySidebar={sidebar}
               appBodyRef={sidebarShell.appBodyRef}
               workspaceRef={workspaceRef}
@@ -4169,7 +4204,7 @@ export function DesktopLayout(): React.ReactNode {
               workspaceHeader={
                 isHomeOrConversationRoute || isProviderDetailRoute ? (
                   <DesktopWorkspaceHeader
-                    divider={isConversationRoute}
+                    divider={false}
                     rightDockOpen={effectiveRightDockVisible}
                     shellControls={
                       isHomeOrConversationRoute ? (

@@ -15,6 +15,8 @@ import type { RpcHandlerGroup } from './Types'
 
 const providerMethods = [
   'provider/list',
+  'provider/modelPreferences/list',
+  'provider/modelPreferences/set',
   'model/list',
   'model/refresh',
   'model/setDefault',
@@ -191,6 +193,23 @@ export const providerHandlers = {
             code: issue.code,
           })),
         }
+      }
+      case 'provider/modelPreferences/list': {
+        const preferences = runtime.dependencies.db.repositories.modelRuntimePreferences.list()
+        return { preferences }
+      }
+      case 'provider/modelPreferences/set': {
+        const providerId = stringParam(params, 'providerId')
+        const modelId = stringParam(params, 'modelId')
+        return runtime.dependencies.history.saveModelRuntimePreference({
+          providerId,
+          modelId,
+          ...(params.threadId !== undefined ? { threadId: stringParam(params, 'threadId') } : {}),
+          ...(params.variant !== undefined ? { variant: params.variant as string | null } : {}),
+          ...(params.maxContextTokens !== undefined
+            ? { maxContextTokens: params.maxContextTokens as number | null }
+            : {}),
+        })
       }
       case 'model/list':
         return runtime.modelCatalog(params)

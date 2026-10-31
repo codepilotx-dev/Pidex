@@ -242,6 +242,8 @@ export function agentThreadSnapshotToDesktop(
           latestTurn?.model.providerID ?? latestInput?.model.providerID,
           latestTurn?.model.id ?? latestInput?.model.id,
         ),
+        snapshot.thread.settings?.maxContextTokens,
+        latestTurn?.status === 'running' || Boolean(latestTurn?.status?.startsWith('waiting-')),
       ),
     },
     events,
@@ -757,24 +759,48 @@ function itemToAgentEvents(threadId: string, item: Item): DesktopAgentEvent[] {
 export function contextStateUsage(
   state: ThreadContextState | null | undefined,
   fallback: DesktopContextUsage | null,
+  maxContextTokens?: number | null,
+  activeTurn = false,
 ): DesktopContextUsage | null {
-  if (!state?.budget)
-    return state?.operation
+  let base: DesktopContextUsage | null = null
+  if (!state?.budget) {
+    base = state?.operation
       ? { ...(fallback ?? { usedTokens: 0 }), compactionOperation: state.operation }
       : fallback
-  const budget = state.budget
-  const usedPercent = Math.min(100, (budget.usedTokens / budget.contextWindowTokens) * 100)
-  return {
-    ...fallback,
-    usedTokens: budget.usedTokens,
-    contextWindow: budget.contextWindowTokens,
-    remainingTokens: Math.max(0, budget.contextWindowTokens - budget.usedTokens),
-    usedPercent,
-    remainingPercent: 100 - usedPercent,
-    percentUsed: usedPercent,
-    budget,
-    ...(state.operation ? { compactionOperation: state.operation } : {}),
+  } else {
+    const budget = state.budget
+    const physicalInput = budget.physicalInputBudgetTokens ?? budget.inputBudgetTokens
+    const effectiveWindow = activeTurn || maxContextTokens === undefined
+      ? budget.inputBudgetTokens
+      : Math.min(maxContextTokens ?? physicalInput, physicalInput)
+    const usedPercent = Math.max(0, (budget.usedTokens / effectiveWindow) * 100)
+    base = {
+      ...fallback,
+      usedTokens: budget.usedTokens,
+      contextWindow: effectiveWindow,
+      remainingTokens: Math.max(0, effectiveWindow - budget.usedTokens),
+      usedPercent,
+      remainingPercent: 100 - usedPercent,
+      percentUsed: usedPercent,
+      budget,
+      ...(activeTurn ? { budgetFrozen: true } : {}),
+      ...(state.operation ? { compactionOperation: state.operation } : {}),
+    }
   }
+
+  if (base && !activeTurn && maxContextTokens && base.contextWindow > maxContextTokens) {
+    const effectiveWindow = Math.min(maxContextTokens, base.contextWindow)
+    const usedPercent = Math.max(0, (base.usedTokens / effectiveWindow) * 100)
+    return {
+      ...base,
+      contextWindow: effectiveWindow,
+      remainingTokens: Math.max(0, effectiveWindow - base.usedTokens),
+      usedPercent,
+      remainingPercent: 100 - usedPercent,
+      percentUsed: usedPercent,
+    }
+  }
+  return base
 }
 
 export function itemContextUsage(
@@ -793,7 +819,7 @@ export function itemContextUsage(
   if (!contextWindow) return null
 
   const usedTokens = input + cacheRead + cacheWrite
-  const usedPercent = Math.min(100, Math.max(0, (usedTokens / contextWindow) * 100))
+  const usedPercent = Math.max(0, (usedTokens / contextWindow) * 100)
   const provider = stringValue(value.provider) || fallbackProvider
   const model = stringValue(value.model) || fallbackModel
 

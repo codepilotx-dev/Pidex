@@ -929,6 +929,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       threads,
       worktrees,
       threadExecutions,
+      db.repositories.modelRuntimePreferences,
     )
     let prWatches!: PullRequestWatchService
     const automationRuns = new AutomationRunCoordinator(

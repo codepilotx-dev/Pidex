@@ -8,10 +8,13 @@ export const CUSTOM_MODEL_PRESET_ID = '__custom__'
 
 export const MODEL_PRESETS: ModelPreset[] = buildModelPresets([])
 
-export function buildModelPresets(models: string[]): ModelPreset[] {
+export function buildModelPresets(
+  models: string[],
+  metadata?: Record<string, { name?: string }>,
+): ModelPreset[] {
   return models.map((model) => ({
     id: model,
-    label: getModelDisplayLabel(model),
+    label: metadata?.[model]?.name || getModelDisplayLabel(model),
     value: model,
   }))
 }

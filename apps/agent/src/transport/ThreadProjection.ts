@@ -38,7 +38,10 @@ import {
 import { Schema } from 'effect'
 import type { AgentExecution, EventEnvelope, Item as StoredItem } from '../Domain'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
-import { probeThreadsStorageCapabilities } from '../storage/database/StorageCapabilities'
+import {
+  probeThreadContextLimitsStorageCapabilities,
+  probeThreadsStorageCapabilities,
+} from '../storage/database/StorageCapabilities'
 import { THREAD_ORIGIN_PROJECTION_SQL } from '../storage/repositories/ThreadRepository'
 import { SubagentRepository } from '../subagent/SubagentRepository'
 import { classifyToolActivity, storedToolActivity } from '../tool/ToolActivityClassifier'
@@ -474,18 +477,21 @@ export class ThreadProjection {
         ? { creationSurface: row.creation_surface as Thread['creationSurface'] }
         : {}),
       ...(workspace ? { workspace } : {}),
-      settings: {
-        taskMode: decodeStoredTaskMode(row.task_mode),
-        permissionConfig: {
-          sandboxMode: String(
-            row.sandbox_mode,
-          ) as Thread['settings']['permissionConfig']['sandboxMode'],
-          approvalPolicy: decodeApprovalPolicy(String(row.approval_policy)),
-          approvalsReviewer: String(
-            row.approvals_reviewer,
-          ) as Thread['settings']['permissionConfig']['approvalsReviewer'],
+        settings: {
+          taskMode: decodeStoredTaskMode(row.task_mode),
+          permissionConfig: {
+            sandboxMode: String(
+              row.sandbox_mode,
+            ) as Thread['settings']['permissionConfig']['sandboxMode'],
+            approvalPolicy: decodeApprovalPolicy(String(row.approval_policy)),
+            approvalsReviewer: String(
+              row.approvals_reviewer,
+            ) as Thread['settings']['permissionConfig']['approvalsReviewer'],
+          },
+          ...(row.max_context_tokens != null
+            ? { maxContextTokens: Number(row.max_context_tokens) }
+            : {}),
         },
-      },
       archivedAt: row.archived_at == null ? null : Number(row.archived_at),
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
@@ -494,11 +500,17 @@ export class ThreadProjection {
 
   private projectThread(threadId: string): Thread | null {
     const { creationSurface: columnExists } = probeThreadsStorageCapabilities(this.db.sqlite)
+    const { threadContextLimits: hasLimits } = probeThreadContextLimitsStorageCapabilities(
+      this.db.sqlite,
+    )
     const sql = `SELECT t.id, t.title, ${this.db.projectMembershipSql()} AS project_id, t.git_branch,
       ${columnExists ? 't.creation_surface' : 'NULL AS creation_surface'},
       t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.parent_thread_id,
-      t.archived_at, t.created_at, t.updated_at, ${THREAD_ORIGIN_PROJECTION_SQL}
-      FROM threads AS t WHERE t.id = ?`
+      t.archived_at, t.created_at, t.updated_at, ${THREAD_ORIGIN_PROJECTION_SQL},
+      ${hasLimits ? 'l.max_context_tokens' : 'NULL AS max_context_tokens'}
+      FROM threads AS t
+      ${hasLimits ? 'LEFT JOIN thread_context_limits AS l ON l.thread_id = t.id' : ''}
+      WHERE t.id = ?`
     const threadRow = this.db.sqlite.query(sql).get(threadId) as Record<
       string,
       string | number | null
@@ -1251,6 +1263,9 @@ export class ThreadProjection {
       where.push(params.archived ? 't.archived_at IS NOT NULL' : 't.archived_at IS NULL')
     }
     const { creationSurface: columnExists } = probeThreadsStorageCapabilities(this.db.sqlite)
+    const { threadContextLimits: hasLimits } = probeThreadContextLimitsStorageCapabilities(
+      this.db.sqlite,
+    )
     const creationSurfaceExpr = columnExists ? 't.creation_surface' : 'NULL AS creation_surface'
     const sql = `
       SELECT t.id, ${this.db.projectMembershipSql()} AS project_id, t.git_branch, ${creationSurfaceExpr}, t.title, t.preview, t.first_user_message, t.message_count,
@@ -1259,9 +1274,11 @@ export class ThreadProjection {
         (SELECT status FROM turns AS u WHERE u.thread_id = t.id
           ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting_question', 'waiting_subagents') THEN 0 ELSE 1 END,
             u.created_at DESC LIMIT 1) AS latest_turn_status,
-        ${this.db.repositories.planApprovals.available() ? "EXISTS (SELECT 1 FROM plan_approvals WHERE thread_id = t.id AND status = 'pending')" : '0'} AS pending_plan_approval
+        ${this.db.repositories.planApprovals.available() ? "EXISTS (SELECT 1 FROM plan_approvals WHERE thread_id = t.id AND status = 'pending')" : '0'} AS pending_plan_approval,
+        ${hasLimits ? 'l.max_context_tokens' : 'NULL AS max_context_tokens'}
       FROM threads AS t
       LEFT JOIN thread_read_state AS read_state ON read_state.thread_id = t.id
+      ${hasLimits ? 'LEFT JOIN thread_context_limits AS l ON l.thread_id = t.id' : ''}
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY t.updated_at DESC, t.id DESC
       LIMIT ?
@@ -1311,6 +1328,9 @@ export class ThreadProjection {
               row.approvals_reviewer,
             ) as ThreadListItem['settings']['permissionConfig']['approvalsReviewer'],
           },
+          ...(row.max_context_tokens != null
+            ? { maxContextTokens: Number(row.max_context_tokens) }
+            : {}),
         },
         createdAt: Number(row.created_at),
         updatedAt: Number(row.updated_at),

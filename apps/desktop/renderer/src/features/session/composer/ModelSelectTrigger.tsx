@@ -179,7 +179,7 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
     const [focused, setFocused] = useState(false)
     const buttonRef = useRef<HTMLButtonElement>(null)
 
-    const active = isOpen || effortMenuOpen
+    const active = isOpen
     const { prefix, model } = splitComposerModelName(modelName)
     useEffect(() => {
       onHeldChange?.(focused || reasoningHeld)
@@ -240,29 +240,7 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
           if (!(event.target as Element).closest('button')) buttonRef.current?.click()
         }}
       >
-        {compact ? (
-          nameButton
-        ) : (
-          <>
-            {nameButton}
-            {showThinkingOptions && thinkingLabel && onThinkingChange ? (
-              <div
-                className={EFFORT_WRAP_CLASS}
-                onClick={(event) => event.stopPropagation()}
-              >
-                <ModelReasoningControl
-                  thinkingLabel={thinkingLabel}
-                  thinkingMode={thinkingMode}
-                  thinkingOptions={thinkingOptions}
-                  onThinkingChange={onThinkingChange}
-                  onHeldChange={setReasoningHeld}
-                  open={effortMenuOpen}
-                  onOpenChange={setEffortMenuOpen}
-                />
-              </div>
-            ) : null}
-          </>
-        )}
+        {nameButton}
 
         <span
           aria-hidden="true"

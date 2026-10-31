@@ -15,8 +15,81 @@ import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { TerminalOutputMirror } from '../src/terminal/TerminalOutputMirror'
 import { rpcTransportAuthority } from '../src/transport/Server'
 import { TurnCoordinator } from '../src/session/TurnCoordinator'
+import { ThreadHistoryService } from '../src/session/ThreadHistoryService'
 
 const roots: string[] = []
+
+test('model parameter preferences round trip through RPC', async () => {
+  const { db, initialize, call } = await fixture()
+  await initialize()
+  const result = await call('provider/modelPreferences/set', {
+    operationId: 'preferences:test', providerId: 'workbuddy', modelId: 'hy4-preview',
+    variant: 'high', maxContextTokens: 96_500,
+  })
+  expect(result.error).toBeUndefined()
+  expect(result.result.preference).toMatchObject({ variant: 'high', maxContextTokens: 96_500 })
+  const listed = await call('provider/modelPreferences/list', {})
+  expect(listed.error).toBeUndefined()
+  expect(listed.result.preferences).toHaveLength(1)
+  db.close()
+})
+
+test('session context limit and model preference save through one transactional call', async () => {
+  const { db, initialize, call } = await fixture()
+  await initialize()
+  const thread = db.createThread('参数保存事务')
+  const saved = await call('provider/modelPreferences/set', {
+    operationId: 'preferences:session',
+    threadId: thread.id,
+    providerId: 'workbuddy',
+    modelId: 'hy4-preview',
+    maxContextTokens: 128_000,
+  })
+  expect(saved.error).toBeUndefined()
+  expect(db.repositories.threads.getThreadSettings(thread.id)?.maxContextTokens).toBe(128_000)
+  expect((await call('provider/modelPreferences/list', {})).result.preferences).toMatchObject([
+    { providerId: 'workbuddy', modelId: 'hy4-preview', maxContextTokens: 128_000 },
+  ])
+
+  // 只改思考档位时不得覆盖已保存的会话额度。
+  const thinkingOnly = await call('provider/modelPreferences/set', {
+    operationId: 'preferences:thinking',
+    threadId: thread.id,
+    providerId: 'workbuddy',
+    modelId: 'hy4-preview',
+    variant: 'high',
+  })
+  expect(thinkingOnly.error).toBeUndefined()
+  expect(db.repositories.threads.getThreadSettings(thread.id)?.maxContextTokens).toBe(128_000)
+  expect((await call('provider/modelPreferences/list', {})).result.preferences).toMatchObject([
+    {
+      providerId: 'workbuddy',
+      modelId: 'hy4-preview',
+      variant: 'high',
+      maxContextTokens: 128_000,
+    },
+  ])
+
+  // 切回模型默认时删除会话额度行，而不是写入空值。
+  const cleared = await call('provider/modelPreferences/set', {
+    operationId: 'preferences:clear',
+    threadId: thread.id,
+    providerId: 'workbuddy',
+    modelId: 'hy4-preview',
+    maxContextTokens: null,
+  })
+  expect(cleared.error).toBeUndefined()
+  expect(db.repositories.threads.getThreadSettings(thread.id)?.maxContextTokens).toBeUndefined()
+  expect((await call('provider/modelPreferences/list', {})).result.preferences).toMatchObject([
+    {
+      providerId: 'workbuddy',
+      modelId: 'hy4-preview',
+      variant: 'high',
+      maxContextTokens: null,
+    },
+  ])
+  db.close()
+})
 afterEach(async () => {
   await removeFixturePaths(roots.splice(0))
 })
@@ -109,7 +182,7 @@ const fixture = async (
       github,
       hub: { publish: () => Effect.void },
       threads: { resumeHookTrust: () => undefined },
-      history: null,
+      history: new ThreadHistoryService(db, { publish: () => Effect.void } as never),
       approvals: null,
       questions: null,
       subagents: null,

@@ -7,27 +7,37 @@ export const DEFAULT_CONTEXT_WINDOW_TOKENS = 128_000
 
 export function contextBudget(
   model: Pick<Model<any>, 'contextWindow' | 'maxTokens'> & { maxInputTokens?: number },
+  maxContextTokens?: number | null,
 ) {
-  const contextWindowTokens = model.contextWindow || DEFAULT_CONTEXT_WINDOW_TOKENS
+  const physicalWindow = model.contextWindow || DEFAULT_CONTEXT_WINDOW_TOKENS
   const outputReserveTokens = model.maxTokens
-  const inputBudgetTokens = Math.min(
-    model.maxInputTokens ?? contextWindowTokens,
-    contextWindowTokens - outputReserveTokens - CONTEXT_SAFETY_TOKENS,
+  const physicalInputLimit = Math.min(
+    model.maxInputTokens ?? physicalWindow,
+    physicalWindow - outputReserveTokens - CONTEXT_SAFETY_TOKENS,
   )
   if (
-    ![contextWindowTokens, outputReserveTokens, inputBudgetTokens].every(
+    ![physicalWindow, outputReserveTokens, physicalInputLimit].every(
       (n) => Number.isInteger(n) && n > 0,
     )
   ) {
     throw new Error('模型输入与输出额度没有可用的上下文空间，请检查模型配置')
   }
-  const triggerTokens = Math.min(Math.ceil(contextWindowTokens * 0.8), inputBudgetTokens)
+
+  const effectiveWindow =
+    typeof maxContextTokens === 'number' && maxContextTokens > 0
+      ? Math.min(maxContextTokens, physicalWindow)
+      : physicalWindow
+  const inputBudgetTokens = Math.min(effectiveWindow, physicalInputLimit)
+  const triggerTokens = Math.min(Math.ceil(effectiveWindow * 0.8), inputBudgetTokens)
+  const targetTokens = Math.min(Math.floor(effectiveWindow * 0.55), triggerTokens - 1)
+
   return {
-    contextWindowTokens,
+    contextWindowTokens: physicalWindow,
     outputReserveTokens,
     inputBudgetTokens,
+    physicalInputBudgetTokens: physicalInputLimit,
     triggerTokens,
-    targetTokens: Math.min(Math.floor(contextWindowTokens * 0.55), triggerTokens - 1),
+    targetTokens,
   }
 }
 
@@ -99,9 +109,10 @@ export class RequestContextUsage {
     context: Context,
     generation: string,
     source: ContextBudget['source'] = 'estimated',
+    maxContextTokens?: number | null,
   ): ContextBudget {
     return {
-      ...contextBudget(model),
+      ...contextBudget(model, maxContextTokens),
       fixedTokens: this.fixedTokens(context),
       usedTokens: this.estimate(context, this.identity(model, context, generation)),
       source,

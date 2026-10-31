@@ -199,3 +199,41 @@ export function probePermissionRuleStorageCapabilities(
   permissionRuleCache.set(sqlite, capabilities)
   return capabilities
 }
+
+export type ThreadContextLimitsStorageCapabilities = {
+  threadContextLimits: boolean
+}
+
+export type ModelRuntimePreferencesStorageCapabilities = {
+  modelRuntimePreferences: boolean
+}
+
+const threadContextLimitsCache = new WeakMap<Database, ThreadContextLimitsStorageCapabilities>()
+const modelRuntimePreferencesCache =
+  new WeakMap<Database, ModelRuntimePreferencesStorageCapabilities>()
+
+export function probeThreadContextLimitsStorageCapabilities(
+  sqlite: Database,
+): ThreadContextLimitsStorageCapabilities {
+  const cached = threadContextLimitsCache.get(sqlite)
+  if (cached) return cached
+  const row = sqlite
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'thread_context_limits'")
+    .get()
+  const capabilities = { threadContextLimits: Boolean(row) }
+  threadContextLimitsCache.set(sqlite, capabilities)
+  return capabilities
+}
+
+export function probeModelRuntimePreferencesStorageCapabilities(
+  sqlite: Database,
+): ModelRuntimePreferencesStorageCapabilities {
+  const cached = modelRuntimePreferencesCache.get(sqlite)
+  if (cached) return cached
+  const row = sqlite
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'model_runtime_preferences'")
+    .get()
+  const capabilities = { modelRuntimePreferences: Boolean(row) }
+  modelRuntimePreferencesCache.set(sqlite, capabilities)
+  return capabilities
+}

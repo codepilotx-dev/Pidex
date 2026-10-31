@@ -9,7 +9,10 @@ import {
   type ThreadSettingsPatch,
 } from '@pidex/shared/thread'
 import { AgentError, decodeStoredTaskMode } from '../../Domain'
-import { probeThreadsStorageCapabilities } from '../database/StorageCapabilities'
+import {
+  probeThreadContextLimitsStorageCapabilities,
+  probeThreadsStorageCapabilities,
+} from '../database/StorageCapabilities'
 import type {
   EventEnvelope,
   Item,
@@ -102,6 +105,7 @@ type PermissionColumns = {
 
 type ThreadSettingsColumns = PermissionColumns & {
   task_mode: string
+  max_context_tokens?: number | null
 }
 
 const permissionConfigFromRow = (row: PermissionColumns): PermissionConfig => ({
@@ -113,6 +117,7 @@ const permissionConfigFromRow = (row: PermissionColumns): PermissionConfig => ({
 const threadSettingsFromRow = (row: ThreadSettingsColumns): ThreadSettings => ({
   taskMode: decodeStoredTaskMode(row.task_mode),
   permissionConfig: permissionConfigFromRow(row),
+  ...(row.max_context_tokens != null ? { maxContextTokens: Number(row.max_context_tokens) } : {}),
 })
 
 const defaultThreadSettings = (): ThreadSettings => ({
@@ -156,18 +161,21 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
   }
 
   getThreadSettings(threadID: string): ThreadSettings | null {
-    const row = this.sqlite
-      .query(
-        'SELECT task_mode, sandbox_mode, approval_policy, approvals_reviewer FROM threads WHERE id = ?',
-      )
-      .get(threadID) as ThreadSettingsColumns | null
+    const hasLimits = probeThreadContextLimitsStorageCapabilities(this.sqlite).threadContextLimits
+    const sql = hasLimits
+      ? 'SELECT t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, l.max_context_tokens FROM threads t LEFT JOIN thread_context_limits l ON l.thread_id = t.id WHERE t.id = ?'
+      : 'SELECT task_mode, sandbox_mode, approval_policy, approvals_reviewer FROM threads WHERE id = ?'
+    const row = this.sqlite.query(sql).get(threadID) as ThreadSettingsColumns | null
     return row ? threadSettingsFromRow(row) : null
   }
 
   protected syncThreadSettings(threadID: string, patch: ThreadSettingsPatch) {
+    const hasLimits = probeThreadContextLimitsStorageCapabilities(this.sqlite).threadContextLimits
     const stored = this.sqlite
       .query(
-        'SELECT task_mode, sandbox_mode, approval_policy, approvals_reviewer FROM threads WHERE id = ?',
+        hasLimits
+          ? 'SELECT t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, l.max_context_tokens FROM threads t LEFT JOIN thread_context_limits l ON l.thread_id = t.id WHERE t.id = ?'
+          : 'SELECT task_mode, sandbox_mode, approval_policy, approvals_reviewer FROM threads WHERE id = ?',
       )
       .get(threadID) as ThreadSettingsColumns | null
     if (!stored) throw new Error('Thread not found')
@@ -175,13 +183,24 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
     const settings: ThreadSettings = {
       taskMode: patch.taskMode ?? existing.taskMode,
       permissionConfig: patch.permissionConfig ?? existing.permissionConfig,
+      ...(patch.maxContextTokens !== undefined
+        ? patch.maxContextTokens === null
+          ? {}
+          : { maxContextTokens: patch.maxContextTokens }
+        : existing.maxContextTokens !== undefined
+          ? { maxContextTokens: existing.maxContextTokens }
+          : {}),
     }
+    const contextLimitChanged =
+      patch.maxContextTokens !== undefined &&
+      (patch.maxContextTokens ?? undefined) !== (existing.maxContextTokens ?? undefined)
     const unchanged =
       (patch.taskMode === undefined || patch.taskMode === stored.task_mode) &&
       settings.permissionConfig.sandboxMode === existing.permissionConfig.sandboxMode &&
       encodeApprovalPolicy(settings.permissionConfig.approvalPolicy) ===
         encodeApprovalPolicy(existing.permissionConfig.approvalPolicy) &&
-      settings.permissionConfig.approvalsReviewer === existing.permissionConfig.approvalsReviewer
+      settings.permissionConfig.approvalsReviewer === existing.permissionConfig.approvalsReviewer &&
+      !contextLimitChanged
     if (unchanged) return { settings, event: null }
     this.sqlite
       .query(
@@ -198,6 +217,22 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
         settings.permissionConfig.approvalsReviewer,
         threadID,
       )
+    if (contextLimitChanged && hasLimits) {
+      const timestamp = now()
+      if (patch.maxContextTokens === null) {
+        this.sqlite.query('DELETE FROM thread_context_limits WHERE thread_id = ?').run(threadID)
+      } else if (patch.maxContextTokens !== undefined) {
+        this.sqlite
+          .query(
+            `INSERT INTO thread_context_limits (thread_id, max_context_tokens, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(thread_id) DO UPDATE SET
+               max_context_tokens = excluded.max_context_tokens,
+               updated_at = excluded.updated_at`,
+          )
+          .run(threadID, patch.maxContextTokens, timestamp)
+      }
+    }
     const event = this.insertEvent(threadID, null, 'thread/settings/updated', {
       threadId: threadID,
       settings,
@@ -386,6 +421,20 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
             timestamp,
           )
       }
+      if (
+        settings.maxContextTokens != null &&
+        probeThreadContextLimitsStorageCapabilities(this.sqlite).threadContextLimits
+      ) {
+        this.sqlite
+          .query(
+            `INSERT INTO thread_context_limits (thread_id, max_context_tokens, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(thread_id) DO UPDATE SET
+               max_context_tokens = excluded.max_context_tokens,
+               updated_at = excluded.updated_at`,
+          )
+          .run(id, settings.maxContextTokens, timestamp)
+      }
       const persistedWorkspace = this.threadWorkspace(id)
       const event = this.insertEvent(id, null, 'thread/created', {
         thread: {
@@ -416,9 +465,12 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
   }
 
   getThread(threadID: string): ThreadSnapshot | null {
+    const hasLimits = probeThreadContextLimitsStorageCapabilities(this.sqlite).threadContextLimits
     const thread = this.sqlite
       .query(
-        'SELECT id, title, git_branch, task_mode, sandbox_mode, approval_policy, approvals_reviewer, created_at, updated_at FROM threads WHERE id = ?',
+        hasLimits
+          ? 'SELECT t.id, t.title, t.git_branch, t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.created_at, t.updated_at, l.max_context_tokens FROM threads t LEFT JOIN thread_context_limits l ON l.thread_id = t.id WHERE t.id = ?'
+          : 'SELECT id, title, git_branch, task_mode, sandbox_mode, approval_policy, approvals_reviewer, created_at, updated_at FROM threads WHERE id = ?',
       )
       .get(threadID) as
       | ({
