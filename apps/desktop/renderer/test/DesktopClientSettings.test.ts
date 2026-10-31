@@ -1104,6 +1104,7 @@ describe('desktop thread settings client', () => {
   })
 
   test('uses turn steer for an active follow-up without legacy strategy params', async () => {
+    let queuedParams: Record<string, unknown> | null = null
     let steerParams: Record<string, unknown> | null = null
     const activeSnapshot = (): ThreadSnapshot => ({
       ...snapshot('thread-active', defaultSettings),
@@ -1134,6 +1135,16 @@ describe('desktop thread settings client', () => {
           return rpc(body.id, { projects: [project], nextCursor: null })
         if (body?.method === 'thread/read') {
           return rpc(body.id, snapshotResult(activeSnapshot()))
+        }
+        if (body?.method === 'queue/add') {
+          queuedParams = body.params
+          return rpc(body.id, {
+            inputId: body.params.inputId,
+            turnId: 'next',
+            disposition: 'accepted',
+            admission: 'queued',
+            streamPosition: { streamId: 'thread-active', sequence: 2 },
+          })
         }
         if (body?.method === 'turn/steer') {
           steerParams = body.params
@@ -1170,10 +1181,15 @@ describe('desktop thread settings client', () => {
     expect(steerParams).not.toHaveProperty('model')
     for (const taskMode of ['plan', 'grill'] as const) {
       steerParams = null
-      await expect(client.submitSessionFollowUp(
-        'thread-active', { text: '改为只读调查', taskMode }, 'steer',
-      )).rejects.toThrow('当前轮次模式不同')
+      await client.submitSessionFollowUp(
+        'thread-active',
+        { text: '改为只读调查', taskMode },
+        'steer',
+        undefined,
+        { providerID: 'openai', model: 'gpt-5' },
+      )
       expect(steerParams).toBeNull()
+      expect(queuedParams).toMatchObject({ taskMode, content: '改为只读调查' })
     }
   })
 
@@ -2282,3 +2298,213 @@ test('日程会话显示过滤经过桌面 bridge 保存并在新 client 中读�
     )
   }
 })
+
+test('真实能力交集协商保留 Goal 管理与排队能力', async () => {
+  const requested: string[] = []
+  const methods: string[] = []
+  const goal = {
+    id: 'goal-1',
+    threadId: 'goal-thread',
+    objective: '测试目标',
+    status: 'active',
+    tokenBudget: 200000,
+    tokensUsed: 0,
+    timeUsedSeconds: 0,
+    version: 1,
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const client = createDesktopClient({
+    fetch: async (_path, init) => {
+      const body = JSON.parse(String(init?.body))
+      methods.push(body.method)
+      if (body.method === 'initialized') return new Response(null, { status: 204 })
+      if (body.method === 'initialize') {
+        requested.push(...body.params.capabilities)
+        return rpc(body.id, {
+          ...initializedResult(),
+          capabilities: [
+            ...initializedResult().capabilities,
+            'thread.goal.v1',
+            'queue.goal.v1',
+          ].filter((capability) => requested.includes(capability)),
+        })
+      }
+      if (body.method === 'thread/goal/get') return rpc(body.id, { goal })
+      if (body.method === 'thread/read')
+        return rpc(body.id, snapshotResult(snapshot('goal-thread', defaultSettings)))
+      if (body.method === 'queue/add')
+        return rpc(body.id, {
+          inputId: body.params.inputId,
+          turnId: 'queued-goal',
+          disposition: 'accepted',
+          admission: 'queued',
+          streamPosition: { streamId: 'goal-thread', sequence: 1 },
+        })
+      throw new Error(`Unexpected RPC: ${body.method}`)
+    },
+  })
+  expect(await client.getSessionGoal('goal-thread')).toMatchObject({ id: 'goal-1' })
+  expect(requested).toContain('thread.goal.v1')
+  expect(requested).toContain('queue.goal.v1')
+  expect(
+    await client.submitSessionFollowUp(
+      'goal-thread',
+      { text: '后续目标', taskMode: 'chat', goal: { objective: '后续目标' } },
+      'follow-up',
+      'goal-input',
+      { providerID: 'openai', model: 'gpt-5' },
+    ),
+  ).toBe('queued')
+  expect(methods).toContain('queue/add')
+})
+
+test.each(['paused', 'complete', 'clear'] as const)(
+  'Goal %s 成功后发布目标会话的新状态，不依赖事件或列表携带 Goal',
+  async (action) => {
+    let goal: import('../shared/Types.js').DesktopThreadGoal | null = {
+      id: 'goal',
+      threadId: 'goal-thread',
+      objective: '持续目标',
+      status: 'active',
+      tokenBudget: 200000,
+      tokensUsed: 0,
+      timeUsedSeconds: 0,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
+    }
+    let published: typeof goal | undefined
+    const client = createDesktopClient({
+      fetch: async (_path, init) => {
+        const body = JSON.parse(String(init?.body))
+        if (body.method === 'initialized') return new Response(null, { status: 204 })
+        if (body.method === 'initialize')
+          return rpc(body.id, {
+            ...initializedResult(),
+            capabilities: [...initializedResult().capabilities, 'thread.goal.v1'],
+          })
+        if (body.method === 'project/list')
+          return rpc(body.id, { projects: [project], nextCursor: null })
+        if (body.method === 'thread/list')
+          return rpc(body.id, {
+            threads: [listItem('goal-thread', defaultSettings)],
+            nextCursor: null,
+          })
+        if (body.method === 'thread/read')
+          return rpc(body.id, snapshotResult({ ...snapshot('goal-thread', defaultSettings), goal }))
+        if (body.method === 'thread/goal/get') return rpc(body.id, { goal })
+        if (body.method === 'thread/goal/set') {
+          goal = { ...goal!, status: body.params.status, version: 2 }
+          return rpc(body.id, { goal })
+        }
+        if (body.method === 'thread/goal/clear') {
+          goal = null
+          return rpc(body.id, { threadId: 'goal-thread', goalId: 'goal', clearedAt: now })
+        }
+        throw new Error(`Unexpected RPC: ${body.method}`)
+      },
+    })
+    await client.getSession('goal-thread')
+    const unsubscribe = client.onSessionStoreChange((change) => {
+      published = change.sessions.find((session) => session.item.id === 'goal-thread')?.item
+        .threadGoal
+    })
+    try {
+      if (action === 'clear') await client.clearSessionGoal('goal-thread')
+      else await client.setSessionGoal('goal-thread', { status: action })
+      if (action === 'clear') expect(published).toBeNull()
+      else expect(published?.status).toBe(action)
+    } finally {
+      unsubscribe()
+    }
+  },
+)
+
+test.each(['paused', 'complete', 'clear', 'replaced'] as const)(
+  'Goal 操作 %s 在计量更新冲突后刷新，且不误改替换后的目标',
+  async (action) => {
+    const requests: Array<{ expectedVersion: number; operationId: string }> = []
+    let version = 11
+    let objective = '原目标'
+    let threadReads = 0
+    const goal = () => ({
+      id: 'same-goal-id',
+      threadId: 'goal-thread',
+      objective,
+      status: 'active',
+      tokenBudget: 200000,
+      tokensUsed: 100,
+      timeUsedSeconds: 1,
+      version,
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const client = createDesktopClient({
+      fetch: async (_path, init) => {
+        const body = JSON.parse(String(init?.body))
+        if (body.method === 'initialized') return new Response(null, { status: 204 })
+        if (body.method === 'initialize')
+          return rpc(body.id, {
+            ...initializedResult(),
+            capabilities: [...initializedResult().capabilities, 'thread.goal.v1'],
+          })
+        if (body.method === 'project/list')
+          return rpc(body.id, { projects: [project], nextCursor: null })
+        if (body.method === 'thread/list')
+          return rpc(body.id, {
+            threads: [listItem('goal-thread', defaultSettings)],
+            nextCursor: null,
+          })
+        if (body.method === 'thread/goal/get') return rpc(body.id, { goal: goal() })
+        if (body.method === 'thread/read') {
+          threadReads++
+          return rpc(
+            body.id,
+            snapshotResult({ ...snapshot('goal-thread', defaultSettings), goal: goal() as never }),
+          )
+        }
+        if (body.method === 'thread/goal/set' || body.method === 'thread/goal/clear') {
+          requests.push(body.params)
+          if (requests.length === 1) {
+            version = 13
+            if (action === 'replaced') objective = '另一个用户的新目标'
+            return new Response(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: body.id,
+                error: {
+                  code: -32603,
+                  message: 'Goal 已被更新，请刷新后重试',
+                  data: { code: 'CONFLICT', retryable: false },
+                },
+              }),
+              { headers: { 'content-type': 'application/json' } },
+            )
+          }
+          if (body.method === 'thread/goal/clear')
+            return rpc(body.id, { threadId: 'goal-thread', goalId: 'same-goal-id', clearedAt: now })
+          return rpc(body.id, { goal: { ...goal(), status: body.params.status } })
+        }
+        throw new Error(`Unexpected RPC: ${body.method}`)
+      },
+    })
+    if (action === 'replaced') {
+      await expect(
+        client.setSessionGoal('goal-thread', { status: 'paused' }),
+      ).rejects.toMatchObject({ code: 'GOAL_VERSION_CONFLICT' })
+      expect(requests).toHaveLength(1)
+    } else {
+      if (action === 'clear') expect(await client.clearSessionGoal('goal-thread')).toBe(true)
+      else
+        expect(await client.setSessionGoal('goal-thread', { status: action })).toMatchObject({
+          status: action,
+        })
+      expect(requests.map((request) => request.expectedVersion)).toEqual([11, 13])
+    }
+    expect(threadReads).toBe(action === 'replaced' ? 1 : 2)
+  },
+)

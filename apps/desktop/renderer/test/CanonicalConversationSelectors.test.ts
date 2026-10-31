@@ -678,3 +678,71 @@ describe('canonical latest plan identity', () => {
     expect(selectCanonicalLatestPlanItemId(createCanonicalThreadState(pageWith([])))).toBeNull()
   })
 })
+
+test('canonical 实际队列保留模式与 Goal 意图，供显示和编辑使用', () => {
+  const threadId = 'queue-thread'
+  const inputs = (['plan', 'grill', 'chat'] as const).map((mode, index) => ({
+    id: `input-${index}`,
+    threadId,
+    turnId: `turn-${index}`,
+    content: '任务正文',
+    delivery: 'queue' as const,
+    mode,
+    model,
+    permissionConfig,
+    state: 'queued' as const,
+    createdAt: index,
+    ...(mode === 'chat' ? { goal: { objective: '持续目标' } } : {}),
+  }))
+  const state = createCanonicalThreadState({
+    thread: {
+      id: threadId,
+      projectID: null,
+      title: null,
+      gitBranch: null,
+      workspace: {
+        kind: 'projectless',
+        projectID: null,
+        folderID: null,
+        cwd: 'F:\\CodeProject\\guardian-lab',
+        outputDirectory: null,
+      },
+      settings: { taskMode: 'chat', permissionConfig },
+      createdAt: 0,
+      updatedAt: 0,
+    },
+    subagents: [],
+    turns: [],
+    queue: { version: 1, pauseReason: null, turns: [], inputs },
+    olderCursor: null,
+    hasOlder: false,
+    streamPosition: { streamId: threadId, sequence: 1 },
+  })
+  const queue = selectCanonicalConversationAuxiliaryState(state).queuedFollowUps
+  expect(queue.map((item) => item.previewText)).toEqual([
+    '计划 任务正文',
+    '访谈 任务正文',
+    '目标 任务正文',
+  ])
+  expect(queue.map((item) => item.input.taskMode)).toEqual(['plan', 'grill', 'chat'])
+  expect(queue[2]?.input.goal).toEqual({ objective: '持续目标' })
+  state.inputsById.set(inputs[0]!.id, { ...inputs[0]!, state: 'active' })
+  state.turnsById.set('turn-1', {
+    id: 'turn-1',
+    threadId,
+    sourceInputID: 'input-1',
+    status: 'running',
+    mode: 'grill',
+    model,
+    permissionConfig,
+    rootAgentId: 'agent',
+    mergedInputIDs: [],
+    startedAt: 1,
+    finishedAt: null,
+    elapsedSeconds: 0,
+    error: null,
+  })
+  expect(
+    selectCanonicalConversationAuxiliaryState(state).queuedFollowUps.map((item) => item.id),
+  ).toEqual(['input-2'])
+})

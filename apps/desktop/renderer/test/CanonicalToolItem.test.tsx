@@ -35,7 +35,7 @@ import {
 } from '../src/features/session/timeline/StructuredDeliveryText.js'
 import { CodeBlock } from '../src/features/syntax/CodeBlock.js'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
-import { AttachmentFilePill } from '../src/features/session/attachments/AttachmentRowPrimitives.js'
+import { AttachmentFilePill, AttachmentFileRow } from '../src/features/session/attachments/AttachmentRowPrimitives.js'
 import { threadPatchDiffToDesktopFile } from '../src/features/session/timeline/FileMutationDiffContent.js'
 import {
   createThreadPatchDiffLoader,
@@ -209,6 +209,45 @@ describe('canonical tool item display', () => {
       /<button aria-label="打开 notes.txt" class="attachment-file-pill__open[^"]*" type="button">/,
     )
     expect(markup).not.toMatch(/class="[^"]*attachment-file-pill__open[^"]*ui-button/)
+  })
+
+  test('uses the shared tooltip instead of a native title for local attachment paths', () => {
+    const markup = renderToStaticMarkup(
+      <AttachmentFilePill name="notes.txt" path="C:/workspace/notes.txt" onOpen={() => undefined} />,
+    )
+    expect(markup).toContain('data-state="closed"')
+    expect(markup).not.toContain('title="notes.txt"')
+    expect(markup).toContain('打开 notes.txt')
+  })
+
+  test('shows two files and collapses the rest behind a counted stack', () => {
+    const files = ['one.txt', 'two.txt', 'three.txt', 'four.txt', 'five.txt'].map((name) => (
+      <AttachmentFilePill key={name} name={name} />
+    ))
+    const collapsed = renderToStaticMarkup(<AttachmentFileRow ariaLabel="文件">{files}</AttachmentFileRow>)
+    expect(collapsed).toContain('one.txt')
+    expect(collapsed).toContain('two.txt')
+    expect(collapsed).not.toContain('three.txt')
+    expect(collapsed).toContain('展开其余 3 个文件')
+    expect(collapsed).not.toContain('title="展开其余')
+    const expanded = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件" defaultExpanded>{files}</AttachmentFileRow>,
+    )
+    for (const name of ['one.txt', 'two.txt', 'three.txt', 'four.txt', 'five.txt']) {
+      expect(expanded).toContain(name)
+    }
+    expect(expanded.match(/aria-expanded="true"/g)).toHaveLength(1)
+    expect(expanded).toContain('收起文件列表')
+    const pair = renderToStaticMarkup(<AttachmentFileRow ariaLabel="文件">{files.slice(0, 2)}</AttachmentFileRow>)
+    expect(pair).not.toContain('展开其余')
+    const manyFiles = Array.from({ length: 40 }, (_, index) => (
+      <AttachmentFilePill key={index} name={`file-${index}.txt`} />
+    ))
+    const manyCollapsed = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件">{manyFiles}</AttachmentFileRow>,
+    )
+    expect(manyCollapsed).toContain('展开其余 38 个文件')
+    expect(manyCollapsed.match(/<svg\b/g)).toHaveLength(4)
   })
 
   test('cleanCommandOutput extracts stdout/stderr and drops process JSON envelope', () => {

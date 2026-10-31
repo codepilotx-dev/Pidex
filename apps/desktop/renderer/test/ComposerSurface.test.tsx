@@ -574,6 +574,42 @@ describe('composer surface variant', () => {
     expect(html).not.toContain('class="rm-empty"')
   })
 
+  test('模型目录异步加载时若已有选择模型则保持稳定展示不发生文本或占位跳变', () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          modelCatalogLoading: true,
+          modelConfigured: false,
+          modelPresets: [],
+          providerOptions: [],
+          selectedModelPreset: 'workbuddy/hy4-preview',
+        })}
+      />,
+    )
+
+    expect(html).toContain('>workbuddy</span>')
+    expect(html).toContain('>hy4-preview</span>')
+    expect(html).not.toContain('>配置模型<')
+    expect(html).not.toContain('加载模型列表中……')
+  })
+
+  test('模型目录异步加载时若无模型选择则显示加载中提示', () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          modelCatalogLoading: true,
+          modelConfigured: false,
+          modelPresets: [],
+          providerOptions: [],
+          selectedModelPreset: '',
+        })}
+      />,
+    )
+
+    expect(html).toContain('加载模型列表中……')
+    expect(html).not.toContain('>配置模型<')
+  })
+
   test('模型与推理强度渲染为统一入口', () => {
     const html = renderToStaticMarkup(
       <ComposerCard
@@ -717,8 +753,12 @@ describe('composer surface variant', () => {
     const shell = await Bun.file(
       new URL('../src/styles/features/composer-shell.css', import.meta.url),
     ).text()
-    expect(shell).toMatch(/@container composer-footer \(width <= 475px\)\s*\{\s*\.composer-footer-label\s*\{\s*display: none;/)
-    expect(shell).toMatch(/@container composer-footer \(width <= 420px\)\s*\{\s*\.composer-footer-secondary-chevron\s*\{\s*display: none;/)
+    expect(shell).toMatch(
+      /@container composer-footer \(width <= 475px\)\s*\{\s*\.composer-footer-label\s*\{\s*display: none;/,
+    )
+    expect(shell).toMatch(
+      /@container composer-footer \(width <= 420px\)\s*\{\s*\.composer-footer-secondary-chevron\s*\{\s*display: none;/,
+    )
     expect(html).toContain('composer-footer-label')
     expect(html).toContain('composer-footer-secondary-chevron')
     // 隐藏文字后图标入口仍可操作且有无障碍名称。
@@ -744,3 +784,10 @@ function canSubmitInput(
     ...overrides,
   }
 }
+
+
+test('目标超预算保留实际用量并明确标注，指标允许换行', () => {
+  const html = renderToStaticMarkup(<ComposerCard {...composerCardProps({ placement: 'thread', threadGoal: { ...GOAL, tokensUsed: 879000, tokenBudget: 200000, status: 'budget-limited' } })} />)
+  expect(html).toContain('87.9万 / 20万 tokens（已超预算）')
+  expect(html).toContain('tw:flex-wrap')
+})

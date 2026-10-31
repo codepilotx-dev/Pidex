@@ -634,3 +634,32 @@ describe('composer submit transaction', () => {
     })
   })
 })
+
+test('三种显式命令优先于草稿模式，保留附件且不重写普通正文中的命令', () => {
+  for (const [command, mode] of [
+    ['goal', 'chat'],
+    ['plan', 'plan'],
+    ['grill', 'grill'],
+  ] as const) {
+    const source = draft({
+      document: createComposerDocument(`/${command} 修复登录`),
+      collaborationMode: 'plan',
+      goalModeEnabled: true,
+    })
+    const prepared = prepareComposerSubmission(source)
+    expect('input' in prepared && prepared.input).toMatchObject({
+      text: '修复登录',
+      taskMode: mode,
+      attachments: [],
+    })
+    expect('goal' in prepared ? prepared.goal?.objective : undefined).toBe(
+      command === 'goal' ? '修复登录' : undefined,
+    )
+    expect(source.document.text).toBe(`/${command} 修复登录`)
+  }
+  const normal = prepareComposerSubmission(
+    draft({ document: createComposerDocument('解释 /goal 修复登录') }),
+  )
+  expect('goal' in normal).toBe(false)
+  expect('input' in normal && normal.input.text).toBe('解释 /goal 修复登录')
+})

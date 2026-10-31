@@ -1,3 +1,4 @@
+import { AgentRpcError } from '../src/services/AgentRpcClient.js'
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { toUserErrorMessage } from '../src/utils/Errors.js'
@@ -311,4 +312,25 @@ describe('UI surfaces do not leak technical or catalog errors inline', () => {
     expect(markup).not.toContain('任务目录暂不可用')
     expect(markup).toContain('重构全局错误提示')
   })
+})
+
+test('版本冲突即使使用 RPC 内部错误数值码也显示可操作提示', () => {
+  expect(
+    toUserErrorMessage(
+      new AgentRpcError('队列版本已变化，请刷新后重试', -32603, {
+        code: 'CONFLICT',
+        retryable: false,
+      }),
+    ),
+  ).toBe('队列版本已变化，请刷新后重试')
+  expect(
+    toUserErrorMessage(
+      Object.assign(new Error('目标已被替换，请确认后重试'), { code: 'GOAL_VERSION_CONFLICT' }),
+    ),
+  ).toContain('请确认后重试')
+  expect(
+    toUserErrorMessage(
+      Object.assign(new Error('队列发生冲突'), { code: 'QUEUE_VERSION_CONFLICT' }),
+    ),
+  ).toContain('已刷新最新状态')
 })
