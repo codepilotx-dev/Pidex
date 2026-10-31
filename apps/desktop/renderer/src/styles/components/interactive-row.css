@@ -106,12 +106,12 @@
     gap: var(--cpx-comp-row-gap-y);
   }
 
-  .interactive-row:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])),
+  .interactive-row:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'], [data-menu-item])),
   .settings-dropdown-item:hover:not(:where(:disabled, [data-disabled])),
   .permission-select-item:hover:not(:where([data-disabled])),
   .chat-input__dropdown-item:hover:not(:where(:disabled)),
-  .sidebar-context-menu-item:hover:not(:where([data-disabled])),
-  .sidebar-context-menu-sub-trigger:hover:not(:where([data-disabled])) {
+  .sidebar-context-menu-item:hover:not(:where([data-disabled], [data-menu-item])),
+  .sidebar-context-menu-sub-trigger:hover:not(:where([data-disabled], [data-menu-item])) {
     background: var(--cpx-comp-row-hover-bg, var(--cpx-sys-color-hover));
     color: var(--cpx-comp-row-hover-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
   }

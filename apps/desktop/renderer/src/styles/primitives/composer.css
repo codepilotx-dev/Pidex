@@ -238,6 +238,12 @@
     border-radius: inherit;
   }
 
+  .attachment-file-row__stack-card {
+    /* Keep the translucent tint over an opaque base to hide stacked icons. */
+    background: var(--cpx-sys-color-surface-canvas);
+    background-image: linear-gradient(var(--cpx-sys-color-hover), var(--cpx-sys-color-hover));
+  }
+
   .attachment-file-pill__detail::before {
     content: '· ';
   }

@@ -559,10 +559,10 @@
     opacity: 0;
   }
 
-  .canonical-user-message:hover .canonical-message-actions,
+  .canonical-user-message:has(.canonical-user-message__bubble:hover) .canonical-message-actions,
+  .canonical-user-message:has(.attachment-file-pill:hover) .canonical-message-actions,
+  .canonical-message-actions:hover,
   .canonical-user-message:is(:focus-visible, :has(:focus-visible)) .canonical-message-actions,
-  .canonical-turn:hover .canonical-message-actions--assistant,
-  .canonical-turn:is(:focus-visible, :has(:focus-visible)) .canonical-message-actions--assistant,
   .canonical-text-item:hover .canonical-message-actions,
   .canonical-text-item:is(:focus-visible, :has(:focus-visible)) .canonical-message-actions {
     opacity: 1;
