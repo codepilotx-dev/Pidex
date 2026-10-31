@@ -144,6 +144,7 @@ export class ManagedWorktreeService {
       ['git', '-c', `core.hooksPath=${hooksPath}`, '-c', 'core.fsmonitor=false', ...args],
       {
         cwd,
+        windowsHide: true,
         stdin: input === undefined ? 'ignore' : new Blob([input]),
         stdout: 'pipe',
         stderr: 'pipe',

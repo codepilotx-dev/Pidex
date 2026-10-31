@@ -787,6 +787,7 @@ export class GitReviewService {
     )
     const rawEntries = metadata.rawEntries
     const numstats = metadata.numstats
+    const trackedPaths = new Set(rawEntries.map((entry) => entry.path))
 
     if (resolved.source.kind === 'branch' || resolved.source.kind === 'uncommitted') {
       const untracked = (
@@ -798,7 +799,8 @@ export class GitReviewService {
         const directory = path.endsWith('/')
         const normalized = validateRelativePath(directory ? path.slice(0, -1) : path)
         if (directory) continue
-        if (!rawEntries.some((entry) => entry.path === normalized)) {
+        if (!trackedPaths.has(normalized)) {
+          trackedPaths.add(normalized)
           rawEntries.push({
             path: normalized,
             previousPath: null,

@@ -271,6 +271,7 @@ export class SubagentWorkspaceCoordinator implements SubagentWorkspaceProvider {
         ['git', 'apply', '--reverse', '--binary', ...(check ? ['--check'] : []), '-'],
         {
           cwd: rootPath,
+          windowsHide: true,
           stdin: new Blob([diff.patch]),
           stdout: 'pipe',
           stderr: 'pipe',

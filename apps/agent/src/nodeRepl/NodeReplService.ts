@@ -85,6 +85,7 @@ const decodeLines = async function* (stream: ReadableStream<Uint8Array>) {
 
 const defaultSpawner: NodeReplSpawner = (command, signal) => {
   const child = Bun.spawn([command.executable, ...command.args], {
+    windowsHide: true,
     stdin: 'pipe',
     stdout: 'pipe',
     stderr: 'pipe',

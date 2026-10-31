@@ -79,6 +79,7 @@ export class GitCommandRunner {
       ['git', '-c', 'core.quotepath=false', '-c', 'core.fsmonitor=false', ...args],
       {
         cwd,
+        windowsHide: true,
         env: {
           ...process.env,
           GIT_OPTIONAL_LOCKS: '0',

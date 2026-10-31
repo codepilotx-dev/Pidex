@@ -180,7 +180,7 @@ async function isRuntimeOwnerAlive(pid: number, path: string) {
       '-Command',
       `[Console]::Write((Get-Process -Id ${pid} -ErrorAction Stop).StartTime.ToUniversalTime().ToString("o"))`,
     ],
-    { stdout: 'pipe', stderr: 'ignore' },
+    { stdout: 'pipe', stderr: 'ignore', windowsHide: true },
   )
   if (result.exitCode !== 0) return isProcessAlive(pid)
   const startedAt = Date.parse(new TextDecoder().decode(result.stdout).trim())
@@ -395,6 +395,7 @@ export function terminateProcessTree(child: ReturnType<typeof Bun.spawn>) {
   try {
     if (process.platform === 'win32') {
       Bun.spawnSync(['taskkill.exe', '/PID', String(child.pid), '/T', '/F'], {
+        windowsHide: true,
         stdout: 'ignore',
         stderr: 'ignore',
       })
