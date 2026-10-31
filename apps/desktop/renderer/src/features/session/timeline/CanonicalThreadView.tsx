@@ -423,7 +423,7 @@ export function CanonicalTurnActivity({
         )}
         <div
           aria-hidden="true"
-          className="canonical-turn-activity__divider tw:w-full tw:border-t tw:border-app-border-subtle"
+          className="canonical-turn-activity__divider tw:w-full tw:max-w-conversation tw:mx-auto tw:border-0"
         />
         <CollapsibleContent
           expanded={contentVisible}

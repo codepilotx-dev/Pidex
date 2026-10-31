@@ -81,7 +81,7 @@
     align-items: center;
     gap: var(--cpx-sys-space-2);
     padding: 0 var(--cpx-sys-space-2);
-    border-bottom: 1px solid var(--cpx-sys-color-border-subtle);
+    border-bottom: 0;
     background: var(--cpx-sys-color-workbench-panel-bg);
     color: var(--cpx-sys-color-fg-secondary);
   }

@@ -373,7 +373,7 @@ describe('Codex CPX design system token contract', () => {
     expect(systemTokens.match(/--cpx-sys-shadow-prominent:/g)).toHaveLength(1)
     expectSourceContains(
       systemTokens,
-      '--cpx-sys-shadow-raised: inset 0 1px 0 rgba(255, 255, 255, 0.7);',
+      '--cpx-sys-shadow-raised: none;',
     )
     expectSourceContains(
       componentTokens,
@@ -617,7 +617,7 @@ describe('Codex CPX design system token contract', () => {
     )
     expectSourceContains(
       systemTokens,
-      '--cpx-sys-color-workbench-sidebar-bg: var(--cpx-ref-gray-2);',
+      '--cpx-sys-color-workbench-sidebar-bg: var(--cpx-ref-gray-3);',
     )
     expectSourceContains(
       systemTokens,
@@ -667,7 +667,7 @@ describe('Codex CPX design system token contract', () => {
     // titlebar 表面，工作台主体取 main 表面并保留左侧分隔边框。
     expectSourceContains(chrome, 'tw:bg-app-titlebar')
     expectSourceContains(workbenchShell, 'tw:bg-app-main')
-    expectSourceContains(workbenchShell, 'tw:border-l tw:border-app-border')
+    expectSourceContains(workbenchShell, 'tw:border-l tw:border-app-border-subtle')
     expect(workbenchLayout).not.toMatch(/\.desktop-workspace-panel--bottom\s*\{[^}]*border-top:/)
 
     // Panel and toolbar borders moved out of the dock stylesheet into the
@@ -675,7 +675,7 @@ describe('Codex CPX design system token contract', () => {
     expectSourceContains(tabStrip, 'tw:rounded-md')
     expectSourceContains(dockFrame, 'tw:border-l tw:border-app-border')
     expectSourceContains(dockFrame, 'tw:border-t tw:border-app-border')
-    expectSourceContains(panelSurface, 'tw:border-b tw:border-app-border-subtle')
+    expectSourceNotContains(panelSurface, 'tw:border-b tw:border-app-border-subtle')
     expectSourceContains(modal, '--cpx-comp-modal-bg')
     expectSourceContains(modal, '--cpx-comp-modal-shadow')
     expectSourceContains(popover, '--cpx-comp-dropdown-menu-bg')

@@ -289,7 +289,7 @@
   }
 
   .desktop-sidebar.is-floating {
-    border: var(--cpx-comp-surface-edge);
+    border: 0;
     border-radius: var(--cpx-sys-radius-container);
     background: var(--cpx-comp-glass-bg, var(--cpx-comp-surface-floating));
     backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));

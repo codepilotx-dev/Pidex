@@ -498,7 +498,7 @@ export function RightDockFilesPanel({
             />
             <aside
               aria-label="工作区文件树"
-              className="right-dock-editor-file-tree tw:grow tw:shrink tw:basis-auto tw:h-full tw:min-h-0 tw:min-w-0 tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-underlay"
+              className="right-dock-editor-file-tree tw:grow tw:shrink tw:basis-auto tw:h-full tw:min-h-0 tw:min-w-0 tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-dock"
             >
               <WorkspaceFileTree
                 key={workspacePath}
@@ -822,7 +822,7 @@ export function RightDockFilePreviewPanel({
             />
             <aside
               aria-label="当前文件的工作区文件树"
-              className="right-dock-editor-file-tree tw:grow tw:shrink tw:basis-auto tw:h-full tw:min-h-0 tw:min-w-0 tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-underlay"
+              className="right-dock-editor-file-tree tw:grow tw:shrink tw:basis-auto tw:h-full tw:min-h-0 tw:min-w-0 tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-dock"
             >
               <WorkspaceFileTree
                 activePath={expectedPath}

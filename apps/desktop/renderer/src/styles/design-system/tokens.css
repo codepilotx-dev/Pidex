@@ -73,6 +73,12 @@
     --cpx-ref-gray-surface: #ffffffcc;
     --cpx-ref-gray-indicator: #8c8c8c;
     --cpx-ref-gray-track: #8c8c8c;
+
+    /* Context Capacity Tiers (Light) */
+    --cpx-sys-color-context-tier-cyan: #00a2c7;
+    --cpx-sys-color-context-tier-jade: #29a383;
+    --cpx-sys-color-context-tier-amber: #ffc53d;
+    --cpx-sys-color-context-tier-violet: #6e56cf;
   }
 
   [data-theme='dark'] {
@@ -138,6 +144,12 @@
     --cpx-ref-gray-surface: rgba(0, 0, 0, 0.05);
     --cpx-ref-gray-indicator: #6f6f6f;
     --cpx-ref-gray-track: #6f6f6f;
+
+    /* Context Capacity Tiers (Dark) */
+    --cpx-sys-color-context-tier-cyan: #12b7de;
+    --cpx-sys-color-context-tier-jade: #3dd68c;
+    --cpx-sys-color-context-tier-amber: #ffe629;
+    --cpx-sys-color-context-tier-violet: #8e4ec6;
   }
 
   @supports (color: color(display-p3 1 1 1)) {
@@ -279,7 +291,7 @@
     --cpx-sys-color-surface-recessed: var(--cpx-ref-gray-3);
     --cpx-sys-color-surface-panel: var(--cpx-ref-gray-2);
     --cpx-sys-color-surface-control: var(--cpx-ref-gray-2);
-    --cpx-sys-color-surface-raised: var(--cpx-ref-gray-2);
+    --cpx-sys-color-surface-raised: #ffffff;
     --cpx-sys-color-surface-secondary: var(--cpx-ref-gray-4);
     --cpx-sys-color-surface-active: var(--cpx-ref-gray-5);
     --cpx-sys-color-surface-editor: var(--cpx-ref-gray-2);
@@ -287,7 +299,7 @@
 
     /* Workbench region surfaces */
     --cpx-sys-color-workbench-titlebar-bg: var(--cpx-sys-color-workbench-sidebar-bg);
-    --cpx-sys-color-workbench-sidebar-bg: var(--cpx-ref-gray-2);
+    --cpx-sys-color-workbench-sidebar-bg: var(--cpx-ref-gray-3);
     --cpx-sys-color-workbench-main-bg: var(--cpx-sys-color-surface-canvas);
     --cpx-sys-color-workbench-panel-bg: var(--cpx-sys-color-workbench-main-bg);
 
@@ -527,10 +539,10 @@
     --cpx-sys-layout-conversation-max-width: 736px;
 
     /* System Shadows (Light Default: Edge Highlight + Floating) */
-    --cpx-sys-shadow-resting: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-    --cpx-sys-shadow-raised: inset 0 1px 0 rgba(255, 255, 255, 0.7);
-    --cpx-sys-shadow-prominent: 0 16px 48px rgb(0 0 0 / 24%);
-    --cpx-sys-shadow-floating: 0 16px 48px rgb(0 0 0 / 24%);
+    --cpx-sys-shadow-resting: none;
+    --cpx-sys-shadow-raised: none;
+    --cpx-sys-shadow-prominent: 0 16px 40px -6px rgb(0 0 0 / 14%), 0 4px 12px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 10%);
+    --cpx-sys-shadow-floating: 0 16px 40px -6px rgb(0 0 0 / 14%), 0 4px 12px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 10%);
     --cpx-sys-shadow-control: none;
 
     /* System Motion (Semantic Roles) */

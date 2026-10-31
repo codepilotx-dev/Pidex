@@ -58,7 +58,7 @@ export function SidebarNavigationRail(props: Props): ReactNode {
   const { t } = useLocale()
   return (
     <nav
-      className="sidebar-navigation-rail tw:flex tw:h-full tw:flex-col tw:items-center tw:py-2"
+      className="sidebar-navigation-rail tw:flex tw:h-full tw:flex-col tw:items-center tw:justify-center tw:py-2"
       aria-label={t('应用导航')}
     >
       {initiallyReady ? (

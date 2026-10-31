@@ -59,7 +59,7 @@ export function deriveDesktopSurfaceUnder(
   const target = dark ? { red: 0, green: 0, blue: 0 } : inkRgb
   const amount = Math.max(
     0,
-    Math.min(1, (dark ? 0.1 : 0.04) + (contrast - (dark ? 60 : 40)) * (dark ? 0.0015 : 0.0012)),
+    Math.min(1, (dark ? 0.53 : 0.067) + (contrast - (dark ? 60 : 40)) * (dark ? 0.002 : 0.0012)),
   )
   const mix = (channel: keyof typeof surfaceRgb) =>
     Math.round(surfaceRgb[channel] + (target[channel] - surfaceRgb[channel]) * amount)

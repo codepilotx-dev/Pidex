@@ -149,7 +149,7 @@ const REVIEW_FILE_TREE_RUNTIME_MIN_WIDTH = REVIEW_FILE_TREE_PANEL_MIN_WIDTH + 8 
 const REVIEW_SIDEBAR_CLASS =
   'review-sidebar tw:@container tw:flex tw:h-full tw:min-h-0 tw:flex-col tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-panel tw:text-app-text tw:shadow-none tw:in-[.workbench-panel]:flex-auto tw:in-[.workbench-panel]:w-full tw:in-[.workbench-panel]:min-w-0 tw:in-[.workbench-panel]:max-w-none tw:in-[.workbench-panel]:border-l-0'
 const REVIEW_SIDEBAR_TOOLBAR_CLASS =
-  'tw:box-border tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:min-h-12 tw:items-start tw:gap-2 tw:border-b tw:border-app-border-subtle tw:bg-app-dock tw:px-2 tw:py-2 tw:shadow-none'
+  'tw:box-border tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:min-h-12 tw:items-start tw:gap-2 tw:bg-app-dock tw:px-2 tw:py-2 tw:shadow-none'
 const REVIEW_COUNTS_CLASS = 'tw:inline-flex tw:items-center tw:gap-2'
 const REVIEW_FOOTER_CLASS =
   'tw:absolute tw:bottom-2.5 tw:left-1/2 tw:z-local tw:flex tw:-translate-x-1/2 tw:items-center tw:justify-center tw:gap-4 tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-1 tw:shadow-none'

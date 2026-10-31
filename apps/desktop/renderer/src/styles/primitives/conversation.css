@@ -59,7 +59,7 @@
   }
 
   .conversation-page {
-    --thread-scroll-footer-fade-height: 48px;
+    --thread-scroll-footer-fade-height: 72px;
     --thread-scroll-content-bottom-gap: 24px;
     --conversation-rail-inline-start: var(--cpx-sys-space-2);
     --session-timeline-width: 100%;
@@ -158,6 +158,34 @@
       transparent 0%,
       color-mix(in srgb, var(--cpx-sys-color-surface-canvas) 85%, transparent) 40%,
       var(--cpx-sys-color-surface-canvas) 100%
+    );
+  }
+
+  .canonical-turn-activity__divider {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      color-mix(in srgb, var(--cpx-sys-color-border-subtle) 65%, transparent) 25%,
+      color-mix(in srgb, var(--cpx-sys-color-border-subtle) 65%, transparent) 75%,
+      transparent 100%
+    );
+  }
+
+  .conversation-page .thread-scroll-layout::before {
+    content: '';
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 24px;
+    margin-bottom: -24px;
+    z-index: 10;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      var(--cpx-sys-color-surface-canvas) 0%,
+      transparent 100%
     );
   }
 

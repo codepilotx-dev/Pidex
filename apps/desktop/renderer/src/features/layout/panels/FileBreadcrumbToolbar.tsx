@@ -75,7 +75,7 @@ export function FileBreadcrumbToolbar({
   }, [absolutePath])
 
   return (
-    <header className="file-breadcrumb-toolbar tw:flex tw:h-10 tw:min-h-10 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-app-border-subtle tw:bg-app-dock tw:px-2">
+    <header className="file-breadcrumb-toolbar tw:flex tw:h-10 tw:min-h-10 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:bg-app-dock tw:px-2">
       <div
         aria-label={`文件路径：${path}`}
         className="file-breadcrumb-toolbar__path tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:overflow-hidden tw:type-control"

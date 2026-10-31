@@ -258,6 +258,12 @@
   --color-app-info-border: var(--cpx-sys-color-info-subtle-border);
   --color-app-info-fg: var(--cpx-sys-color-info-fg);
 
+  /* Context capacity tiers */
+  --color-app-context-cyan: var(--cpx-sys-color-context-tier-cyan);
+  --color-app-context-jade: var(--cpx-sys-color-context-tier-jade);
+  --color-app-context-amber: var(--cpx-sys-color-context-tier-amber);
+  --color-app-context-violet: var(--cpx-sys-color-context-tier-violet);
+
   /* Primary action */
   --color-app-primary-action: var(--cpx-comp-button-primary-bg);
   --color-app-primary-action-foreground: var(--cpx-comp-button-primary-fg);

@@ -33,7 +33,7 @@
     width: var(--popover-width);
     min-width: var(--popover-min-width, 0);
     max-width: var(--popover-max-width, calc(100vw - 16px));
-    border: 1px solid var(--cpx-comp-dropdown-menu-border, var(--cpx-sys-color-border-default));
+    border: 0;
     border-radius: var(--cpx-comp-dropdown-menu-radius);
     background: var(--cpx-comp-dropdown-menu-bg, var(--cpx-comp-surface-floating));
     backdrop-filter: var(--cpx-comp-dropdown-menu-backdrop-filter, blur(16px));
@@ -219,7 +219,7 @@
     .thread-summary-popover,
     .sidebar-hover-card-surface
   ) {
-    border: var(--cpx-comp-surface-edge);
+    border: 0;
     background: var(--cpx-comp-dropdown-menu-bg, var(--cpx-comp-surface-floating));
     backdrop-filter: var(--cpx-comp-dropdown-menu-backdrop-filter, blur(16px));
     box-shadow: var(--cpx-comp-dropdown-menu-shadow, var(--cpx-sys-shadow-floating));
@@ -240,7 +240,7 @@
     }
   }
   .popover-surface {
-    border: 1px solid var(--cpx-comp-dropdown-menu-border, var(--cpx-sys-color-border-default));
+    border: 0;
     background: var(--cpx-comp-dropdown-menu-bg, var(--cpx-comp-surface-floating));
     backdrop-filter: var(--cpx-comp-dropdown-menu-backdrop-filter, blur(16px));
     box-shadow: var(--cpx-comp-dropdown-menu-shadow, var(--cpx-sys-shadow-floating));

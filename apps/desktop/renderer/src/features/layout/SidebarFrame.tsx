@@ -163,18 +163,16 @@ export function SidebarFrame({
 
   return (
     <>
-      <div
-        className="desktop-sidebar-rail-slot tw:absolute tw:inset-y-0 tw:left-0 tw:z-composer tw:w-[var(--sidebar-rail-width)] tw:bg-app-sidebar"
-        data-sidebar-layout="modern"
-        style={{ '--sidebar-rail-width': `${railWidth}px` } as React.CSSProperties}
-      >
-        {rail}
-      </div>
-      <motion.div
-        aria-hidden="true"
-        className="desktop-sidebar-spacer tw:w-0 tw:min-w-0 tw:flex-none"
-        style={{ width: allocatedWidth }}
-      />
+      {rail ? (
+        <div
+          className="desktop-sidebar-rail-slot tw:hidden tw:w-[var(--sidebar-rail-width)]"
+          aria-hidden="true"
+          data-sidebar-layout="modern"
+          style={{ '--sidebar-rail-width': `${railWidth}px` } as React.CSSProperties}
+        >
+          {rail}
+        </div>
+      ) : null}
       <motion.aside
         id="desktop-sidebar-pane"
         ref={sidebarRef}
@@ -183,18 +181,15 @@ export function SidebarFrame({
         aria-label={labels.sidebar}
         aria-hidden={hidden || undefined}
         className={cx(
-          'desktop-sidebar tw:absolute tw:flex tw:flex-none tw:flex-col tw:overflow-hidden tw:select-none tw:type-body tw:text-app-text tw:antialiased tw:[text-rendering:optimizeLegibility]',
-          // Modern 布局：面板起点与宽度按图标栏宽度让位。
+          'desktop-sidebar tw:flex tw:flex-none tw:flex-col tw:overflow-hidden tw:select-none tw:type-body tw:text-app-text tw:antialiased tw:[text-rendering:optimizeLegibility]',
           floating
-            ? 'tw:inset-y-2 tw:left-[calc(var(--sidebar-rail-width)+8px)] tw:w-[calc(var(--sidebar-current-width)-var(--sidebar-rail-width)-16px)]'
-            : 'tw:inset-y-0 tw:h-full tw:left-[var(--sidebar-rail-width)] tw:w-[calc(var(--sidebar-current-width)-var(--sidebar-rail-width))]',
+            ? 'is-floating tw:absolute tw:top-2 tw:bottom-2 tw:left-2 tw:z-[calc(var(--cpx-sys-z-composer)+1)] tw:rounded-container tw:border-0 tw:bg-app-raised tw:shadow-floating tw:w-[calc(var(--sidebar-current-width)-var(--sidebar-rail-width)-16px)]'
+            : 'tw:relative tw:h-full tw:border-r tw:border-app-border-subtle tw:bg-app-main tw:w-[calc(var(--sidebar-current-width)-var(--sidebar-rail-width))]',
           `is-${shell.mode}`,
-          floating
-            ? 'is-floating tw:[&.is-resizing]:border-r-app-border-strong tw:has-[.sidebar-resizer:hover]:border-r-app-border-strong tw:has-[.sidebar-resizer:focus-visible]:border-r-app-border-strong tw:z-[calc(var(--cpx-sys-z-composer)+1)] tw:rounded-xl tw:border-r tw:border-app-border tw:bg-app-raised tw:shadow-lg'
-            : 'tw:z-dock',
+          floating ? 'is-floating tw:z-[calc(var(--cpx-sys-z-composer)+1)]' : 'tw:z-dock',
           !floating && docked ? 'is-docked tw:bg-app-main' : undefined,
           !floating && !docked ? 'tw:bg-app-sidebar' : undefined,
-          hidden ? 'is-collapsed tw:pointer-events-none' : undefined,
+          hidden ? 'is-collapsed tw:pointer-events-none tw:hidden' : undefined,
           resizing ? 'is-resizing' : undefined,
         )}
         animate={

@@ -143,9 +143,10 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 
 分级轻量投影与边缘高光（Dark 模式下自动反转透明度并增强对比度）：
 
-- 边缘高光与常驻表面：`--cpx-sys-shadow-resting` / `--cpx-sys-shadow-raised`（浅色 `inset 0 1px 0 rgba(255, 255, 255, 0.7)` / 深色 `inset 0 1px 0 rgba(238, 238, 238, 0.04)`）。
+- 常驻表面与凸起：`--cpx-sys-shadow-resting` / `--cpx-sys-shadow-raised`（设为 `none`，平直沉稳，不添加内阴影）。
+- 浮层与模态弹窗：`--cpx-sys-shadow-floating`（浅色 `0 16px 48px rgb(0 0 0 / 14%)`，深色 `0 16px 48px rgb(0 0 0 / 48%)`，暗色模式叠加 `inset 0 1px 0 rgba(255, 255, 255, 0.08)` 顶部微光高光）。
+- 悬浮 Composer 与高层级浮层：`--cpx-sys-shadow-prominent`（浅色 `0 24px 64px rgb(0 0 0 / 18%)`，深色 `0 24px 64px rgb(0 0 0 / 64%)`，暗色模式叠加 `inset 0 1px 0 rgba(255, 255, 255, 0.1)` 顶部微光高光）。
 - 悬浮控件与分段激活钮：`--cpx-sys-shadow-control`（默认使用 `none`，平直沉稳）。
-- 浮层与模态弹窗：`--cpx-sys-shadow-floating`（`0 16px 48px rgb(0 0 0 / 24%)`，纯黑半透明阴影杜绝光晕）。
 - 毛玻璃背景模糊：`--cpx-sys-blur-sm` (8px)、`--cpx-sys-blur-md` (16px)、`--cpx-sys-blur-lg` (24px)。
 
 全局层级固定为 `local < sticky < dock < composer < modal < popover < tooltip < toast`。`-1..5` 只允许在明确 stacking context 内表达局部兄弟顺序；其他值必须使用系统层级 Token。

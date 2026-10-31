@@ -27,7 +27,7 @@
 
   .ui-dialog-surface {
     background: var(--cpx-comp-modal-bg, var(--cpx-comp-surface-floating));
-    border: var(--cpx-comp-modal-border, var(--cpx-comp-surface-edge));
+    border: 0;
     box-shadow: var(--cpx-comp-modal-shadow, var(--cpx-sys-shadow-floating));
     border-radius: var(--cpx-comp-modal-radius, var(--cpx-sys-radius-prominent));
   }

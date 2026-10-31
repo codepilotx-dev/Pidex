@@ -335,7 +335,7 @@ export function MenuBar({
       onBlur={handleMenuBarBlur}
       onKeyDown={handleMenuBarKeyDown}
     >
-      <div className="menubar-titlebar tw:flex tw:h-chrome tw:w-full tw:items-center tw:justify-between tw:gap-2 tw:pl-2">
+      <div className="menubar-titlebar tw:flex tw:h-chrome tw:w-full tw:items-center tw:justify-between tw:gap-2 tw:pl-3">
         <div className="menubar-left tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:gap-1 tw:overflow-visible">
           <Button
             isIconOnly
