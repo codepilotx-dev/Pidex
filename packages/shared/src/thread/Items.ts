@@ -46,6 +46,12 @@ export const InputSchema = Schema.Struct({
   turnId: Schema.NullOr(Schema.String),
   content: Schema.String,
   skills: Schema.optional(Schema.Array(SkillSelectionSchema)),
+  goal: Schema.optional(
+    Schema.Struct({
+      objective: Schema.String,
+      tokenBudget: Schema.optional(Schema.NullOr(Schema.Number)),
+    }),
+  ),
   delivery: InputDeliverySchema,
   origin: Schema.optional(InputOriginSchema),
   mode: TaskModeSchema,

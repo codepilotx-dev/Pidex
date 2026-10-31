@@ -399,7 +399,12 @@ export function selectVisibleTurnEntries(
       : state.turnOrder
   for (const turnId of visibleTurnOrder) {
     const turn = state.turnsById.get(turnId)
-    if (!turn || queueTurnIds.has(turnId)) continue
+    if (
+      !turn ||
+      (turn.status === 'cancelled' && turn.startedAt === null) ||
+      queueTurnIds.has(turnId)
+    )
+      continue
     const userInputs = inputsByTurnId.get(turnId) ?? []
     const agents = agentsByTurnId.get(turnId) ?? []
     const items = filterItemsByAllowedAgents(itemsByTurnId.get(turnId) ?? [], allowedAgentIds)
@@ -735,7 +740,7 @@ function applyEnvelopePayload(
       state.pendingPlanApproval = null
       upsertTurn(state, envelope.payload.turn)
       state.inputsById.set(envelope.payload.input.id, envelope.payload.input)
-      state.queue.turnIds = state.queue.turnIds.filter((id) => id !== envelope.payload.turn.id)
+      removeQueuedTurn(state, envelope.payload.turn.id, envelope.payload.input.id)
       return
     case 'turn/completed':
     case 'turn/failed':
@@ -758,7 +763,7 @@ function applyEnvelopePayload(
           upsertItem(state, { ...item, status: 'cancelled' })
         }
       }
-      state.queue.turnIds = state.queue.turnIds.filter((id) => id !== envelope.payload.turn.id)
+      removeQueuedTurn(state, envelope.payload.turn.id, envelope.payload.turn.sourceInputID)
       return
     case 'turn/statusChanged': {
       const turn = state.turnsById.get(envelope.payload.turnId)
@@ -1235,6 +1240,14 @@ function questionFromPayload(payload: {
   }
 }
 
+function removeQueuedTurn(state: CanonicalThreadState, turnId?: string, inputId?: string): void {
+  const queuedTurnId = turnId ?? (inputId ? state.inputsById.get(inputId)?.turnId : null)
+  state.queue.turnIds = state.queue.turnIds.filter((id) => id !== queuedTurnId)
+  state.queue.inputIds = state.queue.inputIds.filter(
+    (id) => id !== inputId && (!queuedTurnId || state.inputsById.get(id)?.turnId !== queuedTurnId),
+  )
+}
+
 function applyQueueUpdate(
   state: CanonicalThreadState,
   payload: {
@@ -1242,6 +1255,9 @@ function applyQueueUpdate(
     inputs?: readonly Input[]
     version?: number
     pauseReason?: 'interrupted' | 'turn_failed' | null
+    action?: string
+    inputId?: string
+    turnId?: string
   },
 ): void {
   if (payload.turns) {
@@ -1253,6 +1269,17 @@ function applyQueueUpdate(
     for (const input of payload.inputs) state.inputsById.set(input.id, input)
   }
   if (payload.version !== undefined) state.queue.version = payload.version
+  if (payload.action === 'removed') {
+    const turnId =
+      payload.turnId ?? (payload.inputId ? state.inputsById.get(payload.inputId)?.turnId : null)
+    const turn = turnId ? state.turnsById.get(turnId) : undefined
+    if (turn) state.turnsById.set(turn.id, { ...turn, status: 'cancelled' })
+    for (const [id, input] of state.inputsById) {
+      if (id === payload.inputId || (turnId && input.turnId === turnId))
+        state.inputsById.set(id, { ...input, state: 'cancelled' })
+    }
+    removeQueuedTurn(state, payload.turnId, payload.inputId)
+  }
   if (payload.pauseReason !== undefined) state.queue.pauseReason = payload.pauseReason
 }
 
