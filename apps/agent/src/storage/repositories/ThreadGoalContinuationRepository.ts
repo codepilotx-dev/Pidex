@@ -35,6 +35,22 @@ export class ThreadGoalContinuationRepository {
     )
   }
 
+  canContinue(threadId: string, taskMode: TaskMode): boolean {
+    return (
+      taskMode === 'chat' &&
+      Boolean(
+        this.db.sqlite
+          .query(
+            'SELECT 1 FROM threads WHERE id = ? AND archived_at IS NULL AND queue_pause_reason IS NULL',
+          )
+          .get(threadId),
+      ) &&
+      !this.db.sqlite
+        .query("SELECT 1 FROM turns WHERE thread_id = ? AND status = 'queued' LIMIT 1")
+        .get(threadId)
+    )
+  }
+
   hasSourceTurn(sourceTurnId: string): boolean {
     return (
       this.available() &&

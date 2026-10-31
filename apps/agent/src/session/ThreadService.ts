@@ -51,6 +51,10 @@ import { TurnCoordinator, type TurnTerminalStatus } from './TurnCoordinator'
 import { TurnRunner } from './TurnRunner'
 import type { ThreadTitleService } from './ThreadTitleService'
 import type { SessionGroupService } from '../session-group/SessionGroupService'
+import {
+  QueuedGoalRepository,
+  type QueuedGoalIntent,
+} from '../storage/repositories/QueuedGoalRepository'
 import type { ThreadGoalService } from './ThreadGoalService'
 import type { ThreadForkWorkspaceService } from './fork/ThreadForkWorkspaceService'
 
@@ -803,7 +807,8 @@ export class ThreadService {
         .get(threadID) as { id: string } | null
       if (!source || this.db.repositories.threadGoalContinuations.hasSourceTurn(source.id)) return
       const previous = this.db.getTurnInput(source.id)
-      if (!previous) return
+      if (!previous || !this.db.repositories.threadGoalContinuations.canContinue(threadID, 'chat'))
+        return
       const created = this.db.transaction(() => {
         const value = this.db.createTurn(
           threadID,
@@ -812,7 +817,7 @@ export class ThreadService {
             model: previous.model,
             permissionConfig: previous.permissionConfig,
             strategy: 'queue',
-            taskMode: previous.taskMode,
+            taskMode: 'chat',
             origin: 'goal-continuation',
           },
           'queued',
@@ -990,6 +995,7 @@ export class ThreadService {
     attachmentIDs: readonly string[] = [],
     contextReferenceIDs: readonly string[] = [],
     queueMeta?: QueueMutationMeta,
+    goal?: QueuedGoalIntent,
   ) {
     return this.coordinator.exclusive(threadID, async () => {
       if (queueMeta) {
@@ -1003,6 +1009,20 @@ export class ThreadService {
       }
       const duplicate = this.duplicateAdmission(threadID, inputID, input.content, input.skills)
       if (duplicate) return duplicate
+      if (goal) {
+        if (!new QueuedGoalRepository(this.db).available() || !this.threadGoals)
+          throw new AgentError('GOAL_NOT_AVAILABLE', '当前 Agent 不支持目标排队', 409)
+        if (
+          input.taskMode !== 'chat' ||
+          !goal.objective.trim() ||
+          goal.objective.trim().length > 4000
+        )
+          throw new AgentError(
+            'INVALID_REQUEST',
+            'Goal 必须使用 Chat 模式且目标为 1–4000 字符',
+            400,
+          )
+      }
       await this.validateAdmission(threadID, input, attachmentIDs, contextReferenceIDs)
       this.validateInputItems(threadID, attachmentIDs, contextReferenceIDs)
       await this.validateInputAttachments(inputID, attachmentIDs, input.model)
@@ -1018,6 +1038,7 @@ export class ThreadService {
           inputID,
           ...(queueMeta ? { queueOperation: queueMeta } : {}),
         })
+        if (goal) new QueuedGoalRepository(this.db).put(inputID, goal)
         this.db.bindInputAttachments(inputID, attachmentIDs)
         this.localContextPaths?.repository.bindInput(threadID, inputID, contextReferenceIDs)
         return value
@@ -1291,8 +1312,18 @@ export class ThreadService {
     } catch {
       return
     }
-    new ThreadEditRepository(this.db).recordStart(threadID, turnID)
-    const started = this.db.startTurnExecution(turnID, input)
+    let started
+    try {
+      started = this.db.startTurnExecution(turnID, input, () => {
+        new ThreadEditRepository(this.db).recordStart(threadID, turnID)
+        return this.threadGoals?.applyInputInTransaction(threadID, input.id, input.taskMode)
+      })
+    } catch {
+      this.coordinator.release(threadID, turnID)
+      for (const event of this.db.recordQueuedStartFailure(turnID))
+        await Effect.runPromise(this.hub.publish(event))
+      return
+    }
     if (!started) {
       if (reservedHere) this.coordinator.release(threadID, turnID)
       return

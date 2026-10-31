@@ -1,3 +1,5 @@
+import { QueuedGoalRepository } from '../storage/repositories/QueuedGoalRepository'
+import type { TaskMode } from '../Domain'
 import { Effect } from 'effect'
 import type { ThreadGoal, ThreadGoalStatus } from '@pidex/shared/thread'
 import { AgentError, type EventEnvelope } from '../Domain'
@@ -49,7 +51,7 @@ export class ThreadGoalService {
   admitInTransaction(input: {
     threadId: string
     objective: string
-    tokenBudget?: number | null
+    tokenBudget?: number | null | undefined
     expectedVersion: number | null
   }): { goal: ThreadGoal; event: EventEnvelope } {
     this.requireThread(input.threadId)
@@ -73,6 +75,42 @@ export class ThreadGoalService {
         version: goal.version,
       }),
     }
+  }
+
+  applyInputInTransaction(
+    threadId: string,
+    inputId: string,
+    taskMode: TaskMode,
+  ): EventEnvelope | undefined {
+    const pending = new QueuedGoalRepository(this.db).get(inputId)
+    const current = this.repository().get(threadId)
+    if (pending) {
+      if (taskMode !== 'chat')
+        throw new AgentError('INVALID_REQUEST', 'Goal 必须使用 Chat 模式', 400)
+      const { event } = this.admitInTransaction({
+        threadId,
+        ...pending,
+        expectedVersion: current?.version ?? null,
+      })
+      new QueuedGoalRepository(this.db).remove(inputId)
+      return event
+    }
+    if (taskMode !== 'chat' && current?.status === 'active') {
+      const goal = this.repository().write({
+        threadId,
+        objective: current.objective,
+        status: 'paused',
+        tokenBudget: current.tokenBudget,
+        expectedVersion: current.version,
+      })
+      if (!goal) throw new AgentError('CONFLICT', 'Goal 已变化，请重试', 409)
+      return this.db.insertEvent(threadId, null, 'thread/goal/updated', {
+        threadId,
+        goal,
+        version: goal.version,
+      })
+    }
+    return undefined
   }
 
   get(threadId: string): { goal: ThreadGoal | null } {

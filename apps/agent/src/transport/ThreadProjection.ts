@@ -1,3 +1,4 @@
+import { QueuedGoalRepository } from '../storage/repositories/QueuedGoalRepository'
 import { contextCompactionItem } from '@pidex/session-view/context-compaction'
 import {
   activeTurnSql,
@@ -532,6 +533,9 @@ export class ThreadProjection {
       turnId: row.turn_id == null ? null : String(row.turn_id),
       content: String(row.content),
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
+      ...(new QueuedGoalRepository(this.db).get(String(row.id))
+        ? { goal: new QueuedGoalRepository(this.db).get(String(row.id))! }
+        : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
       mode: decodeStoredTaskMode(row.task_mode),
@@ -750,6 +754,9 @@ export class ThreadProjection {
       turnId: row.turn_id ? String(row.turn_id) : null,
       content: String(row.content),
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
+      ...(new QueuedGoalRepository(this.db).get(String(row.id))
+        ? { goal: new QueuedGoalRepository(this.db).get(String(row.id))! }
+        : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
       mode: decodeStoredTaskMode(row.task_mode),
@@ -1028,6 +1035,9 @@ export class ThreadProjection {
       turnId: row.turn_id == null ? null : String(row.turn_id),
       content: String(row.content),
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
+      ...(new QueuedGoalRepository(this.db).get(String(row.id))
+        ? { goal: new QueuedGoalRepository(this.db).get(String(row.id))! }
+        : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
       mode: decodeStoredTaskMode(row.task_mode),

@@ -1,3 +1,4 @@
+import { QueuedGoalRepository } from '../../../storage/repositories/QueuedGoalRepository'
 import { BrowserRepository } from '../../../storage/repositories/BrowserRepository'
 import { BrowserDataRepository } from '../../../storage/repositories/BrowserDataRepository'
 import { Capabilities, type ProtocolCapability } from '@pidex/agent-protocol'
@@ -67,6 +68,10 @@ export function filterAdvertisedCapabilities(
       (capability !== 'thread.creation-surface.v1' || creationSurface) &&
       ((capability !== 'plan.approval.v1' && capability !== 'plan.approval.fresh.v1') ||
         db.repositories.planApprovals.available()) &&
+      (capability !== 'queue.goal.v1' ||
+        (new QueuedGoalRepository(db).available() &&
+          db.repositories.threadGoals.available() &&
+          db.repositories.threadGoals.visibleGoalsValid())) &&
       (capability !== 'thread.goal.v1' ||
         (db.repositories.threadGoals.available() &&
           db.repositories.threadGoalLedger.available() &&

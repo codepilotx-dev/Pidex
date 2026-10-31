@@ -465,6 +465,7 @@ export const threadHandlers = {
               ? {}
               : { expectedVersion: request.expectedVersion }),
           },
+          request.goal,
         )
         const sequence = globalEventSequence(db)
         const turnStatus = db.getTurnStatus(submitted.turnID)

@@ -1,3 +1,4 @@
+import { QueuedGoalRepository } from './QueuedGoalRepository'
 import { Effect } from 'effect'
 import { encodeApprovalPolicy } from '@pidex/shared/thread'
 import { AgentError, decodeStoredTaskMode } from '../../Domain'
@@ -518,7 +519,11 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
     })
   }
 
-  startTurnExecution(turnID: string, input: SubmitMessage & { id: string }) {
+  startTurnExecution(
+    turnID: string,
+    input: SubmitMessage & { id: string },
+    beforeStart?: () => EventEnvelope | undefined,
+  ) {
     const timestamp = now()
     return this.transaction(() => {
       const row = this.sqlite
@@ -531,6 +536,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         )
         .run(timestamp, row.root_agent_id)
       if (claimed.changes === 0) return null
+      const goalEvent = beforeStart?.()
       const started = this.sqlite
         .query(
           "UPDATE turns SET status = 'running', started_at = COALESCE(started_at, ?), finished_at = NULL, updated_at = ? WHERE id = ? AND status = 'queued'",
@@ -546,6 +552,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       const agent = this.getAgentExecution(row.root_agent_id)!
       this.goalLedger().openInterval({ threadId: row.thread_id, agentId: agent.id })
       const events = [
+        ...(goalEvent ? [goalEvent] : []),
         this.insertEvent(row.thread_id, turnID, 'agent/upserted', { agent }),
         this.insertEvent(row.thread_id, turnID, 'turn/started', {
           turnId: turnID,
@@ -555,6 +562,25 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         }),
       ]
       return { agent, events }
+    })
+  }
+
+  recordQueuedStartFailure(turnID: string) {
+    return this.transaction(() => {
+      const row = this.sqlite
+        .query("SELECT thread_id, root_agent_id FROM turns WHERE id = ? AND status = 'queued'")
+        .get(turnID) as { thread_id: string; root_agent_id: string } | null
+      if (!row) return []
+      const agent = this.updateAgentStatus(
+        row.root_agent_id,
+        'queued',
+        '目标或模式设置失败，请刷新后重试队列',
+      )
+      const pause = this.pauseQueue(row.thread_id, 'turn_failed')
+      return [
+        this.insertEvent(row.thread_id, turnID, 'agent/upserted', { agent }),
+        ...(pause ? [pause] : []),
+      ]
     })
   }
 
@@ -725,7 +751,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         )
       ) {
         const previous = this.getTurnInput(input.turnID)
-        if (previous) {
+        if (previous && continuationRepository.canContinue(input.threadID, previous.taskMode)) {
           const continuationInputId = crypto.randomUUID()
           continuation = this.createTurn(
             input.threadID,
@@ -1137,6 +1163,12 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       if (!input || input.thread_id !== threadID)
         throw new AgentError('QUEUED_INPUT_NOT_FOUND', '排队消息不存在或已开始执行', 409)
       const timestamp = now()
+      const pendingGoal = new QueuedGoalRepository(this).get(inputID)
+      if (pendingGoal) {
+        if (!content.trim() || content.trim().length > 4000)
+          throw new AgentError('INVALID_REQUEST', 'Goal 目标为 1–4000 字符', 400)
+        new QueuedGoalRepository(this).put(inputID, { ...pendingGoal, objective: content.trim() })
+      }
       this.sqlite.query('UPDATE inputs SET content = ? WHERE id = ?').run(content, inputID)
       if (skills !== undefined)
         this.sqlite
@@ -1164,6 +1196,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       if (!input || input.thread_id !== threadID)
         throw new AgentError('QUEUED_INPUT_NOT_FOUND', '排队消息不存在或已开始执行', 409)
       const timestamp = now()
+      new QueuedGoalRepository(this).remove(inputID)
       this.sqlite.query("UPDATE inputs SET status = 'cancelled' WHERE id = ?").run(inputID)
       this.sqlite
         .query(

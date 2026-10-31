@@ -12,6 +12,7 @@ import {
   migrateThreadGoals45To46,
 } from '../repositories/ThreadGoalRepository'
 import { THREAD_GOAL_LEDGER_SCHEMA } from '../repositories/ThreadGoalLedgerRepository'
+import { QUEUED_GOAL_SCHEMA } from '../repositories/QueuedGoalRepository'
 import { THREAD_GOAL_CONTINUATION_SCHEMA } from '../repositories/ThreadGoalContinuationRepository'
 import { THREAD_BOOKMARK_SCHEMA } from '../repositories/ThreadBookmarkRepository'
 import { THREAD_PULL_REQUEST_SCHEMA } from '../repositories/ThreadPullRequestRepository'
@@ -173,6 +174,7 @@ export const FINAL_SCHEMA = [
   ...THREAD_GOAL_SCHEMA,
   ...THREAD_GOAL_LEDGER_SCHEMA,
   ...THREAD_GOAL_CONTINUATION_SCHEMA,
+  ...QUEUED_GOAL_SCHEMA,
   ...THREAD_BOOKMARK_SCHEMA,
   ...CONTEXT_LIFECYCLE_SCHEMA,
   ...THREAD_EDIT_SCHEMA,
@@ -1478,6 +1480,12 @@ class SchemaInitializer {
         ? {
             // prepareStorage rebuilds former mixed v17 databases. Keep the
             // sequential registry entry for already-split prerelease stores.
+            66: () =>
+              this.sqlite.exec(
+                QUEUED_GOAL_SCHEMA.map((sql) =>
+                  sql.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '),
+                ).join(';'),
+              ),
             17: () => undefined,
             18: () => migrateHistory18To19(this.sqlite),
             19: () => migrateHistory19To20(this.sqlite),
