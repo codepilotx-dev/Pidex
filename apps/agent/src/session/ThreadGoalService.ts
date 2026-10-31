@@ -10,7 +10,7 @@ import type { EventHub } from '../storage/events/EventHub'
 const OBJECTIVE_MAX_LENGTH = 4_000
 
 /** Default applied when a goal is created without an explicit budget. */
-export const DEFAULT_GOAL_TOKEN_BUDGET = 200_000
+export const DEFAULT_GOAL_TOKEN_BUDGET: number | null = null
 
 /**
  * Owns the single optional goal attached to a thread. Clearing archives the goal
@@ -21,7 +21,7 @@ export class ThreadGoalService {
   constructor(
     private readonly db: AgentDatabase,
     private readonly hub: EventHub,
-    private readonly defaultTokenBudget: () => number = () => DEFAULT_GOAL_TOKEN_BUDGET,
+    private readonly defaultTokenBudget: () => number | null = () => DEFAULT_GOAL_TOKEN_BUDGET,
   ) {}
 
   private repository() {
@@ -188,13 +188,6 @@ export class ThreadGoalService {
   }): Promise<{ threadId: string; goalId: string; clearedAt: number }> {
     this.requireThread(input.threadId)
     this.requireWritableStorage()
-    if (this.db.activeTurn(input.threadId)) {
-      throw new AgentError(
-        'GOAL_CLEAR_WHILE_RUNNING',
-        '任务正在执行，不能清除 Goal；可以暂停或完成 Goal',
-        409,
-      )
-    }
     const request = { threadId: input.threadId, expectedVersion: input.expectedVersion }
     const replay = this.repository().completedOperation(
       input.operationId,

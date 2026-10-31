@@ -266,7 +266,7 @@ describe('ThreadGoal ledger', () => {
         operationId: 'goal:set:default',
       })
     ).goal
-    expect(DEFAULT_GOAL_TOKEN_BUDGET).toBe(200_000)
+    expect(DEFAULT_GOAL_TOKEN_BUDGET).toBeNull()
     expect(defaulted.tokenBudget).toBe(DEFAULT_GOAL_TOKEN_BUDGET)
 
     const unlimited = (

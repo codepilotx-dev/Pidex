@@ -10,8 +10,8 @@ import { WorkspaceService } from '../src/workspace/WorkspaceService'
 import { threadGoalHandlers } from '../src/transport/rpc/handlers/ThreadGoal'
 import { removeFixturePaths } from './FixtureCleanup'
 
-for (const action of ['pause', 'stop'] as const) {
-  test(`运行中 ${action}：暂停 Goal 保留当前 Turn，显式停止仍中断`, async () => {
+for (const action of ['pause', 'stop', 'clear'] as const) {
+  test(`运行中 ${action}：暂停或清除 Goal 保留当前 Turn，显式停止中断并自动暂停 Goal`, async () => {
     const root = await mkdtemp(join(tmpdir(), 'pidex-goal-turn-'))
     const db = new AgentDatabase(join(root, 'agent.sqlite'))
     const workspace = await WorkspaceService.open(root)
@@ -125,21 +125,37 @@ for (const action of ['pause', 'stop'] as const) {
           )
         }),
       ])
-      await threadGoalHandlers.handle(
-        { dependencies: { threadGoals: goals, threads } } as never,
-        'thread/goal/set',
-        {
-          threadId: thread.id,
-          status: 'paused',
-          expectedVersion: goal.version,
-          operationId: 'pause',
-        },
-        {} as never,
-      )
-      expect(goals.get(thread.id).goal?.status).toBe('paused')
-      expect(signal.aborted).toBe(false)
-      expect(db.activeTurn(thread.id)?.id).toBe(turn.turnID)
-      expect(events).not.toContain('turn/interrupted')
+      if (action === 'pause') {
+        await threadGoalHandlers.handle(
+          { dependencies: { threadGoals: goals, threads } } as never,
+          'thread/goal/set',
+          {
+            threadId: thread.id,
+            status: 'paused',
+            expectedVersion: goal.version,
+            operationId: 'pause',
+          },
+          {} as never,
+        )
+        expect(goals.get(thread.id).goal?.status).toBe('paused')
+        expect(signal.aborted).toBe(false)
+        expect(db.activeTurn(thread.id)?.id).toBe(turn.turnID)
+        expect(events).not.toContain('turn/interrupted')
+      } else if (action === 'clear') {
+        await threadGoalHandlers.handle(
+          { dependencies: { threadGoals: goals, threads } } as never,
+          'thread/goal/clear',
+          {
+            threadId: thread.id,
+            expectedVersion: goal.version,
+            operationId: 'clear',
+          },
+          {} as never,
+        )
+        expect(goals.get(thread.id).goal).toBeNull()
+        expect(signal.aborted).toBe(false)
+        expect(db.activeTurn(thread.id)?.id).toBe(turn.turnID)
+      }
       const stopping = action === 'stop' ? threads.stop(thread.id, turn.turnID) : undefined
       if (stopping) {
         // stop takes the admission lock before aborting the live runtime.
@@ -150,11 +166,13 @@ for (const action of ['pause', 'stop'] as const) {
       await execution
       await stopping
       expect(db.sqlite.query('SELECT status FROM turns WHERE id = ?').get(turn.turnID)).toEqual({
-        status: action === 'pause' ? 'completed' : 'interrupted',
+        status: action === 'stop' ? 'interrupted' : 'completed',
       })
       expect(db.nextQueuedTurn(thread.id)).toBeNull()
       expect(runs).toBe(1)
-      expect(goals.get(thread.id).goal?.status).toBe('paused')
+      expect(goals.get(thread.id).goal?.status ?? null).toBe(
+        action === 'clear' ? null : 'paused',
+      )
     } finally {
       release()
       await execution

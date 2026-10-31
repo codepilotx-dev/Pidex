@@ -732,7 +732,25 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           })
         : null
       const continuationRepository = new ThreadGoalContinuationRepository(this)
-      const settledGoal = new ThreadGoalRepository(this).get(input.threadID)
+      let settledGoal = new ThreadGoalRepository(this).get(input.threadID)
+      let interruptedGoalEvent: EventEnvelope | null = null
+      if (input.status === 'interrupted' && settledGoal?.status === 'active') {
+        const pausedGoal = new ThreadGoalRepository(this).write({
+          threadId: input.threadID,
+          objective: settledGoal.objective,
+          status: 'paused',
+          tokenBudget: settledGoal.tokenBudget,
+          expectedVersion: settledGoal.version,
+        })
+        if (pausedGoal) {
+          settledGoal = pausedGoal
+          interruptedGoalEvent = this.insertEvent(input.threadID, null, 'thread/goal/updated', {
+            threadId: input.threadID,
+            goal: pausedGoal,
+            version: pausedGoal.version,
+          })
+        }
+      }
       let continuation: ReturnType<ExecutionRepositoryDatabase['createTurn']> | null = null
       if (
         input.status === 'completed' &&
@@ -802,6 +820,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           finishedAt: timestamp,
         }),
         ...(goalMeasurement ? [goalMeasurement.event] : []),
+        ...(interruptedGoalEvent ? [interruptedGoalEvent] : []),
         ...(continuation
           ? [continuation.event, continuation.queueEvent, continuation.agentEvent].filter(
               (event): event is EventEnvelope => event !== null,
