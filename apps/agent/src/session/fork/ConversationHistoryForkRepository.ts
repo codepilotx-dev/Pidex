@@ -9,6 +9,7 @@ import {
 import type { AgentDatabase } from '../../storage/database/AgentDatabase'
 import { parsePiSessionEntry } from '../../storage/pi-session/PiSessionEntry'
 import { TurnPiBoundaryRepository } from '../../storage/repositories/TurnPiBoundaryRepository'
+import { probeThreadContextLimitsStorageCapabilities } from '../../storage/database/StorageCapabilities'
 import type {
   SideChatRepository,
   StoredSideChat,
@@ -298,9 +299,7 @@ export class ConversationHistoryForkRepository {
           agentID: entry.targetAgentID,
         })
       }
-      this.db.transaction(() => {
-        for (const boundary of copiedBoundaries) this.boundaries.upsert(boundary)
-      })
+      this.upsertCopiedBoundaries(copiedBoundaries)
     } catch (cause) {
       this.rollbackHandoff(options.operationID)
       if (cause instanceof AgentError) throw cause
@@ -466,9 +465,7 @@ export class ConversationHistoryForkRepository {
           ...(entry.entryID ? { entryId: entry.entryID, position: 'at' as const } : {}),
         })
       }
-      this.db.transaction(() => {
-        for (const boundary of copiedBoundaries) this.boundaries.upsert(boundary)
-      })
+      this.upsertCopiedBoundaries(copiedBoundaries)
       if (options.visible) this.publishTarget(options.operationID, targetRootID)
     } catch (cause) {
       this.rollbackHiddenTarget(targetRootID)
@@ -1007,6 +1004,22 @@ export class ConversationHistoryForkRepository {
       row.queue_pause_reason = null
       row.updated_at = Date.now()
       this.insert('threads', row)
+      if (probeThreadContextLimitsStorageCapabilities(this.db.sqlite).threadContextLimits) {
+        const limitRow = this.db.sqlite
+          .query('SELECT max_context_tokens FROM thread_context_limits WHERE thread_id = ?')
+          .get(sourceID) as { max_context_tokens: number } | null
+        if (limitRow) {
+          this.db.sqlite
+            .query(
+              `INSERT INTO thread_context_limits (thread_id, max_context_tokens, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(thread_id) DO UPDATE SET
+                 max_context_tokens = excluded.max_context_tokens,
+                 updated_at = excluded.updated_at`,
+            )
+            .run(targetID, limitRow.max_context_tokens, Date.now())
+        }
+      }
     }
   }
 
@@ -1231,6 +1244,26 @@ export class ConversationHistoryForkRepository {
       if (targetSessionID)
         output.push({ turnID: targetTurnID, sessionID: targetSessionID, entryID: boundary.entryID })
     }
+  }
+
+  /**
+   * 目标 Pi 会话从最近一次压缩边界开始复制，压缩前的 entry 不在目标会话里，
+   * 这些 turn 的边界无法满足 (session_id, entry_id) 外键。只写回目标会话真实存在的边界，
+   * 避免整笔分叉因为历史边界被回滚成“当前聊天历史无法完整复制”。
+   */
+  private upsertCopiedBoundaries(
+    boundaries: ReadonlyArray<{ turnID: string; sessionID: string; entryID: string }>,
+  ) {
+    const exists = this.db.sqlite.query(
+      'SELECT 1 FROM pi_session_entries WHERE session_id = ? AND id = ?',
+    )
+    const applied: Array<{ turnID: string; sessionID: string; entryID: string }> = []
+    for (const boundary of boundaries) {
+      if (exists.get(boundary.sessionID, boundary.entryID)) applied.push(boundary)
+    }
+    this.db.transaction(() => {
+      for (const boundary of applied) this.boundaries.upsert(boundary)
+    })
   }
 
   private recomputeThreadSummary(threadID: string) {

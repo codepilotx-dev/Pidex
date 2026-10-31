@@ -658,6 +658,115 @@ describe('ConversationHistoryForkRepository', () => {
         .get(),
     ).toBeNull()
   })
+
+  test('压缩后的会话分叉跳过目标 Pi 会话里不存在的前置边界', async () => {
+    const db = await database()
+    const source = db.createThread('压缩后分叉来源')
+    const sessions = new SqlitePiSessionRepo(db)
+    const session = await sessions.create({
+      id: 'compact-source',
+      threadID: source.id,
+      agentID: 'compact-agent-1',
+    })
+    const storage = session.getStorage() as SqlitePiSessionStorage
+    const stamp = new Date(0).toISOString()
+    await storage.appendEntry({
+      type: 'message',
+      id: 'compact-q1',
+      parentId: null,
+      timestamp: stamp,
+      message: { role: 'user', content: 'question-compact-1', timestamp: 1 },
+    } as never)
+    await storage.appendEntry({
+      type: 'message',
+      id: 'compact-a1',
+      parentId: 'compact-q1',
+      timestamp: stamp,
+      message: assistant('compact-answer-1', 2),
+    } as never)
+    // 目标会话从压缩边界开始复制，压缩前的 entry 不会进入分叉会话。
+    await storage.appendEntry({
+      type: 'compaction',
+      id: 'compact-entry-1',
+      parentId: 'compact-a1',
+      timestamp: stamp,
+      summary: '压缩摘要',
+      firstKeptEntryId: null,
+      tokensBefore: 900,
+      retainedTail: true,
+    } as never)
+    await storage.appendEntry({
+      type: 'message',
+      id: 'compact-q2',
+      parentId: 'compact-entry-1',
+      timestamp: stamp,
+      message: { role: 'user', content: 'question-compact-2', timestamp: 3 },
+    } as never)
+    await storage.appendEntry({
+      type: 'message',
+      id: 'compact-a2',
+      parentId: 'compact-q2',
+      timestamp: stamp,
+      message: assistant('compact-answer-2', 4),
+    } as never)
+    storage.flush()
+    const firstAnswer = 'compact-a1'
+    const secondAnswer = 'compact-a2'
+
+    insertTurn(db, {
+      threadID: source.id,
+      turnID: 'compact-turn-1',
+      agentID: 'compact-agent-1',
+      sessionID: 'compact-source',
+      itemID: 'compact-item-1',
+      text: 'compact-answer-1',
+      createdAt: 10,
+    })
+    insertTurn(db, {
+      threadID: source.id,
+      turnID: 'compact-turn-2',
+      agentID: 'compact-agent-2',
+      sessionID: 'compact-source',
+      itemID: 'compact-item-2',
+      text: 'compact-answer-2',
+      createdAt: 20,
+    })
+    const boundaries = new TurnPiBoundaryRepository(db)
+    boundaries.upsert({ turnID: 'compact-turn-1', sessionID: 'compact-source', entryID: firstAnswer })
+    boundaries.upsert({
+      turnID: 'compact-turn-2',
+      sessionID: 'compact-source',
+      entryID: secondAnswer,
+    })
+    createOperation(db, {
+      operationID: 'compact-fork',
+      threadID: source.id,
+      turnID: 'compact-turn-2',
+      itemID: 'compact-item-2',
+    })
+
+    let id = 0
+    const history = new ConversationHistoryForkRepository(db, () => `compact-id-${++id}`)
+    const result = await history.forkThrough(source.id, {
+      operationID: 'compact-fork',
+      throughTurnID: 'compact-turn-2',
+      sourceItemID: 'compact-item-2',
+      targetWorkspace: { cwd: 'C:\\repo', roots: '[]', gitBranch: 'main' },
+      visible: false,
+    })
+
+    const targetTurns = db.sqlite
+      .query('SELECT id FROM turns WHERE thread_id = ?')
+      .all(result.targetThreadID) as Array<{ id: string }>
+    expect(targetTurns).toHaveLength(2)
+    const copiedBoundaries = db.sqlite
+      .query(
+        `SELECT turn_id FROM turn_pi_boundaries WHERE turn_id IN (${targetTurns.map(() => '?').join(',')})`,
+      )
+      .all(...targetTurns.map((turn) => turn.id)) as Array<{ turn_id: string }>
+    // 只有目标 Pi 会话真实保留的边界会被写回，压缩前的 turn 边界被跳过而不是整笔失败。
+    expect(copiedBoundaries).toHaveLength(1)
+  })
 })
 
 describe('PiEventAdapter turn boundary', () => {

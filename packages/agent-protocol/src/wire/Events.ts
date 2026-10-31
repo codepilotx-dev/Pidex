@@ -21,6 +21,7 @@ import {
   TurnStatusSchema,
 } from '@pidex/shared/thread'
 import { Schema } from 'effect'
+import { ModelRuntimePreferenceSchema } from '@pidex/shared'
 import { VisualizationPreviewSchema } from '@pidex/shared/visualization'
 import { defineEvent, type EventPayloadOf } from './Definition'
 import {
@@ -355,6 +356,22 @@ export const EventManifest = {
     version: 1,
     durability: 'durable',
     stream: 'thread',
+    capability: 'events.replay.v1',
+  }),
+  // 分叉/移交会创建并发布一个原本隐藏的目标会话：客户端必须刷新会话目录，
+  // 否则刚跳转过去时会话还未出现在目录里。payload 兼容消息分叉与 handoff 两种写入方。
+  'thread/forked': defineEvent({
+    payload: Schema.Struct({
+      sourceThreadId: OpaqueIDSchema,
+      threadId: Schema.optional(OpaqueIDSchema),
+      targetThreadId: Schema.optional(OpaqueIDSchema),
+      lastTurnId: Schema.optional(OpaqueIDSchema),
+      sourceItemId: Schema.optional(OpaqueIDSchema),
+      operationId: Schema.optional(OpaqueIDSchema),
+    }),
+    version: 1,
+    durability: 'durable',
+    stream: 'global',
     capability: 'events.replay.v1',
   }),
   'thread/prompt-settings/updated': defineEvent({
@@ -765,6 +782,14 @@ export const EventManifest = {
     stream: 'global',
     capability: 'provider.auth.pi.v1',
     reconcilesWith: 'provider/credential/list',
+  }),
+  'provider/modelPreferences/updated': defineEvent({
+    payload: Schema.Struct({ preference: ModelRuntimePreferenceSchema }),
+    version: 1,
+    durability: 'live',
+    stream: 'global',
+    capability: 'model.preferences.v1',
+    reconcilesWith: 'provider/modelPreferences/list',
   }),
   'auth/session/updated': defineEvent({
     payload: Schema.Struct({ session: AuthSessionSchema }),

@@ -10,6 +10,9 @@ export const THREAD_BOOKMARKS_UPDATED_EVENT = 'pidex-thread-bookmarks-updated'
 const THREAD_CATALOG_EVENT_TYPES: ReadonlySet<EventEnvelope['type']> = new Set([
   'thread/created',
   'thread/updated',
+  // 分叉完成会把目标会话从隐藏状态发布到目录，必须立即刷新，否则前端跳到
+  // 新会话时还可能拿到旧目录并报“找不到对话”。
+  'thread/forked',
   'thread/history/edited',
   'thread/settings/updated',
   // Goal state is part of the canonical thread projection, so a goal change must
