@@ -66,6 +66,7 @@ export type WorkbenchTabKind =
   | 'attachment-preview'
   | 'skill-preview'
   | 'plan'
+  | 'goal'
   | 'side-chat'
   | 'side-task'
   | 'terminal'
@@ -73,6 +74,7 @@ export type WorkbenchTabKind =
 export type WorkbenchTabDescriptor =
   | ProviderManagementTab
   | { id: 'review'; kind: 'review' }
+  | { id: 'goal'; kind: 'goal'; threadId?: string }
   | {
       id: `browser:${string}`
       kind: 'browser'

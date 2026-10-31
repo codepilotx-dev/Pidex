@@ -84,6 +84,17 @@ export const BUILTIN_COMPOSITE_VIEWS: Record<WorkbenchTabKind, CompositeViewDefi
     isSingleton: false,
     canFloat: true,
   },
+  goal: {
+    id: 'workbench.view.goal',
+    kind: 'goal',
+    title: '目标',
+    defaultLocation: 'right',
+    allowedLocations: ['sidebar', 'right', 'floating'],
+    canMove: true,
+    canClose: true,
+    isSingleton: true,
+    canFloat: true,
+  },
   plan: {
     id: 'workbench.view.plan',
     kind: 'plan',

@@ -1,4 +1,5 @@
 import { ConversationItemContext } from './ConversationItemContext.js'
+import { formatGoalDurationCompact } from '../composer/ComposerGoalRow.js'
 import { ModelSwitchDivider } from './ModelSwitchDivider.js'
 import { ReasoningWaitingIndicator } from './ReasoningWaitingIndicator.js'
 import { cx } from '../../../utils/Cx.js'
@@ -771,6 +772,7 @@ function CanonicalConversationTurnComponent({
       disclosureId?: string
       presentation?: CanonicalItemRendererProps['presentation']
       showAssistantActions?: boolean
+      goalAchievedDuration?: string | null
     } = {},
   ) => (
     <CanonicalItemRenderer
@@ -792,6 +794,7 @@ function CanonicalConversationTurnComponent({
       latestPlanItemId={latestPlanItemId}
       pendingPlanItemId={pendingPlanItemId}
       showAssistantActions={options.showAssistantActions}
+      goalAchievedDuration={options.goalAchievedDuration}
       threadId={threadId}
     />
   )
@@ -819,6 +822,25 @@ function CanonicalConversationTurnComponent({
       presentation,
     })
   }
+  const goalAchievedDuration = React.useMemo(() => {
+    for (const item of entry.items) {
+      if (item.type === 'tool' && item.tool === 'update_goal') {
+        const inputStatus = (item.input as { status?: string } | null)?.status
+        if (inputStatus === 'complete' && item.state === 'completed') {
+          if (typeof item.output === 'string') {
+            try {
+              const data = JSON.parse(item.output)
+              if (typeof data?.timeUsedSeconds === 'number') {
+                return formatGoalDurationCompact(data.timeUsedSeconds)
+              }
+            } catch {}
+          }
+          return '0s'
+        }
+      }
+    }
+    return null
+  }, [entry.items])
   const active = isActiveTurn(entry.turn.status)
   const historicalDeliveries = !isSubagent
     ? entry.processItems.filter(
@@ -944,7 +966,13 @@ function CanonicalConversationTurnComponent({
             block.kind === 'visualization' ? (
               <VisualizationView item={block.item} threadId={threadId} key={block.id} />
             ) : block.kind === 'assistant' ? (
-              block.items.map((item) => renderItem(item, { showAssistantActions: true }))
+              block.items.map((item, index) =>
+                renderItem(item, {
+                  showAssistantActions: true,
+                  goalAchievedDuration:
+                    index === block.items.length - 1 ? goalAchievedDuration : null,
+                }),
+              )
             ) : null,
           )}
           {historicalDeliveries.map((item) =>

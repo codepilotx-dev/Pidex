@@ -104,14 +104,6 @@ const AGENT_STATUS_META_LABELS: Record<string, string> = {
   error: '错误',
 }
 
-const GOAL_STATUS_LABELS: Record<string, string> = {
-  active: '进行中',
-  paused: '已暂停',
-  blocked: '受阻',
-  'usage-limited': '用量受限',
-  'budget-limited': '预算受限',
-  complete: '已完成',
-}
 
 export function ThreadSummaryPopover({
   children,
@@ -503,49 +495,6 @@ export function ThreadSummaryPanel({
         </ThreadSummarySection>
       ) : null}
 
-      {model.goal ? (
-        <ThreadSummarySection
-          expanded={isSectionExpanded('goal')}
-          id="goal"
-          meta={
-            <GoalHeaderAction
-              goal={model.goal}
-              onGoalPause={onGoalPause}
-              onGoalResume={onGoalResume}
-            />
-          }
-          title="目标"
-          onToggle={toggleSection}
-        >
-          <div className="thread-summary-goal tw:grid tw:gap-1 tw:px-2 tw:py-1">
-            <p className="thread-summary-goal__objective tw:m-0 tw:min-w-0 tw:type-body tw:line-clamp-3 tw:whitespace-pre-wrap">
-              {model.goal.objective}
-            </p>
-            <small className="tw:flex tw:flex-wrap tw:items-center tw:gap-x-2 tw:gap-y-1 tw:text-app-text-meta tw:type-caption">
-              <span
-                className={cx(
-                  'tw:whitespace-nowrap',
-                  model.goal.status === 'complete' && 'tw:text-app-success',
-                  model.goal.status === 'paused' && 'tw:text-app-warning',
-                )}
-              >
-                {GOAL_STATUS_LABELS[model.goal.status] ?? model.goal.status}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span className="tw:tabular-nums">
-                累计 {formatGoalDuration(model.goal.timeUsedSeconds)}
-              </span>
-              <span aria-hidden="true">·</span>
-              <span className="tw:tabular-nums">
-                {model.goal.tokenBudget !== null
-                  ? `${formatGoalNumber(model.goal.tokensUsed)} / ${formatGoalNumber(model.goal.tokenBudget)} tokens`
-                  : `${formatGoalNumber(model.goal.tokensUsed)} tokens`}
-              </span>
-            </small>
-          </div>
-        </ThreadSummarySection>
-      ) : null}
-
       {model.agents.length ? (
         <ThreadSummarySection
           collapsedSummary={<AgentSectionSummary agents={model.agents} />}
@@ -708,39 +657,6 @@ export function ThreadSummaryPanel({
   )
 }
 
-function GoalHeaderAction({
-  goal,
-  onGoalPause,
-  onGoalResume,
-}: {
-  goal: ThreadSummaryViewModel['goal']
-  onGoalPause?: () => void | Promise<void>
-  onGoalResume?: () => void | Promise<void>
-}): React.ReactNode {
-  if (!goal) return null
-  const paused = goal.status === 'paused'
-  const action = paused ? onGoalResume : onGoalPause
-  if (!action || (goal.status !== 'active' && !paused)) return null
-  const label = paused ? '恢复目标' : '暂停目标'
-  return (
-    <Tooltip content={label}>
-      <button
-        aria-label={label}
-        className="tw:inline-flex tw:size-6 tw:items-center tw:justify-center tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text-meta tw:[font:inherit] tw:cursor-pointer tw:outline-none tw:hover:bg-app-hover tw:hover:text-app-text tw:focus-visible:outline-1 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus tw:[&>svg]:size-icon-sm"
-        type="button"
-        onClick={() => {
-          void Promise.resolve(action()).catch(() => undefined)
-        }}
-      >
-        {paused ? (
-          <Play aria-hidden="true" size={APP_ICON_SIZES.sm} />
-        ) : (
-          <Pause aria-hidden="true" size={APP_ICON_SIZES.sm} />
-        )}
-      </button>
-    </Tooltip>
-  )
-}
 
 function AgentSectionMeta({
   agents,
@@ -1057,19 +973,7 @@ function subagentStatusLabel(status: string): string {
   return '运行中'
 }
 
-function formatGoalDuration(timeUsedSeconds: number): string {
-  const totalSeconds = Math.max(0, Math.floor(timeUsedSeconds))
-  const hours = Math.floor(totalSeconds / 3600)
-  const minutes = Math.floor((totalSeconds % 3600) / 60)
-  const seconds = totalSeconds % 60
-  if (hours > 0) return `${hours}小时${minutes}分`
-  if (minutes > 0) return `${minutes}分${seconds}秒`
-  return `${seconds}秒`
-}
 
-function formatGoalNumber(value: number): string {
-  return new Intl.NumberFormat('en-US').format(Math.max(0, Math.floor(value)))
-}
 
 function formatByteSize(sizeBytes: number): string {
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return '0 B'

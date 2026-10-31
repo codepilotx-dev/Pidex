@@ -173,6 +173,8 @@ export type DesktopComposerProps = {
   onError?: (message: string) => void
   /** Current route path used to decide whether a failed creation should navigate back. */
   readPathname?: () => string
+  onGoalEdit?: (objective: string) => Promise<void>
+  onOpenGoalPanel?: () => void
   onGoalPause?: () => void | Promise<void>
   onGoalResume?: () => void | Promise<void>
   onGoalComplete?: () => void | Promise<void>
@@ -266,6 +268,8 @@ export function DesktopComposer({
   onFollowUpRemove,
   onFollowUpResume,
   threadGoal,
+  onGoalEdit,
+  onOpenGoalPanel,
   onGoalPause,
   onGoalResume,
   onGoalComplete,
@@ -275,11 +279,6 @@ export function DesktopComposer({
   const effectiveCapabilities = { ...capabilities, dictation: capabilities?.dictation ?? true }
   const [goalConfirmation, setGoalConfirmation] = useState<string | null>(null)
   const goalConfirmationResolver = useRef<((confirmed: boolean) => void) | null>(null)
-  const goalEditSubmission = useRef<{
-    threadId: string
-    objective: string
-    inputId: string
-  } | null>(null)
   useEffect(
     () => () => {
       goalConfirmationResolver.current?.(false)
@@ -325,8 +324,14 @@ export function DesktopComposer({
     unsupportedAttachmentReason,
   } = useDesktopComposerController({
     confirmGoalSubmission: async (objective, hasAttachments) => {
-      const currentGoal = routedSessionId ? await desktopClient.getSessionGoal(routedSessionId) : threadGoal
-      if (!currentGoal || (currentGoal.objective === objective && !hasAttachments))
+      const currentGoal = routedSessionId
+        ? await desktopClient.getSessionGoal(routedSessionId)
+        : threadGoal
+      if (
+        !currentGoal ||
+        currentGoal.status === 'complete' ||
+        (currentGoal.objective === objective && !hasAttachments)
+      )
         return Promise.resolve(true)
       return new Promise<boolean>((resolve) => {
         goalConfirmationResolver.current = resolve
@@ -550,21 +555,17 @@ export function DesktopComposer({
         onFollowUpRemove={onFollowUpRemove}
         onFollowUpResume={onFollowUpResume}
         threadGoal={threadGoal}
+        onOpenGoalPanel={onOpenGoalPanel}
         onGoalEdit={async (objective) => {
+          if (onGoalEdit) {
+            await onGoalEdit(objective)
+            return
+          }
           if (!routedSessionId) throw new Error('当前任务不可用')
-          const previousEdit = goalEditSubmission.current
-          const edit =
-            previousEdit?.threadId === routedSessionId && previousEdit.objective === objective
-              ? previousEdit
-              : { threadId: routedSessionId, objective, inputId: crypto.randomUUID() }
-          goalEditSubmission.current = edit
-          const result = await submitToSession(
-            routedSessionId,
-            { text: objective, taskMode: 'chat', goal: { objective } },
-            { inputId: edit.inputId, goal: { objective }, propagateError: true },
-          )
-          if (!result) throw new Error('目标提交失败')
-          goalEditSubmission.current = null
+          await desktopClient.setSessionGoal(routedSessionId, {
+            objective,
+            status: 'active',
+          })
         }}
         onGoalPause={onGoalPause}
         onGoalResume={onGoalResume}
@@ -573,13 +574,13 @@ export function DesktopComposer({
       />
       <ConfirmationDialog
         open={goalConfirmation !== null}
-        title="替换目标？"
+        title="替换当前目标吗？"
         description={
           <>
             该输入开始执行时替换当前目标。<p>{goalConfirmation}</p>
           </>
         }
-        actionLabel="确认提交"
+        actionLabel="替换目标"
         onCancel={() => settleGoalConfirmation(false)}
         onAction={() => settleGoalConfirmation(true)}
       />

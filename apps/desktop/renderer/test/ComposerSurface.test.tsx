@@ -449,7 +449,8 @@ describe('composer surface variant', () => {
     expect(html).toContain('data-composer-utility-item="goal"')
     expect(html).toContain('目标')
     expect(html).toContain(GOAL.objective)
-    expect(html).toContain('aria-label="目标操作"')
+    expect(html).toContain('aria-label="清除目标"')
+    expect(html).toContain('aria-label="编辑目标"')
     expect(html).not.toContain(WORKSPACE.name)
 
     const complete = renderToStaticMarkup(
@@ -786,8 +787,8 @@ function canSubmitInput(
 }
 
 
-test('目标超预算保留实际用量并明确标注，指标允许换行', () => {
+test('目标超预算保留实际用量并展示紧凑指标', () => {
   const html = renderToStaticMarkup(<ComposerCard {...composerCardProps({ placement: 'thread', threadGoal: { ...GOAL, tokensUsed: 879000, tokenBudget: 200000, status: 'budget-limited' } })} />)
-  expect(html).toContain('87.9万 / 20万 tokens（已超预算）')
-  expect(html).toContain('tw:flex-wrap')
+  expect(html).toContain('87.9万 / 20万')
+  expect(html).toContain('目标受限')
 })

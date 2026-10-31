@@ -19,6 +19,7 @@ import {
   RotateCcw,
   Send,
   Shield,
+  Target,
   UserRoundPlus,
   type LucideIcon,
 } from 'lucide-react'
@@ -216,6 +217,7 @@ export type CanonicalItemRendererProps = {
   /** 当前待审阅计划项。 */
   pendingPlanItemId?: string | null
   showAssistantActions?: boolean
+  goalAchievedDuration?: string | null
   /** @default "standalone" — "grouped" applies tighter spacing inside a process group. */
   presentation?: 'standalone' | 'grouped'
   /** Thread scope used to resolve tool artifact content. */
@@ -497,6 +499,7 @@ function areCanonicalItemRendererPropsEqual(
     previous.latestPlanItemId === next.latestPlanItemId &&
     previous.pendingPlanItemId === next.pendingPlanItemId &&
     previous.showAssistantActions === next.showAssistantActions &&
+    previous.goalAchievedDuration === next.goalAchievedDuration &&
     previous.disclosure === next.disclosure &&
     previous.onApplyPatch === next.onApplyPatch &&
     previous.onOpenPatchReview === next.onOpenPatchReview &&
@@ -534,13 +537,19 @@ function CanonicalItemRendererContentComponent({
   latestPlanItemId = null,
   pendingPlanItemId = null,
   showAssistantActions = false,
+  goalAchievedDuration,
   presentation = 'standalone',
   threadId,
 }: CanonicalItemRendererContentProps): React.ReactNode {
   switch (item.type) {
     case 'text':
       return (
-        <TextItemView item={item} showAssistantActions={showAssistantActions} threadId={threadId} />
+        <TextItemView
+          item={item}
+          showAssistantActions={showAssistantActions}
+          goalAchievedDuration={goalAchievedDuration}
+          threadId={threadId}
+        />
       )
     case 'reasoning':
       return <ReasoningItemView item={item} disclosure={disclosure} threadId={threadId} />
@@ -591,10 +600,12 @@ function CanonicalItemRendererContentComponent({
 function TextItemView({
   item,
   showAssistantActions,
+  goalAchievedDuration,
   threadId,
 }: {
   item: ItemOf<'text'>
   showAssistantActions: boolean
+  goalAchievedDuration?: string | null
   threadId?: string
 }): React.ReactNode {
   const {
@@ -630,31 +641,43 @@ function TextItemView({
           text={text}
         />
       </ConversationMarkdownErrorBoundary>
-      {showAssistantActions && item.status !== 'streaming' ? (
-        <div className="canonical-message-actions canonical-message-actions--assistant">
-          <CopyButton text={item.text} />
-          {item.placement === 'result' && item.status === 'completed' && onForkFromMessage ? (
-            <Tooltip content="在新聊天中继续">
-              <Button
-                isIconOnly
-                aria-label="在新聊天中继续"
-                color="ghostSecondary"
-                size="xs"
-                title="在新聊天中继续"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  onForkFromMessage({ itemId: item.id, turnId: item.turnId })
-                }}
-              >
-                <Split
-                  aria-hidden="true"
-                  size={APP_ICON_SIZE}
-                  strokeWidth={APP_ICON_STROKE_WIDTH}
-                />
-              </Button>
-            </Tooltip>
+      {(showAssistantActions && item.status !== 'streaming') || goalAchievedDuration ? (
+        <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:mt-1 tw:min-h-[26px]">
+          {goalAchievedDuration ? (
+            <span className="canonical-goal-achieved tw:inline-flex tw:items-center tw:gap-1.5 tw:text-app-text-meta tw:type-caption">
+              <Target aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+              <span>已在 {goalAchievedDuration} 内达成目标</span>
+            </span>
+          ) : (
+            <span />
+          )}
+          {showAssistantActions && item.status !== 'streaming' ? (
+            <div className="canonical-message-actions canonical-message-actions--assistant tw:mt-0">
+              <CopyButton text={item.text} />
+              {item.placement === 'result' && item.status === 'completed' && onForkFromMessage ? (
+                <Tooltip content="在新聊天中继续">
+                  <Button
+                    isIconOnly
+                    aria-label="在新聊天中继续"
+                    color="ghostSecondary"
+                    size="xs"
+                    title="在新聊天中继续"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      onForkFromMessage({ itemId: item.id, turnId: item.turnId })
+                    }}
+                  >
+                    <Split
+                      aria-hidden="true"
+                      size={APP_ICON_SIZE}
+                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                    />
+                  </Button>
+                </Tooltip>
+              ) : null}
+              <MessageSentTime sentAt={item.createdAt} />
+            </div>
           ) : null}
-          <MessageSentTime sentAt={item.createdAt} />
         </div>
       ) : null}
     </article>

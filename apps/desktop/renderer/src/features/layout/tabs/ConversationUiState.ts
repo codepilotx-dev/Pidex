@@ -173,7 +173,8 @@ export function omitEphemeralSideChatTabs(workbench: WorkbenchTabsState): Workbe
         ([, tab]) =>
           tab?.kind === 'side-chat' ||
           tab?.kind === 'attachment-preview' ||
-          tab?.kind === 'skill-preview',
+          tab?.kind === 'skill-preview' ||
+          tab?.kind === 'goal',
       )
       .map(([tabId]) => tabId),
   )
@@ -268,6 +269,7 @@ export function transferConversationUiStateForHandoff(input: {
           tab?.kind !== 'side-chat' &&
           tab?.kind !== 'attachment-preview' &&
           tab?.kind !== 'skill-preview' &&
+          tab?.kind !== 'goal' &&
           tab?.kind !== 'side-task' &&
           tab?.kind !== 'file-preview',
       ),

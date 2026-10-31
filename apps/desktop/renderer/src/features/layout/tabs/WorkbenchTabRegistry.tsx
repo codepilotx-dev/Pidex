@@ -15,6 +15,7 @@ import {
   SquarePlus,
   SquareTerminal,
   Settings2,
+  Target,
 } from 'lucide-react'
 import type {
   DesktopBrowserState,
@@ -26,6 +27,7 @@ import type {
   DesktopModelSelection,
   DesktopReviewView,
   DesktopSessionStatus,
+  DesktopThreadGoal,
   DesktopWorkspace,
 } from '../../../../shared/Types.js'
 import type { ReviewTabUiState } from './ConversationUiState.js'
@@ -50,6 +52,7 @@ import { WorkspaceReviewSidebar } from '../../review/workspace/WorkspaceReviewSi
 import {
   RightDockFilePreviewPanel,
   RightDockFilesPanel,
+  RightDockGoalPanel,
   RightDockPlanPanel,
   RightDockSkillPreviewPanel,
 } from '../dock/RightDockPanels.js'
@@ -173,6 +176,10 @@ export type WorkbenchTabRenderContext = {
       error: Error,
       phase: FileDocumentLoadErrorPhase,
     ) => void
+  }
+  goal?: {
+    goal: DesktopThreadGoal | null
+    onSaveGoal?: (objective: string) => Promise<void>
   }
   planContentByEventId: Readonly<Record<string, string>>
   plan: {
@@ -366,6 +373,21 @@ const definitions: readonly WorkbenchTabDefinition[] = [
           }}
           onAddComposerFiles={context.files.onAddComposerFiles}
           onAppendComposerText={context.files.onAppendComposerText}
+        />
+      ) : null,
+  },
+  {
+    kind: 'goal',
+    label: '目标',
+    icon: <Target size={iconSize} />,
+    launcher: false,
+    lifecycle: 'unmount-when-hidden',
+    getTitle: () => '目标',
+    render: (tab, context) =>
+      tab.kind === 'goal' ? (
+        <RightDockGoalPanel
+          goal={context.goal?.goal ?? null}
+          onSaveGoal={context.goal?.onSaveGoal}
         />
       ) : null,
   },

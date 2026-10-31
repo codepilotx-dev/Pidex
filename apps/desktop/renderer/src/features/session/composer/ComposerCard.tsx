@@ -373,6 +373,7 @@ type Props = {
   onFollowUpRemove?: (followUpId: string) => void | Promise<void>
   onFollowUpResume?: () => void
   onGoalEdit?: (objective: string) => Promise<void>
+  onOpenGoalPanel?: () => void
   threadGoal?: DesktopThreadGoal | null
   onGoalPause?: () => void | Promise<void>
   onGoalResume?: () => void | Promise<void>
@@ -504,6 +505,7 @@ export function ComposerCard({
   onFollowUpResume,
   threadGoal,
   onGoalEdit,
+  onOpenGoalPanel,
   onGoalPause,
   onGoalResume,
   onGoalComplete,
@@ -1436,6 +1438,7 @@ export function ComposerCard({
                 <ComposerGoalRow
                   goal={activeThreadGoal}
                   onEdit={onGoalEdit}
+                  onOpenGoalPanel={onOpenGoalPanel}
                   sessionBusy={sessionStatus === 'running' || sessionStatus === 'waiting'}
                   onPause={onGoalPause}
                   onResume={onGoalResume}

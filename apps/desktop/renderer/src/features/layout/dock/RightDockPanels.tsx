@@ -16,7 +16,7 @@ import {
   useTransform,
   type MotionValue,
 } from 'motion/react'
-import type { DesktopFileEntry, DesktopWorkspace } from '../../../../shared/Types.js'
+import type { DesktopFileEntry, DesktopThreadGoal, DesktopWorkspace } from '../../../../shared/Types.js'
 import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
 import { Button } from '../../../components/ui/Button.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
@@ -150,6 +150,110 @@ export function RightDockSkillPreviewPanel({ tab }: { tab: SkillPreviewTab }): R
         </pre>
       </article>
     </ScrollArea>
+  )
+}
+
+function formatRelativeUpdatedLabel(updatedAt: number): string {
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000))
+  if (diffSeconds < 60) return '刚刚更新'
+  if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} 分钟前更新`
+  if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} 小时前更新`
+  return `${Math.floor(diffSeconds / 86400)} 天前更新`
+}
+
+export function RightDockGoalPanel({
+  goal,
+  onSaveGoal,
+}: {
+  goal: DesktopThreadGoal | null
+  onSaveGoal?: (objective: string) => Promise<void>
+}): React.ReactNode {
+  const savedObjective = goal?.objective ?? ''
+  const [draft, setDraft] = useState(savedObjective)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const previousSavedRef = useRef(savedObjective)
+
+  useEffect(() => {
+    const previousSaved = previousSavedRef.current
+    previousSavedRef.current = savedObjective
+    if (draft === previousSaved) {
+      setDraft(savedObjective)
+    }
+  }, [draft, savedObjective])
+
+  const trimmedDraft = draft.trim()
+  const isDirty = trimmedDraft !== savedObjective.trim()
+  const canSave = Boolean(onSaveGoal && !saving && isDirty && trimmedDraft.length > 0 && trimmedDraft.length <= 4000)
+
+  async function handleSave(): Promise<void> {
+    if (!canSave || !onSaveGoal) return
+    setSaving(true)
+    setError(null)
+    try {
+      await onSaveGoal(trimmedDraft)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : '目标更新失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleReset(): void {
+    setError(null)
+    setDraft(savedObjective)
+  }
+
+  return (
+    <div
+      aria-label="目标"
+      className="right-dock-goal-panel tw:flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:bg-app-dock"
+    >
+      <div className="tw:px-4 tw:pt-3 tw:pb-1 tw:text-app-text-meta tw:type-caption">
+        {goal ? formatRelativeUpdatedLabel(goal.updatedAt) : '尚未设置目标'}
+      </div>
+      <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:px-4 tw:py-2">
+        <textarea
+          aria-label="目标内容"
+          value={draft}
+          maxLength={4000}
+          disabled={saving || !onSaveGoal}
+          placeholder="定义或优化此线程应达成的目标。"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              void handleSave()
+            }
+          }}
+          className="tw:min-h-0 tw:w-full tw:flex-1 tw:resize-none tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text tw:type-body tw:outline-none tw:placeholder:text-app-text-meta"
+        />
+      </div>
+      <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:border-t tw:border-app-border-subtle tw:px-4 tw:py-2.5">
+        {error ? (
+          <span role="alert" className="tw:min-w-0 tw:truncate tw:text-app-danger tw:type-caption">
+            {error}
+          </span>
+        ) : (
+          <div />
+        )}
+        <div className="tw:flex tw:shrink-0 tw:items-center tw:gap-1.5">
+          {isDirty && !saving ? (
+            <Button color="ghostSecondary" size="sm" onClick={handleReset}>
+              还原
+            </Button>
+          ) : null}
+          <Button
+            color="primary"
+            size="sm"
+            disabled={!canSave}
+            onClick={() => void handleSave()}
+          >
+            {saving ? '正在保存…' : '保存'}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 

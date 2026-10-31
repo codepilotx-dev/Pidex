@@ -1216,6 +1216,27 @@ export function DesktopLayout(): React.ReactNode {
     () => handleSetGoalStatus('complete'),
     [handleSetGoalStatus],
   )
+  const handleGoalEdit = useCallback(
+    async (objective: string): Promise<void> => {
+      if (!sessionId) throw new Error('当前任务不可用')
+      try {
+        await desktopClient.setSessionGoal(sessionId, { objective, status: 'active' })
+      } catch (cause) {
+        setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      }
+    },
+    [sessionId],
+  )
+  const handleOpenGoalDock = useCallback((): void => {
+    openRightDockTab({ id: 'goal', kind: 'goal', ...(sessionId ? { threadId: sessionId } : {}) })
+  }, [openRightDockTab, sessionId])
+  useEffect(() => {
+    const currentGoal = activeSessionItem?.threadGoal ?? null
+    if ((!currentGoal || currentGoal.status === 'complete') && rightDockState.tabIds.includes('goal')) {
+      closePanelTab('right', 'goal')
+    }
+  }, [activeSessionItem?.threadGoal, closePanelTab, rightDockState.tabIds])
   const handleGoalClear = useCallback(async (): Promise<void> => {
     if (!sessionId) return
     try {
@@ -2715,6 +2736,8 @@ export function DesktopLayout(): React.ReactNode {
       )
     },
     [
+      activeSessionItem?.threadGoal,
+      handleGoalEdit,
       handleFileLoadError,
       workbenchPanelState.tabsById,
       workbenchPanelState.right.tabIds,
@@ -3320,6 +3343,10 @@ export function DesktopLayout(): React.ReactNode {
           handleFileLoadError({ error, phase, tab, target: 'right' }),
       },
       planContentByEventId,
+      goal: {
+        goal: activeSessionItem?.threadGoal ?? null,
+        onSaveGoal: handleGoalEdit,
+      },
       plan: { onOpenPlan: handleOpenPlanDock },
       sideChat: {
         activeTabId: null,
@@ -3394,6 +3421,8 @@ export function DesktopLayout(): React.ReactNode {
       handleOpenBrowser,
       handleCopyMarkdownFileReferenceContents,
       handleCreateBranch,
+      activeSessionItem?.threadGoal,
+      handleGoalEdit,
       handleFileLoadError,
       handleOpenFileFromBrowser,
       handleOpenFilePreview,
@@ -3701,6 +3730,8 @@ export function DesktopLayout(): React.ReactNode {
       handleGoalResume,
       handleGoalComplete,
       handleGoalClear,
+      handleGoalEdit,
+      handleOpenGoalDock,
       session.reloadModelSelection,
       refreshProviderState,
       selectedProviderID,
