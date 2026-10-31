@@ -243,8 +243,6 @@ export function useFloatingPosition({
   useLayoutEffect(() => {
     if (isOpen) {
       updatePosition()
-    } else {
-      setCoords(null)
     }
   }, [isOpen, updatePosition])
 

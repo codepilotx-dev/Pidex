@@ -197,6 +197,8 @@ function ChatInputDropdownSurface({
             : DROPDOWN_CLASS
       }
       data-popover-size={size}
+      data-side={side}
+      data-align={suggestion ? 'center' : 'start'}
       data-presence={isPresent ? 'present' : 'exiting'}
       data-theme-component="dropdown-surface"
       exit={{

@@ -123,6 +123,64 @@ export function useTopLayer(ref: RefObject<HTMLElement | null>, open: boolean) {
   return topLayer ? ('manual' as const) : undefined
 }
 
+export function useExitPresence(
+  open: boolean,
+  contentRef: RefObject<HTMLElement | null>,
+): boolean {
+  const [present, setPresent] = useState(open)
+
+  useLayoutEffect(() => {
+    if (open) {
+      setPresent(true)
+      return
+    }
+
+    if (!present) return
+
+    const el = contentRef.current
+    if (typeof window === 'undefined' || !el) {
+      setPresent(false)
+      return
+    }
+
+    const reducedMotion =
+      document.documentElement.dataset.reduceMotion === 'on' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (reducedMotion) {
+      setPresent(false)
+      return
+    }
+
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      setPresent(false)
+    }
+
+    const onTransitionEnd = (e: TransitionEvent) => {
+      if (e.target === el) finish()
+    }
+
+    const onAnimationEnd = (e: AnimationEvent) => {
+      if (e.target === el) finish()
+    }
+
+    el.addEventListener('transitionend', onTransitionEnd)
+    el.addEventListener('animationend', onAnimationEnd)
+    const timer = setTimeout(finish, 250)
+
+    return () => {
+      el.removeEventListener('transitionend', onTransitionEnd)
+      el.removeEventListener('animationend', onAnimationEnd)
+      clearTimeout(timer)
+    }
+  }, [open, present, contentRef])
+
+  return present
+}
+
 export interface DismissEvents {
   onPointerDownOutside?: (event: PointerEvent) => void
   onFocusOutside?: (event: FocusEvent) => void

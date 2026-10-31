@@ -19,6 +19,7 @@ import {
   mergeRefs,
   useControllableState,
   useDismissableLayer,
+  useExitPresence,
   useFocusReturn,
   useTopLayer,
   type DismissEvents,
@@ -50,6 +51,8 @@ export type MenuRootProps = {
 
 const MenuContext = createContext<{
   open: boolean
+  present: boolean
+  setPresent: (present: boolean) => void
   setOpen: (open: boolean) => void
   triggerRef: React.MutableRefObject<HTMLElement | null>
   submenuRefs: React.RefObject<HTMLElement | null>[]
@@ -75,6 +78,7 @@ export function useMenuLevelCoordinator(): LevelCoordinator {
 
 export function MenuRoot({ children, open, defaultOpen = false, onOpenChange }: MenuRootProps) {
   const [activeOpen, setOpen] = useControllableState(open, defaultOpen, onOpenChange)
+  const [present, setPresent] = useState(activeOpen)
   const triggerRef = useRef<HTMLElement | null>(null)
   const submenuRefs = useRef<React.RefObject<HTMLElement | null>[]>([])
   const [point, setPoint] = useState({ x: 0, y: 0 })
@@ -95,6 +99,8 @@ export function MenuRoot({ children, open, defaultOpen = false, onOpenChange }: 
     <MenuContext.Provider
       value={{
         open: activeOpen,
+        present: activeOpen || present,
+        setPresent,
         setOpen,
         triggerRef,
         submenuRefs: submenuRefs.current,
@@ -109,7 +115,7 @@ export function MenuRoot({ children, open, defaultOpen = false, onOpenChange }: 
 
 function MenuPortal(props: PortalProps) {
   const root = useMenu()
-  return root.open ? <Portal {...props} anchor={root.triggerRef.current} /> : null
+  return root.present ? <Portal {...props} anchor={root.triggerRef.current} /> : null
 }
 
 export function useMenuSurface(ref: React.RefObject<HTMLElement | null>) {
@@ -555,7 +561,8 @@ export function MenuSubContent({
   const parentCoord = useMenuLevelCoordinator()
   const contentRef = useRef<HTMLDivElement | null>(null)
   const root = useMenuSurface(contentRef)
-  const popover = useTopLayer(contentRef, root.open && sub.open)
+  const present = useExitPresence(root.open && sub.open, contentRef)
+  const popover = useTopLayer(contentRef, present)
   const { coords, floatingStyle } = useFloatingPosition({
     anchor: sub.triggerRef,
     contentRef,
@@ -565,9 +572,8 @@ export function MenuSubContent({
     collisionPadding,
   })
 
-  const side = (coords?.actualPlacement.split('-')[0] === 'left' ? 'left' : 'right') as
-    | 'left'
-    | 'right'
+  const [rawSide, actualAlign = 'start'] = (coords?.actualPlacement ?? 'right-start').split('-')
+  const side = (rawSide === 'left' ? 'left' : 'right') as 'left' | 'right'
 
   useLayoutEffect(() => {
     sub.contentRef.current = contentRef.current
@@ -623,7 +629,7 @@ export function MenuSubContent({
         ?.focus()
   }, [root.open, sub.open, sub.pointerOpened])
 
-  if (!root.open || !sub.open) return null
+  if (!present) return null
 
   return (
     <div
@@ -632,8 +638,9 @@ export function MenuSubContent({
       popover={popover}
       role="menu"
       tabIndex={-1}
-      data-state="open"
+      data-state={root.open && sub.open ? 'open' : 'closed'}
       data-side={side}
+      data-align={actualAlign}
       data-popover-size={size}
       data-theme-component="dropdown-surface"
       data-menu-subcontent=""
@@ -747,21 +754,29 @@ export function ContextContent({
   }) {
   const contentRef = useRef<HTMLDivElement | null>(null)
   const root = useMenuSurface(contentRef)
-  const popover = useTopLayer(contentRef, root.open)
+  const present = useExitPresence(root.open, contentRef)
+  useLayoutEffect(() => {
+    root.setPresent(present)
+  }, [present, root])
+  const popover = useTopLayer(contentRef, present)
   useFocusReturn(root.open, contentRef, root.triggerRef, onCloseAutoFocus)
   const [point, setPoint] = useState(root.point)
+  const [placement, setPlacement] = useState<{
+    side: 'top' | 'bottom'
+    align: 'start' | 'end'
+  }>({ side: 'bottom', align: 'start' })
   useLayoutEffect(() => {
     if (!root.open || !contentRef.current) return
     const rect = contentRef.current.getBoundingClientRect()
+    const maxX = window.innerWidth - rect.width - collisionPadding
+    const maxY = window.innerHeight - rect.height - collisionPadding
     setPoint({
-      x: Math.max(
-        collisionPadding,
-        Math.min(root.point.x, window.innerWidth - rect.width - collisionPadding),
-      ),
-      y: Math.max(
-        collisionPadding,
-        Math.min(root.point.y, window.innerHeight - rect.height - collisionPadding),
-      ),
+      x: Math.max(collisionPadding, Math.min(root.point.x, maxX)),
+      y: Math.max(collisionPadding, Math.min(root.point.y, maxY)),
+    })
+    setPlacement({
+      side: root.point.y > maxY ? 'top' : 'bottom',
+      align: root.point.x > maxX ? 'end' : 'start',
     })
     contentRef.current
       .querySelector<HTMLElement>('[role^="menuitem"]:not([aria-disabled="true"])')
@@ -777,7 +792,7 @@ export function ContextContent({
     onInteractOutside,
     onEscapeKeyDown,
   })
-  if (!root.open) return null
+  if (!present) return null
   return (
     <div
       {...props}
@@ -785,7 +800,9 @@ export function ContextContent({
       popover={popover}
       role="menu"
       tabIndex={-1}
-      data-state="open"
+      data-state={root.open ? 'open' : 'closed'}
+      data-side={placement.side}
+      data-align={placement.align}
       data-popover-size={size}
       data-theme-component="dropdown-surface"
       className={`popover-surface tw:p-1.5 ${className}`}

@@ -5,10 +5,9 @@
  * - Floating surfaces enter through @starting-style transitions; tooltip,
  *   dialog and exit animations keep shared keyframes. Duration and easing
  *   come from --cpx-sys-motion-* / --cpx-sys-ease-*.
- * - Transitions and keyframes share --cpx-floating-offset-x/y, so the
- *   per-side offsets live next to them.
- * - transform-origin consumes Radix's runtime --radix-*-transform-origin
- *   variables, which exist only on the portalled element at runtime.
+ * - Floating menus and popovers scale from the trigger edge/corner mapped via
+ *   runtime data-side + data-align attributes (or Radix's runtime
+ *   --radix-*-transform-origin variable for menubar content).
  * The semantic class names stay because features and visual tests query them.
  */
 @layer primitives {
@@ -18,33 +17,54 @@
   .permission-select-content[data-side],
   .appearance-color-popover[data-side],
   .thread-summary-popover[data-side] {
-    --cpx-floating-offset-x: 0px;
-    --cpx-floating-offset-y: 0px;
-
     transform-origin: var(--radix-menubar-content-transform-origin, center);
 
     &[data-side='top'] {
       transform-origin: bottom center;
-      --cpx-floating-offset-y: var(--cpx-sys-space-1);
+
+      &[data-align='start'] {
+        transform-origin: bottom left;
+      }
+
+      &[data-align='end'] {
+        transform-origin: bottom right;
+      }
     }
 
     &[data-side='bottom'] {
       transform-origin: top center;
-      --cpx-floating-offset-y: calc(var(--cpx-sys-space-1) * -1);
+
+      &[data-align='start'] {
+        transform-origin: top left;
+      }
+
+      &[data-align='end'] {
+        transform-origin: top right;
+      }
     }
 
     &[data-side='left'] {
       transform-origin: center right;
-      --cpx-floating-offset-x: var(--cpx-sys-space-1);
+
+      &[data-align='start'] {
+        transform-origin: top right;
+      }
+
+      &[data-align='end'] {
+        transform-origin: bottom right;
+      }
     }
 
     &[data-side='right'] {
       transform-origin: center left;
-      --cpx-floating-offset-x: calc(var(--cpx-sys-space-1) * -1);
-    }
 
-    &[data-state='closed'] {
-      animation: radix-floating-surface-out var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in);
+      &[data-align='start'] {
+        transform-origin: top left;
+      }
+
+      &[data-align='end'] {
+        transform-origin: bottom left;
+      }
     }
   }
 
@@ -57,15 +77,35 @@
       .thread-summary-popover
     ):not(.ui-dialog-surface):not([data-warm-handoff='true'])[data-state='open'] {
     opacity: 1;
-    translate: 0 0;
+    scale: 1;
     transition:
       opacity var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out),
-      translate var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out);
+      scale var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out),
+      overlay var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out) allow-discrete,
+      display var(--cpx-sys-motion-enter) var(--cpx-sys-ease-out) allow-discrete;
 
     @starting-style {
       opacity: 0;
-      translate: var(--cpx-floating-offset-x, 0px) var(--cpx-floating-offset-y, 0px);
+      scale: 0.95;
     }
+  }
+
+  :is(
+      .popover-surface,
+      .sidebar-context-menu-content,
+      .settings-dropdown-content,
+      .permission-select-content,
+      .appearance-color-popover,
+      .thread-summary-popover
+    ):not(.ui-dialog-surface):not([data-warm-handoff='true'])[data-state='closed'] {
+    opacity: 0;
+    scale: 0.95;
+    pointer-events: none;
+    transition:
+      opacity var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in),
+      scale var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in),
+      overlay var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in) allow-discrete,
+      display var(--cpx-sys-motion-exit) var(--cpx-sys-ease-in) allow-discrete;
   }
 
   .ui-dialog-backdrop[data-state='open'] {
