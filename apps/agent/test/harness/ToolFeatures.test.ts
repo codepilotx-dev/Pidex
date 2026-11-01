@@ -192,7 +192,8 @@ describe('AgentHarness turn composition', () => {
       model: Object.assign(setup.faux.getModel(), { maxInputTokens: 1 }) })
     const result = await harness.prompt('a message exceeding the configured one-token input budget')
     expect(result.stopReason).toBe('error')
-    expect(result.errorMessage).toContain('最大输入 Token')
+    expect(result.errorMessage).toContain('已接近上下文预算')
+    expect(result.errorMessage).toContain('本次请求未发送')
   })
 
   test('resolves an async system prompt at each turn boundary, never in the constructor', async () => {

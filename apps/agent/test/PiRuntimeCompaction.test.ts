@@ -8,6 +8,7 @@ import {
   type Context,
 } from '@earendil-works/pi-ai'
 import { AgentError } from '../src/Domain'
+import { AgentRuntimeService } from '../src/orchestration/AgentRuntimeService'
 import { executeHarnessRun } from '../src/orchestration/pi/ExecuteHarnessRun'
 import { frozenDeferredEnvelope } from '../src/tool/ToolExecutor'
 
@@ -138,6 +139,7 @@ async function createRuntime(input: {
       run: (request: HarnessRuntimeRequest) => executeHarnessRun(runtimeOptions, request),
       dispose: () => active?.harness.abort() ?? Promise.resolve(),
       compact: () => active!.compact('manual'),
+      harness: () => active!.harness,
     },
     request,
     compacted,
@@ -210,6 +212,75 @@ describe('Harness runtime provider errors', () => {
 })
 
 describe('Harness runtime context compaction', () => {
+  test('idle manual compaction reads the latest 1K budget after a completed 20K turn', async () => {
+    let requests = 0
+    const setup = await createRuntime({
+      history: 'x'.repeat(20_000),
+      responses: [
+        () => { requests += 1; return fauxAssistantMessage('completed at 20K') },
+        () => { requests += 1; return fauxAssistantMessage('summary under the original budget') },
+      ],
+    })
+    let status: string | undefined
+    const service = new AgentRuntimeService({
+      db: { repositories: { threads: { getThreadSettings: () => ({ maxContextTokens: 1_000 }) } } } as never,
+      hub: {} as never, models: {} as never, toolExecutor: {} as never,
+      contextCompaction: {
+        begin: () => {},
+        finish: (_thread: string, next: string) => { status = next },
+      } as never,
+    })
+    try {
+      await setup.runtime.run({ ...setup.request, maxContextTokens: 20_000 })
+      const active = (service as unknown as { active: Map<string, unknown> }).active
+      active.set(setup.request.threadID, { harness: setup.runtime.harness() })
+      await expect(service.compact(setup.request.threadID)).rejects.toMatchObject({ code: 'compaction' })
+      expect(status).toBe('failed')
+      expect(requests).toBe(1)
+      expect((await setup.session.getBranch()).filter(entry => entry.type === 'compaction')).toHaveLength(0)
+      // The idle override must not rewrite the completed turn's frozen configuration.
+      await setup.runtime.compact()
+      expect(requests).toBe(2)
+    } finally {
+      await setup.runtime.dispose()
+    }
+  })
+
+  test('explicit budget blocks oversized summary requests before any provider call', async () => {
+    let requests = 0
+    const setup = await createRuntime({
+      history: 'x'.repeat(100_000), shouldAutoCompact: true,
+      responses: [() => { requests += 1; return fauxAssistantMessage('must not send') }],
+    })
+    try {
+      await expect(setup.runtime.run({ ...setup.request, maxContextTokens: 10_000 }))
+        .rejects.toMatchObject({ code: 'CONTEXT_BUDGET_EXCEEDED', status: 413 })
+      expect(requests).toBe(0)
+      expect((await setup.session.getBranch()).filter(entry => entry.type === 'compaction')).toHaveLength(0)
+    } finally {
+      await setup.runtime.dispose()
+    }
+  })
+
+  test('explicit budget compresses early and continues without raising the budget', async () => {
+    let requests = 0
+    const setup = await createRuntime({
+      history: 'x'.repeat(34_000), shouldAutoCompact: true,
+      responses: [
+        () => { requests += 1; return fauxAssistantMessage('compact summary') },
+        () => { requests += 1; return fauxAssistantMessage('within budget') },
+      ],
+    })
+    try {
+      await expect(setup.runtime.run({ ...setup.request, maxContextTokens: 10_000 }))
+        .resolves.toMatchObject({ output: 'within budget' })
+      expect(setup.compacted).toEqual(['automatic'])
+      expect(requests).toBe(2)
+    } finally {
+      await setup.runtime.dispose()
+    }
+  })
+
   test('32K 模型的首份摘要超预算时收紧摘要与保留量后重试，仍只写入成功摘要', async () => {
     const summaryBudgets: number[] = []
     const setup = await createRuntime({

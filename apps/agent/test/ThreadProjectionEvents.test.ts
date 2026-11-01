@@ -1,3 +1,4 @@
+import { ContextCompactionService } from '../src/context/ContextCompactionService'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -57,10 +58,11 @@ const permission = {
 const decodeFromStorage = (
   event: EventEnvelope,
   projection: ThreadProjection,
+  streamId = 'thread',
 ): WireEventEnvelope => {
   const notification = buildEventNextNotification({
     subscriptionId: 'sub-test',
-    streamId: 'thread',
+    streamId,
     event,
     projection,
   })
@@ -1067,4 +1069,75 @@ test('已发布的正文增量在完成前中止仍可从持久快照恢复，�
       .query("SELECT count(*) AS n FROM events WHERE turn_id = ? AND method = 'turn/completed'")
       .get(turn.turnID),
   ).toEqual({ n: 0 })
+})
+
+test('手动压缩失败按操作恢复为会话节点，不依赖最新状态提示', async () => {
+  const { db, projection } = await fixture()
+  const thread = db.createThread('手动压缩节点')
+  const turn = seedTurn(db, thread.id)
+  for (const [index, status] of (['failed', 'completed'] as const).entries()) {
+    db.repositories.context.saveOperation({
+      operationId: `manual-${index}`,
+      threadId: thread.id,
+      sessionId: null,
+      agentId: null,
+      trigger: 'manual',
+      phase: 'settled',
+      status,
+      compactionId: null,
+      reason: status === 'failed' ? 'budget-exceeded' : null,
+      createdAt: Date.now() + index,
+      updatedAt: Date.now() + index,
+    })
+  }
+  db.claimTurnExecution(turn.turnID)
+  const snapshot = new ThreadProjection(db).snapshot(thread.id)!
+  expect(projection.historyPage(thread.id)?.turns.flatMap((bundle) => bundle.items)).toEqual([
+    ...snapshot.items,
+  ])
+  expect(snapshot.items.filter((item) => item.type === 'activity')).toMatchObject([
+    {
+      id: 'activity:context-compression-operation:manual-0',
+      turnId: turn.turnID,
+      status: 'interrupted',
+    },
+    {
+      id: 'activity:context-compression-operation:manual-1',
+      turnId: turn.turnID,
+      status: 'completed',
+    },
+  ])
+  expect(projection.snapshot(thread.id)?.items).toEqual([...snapshot.items])
+})
+
+test.each([false, true])('压缩发起归属经过真实事件与历史恢复一致（空闲：%s）', async (idle) => {
+  const { db, projection } = await fixture()
+  const thread = db.createThread('压缩归属')
+  const turn = seedTurn(db, thread.id)
+  db.startTurnExecution(turn.turnID, { ...turn.input, id: turn.inputID })
+  if (idle)
+    db.finalizeTurn({
+      threadID: thread.id,
+      turnID: turn.turnID,
+      agentID: turn.agentID,
+      status: 'completed',
+    })
+  const page = new ThreadReadViewRepository(db).history(thread.id, {})
+  const service = new ContextCompactionService(db)
+  const operation = service.request(thread.id, 'manual-anchor')
+  expect(operation.turnId).toBe(idle ? null : turn.turnID)
+  service.finish(thread.id, 'failed', 'budget-exceeded')
+  const events = db
+    .eventsAfter(page.streamPosition.sequence)
+    .filter((event) => event.method === 'context/compactionUpdated')
+  const wire = events.map((event) => decodeFromStorage(event, projection, thread.id))
+  expect(wire).toHaveLength(2)
+  expect(wire.at(-1)?.payload).toMatchObject({
+    operation: { turnId: operation.turnId, status: 'failed' },
+  })
+  const restored = new ThreadReadViewRepository(db).history(thread.id, {})
+  const items = restored.turns.flatMap((bundle) => bundle.items)
+  expect(items).toHaveLength(1)
+  expect(items[0]).toMatchObject({ title: '压缩已中断', compaction: { standalone: idle } })
+  expect(new ThreadProjection(db).snapshot(thread.id)?.items).toEqual(items)
 })

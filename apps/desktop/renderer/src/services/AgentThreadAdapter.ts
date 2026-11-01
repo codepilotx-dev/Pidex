@@ -121,6 +121,7 @@ export function agentThreadListItemToDesktopSnapshot(
     workspace: threadWorkspaceToDesktopWorkspace(thread.workspace, project),
     settings: {
       permissionConfig: thread.settings.permissionConfig,
+      maxContextTokens: thread.settings.maxContextTokens ?? null,
       collaborationMode: item.collaborationMode,
       planModeActive: item.planModeActive,
       grillModeActive: item.grillModeActive,
@@ -212,6 +213,7 @@ export function agentThreadSnapshotToDesktop(
     workspace,
     settings: {
       permissionConfig: snapshot.thread.settings.permissionConfig,
+      maxContextTokens: snapshot.thread.settings.maxContextTokens ?? null,
       collaborationMode: item.collaborationMode,
       planModeActive,
       grillModeActive,

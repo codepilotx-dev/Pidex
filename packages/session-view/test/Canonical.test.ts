@@ -2052,3 +2052,72 @@ test('context budgets and operation state survive replay and snapshot hydration'
   const restored = createCanonicalThreadState({ ...page([]), context: updated.context! })
   expect(restored.context).toEqual(updated.context)
 })
+
+test('手动压缩生命周期在同一个会话节点更新，多次操作保留各自节点', () => {
+  const active = turn('manual-turn')
+  let state = createCanonicalThreadState(
+    page([{ turn: active, inputs: [], messages: [], agents: [], items: [], approvals: [] }]),
+  )
+  const operation = {
+    operationId: 'manual-one',
+    threadId: state.thread.id,
+    sessionId: null,
+    agentId: null,
+    trigger: 'manual' as const,
+    phase: 'settled' as const,
+    status: 'queued' as const,
+    compactionId: null,
+    reason: null,
+    createdAt: 10,
+    updatedAt: 10,
+  }
+  for (const [index, status] of (['queued', 'running', 'failed'] as const).entries()) {
+    state = applyThreadEnvelope(
+      state,
+      durable(index + 11, 'context/compactionUpdated', { operation: { ...operation, status } }),
+    )
+    expect(state.itemsById.size).toBe(1)
+    expect(selectRenderTurnEntries(state)[0].processItems[0]).toMatchObject({
+      id: 'activity:context-compression-operation:manual-one',
+      turnId: active.id,
+      status: status === 'failed' ? 'interrupted' : 'running',
+    })
+  }
+  const second = {
+    ...operation,
+    operationId: 'manual-two',
+    status: 'running' as const,
+    createdAt: 20,
+  }
+  state = applyThreadEnvelope(
+    state,
+    durable(14, 'context/compactionUpdated', { operation: second }),
+  )
+  state = applyThreadEnvelope(
+    state,
+    durable(15, 'context/compacted', {
+      compactionId: 'result-two',
+      trigger: 'manual',
+      beforeCount: 10,
+      afterCount: 2,
+      beforeTokens: 20000,
+      afterTokens: 10000,
+      targetTokens: 16000,
+      baselineVersion: 1,
+      usageSampleId: 'sample',
+    }),
+  )
+  state = applyThreadEnvelope(
+    state,
+    durable(16, 'context/compactionUpdated', {
+      operation: { ...second, status: 'completed', compactionId: 'result-two' },
+    }),
+  )
+  expect(state.itemsById.size).toBe(2)
+  expect(state.itemsById.get('activity:context-compression-operation:manual-two')).toMatchObject({
+    title: '上下文已压缩',
+    status: 'completed',
+    contextTokens: 10000,
+    createdAt: 20,
+  })
+})

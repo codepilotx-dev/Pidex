@@ -1,3 +1,6 @@
+import { createCanonicalThreadState, selectRenderTurnEntries } from '@pidex/session-view'
+import { decodeEventEnvelope } from '@pidex/agent-protocol'
+import { CanonicalThreadIngestionCoordinator } from '../src/features/session/timeline/CanonicalThreadIngestionCoordinator.js'
 import { describe, expect, test } from 'bun:test'
 import type React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -1165,4 +1168,237 @@ test('Radix 强制展开不覆盖保存选择，结束后恢复且内层分组�
   expect(store.getSnapshot('process-group:turn:group')).toBe(false)
   store.setExpanded('process-group:turn:group', true)
   expect(group(true)).toContain('内层标记')
+})
+
+test.each(['idle-manual', 'active-manual', 'automatic', 'reactive'] as const)(
+  '真实会话组件按 Codex 归属显示压缩，默认折叠不吞空闲手动节点：%s',
+  async (scenario) => {
+    const idle = scenario === 'idle-manual'
+    const manual = scenario === 'idle-manual' || scenario === 'active-manual'
+    const config = {
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'user',
+    } as const
+    const turn = {
+      id: 'compression-turn',
+      threadId: 'compression-thread',
+      sourceInputID: 'input',
+      status: idle ? ('completed' as const) : ('running' as const),
+      mode: 'chat' as const,
+      model: { providerID: 'openai', id: 'test' },
+      permissionConfig: config,
+      rootAgentId: 'agent',
+      mergedInputIDs: [],
+      startedAt: 1,
+      finishedAt: idle ? 2 : null,
+      elapsedSeconds: 1,
+      error: null,
+    }
+    const answer = {
+      id: 'answer',
+      messageID: 'message',
+      turnId: turn.id,
+      agentId: 'agent',
+      type: 'text',
+      placement: 'result',
+      phase: 'final_answer',
+      status: 'completed',
+      text: '原有回复',
+      createdAt: 2,
+    } as const
+    const state = createCanonicalThreadState({
+      thread: {
+        id: turn.threadId,
+        title: 'test',
+        projectID: null,
+        gitBranch: null,
+        settings: { taskMode: 'chat', permissionConfig: config },
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      subagents: [],
+      olderCursor: null,
+      hasOlder: false,
+      streamPosition: { streamId: turn.threadId, sequence: 0 },
+      turns: [
+        {
+          turn,
+          inputs: [],
+          agents: [],
+          messages: [],
+          approvals: [],
+          items: [
+            {
+              id: 'thought',
+              messageID: 'thought-message',
+              turnId: turn.id,
+              agentId: 'agent',
+              type: 'reasoning',
+              text: '原有思考',
+              status: 'completed',
+              createdAt: 1,
+            },
+            ...(idle ? [answer] : []),
+          ],
+        },
+      ],
+    })
+    const coordinator = new CanonicalThreadIngestionCoordinator({
+      threadId: turn.threadId,
+      initialState: state,
+    })
+    const operation = {
+      operationId: 'operation',
+      threadId: turn.threadId,
+      turnId: idle ? null : turn.id,
+      sessionId: null,
+      agentId: 'agent',
+      trigger: manual
+        ? ('manual' as const)
+        : scenario === 'reactive'
+          ? ('reactive' as const)
+          : ('automatic' as const),
+      phase: 'settled' as const,
+      status: 'running' as const,
+      compactionId: null,
+      reason: null,
+      createdAt: Date.now() - 11_000,
+      updatedAt: Date.now(),
+    }
+    const envelope = (sequence: number, type: string, payload: unknown) =>
+      decodeEventEnvelope({
+        eventId: String(sequence),
+        streamId: turn.threadId,
+        threadId: turn.threadId,
+        type,
+        version: type === 'turn/completed' ? 2 : 1,
+        durability: 'durable',
+        sequence,
+        occurredAt: Date.now(),
+        payload,
+      })
+    const render = () =>
+      renderToStaticMarkup(
+        <CanonicalTestProviders>
+          {selectRenderTurnEntries(coordinator.getSnapshot()!).map((entry) => (
+            <CanonicalConversationTurn
+              key={entry.id}
+              entry={entry}
+              disclosureState={disclosureStore()}
+              dockedPlanItemId={null}
+              onOpenPlanInRightDock={() => {}}
+              onOpenSubagent={() => {}}
+            />
+          ))}
+        </CanonicalTestProviders>,
+      )
+    try {
+      await coordinator.deliverBatch([envelope(1, 'context/compactionUpdated', { operation })])
+      const running = render()
+      if (idle) {
+        expect(running).toContain('正在压缩上下文 · 可能需要几分钟')
+        expect(running.indexOf('原有回复')).toBeLessThan(running.indexOf('正在压缩上下文'))
+        expect(selectRenderTurnEntries(coordinator.getSnapshot()!)).toHaveLength(2)
+      } else {
+        expect(running).toContain('正在压缩上下文')
+        expect(selectRenderTurnEntries(coordinator.getSnapshot()!)).toHaveLength(1)
+      }
+      await coordinator.deliverBatch([
+        envelope(2, 'context/compacted', {
+          compactionId: 'result',
+          trigger: operation.trigger,
+          beforeCount: 3,
+          afterCount: 1,
+          beforeTokens: 20_000,
+          afterTokens: 10_000,
+          targetTokens: 16_000,
+          baselineVersion: 1,
+          usageSampleId: 'sample',
+        }),
+        envelope(3, 'context/compactionUpdated', {
+          operation: { ...operation, status: 'completed', compactionId: 'result' },
+        }),
+      ])
+      if (!idle)
+        await coordinator.deliverBatch([
+          envelope(4, 'item/completed', { item: answer }),
+          envelope(5, 'turn/completed', {
+            turn: { ...turn, status: 'completed', finishedAt: Date.now() },
+          }),
+        ])
+      expect(coordinator.getSnapshot()!.itemsById.size).toBe(3)
+      const completed = render()
+      if (idle) {
+        expect(completed.match(/上下文已压缩/g)).toHaveLength(1)
+        expect(completed).not.toContain('正在压缩上下文')
+        expect(completed.indexOf('原有回复')).toBeLessThan(completed.indexOf('上下文已压缩'))
+        const nodeTurn = completed.slice(completed.lastIndexOf('<article class="canonical-turn"'))
+        expect(nodeTurn).not.toContain('canonical-turn-activity__summary')
+        expect(nodeTurn).not.toContain('aria-expanded')
+        expect(nodeTurn).not.toContain('Token ')
+      }
+      if (!idle) expect(completed).not.toContain(manual ? '上下文已压缩' : '上下文已自动压缩')
+      const entries = selectRenderTurnEntries(coordinator.getSnapshot()!)
+      const nodeEntry = entries.at(-1)!
+      const expanded = renderToStaticMarkup(
+        <CanonicalTestProviders>
+          <CanonicalConversationTurn
+            entry={nodeEntry}
+            disclosureState={disclosureStore(`turn-activity:${nodeEntry.id}`)}
+            dockedPlanItemId={null}
+            onOpenPlanInRightDock={() => {}}
+            onOpenSubagent={() => {}}
+          />
+        </CanonicalTestProviders>,
+      )
+      expect(expanded).toContain(manual ? '上下文已压缩' : '上下文已自动压缩')
+    } finally {
+      coordinator.dispose()
+    }
+  },
+)
+
+test.each(['running', 'completed'] as const)('只有压缩活动时不显示过程折叠入口：%s', (status) => {
+  const item: Extract<Item, { type: 'activity' }> = {
+    id: 'sole-compaction',
+    messageID: 'message',
+    turnId: 'sole-turn',
+    agentId: 'agent',
+    type: 'activity',
+    activity: 'context-compression',
+    title: status === 'running' ? '正在压缩上下文' : '上下文已自动压缩',
+    status,
+    createdAt: Date.now(),
+  }
+  const entry = {
+    id: item.turnId,
+    turn: { id: item.turnId, status: 'completed', startedAt: 1, elapsedSeconds: 1, error: null },
+    items: [item],
+    userItems: [],
+    attachments: [],
+    contextReferences: [],
+    processItems: [item],
+    assistantResultItems: [],
+    patchItems: [],
+    postAssistantItems: [],
+    planItem: null,
+    executionPlanItems: [],
+    blockers: [],
+    contentBlocks: [],
+  } as unknown as RenderTurnEntry
+  const markup = renderToStaticMarkup(
+    <CanonicalTestProviders>
+      <CanonicalConversationTurn
+        entry={entry}
+        disclosureState={disclosureStore()}
+        dockedPlanItemId={null}
+        onOpenPlanInRightDock={() => {}}
+        onOpenSubagent={() => {}}
+      />
+    </CanonicalTestProviders>,
+  )
+  expect(markup).toContain(item.title)
+  expect(markup).not.toContain('canonical-turn-activity__summary')
+  expect(markup).not.toContain('aria-expanded')
 })

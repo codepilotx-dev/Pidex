@@ -1,5 +1,5 @@
-import type { ThreadContextState } from '@pidex/shared/thread'
-import { contextCompactionItem } from '../ContextCompaction'
+import type { ContextCompactionOperation, ThreadContextState } from '@pidex/shared/thread'
+import { contextCompactionItem, contextCompactionOperationItem } from '../ContextCompaction'
 import type {
   AgentExecution,
   ApprovalRequest,
@@ -434,7 +434,42 @@ export function selectVisibleTurnEntries(
         .filter((reference): reference is LocalContextReference => reference !== undefined),
     })
   }
-  return entries
+  return entries.flatMap((entry) => {
+    const standalone = entry.items.filter(
+      (item) => item.type === 'activity' && item.compaction?.standalone,
+    )
+    if (!standalone.length) return [entry]
+    const ids = new Set(standalone.map((item) => item.id))
+    return [
+      { ...entry, items: entry.items.filter((item) => !ids.has(item.id)) },
+      ...standalone.map((item) => {
+        const id = `compaction-turn:${item.id}`
+        return {
+          ...entry,
+          id,
+          turn: {
+            ...entry.turn,
+            id,
+            status:
+              item.type === 'activity' && item.status === 'running'
+                ? ('running' as const)
+                : ('completed' as const),
+            startedAt: null,
+            finishedAt: null,
+            elapsedSeconds: 0,
+            error: null,
+            mergedInputIDs: [],
+          },
+          userInputs: [],
+          agents: [],
+          items: [{ ...item, turnId: id }],
+          approvals: [],
+          attachments: [],
+          contextReferences: [],
+        }
+      }),
+    ]
+  })
 }
 
 function filterItemsByAllowedAgents(
@@ -994,6 +1029,7 @@ function applyEnvelopePayload(
         budget: state.context?.budget ?? null,
         operation: envelope.payload.operation,
       }
+      projectCompactionOperation(state, envelope.payload.operation)
       return
     case 'context/compacted':
       projectContextCompaction(state, envelope)
@@ -1005,6 +1041,47 @@ function applyEnvelopePayload(
     default:
       return
   }
+}
+
+function projectCompactionOperation(
+  state: CanonicalThreadState,
+  operation: ContextCompactionOperation,
+  result?: Extract<Item, { type: 'activity' }>,
+): void {
+  const id = `activity:context-compression-operation:${operation.operationId}`
+  const previous = state.itemsById.get(id)
+  if (operation.status === 'skipped') {
+    if (previous) {
+      state.itemsById.delete(id)
+      state.groups.itemsByTurnId.set(
+        previous.turnId,
+        (state.groups.itemsByTurnId.get(previous.turnId) ?? []).filter((item) => item.id !== id),
+      )
+    }
+    return
+  }
+  const turnId = previous?.turnId ?? operation.turnId ?? result?.turnId ?? state.turnOrder.at(-1)
+  const turn = turnId ? state.turnsById.get(turnId) : undefined
+  if (!turn) return
+  upsertItem(
+    state,
+    contextCompactionOperationItem(
+      operation,
+      {
+        turnId: turn.id,
+        agentId: previous?.agentId ?? result?.agentId ?? operation.agentId ?? turn.rootAgentId,
+        standalone:
+          previous?.type === 'activity' && previous.compaction
+            ? previous.compaction.standalone
+            : operation.turnId === undefined &&
+              operation.trigger === 'manual' &&
+              !['running', 'waiting-permission', 'waiting-question', 'waiting-subagents'].includes(
+                turn.status,
+              ),
+      },
+      result ?? (previous?.type === 'activity' ? previous : undefined),
+    ),
+  )
 }
 
 function projectContextCompaction(
@@ -1023,14 +1100,25 @@ function projectContextCompaction(
     .filter((agent) => agent.turnId === turnId)
     .sort(compareCreated)
     .at(-1)
-  upsertItem(
-    state,
-    contextCompactionItem(envelope.payload, {
-      turnId,
-      agentId: latestAgent?.id ?? turn.rootAgentId,
-      createdAt: envelope.occurredAt,
-    }),
-  )
+  const item = contextCompactionItem(envelope.payload, {
+    turnId,
+    agentId: latestAgent?.id ?? turn.rootAgentId,
+    createdAt: envelope.occurredAt,
+  })
+  const operation = state.context?.operation
+  if (
+    operation &&
+    operation.trigger === envelope.payload.trigger &&
+    (operation.status === 'running' || operation.compactionId === envelope.payload.compactionId)
+  ) {
+    projectCompactionOperation(
+      state,
+      { ...operation, status: 'completed', compactionId: envelope.payload.compactionId },
+      item,
+    )
+  } else {
+    upsertItem(state, item)
+  }
 }
 
 export type ItemDeltaKind = 'text' | 'reasoning' | 'plan' | 'tool'

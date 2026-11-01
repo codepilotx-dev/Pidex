@@ -575,7 +575,7 @@ export class AgentHarness<
       if (budget.usedTokens >= budget.triggerTokens)
         throw new AgentHarnessError(
           'compaction',
-          '上下文超过最大输入 Token 安全预算，压缩未能恢复；请减少输入或调整模型额度',
+          '已接近上下文预算且无法完成压缩，本次请求未发送；请减少输入、新建会话或调整上下文预算',
         )
       this.samplingContext = {
         context: { ...context, messages: [...context.messages] },
@@ -1111,9 +1111,12 @@ export class AgentHarness<
     signal?: AbortSignal,
     requestContext?: Context,
     fixedPrefixTokens?: number,
+    maxContextTokens = this.maxContextTokens,
   ): Promise<CompactResult> {
     if (this.phase !== 'idle')
       throw new AgentHarnessError('busy', 'compact() requires idle harness')
+    const previousMaxContextTokens = this.maxContextTokens
+    this.maxContextTokens = maxContextTokens
     this.phase = 'compaction'
     try {
       return await this.runCompaction(
@@ -1124,6 +1127,7 @@ export class AgentHarness<
         fixedPrefixTokens,
       )
     } finally {
+      this.maxContextTokens = previousMaxContextTokens
       this.phase = 'idle'
     }
   }
@@ -1292,6 +1296,18 @@ export class AgentHarness<
               this.thinkingLevel,
               this.retry,
               this.retryCallbacks('compaction'),
+              (summaryContext) => {
+                if (this.maxContextTokens == null) return
+                const summaryBudget = this.requestUsage.snapshot(
+                  model, summaryContext, '', 'estimated', this.maxContextTokens,
+                )
+                if (summaryBudget.usedTokens >= summaryBudget.inputBudgetTokens) {
+                  throw new AgentHarnessError(
+                    'compaction',
+                    '压缩请求超过上下文预算，本次请求未发送；请减少输入、新建会话或调整上下文预算',
+                  )
+                }
+              },
             )
         if (!candidate.ok) throw candidate.error
         const result = candidate.value

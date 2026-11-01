@@ -352,7 +352,7 @@ export async function executeHarnessRun(
       if (budget && budget.usedTokens >= budget.triggerTokens) {
         throw new AgentError(
           'CONTEXT_BUDGET_EXCEEDED',
-          '上下文超过安全输入预算，压缩未能恢复；固定提示词、最新输入或保留内容过大，请减少输入或调整模型额度',
+          '已接近上下文预算，本次请求未发送；自动压缩不可用、压缩请求超预算或压缩后仍过大，请减少输入、新建会话或调整上下文预算',
           413,
         )
       }

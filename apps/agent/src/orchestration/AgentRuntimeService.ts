@@ -2053,9 +2053,11 @@ export class AgentRuntimeService implements AgentRuntime {
     promptText?: string,
     signal?: AbortSignal,
   ) {
+    const maxContextTokens =
+      this.options.db.repositories.threads.getThreadSettings(threadID)?.maxContextTokens ?? null
     const runtime = this.active.get(threadID)
     if (runtime) {
-      await runtime.harness.compact(instructions, signal)
+      await runtime.harness.compact(instructions, signal, undefined, undefined, maxContextTokens)
       const completed = this.completedCompactions.get(threadID)
       if (!completed) throw new Error('Pi 压缩完成但缺少产品压缩记录')
       return completed
@@ -2068,8 +2070,6 @@ export class AgentRuntimeService implements AgentRuntime {
     const frozen = this.options.db.repositories.runtimeCompositions.get(row.turn_id)?.snapshot
     const session = await this.repo.openForThread(row.session_id, threadID)
     const storage = session.getStorage() as SqlitePiSessionStorage
-    const maxContextTokens =
-      this.options.db.repositories.threads.getThreadSettings(threadID)?.maxContextTokens ?? null
     const harness = new AgentHarness({
       session,
       models: this.options.models,

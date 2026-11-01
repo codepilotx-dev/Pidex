@@ -7,6 +7,7 @@ import {
 import { AgentError, decodeStoredTaskMode } from '../Domain'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
+import { publishAgentEvent } from '../storage/events/EventPublisher'
 import { normalizeThreadTitle } from './ThreadTitleService'
 import { THREAD_ORIGIN_PROJECTION_SQL } from '../storage/repositories/ThreadRepository'
 import { probeThreadContextLimitsStorageCapabilities } from '../storage/database/StorageCapabilities'
@@ -228,10 +229,15 @@ export class ThreadHistoryService {
         ? this.db.updateThreadSettings(input.threadId, { maxContextTokens: input.maxContextTokens })
         : null
       const preference = this.db.repositories.modelRuntimePreferences.set(input)
-      const event = this.db.insertEvent(null, null, 'provider/modelPreferences/updated', { preference })
-      return { preference, events: [...(settings?.event ? [settings.event] : []), event] }
+      return { preference, settingsEvent: settings?.event ?? null }
     })
-    for (const event of result.events) await Effect.runPromise(this.hub.publish(event))
+    // 会话设置是持久事件：事务内已写入 events 表，提交后保持原有发布语义。
+    if (result.settingsEvent) await Effect.runPromise(this.hub.publish(result.settingsEvent))
+    // 模型偏好更新在协议 manifest 中是实时事件。持久化由事务内的偏好表完成，
+    // 通知必须经发布边界补齐 afterSequence 锚点，且不得再写入 events 表。
+    await publishAgentEvent(this.db, this.hub, null, null, 'provider/modelPreferences/updated', {
+      preference: result.preference,
+    })
     return { preference: result.preference }
   }
 

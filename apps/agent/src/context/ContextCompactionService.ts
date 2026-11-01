@@ -130,6 +130,7 @@ export class ContextCompactionService {
       threadId: threadID,
       sessionId: null,
       agentId: null,
+      turnId: this.db.activeTurn(threadID)?.id ?? null,
       trigger,
       phase: 'settled',
       status,

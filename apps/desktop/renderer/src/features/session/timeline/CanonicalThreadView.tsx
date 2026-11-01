@@ -866,7 +866,13 @@ function CanonicalConversationTurnComponent({
     processActivity.units.length > 0 || processActivity.showThinkingFallback
   const lastProcessUnit = processActivity.units.at(-1)
   const turnActivityDisclosureId = `turn-activity:${entry.turn.id}`
-  const canCollapseTurnActivity = activitySliceClosed && hasVisibleActivityContent
+  const compactionOnly =
+    processActivity.units.length === 1 &&
+    processActivity.units[0]?.kind === 'standalone' &&
+    processActivity.units[0].item.type === 'activity' &&
+    processActivity.units[0].item.activity === 'context-compression'
+  const canCollapseTurnActivity =
+    activitySliceClosed && hasVisibleActivityContent && !compactionOnly
   const syntheticPatch =
     !active && entry.patchItems.length === 0 ? syntheticPatchDisplay(entry.processItems) : null
   const activityContent = hasVisibleActivityContent ? (
@@ -943,7 +949,8 @@ function CanonicalConversationTurnComponent({
         forceExpanded={entry.forceExpandActivity}
         disclosureId={turnActivityDisclosureId}
         hasWork={
-          entry.turn.startedAt != null || entry.processItems.length > 0 || hasAssistantResult
+          !compactionOnly &&
+          (entry.turn.startedAt != null || entry.processItems.length > 0 || hasAssistantResult)
         }
         store={disclosureState}
         turn={entry.turn}

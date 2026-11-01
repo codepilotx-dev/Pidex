@@ -41,11 +41,11 @@ export function ContextUsagePanel({ contextUsage, maxContextTokens }: Props): Re
       </div>
       {contextUsage.budget ? (
         <div className="tw:mb-2 tw:type-caption tw:text-app-text-meta">
-          输入额度 {formatCompactNumber(contextUsage.contextWindow)} tokens · 压缩触发线 {formatCompactNumber(contextUsage.budget.triggerTokens)} tokens · 来源 {contextUsage.budget.source}
+          输入预算 {formatCompactNumber(contextUsage.contextWindow)} tokens · 压缩触发线 {formatCompactNumber(contextUsage.budget.triggerTokens)} tokens · 来源 {contextUsage.budget.source}
           <div>物理窗口 {formatCompactNumber(contextUsage.budget.contextWindowTokens)} tokens；运行中沿用当前轮预算，修改下一轮生效。</div>
           {contextUsage.budgetFrozen ? (
             <div>
-              当前轮沿用冻结预算；下一轮生效额度{' '}
+              当前轮沿用冻结预算；下一轮上下文预算{' '}
               {maxContextTokens == null
                 ? '模型默认'
                 : `${formatCompactNumber(maxContextTokens)} tokens`}

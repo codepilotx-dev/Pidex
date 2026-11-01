@@ -316,6 +316,13 @@ export const ActivityItemSchema = Schema.Struct({
   title: Schema.String,
   detail: Schema.optional(Schema.String),
   contextTokens: Schema.optional(Schema.Number),
+  compaction: Schema.optional(
+    Schema.Struct({
+      source: Schema.Literals(['manual', 'automatic', 'reactive']),
+      startedAt: Schema.Number,
+      standalone: Schema.Boolean,
+    }),
+  ),
   commands: Schema.optional(Schema.Array(ActivityCommandSchema)),
   status: Schema.Literals(['running', 'completed', 'error', 'interrupted']),
   ordinal: Schema.optional(Schema.Number),

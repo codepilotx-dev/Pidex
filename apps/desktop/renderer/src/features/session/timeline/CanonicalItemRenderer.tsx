@@ -1,3 +1,4 @@
+import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 import React from 'react'
 import {
   Bot,
@@ -554,7 +555,11 @@ function CanonicalItemRendererContentComponent({
     case 'reasoning':
       return <ReasoningItemView item={item} disclosure={disclosure} threadId={threadId} />
     case 'activity':
-      return <ActivityItemView disclosure={disclosure} item={item} />
+      return item.activity === 'context-compression' ? (
+        <ContextCompactionItemView item={item} />
+      ) : (
+        <ActivityItemView disclosure={disclosure} item={item} />
+      )
     case 'tool': {
       const arrangement = taskArrangementFromTool(item)
       if (arrangement) return <TaskArrangementCard initial={arrangement} />
@@ -681,6 +686,70 @@ function TextItemView({
         </div>
       ) : null}
     </article>
+  )
+}
+
+function ContextCompactionItemView({ item }: { item: ItemOf<'activity'> }): React.ReactNode {
+  const active = item.status === 'running'
+  const startedAt = item.compaction?.startedAt ?? item.createdAt
+  const [now, setNow] = React.useState(Date.now)
+  const reducedMotion = usePrefersReducedMotion()
+  const shimmerId = React.useId()
+  React.useEffect(() => {
+    setNow(Date.now())
+    if (!active) return
+    const timer = window.setTimeout(
+      () => setNow(Date.now()),
+      Math.max(0, startedAt + 10_000 - Date.now()),
+    )
+    return () => window.clearTimeout(timer)
+  }, [active, startedAt])
+  const label = active && now - startedAt >= 10_000 ? '正在压缩上下文 · 可能需要几分钟' : item.title
+  const Icon = active ? LoaderCircle : item.status === 'completed' ? Check : CircleStop
+  return (
+    <div
+      className="cpx-agent-activity__item tw:min-w-0 tw:text-app-text-soft"
+      role="status"
+      data-compaction-id={item.id}
+    >
+      <div className="cpx-agent-activity__item-header cpx-agent-activity__item-header--static">
+        <Icon size={APP_ICON_SIZES.sm} className="cpx-agent-activity__icon" aria-hidden="true" />
+        <span className="reasoning-node__label">
+          {label}
+          {active && !reducedMotion ? (
+            <svg className="reasoning-node__shimmer" aria-hidden="true" width="100%" height="100%">
+              <defs>
+                <mask id={`${shimmerId}-mask`}>
+                  <text
+                    x="0"
+                    y="50%"
+                    dy=".35em"
+                    textLength="100%"
+                    lengthAdjust="spacingAndGlyphs"
+                    fill="white"
+                  >
+                    {label}
+                  </text>
+                </mask>
+                <linearGradient id={`${shimmerId}-gradient`}>
+                  <stop offset="0" stopColor="currentColor" stopOpacity="0" />
+                  <stop offset=".5" stopColor="currentColor" />
+                  <stop offset="1" stopColor="currentColor" stopOpacity="0" />
+                </linearGradient>
+              </defs>
+              <g mask={`url(#${shimmerId}-mask)`}>
+                <rect
+                  className="reasoning-node__sweep"
+                  width="100%"
+                  height="100%"
+                  fill={`url(#${shimmerId}-gradient)`}
+                />
+              </g>
+            </svg>
+          ) : null}
+        </span>
+      </div>
+    </div>
   )
 }
 

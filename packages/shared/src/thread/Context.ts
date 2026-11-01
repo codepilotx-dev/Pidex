@@ -19,6 +19,7 @@ export const ContextCompactionOperationSchema = Schema.Struct({
   threadId: Schema.String,
   sessionId: Schema.NullOr(Schema.String),
   agentId: Schema.NullOr(Schema.String),
+  turnId: Schema.optional(Schema.NullOr(Schema.String)),
   trigger: Schema.Literals(['manual', 'automatic', 'reactive']),
   phase: Schema.Literals(['pre-request', 'mid-turn', 'settled']),
   status: Schema.Literals([

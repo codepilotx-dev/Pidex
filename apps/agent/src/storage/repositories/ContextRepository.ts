@@ -555,6 +555,47 @@ export class ContextRepository {
     return row ? this.compactionByID(row.id) : null
   }
 
+  compactionOperationsForTurns(threadID: string, turnIDs: readonly string[]) {
+    if (!turnIDs.length || !this.supportsLifecycle()) return []
+    const rows = this.db.sqlite
+      .query(
+        `
+      SELECT o.payload, t.id AS turn_id, t.started_at, t.finished_at, o.created_at FROM context_compaction_operations o
+      JOIN turns t ON t.id = COALESCE(json_extract(o.payload, '$.turnId'), (
+        SELECT id FROM turns WHERE thread_id = o.thread_id AND created_at <= o.created_at
+        ORDER BY created_at DESC, id DESC LIMIT 1
+      ))
+      WHERE o.thread_id = ? AND t.id IN (${turnIDs.map(() => '?').join(',')})
+      ORDER BY o.created_at, o.id
+    `,
+      )
+      .all(threadID, ...turnIDs) as Array<{
+      payload: string
+      turn_id: string
+      started_at: number | null
+      finished_at: number | null
+      created_at: number
+    }>
+    return rows.map((row) => {
+      const operation = JSON.parse(row.payload) as ContextCompactionOperation
+      return {
+        turnID: row.turn_id,
+        operation: {
+          ...operation,
+          // Older operations lack an anchor; infer it without rewriting stored data.
+          turnId:
+            operation.turnId !== undefined
+              ? operation.turnId
+              : row.started_at !== null &&
+                  row.started_at <= row.created_at &&
+                  (row.finished_at === null || row.finished_at >= row.created_at)
+                ? row.turn_id
+                : null,
+        },
+      }
+    })
+  }
+
   compactionsForTurns(threadID: string, turnIDs: readonly string[]) {
     if (!turnIDs.length) return []
     const rows = this.db.sqlite

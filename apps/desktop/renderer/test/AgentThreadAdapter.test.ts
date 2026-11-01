@@ -11,6 +11,7 @@ import {
   agentEventsFromNotification,
   agentQuestionIdFromRequestId,
   agentThreadListItemToDesktop,
+  agentThreadListItemToDesktopSnapshot,
   agentThreadSnapshotToDesktop,
   agentTurnStatusToDesktopStatus,
   desktopPermissionModeToPermissionConfig,
@@ -105,7 +106,7 @@ describe('agent thread adapter', () => {
         projectID: project.id,
         gitBranch: null,
         workspace: projectWorkspace,
-        settings: { taskMode: 'chat', permissionConfig },
+        settings: { taskMode: 'chat', permissionConfig, maxContextTokens: 100_000 },
         archivedAt: null,
         createdAt: 1,
         updatedAt: 3,
@@ -158,6 +159,8 @@ describe('agent thread adapter', () => {
     for (const variant of [undefined, 'default', 'enabled', 'adaptive', 'disabled', 'high']) {
       snapshot.turns = [{ ...actual, model: { ...actual.model, variant } }, queued]
       const restored = agentThreadSnapshotToDesktop(snapshot)
+      expect(restored.settings.maxContextTokens).toBe(100_000)
+      expect(agentThreadListItemToDesktopSnapshot(snapshot.thread).settings.maxContextTokens).toBe(100_000)
       const expectedThinkingMode =
         variant === 'enabled' || variant === 'adaptive' || variant === 'disabled'
           ? variant

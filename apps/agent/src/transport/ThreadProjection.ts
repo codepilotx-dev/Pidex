@@ -1,5 +1,8 @@
 import { QueuedGoalRepository } from '../storage/repositories/QueuedGoalRepository'
-import { contextCompactionItem } from '@pidex/session-view/context-compaction'
+import {
+  contextCompactionItem,
+  contextCompactionOperationItem,
+} from '@pidex/session-view/context-compaction'
 import {
   activeTurnSql,
   hasThreadEditStorage,
@@ -477,21 +480,21 @@ export class ThreadProjection {
         ? { creationSurface: row.creation_surface as Thread['creationSurface'] }
         : {}),
       ...(workspace ? { workspace } : {}),
-        settings: {
-          taskMode: decodeStoredTaskMode(row.task_mode),
-          permissionConfig: {
-            sandboxMode: String(
-              row.sandbox_mode,
-            ) as Thread['settings']['permissionConfig']['sandboxMode'],
-            approvalPolicy: decodeApprovalPolicy(String(row.approval_policy)),
-            approvalsReviewer: String(
-              row.approvals_reviewer,
-            ) as Thread['settings']['permissionConfig']['approvalsReviewer'],
-          },
-          ...(row.max_context_tokens != null
-            ? { maxContextTokens: Number(row.max_context_tokens) }
-            : {}),
+      settings: {
+        taskMode: decodeStoredTaskMode(row.task_mode),
+        permissionConfig: {
+          sandboxMode: String(
+            row.sandbox_mode,
+          ) as Thread['settings']['permissionConfig']['sandboxMode'],
+          approvalPolicy: decodeApprovalPolicy(String(row.approval_policy)),
+          approvalsReviewer: String(
+            row.approvals_reviewer,
+          ) as Thread['settings']['permissionConfig']['approvalsReviewer'],
         },
+        ...(row.max_context_tokens != null
+          ? { maxContextTokens: Number(row.max_context_tokens) }
+          : {}),
+      },
       archivedAt: row.archived_at == null ? null : Number(row.archived_at),
       createdAt: Number(row.created_at),
       updatedAt: Number(row.updated_at),
@@ -700,19 +703,38 @@ export class ThreadProjection {
     agents: readonly WireAgentExecution[],
     items: Item[],
   ): void {
-    for (const record of this.db.repositories.context.compactionsForTurns(
-      threadId,
-      turns.map((turn) => turn.id),
-    )) {
+    const turnIDs = turns.map((turn) => turn.id)
+    const operations = this.db.repositories.context
+      .compactionOperationsForTurns(threadId, turnIDs)
+      .filter((record) => record.operation.status !== 'skipped')
+    const records = this.db.repositories.context.compactionsForTurns(threadId, turnIDs)
+    const projected: Item[] = []
+    for (const record of records) {
       const turn = turns.find((turn) => turn.id === record.turnID)!
-      const latestAgent = agents
+      const agent = agents
         .filter((agent) => agent.turnId === turn.id && agent.createdAt <= record.createdAt)
         .at(-1)
-      const item = contextCompactionItem(record.payload, {
-        turnId: turn.id,
-        agentId: latestAgent?.id ?? turn.rootAgentId,
+      const anchor = { turnId: turn.id, agentId: agent?.id ?? turn.rootAgentId }
+      const result = contextCompactionItem(record.payload, {
+        ...anchor,
         createdAt: record.createdAt,
       })
+      const operation = operations.find(
+        (entry) => entry.operation.compactionId === record.payload.compactionId,
+      )?.operation
+      projected.push(operation ? contextCompactionOperationItem(operation, anchor, result) : result)
+    }
+    for (const { turnID, operation } of operations) {
+      if (records.some((record) => record.payload.compactionId === operation.compactionId)) continue
+      const turn = turns.find((turn) => turn.id === turnID)!
+      projected.push(
+        contextCompactionOperationItem(operation, {
+          turnId: turnID,
+          agentId: operation.agentId ?? turn.rootAgentId,
+        }),
+      )
+    }
+    for (const item of projected.sort((a, b) => a.createdAt - b.createdAt)) {
       const index = items.findIndex((existing) => existing.createdAt > item.createdAt)
       items.splice(index < 0 ? items.length : index, 0, item)
     }
