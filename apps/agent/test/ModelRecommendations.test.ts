@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import fixture from './fixtures/models-dev-catalog.json'
-import { ModelRecommendationIndex } from '../src/provider/pi/ModelRecommendations'
+import { ModelRecommendationIndex, applyRecommendation } from '../src/provider/pi/ModelRecommendations'
 import { ModelRecommendationStore } from '../src/provider/pi/ModelRecommendationStore'
 
 const row = (context: number, extra = {}) => ({
@@ -92,6 +92,77 @@ describe('models.dev recommendations', () => {
     expect(input.modelId).toBe('example')
   })
 
+  test('剥离日期、网关标记与量化后缀后仍精确命中；相似但不同的名字不猜', () => {
+    const index = new ModelRecommendationIndex({
+      models: {
+        'anthropic/claude-sonnet-4-5': row(200000),
+        'openai/gpt-4o': row(128000),
+        'meta-llama/llama-3.3-70b-instruct': row(131072),
+        'qwen/qwen2.5-7b-instruct': row(32768),
+      },
+      providers: {},
+    })
+    for (const modelId of [
+      'claude-sonnet-4-5-20250929',
+      'gpt-4o-2024-08-06',
+      'meta-llama/llama-3.3-70b-instruct:free',
+      'qwen2.5-7b-instruct-q4_k_m',
+    ])
+      expect(index.resolve({ ...input, modelId }).status).toBe('matched')
+    // 相似但确实是另一个模型的名字不能被当成同一个。
+    for (const modelId of ['claude-sonnet-4', 'gpt-4o-mini', 'qwen2.5-14b-instruct'])
+      expect(index.resolve({ ...input, modelId }).status).toBe('unmatched')
+  })
+
+  test('推荐值只覆盖未固定字段，固定字段保留保存值', () => {
+    const model = {
+      name: '自定义名字',
+      contextWindow: 8_192,
+      maxTokens: 4_096,
+      reasoning: false,
+      tools: true,
+      input: ['text' as const],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    }
+    const recommended = {
+      name: '推荐名字',
+      contextWindow: 200_000,
+      maxTokens: 64_000,
+      reasoning: true,
+      tools: false,
+      input: ['text' as const, 'image' as const],
+      cost: { input: 3, output: 15 },
+    }
+    const merged = applyRecommendation(model, recommended, [])
+    expect(merged).toMatchObject({
+      name: '推荐名字',
+      contextWindow: 200_000,
+      maxTokens: 64_000,
+      reasoning: true,
+      tools: false,
+      input: ['text', 'image'],
+      cost: { input: 3, output: 15, cacheRead: 0, cacheWrite: 0 },
+    })
+    const pinned = applyRecommendation(model, recommended, ['contextWindow', 'imageInput'])
+    expect(pinned.contextWindow).toBe(8_192)
+    expect(pinned.maxTokens).toBe(64_000)
+    expect(pinned.input).toEqual(['text'])
+  })
+
+  test('没有推荐时原样返回', () => {
+    const model = {
+      name: 'x',
+      contextWindow: 1,
+      maxTokens: 1,
+      reasoning: false,
+      tools: true,
+      input: [] as ('text' | 'image' | 'audio' | 'video')[],
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    }
+    expect(applyRecommendation(model, undefined)).toBe(model)
+    expect(applyRecommendation(model, {})).toBe(model)
+  })
+
   test('canonical 冲突不猜测，供应商未确认不套价格，地址匹配可叠加差异', () => {
     const payload = catalog()
     const index = new ModelRecommendationIndex(payload)
@@ -118,9 +189,10 @@ describe('models.dev recommendations', () => {
     expect(result.tools).toBeUndefined()
   })
 
-  test('手动刷新、重启读缓存、失败保留及未知文件拒绝覆盖', async () => {
+  test('手动刷新写入共享缓存、重启读缓存、失败保留及未知格式拒绝覆盖', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'pidex-recommendations-'))
     const path = join(directory, 'recommendations.json')
+    const shared = join(directory, 'shared-model-catalog.json')
     try {
       let calls = 0
       const store = new ModelRecommendationStore(path, async () => {
@@ -131,18 +203,45 @@ describe('models.dev recommendations', () => {
       expect(calls).toBe(0)
       await store.refresh()
       expect(calls).toBe(1)
-      const before = await readFile(path, 'utf8')
+      // models.dev 只落到共享缓存，不再单独写第二份推荐文件。
+      const before = await readFile(shared, 'utf8')
+      expect(before).toContain('"owner":"pidex-model-catalog"')
+      await expect(readFile(path, 'utf8')).rejects.toThrow()
       const restarted = new ModelRecommendationStore(path, response({ invalid: true }))
       expect((await restarted.resolve(input)).recommended.contextWindow).toBe(128000)
       await expect(restarted.refresh()).rejects.toThrow()
-      expect(await readFile(path, 'utf8')).toBe(before)
-      await writeFile(path, '{"owner":"someone-else"}', 'utf8')
-      await expect(
-        new ModelRecommendationStore(path, response(catalog())).refresh(),
-      ).rejects.toThrow()
-      expect(await readFile(path, 'utf8')).toBe('{"owner":"someone-else"}')
+      expect(await readFile(shared, 'utf8')).toBe(before)
     } finally {
       await rm(directory, { recursive: true, force: true })
+    }
+  })
+
+  test('旧推荐缓存只读兼容，未知 owner 文件原样保留', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'pidex-recommendations-legacy-'))
+    const path = join(directory, 'model-recommendations.json')
+    const shared = join(directory, 'shared-model-catalog.json')
+    try {
+      const legacy = { owner: 'pidex', formatVersion: 1, updatedAt: 42, catalog: catalog() }
+      await writeFile(path, JSON.stringify(legacy), 'utf8')
+      const store = new ModelRecommendationStore(path, response(catalog()))
+      expect((await store.resolve(input)).recommended.contextWindow).toBe(128000)
+      expect(await store.version()).toBe(42)
+      expect(await readFile(shared, 'utf8')).toContain('"owner":"pidex-model-catalog"')
+      expect(await readFile(path, 'utf8')).toBe(JSON.stringify(legacy))
+    } finally {
+      await rm(directory, { recursive: true, force: true })
+    }
+
+    const fresh = await mkdtemp(join(tmpdir(), 'pidex-recommendations-foreign-'))
+    const foreignShared = join(fresh, 'shared-model-catalog.json')
+    try {
+      await writeFile(foreignShared, '{"owner":"someone-else"}', 'utf8')
+      await expect(
+        new ModelRecommendationStore(join(fresh, 'model-recommendations.json'), response(catalog())).refresh(),
+      ).rejects.toThrow()
+      expect(await readFile(foreignShared, 'utf8')).toBe('{"owner":"someone-else"}')
+    } finally {
+      await rm(fresh, { recursive: true, force: true })
     }
   })
 })

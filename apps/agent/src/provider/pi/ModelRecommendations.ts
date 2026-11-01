@@ -20,6 +20,34 @@ const object = (value: unknown): JsonObject => {
   return value as JsonObject
 }
 const bare = (id: string) => id.toLowerCase().split('/').at(-1)!
+
+/**
+ * 发布噪音后缀：日期版本、网关标记、量化尾。
+ * 反复剥离到不动点，让 `gpt-4o-2024-08-06`、`llama-3.3-70b-instruct:free`、
+ * `qwen2.5-7b-instruct-q4_k_m` 这类真实 ID 回到目录里的裸名。
+ * 刻意不含 `-preview` / `-instruct`：前者是不同模型，后者本身就是目录里的正式名。
+ */
+const releaseNoise = [
+  /-\d{4}-\d{2}-\d{2}$/,
+  /-\d{8}$/,
+  /[:@][a-z0-9][a-z0-9_.-]*$/i,
+  /-(?:q\d+(?:_k(?:_[ms])?)?|fp8|fp16|bf16|int8|int4|awq|gptq|gguf|mlx)$/i,
+]
+
+/** 逐层剥离后的候选名，按剥离深度递增；不含原文本身。 */
+const strippedCandidates = (value: string): string[] => {
+  const result: string[] = []
+  let current = value
+  for (let round = 0; round < 8; round++) {
+    const pattern = releaseNoise.find((candidate) => candidate.test(current))
+    if (!pattern) break
+    const next = current.replace(pattern, '')
+    if (!next) break
+    current = next
+    result.push(current)
+  }
+  return result
+}
 type Entry = {
   id: string
   canonical: string
@@ -34,6 +62,89 @@ export type RecommendationInput = {
   baseUrl?: string | undefined
   modelId: string
   modelType: 'chat' | 'embedding' | 'rerank'
+}
+
+/**
+ * 把推荐值合进已保存的模型配置：只改写 `pinned` 之外的字段。
+ * 未命中推荐时原样返回，所以调用方不需要分支。
+ */
+export function applyRecommendation<T extends PiModelFields>(
+  model: T,
+  recommended: Model.Recommendation | undefined,
+  pinned: readonly Model.SmartConfigPinnedField[] = [],
+): T {
+  if (!recommended || !Object.keys(recommended).length) return model
+  const fixed = new Set<string>(pinned)
+  const pick = <K extends keyof Model.Recommendation>(key: K) =>
+    fixed.has(key) ? undefined : recommended[key]
+  const name = pick('name')
+  const contextWindow = pick('contextWindow')
+  const maxInputTokens = pick('maxInputTokens')
+  const maxTokens = pick('maxTokens')
+  const reasoning = pick('reasoning')
+  const tools = pick('tools')
+  const inputCost = fixed.has('inputCost') ? undefined : recommended.cost?.input
+  const outputCost = fixed.has('outputCost') ? undefined : recommended.cost?.output
+  const cacheReadCost = fixed.has('cacheReadCost') ? undefined : recommended.cost?.cacheRead
+  const cacheWriteCost = fixed.has('cacheWriteCost') ? undefined : recommended.cost?.cacheWrite
+  const input = recommended.input && !fixed.has('imageInput')
+    ? mergeModalities(model.input, recommended.input, fixed)
+    : undefined
+  return {
+    ...model,
+    ...(name !== undefined ? { name } : {}),
+    ...(contextWindow !== undefined ? { contextWindow } : {}),
+    ...(maxInputTokens !== undefined ? { maxInputTokens } : {}),
+    ...(maxTokens !== undefined ? { maxTokens } : {}),
+    ...(reasoning !== undefined ? { reasoning } : {}),
+    ...(tools !== undefined ? { tools } : {}),
+    ...(input !== undefined ? { input } : {}),
+    ...(inputCost !== undefined || outputCost !== undefined || cacheReadCost !== undefined || cacheWriteCost !== undefined
+      ? {
+          cost: {
+            ...model.cost,
+            ...(inputCost !== undefined ? { input: inputCost } : {}),
+            ...(outputCost !== undefined ? { output: outputCost } : {}),
+            ...(cacheReadCost !== undefined ? { cacheRead: cacheReadCost } : {}),
+            ...(cacheWriteCost !== undefined ? { cacheWrite: cacheWriteCost } : {}),
+          },
+        }
+      : {}),
+  }
+}
+
+type PiModelFields = {
+  readonly name: string
+  readonly contextWindow: number
+  readonly maxInputTokens?: number | undefined
+  readonly maxTokens: number
+  readonly reasoning: boolean
+  readonly tools?: boolean | undefined
+  readonly input: readonly ('text' | 'image' | 'audio' | 'video')[]
+  readonly cost: {
+    readonly input: number
+    readonly output: number
+    readonly cacheRead: number
+    readonly cacheWrite: number
+  }
+}
+
+/**
+ * 多模态按单个能力合并：已固定的 `imageInput`/`audioInput`/`videoInput`
+ * 各自保留，其余跟随推荐。
+ */
+const mergeModalities = (
+  saved: readonly ('text' | 'image' | 'audio' | 'video')[],
+  recommended: readonly ('text' | 'image' | 'audio' | 'video')[],
+  fixed: ReadonlySet<string>,
+): ('text' | 'image' | 'audio' | 'video')[] => {
+  const result = new Set<'text' | 'image' | 'audio' | 'video'>(['text'])
+  for (const modality of ['image', 'audio', 'video'] as const) {
+    const pin = `${modality}Input`
+    const wanted = fixed.has(pin) ? saved.includes(modality) : recommended.includes(modality)
+    if (wanted) result.add(modality)
+  }
+  return [...result]
 }
 
 function values(raw: JsonObject): Model.Recommendation {
@@ -165,6 +276,13 @@ export class ModelRecommendationIndex {
     const id = input.modelId.trim()
     const normalized = bare(id)
     const suffix = normalized.replace(/\((?:off|none|minimal|low|medium|high|xhigh|max)\)$/, '')
+    const stripped = strippedCandidates(suffix)
+    // 剥离档位只在裸名精确匹配时才算数：`gpt-4o-2024-08-06` 剥掉日期后命中原名，
+    // `ample` 不剥也永远不命中，避免把模糊相似当成同一个模型。
+    const strippedMatch = (candidate: string) =>
+      entries.filter(
+        (entry) => bare(entry.id) === candidate || bare(entry.canonical) === candidate,
+      )
     const stages = [
       entries.filter((entry) => entry.id === id),
       entries.filter((entry) => entry.canonical === id || entry.aliases.includes(id)),
@@ -177,6 +295,7 @@ export class ModelRecommendationIndex {
       ...(suffix !== normalized
         ? [entries.filter((entry) => bare(entry.id) === suffix || bare(entry.canonical) === suffix)]
         : []),
+      ...stripped.map(strippedMatch),
     ]
     const matches = stages.find((stage) => stage.length)
     if (!matches) return { status: 'unmatched', recommended: {} }

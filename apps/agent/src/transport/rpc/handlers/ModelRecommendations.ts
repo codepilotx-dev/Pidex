@@ -14,6 +14,8 @@ export const modelRecommendationHandlers = {
     try {
       if (input) return await runtime.dependencies.piModels.previewRecommendation(input)
       const result = await runtime.dependencies.piModels.refreshRecommendations()
+      // 推荐目录更新会改变已保存智能模型的生效值，推一次目录更新让 UI 重新拉取。
+      await runtime.publishCatalogUpdated(false).catch(() => undefined)
       return result
     } catch {
       throw new AgentError('PROVIDER_UNAVAILABLE', '模型推荐配置不可用，请稍后重试。', 502)

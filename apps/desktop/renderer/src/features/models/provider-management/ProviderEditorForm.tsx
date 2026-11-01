@@ -1,5 +1,6 @@
 import { useSmartModelConfig } from './UseSmartModelConfig.js'
 import * as Dialog from '@radix-ui/react-dialog'
+import type { SmartConfig, SmartConfigPinnedField } from '@pidex/agent-protocol'
 import {
   AlertTriangle,
   Brain,
@@ -143,6 +144,16 @@ export type EditableModel = {
   headers: string
   thinkingLevelMap: string
   compat: string
+  /** optionSpecs.reasoningLevel.values，每行/逗号分隔，按顺序展示。 */
+  reasoningLevelValues: string
+  /** optionSpecs.reasoningLevel.map（受限 CEL 源串）。 */
+  reasoningLevelMap: string
+  /** optionSpecs.maxOutputTokens.max；0 表示未设置。 */
+  maxOutputTokensMax: number
+  /** optionSpecs.maxOutputTokens.map（受限 CEL 源串）。 */
+  maxOutputTokensMap: string
+  /** 已脱离推荐值的字段；缺失表示该模型未启用智能配置。 */
+  smartConfig?: SmartConfig
 }
 
 type DialogTab = 'basic' | 'models' | 'advanced'
@@ -264,6 +275,10 @@ export function ProviderEditorForm({
           headers: '',
           thinkingLevelMap: '',
           compat: '',
+          reasoningLevelValues: '',
+          reasoningLevelMap: '',
+          maxOutputTokensMax: 0,
+          maxOutputTokensMap: '',
         } satisfies EditableModel
       }) ??
       (embedded ? [] : [emptyModel()])
@@ -1407,6 +1422,7 @@ export function ModelEditor({
       headers,
       thinkingLevelMap,
       compat,
+      smartConfig,
       ...values
     } = value
     return { ...values, maxInputTokens: value.maxInputTokens }
@@ -1448,13 +1464,28 @@ export function ModelEditor({
       {label}
     </button>
   )
+  /** 已固定的字段打标，并可在标题处一键恢复跟随。 */
+  const pinBadge = (field: SmartConfigPinnedField) =>
+    !smart.enabled || !smart.pinned.includes(field) ? null : (
+      <button
+        type="button"
+        className="tw:ml-2 tw:rounded-full tw:border tw:border-app-border tw:bg-app-selected tw:px-2 tw:type-caption tw:text-app-text-soft tw:hover:text-app-text"
+        title="该字段已固定，不再跟随推荐"
+        onClick={() => smart.togglePin(field)}
+      >
+        已固定
+      </button>
+    )
   const tokenField = (
     key: 'contextWindow' | 'maxInputTokens' | 'maxTokens',
     label: string,
     values: number[],
   ) => (
     <div className={PROVIDER_EDITOR_FIELD_CLASS}>
-      <span>{label}</span>
+      <span>
+        {label}
+        {pinBadge(key)}
+      </span>
       <div className="tw:flex tw:flex-wrap tw:gap-2">
         {values.map((value) => (
           <span key={value}>
@@ -1738,6 +1769,64 @@ export function ModelEditor({
             />
           </label>
 
+          <label className={PROVIDER_EDITOR_FIELD_CLASS}>
+            <span>
+              Reasoning Level Values
+              <small>每行一个，保留顺序；重复项自动去重</small>
+              {pinBadge('reasoning')}
+            </span>
+            <textarea
+              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+              placeholder={'none\nlow\nhigh\nmax'}
+              rows={3}
+              value={model.reasoningLevelValues}
+              onChange={(event) => onChange({ ...model, reasoningLevelValues: event.target.value })}
+            />
+          </label>
+
+          <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
+            <span>
+              Reasoning Level Map (CEL)
+              {pinBadge('reasoning')}
+            </span>
+            <textarea
+              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+              placeholder={'{"reasoning_effort": reasoningLevel}'}
+              rows={3}
+              value={model.reasoningLevelMap}
+              onChange={(event) => onChange({ ...model, reasoningLevelMap: event.target.value })}
+            />
+          </label>
+
+          <label className={PROVIDER_EDITOR_FIELD_CLASS}>
+            <span>
+              Max Output Tokens（映射上限）
+              {pinBadge('maxTokens')}
+            </span>
+            <Input
+              type="number"
+              min={1}
+              max={10_000_000}
+              aria-label="Max Output Tokens 映射上限"
+              value={model.maxOutputTokensMax > 0 ? String(model.maxOutputTokensMax) : ''}
+              onChange={(event) => number('maxOutputTokensMax', event.target.value)}
+            />
+          </label>
+
+          <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
+            <span>
+              Max Output Tokens Map (CEL)
+              {pinBadge('maxTokens')}
+            </span>
+            <textarea
+              className="provider-editor-textarea tw:w-full tw:min-h-20 tw:resize-y tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-3 tw:py-2 tw:text-app-text tw:type-code tw:transition-[border-color] tw:duration-state tw:ease-standard tw:focus:border-app-accent tw:focus:outline-2 tw:focus:outline-solid tw:focus:outline-offset-[-1px] tw:focus:outline-app-focus tw:placeholder:text-app-text-meta"
+              placeholder={'{"max_tokens": maxOutputTokens}'}
+              rows={3}
+              value={model.maxOutputTokensMap}
+              onChange={(event) => onChange({ ...model, maxOutputTokensMap: event.target.value })}
+            />
+          </label>
+
           <label className={cx(PROVIDER_EDITOR_FIELD_CLASS, PROVIDER_EDITOR_FIELD_MONO_CLASS)}>
             <span>API Compat (JSON)</span>
             <textarea
@@ -1776,6 +1865,10 @@ function emptyModel(): EditableModel {
     headers: '',
     thinkingLevelMap: '',
     compat: '',
+    reasoningLevelValues: '',
+    reasoningLevelMap: '',
+    maxOutputTokensMax: 0,
+    maxOutputTokensMap: '',
   }
 }
 
@@ -1804,6 +1897,11 @@ export function editableModel(model: DesktopProviderModelDefinition): EditableMo
     headers: headersToText(model.headers ?? {}),
     thinkingLevelMap: model.thinkingLevelMap ? JSON.stringify(model.thinkingLevelMap, null, 2) : '',
     compat: model.compat ? JSON.stringify(model.compat, null, 2) : '',
+    reasoningLevelValues: model.optionSpecs?.reasoningLevel?.values?.join('\n') ?? '',
+    reasoningLevelMap: model.optionSpecs?.reasoningLevel?.map ?? '',
+    maxOutputTokensMax: model.optionSpecs?.maxOutputTokens?.max ?? 0,
+    maxOutputTokensMap: model.optionSpecs?.maxOutputTokens?.map ?? '',
+    ...(model.smartConfig ? { smartConfig: { pinned: [...model.smartConfig.pinned] } } : {}),
   }
 }
 
@@ -1833,6 +1931,22 @@ export function headersToText(headers: Readonly<Record<string, string>>): string
   return Object.entries(headers)
     .map(([name, value]) => `${name}: ${value}`)
     .join('\n')
+}
+
+/**
+ * 解析 optionSpecs.reasoningLevel.values：支持逐行或逗号分隔，按出现顺序保序去重，
+ * 丢弃空项。顺序即思考档位展示顺序，必须原样保留。
+ */
+export function parseReasoningLevelValues(value: string): string[] {
+  const seen = new Set<string>()
+  const values: string[] = []
+  for (const raw of value.split(/[\n,]/)) {
+    const item = raw.trim()
+    if (!item || seen.has(item)) continue
+    seen.add(item)
+    values.push(item)
+  }
+  return values
 }
 
 function parseJsonObject(value: string, label: string): Record<string, unknown> | null | Error {
@@ -1890,6 +2004,44 @@ export function normalizeEditableModel(
   if (thinkingLevelMap instanceof Error) return thinkingLevelMap
   const compat = parseJsonObject(model.compat, 'compat')
   if (compat instanceof Error) return compat
+  const reasoningLevelValues = parseReasoningLevelValues(model.reasoningLevelValues)
+  const reasoningLevelMap = model.reasoningLevelMap.trim()
+  const maxOutputTokensMap = model.maxOutputTokensMap.trim()
+  // 不静默改写用户输入：越界/非法值返回可见校验错误，由调用方展示。
+  const rawMax = model.maxOutputTokensMax
+  if (rawMax !== undefined && rawMax !== 0) {
+    if (!Number.isFinite(rawMax) || !Number.isInteger(rawMax) || rawMax <= 0) {
+      return new Error(`模型 ${model.id || '(未命名)'}：Max Output Tokens 必须是正整数。`)
+    }
+    if (rawMax > 10_000_000) {
+      return new Error(`模型 ${model.id || '(未命名)'}：Max Output Tokens 不能超过 10,000,000。`)
+    }
+  }
+  const maxOutputTokensMax = rawMax !== undefined && rawMax > 0 ? rawMax : undefined
+  const optionSpecs =
+    reasoningLevelValues.length ||
+    reasoningLevelMap ||
+    maxOutputTokensMax !== undefined ||
+    maxOutputTokensMap
+      ? {
+          ...(reasoningLevelValues.length || reasoningLevelMap
+            ? {
+                reasoningLevel: {
+                  ...(reasoningLevelValues.length ? { values: reasoningLevelValues } : {}),
+                  ...(reasoningLevelMap ? { map: reasoningLevelMap } : {}),
+                },
+              }
+            : {}),
+          ...(maxOutputTokensMax !== undefined || maxOutputTokensMap
+            ? {
+                maxOutputTokens: {
+                  ...(maxOutputTokensMax !== undefined ? { max: maxOutputTokensMax } : {}),
+                  ...(maxOutputTokensMap ? { map: maxOutputTokensMap } : {}),
+                },
+              }
+            : {}),
+        }
+      : undefined
   return {
     ...model.original,
     id: model.id.trim(),
@@ -1926,5 +2078,7 @@ export function normalizeEditableModel(
     headers: modelHeaders,
     thinkingLevelMap: thinkingLevelMap ? (thinkingLevelMap as never) : undefined,
     compat: compat ?? undefined,
+    optionSpecs: optionSpecs as never,
+    smartConfig: model.smartConfig ? { pinned: [...model.smartConfig.pinned] } : undefined,
   } as unknown as DesktopProviderModelDefinition
 }

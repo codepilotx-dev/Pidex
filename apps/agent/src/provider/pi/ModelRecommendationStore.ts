@@ -1,47 +1,38 @@
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
-import { dirname } from 'node:path'
-import { randomUUID } from 'node:crypto'
-import { ModelRecommendationIndex, type RecommendationInput } from './ModelRecommendations'
+import {
+  SharedModelCatalogCache,
+  downloadCatalogJson,
+} from './SharedModelCatalogCache'
+import type { RecommendationInput } from './ModelRecommendations'
 
-const URL = 'https://models.dev/catalog.json?type=all'
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000
-type Document = { owner: 'pidex'; formatVersion: 1; updatedAt: number; catalog: unknown }
 
-export const downloadCatalogJson = async (
-  request: (input: string | URL | Request, init?: RequestInit) => Promise<Response>,
-  url: string,
-): Promise<unknown> => {
-  const response = await request(url, { signal: AbortSignal.timeout(30_000), redirect: 'error' })
-  if (!response.ok) throw new Error('Catalog download failed')
-  const reader = response.body?.getReader()
-  if (!reader) throw new Error('Empty catalog response')
-  const chunks: Uint8Array[] = []
-  let size = 0
-  try {
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      size += value.length
-      if (size > 64 * 1024 * 1024) throw new Error('Catalog too large')
-      chunks.push(value)
-    }
-  } finally { await reader.cancel() }
-  return JSON.parse(Buffer.concat(chunks).toString('utf8'))
-}
+export { downloadCatalogJson }
 
+/**
+ * 推荐目录的持久化交给共享的 models.dev 缓存（{@link SharedModelCatalogCache}）。
+ *
+ * `path` 仍指向旧 `model-recommendations.json`：文件存在时用于只读兼容迁移，
+ * 新格式写入同目录的 `shared-model-catalog.json`，不再单独保存第二份 models.dev。
+ * `version()`/`updatedAt()` 语义保持不变，PiModelService 的 fingerprint 依赖它。
+ */
 export class ModelRecommendationStore {
-  private loaded = false
-  private index?: ModelRecommendationIndex
-  private updatedAt?: number
-  private operation: Promise<unknown> = Promise.resolve()
+  private readonly cache: SharedModelCatalogCache
+  private readonly request: (
+    input: string | URL | Request,
+    init?: RequestInit,
+  ) => Promise<Response>
   private refreshTimer: ReturnType<typeof setInterval> | undefined
+
   constructor(
-    private readonly path?: string,
-    private readonly request: (
+    path?: string,
+    request: (
       input: string | URL | Request,
       init?: RequestInit,
     ) => Promise<Response> = fetch,
-  ) {}
+  ) {
+    this.cache = SharedModelCatalogCache.forPath(path)
+    this.request = request
+  }
 
   startAutoRefresh() {
     if (this.refreshTimer) return
@@ -58,63 +49,16 @@ export class ModelRecommendationStore {
     this.refreshTimer = undefined
   }
 
-  private async load(force = false) {
-    if (this.loaded && !force) return
-    if (this.path) {
-      try {
-        const raw = JSON.parse(await readFile(this.path, 'utf8')) as Document
-        if (raw.owner !== 'pidex' || raw.formatVersion !== 1 || !Number.isFinite(raw.updatedAt))
-          throw new Error('Unsupported recommendation cache')
-        this.index = new ModelRecommendationIndex(raw.catalog)
-        this.updatedAt = raw.updatedAt
-      } catch (error) {
-        if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'))
-          throw error
-      }
-    }
-    this.loaded = true
+  async resolve(input: RecommendationInput) {
+    return this.cache.resolve(input)
   }
 
-  async resolve(input: RecommendationInput) {
-    await this.load()
-    return {
-      ...(this.index?.resolve(input) ?? {
-        status: 'no-cache' as const,
-        recommended: {} as import('@pidex/model-schema').Model.Recommendation,
-      }),
-      ...(this.updatedAt !== undefined ? { updatedAt: this.updatedAt } : {}),
-    }
+  /** 当前目录版本；推荐更新后指纹变化会触发已保存模型重新合成。 */
+  async version(): Promise<number | undefined> {
+    return this.cache.version()
   }
 
   refresh() {
-    return this.serial(async () => {
-      await this.load(true)
-      const catalog = await downloadCatalogJson(this.request, URL)
-      const index = new ModelRecommendationIndex(catalog)
-      const updatedAt = Date.now()
-      if (this.path) {
-        await mkdir(dirname(this.path), { recursive: true })
-        const temporary = `${this.path}.${randomUUID()}.tmp`
-        try {
-          await writeFile(
-            temporary,
-            JSON.stringify({ owner: 'pidex', formatVersion: 1, updatedAt, catalog }),
-            'utf8',
-          )
-          await rename(temporary, this.path)
-        } finally {
-          await rm(temporary, { force: true })
-        }
-      }
-      this.index = index
-      this.updatedAt = updatedAt
-      return { updatedAt }
-    })
-  }
-
-  private serial<T>(action: () => Promise<T>): Promise<T> {
-    const next = this.operation.then(action, action)
-    this.operation = next.catch(() => undefined)
-    return next
+    return this.cache.refresh(this.request)
   }
 }

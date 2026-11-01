@@ -76,6 +76,118 @@ describe('Pi provider v2 config', () => {
     ).toThrow()
   })
 
+  test('智能配置固定清单往返，未知字段名被丢弃', () => {
+    const custom = serializePiProviderDefinition({
+      kind: 'custom',
+      id: 'smart',
+      name: 'Smart',
+      enabled: true,
+      baseUrl: 'https://example.com/v1',
+      auth: 'none',
+      env: [],
+      allowInsecureHttp: false,
+      headers: {},
+      models: [
+        {
+          id: 'gpt-4o',
+          api: 'openai-completions',
+          smartConfig: { pinned: ['contextWindow', 'imageInput'] },
+        },
+        { id: 'plain', api: 'openai-completions' },
+      ],
+    })
+    const models = custom.value.models as Record<string, Record<string, unknown>>
+    expect(models['gpt-4o']).toMatchObject({
+      smart_config: { pinned: ['contextWindow', 'imageInput'] },
+    })
+    const parsed = parsePiProviderCatalog({ providers: { smart: custom.value } })
+    expect(parsed.issues).toEqual([])
+    expect(parsed.providers.smart?.models['gpt-4o']?.smartConfig).toEqual({
+      pinned: ['contextWindow', 'imageInput'],
+    })
+    // 没有智能配置的模型保持原样，不因为推荐存在就整体接管。
+    expect(parsed.providers.smart?.models.plain?.smartConfig).toBeUndefined()
+    // 空清单合法：表示跟随推荐但当前没有固定项。
+    const following = parsePiProviderCatalog({
+      providers: {
+        smart: {
+          ...custom.value,
+          models: {
+            'gpt-4o': { ...models['gpt-4o'], smart_config: { pinned: [] } },
+          },
+        },
+      },
+    })
+    expect(following.providers.smart?.models['gpt-4o']?.smartConfig).toEqual({ pinned: [] })
+    // 未知字段名丢弃而不是拒绝整份配置。
+    const unknown = parsePiProviderCatalog({
+      providers: {
+        smart: {
+          ...custom.value,
+          models: {
+            'gpt-4o': {
+              ...models['gpt-4o'],
+              smart_config: { pinned: ['nope', 'maxTokens'] },
+            },
+          },
+        },
+      },
+    })
+    expect(unknown.providers.smart?.models['gpt-4o']?.smartConfig).toEqual({ pinned: ['maxTokens'] })
+  })
+
+  test('optionSpecs 往返保留 values/map/max，非法 map 被拒绝', () => {
+    const custom = serializePiProviderDefinition({
+      kind: 'custom',
+      id: 'opts',
+      name: 'Opts',
+      enabled: true,
+      baseUrl: 'https://example.com/v1',
+      auth: 'none',
+      env: [],
+      allowInsecureHttp: false,
+      headers: {},
+      models: [
+        {
+          id: 'm',
+          api: 'openai-completions',
+          optionSpecs: {
+            reasoningLevel: { values: ['none', 'low', 'high', 'max'], map: '{"reasoning_effort": reasoningLevel}' },
+            maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
+          },
+        },
+      ],
+    })
+    const models = custom.value.models as Record<string, Record<string, unknown>>
+    expect(models.m!.option_specs).toMatchObject({
+      reasoningLevel: { values: ['none', 'low', 'high', 'max'], map: '{"reasoning_effort": reasoningLevel}' },
+      maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
+    })
+    const parsed = parsePiProviderCatalog({ providers: { opts: custom.value } })
+    expect(parsed.issues).toEqual([])
+    expect(parsed.providers.opts?.models.m?.optionSpecs).toEqual({
+      reasoningLevel: { values: ['none', 'low', 'high', 'max'], map: '{"reasoning_effort": reasoningLevel}' },
+      maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
+    })
+    // 无法编译的表达式在解析/保存边界被拒绝，且整份 provider 不生效。
+    const invalid = parsePiProviderCatalog({
+      providers: {
+        opts: {
+          ...custom.value,
+          models: {
+            m: {
+              ...models.m!,
+              option_specs: { reasoningLevel: { map: 'reasoningLevel.badMember' } },
+            },
+          },
+        },
+      },
+    })
+    expect(invalid.issues.length).toBeGreaterThan(0)
+    expect(invalid.issues[0]?.message).toContain('Reasoning Level Map (CEL) 校验失败')
+    expect(invalid.providers.opts).toBeUndefined()
+  })
+
   test('最大输入 Token 在配置与运行时模型中保留，旧模型不添加限制', () => {
     const saved = serializePiProviderDefinition({
       kind: 'custom',

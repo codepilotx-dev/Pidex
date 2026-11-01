@@ -33,3 +33,6 @@ export const ModelRecommendationRpcMethods = {
 } as const
 
 export type ModelRecommendation = Model.Recommendation
+export type SmartConfig = Model.SmartConfig
+export type SmartConfigPinnedField = Model.SmartConfigPinnedField
+export const SmartConfigPinnedFields = Model.SmartConfigPinnedFields

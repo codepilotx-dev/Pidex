@@ -11,6 +11,7 @@ import type {
   PiCustomModelConfig,
   PiCustomProviderConfig,
 } from './PiProviderConfig'
+import type { Model as PidexModel } from '@pidex/model-schema'
 import { piProviderApiStreams as streams } from './PiProviderApis'
 
 export const toPiModel = (
@@ -21,6 +22,7 @@ export const toPiModel = (
   inputExplicit: boolean
   modelType?: NonNullable<PiCustomModelConfig['modelType']>
   tools?: boolean
+  optionSpecs?: PidexModel.OptionSpecs
 } => ({
   id: model.id,
   name: model.name,
@@ -39,6 +41,7 @@ export const toPiModel = (
   ...(Object.keys(model.headers).length ? { headers: { ...model.headers } } : {}),
   ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
   ...(model.compat ? { compat: structuredClone(model.compat) } : {}),
+  ...(model.optionSpecs ? { optionSpecs: structuredClone(model.optionSpecs) } : {}),
 })
 
 export const createPiCustomProvider = (

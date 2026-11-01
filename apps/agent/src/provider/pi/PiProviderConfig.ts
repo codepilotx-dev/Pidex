@@ -6,6 +6,8 @@ import type {
   AnthropicMessagesCompat,
 } from '@earendil-works/pi-ai'
 import { builtinProviders } from '@earendil-works/pi-ai/providers/all'
+import { Model } from '@pidex/model-schema'
+import { compileModelOptionMap } from './option-map'
 
 export const PI_PROVIDER_CONFIG_SCHEMA_VERSION = 2
 
@@ -103,6 +105,13 @@ export interface PiCustomModelConfig {
   readonly headers: Readonly<Record<string, string>>
   readonly thinkingLevelMap?: NonNullable<PiModel<Api>['thinkingLevelMap']>
   readonly compat?: OpenAICompletionsCompat | OpenAIResponsesCompat | AnthropicMessagesCompat
+  /** 双层参数规格：reasoningLevel.values/map 与 maxOutputTokens.max/map。 */
+  readonly optionSpecs?: Model.OptionSpecs
+  /**
+   * 已脱离推荐值的字段清单。字段值本身仍写在普通模型字段里；
+   * 缺失表示整份配置都跟随推荐（老数据默认行为）。
+   */
+  readonly smartConfig?: Model.SmartConfig
 }
 
 /** Persisted baseline of the last successful upstream model list. */
@@ -143,6 +152,8 @@ export interface PiProviderConfigIssue {
     | 'SENSITIVE_HEADER'
     | 'BUILTIN_OVERRIDE'
     | 'UNSUPPORTED_SCHEMA'
+  /** 可选的具体校验信息（安全、面向用户，不含源码路径/凭据）。 */
+  readonly message?: string
 }
 
 export interface ParsedPiProviderCatalog {
@@ -362,6 +373,102 @@ const parseCustomModelSync = (value: unknown): PiCustomModelSyncConfig | undefin
   return { fetchedAt, api: api as CustomProviderApi, models: ids }
 }
 
+/**
+ * 只接受已知的固定字段名；未知或重复项丢弃而不是拒绝整份配置，
+ * 让旧版本写坏的值不会锁死模型。空 `pinned` 合法：存在即表示该模型跟随推荐。
+ */
+const parseSmartConfig = (value: unknown): Model.SmartConfig | undefined => {
+  if (!isObject(value) || !Array.isArray(value.pinned)) return undefined
+  const known = new Set<string>(Model.SmartConfigPinnedFields)
+  const pinned = [
+    ...new Set(
+      value.pinned.filter((field): field is string => typeof field === 'string' && known.has(field)),
+    ),
+  ] as Model.SmartConfig['pinned']
+  return { pinned }
+}
+
+const assertOptionMapCompiles = (
+  source: string,
+  variable: 'reasoningLevel' | 'maxOutputTokens',
+): void => {
+  try {
+    compileModelOptionMap(source, variable)
+  } catch (error) {
+    // 只暴露受限 CEL 的安全错误信息（消息 + offset），不含用户路径或凭据。
+    const detail = error instanceof Error ? error.message : '无法编译'
+    const label =
+      variable === 'reasoningLevel' ? 'Reasoning Level Map (CEL)' : 'Max Output Tokens Map (CEL)'
+    throw new Error(`${label} 校验失败：${detail}`)
+  }
+}
+
+/**
+ * 结构解析 optionSpecs，并在保存/导入/加载边界校验 map 可编译（安全错误）。
+ * values 去重、去空、保序；map 仅接受非空且可编译的字符串；整份为空时返回 undefined。
+ */
+const parseOptionSpecs = (value: unknown): Model.OptionSpecs | undefined => {
+  if (!isObject(value)) return undefined
+  const level = isObject(value.reasoningLevel) ? value.reasoningLevel : undefined
+  const values = level && Array.isArray(level.values)
+    ? [
+        ...new Set(
+          level.values.filter(
+            (item): item is string => typeof item === 'string' && item.trim().length > 0,
+          ),
+        ),
+      ]
+    : undefined
+  const levelMap =
+    level && typeof level.map === 'string' && level.map.trim() ? level.map : undefined
+  const max = isObject(value.maxOutputTokens) ? value.maxOutputTokens : undefined
+  const maxValue =
+    max && typeof max.max === 'number' && Number.isSafeInteger(max.max) && max.max > 0
+      ? max.max
+      : undefined
+  const maxMap = max && typeof max.map === 'string' && max.map.trim() ? max.map : undefined
+  if (levelMap !== undefined) assertOptionMapCompiles(levelMap, 'reasoningLevel')
+  if (maxMap !== undefined) assertOptionMapCompiles(maxMap, 'maxOutputTokens')
+  const reasoningLevel =
+    values?.length || levelMap !== undefined
+      ? {
+          ...(values?.length ? { values } : {}),
+          ...(levelMap !== undefined ? { map: levelMap } : {}),
+        }
+      : undefined
+  const maxOutputTokens =
+    maxValue !== undefined || maxMap !== undefined
+      ? {
+          ...(maxValue !== undefined ? { max: maxValue } : {}),
+          ...(maxMap !== undefined ? { map: maxMap } : {}),
+        }
+      : undefined
+  return reasoningLevel || maxOutputTokens
+    ? {
+        ...(reasoningLevel ? { reasoningLevel } : {}),
+        ...(maxOutputTokens ? { maxOutputTokens } : {}),
+      }
+    : undefined
+}
+
+const serializeOptionSpecs = (specs: Model.OptionSpecs): Record<string, unknown> => ({  ...(specs.reasoningLevel
+    ? {
+        reasoningLevel: {
+          ...(specs.reasoningLevel.values ? { values: [...specs.reasoningLevel.values] } : {}),
+          ...(specs.reasoningLevel.map ? { map: specs.reasoningLevel.map } : {}),
+        },
+      }
+    : {}),
+  ...(specs.maxOutputTokens
+    ? {
+        maxOutputTokens: {
+          ...(specs.maxOutputTokens.max !== undefined ? { max: specs.maxOutputTokens.max } : {}),
+          ...(specs.maxOutputTokens.map ? { map: specs.maxOutputTokens.map } : {}),
+        },
+      }
+    : {}),
+})
+
 const parseCustomModel = (
   providerID: string,
   configuredID: string,
@@ -393,6 +500,8 @@ const parseCustomModel = (
   const cost = isObject(value.cost) ? value.cost : {}
   const thinkingLevelMap = parseThinkingLevelMap(value.thinking_level_map ?? value.thinkingLevelMap)
   const compat = parseCompat(value.compat)
+  const smartConfig = parseSmartConfig(value.smart_config ?? value.smartConfig)
+  const optionSpecs = parseOptionSpecs(value.option_specs ?? value.optionSpecs)
   return {
     id,
     api: api as CustomProviderApi,
@@ -419,6 +528,8 @@ const parseCustomModel = (
     headers: assertSafeProviderHeaders(value.headers, `model ${providerID}/${configuredID}`),
     ...(thinkingLevelMap ? { thinkingLevelMap } : {}),
     ...(compat ? { compat } : {}),
+    ...(smartConfig ? { smartConfig } : {}),
+    ...(optionSpecs ? { optionSpecs } : {}),
   }
 }
 
@@ -523,6 +634,10 @@ const parseBuiltinModel = (
     'thinkingLevelMap',
     'thinking_level_map',
     'compat',
+    'smartConfig',
+    'smart_config',
+    'optionSpecs',
+    'option_specs',
   ])
   if (Object.keys(raw).some((key) => !allowed.has(key)))
     throw new Error('Builtin model override is unsupported')
@@ -678,6 +793,10 @@ export const parsePiProviderCatalog = (config: PiModelCatalogConfig): ParsedPiPr
       })
     } catch (cause) {
       const message = cause instanceof Error ? cause.message : ''
+      // 仅当我们自己的 optionSpecs 受限 CEL 校验提供安全、面向用户的具体信息时才附带，
+      // 其他内部解析错误保持原有 issue 形状（不扩大暴露面）。
+      const safeMessage =
+        /Map \(CEL\)|optionSpecs/u.test(message) && message.trim() ? message.trim() : undefined
       issues.push({
         providerID,
         path: `model_providers.${providerID}`,
@@ -685,9 +804,10 @@ export const parsePiProviderCatalog = (config: PiModelCatalogConfig): ParsedPiPr
           ? 'SENSITIVE_HEADER'
           : message.includes('base_url') || message.includes('HTTP')
             ? 'UNSAFE_URL'
-            : message.includes('model') || message.includes('Model')
+            : safeMessage || message.includes('model') || message.includes('Model')
               ? 'INVALID_MODEL'
               : 'INVALID_PROVIDER',
+        ...(safeMessage ? { message: safeMessage } : {}),
       })
     }
   }
@@ -807,6 +927,12 @@ export const serializePiProviderDefinition = (
                     }
                   : {}),
                 ...(model.compat !== undefined ? { compat: structuredClone(model.compat) } : {}),
+                ...(model.smartConfig !== undefined
+                  ? { smart_config: { pinned: [...model.smartConfig.pinned] } }
+                  : {}),
+                ...(model.optionSpecs !== undefined
+                  ? { option_specs: serializeOptionSpecs(model.optionSpecs) }
+                  : {}),
               },
             ]),
           ),
@@ -891,6 +1017,12 @@ export const serializePiProviderDefinition = (
                       }
                     : {}),
                   ...(model.compat ? { compat: structuredClone(model.compat) } : {}),
+                  ...(model.smartConfig
+                    ? { smart_config: { pinned: [...model.smartConfig.pinned] } }
+                    : {}),
+                  ...(model.optionSpecs
+                    ? { option_specs: serializeOptionSpecs(model.optionSpecs) }
+                    : {}),
                 },
               ]),
             ),

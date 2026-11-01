@@ -1,0 +1,168 @@
+/*
+ * StopSlider private styles: the pill track, inset stop dots and the round thumb
+ * are geometry/pseudo-state rules that utilities cannot carry (percentage fill,
+ * per-stop data attributes). Colors stay on semantic system tokens so light,
+ * dark and forced-colors all keep working.
+ */
+@layer primitives {
+  .stop-slider-field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--cpx-sys-space-1);
+    width: 100%;
+  }
+
+  .stop-slider {
+    --stop-slider-thumb-size: 28px;
+
+    position: relative;
+    display: flex;
+    width: 100%;
+    height: 32px;
+    align-items: center;
+    touch-action: none;
+    user-select: none;
+    cursor: pointer;
+  }
+
+  .stop-slider[data-disabled] {
+    cursor: default;
+    opacity: 0.5;
+  }
+
+  /* 自定义值占位时轨道变灰；仍可拖动，拖到任一档位即切回档位。 */
+  .stop-slider[data-muted='true'] {
+    opacity: 0.55;
+  }
+
+  .stop-slider:has([role='slider']:focus-visible) {
+    border-radius: var(--cpx-sys-radius-full);
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+
+  .stop-slider-track {
+    position: relative;
+    display: block;
+    height: 24px;
+    flex: 1;
+    overflow: hidden;
+    border-radius: var(--cpx-sys-radius-full);
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 10%, transparent);
+
+    /* 描边留在填充层之下，选中区域完全覆盖它。 */
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cpx-sys-color-fg-primary) 10%, transparent);
+  }
+
+  .stop-slider-fill {
+    position: absolute;
+    inset-block: 0;
+    left: 0;
+    border-radius: var(--cpx-sys-radius-full);
+
+    /* 参照 ZCode：档位填充用成功色，滑块保持白色并在两套主题下都不变。 */
+    background: var(--cpx-sys-color-success);
+    transition: width var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-out);
+  }
+
+  .stop-slider[data-muted='true'] .stop-slider-fill {
+    background: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  .stop-slider-stops {
+    position: absolute;
+    inset-block: 0;
+    inset-inline: calc(var(--stop-slider-thumb-size) / 2);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    pointer-events: none;
+  }
+
+  .stop-slider-stop {
+    display: block;
+    width: 4px;
+    height: 4px;
+    border-radius: var(--cpx-sys-radius-full);
+    background: var(--cpx-sys-color-fg-tertiary);
+    scale: 1;
+
+    /* 圆点自带 4px 宽：用负外边距把中心压到吸附位置上，和滑块中心对齐。 */
+    margin-inline: -2px;
+    transition:
+      scale var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-out),
+      opacity var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-out);
+  }
+
+  /* 已填充档位坐在强调色填充上，用 on-accent 保证对比。 */
+  .stop-slider-stop[data-filled='true'] {
+    background: var(--cpx-sys-color-fg-on-accent);
+    opacity: 0.35;
+  }
+
+  .stop-slider-stop[data-hovered='true'] {
+    scale: 1.75;
+    opacity: 1;
+  }
+
+  .stop-slider-thumb {
+    display: block;
+    width: var(--stop-slider-thumb-size);
+    height: var(--stop-slider-thumb-size);
+    border: 0;
+    border-radius: var(--cpx-sys-radius-full);
+
+    /* 参照 ZCode：滑块在两套主题下都是白色；浅色主题用一圈描边保证可见。 */
+    background: var(--cpx-sys-color-fg-on-accent);
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--cpx-sys-color-fg-primary) 16%, transparent);
+    cursor: grab;
+    transition: scale var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-out);
+  }
+
+  .stop-slider[data-muted='true'] .stop-slider-thumb {
+    background: var(--cpx-sys-color-fg-secondary);
+  }
+
+  .stop-slider-thumb:active {
+    cursor: grabbing;
+  }
+
+  .stop-slider[data-disabled] .stop-slider-thumb {
+    cursor: default;
+  }
+
+  .stop-slider-labels {
+    display: flex;
+    justify-content: space-between;
+    gap: var(--cpx-sys-space-1);
+    font: var(--cpx-sys-type-caption);
+    color: var(--cpx-sys-color-fg-tertiary);
+  }
+
+  .stop-slider-label[data-active='true'] {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .stop-slider-fill,
+    .stop-slider-stop,
+    .stop-slider-thumb {
+      transition: none;
+    }
+  }
+
+  @media (forced-colors: active) {
+    .stop-slider-track {
+      background: Canvas;
+      box-shadow: inset 0 0 0 1px CanvasText;
+    }
+
+    .stop-slider-fill {
+      background: Highlight;
+    }
+
+    .stop-slider-thumb {
+      background: ButtonText;
+    }
+  }
+}

@@ -636,7 +636,7 @@ describe('composer surface variant', () => {
     expect(html).not.toContain('composer-model-trigger-effort-wrap')
     expect(html).toContain('composer-signal-trigger-btn')
     expect(html).toContain(
-      'aria-label="模型运行时参数设置：Claude Sonnet；思考：高；上下文：模型默认"',
+      'aria-label="模型运行时参数设置：Claude Sonnet；思考：高；上下文预算：模型默认"',
     )
     expect(html).toContain('aria-label="模型与推理设置：Claude Sonnet，高"')
     expect(html).not.toContain('composer-thinking-chip')
@@ -790,9 +790,42 @@ function canSubmitInput(
   }
 }
 
-
 test('目标超预算保留实际用量并展示紧凑指标', () => {
-  const html = renderToStaticMarkup(<ComposerCard {...composerCardProps({ placement: 'thread', threadGoal: { ...GOAL, tokensUsed: 879000, tokenBudget: 200000, status: 'budget-limited' } })} />)
+  const html = renderToStaticMarkup(
+    <ComposerCard
+      {...composerCardProps({
+        placement: 'thread',
+        threadGoal: { ...GOAL, tokensUsed: 879000, tokenBudget: 200000, status: 'budget-limited' },
+      })}
+    />,
+  )
   expect(html).toContain('87.9万 / 20万')
   expect(html).toContain('目标受限')
+})
+
+test('手动压缩反馈不放进输入框容器', () => {
+  const html = renderToStaticMarkup(
+    <ComposerCard
+      {...composerCardProps({
+        contextUsage: {
+          usedTokens: 0,
+          compactionOperation: {
+            operationId: 'manual-current',
+            threadId: 'thread-1',
+            turnId: null,
+            sessionId: null,
+            agentId: null,
+            trigger: 'manual',
+            phase: 'settled',
+            status: 'failed',
+            compactionId: null,
+            reason: null,
+            createdAt: 1,
+            updatedAt: 2,
+          },
+        },
+      })}
+    />,
+  )
+  expect(html).not.toContain('上下文压缩未完成')
 })

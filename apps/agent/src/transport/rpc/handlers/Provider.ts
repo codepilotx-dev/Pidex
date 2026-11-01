@@ -417,8 +417,14 @@ export const providerHandlers = {
         } catch (cause) {
           if (cause instanceof PiProviderConfigValidationError) {
             const firstIssue = cause.issues[0]
+            // optionSpecs 的受限 CEL 校验消息是安全且面向用户的，直接透出以指明具体字段。
+            const specific =
+              firstIssue?.message && /Map \(CEL\)|optionSpecs/u.test(firstIssue.message)
+                ? firstIssue.message.trim()
+                : undefined
             const detail =
-              firstIssue?.code === 'BUILTIN_OVERRIDE'
+              specific ??
+              (firstIssue?.code === 'BUILTIN_OVERRIDE'
                 ? `Provider ID "${providerID}" 与系统内置 Provider 重名，请使用其他 ID（如 custom-${providerID}）`
                 : firstIssue?.code === 'UNSAFE_URL'
                   ? 'Base URL 格式无效，或明文 HTTP 需要开启允许非 loopback 明文 HTTP'
@@ -426,7 +432,7 @@ export const providerHandlers = {
                     ? '自定义 Provider 请求头中不能包含敏感认证凭据'
                     : firstIssue?.code === 'INVALID_MODEL'
                       ? '模型配置不合法，请检查模型 ID 与参数设置'
-                      : 'Provider 配置不合法'
+                      : 'Provider 配置不合法')
             throw new AgentError('INVALID_REQUEST', `Provider 配置不合法：${detail}`, 400, {
               issues: cause.issues.map((issue) => ({
                 providerId: issue.providerID,
@@ -464,6 +470,10 @@ export const providerHandlers = {
             'thinkingLevelMap',
             'thinking_level_map',
             'compat',
+            'smartConfig',
+            'smart_config',
+            'optionSpecs',
+            'option_specs',
           ])
           const models = serialized.value.models as Record<string, Record<string, unknown>>
           for (const [id, model] of Object.entries(models)) {

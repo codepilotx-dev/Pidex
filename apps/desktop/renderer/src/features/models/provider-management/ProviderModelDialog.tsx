@@ -6,10 +6,21 @@ import { Button } from '../../../components/ui/Button.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
 import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { useDialogFocusRestore } from '../../../components/ui/UseDialogFocusRestore.js'
-import { fullErrorMessage } from '../../../utils/Errors.js'
 import { editableModel, ModelEditor, normalizeEditableModel } from './ProviderEditorForm.js'
 import { ProviderEditorNavigationGuard } from './ProviderEditorNavigationGuard.js'
 import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../../settings/SettingsManagementDialogSizing.js'
+
+/** 产品面可读的错误文本：只保留 message，剥离堆栈帧与内部源码路径，避免泄露实现细节。 */
+function readableError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : String(error)
+  const cleaned = raw
+    .split('\n')
+    .filter((line) => !/^\s*at\s/u.test(line))
+    .join(' ')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  return cleaned || '保存失败，请重试。'
+}
 
 export function ProviderModelDialog({
   model,
@@ -58,7 +69,7 @@ export function ProviderModelDialog({
       if (closeAfterSave) onClose()
       return true
     } catch (error) {
-      setError(fullErrorMessage(error))
+      setError(readableError(error))
       return false
     } finally {
       setBusy(false)
@@ -104,13 +115,15 @@ export function ProviderModelDialog({
                 onChange={setDraft}
                 {...(nativeApi ? { nativeApi } : {})}
               />
-              {error ? (
-                <p role="alert" className="tw:text-app-danger tw:type-body-sm">
-                  {error}
-                </p>
-              ) : null}
             </fieldset>
             </div>
+            {error ? (
+              <div className="tw:shrink-0 tw:px-6 tw:pb-2">
+                <p role="alert" className="tw:m-0 tw:w-full tw:text-app-danger tw:type-body-sm">
+                  {error}
+                </p>
+              </div>
+            ) : null}
             <footer className="settings-management-dialog-footer tw:shrink-0">
               <Button size="md" color="secondary" disabled={busy} onClick={close}>
                 取消

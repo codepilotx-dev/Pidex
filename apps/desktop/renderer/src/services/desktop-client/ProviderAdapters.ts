@@ -16,7 +16,7 @@ export function catalogProviderToDesktop(
       const cost = model.cost[0]
       const metadata: DesktopModelMetadata = {
         id: model.id,
-        name: model.name,
+        name: model.name || model.id,
         contextWindow: model.limit.context,
         inputTokens: model.limit.input,
         outputTokens: model.limit.output,
@@ -29,6 +29,8 @@ export function catalogProviderToDesktop(
           (output) => output === 'json' || output === 'structured',
         ),
         vision: model.capabilities.input.includes('image'),
+        // 推理能力以目录返回的思考档位为准：有任意档位即视为支持推理。
+        reasoning: model.variants.length > 0,
         modalities: {
           input: [...model.capabilities.input],
           output: [...model.capabilities.output],

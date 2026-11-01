@@ -75,13 +75,12 @@ import { ProjectSwitcherPopover } from './ProjectSwitcherPopover.js'
 import { ChatInputDropdown } from './ChatInputDropdown.js'
 import { BranchSelectPopover } from './BranchSelectPopover.js'
 import { ModelPickerPopover } from './ModelPickerPopover.js'
-import { ModelRuntimeParametersPopover } from './ModelRuntimeParametersPopover.js'
-import { ContextThinkingSignalIcon } from './ContextThinkingSignalIcon.js'
-import { ModelReasoningControl, ModelSelectTrigger } from './ModelSelectTrigger.js'
 import {
-  resolveThinkingLabel,
-  resolveThinkingOptions,
-} from './ThinkingLevelPopover.js'
+  ModelRuntimeParametersPopover,
+  ModelRuntimeParametersSummary,
+} from './ModelRuntimeParametersPopover.js'
+import { ModelReasoningControl, ModelSelectTrigger } from './ModelSelectTrigger.js'
+import { resolveThinkingLabel, resolveThinkingOptions } from './ThinkingLevelPopover.js'
 import { MotionConfig } from 'motion/react'
 import { resolveComposerFooterFit, useComposerFooterFit } from './ComposerFooterLayout.js'
 import { ComposerStatusOverlay } from './ComposerStatusOverlay.js'
@@ -236,14 +235,8 @@ const COMPOSER_TOP_BASE_CLASS = cx(
   'tw:shadow-prominent tw:transition-[min-height] tw:duration-panel tw:ease-standard',
   'tw:forced-colors:outline-1 tw:forced-colors:outline-solid tw:forced-colors:shadow-none',
 )
-const COMPOSER_TOP_DEFAULT_CLASS = cx(
-  COMPOSER_TOP_BASE_CLASS,
-  'tw:order-2',
-)
-const COMPOSER_TOP_WORKING_CLASS = cx(
-  COMPOSER_TOP_BASE_CLASS,
-  'tw:order-1',
-)
+const COMPOSER_TOP_DEFAULT_CLASS = cx(COMPOSER_TOP_BASE_CLASS, 'tw:order-2')
+const COMPOSER_TOP_WORKING_CLASS = cx(COMPOSER_TOP_BASE_CLASS, 'tw:order-1')
 const UTILITY_BAR_BASE_CLASS = cx(
   'composer-bottom composer-utility-bar',
   'tw:z-1 tw:flex tw:min-w-0 tw:max-w-none tw:items-center tw:gap-2 tw:overflow-x-auto tw:overflow-y-hidden',
@@ -708,23 +701,17 @@ export function ComposerCard({
     selectedProvider?.modelPresets.find((preset) => preset.id === selectedModelPreset)
   const resolvedModelLabel =
     selectedModel?.label ??
-    (selectedModelPreset && selectedModelPreset !== 'default' && selectedModelPreset !== '__custom__'
+    (selectedModelPreset &&
+    selectedModelPreset !== 'default' &&
+    selectedModelPreset !== '__custom__'
       ? getModelDisplayLabel(selectedModelPreset)
       : undefined)
   const selectedModelLabel =
     resolvedModelLabel ??
-    (modelCatalogLoading
-      ? '加载模型列表中……'
-      : !modelConfigured
-        ? '配置模型'
-        : '未选择模型')
+    (modelCatalogLoading ? '加载模型列表中……' : !modelConfigured ? '配置模型' : '未选择模型')
   const selectedModelTitle =
     resolvedModelLabel ??
-    (modelCatalogLoading
-      ? '加载模型列表中……'
-      : !modelConfigured
-        ? '打开模型配置'
-        : '未选择模型')
+    (modelCatalogLoading ? '加载模型列表中……' : !modelConfigured ? '打开模型配置' : '未选择模型')
   const composerPlaceholder =
     modelCatalogLoading && !modelConfigured && !resolvedModelLabel
       ? '加载模型列表中……'
@@ -875,33 +862,30 @@ export function ComposerCard({
     skillCommands,
     subagentMode,
   ])
-  const reviewMenuItems = useMemo(
-    (): ComposerMenuItem[] => {
-      if (!reviewMenuRequested) return []
-      return [
-        {
-          key: 'code-review-uncommitted',
-          label: '审阅未提交的更改',
-          description: '审查当前工作树和暂存区中的变更',
-          icon: <ShieldCheck size={APP_ICON_SIZE} />,
-          matchText: '代码审查 review uncommitted',
-          onSelect: () => onStartReview?.({ type: 'uncommittedChanges' }),
-        },
-        ...branches
-          .filter((candidate) => candidate && candidate !== branchName)
-          .slice(0, 6)
-          .map((branch) => ({
-            key: `code-review-branch:${branch}`,
-            label: `与 ${branch} 比较`,
-            description: '从 merge-base 开始审阅当前分支的变更',
-            icon: <GitBranch size={APP_ICON_SIZE} />,
-            matchText: `代码审查 branch review ${branch}`,
-            onSelect: () => onStartReview?.({ type: 'baseBranch', branch }),
-          })),
-      ]
-    },
-    [reviewMenuRequested, branchName, branches, onStartReview],
-  )
+  const reviewMenuItems = useMemo((): ComposerMenuItem[] => {
+    if (!reviewMenuRequested) return []
+    return [
+      {
+        key: 'code-review-uncommitted',
+        label: '审阅未提交的更改',
+        description: '审查当前工作树和暂存区中的变更',
+        icon: <ShieldCheck size={APP_ICON_SIZE} />,
+        matchText: '代码审查 review uncommitted',
+        onSelect: () => onStartReview?.({ type: 'uncommittedChanges' }),
+      },
+      ...branches
+        .filter((candidate) => candidate && candidate !== branchName)
+        .slice(0, 6)
+        .map((branch) => ({
+          key: `code-review-branch:${branch}`,
+          label: `与 ${branch} 比较`,
+          description: '从 merge-base 开始审阅当前分支的变更',
+          icon: <GitBranch size={APP_ICON_SIZE} />,
+          matchText: `代码审查 branch review ${branch}`,
+          onSelect: () => onStartReview?.({ type: 'baseBranch', branch }),
+        })),
+    ]
+  }, [reviewMenuRequested, branchName, branches, onStartReview])
 
   const { plugins } = usePluginCatalog(workspace?.path)
   const mentionMenuItems = useMemo((): ComposerMenuItem[] => {
@@ -960,8 +944,7 @@ export function ComposerCard({
     /* 底栏空间不足时模型快捷入口会隐藏；加号菜单保留模型/推理命令作为进入模型弹层的入口。 */
     const modelActions = builtinSlashCommands
       .filter(
-        (command) =>
-          command.availability.visible && ['model', 'reasoning'].includes(command.id),
+        (command) => command.availability.visible && ['model', 'reasoning'].includes(command.id),
       )
       .map((command) => ({
         ...composerCommandMenuItem(command, executeCommand, onSkillSelect),
@@ -1714,7 +1697,9 @@ export function ComposerCard({
                   if (grillModeActive) {
                     event.preventDefault()
                     void Promise.resolve(onGrillModeChange?.(false)).catch((error: unknown) =>
-                      onCommandError?.(error instanceof Error ? error.message : '深度访谈模式未更新'),
+                      onCommandError?.(
+                        error instanceof Error ? error.message : '深度访谈模式未更新',
+                      ),
                     )
                     return true
                   }
@@ -1768,12 +1753,7 @@ export function ComposerCard({
 
         <div ref={footerRef} className={TOOLBAR_CLASS}>
           <div ref={toolbarLeftRef} className={TOOLBAR_LEFT_CLASS}>
-            <Tooltip
-              content="添加文件等内容"
-              shortcut="@"
-              side="top"
-              disabled={buttonContextOpen}
-            >
+            <Tooltip content="添加文件等内容" shortcut="@" side="top" disabled={buttonContextOpen}>
               <Button
                 isIconOnly
                 active={buttonContextOpen}
@@ -1959,7 +1939,9 @@ export function ComposerCard({
                   )}
                   onClick={() => {
                     void Promise.resolve(onGrillModeChange(false)).catch((error: unknown) =>
-                      onCommandError?.(error instanceof Error ? error.message : '深度访谈模式未更新'),
+                      onCommandError?.(
+                        error instanceof Error ? error.message : '深度访谈模式未更新',
+                      ),
                     )
                   }}
                   title="退出深度访谈"
@@ -2139,7 +2121,7 @@ export function ComposerCard({
                     showThinkingOptions={showThinkingOptions}
                     thinkingLabel={selectedThinkingLabel}
                     thinkingMode={modelVariant ?? thinkingMode}
-                    thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                    thinkingOptions={effectiveThinkingOptions}
                     tooltipTitle={
                       showThinkingOptions
                         ? `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle} · 推理强度：${selectedThinkingLabel}`
@@ -2151,12 +2133,12 @@ export function ComposerCard({
               reasoningControl={
                 footerFit.modelMode !== 'text' &&
                 showThinkingOptions &&
-                (modelVariantOptions ?? thinkingOptions).length > 0 &&
+                effectiveThinkingOptions.length > 0 &&
                 selectedThinkingLabel ? (
                   <ModelReasoningControl
                     thinkingLabel={selectedThinkingLabel}
                     thinkingMode={modelVariant ?? thinkingMode}
-                    thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                    thinkingOptions={effectiveThinkingOptions}
                     onThinkingChange={handleThinkingSelect}
                     side="bottom"
                     align="start"
@@ -2180,13 +2162,22 @@ export function ComposerCard({
                   selectedModelMetadata?.contextWindow ?? contextUsage?.contextWindow ?? 128_000
                 }
                 physicalInputLimit={contextUsage?.budget?.physicalInputBudgetTokens}
+                minimumContextTokens={
+                  contextUsage &&
+                  selectedModel &&
+                  contextUsage.provider === selectedProviderID &&
+                  contextUsage.model === selectedModel.value &&
+                  contextUsage.budget?.fixedTokens !== undefined
+                    ? Math.ceil((contextUsage.budget.fixedTokens + 1) / 0.8)
+                    : undefined
+                }
                 maxContextTokens={maxContextTokens}
                 onMaxContextTokensChange={(tokens) => {
                   onMaxContextTokensChange?.(tokens)
                 }}
                 showThinkingOptions={showThinkingOptions}
                 thinkingMode={modelVariant ?? thinkingMode}
-                thinkingOptions={modelVariantOptions ?? thinkingOptions}
+                thinkingOptions={effectiveThinkingOptions}
                 onThinkingChange={handleThinkingSelect}
                 open={openDropdown === 'runtimeParams'}
                 onOpenChange={(open) => {
@@ -2209,32 +2200,36 @@ export function ComposerCard({
                 aria-hidden="true"
                 className="tw:pointer-events-none tw:invisible tw:absolute tw:left-0 tw:top-0"
               >
-                <div ref={modelTextProbeRef} className="tw:inline-flex tw:items-center tw:gap-1.5 tw:w-max">
+                <div
+                  ref={modelTextProbeRef}
+                  className="tw:inline-flex tw:items-center tw:gap-1.5 tw:w-max"
+                >
                   <ModelSelectTrigger
                     id="model-select-trigger-probe-text"
                     modelName={selectedModelLabel}
                   />
-                  <span className="tw:inline-flex tw:size-7 tw:items-center tw:justify-center">
-                    <ContextThinkingSignalIcon
-                      showThinkingOptions={showThinkingOptions}
-                      thinkingMode={modelVariant ?? thinkingMode}
-                      thinkingOptions={modelVariantOptions ?? thinkingOptions}
-                    />
-                  </span>
+                  <ModelRuntimeParametersSummary
+                    maxContextTokens={maxContextTokens}
+                    showThinkingOptions={showThinkingOptions}
+                    thinkingMode={modelVariant ?? thinkingMode}
+                    thinkingOptions={effectiveThinkingOptions}
+                  />
                 </div>
-                <div ref={modelIconProbeRef} className="tw:inline-flex tw:items-center tw:gap-1.5 tw:w-max">
+                <div
+                  ref={modelIconProbeRef}
+                  className="tw:inline-flex tw:items-center tw:gap-1.5 tw:w-max"
+                >
                   <ModelSelectTrigger
                     id="model-select-trigger-probe-icon"
                     compact
                     modelName={selectedModelLabel}
                   />
-                  <span className="tw:inline-flex tw:size-7 tw:items-center tw:justify-center">
-                    <ContextThinkingSignalIcon
-                      showThinkingOptions={showThinkingOptions}
-                      thinkingMode={modelVariant ?? thinkingMode}
-                      thinkingOptions={modelVariantOptions ?? thinkingOptions}
-                    />
-                  </span>
+                  <ModelRuntimeParametersSummary
+                    maxContextTokens={maxContextTokens}
+                    showThinkingOptions={showThinkingOptions}
+                    thinkingMode={modelVariant ?? thinkingMode}
+                    thinkingOptions={effectiveThinkingOptions}
+                  />
                 </div>
               </div>
             </MotionConfig>

@@ -644,6 +644,61 @@ describe('PiModelService', () => {
     ).toBe(piModel!)
   })
 
+  test('missing reasoning selection sends the first advertised level and preserves explicit selections', async () => {
+    const bodies: Record<string, unknown>[] = []
+    const server = Bun.serve({
+      hostname: '127.0.0.1', port: 0,
+      async fetch(request) {
+        bodies.push(await request.json() as Record<string, unknown>)
+        const chunk = { id: 'reasoning-test', object: 'chat.completion.chunk', created: 1,
+          model: 'test', choices: [{ index: 0, delta: { content: 'OK' }, finish_reason: 'stop' }] }
+        return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, {
+          headers: { 'content-type': 'text/event-stream' },
+        })
+      },
+    })
+    const service = new PiModelService(repository().adapter, {
+      config: { schemaVersion: 2, providers: { 'reasoning-test': {
+        kind: 'custom', name: 'Reasoning test', enabled: true,
+        base_url: `${server.url}v1`, auth: 'none',
+        models: Object.fromEntries([
+          ['single', ['high']], ['multiple', ['low', 'high']],
+        ].map(([id, values]) => [id, {
+          api: 'openai-completions', reasoning: true,
+          optionSpecs: { reasoningLevel: { values, map: '{"reasoning_effort": reasoningLevel}' } },
+        }])),
+      } } },
+      env: {},
+    })
+    try {
+      for (const [id, variant, expected] of [
+        ['single', undefined, 'high'],
+        ['multiple', undefined, 'low'],
+        ['multiple', 'high', 'high'],
+      ] as const) {
+        const info = await service.resolve({
+          providerID: Provider.ID.make('reasoning-test'), id: Model.ID.make(id),
+          ...(variant ? { variant: Model.VariantID.make(variant) } : {}),
+        })
+        expect(info.variant).toBe(expected)
+        const model = await service.getPiModel(Model.Ref.make({
+          providerID: info.providerID, id: info.id,
+          variant: Model.VariantID.make(info.variant!),
+        }))
+        const result = await service.pi.streamSimple(model, normalizeContext({
+          messages: [{ role: 'user', content: 'test', timestamp: 0 }],
+        }), { apiKey: 'fixture-only', reasoning: info.variant as 'low' | 'high' }).result()
+        expect(result.errorMessage).toBeUndefined()
+        expect(result.stopReason).toBe('stop')
+        expect(bodies.at(-1)?.reasoning_effort).toBe(expected)
+      }
+      expect(bodies).toHaveLength(3)
+    } finally {
+      await service.dispose()
+      await server.stop(true)
+    }
+  })
+
   test('loads Pi native providers and preserves custom-provider precedence', async () => {
     const fake = repository([
       {

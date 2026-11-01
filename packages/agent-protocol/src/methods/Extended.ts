@@ -128,7 +128,11 @@ export const ProviderModelDefinitionSchema = Schema.Struct({
   cost: Schema.optional(ProviderModelCostSchema),
   headers: Schema.optional(PublicHeadersSchema),
   thinkingLevelMap: Schema.optional(ThinkingLevelMapSchema),
+  /** 双层参数规格：reasoningLevel.values/map 与 maxOutputTokens.max/map。 */
+  optionSpecs: Schema.optional(Model.OptionSpecs),
   compat: Schema.optional(Schema.Record(Schema.String, JsonValueSchema)),
+  /** 已脱离推荐值的字段清单；其余字段继续跟随 models.dev 推荐。 */
+  smartConfig: Schema.optional(Model.SmartConfig),
 })
 
 /** Wire protocols that can list models and run a minimal generation probe. */

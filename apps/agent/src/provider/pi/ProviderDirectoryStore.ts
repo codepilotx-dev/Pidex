@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto'
 import agentPackage from '../../../package.json'
 import { AgentError } from '../../Domain'
 import { ModelRecommendationIndex } from './ModelRecommendations'
-import { downloadCatalogJson } from './ModelRecommendationStore'
+import { SharedModelCatalogCache, downloadCatalogJson } from './SharedModelCatalogCache'
 import {
   CUSTOM_PROVIDER_APIS,
   parsePiProviderCatalog,
@@ -55,6 +55,44 @@ const address = (value: unknown): string | undefined => {
 }
 const positiveLimit = (value: unknown, fallback: number) =>
   typeof value === 'number' && Number.isSafeInteger(value) && value > 0 ? value : fallback
+
+/** 新格式只保存 Pi 源（models.dev 已迁到共享缓存），版本升到 2。 */
+type PiSnapshot = {
+  owner: 'pidex-provider-directory'
+  formatVersion: 2
+  pi: unknown
+}
+
+const PI_FORMAT_VERSION = 2
+const PI_MODEL_FIELDS = [
+  'id',
+  'api',
+  'baseUrl',
+  'name',
+  'contextWindow',
+  'maxTokens',
+  'reasoning',
+  'input',
+  'cost',
+  'thinkingLevelMap',
+  'compat',
+] as const
+
+/** 只保留 Pi 目录下游实际消费的字段，其余（描述、输入限制等）不入缓存。 */
+const trimPi = (pi: unknown): unknown => {
+  const providers: Record<string, Record<string, Record<string, unknown>>> = {}
+  for (const [providerId, input] of Object.entries(record(pi))) {
+    const models: Record<string, Record<string, unknown>> = {}
+    for (const [modelId, inputModel] of Object.entries(record(input))) {
+      const model = record(inputModel)
+      const trimmed: Record<string, unknown> = {}
+      for (const key of PI_MODEL_FIELDS) if (model[key] !== undefined) trimmed[key] = model[key]
+      models[modelId] = trimmed
+    }
+    providers[providerId] = models
+  }
+  return providers
+}
 
 export const directoryBaseUrlKey = (value: string | undefined): string | undefined => {
   if (!value) return undefined
@@ -215,15 +253,19 @@ export const parseProviderDirectory = (snapshot: Snapshot): DirectoryProvider[] 
 
 export class ProviderDirectoryStore {
   private entries: readonly DirectoryProvider[] = []
+  private pi: unknown = undefined
   private loaded = false
   private operation: Promise<unknown> = Promise.resolve()
+  private readonly shared: SharedModelCatalogCache
   constructor(
     private readonly path?: string,
     private readonly request: (
       input: string | URL | Request,
       init?: RequestInit,
     ) => Promise<Response> = fetch,
-  ) {}
+  ) {
+    this.shared = SharedModelCatalogCache.forPath(path)
+  }
 
   async providers(): Promise<readonly DirectoryProvider[]> {
     await this.load()
@@ -231,56 +273,102 @@ export class ProviderDirectoryStore {
   }
 
   private async load(force = false): Promise<void> {
-    if (!this.loaded || force) {
-      if (this.path) {
-        try {
-          this.entries = parseProviderDirectory(JSON.parse(await readFile(this.path, 'utf8')))
-        } catch (error) {
-          if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'))
-            throw error
-        }
+    if (this.loaded && !force) return
+    if (this.path) {
+      let raw: unknown = undefined
+      try {
+        raw = JSON.parse(await readFile(this.path, 'utf8'))
+      } catch (error) {
+        if (!(error && typeof error === 'object' && 'code' in error && error.code === 'ENOENT'))
+          throw error
       }
-      this.loaded = true
+      if (raw !== undefined) {
+        if (!raw || typeof raw !== 'object' || Array.isArray(raw))
+          throw new Error('Unsupported directory cache')
+        const document = raw as Record<string, unknown>
+        if (
+          document.owner !== 'pidex-provider-directory' ||
+          (document.formatVersion !== 1 && document.formatVersion !== PI_FORMAT_VERSION)
+        )
+          throw new Error('Unsupported directory cache')
+        this.pi = document.pi
+      } else {
+        this.pi = undefined
+      }
     }
+    this.entries = await this.buildEntries(this.pi)
+    this.loaded = true
+  }
+
+  private async buildEntries(pi: unknown): Promise<DirectoryProvider[]> {
+    if (!pi) return []
+    const catalog = await this.shared.catalog()
+    if (!catalog) return []
+    return parseProviderDirectory({
+      owner: 'pidex-provider-directory',
+      formatVersion: 1,
+      pi,
+      modelsDev: catalog,
+    })
   }
 
   refresh(): Promise<void> {
     const action = async () => {
       await this.load(true)
-      const download = async (source: 'Pi' | 'models.dev', url: string) => {
+      const downloadPi = async () => {
         try {
-          return await downloadCatalogJson(this.request, url)
+          return await downloadCatalogJson(
+            this.request,
+            `https://pi.dev/api/models?pi-version=${encodeURIComponent(agentPackage.dependencies['@earendil-works/pi-ai'])}`,
+          )
         } catch {
           throw new AgentError(
             'PROVIDER_UNAVAILABLE',
-            `${source} 官方目录下载失败，已保留原目录，请稍后重试。`,
+            'Pi 官方目录下载失败，已保留原目录，请稍后重试。',
             502,
           )
         }
       }
-      const [pi, modelsDev] = await Promise.allSettled([
-        download(
-          'Pi',
-          `https://pi.dev/api/models?pi-version=${encodeURIComponent(agentPackage.dependencies['@earendil-works/pi-ai'])}`,
-        ),
-        download('models.dev', 'https://models.dev/catalog.json?type=all'),
-      ])
-      if (pi.status === 'rejected') throw pi.reason
-      if (modelsDev.status === 'rejected') throw modelsDev.reason
-      const snapshot: Snapshot = {
-        owner: 'pidex-provider-directory',
-        formatVersion: 1,
-        pi: pi.value,
-        modelsDev: modelsDev.value,
+      const downloadModelsDev = async () => {
+        try {
+          return await this.shared.prepare(this.request)
+        } catch (cause) {
+          if (cause instanceof AgentError) throw cause
+          throw new AgentError(
+            'PROVIDER_UNAVAILABLE',
+            'models.dev 官方目录下载失败，已保留原目录，请稍后重试。',
+            502,
+          )
+        }
       }
+      // 双源都下载并解析成功后才写盘，避免用部分结果覆盖最近一次完整缓存。
+      const [piResult, catalogResult] = await Promise.allSettled([
+        downloadPi(),
+        downloadModelsDev(),
+      ])
+      if (piResult.status === 'rejected') throw piResult.reason
+      if (catalogResult.status === 'rejected') throw catalogResult.reason
+      const pi = piResult.value
+      const prepared = catalogResult.value
       let entries: DirectoryProvider[]
       try {
-        entries = parseProviderDirectory(snapshot)
+        entries = parseProviderDirectory({
+          owner: 'pidex-provider-directory',
+          formatVersion: 1,
+          pi,
+          modelsDev: prepared.catalog,
+        })
       } catch (cause) {
         if (cause instanceof AgentError) throw cause
         throw invalidDirectory('Pi / models.dev')
       }
+      await this.shared.commit(prepared)
       if (this.path) {
+        const snapshot: PiSnapshot = {
+          owner: 'pidex-provider-directory',
+          formatVersion: PI_FORMAT_VERSION,
+          pi: trimPi(pi),
+        }
         await mkdir(dirname(this.path), { recursive: true })
         const temporary = `${this.path}.${randomUUID()}.tmp`
         try {
@@ -290,6 +378,7 @@ export class ProviderDirectoryStore {
           await rm(temporary, { force: true })
         }
       }
+      this.pi = pi
       this.entries = entries
     }
     const next = this.operation.then(action, action)

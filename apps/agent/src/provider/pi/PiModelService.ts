@@ -1,6 +1,12 @@
 import { ModelRecommendationStore } from './ModelRecommendationStore'
 import { ProviderDirectoryStore, directoryBaseUrlKey, directoryProviderConfig, type DirectoryProvider } from './ProviderDirectoryStore'
-import type { RecommendationInput } from './ModelRecommendations'
+import { applyRecommendation, type RecommendationInput } from './ModelRecommendations'
+import {
+  applyModelOptionMap,
+  compileOptionSpecs,
+  type CompiledOptionSpecs,
+} from './PiModelOptionMapping'
+import { resolveZCodeOptionSpecs } from './ZCodeModelOptions'
 import { AgentError } from '../../Domain'
 import type { AgentLogger } from '../../observability/AgentLogger'
 import { providerFailureCategory, providerFailureMessage } from '../ModelHealthService'
@@ -33,6 +39,7 @@ import {
   type CustomProviderApi,
   type DeepSeekProtocol,
   type ParsedPiProviderCatalog,
+  type PiCustomModelConfig,
   type PiModelCatalogConfig,
   type PiProviderConfig,
   type PiProviderConfigIssue,
@@ -132,17 +139,53 @@ const cost = (model: PiModel<Api>): Model.Cost[] => [
 
 const thinkingLevels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
-const supportedThinkingLevels = (model: PiModel<Api>) =>
-  (!(model as ConfiguredPiModel).modelType || (model as ConfiguredPiModel).modelType === 'chat') &&
-  model.reasoning
-    ? thinkingLevels.filter((level) => model.thinkingLevelMap?.[level] !== null)
-    : []
-
 type ConfiguredPiModel = PiModel<Api> & {
   maxInputTokens?: number
   inputExplicit?: boolean
   modelType?: 'chat' | 'embedding' | 'rerank'
   tools?: boolean
+  /** 双层参数规格（仅 Pidex 内存模型携带，不进入 Pi 上游类型）。 */
+  optionSpecs?: Model.OptionSpecs
+}
+
+const isChatModel = (model: PiModel<Api>) => {
+  const kind = (model as ConfiguredPiModel).modelType
+  return !kind || kind === 'chat'
+}
+
+/** 显式 values 优先；存在时严格使用该值域，不再回退固定七档。 */
+const explicitReasoningValues = (model: PiModel<Api>): readonly string[] | undefined => {
+  const values = (model as ConfiguredPiModel).optionSpecs?.reasoningLevel?.values
+  return values && values.length ? values : undefined
+}
+
+const supportedThinkingLevels = (model: PiModel<Api>): readonly string[] => {
+  if (!isChatModel(model)) return []
+  const explicit = explicitReasoningValues(model)
+  if (explicit) return explicit
+  return model.reasoning
+    ? thinkingLevels.filter((level) => model.thinkingLevelMap?.[level] !== null)
+    : []
+}
+
+/** 逐字段叠加：next（更高优先级，如 ZCode）覆盖 base，缺失字段继续继承。 */
+const overlayRecommendedOptionSpecs = (
+  base: Model.OptionSpecs | undefined,
+  next: Model.OptionSpecs | undefined,
+): Model.OptionSpecs | undefined => {
+  if (!base && !next) return undefined
+  const reasoningLevel =
+    base?.reasoningLevel || next?.reasoningLevel
+      ? { ...(base?.reasoningLevel ?? {}), ...(next?.reasoningLevel ?? {}) }
+      : undefined
+  const maxOutputTokens =
+    base?.maxOutputTokens || next?.maxOutputTokens
+      ? { ...(base?.maxOutputTokens ?? {}), ...(next?.maxOutputTokens ?? {}) }
+      : undefined
+  return {
+    ...(reasoningLevel ? { reasoningLevel } : {}),
+    ...(maxOutputTokens ? { maxOutputTokens } : {}),
+  }
 }
 
 const effectiveInput = (model: PiModel<Api>): string[] => {
@@ -241,6 +284,8 @@ export class PiModelService {
       }
     | undefined
   private disposed = false
+  /** 按 Pi 模型对象缓存编译后的 option map；配置同步重建模型对象时自动失效。 */
+  private readonly optionMapCompiled = new WeakMap<object, CompiledOptionSpecs | null>()
 
   constructor(
     repository: ProviderCredentialRepository,
@@ -276,6 +321,7 @@ export class PiModelService {
     }
     this.baseProviders = new Map(this.pi.getProviders().map((provider) => [provider.id, provider]))
     this.builtinProviderIDs = new Set(this.pi.getProviders().map((provider) => provider.id))
+    this.installOptionMapBoundary()
     this.configSource = options.config
     options.recommendations?.startAutoRefresh()
   }
@@ -398,6 +444,10 @@ export class PiModelService {
             ...(Object.keys(model.headers).length ? { headers: { ...model.headers } } : {}),
             ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
             ...(model.compat ? { compat: structuredClone(model.compat) } : {}),
+            ...(model.smartConfig
+              ? { smartConfig: { pinned: [...model.smartConfig.pinned] } }
+              : {}),
+            ...(model.optionSpecs ? { optionSpecs: structuredClone(model.optionSpecs) } : {}),
           })),
         }
       }
@@ -441,9 +491,8 @@ export class PiModelService {
   async resolve(ref: Model.Ref): Promise<Model.Info> {
     const model = await this.getPiModel(ref)
     const auth = await this.pi.checkAuth(model.provider)
-    return clone(
-      piModelToInfo(model, auth !== undefined, ref.variant ? String(ref.variant) : undefined),
-    )
+    const variant = ref.variant ? String(ref.variant) : supportedThinkingLevels(model)[0]
+    return clone(piModelToInfo(model, auth !== undefined, variant))
   }
 
   async getPiModel(ref: Model.Ref): Promise<PiModel<Api>> {
@@ -463,9 +512,7 @@ export class PiModelService {
     }
     if (
       ref.variant &&
-      !supportedThinkingLevels(model).includes(
-        String(ref.variant) as (typeof thinkingLevels)[number],
-      )
+      !supportedThinkingLevels(model).includes(String(ref.variant))
     ) {
       throw new PiModelServiceError(
         'VARIANT_NOT_FOUND',
@@ -751,8 +798,22 @@ export class PiModelService {
     this.recommendations.dispose()
   }
 
-  previewRecommendation(input: RecommendationInput) {
-    return this.recommendations.resolve(input)
+  async previewRecommendation(input: RecommendationInput) {
+    const resolved = await this.recommendations.resolve(input)
+    // 预览阶段通常没有协议的精确 api，仅用通用层规则贡献思考 values/map。
+    const zcode = resolveZCodeOptionSpecs({
+      modelId: input.modelId,
+      api: '',
+      baseUrl: input.baseUrl,
+    })
+    if (!zcode) return resolved
+    return {
+      ...resolved,
+      recommended: {
+        ...resolved.recommended,
+        optionSpecs: overlayRecommendedOptionSpecs(resolved.recommended.optionSpecs, zcode),
+      },
+    }
   }
 
   refreshRecommendations() {
@@ -765,11 +826,110 @@ export class PiModelService {
       : (this.configSource ?? {})
   }
 
+  /**
+   * 运行时合成：已启用智能配置的模型，用当前推荐值覆盖 `pinned` 之外的字段。
+   * 只作用于交给 Pi 的运行时配置；`parsedConfig` 仍保存用户原始值，
+   * 否则 UI 读到的推荐值会被当成用户值回写并永久固定。
+   */
+  private async applyRecommendations(
+    providerID: string,
+    provider: Extract<PiProviderConfig, { kind: 'custom' }>,
+  ): Promise<Extract<PiProviderConfig, { kind: 'custom' }>> {
+    if (!Object.values(provider.models).some((model) => model.smartConfig)) return provider
+    const models: Record<string, PiCustomModelConfig> = {}
+    for (const [id, model] of Object.entries(provider.models)) {
+      if (!model.smartConfig) {
+        models[id] = model
+        continue
+      }
+      const baseUrl = (model.api && provider.endpoints?.[model.api]) || provider.baseUrl
+      const { recommended: baseRecommended } = await this.recommendations.resolve({
+        providerId: providerID,
+        baseUrl,
+        modelId: model.id,
+        modelType: model.modelType ?? 'chat',
+      })
+      // ZCode 优先于 models.dev 推荐：逐字段覆盖，缺失继续继承。
+      const zcode = resolveZCodeOptionSpecs({ modelId: model.id, api: model.api, baseUrl })
+      const recommended = zcode
+        ? { ...baseRecommended, optionSpecs: overlayRecommendedOptionSpecs(baseRecommended.optionSpecs, zcode) }
+        : baseRecommended
+      const applied = applyRecommendation(model, recommended, model.smartConfig.pinned)
+      // 用户显式配置优先于推荐；只有缺失时才从推荐（含 ZCode）继承。
+      models[id] =
+        !model.optionSpecs && recommended.optionSpecs
+          ? { ...applied, optionSpecs: recommended.optionSpecs }
+          : applied
+    }
+    return { ...provider, models }
+  }
+
+  /**
+   * 在 `Models` 单一出口处组合协议 map：聊天、非流式（completeSimple 走 streamSimple）、
+   * 模型测试都消费同一个 pi 实例，因此这一处接线覆盖所有请求路径。
+   * 显式 reasoningLevel map 存在时，抑制 pi 固定 reasoning 枚举，避免把任意 values
+   * 塞进 Pi 的 ThinkingLevel；由 map 成为请求字段的唯一权威。
+   */
+  private installOptionMapBoundary(): void {
+    const pi = this.pi as unknown as {
+      streamSimple?: (model: unknown, context: unknown, options?: unknown) => unknown
+    }
+    if (typeof pi.streamSimple !== 'function') return
+    const original = pi.streamSimple.bind(this.pi)
+    try {
+      pi.streamSimple = (model: unknown, context: unknown, options?: unknown) => {
+        const compiled =
+          model && typeof model === 'object' ? this.compiledOptionMap(model as object) : null
+        if (!compiled) return original(model, context, options)
+        const opts = (options && typeof options === 'object' ? options : {}) as Record<string, unknown>
+        const reasoningLevel = typeof opts.reasoning === 'string' ? opts.reasoning : undefined
+        const maxOutputTokens =
+          typeof opts.maxTokens === 'number'
+            ? opts.maxTokens
+            : (model as { maxTokens?: number }).maxTokens
+        const previous =
+          typeof opts.onPayload === 'function'
+            ? (opts.onPayload as (p: unknown, m: unknown) => unknown)
+            : undefined
+        const next: Record<string, unknown> = { ...opts }
+        // 显式 reasoning values 不再交给 Pi 的固定枚举处理。
+        if (compiled.reasoningLevel) delete next.reasoning
+        next.onPayload = async (payload: unknown, target: unknown) => {
+          const resolved = previous ? ((await previous(payload, target)) ?? payload) : payload
+          try {
+            return applyModelOptionMap(resolved, compiled, { reasoningLevel, maxOutputTokens })
+          } catch {
+            return resolved
+          }
+        }
+        return original(model, context, next)
+      }
+    } catch {
+      /* 只读或冻结的 Models 实例保持原样；不影响其余行为 */
+    }
+  }
+
+  private compiledOptionMap(model: object): CompiledOptionSpecs | null {
+    if (this.optionMapCompiled.has(model)) return this.optionMapCompiled.get(model) ?? null
+    const specs = (model as { optionSpecs?: Model.OptionSpecs }).optionSpecs
+    let compiled: CompiledOptionSpecs | null = null
+    if (specs) {
+      try {
+        compiled = compileOptionSpecs(specs) ?? null
+      } catch {
+        compiled = null
+      }
+    }
+    this.optionMapCompiled.set(model, compiled)
+    return compiled
+  }
+
   private syncProviders(force = false): Promise<ParsedPiProviderCatalog> {
     const operation = async () => {
       const raw = await this.rawConfig()
       const entries = await this.directory.providers()
-      const fingerprint = JSON.stringify(raw)
+      // 推荐目录更新后必须重新合成，否则已保存模型会停在旧推荐值上。
+      const fingerprint = JSON.stringify([raw, await this.recommendations.version()])
       if (!force && fingerprint === this.configFingerprint && entries === this.directoryEntries) return this.parsedConfig
       let parsed = parsePiProviderCatalog(raw)
       this.directoryEntries = entries
@@ -835,7 +995,9 @@ export class PiModelService {
       }
       const nextCustomProviderIDs = new Set<string>()
       for (const [providerID, provider] of custom) {
-        this.mutablePi?.setProvider(createPiCustomProvider(providerID, provider))
+        this.mutablePi?.setProvider(
+          createPiCustomProvider(providerID, await this.applyRecommendations(providerID, provider)),
+        )
         nextCustomProviderIDs.add(providerID)
       }
       this.configuredCustomProviderIDs = nextCustomProviderIDs

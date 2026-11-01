@@ -20,6 +20,7 @@
     "src/components/ui/SearchInput.tsx -> src/components/ui/SearchInput.css",
     "src/components/ui/SidebarRow.tsx -> src/components/ui/SidebarRow.css",
     "src/components/ui/Skeleton.tsx -> src/components/ui/Skeleton.css",
+    "src/components/ui/StopSlider.tsx -> src/components/ui/StopSlider.css",
     "src/components/ui/ToggleSwitch.tsx -> src/components/ui/ToggleSwitch.css",
     "src/features/pet/PetOverlayPage.tsx -> src/styles/lazy/pet-overlay.css",
     "src/features/terminal/TerminalPanel.tsx -> src/styles/lazy/terminal.css"
@@ -36,6 +37,7 @@
     "src/components/ui/SearchInput.css": "primitives",
     "src/components/ui/SidebarRow.css": "primitives",
     "src/components/ui/Skeleton.css": "primitives",
+    "src/components/ui/StopSlider.css": "primitives",
     "src/components/ui/ToggleSwitch.css": "primitives"
   },
   "customPropertyReferenceAllowlist": [
@@ -58,7 +60,9 @@
     "src/styles/design-system/tokens.css": 4
   },
   "literalLineHeightAllowlist": {},
-  "tailwindLeadingAllowlist": {},
+  "tailwindLeadingAllowlist": {
+    "src/components/ui/Tooltip.tsx": 1
+  },
   "featureColorContract": {
     "roots": ["src/styles/features", "src/styles/lazy"],
     "componentTokenExceptions": [
