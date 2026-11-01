@@ -10,6 +10,7 @@ import { GitCommandRunner } from '../git/GitCommandRunner'
 import { WorkspaceIsolationService } from '../subagent/WorkspaceIsolationService'
 import { WorktreeIncludeService } from './WorktreeIncludeService'
 import { WorktreeOperationOutputBuffer } from './WorktreeOperationOutputBuffer'
+import { windowsWorktreeFiles } from './WindowsWorktreeFiles'
 import {
   WorktreeRestoreSnapshotStore,
   type WorktreeRestoreSnapshot,
@@ -759,7 +760,7 @@ export class ManagedWorktreeService {
     return { worktree: publicWorktree(updated), operation: publicOperation(operation) }
   }
 
-  private async assertRegistered(worktree: ManagedWorktree) {
+  private async isRegistered(worktree: ManagedWorktree) {
     const list = await this.requireGit(
       worktree.repositoryRoot,
       ['worktree', 'list', '--porcelain'],
@@ -769,9 +770,15 @@ export class ManagedWorktreeService {
       .split(/\r?\n/)
       .filter((line) => line.startsWith('worktree '))
       .map((line) => pathKey(line.slice(9)))
+    return registered.includes(pathKey(worktree.path))
+  }
+
+  private async assertRegistered(worktree: ManagedWorktree) {
+    const root = this.repository.ownedRoot(worktree.id) ?? this.managedRoot
     if (
-      !registered.includes(pathKey(worktree.path)) ||
-      !contained(this.repository.ownedRoot(worktree.id) ?? this.managedRoot, worktree.path)
+      !(await this.isRegistered(worktree)) ||
+      !contained(root, worktree.path) ||
+      pathKey(root) === pathKey(worktree.path)
     ) {
       throw new AgentError('WORKTREE_PATH_DENIED', '只允许删除已登记的托管 worktree', 403)
     }
@@ -780,21 +787,64 @@ export class ManagedWorktreeService {
   private async removeManagedPath(worktree: ManagedWorktree) {
     const requested = resolve(worktree.path)
     const root = this.repository.ownedRoot(worktree.id) ?? this.managedRoot
-    if (!contained(root, requested)) {
+    if (!contained(root, requested) || pathKey(root) === pathKey(requested)) {
       throw new AgentError('WORKTREE_PATH_DENIED', 'worktree 删除路径越界', 403)
+    }
+    const requestedMetadata = await lstat(requested).catch((cause: NodeJS.ErrnoException) =>
+      cause.code === 'ENOENT' ? null : Promise.reject(cause),
+    )
+    if (
+      requestedMetadata &&
+      (!requestedMetadata.isDirectory() || requestedMetadata.isSymbolicLink())
+    ) {
+      throw new AgentError('WORKTREE_PATH_UNSAFE', 'worktree 删除目标不是普通目录，已保留', 409)
     }
     const canonical = await realpath(requested).catch((cause: NodeJS.ErrnoException) =>
       cause.code === 'ENOENT' ? null : Promise.reject(cause),
     )
-    if (canonical && !contained(root, canonical)) {
+    if (canonical && (!contained(root, canonical) || pathKey(root) === pathKey(canonical))) {
       throw new AgentError('WORKTREE_PATH_DENIED', 'worktree 删除路径越界', 403)
     }
-    await this.assertRegistered({ ...worktree, path: canonical ?? requested })
-    await this.requireGit(
-      worktree.repositoryRoot,
-      ['worktree', 'remove', '--force', canonical ?? requested],
-      'WORKTREE_GIT_FAILED',
-    )
+    if (await this.isRegistered(worktree)) {
+      const result = await this.git(worktree.repositoryRoot, [
+        'worktree',
+        'remove',
+        '--force',
+        canonical ?? requested,
+      ])
+      if (result.code === 0) return
+      if (await this.isRegistered(worktree)) {
+        throw new AgentError(
+          'WORKTREE_GIT_FAILED',
+          'Git 无法移除工作树，可能被锁定或占用；请关闭相关终端或程序后重试，恢复快照已保留。',
+          409,
+        )
+      }
+    }
+    // Git 可能先取消登记再删除失败；仅继续清理有恢复快照的同一托管目录。
+    if (!worktree.restoreSnapshotPath)
+      throw new AgentError('WORKTREE_PATH_DENIED', '缺少恢复快照，已保留目录', 403)
+    await this.snapshotStore().read(worktree.restoreSnapshotPath)
+    if (canonical) {
+      const metadata = await lstat(join(canonical, '.git')).catch((cause: NodeJS.ErrnoException) =>
+        cause.code === 'ENOENT' ? null : Promise.reject(cause),
+      )
+      if (metadata)
+        throw new AgentError('WORKTREE_PATH_DENIED', '残留目录包含 Git 元数据，已保留目录', 403)
+      await this.snapshotStore().preserveWindowsDeviceFiles(worktree.restoreSnapshotPath, canonical)
+      if (process.platform === 'win32')
+        await windowsWorktreeFiles({ operation: 'remove', target: canonical })
+      else await rm(canonical, { recursive: true, force: true })
+      const remaining = await lstat(requested).catch((cause: NodeJS.ErrnoException) =>
+        cause.code === 'ENOENT' ? null : Promise.reject(cause),
+      )
+      if (remaining)
+        throw new AgentError(
+          'WORKTREE_GIT_FAILED',
+          '工作树目录仍被占用或无权移除，恢复快照已保留，请关闭相关程序后重试。',
+          409,
+        )
+    }
   }
 
   private async preflightRestore(workspacePath: string, snapshot: WorktreeRestoreSnapshot) {
@@ -878,31 +928,45 @@ export class ManagedWorktreeService {
       this.output.complete(input.operationId)
       throw new AgentError('WORKTREE_NOT_READY', '仍有未归档任务使用此 worktree', 409)
     }
-    const originalStatus = worktree.status
     let removed = false
     try {
-      this.updateOperation(input.operationId, { step: 'cleanup', status: 'running' })
-      await this.assertRegistered(worktree)
-      const cleanup = await this.environment
-        .cleanup({
-          operationId: input.operationId,
-          projectId: worktree.projectId,
-          worktreeId: worktree.id,
-          workspacePath: worktree.path,
-          onOutput: (chunk) => this.output.append(input.operationId, chunk),
+      const registered = await this.isRegistered(worktree)
+      const resumeRemoval =
+        worktree.restoreSnapshotPath &&
+        (worktree.status === 'deleting' ||
+          (!registered && this.repository.hasFailedDeletion(worktree.id)))
+      if (resumeRemoval) {
+        await this.snapshotStore().read(worktree.restoreSnapshotPath!)
+        worktree = this.updateWorktree(worktree, { status: 'deleting' })
+      } else {
+        this.updateOperation(input.operationId, { step: 'cleanup', status: 'running' })
+        await this.assertRegistered(worktree)
+        const cleanup = await this.environment
+          .cleanup({
+            operationId: input.operationId,
+            projectId: worktree.projectId,
+            worktreeId: worktree.id,
+            workspacePath: worktree.path,
+            onOutput: (chunk) => this.output.append(input.operationId, chunk),
+          })
+          .catch(() => {
+            throw new AgentError(
+              'WORKTREE_CLEANUP_FAILED',
+              'worktree cleanup 失败，已保留目录',
+              409,
+            )
+          })
+        const snapshotPath = await this.snapshotStore().capture(worktree.id, worktree.path)
+        worktree = this.updateWorktree(worktree, {
+          status: 'deleting',
+          restoreSnapshotPath: snapshotPath,
         })
-        .catch(() => {
-          throw new AgentError('WORKTREE_CLEANUP_FAILED', 'worktree cleanup 失败，已保留目录', 409)
+        this.updateOperation(input.operationId, {
+          step: 'remove-worktree',
+          warnings: [...(cleanup.warnings ?? [])],
         })
-      const snapshotPath = await this.snapshotStore().capture(worktree.id, worktree.path)
-      worktree = this.updateWorktree(worktree, {
-        status: 'deleting',
-        restoreSnapshotPath: snapshotPath,
-      })
-      this.updateOperation(input.operationId, {
-        step: 'remove-worktree',
-        warnings: [...(cleanup.warnings ?? [])],
-      })
+      }
+      this.updateOperation(input.operationId, { step: 'remove-worktree', status: 'running' })
       await this.removeManagedPath(worktree)
       removed = true
       const updated = this.updateWorktree(worktree, { status: 'cleaned', deletedAt: this.now() })
@@ -915,11 +979,8 @@ export class ManagedWorktreeService {
       return { worktree: publicWorktree(updated), operation: publicOperation(operation) }
     } catch (cause) {
       const latest = this.repository.readWorktree(worktree.id)
-      if (latest?.status === 'deleting') {
-        this.updateWorktree(
-          latest,
-          removed ? { status: 'cleaned', deletedAt: this.now() } : { status: originalStatus },
-        )
+      if (latest?.status === 'deleting' && removed) {
+        this.updateWorktree(latest, { status: 'cleaned', deletedAt: this.now() })
       }
       const currentOperation = this.repository.operation(input.operationId)
       if (
