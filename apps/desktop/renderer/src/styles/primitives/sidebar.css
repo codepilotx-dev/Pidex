@@ -11,6 +11,8 @@
  * - subtree overrides that must reach every descendant: the
  *   "grabbing" cursor while a reorder item is being dragged;
  * - one `color-mix()` surface (sidebar session approval chip);
+ * - the one-off 16px font size of the sidebar product-mode selector, which has
+ *   to outrank its `type-control` role from the utilities layer;
  * - rules whose consumers are owned by another migration group:
  *   `.sidebar-panel-content` (layout/shell/DesktopLayout.tsx),
  *   `.sidebar-layout` (settings/SettingsSidebarContent.tsx),
@@ -197,7 +199,7 @@
    * utility and several of these are plain `div`/`a` elements.
    */
   .sidebar-row,
-  .sidebar-product-mode-trigger,
+  .sidebar-product-mode-select,
   .sidebar-footer-trigger,
   .sidebar-hover-card-surface,
   .popover-usage-action {
@@ -301,5 +303,16 @@
       backdrop-filter: none;
       background: var(--cpx-comp-surface-floating);
     }
+  }
+}
+
+/*
+ * 侧栏顶部「产品模式」选择器只出现在这一处，不为此新增系统排版角色：沿用
+ * `type-control` 的字重与行高，仅把字号提到 16px 刻度。字号必须压过 utilities
+ * 层中 `type-control` 的 `font` 简写，因此放在 overrides 层并消费字号 token。
+ */
+@layer overrides {
+  .sidebar-product-mode-select {
+    font-size: var(--cpx-sys-font-size-lg);
   }
 }

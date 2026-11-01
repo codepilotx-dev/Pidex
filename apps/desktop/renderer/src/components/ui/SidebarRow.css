@@ -41,6 +41,23 @@
     color: var(--cpx-comp-row-selected-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
   }
 
+  /*
+   * Ghost rows（固定“新聊天”入口）：激活时只保留 aria-current 无障碍语义，
+   * 不显示选中底色；hover/pressed 仍走上面的行状态规则（这里显式排除）。
+   */
+  .sidebar-row--ghost:is([aria-current='page'], .active, .selected) {
+    background: var(--cpx-comp-row-bg, transparent);
+    color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
+  }
+
+  .sidebar-row--ghost:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: var(--cpx-comp-row-hover-bg, var(--cpx-sys-color-hover));
+  }
+
+  .sidebar-row--ghost:active:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+    background: var(--cpx-comp-row-pressed-bg, var(--cpx-sys-color-active));
+  }
+
   /* Items with check indicators maintain a transparent idle background so selection is marked by the checkmark */
   :is(
     .sidebar-row[data-state='checked'],

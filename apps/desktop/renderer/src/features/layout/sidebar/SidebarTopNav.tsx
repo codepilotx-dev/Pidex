@@ -209,7 +209,8 @@ function SidebarNavItems({
             className={cx(
               'sidebar-nav-link tw:type-row-title',
               'tw:focus-visible:outline-2 tw:focus-visible:outline-offset-0 tw:focus-visible:outline-app-focus',
-              active ? 'active' : undefined,
+              active && !plainActive ? 'active' : undefined,
+              plainActive ? 'sidebar-row--ghost' : undefined,
             )}
             key={item.view}
             labelClassName={cx(
@@ -310,7 +311,7 @@ export function SidebarHeader({
               label: SIDEBAR_PRODUCT_MODE_META[value].label,
               detail: t(SIDEBAR_PRODUCT_MODE_META[value].description),
             }))}
-            triggerClassName="sidebar-product-mode-select tw:h-7 tw:max-w-full tw:border-transparent tw:bg-transparent tw:shadow-none tw:type-section-title tw:hover:bg-app-hover tw:data-[state=open]:bg-app-selected"
+            triggerClassName="sidebar-product-mode-select tw:h-7 tw:max-w-full tw:border-transparent tw:bg-transparent tw:shadow-none tw:hover:bg-app-hover tw:data-[state=open]:bg-app-selected"
             onValueChange={(value) => {
               setSidebarProductMode(value)
               navigate(newSessionPath(value))
