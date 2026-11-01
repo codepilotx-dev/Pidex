@@ -237,3 +237,24 @@ export function probeModelRuntimePreferencesStorageCapabilities(
   modelRuntimePreferencesCache.set(sqlite, capabilities)
   return capabilities
 }
+
+export type ThreadMessageForksStorageCapabilities = {
+  forkTargetTurnId: boolean
+}
+
+const threadMessageForksCache = new WeakMap<Database, ThreadMessageForksStorageCapabilities>()
+
+export function probeThreadMessageForksStorageCapabilities(
+  sqlite: Database,
+): ThreadMessageForksStorageCapabilities {
+  const cached = threadMessageForksCache.get(sqlite)
+  if (cached) return cached
+  const rows = sqlite
+    .query('PRAGMA table_info(thread_message_forks)')
+    .all() as Array<{ name: string }>
+  const capabilities: ThreadMessageForksStorageCapabilities = {
+    forkTargetTurnId: rows.some((column) => column.name === 'target_turn_id'),
+  }
+  threadMessageForksCache.set(sqlite, capabilities)
+  return capabilities
+}

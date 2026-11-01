@@ -119,6 +119,12 @@ export type ThreadWorkspace = typeof ThreadWorkspaceSchema.Type
 export const ThreadCreationSurfaceSchema = Schema.Literals(['coding', 'working', 'chat'])
 export type ThreadCreationSurface = typeof ThreadCreationSurfaceSchema.Type
 
+export const ThreadForkOriginSchema = Schema.Struct({
+  threadId: Schema.String,
+  inheritedThroughTurnId: Schema.String,
+})
+export type ThreadForkOrigin = typeof ThreadForkOriginSchema.Type
+
 export const ThreadSchema = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
@@ -133,6 +139,7 @@ export const ThreadSchema = Schema.Struct({
   hasScheduledRun: Schema.optional(Schema.Boolean),
   isScheduledSession: Schema.optional(Schema.Boolean),
   isFork: Schema.optional(Schema.Boolean),
+  forkedFrom: Schema.optional(ThreadForkOriginSchema),
   workspace: Schema.optional(ThreadWorkspaceSchema),
   settings: ThreadSettingsSchema,
   archivedAt: Schema.optional(Schema.NullOr(Schema.Number)),

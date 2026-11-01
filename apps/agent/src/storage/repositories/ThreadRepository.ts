@@ -5,12 +5,14 @@ import {
   decodeApprovalPolicy,
   encodeApprovalPolicy,
   type ThreadCreationSurface,
+  type ThreadForkOrigin,
   type ThreadSettings,
   type ThreadSettingsPatch,
 } from '@pidex/shared/thread'
 import { AgentError, decodeStoredTaskMode } from '../../Domain'
 import {
   probeThreadContextLimitsStorageCapabilities,
+  probeThreadMessageForksStorageCapabilities,
   probeThreadsStorageCapabilities,
 } from '../database/StorageCapabilities'
 import type {
@@ -539,6 +541,31 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
         const agent = this.getAgentExecution(turn.root_agent_id)
         return agent ? [agent] : []
       }),
+    }
+  }
+
+  getThreadForkOrigin(threadID: string): ThreadForkOrigin | null {
+    if (!probeThreadMessageForksStorageCapabilities(this.sqlite).forkTargetTurnId) {
+      return null
+    }
+    const row = this.sqlite
+      .query(
+        `
+        SELECT f.source_thread_id, f.target_turn_id
+        FROM thread_message_forks AS f
+        JOIN threads AS source_thread ON source_thread.id = f.source_thread_id
+        JOIN turns AS target_turn ON target_turn.id = f.target_turn_id AND target_turn.thread_id = f.target_thread_id
+        WHERE f.target_thread_id = ?
+          AND f.target_turn_id IS NOT NULL
+          AND (source_thread.archived_at IS NULL OR source_thread.archived_at <> -1)
+          AND ${activeTurnSql('target_turn', this)}
+      `,
+      )
+      .get(threadID) as { source_thread_id: string; target_turn_id: string } | null
+    if (!row) return null
+    return {
+      threadId: row.source_thread_id,
+      inheritedThroughTurnId: row.target_turn_id,
     }
   }
 

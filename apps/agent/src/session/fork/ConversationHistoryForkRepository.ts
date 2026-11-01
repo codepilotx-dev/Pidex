@@ -9,7 +9,10 @@ import {
 import type { AgentDatabase } from '../../storage/database/AgentDatabase'
 import { parsePiSessionEntry } from '../../storage/pi-session/PiSessionEntry'
 import { TurnPiBoundaryRepository } from '../../storage/repositories/TurnPiBoundaryRepository'
-import { probeThreadContextLimitsStorageCapabilities } from '../../storage/database/StorageCapabilities'
+import {
+  probeThreadContextLimitsStorageCapabilities,
+  probeThreadMessageForksStorageCapabilities,
+} from '../../storage/database/StorageCapabilities'
 import type {
   SideChatRepository,
   StoredSideChat,
@@ -438,23 +441,45 @@ export class ConversationHistoryForkRepository {
           sessionID: targetSelectedSession,
           entryID: piBoundary,
         })
-        this.db.sqlite
-          .query(
-            `
-          INSERT INTO thread_message_forks (
-            target_thread_id, source_thread_id, source_turn_id,
-            source_item_id, operation_id, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `,
-          )
-          .run(
-            targetRootID,
-            sourceThreadID,
-            options.throughTurnID,
-            options.sourceItemID,
-            options.operationID,
-            Date.now(),
-          )
+        const capabilities = probeThreadMessageForksStorageCapabilities(this.db.sqlite)
+        if (capabilities.forkTargetTurnId) {
+          this.db.sqlite
+            .query(
+              `
+            INSERT INTO thread_message_forks (
+              target_thread_id, source_thread_id, source_turn_id,
+              source_item_id, operation_id, created_at, target_turn_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `,
+            )
+            .run(
+              targetRootID,
+              sourceThreadID,
+              options.throughTurnID,
+              options.sourceItemID,
+              options.operationID,
+              Date.now(),
+              targetSelectedTurn,
+            )
+        } else {
+          this.db.sqlite
+            .query(
+              `
+            INSERT INTO thread_message_forks (
+              target_thread_id, source_thread_id, source_turn_id,
+              source_item_id, operation_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `,
+            )
+            .run(
+              targetRootID,
+              sourceThreadID,
+              options.throughTurnID,
+              options.sourceItemID,
+              options.operationID,
+              Date.now(),
+            )
+        }
       })
 
       for (const entry of piForks.values()) {

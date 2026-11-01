@@ -2067,6 +2067,7 @@ export type DesktopApi = {
   listSessions(options?: { archived?: boolean }): Promise<DesktopSessionSnapshot[]>
   getSessionCatalogStatus(): Promise<DesktopSessionCatalogStatus>
   getSession(sessionId: string): Promise<DesktopSessionSnapshot>
+  synchronizeSession(sessionId: string): Promise<void>
   getActiveSessionId(): Promise<string | null>
   setActiveSession(sessionId: string | null): Promise<void>
   /**

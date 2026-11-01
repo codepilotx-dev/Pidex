@@ -1546,6 +1546,7 @@ export function ConversationPage(): React.ReactNode {
       deferInitialLoading={deferThreadLoading}
       diffMarkerStyle={diffMarkerStyle}
       error={canonicalConversation.error}
+      forkedFrom={canonicalConversation.state?.thread.forkedFrom}
       hasOlder={canonicalConversation.hasOlder}
       initialScrollOffset={initialTimelineScrollTop}
       layoutResizeActive={layoutResizeActive}

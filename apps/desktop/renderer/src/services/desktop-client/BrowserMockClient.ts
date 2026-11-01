@@ -1452,6 +1452,10 @@ export function createBrowserMockDesktopClient(
       if (!snapshot) throw new Error(`Mock session not found: ${sessionId}`)
       return snapshot
     },
+    synchronizeSession: async (sessionId) => {
+      if (!sessions.has(sessionId)) throw new Error(`Mock session not found: ${sessionId}`)
+      emitSessionStoreChange()
+    },
     getActiveSessionId: async () => activeSessionId,
     setActiveSession: async (sessionId) => {
       activeSessionId = sessionId

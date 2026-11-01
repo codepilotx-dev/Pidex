@@ -1121,6 +1121,29 @@ describe('desktop history client', () => {
   })
 })
 
+test('synchronizeSession publishes a newly read target before resolving without a catalog event', async () => {
+  const client = createDesktopClient({
+    fetch: async (_path, init) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.method === 'initialize') return rpc(body.id, initializedResult())
+      if (body.method === 'initialized') return new Response(null, { status: 204 })
+      if (body.method === 'thread/read') return rpc(body.id, snapshotResult(sessionSnapshot()))
+      if (body.method === 'project/list') return rpc(body.id, { projects: [project], nextCursor: null })
+      throw new Error(`Unexpected RPC: ${body.method}`)
+    },
+  })
+  const published: string[][] = []
+  const unsubscribe = client.onSessionStoreChange((change) => {
+    published.push(change.sessions.map((snapshot) => snapshot.item.id))
+  })
+  try {
+    await client.synchronizeSession('session-1')
+    expect(published.at(-1)).toEqual(['session-1'])
+  } finally {
+    unsubscribe()
+  }
+})
+
 function json(value: unknown, status = 200): Response {
   return new Response(JSON.stringify(value), {
     status,

@@ -1,6 +1,7 @@
 import { ConversationItemContext } from './ConversationItemContext.js'
 import { formatGoalDurationCompact } from '../composer/ComposerGoalRow.js'
 import { ModelSwitchDivider } from './ModelSwitchDivider.js'
+import { ForkOriginDivider } from './ForkOriginDivider.js'
 import { ReasoningWaitingIndicator } from './ReasoningWaitingIndicator.js'
 import { cx } from '../../../utils/Cx.js'
 import { historicalDeliveryText } from './StructuredDeliveryText.js'
@@ -9,7 +10,7 @@ import React from 'react'
 import { VisualizationView } from '../../visualization/VisualizationView.js'
 import { ChevronRight, CircleAlert, LoaderCircle, RotateCcw, type LucideIcon } from 'lucide-react'
 import type { RenderBlocker, RenderTurnEntry } from '@pidex/session-view'
-import type { Item } from '@pidex/shared/thread'
+import type { Item, ThreadForkOrigin } from '@pidex/shared/thread'
 import type { DesktopDiffMarkerStyle } from '../../../../shared/Types.js'
 import type { VirtualizerHandle } from 'virtua'
 import { FullScreenWhaleLoading } from '../../../components/ui/FullScreenWhaleLoading.js'
@@ -97,6 +98,7 @@ export type CanonicalThreadViewProps = {
   hasOlder: boolean
   error: string | null
   historyError?: string | null
+  forkedFrom?: ThreadForkOrigin
   initialScrollOffset?: number
   layoutResizeActive?: boolean
   listRef: React.RefObject<VirtualizerHandle | null>
@@ -522,6 +524,7 @@ function CanonicalThreadViewComponent({
   hasOlder,
   error,
   historyError,
+  forkedFrom,
   initialScrollOffset,
   layoutResizeActive,
   listRef,
@@ -564,6 +567,11 @@ function CanonicalThreadViewComponent({
         diffMarkerStyle={diffMarkerStyle}
         disclosureState={disclosureState}
         entry={entry}
+        forkedFrom={
+          forkedFrom && forkedFrom.inheritedThroughTurnId === entry.turn.id
+            ? forkedFrom
+            : undefined
+        }
         previousModel={turns[index - 1]?.turn.model}
         key={entry.id}
         onApplyPatch={onApplyPatch}
@@ -581,6 +589,7 @@ function CanonicalThreadViewComponent({
     [
       disclosureState,
       diffMarkerStyle,
+      forkedFrom,
       onApplyPatch,
       onOpenPatchReview,
       onOpenPlanInRightDock,
@@ -675,10 +684,11 @@ function CanonicalThreadViewComponent({
 
 export const CanonicalThreadView = React.memo(CanonicalThreadViewComponent)
 
-const CanonicalTurnRow = React.memo(function CanonicalTurnRow({
+export const CanonicalTurnRow = React.memo(function CanonicalTurnRow({
   disclosureState,
   diffMarkerStyle,
   entry,
+  forkedFrom,
   previousModel,
   onApplyPatch,
   onOpenPatchReview,
@@ -693,6 +703,7 @@ const CanonicalTurnRow = React.memo(function CanonicalTurnRow({
 }: {
   disclosureState: KeyedDisclosureStore
   entry: RenderTurnEntry
+  forkedFrom?: ThreadForkOrigin
   previousModel?: RenderTurnEntry['turn']['model']
   diffMarkerStyle: DesktopDiffMarkerStyle
   onApplyPatch?: CanonicalThreadViewProps['onApplyPatch']
@@ -729,6 +740,9 @@ const CanonicalTurnRow = React.memo(function CanonicalTurnRow({
           readThreadPatchDiff={readThreadPatchDiff}
           threadId={threadId}
         />
+        {forkedFrom && forkedFrom.inheritedThroughTurnId === entry.turn.id ? (
+          <ForkOriginDivider sourceThreadId={forkedFrom.threadId} />
+        ) : null}
       </ConversationTurnErrorBoundary>
     </div>
   )

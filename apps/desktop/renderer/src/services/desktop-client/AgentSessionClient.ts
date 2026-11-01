@@ -3564,6 +3564,14 @@ export function createAgentSessionDesktopClient(
         () => loadAgentSessionSnapshot(sessionId),
         () => mockClient.getSession(sessionId),
       ),
+    synchronizeSession: async (sessionId) =>
+      withAgentOrMock(
+        async () => {
+          await loadAgentSessionSnapshot(sessionId)
+          emitSessionStoreChange()
+        },
+        () => mockClient.synchronizeSession(sessionId),
+      ),
     listSubagents: async (threadId) => {
       const response = await rpc.call<{ subagents: SubagentProjection[] }>('subagent/list', {
         threadId,

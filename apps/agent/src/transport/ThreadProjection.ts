@@ -457,6 +457,7 @@ export class ThreadProjection {
      * 否则会退回描述符里的项目根目录，把父线程的托管 worktree 显示成主检出。
      */
     ownerThreadID = String(row.id),
+    forkedFrom?: Thread['forkedFrom'],
   ): Thread {
     const threadId = String(row.id)
     const sessionGroupId = this.db.repositories.sessionGroups.membership(threadId)?.group_id ?? null
@@ -476,6 +477,7 @@ export class ThreadProjection {
       hasScheduledRun: Boolean(row.has_scheduled_run),
       isScheduledSession: Boolean(row.is_scheduled_session),
       isFork: Boolean(row.is_fork),
+      ...(forkedFrom ? { forkedFrom } : {}),
       ...(row.creation_surface
         ? { creationSurface: row.creation_surface as Thread['creationSurface'] }
         : {}),
@@ -519,6 +521,7 @@ export class ThreadProjection {
       string | number | null
     > | null
     if (!threadRow) return null
+    const forkedFrom = this.db.repositories.threads.getThreadForkOrigin(threadId) ?? undefined
     return this.projectThreadRow(
       threadRow,
       this.db.threadWorkspace(threadId) ?? undefined,
@@ -526,6 +529,7 @@ export class ThreadProjection {
       threadRow.parent_thread_id == null
         ? threadId
         : (this.db.threadWorkspaceOwner(threadId) ?? threadId),
+      forkedFrom,
     )
   }
 

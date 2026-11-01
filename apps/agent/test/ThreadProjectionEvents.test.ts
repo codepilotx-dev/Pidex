@@ -1141,3 +1141,167 @@ test.each([false, true])('压缩发起归属经过真实事件与历史恢复一
   expect(items[0]).toMatchObject({ title: '压缩已中断', compaction: { standalone: idle } })
   expect(new ThreadProjection(db).snapshot(thread.id)?.items).toEqual(items)
 })
+
+describe('ThreadProjection forkedFrom 字段投影契约', () => {
+  test('消息分叉目标会话投影 forkedFrom，包含直接来源与继承末尾 turnId', async () => {
+    const { db, projection } = await fixture()
+    const sourceThread = db.createThread('来源会话')
+    const sourceTurn = seedTurn(db, sourceThread.id)
+    const targetThread = db.createThread('分叉目标')
+    const targetTurn = seedTurn(db, targetThread.id)
+
+    const sourceItemId = `item-${sourceTurn.turnID}`
+    db.sqlite
+      .query(
+        `INSERT INTO items (id, thread_id, turn_id, agent_id, type, status, data, ordinal, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'text', 'completed', '{}', 0, 1, 1)`,
+      )
+      .run(sourceItemId, sourceThread.id, sourceTurn.turnID, sourceTurn.agentID)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_fork_operations (
+          operation_id, source_thread_id, source_turn_id, source_item_id, target_thread_id,
+          destination_kind, request_hash, status, step, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'same-worktree', 'hash-1', 'completed', 'complete', 1, 1, 1)`,
+      )
+      .run('op-1', sourceThread.id, sourceTurn.turnID, sourceItemId, targetThread.id)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_forks (target_thread_id, source_thread_id, source_turn_id, source_item_id, operation_id, created_at, target_turn_id)
+         VALUES (?, ?, ?, ?, ?, 1, ?)`,
+      )
+      .run(targetThread.id, sourceThread.id, sourceTurn.turnID, sourceItemId, 'op-1', targetTurn.turnID)
+
+    const projected = projection.snapshot(targetThread.id)
+    expect(projected?.thread.forkedFrom).toEqual({
+      threadId: sourceThread.id,
+      inheritedThroughTurnId: targetTurn.turnID,
+    })
+  })
+
+  test('旧分叉缺少 target_turn_id 或关联对象失效时不投影 forkedFrom', async () => {
+    const { db, projection } = await fixture()
+    const sourceThread = db.createThread('来源会话')
+    const sourceTurn = seedTurn(db, sourceThread.id)
+    const targetThread = db.createThread('旧分叉目标')
+
+    const legacyItemId = `item-${sourceTurn.turnID}`
+    db.sqlite
+      .query(
+        `INSERT INTO items (id, thread_id, turn_id, agent_id, type, status, data, ordinal, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'text', 'completed', '{}', 0, 1, 1)`,
+      )
+      .run(legacyItemId, sourceThread.id, sourceTurn.turnID, sourceTurn.agentID)
+
+    // 缺少 target_turn_id
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_fork_operations (
+          operation_id, source_thread_id, source_turn_id, source_item_id, target_thread_id,
+          destination_kind, request_hash, status, step, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'same-worktree', 'hash-legacy', 'completed', 'complete', 1, 1, 1)`,
+      )
+      .run('op-legacy', sourceThread.id, sourceTurn.turnID, legacyItemId, targetThread.id)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_forks (target_thread_id, source_thread_id, source_turn_id, source_item_id, operation_id, created_at, target_turn_id)
+         VALUES (?, ?, ?, ?, ?, 1, NULL)`,
+      )
+      .run(targetThread.id, sourceThread.id, sourceTurn.turnID, legacyItemId, 'op-legacy')
+
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+  })
+
+  test('Handoff 会话 (thread_forks) 不暴露 forkedFrom', async () => {
+    const { db, projection } = await fixture()
+    const sourceThread = db.createThread('Handoff 来源')
+    const targetThread = db.createThread('Handoff 目标')
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_handoff_operations (
+          operation_id, source_thread_id, target_thread_id, destination_kind, direction,
+          request_hash, status, step, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, 'local', 'local-to-worktree', 'hash-handoff', 'completed', 'complete', 1, 1, 1)`,
+      )
+      .run('op-handoff', sourceThread.id, targetThread.id)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_forks (target_thread_id, source_thread_id, operation_id, created_at)
+         VALUES (?, ?, ?, 1)`,
+      )
+      .run(targetThread.id, sourceThread.id, 'op-handoff')
+
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+  })
+
+  test('来源删除、边界 Turn 删除、Turn 失活或来源处于隐藏态时，省略 forkedFrom', async () => {
+    const { db, projection } = await fixture()
+    const sourceThread = db.createThread('来源会话')
+    const sourceTurn = seedTurn(db, sourceThread.id)
+    const targetThread = db.createThread('目标会话')
+    const targetTurn = seedTurn(db, targetThread.id)
+
+    const sourceItemId = `item-${sourceTurn.turnID}`
+    db.sqlite
+      .query(
+        `INSERT INTO items (id, thread_id, turn_id, agent_id, type, status, data, ordinal, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'text', 'completed', '{}', 0, 1, 1)`,
+      )
+      .run(sourceItemId, sourceThread.id, sourceTurn.turnID, sourceTurn.agentID)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_fork_operations (
+          operation_id, source_thread_id, source_turn_id, source_item_id, target_thread_id,
+          destination_kind, request_hash, status, step, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'same-worktree', 'hash-test', 'completed', 'complete', 1, 1, 1)`,
+      )
+      .run('op-edge', sourceThread.id, sourceTurn.turnID, sourceItemId, targetThread.id)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_forks (target_thread_id, source_thread_id, source_turn_id, source_item_id, operation_id, created_at, target_turn_id)
+         VALUES (?, ?, ?, ?, ?, 1, ?)`,
+      )
+      .run(targetThread.id, sourceThread.id, sourceTurn.turnID, sourceItemId, 'op-edge', targetTurn.turnID)
+
+    // 初始状态下有效
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toEqual({
+      threadId: sourceThread.id,
+      inheritedThroughTurnId: targetTurn.turnID,
+    })
+
+    // 情况 1: target_turn 成为 inactive turn（编辑回退）
+    db.sqlite
+      .query(
+        `INSERT INTO thread_edits (operation_id, thread_id, request_hash, source_turn_id, source_input_id, input_id, turn_id, created_at)
+         VALUES ('edit-op-1', ?, 'hash-edit', ?, 'inp-1', 'inp-2', ?, 1)`,
+      )
+      .run(targetThread.id, targetTurn.turnID, targetTurn.turnID)
+    db.sqlite
+      .query('INSERT INTO thread_inactive_turns (turn_id, operation_id) VALUES (?, ?)')
+      .run(targetTurn.turnID, 'edit-op-1')
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+
+    // 恢复 active
+    db.sqlite.query('DELETE FROM thread_inactive_turns WHERE turn_id = ?').run(targetTurn.turnID)
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeDefined()
+
+    // 情况 2: sourceThread 处于未发布的隐藏状态（archived_at = -1）
+    db.sqlite.query('UPDATE threads SET archived_at = -1 WHERE id = ?').run(sourceThread.id)
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+
+    // 恢复正常归档状态（例如用户主动归档的时间戳）
+    db.sqlite.query('UPDATE threads SET archived_at = 123456789 WHERE id = ?').run(sourceThread.id)
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeDefined()
+
+    // 情况 3: targetTurn 被删除
+    db.sqlite.query('DELETE FROM turns WHERE id = ?').run(targetTurn.turnID)
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+  })
+})

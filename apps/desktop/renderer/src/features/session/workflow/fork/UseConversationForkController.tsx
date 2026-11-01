@@ -1,4 +1,5 @@
 import React from 'react'
+import { desktopClient } from '../../../../services/desktop-client/index.js'
 import { toUserErrorMessage } from '../../../../utils/Errors.js'
 
 import { GlobalErrorModal } from '../../../../components/GlobalErrorModal.js'
@@ -107,11 +108,14 @@ export function useConversationForkController({
   )
 
   const finish = React.useCallback(
-    (result: ConversationForkResult, expectedSourceThreadId: string): void => {
+    async (result: ConversationForkResult, expectedSourceThreadId: string): Promise<void> => {
       if (sourceThreadIdRef.current !== expectedSourceThreadId) return
-      setBusy(false)
       setOperation(result.operation)
       if (result.kind === 'completed' && result.operation.targetThreadId) {
+        // 路由只接受已登记的会话，不能等待异步目录事件追上创建结果。
+        await desktopClient.synchronizeSession(result.operation.targetThreadId)
+        if (sourceThreadIdRef.current !== expectedSourceThreadId) return
+        setBusy(false)
         if (openRef.current) {
           openRef.current = false
           setOpen(false)
@@ -121,6 +125,7 @@ export function useConversationForkController({
         }
         return
       }
+      setBusy(false)
       if (result.kind === 'abandoned') {
         openRef.current = false
         setOpen(false)
@@ -176,10 +181,10 @@ export function useConversationForkController({
       setOpen(true)
       setBusy(true)
       const promise = resumeConversationFork(client, nextPoint, observeProgressFor(sourceThreadId))
-        .then((result) => {
+        .then(async (result) => {
           if (sourceThreadIdRef.current !== sourceThreadId) return
-          setBusy(false)
-          if (result) finish(result, sourceThreadId)
+          if (result) await finish(result, sourceThreadId)
+          else setBusy(false)
         })
         .catch((cause) => {
           if (sourceThreadIdRef.current !== sourceThreadId) return

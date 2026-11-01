@@ -426,6 +426,16 @@ describe('ConversationHistoryForkRepository', () => {
       title: '实现普通 Fork（分支）',
       archived_at: -1,
     })
+    const targetTurnID = result.turnIDs.get('turn-1')!
+    expect(targetTurnID).toBeDefined()
+    const forkRow = db.sqlite
+      .query(
+        'SELECT target_turn_id, source_thread_id, source_turn_id FROM thread_message_forks WHERE target_thread_id = ?',
+      )
+      .get('target-1') as { target_turn_id: string; source_thread_id: string; source_turn_id: string }
+    expect(forkRow.target_turn_id).toBe(targetTurnID)
+    expect(forkRow.source_turn_id).toBe('turn-1')
+    expect(forkRow.target_turn_id).not.toBe('turn-1')
     expect(
       db.sqlite
         .query("SELECT status FROM turns WHERE thread_id = 'target-1' ORDER BY created_at")
@@ -766,6 +776,153 @@ describe('ConversationHistoryForkRepository', () => {
       .all(...targetTurns.map((turn) => turn.id)) as Array<{ turn_id: string }>
     // 只有目标 Pi 会话真实保留的边界会被写回，压缩前的 turn 边界被跳过而不是整笔失败。
     expect(copiedBoundaries).toHaveLength(1)
+  })
+
+  test('再次分支保存直接来源及当前边界，且回滚完整清理', async () => {
+    const db = await database()
+    const source = db.createThread('祖先任务')
+    const sessions = new SqlitePiSessionRepo(db)
+    const session = await sessions.create({
+      id: 's-session',
+      threadID: source.id,
+      agentID: 's-agent-1',
+    })
+    await session.appendMessage({ role: 'user', content: 'question-1', timestamp: 1 })
+    const entry1 = await session.appendMessage(assistant('answer-1', 2))
+    ;(session.getStorage() as SqlitePiSessionStorage).flush()
+
+    insertTurn(db, {
+      threadID: source.id,
+      turnID: 's-turn-1',
+      agentID: 's-agent-1',
+      sessionID: 's-session',
+      itemID: 's-item-1',
+      text: 'answer-1',
+      createdAt: 10,
+    })
+    new TurnPiBoundaryRepository(db).upsert({
+      turnID: 's-turn-1',
+      sessionID: 's-session',
+      entryID: entry1,
+    })
+    createOperation(db, {
+      operationID: 'fork-op-1',
+      threadID: source.id,
+      turnID: 's-turn-1',
+      itemID: 's-item-1',
+    })
+
+    let idCounter = 0
+    const history = new ConversationHistoryForkRepository(db, () => `id-${++idCounter}`)
+    const fork1 = await history.forkThrough(source.id, {
+      operationID: 'fork-op-1',
+      targetThreadID: 'fork-thread-1',
+      throughTurnID: 's-turn-1',
+      sourceItemID: 's-item-1',
+      targetWorkspace: { cwd: 'C:\\repo', roots: '[]', gitBranch: 'main' },
+      visible: true,
+    })
+
+    const fork1Turn1 = fork1.turnIDs.get('s-turn-1')!
+    expect(fork1Turn1).toBeDefined()
+    const row1 = db.sqlite
+      .query(
+        'SELECT target_turn_id, source_thread_id, source_turn_id FROM thread_message_forks WHERE target_thread_id = ?',
+      )
+      .get('fork-thread-1') as {
+      target_turn_id: string
+      source_thread_id: string
+      source_turn_id: string
+    }
+    expect(row1.target_turn_id).toBe(fork1Turn1)
+    expect(row1.source_thread_id).toBe(source.id)
+
+    // 在 fork 1 基础上追加一个新 turn
+    const fork1Session = db.sqlite
+      .query('SELECT session_id FROM agent_executions WHERE thread_id = ? AND turn_id = ?')
+      .get('fork-thread-1', fork1Turn1) as { session_id: string }
+    const openedSession = await sessions.openByID(fork1Session.session_id)
+    await openedSession.appendMessage({ role: 'user', content: 'question-2', timestamp: 3 })
+    const entry2 = await openedSession.appendMessage(assistant('answer-2', 4))
+    ;(openedSession.getStorage() as SqlitePiSessionStorage).flush()
+
+    insertTurn(db, {
+      threadID: 'fork-thread-1',
+      turnID: 'fork-1-turn-2',
+      agentID: 'fork-1-agent-2',
+      sessionID: fork1Session.session_id,
+      itemID: 'fork-1-item-2',
+      text: 'answer-2',
+      createdAt: 30,
+    })
+    new TurnPiBoundaryRepository(db).upsert({
+      turnID: 'fork-1-turn-2',
+      sessionID: fork1Session.session_id,
+      entryID: entry2,
+    })
+    createOperation(db, {
+      operationID: 'fork-op-2',
+      threadID: 'fork-thread-1',
+      turnID: 'fork-1-turn-2',
+      itemID: 'fork-1-item-2',
+    })
+
+    const fork2 = await history.forkThrough('fork-thread-1', {
+      operationID: 'fork-op-2',
+      targetThreadID: 'fork-thread-2',
+      throughTurnID: 'fork-1-turn-2',
+      sourceItemID: 'fork-1-item-2',
+      targetWorkspace: { cwd: 'C:\\repo', roots: '[]', gitBranch: 'main' },
+      visible: true,
+    })
+
+    const fork2Turn2 = fork2.turnIDs.get('fork-1-turn-2')!
+    expect(fork2Turn2).toBeDefined()
+    const fork2Rows = db.sqlite
+      .query(
+        'SELECT target_turn_id, source_thread_id, source_turn_id FROM thread_message_forks WHERE target_thread_id = ?',
+      )
+      .all('fork-thread-2') as Array<{
+      target_turn_id: string
+      source_thread_id: string
+      source_turn_id: string
+    }>
+    // 仅有一行关系，指向直接来源 fork-thread-1，不继承祖先 source.id
+    expect(fork2Rows).toHaveLength(1)
+    expect(fork2Rows[0]?.source_thread_id).toBe('fork-thread-1')
+    expect(fork2Rows[0]?.target_turn_id).toBe(fork2Turn2)
+    expect(fork2Rows[0]?.source_turn_id).toBe('fork-1-turn-2')
+
+    // 回滚测试：针对未发布的隐藏 target 进行 rollback
+    const itemInFork2 = (
+      db.sqlite
+        .query('SELECT id FROM items WHERE thread_id = ? AND turn_id = ?')
+        .get('fork-thread-2', fork2Turn2) as { id: string } | null
+    )?.id
+    if (!itemInFork2) throw new Error('missing itemInFork2')
+    createOperation(db, {
+      operationID: 'fork-op-rollback',
+      threadID: 'fork-thread-2',
+      turnID: fork2Turn2,
+      itemID: itemInFork2,
+    })
+    const hiddenFork = await history.forkThrough('fork-thread-2', {
+      operationID: 'fork-op-rollback',
+      targetThreadID: 'hidden-target',
+      throughTurnID: fork2Turn2,
+      sourceItemID: itemInFork2,
+      targetWorkspace: { cwd: 'C:\\repo', roots: '[]', gitBranch: 'main' },
+      visible: false,
+    })
+    expect(hiddenFork.targetThreadID).toBe('hidden-target')
+    expect(db.sqlite.query("SELECT id FROM threads WHERE id = 'hidden-target'").get()).not.toBeNull()
+    expect(history.rollback('fork-op-rollback')).toBe(true)
+    expect(db.sqlite.query("SELECT id FROM threads WHERE id = 'hidden-target'").get()).toBeNull()
+    expect(
+      db.sqlite
+        .query("SELECT * FROM thread_message_forks WHERE target_thread_id = 'hidden-target'")
+        .get(),
+    ).toBeNull()
   })
 })
 
