@@ -131,16 +131,15 @@ describe('ModelRuntimeParametersPopover', () => {
     )
     expect(html).toContain('推理思考强度')
     expect(html).toContain('上下文预算')
-    expect(html).toContain('自定义 (K):')
-    // 应该展示过滤后的预设档位，并以开关替代「模型默认」档
-    expect(html).toContain('role="switch"')
-    expect(html).toContain('64K')
-    expect(html).toContain('128K')
-    expect(html).toContain('200K')
-    // 超出 200K 的预设不应该在 html 中出现
-    expect(html).not.toContain('256K')
-    expect(html).not.toContain('500K')
-    expect(html).not.toContain('1M')
+    expect(html).not.toContain('自定义 (K):')
+    expect(html).not.toContain('k 上下文')
+    expect(html).toContain('>k</span>')
+    expect(html).toContain('value="128"')
+    expect(html).not.toContain('role="switch"')
+    // 滑块下方不再渲染档位文本描述，刻度圆点包含过滤后的档位（默认、64K、128K、200K、自定义共 5 档）
+    expect(html).not.toContain('stop-slider-labels')
+    expect(html).toMatch(/role="slider"[^>]*aria-label="上下文预算"[^>]*aria-valuemax="4"/)
+    expect(html).toContain('aria-valuetext="128K"')
   })
 
   test('预设与自定义输入按物理输入上界过滤，而不是按标称窗口过滤', () => {
@@ -152,9 +151,8 @@ describe('ModelRuntimeParametersPopover', () => {
         onMaxContextTokensChange={() => {}}
       />,
     )
-    expect(html).toContain('500K')
-    // 标称 1M 的模型扣除输出预留后 1M 档不可选。
-    expect(html).not.toContain('1M')
+    // 标称 1M 的模型扣除输出预留后 1M 档不可选，最大为 500K（共 7 个 stops：默认、64K、128K、200K、256K、500K、自定义）
+    expect(html).toMatch(/role="slider"[^>]*aria-label="上下文预算"[^>]*aria-valuemax="6"/)
     expect(html).toContain('最大 900')
   })
 
@@ -185,7 +183,7 @@ describe('ModelRuntimeParametersPopover', () => {
     expect(html).toContain('当前模型不支持配置推理思考强度')
   })
 
-  test('单档保留滑块并禁用，多档可以调节', () => {
+  test('单档保留滑块并禁用且拉满，多档可以调节', () => {
     const html = renderToString(
       <ModelRuntimeParametersContent
         physicalWindow={200_000}
@@ -203,10 +201,8 @@ describe('ModelRuntimeParametersPopover', () => {
     expect(html).toContain('role="slider"')
     expect(html).toContain('aria-valuetext="高"')
     expect(html).toContain('aria-valuetext="128K"')
-    expect(html).toContain('role="switch"')
-    expect(html).toContain('aria-checked="true"')
 
-    // 单档保留相同结构，但不允许调档。
+    // 单档保留相同结构，拉满并禁止调档。
     const single = renderToString(
       <ModelRuntimeParametersContent
         physicalWindow={200_000}
@@ -221,12 +217,12 @@ describe('ModelRuntimeParametersPopover', () => {
     expect(single).toMatch(/role="slider"[^>]*aria-label="推理思考强度"[^>]*aria-valuetext="高"/)
     expect(single.match(/class="stop-slider-track"/g)).toHaveLength(2)
     expect(single.match(/class="stop-slider-thumb"/g)).toHaveLength(2)
-    expect(single).toMatch(/role="slider"[^>]*aria-valuemax="0"[^>]*aria-valuetext="高"/)
+    expect(single).toContain('style="width:100%"')
     expect(single).not.toContain('NaN')
     expect(single).toContain('aria-valuetext="128K"')
   })
 
-  test('关闭开关即模型默认，自定义额度让滑块置灰', () => {
+  test('支持选择默认档与自定义档位，输入框仅在自定义档允许输入', () => {
     const off = renderToString(
       <ModelRuntimeParametersContent
         physicalWindow={200_000}
@@ -234,8 +230,20 @@ describe('ModelRuntimeParametersPopover', () => {
         onMaxContextTokensChange={() => {}}
       />,
     )
-    expect(off).toContain('aria-checked="false"')
-    expect(off).toContain('aria-disabled="true"')
+    expect(off).toContain('默认')
+    expect(off).toContain('aria-valuetext="默认"')
+    expect(off).toMatch(/disabled=""[^>]*value="默认"/)
+    expect(off).not.toContain('>k</span>')
+
+    const preset = renderToString(
+      <ModelRuntimeParametersContent
+        physicalWindow={200_000}
+        maxContextTokens={128_000}
+        onMaxContextTokensChange={() => {}}
+      />,
+    )
+    expect(preset).toMatch(/disabled=""[^>]*value="128"/)
+    expect(preset).toContain('>k</span>')
 
     const custom = renderToString(
       <ModelRuntimeParametersContent
@@ -245,7 +253,9 @@ describe('ModelRuntimeParametersPopover', () => {
       />,
     )
     expect(custom).toContain('aria-valuetext="96K"')
-    expect(custom).toContain('当前为自定义额度，拖动滑块可切回档位。')
+    expect(custom).toContain('value="96"')
+    expect(custom).not.toMatch(/disabled=""[^>]*value="96"/)
+    expect(custom).toContain('>k</span>')
   })
 })
 
@@ -269,8 +279,8 @@ test('预算低于必要开销下限时不可保存，并隐藏不可用预设',
     />,
   )
   expect(html).toContain('role="alert"')
-  expect(html).toContain('至少 100K')
-  expect(html).not.toContain('64K')
-  expect(html).toContain('128K')
+  expect(html).toContain('系统必要开销约 100K，预算不能低于此值。')
+  // 64K 被过滤剔除，剩下 4 个 stop（默认、128K、200K、自定义）
+  expect(html).toMatch(/role="slider"[^>]*aria-label="上下文预算"[^>]*aria-valuemax="3"/)
   expect(html).toContain('value="1"')
 })
