@@ -5,7 +5,6 @@ import { Popover } from '../../../components/ui/floating/Popover.js'
 import { Chip } from '../../../components/ui/Chip.js'
 import { InfoTooltip } from '../../../components/ui/InfoTooltip.js'
 import { StopSlider } from '../../../components/ui/StopSlider.js'
-import { ToggleSwitch } from '../../../components/ui/ToggleSwitch.js'
 import { cx } from '../../../utils/Cx.js'
 import { resolveThinkingLabel } from './ThinkingLevelPopover.js'
 
@@ -102,9 +101,11 @@ export function ModelRuntimeParametersContent({
   onThinkingChange,
 }: ModelRuntimeParametersContentProps): React.ReactElement {
   const customInputId = useId()
+  const customInputRef = useRef<HTMLInputElement>(null)
   const minimumTokens = Math.max(1, minimumContextTokens ?? 1)
   const presetLimit = physicalInputLimit ?? physicalWindow
-  const stops = CONTEXT_LIMIT_PRESETS.flatMap((preset) =>
+
+  const numericPresets = CONTEXT_LIMIT_PRESETS.flatMap((preset) =>
     preset.tokens === null ||
     preset.tokens < minimumTokens ||
     (presetLimit && preset.tokens > presetLimit)
@@ -112,14 +113,44 @@ export function ModelRuntimeParametersContent({
       : [{ label: preset.label, tokens: preset.tokens }],
   )
 
-  const contextEnabled = maxContextTokens !== null && maxContextTokens !== undefined
-  const isCustomValue = contextEnabled && !stops.some((stop) => stop.tokens === maxContextTokens)
-  const sliderIndex = isCustomValue
-    ? nearestStopIndex(maxContextTokens, stops)
-    : Math.max(
-        0,
-        stops.findIndex((stop) => stop.tokens === maxContextTokens),
-      )
+  type BudgetStop = {
+    key: 'default' | 'preset' | 'custom'
+    label: string
+    tokens: number | null
+  }
+
+  const stops: BudgetStop[] = [
+    { key: 'default', label: '默认', tokens: null },
+    ...numericPresets.map((preset) => ({
+      key: 'preset' as const,
+      label: preset.label,
+      tokens: preset.tokens,
+    })),
+    { key: 'custom', label: '自定义', tokens: null },
+  ]
+
+  const matchedPresetIndex = numericPresets.findIndex((preset) => preset.tokens === maxContextTokens)
+  const isDefaultValue = maxContextTokens === null || maxContextTokens === undefined
+  const isPresetValue = matchedPresetIndex !== -1
+  const isCustomValue = !isDefaultValue && !isPresetValue
+
+  const [isCustomMode, setIsCustomMode] = useState<boolean>(() => isCustomValue)
+  const lastSubmitted = useRef<number | null | undefined>(maxContextTokens)
+
+  useEffect(() => {
+    // 只有当 maxContextTokens 的变更来自外部（非本组件刚刚提交的值）时，才同步重置 isCustomMode
+    if (maxContextTokens !== lastSubmitted.current) {
+      lastSubmitted.current = maxContextTokens
+      setIsCustomMode(!isDefaultValue && !isPresetValue)
+    }
+  }, [maxContextTokens, isDefaultValue, isPresetValue])
+
+  const customStopIndex = stops.length - 1
+  const sliderIndex = isCustomMode
+    ? customStopIndex
+    : isDefaultValue
+      ? 0
+      : 1 + matchedPresetIndex
 
   const [customKInput, setCustomKInput] = useState<string>(() =>
     isCustomValue && maxContextTokens ? String(maxContextTokens / 1000) : '',
@@ -128,33 +159,33 @@ export function ModelRuntimeParametersContent({
   useEffect(() => {
     if (isCustomValue && maxContextTokens) {
       setCustomKInput(String(maxContextTokens / 1000))
-    } else if (!contextEnabled) {
+    } else if (!isCustomMode) {
       setCustomKInput('')
     }
-  }, [maxContextTokens, isCustomValue, contextEnabled])
-
-  // 关掉开关不清空记忆，重新打开时回到上一次显式选择的额度。
-  const lastChosen = useRef<number | null>(null)
-  useEffect(() => {
-    if (contextEnabled) lastChosen.current = maxContextTokens ?? null
-  }, [maxContextTokens, contextEnabled])
+  }, [maxContextTokens, isCustomValue, isCustomMode])
 
   const maxK = Math.min(physicalInputLimit ?? physicalWindow ?? 10_000_000, 10_000_000) / 1000
   const rangeHint =
     minimumTokens > maxK * 1000
-      ? '当前模型输入空间不足以容纳必要上下文，请调整模型或工具配置'
-      : `请输入 ${minimumTokens / 1000} 至 ${maxK} K，最多三位小数`
+      ? '可用空间不足，请调整模型或工具配置'
+      : `请输入 ${minimumTokens / 1000} 至 ${maxK} K`
   const [inputError, setInputError] = useState('')
-  const lastSubmitted = useRef<number | null | undefined>(maxContextTokens)
+  const lastCustomK = useRef<string>(
+    isCustomValue && maxContextTokens ? String(maxContextTokens / 1000) : '',
+  )
+
   useEffect(() => {
-    lastSubmitted.current = maxContextTokens
-  }, [maxContextTokens])
+    if (isCustomValue && maxContextTokens) {
+      lastCustomK.current = String(maxContextTokens / 1000)
+    }
+  }, [maxContextTokens, isCustomValue])
 
   const handleCommitCustomK = (): void => {
     const trimmed = customKInput.trim()
     if (!trimmed) {
-      // 空值不提交，但要给出可见反馈，避免看起来“保存成功”。
-      setInputError(rangeHint)
+      if (isCustomMode) {
+        setInputError(rangeHint)
+      }
       return
     }
     const tokens = parseContextLimitK(trimmed, maxK * 1000, minimumTokens)
@@ -164,28 +195,56 @@ export function ModelRuntimeParametersContent({
     }
     setInputError('')
     setCustomKInput(String(tokens / 1000))
+    lastCustomK.current = String(tokens / 1000)
+
+    // 如果数值和预设档位重复了，失焦提交后才弹回到对应预设档位
+    const matched = numericPresets.find((p) => p.tokens === tokens)
+    if (matched) {
+      setIsCustomMode(false)
+    } else {
+      setIsCustomMode(true)
+    }
+
     if (lastSubmitted.current === tokens) return
     lastSubmitted.current = tokens
     onMaxContextTokensChange(tokens)
   }
 
-  const handleContextToggle = (enabled: boolean): void => {
+  const handleSliderCommit = (index: number): void => {
+    const stop = stops[index]
+    if (!stop) return
     setInputError('')
-    if (!enabled) {
+    if (stop.key === 'default') {
+      setIsCustomMode(false)
       setCustomKInput('')
+      lastSubmitted.current = null
       onMaxContextTokensChange(null)
-      return
+    } else if (stop.key === 'preset') {
+      setIsCustomMode(false)
+      setCustomKInput('')
+      lastSubmitted.current = stop.tokens
+      onMaxContextTokensChange(stop.tokens)
+    } else {
+      // 自定义档：保持处于自定义模式，绝不弹回上一档
+      setIsCustomMode(true)
+      let initialK = customKInput.trim() || lastCustomK.current
+      if (!initialK) {
+        if (maxContextTokens) {
+          initialK = String(maxContextTokens / 1000)
+        } else if (numericPresets.length > 0) {
+          initialK = String(numericPresets[numericPresets.length - 1]!.tokens / 1000)
+        } else {
+          initialK = String(maxK)
+        }
+      }
+      setCustomKInput(initialK)
+      lastCustomK.current = initialK
+      // 输入框聚焦全选，供用户直接输入
+      setTimeout(() => {
+        customInputRef.current?.focus()
+        customInputRef.current?.select()
+      }, 0)
     }
-    if (minimumTokens > maxK * 1000) {
-      setInputError(rangeHint)
-      return
-    }
-    const remembered = lastChosen.current
-    onMaxContextTokensChange(
-      remembered && remembered >= minimumTokens && remembered <= maxK * 1000
-        ? remembered
-        : (stops[stops.length - 1]?.tokens ?? maxK * 1000),
-    )
   }
 
   const thinkingIndex = Math.max(
@@ -197,10 +256,33 @@ export function ModelRuntimeParametersContent({
     (thinkingDraft !== null ? thinkingOptions[thinkingDraft]?.label : undefined) ??
     resolveThinkingLabel(thinkingOptions, thinkingMode)
   const [contextDraft, setContextDraft] = useState<number | null>(null)
-  const contextLabel =
-    contextDraft !== null && stops[contextDraft]
-      ? stops[contextDraft].label
-      : formatContextLimitLabel(maxContextTokens)
+
+  const activeStop = contextDraft !== null ? stops[contextDraft] : null
+  const effectiveKey = activeStop
+    ? activeStop.key
+    : isCustomMode
+      ? 'custom'
+      : isDefaultValue
+        ? 'default'
+        : 'preset'
+
+  const isInputDisabled = effectiveKey !== 'custom'
+  const showKUnit = effectiveKey !== 'default'
+
+  const displayInputValue = activeStop
+    ? activeStop.key === 'default'
+      ? '默认'
+      : activeStop.key === 'preset'
+        ? String((activeStop.tokens ?? 0) / 1000)
+        : customKInput || lastCustomK.current || ''
+    : isCustomMode
+      ? customKInput
+      : isDefaultValue
+        ? '默认'
+        : String((maxContextTokens ?? 0) / 1000)
+
+  const contextAriaValue =
+    effectiveKey === 'default' ? '默认' : `${displayInputValue}K`
 
   return (
     <div className="tw:flex tw:flex-col" onClick={(event) => event.stopPropagation()}>
@@ -241,83 +323,23 @@ export function ModelRuntimeParametersContent({
           <div className="tw:flex tw:items-center tw:gap-1.5">
             <span className={SECTION_TITLE_CLASS}>上下文预算</span>
             <InfoTooltip
-              content="控制每次请求的输入规模，避免跨入更高的长上下文计费档位；系统会提前按预算的 80% 或模型安全输入上限触发压缩。自动压缩关闭、无法压缩或压缩请求本身超预算时暂停，不自动提高预算。设置从下一轮生效并按模型记忆；Token 数含估算，不能保证供应商最终计费档位。"
+              content="控制单次请求上下文规模，超限时触发压缩或暂停。发送前自动检查预算是否充足；修改从下一轮生效，当前轮次沿用已有预算。"
               size={14}
               ariaLabel="上下文预算说明"
             />
           </div>
-          <div className="tw:flex tw:items-center tw:gap-1.5">
-            <span className={HEADING_VALUE_CLASS}>{contextLabel}</span>
-            <ToggleSwitch
-              checked={contextEnabled}
-              onChange={handleContextToggle}
-              ariaLabel="启用上下文预算（关闭时使用模型默认预算）"
-            />
-          </div>
-        </div>
-
-        {stops.length > 0 ? (
-          <div className="tw:flex tw:flex-col tw:gap-2">
-            <StopSlider
-              labels={stops.map((stop) => stop.label)}
-              value={sliderIndex}
-              disabled={!contextEnabled}
-              muted={isCustomValue}
-              ariaLabel="上下文预算"
-              ariaValueText={contextLabel}
-              onDraftChange={setContextDraft}
-              onCommit={(index) => {
-                const stop = stops[index]
-                if (!stop) return
-                setCustomKInput('')
-                setInputError('')
-                onMaxContextTokensChange(stop.tokens)
-              }}
-            />
-            {isCustomValue ? (
-              <span className="tw:type-caption tw:text-app-text-meta">
-                当前为自定义额度，拖动滑块可切回档位。
-              </span>
-            ) : null}
-          </div>
-        ) : null}
-
-        {minimumContextTokens !== undefined ? (
-          <span
-            role={contextEnabled && maxContextTokens < minimumTokens ? 'alert' : undefined}
-            className={cx(
-              'tw:type-caption',
-              contextEnabled && maxContextTokens < minimumTokens
-                ? 'tw:text-app-warning'
-                : 'tw:text-app-text-meta',
-            )}
-          >
-            {`当前系统与工具开销估算要求预算至少 ${minimumTokens / 1000}K（含提前压缩余量）；新输入仍需额外空间，低于此值不能保存。`}
-          </span>
-        ) : (
-          <span className="tw:type-caption tw:text-app-text-meta">
-            当前模型的必要上下文开销尚未估算，发送前仍会检查预算是否足够。
-          </span>
-        )}
-
-        {/* Custom Input */}
-        <div className="tw:mt-1 tw:flex tw:items-center tw:gap-2 tw:pt-1">
-          <label
-            htmlFor={customInputId}
-            className="tw:shrink-0 tw:type-caption tw:text-app-text-soft"
-          >
-            自定义 (K):
-          </label>
-          <div className="tw:relative tw:flex tw:flex-1 tw:items-center">
+          <div className="tw:flex tw:items-center tw:gap-1">
             <input
+              ref={customInputRef}
               id={customInputId}
               type="text"
               inputMode="decimal"
               placeholder={physicalWindow ? `最大 ${maxK}` : '自定义'}
-              disabled={!contextEnabled}
+              disabled={isInputDisabled}
+              aria-label="上下文预算数值（K）"
               aria-invalid={Boolean(inputError)}
               aria-describedby={inputError ? `${customInputId}-error` : undefined}
-              value={customKInput}
+              value={displayInputValue}
               onChange={(e) => setCustomKInput(e.target.value)}
               onBlur={handleCommitCustomK}
               onKeyDown={(e) => {
@@ -335,44 +357,51 @@ export function ModelRuntimeParametersContent({
                 }
               }}
               className={cx(
-                'tw:w-full tw:rounded-indicator tw:border tw:border-app-border-subtle tw:bg-transparent',
-                'tw:px-2 tw:py-1 tw:pr-14 tw:type-caption tw:text-app-text tw:outline-none',
+                'tw:h-6 tw:w-20 tw:rounded-indicator tw:border tw:border-app-border-subtle tw:bg-transparent',
+                'tw:px-2 tw:type-caption tw:text-app-text tw:outline-none tw:text-right',
                 'tw:transition-colors tw:duration-feedback tw:ease-standard',
                 'tw:focus:border-app-focus tw:focus:outline-none',
-                'tw:disabled:cursor-default tw:disabled:opacity-50',
+                'tw:disabled:cursor-default tw:disabled:opacity-60',
               )}
             />
-            <span className="tw:pointer-events-none tw:absolute tw:right-2 tw:type-caption tw:text-app-text-meta">
-              tokens
-            </span>
+            {showKUnit ? (
+              <span className="tw:type-caption tw:text-app-text-soft">
+                k
+              </span>
+            ) : null}
           </div>
         </div>
+
+        <div className="tw:flex tw:flex-col tw:gap-2">
+          <StopSlider
+            labels={stops.map((stop) => stop.label)}
+            value={sliderIndex}
+            ariaLabel="上下文预算"
+            ariaValueText={contextAriaValue}
+            onDraftChange={setContextDraft}
+            onCommit={handleSliderCommit}
+          />
+        </div>
+
         {inputError ? (
           <span
             id={`${customInputId}-error`}
             role="alert"
-            className="tw:type-caption tw:text-app-text-soft"
+            className="tw:type-caption tw:text-app-warning"
           >
             {inputError}
           </span>
+        ) : maxContextTokens !== null && maxContextTokens < minimumTokens ? (
+          <span
+            role="alert"
+            className="tw:type-caption tw:text-app-warning"
+          >
+            {`系统必要开销约 ${minimumTokens / 1000}K，预算不能低于此值。`}
+          </span>
         ) : null}
-        <span className="tw:type-caption tw:text-app-text-meta">
-          参数修改从下一轮生效；进行中的轮次继续使用启动时的预算。
-        </span>
       </div>
     </div>
   )
-}
-
-function nearestStopIndex(tokens: number | null | undefined, stops: { tokens: number }[]): number {
-  if (!tokens || stops.length === 0) return 0
-  let best = 0
-  for (let index = 1; index < stops.length; index += 1) {
-    if (Math.abs(stops[index]!.tokens - tokens) < Math.abs(stops[best]!.tokens - tokens)) {
-      best = index
-    }
-  }
-  return best
 }
 
 export function ModelRuntimeParametersPopover({
