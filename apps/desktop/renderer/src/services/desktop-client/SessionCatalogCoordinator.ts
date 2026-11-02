@@ -152,10 +152,26 @@ function catalogThreadId(event: EventEnvelope): string | null {
   switch (event.type) {
     case 'thread/created':
     case 'thread/updated':
-      return event.payload.thread.id
+      // Writers on the agent side emit a lightweight `{threadId, patch, updatedAt}`
+      // shape while the wire schema documents `{thread, version}`. Reading only the
+      // schema shape crashed reconciliation (and silently dropped the refresh) for
+      // every goal-driven `thread/updated`. Accept both, and fall back to the
+      // envelope thread id.
+      return (
+        readThreadId(event.payload) ?? event.threadId ?? null
+      )
     case 'thread/settings/updated':
       return event.payload.threadId
     default:
       return event.threadId ?? null
   }
+}
+
+function readThreadId(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const record = payload as { thread?: { id?: unknown }; threadId?: unknown }
+  if (record.thread && typeof record.thread.id === 'string' && record.thread.id) {
+    return record.thread.id
+  }
+  return typeof record.threadId === 'string' && record.threadId ? record.threadId : null
 }

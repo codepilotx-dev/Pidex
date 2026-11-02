@@ -225,3 +225,36 @@ function providerCredentialEvent(): EventEnvelope {
     payload: { providerId: 'openai' },
   }
 }
+
+describe('SessionCatalogCoordinator goal reconciliation', () => {
+  test('agent-side lightweight thread/updated payload still refreshes the thread', async () => {
+    // 预算准入把目标写成 budget-limited 时，agent 会附加一条
+    // {threadId, patch, updatedAt} 形状的 thread/updated。旧实现只读
+    // payload.thread.id，取不到 id 就静默跳过，目标行于是永远停在“进行中的目标”。
+    const refreshed: string[][] = []
+    const coordinator = new SessionCatalogCoordinator({
+      onCatalogUpdated: () => {},
+      onProviderCredentialUpdated: () => {},
+      onConfigUpdated: () => {},
+      onWorkspaceFileChanged: () => {},
+      onWorkspaceGitChanged: () => {},
+      onLifecycleUpdated: () => {},
+      refreshThreads: async (threadIds) => {
+        refreshed.push([...threadIds])
+      },
+    })
+
+    await coordinator.deliverBatch([
+      {
+        id: 1,
+        type: 'thread/updated',
+        threadId: 'thread-1',
+        sequence: 1,
+        createdAt: Date.now(),
+        payload: { threadId: 'thread-1', patch: {}, updatedAt: Date.now() },
+      } as unknown as EventEnvelope,
+    ])
+
+    expect(refreshed).toEqual([['thread-1']])
+  })
+})

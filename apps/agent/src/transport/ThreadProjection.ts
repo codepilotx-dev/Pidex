@@ -1,4 +1,5 @@
 import { QueuedGoalRepository } from '../storage/repositories/QueuedGoalRepository'
+import { createPromptCacheKey } from '../prompt/PromptCache'
 import {
   contextCompactionItem,
   contextCompactionOperationItem,
@@ -1343,6 +1344,7 @@ export class ThreadProjection {
         archivedAt: row.archived_at == null ? null : Number(row.archived_at),
         unreadAt: row.unread_at == null ? null : Number(row.unread_at),
         pendingPlanApproval: Number(row.pending_plan_approval) === 1,
+        goal: this.db.repositories.threadGoals.get(id),
         settings: {
           taskMode: decodeStoredTaskMode(row.task_mode),
           permissionConfig: {
@@ -1794,6 +1796,16 @@ export class ThreadProjection {
   ): Record<string, unknown> | null {
     const threadId =
       event.threadId ?? (typeof source.threadId === 'string' ? source.threadId : null)
+    if (event.method === 'thread/prompt-settings/updated' && threadId) {
+      const state = this.db.repositories.context.state(threadId)
+      // Settings are saved before first composition, whose baseline starts at 1.
+      return {
+        threadId,
+        cacheKey: state?.cacheKey ?? createPromptCacheKey(threadId),
+        promptVersion: state?.promptVersion ?? 'prompt-engine-v2',
+        baselineVersion: state?.baselineVersion ?? 1,
+      }
+    }
     if (event.method === 'thread/updated') {
       const thread = threadId ? this.projectThread(threadId) : null
       return thread ? { thread, version: thread.updatedAt } : null

@@ -1,4 +1,6 @@
 import { ContextCompactionService } from '../src/context/ContextCompactionService'
+import { createPromptCacheKey } from '../src/prompt/PromptCache'
+import { ThreadGoalService } from '../src/session/ThreadGoalService'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -92,6 +94,58 @@ const seedTurn = (db: AgentDatabase, threadID: string) => {
 }
 
 describe('v4 会话事件投影契约', () => {
+  test('首次 prompt 设置事件与后续 Goal/Turn 事件能连续解码，旧 outbox 也可重放', async () => {
+    const { db, projection, hub } = await fixture()
+    const thread = db.createThread('实时状态')
+    const settings = db.saveThreadPromptSettings(thread.id, {
+      engine: 'prompt-engine-v2',
+      version: 2,
+      settings: {},
+    })
+    const settingsEvent = decodeFromStorage(settings.event, projection, 'global')
+    expect(() =>
+      decodeEventEnvelope({ ...settingsEvent, payload: settings.event.params }),
+    ).toThrow()
+    expect(settingsEvent).toMatchObject({
+      type: 'thread/prompt-settings/updated',
+      payload: {
+        threadId: thread.id,
+        cacheKey: createPromptCacheKey(thread.id),
+        promptVersion: 'prompt-engine-v2',
+        baselineVersion: 1,
+      },
+    })
+    const goals = new ThreadGoalService(db, hub)
+    const goal = (
+      await goals.set({
+        threadId: thread.id,
+        objective: '交付',
+        expectedVersion: null,
+        operationId: 'create',
+      })
+    ).goal
+    const turn = seedTurn(db, thread.id)
+    db.claimTurnExecution(turn.turnID)
+    db.finalizeTurn({
+      threadID: thread.id,
+      turnID: turn.turnID,
+      agentID: turn.agentID,
+      status: 'completed',
+    })
+    await goals.set({
+      threadId: thread.id,
+      status: 'paused',
+      expectedVersion: goals.get(thread.id).goal!.version,
+      operationId: 'pause',
+    })
+    const events = db.eventsAfter(settings.event.id - 1, thread.id, 500)
+    const decoded = events.map((event) => decodeFromStorage(event, projection, 'global'))
+    expect(decoded.some((event) => event.type === 'turn/completed')).toBe(true)
+    expect(decoded.at(-1)).toMatchObject({
+      type: 'thread/goal/updated',
+      payload: { goal: { id: goal.id, status: 'paused' } },
+    })
+  })
   test.each([false, true])(
     '待审批重启快照与实时事件一致，不依赖工具执行记录（旧展示字段：%s）',
     async (legacy) => {
@@ -1172,7 +1226,14 @@ describe('ThreadProjection forkedFrom 字段投影契约', () => {
         `INSERT INTO thread_message_forks (target_thread_id, source_thread_id, source_turn_id, source_item_id, operation_id, created_at, target_turn_id)
          VALUES (?, ?, ?, ?, ?, 1, ?)`,
       )
-      .run(targetThread.id, sourceThread.id, sourceTurn.turnID, sourceItemId, 'op-1', targetTurn.turnID)
+      .run(
+        targetThread.id,
+        sourceThread.id,
+        sourceTurn.turnID,
+        sourceItemId,
+        'op-1',
+        targetTurn.turnID,
+      )
 
     const projected = projection.snapshot(targetThread.id)
     expect(projected?.thread.forkedFrom).toEqual({
@@ -1268,7 +1329,14 @@ describe('ThreadProjection forkedFrom 字段投影契约', () => {
         `INSERT INTO thread_message_forks (target_thread_id, source_thread_id, source_turn_id, source_item_id, operation_id, created_at, target_turn_id)
          VALUES (?, ?, ?, ?, ?, 1, ?)`,
       )
-      .run(targetThread.id, sourceThread.id, sourceTurn.turnID, sourceItemId, 'op-edge', targetTurn.turnID)
+      .run(
+        targetThread.id,
+        sourceThread.id,
+        sourceTurn.turnID,
+        sourceItemId,
+        'op-edge',
+        targetTurn.turnID,
+      )
 
     // 初始状态下有效
     expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toEqual({
