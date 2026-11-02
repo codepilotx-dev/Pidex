@@ -243,7 +243,7 @@ export function SessionTimelineView<T>({
             item === TIMELINE_BOTTOM_SENTINEL ? (
               <div
                 aria-hidden="true"
-                className="session-timeline-bottom-sentinel tw:relative tw:w-full tw:flex-none tw:h-[calc(var(--thread-scroll-footer-fade-height)+var(--thread-scroll-content-bottom-gap))] tw:pointer-events-none"
+                className="session-timeline-bottom-sentinel tw:relative tw:w-full tw:flex-none tw:h-[calc(var(--thread-scroll-footer-height)+var(--thread-scroll-footer-fade-height)+var(--thread-scroll-content-bottom-gap))] tw:pointer-events-none"
                 key="timeline-bottom-sentinel"
               >
                 <div

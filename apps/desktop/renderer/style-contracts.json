@@ -60,9 +60,7 @@
     "src/styles/design-system/tokens.css": 4
   },
   "literalLineHeightAllowlist": {},
-  "tailwindLeadingAllowlist": {
-    "src/components/ui/Tooltip.tsx": 1
-  },
+  "tailwindLeadingAllowlist": {},
   "featureColorContract": {
     "roots": ["src/styles/features", "src/styles/lazy"],
     "componentTokenExceptions": [

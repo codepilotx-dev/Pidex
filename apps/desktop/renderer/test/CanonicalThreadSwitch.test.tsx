@@ -1402,3 +1402,67 @@ test.each(['running', 'completed'] as const)('只有压缩活动时不显示过�
   expect(markup).not.toContain('canonical-turn-activity__summary')
   expect(markup).not.toContain('aria-expanded')
 })
+
+test('assistant actions align to the left in Codex order with optional goal status and divider', () => {
+  const textItem = {
+    id: 'text-1',
+    messageID: 'msg-1',
+    turnId: 'turn-1',
+    agentId: 'agent-1',
+    type: 'text',
+    text: '你好，你好。',
+    status: 'completed',
+    createdAt: 1730547240000,
+    placement: 'result',
+  } as Extract<Item, { type: 'text' }>
+
+  // 1. With goal duration
+  const markupWithGoal = renderToStaticMarkup(
+    <CanonicalTestProviders>
+      <CanonicalItemRenderer
+        item={textItem}
+        showAssistantActions={true}
+        goalAchievedDuration="12s"
+        dockedPlanItemId={null}
+        onOpenPlanInRightDock={() => {}}
+        onOpenSubagent={() => {}}
+      />
+    </CanonicalTestProviders>,
+  )
+
+  expect(markupWithGoal).toContain('canonical-message-actions--assistant')
+  expect(markupWithGoal).toContain('toolbar-divider')
+  expect(markupWithGoal).toContain('canonical-goal-achieved')
+  expect(markupWithGoal).toContain('已在 12s 内达成目标')
+  expect(markupWithGoal).toContain('lucide-circle-check')
+
+  // Verify order: copy button -> divider -> goal achieved -> sent time
+  const copyIdx = markupWithGoal.indexOf('aria-label="复制"')
+  const dividerIdx = markupWithGoal.indexOf('toolbar-divider')
+  const goalIdx = markupWithGoal.indexOf('canonical-goal-achieved')
+  const timeIdx = markupWithGoal.indexOf('<time')
+  expect(copyIdx).toBeGreaterThan(-1)
+  expect(dividerIdx).toBeGreaterThan(copyIdx)
+  expect(goalIdx).toBeGreaterThan(dividerIdx)
+  expect(timeIdx).toBeGreaterThan(goalIdx)
+
+  // 2. Without goal duration
+  const markupWithoutGoal = renderToStaticMarkup(
+    <CanonicalTestProviders>
+      <CanonicalItemRenderer
+        item={textItem}
+        showAssistantActions={true}
+        goalAchievedDuration={null}
+        dockedPlanItemId={null}
+        onOpenPlanInRightDock={() => {}}
+        onOpenSubagent={() => {}}
+      />
+    </CanonicalTestProviders>,
+  )
+  expect(markupWithoutGoal).not.toContain('toolbar-divider')
+  expect(markupWithoutGoal).not.toContain('canonical-goal-achieved')
+  const noGoalCopyIdx = markupWithoutGoal.indexOf('aria-label="复制"')
+  const noGoalTimeIdx = markupWithoutGoal.indexOf('<time')
+  expect(noGoalCopyIdx).toBeGreaterThan(-1)
+  expect(noGoalTimeIdx).toBeGreaterThan(noGoalCopyIdx)
+})

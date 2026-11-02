@@ -20,7 +20,8 @@ import {
   RotateCcw,
   Send,
   Shield,
-  Target,
+  CheckCircle2,
+  MoreHorizontal,
   UserRoundPlus,
   type LucideIcon,
 } from 'lucide-react'
@@ -45,6 +46,8 @@ import {
 import { Button } from '../../../components/ui/Button.js'
 
 import { Tooltip } from '../../../components/ui/Tooltip.js'
+import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
+import { PopoverItem } from '../../../components/ui/PopoverItem.js'
 import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
 import { Collapsible, CollapsibleContent } from '../../../components/ui/Collapsible.js'
 import {
@@ -602,6 +605,77 @@ function CanonicalItemRendererContentComponent({
   }
 }
 
+interface AssistantActionItem {
+  id: string
+  label: string
+  icon?: React.ReactNode
+  element: React.ReactNode
+  onClick?: () => void
+}
+
+function AssistantActionsGroup({
+  actions,
+}: {
+  actions: readonly AssistantActionItem[]
+}): React.ReactNode {
+  const [menuOpen, setMenuOpen] = React.useState(false)
+  const MAX_VISIBLE = 3
+
+  if (actions.length <= MAX_VISIBLE) {
+    return (
+      <>
+        {actions.map((action) => (
+          <React.Fragment key={action.id}>{action.element}</React.Fragment>
+        ))}
+      </>
+    )
+  }
+
+  const visibleActions = actions.slice(0, MAX_VISIBLE)
+  const overflowActions = actions.slice(MAX_VISIBLE)
+
+  return (
+    <>
+      {visibleActions.map((action) => (
+        <React.Fragment key={action.id}>{action.element}</React.Fragment>
+      ))}
+      <PopoverMenu
+        align="start"
+        open={menuOpen}
+        onOpenChange={setMenuOpen}
+        trigger={
+          <Button
+            isIconOnly
+            aria-label="更多操作"
+            color="ghostSecondary"
+            size="xs"
+            title="更多操作"
+          >
+            <MoreHorizontal
+              aria-hidden="true"
+              size={APP_ICON_SIZE}
+              strokeWidth={APP_ICON_STROKE_WIDTH}
+            />
+          </Button>
+        }
+      >
+        {overflowActions.map((action) => (
+          <PopoverItem
+            key={action.id}
+            icon={action.icon}
+            onClick={() => {
+              setMenuOpen(false)
+              action.onClick?.()
+            }}
+          >
+            {action.label}
+          </PopoverItem>
+        ))}
+      </PopoverMenu>
+    </>
+  )
+}
+
 function TextItemView({
   item,
   showAssistantActions,
@@ -625,6 +699,53 @@ function TextItemView({
 
   if (item.status === 'streaming') countStreamingItemRender()
   if (!text.trim()) return null
+
+  const actionItems: AssistantActionItem[] = []
+  if (showAssistantActions && item.status !== 'streaming') {
+    actionItems.push({
+      id: 'copy',
+      label: '复制',
+      element: <CopyButton text={item.text} />,
+    })
+    if (item.placement === 'result' && item.status === 'completed' && onForkFromMessage) {
+      actionItems.push({
+        id: 'fork',
+        label: '在新聊天中继续',
+        icon: (
+          <Split
+            aria-hidden="true"
+            size={APP_ICON_SIZE}
+            strokeWidth={APP_ICON_STROKE_WIDTH}
+          />
+        ),
+        onClick: () => onForkFromMessage({ itemId: item.id, turnId: item.turnId }),
+        element: (
+          <Tooltip content="在新聊天中继续">
+            <Button
+              isIconOnly
+              aria-label="在新聊天中继续"
+              color="ghostSecondary"
+              size="xs"
+              title="在新聊天中继续"
+              onClick={(event) => {
+                event.stopPropagation()
+                onForkFromMessage({ itemId: item.id, turnId: item.turnId })
+              }}
+            >
+              <Split
+                aria-hidden="true"
+                size={APP_ICON_SIZE}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            </Button>
+          </Tooltip>
+        ),
+      })
+    }
+  }
+
+  const hasBottomBar = actionItems.length > 0 || Boolean(goalAchievedDuration)
+
   return (
     <article
       className={cx(
@@ -646,42 +767,27 @@ function TextItemView({
           text={text}
         />
       </ConversationMarkdownErrorBoundary>
-      {(showAssistantActions && item.status !== 'streaming') || goalAchievedDuration ? (
-        <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:mt-1 tw:min-h-[26px]">
+      {hasBottomBar ? (
+        <div className="canonical-message-actions canonical-message-actions--assistant tw:flex tw:items-center tw:gap-1.5 tw:mt-1 tw:min-h-[26px]">
+          {actionItems.length > 0 ? <AssistantActionsGroup actions={actionItems} /> : null}
+          {actionItems.length > 0 && goalAchievedDuration ? (
+            <span
+              className="toolbar-divider tw:inline-block tw:h-3.5 tw:w-px tw:shrink-0 tw:bg-app-border-strong tw:mx-1"
+              aria-hidden="true"
+            />
+          ) : null}
           {goalAchievedDuration ? (
             <span className="canonical-goal-achieved tw:inline-flex tw:items-center tw:gap-1.5 tw:text-app-text-meta tw:type-caption">
-              <Target aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+              <CheckCircle2
+                aria-hidden="true"
+                size={APP_ICON_SIZE}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
               <span>已在 {goalAchievedDuration} 内达成目标</span>
             </span>
-          ) : (
-            <span />
-          )}
+          ) : null}
           {showAssistantActions && item.status !== 'streaming' ? (
-            <div className="canonical-message-actions canonical-message-actions--assistant tw:mt-0">
-              <CopyButton text={item.text} />
-              {item.placement === 'result' && item.status === 'completed' && onForkFromMessage ? (
-                <Tooltip content="在新聊天中继续">
-                  <Button
-                    isIconOnly
-                    aria-label="在新聊天中继续"
-                    color="ghostSecondary"
-                    size="xs"
-                    title="在新聊天中继续"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      onForkFromMessage({ itemId: item.id, turnId: item.turnId })
-                    }}
-                  >
-                    <Split
-                      aria-hidden="true"
-                      size={APP_ICON_SIZE}
-                      strokeWidth={APP_ICON_STROKE_WIDTH}
-                    />
-                  </Button>
-                </Tooltip>
-              ) : null}
-              <MessageSentTime sentAt={item.createdAt} />
-            </div>
+            <MessageSentTime sentAt={item.createdAt} />
           ) : null}
         </div>
       ) : null}

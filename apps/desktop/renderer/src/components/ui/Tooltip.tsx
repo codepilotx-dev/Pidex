@@ -943,7 +943,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
               {shortcut ? (
                 <span className="tooltip-with-shortcut tw:inline-flex tw:items-center tw:gap-1.5">
                   <span>{children}</span>
-                  <kbd className="tooltip-shortcut-badge tw:inline-flex tw:items-center tw:justify-center tw:rounded-xs tw:bg-[color-mix(in_srgb,currentColor_16%,transparent)] tw:px-1.5 tw:py-0.5 tw:font-sans tw:type-caption tw:leading-none tw:text-inherit">
+                  <kbd className="tooltip-shortcut-badge tw:inline-flex tw:items-center tw:justify-center tw:rounded-xs tw:bg-[color-mix(in_srgb,currentColor_16%,transparent)] tw:px-1.5 tw:py-0.5 tw:font-sans tw:type-caption tw:text-inherit">
                     {shortcut}
                   </kbd>
                 </span>
