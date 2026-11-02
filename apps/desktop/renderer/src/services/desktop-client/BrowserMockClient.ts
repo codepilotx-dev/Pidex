@@ -19,6 +19,7 @@ import {
   resolveCollaborationMode,
 } from '../../shims/core/agent/SessionContract.js'
 import type { CatalogProvider, ModelRef, Project } from '@pidex/shared'
+import { threadGoalBudgetViolation } from '@pidex/shared/thread'
 import type {
   PermissionConfig,
   PermissionRule,
@@ -1692,19 +1693,34 @@ export function createBrowserMockDesktopClient(
       restoredFiles: [],
     }),
     getSessionGoal: async () => null,
-    setSessionGoal: async () => ({
-      id: 'goal:mock',
-      threadId: 'mock',
-      objective: '',
-      status: 'active',
-      tokenBudget: null,
-      tokensUsed: 0,
-      timeUsedSeconds: 0,
-      version: 1,
-      completedAt: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }),
+    setSessionGoal: async (_sessionId, input) => {
+      // Mirror the agent rule so browser previews cannot narrow a budget either.
+      if (input.budgetBaseline && input.tokenBudget !== undefined) {
+        const violation = threadGoalBudgetViolation(
+          input.budgetBaseline.tokenBudget,
+          input.tokenBudget,
+        )
+        if (violation)
+          throw new Error(
+            violation === 'capped'
+              ? '目标当前不限额，不能再设置有限预算'
+              : '目标预算只能增加或取消上限，不能降低',
+          )
+      }
+      return {
+        id: 'goal:mock',
+        threadId: 'mock',
+        objective: '',
+        status: 'active',
+        tokenBudget: input.tokenBudget ?? null,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+        version: 1,
+        completedAt: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+    },
     clearSessionGoal: async () => true,
     listThreadBookmarks: async (sessionId) => ({
       threadId: sessionId,

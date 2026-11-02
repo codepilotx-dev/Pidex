@@ -183,6 +183,9 @@ export function useDesktopComposerController({
   function setGoalModeEnabled(enabled: boolean): void {
     composerDraftStore.update(draftKey, (draft) => ({ ...draft, goalModeEnabled: enabled }))
   }
+  function setGoalTokenBudget(budget: number | null): void {
+    composerDraftStore.update(draftKey, (draft) => ({ ...draft, goalTokenBudget: budget }))
+  }
   const [isComposing, setIsComposing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lastSubmitOutcome, setLastSubmitOutcome] = useState<ComposerSubmitOutcome | null>(null)
@@ -194,6 +197,7 @@ export function useDesktopComposerController({
   )
   const activeDraft = draft ?? composerDraftStore.get(draftKey)
   const goalModeEnabled = Boolean(activeDraft.goalModeEnabled)
+  const goalTokenBudget = activeDraft.goalTokenBudget ?? null
   const composingRef = useRef(false)
   const submittingRef = useRef(false)
   const attachmentGenerationRef = useRef(new Map<ComposerDraftKey, number>())
@@ -676,7 +680,9 @@ export function useDesktopComposerController({
     selectedSkillToken,
     activeSkillToken,
     composerDocument,
+    goalTokenBudget,
     setGoalModeEnabled,
+    setGoalTokenBudget,
     skillCommands,
     skillCatalogLoading: !runtimeSkillsLoaded,
     skillCatalogError: runtimeSkillsError,

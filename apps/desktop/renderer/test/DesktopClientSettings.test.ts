@@ -2508,3 +2508,188 @@ test.each(['paused', 'complete', 'clear', 'replaced'] as const)(
     expect(threadReads).toBe(action === 'replaced' ? 1 : 2)
   },
 )
+
+test.each(['paused', 'complete'] as const)(
+  '取消 %s Goal 的预算上限只更新设置，不发起 Turn 或恢复目标',
+  async (status) => {
+    let goal = {
+      id: 'goal-edit',
+      threadId: 'goal-thread',
+      objective: '保留目标状态',
+      status,
+      tokenBudget: 50000 as number | null,
+      tokensUsed: 1234,
+      timeUsedSeconds: 3,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
+    }
+    const writes: Record<string, unknown>[] = []
+    const client = createDesktopClient({
+      fetch: async (_path, init) => {
+        const body = JSON.parse(String(init?.body))
+        if (body.method === 'initialize')
+          return rpc(body.id, {
+            ...initializedResult(),
+            capabilities: [...initializedResult().capabilities, 'thread.goal.v1'],
+          })
+        if (body.method === 'initialized') return new Response(null, { status: 204 })
+        if (body.method === 'thread/goal/get') return rpc(body.id, { goal })
+        if (body.method === 'thread/goal/set') {
+          writes.push(body.params)
+          goal = { ...goal, tokenBudget: body.params.tokenBudget, version: goal.version + 1 }
+          return rpc(body.id, { goal })
+        }
+        if (body.method === 'thread/read')
+          return rpc(
+            body.id,
+            snapshotResult({
+              ...snapshot('goal-thread', defaultSettings),
+              goal,
+            }),
+          )
+        if (body.method === 'project/list')
+          return rpc(body.id, { projects: [project], nextCursor: null })
+        throw new Error(`不应在编辑预算时调用 ${body.method}`)
+      },
+    })
+    const result = await client.setSessionGoal('goal-thread', {
+      tokenBudget: null,
+      budgetBaseline: { goalId: goal.id, tokenBudget: 50000 },
+    })
+    expect(result).toMatchObject({ status, tokenBudget: null, tokensUsed: 1234 })
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).not.toHaveProperty('status')
+  },
+)
+
+function goalBudgetHarness(
+  initialBudget: number | null,
+  onWrite?: (params: Record<string, unknown>) => void,
+) {
+  let goal = {
+    id: 'goal-append',
+    threadId: 'goal-thread',
+    objective: '追加预算',
+    status: 'active',
+    tokenBudget: initialBudget as number | null,
+    tokensUsed: 40,
+    timeUsedSeconds: 1,
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: null,
+  }
+  const writes: Record<string, unknown>[] = []
+  let reads = 0
+  const client = createDesktopClient({
+    fetch: async (_path, init) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.method === 'initialize')
+        return rpc(body.id, {
+          ...initializedResult(),
+          capabilities: [...initializedResult().capabilities, 'thread.goal.v1'],
+        })
+      if (body.method === 'initialized') return new Response(null, { status: 204 })
+      if (body.method === 'project/list')
+        return rpc(body.id, { projects: [project], nextCursor: null })
+      if (body.method === 'thread/goal/get') {
+        reads += 1
+        return rpc(body.id, { goal })
+      }
+      if (body.method === 'thread/goal/set') {
+        writes.push(body.params)
+        onWrite?.(body.params)
+        goal = {
+          ...goal,
+          tokenBudget: body.params.tokenBudget,
+          version: goal.version + 1,
+          updatedAt: now,
+        }
+        return rpc(body.id, { goal })
+      }
+      if (body.method === 'thread/read') {
+        reads += 1
+        return rpc(body.id, snapshotResult({ ...snapshot('goal-thread', defaultSettings), goal }))
+      }
+      throw new Error(`Unexpected RPC: ${body.method}`)
+    },
+  })
+  return {
+    client,
+    writes,
+    reads: () => reads,
+    goal: () => goal,
+    replace: (next: Partial<typeof goal>) => (goal = { ...goal, ...next }),
+  }
+}
+
+describe('Goal 追加预算', () => {
+  test('修改已有预算必须提供基准，缺失时不发写入', async () => {
+    const harness = goalBudgetHarness(200)
+    await expect(
+      harness.client.setSessionGoal('goal-thread', { tokenBudget: 250 }),
+    ).rejects.toThrow('预算基准')
+    expect(harness.writes).toHaveLength(0)
+  })
+
+  test('200 追加 50 提交总上限 250，而不是追加量', async () => {
+    const harness = goalBudgetHarness(200)
+    const baseline = { goalId: 'goal-append', tokenBudget: 200 }
+    const nextTotal = 250
+    const result = await harness.client.setSessionGoal('goal-thread', {
+      tokenBudget: nextTotal,
+      budgetBaseline: baseline,
+    })
+    expect(result.tokenBudget).toBe(250)
+    expect(harness.writes).toHaveLength(1)
+    expect(harness.writes[0]).toMatchObject({ tokenBudget: 250, expectedVersion: 1 })
+  })
+
+  test('目标替换或上限已变化时以基准冲突拒绝，不发写入', async () => {
+    const replaced = goalBudgetHarness(200)
+    replaced.replace({ id: 'other-goal' })
+    await expect(
+      replaced.client.setSessionGoal('goal-thread', {
+        tokenBudget: 250,
+        budgetBaseline: { goalId: 'goal-append', tokenBudget: 200 },
+      }),
+    ).rejects.toMatchObject({ code: 'GOAL_VERSION_CONFLICT' })
+    expect(replaced.writes).toHaveLength(0)
+    // The client re-reads the goal so the panel's baseline can be repaired.
+    expect(replaced.reads()).toBeGreaterThan(1)
+
+    const changed = goalBudgetHarness(200)
+    changed.replace({ tokenBudget: 300 })
+    await expect(
+      changed.client.setSessionGoal('goal-thread', {
+        tokenBudget: 250,
+        budgetBaseline: { goalId: 'goal-append', tokenBudget: 200 },
+      }),
+    ).rejects.toMatchObject({ code: 'GOAL_VERSION_CONFLICT' })
+    expect(changed.writes).toHaveLength(0)
+    expect(changed.reads()).toBeGreaterThan(1)
+  })
+
+  test('版本冲突刷新后不自动重试追加，重复点击不重复加', async () => {
+    let calls = 0
+    const harness = goalBudgetHarness(200, () => {
+      calls += 1
+    })
+    const first = await harness.client.setSessionGoal('goal-thread', {
+      tokenBudget: 250,
+      budgetBaseline: { goalId: 'goal-append', tokenBudget: 200 },
+    })
+    expect(first.tokenBudget).toBe(250)
+    // A second click computed against the stale 200 baseline must not add again.
+    await expect(
+      harness.client.setSessionGoal('goal-thread', {
+        tokenBudget: 250,
+        budgetBaseline: { goalId: 'goal-append', tokenBudget: 200 },
+      }),
+    ).rejects.toMatchObject({ code: 'GOAL_VERSION_CONFLICT' })
+    expect(calls).toBe(1)
+    expect(harness.goal().tokenBudget).toBe(250)
+  })
+})

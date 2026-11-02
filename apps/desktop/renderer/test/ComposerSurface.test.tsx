@@ -79,6 +79,30 @@ function composerCardProps(overrides: Partial<ComposerCardProps> = {}): Composer
 }
 
 describe('composer surface variant', () => {
+  test('Goal 累计时间有独立口径，等待阶段不继续外推计时，暂停状态显示恢复按钮', () => {
+    const html = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          sessionStatus: 'waiting',
+          threadGoal: { ...GOAL, tokenBudget: null, updatedAt: Date.now() - 10_000 },
+        })}
+      />,
+    )
+    expect(html).toContain('目标累计执行时间')
+    expect(html).toContain('1m 30s')
+    expect(html).not.toContain('1m 40s')
+    const paused = renderToStaticMarkup(
+      <ComposerCard
+        {...composerCardProps({
+          sessionStatus: 'done',
+          threadGoal: { ...GOAL, tokenBudget: null, status: 'paused', timeUsedSeconds: 8 },
+        })}
+      />,
+    )
+    expect(paused).toContain('已暂停的目标')
+    expect(paused).toContain('aria-label="恢复目标"')
+    expect(paused).toContain('8s')
+  })
   test('紧凑模型入口只显示图标但保留模型与推理的完整无障碍名称', () => {
     const html = renderToStaticMarkup(
       <ModelSelectTrigger
@@ -800,7 +824,7 @@ test('目标超预算保留实际用量并展示紧凑指标', () => {
     />,
   )
   expect(html).toContain('87.9万 / 20万')
-  expect(html).toContain('目标受限')
+  expect(html).toContain('目标预算受限')
 })
 
 test('手动压缩反馈不放进输入框容器', () => {

@@ -210,6 +210,16 @@ export type DesktopGoalSubmission = Omit<
   'expectedVersion'
 >
 
+/**
+ * Observed budget of the goal a budget edit is computed against. The UI derives the
+ * new total from it, so a concurrent replacement or budget change can be detected
+ * instead of silently applying the wrong total.
+ */
+export type DesktopGoalBudgetBaseline = {
+  goalId: string
+  tokenBudget: number | null
+}
+
 export type DesktopUserMessageInput = {
   text: string
   goal?: DesktopGoalSubmission
@@ -2169,6 +2179,8 @@ export type DesktopApi = {
       objective?: string
       status?: 'active' | 'paused' | 'complete'
       tokenBudget?: number | null
+      /** Required for budget edits on an existing goal; ignored when creating one. */
+      budgetBaseline?: DesktopGoalBudgetBaseline
     },
   ): Promise<DesktopThreadGoal>
   clearSessionGoal(sessionId: string): Promise<boolean>

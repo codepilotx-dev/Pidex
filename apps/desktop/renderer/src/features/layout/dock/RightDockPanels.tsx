@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FileEditorViewState } from '../../editor/FileEditor.js'
 import type React from 'react'
-import { Check, Copy, Download, Folder, FolderOpen, ListChecks } from 'lucide-react'
+import { Check, Copy, Download, Folder, FolderOpen, ListChecks, Undo2 } from 'lucide-react'
 import {
   APP_ICON_SIZE,
   APP_ICON_STROKE_WIDTH,
@@ -16,7 +16,12 @@ import {
   useTransform,
   type MotionValue,
 } from 'motion/react'
-import type { DesktopFileEntry, DesktopThreadGoal, DesktopWorkspace } from '../../../../shared/Types.js'
+import type {
+  DesktopFileEntry,
+  DesktopGoalBudgetBaseline,
+  DesktopThreadGoal,
+  DesktopWorkspace,
+} from '../../../../shared/Types.js'
 import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
 import { Button } from '../../../components/ui/Button.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
@@ -30,6 +35,9 @@ import { useCanonicalThreadConversation } from '../../session/timeline/UseCanoni
 import { selectCanonicalLatestPlanItemId } from '../../session/conversation/CanonicalConversationSelectors.js'
 import { resolveLanguageFromPath } from '../../syntax/index.js'
 import { cx } from '../../../utils/Cx.js'
+import { resolveGoalBudgetAppend } from '../../session/composer/ComposerTypes.js'
+import { compactTokenCount } from '../../session/composer/ComposerGoalRow.js'
+import { toast } from '../../../components/toast/ToastState.js'
 import {
   prefetchFileDocument,
   fileDocumentLoadErrorMessage,
@@ -164,61 +172,199 @@ function formatRelativeUpdatedLabel(updatedAt: number): string {
 export function RightDockGoalPanel({
   goal,
   onSaveGoal,
+  onAppendBudget,
+  onRemoveBudgetLimit,
 }: {
   goal: DesktopThreadGoal | null
   onSaveGoal?: (objective: string) => Promise<void>
+  onAppendBudget?: (nextTotal: number, baseline: DesktopGoalBudgetBaseline) => Promise<void>
+  onRemoveBudgetLimit?: (baseline: DesktopGoalBudgetBaseline) => Promise<void>
 }): React.ReactNode {
   const savedObjective = goal?.objective ?? ''
+  const savedBudget = goal?.tokenBudget ?? null
   const [draft, setDraft] = useState(savedObjective)
+  const [appendDraft, setAppendDraft] = useState('')
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const [budgetError, setBudgetError] = useState<string | null>(null)
+  const [budgetPending, setBudgetPending] = useState(false)
   const previousSavedRef = useRef(savedObjective)
+  const previousGoalIdRef = useRef(goal?.id ?? null)
 
   useEffect(() => {
     const previousSaved = previousSavedRef.current
     previousSavedRef.current = savedObjective
-    if (draft === previousSaved) {
-      setDraft(savedObjective)
-    }
+    if (draft === previousSaved) setDraft(savedObjective)
   }, [draft, savedObjective])
 
+  // Usage refreshes rewrite the same goal, so only a different goal identity resets
+  // the in-progress append amount.
+  useEffect(() => {
+    const goalId = goal?.id ?? null
+    if (previousGoalIdRef.current === goalId) return
+    previousGoalIdRef.current = goalId
+    setAppendDraft('')
+    setBudgetError(null)
+  }, [goal?.id])
+
   const trimmedDraft = draft.trim()
-  const isDirty = trimmedDraft !== savedObjective.trim()
-  const canSave = Boolean(onSaveGoal && !saving && isDirty && trimmedDraft.length > 0 && trimmedDraft.length <= 4000)
+  const isObjectiveDirty = trimmedDraft !== savedObjective.trim()
+  const canSave = Boolean(
+    onSaveGoal && !saving && isObjectiveDirty && trimmedDraft.length > 0,
+  )
+  const baseline = goal ? { goalId: goal.id, tokenBudget: savedBudget } : null
+  const append =
+    savedBudget !== null ? resolveGoalBudgetAppend(savedBudget, appendDraft) : null
+  const nextTotal = append?.status === 'valid' ? append.nextTotal : null
+  const canAppend = Boolean(
+    onAppendBudget && baseline && append?.status === 'valid' && !budgetPending,
+  )
+  const appendHint =
+    append?.status === 'invalid'
+      ? '追加量需为正整数'
+      : append?.status === 'overflow'
+        ? '追加后超出可用范围'
+        : append?.status === 'valid' && goal
+          ? `追加后上限 ${compactTokenCount(append.nextTotal)}，剩余 ${compactTokenCount(Math.max(0, append.nextTotal - goal.tokensUsed))}`
+          : ''
+  const budgetEditable =
+    goal !== null &&
+    goal.status !== 'complete' &&
+    savedBudget !== null &&
+    Boolean(onAppendBudget)
 
   async function handleSave(): Promise<void> {
     if (!canSave || !onSaveGoal) return
     setSaving(true)
-    setError(null)
     try {
       await onSaveGoal(trimmedDraft)
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : '目标更新失败')
+      toast.error(cause instanceof Error ? cause.message : '目标更新失败')
     } finally {
       setSaving(false)
     }
   }
 
   function handleReset(): void {
-    setError(null)
     setDraft(savedObjective)
+  }
+
+  async function handleAppend(): Promise<void> {
+    if (!canAppend || !onAppendBudget || !baseline || nextTotal === null) return
+    setBudgetPending(true)
+    setBudgetError(null)
+    try {
+      await onAppendBudget(nextTotal, baseline)
+      setAppendDraft('')
+    } catch (cause) {
+      setBudgetError(cause instanceof Error ? cause.message : '追加预算失败')
+    } finally {
+      setBudgetPending(false)
+    }
+  }
+
+  async function handleRemoveLimit(): Promise<void> {
+    if (!onRemoveBudgetLimit || !baseline || budgetPending) return
+    setBudgetPending(true)
+    setBudgetError(null)
+    try {
+      await onRemoveBudgetLimit(baseline)
+    } catch (cause) {
+      setBudgetError(cause instanceof Error ? cause.message : '取消预算上限失败')
+    } finally {
+      setBudgetPending(false)
+    }
   }
 
   return (
     <div
-      aria-label="目标"
+      aria-label="编辑目标"
       className="right-dock-goal-panel tw:flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:bg-app-dock"
     >
-      <div className="tw:px-4 tw:pt-3 tw:pb-1 tw:text-app-text-meta tw:type-caption">
-        {goal ? formatRelativeUpdatedLabel(goal.updatedAt) : '尚未设置目标'}
+      <div className="tw:flex tw:shrink-0 tw:flex-col tw:gap-1.5 tw:border-b tw:border-app-border-subtle tw:px-4 tw:py-2">
+        <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
+          <span className="tw:text-app-text-meta tw:type-caption tw:select-none">
+            {goal ? formatRelativeUpdatedLabel(goal.updatedAt) : '尚未设置目标'}
+          </span>
+          <div className="tw:flex tw:items-center tw:gap-1.5">
+            <Button
+              color="ghostSecondary"
+              size="sm"
+              aria-label="撤销未保存的修改"
+              disabled={!isObjectiveDirty || saving}
+              onClick={handleReset}
+            >
+              <Undo2 size={15} />
+            </Button>
+            <Button color="primary" size="sm" disabled={!canSave} onClick={() => void handleSave()}>
+              {saving ? '保存中…' : '保存'}
+            </Button>
+          </div>
+        </div>
+        {goal ? (
+          <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5">
+            <span className="tw:text-app-text-meta tw:type-caption tw:tabular-nums">
+              {savedBudget === null
+                ? '预算：不限额'
+                : `预算：${compactTokenCount(goal.tokensUsed)} / ${compactTokenCount(savedBudget)}`}
+            </span>
+            {budgetEditable ? (
+              <>
+                <input
+                  id="dock-goal-append-budget"
+                  type="number"
+                  min={1}
+                  aria-label="追加 Token 预算"
+                  placeholder="追加 Token"
+                  value={appendDraft}
+                  disabled={budgetPending}
+                  onChange={(event) => {
+                    setAppendDraft(event.target.value)
+                    setBudgetError(null)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      void handleAppend()
+                    }
+                  }}
+                  className="tw:h-7 tw:w-28 tw:rounded tw:border tw:border-app-border-subtle tw:bg-transparent tw:px-2 tw:py-0.5 tw:text-app-text tw:type-caption tw:tabular-nums tw:outline-none tw:placeholder:text-app-text-meta tw:focus:border-app-focus"
+                />
+                <Button
+                  color="ghostSecondary"
+                  size="sm"
+                  disabled={!canAppend}
+                  onClick={() => void handleAppend()}
+                >
+                  追加预算
+                </Button>
+                <Button
+                  color="ghostSecondary"
+                  size="sm"
+                  disabled={budgetPending || !onRemoveBudgetLimit}
+                  onClick={() => void handleRemoveLimit()}
+                >
+                  取消预算上限
+                </Button>
+                <span className="tw:text-app-text-soft tw:type-caption tw:tabular-nums">
+                  {appendHint}
+                </span>
+              </>
+            ) : null}
+            {budgetError ? (
+              <span role="alert" className="tw:text-app-danger tw:type-caption">
+                {budgetError}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
       </div>
-      <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:px-4 tw:py-2">
+      <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:p-4">
         <textarea
           aria-label="目标内容"
           value={draft}
-          maxLength={4000}
+          autoFocus
           disabled={saving || !onSaveGoal}
-          placeholder="定义或优化此线程应达成的目标。"
+          placeholder="输入此任务的目标…"
           onChange={(event) => setDraft(event.target.value)}
           onKeyDown={(event) => {
             if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.shiftKey) {
@@ -228,30 +374,6 @@ export function RightDockGoalPanel({
           }}
           className="tw:min-h-0 tw:w-full tw:flex-1 tw:resize-none tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text tw:type-body tw:outline-none tw:placeholder:text-app-text-meta"
         />
-      </div>
-      <div className="tw:flex tw:items-center tw:justify-between tw:gap-2 tw:border-t tw:border-app-border-subtle tw:px-4 tw:py-2.5">
-        {error ? (
-          <span role="alert" className="tw:min-w-0 tw:truncate tw:text-app-danger tw:type-caption">
-            {error}
-          </span>
-        ) : (
-          <div />
-        )}
-        <div className="tw:flex tw:shrink-0 tw:items-center tw:gap-1.5">
-          {isDirty && !saving ? (
-            <Button color="ghostSecondary" size="sm" onClick={handleReset}>
-              还原
-            </Button>
-          ) : null}
-          <Button
-            color="primary"
-            size="sm"
-            disabled={!canSave}
-            onClick={() => void handleSave()}
-          >
-            {saving ? '正在保存…' : '保存'}
-          </Button>
-        </div>
       </div>
     </div>
   )

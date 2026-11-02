@@ -106,6 +106,7 @@ export function agentThreadListItemToDesktop(
     unreadAt: isoOrNull(thread.unreadAt),
     latestTurnStatus: thread.latestTurnStatus,
     pendingPlanApproval: thread.pendingPlanApproval === true,
+    ...(thread.goal === undefined ? {} : { threadGoal: thread.goal }),
     lastMessageAt: isoOrNull(thread.updatedAt),
     createdAt: iso(thread.createdAt),
   }

@@ -175,7 +175,6 @@ export type DesktopComposerProps = {
   onError?: (message: string) => void
   /** Current route path used to decide whether a failed creation should navigate back. */
   readPathname?: () => string
-  onGoalEdit?: (objective: string) => Promise<void>
   onOpenGoalPanel?: () => void
   onGoalPause?: () => void | Promise<void>
   onGoalResume?: () => void | Promise<void>
@@ -272,7 +271,6 @@ export function DesktopComposer({
   onFollowUpRemove,
   onFollowUpResume,
   threadGoal,
-  onGoalEdit,
   onOpenGoalPanel,
   onGoalPause,
   onGoalResume,
@@ -301,6 +299,8 @@ export function DesktopComposer({
     effectivePermissionMode,
     fileAttachmentsAvailable,
     goalModeEnabled,
+    goalTokenBudget,
+    setGoalTokenBudget,
     handleAddFiles,
     handleAddFilePaths,
     handleCommandError,
@@ -470,6 +470,8 @@ export function DesktopComposer({
         submitOutcome={lastSubmitOutcome}
         goalModeEnabled={goalModeEnabled}
         onGoalModeChange={setGoalModeEnabled}
+        goalTokenBudget={goalTokenBudget}
+        onGoalTokenBudgetChange={setGoalTokenBudget}
         modelVariant={modelVariant}
         modelVariantOptions={modelVariantOptions}
         onModelVariantChange={onModelVariantChange}
@@ -563,17 +565,6 @@ export function DesktopComposer({
         onFollowUpResume={onFollowUpResume}
         threadGoal={threadGoal}
         onOpenGoalPanel={onOpenGoalPanel}
-        onGoalEdit={async (objective) => {
-          if (onGoalEdit) {
-            await onGoalEdit(objective)
-            return
-          }
-          if (!routedSessionId) throw new Error('当前任务不可用')
-          await desktopClient.setSessionGoal(routedSessionId, {
-            objective,
-            status: 'active',
-          })
-        }}
         onGoalPause={onGoalPause}
         onGoalResume={onGoalResume}
         onGoalComplete={onGoalComplete}

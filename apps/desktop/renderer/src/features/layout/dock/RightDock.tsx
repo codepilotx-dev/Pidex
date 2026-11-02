@@ -71,6 +71,7 @@ type Props = {
   sessionStatus: DesktopSessionStatus
   terminalAvailable: boolean
   planContentByEventId: Readonly<Record<string, string>>
+  goal?: WorkbenchTabRenderContext['goal']
   providerManagement?: React.ReactNode
   width: number
   height?: number
@@ -277,6 +278,7 @@ export function WorkbenchPanel({
   sessionStatus,
   terminalAvailable,
   planContentByEventId,
+  goal,
   providerManagement,
   width,
   height,
@@ -407,6 +409,7 @@ export function WorkbenchPanel({
         onLoadError: (tab, error, phase) => stableOnFileLoadError({ error, phase, tab, target }),
       },
       planContentByEventId,
+      goal,
       plan: { onOpenPlan: onOpenPlan ? stableOnOpenPlan : undefined },
       sideChat: {
         ...sideChat,
@@ -443,6 +446,7 @@ export function WorkbenchPanel({
       handleTerminalDisplayPathChange,
       isRefreshingReview,
       planContentByEventId,
+      goal,
       reviewView,
       reviewTabState,
       onReviewSummaryChange,

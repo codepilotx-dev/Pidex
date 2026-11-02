@@ -92,6 +92,7 @@ import type {
   DesktopComposerAttachment,
   DesktopBrowserState,
   DesktopFileEntry,
+  DesktopGoalBudgetBaseline,
   DesktopInstalledSkill,
   DesktopPermissionMode,
   DesktopUserMessageInput,
@@ -1249,7 +1250,34 @@ export function DesktopLayout(): React.ReactNode {
     async (objective: string): Promise<void> => {
       if (!sessionId) throw new Error('当前任务不可用')
       try {
-        await desktopClient.setSessionGoal(sessionId, { objective, status: 'active' })
+        await desktopClient.setSessionGoal(sessionId, { objective })
+      } catch (cause) {
+        setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      }
+    },
+    [sessionId],
+  )
+  const handleGoalAppendBudget = useCallback(
+    async (nextTotal: number, baseline: DesktopGoalBudgetBaseline): Promise<void> => {
+      if (!sessionId) throw new Error('当前任务不可用')
+      try {
+        await desktopClient.setSessionGoal(sessionId, {
+          tokenBudget: nextTotal,
+          budgetBaseline: baseline,
+        })
+      } catch (cause) {
+        setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      }
+    },
+    [sessionId],
+  )
+  const handleGoalRemoveBudgetLimit = useCallback(
+    async (baseline: DesktopGoalBudgetBaseline): Promise<void> => {
+      if (!sessionId) throw new Error('当前任务不可用')
+      try {
+        await desktopClient.setSessionGoal(sessionId, { tokenBudget: null, budgetBaseline: baseline })
       } catch (cause) {
         setErrorMessage(cause instanceof Error ? cause.message : String(cause))
         throw cause
@@ -3116,6 +3144,7 @@ export function DesktopLayout(): React.ReactNode {
         }
         planContentByEventId={planContentByEventId}
         onOpenPlan={handleOpenPlanDock}
+        goal={auxiliaryPanelContext.goal}
         selectedFile={selectedFile}
         sessionId={sessionId}
         sessionStatus={sessionStatus}
@@ -3377,6 +3406,8 @@ export function DesktopLayout(): React.ReactNode {
       goal: {
         goal: activeSessionItem?.threadGoal ?? null,
         onSaveGoal: handleGoalEdit,
+        onAppendBudget: handleGoalAppendBudget,
+        onRemoveBudgetLimit: handleGoalRemoveBudgetLimit,
       },
       plan: { onOpenPlan: handleOpenPlanDock },
       sideChat: {
@@ -3453,7 +3484,9 @@ export function DesktopLayout(): React.ReactNode {
       handleCopyMarkdownFileReferenceContents,
       handleCreateBranch,
       activeSessionItem?.threadGoal,
+      handleGoalAppendBudget,
       handleGoalEdit,
+      handleGoalRemoveBudgetLimit,
       handleFileLoadError,
       handleOpenFileFromBrowser,
       handleOpenFilePreview,
@@ -3676,6 +3709,7 @@ export function DesktopLayout(): React.ReactNode {
             onMaxContextTokensChange: handleMaxContextTokensChange,
             modelSelectionError: session.modelSelectionError ?? selectedModelUnavailableMessage,
             threadGoal: activeSessionItem?.threadGoal ?? null,
+            onOpenGoalPanel: handleOpenGoalDock,
             onGoalPause: handleGoalPause,
             onGoalResume: handleGoalResume,
             onGoalComplete: handleGoalComplete,
@@ -3764,7 +3798,6 @@ export function DesktopLayout(): React.ReactNode {
       handleGoalResume,
       handleGoalComplete,
       handleGoalClear,
-      handleGoalEdit,
       handleOpenGoalDock,
       session.reloadModelSelection,
       refreshProviderState,

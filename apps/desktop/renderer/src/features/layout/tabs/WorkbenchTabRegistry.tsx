@@ -23,6 +23,7 @@ import type {
   DesktopFileEntry,
   DesktopFilePreview,
   DesktopGitStatus,
+  DesktopGoalBudgetBaseline,
   DesktopPermissionMode,
   DesktopModelSelection,
   DesktopReviewView,
@@ -180,6 +181,8 @@ export type WorkbenchTabRenderContext = {
   goal?: {
     goal: DesktopThreadGoal | null
     onSaveGoal?: (objective: string) => Promise<void>
+    onAppendBudget?: (nextTotal: number, baseline: DesktopGoalBudgetBaseline) => Promise<void>
+    onRemoveBudgetLimit?: (baseline: DesktopGoalBudgetBaseline) => Promise<void>
   }
   planContentByEventId: Readonly<Record<string, string>>
   plan: {
@@ -378,16 +381,18 @@ const definitions: readonly WorkbenchTabDefinition[] = [
   },
   {
     kind: 'goal',
-    label: '目标',
+    label: '编辑目标',
     icon: <Target size={iconSize} />,
     launcher: false,
     lifecycle: 'unmount-when-hidden',
-    getTitle: () => '目标',
+    getTitle: () => '编辑目标',
     render: (tab, context) =>
       tab.kind === 'goal' ? (
         <RightDockGoalPanel
           goal={context.goal?.goal ?? null}
           onSaveGoal={context.goal?.onSaveGoal}
+          onAppendBudget={context.goal?.onAppendBudget}
+          onRemoveBudgetLimit={context.goal?.onRemoveBudgetLimit}
         />
       ) : null,
   },

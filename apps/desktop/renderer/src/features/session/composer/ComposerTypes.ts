@@ -6,6 +6,30 @@ import type {
 
 export type ComposerPlacement = 'new-session' | 'thread' | 'side-task'
 
+export function parseGoalTokenBudget(input: string): number | null | undefined {
+  if (!input.trim()) return null
+  const value = Number(input)
+  return Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
+export type GoalBudgetAppend =
+  | { status: 'empty' }
+  | { status: 'invalid' | 'overflow' }
+  | { status: 'valid'; tokens: number; nextTotal: number }
+
+/**
+ * Turns the appended token count typed by the user into the new total budget. The
+ * wire field stays the total, so the addition has to fit a safe integer here.
+ */
+export function resolveGoalBudgetAppend(savedBudget: number, input: string): GoalBudgetAppend {
+  if (!input.trim()) return { status: 'empty' }
+  const tokens = parseGoalTokenBudget(input)
+  if (typeof tokens !== 'number' || tokens <= 0) return { status: 'invalid' }
+  const nextTotal = savedBudget + tokens
+  if (!Number.isSafeInteger(nextTotal)) return { status: 'overflow' }
+  return { status: 'valid', tokens, nextTotal }
+}
+
 export type ComposerLayout = 'single-line' | 'multiline'
 
 export type ComposerRadiusVariant = 'default' | 'single-line' | 'compact'
@@ -154,6 +178,7 @@ export type ComposerDraft = {
   skillInvocation?: ComposerSkillInvocation
   skills?: ComposerSkillInvocation[]
   goalModeEnabled?: boolean
+  goalTokenBudget?: number | null
   collaborationMode: ComposerCollaborationMode
   suggestionOrigin?: string
 }

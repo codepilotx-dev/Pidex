@@ -133,6 +133,159 @@ function sessionSnapshot(overrides: Partial<ThreadSnapshot['thread']> = {}): Thr
 }
 
 describe('desktop history client', () => {
+  test('全局 SSE 连续消费 prompt 设置、终态和 Goal 暂停，500ms 内刷新未读与累计时间', async () => {
+    const source = {
+      onmessage: null as ((event: MessageEvent) => void) | null,
+      onerror: null as (() => void) | null,
+      close: () => {},
+    }
+    let status: 'running' | 'completed' = 'running'
+    let goalStatus: 'active' | 'paused' = 'active'
+    let seconds = 0
+    let subscriptions = 0
+    const goal = () => ({
+      id: 'realtime-goal',
+      threadId: 'session-1',
+      objective: '实时状态',
+      status: goalStatus,
+      tokenBudget: null,
+      tokensUsed: 0,
+      timeUsedSeconds: seconds,
+      version: seconds + 1,
+      createdAt: now,
+      updatedAt: now + seconds * 1000,
+    })
+    const client = createDesktopClient({
+      eventSourceFactory: () => source as unknown as EventSource,
+      fetch: async (_path, init) => {
+        const body = JSON.parse(String(init?.body))
+        const p = body.params ?? {}
+        switch (body.method) {
+          case 'initialize':
+            return rpc(body.id, initializedResult())
+          case 'initialized':
+            return new Response(null, { status: 204 })
+          case 'project/list':
+            return rpc(body.id, { projects: [project], nextCursor: null })
+          case 'thread/list':
+            return rpc(body.id, {
+              threads: [
+                sessionItem({
+                  latestTurnStatus: status,
+                  unreadAt: status === 'completed' ? now + 8000 : null,
+                  goal: goal(),
+                }),
+              ],
+              nextCursor: null,
+            })
+          case 'thread/read':
+            return rpc(body.id, snapshotResult({ ...sessionSnapshot(), goal: goal() }))
+          case 'interaction/listPending':
+            return rpc(body.id, { interactions: [], nextCursor: null })
+          case 'event/subscribe':
+            subscriptions++
+            return rpc(body.id, {
+              subscriptionId: 'realtime-sub',
+              highWatermarks: [{ streamId: 'global', sequence: 0 }],
+            })
+          case 'event/unsubscribe':
+            return rpc(body.id, { ok: true })
+          case 'event/ack':
+            return rpc(body.id, { subscriptionId: p.subscriptionId, acknowledged: p.positions })
+          default:
+            throw new Error(`Unexpected RPC: ${body.method}`)
+        }
+      },
+    })
+    await client.listSessions()
+    const observed: Array<{ status: string; unread: string | null | undefined; goal: unknown }> = []
+    const unsubscribe = client.onSessionStoreChange((change) => {
+      const item = change.sessions.find((snapshot) => snapshot.item.id === 'session-1')?.item
+      if (item) observed.push({ status: item.status, unread: item.unreadAt, goal: item.threadGoal })
+    })
+    const emit = (sequence: number, type: string, payload: unknown, version = 1) =>
+      source.onmessage!({
+        data: JSON.stringify({
+          jsonrpc: '2.0',
+          method: 'event/next',
+          params: {
+            subscriptionId: 'realtime-sub',
+            event: {
+              eventId: String(sequence),
+              streamId: 'global',
+              sequence,
+              version,
+              occurredAt: now + sequence,
+              threadId: 'session-1',
+              durability: 'durable',
+              type,
+              payload,
+            },
+          },
+        }),
+      } as MessageEvent)
+    try {
+      for (let i = 0; i < 50 && !source.onmessage; i++) await Bun.sleep(1)
+      expect(source.onmessage).not.toBeNull()
+      emit(1, 'thread/prompt-settings/updated', {
+        threadId: 'session-1',
+        cacheKey: 'thread-cache',
+        promptVersion: 'prompt-engine-v2',
+        baselineVersion: 1,
+      })
+      status = 'completed'
+      seconds = 8
+      emit(
+        2,
+        'turn/completed',
+        {
+          turn: {
+            id: 'realtime-turn',
+            threadId: 'session-1',
+            sourceInputID: 'input-1',
+            status: 'completed',
+            mode: 'chat',
+            model: { providerID: 'openai', id: 'gpt-5' },
+            permissionConfig: defaultThreadSettings.permissionConfig,
+            rootAgentId: 'root',
+            mergedInputIDs: [],
+            queuePosition: null,
+            startedAt: now,
+            finishedAt: now + 8000,
+            elapsedSeconds: 8,
+            error: null,
+          },
+        },
+        2,
+      )
+      goalStatus = 'paused'
+      emit(3, 'thread/goal/updated', {
+        threadId: 'session-1',
+        goal: goal(),
+        version: goal().version,
+      })
+      for (
+        let i = 0;
+        i < 100 &&
+        !observed.some(
+          (item) =>
+            item.status === 'done' &&
+            item.unread &&
+            (item.goal as { status?: string })?.status === 'paused',
+        );
+        i++
+      )
+        await Bun.sleep(5)
+      expect(observed).toContainEqual({
+        status: 'done',
+        unread: new Date(now + 8000).toISOString(),
+        goal: goal(),
+      })
+      expect(subscriptions).toBe(1)
+    } finally {
+      unsubscribe()
+    }
+  })
   test('resets both theme variants and persists only advanced defaults', async () => {
     const defaults = structuredClone(DEFAULT_DESKTOP_THEME_SETTINGS)
     const settings = structuredClone(defaults)
@@ -1128,7 +1281,8 @@ test('synchronizeSession publishes a newly read target before resolving without 
       if (body.method === 'initialize') return rpc(body.id, initializedResult())
       if (body.method === 'initialized') return new Response(null, { status: 204 })
       if (body.method === 'thread/read') return rpc(body.id, snapshotResult(sessionSnapshot()))
-      if (body.method === 'project/list') return rpc(body.id, { projects: [project], nextCursor: null })
+      if (body.method === 'project/list')
+        return rpc(body.id, { projects: [project], nextCursor: null })
       throw new Error(`Unexpected RPC: ${body.method}`)
     },
   })
@@ -1139,6 +1293,119 @@ test('synchronizeSession publishes a newly read target before resolving without 
   try {
     await client.synchronizeSession('session-1')
     expect(published.at(-1)).toEqual(['session-1'])
+  } finally {
+    unsubscribe()
+  }
+})
+
+test('Goal 结算刷新事件所属会话的用量，即使活动聊天是另一个会话', async () => {
+  const source = {
+    onmessage: null as ((event: MessageEvent) => void) | null,
+    onerror: null as (() => void) | null,
+    close: () => {},
+  }
+  let tokensUsed = 0
+  const goal = () => ({
+    id: 'goal-1',
+    threadId: 'session-1',
+    objective: '预算验收',
+    status: tokensUsed ? 'budget-limited' : 'active',
+    tokenBudget: 50000,
+    tokensUsed,
+    timeUsedSeconds: 0,
+    version: tokensUsed ? 2 : 1,
+    createdAt: now,
+    updatedAt: now,
+  })
+  const client = createDesktopClient({
+    eventSourceFactory: () => source as unknown as EventSource,
+    fetch: async (_path, init) => {
+      const body = JSON.parse(String(init?.body))
+      const params = body.params ?? {}
+      switch (body.method) {
+        case 'initialize':
+          return rpc(body.id, initializedResult())
+        case 'initialized':
+          return new Response(null, { status: 204 })
+        case 'project/list':
+          return rpc(body.id, { projects: [project], nextCursor: null })
+        case 'thread/list':
+          return rpc(body.id, {
+            threads: [
+              sessionItem({ goal: goal() as ThreadSnapshot['goal'] }),
+              sessionItem({ id: 'session-2', goal: null }),
+            ],
+            nextCursor: null,
+          })
+        case 'thread/read':
+          return rpc(
+            body.id,
+            snapshotResult({
+              ...sessionSnapshot({ id: params.threadId }),
+              goal: params.threadId === 'session-1' ? goal() : null,
+            } as ThreadSnapshot),
+          )
+        case 'interaction/listPending':
+          return rpc(body.id, { interactions: [], nextCursor: null })
+        case 'event/subscribe':
+          return rpc(body.id, {
+            subscriptionId: 'goal-subscription',
+            highWatermarks: [{ streamId: 'global', sequence: 0 }],
+          })
+        case 'event/unsubscribe':
+          return rpc(body.id, { ok: true })
+        case 'event/ack':
+          return rpc(body.id, {
+            subscriptionId: params.subscriptionId,
+            acknowledged: params.positions,
+          })
+        default:
+          throw new Error(`Unexpected RPC: ${body.method}`)
+      }
+    },
+  })
+  await client.getSession('session-1')
+  await client.setActiveSession('session-2')
+  const observed: number[] = []
+  const unsubscribe = client.onSessionStoreChange((change) => {
+    const item = change.sessions.find((snapshot) => snapshot.item.id === 'session-1')?.item
+    if (item?.threadGoal) observed.push(item.threadGoal.tokensUsed)
+  })
+  try {
+    for (let i = 0; i < 50 && !source.onmessage; i++) await Bun.sleep(1)
+    expect(source.onmessage).not.toBeNull()
+    tokensUsed = 50537
+    source.onmessage!({
+      data: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'event/next',
+        params: {
+          subscriptionId: 'goal-subscription',
+          event: {
+            eventId: 'goal-measured',
+            streamId: 'global',
+            sequence: 1,
+            version: 1,
+            occurredAt: now,
+            threadId: 'session-1',
+            durability: 'durable',
+            type: 'thread/goal/updated',
+            payload: { threadId: 'session-1', goal: goal(), version: 2 },
+          },
+        },
+      }),
+    } as MessageEvent)
+    for (let i = 0; i < 100 && !observed.includes(50537); i++) await Bun.sleep(5)
+    expect(observed).toContain(50537)
+    expect(
+      (await client.listSessions()).find((snapshot) => snapshot.item.id === 'session-1')?.item
+        .threadGoal,
+    ).toMatchObject({ tokensUsed: 50537, tokenBudget: 50000, status: 'budget-limited' })
+    tokensUsed = 60000
+    expect(
+      (await client.listSessions()).find((snapshot) => snapshot.item.id === 'session-1')?.item
+        .threadGoal,
+    ).toMatchObject({ tokensUsed: 60000, status: 'budget-limited' })
   } finally {
     unsubscribe()
   }

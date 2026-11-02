@@ -112,7 +112,16 @@ export function prepareComposerSubmission(
     sessionName: skills.length
       ? `${skills.map((skill) => `$${skill.name}`).join(' ')} ${text}`.trim()
       : undefined,
-    ...(snapshot.goalModeEnabled ? { goal: { objective: snapshot.document.text.trim() } } : {}),
+    ...(snapshot.goalModeEnabled
+      ? {
+          goal: {
+            objective: snapshot.document.text.trim(),
+            ...(typeof snapshot.goalTokenBudget === 'number'
+              ? { tokenBudget: snapshot.goalTokenBudget }
+              : {}),
+          },
+        }
+      : {}),
   }
 }
 

@@ -3999,6 +3999,29 @@ export function createAgentSessionDesktopClient(
                   code: 'GOAL_VERSION_CONFLICT',
                 })
               originalGoal = current
+              if (
+                current &&
+                input.tokenBudget !== undefined &&
+                input.tokenBudget !== current.tokenBudget &&
+                !input.budgetBaseline
+              )
+                throw new Error('修改已有目标预算需要当前目标与预算基准，请刷新后重试。')
+              // A budget edit is computed from the budget the panel showed. Re-read
+              // that baseline before writing, so a concurrent replacement or budget
+              // change is reported instead of applying a total derived from stale data.
+              if (input.budgetBaseline) {
+                const baseline = input.budgetBaseline
+                if (
+                  current?.id !== baseline.goalId ||
+                  (current?.tokenBudget ?? null) !== baseline.tokenBudget
+                ) {
+                  await loadAgentSessionSnapshot(sessionId).catch(() => null)
+                  emitSessionStoreChange()
+                  throw Object.assign(new Error('目标或预算已被更新，已刷新，请确认后重试。'), {
+                    code: 'GOAL_VERSION_CONFLICT',
+                  })
+                }
+              }
               const snapshot = input.objective?.trim()
                 ? (await rpc.call('thread/read', { threadId: sessionId })).snapshot
                 : null
@@ -4011,7 +4034,7 @@ export function createAgentSessionDesktopClient(
                   'waiting-subagents',
                 ].includes(turn.status),
               )
-              if (input.objective?.trim() && input.status !== 'paused' && !running) {
+              if (!current && input.objective?.trim() && input.status !== 'paused' && !running) {
                 await turnQueueClient.submitMessage(
                   sessionId,
                   { text: input.objective.trim() },

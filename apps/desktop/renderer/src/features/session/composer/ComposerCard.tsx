@@ -120,7 +120,7 @@ import {
 } from './ComposerSlashCommands.js'
 import { useComposerSlashCommands } from './UseComposerSlashCommands.js'
 import { isDictationShortcut } from './UseComposerDictation.js'
-import { isComposerInputEmpty } from './ComposerTypes.js'
+import { isComposerInputEmpty, parseGoalTokenBudget } from './ComposerTypes.js'
 import {
   ApprovalRulesDialog,
   ApprovalRetryDialog,
@@ -294,7 +294,9 @@ type Props = {
   planModeActive?: boolean
   grillModeActive?: boolean
   goalModeEnabled?: boolean
+  goalTokenBudget?: number | null
   onGoalModeChange?: (enabled: boolean) => void
+  onGoalTokenBudgetChange?: (budget: number | null) => void
   thinkingMode: DesktopThinkingMode
   modelVariant?: string
   modelVariantOptions?: Option<string>[]
@@ -375,7 +377,6 @@ type Props = {
   onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void | Promise<void>
   onFollowUpRemove?: (followUpId: string) => void | Promise<void>
   onFollowUpResume?: () => void
-  onGoalEdit?: (objective: string) => Promise<void>
   onOpenGoalPanel?: () => void
   threadGoal?: DesktopThreadGoal | null
   onGoalPause?: () => void | Promise<void>
@@ -431,7 +432,9 @@ export function ComposerCard({
   planModeActive = false,
   grillModeActive = false,
   goalModeEnabled = false,
+  goalTokenBudget,
   onGoalModeChange,
+  onGoalTokenBudgetChange,
   thinkingMode,
   modelVariant,
   modelVariantOptions,
@@ -510,7 +513,6 @@ export function ComposerCard({
   onFollowUpRemove,
   onFollowUpResume,
   threadGoal,
-  onGoalEdit,
   onOpenGoalPanel,
   onGoalPause,
   onGoalResume,
@@ -1431,9 +1433,8 @@ export function ComposerCard({
               {activeThreadGoal ? (
                 <ComposerGoalRow
                   goal={activeThreadGoal}
-                  onEdit={onGoalEdit}
                   onOpenGoalPanel={onOpenGoalPanel}
-                  sessionBusy={sessionStatus === 'running' || sessionStatus === 'waiting'}
+                  sessionBusy={sessionStatus === 'running'}
                   onPause={onGoalPause}
                   onResume={onGoalResume}
                   onComplete={onGoalComplete}
@@ -1926,6 +1927,20 @@ export function ComposerCard({
                   </span>
                   <span className={COMPOSER_MODE_CHIP_LABEL_CLASS}>目标</span>
                 </button>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="预算(可选)"
+                  aria-label="目标 Token 预算"
+                  title="目标 Token 预算（留空表示无限制）"
+                  value={goalTokenBudget ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value.trim()
+                    const budget = parseGoalTokenBudget(val)
+                    if (budget !== undefined) onGoalTokenBudgetChange?.(budget)
+                  }}
+                  className="tw:h-6 tw:w-20 tw:rounded tw:border tw:border-app-border-subtle tw:bg-transparent tw:px-1.5 tw:py-0 tw:text-app-text tw:type-caption tw:tabular-nums tw:outline-none tw:focus:border-app-focus"
+                />
               </>
             ) : null}
             {!subagentMode && grillModeActive && onGrillModeChange ? (
