@@ -1,3 +1,4 @@
+import { ThreadGoalControlRepository } from './ThreadGoalControlRepository'
 import type { EventEnvelope } from '../../Domain'
 import { now, parse } from './RepositoryCore'
 
@@ -78,17 +79,20 @@ export abstract class SubagentRepositoryDatabase extends InteractionRepositoryDa
           mode === 'all'
             ? states.every((run) => terminal.has(run.status))
             : states.some((run) => terminal.has(run.status))
-        if (!satisfied) continue
+        const budgetRevision = new ThreadGoalControlRepository(this).pendingBudgetForThread(
+          row.thread_id,
+        )
+        if (!satisfied && budgetRevision === null) continue
         const timestamp = now()
         const claimed = this.sqlite
           .query(
             `
           UPDATE agent_checkpoints
-          SET state = 'ready', payload = json_set(payload, '$.kind', 'subagent-wait'), updated_at = ?
+          SET state = 'ready', payload = json_set(payload, '$.kind', 'subagent-wait', '$.budgetRevision', ?), updated_at = ?
           WHERE agent_id = ? AND state = 'waiting_subagents'
         `,
           )
-          .run(timestamp, row.agent_id)
+          .run(!satisfied ? budgetRevision : null, timestamp, row.agent_id)
         if (claimed.changes !== 1) continue
         this.updateTurnStatus(row.turn_id, 'queued')
         const agent = this.updateAgentStatus(row.agent_id, 'queued')

@@ -5,6 +5,7 @@ import type { Context } from '@earendil-works/pi-ai'
 import { createProviderMessagePhaseReader } from './ProviderMessagePhase'
 import {
   type AssistantMessage,
+  createAssistantMessageEventStream,
   contentText,
   type ImageContent,
   type Model,
@@ -255,9 +256,11 @@ export class AgentHarness<
   private nextTurnQueue: AgentMessage[] = []
   private readonly queuedInputIds = new WeakMap<AgentMessage, string>()
   private handlers = new Map<string, Set<AgentHarnessHandler>>()
+  private goalBudget?: AgentHarnessOptions['goalBudget']
 
   constructor(options: AgentHarnessOptions<TContext, TSkill, TPromptTemplate, TTool>) {
     this.session = options.session
+    this.goalBudget = options.goalBudget
     this.models = options.models
     this.resources = options.resources ?? {}
     this.streamOptions = cloneStreamOptions(options.streamOptions)
@@ -331,11 +334,18 @@ export class AgentHarness<
     const handlers = this.getHandlers(event.type as TType)
     if (!handlers || handlers.size === 0) return undefined
     let lastResult: AgentHarnessEventResultMap[TType] | undefined
+    let currentEvent = event
     for (const handler of handlers) {
       try {
-        const result = await handler(event)
+        const result = await handler(currentEvent)
         if (result !== undefined) {
           lastResult = result
+          if (currentEvent.type === 'context' && (result as { messages?: unknown[] })?.messages) {
+            currentEvent = {
+              ...currentEvent,
+              messages: (result as { messages: AgentMessage[] }).messages,
+            } as typeof event
+          }
         }
       } catch (error) {
         throw normalizeHookError(error)
@@ -552,7 +562,63 @@ export class AgentHarness<
       )
       this.lastBudget = budget
       await this.contextCompaction?.onBudget(budget)
-      if (this.contextCompaction && (await this.contextCompaction.canCompact())) {
+      let wrapupTurn = false
+      let goalMaxTokens: number | undefined
+      const wrapupContext = this.goalBudget?.prepareWrapupContext?.(context)
+      if (this.goalBudget) {
+        const decision = await this.goalBudget.checkAdmission(
+          budget.usedTokens,
+          budget.outputReserveTokens,
+          this.goalBudget.prepareWrapupContext
+            ? wrapupContext
+              ? new RequestContextUsage().estimate(wrapupContext, 'goal-wrapup')
+              : Infinity
+            : undefined,
+        )
+        if (!decision.allowed) {
+          if (decision.stopSubagent) {
+            const assistantMessage: AssistantMessage = {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: '已达到目标 Token 预算限制，子任务已安全结束当前回合。' },
+              ],
+              api: model.api,
+              provider: model.provider,
+              model: model.id,
+              stopReason: 'stop',
+              timestamp: Date.now(),
+              usage: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 0,
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+              },
+            }
+            const stream = createAssistantMessageEventStream()
+            stream.push({ type: 'start', partial: assistantMessage })
+            stream.push({ type: 'done', reason: 'stop', message: assistantMessage })
+            return stream
+          }
+          throw new AgentHarnessError('goal_budget', '目标预算受限')
+        }
+        wrapupTurn = decision.wrapup === true
+        goalMaxTokens = decision.maxTokens
+        if (wrapupTurn && wrapupContext) {
+          context = wrapupContext
+          budget = this.requestUsage.snapshot(
+            model,
+            context,
+            generation,
+            'estimated',
+            this.maxContextTokens,
+          )
+          this.lastBudget = budget
+        }
+        if (decision.wrapupMessage) context.messages.push(decision.wrapupMessage)
+      }
+      if (!wrapupTurn && this.contextCompaction && (await this.contextCompaction.canCompact())) {
         const manual = this.contextCompaction.pending()
         if (
           manual ||
@@ -592,8 +658,11 @@ export class AgentHarness<
       const readPhase = createProviderMessagePhaseReader()
       await this.emitOwn({ type: 'provider_text_reset' }, streamOptions?.signal)
       const mediaInput = prepareMediaInput(model, context)
+      // A wrap-up request is text only: the reserved budget belongs to the
+      // summary, so no tool may extend the work it is meant to close out.
+      if (wrapupTurn) mediaInput.context.tools = []
       return this.models.streamSimple(model, mediaInput.context, {
-        maxTokens: budget.outputReserveTokens,
+        maxTokens: goalMaxTokens ?? budget.outputReserveTokens,
         onProviderStreamEvent: async (value) => {
           const event = readPhase(value)
           if (event) await this.emitOwn(event, streamOptions?.signal)
@@ -602,9 +671,11 @@ export class AgentHarness<
           ? { cacheRetention: requestOptions.cacheRetention }
           : {}),
         ...(requestOptions.headers !== undefined ? { headers: requestOptions.headers } : {}),
-        ...(requestOptions.maxRetries !== undefined
-          ? { maxRetries: requestOptions.maxRetries }
-          : {}),
+        ...(wrapupTurn
+          ? { maxRetries: 0 }
+          : requestOptions.maxRetries !== undefined
+            ? { maxRetries: requestOptions.maxRetries }
+            : {}),
         ...(requestOptions.maxRetryDelayMs !== undefined
           ? { maxRetryDelayMs: requestOptions.maxRetryDelayMs }
           : {}),
@@ -1299,7 +1370,11 @@ export class AgentHarness<
               (summaryContext) => {
                 if (this.maxContextTokens == null) return
                 const summaryBudget = this.requestUsage.snapshot(
-                  model, summaryContext, '', 'estimated', this.maxContextTokens,
+                  model,
+                  summaryContext,
+                  '',
+                  'estimated',
+                  this.maxContextTokens,
                 )
                 if (summaryBudget.usedTokens >= summaryBudget.inputBudgetTokens) {
                   throw new AgentHarnessError(

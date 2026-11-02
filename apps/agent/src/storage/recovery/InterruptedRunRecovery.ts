@@ -9,6 +9,10 @@ export const recoverInterruptedRuns = (database: AgentDatabase) => {
     database.repositories.executions.recoverInterruptedExecutions(timestamp)
     database.repositories.interactions.finalizeInterruptedQuestions(timestamp)
     database.repositories.subagents.recoverInterruptedSubagents(timestamp)
+    // A verification whose result never arrived is audited as interrupted, never
+    // re-sent: replaying it would charge the goal twice for one decision.
+    database.repositories.threadGoalControls.interruptRunning()
+    database.repositories.threadGoalControls.recoverObservations()
   })
 }
 

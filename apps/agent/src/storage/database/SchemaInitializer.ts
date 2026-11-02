@@ -14,6 +14,7 @@ import {
 import { THREAD_GOAL_LEDGER_SCHEMA } from '../repositories/ThreadGoalLedgerRepository'
 import { QUEUED_GOAL_SCHEMA } from '../repositories/QueuedGoalRepository'
 import { THREAD_GOAL_CONTINUATION_SCHEMA } from '../repositories/ThreadGoalContinuationRepository'
+import { THREAD_GOAL_CONTROL_SCHEMA } from '../repositories/ThreadGoalControlRepository'
 import { THREAD_BOOKMARK_SCHEMA } from '../repositories/ThreadBookmarkRepository'
 import { THREAD_PULL_REQUEST_SCHEMA } from '../repositories/ThreadPullRequestRepository'
 import { BROWSER_SCHEMA } from '../repositories/BrowserRepository'
@@ -179,6 +180,7 @@ export const FINAL_SCHEMA = [
   ...THREAD_GOAL_SCHEMA,
   ...THREAD_GOAL_LEDGER_SCHEMA,
   ...THREAD_GOAL_CONTINUATION_SCHEMA,
+  ...THREAD_GOAL_CONTROL_SCHEMA,
   ...QUEUED_GOAL_SCHEMA,
   ...THREAD_BOOKMARK_SCHEMA,
   ...CONTEXT_LIFECYCLE_SCHEMA,
@@ -1485,6 +1487,40 @@ export class SchemaInitializer {
     const migrations: Record<number, () => void> =
       this.kind === 'history'
         ? {
+            70: () => {
+              for (const [table, columns] of Object.entries({
+                thread_goal_controls: {
+                  budget_revision: 'INTEGER NOT NULL DEFAULT 0',
+                  budget_ack_revision: 'INTEGER NOT NULL DEFAULT 0',
+                  previous_budget: 'INTEGER',
+                },
+                thread_goal_verifications: { continuation: 'TEXT' },
+              })) {
+                const existing = new Set(
+                  (
+                    this.sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{
+                      name: string
+                    }>
+                  ).map((row) => row.name),
+                )
+                for (const [column, declaration] of Object.entries(columns)) {
+                  if (!existing.has(column))
+                    this.sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`)
+                }
+              }
+            },
+            // 69 adds the Goal control revision, per-turn observation and
+            // verification audit tables. They stay out of `thread_goals` so the
+            // schema-46 required-columns gate in ThreadGoalRepository keeps
+            // recognising this store instead of downgrading it.
+            69: () =>
+              this.sqlite.exec(
+                THREAD_GOAL_CONTROL_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
             // prepareStorage rebuilds former mixed v17 databases. Keep the
             // sequential registry entry for already-split prerelease stores.
             68: () => {

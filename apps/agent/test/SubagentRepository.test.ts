@@ -1,3 +1,7 @@
+import { Effect } from 'effect'
+import { ThreadGoalService } from '../src/session/ThreadGoalService'
+import { EventHub } from '../src/storage/events/EventHub'
+import { SubagentService } from '../src/subagent/SubagentService'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -338,4 +342,79 @@ describe('子 Agent 持久化与调度', () => {
     expect(retried.agent.runSequence).toBe(0)
     db.close()
   })
+})
+
+test('pending budget change wakes a waiting parent without completing or stopping its child', async () => {
+  const path = join(tmpdir(), `pidex-budget-wake-${crypto.randomUUID()}.sqlite`)
+  paths.push(path)
+  const db = new AgentDatabase(path)
+  const thread = db.createThread()
+  const service = new ThreadGoalService(db, await Effect.runPromise(EventHub.make))
+  const { goal } = await service.set({
+    threadId: thread.id,
+    objective: '交付主任务',
+    tokenBudget: 100000,
+    expectedVersion: null,
+    operationId: 'create',
+  })
+  const root = db.createTurn(thread.id, {
+    content: 'root',
+    model,
+    permissionConfig: permission,
+    strategy: 'queue',
+    taskMode: 'chat',
+  })
+  db.claimTurnExecution(root.turnID)
+  const repository = new SubagentRepository(db)
+  const child = repository.create({
+    parentThreadID: thread.id,
+    parentTurnID: root.turnID,
+    parentAgentID: root.agentID,
+    displayName: 'worker',
+    profile: 'worker',
+    task: '尚未完成',
+    model,
+    permissionCeiling: permission,
+    workspaceMode: 'shared',
+    workspaceRoot: 'C:\\workspace',
+  })
+  const checkpoint = () =>
+    db.repositories.subagents.checkpointSubagentWait({
+      agentID: root.agentID,
+      turnID: root.turnID,
+      threadID: thread.id,
+      state: 'pi-state',
+      interruption: { toolCallID: 'wait-1' },
+      runIDs: [child.run.id],
+      mode: 'all',
+    })
+  checkpoint()
+  expect(db.repositories.subagents.resumeSatisfiedSubagentWaits()).toEqual([])
+  await service.set({
+    threadId: thread.id,
+    tokenBudget: 200000,
+    expectedVersion: goal.version,
+    operationId: 'append',
+  })
+  expect(db.repositories.subagents.resumeSatisfiedSubagentWaits()).toHaveLength(1)
+  expect(db.getAgentTurnCheckpoint(root.turnID)).toMatchObject({
+    state: 'ready',
+    payload: { budgetRevision: 1 },
+  })
+  const resolved = SubagentService.prototype.resolvedWaitCheckpoint.call(
+    { db, isWaitSatisfied: () => false } as never,
+    root.turnID,
+  )
+  expect(resolved?.answer).toContain('子任务尚未被视为完成')
+  expect(repository.run(child.run.id)?.status).toBe('queued')
+  expect(db.repositories.subagents.resumeSatisfiedSubagentWaits()).toEqual([])
+  await service.set({
+    threadId: thread.id,
+    status: 'paused',
+    expectedVersion: service.get(thread.id).goal!.version,
+    operationId: 'pause',
+  })
+  checkpoint()
+  expect(db.repositories.subagents.resumeSatisfiedSubagentWaits()).toEqual([])
+  db.close()
 })

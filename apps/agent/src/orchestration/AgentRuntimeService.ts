@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { Effect } from 'effect'
 import { contentText, type Api, type Model as PiModel, type Models } from '@earendil-works/pi-ai'
 import { AgentHarness } from './harness/AgentHarness'
@@ -6,10 +7,20 @@ import type { AgentRuntime, AgentRuntimeRequest, PendingApproval } from './Agent
 import { executeHarnessRun } from './pi/ExecuteHarnessRun'
 import type {
   ActiveHarness,
+  GoalBudgetStatus,
+  GoalBudgetLifecycle,
   HarnessRuntimeOptions,
   PiRuntimeEventContext,
   PiRuntimeEventSink,
 } from './pi/Types'
+import {
+  computeConvergenceReserve,
+  getRootThreadId,
+  createWrapupMessage,
+} from '../session/GoalDirectiveService'
+import { GOAL_WRAPUP_OUTPUT_TOKENS, goalBudgetAdmission } from '../session/GoalWrapupPolicy'
+import { estimateTokens } from '../context/harness/Compaction'
+import type { GoalUsageEntry } from '../storage/repositories/ThreadGoalLedgerRepository'
 import { piToolResultText } from './pi/PiEventAdapter'
 import {
   SqlitePiSessionRepo,
@@ -420,8 +431,291 @@ export class AgentRuntimeService implements AgentRuntime {
     }
   }
 
+  /** Budget status for a thread's goal, or null when there is no budget to report. */
+  private goalBudgetStatusFor(rootThreadId: string): GoalBudgetStatus | null {
+    const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+    if (!goal) return null
+    const controls = this.options.db.repositories.threadGoalControls
+    const control = controls.available() ? controls.ensure(goal.id, rootThreadId) : null
+    const tokensUsed = this.options.db.repositories.threadGoalLedger.tokensUsed(goal.id)
+    const remaining =
+      goal.token_budget === null ? null : Math.max(0, goal.token_budget - tokensUsed)
+    const reserve = goal.token_budget === null ? 0 : computeConvergenceReserve(goal.token_budget)
+    return {
+      revision: control?.revision ?? 0,
+      goal: {
+        id: goal.id,
+        threadId: goal.thread_id,
+        objective: goal.objective,
+        status: goal.status,
+        tokenBudget: goal.token_budget,
+        tokensUsed,
+        timeUsedSeconds: goal.time_used_seconds,
+        version: goal.version,
+        createdAt: goal.created_at,
+        updatedAt: goal.updated_at,
+        completedAt: goal.completed_at,
+      },
+      tokensUsed,
+      remaining,
+      reserve,
+      isConvergence: goal.token_budget !== null && (remaining ?? 0) <= reserve,
+    }
+  }
+
+  private goalBudgetLifecycle(): GoalBudgetLifecycle {
+    return {
+      getBudgetStatus: (threadID) =>
+        this.goalBudgetStatusFor(getRootThreadId(this.options.db, threadID)),
+      budgetChange: (threadID) => {
+        const status = this.goalBudgetStatusFor(getRootThreadId(this.options.db, threadID))
+        if (!status || status.goal.status !== 'active') return null
+        const control = this.options.db.repositories.threadGoalControls.get(status.goal.id)
+        if (!control?.budget_revision) return null
+        return {
+          goalId: status.goal.id,
+          revision: control.revision,
+          budgetRevision: control.budget_revision,
+          acknowledged: control.budget_ack_revision,
+          previousBudget: control.previous_budget,
+          budget: status.goal.tokenBudget,
+          tokensUsed: status.tokensUsed,
+        }
+      },
+      acknowledgeBudget: async (request, change) => {
+        if (request.profile && request.profile !== 'main') return
+        const root = getRootThreadId(this.options.db, request.threadID)
+        const events = this.options.db.transaction(() => {
+          const goal = this.options.db.repositories.threadGoals.get(root)
+          const controls = this.options.db.repositories.threadGoalControls
+          const current = controls.get(change.goalId)
+          if (
+            goal?.id !== change.goalId ||
+            goal.status !== 'active' ||
+            current?.revision !== change.revision ||
+            current.budget_revision !== change.budgetRevision ||
+            current.budget_ack_revision >= change.budgetRevision
+          )
+            return []
+          controls.acknowledgeBudget(goal.id, change.budgetRevision)
+          const timestamp = Date.now()
+          const item: Item = {
+            id: randomUUID(),
+            turnID: request.turnID,
+            agentID: request.agentID,
+            type: 'text',
+            status: 'completed',
+            data: {
+              text: `主 Agent 已收到预算变更（${change.previousBudget ?? '不限额'} → ${change.budget ?? '不限额'}，累计已用 ${change.tokensUsed}）。新额度是上限，将按未完成目标重审计划和子任务，不要求用完额度。`,
+              placement: 'result',
+              phase: 'notice',
+            },
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          }
+          this.options.db.upsertItem(request.threadID, item)
+          return [
+            this.options.db.insertEvent(request.threadID, request.turnID, 'item/completed', {
+              item: this.options.db.getItem(item.id)!,
+            }),
+          ]
+        })
+        for (const event of events) await this.publish(event)
+      },
+      /**
+       * Objective edited by the user but not yet consumed by the model. Read
+       * per request so an edit made mid-turn reaches the very next request;
+       * confirmation happens only after the provider accepts it.
+       */
+      pendingObjectiveUpdate: (threadID) => {
+        const rootThreadId = getRootThreadId(this.options.db, threadID)
+        const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+        if (!goal || goal.status !== 'active') return null
+        const control = this.options.db.repositories.threadGoalControls.get(goal.id)
+        if (!control || control.objective_ack_revision >= control.objective_revision) return null
+        return {
+          goal: {
+            id: goal.id,
+            threadId: goal.thread_id,
+            objective: goal.objective,
+            status: goal.status,
+            tokenBudget: goal.token_budget,
+            tokensUsed: goal.tokens_used,
+            timeUsedSeconds: goal.time_used_seconds,
+            version: goal.version,
+            createdAt: goal.created_at,
+            updatedAt: goal.updated_at,
+            completedAt: goal.completed_at,
+          },
+          revision: control.revision,
+          acknowledged: control.objective_ack_revision,
+          objectiveRevision: control.objective_revision,
+        }
+      },
+      acknowledgeObjective: (threadID, revision, objectiveRevision, goalId) => {
+        const rootThreadId = getRootThreadId(this.options.db, threadID)
+        const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+        if (!goal) return
+        const control = this.options.db.repositories.threadGoalControls.get(goal.id)
+        // A newer objective may have arrived while this request was in flight;
+        // never acknowledge a revision the model did not actually see.
+        if (
+          !control ||
+          control.revision !== revision ||
+          goal.id !== goalId ||
+          objectiveRevision !== control.objective_revision
+        )
+          return
+        this.options.db.repositories.threadGoalControls.acknowledgeObjective(
+          goal.id,
+          objectiveRevision,
+        )
+      },
+      checkAdmission: (
+        threadID,
+        estimatedInputTokens,
+        profile,
+        estimatedOutputTokens = GOAL_WRAPUP_OUTPUT_TOKENS,
+        wrapupInputTokens,
+      ) => {
+        const rootThreadId = getRootThreadId(this.options.db, threadID)
+        const status = this.goalBudgetStatusFor(rootThreadId)
+        if (!status || status.remaining === null) return { allowed: true }
+        const denied = (reason: 'budget_exhausted' | 'estimated_exceeds_budget') => ({
+          allowed: false as const,
+          reason,
+          budgetStatus: status,
+        })
+        if (status.remaining <= 0 || status.goal.status === 'budget-limited')
+          return denied('budget_exhausted')
+        const summaryInput =
+          wrapupInputTokens ??
+          estimatedInputTokens + estimateTokens(createWrapupMessage(status.goal, status.tokensUsed))
+        const outputAllowance = Math.min(
+          estimatedOutputTokens,
+          16384,
+          Math.max(
+            Math.min(4096, estimatedOutputTokens),
+            status.remaining -
+              estimatedInputTokens -
+              Math.max(status.reserve, summaryInput + GOAL_WRAPUP_OUTPUT_TOKENS),
+          ),
+        )
+        const admission = goalBudgetAdmission({
+          remaining: status.remaining,
+          reserve: status.reserve,
+          inputTokens: estimatedInputTokens,
+          outputTokens: outputAllowance,
+          wrapupInputTokens: summaryInput,
+        })
+        if (admission !== 'work') {
+          if ((profile && profile !== 'main') || admission === 'denied')
+            return denied('estimated_exceeds_budget')
+          const controls = this.options.db.repositories.threadGoalControls
+          if (!controls.claimWrapup(status.goal.id, status.revision!))
+            return denied('estimated_exceeds_budget')
+          return {
+            allowed: true,
+            budgetStatus: status,
+            wrapup: true,
+            maxTokens: GOAL_WRAPUP_OUTPUT_TOKENS,
+          }
+        }
+        return { allowed: true, budgetStatus: status, maxTokens: outputAllowance }
+      },
+      finishWrapup: async (threadID, status) => {
+        const rootThreadId = getRootThreadId(this.options.db, threadID)
+        const events = this.options.db.transaction(() => {
+          const goal = this.options.db.repositories.threadGoals.get(rootThreadId)
+          const controls = this.options.db.repositories.threadGoalControls
+          if (
+            !goal ||
+            goal.id !== status.goal.id ||
+            goal.status !== 'active' ||
+            controls.revision(goal.id) !== status.revision
+          )
+            return []
+          const measurement = this.options.db.repositories.threadGoalLedger.refreshMeasurement(
+            rootThreadId,
+            'budget-limited',
+          )
+          if (measurement) controls.bump(goal.id, rootThreadId)
+          return measurement ? [measurement.event] : []
+        })
+        for (const event of events) await this.publish(event)
+        if (events.length) await this.publishThreadProjectionChanged(rootThreadId)
+      },
+      handleAdmissionDenied: async (request, decision, estimatedInputTokens) => {
+        const rootThreadId = getRootThreadId(this.options.db, request.threadID)
+        const events = this.options.db.transaction(() => {
+          const goal = this.options.db.repositories.threadGoals.get(rootThreadId)
+          const captured = decision.budgetStatus
+          if (
+            !goal ||
+            goal.id !== captured.goal.id ||
+            !['active', 'budget-limited'].includes(goal.status) ||
+            this.options.db.repositories.threadGoalControls.revision(goal.id) !== captured.revision
+          )
+            return []
+          const measurement = this.options.db.repositories.threadGoalLedger.refreshMeasurement(
+            rootThreadId,
+            'budget-limited',
+          )
+          const timestamp = Date.now()
+          const noticeText =
+            decision.reason === 'budget_exhausted'
+              ? `目标已达到 Token 预算限制，本轮未获准继续（已用 ${captured.tokensUsed}，预算 ${captured.goal.tokenBudget}）。已交付的内容与未完成项请查看当前计划和已有改动；如需继续，请追加预算或取消预算限制。`
+              : `目标即将超出 Token 预算，本轮未获准继续（预估单次请求约需 ${estimatedInputTokens} Token，剩余预算 ${captured.remaining}）。已交付的内容与未完成项请查看当前计划和已有改动；如需继续，请追加预算或取消预算限制。`
+          const noticeItem: Item = {
+            id: randomUUID(),
+            turnID: request.turnID,
+            agentID: request.agentID,
+            type: 'text',
+            status: 'completed',
+            data: { placement: 'result', phase: 'notice', text: noticeText },
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          }
+          this.options.db.upsertItem(request.threadID, noticeItem)
+          return [
+            ...(measurement
+              ? [
+                  measurement.event,
+                  this.options.db.insertEvent(rootThreadId, null, 'thread/updated', {
+                    threadId: rootThreadId,
+                    patch: {},
+                    updatedAt: timestamp,
+                  }),
+                ]
+              : []),
+            this.options.db.insertEvent(request.threadID, request.turnID, 'item/completed', {
+              item: this.options.db.getItem(noticeItem.id) ?? noticeItem,
+            }),
+          ]
+        })
+        for (const event of events) await this.publish(event)
+      },
+    }
+  }
+
   private async publish(event: ReturnType<AgentDatabase['insertEvent']>) {
     await Effect.runPromise(this.options.hub.publish(event))
+  }
+
+  /**
+   * Goal events live on the per-thread stream, so a client that only watches the
+   * global catalog never sees them. Emit the thread-projection event as well: it
+   * carries no payload change but makes every subscribed catalog reconcile, which
+   * is what refreshes the goal row (status + usage) in an open composer.
+   */
+  private async publishThreadProjectionChanged(threadId: string) {
+    await this.publish(
+      this.options.db.insertEvent(threadId, null, 'thread/updated', {
+        threadId,
+        patch: {},
+        updatedAt: Date.now(),
+      }),
+    )
   }
 
   private persistFinishedTool(
@@ -662,6 +956,7 @@ export class AgentRuntimeService implements AgentRuntime {
     onUsage?: AgentRuntimeRequest['onUsage'],
     readContextUsageBreakdown?: () => readonly ContextUsageBreakdownEntry[] | undefined,
   ): PiRuntimeEventSink {
+    let usageGoal: { id: string; threadId: string } | null | undefined
     const pendingFor = (context: PiRuntimeEventContext) => {
       const existing = this.pending.get(context.threadID)
       if (existing) return existing
@@ -675,6 +970,11 @@ export class AgentRuntimeService implements AgentRuntime {
     }
     return {
       event: (context, event) => {
+        if (event.type === 'before_provider_request') {
+          const rootThreadId = getRootThreadId(this.options.db, context.threadID)
+          const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+          usageGoal = goal ? { id: goal.id, threadId: rootThreadId } : null
+        }
         this.options.observeHarnessEvent?.(context, event)
       },
       assistantMessageStarted: async (context, input) => {
@@ -848,6 +1148,50 @@ export class AgentRuntimeService implements AgentRuntime {
           totalTokens: inputTokens + usage.output,
           requests: 1,
         })
+        const rootThreadId = getRootThreadId(this.options.db, context.threadID)
+        const rootGoal =
+          usageGoal === undefined
+            ? this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+            : usageGoal
+        if (rootGoal) {
+          const entry: GoalUsageEntry = {
+            threadId: rootThreadId,
+            goalId: rootGoal.id,
+            agentId: context.agentID,
+            sourceEntryId: input.textItemID,
+            inputTokens: usage.input,
+            outputTokens: usage.output,
+            cacheReadTokens: usage.cacheRead,
+            cacheWriteTokens: usage.cacheWrite,
+            reasoningTokens: usage.reasoning ?? 0,
+          }
+          if (
+            entry.inputTokens +
+              entry.outputTokens +
+              entry.cacheReadTokens +
+              entry.cacheWriteTokens +
+              entry.reasoningTokens >
+            0
+          ) {
+            const inserted = this.options.db.repositories.threadGoalLedger.recordUsage([entry])
+            if (inserted > 0) {
+              const current = this.options.db.repositories.threadGoals.get(rootThreadId)
+              if (current?.id !== rootGoal.id) {
+                this.options.db.repositories.threadGoalLedger.refreshArchivedMeasurement(
+                  rootGoal.id,
+                )
+              }
+              const measurement =
+                current?.id === rootGoal.id
+                  ? this.options.db.repositories.threadGoalLedger.refreshMeasurement(rootThreadId)
+                  : null
+              if (measurement) {
+                await this.publish(measurement.event)
+                await this.publishThreadProjectionChanged(rootThreadId)
+              }
+            }
+          }
+        }
         const content = Array.isArray(input.content) ? input.content : []
         const reasoning = content
           .flatMap((part) => (part.type === 'thinking' ? [part.thinking] : []))
@@ -1609,11 +1953,22 @@ export class AgentRuntimeService implements AgentRuntime {
         },
         compaction: {
           lifecycle: this.options.contextCompaction,
-          shouldAutoCompact: (threadID) =>
-            this.options.contextCompaction.shouldAutoCompact(threadID),
+          shouldAutoCompact: (threadID) => {
+            const rootThreadId = getRootThreadId(this.options.db, threadID)
+            const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+            if (goal) {
+              if (goal.status === 'budget-limited') return false
+              if (goal.token_budget !== null) {
+                const tokensUsed = this.options.db.repositories.threadGoalLedger.tokensUsed(goal.id)
+                if (goal.token_budget - tokensUsed <= 0) return false
+              }
+            }
+            return this.options.contextCompaction.shouldAutoCompact(threadID)
+          },
           recordFailure: (threadID, trigger) =>
             this.options.contextCompaction.recordFailure(threadID, trigger),
         },
+        goalBudget: this.goalBudgetLifecycle(),
         lifecycle: {
           skillList: async () =>
             composition.bindings.skills
@@ -1703,7 +2058,7 @@ export class AgentRuntimeService implements AgentRuntime {
             if (!request.updatePlan) throw new Error('当前 turn 未配置执行计划服务')
             return request.updatePlan(input, toolCallID)
           },
-          updateGoal: async (input, toolCallID) => {
+          updateGoal: async (input, toolCallID, _signal, identity) => {
             if (request.taskMode !== 'chat' || (request.profile ?? 'main') !== 'main')
               throw new AgentError(
                 'TOOL_NOT_ALLOWED_IN_MODE',
@@ -1712,7 +2067,7 @@ export class AgentRuntimeService implements AgentRuntime {
               )
             if (!request.updateGoal)
               throw new AgentError('TOOL_NOT_AVAILABLE', '当前任务没有可更新的 Goal', 409)
-            return request.updateGoal(input.status, toolCallID)
+            return request.updateGoal(input, toolCallID, identity)
           },
           submitPlan: async (input) => {
             if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main')
@@ -1837,8 +2192,9 @@ export class AgentRuntimeService implements AgentRuntime {
       const resumedContent = request.resume
         ? `<interaction_resolution toolCallId=${JSON.stringify(request.resume.toolCallID ?? 'unknown')}>${JSON.stringify({ answer: request.resume.answer, decision: request.resume.decision ?? null })}</interaction_resolution>\n继续处理已恢复的 Pi session；复用上述 toolCallId 的处理结果，不得重复执行该 ID，也不得自行换工具或等价命令绕过用户拒绝。此限制不禁止用户后续明确要求再次执行相同命令：那是新的工具调用，必须使用新的 toolCallId 并重新判权，不能复用一次批准。若用户给出调整要求，必须据此处理。`
         : request.content
-      const threadLimit = this.options.db.repositories.threads.getThreadSettings(request.threadID)
-        ?.maxContextTokens
+      const threadLimit = this.options.db.repositories.threads.getThreadSettings(
+        request.threadID,
+      )?.maxContextTokens
       // 客户端把“未设置”以 null 传上来；null 不能遮住会话设置，否则会话额度永远进不了预算。
       const requestedLimit =
         typeof request.maxContextTokens === 'number' ? request.maxContextTokens : undefined
@@ -1947,17 +2303,19 @@ export class AgentRuntimeService implements AgentRuntime {
     return this.options.toolExecutor.exposurePlan(
       {
         taskMode: request.taskMode,
-        sandboxMode:
-          isReadOnlyTaskMode(request.taskMode)
-            ? 'read-only'
-            : 'permissionConfig' in request
-              ? request.permissionConfig.sandboxMode
-              : request.sandboxMode,
+        sandboxMode: isReadOnlyTaskMode(request.taskMode)
+          ? 'read-only'
+          : 'permissionConfig' in request
+            ? request.permissionConfig.sandboxMode
+            : request.sandboxMode,
         approvalPolicy:
           'permissionConfig' in request
             ? request.permissionConfig.approvalPolicy
             : request.approvalPolicy,
         ...(request.profile ? { profile: request.profile } : {}),
+        ...(runtime.updateGoal || ('hasActiveGoal' in request && request.hasActiveGoal)
+          ? { hasActiveGoal: true }
+          : {}),
         ...(runtime.skillService
           ? { hasSkillService: true }
           : 'hasSkillService' in request && request.hasSkillService

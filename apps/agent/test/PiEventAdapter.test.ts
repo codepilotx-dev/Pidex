@@ -181,6 +181,8 @@ describe('PiEventAdapter', () => {
   test('keeps the completion placement when building the durable text item', async () => {
     const db = {
       getItem: () => null,
+      sqlite: { query: () => ({ get: () => null }) },
+      repositories: { threadGoalLedger: { visibleGoal: () => null } },
     }
     const orchestrator = new AgentRuntimeService({
       db: db as never,

@@ -29,6 +29,7 @@ import { SessionGroupRepository } from '../repositories/SessionGroupRepository'
 import { ThreadGoalRepository } from '../repositories/ThreadGoalRepository'
 import { ThreadGoalLedgerRepository } from '../repositories/ThreadGoalLedgerRepository'
 import { ThreadGoalContinuationRepository } from '../repositories/ThreadGoalContinuationRepository'
+import { ThreadGoalControlRepository } from '../repositories/ThreadGoalControlRepository'
 import { ThreadBookmarkRepository } from '../repositories/ThreadBookmarkRepository'
 import { ThreadPullRequestRepository } from '../repositories/ThreadPullRequestRepository'
 import { ThreadWorktreeOperationRepository } from '../repositories/ThreadWorktreeOperationRepository'
@@ -95,6 +96,7 @@ export class AgentDatabase extends RepositoryDatabase {
       threadGoals: new ThreadGoalRepository(this),
       threadGoalLedger: new ThreadGoalLedgerRepository(this),
       threadGoalContinuations: new ThreadGoalContinuationRepository(this),
+      threadGoalControls: new ThreadGoalControlRepository(this),
       threadBookmarks: new ThreadBookmarkRepository(this),
       threadPullRequests: new ThreadPullRequestRepository(this),
       threadWorktreeOperations: new ThreadWorktreeOperationRepository(this),

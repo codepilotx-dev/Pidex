@@ -1,3 +1,4 @@
+import { ThreadGoalControlRepository } from '../storage/repositories/ThreadGoalControlRepository'
 import type { Model } from '@pidex/model-schema'
 import {
   MAX_SUBAGENT_DEPTH,
@@ -42,6 +43,7 @@ import type { McpConnectionManager, McpTurnLease } from '../mcp/McpConnectionMan
 import { createMcpInstructionSections } from '../mcp/McpPromptSections'
 import type { ProjectSourceService } from '../project/ProjectSourceService'
 import { secretScrubber } from '../security/SecretScrubber'
+import { getRootThreadId } from '../session/GoalDirectiveService'
 
 const terminal = new Set(['completed', 'failed', 'stopped', 'interrupted'])
 export const pausedSubagentStatus = (kind: PendingApproval['kind'] | null) =>
@@ -393,6 +395,14 @@ export class SubagentService {
     if (!parent || parent.depth >= MAX_SUBAGENT_DEPTH)
       throw new AgentError('SUBAGENT_DEPTH_EXCEEDED', '子 Agent 已达到最大深度', 409)
     this.assertAdmission(root.threadID)
+    const rootThreadId = getRootThreadId(this.db, root.threadID)
+    const goal = this.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+    if (goal && goal.token_budget !== null) {
+      const tokensUsed = this.db.repositories.threadGoalLedger.tokensUsed(goal.id)
+      if (goal.token_budget - tokensUsed <= 0) {
+        throw new AgentError('GOAL_BUDGET_EXHAUSTED', '目标预算已耗尽，无法创建新子 Agent', 409)
+      }
+    }
     if (!this.collaboration.available && parent.depth > 0) this.collaboration.assertAvailable()
     if (agents.some((agent) => !agent.task.trim()))
       throw new AgentError('SUBAGENT_TASK_REQUIRED', '子 Agent 任务不能为空', 400)
@@ -527,7 +537,10 @@ export class SubagentService {
       ? checkpoint.payload.runIDs.filter((value): value is string => typeof value === 'string')
       : []
     const mode = checkpoint.payload.mode === 'any' ? 'any' : 'all'
-    if (!this.isWaitSatisfied(runIDs, mode)) return null
+    const budgetChanged =
+      typeof checkpoint.payload.budgetRevision === 'number' &&
+      new ThreadGoalControlRepository(this.db).pendingBudgetForThread(checkpoint.threadID) !== null
+    if (!budgetChanged && !this.isWaitSatisfied(runIDs, mode)) return null
     if (
       typeof checkpoint.payload.state !== 'string' ||
       checkpoint.payload.interruption === undefined
@@ -536,7 +549,9 @@ export class SubagentService {
     return {
       state: checkpoint.payload.state,
       interruption: checkpoint.payload.interruption,
-      answer: null,
+      answer: budgetChanged
+        ? '预算已调整，等待已被打断以便主 Agent 重审分工。子任务尚未被视为完成；请读取最新预算通知，检查运行中的子任务并决定继续、调整或停止。'
+        : null,
     }
   }
 

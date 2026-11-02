@@ -3,6 +3,53 @@ import { createToolExposurePlan } from '../src/tool/ToolExposurePlan'
 import { ToolCatalog } from '../src/tool/ToolRegistry'
 import type { SubagentProfile, TaskMode } from '../src/Domain'
 import type { ApprovalPolicy } from '@pidex/shared/thread'
+import { AgentRuntimeService } from '../src/orchestration/AgentRuntimeService'
+import { createLifecycleTools } from '../src/orchestration/pi/PiToolAdapter'
+import type { ToolExposureInput } from '../src/tool/ToolExposurePlan'
+
+test('运行时重建 Goal 工具暴露后仍可调用 complete/blocked，普通聊天和 allowlist 不扩大', async () => {
+  const runtime = new AgentRuntimeService({
+    db: {} as never,
+    toolExecutor: {
+      exposurePlan: (input: ToolExposureInput) => createToolExposurePlan(new ToolCatalog(), input),
+    } as never,
+  } as never)
+  const input = {
+    taskMode: 'chat' as const,
+    sandboxMode: 'workspace-write' as const,
+    approvalPolicy: 'never' as const,
+  }
+  expect(runtime.toolExposure(input).allows('update_goal')).toBe(false)
+  expect(runtime.toolExposure({ ...input, hasActiveGoal: true }).allows('update_goal')).toBe(true)
+  const request = {
+    taskMode: 'chat' as const,
+    permissionConfig: {
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'never',
+      approvalsReviewer: 'user',
+    },
+    updateGoal: async () => {},
+  }
+  const plan = runtime.toolExposure(request as never)
+  expect(plan.allows('update_goal')).toBe(true)
+  expect(
+    runtime.toolExposure({ ...request, allowedTools: ['Read'] } as never).allows('update_goal'),
+  ).toBe(false)
+  const calls: string[] = []
+  const tools = createLifecycleTools(
+    {
+      updateGoal: async ({ status }) => {
+        calls.push(status)
+        return { status }
+      },
+    },
+    { ...request, exposedTools: plan.exposed } as never,
+  )
+  const goalTool = tools.find(({ name }) => name === 'update_goal')!
+  await goalTool.execute('complete-call', { status: 'complete' }, undefined, undefined)
+  await goalTool.execute('blocked-call', { status: 'blocked' }, undefined, undefined)
+  expect(calls).toEqual(['complete', 'blocked'])
+})
 
 const exposure = (input: {
   taskMode: TaskMode

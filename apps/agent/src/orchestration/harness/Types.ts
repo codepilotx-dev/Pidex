@@ -251,6 +251,7 @@ export type AgentHarnessErrorCode =
   | 'auth'
   | 'compaction'
   | 'branch_summary'
+  | 'goal_budget'
   | 'unknown'
 
 /** Public AgentHarness failure with a stable top-level classification. */
@@ -1012,6 +1013,36 @@ interface AgentHarnessOptionsBase<
   steeringMode?: QueueMode
   followUpMode?: QueueMode
   maxContextTokens?: number | null
+  goalBudget?:
+    | {
+        prepareWrapupContext?(
+          context: import('@earendil-works/pi-ai').Context,
+        ): import('@earendil-works/pi-ai').Context | null
+        checkAdmission(
+          estimatedInputTokens: number,
+          estimatedOutputTokens: number,
+          wrapupInputTokens?: number,
+        ):
+          | Promise<{
+              allowed: boolean
+              reason?: 'budget_exhausted' | 'estimated_exceeds_budget'
+              stopSubagent?: boolean
+              /** The request fits the budget only if this turn wraps the goal up. */
+              wrapup?: boolean
+              maxTokens?: number
+              wrapupMessage?: Extract<AgentMessage, { role: 'user' }>
+            }>
+          | {
+              allowed: boolean
+              reason?: 'budget_exhausted' | 'estimated_exceeds_budget'
+              stopSubagent?: boolean
+              /** The request fits the budget only if this turn wraps the goal up. */
+              wrapup?: boolean
+              maxTokens?: number
+              wrapupMessage?: Extract<AgentMessage, { role: 'user' }>
+            }
+      }
+    | undefined
 }
 
 export type AgentHarnessOptions<

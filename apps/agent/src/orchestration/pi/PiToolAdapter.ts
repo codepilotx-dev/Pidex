@@ -340,10 +340,30 @@ export function createLifecycleTools(
     add(
       lifecycleTool(
         'update_goal',
-        '更新当前 Goal 的终态。只有目标确实完成时使用 complete；只有必须等待用户输入或外部状态变化时使用 blocked。调用后以普通 Markdown 回答说明结果。',
-        Type.Object({ status: Type.Union([Type.Literal('complete'), Type.Literal('blocked')]) }),
+        [
+          'Set the terminal state of the current goal. After the call, describe the result in a plain Markdown reply.',
+          '',
+          'status="complete": use only when the objective is achieved and no required work remains. Derive the requirements from the objective and every referenced file, plan, specification and user instruction. For each explicit requirement, named artifact, command, test and deliverable, identify the evidence that proves it, then inspect the current state. Treat uncertain or indirect evidence as not achieved. The audit must prove completion, not merely fail to find remaining work. A narrower or easier-to-verify subset is not the objective.',
+          '',
+          'status="blocked": use only when the same blocking condition has repeated for at least three consecutive goal turns, counting the user-triggered turn and any automatic goal continuations. Do not use it the first time a blocker appears. Supply the blocking condition in `blocker` as a stable, reusable description of the missing input, external dependency or unavailable capability — not a description of work you have not done yet. Reuse the same wording across those turns; a different wording is counted as a different condition. The host returns an error before the threshold is reached; retrying within the same turn does not increase the count and is not a way past the check. Keep doing meaningful work, and if there is genuinely nothing left to do, end the turn honestly instead.',
+          '',
+          'Waiting: only a host-registered approval, question or live child task counts as waiting. Do not report "blocked" to express that you are waiting, and do not retry a fixed number of times.',
+          '',
+          'You cannot use this tool to resume, create, re-budget or otherwise change a goal; those are user actions. A budget limit is not completion.',
+        ].join('\n'),
+        Type.Object({
+          status: Type.Union([Type.Literal('complete'), Type.Literal('blocked')]),
+          blocker: Type.Optional(Type.String({ maxLength: 1000 })),
+        }),
         async (input, id, signal) =>
-          callbacks.updateGoal!({ status: input.status as 'complete' | 'blocked' }, id, signal),
+          callbacks.updateGoal!(
+            {
+              status: input.status as 'complete' | 'blocked',
+              ...(typeof input.blocker === 'string' ? { blocker: input.blocker } : {}),
+            },
+            id,
+            signal,
+          ),
       ),
     )
   }

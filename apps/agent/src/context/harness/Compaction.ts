@@ -511,16 +511,17 @@ Use this EXACT format:
 - [Issues preventing progress, if any]
 
 ## Key Decisions
-- **[Decision]**: [Brief rationale]
+- **[Decision]**: [Brief rationale; include any budget trade-offs and rationale]
 
 ## Next Steps
-1. [Ordered list of what should happen next]
+1. [Ordered list of what should happen next; preserve uncompleted required deliverables and evidence]
 
 ## Critical Context
 - [Any data, examples, or references needed to continue]
 - [Or "(none)" if not applicable]
 
-Keep each section concise. Preserve exact file paths, function names, and error messages.`
+Keep each section concise. Preserve exact file paths, function names, and error messages.
+Note: Recovery and continuation rely on actual workspace files and the latest goal status, not outdated summaries.`
 
 const UPDATE_SUMMARIZATION_PROMPT = `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
 
@@ -528,8 +529,9 @@ Update the existing structured summary with new information. RULES:
 - PRESERVE all existing information from the previous summary
 - ADD new progress, decisions, and context from the new messages
 - UPDATE the Progress section: move items from "In Progress" to "Done" when completed
-- UPDATE "Next Steps" based on what was accomplished
+- UPDATE "Next Steps" based on what was accomplished; preserve uncompleted required deliverables and evidence
 - PRESERVE exact file paths, function names, and error messages
+- PRESERVE budget trade-offs and decisions in Key Decisions
 - If something is no longer relevant, you may remove it
 
 Use this EXACT format:
@@ -551,15 +553,16 @@ Use this EXACT format:
 - [Current blockers - remove if resolved]
 
 ## Key Decisions
-- **[Decision]**: [Brief rationale] (preserve all previous, add new)
+- **[Decision]**: [Brief rationale; preserve all previous, add new including budget trade-offs]
 
 ## Next Steps
-1. [Update based on current state]
+1. [Update based on current state; preserve uncompleted required deliverables and evidence]
 
 ## Critical Context
 - [Preserve important context, add new if needed]
 
-Keep each section concise. Preserve exact file paths, function names, and error messages.`
+Keep each section concise. Preserve exact file paths, function names, and error messages.
+Note: Recovery and continuation rely on actual workspace files and the latest goal status, not outdated summaries.`
 
 /** Generate or update a conversation summary for compaction. */
 export async function generateSummary(

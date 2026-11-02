@@ -273,6 +273,7 @@ describe('ThreadGoalService', () => {
     const projection = new ThreadProjection(db)
 
     expect(projection.snapshot(thread.id)?.goal ?? null).toBeNull()
+    expect(projection.list().find((item) => item.id === thread.id)?.goal).toBeNull()
 
     const goal = (
       await service.set({
@@ -283,6 +284,7 @@ describe('ThreadGoalService', () => {
       })
     ).goal
     expect(projection.snapshot(thread.id)?.goal).toEqual(goal)
+    expect(projection.list().find((item) => item.id === thread.id)?.goal).toEqual(goal)
 
     await service.clear({
       threadId: thread.id,
@@ -290,6 +292,7 @@ describe('ThreadGoalService', () => {
       operationId: 'goal:clear:snapshot',
     })
     expect(projection.snapshot(thread.id)?.goal ?? null).toBeNull()
+    expect(projection.list().find((item) => item.id === thread.id)?.goal).toBeNull()
     db.close()
   })
 
@@ -538,4 +541,188 @@ test('66→67 新增队列目标表，未知对象和更高版本原样保留', 
   expect(new QueuedGoalRepository(future).available()).toBe(false)
   expect(future.sqlite.query('SELECT value FROM future_goal_data').get()).toEqual({ value: 'keep' })
   future.close()
+})
+
+describe('Goal 预算只允许放宽', () => {
+  test('降低预算、不限额转有限与相同值：拒绝与保持', async () => {
+    const { db, service } = await fixture()
+    const thread = db.createThread('预算只放宽')
+    const created = (
+      await service.set({
+        threadId: thread.id,
+        objective: '预算规则',
+        tokenBudget: 200,
+        expectedVersion: null,
+        operationId: 'budget:create',
+      })
+    ).goal
+
+    const before = service.get(thread.id).goal!
+    const eventCount = () =>
+      (
+        db.sqlite.query('SELECT COUNT(*) AS count FROM thread_goal_operations').get() as {
+          count: number
+        }
+      ).count
+    const operationsBefore = eventCount()
+    // A narrowing request must fail without moving the goal, its version or the
+    // idempotency log.
+    await expect(
+      service.set({
+        threadId: thread.id,
+        tokenBudget: 100,
+        expectedVersion: before.version,
+        operationId: 'budget:narrow',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(service.get(thread.id).goal).toEqual(before)
+    expect(eventCount()).toBe(operationsBefore)
+    expect(goalEvents(db)).toHaveLength(1)
+
+    // Same value is a no-op write, not a violation.
+    const same = await service.set({
+      threadId: thread.id,
+      tokenBudget: 200,
+      expectedVersion: before.version,
+      operationId: 'budget:same',
+    })
+    expect(same.goal.tokenBudget).toBe(200)
+
+    // Removing the cap is widening.
+    const unlimited = await service.set({
+      threadId: thread.id,
+      tokenBudget: null,
+      expectedVersion: same.goal.version,
+      operationId: 'budget:unlimited',
+    })
+    expect(unlimited.goal.tokenBudget).toBeNull()
+
+    // An unlimited goal may never become finite again.
+    const unlimitedBefore = service.get(thread.id).goal!
+    await expect(
+      service.set({
+        threadId: thread.id,
+        tokenBudget: 5_000,
+        expectedVersion: unlimitedBefore.version,
+        operationId: 'budget:recap',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(service.get(thread.id).goal).toEqual(unlimitedBefore)
+
+    // Omitted budget keeps the stored value rather than re-applying a default.
+    const kept = await service.set({
+      threadId: thread.id,
+      objective: '预算规则（正文更新）',
+      expectedVersion: unlimitedBefore.version,
+      operationId: 'budget:omit',
+    })
+    expect(kept.goal.tokenBudget).toBeNull()
+    expect(created.id).toBe(kept.goal.id)
+    db.close()
+  })
+
+  test('已完成目标不能通过预算操作改变预算或重开', async () => {
+    const { db, service } = await fixture()
+    const thread = db.createThread('完成目标预算')
+    const created = (
+      await service.set({
+        threadId: thread.id,
+        objective: '完成即冻结',
+        tokenBudget: 100,
+        expectedVersion: null,
+        operationId: 'budget:done-create',
+      })
+    ).goal
+    const completed = await service.set({
+      threadId: thread.id,
+      status: 'complete',
+      expectedVersion: created.version,
+      operationId: 'budget:done-complete',
+    })
+    expect(completed.goal.status).toBe('complete')
+
+    await expect(
+      service.set({
+        threadId: thread.id,
+        tokenBudget: 500,
+        expectedVersion: completed.goal.version,
+        operationId: 'budget:done-raise',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(service.get(thread.id).goal).toEqual(completed.goal)
+
+    // Omitted budget on a completed goal stays allowed and keeps it complete.
+    const edited = await service.set({
+      threadId: thread.id,
+      objective: '完成即冻结（正文）',
+      expectedVersion: completed.goal.version,
+      operationId: 'budget:done-objective',
+    })
+    expect(edited.goal).toMatchObject({ status: 'complete', tokenBudget: 100 })
+    db.close()
+  })
+
+  test('排队意图在预算基准变化后执行时被拒绝，且不改动当前目标', async () => {
+    const { db, service } = await fixture()
+    const thread = db.createThread('排队预算')
+    const created = (
+      await service.set({
+        threadId: thread.id,
+        objective: '排队预算基准',
+        tokenBudget: 300,
+        expectedVersion: null,
+        operationId: 'budget:queue-create',
+      })
+    ).goal
+
+    const turn = db.createTurn(thread.id, submit('排队目标'))
+    // The queued intent was authored against the 300 cap, which has since been raised.
+    new QueuedGoalRepository(db).put(turn.inputID, { objective: '排队目标', tokenBudget: 150 })
+    await service.set({
+      threadId: thread.id,
+      tokenBudget: 400,
+      expectedVersion: created.version,
+      operationId: 'budget:queue-raise',
+    })
+
+    expect(() =>
+      db.startTurnExecution(turn.turnID, db.getTurnInput(turn.turnID)!, () =>
+        service.applyInputInTransaction(thread.id, turn.inputID, 'chat'),
+      ),
+    ).toThrow('不能降低')
+    expect(db.getTurnStatus(turn.turnID)).toBe('queued')
+    expect(service.get(thread.id).goal).toMatchObject({
+      objective: '排队预算基准',
+      tokenBudget: 400,
+    })
+    // The rejected intent survives so admission failure stays visible and retryable.
+    expect(new QueuedGoalRepository(db).get(turn.inputID)?.tokenBudget).toBe(150)
+    db.close()
+  })
+})
+
+test('direct Goal budget writes reject non-safe integers without changing state or events', async () => {
+  const { db, service } = await fixture()
+  const thread = db.createThread('budget validation')
+  const { goal } = await service.set({
+    threadId: thread.id,
+    objective: '交付',
+    tokenBudget: 200,
+    expectedVersion: null,
+    operationId: 'create-safe',
+  })
+  const events = goalEvents(db)
+  for (const tokenBudget of [NaN, Infinity, -1, 200.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await expect(
+      service.set({
+        threadId: thread.id,
+        tokenBudget,
+        expectedVersion: goal.version,
+        operationId: `bad-${tokenBudget}`,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(service.get(thread.id).goal).toEqual(goal)
+    expect(goalEvents(db)).toEqual(events)
+  }
+  db.close()
 })

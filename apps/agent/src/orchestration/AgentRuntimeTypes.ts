@@ -145,7 +145,11 @@ export interface AgentRuntimeRequest {
   resolveModel(fallback: ModelRef): Promise<{ ref: ModelRef; model: unknown }>
   pause(approval: PendingApproval): Promise<void>
   updatePlan?(input: ExecutionPlanInput, toolCallID: string): Promise<unknown>
-  updateGoal?(status: 'complete' | 'blocked', toolCallID: string): Promise<unknown>
+  updateGoal?(
+    input: { status: 'complete' | 'blocked'; blocker?: string | undefined },
+    toolCallID: string,
+    identity?: { goalId: string; revision: number },
+  ): Promise<unknown>
   /** Subagent-only safe-boundary control; main Chat steer does not use this callback. */
   checkSafeBoundary?: () => Promise<boolean>
   attachments?: Array<

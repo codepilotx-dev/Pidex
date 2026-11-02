@@ -1,3 +1,4 @@
+import { GoalTurnClassifier } from './GoalTurnClassifier'
 import { activeTurnSql, ThreadEditRepository } from '../storage/repositories/ThreadEditRepository'
 import { ThreadEditService } from './ThreadEditService'
 import type { RpcParams } from '@pidex/agent-protocol'
@@ -43,12 +44,19 @@ import type {
   ThreadWorkspaceResolver,
   ResolvedThreadWorkspace,
 } from '../workspace/ThreadWorkspaceResolver'
+import {
+  buildContinuationPrompt,
+  createGoalExecutionSection,
+  GoalBudgetLimitError,
+} from './GoalDirectiveService'
 import type { McpConnectionManager, McpTurnLease } from '../mcp/McpConnectionManager'
 import { createMcpInstructionSections } from '../mcp/McpPromptSections'
 import type { ConfigService } from '../config/ConfigService'
 import { resolveEffectivePermissionConfig } from '../permission/EffectivePermissionConfig'
 import { TurnCoordinator, type TurnTerminalStatus } from './TurnCoordinator'
 import { TurnRunner } from './TurnRunner'
+import { GoalContinuationCoordinator } from '../orchestration/GoalContinuationCoordinator'
+import { runGoalVerifier } from './GoalVerifier'
 import type { ThreadTitleService } from './ThreadTitleService'
 import type { SessionGroupService } from '../session-group/SessionGroupService'
 import {
@@ -140,6 +148,7 @@ const instructionCwd = (workspaceRoot: string, cwd: string) => {
 export class ThreadService {
   private readonly coordinator = new TurnCoordinator()
   private readonly runner: TurnRunner
+  private readonly goalContinuation: GoalContinuationCoordinator
   private readonly resumeCheckpoints: ResumeCheckpointResolver
 
   constructor(
@@ -174,8 +183,67 @@ export class ThreadService {
       new ResumeCheckpointResolver(db, approvals, {
         resolvedSubagentWait: (turnID) => subagents.resolvedWaitCheckpoint(turnID),
       })
-    this.runner = new TurnRunner(this.db, this.hub, this.coordinator, (threadID, turnID) =>
-      this.orchestrator.clearTurnPermissionGrants(threadID, turnID),
+    // The verifier reuses the session's resolved provider and model: it is an
+    // internal audit pass, not a second provider runtime. Without a usable model
+    // it is simply absent, and the goal keeps the ordinary continuation rules.
+    this.goalContinuation = new GoalContinuationCoordinator({
+      db,
+      ...(typeof hub?.listen === 'function' ? { hub } : {}),
+      publish: (events) => this.publish(events),
+      onContinued: (threadId, turnId) => {
+        queueMicrotask(() => {
+          void this.executeTurn(threadId, turnId)
+        })
+      },
+      verify: async ({ goal, sourceTurnId, evidence, currentState, signal, admit, onResponse }) => {
+        // Reuse the model the goal's last turn actually ran on, so the verifier
+        // matches what produced the work it audits.
+        const last = db.getTurnInput(sourceTurnId)
+        if (!last) return { kind: 'error', code: 'provider_failed' }
+        const model = await this.providers.getPiModel(last.model).catch(() => null)
+        if (!model) return { kind: 'error', code: 'provider_failed' }
+        const exposure = this.orchestrator.toolExposure({
+          taskMode: last.taskMode,
+          sandboxMode: last.permissionConfig.sandboxMode,
+          approvalPolicy: last.permissionConfig.approvalPolicy,
+          profile: 'main',
+          hasActiveGoal: goal.status === 'active',
+        })
+        return runGoalVerifier(
+          {
+            goal,
+            evidence,
+            currentState: {
+              ...currentState,
+              execution: {
+                taskMode: last.taskMode,
+                sandboxMode: last.permissionConfig.sandboxMode,
+                approvalPolicy: last.permissionConfig.approvalPolicy,
+                exposedTools: exposure.exposed,
+                deferredTools: exposure.deferred,
+              },
+            },
+          },
+          {
+            models: this.providers.pi,
+            model,
+            signal,
+            timeoutMs: 30_000,
+            admit,
+            onResponse,
+          },
+        )
+      },
+    })
+    this.threadGoals?.setBudgetReviewer((threadId, budget) =>
+      this.goalContinuation.reviewBudgetChange(threadId, budget),
+    )
+    this.runner = new TurnRunner(
+      this.db,
+      this.hub,
+      this.coordinator,
+      (threadID, turnID) => this.orchestrator.clearTurnPermissionGrants(threadID, turnID),
+      this.goalContinuation,
     )
     this.questions.setResumeHandler((threadID, turnID) => {
       const agent = this.db.agentForTurn(turnID)
@@ -191,6 +259,22 @@ export class ThreadService {
 
   startRecoveredQueues() {
     this.resumeQueuedTurns()
+    this.resumePendingGoalSettlements()
+  }
+
+  /**
+   * Re-processes goal turns whose settlement never ran because the process
+   * stopped between commit and the coordinator. Only unsettled observations are
+   * picked up, and the coordinator re-reads goal, revision and queue state, so a
+   * restart cannot duplicate a continuation or replay a finished verification.
+   */
+  private resumePendingGoalSettlements() {
+    if (!this.db.repositories.threadGoalControls.available()) return
+    const rows = this.db.repositories.threadGoalControls.pendingSettlements()
+    for (const row of rows) {
+      if (this.coordinator.active(row.threadId) || this.db.activeTurn(row.threadId)) continue
+      void this.goalContinuation.settle(row).catch(() => undefined)
+    }
   }
 
   activeTurn(threadID: string) {
@@ -785,6 +869,8 @@ export class ThreadService {
   }
 
   async resumeGoalContinuation(threadID: string): Promise<void> {
+    if (this.db.repositories.threadGoalControls.pendingBudgetForThread(threadID) !== null)
+      await this.subagents.reconcileCompletions()
     await this.coordinator.exclusive(threadID, async () => {
       const goal = this.db.repositories.threadGoals.get(threadID)
       if (
@@ -802,40 +888,38 @@ export class ThreadService {
         return
       const source = this.db.sqlite
         .query(
-          `SELECT id FROM turns WHERE thread_id = ? AND ${activeTurnSql('turns', this.db)} AND status = 'completed' ORDER BY finished_at DESC, created_at DESC LIMIT 1`,
+          `SELECT turns.id FROM turns
+           LEFT JOIN agent_executions ON agent_executions.id = turns.root_agent_id
+           WHERE turns.thread_id = ? AND ${activeTurnSql('turns', this.db)}
+             AND (turns.status = 'completed' OR (turns.status = 'interrupted' AND agent_executions.error = 'budget-limited'))
+           ORDER BY COALESCE(turns.finished_at, turns.updated_at, turns.created_at) DESC, turns.created_at DESC LIMIT 1`,
         )
         .get(threadID) as { id: string } | null
       if (!source || this.db.repositories.threadGoalContinuations.hasSourceTurn(source.id)) return
       const previous = this.db.getTurnInput(source.id)
       if (!previous || !this.db.repositories.threadGoalContinuations.canContinue(threadID, 'chat'))
         return
-      const created = this.db.transaction(() => {
-        const value = this.db.createTurn(
-          threadID,
-          {
-            content: `继续推进当前 Goal，基于已有任务上下文自主完成下一步。不要重复已完成的工作。\n\nGoal：${goal.objective}`,
-            model: previous.model,
-            permissionConfig: previous.permissionConfig,
-            strategy: 'queue',
-            taskMode: 'chat',
-            origin: 'goal-continuation',
-          },
-          'queued',
-        )
-        this.db.repositories.threadGoalContinuations.record({
-          sourceTurnId: source.id,
-          threadId: threadID,
-          goalId: goal.id,
-          continuationTurnId: value.turnID,
-          continuationInputId: value.inputID,
-          triggerReason: 'goal-resumed-idle',
-          timestamp: Date.now(),
-        })
-        return value
+      const controls = this.db.repositories.threadGoalControls
+      const revision = controls.ensure(goal.id, threadID).revision
+      const existing = controls.observation(goal.id, revision, source.id)
+      if (existing) return
+      // Resume rechecks completion before creating work; a larger ceiling is not an assignment.
+      controls.settleTurn({
+        goalId: goal.id,
+        revision,
+        threadId: threadID,
+        turnId: source.id,
+        classification: new GoalTurnClassifier(this.db).classify({
+          turnId: source.id,
+          hasBlockerCandidate: false,
+        }),
+        processing: 'pending',
       })
-      await this.publishCreatedTurn(created)
-      this.coordinator.reserve(threadID, created.turnID)
-      void this.executeTurn(threadID, created.turnID)
+      queueMicrotask(() => {
+        void this.goalContinuation
+          .settle({ threadId: threadID, turnId: source.id })
+          .catch(() => undefined)
+      })
     })
   }
 
@@ -1300,6 +1384,20 @@ export class ThreadService {
   private async executeTurn(threadID: string, turnID: string) {
     const input = this.db.getTurnInput(turnID)
     if (!input) return
+    const automaticGoal = this.db.repositories.threadGoalContinuations.goalForContinuation(turnID)
+    if (automaticGoal) {
+      const goal = this.db.repositories.threadGoals.get(threadID)
+      if (!goal || goal.id !== automaticGoal || goal.status !== 'active') {
+        await this.publishQueueMutation(
+          this.db.removeQueuedInput(threadID, input.id, { operationID: `goal-stale:${turnID}` }),
+        )
+        return
+      }
+      const prompt = buildContinuationPrompt(goal)
+      const reference = input.content.indexOf('\n<verifier_reference>')
+      input.content =
+        reference >= 0 && input.content.slice(0, reference) === prompt ? input.content : prompt
+    }
     let handle
     let reservedHere = false
     try {
@@ -1542,18 +1640,7 @@ export class ThreadService {
         userMessage: content,
       })
       if (currentGoal) {
-        promptSections.splice(promptSections.length - 1, 0, {
-          id: 'thread.goal',
-          role: 'developer',
-          cache: 'dynamic',
-          authority: 'builtin',
-          source: { type: 'runtime', name: 'goal' },
-          content: [
-            `当前 Goal：${currentGoal.objective}`,
-            `状态：${currentGoal.status}；token：${currentGoal.tokensUsed}/${currentGoal.tokenBudget ?? '不限额'}；实际运行：${currentGoal.timeUsedSeconds} 秒。`,
-            '只有真正完成时先调用 update_goal(complete)，必须等待用户或外部状态变化时调用 update_goal(blocked)，然后以普通 Markdown 回答说明结果。',
-          ].join('\n'),
-        })
+        promptSections.splice(promptSections.length - 1, 0, createGoalExecutionSection(currentGoal))
       }
       // 计划修改轮次：用户消息是修改意见原文，完整源计划按 next_turn_id 关联
       // 重建为 prompt context，不写入用户消息文本，也不新增数据库字段。
@@ -1780,14 +1867,22 @@ export class ThreadService {
           },
           ...(currentGoal?.status === 'active' && this.threadGoals
             ? {
-                updateGoal: async (status: 'complete' | 'blocked', toolCallID: string) => {
-                  const latest = this.db.repositories.threadGoals.get(threadID)
-                  if (!latest) throw new AgentError('GOAL_NOT_FOUND', '当前任务没有 Goal', 409)
-                  return this.threadGoals!.set({
+                updateGoal: async (
+                  input: { status: 'complete' | 'blocked'; blocker?: string | undefined },
+                  toolCallID: string,
+                  identity?: { goalId: string; revision: number },
+                ) => {
+                  if (!identity)
+                    throw new AgentError('CONFLICT', 'Goal 请求身份缺失，请重新读取当前目标', 409)
+                  // The model never names the source turn: the host binds it, so a
+                  // blocker can only ever be counted against the turn that sent it.
+                  return this.threadGoals!.applyModelTerminal({
                     threadId: threadID,
-                    status,
-                    expectedVersion: latest.version,
-                    operationId: `goal-tool:${turnID}:${toolCallID}`,
+                    turnId: turnID,
+                    status: input.status,
+                    blocker: input.blocker,
+                    toolCallId: toolCallID,
+                    identity,
                   })
                 },
               }
@@ -1903,6 +1998,38 @@ export class ThreadService {
         })
         return
       }
+      if (cause instanceof GoalBudgetLimitError) {
+        await this.subagents.stopChildrenForParent(agent.id)
+        await this.sessionGroups
+          ?.captureTurn({
+            threadId: threadID,
+            turnId: turnID,
+            status: 'interrupted',
+            summary: '目标达到 Token 预算限制并暂停执行。',
+          })
+          .catch(() => undefined)
+        await this.coordinator.exclusive(threadID, async () => {
+          const current = this.db.activeTurn(threadID)
+          if (current?.id !== turnID) return
+          terminalStatus = await this.runner.terminalize({
+            threadID,
+            turnID,
+            agentID: agent.id,
+            status: 'interrupted',
+            message: 'budget-limited',
+            ...(cause.goalIdentity ? { goalBudget: cause.goalIdentity } : {}),
+            ...(cause.goalIdentity &&
+            this.db.repositories.threadGoals.get(threadID)?.id === cause.goalIdentity.goalId &&
+            this.db.repositories.threadGoalControls.revision(cause.goalIdentity.goalId) ===
+              cause.goalIdentity.revision
+              ? { pauseReason: 'interrupted' as const }
+              : {}),
+          })
+        })
+        if (this.db.repositories.threadGoals.get(threadID)?.status === 'active')
+          await this.resumeGoalContinuation(threadID)
+        return
+      }
       if (cause instanceof AgentError && cause.code === 'SIDE_EFFECT_RECOVERY_REQUIRED') return
       if (cause instanceof AgentError && cause.code === 'HOOK_TRUST_REQUIRED') {
         const pausedAgent = this.db.agentForTurn(turnID)
@@ -2012,6 +2139,16 @@ export class ThreadService {
   }
 
   async stop(threadID: string, expectedTurnID: string) {
+    if (this.goalContinuation.cancel(threadID)) {
+      const goal = this.threadGoals?.get(threadID).goal
+      if (goal?.status === 'active')
+        await this.threadGoals!.set({
+          threadId: threadID,
+          status: 'paused',
+          expectedVersion: goal.version,
+          operationId: `goal-stop:${expectedTurnID}:${goal.version}`,
+        })
+    }
     let terminal: Promise<TurnTerminalStatus> = Promise.resolve('interrupted')
     let status: TurnTerminalStatus = 'interrupted'
     let alreadyTerminal: TurnTerminalStatus | null = null

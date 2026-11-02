@@ -26,7 +26,8 @@ import { ThreadRepositoryDatabase } from './ThreadRepository'
 import { PlanApprovalRepository } from './PlanApprovalRepository'
 import { ThreadGoalLedgerRepository } from './ThreadGoalLedgerRepository'
 import { ThreadGoalRepository } from './ThreadGoalRepository'
-import { ThreadGoalContinuationRepository } from './ThreadGoalContinuationRepository'
+import { ThreadGoalControlRepository } from './ThreadGoalControlRepository'
+import { GoalTurnClassifier } from '../../session/GoalTurnClassifier'
 
 export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDatabase {
   bindInputAttachments(inputID: string, attachmentIDs: readonly string[]) {
@@ -669,12 +670,53 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
     return requeuedSteers
   }
 
+  /**
+   * Classifies a completed goal round from host facts only and persists it. The
+   * blocker candidate, if any, was recorded by the model's `update_goal` call;
+   * everything else is read from approvals, questions, child tasks and tool
+   * results, so a plausible reply cannot fake progress or a wait.
+   */
+  private settleGoalObservation(input: {
+    threadId: string
+    turnId: string
+    goalId: string
+  }): { classification: string; hasWaiting: boolean } | null {
+    const controls = new ThreadGoalControlRepository(this)
+    const classifier = new GoalTurnClassifier(this)
+    const facts = classifier.facts(input.turnId)
+    // Settle onto the row this turn already opened, if any: a blocker candidate is
+    // recorded before the blocked transition bumps the revision, and a settlement
+    // under the newer revision would leave the candidate pending forever.
+    const existing = controls.observationForTurn(input.goalId, input.turnId)
+    const control = controls.ensure(input.goalId, input.threadId)
+    const active = new ThreadGoalRepository(this).get(input.threadId)?.status === 'active'
+    if (active && existing && existing.revision !== control.revision)
+      controls.markProcessing(input.goalId, existing.revision, input.turnId, 'settled')
+    const revision = active ? control.revision : (existing?.revision ?? control.revision)
+    const hasBlockerCandidate =
+      existing?.revision === revision && existing.classification === 'blocker-candidate'
+    const classification = classifier.classify({ turnId: input.turnId, hasBlockerCandidate })
+    controls.settleTurn({
+      goalId: input.goalId,
+      revision,
+      threadId: input.threadId,
+      turnId: input.turnId,
+      classification,
+      processing:
+        new ThreadGoalRepository(this).get(input.threadId)?.status === 'active'
+          ? 'pending'
+          : 'settled',
+    })
+    return { classification, hasWaiting: facts.hasWaiting }
+  }
+
   finalizeTurn(input: {
     threadID: string
     turnID: string
     agentID: string
     status: 'completed' | 'failed' | 'interrupted'
     message?: string
+    goalBudget?: { goalId: string; revision: number }
     pauseReason?: Exclude<QueuePauseReason, null>
   }) {
     const timestamp = now()
@@ -731,10 +773,47 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
             goal: { id: visibleGoal.id, createdAt: visibleGoal.createdAt },
           })
         : null
-      const continuationRepository = new ThreadGoalContinuationRepository(this)
+      const controls = new ThreadGoalControlRepository(this)
       let settledGoal = new ThreadGoalRepository(this).get(input.threadID)
+      // Settle this turn's host-fact classification before any continuation
+      // decision, so "real wait" and "real progress" are never mistaken for the
+      // no-progress spin that the two-round protection targets. A stopped or
+      // failed turn is not a goal round: user Stop and non-active goals win.
+      const observation =
+        visibleGoal && controls.available() && input.status === 'completed'
+          ? this.settleGoalObservation({
+              threadId: input.threadID,
+              turnId: input.turnID,
+              goalId: visibleGoal.id,
+            })
+          : null
       let interruptedGoalEvent: EventEnvelope | null = null
-      if (input.status === 'interrupted' && settledGoal?.status === 'active') {
+      if (input.message === 'budget-limited') {
+        if (
+          settledGoal?.status === 'active' &&
+          input.goalBudget?.goalId === settledGoal.id &&
+          input.goalBudget.revision === controls.revision(settledGoal.id)
+        ) {
+          const limitedGoal = new ThreadGoalRepository(this).write({
+            threadId: input.threadID,
+            objective: settledGoal.objective,
+            status: 'budget-limited',
+            tokenBudget: settledGoal.tokenBudget,
+            expectedVersion: settledGoal.version,
+          })
+          if (limitedGoal) {
+            settledGoal = limitedGoal
+            // A terminal internal transition ends the generation: work already in
+            // flight for the previous revision must not resume this goal.
+            controls.bump(limitedGoal.id, input.threadID)
+            interruptedGoalEvent = this.insertEvent(input.threadID, null, 'thread/goal/updated', {
+              threadId: input.threadID,
+              goal: limitedGoal,
+              version: limitedGoal.version,
+            })
+          }
+        }
+      } else if (settledGoal?.status === 'active' && input.status === 'interrupted') {
         const pausedGoal = new ThreadGoalRepository(this).write({
           threadId: input.threadID,
           objective: settledGoal.objective,
@@ -744,6 +823,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         })
         if (pausedGoal) {
           settledGoal = pausedGoal
+          controls.bump(pausedGoal.id, input.threadID)
           interruptedGoalEvent = this.insertEvent(input.threadID, null, 'thread/goal/updated', {
             threadId: input.threadID,
             goal: pausedGoal,
@@ -751,50 +831,15 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           })
         }
       }
-      let continuation: ReturnType<ExecutionRepositoryDatabase['createTurn']> | null = null
-      if (
+      // Whether a goal continued after this turn is decided *after* commit by
+      // GoalContinuationCoordinator: verification is a network call, and a user
+      // reply must not wait on it. This only reports that the goal is still live.
+      const settleGoal =
         input.status === 'completed' &&
         settledGoal?.status === 'active' &&
-        continuationRepository.available() &&
-        !continuationRepository.hasSourceTurn(input.turnID) &&
-        !this.sqlite
-          .query("SELECT 1 FROM turns WHERE thread_id = ? AND status = 'queued' LIMIT 1")
-          .get(input.threadID) &&
-        Boolean(
-          this.sqlite
-            .query(
-              'SELECT 1 FROM threads WHERE id = ? AND archived_at IS NULL AND queue_pause_reason IS NULL',
-            )
-            .get(input.threadID),
-        )
-      ) {
-        const previous = this.getTurnInput(input.turnID)
-        if (previous && continuationRepository.canContinue(input.threadID, previous.taskMode)) {
-          const continuationInputId = crypto.randomUUID()
-          continuation = this.createTurn(
-            input.threadID,
-            {
-              content: `继续推进当前 Goal，基于已有任务上下文自主完成下一步。不要重复已完成的工作。\n\nGoal：${settledGoal.objective}`,
-              model: previous.model,
-              permissionConfig: previous.permissionConfig,
-              strategy: 'queue',
-              taskMode: previous.taskMode,
-              origin: 'goal-continuation',
-            },
-            'queued',
-            { inputID: continuationInputId },
-          )
-          continuationRepository.record({
-            sourceTurnId: input.turnID,
-            threadId: input.threadID,
-            goalId: settledGoal.id,
-            continuationTurnId: continuation.turnID,
-            continuationInputId,
-            triggerReason: 'turn-completed-goal-active',
-            timestamp,
-          })
-        }
-      }
+        observation?.classification !== 'waiting'
+          ? { threadId: input.threadID, turnId: input.turnID }
+          : null
       const events: EventEnvelope[] = [
         this.insertEvent(input.threadID, input.turnID, 'agent/upserted', { agent }),
         ...requeuedSteers.flatMap((queued) => [
@@ -821,11 +866,6 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         }),
         ...(goalMeasurement ? [goalMeasurement.event] : []),
         ...(interruptedGoalEvent ? [interruptedGoalEvent] : []),
-        ...(continuation
-          ? [continuation.event, continuation.queueEvent, continuation.agentEvent].filter(
-              (event): event is EventEnvelope => event !== null,
-            )
-          : []),
       ]
       if (
         input.pauseReason &&
@@ -851,7 +891,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           )
         }
       }
-      return { agent, events }
+      return { agent, events, settleGoal }
     })
   }
 

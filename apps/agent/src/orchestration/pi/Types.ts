@@ -267,9 +267,10 @@ export interface PiLifecycleCallbacks {
   ): Promise<unknown>
   updatePlan?(input: ExecutionPlanInput, toolCallID: string, signal?: AbortSignal): Promise<unknown>
   updateGoal?(
-    input: { status: 'complete' | 'blocked' },
+    input: { status: 'complete' | 'blocked'; blocker?: string | undefined },
     toolCallID: string,
     signal?: AbortSignal,
+    identity?: { goalId: string; revision: number },
   ): Promise<unknown>
   submitPlan?(input: StructuredPlan, toolCallID: string, signal?: AbortSignal): Promise<unknown>
   submitSchedulePlan?(
@@ -343,6 +344,75 @@ export interface HarnessRuntimeOptions {
     shouldAutoCompact(threadID: string): boolean | Promise<boolean>
     recordFailure(threadID: string, trigger: RuntimeCompactionTrigger): void | Promise<void>
   }
+  goalBudget?: GoalBudgetLifecycle
+}
+
+export type GoalBudgetStatus = {
+  revision?: number
+  goal: import('@pidex/shared/thread').ThreadGoal
+  tokensUsed: number
+  remaining: number | null
+  reserve: number
+  isConvergence: boolean
+}
+
+export type GoalAdmissionDecision =
+  | { allowed: true; budgetStatus?: GoalBudgetStatus; wrapup?: boolean; maxTokens?: number }
+  | {
+      allowed: false
+      reason: 'budget_exhausted' | 'estimated_exceeds_budget'
+      budgetStatus: GoalBudgetStatus
+    }
+
+export type GoalObjectiveRevision = {
+  goal: import('@pidex/shared/thread').ThreadGoal
+  /** Control generation this objective belongs to. */
+  revision: number
+  /** Objective revision the model has already consumed. */
+  acknowledged: number
+  objectiveRevision?: number
+}
+
+export type GoalBudgetChange = {
+  goalId: string
+  revision: number
+  budgetRevision: number
+  acknowledged: number
+  previousBudget: number | null
+  budget: number | null
+  tokensUsed: number
+}
+
+export interface GoalBudgetLifecycle {
+  getBudgetStatus(threadID: string): GoalBudgetStatus | null
+  budgetChange?(threadID: string): GoalBudgetChange | null
+  acknowledgeBudget?(request: HarnessRuntimeRequest, change: GoalBudgetChange): void | Promise<void>
+  checkAdmission(
+    threadID: string,
+    estimatedInputTokens: number,
+    profile?: SubagentProfile,
+    estimatedOutputTokens?: number,
+    wrapupInputTokens?: number,
+  ): GoalAdmissionDecision
+  handleAdmissionDenied(
+    request: HarnessRuntimeRequest,
+    decision: Extract<GoalAdmissionDecision, { allowed: false }>,
+    estimatedInputTokens: number,
+  ): Promise<void>
+  /**
+   * Pending objective change to inject, or null when the model already consumed
+   * the current revision. Read before every model request so an edit made
+   * mid-turn reaches the next request.
+   */
+  pendingObjectiveUpdate?(threadID: string): GoalObjectiveRevision | null
+  /** Confirms consumption only after the request succeeded and was accepted. */
+  acknowledgeObjective?(
+    threadID: string,
+    revision: number,
+    objectiveRevision: number,
+    goalId?: string,
+  ): void
+  finishWrapup?(threadID: string, status: GoalBudgetStatus): Promise<void>
 }
 
 export interface ActiveHarness {

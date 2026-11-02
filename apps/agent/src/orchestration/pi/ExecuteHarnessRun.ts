@@ -20,11 +20,20 @@ import { adaptToolDefinition, createPiTools } from './PiToolAdapter'
 import { formatStructuredResult, parseStructuredResult } from './StructuredResult'
 import type {
   ActiveHarness,
+  GoalBudgetStatus,
   HarnessRunResult,
   HarnessRuntimeOptions,
   HarnessRuntimeRequest,
 } from './Types'
 import type { RuntimeCompactionTrigger } from './Types'
+import {
+  createDynamicDirectiveMessage,
+  createObjectiveUpdatedMessage,
+  createGoalWrapupContext,
+  GoalBudgetLimitError,
+  isDynamicDirectiveMessage,
+} from '../../session/GoalDirectiveService'
+import { AgentHarnessError } from '../harness/Types'
 
 const promptContext = (request: HarnessRuntimeRequest, contextItems: readonly unknown[]) => {
   const attachments =
@@ -76,8 +85,21 @@ export async function executeHarnessRun(
   // call id. Validation failures, callback errors and blocked calls return
   // tool errors without retaining a candidate or ending the loop.
   let delivery: { toolCallID: string; result: SubagentResult } | undefined
+  let pendingBudget: import('./Types').GoalBudgetChange | null = null
+  let providerBudget: import('./Types').GoalBudgetChange | null = null
+  let seenBudget = ''
+  let providerGoal: { goalId: string; revision: number } | undefined
   const lifecycle = {
     ...options.lifecycle,
+    ...(options.lifecycle?.updateGoal
+      ? {
+          updateGoal: (
+            input: { status: 'complete' | 'blocked'; blocker?: string | undefined },
+            id: string,
+            signal?: AbortSignal,
+          ) => options.lifecycle!.updateGoal!(input, id, signal, providerGoal),
+        }
+      : {}),
     ...(options.lifecycle?.finalizeResult
       ? {
           finalizeResult: async (input: SubagentResult, id: string) => {
@@ -90,6 +112,20 @@ export async function executeHarnessRun(
       : {}),
   }
   const tools = createPiTools({ executor: options.toolExecutor, request }, lifecycle)
+  /**
+   * Objective revision injected into the request currently being sent. It is
+   * confirmed only if that request succeeds, so a failed or cancelled request
+   * keeps the update pending and re-injects it next time.
+   */
+  let pendingObjective: { goalId: string; revision: number; objectiveRevision: number } | null =
+    null
+  /**
+   * Budget status for the one wrap-up request this control revision is allowed.
+   * Claimed before the request is sent; while set, admission marks the turn as a
+   * wrap-up and the harness strips tools from it.
+   */
+  let wrapupStatus: GoalBudgetStatus | null = null
+  let deniedGoal: { goalId: string; revision: number } | undefined
   const deferredDefinitions = options.toolExecutor.deferredDefinitions(
     {
       taskMode: request.taskMode,
@@ -121,7 +157,9 @@ export async function executeHarnessRun(
     ...(dependencies.resources ? { resources: dependencies.resources } : {}),
     model: request.model,
     thinkingLevel: request.thinkingLevel ?? 'off',
-    ...(request.maxContextTokens !== undefined ? { maxContextTokens: request.maxContextTokens } : {}),
+    ...(request.maxContextTokens !== undefined
+      ? { maxContextTokens: request.maxContextTokens }
+      : {}),
     systemPrompt: bundle.instructions,
     tools,
     activeToolNames: tools.map((tool) => tool.name),
@@ -159,6 +197,59 @@ export async function executeHarnessRun(
           },
         }
       : {}),
+    ...(options.goalBudget
+      ? {
+          goalBudget: {
+            prepareWrapupContext: (context) => {
+              const status = options.goalBudget!.getBudgetStatus(request.threadID)
+              return status
+                ? createGoalWrapupContext(context, status.goal, status.tokensUsed)
+                : null
+            },
+            checkAdmission: async (
+              estimatedInputTokens: number,
+              estimatedOutputTokens: number,
+              wrapupInputTokens?: number,
+            ) => {
+              const latest = options.goalBudget!.getBudgetStatus(request.threadID)
+              if (wrapupStatus && latest?.revision !== wrapupStatus.revision) wrapupStatus = null
+              const decision = options.goalBudget!.checkAdmission(
+                request.threadID,
+                estimatedInputTokens,
+                request.profile,
+                estimatedOutputTokens,
+                wrapupInputTokens,
+              )
+              if (!decision.allowed) {
+                if (decision.budgetStatus.revision !== undefined)
+                  deniedGoal = {
+                    goalId: decision.budgetStatus.goal.id,
+                    revision: decision.budgetStatus.revision,
+                  }
+                if (request.profile && request.profile !== 'main') {
+                  return { allowed: false, stopSubagent: true, reason: decision.reason }
+                }
+                await options.goalBudget!.handleAdmissionDenied(
+                  request,
+                  decision,
+                  estimatedInputTokens,
+                )
+                return { allowed: false, reason: decision.reason }
+              }
+              if (decision.wrapup && decision.budgetStatus) wrapupStatus = decision.budgetStatus
+              return {
+                allowed: true,
+                ...(decision.maxTokens === undefined ? {} : { maxTokens: decision.maxTokens }),
+                ...(wrapupStatus
+                  ? {
+                      wrapup: true,
+                    }
+                  : {}),
+              }
+            },
+          },
+        }
+      : {}),
     streamOptions: {
       timeoutMs: 600_000,
       maxRetries: 2,
@@ -167,12 +258,94 @@ export async function executeHarnessRun(
       metadata: { threadID: request.threadID, turnID: request.turnID, agentID: request.agentID },
     },
   })
-  harness.on('before_provider_request', (event) => ({
-    streamOptions: {
-      cacheRetention: inferPromptCacheRuntimePolicy(event.model, bundle.cacheKey).cacheRetention,
-      metadata: { threadID: request.threadID, turnID: request.turnID, agentID: request.agentID },
-    },
-  }))
+  // Consumption requires a complete assistant message, not merely HTTP headers.
+  harness.subscribe(async (event) => {
+    if (event.type !== 'message_end' || event.message.role !== 'assistant') return
+    const message = event.message
+    if (
+      pendingBudget &&
+      !wrapupStatus &&
+      !request.signal.aborted &&
+      !['error', 'aborted'].includes(message.stopReason)
+    ) {
+      seenBudget = `${pendingBudget.goalId}:${pendingBudget.budgetRevision}`
+      await options.goalBudget?.acknowledgeBudget?.(request, pendingBudget)
+      pendingBudget = null
+    }
+    if (
+      !pendingObjective ||
+      request.signal.aborted ||
+      message.stopReason === 'error' ||
+      message.stopReason === 'aborted'
+    )
+      return
+    options.goalBudget?.acknowledgeObjective?.(
+      request.threadID,
+      pendingObjective.revision,
+      pendingObjective.objectiveRevision,
+      pendingObjective.goalId,
+    )
+    pendingObjective = null
+  })
+  harness.on('before_provider_request', (event) => {
+    return {
+      streamOptions: {
+        cacheRetention: inferPromptCacheRuntimePolicy(event.model, bundle.cacheKey).cacheRetention,
+        metadata: { threadID: request.threadID, turnID: request.turnID, agentID: request.agentID },
+      },
+    }
+  })
+  harness.on('context', (event) => {
+    const budgetStatus = options.goalBudget?.getBudgetStatus(request.threadID)
+    providerGoal =
+      budgetStatus?.revision === undefined
+        ? undefined
+        : { goalId: budgetStatus.goal.id, revision: budgetStatus.revision }
+    pendingObjective = null
+    pendingBudget = null
+    providerBudget = options.goalBudget?.budgetChange?.(request.threadID) ?? null
+    if (
+      providerBudget &&
+      (request.profile && request.profile !== 'main'
+        ? seenBudget !== `${providerBudget.goalId}:${providerBudget.budgetRevision}`
+        : providerBudget.acknowledged < providerBudget.budgetRevision)
+    )
+      pendingBudget = providerBudget
+    if (!budgetStatus) return undefined
+    const filteredMessages = event.messages.filter((msg) => !isDynamicDirectiveMessage(msg))
+    const messages = [...filteredMessages]
+    // An objective edited mid-turn must reach the next request, so this is read
+    // per request rather than once per turn. Consumption is confirmed only after
+    // the provider accepts the request (see the response hook below).
+    const pending = options.goalBudget?.pendingObjectiveUpdate?.(request.threadID)
+    if (pending) {
+      messages.push(createObjectiveUpdatedMessage(pending.goal))
+      pendingObjective = {
+        goalId: pending.goal.id,
+        revision: pending.revision,
+        objectiveRevision: pending.objectiveRevision ?? pending.acknowledged + 1,
+      }
+    }
+    if (pendingBudget)
+      messages.push({
+        role: 'user',
+        timestamp: Date.now(),
+        content: [
+          {
+            type: 'text',
+            text: [
+              '<goal_budget_updated>',
+              `Budget changed: ${pendingBudget.previousBudget ?? 'none'} -> ${pendingBudget.budget ?? 'none'}; cumulative usage ${pendingBudget.tokensUsed}; remaining ${pendingBudget.budget === null ? 'unlimited' : Math.max(0, pendingBudget.budget - pendingBudget.tokensUsed)}.`,
+              'This is a spending ceiling, never a spending target. Check completion first: if all requirements are delivered, finish without inventing work. Otherwise revise only the remaining plan before further tools or delegation. Review running child tasks; use the existing collaboration tools to cancel, steer or add assignments only when useful. Preserve delivered work and cumulative usage. More budget grants no new scope. Do not wait for another turn to respond to this change.',
+              '</goal_budget_updated>',
+            ].join('\n'),
+          },
+        ],
+      })
+    messages.push(createDynamicDirectiveMessage(budgetStatus.goal, budgetStatus.tokensUsed))
+
+    return { messages }
+  })
   harness.on('context', (event) => {
     const notices = request.collaborationMessages?.() ?? []
     if (!notices.length) return undefined
@@ -250,8 +423,20 @@ export async function executeHarnessRun(
       'submit_task_schedule',
       '时间安排草案必须在调查和澄清完成后单独提交。',
     )
-  if (singleToolCallReasons.size > 0 || options.beforeToolCall)
+  if (singleToolCallReasons.size > 0 || options.beforeToolCall || options.goalBudget)
     harness.on('tool_call', async (event) => {
+      const latestBudget = options.goalBudget?.budgetChange?.(request.threadID)
+      if (
+        latestBudget &&
+        (latestBudget.goalId !== providerBudget?.goalId ||
+          latestBudget.budgetRevision !== providerBudget?.budgetRevision)
+      )
+        return {
+          block: true,
+          reason:
+            '预算已变更。请先读取下一请求中的新预算通知，检查是否已交付并调整剩余计划及子任务，再执行工具。',
+        }
+      if (wrapupStatus) return { block: true, reason: '目标预算收尾仅允许文本，工具已关闭。' }
       const singleCallReason = singleToolCallReasons.get(event.toolName)
       if (singleCallReason && event.messageToolCallCount > 1) {
         return { block: true, reason: singleCallReason }
@@ -348,6 +533,12 @@ export async function executeHarnessRun(
       )
     }
     if (message.stopReason === 'error') {
+      if (
+        message.errorMessage?.includes('目标预算受限') ||
+        message.errorMessage?.includes('GOAL_BUDGET_LIMITED')
+      ) {
+        throw new GoalBudgetLimitError('目标预算受限', deniedGoal)
+      }
       const budget = harness.getContextBudget()
       if (budget && budget.usedTokens >= budget.triggerTokens) {
         throw new AgentError(
@@ -375,12 +566,43 @@ export async function executeHarnessRun(
       message.content.some((part) => part.type === 'toolCall' && part.id === delivery!.toolCallID)
         ? delivery
         : undefined
+    if (
+      !delivered &&
+      request.profile &&
+      request.profile !== 'main' &&
+      message.content.some(
+        (part) => part.type === 'text' && part.text.includes('已达到目标 Token 预算限制'),
+      )
+    ) {
+      return {
+        status: 'completed',
+        output: output || '已达到目标 Token 预算限制，子任务已安全结束当前回合。',
+        result: {
+          outcome: 'partial',
+          summary:
+            '已达到目标 Token 预算限制，子任务已安全结束当前回合。已完成进展已汇总，待预算恢复后可继续推进。',
+          findings: [],
+          changedFiles: [],
+          validation: [],
+          risks: ['目标 Token 预算不足，子任务提前收尾'],
+          references: [],
+        },
+      }
+    }
     return {
       status: 'completed',
       output: delivered ? formatStructuredResult(delivered.result) : output,
       ...(delivered ? { result: delivered.result } : {}),
     }
+  } catch (error) {
+    if (error instanceof GoalBudgetLimitError) throw error
+    if (error instanceof AgentHarnessError && error.code === 'goal_budget') {
+      throw new GoalBudgetLimitError('目标预算受限', deniedGoal)
+    }
+    throw error
   } finally {
+    if (wrapupStatus && !request.signal.aborted)
+      await options.goalBudget?.finishWrapup?.(request.threadID, wrapupStatus)
     request.signal.removeEventListener('abort', onAbort)
   }
 }

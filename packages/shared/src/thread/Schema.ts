@@ -1,6 +1,7 @@
 import { Model } from '@pidex/model-schema'
 import { Schema } from 'effect'
 import { ThreadExecutionEnvironmentSchema } from './Execution'
+import { ThreadGoalSchema } from './Goal'
 import { PermissionConfigSchema } from './Permission'
 import { TaskModeSchema, ThreadSettingsSchema } from './Settings'
 
@@ -171,6 +172,7 @@ export const ThreadListItemSchema = Schema.Struct({
   archivedAt: Schema.NullOr(Schema.Number),
   unreadAt: Schema.optional(Schema.NullOr(Schema.Number)),
   pendingPlanApproval: Schema.optional(Schema.Boolean),
+  goal: Schema.optional(Schema.NullOr(ThreadGoalSchema)),
   settings: ThreadSettingsSchema,
   createdAt: Schema.Number,
   updatedAt: Schema.Number,
