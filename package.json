@@ -19,7 +19,7 @@
     "dev": "bun run scripts/Dev.ts",
     "dev:agent": "bun run scripts/DevAgent.ts",
     "dev:desktop": "bun run scripts/DevDesktop.ts",
-    "test:unit": "bun test --max-concurrency 1",
+    "test:unit": "bun test --parallel=8 --max-concurrency=1 --timeout=30000",
     "check:quality": "bun run version:check && bun run typecheck && bun run format:check && bun run lint && bun run --cwd packages/material-icon-theme sync:check && bun run desktop:css:check",
     "check:release": "bun run check:quality && bun run test:unit && bun run security:audit && bun run --cwd apps/desktop/renderer test:a11y && bun run package:win",
     "security:audit": "bun scripts/security/SecurityAudit.ts",
