@@ -114,23 +114,24 @@ describe('release workflows', () => {
     expect(parity).not.toContain('name: beta-release')
   })
 
-  test('source-release creates v* releases before manual Windows uploads', () => {
+  test('source-release builds and publishes the Windows x64 installer', () => {
     const sourceRelease = job(packageWorkflow, 'source-release')
     expect(sourceRelease).toContain(
       "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')",
     )
-    expect(sourceRelease).toContain('runs-on: ubuntu-latest')
+    expect(sourceRelease).toContain('runs-on: windows-latest')
     expect(sourceRelease).toContain('Verify tag target belongs to main')
     expect(sourceRelease).toContain('bun run version:check -- --tag')
+    expect(sourceRelease).toContain('bun run package:win')
+    expect(sourceRelease).toContain('smoke-installed-win-x64.ps1')
     expect(sourceRelease).toContain('scripts/WriteReleaseNotes.ts')
+    expect(sourceRelease).toContain('SHA256SUMS.txt')
     expect(sourceRelease).toContain('gh release create')
+    expect(sourceRelease).toContain('Pidex-Desktop-*-x64.exe')
     expect(sourceRelease).toContain('--verify-tag')
     expect(sourceRelease).toContain('--prerelease')
     expect(sourceRelease).not.toContain('asset_count')
     expect(sourceRelease).not.toContain('self-hosted')
-    expect(sourceRelease).not.toContain('package:win')
-    expect(sourceRelease).not.toContain('PIDEX_REQUIRE_SIGNING')
-    expect(sourceRelease).not.toContain('Pidex-Desktop-*-x64.exe')
     expect(sourceRelease).not.toContain('upload-artifact')
     expect(sourceRelease).not.toContain('attest-')
   })
@@ -145,7 +146,6 @@ describe('release workflows', () => {
       'verify-release-pr-policy',
       'beta-preflight.allowed_signers',
       'release-pr-policy',
-      'SHA256SUMS.txt',
       'spdx.json',
       'blockmap',
       'beta.yml',
