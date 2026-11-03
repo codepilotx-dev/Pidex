@@ -28,13 +28,27 @@ export const SHARED_SLASH_COMMANDS = {
 } as const satisfies Record<SharedSlashCommandId, SharedSlashCommandDefinition>
 
 export function parsePlanTaskFromInput(input: string): string | null {
-  return /^\/plan\s+([\s\S]*\S)\s*$/iu.exec(input)?.[1] ?? null
+  return parseCommandTask(input, 'plan')
 }
 
 export function parseGrillTaskFromInput(input: string): string | null {
-  return /^\/grill\s+([\s\S]*\S)\s*$/iu.exec(input)?.[1] ?? null
+  return parseCommandTask(input, 'grill')
 }
 
 export function parseGoalTaskFromInput(input: string): string | null {
-  return /^\/goal\s+([\s\S]*\S)\s*$/iu.exec(input)?.[1] ?? null
+  return parseCommandTask(input, 'goal')
+}
+
+/**
+ * 提取 `/name <task>` 的任务正文并去掉首尾空白。
+ *
+ * 不用 `^\/name\s+([\s\S]*\S)\s*$/`：该写法在大量空白输入上有二次回溯。
+ * 这里按前缀匹配后直接用 trim，行为等价且为线性时间。
+ */
+function parseCommandTask(input: string, command: string): string | null {
+  const prefix = `/${command}`
+  if (!input.slice(0, prefix.length).toLowerCase().startsWith(prefix)) return null
+  const rest = input.slice(prefix.length)
+  if (!/^\s/.test(rest)) return null
+  return rest.trim() || null
 }

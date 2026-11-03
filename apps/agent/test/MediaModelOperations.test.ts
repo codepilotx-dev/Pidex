@@ -49,7 +49,7 @@ test('嵌入与重排走独立端点，向量按输入索引恢复并校验响�
   const fetcher = (async (url: string | URL | Request, init?: RequestInit) => {
     const body = JSON.parse(String(init?.body))
     expect(init?.redirect).toBe('error')
-    if (String(url).startsWith('https://vectors.example')) {
+    if (new URL(String(url)).hostname === 'vectors.example') {
       expect(body.input).toEqual(['first', 'second'])
       return Response.json({
         data: [

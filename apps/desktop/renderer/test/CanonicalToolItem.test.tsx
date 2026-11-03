@@ -1019,7 +1019,7 @@ describe('canonical tool item display', () => {
       </TooltipProvider>,
     )
 
-    expect(collapsed.replace(/<[^>]*>/g, '')).toContain('已在 1 秒内运行 bun test')
+    expect(textContentOf(collapsed)).toContain('已在 1 秒内运行 bun test')
     expect(collapsed).toContain('class="cpx-agent-activity__duration">1 秒</span>')
     expect(collapsed).not.toContain('title="已在 1 秒内运行 bun test"')
     expect(collapsed).not.toContain('aria-label="执行内容"')
@@ -1030,7 +1030,7 @@ describe('canonical tool item display', () => {
     expect(collapsed).not.toContain('canonical-command-shell')
     expect(collapsed).toContain('lucide-chevron-right')
     expect(collapsed).not.toContain('lucide-chevron-down')
-    expect(expanded.replace(/<[^>]*>/g, '')).toContain('已在 1 秒内运行 bun test')
+    expect(textContentOf(expanded)).toContain('已在 1 秒内运行 bun test')
     expect(expanded).not.toContain('title="已在 1 秒内运行 bun test"')
     expect(expanded).toContain('aria-label="执行内容"')
     expect(expanded).not.toContain('transition-[grid-template-rows]')
@@ -1710,3 +1710,8 @@ describe('canonical tool item display', () => {
     expect(markup).not.toContain('bun test 4')
   })
 })
+
+/** 从渲染出的 HTML 里取纯文本，用于断言可见文案；这不是清洗器。 */
+function textContentOf(html: string): string {
+  return html.replace(/<[^>]*>/g, '')
+}
