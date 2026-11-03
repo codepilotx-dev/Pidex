@@ -9,6 +9,7 @@ import {
 } from '@earendil-works/pi-ai'
 import { AgentError } from '../src/Domain'
 import { AgentRuntimeService } from '../src/orchestration/AgentRuntimeService'
+import { AgentHarness } from '../src/orchestration/harness/AgentHarness'
 import { executeHarnessRun } from '../src/orchestration/pi/ExecuteHarnessRun'
 import { frozenDeferredEnvelope } from '../src/tool/ToolExecutor'
 
@@ -145,6 +146,7 @@ async function createRuntime(input: {
     compacted,
     failures,
     session,
+    models,
   }
 }
 
@@ -212,6 +214,44 @@ describe('Harness runtime provider errors', () => {
 })
 
 describe('Harness runtime context compaction', () => {
+  test.each([false, true])(
+    '冷启动压缩不恢复历史工具，普通聊天仍校验工具（动态提示词：%s）',
+    async (dynamic) => {
+      let requests = 0
+      const setup = await createRuntime({
+        history: 'x'.repeat(100_000),
+        responses: [
+          () => {
+            requests += 1
+            return fauxAssistantMessage('压缩后的任务摘要')
+          },
+        ],
+      })
+      await setup.session.appendActiveToolsChange(['Read', 'PowerShell'])
+      const harness = new AgentHarness({
+        session: setup.session,
+        models: setup.models,
+        model: setup.request.model,
+        tools: [],
+        systemPrompt: dynamic
+          ? ({ activeTools }) => {
+              expect(activeTools).toEqual([])
+              return 'frozen prompt'
+            }
+          : 'frozen prompt',
+      })
+      await expect(harness.prompt('continue')).rejects.toMatchObject({ code: 'invalid_argument' })
+      await expect(harness.compact()).resolves.toMatchObject({ summary: '压缩后的任务摘要' })
+      expect(requests).toBe(1)
+      expect(
+        (await setup.session.getEntries()).filter((entry) => entry.type === 'active_tools_change'),
+      ).toMatchObject([{ activeToolNames: ['Read', 'PowerShell'] }])
+      expect(
+        (await setup.session.getBranch()).filter((entry) => entry.type === 'compaction'),
+      ).toHaveLength(1)
+    },
+  )
+
   test('idle manual compaction reads the latest 1K budget after a completed 20K turn', async () => {
     let requests = 0
     const setup = await createRuntime({

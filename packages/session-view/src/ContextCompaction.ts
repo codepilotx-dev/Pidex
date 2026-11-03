@@ -42,6 +42,15 @@ export function contextCompactionOperationItem(
   const id = `activity:context-compression-operation:${operation.operationId}`
   const active = operation.status === 'queued' || operation.status === 'running'
   const completed = operation.status === 'completed'
+  const title = {
+    queued: '等待压缩上下文',
+    running: '正在压缩上下文',
+    completed: operation.trigger === 'manual' ? '上下文已压缩' : '上下文已自动压缩',
+    skipped: '无需压缩上下文',
+    failed: operation.reason === 'budget-exceeded' ? '压缩失败：上下文预算不足' : '压缩失败',
+    cancelled: '压缩已取消',
+    interrupted: operation.reason === 'restart' ? '压缩因重启中断' : '压缩已中断',
+  }[operation.status]
   return {
     ...result,
     id,
@@ -50,14 +59,12 @@ export function contextCompactionOperationItem(
     agentId: anchor.agentId,
     type: 'activity',
     activity: 'context-compression',
-    title: active
-      ? '正在压缩上下文'
-      : completed
-        ? operation.trigger === 'manual'
-          ? '上下文已压缩'
-          : '上下文已自动压缩'
-        : '压缩已中断',
-    status: active ? 'running' : completed ? 'completed' : 'interrupted',
+    title,
+    status: active
+      ? 'running'
+      : completed || operation.status === 'skipped'
+        ? 'completed'
+        : 'interrupted',
     compaction: {
       source: operation.trigger,
       startedAt: operation.createdAt,

@@ -2120,4 +2120,27 @@ test('手动压缩生命周期在同一个会话节点更新，多次操作保�
     contextTokens: 10000,
     createdAt: 20,
   })
+  state = applyThreadEnvelope(
+    state,
+    durable(17, 'context/compactionUpdated', {
+      operation: { ...operation, operationId: 'manual-three', status: 'running', createdAt: 30 },
+    }),
+  )
+  state = applyThreadEnvelope(
+    state,
+    durable(18, 'context/compactionUpdated', {
+      operation: {
+        ...operation,
+        operationId: 'manual-three',
+        status: 'skipped',
+        reason: 'already-compacted',
+        createdAt: 30,
+      },
+    }),
+  )
+  expect(state.itemsById.size).toBe(3)
+  expect(state.itemsById.get('activity:context-compression-operation:manual-three')).toMatchObject({
+    title: '无需压缩上下文',
+    status: 'completed',
+  })
 })

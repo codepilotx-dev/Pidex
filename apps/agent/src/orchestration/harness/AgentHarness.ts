@@ -448,6 +448,21 @@ export class AgentHarness<
     }
   }
 
+  private async resolveSystemPrompt(
+    activeTools: TTool[],
+    resources = this.getResources(),
+  ): Promise<string> {
+    if (typeof this.systemPrompt === 'string') return this.systemPrompt
+    if (!this.systemPrompt) return 'You are a helpful assistant.'
+    return this.systemPrompt({
+      session: this.session,
+      model: this.model,
+      thinkingLevel: this.thinkingLevel,
+      activeTools,
+      resources,
+    })
+  }
+
   private async createTurnState(): Promise<
     AgentHarnessTurnState<TContext, TSkill, TPromptTemplate, TTool>
   > {
@@ -492,18 +507,7 @@ export class AgentHarness<
       const activeTools = (toolsEnabled ? this.activeToolNames : [])
         .map((name) => this.tools.get(name))
         .filter((tool): tool is TTool => tool !== undefined)
-      let systemPrompt = 'You are a helpful assistant.'
-      if (typeof this.systemPrompt === 'string') {
-        systemPrompt = this.systemPrompt
-      } else if (this.systemPrompt) {
-        systemPrompt = await this.systemPrompt({
-          session: this.session,
-          model: this.model,
-          thinkingLevel: this.thinkingLevel,
-          activeTools,
-          resources,
-        })
-      }
+      const systemPrompt = await this.resolveSystemPrompt(activeTools, resources)
       composition = await buildHarnessTurnComposition({
         model: this.model,
         thinkingLevel: this.thinkingLevel,
@@ -1268,13 +1272,21 @@ export class AgentHarness<
     try {
       await this.flushPendingSessionWrites()
       const model = this.model
-      const turnState = await this.createTurnState()
+      const configuredModel = model as typeof model & { tools?: boolean; modelType?: string }
+      if (configuredModel.modelType && configuredModel.modelType !== 'chat')
+        throw new AgentHarnessError('invalid_argument', '嵌入与重排模型不能用于聊天')
       const original = (await this.session.buildContext()).messages
       const originalLlm = convertToLlm(original)
       const extras = requestContext?.messages.slice(originalLlm.length) ?? []
+      // 压缩只准备上下文与预算，不恢复历史工具；空闲 Harness 没有工具执行目录。
+      const activeTools = (configuredModel.tools === false ? [] : this.activeToolNames)
+        .map((name) => this.tools.get(name))
+        .filter((tool): tool is TTool => tool !== undefined)
       const context: Context = requestContext ?? {
-        systemPrompt: turnState.systemPrompt,
-        tools: turnState.activeTools,
+        systemPrompt:
+          this.currentTurnComposition?.systemPrompt ??
+          (await this.resolveSystemPrompt(activeTools)),
+        tools: activeTools,
         messages: originalLlm,
       }
       const budget = contextBudget(model, this.maxContextTokens)

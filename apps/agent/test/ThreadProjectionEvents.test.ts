@@ -1164,37 +1164,51 @@ test('手动压缩失败按操作恢复为会话节点，不依赖最新状态�
   expect(projection.snapshot(thread.id)?.items).toEqual([...snapshot.items])
 })
 
-test.each([false, true])('压缩发起归属经过真实事件与历史恢复一致（空闲：%s）', async (idle) => {
-  const { db, projection } = await fixture()
-  const thread = db.createThread('压缩归属')
-  const turn = seedTurn(db, thread.id)
-  db.startTurnExecution(turn.turnID, { ...turn.input, id: turn.inputID })
-  if (idle)
-    db.finalizeTurn({
-      threadID: thread.id,
-      turnID: turn.turnID,
-      agentID: turn.agentID,
-      status: 'completed',
+test.each([
+  [false, 'failed', 'budget-exceeded', '压缩失败：上下文预算不足'],
+  [true, 'failed', 'budget-exceeded', '压缩失败：上下文预算不足'],
+  [true, 'failed', 'provider-failed', '压缩失败'],
+  [true, 'cancelled', 'stopped', '压缩已取消'],
+  [true, 'skipped', 'already-compacted', '无需压缩上下文'],
+  [true, 'interrupted', 'restart', '压缩因重启中断'],
+] as const)(
+  '压缩状态经过真实事件与历史恢复一致（空闲：%s，状态：%s）',
+  async (idle, status, reason, title) => {
+    const { db, projection } = await fixture()
+    const thread = db.createThread('压缩归属')
+    const turn = seedTurn(db, thread.id)
+    db.startTurnExecution(turn.turnID, { ...turn.input, id: turn.inputID })
+    if (idle)
+      db.finalizeTurn({
+        threadID: thread.id,
+        turnID: turn.turnID,
+        agentID: turn.agentID,
+        status: 'completed',
+      })
+    const page = new ThreadReadViewRepository(db).history(thread.id, {})
+    const service = new ContextCompactionService(db)
+    const operation = service.request(thread.id, 'manual-anchor')
+    expect(operation.turnId).toBe(idle ? null : turn.turnID)
+    service.finish(thread.id, status, reason)
+    const events = db
+      .eventsAfter(page.streamPosition.sequence)
+      .filter((event) => event.method === 'context/compactionUpdated')
+    const wire = events.map((event) => decodeFromStorage(event, projection, thread.id))
+    expect(wire).toHaveLength(2)
+    expect(wire.at(-1)?.payload).toMatchObject({
+      operation: { turnId: operation.turnId, status },
     })
-  const page = new ThreadReadViewRepository(db).history(thread.id, {})
-  const service = new ContextCompactionService(db)
-  const operation = service.request(thread.id, 'manual-anchor')
-  expect(operation.turnId).toBe(idle ? null : turn.turnID)
-  service.finish(thread.id, 'failed', 'budget-exceeded')
-  const events = db
-    .eventsAfter(page.streamPosition.sequence)
-    .filter((event) => event.method === 'context/compactionUpdated')
-  const wire = events.map((event) => decodeFromStorage(event, projection, thread.id))
-  expect(wire).toHaveLength(2)
-  expect(wire.at(-1)?.payload).toMatchObject({
-    operation: { turnId: operation.turnId, status: 'failed' },
-  })
-  const restored = new ThreadReadViewRepository(db).history(thread.id, {})
-  const items = restored.turns.flatMap((bundle) => bundle.items)
-  expect(items).toHaveLength(1)
-  expect(items[0]).toMatchObject({ title: '压缩已中断', compaction: { standalone: idle } })
-  expect(new ThreadProjection(db).snapshot(thread.id)?.items).toEqual(items)
-})
+    const restored = new ThreadReadViewRepository(db).history(thread.id, {})
+    const items = restored.turns.flatMap((bundle) => bundle.items)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      title,
+      status: status === 'skipped' ? 'completed' : 'interrupted',
+      compaction: { standalone: idle },
+    })
+    expect(new ThreadProjection(db).snapshot(thread.id)?.items).toEqual(items)
+  },
+)
 
 describe('ThreadProjection forkedFrom 字段投影契约', () => {
   test('消息分叉目标会话投影 forkedFrom，包含直接来源与继承末尾 turnId', async () => {

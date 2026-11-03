@@ -1050,7 +1050,7 @@ function projectCompactionOperation(
 ): void {
   const id = `activity:context-compression-operation:${operation.operationId}`
   const previous = state.itemsById.get(id)
-  if (operation.status === 'skipped') {
+  if (operation.status === 'skipped' && operation.trigger !== 'manual') {
     if (previous) {
       state.itemsById.delete(id)
       state.groups.itemsByTurnId.set(

@@ -710,7 +710,7 @@ export class ThreadProjection {
     const turnIDs = turns.map((turn) => turn.id)
     const operations = this.db.repositories.context
       .compactionOperationsForTurns(threadId, turnIDs)
-      .filter((record) => record.operation.status !== 'skipped')
+      .filter((record) => record.operation.status !== 'skipped' || record.operation.trigger === 'manual')
     const records = this.db.repositories.context.compactionsForTurns(threadId, turnIDs)
     const projected: Item[] = []
     for (const record of records) {
