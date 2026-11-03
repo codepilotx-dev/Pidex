@@ -1,4 +1,8 @@
-import { isReadOnlyTaskMode, type ContextCompactionOperation } from '@pidex/shared/thread'
+import {
+  isReadOnlyTaskMode,
+  type ContextCompactionOperation,
+  type SubagentRole,
+} from '@pidex/shared/thread'
 import type {
   ModelRef,
   PermissionConfig,
@@ -64,6 +68,7 @@ export interface DelegationController {
         name?: string
         profile: 'default' | 'explorer' | 'worker'
         task: string
+        role?: SubagentRole
         workspaceMode?: 'shared' | 'worktree'
         model?: ModelRef
       }>

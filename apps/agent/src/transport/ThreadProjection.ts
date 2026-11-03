@@ -6,6 +6,7 @@ import {
 } from '@pidex/session-view/context-compaction'
 import { activeTurnSql, hasThreadEditStorage, ThreadEditRepository } from '../storage/repositories/ThreadEditRepository'
 import { safeTurnError } from '@pidex/shared/errors'
+import { SubagentRoleSchema } from '@pidex/shared/thread'
 import { AgentError, decodeStoredTaskMode } from '../Domain'
 import type {
   ApprovalRequest,
@@ -49,6 +50,7 @@ import { classifyToolActivity, storedToolActivity } from '../tool/ToolActivityCl
 
 const parse = <T>(value: string): T => JSON.parse(value) as T
 const isQuestionGroup = Schema.is(Schema.Array(InteractionQuestionSchema))
+const isSubagentRoleValue = Schema.is(SubagentRoleSchema)
 const isQuestionAnswers = Schema.is(Schema.Array(InteractionQuestionAnswerSchema))
 const localContextStatus = (path: string): LocalContextReference['status'] => {
   try {
@@ -1669,6 +1671,7 @@ export class ThreadProjection {
         childThreadId: String(item.data.childThreadId),
         displayName: String(item.data.displayName),
         profile: String(item.data.profile) as Extract<Item, { type: 'subagent' }>['profile'],
+        ...(isSubagentRoleValue(item.data.role) ? { role: item.data.role } : {}),
         task: String(item.data.task),
         status: subagentStatus,
         queueReason,

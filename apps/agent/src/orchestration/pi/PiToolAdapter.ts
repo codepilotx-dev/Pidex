@@ -455,6 +455,7 @@ export function createLifecycleTools(
           '委派前先判断：小型、强耦合或能直接用工具并发完成的工作应由你自己完成。尊重用户和适用仓库规则对并行或委派的明确要求；数量上限由宿主按队列执行，模型不需要自行预设默认数量。',
           'agents 中每个 task 都必须是自包含的任务描述：包含目标、范围、关键背景、约束与预期证据，且不得假设子代理能看到本会话未显式提供的上下文。不要为了获得一段总结而创建子代理。',
           'Plan 与 Grill 模式只能创建 explorer 子代理。共享工作区中的写任务必须明确文件范围，避免同时修改同一文件。递归深度上限由宿主限制。',
+          'role 只用于视觉职能标识（头像），不授予权限，也不改变 profile、模型、工具或工作区策略；不确定时省略。',
         ].join('\n'),
         Type.Unsafe(
           subagentToolDefinitions.find((definition) => definition.sdkName === 'spawn_agents')!

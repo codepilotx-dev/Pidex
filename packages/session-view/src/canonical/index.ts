@@ -1403,6 +1403,7 @@ function reconcileSubagentItems(state: CanonicalThreadState): void {
       childThreadId: projection.task.childThreadId,
       displayName: projection.task.displayName,
       profile: projection.task.profile,
+      ...(projection.task.role ? { role: projection.task.role } : {}),
       task: projection.task.task,
       status: run?.status ?? item.status,
       queueReason: run?.queueReason ?? item.queueReason,

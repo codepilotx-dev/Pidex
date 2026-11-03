@@ -7,6 +7,23 @@ export const MAX_SUBAGENT_DEPTH = 3
 export const SubagentProfileSchema = Schema.Literals(['main', 'default', 'explorer', 'worker'])
 export type SubagentProfile = typeof SubagentProfileSchema.Type
 
+/**
+ * 子智能体的展示职能，仅决定头像；不授予权限，也不改变 profile、模型、
+ * 工具或工作区策略。显式指定优先，缺失时由 Renderer 按名称/任务推断。
+ */
+export const SubagentRoleSchema = Schema.Literals([
+  'frontend',
+  'backend',
+  'devops',
+  'qa',
+  'designer',
+  'data',
+  'docs',
+  'product',
+  'general',
+])
+export type SubagentRole = typeof SubagentRoleSchema.Type
+
 export const SubagentWorkspaceSchema = Schema.Struct({
   mode: Schema.Literals(['shared', 'worktree']),
   state: Schema.Literals(['ready', 'preparing', 'conflict', 'applied', 'discarded']),
@@ -112,6 +129,8 @@ export const SubagentTaskSchema = Schema.Struct({
   queuedFollowups: Schema.optional(Schema.Number),
   displayName: Schema.String,
   profile: Schema.Literals(['default', 'explorer', 'worker']),
+  /** 显式指派的展示职能；缺失表示没有显式角色。 */
+  role: Schema.optional(SubagentRoleSchema),
   task: Schema.String,
   permissionCeiling: PermissionConfigSchema,
   workspace: SubagentWorkspaceSchema,

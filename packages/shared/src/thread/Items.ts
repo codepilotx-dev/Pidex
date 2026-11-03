@@ -24,6 +24,7 @@ import {
   SubagentProfileSchema,
   SubagentQueueReasonSchema,
   SubagentResultSchema,
+  SubagentRoleSchema,
   SubagentStatusSchema,
 } from './Subagent'
 import { TurnSchema } from './Schema'
@@ -575,6 +576,8 @@ export const SubagentItemSchema = Schema.Struct({
   childThreadId: Schema.String,
   displayName: Schema.String,
   profile: SubagentProfileSchema,
+  /** 派生自 task.role，仅供时间线独立渲染；不单独持久化。 */
+  role: Schema.optional(SubagentRoleSchema),
   task: Schema.String,
   status: SubagentStatusSchema,
   queueReason: SubagentQueueReasonSchema,

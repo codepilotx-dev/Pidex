@@ -76,6 +76,76 @@ describe('子 Agent 持久化与调度', () => {
     db.close()
   })
 
+  test('显式 role 持久化到任务与时间线 Item，重开数据库后保持不变', () => {
+    const path = join(tmpdir(), `pidex-subagent-role-${crypto.randomUUID()}.sqlite`)
+    paths.push(path)
+    const db = new AgentDatabase(path)
+    const thread = db.createThread()
+    const root = db.createTurn(thread.id, {
+      content: 'root',
+      model,
+      permissionConfig: permission,
+      strategy: 'queue',
+      taskMode: 'chat',
+    })
+    const created = new SubagentRepository(db).create({
+      parentThreadID: thread.id,
+      parentTurnID: root.turnID,
+      parentAgentID: root.agentID,
+      displayName: 'Agent 1',
+      profile: 'worker',
+      role: 'backend',
+      task: '实现接口',
+      model,
+      permissionCeiling: permission,
+      workspaceMode: 'shared',
+      workspaceRoot: 'C:\workspace',
+    })
+
+    expect(created.task.role).toBe('backend')
+    expect(new ThreadProjection(db).snapshot(thread.id)?.items.find((item) => item.type === 'subagent')).toMatchObject({
+      role: 'backend',
+    })
+    db.close()
+
+    // 关闭重开：role 从列中读回，item 也从同一真源派生。
+    const reopened = new AgentDatabase(path)
+    expect(new SubagentRepository(reopened).task(created.task.id)?.role).toBe('backend')
+    reopened.close()
+  })
+
+  test('缺省 role 的任务不带角色字段，旧任务保持可读', () => {
+    const path = join(tmpdir(), `pidex-subagent-no-role-${crypto.randomUUID()}.sqlite`)
+    paths.push(path)
+    const db = new AgentDatabase(path)
+    const thread = db.createThread()
+    const root = db.createTurn(thread.id, {
+      content: 'root',
+      model,
+      permissionConfig: permission,
+      strategy: 'queue',
+      taskMode: 'chat',
+    })
+    const created = new SubagentRepository(db).create({
+      parentThreadID: thread.id,
+      parentTurnID: root.turnID,
+      parentAgentID: root.agentID,
+      displayName: 'Explorer 1',
+      profile: 'explorer',
+      task: '审计实现',
+      model,
+      permissionCeiling: permission,
+      workspaceMode: 'shared',
+      workspaceRoot: 'C:\workspace',
+    })
+
+    expect(created.task.role).toBeUndefined()
+    expect(
+      new ThreadProjection(db).snapshot(thread.id)?.items.find((item) => item.type === 'subagent'),
+    ).not.toHaveProperty('role')
+    db.close()
+  })
+
   test('项目会话中的子 Agent 不持有工作区描述符，按父线程解析工作区', () => {
     const path = join(tmpdir(), `pidex-subagent-workspace-${crypto.randomUUID()}.sqlite`)
     paths.push(path)

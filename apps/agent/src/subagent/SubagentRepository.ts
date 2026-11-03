@@ -3,6 +3,7 @@ import type { Model } from '@pidex/model-schema'
 import type {
   PermissionConfig,
   SubagentProfile,
+  SubagentRole,
   SubagentProjection,
   SubagentResult,
   SubagentRun,
@@ -15,6 +16,22 @@ import { subagentCollaborationAvailable } from './SubagentCollaborationRepositor
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 
 const parse = <T>(value: string): T => JSON.parse(value) as T
+
+const SUBAGENT_ROLES: ReadonlySet<string> = new Set([
+  'frontend',
+  'backend',
+  'devops',
+  'qa',
+  'designer',
+  'data',
+  'docs',
+  'product',
+  'general',
+])
+
+/** 只识别已知角色；未知值原样留在库中，展示时按缺失回退。 */
+const isSubagentRole = (value: unknown): value is SubagentRole =>
+  typeof value === 'string' && SUBAGENT_ROLES.has(value)
 const stringify = (value: unknown) => JSON.stringify(value ?? null)
 const now = () => Date.now()
 const terminalStatuses = new Set<SubagentStatus>(['completed', 'failed', 'stopped', 'interrupted'])
@@ -32,6 +49,7 @@ export type SpawnSubagentInput = {
   parentAgentID: string
   displayName: string
   profile: Exclude<SubagentProfile, 'main'>
+  role?: SubagentRole
   task: string
   model: Model.Ref
   permissionCeiling: PermissionConfig
@@ -91,7 +109,7 @@ export class SubagentRepository {
         )
       this.db.sqlite
         .query(
-          `INSERT INTO subagent_tasks (id, parent_thread_id, parent_turn_id, parent_agent_id, child_thread_id, display_name, profile, task, permission_ceiling, workspace_mode, workspace_state, current_run_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
+          `INSERT INTO subagent_tasks (id, parent_thread_id, parent_turn_id, parent_agent_id, child_thread_id, display_name, profile, role, task, permission_ceiling, workspace_mode, workspace_state, current_run_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
         )
         .run(
           taskID,
@@ -101,6 +119,7 @@ export class SubagentRepository {
           childThreadID,
           input.displayName,
           input.profile,
+          input.role ?? null,
           input.task,
           stringify(input.permissionCeiling),
           input.workspaceMode,
@@ -167,6 +186,7 @@ export class SubagentRepository {
             childThreadId: childThreadID,
             displayName: input.displayName,
             profile: input.profile,
+            ...(input.role ? { role: input.role } : {}),
             task: input.task,
             status: 'queued',
             queueReason: null,
@@ -301,7 +321,7 @@ export class SubagentRepository {
   task(taskID: string): SubagentTask | null {
     const row = this.db.sqlite
       .query(
-        'SELECT id, parent_thread_id, parent_turn_id, parent_agent_id, child_thread_id, display_name, profile, task, permission_ceiling, workspace_mode, workspace_state, current_run_id, created_at, updated_at FROM subagent_tasks WHERE id = ?',
+        'SELECT id, parent_thread_id, parent_turn_id, parent_agent_id, child_thread_id, display_name, profile, role, task, permission_ceiling, workspace_mode, workspace_state, current_run_id, created_at, updated_at FROM subagent_tasks WHERE id = ?',
       )
       .get(taskID) as Record<string, string | number | null> | null
     if (!row) return null
@@ -349,6 +369,7 @@ export class SubagentRepository {
       ).count,
       displayName: String(row.display_name),
       profile: String(row.profile) as SubagentTask['profile'],
+      ...(isSubagentRole(row.role) ? { role: row.role } : {}),
       task: String(row.task),
       permissionCeiling: parse(String(row.permission_ceiling)),
       workspace,

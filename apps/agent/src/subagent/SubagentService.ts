@@ -5,6 +5,7 @@ import {
   isReadOnlyTaskMode,
   type PermissionConfig,
   type SubagentProfile,
+  type SubagentRole,
 } from '@pidex/shared/thread'
 import { Effect } from 'effect'
 import type { AgentModelCatalog } from '../provider/AgentModelCatalog'
@@ -382,6 +383,7 @@ export class SubagentService {
       name?: string
       profile: 'default' | 'explorer' | 'worker'
       task: string
+      role?: SubagentRole
       workspaceMode?: 'shared' | 'worktree'
       model?: Model.Ref
     }>,
@@ -441,6 +443,7 @@ export class SubagentService {
         parentAgentID: root.agentID,
         displayName,
         profile,
+        ...(requested.role ? { role: requested.role } : {}),
         task: requested.task.trim(),
         model,
         ...(allowedTools ? { allowedTools } : {}),
