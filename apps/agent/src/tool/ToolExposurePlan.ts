@@ -71,8 +71,10 @@ export function createToolExposurePlan(
   input: ToolExposureInput,
 ): ToolExposurePlan {
   const profile = input.profile ?? 'main'
-  const sandboxMode = isReadOnlyTaskMode(input.taskMode) ? 'read-only' : input.sandboxMode
-  const definitions = catalog.list(input.taskMode, sandboxMode, profile)
+  // Collaboration modes gate tools, not the user's file-access scope. Passing
+  // the stored sandbox mode through keeps exposure, preview and execution on
+  // the same policy; mutating tools are filtered by the mode rule instead.
+  const definitions = catalog.list(input.taskMode, input.sandboxMode, profile)
   const eager = definitions
     .filter((tool) => tool.visibility === 'eager')
     .map((tool) => tool.sdkName)

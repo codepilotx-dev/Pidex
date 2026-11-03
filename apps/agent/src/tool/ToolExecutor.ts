@@ -12,6 +12,7 @@ import {
 import type { WorkspaceService } from '../workspace/WorkspaceService'
 import { buildFileDiff } from '../patch/TurnPatchService'
 import {
+  toolAllowedInTaskMode,
   toolNameMatches,
   type ToolCatalog,
   type ToolFileSnapshots,
@@ -437,7 +438,7 @@ export class ToolExecutor {
     let workspace = context.workspace.withFileAccess(
       executionPolicyFromV4(permissionConfig).fileAccess,
     )
-    const skipProjectHooks = context.skipHooks || isReadOnlyTaskMode(context.taskMode)
+    const skipProjectHooks = context.skipHooks
     if (this.options?.userConfigPath) {
       workspace.grantEditorAlias('@pidex/config.json', this.options.userConfigPath)
     }
@@ -619,20 +620,6 @@ export class ToolExecutor {
         '工具输入或受影响文件范围已变化，需要重新审批',
         409,
       )
-    }
-    if (isReadOnlyTaskMode(context.taskMode) && this.options?.hooks) {
-      this.options.logger?.info('hook.skipped', {
-        context: {
-          threadId: context.threadID,
-          turnId: context.turnID,
-          ...(context.agentID ? { agentId: context.agentID } : {}),
-          toolCallId: invocation.id,
-        },
-        details: {
-          tool: name,
-          reason: 'plan_mode_host_process_disabled',
-        },
-      })
     }
     const hookResults =
       skipProjectHooks || resumedApproval
@@ -1054,19 +1041,14 @@ export class ToolExecutor {
       ...(context.agentID ? { agentId: context.agentID } : {}),
       ...(context.toolCallID ? { toolCallId: context.toolCallID } : {}),
     }
-    if (isReadOnlyTaskMode(context.taskMode)) {
-      options.logger?.warn('shell.execution.failed', {
-        context: logContext,
-        details: {
-          shellTool,
-          backend: 'host-hook',
-          phase: 'task-mode',
-          code: 'PLAN_SHELL_DISABLED',
-          durationMs: 0,
-        },
-      })
-      throw new AgentError('PLAN_SHELL_DISABLED', 'Plan 与 Grill 模式禁止执行 Bash 或 PowerShell', 403)
-    }
+    // The mode surface and the final execution gate share one rule: Plan and
+    // Grill may run Shell investigation commands through the normal host chain.
+    if (!toolAllowedInTaskMode(catalog.get(shellTool), context.taskMode))
+      throw new AgentError(
+        'TOOL_NOT_ALLOWED_IN_MODE',
+        `工具 ${shellTool} 不允许在 ${context.taskMode} 模式执行`,
+        403,
+      )
     const permissionConfig = context.permissionConfig ?? DEFAULT_PERMISSION_CONFIG
     const executionPolicy = executionPolicyFromV4(permissionConfig)
     const model =
@@ -1254,7 +1236,13 @@ export class ToolExecutor {
           : hookResults.length > 0
             ? 'continue'
             : 'skipped'
-      if (denied && !isFullAccessPermissionConfig(permissionConfig))
+      if (
+        denied &&
+        !(
+          isFullAccessPermissionConfig(permissionConfig) &&
+          !isReadOnlyTaskMode(context.taskMode)
+        )
+      )
         throw new AgentError('HOOK_DENIED', denied.result.reason ?? 'PreToolUse Hook 拒绝执行', 403)
       const narrowed = hookResults
         .map(({ result }) => result.narrowedInput)

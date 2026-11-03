@@ -36,7 +36,7 @@ export function taskScheduleDefinitions(service: TaskScheduleService): ToolDefin
         '读取任务、会话关联、每次执行与验收状态、待处理提醒及排程草案；安排时间前读取现有任务与日历。',
       schema: z.object({}).strict(),
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
-      capabilities: { ...capabilities, externalState: false },
+      capabilities: { ...capabilities, externalState: false, readOnly: true },
       allowedModes: ['chat', 'plan'],
       execute: async () => service.list(),
       formatResult: (value) => ({ content: JSON.stringify(value), details: value }),

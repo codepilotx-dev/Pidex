@@ -4,7 +4,10 @@ import { PermissionConfigSchema } from './Permission'
 export const TaskModeSchema = Schema.Literals(['chat', 'plan', 'grill'])
 export type TaskMode = typeof TaskModeSchema.Type
 
-/** Plan and Grill investigate read-only until the user confirms the requirements. */
+/**
+ * Plan and Grill investigate before the user confirms requirements: they may
+ * read, search and run investigation commands, but never implement.
+ */
 export const isReadOnlyTaskMode = (mode: TaskMode): boolean => mode === 'plan' || mode === 'grill'
 
 export const MaxContextTokensSchema = Schema.Int.check(

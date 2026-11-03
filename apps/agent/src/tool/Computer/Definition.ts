@@ -89,7 +89,7 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
     {
       ...base,
       sdkName: 'ComputerApps',
-      capabilities: observational,
+      capabilities: { ...observational, readOnly: true },
       schema: z.object({}).strict(),
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       allowedModes: ['chat', 'plan'],
@@ -101,7 +101,7 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
     {
       ...base,
       sdkName: 'ComputerRead',
-      capabilities: observational,
+      capabilities: { ...observational, readOnly: true },
       schema: read,
       inputSchema: z.toJSONSchema(read),
       allowedModes: ['chat', 'plan'],

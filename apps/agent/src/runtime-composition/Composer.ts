@@ -2,7 +2,6 @@ import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import type { Model } from '@earendil-works/pi-ai'
 import { Model as ModelSchema } from '@pidex/model-schema'
-import { isReadOnlyTaskMode } from '@pidex/shared/thread'
 import { AgentError, type PermissionConfig, type TaskMode } from '../Domain'
 import { resolveEffectivePermissionConfig } from '../permission/EffectivePermissionConfig'
 import {
@@ -288,15 +287,14 @@ export function composeRuntimeComposition(
   )
   const exposureInput: ToolExposureInput = {
     taskMode: input.taskMode,
-    sandboxMode: isReadOnlyTaskMode(input.taskMode)
-      ? 'read-only'
-      : effectivePermissionConfig.sandboxMode,
+    sandboxMode: effectivePermissionConfig.sandboxMode,
     approvalPolicy: effectivePermissionConfig.approvalPolicy,
     profile: input.profile,
     hasSkillService: true,
     hasProjectSources: false,
     defaultModeRequestUserInput: false,
-    // Grill keeps read-only explorer delegation; Plan disables delegation entirely.
+    // Grill keeps read-only explorer delegation; Plan keeps its existing
+    // delegation rule and only constrains implementation, not investigation.
     delegationEnabled: input.profile === 'main' && input.taskMode !== 'plan',
     ...(input.allowedTools ? { allowedTools: input.allowedTools } : {}),
   }

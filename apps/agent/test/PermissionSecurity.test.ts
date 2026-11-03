@@ -408,35 +408,83 @@ describe('统一权限真值', () => {
     ).toMatchObject({ action: 'allow', risk: 'low' })
   })
 
-  test.each(['plan', 'grill'] as const)('%s 强制只读并禁止 Shell、权限提升和外部副作用', (taskMode) => {
+  test.each(['plan', 'grill'] as const)('%s 使用统一调查判权并保留写入与提权限制', (taskMode) => {
     const catalog = new ToolRegistry()
     const engine = new PermissionDecisionEngine()
+    const fullAccessNever = {
+      sandboxMode: 'danger-full-access' as const,
+      approvalPolicy: 'never' as const,
+      approvalsReviewer: 'user' as const,
+    }
+    for (const [name, input] of [
+      ['Read', { file_path: 'x' }],
+      ['Glob', { pattern: '*' }],
+      ['Grep', { pattern: 'x' }],
+    ] as const) {
+      expect(
+        engine.evaluate(
+          invocation({ name, input, taskMode, permissionConfig: fullAccessNever }),
+          catalog.get(name),
+        ),
+      ).toMatchObject({ action: 'allow' })
+    }
+    // 安全调查命令按实际风险进入统一判权链，不因进程能力额外要求审批
     expect(
       engine.evaluate(
         invocation({
           taskMode,
-          permissionConfig: {
-            sandboxMode: 'danger-full-access',
-            approvalPolicy: 'on-failure',
-            approvalsReviewer: 'user',
-          },
+          input: { command: 'Get-ChildItem' },
+          permissionFacts: { risk: 'low' },
+          permissionConfig: fullAccessNever,
         }),
         catalog.get('PowerShell'),
       ),
-    ).toMatchObject({
-      action: 'deny',
-      reason: expect.stringContaining('不允许'),
-    })
+    ).toMatchObject({ action: 'allow' })
+    // 风险、显式拒绝和 Hook 要求仍不能借完全访问通过
     expect(
       engine.evaluate(
         invocation({
-          name: 'Write',
           taskMode,
-          input: { file_path: 'x', content: 'x' },
+          input: { command: 'winget uninstall fixture' },
+          permissionFacts: { risk: 'high', ruleRequiresApproval: true },
+          permissionConfig: fullAccessNever,
         }),
-        catalog.get('Write'),
+        catalog.get('PowerShell'),
       ),
     ).toMatchObject({ action: 'deny' })
+    expect(
+      engine.evaluate(
+        invocation({
+          taskMode,
+          permissionFacts: { risk: 'low', ruleEffect: 'deny' },
+          permissionConfig: fullAccessNever,
+        }),
+        catalog.get('PowerShell'),
+      ),
+    ).toMatchObject({ action: 'deny' })
+    expect(
+      engine.evaluate(
+        invocation({
+          taskMode,
+          permissionFacts: { risk: 'low', hookRequiresApproval: true },
+          permissionConfig: fullAccessNever,
+        }),
+        catalog.get('PowerShell'),
+      ),
+    ).toMatchObject({ action: 'deny' })
+    // 实施类工具仍被模式拒绝
+    for (const [name, input] of [
+      ['Write', { file_path: 'x', content: 'x' }],
+      ['Edit', { path: 'x', edits: [{ oldText: 'a', newText: 'b' }] }],
+      ['apply_patch', { patch: '*** Begin Patch\n*** End Patch' }],
+    ] as const) {
+      expect(
+        engine.evaluate(
+          invocation({ name, input, taskMode, permissionConfig: fullAccessNever }),
+          catalog.get(name),
+        ),
+      ).toMatchObject({ action: 'deny' })
+    }
     expect(
       engine.evaluate(
         invocation({
@@ -451,6 +499,37 @@ describe('统一权限真值', () => {
       reason: expect.stringContaining('禁止请求'),
     })
   })
+
+  test.each(['plan', 'grill'] as const)(
+    '%s 的 Read、Glob、Grep 在 untrusted 与 never 下判定一致',
+    (taskMode) => {
+      const catalog = new ToolRegistry()
+      const engine = new PermissionDecisionEngine()
+      for (const approvalPolicy of ['untrusted', 'never'] as const) {
+        for (const [name, input] of [
+          ['Read', { file_path: 'x' }],
+          ['Glob', { pattern: '*' }],
+          ['Grep', { pattern: 'x' }],
+        ] as const) {
+          expect(
+            engine.evaluate(
+              invocation({
+                name,
+                input,
+                taskMode,
+                permissionConfig: {
+                  sandboxMode: 'workspace-write',
+                  approvalPolicy,
+                  approvalsReviewer: 'user',
+                },
+              }),
+              catalog.get(name),
+            ),
+          ).toMatchObject({ action: 'allow' })
+        }
+      }
+    },
+  )
 })
 
 describe('脱敏', () => {

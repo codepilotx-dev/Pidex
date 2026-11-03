@@ -113,9 +113,14 @@ describe('ToolExposurePlan finalize_result exposure', () => {
     expect(plan.allows('request_permissions')).toBe(false)
     expect(plan.allows('submit_plan')).toBe(true)
     expect(plan.exposed).toContain('submit_plan')
+    expect(plan.exposed).toContain('PowerShell')
+    expect(plan.exposed).toContain('Bash')
+    expect(plan.exposed).toContain('Grep')
+    expect(plan.exposed).not.toContain('Write')
+    expect(plan.exposed).not.toContain('Edit')
   })
 
-  test('Grill 主 Agent 只读调查、可提问与派发 Explorer，但不暴露计划提交', () => {
+  test('Grill 主 Agent 使用调查权限、可提问与派发 Explorer，但不暴露计划提交', () => {
     const plan = exposure({ taskMode: 'grill', profile: 'main', sandboxMode: 'danger-full-access' })
     expect(plan.allows('request_user_input')).toBe(true)
     expect(plan.allows('spawn_agents')).toBe(true)
@@ -125,8 +130,34 @@ describe('ToolExposurePlan finalize_result exposure', () => {
     expect(plan.allows('update_goal')).toBe(false)
     expect(plan.allows('request_permissions')).toBe(false)
     expect(plan.exposed).toContain('Read')
+    expect(plan.exposed).toContain('Grep')
+    expect(plan.exposed).toContain('PowerShell')
     expect(plan.exposed).not.toContain('Write')
     expect(plan.exposed).not.toContain('Edit')
+  })
+
+  test('Plan、Grill 与 Explorer 暴露同一调查工具集，写工具仍不可见', () => {
+    for (const [taskMode, profile] of [
+      ['plan', 'main'],
+      ['grill', 'main'],
+      ['chat', 'explorer'],
+      ['plan', 'explorer'],
+    ] as const) {
+      const plan = exposure({ taskMode, profile })
+      for (const name of ['Read', 'Glob', 'Grep', 'Bash', 'PowerShell'])
+        expect(plan.exposed).toContain(name)
+      for (const name of ['Write', 'Edit', 'apply_patch'])
+        expect(plan.exposed).not.toContain(name)
+    }
+  })
+
+  test('暴露计划沿用配置的文件访问范围，不再改写为 read-only', () => {
+    const full = exposure({ taskMode: 'plan', sandboxMode: 'danger-full-access' })
+    expect(full.exposed).toContain('PowerShell')
+    const readOnly = exposure({ taskMode: 'plan', sandboxMode: 'read-only' })
+    expect(readOnly.exposed).toContain('PowerShell')
+    expect(readOnly.exposed).toContain('Read')
+    expect(readOnly.exposed).not.toContain('Write')
   })
 
   test('submit_plan 只属于 Plan 主 Agent', () => {

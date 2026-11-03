@@ -797,6 +797,22 @@ describe('协作模式提示', () => {
       userMessage: '你好',
     }).find((section) => section.id === `mode.${taskMode}`)!.content
 
+  test('Plan、Grill 与 Explorer 共用同一调查定义', () => {
+    const explorer = createPromptSections({
+      permissionInstructions: '',
+      mode: 'chat',
+      profile: 'explorer',
+      userMessage: '你好',
+    }).find((section) => section.id === 'profile.explorer')!.content
+    for (const content of [mode('plan'), mode('grill'), explorer]) {
+      expect(content).toContain('不修改受版本控制文件的测试、构建和检查')
+      expect(content).toContain('不得创建、修改或删除业务文件')
+      expect(content).toContain('显式拒绝')
+    }
+    expect(mode('plan')).not.toContain('禁用通用 Shell')
+    expect(mode('grill')).not.toContain('只读调查工具')
+  })
+
   test('Grill 模式要求设计树、暂定假设与无默认出口门禁', () => {
     expect(mode('grill')).toContain('设计树')
     expect(mode('grill')).toContain('概念层 Frontier')

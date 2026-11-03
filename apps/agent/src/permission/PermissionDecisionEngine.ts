@@ -65,6 +65,7 @@ export const riskFor = (
 ): PermissionDecision['risk'] => {
   const requested = requestedPermissions(invocation.input)
   if (invocation.permissionFacts?.risk) return invocation.permissionFacts.risk
+  if (tool.capabilities.readOnly === true) return 'low'
   if (tool.capabilities.filesystem === 'host-write') return 'critical'
   if (
     requested.writePaths.length ||
@@ -80,6 +81,7 @@ const approvalCapability = (invocation: ToolInvocation, tool: ToolCatalogEntry) 
   if (tool.sdkName === 'request_permissions') return 'requestPermissions' as const
   if (invocation.permissionFacts?.skillScript === true) return 'skillApproval' as const
   if (tool.origin?.kind === 'mcp') return 'mcpTools' as const
+  if (tool.capabilities.readOnly === true) return 'rules' as const
   if (invocation.permissionFacts?.ruleRequiresApproval === true) return 'rules' as const
   if (tool.capabilities.process || tool.capabilities.filesystem === 'host-write')
     return 'sandboxApproval' as const
@@ -117,6 +119,9 @@ export class PermissionDecisionEngine {
       reason,
     })
     const preset = matchPermissionPreset(invocation.permissionConfig)
+    // Collaboration modes constrain behavior, not the approval policy: Plan and
+    // Grill keep the stored preset but do not get the full-access shortcut, so
+    // explicit deny rules, protected resources, hooks and hard denials still run.
     const fullAccess = preset === 'full-access' && !isReadOnlyTaskMode(invocation.taskMode)
     if (!fullAccess && invocation.permissionFacts?.denyReason)
       return deny(invocation.permissionFacts.denyReason)
@@ -222,6 +227,7 @@ export class PermissionDecisionEngine {
     const risky = detectedRisk !== undefined && detectedRisk !== 'low'
     const unknown =
       tool.approvalStrategy !== 'never-review' &&
+      tool.capabilities.readOnly !== true &&
       detectedRisk === undefined &&
       (tool.capabilities.process ||
         tool.capabilities.externalState ||
@@ -250,7 +256,8 @@ export class PermissionDecisionEngine {
     if (tool.approvalStrategy === 'never-review') return allow('工具声明为无需审批')
     if (isGranularApprovalPolicy(policy)) return allow('当前权限范围内执行')
     if (policy === 'untrusted')
-      return tool.capabilities.filesystem === 'read' && !tool.capabilities.process
+      return (tool.capabilities.filesystem === 'read' && !tool.capabilities.process) ||
+        (tool.capabilities.readOnly === true && tool.capabilities.process)
         ? allow('可信纯读取操作')
         : review('untrusted 策略要求审批非纯读取操作', false)
     return allow('当前权限范围内执行')

@@ -2303,9 +2303,8 @@ export class AgentRuntimeService implements AgentRuntime {
     return this.options.toolExecutor.exposurePlan(
       {
         taskMode: request.taskMode,
-        sandboxMode: isReadOnlyTaskMode(request.taskMode)
-          ? 'read-only'
-          : 'permissionConfig' in request
+        sandboxMode:
+          'permissionConfig' in request
             ? request.permissionConfig.sandboxMode
             : request.sandboxMode,
         approvalPolicy:

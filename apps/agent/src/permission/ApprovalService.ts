@@ -378,7 +378,10 @@ export class ApprovalService {
     if (tool.sdkName === 'request_permissions') categories.add('requestPermissions')
     if (invocation.permissionFacts?.skillScript === true) categories.add('skillApproval')
     if (tool.origin?.kind === 'mcp') categories.add('mcpTools')
-    if (tool.capabilities.process || tool.capabilities.filesystem === 'host-write')
+    if (
+      tool.capabilities.readOnly !== true &&
+      (tool.capabilities.process || tool.capabilities.filesystem === 'host-write')
+    )
       categories.add('sandboxApproval')
     if (hasRequestedPermissions(invocation.input) && tool.sdkName !== 'request_permissions')
       categories.add('sandboxApproval')

@@ -281,6 +281,7 @@ describe('workgroup_read 工具', () => {
       process: false,
       externalState: false,
       userInteraction: false,
+      readOnly: true,
     })
     for (const taskMode of ['chat', 'plan'] as const) {
       const plan = fixture.executor.exposurePlan({

@@ -34,6 +34,13 @@ export type ToolCapabilities = {
   process: boolean
   externalState: boolean
   userInteraction: boolean
+  /**
+   * Host-registered fact: the tool only reads existing state. Starting a helper
+   * process (for example a search binary) stays an implementation detail, not
+   * a mutation. Only built-in definitions set this; model input, MCP
+   * annotations and plugin metadata never grant investigation access.
+   */
+  readOnly?: boolean
 }
 
 export type ApprovalStrategy = 'policy' | 'always-review' | 'never-review'
@@ -177,6 +184,7 @@ const noCapabilities = (): ToolCapabilities => ({
   process: false,
   externalState: false,
   userInteraction: false,
+  readOnly: false,
 })
 const jsonObject = (properties: Record<string, unknown>, required?: string[]) => ({
   type: 'object',
@@ -583,7 +591,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
       },
       ['file_path'],
     ),
-    capabilities: { ...noCapabilities(), filesystem: 'read' },
+    capabilities: { ...noCapabilities(), filesystem: 'read', readOnly: true },
     allowedModes: allModes,
     allowedProfiles: allProfiles,
     approvalStrategy: 'policy',
@@ -855,7 +863,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
       },
       ['pattern'],
     ),
-    capabilities: { ...noCapabilities(), filesystem: 'read', process: true },
+    capabilities: { ...noCapabilities(), filesystem: 'read', process: true, readOnly: true },
     allowedModes: allModes,
     allowedProfiles: allProfiles,
     approvalStrategy: 'policy',
@@ -976,7 +984,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
       },
       ['pattern'],
     ),
-    capabilities: { ...noCapabilities(), filesystem: 'read', process: true },
+    capabilities: { ...noCapabilities(), filesystem: 'read', process: true, readOnly: true },
     allowedModes: allModes,
     allowedProfiles: allProfiles,
     approvalStrategy: 'policy',
@@ -990,8 +998,8 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
     name: sdkName,
     description:
       sdkName === 'Bash'
-        ? '以工作区为默认 cwd，经 Pi tool_call、统一权限、Hook、hard-deny 与幂等门禁后，以当前用户身份执行 Bash 命令。计划模式禁用；无 OS 文件或网络沙箱。'
-        : '以工作区为默认 cwd，经 Pi tool_call、统一权限、Hook、hard-deny 与幂等门禁后，以当前用户身份执行 PowerShell 命令。计划模式禁用；无 OS 文件或网络沙箱。',
+        ? '以工作区为默认 cwd，经 Pi tool_call、统一权限、Hook、hard-deny 与幂等门禁后，以当前用户身份执行 Bash 命令。Plan 与 Grill 只允许用于调查（读取、搜索、测试、构建和检查），不得实施；无 OS 文件或网络沙箱。'
+        : '以工作区为默认 cwd，经 Pi tool_call、统一权限、Hook、hard-deny 与幂等门禁后，以当前用户身份执行 PowerShell 命令。Plan 与 Grill 只允许用于调查（读取、搜索、测试、构建和检查），不得实施；无 OS 文件或网络沙箱。',
     schema: shellSchema,
     inputSchema: shellInputSchema,
     capabilities: {
@@ -1002,7 +1010,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
       userInteraction: false,
     },
     allowedModes: allModes,
-    allowedProfiles: ['main', 'default', 'worker'],
+    allowedProfiles: ['main', 'default', 'explorer', 'worker'],
     approvalStrategy: 'policy',
     visibility: 'eager',
     executionMode: 'sequential',
@@ -1089,15 +1097,17 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
 ]
 
 export const toolMayMutate = (tool: ToolCatalogEntry) =>
-  tool.capabilities.filesystem === 'workspace-write' ||
-  tool.capabilities.filesystem === 'host-write' ||
-  tool.capabilities.externalState
+  tool.capabilities.readOnly !== true &&
+  (tool.capabilities.filesystem === 'workspace-write' ||
+    tool.capabilities.filesystem === 'host-write' ||
+    tool.capabilities.externalState)
 const isShell = (tool: ToolCatalogEntry) => tool.sdkName === 'Bash' || tool.sdkName === 'PowerShell'
 export const toolAllowedInTaskMode = (tool: ToolCatalogEntry, mode: TaskMode) =>
-  // Grill mirrors Plan's read-only investigation surface; mutating tools stay out
-  // even if a definition forgets to narrow its allowedModes.
+  // Grill mirrors Plan's investigation surface; mutating tools stay out even if
+  // a definition forgets to narrow its allowedModes. Shell stays available so
+  // the existing risk, rule, hook and approval chain decides each command.
   (tool.allowedModes.includes(mode) || (mode === 'grill' && tool.allowedModes.includes('plan'))) &&
-  (!isReadOnlyTaskMode(mode) || !toolMayMutate(tool))
+  (!isReadOnlyTaskMode(mode) || isShell(tool) || !toolMayMutate(tool))
 export const toolAllowedForFileAccess = (tool: ToolCatalogEntry, profile: FileAccessProfile) =>
   profile !== 'read-only' ||
   isShell(tool) ||

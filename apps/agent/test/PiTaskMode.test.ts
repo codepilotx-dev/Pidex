@@ -65,6 +65,7 @@ test('Chat 与 Grill 切换时按本轮冻结工具恢复，不沿用历史写�
     )
     expect(names.includes('request_user_input')).toBe(taskMode === 'grill')
     expect(names.includes('Write')).toBe(taskMode === 'chat')
-    expect(names.includes('PowerShell')).toBe(taskMode === 'chat')
+    expect(names.includes('PowerShell')).toBe(true)
+    expect(names.includes('Grep')).toBe(true)
   }
 })
