@@ -2711,11 +2711,30 @@ mod tests {
         extern "system" {
             fn EqualSid(left: *mut c_void, right: *mut c_void) -> Bool;
             fn GetAce(acl: *const c_void, index: u32, ace: *mut *mut c_void) -> Bool;
+            fn GetAclInformation(
+                acl: *const c_void,
+                info: *mut c_void,
+                length: u32,
+                class: AclInformationClass,
+            ) -> Bool;
             fn GetSecurityDescriptorControl(
                 descriptor: *mut c_void,
                 control: *mut u16,
                 revision: *mut u32,
             ) -> Bool;
+        }
+
+        // ACL_INFORMATION_CLASS 中 AclSizeInformation 为 2。
+        #[repr(transparent)]
+        struct AclInformationClass(i32);
+        const ACL_SIZE_INFORMATION_CLASS: AclInformationClass = AclInformationClass(2);
+
+        #[repr(C)]
+        #[derive(Default)]
+        struct AclSizeInformation {
+            ace_count: u32,
+            acl_bytes_in_use: u32,
+            acl_bytes_free: u32,
         }
 
         let target = AclTarget::open(path)?;
@@ -2750,18 +2769,25 @@ mod tests {
             ));
         }
 
-        #[repr(C)]
-        struct AclHeader {
-            revision: u8,
-            sbz1: u8,
-            size: u16,
-            ace_count: u16,
-            sbz2: u16,
+        // 通过 GetAclInformation 读取 ACE 数量：直接按自定义结构体解引用 DACL
+        // 指针既不安全，也依赖未文档化的内存布局。
+        let mut size_info = AclSizeInformation::default();
+        if unsafe {
+            GetAclInformation(
+                dacl,
+                std::ptr::addr_of_mut!(size_info).cast(),
+                std::mem::size_of::<AclSizeInformation>() as u32,
+                ACL_SIZE_INFORMATION_CLASS,
+            )
+        } == FALSE
+        {
+            return Err(last_error(
+                "failed to read perception worker ACL size in a test",
+            ));
         }
 
-        let ace_count = unsafe { (*(dacl.cast::<AclHeader>())).ace_count };
         let mut grants = Vec::new();
-        for index in 0..u32::from(ace_count) {
+        for index in 0..size_info.ace_count {
             let mut raw: *mut c_void = std::ptr::null_mut();
             if unsafe { GetAce(dacl, index, &mut raw) } == FALSE || raw.is_null() {
                 return Err(last_error(
