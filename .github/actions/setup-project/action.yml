@@ -57,6 +57,7 @@ runs:
           args+=(--ignore-scripts)
         fi
         if [[ -n "$WORKSPACE" ]]; then
-          args+=(--filter "$WORKSPACE")
+          # Shared test runners live at the repository root and need its dependencies too.
+          args+=(--filter './' --filter "$WORKSPACE")
         fi
         bun install "${args[@]}"
