@@ -3,6 +3,8 @@ name: Windows desktop performance
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  push:
+    branches: [main]
   schedule:
     - cron: '0 18 * * *'
   workflow_dispatch:
@@ -11,8 +13,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-desktop-performance-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   renderer-observation:
@@ -23,13 +25,11 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.4
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Prepare project
+        id: project
+        uses: ./.github/actions/setup-project
       - name: Renderer performance observation
+        if: steps.project.outputs.run == 'true'
         run: bun scripts/performance/RunSuite.ts --suite=renderer
       - name: Upload renderer performance report
         if: always()
@@ -52,18 +52,17 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.4.4
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Prepare project
+        id: project
+        uses: ./.github/actions/setup-project
       - name: Build Windows package
+        if: steps.project.outputs.run == 'true'
         run: bun run package:win
       - name: Locate packaged executable
+        if: steps.project.outputs.run == 'true'
         shell: pwsh
         run: |
-          $executable = Get-ChildItem release -Recurse -Filter Pidex Desktop.exe |
+          $executable = Get-ChildItem release -Recurse -Filter 'Pidex Desktop.exe' |
             Where-Object { $_.FullName -match 'win-unpacked' } |
             Select-Object -First 1
           if (-not $executable) {
@@ -72,6 +71,7 @@ jobs:
           "PIDEX_PERF_EXECUTABLE=$($executable.FullName)" |
             Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
       - name: Packaged Electron performance
+        if: steps.project.outputs.run == 'true'
         run: bun run perf:electron
       - name: Upload performance report
         if: always()
