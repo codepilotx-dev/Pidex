@@ -3,10 +3,12 @@ import type {
   ComposerDocument,
   ComposerDraft,
   ComposerDraftKey,
+  ComposerLaunchSettings,
   ComposerSkillInvocation,
   ComposerSubmitOutcome,
 } from './ComposerTypes.js'
 import { createComposerDocument } from './ComposerTypes.js'
+import { mergeComposerLaunchSettings } from './ComposerLaunch.js'
 import { skillInvocationsFromComposerDocument } from './ComposerSkillToken.js'
 
 type CreateClientId = () => string
@@ -167,6 +169,43 @@ export class ComposerDraftStore {
     return next
   }
 
+  setLaunchSettings(
+    key: ComposerDraftKey,
+    projectKey: string,
+    settings: ComposerLaunchSettings,
+  ): ComposerDraft {
+    return this.update(key, (current) => mergeComposerLaunchSettings(current, projectKey, settings))
+  }
+
+  /**
+   * 失败重试复用同一 operationId；执行位置、分支或首次消息标题变化时重新分配，
+   * 避免 `thread/create` 把不同请求当成同一个操作。
+   */
+  beginLaunchAttempt(
+    key: ComposerDraftKey,
+    input: { projectKey: string; signature: string; createId?: () => string },
+  ): string {
+    const current = this.get(key)
+    const existing = current.launchAttempt
+    if (
+      existing &&
+      existing.projectKey === input.projectKey &&
+      existing.signature === input.signature
+    ) {
+      return existing.operationId
+    }
+    const operationId = (input.createId ?? defaultCreateClientId)()
+    this.set(key, {
+      ...current,
+      launchAttempt: {
+        projectKey: input.projectKey,
+        signature: input.signature,
+        operationId,
+      },
+    })
+    return operationId
+  }
+
   addSkill(key: ComposerDraftKey, skill: ComposerSkillInvocation): ComposerDraft {
     const current = this.get(key)
     const skills =
@@ -200,6 +239,8 @@ export class ComposerDraftStore {
     const next = options.clearContent
       ? createEmptyComposerDraft(nextClientId)
       : { ...current, clientId: nextClientId }
+    // 创建已成功完成，后续发送不应再复用本次创建的 operationId。
+    next.launchAttempt = undefined
     next.browserAnnotations = remaining
     next.browserAnnotationImages = (current.browserAnnotationImages ?? []).filter((image) =>
       remaining.some((annotation) => annotation.screenshotName === image.name),
@@ -287,6 +328,15 @@ export function cloneDraft(draft: ComposerDraft): ComposerDraft {
       : undefined,
     skills: draft.skills?.map((skill) => ({ ...skill })),
     skillInvocation: draft.skillInvocation ? { ...draft.skillInvocation } : undefined,
+    launchSettingsByProject: draft.launchSettingsByProject
+      ? Object.fromEntries(
+          Object.entries(draft.launchSettingsByProject).map(([projectKey, settings]) => [
+            projectKey,
+            { ...settings },
+          ]),
+        )
+      : undefined,
+    launchAttempt: draft.launchAttempt ? { ...draft.launchAttempt } : undefined,
   }
 }
 

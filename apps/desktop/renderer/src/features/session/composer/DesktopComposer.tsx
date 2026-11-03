@@ -10,6 +10,7 @@ import type {
   DesktopPermissionMode,
   DesktopQueuePauseReason,
   DesktopQueuedFollowUp,
+  DesktopSessionExecution,
   DesktopSessionStatus,
   DesktopThinkingMode,
   DesktopThreadGoal,
@@ -17,6 +18,7 @@ import type {
   DesktopGoalSubmission,
   DesktopWorkspace,
   ModelProviderID,
+  ThreadCreationSurface,
 } from '../../../../shared/Types.js'
 import { THINKING_MODE_OPTIONS } from '../../settings/SettingsStorage.js'
 import type { ModelPreset } from '../../../ModelPresets.js'
@@ -138,6 +140,8 @@ export type DesktopComposerProps = {
   onClearWorkspace: () => void
   onOpenMcpSettings?: () => void
   onOpenModelSettings?: () => void
+  /** 跳转已有项目环境设置页，用于首页发起设置菜单。 */
+  onOpenEnvironmentSettings?: (projectId: string) => void
   onOpenSideChat?: () => void
   onForkConversation?: () => void
   canForkConversation?: boolean
@@ -155,6 +159,8 @@ export type DesktopComposerProps = {
     target?: DesktopWorkspace | null,
     initialSessionName?: string,
     projectlessPrompt?: string,
+    creationSurface?: ThreadCreationSurface,
+    options?: { execution?: DesktopSessionExecution; operationId?: string },
   ) => Promise<string | null>
   submitToSession: (
     targetSessionId: string,
@@ -252,6 +258,7 @@ export function DesktopComposer({
   onClearWorkspace,
   onOpenMcpSettings,
   onOpenModelSettings,
+  onOpenEnvironmentSettings,
   onOpenSideChat,
   onForkConversation,
   canForkConversation,
@@ -544,6 +551,7 @@ export function DesktopComposer({
         onClearWorkspace={onClearWorkspace}
         onOpenMcpSettings={onOpenMcpSettings}
         onOpenModelSettings={onOpenModelSettings}
+        onOpenEnvironmentSettings={onOpenEnvironmentSettings}
         onOpenSideChat={onOpenSideChat}
         onForkConversation={onForkConversation}
         canForkConversation={canForkConversation}

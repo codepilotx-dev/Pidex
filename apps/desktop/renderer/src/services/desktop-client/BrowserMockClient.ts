@@ -207,6 +207,8 @@ export function createBrowserMockDesktopClient(
   let browserState: DesktopBrowserState = emptyBrowserState()
   let githubLoginMode: DesktopGithubAuthMode = 'browser'
   const sessions = new Map<string, DesktopSessionSnapshot>()
+  // 模拟 thread/create 的 operationId 幂等：重试同一个创建操作时返回已有会话。
+  const sessionCreationOperations = new Map<string, string>()
   const mockModelPreferences = new Map<
     string,
     {
@@ -1358,12 +1360,25 @@ export function createBrowserMockDesktopClient(
       return themeSettings
     },
     createSession: async (options) => {
+      if (options.operationId) {
+        const existingId = sessionCreationOperations.get(options.operationId)
+        const existing = existingId ? sessions.get(existingId) : undefined
+        if (existing) {
+          activeSessionId = existing.item.id
+          return {
+            sessionId: existing.item.id,
+            workspace: existing.workspace,
+            standalone: existing.item.standalone,
+          }
+        }
+      }
       const workspace = options.workspacePath
         ? mockWorkspace(options.workspacePath)
         : mockWorkspace('')
       const sessionId = `browser-mock-${sessions.size + 1}`
       const snapshot = mockSessionSnapshot(sessionId, workspace, options)
       sessions.set(sessionId, snapshot)
+      if (options.operationId) sessionCreationOperations.set(options.operationId, sessionId)
       activeSessionId = sessionId
       emitSessionStoreChange()
       return {

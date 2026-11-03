@@ -11,6 +11,7 @@ import type {
   DesktopPermissionMode,
   DesktopPermissionConfig,
   DesktopPermissionRequest,
+  DesktopSessionExecution,
   DesktopSessionMetadataPatch,
   DesktopSessionSnapshot,
   DesktopSessionStatus,
@@ -137,7 +138,13 @@ export async function createSessionForWorkspaceAction(
   target: DesktopWorkspace | null,
   initialSessionName?: string,
   projectlessPrompt?: string,
-  options?: { propagateError?: boolean },
+  options?: {
+    propagateError?: boolean
+    /** 首页发起设置的一次性执行位置；不传时沿用自动选择。 */
+    execution?: DesktopSessionExecution
+    /** 重试时复用已创建的 Worktree；不传时新建一个操作。 */
+    operationId?: string
+  },
 ): Promise<string | null> {
   try {
     const preferredSessionGroupId = readPreferredSessionGroupId()
@@ -158,6 +165,8 @@ export async function createSessionForWorkspaceAction(
       permissionConfig: settings.permissionConfig,
       planModeActive: settings.planModeActive,
       grillModeActive: settings.grillModeActive,
+      ...(options?.execution ? { execution: options.execution } : {}),
+      ...(options?.operationId ? { operationId: options.operationId } : {}),
       providerID: settings.providerID,
       providerBaseURL: normalizeOptionalText(settings.providerBaseURL),
       model: normalizeOptionalText(settings.model),

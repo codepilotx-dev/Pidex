@@ -1,4 +1,4 @@
-import { resolveTaskExecution } from '../../features/session/TaskExecutionMode.js'
+import { resolveSessionCreationExecution } from '../../features/session/TaskExecutionMode.js'
 import { reconcileQuestionDrafts } from '../../features/session/approvals/AskUserQuestionModel.js'
 import {
   DESKTOP_AGENT_EVENT_CHANNEL,
@@ -3516,14 +3516,17 @@ export function createAgentSessionDesktopClient(
           const supportsCreationSurface = agentCapabilities.has('thread.creation-surface.v1')
           const creationSurface =
             supportsCreationSurface && options.creationSurface ? options.creationSurface : undefined
-          // The execution location is automatic: the project setting wins, otherwise the
-          // project type decides. A failed probe is silently Local, and an older agent
-          // that never negotiated thread.execution.v2 keeps the legacy Local behaviour.
+          // The execution location is explicit when the caller carried a launch
+          // selection; otherwise the project setting wins, then the project type.
+          // A failed probe is silently Local, and an older agent that never
+          // negotiated thread.execution.v2 keeps the legacy Local behaviour.
+          const supportsExplicitExecution = agentCapabilities.has('thread.execution.v2')
           const execution = project
-            ? resolveTaskExecution({
-                supportsExecution: agentCapabilities.has('thread.execution.v2'),
+            ? resolveSessionCreationExecution({
+                execution: options.execution,
+                supportsExplicitExecution,
                 projectExecutionEnvironment: project.settings?.executionEnvironment,
-                eligibility: agentCapabilities.has('thread.execution.v2')
+                eligibility: supportsExplicitExecution
                   ? await rpc
                       .call('worktree/eligibility', { projectId: project.id })
                       .catch(() => null)
@@ -3543,7 +3546,7 @@ export function createAgentSessionDesktopClient(
             ...(creationSurface ? { creationSurface } : {}),
             ...(options.workflowId ? { workflowId: options.workflowId } : {}),
             title: options.sessionName,
-            operationId: crypto.randomUUID(),
+            operationId: options.operationId ?? crypto.randomUUID(),
           })
           const snapshot = agentThreadSnapshotToDesktop(sharedSnapshot, project)
           sessionSnapshots.set(snapshot.item.id, snapshot)

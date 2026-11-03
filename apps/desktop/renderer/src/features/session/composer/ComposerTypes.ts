@@ -161,6 +161,20 @@ export type ComposerSkillInvocation = {
   path: string
 }
 
+export type ComposerLaunchSettings = {
+  /** 开启后由 Agent 从选定分支创建托管工作树，不切换源目录分支。 */
+  createWorktree: boolean
+  /** `null` 表示项目当前分支；此处选择只更新草稿，发送时才生效。 */
+  branch: string | null
+}
+
+/** 一次尚未完成的会话创建，用同一个 operationId 让重试复用已创建的工作树。 */
+export type ComposerLaunchAttempt = {
+  projectKey: string
+  signature: string
+  operationId: string
+}
+
 export type ComposerDraft = {
   clientId: string
   document: ComposerDocument
@@ -181,6 +195,9 @@ export type ComposerDraft = {
   goalTokenBudget?: number | null
   collaborationMode: ComposerCollaborationMode
   suggestionOrigin?: string
+  /** 发起设置按首页草稿所属项目分别保存，切换项目不串用。 */
+  launchSettingsByProject?: Record<string, ComposerLaunchSettings>
+  launchAttempt?: ComposerLaunchAttempt
 }
 
 export type ComposerDraftContentSnapshot = {

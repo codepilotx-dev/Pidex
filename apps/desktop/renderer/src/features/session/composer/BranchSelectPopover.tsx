@@ -12,6 +12,77 @@ import {
 } from '../../../components/ui/SearchablePopoverContent.js'
 import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 
+type BranchOptionRowProps = {
+  branch: string
+  detail?: string
+  selected: boolean
+  /** 提供时渲染为可点击按钮行；不提供时由外层列表项控制交互。 */
+  onSelect?: () => void
+}
+
+/**
+ * 分支行的展示部分：图标、名称、当前选中标记。切换分支菜单与首页发起设置
+ * 共用同一套视觉，避免两处出现不同的分支列表样式。
+ */
+export function BranchOptionRow({
+  branch,
+  detail,
+  selected,
+  onSelect,
+}: BranchOptionRowProps): React.ReactNode {
+  const label = (
+    <span className="popover-item-label">
+      {detail && selected ? (
+        <span className="environment-branch-label tw:flex tw:min-w-0 tw:flex-col tw:gap-1">
+          <span
+            className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap"
+            title={branch}
+          >
+            {branch}
+          </span>
+          <small className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-app-text-soft tw:type-caption">
+            {detail}
+          </small>
+        </span>
+      ) : (
+        <span title={branch}>{branch}</span>
+      )}
+    </span>
+  )
+  const leading = (
+    <span className="popover-item-icon">
+      <GitBranch size={APP_ICON_SIZE} />
+    </span>
+  )
+  const trailing = selected ? (
+    <Check
+      className="popover-item-check"
+      size={APP_ICON_SIZES.sm}
+      strokeWidth={APP_ICON_STROKE_WIDTH}
+    />
+  ) : null
+  if (onSelect) {
+    return (
+      <SidebarRow
+        asChild
+        active={selected}
+        className="popover-item"
+        leading={leading}
+        trailing={trailing}
+      >
+        <button aria-pressed={selected} type="button" onClick={onSelect}>
+          {label}
+        </button>
+      </SidebarRow>
+    )
+  }
+  return (
+    <SidebarRow active={selected} className="popover-item" leading={leading} trailing={trailing}>
+      {label}
+    </SidebarRow>
+  )
+}
+
 type BranchSelectPopoverProps = {
   align?: 'start' | 'center' | 'end'
   branchSearch: string
@@ -85,42 +156,11 @@ export function BranchSelectPopover({
       open={open}
       options={options}
       renderOption={(option, selected) => (
-        <SidebarRow
-          active={selected}
-          className="popover-item"
-          leading={
-            <span className="popover-item-icon">
-              <GitBranch size={APP_ICON_SIZE} />
-            </span>
-          }
-          trailing={
-            selected ? (
-              <Check
-                className="popover-item-check"
-                size={APP_ICON_SIZES.sm}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            ) : null
-          }
-        >
-          <span className="popover-item-label">
-            {currentBranchDetail && selected ? (
-              <span className="environment-branch-label tw:flex tw:min-w-0 tw:flex-col tw:gap-1">
-                <span
-                  className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap"
-                  title={option.value}
-                >
-                  {option.value}
-                </span>
-                <small className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-app-text-soft tw:type-caption">
-                  {currentBranchDetail}
-                </small>
-              </span>
-            ) : (
-              <span title={option.value}>{option.value}</span>
-            )}
-          </span>
-        </SidebarRow>
+        <BranchOptionRow
+          branch={option.value}
+          detail={currentBranchDetail}
+          selected={selected}
+        />
       )}
       search={branchSearch}
       searchLabel="搜索分支"

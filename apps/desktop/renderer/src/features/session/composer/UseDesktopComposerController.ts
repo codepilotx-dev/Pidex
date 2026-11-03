@@ -7,6 +7,7 @@ import type {
   DesktopInstalledSkill,
   DesktopModelMetadata,
   DesktopPermissionMode,
+  DesktopSessionExecution,
   DesktopUserMessageInput,
   DesktopGoalSubmission,
   DesktopWorkspace,
@@ -52,6 +53,16 @@ import {
   type ComposerSkillCommand,
 } from './ComposerSlashCommands.js'
 import { getDesktopComposerBranchName } from './ComposerWorkspacePresentation.js'
+import {
+  DEFAULT_COMPOSER_LAUNCH_SETTINGS,
+  composerLaunchAttemptSignature,
+  composerLaunchProjectKey,
+  createComposerLaunchSession,
+  planComposerLaunch,
+  readComposerLaunchSettings,
+  withLaunchAttempt,
+  type ComposerLaunchPlan,
+} from './ComposerLaunch.js'
 
 type ControllerOptions = {
   input: string
@@ -90,6 +101,7 @@ type ControllerOptions = {
     initialSessionName?: string,
     projectlessPrompt?: string,
     creationSurface?: ThreadCreationSurface,
+    options?: { execution?: DesktopSessionExecution; operationId?: string },
   ) => Promise<string | null>
   /** Global error notification for failures that block sending. */
   onError?: (message: string) => void
@@ -404,6 +416,13 @@ export function useDesktopComposerController({
     }
     composerDraftStore.set(sourceDraftKey, draft)
     const isNewSession = placement === 'new-session'
+    // 发起设置只对本次发送生效：在此快照，后续菜单修改不会改变已开始创建的位置。
+    const launchSettings = readComposerLaunchSettings(draft, composerLaunchProjectKey(workspace))
+    const launchPlan: ComposerLaunchPlan | null = isNewSession
+      ? planComposerLaunch({ settings: launchSettings, workspace })
+      : null
+    // 与 thread/create 的请求指纹相关：设置变化后不能再复用旧 operationId。
+    const launchSettingsKey = `${effectivePermissionMode}:${planModeActive}:${grillModeActive}:${surface ?? ''}`
     let pendingSubmission: PendingSubmission | null = null
     let pendingSessionId: string | null = null
     const outcome = await executeComposerSubmitTransaction({
@@ -428,15 +447,35 @@ export function useDesktopComposerController({
         ? (initialSessionName, projectlessPrompt) =>
             createTaskSession({
               onError,
-              create: () =>
-                createSessionForWorkspace(
-                  workspace,
-                  initialSessionName,
-                  projectlessPrompt,
-                  surface === 'working' || surface === 'chat' || surface === 'coding'
-                    ? surface
-                    : undefined,
-                ),
+              create: () => {
+                const plan =
+                  launchPlan ??
+                  planComposerLaunch({ settings: DEFAULT_COMPOSER_LAUNCH_SETTINGS, workspace })
+                // 同一草稿、同一执行位置与创建请求的重试复用已创建的 Worktree。
+                const operationId = composerDraftStore.beginLaunchAttempt(sourceDraftKey, {
+                  projectKey: composerLaunchProjectKey(workspace) ?? '__projectless__',
+                  signature: composerLaunchAttemptSignature(
+                    plan.execution,
+                    initialSessionName,
+                    launchSettingsKey,
+                  ),
+                })
+                return createComposerLaunchSession({
+                  plan,
+                  operationId,
+                  checkout: (branch) => checkoutLaunchBranch(workspace, branch),
+                  create: ({ execution, operationId: createOperationId }) =>
+                    createSessionForWorkspace(
+                      workspace,
+                      initialSessionName,
+                      projectlessPrompt,
+                      surface === 'working' || surface === 'chat' || surface === 'coding'
+                        ? surface
+                        : undefined,
+                      { execution, operationId: createOperationId },
+                    ),
+                })
+              },
             })
         : undefined,
       // 创建成功后先交接草稿，再用真实会话页替换临时路由。
@@ -541,10 +580,12 @@ export function useDesktopComposerController({
     }
     if (stillOnPendingPage) {
       // 创建失败：退回来源页，原稿写入来源草稿键后再清理临时目标。
+      // 本次尝试已记录的 operationId 必须随草稿带回，重试才能复用已创建的工作树。
+      const attempt = composerDraftStore.peek(submission.sourceDraftKey)?.launchAttempt
       composerDraftStore.revertHandoff(
         submission.sourceDraftKey,
         draftTargetKey(submission.submissionId),
-        draft,
+        withLaunchAttempt(draft, attempt),
       )
       composerDraftStore.setSubmitOutcome(submission.sourceDraftKey, outcome)
       navigate(sourceDraftPath(submission.sourceDraftKey), { replace: true })
@@ -782,6 +823,15 @@ function attachmentKindLabel(kind: DesktopComposerAttachment['kind']): string {
 
 function sessionPath(sessionId: string): string {
   return `/threads/${encodeURIComponent(sessionId)}`
+}
+
+/** 本地模式：发送前通过现有 Git client 检出待使用分支；失败时直接阻止创建。 */
+async function checkoutLaunchBranch(
+  workspace: DesktopWorkspace | null,
+  branch: string,
+): Promise<void> {
+  if (!workspace?.path) throw new Error('请先选择项目')
+  await desktopClient.checkoutWorkspaceBranch(workspace.path, branch, workspace.projectId)
 }
 
 function draftTargetKey(sessionId: string): ComposerDraftKey {

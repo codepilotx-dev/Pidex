@@ -26,8 +26,12 @@ export async function browserEnvironmentCall<M extends RpcMethod>(
             invalid: false,
           },
         ],
-        selectedEnvironmentId: null,
+        selectedEnvironmentId: 'mock-default',
       }
+      break
+    case 'local-environment/project/select':
+      // 浏览器预览只验证交互；选择不持久化，回读仍返回 mock 默认环境。
+      result = undefined
       break
     case 'local-environment/project/read':
     case 'local-environment/read':

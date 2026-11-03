@@ -373,6 +373,19 @@ describe('composer surface variant', () => {
     expect(chat).toContain('data-surface="chat"')
   })
 
+  test('发起设置齿轮只在首页发起新对话时出现', () => {
+    const home = renderToStaticMarkup(<ComposerCard {...composerCardProps()} />)
+    const thread = renderToStaticMarkup(
+      <ComposerCard {...composerCardProps({ placement: 'thread' })} />,
+    )
+    const sideTask = renderToStaticMarkup(
+      <ComposerCard {...composerCardProps({ placement: 'side-task' })} />,
+    )
+    expect(home).toContain('aria-label="配置本地环境"')
+    expect(thread).not.toContain('aria-label="配置本地环境"')
+    expect(sideTask).not.toContain('aria-label="配置本地环境"')
+  })
+
   test('Composer 独立投影首页外壳、实际布局与圆角角色', () => {
     const defaults = renderToStaticMarkup(
       <ComposerCard {...composerCardProps({ placement: 'thread' })} />,
@@ -697,7 +710,8 @@ describe('composer surface variant', () => {
       <ComposerCard {...composerCardProps({ surface: 'working', workspace: WORKSPACE })} />,
     )
     expect(html).toContain('Alpha 工作区')
-    expect(html).not.toContain('本地')
+    // 只检查 Local 芯片的标签文本；齿轮按钮的“配置本地环境”名称不属于执行位置芯片。
+    expect(html).not.toContain('>本地<')
     expect(html).not.toContain('feature/working-surface')
     expect(html).not.toContain('选择分支')
   })

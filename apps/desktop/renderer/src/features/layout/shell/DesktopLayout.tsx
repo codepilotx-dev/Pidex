@@ -3690,6 +3690,8 @@ export function DesktopLayout(): React.ReactNode {
             onClearWorkspace: handleClearWorkspace,
             onOpenMcpSettings: () => navigate('/settings/plugins?tab=mcps'),
             onOpenModelSettings: () => navigate('/providers'),
+            onOpenEnvironmentSettings: (projectId) =>
+              navigate(`/settings/worktrees?tab=environments&projectId=${encodeURIComponent(projectId)}`),
             onOpenSideChat: sideChatSupported ? handleOpenSideChat : undefined,
             onSkillTokenActivate: (invocation) => {
               void handleActivateComposerSkill(invocation)

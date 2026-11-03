@@ -11,6 +11,7 @@ import type {
   DesktopComposerAttachment,
   DesktopContextUsage,
   DesktopSessionCatalogStatus,
+  DesktopSessionExecution,
   DesktopPermissionDecision,
   DesktopPermissionConfig,
   DesktopPermissionMode,
@@ -145,6 +146,7 @@ export type UseSessionStateResult = {
     initialSessionName?: string,
     projectlessPrompt?: string,
     creationSurface?: ThreadCreationSurface,
+    options?: { execution?: DesktopSessionExecution; operationId?: string },
   ) => Promise<string | null>
   submitToSession: (
     targetSessionId: string,
@@ -683,6 +685,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       initialSessionName?: string,
       projectlessPrompt?: string,
       creationSurface?: ThreadCreationSurface,
+      options?: { execution?: DesktopSessionExecution; operationId?: string },
     ): Promise<string | null> => {
       const selection = await sessionModelSelections.load(null)
       const nextSessionId = await createSessionForWorkspaceAction(
@@ -696,7 +699,11 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
         target,
         initialSessionName,
         projectlessPrompt,
-        { propagateError: true },
+        {
+          propagateError: true,
+          ...(options?.execution ? { execution: options.execution } : {}),
+          ...(options?.operationId ? { operationId: options.operationId } : {}),
+        },
       )
       if (!nextSessionId) return null
       sessionModelSelections.set(nextSessionId, selection)

@@ -1399,10 +1399,22 @@ export type DesktopWorktreeEligibility = {
   defaultMode: 'local' | 'worktree'
 }
 
+/**
+ * 只对本次创建有效的执行位置选择，类型直接复用 `thread/create.workspace.execution`。
+ * 显式选择优先于项目默认的自动选择，但不会改写项目执行偏好。
+ */
+export type DesktopSessionExecution = NonNullable<
+  Extract<RpcParams<'thread/create'>['workspace'], { kind: 'project' }>['execution']
+>
+
 export type CreateDesktopSessionOptions = {
   creationSurface?: ThreadCreationSurface
   appServerThreadId?: string | null
   localRouterMode?: LocalRouterMode
+  /** 首页发起设置的显式执行位置；省略时沿用原有自动选择逻辑。 */
+  execution?: DesktopSessionExecution
+  /** 失败后重试时复用同一个创建操作，避免重复创建工作树。 */
+  operationId?: string
   projectId?: string
   workspacePath?: string
   /** Optional workflow the new thread joins. */

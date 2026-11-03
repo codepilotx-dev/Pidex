@@ -74,6 +74,7 @@ import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js
 import { ProjectSwitcherPopover } from './ProjectSwitcherPopover.js'
 import { ChatInputDropdown } from './ChatInputDropdown.js'
 import { BranchSelectPopover } from './BranchSelectPopover.js'
+import { ComposerLaunchSettingsPopover } from './ComposerLaunchSettingsPopover.js'
 import { ModelPickerPopover } from './ModelPickerPopover.js'
 import {
   ModelRuntimeParametersPopover,
@@ -353,6 +354,8 @@ type Props = {
   onClearWorkspace: () => void
   onOpenMcpSettings?: () => void
   onOpenModelSettings?: () => void
+  /** 跳转已有项目环境设置页，用于发起设置菜单的“管理环境…”。 */
+  onOpenEnvironmentSettings?: (projectId: string) => void
   onOpenSideChat?: () => void
   onForkConversation?: () => void
   canForkConversation?: boolean
@@ -491,6 +494,7 @@ export function ComposerCard({
   onClearWorkspace,
   onOpenMcpSettings,
   onOpenModelSettings,
+  onOpenEnvironmentSettings,
   onOpenSideChat,
   onForkConversation,
   canForkConversation = false,
@@ -1542,6 +1546,17 @@ export function ComposerCard({
                     />
                   }
                 />
+              ) : null}
+
+              {placement === 'new-session' && !subagentMode ? (
+                <div className="tw:ml-auto tw:flex tw:shrink-0 tw:items-center tw:ps-1">
+                  <ComposerLaunchSettingsPopover
+                    currentBranchName={branchName}
+                    draftKey={draftKey}
+                    workspace={workspace}
+                    onOpenEnvironmentSettings={onOpenEnvironmentSettings}
+                  />
+                </div>
               ) : null}
             </div>
           )}
