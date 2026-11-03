@@ -41,6 +41,10 @@ const ProvidersView = lazy(() =>
   })),
 )
 
+const ToastDebugPage = import.meta.env.DEV
+  ? lazy(() => import('./components/toast/ToastDebugPage.js').then((module) => ({ default: module.ToastDebugPage })))
+  : null
+
 function LegacyModelsRedirect(): ReactNode {
   const location = useLocation()
   return <Navigate replace to={providerWorkspaceTarget(location.search)} />
@@ -99,6 +103,10 @@ const router = createHashRouter([
         children: [
           { index: true, element: <Navigate to="/new" replace /> },
           { path: 'new', element: <QuickChatView /> },
+          ...(ToastDebugPage ? [{
+            path: 'toast-debug',
+            element: <Suspense fallback={null}><ToastDebugPage /></Suspense>,
+          }] : []),
           { path: 'threads/:threadId', element: <ConversationPage /> },
           { path: 'pending/:submissionId', element: <PendingSubmissionPage /> },
           { path: 'projects', element: <ProjectsView /> },
