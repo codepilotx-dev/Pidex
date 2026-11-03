@@ -215,41 +215,41 @@ function EnvironmentList({
         }
         title="项目"
       >
-          <div className="environment-settings environment-primary-content tw:min-h-0 tw:min-w-0">
-            {loading ? (
-              <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
-                正在载入项目…
+        <div className="environment-settings environment-primary-content tw:min-h-0 tw:min-w-0">
+          {loading ? (
+            <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
+              正在载入项目…
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
+              <h2>暂无项目</h2>
+              <p>添加一个本地目录，开始管理项目环境与默认设置。</p>
+              <Button color="secondary" onClick={() => void addProject()}>
+                添加项目
+              </Button>
+            </div>
+          ) : visibleProjects.length === 0 ? (
+            <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
+              <h2>未找到项目</h2>
+              <p>没有与“{query}”匹配的项目。</p>
+              <Button color="secondary" size="compact" onClick={() => setQuery('')}>
+                清除搜索
+              </Button>
+            </div>
+          ) : (
+            <div className="environment-primary-projects tw:@container">
+              <div
+                className="environment-primary-projects__header tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:px-3 tw:py-2 tw:text-app-text-meta tw:type-caption"
+                aria-hidden="true"
+              >
+                <span>项目</span>
+                <span>目录</span>
               </div>
-            ) : projects.length === 0 ? (
-              <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
-                <h2>暂无项目</h2>
-                <p>添加一个本地目录，开始管理项目环境与默认设置。</p>
-                <Button color="secondary" onClick={() => void addProject()}>
-                  添加项目
-                </Button>
-              </div>
-            ) : visibleProjects.length === 0 ? (
-              <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
-                <h2>未找到项目</h2>
-                <p>没有与“{query}”匹配的项目。</p>
-                <Button color="secondary" size="compact" onClick={() => setQuery('')}>
-                  清除搜索
-                </Button>
-              </div>
-            ) : (
-              <div className="environment-primary-projects tw:@container">
-                <div
-                  className="environment-primary-projects__header tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:px-3 tw:py-2 tw:text-app-text-meta tw:type-caption"
-                  aria-hidden="true"
-                >
-                  <span>项目</span>
-                  <span>目录</span>
-                </div>
-                <div className="environment-project-list tw:grid">{projectRows}</div>
-              </div>
-            )}
-          </div>
-        </PrimaryPageLayout>
+              <div className="environment-project-list tw:grid">{projectRows}</div>
+            </div>
+          )}
+        </div>
+      </PrimaryPageLayout>
     )
   }
 

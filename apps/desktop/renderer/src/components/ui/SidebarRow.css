@@ -9,7 +9,9 @@
     -webkit-app-region: no-drag;
   }
 
-  .sidebar-row:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'], [data-menu-item])),
+  .sidebar-row:hover:not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'], [data-menu-item])
+    ),
   .sidebar-row[data-highlighted]:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
     background: var(--cpx-comp-row-hover-bg, var(--cpx-sys-color-hover));
     color: var(--cpx-comp-row-hover-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
@@ -70,21 +72,23 @@
   }
 
   :is(
-    .sidebar-row[data-state='checked'],
-    .sidebar-row[aria-selected='true'],
-    .sidebar-row[aria-checked='true'],
-    .sidebar-row:has(.popover-item-check)
-  ):where(:hover:not([data-menu-item]), [data-highlighted]):not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+      .sidebar-row[data-state='checked'],
+      .sidebar-row[aria-selected='true'],
+      .sidebar-row[aria-checked='true'],
+      .sidebar-row:has(.popover-item-check)
+    ):where(:hover:not([data-menu-item]), [data-highlighted]):not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'])
+    ) {
     background: var(--cpx-comp-row-hover-bg, var(--cpx-sys-color-hover));
     color: var(--cpx-comp-row-hover-fg, var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary)));
   }
 
   :is(
-    .sidebar-row[data-state='checked'],
-    .sidebar-row[aria-selected='true'],
-    .sidebar-row[aria-checked='true'],
-    .sidebar-row:has(.popover-item-check)
-  ):active:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
+      .sidebar-row[data-state='checked'],
+      .sidebar-row[aria-selected='true'],
+      .sidebar-row[aria-checked='true'],
+      .sidebar-row:has(.popover-item-check)
+    ):active:not(:where(:disabled, [data-disabled], [aria-disabled='true'])) {
     background: var(--cpx-comp-row-pressed-bg, var(--cpx-sys-color-active));
     color: var(--cpx-comp-row-fg, var(--cpx-sys-color-fg-primary));
   }
@@ -101,7 +105,10 @@
     opacity: var(--cpx-comp-row-disabled-opacity, 0.55);
   }
 
-  .sidebar-row:is(:hover:not([data-menu-item]), [data-highlighted], :active, .active):not(:where(:disabled, [data-disabled], [aria-disabled='true'])) .popover-item-arrow {
+  .sidebar-row:is(:hover:not([data-menu-item]), [data-highlighted], :active, .active):not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'])
+    )
+    .popover-item-arrow {
     color: var(--cpx-sys-color-fg-primary);
   }
 

@@ -297,9 +297,7 @@ export function hasAbnormalSubagent(
   return Boolean(
     agents?.some(
       (agent) =>
-        agent.status === 'failed' ||
-        agent.status === 'stopped' ||
-        agent.status === 'interrupted',
+        agent.status === 'failed' || agent.status === 'stopped' || agent.status === 'interrupted',
     ),
   )
 }

@@ -53,7 +53,14 @@ export function computeTooltipPosition({
   sideOffset = 7,
   collisionPadding = 8,
 }: {
-  triggerRect: { top: number; bottom: number; left: number; right: number; width: number; height: number }
+  triggerRect: {
+    top: number
+    bottom: number
+    left: number
+    right: number
+    width: number
+    height: number
+  }
   contentWidth: number
   contentHeight: number
   viewportWidth: number
@@ -201,11 +208,7 @@ interface TooltipProviderContextValue {
   readonly isWarm: boolean
   claimOpen: (id: string, handlers: TooltipOpenHandlers) => number
   releaseOpen: (id: string, generation: number) => void
-  registerExiting: (
-    id: string,
-    lastGeneration: number | null,
-    abortExit: () => void,
-  ) => () => void
+  registerExiting: (id: string, lastGeneration: number | null, abortExit: () => void) => () => void
 }
 
 const TooltipProviderContext = createContext<TooltipProviderContextValue>({
@@ -328,11 +331,7 @@ export function TooltipProvider({
     return contextObj as TooltipProviderContextValue
   }, [delayDuration, skipDelayDuration, claimOpen, releaseOpen, registerExiting])
 
-  return (
-    <TooltipProviderContext.Provider value={value}>
-      {children}
-    </TooltipProviderContext.Provider>
-  )
+  return <TooltipProviderContext.Provider value={value}>{children}</TooltipProviderContext.Provider>
 }
 
 /* -------------------------------------------------------------------------------------------------
@@ -409,11 +408,7 @@ export function TooltipRoot({
   interactive,
 }: TooltipRootProps) {
   const provider = useContext(TooltipProviderContext)
-  const [isOpen, setOpen] = useControllableState(
-    controlledOpen,
-    defaultOpen,
-    onOpenChange,
-  )
+  const [isOpen, setOpen] = useControllableState(controlledOpen, defaultOpen, onOpenChange)
 
   const triggerRef = useRef<HTMLElement | null>(null)
   const contentId = useId()
@@ -545,18 +540,13 @@ export function TooltipRoot({
     ],
   )
 
-  return (
-    <TooltipContext.Provider value={contextValue}>
-      {children}
-    </TooltipContext.Provider>
-  )
+  return <TooltipContext.Provider value={contextValue}>{children}</TooltipContext.Provider>
 }
 
 /* -------------------------------------------------------------------------------------------------
  * Tooltip.Trigger
  * -----------------------------------------------------------------------------------------------*/
-export interface TooltipTriggerProps
-  extends React.ButtonHTMLAttributes<HTMLElement> {
+export interface TooltipTriggerProps extends React.ButtonHTMLAttributes<HTMLElement> {
   asChild?: boolean
   shortcut?: ReactNode
 }
@@ -734,8 +724,7 @@ const VARIANT_STYLES: Record<TooltipVariant, string> = {
     'tw:bg-[#18181b] [data-theme=dark]_&:tw:bg-[#27272a] tw:text-white tw:border tw:border-white/10 tw:shadow-lg',
   glass:
     'tw:bg-app-glass tw:text-app-text tw:border tw:border-app-border-subtle tw:backdrop-blur-xl tw:shadow-lg',
-  accent:
-    'tw:bg-app-accent tw:text-app-on-accent tw:border tw:border-transparent tw:shadow-lg',
+  accent: 'tw:bg-app-accent tw:text-app-on-accent tw:border tw:border-transparent tw:shadow-lg',
   unstyled: '',
 }
 
@@ -794,7 +783,9 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
       })
 
       setActualSide((prev) => (prev !== result.actualSide ? result.actualSide : prev))
-      setArrowOffset((prev) => (Math.abs(prev - result.arrowOffset) > 0.5 ? result.arrowOffset : prev))
+      setArrowOffset((prev) =>
+        Math.abs(prev - result.arrowOffset) > 0.5 ? result.arrowOffset : prev,
+      )
       setPosition((prev) => {
         if (prev && prev.top === result.top && prev.left === result.left) return prev
         return { top: result.top, left: result.left }
@@ -877,7 +868,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
     const baseClasses = isUnstyled
       ? 'tooltip-presence'
       : 'tooltip-presence tooltip-content tw:inline-flex tw:items-center tw:px-2.5 tw:py-1.5 tw:rounded-sm tw:type-caption tw:max-w-[min(280px,calc(100vw-16px))] tw:break-words tw:select-none tw:box-border tw:z-tooltip'
-    const variantClasses = isUnstyled ? '' : (VARIANT_STYLES[variant] || VARIANT_STYLES.default)
+    const variantClasses = isUnstyled ? '' : VARIANT_STYLES[variant] || VARIANT_STYLES.default
 
     const handleMouseEnter = (e: React.MouseEvent<HTMLDivElement>) => {
       onMouseEnter?.(e)
@@ -914,9 +905,7 @@ export const TooltipContent = forwardRef<HTMLDivElement, TooltipContentProps>(
             animate={{ opacity: 1, scale: 1, x: 0, y: 0 }}
             exit={{
               ...getExitAnimation(),
-              transition: reducedMotion
-                ? { duration: 0.08 }
-                : { duration: 0.13, ease: 'easeIn' },
+              transition: reducedMotion ? { duration: 0.08 } : { duration: 0.13, ease: 'easeIn' },
             }}
             transition={
               warm
@@ -967,11 +956,9 @@ export interface TooltipArrowProps extends HTMLAttributes<HTMLDivElement> {
   height?: number
 }
 
-export const TooltipArrow = forwardRef<HTMLDivElement, TooltipArrowProps>(
-  (_props, _ref) => {
-    return null
-  },
-)
+export const TooltipArrow = forwardRef<HTMLDivElement, TooltipArrowProps>((_props, _ref) => {
+  return null
+})
 TooltipArrow.displayName = 'Tooltip.Arrow'
 
 /* -------------------------------------------------------------------------------------------------
@@ -1024,10 +1011,7 @@ export function Tooltip({
   disabled,
 }: TooltipProps) {
   const isEmpty =
-    content === null ||
-    content === undefined ||
-    typeof content === 'boolean' ||
-    content === ''
+    content === null || content === undefined || typeof content === 'boolean' || content === ''
   if (disabled || isEmpty) return <>{children}</>
 
   const sideOffset = propSideOffset ?? offset ?? 7

@@ -316,13 +316,11 @@ export function ConversationPage(): React.ReactNode {
    * 首次提交在两个阶段只显示一份用户消息：尚未建立会话时展示 pending 快照，
    * 真实页面在 canonical 投影出现同一 inputId 前继续展示它。
    */
-  const firstSubmittedMessage = isThreadLoading
-    ? null
-    : pendingSubmission ? (
-        <PendingSubmissionMessages submission={pendingSubmission} />
-      ) : handoff && !firstInputInProjection ? (
-        <PendingSubmissionMessages submission={handoff.submission} />
-      ) : null
+  const firstSubmittedMessage = isThreadLoading ? null : pendingSubmission ? (
+    <PendingSubmissionMessages submission={pendingSubmission} />
+  ) : handoff && !firstInputInProjection ? (
+    <PendingSubmissionMessages submission={handoff.submission} />
+  ) : null
   // pending 路由刷新后记录已不存在：回到新聊天页，不自动重发。
   const isUnknownPendingRoute = Boolean(routeSubmissionId) && !pendingSubmission
   React.useEffect(() => {
@@ -1609,9 +1607,7 @@ export function ConversationPage(): React.ReactNode {
         </React.Suspense>
       ) : null}
       <div className="workflow-page__body tw:flex tw:w-full tw:min-h-0 tw:flex-1 tw:overflow-hidden">
-        <main
-          className="workflow-page__main tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:flex-1 tw:flex-col tw:bg-transparent"
-        >
+        <main className="workflow-page__main tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:flex-1 tw:flex-col tw:bg-transparent">
           <div className="workflow-main-scroll-frame tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:flex-1 tw:overflow-hidden">
             <ConversationTurnNavRail
               key={activeSessionId}

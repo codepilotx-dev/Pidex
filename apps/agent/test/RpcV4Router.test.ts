@@ -23,8 +23,11 @@ test('model parameter preferences round trip through RPC', async () => {
   const { db, initialize, call } = await fixture()
   await initialize()
   const result = await call('provider/modelPreferences/set', {
-    operationId: 'preferences:test', providerId: 'workbuddy', modelId: 'hy4-preview',
-    variant: 'high', maxContextTokens: 96_500,
+    operationId: 'preferences:test',
+    providerId: 'workbuddy',
+    modelId: 'hy4-preview',
+    variant: 'high',
+    maxContextTokens: 96_500,
   })
   expect(result.error).toBeUndefined()
   expect(result.result.preference).toMatchObject({ variant: 'high', maxContextTokens: 96_500 })
@@ -259,7 +262,10 @@ describe('RPC v4 Router', () => {
     const { db, router, initialize } = await fixture({
       threads: {
         resumeHookTrust: () => undefined,
-        stop: async () => { stopped++; handle.controller.abort() },
+        stop: async () => {
+          stopped++
+          handle.controller.abort()
+        },
       } as never,
     })
     try {
@@ -271,7 +277,9 @@ describe('RPC v4 Router', () => {
       expect(coordinator.active('thread:background')?.turnID).toBe('turn:background')
       await initialize()
       expect(handle.controller.signal.aborted).toBe(false)
-    } finally { db.close() }
+    } finally {
+      db.close()
+    }
   })
   test('归档先移除定时任务并停止活动 turn，失败不写入归档', async () => {
     const calls: string[] = []
@@ -1522,7 +1530,10 @@ describe('RPC v4 Router', () => {
     expect(listCalls).toBe(1)
     expect(modelCalls).toBe(1)
 
-    await call('model/refresh', { operationId: 'operation:model-refresh-paged', providerId: providerID })
+    await call('model/refresh', {
+      operationId: 'operation:model-refresh-paged',
+      providerId: providerID,
+    })
     const expired = await call('model/list', {
       providerId: providerID,
       enabled: true,
@@ -1545,7 +1556,10 @@ describe('RPC v4 Router', () => {
     })
     try {
       await initialize()
-      const result = await call('model/refresh', { operationId: 'operation:failed-refresh', providerId: 'google' })
+      const result = await call('model/refresh', {
+        operationId: 'operation:failed-refresh',
+        providerId: 'google',
+      })
       expect(result.error).toMatchObject({
         message: '模型目录刷新失败，请检查提供商连接、凭据和模型接口后重试。',
         data: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
@@ -1560,14 +1574,21 @@ describe('RPC v4 Router', () => {
     const { db, call, initialize } = await fixture({
       providers: {
         refresh: async () => {
-          throw new PiModelServiceError('CATALOG_REFRESH_FAILED', 'private upstream failure',
-            { cause: new Error('private credential') }, ['openai：凭据鉴权失败（HTTP 401）'])
+          throw new PiModelServiceError(
+            'CATALOG_REFRESH_FAILED',
+            'private upstream failure',
+            { cause: new Error('private credential') },
+            ['openai：凭据鉴权失败（HTTP 401）'],
+          )
         },
       } as unknown as RpcRouterDependencies['providers'],
     })
     try {
       await initialize()
-      const result = await call('model/refresh', { operationId: 'operation:refresh-diagnostics', providerId: 'openai' })
+      const result = await call('model/refresh', {
+        operationId: 'operation:refresh-diagnostics',
+        providerId: 'openai',
+      })
       expect(result.error).toMatchObject({
         message: '模型目录刷新失败（1 个提供商）：openai：凭据鉴权失败（HTTP 401）。',
         data: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
@@ -1592,7 +1613,9 @@ describe('RPC v4 Router', () => {
         },
       } as unknown as RpcRouterDependencies['providers'],
       piModels: {
-        refreshDirectory: async () => { reloadCalls += 1 },
+        refreshDirectory: async () => {
+          reloadCalls += 1
+        },
       } as unknown as RpcRouterDependencies['piModels'],
     })
     await initialize()
@@ -1632,7 +1655,8 @@ describe('RPC v4 Router', () => {
     expect(reloadCalls).toBe(1)
     expect(refreshScopes).toEqual([])
     const scoped = await call('model/refresh', {
-      operationId: 'operation:google-refresh', providerId: 'google',
+      operationId: 'operation:google-refresh',
+      providerId: 'google',
     })
     expect(scoped.error).toBeUndefined()
     expect(refreshScopes).toEqual(['google'])

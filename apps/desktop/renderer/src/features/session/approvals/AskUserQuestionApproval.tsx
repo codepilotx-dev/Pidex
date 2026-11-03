@@ -234,7 +234,15 @@ function QuestionAnswerFormInstance({
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentQuestionIndex, onReject, questionCount, questionStates, questions, disabled, isStructured])
+  }, [
+    currentQuestionIndex,
+    onReject,
+    questionCount,
+    questionStates,
+    questions,
+    disabled,
+    isStructured,
+  ])
 
   if (!questions || questions.length === 0) {
     return (
@@ -263,9 +271,11 @@ function QuestionAnswerFormInstance({
   ): void {
     if (supportsPause && !pauseAttemptedRef.current && typeof input.version === 'number') {
       pauseAttemptedRef.current = true
-      void desktopClient.pauseQuestion(requestId.replace(/^question:/u, ''), input.version).catch(() => {
-        pauseAttemptedRef.current = false
-      })
+      void desktopClient
+        .pauseQuestion(requestId.replace(/^question:/u, ''), input.version)
+        .catch(() => {
+          pauseAttemptedRef.current = false
+        })
     }
     setQuestionStates((current) => {
       const question = questions?.find((item) => questionKey(item) === questionText)
@@ -478,11 +488,7 @@ function QuestionAnswerFormInstance({
             const confirmKey =
               event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.altKey
             if (!confirmKey) return
-            if (
-              event.nativeEvent.isComposing ||
-              event.nativeEvent.keyCode === 229 ||
-              event.repeat
-            )
+            if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || event.repeat)
               return
             event.preventDefault()
             if (state.custom.trim()) confirmCurrentQuestionAndAdvance(currentQuestion)
@@ -527,48 +533,48 @@ function QuestionAnswerFormInstance({
         error={error}
         navigation={
           <div className="ask-user-question-navigation tw:flex tw:shrink-0 tw:items-center tw:gap-2 tw:text-app-text-meta tw:type-caption">
-              {questionCount > 1 ? (
-                <div
-                  className="ask-user-question-pagination tw:inline-flex tw:items-center tw:gap-1 tw:whitespace-nowrap"
-                  role="group"
-                  aria-label="问题导航"
+            {questionCount > 1 ? (
+              <div
+                className="ask-user-question-pagination tw:inline-flex tw:items-center tw:gap-1 tw:whitespace-nowrap"
+                role="group"
+                aria-label="问题导航"
+              >
+                <button
+                  type="button"
+                  className={ASK_USER_QUESTION_PAGINATION_NAV_BUTTON_CLASS}
+                  aria-label="上一题"
+                  disabled={disabled || currentQuestionIndex === 0}
+                  onClick={() => goToQuestion(-1)}
                 >
-                  <button
-                    type="button"
-                    className={ASK_USER_QUESTION_PAGINATION_NAV_BUTTON_CLASS}
-                    aria-label="上一题"
-                    disabled={disabled || currentQuestionIndex === 0}
-                    onClick={() => goToQuestion(-1)}
-                  >
-                    <ChevronLeft size={APP_ICON_SIZE} />
-                  </button>
-                  {questions.map((question, index) => {
-                    const answered = hasQuestionAnswer(draftFor(question))
-                    return (
-                      <button
-                        key={questionKey(question)}
-                        type="button"
-                        className={cx(
-                          ASK_USER_QUESTION_PAGINATION_NAV_BUTTON_CLASS,
-                          'ask-user-question-step',
-                          index === currentQuestionIndex && 'current',
-                          answered && 'answered',
-                        )}
-                        aria-current={index === currentQuestionIndex ? 'step' : undefined}
-                        aria-label={`第 ${index + 1} 题${answered ? '（已答）' : '（待答）'}`}
-                        data-answered={answered ? 'true' : 'false'}
-                        disabled={disabled}
-                        onClick={() => goToQuestionIndex(index)}
-                      >
-                        {index + 1}
-                      </button>
-                    )
-                  })}
-                  <span aria-live="polite">
-                    {currentQuestionIndex + 1} / {questionCount}
-                  </span>
-                </div>
-              ) : null}
+                  <ChevronLeft size={APP_ICON_SIZE} />
+                </button>
+                {questions.map((question, index) => {
+                  const answered = hasQuestionAnswer(draftFor(question))
+                  return (
+                    <button
+                      key={questionKey(question)}
+                      type="button"
+                      className={cx(
+                        ASK_USER_QUESTION_PAGINATION_NAV_BUTTON_CLASS,
+                        'ask-user-question-step',
+                        index === currentQuestionIndex && 'current',
+                        answered && 'answered',
+                      )}
+                      aria-current={index === currentQuestionIndex ? 'step' : undefined}
+                      aria-label={`第 ${index + 1} 题${answered ? '（已答）' : '（待答）'}`}
+                      data-answered={answered ? 'true' : 'false'}
+                      disabled={disabled}
+                      onClick={() => goToQuestionIndex(index)}
+                    >
+                      {index + 1}
+                    </button>
+                  )
+                })}
+                <span aria-live="polite">
+                  {currentQuestionIndex + 1} / {questionCount}
+                </span>
+              </div>
+            ) : null}
           </div>
         }
       >

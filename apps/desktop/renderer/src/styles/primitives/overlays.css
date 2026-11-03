@@ -176,7 +176,6 @@
     }
   }
 
-
   @keyframes ui-dialog-backdrop-in {
     from {
       opacity: 0;
@@ -234,5 +233,4 @@
       opacity: 0;
     }
   }
-
 }

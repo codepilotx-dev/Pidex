@@ -384,7 +384,6 @@ export function SubagentThreadPanel({
               <span>{run.error}</span>
             </div>
           ) : null}
-
         </div>
       </div>
     </section>

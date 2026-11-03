@@ -104,7 +104,8 @@ describe('summarizeTurnProcessItems', () => {
       active: false,
       failed: false,
       kind: 'integration',
-      label: '使用 drive、加载工具、调用工具、修改代码、查阅文件、运行命令、检索网络资料，并调用工具',
+      label:
+        '使用 drive、加载工具、调用工具、修改代码、查阅文件、运行命令、检索网络资料，并调用工具',
     })
     expect(result.summaryKey).toBe(
       'completed:ok:integration:drive|loaded-tool|tool|file-change|exploration|command|web-search|dynamic-tool',
@@ -275,54 +276,61 @@ function subagentItem(
 
 describe('subagent group summary', () => {
   test('joins names by 和 for two and 、+和 for three', () => {
-    expect(formatSubagentGroupLabel([
-      { name: 'Frontend', status: 'completed' },
-      { name: 'Backend', status: 'completed' },
-    ])).toBe('Frontend和Backend 已完成')
-    expect(formatSubagentGroupLabel([
-      { name: 'Frontend', status: 'completed' },
-      { name: 'Backend', status: 'completed' },
-      { name: 'Designer', status: 'completed' },
-    ])).toBe('Frontend、Backend和Designer 已完成')
+    expect(
+      formatSubagentGroupLabel([
+        { name: 'Frontend', status: 'completed' },
+        { name: 'Backend', status: 'completed' },
+      ]),
+    ).toBe('Frontend和Backend 已完成')
+    expect(
+      formatSubagentGroupLabel([
+        { name: 'Frontend', status: 'completed' },
+        { name: 'Backend', status: 'completed' },
+        { name: 'Designer', status: 'completed' },
+      ]),
+    ).toBe('Frontend、Backend和Designer 已完成')
   })
 
   test('folds names beyond three into 另外 N 个', () => {
-    expect(formatSubagentGroupLabel([
-      { name: 'A', status: 'completed' },
-      { name: 'B', status: 'completed' },
-      { name: 'C', status: 'completed' },
-      { name: 'D', status: 'completed' },
-    ])).toBe('A、B和另外 2 个 已完成')
+    expect(
+      formatSubagentGroupLabel([
+        { name: 'A', status: 'completed' },
+        { name: 'B', status: 'completed' },
+        { name: 'C', status: 'completed' },
+        { name: 'D', status: 'completed' },
+      ]),
+    ).toBe('A、B和另外 2 个 已完成')
   })
 
   test('reports running count first and appends abnormal counts', () => {
-    expect(formatSubagentGroupLabel([
-      { name: 'A', status: 'running' },
-      { name: 'B', status: 'waiting-permission' },
-    ])).toBe('2 个子智能体正在工作…')
-    expect(formatSubagentGroupLabel([
-      { name: 'A', status: 'running' },
-      { name: 'B', status: 'failed' },
-    ])).toBe('1 个子智能体正在工作…（1 个失败）')
+    expect(
+      formatSubagentGroupLabel([
+        { name: 'A', status: 'running' },
+        { name: 'B', status: 'waiting-permission' },
+      ]),
+    ).toBe('2 个子智能体正在工作…')
+    expect(
+      formatSubagentGroupLabel([
+        { name: 'A', status: 'running' },
+        { name: 'B', status: 'failed' },
+      ]),
+    ).toBe('1 个子智能体正在工作…（1 个失败）')
   })
 
   test('does not read stopped or interrupted as completed', () => {
-    expect(formatSubagentGroupLabel([
-      { name: 'A', status: 'completed' },
-      { name: 'B', status: 'failed' },
-      { name: 'C', status: 'stopped' },
-    ])).toBe('A、B和C 已结束（1 个失败、1 个停止）')
+    expect(
+      formatSubagentGroupLabel([
+        { name: 'A', status: 'completed' },
+        { name: 'B', status: 'failed' },
+        { name: 'C', status: 'stopped' },
+      ]),
+    ).toBe('A、B和C 已结束（1 个失败、1 个停止）')
   })
 
   test('parent turn activity does not decide the group status', () => {
-    const items = [
-      subagentItem('Frontend', 'completed'),
-      subagentItem('Backend', 'completed'),
-    ]
+    const items = [subagentItem('Frontend', 'completed'), subagentItem('Backend', 'completed')]
     // 父 turn 仍 active，但两个子任务都已完成：应报已完成。
-    expect(summarizeTurnProcessItems(items, 'running').label).toBe(
-      'Frontend和Backend 已完成',
-    )
+    expect(summarizeTurnProcessItems(items, 'running').label).toBe('Frontend和Backend 已完成')
 
     // 父 turn 已结束，但子任务仍在运行：不应误报完成。
     const runningItems = [subagentItem('Designer', 'running')]

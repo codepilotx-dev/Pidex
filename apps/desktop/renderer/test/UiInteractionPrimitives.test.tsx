@@ -230,6 +230,20 @@ describe('loading interaction primitives', () => {
     expect(asChildHtml).not.toContain('style=')
   })
 
+  test('button asChild forwards the host accessible name to the child element', () => {
+    const html = renderToStaticMarkup(
+      <Button asChild isIconOnly aria-label="任务列表" title="任务列表">
+        <a href="#list">
+          <span aria-hidden="true">+</span>
+        </a>
+      </Button>,
+    )
+
+    // 图标链接只有 aria-label/title 能提供可访问名，asChild 不应吞掉它们。
+    expect(html).toContain('aria-label="任务列表"')
+    expect(html).toContain('title="任务列表"')
+  })
+
   test('button asChild without a child class leaves the class attribute out', () => {
     const html = renderToStaticMarkup(
       <Button asChild>

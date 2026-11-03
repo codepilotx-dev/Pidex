@@ -707,13 +707,7 @@ function TextItemView({
       actionItems.push({
         id: 'fork',
         label: '在新聊天中继续',
-        icon: (
-          <Split
-            aria-hidden="true"
-            size={APP_ICON_SIZE}
-            strokeWidth={APP_ICON_STROKE_WIDTH}
-          />
-        ),
+        icon: <Split aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />,
         onClick: () => onForkFromMessage({ itemId: item.id, turnId: item.turnId }),
         element: (
           <Tooltip content="在新聊天中继续">
@@ -728,11 +722,7 @@ function TextItemView({
                 onForkFromMessage({ itemId: item.id, turnId: item.turnId })
               }}
             >
-              <Split
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
+              <Split aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
             </Button>
           </Tooltip>
         ),

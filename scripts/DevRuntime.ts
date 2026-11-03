@@ -371,10 +371,16 @@ export async function allocateDevAgentPort(
     return await allocateLoopbackPort(connection.port)
   } catch {
     if (
-      connection.reused && configuredPort === undefined && previous &&
-      !isProcessAlive(previous.ownerPid) && !isProcessAlive(previous.agentPid)
-    ) return await allocateLoopbackPort()
-    throw new Error(connection.reused ? 'AGENT_RECONNECT_PORT_UNAVAILABLE' : 'AGENT_PORT_UNAVAILABLE')
+      connection.reused &&
+      configuredPort === undefined &&
+      previous &&
+      !isProcessAlive(previous.ownerPid) &&
+      !isProcessAlive(previous.agentPid)
+    )
+      return await allocateLoopbackPort()
+    throw new Error(
+      connection.reused ? 'AGENT_RECONNECT_PORT_UNAVAILABLE' : 'AGENT_PORT_UNAVAILABLE',
+    )
   }
 }
 

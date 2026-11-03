@@ -121,16 +121,23 @@ describe('Goal events refresh the session store', () => {
   test('子任务结束后的主 Turn 终态也刷新目录中的 Goal 用量与状态', async () => {
     const reloaded: string[][] = []
     const coordinator = new SessionCatalogCoordinator({
-      onCatalogUpdated: () => {}, onProviderCredentialUpdated: () => {},
-      onConfigUpdated: () => {}, onWorkspaceFileChanged: () => {},
-      onWorkspaceGitChanged: () => {}, onLifecycleUpdated: () => {},
-      refreshThreads: async (ids) => { reloaded.push([...ids]) },
+      onCatalogUpdated: () => {},
+      onProviderCredentialUpdated: () => {},
+      onConfigUpdated: () => {},
+      onWorkspaceFileChanged: () => {},
+      onWorkspaceGitChanged: () => {},
+      onLifecycleUpdated: () => {},
+      refreshThreads: async (ids) => {
+        reloaded.push([...ids])
+      },
     })
-    await coordinator.deliverBatch([{
-      ...goalEvent('thread/goal/updated'),
-      type: 'turn/interrupted',
-      payload: { turn: { id: 'turn-root', status: 'interrupted' } },
-    } as EventEnvelope])
+    await coordinator.deliverBatch([
+      {
+        ...goalEvent('thread/goal/updated'),
+        type: 'turn/interrupted',
+        payload: { turn: { id: 'turn-root', status: 'interrupted' } },
+      } as EventEnvelope,
+    ])
     expect(reloaded).toEqual([['thread:1']])
   })
   test('thread/goal/updated 自行触发目录刷新', async () => {

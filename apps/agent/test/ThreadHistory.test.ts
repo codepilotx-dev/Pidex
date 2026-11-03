@@ -236,20 +236,41 @@ describe('Thread 历史', () => {
       ['automatic-compaction', first.turnID, 4_000],
     ] as const) {
       db.repositories.context.insertCompaction({
-        id, threadID: thread.id, turnID, createdAt,
-        beforeCount: 10, afterCount: 4, beforeTokens: 100_000, afterTokens: 40_000,
-        targetTokens: 55_000, baselineVersion: 1, usageSampleID: `usage-${id}`, summary: '摘要',
+        id,
+        threadID: thread.id,
+        turnID,
+        createdAt,
+        beforeCount: 10,
+        afterCount: 4,
+        beforeTokens: 100_000,
+        afterTokens: 40_000,
+        targetTokens: 55_000,
+        baselineVersion: 1,
+        usageSampleID: `usage-${id}`,
+        summary: '摘要',
         reference: {
-          version: 1, kind: 'pi-compaction-reference', sessionID: db.getAgentExecution(first.agentID)!.sessionID,
-          entryID: id, firstKeptEntryID: null,
-          trigger: turnID ? 'automatic' : 'manual', afterTokensSource: 'compaction-estimate',
+          version: 1,
+          kind: 'pi-compaction-reference',
+          sessionID: db.getAgentExecution(first.agentID)!.sessionID,
+          entryID: id,
+          firstKeptEntryID: null,
+          trigger: turnID ? 'automatic' : 'manual',
+          afterTokensSource: 'compaction-estimate',
         },
       })
     }
     const snapshot = projection.snapshot(thread.id)!
     expect(snapshot.items).toMatchObject([
-      { id: 'activity:context-compression:manual-compaction', turnId: first.turnID, contextTokens: 40_000 },
-      { id: 'activity:context-compression:automatic-compaction', turnId: first.turnID, contextTokens: 40_000 },
+      {
+        id: 'activity:context-compression:manual-compaction',
+        turnId: first.turnID,
+        contextTokens: 40_000,
+      },
+      {
+        id: 'activity:context-compression:automatic-compaction',
+        turnId: first.turnID,
+        contextTokens: 40_000,
+      },
     ])
     const latest = projection.historyPage(thread.id, { limit: 1 })!
     expect(latest.turns[0]?.turn.id).toBe(second.turnID)
@@ -642,7 +663,9 @@ describe('历史 task_mode 读取兼容', () => {
     const thread = db.createThread('旧模式历史')
     const turn = db.createTurn(thread.id, input('保留这条消息'))
     db.sqlite.query("UPDATE threads SET task_mode = 'legacy-mode' WHERE id = ?").run(thread.id)
-    db.sqlite.query("UPDATE inputs SET task_mode = 'legacy-mode' WHERE turn_id = ?").run(turn.turnID)
+    db.sqlite
+      .query("UPDATE inputs SET task_mode = 'legacy-mode' WHERE turn_id = ?")
+      .run(turn.turnID)
     db.sqlite.query("UPDATE turns SET mode = 'legacy-mode' WHERE id = ?").run(turn.turnID)
     const streamPosition = { streamId: 'fixture', sequence: 0 }
     const snapshot = projection.snapshot(thread.id)!
@@ -806,10 +829,13 @@ describe('侧边栏展示轮次与错误投影', () => {
     const tieThread = db.createThread('平局测试')
     const turnA = db.createTurn(tieThread.id, input('轮次A'))
     const turnB = db.createTurn(tieThread.id, input('轮次B'))
-    const [smallerTurn, largerTurn] =
-      turnA.turnID < turnB.turnID ? [turnA, turnB] : [turnB, turnA]
-    db.sqlite.query("UPDATE turns SET status = 'completed', created_at = 5000 WHERE id = ?").run(smallerTurn.turnID)
-    db.sqlite.query("UPDATE turns SET status = 'failed', created_at = 5000 WHERE id = ?").run(largerTurn.turnID)
+    const [smallerTurn, largerTurn] = turnA.turnID < turnB.turnID ? [turnA, turnB] : [turnB, turnA]
+    db.sqlite
+      .query("UPDATE turns SET status = 'completed', created_at = 5000 WHERE id = ?")
+      .run(smallerTurn.turnID)
+    db.sqlite
+      .query("UPDATE turns SET status = 'failed', created_at = 5000 WHERE id = ?")
+      .run(largerTurn.turnID)
     const tieList = projection.list().find((item) => item.id === tieThread.id)!
     // largerTurn id 字典序大于 smallerTurn，两者 created_at 相同且非排队，选择 largerTurn
     expect(tieList.latestTurnStatus).toBe('failed')

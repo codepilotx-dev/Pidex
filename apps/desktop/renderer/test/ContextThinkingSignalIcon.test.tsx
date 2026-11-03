@@ -54,7 +54,9 @@ describe('ContextThinkingSignalIcon', () => {
     })
 
     test('思考关闭选项返回 0 根柱子', () => {
-      expect(resolveSignalActiveBars(true, 'disabled', [{ value: 'disabled' }, { value: 'enabled' }])).toBe(0)
+      expect(
+        resolveSignalActiveBars(true, 'disabled', [{ value: 'disabled' }, { value: 'enabled' }]),
+      ).toBe(0)
       expect(resolveSignalActiveBars(true, 'off', [])).toBe(0)
       expect(resolveSignalActiveBars(true, 'none', [])).toBe(0)
     })
@@ -110,10 +112,7 @@ describe('ContextThinkingSignalIcon', () => {
 
     test('不支持思考的模型同样渲染全柱 + 斜杠', () => {
       const html = renderToString(
-        <ContextThinkingSignalIcon
-          maxContextTokens={1_000_000}
-          showThinkingOptions={false}
-        />,
+        <ContextThinkingSignalIcon maxContextTokens={1_000_000} showThinkingOptions={false} />,
       )
       expect(html).toContain('tw:text-app-context-violet')
       expect(html).toContain('<line')

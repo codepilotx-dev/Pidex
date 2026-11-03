@@ -56,7 +56,9 @@ async function run() {
   )
   const port = await allocateDevAgentPort(connection, previousRuntime, configuredPort)
   if (connection.reused && port !== connection.port) {
-    console.warn('上次的开发 Agent 已退出，但旧端口仍不可用；已分配新端口，请重启正在运行的 Desktop。')
+    console.warn(
+      '上次的开发 Agent 已退出，但旧端口仍不可用；已分配新端口，请重启正在运行的 Desktop。',
+    )
   }
   if (previousRuntime && configuredPort !== undefined && !connection.reused) {
     console.warn('开发 Agent 端口配置已变更；正在运行的 Desktop 需要重启。')

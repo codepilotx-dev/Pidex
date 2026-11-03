@@ -207,12 +207,8 @@ describe('fixed Codex UI themes', () => {
     ).text()
     const normalizedStylesheet = stylesheet.replace(/\s+/g, ' ')
 
-    expect(normalizedStylesheet).toContain(
-      '--cpx-sys-shadow-raised: none;',
-    )
-    expect(normalizedStylesheet).toContain(
-      '--cpx-sys-shadow-resting: none;',
-    )
+    expect(normalizedStylesheet).toContain('--cpx-sys-shadow-raised: none;')
+    expect(normalizedStylesheet).toContain('--cpx-sys-shadow-resting: none;')
     expect(normalizedStylesheet).toContain('--cpx-sys-shadow-floating')
   })
 
@@ -562,7 +558,9 @@ describe('fixed Codex UI themes', () => {
     const dark = deriveThemeVariables(DEFAULT_DARK_THEME)
 
     // In default light: sidebar is gray-2, titlebar follows sidebar, main/panel are canvas
-    expect(light['--cpx-sys-color-workbench-sidebar-bg']).toBe('var(--cpx-sys-color-surface-recessed)')
+    expect(light['--cpx-sys-color-workbench-sidebar-bg']).toBe(
+      'var(--cpx-sys-color-surface-recessed)',
+    )
     expect(light['--cpx-sys-color-workbench-titlebar-bg']).toBe(
       'var(--cpx-sys-color-workbench-sidebar-bg)',
     )

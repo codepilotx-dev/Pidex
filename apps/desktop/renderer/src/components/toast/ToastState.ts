@@ -173,13 +173,21 @@ export function createToastStore(options?: {
   function show(toastOptions: ShowToastOptions): string {
     const tone = toastOptions.tone ?? 'error'
     const original = toastOptions.message
-    const summary = tone === 'error' && typeof original === 'string' ? toUserErrorMessage(original) : original
-    const needsSummary = typeof summary === 'string' && (summary.includes('\n') || summary.length > 80)
+    const summary =
+      tone === 'error' && typeof original === 'string' ? toUserErrorMessage(original) : original
+    const needsSummary =
+      typeof summary === 'string' && (summary.includes('\n') || summary.length > 80)
     const message = needsSummary
-      ? tone === 'error' ? '操作失败，点击查看详情' : '操作结果已更新，点击查看详情'
+      ? tone === 'error'
+        ? '操作失败，点击查看详情'
+        : '操作结果已更新，点击查看详情'
       : summary
-    const details = toastOptions.details !== undefined ? toastOptions.details
-      : original !== message ? original : undefined
+    const details =
+      toastOptions.details !== undefined
+        ? toastOptions.details
+        : original !== message
+          ? original
+          : undefined
     const textKey =
       toastOptions.dedupeKey ??
       (typeof toastOptions.message === 'string'
@@ -267,7 +275,10 @@ export function createToastStore(options?: {
     item.onDismiss?.()
   }
 
-  async function activate(id: string, openDetails: (notice: Pick<ToastItem, 'message' | 'details'>) => void): Promise<void> {
+  async function activate(
+    id: string,
+    openDetails: (notice: Pick<ToastItem, 'message' | 'details'>) => void,
+  ): Promise<void> {
     const item = getState().toasts.find((toast) => toast.id === id)
     if (!item) return
     if (item.onActivate) await item.onActivate()

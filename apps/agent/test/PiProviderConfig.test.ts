@@ -133,7 +133,9 @@ describe('Pi provider v2 config', () => {
         },
       },
     })
-    expect(unknown.providers.smart?.models['gpt-4o']?.smartConfig).toEqual({ pinned: ['maxTokens'] })
+    expect(unknown.providers.smart?.models['gpt-4o']?.smartConfig).toEqual({
+      pinned: ['maxTokens'],
+    })
   })
 
   test('optionSpecs 往返保留 values/map/max，非法 map 被拒绝', () => {
@@ -152,7 +154,10 @@ describe('Pi provider v2 config', () => {
           id: 'm',
           api: 'openai-completions',
           optionSpecs: {
-            reasoningLevel: { values: ['none', 'low', 'high', 'max'], map: '{"reasoning_effort": reasoningLevel}' },
+            reasoningLevel: {
+              values: ['none', 'low', 'high', 'max'],
+              map: '{"reasoning_effort": reasoningLevel}',
+            },
             maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
           },
         },
@@ -160,13 +165,19 @@ describe('Pi provider v2 config', () => {
     })
     const models = custom.value.models as Record<string, Record<string, unknown>>
     expect(models.m!.option_specs).toMatchObject({
-      reasoningLevel: { values: ['none', 'low', 'high', 'max'], map: '{"reasoning_effort": reasoningLevel}' },
+      reasoningLevel: {
+        values: ['none', 'low', 'high', 'max'],
+        map: '{"reasoning_effort": reasoningLevel}',
+      },
       maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
     })
     const parsed = parsePiProviderCatalog({ providers: { opts: custom.value } })
     expect(parsed.issues).toEqual([])
     expect(parsed.providers.opts?.models.m?.optionSpecs).toEqual({
-      reasoningLevel: { values: ['none', 'low', 'high', 'max'], map: '{"reasoning_effort": reasoningLevel}' },
+      reasoningLevel: {
+        values: ['none', 'low', 'high', 'max'],
+        map: '{"reasoning_effort": reasoningLevel}',
+      },
       maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
     })
     // 无法编译的表达式在解析/保存边界被拒绝，且整份 provider 不生效。

@@ -103,8 +103,10 @@ export const SidebarReorderItem = forwardRef<HTMLElement, Props>(function Sideba
       if ((data.list?.key === 'sections') !== (list?.key === 'sections')) return false
       // 不给其他项目的聊天行建立几何观察；项目标题接收区仍负责拒绝反馈。
       // 碰撞检测每次移动都对全部条目调用本回调，保持 O(1)。
-      return list?.destination.kind !== 'project' ||
+      return (
+        list?.destination.kind !== 'project' ||
         Boolean(data.key && sidebarSessionKeyAllowed(list, data.key))
+      )
     },
     sensors,
     plugins: [SortableKeyboardPlugin],
@@ -122,7 +124,9 @@ export const SidebarReorderItem = forwardRef<HTMLElement, Props>(function Sideba
       unsubscribeGate.current = null
       if (element) {
         // 句柄直接绑定在稳定节点上，不观察子树，也不依赖 HoverCard 的 Suspense。
-        handleRef(element.querySelector(dragHandleSelector ?? '[data-sidebar-drag-handle]') ?? element)
+        handleRef(
+          element.querySelector(dragHandleSelector ?? '[data-sidebar-drag-handle]') ?? element,
+        )
         unsubscribeGate.current = viewportGate?.(element, setInViewport) ?? null
       } else handleRef(null)
       if (typeof forwardedRef === 'function') forwardedRef(element)

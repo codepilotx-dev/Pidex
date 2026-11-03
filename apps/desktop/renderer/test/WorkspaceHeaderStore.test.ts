@@ -64,7 +64,9 @@ describe('workspace header store', () => {
     }
 
     expect(
-      selectWorkspaceHeaderItems(store.getState().items, '/plugins', 'right').map((item) => item.id),
+      selectWorkspaceHeaderItems(store.getState().items, '/plugins', 'right').map(
+        (item) => item.id,
+      ),
     ).toEqual(['last', 'first', 'second'])
     expect(
       selectWorkspaceHeaderItems(store.getState().items, '/settings').map((item) => item.id),

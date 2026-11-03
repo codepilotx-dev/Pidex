@@ -23,7 +23,10 @@ const MODEL_BRANDS: readonly [RegExp, string][] = [
 export function modelLogoURL(id: string, name?: string): string | undefined {
   for (const value of [id, name]) {
     if (!value) continue
-    const base = value.split('/').at(-1)!.replace(/:(free|cloud)$/i, '')
+    const base = value
+      .split('/')
+      .at(-1)!
+      .replace(/:(free|cloud)$/i, '')
     const brand = MODEL_BRANDS.find(([pattern]) => pattern.test(base))?.[1]
     if (brand) return modelsDevLogoURL(brand)
   }

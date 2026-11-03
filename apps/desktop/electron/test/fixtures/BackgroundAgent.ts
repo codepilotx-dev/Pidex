@@ -13,10 +13,17 @@ const server = Bun.serve({
       return new Response(null, { status: 401 })
     if (new URL(request.url).pathname === '/api/shutdown') {
       clearInterval(timer)
-      setTimeout(() => { void server.stop(true); process.exit(0) }, 25)
+      setTimeout(() => {
+        void server.stop(true)
+        process.exit(0)
+      }, 25)
       return Response.json({ ok: true })
     }
-    return Response.json({ ok: true, pid: process.pid, instanceToken: process.env.PIDEX_SIDECAR_INSTANCE_TOKEN })
+    return Response.json({
+      ok: true,
+      pid: process.pid,
+      instanceToken: process.env.PIDEX_SIDECAR_INSTANCE_TOKEN,
+    })
   },
 })
 // A failing test must not leave a detached fixture behind.

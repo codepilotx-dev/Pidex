@@ -180,10 +180,11 @@ describe('Shell 静态风险分类与灾难级拒绝', () => {
     const outside =
       "$target='F:\\CodeProject\\guardian-lab\\src\\git-tests'; Remove-Item -LiteralPath $target -Recurse -Force"
     expect(analyzeShellRisk({ command: outside })).toBeDefined()
-    const insideWorkspace = 'Set-Content -LiteralPath .\\notes\\draft.md -Value $text -Encoding utf8'
-    expect(
-      analyzeShellRisk({ command: insideWorkspace, workspaceRoot }).requiresApproval,
-    ).toBe(false)
+    const insideWorkspace =
+      'Set-Content -LiteralPath .\\notes\\draft.md -Value $text -Encoding utf8'
+    expect(analyzeShellRisk({ command: insideWorkspace, workspaceRoot }).requiresApproval).toBe(
+      false,
+    )
     expect(analyzeShellRisk({ command: outside, workspaceRoot })).toMatchObject({
       hardDenied: false,
       requiresApproval: true,
@@ -192,7 +193,8 @@ describe('Shell 静态风险分类与灾难级拒绝', () => {
     })
     expect(
       analyzeShellRisk({
-        command: "Remove-Item -LiteralPath 'C:\\Users\\tester\\Documents\\Pidex\\chat\\work\\tmp' -Recurse",
+        command:
+          "Remove-Item -LiteralPath 'C:\\Users\\tester\\Documents\\Pidex\\chat\\work\\tmp' -Recurse",
         workspaceRoot,
       }).requiresApproval,
     ).toBe(false)

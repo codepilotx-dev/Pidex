@@ -138,7 +138,10 @@ export function EditCommandProvider({ children }: { children: ReactNode }): Reac
   )
 
   const perform = useCallback(
-    async (action: DesktopEditAction, context?: CapturedEditCommandContext | null): Promise<void> => {
+    async (
+      action: DesktopEditAction,
+      context?: CapturedEditCommandContext | null,
+    ): Promise<void> => {
       const targetContext = context ?? activeContextRef.current
       if (!targetContext?.getCapabilities()[action]) return
 
@@ -213,9 +216,7 @@ export function EditCommandProvider({ children }: { children: ReactNode }): Reac
 
   return (
     <EditCommandActionContext.Provider value={actionsValue}>
-      <EditCommandStateContext.Provider value={state}>
-        {children}
-      </EditCommandStateContext.Provider>
+      <EditCommandStateContext.Provider value={state}>{children}</EditCommandStateContext.Provider>
     </EditCommandActionContext.Provider>
   )
 }

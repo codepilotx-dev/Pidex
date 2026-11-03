@@ -3,7 +3,9 @@ import { chromium } from '@playwright/test'
 
 async function run() {
   console.log('[anchor-test] Launching Chromium...')
-  const browser = await chromium.launch({ channel: 'chrome', headless: true }).catch(() => chromium.launch({ headless: true }))
+  const browser = await chromium
+    .launch({ channel: 'chrome', headless: true })
+    .catch(() => chromium.launch({ headless: true }))
   try {
     const page = await browser.newPage({ viewport: { width: 800, height: 600 } })
     const errors: string[] = []
@@ -141,11 +143,22 @@ async function run() {
       const newScrollTop = scroller.scrollTop
       return { initialScrollTop, newScrollTop, delta: newScrollTop - initialScrollTop }
     })
-    assert.ok(result1.initialScrollTop > 0, `initialScrollTop should be > 0, got ${result1.initialScrollTop}`)
-    console.log(`[test 1] padding 0px: initial=${result1.initialScrollTop}, new=${result1.newScrollTop}, delta=${result1.delta}`)
-    assert.strictEqual(result1.delta, 100, `Expected scrollTop to increase by 100px, got ${result1.delta}`)
+    assert.ok(
+      result1.initialScrollTop > 0,
+      `initialScrollTop should be > 0, got ${result1.initialScrollTop}`,
+    )
+    console.log(
+      `[test 1] padding 0px: initial=${result1.initialScrollTop}, new=${result1.newScrollTop}, delta=${result1.delta}`,
+    )
+    assert.strictEqual(
+      result1.delta,
+      100,
+      `Expected scrollTop to increase by 100px, got ${result1.delta}`,
+    )
 
-    console.log('[test 1b] Verifying streaming growth anchoring with padding 88px (footerHeight 72px + 16px)...')
+    console.log(
+      '[test 1b] Verifying streaming growth anchoring with padding 88px (footerHeight 72px + 16px)...',
+    )
     const result1b = await page.evaluate(async () => {
       const scroller = document.getElementById('threadScroller')!
       const streaming = document.getElementById('streamingTurn')!
@@ -161,8 +174,14 @@ async function run() {
       const afterScrollTop = scroller.scrollTop
       return { beforeScrollTop, afterScrollTop, delta: afterScrollTop - beforeScrollTop }
     })
-    console.log(`[test 1b] padding 88px: before=${result1b.beforeScrollTop}, after=${result1b.afterScrollTop}, delta=${result1b.delta}`)
-    assert.strictEqual(result1b.delta, 100, `Expected scrollTop with padding 88px to increase by 100px, got ${result1b.delta}`)
+    console.log(
+      `[test 1b] padding 88px: before=${result1b.beforeScrollTop}, after=${result1b.afterScrollTop}, delta=${result1b.delta}`,
+    )
+    assert.strictEqual(
+      result1b.delta,
+      100,
+      `Expected scrollTop with padding 88px to increase by 100px, got ${result1b.delta}`,
+    )
 
     // ─────────────────────────────────────────────────────────────
     // Verification 2: Content shrinking at bottom adjusts scrollTop without misclassifying
@@ -181,11 +200,25 @@ async function run() {
       await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)))
       const afterShrinkScrollTop = scroller.scrollTop
       const distance = scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
-      return { beforeShrinkScrollTop, afterShrinkScrollTop, delta: afterShrinkScrollTop - beforeShrinkScrollTop, distance }
+      return {
+        beforeShrinkScrollTop,
+        afterShrinkScrollTop,
+        delta: afterShrinkScrollTop - beforeShrinkScrollTop,
+        distance,
+      }
     })
-    console.log(`[test 2] shrinking: delta=${result2.delta}, distance from bottom=${result2.distance}`)
-    assert.strictEqual(result2.delta, -80, `Expected scrollTop to decrease by 80px, got ${result2.delta}`)
-    assert.ok(result2.distance <= 1, `Expected still at bottom (distance <= 1), got ${result2.distance}`)
+    console.log(
+      `[test 2] shrinking: delta=${result2.delta}, distance from bottom=${result2.distance}`,
+    )
+    assert.strictEqual(
+      result2.delta,
+      -80,
+      `Expected scrollTop to decrease by 80px, got ${result2.delta}`,
+    )
+    assert.ok(
+      result2.distance <= 1,
+      `Expected still at bottom (distance <= 1), got ${result2.distance}`,
+    )
 
     // ─────────────────────────────────────────────────────────────
     // Verification 3: Static mode isolation (no bottom pull when scrolled up)
@@ -210,8 +243,14 @@ async function run() {
       const afterGrowth = scroller.scrollTop
       return { beforeGrowth, afterGrowth, delta: afterGrowth - beforeGrowth }
     })
-    console.log(`[test 3] static mode: before=${result3.beforeGrowth}, after=${result3.afterGrowth}, delta=${result3.delta}`)
-    assert.strictEqual(result3.delta, 0, `Expected scrollTop to NOT move in static mode, got ${result3.delta}`)
+    console.log(
+      `[test 3] static mode: before=${result3.beforeGrowth}, after=${result3.afterGrowth}, delta=${result3.delta}`,
+    )
+    assert.strictEqual(
+      result3.delta,
+      0,
+      `Expected scrollTop to NOT move in static mode, got ${result3.delta}`,
+    )
 
     // ─────────────────────────────────────────────────────────────
     // Verification 4: ToolCommandCard pin anchoring
@@ -245,9 +284,15 @@ async function run() {
 
       return { initialCmdTop, followedCmdTop, followDelta, holdTop, afterUnfollowedTop }
     })
-    console.log(`[test 4] ToolCommandCard followDelta=${result4.followDelta}, holdTop=${result4.holdTop}, afterUnfollowed=${result4.afterUnfollowedTop}`)
+    console.log(
+      `[test 4] ToolCommandCard followDelta=${result4.followDelta}, holdTop=${result4.holdTop}, afterUnfollowed=${result4.afterUnfollowedTop}`,
+    )
     assert.ok(result4.followDelta > 0, `Expected followDelta > 0, got ${result4.followDelta}`)
-    assert.strictEqual(result4.afterUnfollowedTop, result4.holdTop, `Expected unfollowed scroll to hold position, got ${result4.afterUnfollowedTop}`)
+    assert.strictEqual(
+      result4.afterUnfollowedTop,
+      result4.holdTop,
+      `Expected unfollowed scroll to hold position, got ${result4.afterUnfollowedTop}`,
+    )
 
     assert.strictEqual(errors.length, 0, `Page errors: ${errors.join(', ')}`)
     console.log('✅ ALL STAGE 1 GATE VERIFICATIONS PASSED!')

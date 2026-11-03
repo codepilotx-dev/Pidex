@@ -128,9 +128,7 @@ try {
   const page = await browser.newPage()
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  await page.setContent(
-    '<div id="root-a"></div><div id="root-b"></div><div id="root-s"></div>',
-  )
+  await page.setContent('<div id="root-a"></div><div id="root-b"></div><div id="root-s"></div>')
   await page.addScriptTag({ content: script })
 
   // 风险 1：冷启动不被自身改写污染，打开期间父组件重渲染仍保持 cold。
@@ -144,7 +142,11 @@ try {
     fixture.setPair(true, false)
     const afterRerender =
       document.querySelector('[role="tooltip"]')?.getAttribute('data-warm-handoff') ?? null
-    return { warmOnOpen, afterRerender, count: document.querySelectorAll('[role="tooltip"]').length }
+    return {
+      warmOnOpen,
+      afterRerender,
+      count: document.querySelectorAll('[role="tooltip"]').length,
+    }
   })
   assert.deepEqual(cold, { warmOnOpen: null, afterRerender: null, count: 1 })
 
@@ -224,11 +226,19 @@ try {
     // React 的 onMouseEnter/onMouseLeave 由 mouseover/mouseout 委托合成。
     const enter = (el) =>
       el.dispatchEvent(
-        new MouseEvent('mouseover', { bubbles: true, cancelable: true, relatedTarget: document.body }),
+        new MouseEvent('mouseover', {
+          bubbles: true,
+          cancelable: true,
+          relatedTarget: document.body,
+        }),
       )
     const leave = (el) =>
       el.dispatchEvent(
-        new MouseEvent('mouseout', { bubbles: true, cancelable: true, relatedTarget: document.body }),
+        new MouseEvent('mouseout', {
+          bubbles: true,
+          cancelable: true,
+          relatedTarget: document.body,
+        }),
       )
     const frame = () => new Promise((done) => requestAnimationFrame(() => done(null)))
     enter(first)
@@ -265,7 +275,9 @@ try {
   )
 
   assert.deepEqual(errors, [])
-  console.log('Tooltip warm handoff: cold snapshot, sync preemption, segment highlight split passed')
+  console.log(
+    'Tooltip warm handoff: cold snapshot, sync preemption, segment highlight split passed',
+  )
 } finally {
   await browser.close()
 }

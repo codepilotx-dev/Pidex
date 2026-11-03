@@ -110,9 +110,7 @@ test.describe('animation contracts', () => {
       await expect(recentSection.locator('.sidebar-section-content')).toBeVisible()
     })
 
-    test(`process group and turn activity collapse (${motion})`, async ({
-      page,
-    }) => {
+    test(`process group and turn activity collapse (${motion})`, async ({ page }) => {
       await openVisualFixture(page, 'scroll-edge', motion)
       const turnActivitySummary = page.locator('.canonical-turn-activity__summary')
       await expect(turnActivitySummary).toBeVisible()

@@ -382,7 +382,9 @@ const parseSmartConfig = (value: unknown): Model.SmartConfig | undefined => {
   const known = new Set<string>(Model.SmartConfigPinnedFields)
   const pinned = [
     ...new Set(
-      value.pinned.filter((field): field is string => typeof field === 'string' && known.has(field)),
+      value.pinned.filter(
+        (field): field is string => typeof field === 'string' && known.has(field),
+      ),
     ),
   ] as Model.SmartConfig['pinned']
   return { pinned }
@@ -410,15 +412,16 @@ const assertOptionMapCompiles = (
 const parseOptionSpecs = (value: unknown): Model.OptionSpecs | undefined => {
   if (!isObject(value)) return undefined
   const level = isObject(value.reasoningLevel) ? value.reasoningLevel : undefined
-  const values = level && Array.isArray(level.values)
-    ? [
-        ...new Set(
-          level.values.filter(
-            (item): item is string => typeof item === 'string' && item.trim().length > 0,
+  const values =
+    level && Array.isArray(level.values)
+      ? [
+          ...new Set(
+            level.values.filter(
+              (item): item is string => typeof item === 'string' && item.trim().length > 0,
+            ),
           ),
-        ),
-      ]
-    : undefined
+        ]
+      : undefined
   const levelMap =
     level && typeof level.map === 'string' && level.map.trim() ? level.map : undefined
   const max = isObject(value.maxOutputTokens) ? value.maxOutputTokens : undefined
@@ -451,7 +454,8 @@ const parseOptionSpecs = (value: unknown): Model.OptionSpecs | undefined => {
     : undefined
 }
 
-const serializeOptionSpecs = (specs: Model.OptionSpecs): Record<string, unknown> => ({  ...(specs.reasoningLevel
+const serializeOptionSpecs = (specs: Model.OptionSpecs): Record<string, unknown> => ({
+  ...(specs.reasoningLevel
     ? {
         reasoningLevel: {
           ...(specs.reasoningLevel.values ? { values: [...specs.reasoningLevel.values] } : {}),
@@ -694,7 +698,9 @@ const parseCustom = (
   const directorySource = value.directory_source ?? value.directorySource
   return {
     kind: 'custom',
-    ...(directorySource === 'pi-remote' || directorySource === 'models-dev' ? { directorySource } : {}),
+    ...(directorySource === 'pi-remote' || directorySource === 'models-dev'
+      ? { directorySource }
+      : {}),
     ...(value.endpoints !== undefined
       ? { endpoints: parseEndpoints(value.endpoints, allowInsecureHttp) }
       : {}),

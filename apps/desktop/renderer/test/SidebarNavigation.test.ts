@@ -120,7 +120,8 @@ function sidebarNavItems(
 describe('Codex 侧栏导航', () => {
   test('首次加载用贴近布局的骨架替代鲸鱼动画，就绪后直接切换真实内容', () => {
     const sidebar = readFileSync(
-      new URL('../src/features/layout/DesktopSidebar.tsx', import.meta.url), 'utf8',
+      new URL('../src/features/layout/DesktopSidebar.tsx', import.meta.url),
+      'utf8',
     )
     // 就绪判定沿用原有加载条件并用 useEverOpened 固定：首次就绪前渲染骨架，
     // 之后刷新保留真实内容不回退；加载失败沿用现有错误展示（非 loading 即就绪）。
@@ -179,30 +180,54 @@ describe('Codex 侧栏导航', () => {
       },
     })
     try {
-      const render = (capabilityState: SidebarCapabilityState) => renderToStaticMarkup(
-        createElement(MemoryRouter, null,
-          createElement(DesktopSettingsProvider, null,
-            createElement(TooltipProvider, null,
-              createElement(SidebarNavigationRailBody, {
-                shell: { mode: 'docked' } as unknown as SidebarShellController,
-                activePane: 'chats', capabilityState,
-                onOpenWhatsNew: () => {}, onReport: () => {},
-              }),
+      const render = (capabilityState: SidebarCapabilityState) =>
+        renderToStaticMarkup(
+          createElement(
+            MemoryRouter,
+            null,
+            createElement(
+              DesktopSettingsProvider,
+              null,
+              createElement(
+                TooltipProvider,
+                null,
+                createElement(SidebarNavigationRailBody, {
+                  shell: { mode: 'docked' } as unknown as SidebarShellController,
+                  activePane: 'chats',
+                  capabilityState,
+                  onOpenWhatsNew: () => {},
+                  onReport: () => {},
+                }),
+              ),
             ),
           ),
+        )
+      const pinned = render(
+        readySidebarCapabilities(
+          'pets.management.v1',
+          'skills.manage.v1',
+          'session-group.v1',
+          'git.review.v1',
         ),
       )
-      const pinned = render(readySidebarCapabilities('pets.management.v1', 'skills.manage.v1', 'session-group.v1', 'git.review.v1'))
-      expect(pinned.indexOf('aria-label="Git 看板"')).toBeGreaterThan(pinned.indexOf('aria-label="其他入口"'))
+      expect(pinned.indexOf('aria-label="Git 看板"')).toBeGreaterThan(
+        pinned.indexOf('aria-label="其他入口"'),
+      )
       expect(pinned).toContain('aria-label="首页"')
       expect(pinned).toContain('aria-label="宠物市场"')
       expect(pinned).toContain('aria-label="更多"')
       const moreIndex = pinned.indexOf('aria-label="更多"')
-      expect(pinned.indexOf('aria-label="插件"')).toBeLessThan(pinned.indexOf('aria-label="已安排"'))
+      expect(pinned.indexOf('aria-label="插件"')).toBeLessThan(
+        pinned.indexOf('aria-label="已安排"'),
+      )
       expect(pinned.indexOf('aria-label="已安排"')).toBeLessThan(moreIndex)
       expect(pinned.indexOf('aria-label="宠物市场"')).toBeGreaterThan(moreIndex)
-      expect(pinned.indexOf('aria-label="供应商"')).toBeGreaterThan(pinned.indexOf('aria-label="宠物市场"'))
-      expect(pinned.indexOf('aria-label="工作组"')).toBeGreaterThan(pinned.indexOf('aria-label="供应商"'))
+      expect(pinned.indexOf('aria-label="供应商"')).toBeGreaterThan(
+        pinned.indexOf('aria-label="宠物市场"'),
+      )
+      expect(pinned.indexOf('aria-label="工作组"')).toBeGreaterThan(
+        pinned.indexOf('aria-label="供应商"'),
+      )
       expect(render(unknownSidebarCapabilities)).not.toContain('aria-label="宠物市场"')
     } finally {
       stored.mockRestore()

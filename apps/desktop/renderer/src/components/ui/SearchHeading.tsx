@@ -28,9 +28,7 @@ export function SearchHeading({
 
   return (
     <div className="search-heading tw:relative tw:flex tw:min-h-9 tw:min-w-0 tw:flex-1 tw:items-center">
-      <div className={cx('tw:min-w-0 tw:flex-1 tw:pe-10', expanded && 'tw:invisible')}>
-        {title}
-      </div>
+      <div className={cx('tw:min-w-0 tw:flex-1 tw:pe-10', expanded && 'tw:invisible')}>{title}</div>
       <div
         ref={containerRef}
         inert={!expanded}

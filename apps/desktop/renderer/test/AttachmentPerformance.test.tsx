@@ -20,11 +20,13 @@ function renderAttachmentImageHook(
   attachment: Attachment,
   targetRef?: React.RefObject<Element | null>,
 ) {
-  const internals = (React as unknown as {
-    __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE: {
-      H: unknown
+  const internals = (
+    React as unknown as {
+      __CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE: {
+        H: unknown
+      }
     }
-  }).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE
+  ).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE
 
   let registeredEffect: (() => (() => void) | void) | null = null
   let stateValue: unknown = null
@@ -37,7 +39,8 @@ function renderAttachmentImageHook(
       return [
         stateValue,
         (val: unknown) => {
-          stateValue = typeof val === 'function' ? (val as (prev: unknown) => unknown)(stateValue) : val
+          stateValue =
+            typeof val === 'function' ? (val as (prev: unknown) => unknown)(stateValue) : val
           setStateCalls.push(stateValue)
         },
       ]
@@ -48,6 +51,8 @@ function renderAttachmentImageHook(
   }
 
   try {
+    // 这里用自建 dispatcher 直接驱动 hook，本意就是脱离组件渲染调用它。
+    // oxlint-disable-next-line react/rules-of-hooks
     useThreadAttachmentImageSource(attachment, targetRef)
   } finally {
     internals.H = prevDispatcher
@@ -67,7 +72,9 @@ describe('文件附件收起态性能与节点收敛', () => {
     ))
 
     // 收起态
-    const collapsed = renderToStaticMarkup(<AttachmentFileRow ariaLabel="文件附件">{files}</AttachmentFileRow>)
+    const collapsed = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件附件">{files}</AttachmentFileRow>,
+    )
 
     // 收起态保留前两个完整文件
     expect(collapsed).toContain('file-0.txt')
@@ -113,8 +120,12 @@ describe('文件附件收起态性能与节点收敛', () => {
       <AttachmentFilePill key={`file-${i}.txt`} name={`file-${i}.txt`} />
     ))
 
-    const markup10 = renderToStaticMarkup(<AttachmentFileRow ariaLabel="文件附件">{files10}</AttachmentFileRow>)
-    const markup100 = renderToStaticMarkup(<AttachmentFileRow ariaLabel="文件附件">{files100}</AttachmentFileRow>)
+    const markup10 = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件附件">{files10}</AttachmentFileRow>,
+    )
+    const markup100 = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件附件">{files100}</AttachmentFileRow>,
+    )
 
     // 计算已渲染的 pill 和堆叠卡片节点数
     const countPillsAndStackCards = (html: string) =>
@@ -249,7 +260,8 @@ describe('图片附件读取范围与并发控制', () => {
       }
     }
 
-    globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver
+    globalThis.IntersectionObserver =
+      MockIntersectionObserver as unknown as typeof IntersectionObserver
 
     const readSpy = spyOn(desktopClient, 'readAttachment').mockResolvedValue({
       attachment: {
@@ -335,7 +347,8 @@ describe('图片附件读取范围与并发控制', () => {
       }
     }
 
-    globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver
+    globalThis.IntersectionObserver =
+      MockIntersectionObserver as unknown as typeof IntersectionObserver
 
     const readSpy = spyOn(desktopClient, 'readAttachment').mockResolvedValue({
       attachment: {
@@ -414,7 +427,8 @@ describe('图片附件读取范围与并发控制', () => {
       }
     }
 
-    globalThis.IntersectionObserver = MockIntersectionObserver as unknown as typeof IntersectionObserver
+    globalThis.IntersectionObserver =
+      MockIntersectionObserver as unknown as typeof IntersectionObserver
 
     const readSpy = spyOn(desktopClient, 'readAttachment').mockImplementation(
       () =>

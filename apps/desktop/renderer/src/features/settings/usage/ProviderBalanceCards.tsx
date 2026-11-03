@@ -35,14 +35,21 @@ export function ProviderBalanceCards({
               {balance.components?.length ? (
                 <InfoTooltip
                   ariaLabel="余额明细"
-                  content={<span>
-                    （含{balance.components.map((component, index) => (
-                      <span key={component.label}>
-                        {index > 0 ? ' ' : ''}{component.label}{' '}
-                        <strong className="tw:tabular-nums">{formatAmount(balance.currency, component.amount)}</strong>
-                      </span>
-                    ))}）
-                  </span>}
+                  content={
+                    <span>
+                      （含
+                      {balance.components.map((component, index) => (
+                        <span key={component.label}>
+                          {index > 0 ? ' ' : ''}
+                          {component.label}{' '}
+                          <strong className="tw:tabular-nums">
+                            {formatAmount(balance.currency, component.amount)}
+                          </strong>
+                        </span>
+                      ))}
+                      ）
+                    </span>
+                  }
                 />
               ) : null}
             </div>

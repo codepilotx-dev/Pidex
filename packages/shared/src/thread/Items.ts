@@ -321,6 +321,8 @@ export const ActivityItemSchema = Schema.Struct({
     Schema.Struct({
       source: Schema.Literals(['manual', 'automatic', 'reactive']),
       startedAt: Schema.Number,
+      /** 压缩操作结束时间；进行中或缺省表示尚未结束。 */
+      finishedAt: Schema.optional(Schema.Number),
       standalone: Schema.Boolean,
     }),
   ),
@@ -620,13 +622,7 @@ export const ComputerAppApprovalSchema = Schema.Struct({
 })
 
 export const GuardianReviewSchema = Schema.Struct({
-  status: Schema.Literals([
-    'completed',
-    'cached',
-    'unavailable',
-    'timeout',
-    'circuit_open',
-  ]),
+  status: Schema.Literals(['completed', 'cached', 'unavailable', 'timeout', 'circuit_open']),
   source: Schema.Literals(['model', 'cache', 'fallback']),
   risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
   userAuthorization: Schema.Literals(['unknown', 'low', 'medium', 'high']),

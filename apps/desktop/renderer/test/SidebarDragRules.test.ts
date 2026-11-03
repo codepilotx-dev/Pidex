@@ -162,10 +162,15 @@ describe('侧栏拖放临时顺序与最终操作', () => {
     const drag = dragSession(dragState(['session:a']), 'recent', ['session:a'])
     const target = dropContainer('pinned', ['session:b', 'session:c'], { kind: 'pinned', index: 0 })
     const next = previewSidebarDrop(drag, target, 'session:c')
-    expect(resolveSidebarDrop({
-      session: drag, target, canceled: false, sourcePersistedOrder: drag.sourceOrder,
-      nextOrder: next.lists.pinned,
-    })).toEqual({
+    expect(
+      resolveSidebarDrop({
+        session: drag,
+        target,
+        canceled: false,
+        sourcePersistedOrder: drag.sourceOrder,
+        nextOrder: next.lists.pinned,
+      }),
+    ).toEqual({
       status: 'commit',
       operations: [{ kind: 'moveToPinned', keys: ['session:a'], anchorKey: 'session:c' }],
     })
@@ -202,9 +207,12 @@ describe('侧栏拖放临时顺序与最终操作', () => {
     )
     expect(preview.lists['section:work']).toEqual(['session:b', 'session:a'])
     expect(preview.lists.default).toEqual(['session:a', 'session:z'])
-    expect(resolveSidebarDisplayOrder(preview, {
-      containerKey: 'default', order: ['session:z', 'session:a'],
-    })).toEqual(['session:a', 'session:z'])
+    expect(
+      resolveSidebarDisplayOrder(preview, {
+        containerKey: 'default',
+        order: ['session:z', 'session:a'],
+      }),
+    ).toEqual(['session:a', 'session:z'])
     expect(
       resolveSidebarDisplayOrder(preview, { containerKey: 'section:work', order: ['session:b'] }),
     ).toEqual(['session:b'])
@@ -258,7 +266,8 @@ describe('侧栏拖放临时顺序与最终操作', () => {
           anchorKey: null,
         },
       ],
-    })  })
+    })
+  })
 
   test('分组只能在分组排序轴移动，聊天与项目不能进入分组排序轴', () => {
     const sections = {
@@ -319,16 +328,36 @@ describe('侧栏拖放临时顺序与最终操作', () => {
       resolveSidebarDropRegion({ isProjectEntry: true, offsetY: 3, height: 40, hasOwnItems: true }),
     ).toBe('before')
     expect(
-      resolveSidebarDropRegion({ isProjectEntry: true, offsetY: 20, height: 40, hasOwnItems: true }),
+      resolveSidebarDropRegion({
+        isProjectEntry: true,
+        offsetY: 20,
+        height: 40,
+        hasOwnItems: true,
+      }),
     ).toBe('receive')
     expect(
-      resolveSidebarDropRegion({ isProjectEntry: true, offsetY: 38, height: 40, hasOwnItems: true }),
+      resolveSidebarDropRegion({
+        isProjectEntry: true,
+        offsetY: 38,
+        height: 40,
+        hasOwnItems: true,
+      }),
     ).toBe('after')
     expect(
-      resolveSidebarDropRegion({ isProjectEntry: false, offsetY: 5, height: 30, hasOwnItems: true }),
+      resolveSidebarDropRegion({
+        isProjectEntry: false,
+        offsetY: 5,
+        height: 30,
+        hasOwnItems: true,
+      }),
     ).toBe('before')
     expect(
-      resolveSidebarDropRegion({ isProjectEntry: false, offsetY: 25, height: 30, hasOwnItems: true }),
+      resolveSidebarDropRegion({
+        isProjectEntry: false,
+        offsetY: 25,
+        height: 30,
+        hasOwnItems: true,
+      }),
     ).toBe('after')
   })
 
@@ -418,7 +447,9 @@ describe('侧栏拖放临时顺序与最终操作', () => {
         { kind: 'moveToSection', keys: ['session:c'], sectionId: 'work', anchorKey: 'session:a' },
       ],
     })
-    expect(anchorToInsertIndex(['session:c', 'session:a', 'session:b'], ['session:c'], 'session:a')).toBe(0)
+    expect(
+      anchorToInsertIndex(['session:c', 'session:a', 'session:b'], ['session:c'], 'session:a'),
+    ).toBe(0)
   })
 
   test('放回原项目同时保存插入位置', () => {
@@ -441,7 +472,12 @@ describe('侧栏拖放临时顺序与最终操作', () => {
     expect(resolution).toEqual({
       status: 'commit',
       operations: [
-        { kind: 'restoreToProject', keys: ['session:a'], projectKey: 'id:alpha', anchorKey: 'session:b' },
+        {
+          kind: 'restoreToProject',
+          keys: ['session:a'],
+          projectKey: 'id:alpha',
+          anchorKey: 'session:b',
+        },
       ],
     })
   })

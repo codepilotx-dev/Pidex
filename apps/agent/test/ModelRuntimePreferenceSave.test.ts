@@ -28,9 +28,9 @@ const fixture = async () => {
   const history = new ThreadHistoryService(db, hub as never)
   const durableCount = (method?: string) => {
     const row = method
-      ? (db.sqlite
-          .query('SELECT COUNT(*) AS c FROM events WHERE method = ?')
-          .get(method) as { c: number })
+      ? (db.sqlite.query('SELECT COUNT(*) AS c FROM events WHERE method = ?').get(method) as {
+          c: number
+        })
       : (db.sqlite.query('SELECT COUNT(*) AS c FROM events').get() as { c: number })
     return Number(row.c)
   }
@@ -51,7 +51,12 @@ describe('saveModelRuntimePreference — 实时事件与持久事件语义', () 
       })
       expect(result.preference).toMatchObject({ variant: 'high', maxContextTokens: 96_500 })
       expect(db.repositories.modelRuntimePreferences.list()).toMatchObject([
-        { providerId: 'workbuddy', modelId: 'hy4-preview', variant: 'high', maxContextTokens: 96_500 },
+        {
+          providerId: 'workbuddy',
+          modelId: 'hy4-preview',
+          variant: 'high',
+          maxContextTokens: 96_500,
+        },
       ])
 
       expect(published).toHaveLength(1)
@@ -87,9 +92,7 @@ describe('saveModelRuntimePreference — 实时事件与持久事件语义', () 
       expect(durableCount('provider/modelPreferences/updated')).toBe(0)
       expect(durableCount('thread/settings/updated')).toBeGreaterThanOrEqual(1)
 
-      const live = published.filter(
-        (event) => event.method === 'provider/modelPreferences/updated',
-      )
+      const live = published.filter((event) => event.method === 'provider/modelPreferences/updated')
       expect(live).toHaveLength(1)
       expect(typeof live[0]!.afterSequence).toBe('number')
       expect(live[0]!.id).toBe(0)
@@ -129,13 +132,16 @@ describe('saveModelRuntimePreference — 实时事件与持久事件语义', () 
       })
       expect(db.repositories.threads.getThreadSettings(thread.id)?.maxContextTokens).toBeUndefined()
       expect(db.repositories.modelRuntimePreferences.list()).toMatchObject([
-        { providerId: 'workbuddy', modelId: 'hy4-preview', variant: 'high', maxContextTokens: null },
+        {
+          providerId: 'workbuddy',
+          modelId: 'hy4-preview',
+          variant: 'high',
+          maxContextTokens: null,
+        },
       ])
 
       // 每次保存都应发出带锚点的实时偏好事件，且都不写入 events 表。
-      const live = published.filter(
-        (event) => event.method === 'provider/modelPreferences/updated',
-      )
+      const live = published.filter((event) => event.method === 'provider/modelPreferences/updated')
       expect(live).toHaveLength(3)
       for (const event of live) {
         expect(typeof event.afterSequence).toBe('number')

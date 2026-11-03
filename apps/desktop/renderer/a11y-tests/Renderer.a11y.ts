@@ -93,7 +93,7 @@ test('WCAG 2.2 AA: dropdown and menubar open states', async ({ page }, testInfo)
   await preparePage(page, '/?visualCase=rich#/threads/visual-rich')
 
   const permissionTrigger = page.getByRole('button', {
-    name: '选择权限模式',
+    name: '更改权限',
   })
   await permissionTrigger.click()
   await expect(page.getByRole('listbox')).toBeVisible()

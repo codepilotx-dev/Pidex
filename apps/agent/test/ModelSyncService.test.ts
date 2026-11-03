@@ -383,13 +383,19 @@ describe('ModelSyncService', () => {
   })
 
   test('零模型目录供应商使用已配置端点的协议同步，不要求先添加模型', async () => {
-    const fixture = await createFixture({ gateway: customProvider({
-      directory_source: 'models-dev', models: {}, endpoints: { 'openai-responses': 'https://gateway.example/v1' },
-    }) })
-    const result = await fixture.sync.sync('gateway', { fetch: async (url) => {
-      expect(String(url)).toBe('https://gateway.example/v1/models')
-      return Response.json({ data: [{ id: 'new-model' }] })
-    } })
+    const fixture = await createFixture({
+      gateway: customProvider({
+        directory_source: 'models-dev',
+        models: {},
+        endpoints: { 'openai-responses': 'https://gateway.example/v1' },
+      }),
+    })
+    const result = await fixture.sync.sync('gateway', {
+      fetch: async (url) => {
+        expect(String(url)).toBe('https://gateway.example/v1/models')
+        return Response.json({ data: [{ id: 'new-model' }] })
+      },
+    })
     expect(result.api).toBe('openai-responses')
     expect(result.candidates[0]).toMatchObject({ id: 'new-model', enabled: false })
   })
@@ -576,7 +582,6 @@ describe('ModelSyncService', () => {
     ).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
   })
 })
-
 
 test('同步期间新增模型或其他配置变化时返回 CONFLICT 并保留写入', async () => {
   const fixture = await createFixture({

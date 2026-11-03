@@ -1,10 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import type { RpcResult } from '@pidex/agent-protocol'
-import {
-  type TaskSchedule,
-  type TaskOccurrence,
-} from '@pidex/shared/task-schedule'
+import { type TaskSchedule, type TaskOccurrence } from '@pidex/shared/task-schedule'
 import type { ScheduleExecution, ScheduleTrigger } from '@pidex/shared/schedule-draft'
 import type { ModelRef } from '@pidex/shared/model'
 import type { DesktopSessionSnapshot, DesktopWorkspace } from '../../../shared/Types.js'
@@ -181,7 +178,7 @@ export function TaskSchedulePanel({ query = '' }: { query?: string }) {
             ))}
           </div>
         ) : null}
-        <div className="tw:flex tw:flex-wrap tw:gap-2" aria-label="任务列表">
+        <div className="tw:flex tw:flex-wrap tw:gap-2" role="group" aria-label="任务列表">
           {data.tasks
             .filter((t) => !query || t.name.includes(query))
             .map((task) => {
@@ -310,7 +307,15 @@ function TaskScheduleEditor({
     }
   }
   const save = async () => {
-    const { id, revision, readyAt: _readyAt, nextRunAt: _nextRunAt, createdAt: _createdAt, updatedAt: _updatedAt, ...definition } = draft
+    const {
+      id,
+      revision,
+      readyAt: _readyAt,
+      nextRunAt: _nextRunAt,
+      createdAt: _createdAt,
+      updatedAt: _updatedAt,
+      ...definition
+    } = draft
     await desktopClient.taskSchedule('task-schedule/save', {
       id,
       expectedRevision: revision,

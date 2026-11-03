@@ -146,8 +146,7 @@ describe('ToolExposurePlan finalize_result exposure', () => {
       const plan = exposure({ taskMode, profile })
       for (const name of ['Read', 'Glob', 'Grep', 'Bash', 'PowerShell'])
         expect(plan.exposed).toContain(name)
-      for (const name of ['Write', 'Edit', 'apply_patch'])
-        expect(plan.exposed).not.toContain(name)
+      for (const name of ['Write', 'Edit', 'apply_patch']) expect(plan.exposed).not.toContain(name)
     }
   })
 

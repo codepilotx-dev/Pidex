@@ -297,16 +297,21 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     >
     const childRef = (childElement as any).ref
     return cloneElement(childElement, {
+      // 子元素才是真实宿主（链接等），宿主属性必须透传，否则图标按钮会丢失可访问名与语义。
+      ...buttonProps,
+      ...appearance,
       ref: ref || childRef ? (mergeRefs(ref, childRef) as any) : undefined,
       className: cn(hostClass, childElement.props.className) || undefined,
       'aria-busy': loading ? true : undefined,
       'aria-disabled': isDisabled ? true : undefined,
+      'aria-label':
+        isIcon && buttonProps.title ? buttonProps.title : (buttonProps['aria-label'] ?? undefined),
+      title: nativeTitle ? buttonProps.title : undefined,
       'data-active':
         active ||
         buttonProps['data-active'] ||
         (childElement.props as any)['data-active'] ||
         undefined,
-      ...appearance,
     } as any)
   }
 

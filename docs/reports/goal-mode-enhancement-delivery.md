@@ -151,15 +151,15 @@ verifier 通过预算准入，输入估算、1024 输出上限及收尾预留必
 
 ## 验证结果
 
-| 检查                                                              | 本轮结果                                  |
-| ----------------------------------------------------------------- | ----------------------------------------- |
-| Agent 全量测试 `bun run --cwd apps/agent test`                    | **1637 pass / 0 fail**（170 文件）        |
+| 检查                                                              | 本轮结果                           |
+| ----------------------------------------------------------------- | ---------------------------------- |
+| Agent 全量测试 `bun run --cwd apps/agent test`                    | **1637 pass / 0 fail**（170 文件） |
 | Renderer 全量测试 `bun run --cwd apps/desktop/renderer test`      | **1979 pass / 0 fail**（255 文件） |
-| 全仓类型检查 `bun run typecheck`                                  | 通过（所有 workspace）                    |
-| Renderer 构建 `bun run build:renderer`                            | 通过，chunk 可解析                      |
-| Renderer CSS 检查 `bun run --cwd apps/desktop/renderer css:check` | 前轮通过；本轮未重跑                      |
-| `git diff --check`                                                | 通过（仅已有 LF/CRLF 提示）               |
-| Computer Use / 真实模型 UI                                        | 本轮未执行                                |
+| 全仓类型检查 `bun run typecheck`                                  | 通过（所有 workspace）             |
+| Renderer 构建 `bun run build:renderer`                            | 通过，chunk 可解析                 |
+| Renderer CSS 检查 `bun run --cwd apps/desktop/renderer css:check` | 前轮通过；本轮未重跑               |
+| `git diff --check`                                                | 通过（仅已有 LF/CRLF 提示）        |
+| Computer Use / 真实模型 UI                                        | 本轮未执行                         |
 
 前轮的 1613 / 1975、1620 / 1976 以及 101 条定向复验均为历史记录。本轮补齐首次 prompt 设置事件的生产投影与连续消费回归、500 毫秒内客户端状态同步回归，以及开放运行区间和 Composer 等待态计时回归；另对保留的实际 outbox 事件 81574 做只读投影复验，严格 decoder 已通过。前轮强化 R03 恢复核验的当前预算/工具输入与实际交付链路，新增 external-input 保存预算、暂停提示及补输入后明确恢复回归；当时定向 Goal 集成与 verifier 共 58 条通过。前轮补 T06 首轮早于 Goal 的追加、核验失败重试和暂停后明确恢复完整链路（当时定向 45 条通过），并覆盖该首轮的成功工具进展分类。前轮增加缺输入停止与显式恢复、重复及语义等价检查、预算实际输出上限、同 Turn 通知与旧工具拦截、失败补注入与主子回执隔离、追加前已交付拒绝修改、未完成预核验结果复用、核验失败预算保持及明确重试、等待子任务时预算唤醒，以及 70→71 保留数据迁移回归。最终结果以本节更新为准；全仓类型检查、涉及文件的 Prettier 检查与 git diff --check 均通过。本轮未启动开发栈或自动化 Chrome，保留用户已有实例；测试进程已结束。
 

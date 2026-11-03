@@ -223,7 +223,10 @@ export function ProviderConnectionSection({
       const target = (section === 'request' ? requestRef : credentialsRef).current
       if (!viewport || !target) return
       viewport.scrollTo({
-        top: viewport.scrollTop + target.getBoundingClientRect().top - viewport.getBoundingClientRect().top,
+        top:
+          viewport.scrollTop +
+          target.getBoundingClientRect().top -
+          viewport.getBoundingClientRect().top,
       })
     })
     return () => cancelAnimationFrame(frame)
@@ -262,11 +265,7 @@ export function ProviderConnectionSection({
     if (await (panel?.beforeChange.current?.() ?? Promise.resolve(true))) setKeyEditor(next)
   }
 
-
-  const usageResultById = useMemo(
-    () => new Map(Object.entries(usageResults ?? {})),
-    [usageResults],
-  )
+  const usageResultById = useMemo(() => new Map(Object.entries(usageResults ?? {})), [usageResults])
   // 只查询当前供应商已连接且可查询的来源；不带 force 走共享缓存。
   const connectedQueryableSourceIds = useMemo(
     () =>
@@ -291,9 +290,13 @@ export function ProviderConnectionSection({
     if (!section || sourceIds.length === 0) return
     const refresh = (poll = false) => {
       if (document.visibilityState === 'hidden') return
-      const selected = poll ? sourceIds.filter((id) =>
-        group?.usageSources.some((source) => source.sourceId === id && source.queryPolicy === 'cached'),
-      ) : sourceIds
+      const selected = poll
+        ? sourceIds.filter((id) =>
+            group?.usageSources.some(
+              (source) => source.sourceId === id && source.queryPolicy === 'cached',
+            ),
+          )
+        : sourceIds
       if (selected.length === 0) return
       void providerManagementStore
         .querySources({ range: 'today', timeZone, sourceIds: selected })
@@ -356,52 +359,55 @@ export function ProviderConnectionSection({
   return (
     <div className="model-center-connection-section tw:grid tw:gap-6">
       <div className="tw:grid tw:min-w-0 tw:grid-cols-1 tw:gap-6 tw:@min-[640px]:grid-cols-2">
-      <section aria-label="连接摘要" className="tw:grid tw:min-w-0 tw:gap-3">
-        <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">
-          {oauthActive
-            ? '账号授权'
-            : envActive
-              ? '环境凭据'
-              : supportsInferenceKeys
-                ? 'API 密钥'
-                : '认证'}
-        </h3>
-        <div className="tw:flex tw:items-center tw:gap-2">
-          {oauthActive || envActive || !supportsInferenceKeys ? (
-            <span className="tw:flex tw:min-h-9 tw:flex-1 tw:items-center tw:gap-2 tw:type-body-sm">
-              {activeConnection?.label ??
-                (configured ? '已配置' : oauthAvailable ? '请登录账号' : '无需认证')}
-              <span className="tw:text-app-text-meta tw:type-caption">
-                {oauthActive ? '已授权' : envActive ? '只读来源' : ''}
+        <section aria-label="连接摘要" className="tw:grid tw:min-w-0 tw:gap-3">
+          <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">
+            {oauthActive
+              ? '账号授权'
+              : envActive
+                ? '环境凭据'
+                : supportsInferenceKeys
+                  ? 'API 密钥'
+                  : '认证'}
+          </h3>
+          <div className="tw:flex tw:items-center tw:gap-2">
+            {oauthActive || envActive || !supportsInferenceKeys ? (
+              <span className="tw:flex tw:min-h-9 tw:flex-1 tw:items-center tw:gap-2 tw:type-body-sm">
+                {activeConnection?.label ??
+                  (configured ? '已配置' : oauthAvailable ? '请登录账号' : '无需认证')}
+                <span className="tw:text-app-text-meta tw:type-caption">
+                  {oauthActive ? '已授权' : envActive ? '只读来源' : ''}
+                </span>
               </span>
-            </span>
-          ) : (
-            <ApiKeyQuickAdd
-              maskedValue={activeKey?.maskedValue}
-              busy={busy}
-              onAdd={(key) => onSubmitKey({
-                providerId: provider.providerID,
-                label: `API Key ${apiKeys.length + 1}`,
-                key,
-              }, null)}
+            ) : (
+              <ApiKeyQuickAdd
+                maskedValue={activeKey?.maskedValue}
+                busy={busy}
+                onAdd={(key) =>
+                  onSubmitKey(
+                    {
+                      providerId: provider.providerID,
+                      label: `API Key ${apiKeys.length + 1}`,
+                      key,
+                    },
+                    null,
+                  )
+                }
+              />
+            )}
+          </div>
+        </section>
+        <section className="tw:grid tw:min-w-0 tw:gap-3">
+          <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">API 地址</h3>
+          <div className="tw:flex tw:items-center tw:gap-2">
+            <Input
+              aria-label="API 地址"
+              readOnly
+              value={provider.config?.baseUrl ?? provider.baseURL ?? ''}
+              placeholder="供应商默认地址"
+              className="tw:min-w-0 tw:flex-1 tw:type-code"
             />
-          )}
-
-        </div>
-      </section>
-      <section className="tw:grid tw:min-w-0 tw:gap-3">
-        <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">API 地址</h3>
-        <div className="tw:flex tw:items-center tw:gap-2">
-          <Input
-            aria-label="API 地址"
-            readOnly
-            value={provider.config?.baseUrl ?? provider.baseURL ?? ''}
-            placeholder="供应商默认地址"
-            className="tw:min-w-0 tw:flex-1 tw:type-code"
-          />
-
-        </div>
-      </section>
+          </div>
+        </section>
       </div>
       {(dirty || busy || requestBusy || guardRequested) && section ? (
         <ProviderEditorNavigationGuard
@@ -425,339 +431,357 @@ export function ProviderConnectionSection({
       {panel?.host && section
         ? createPortal(
             <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col">
-            <div ref={scrollRef} className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-6 tw:overflow-y-auto tw:p-4 tw:[&_.model-center-oauth-flow]:p-0">
-              <section className="tw:grid tw:gap-4" aria-label="供应商图标">
-                <h3 className="tw:m-0 tw:type-title-sm">供应商图标</h3>
-                <ProviderWebsiteIconSettings key={provider.providerID} providerID={provider.providerID} logoURL={provider.logoURL} address={provider.config?.baseUrl ?? provider.baseURL ?? ''} onNotice={onNotice} onError={onError} />
-              </section>
-              <section ref={credentialsRef} className="tw:grid tw:gap-4 tw:border-t tw:border-app-border-subtle tw:pt-6" aria-label="认证与密钥">
-                <h3 className="tw:m-0 tw:type-title-sm">认证与密钥</h3>
-                {keyEditor ? (
-                  <section className="tw:grid tw:gap-3">
-                    <h4 className="tw:m-0 tw:type-title-sm">
-                      {keyEditor === 'new' ? '新增 API Key' : '编辑 API Key'}
-                    </h4>
-                    <ApiKeyEditorForm
-                      embedded
-                      hideProvider
-                      apiKey={keyEditor === 'new' ? null : keyEditor}
-                      initialProviderId={provider.providerID}
-                      providers={[provider]}
-                      busy={busy}
-                      onDraftChange={setKeyDirty}
-                      saveRef={keySave}
-                      onCancel={() => void changeKeyEditor(null)}
-                      onSubmit={async (value) => {
-                        const saved = await onSubmitKey(
-                          value,
-                          keyEditor === 'new' ? null : keyEditor,
-                        )
-                        if (saved) setKeyEditor(null)
-                        return saved
-                      }}
-                    />
-                  </section>
-                ) : null}
-                {/* 2. API Keys Management */}
-                {supportsInferenceKeys ? (
-                  <section className="tw:grid tw:gap-3">
-                    <header className="model-center-detail-card-header tw:flex tw:items-center tw:justify-between tw:gap-3">
-                      <div>
-                        <h4 className="tw:m-0 tw:type-row-title">API Key</h4>
-                        <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
-                          优先使用排在首位的活动密钥。
-                        </p>
-                      </div>
-                      <Button
-                        color="secondary"
-                        size="sm"
-                        shape="default"
-                        disabled={busy || keyEditor !== null}
-                        onClick={() => setKeyEditor('new')}
-                      >
-                        <Plus aria-hidden size={APP_ICON_SIZES.sm} />
-                        新增 API Key
-                      </Button>{' '}
-                    </header>
-
-                    <div className="model-center-detail-card-body tw:min-w-0">
-                      {apiKeys.length > 0 || envInference.length > 0 ? (
-                        <div className="model-center-key-list tw:grid tw:gap-2">
-                          {apiKeys.map((key, index) => (
-                            <ApiKeyRowItem
-                              busy={busy}
-                              index={index}
-                              key={key.id}
-                              keyItem={key}
-                              last={index === apiKeys.length - 1}
-                              onCopy={() => void onCopyKey(key)}
-                              onDelete={() => onDeleteKey(key)}
-                              onEdit={() => void changeKeyEditor(key)}
-                              onMove={(offset) => void onMoveKey(key, offset)}
-                              onSetActive={() => void onSetActiveKey(key)}
-                              onTest={() => void onTestKey(key)}
-                              onToggleEnabled={() => void onToggleKeyEnabled(key)}
-                            />
-                          ))}
-                          {envInference.map((connection) => (
-                            <article
-                              key={connection.id}
-                              className="model-center-key-row tw:flex tw:min-w-0 tw:items-center tw:gap-2 tw:py-2 tw:[&+&]:border-t tw:[&+&]:border-app-border-subtle"
-                            >
-                              <KeyRound aria-hidden size="var(--inline-icon-size, 1em)" />
-                              <span className="tw:min-w-0 tw:flex-1 tw:truncate tw:type-body-sm">
-                                {connection.label}
-                              </span>
-                              <span
-                                className="tw:text-app-text-meta tw:type-caption"
-                                title="由运行环境提供，不支持编辑、删除或复制。"
-                              >
-                                环境变量 · 只读
-                              </span>
-                            </article>
-                          ))}
-                        </div>
-                      ) : (
-                        <div className="model-center-section-empty-hint tw:flex tw:items-center tw:gap-2 tw:py-2 tw:text-app-text-soft tw:type-body-sm tw:[&_svg]:shrink-0 tw:[&_svg]:text-app-text-meta">
-                          <KeyRound aria-hidden size="var(--inline-icon-size, 1em)" />
-                          <span>尚未保存此供应商的 API Key，点击「新增 API Key」进行配置。</span>
-                        </div>
-                      )}
-                    </div>
-                  </section>
-                ) : null}
-
-                {/* 3. OAuth Connections */}
-                {oauthAvailable ? (
-                  <section className="tw:grid tw:gap-3">
-                    <header className="model-center-detail-card-header tw:flex tw:items-center tw:justify-between tw:gap-3">
-                      <div>
-                        <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">OAuth 授权连接</h3>
-                        <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
-                          通过官方账号登录，连接此供应商。
-                        </p>
-                      </div>
-                    </header>
-                    <div className="model-center-detail-card-body tw:min-w-0">
-                      <OAuthConnection
-                        hideHeader
-                        connected={oauthCredentials.length > 0}
-                        description="在浏览器完成授权，连接此供应商。"
-                        target={
-                          {
-                            kind: 'provider',
-                            providerId: provider.providerID,
-                          } as never
-                        }
-                        title={
-                          provider.providerID === 'openai'
-                            ? '使用 ChatGPT 登录'
-                            : `${provider.displayName} OAuth`
-                        }
-                        onChanged={onRefresh}
-                      />
-
-                      {oauthCredentials.length > 0 ? (
-                        <div
-                          className="model-center-key-list tw:grid tw:gap-2"
-                          style={{ marginTop: 'var(--cpx-sys-space-3)' }}
-                        >
-                          {oauthCredentials.map((connection) => (
-                            <div
-                              className="model-center-key-row tw:grid tw:min-w-0 tw:grid-cols-[minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:py-2 tw:transition-[background-color,opacity] tw:duration-state tw:ease-standard tw:hover:bg-app-hover tw:data-[disabled=true]:opacity-62 tw:[&+&]:border-t tw:[&+&]:border-t-app-border-subtle"
-                              key={connection.id}
-                            >
-                              <div className="tw:grid tw:min-w-0 tw:gap-1">
-                                <strong className="tw:overflow-hidden tw:text-app-text tw:type-row-title tw:text-ellipsis tw:whitespace-nowrap">
-                                  {connection.label}
-                                </strong>
-                                <span className="tw:overflow-hidden tw:text-app-text-meta tw:type-caption tw:text-ellipsis tw:whitespace-nowrap">
-                                  {connection.active ? '当前活动' : '未选择'}
-                                </span>
-                              </div>
-                              <div className="model-center-account-actions tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-2 tw:min-h-9 tw:self-end tw:[&_svg]:size-icon tw:@max-[720px]:justify-start">
-                                {!connection.active && connection.credentialId ? (
-                                  <Button
-                                    color="primary"
-                                    onClick={() => {
-                                      void providerManagementStore
-                                        .setActiveCredential(
-                                          provider.providerID,
-                                          connection.credentialId!,
-                                        )
-                                        .then(() => onNotice('活动凭据已切换为 OAuth。'))
-                                        .catch((err) => onError(fullErrorMessage(err)))
-                                    }}
-                                  >
-                                    设为当前活动
-                                  </Button>
-                                ) : null}
-                                {connection.credentialId ? (
-                                  <Button
-                                    color="danger"
-                                    onClick={() => {
-                                      void providerManagementStore
-                                        .deleteCredential(connection.credentialId!)
-                                        .then(() => onNotice('OAuth 凭据已删除。'))
-                                        .catch((err) => onError(fullErrorMessage(err)))
-                                    }}
-                                  >
-                                    断开并删除
-                                  </Button>
-                                ) : null}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      ) : null}
-                    </div>
-                  </section>
-                ) : null}
-              </section>
-              {/* 4. Usage / balance sources */}
-              {(group?.usageSources.length ?? 0) > 0 ? (
+              <div
+                ref={scrollRef}
+                className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:gap-6 tw:overflow-y-auto tw:p-4 tw:[&_.model-center-oauth-flow]:p-0"
+              >
+                <section className="tw:grid tw:gap-4" aria-label="供应商图标">
+                  <h3 className="tw:m-0 tw:type-title-sm">供应商图标</h3>
+                  <ProviderWebsiteIconSettings
+                    key={provider.providerID}
+                    providerID={provider.providerID}
+                    logoURL={provider.logoURL}
+                    address={provider.config?.baseUrl ?? provider.baseURL ?? ''}
+                    onNotice={onNotice}
+                    onError={onError}
+                  />
+                </section>
                 <section
-                  aria-label="用量与余额"
+                  ref={credentialsRef}
                   className="tw:grid tw:gap-4 tw:border-t tw:border-app-border-subtle tw:pt-6"
+                  aria-label="认证与密钥"
                 >
-                  <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
-                    <div className="tw:grid tw:min-w-0 tw:gap-1">
-                      <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2">
-                        <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">用量与余额</h3>
-                        {usageCheckedAt ? (
-                          <span className="tw:text-app-text-meta tw:type-caption tw:tabular-nums">
-                            {formatRefreshedAt(usageCheckedAt)}
-                          </span>
+                  <h3 className="tw:m-0 tw:type-title-sm">认证与密钥</h3>
+                  {keyEditor ? (
+                    <section className="tw:grid tw:gap-3">
+                      <h4 className="tw:m-0 tw:type-title-sm">
+                        {keyEditor === 'new' ? '新增 API Key' : '编辑 API Key'}
+                      </h4>
+                      <ApiKeyEditorForm
+                        embedded
+                        hideProvider
+                        apiKey={keyEditor === 'new' ? null : keyEditor}
+                        initialProviderId={provider.providerID}
+                        providers={[provider]}
+                        busy={busy}
+                        onDraftChange={setKeyDirty}
+                        saveRef={keySave}
+                        onCancel={() => void changeKeyEditor(null)}
+                        onSubmit={async (value) => {
+                          const saved = await onSubmitKey(
+                            value,
+                            keyEditor === 'new' ? null : keyEditor,
+                          )
+                          if (saved) setKeyEditor(null)
+                          return saved
+                        }}
+                      />
+                    </section>
+                  ) : null}
+                  {/* 2. API Keys Management */}
+                  {supportsInferenceKeys ? (
+                    <section className="tw:grid tw:gap-3">
+                      <header className="model-center-detail-card-header tw:flex tw:items-center tw:justify-between tw:gap-3">
+                        <div>
+                          <h4 className="tw:m-0 tw:type-row-title">API Key</h4>
+                          <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
+                            优先使用排在首位的活动密钥。
+                          </p>
+                        </div>
+                        <Button
+                          color="secondary"
+                          size="sm"
+                          shape="default"
+                          disabled={busy || keyEditor !== null}
+                          onClick={() => setKeyEditor('new')}
+                        >
+                          <Plus aria-hidden size={APP_ICON_SIZES.sm} />
+                          新增 API Key
+                        </Button>{' '}
+                      </header>
+
+                      <div className="model-center-detail-card-body tw:min-w-0">
+                        {apiKeys.length > 0 || envInference.length > 0 ? (
+                          <div className="model-center-key-list tw:grid tw:gap-2">
+                            {apiKeys.map((key, index) => (
+                              <ApiKeyRowItem
+                                busy={busy}
+                                index={index}
+                                key={key.id}
+                                keyItem={key}
+                                last={index === apiKeys.length - 1}
+                                onCopy={() => void onCopyKey(key)}
+                                onDelete={() => onDeleteKey(key)}
+                                onEdit={() => void changeKeyEditor(key)}
+                                onMove={(offset) => void onMoveKey(key, offset)}
+                                onSetActive={() => void onSetActiveKey(key)}
+                                onTest={() => void onTestKey(key)}
+                                onToggleEnabled={() => void onToggleKeyEnabled(key)}
+                              />
+                            ))}
+                            {envInference.map((connection) => (
+                              <article
+                                key={connection.id}
+                                className="model-center-key-row tw:flex tw:min-w-0 tw:items-center tw:gap-2 tw:py-2 tw:[&+&]:border-t tw:[&+&]:border-app-border-subtle"
+                              >
+                                <KeyRound aria-hidden size="var(--inline-icon-size, 1em)" />
+                                <span className="tw:min-w-0 tw:flex-1 tw:truncate tw:type-body-sm">
+                                  {connection.label}
+                                </span>
+                                <span
+                                  className="tw:text-app-text-meta tw:type-caption"
+                                  title="由运行环境提供，不支持编辑、删除或复制。"
+                                >
+                                  环境变量 · 只读
+                                </span>
+                              </article>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="model-center-section-empty-hint tw:flex tw:items-center tw:gap-2 tw:py-2 tw:text-app-text-soft tw:type-body-sm tw:[&_svg]:shrink-0 tw:[&_svg]:text-app-text-meta">
+                            <KeyRound aria-hidden size="var(--inline-icon-size, 1em)" />
+                            <span>尚未保存此供应商的 API Key，点击「新增 API Key」进行配置。</span>
+                          </div>
+                        )}
+                      </div>
+                    </section>
+                  ) : null}
+
+                  {/* 3. OAuth Connections */}
+                  {oauthAvailable ? (
+                    <section className="tw:grid tw:gap-3">
+                      <header className="model-center-detail-card-header tw:flex tw:items-center tw:justify-between tw:gap-3">
+                        <div>
+                          <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">
+                            OAuth 授权连接
+                          </h3>
+                          <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
+                            通过官方账号登录，连接此供应商。
+                          </p>
+                        </div>
+                      </header>
+                      <div className="model-center-detail-card-body tw:min-w-0">
+                        <OAuthConnection
+                          hideHeader
+                          connected={oauthCredentials.length > 0}
+                          description="在浏览器完成授权，连接此供应商。"
+                          target={
+                            {
+                              kind: 'provider',
+                              providerId: provider.providerID,
+                            } as never
+                          }
+                          title={
+                            provider.providerID === 'openai'
+                              ? '使用 ChatGPT 登录'
+                              : `${provider.displayName} OAuth`
+                          }
+                          onChanged={onRefresh}
+                        />
+
+                        {oauthCredentials.length > 0 ? (
+                          <div
+                            className="model-center-key-list tw:grid tw:gap-2"
+                            style={{ marginTop: 'var(--cpx-sys-space-3)' }}
+                          >
+                            {oauthCredentials.map((connection) => (
+                              <div
+                                className="model-center-key-row tw:grid tw:min-w-0 tw:grid-cols-[minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:py-2 tw:transition-[background-color,opacity] tw:duration-state tw:ease-standard tw:hover:bg-app-hover tw:data-[disabled=true]:opacity-62 tw:[&+&]:border-t tw:[&+&]:border-t-app-border-subtle"
+                                key={connection.id}
+                              >
+                                <div className="tw:grid tw:min-w-0 tw:gap-1">
+                                  <strong className="tw:overflow-hidden tw:text-app-text tw:type-row-title tw:text-ellipsis tw:whitespace-nowrap">
+                                    {connection.label}
+                                  </strong>
+                                  <span className="tw:overflow-hidden tw:text-app-text-meta tw:type-caption tw:text-ellipsis tw:whitespace-nowrap">
+                                    {connection.active ? '当前活动' : '未选择'}
+                                  </span>
+                                </div>
+                                <div className="model-center-account-actions tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-2 tw:min-h-9 tw:self-end tw:[&_svg]:size-icon tw:@max-[720px]:justify-start">
+                                  {!connection.active && connection.credentialId ? (
+                                    <Button
+                                      color="primary"
+                                      onClick={() => {
+                                        void providerManagementStore
+                                          .setActiveCredential(
+                                            provider.providerID,
+                                            connection.credentialId!,
+                                          )
+                                          .then(() => onNotice('活动凭据已切换为 OAuth。'))
+                                          .catch((err) => onError(fullErrorMessage(err)))
+                                      }}
+                                    >
+                                      设为当前活动
+                                    </Button>
+                                  ) : null}
+                                  {connection.credentialId ? (
+                                    <Button
+                                      color="danger"
+                                      onClick={() => {
+                                        void providerManagementStore
+                                          .deleteCredential(connection.credentialId!)
+                                          .then(() => onNotice('OAuth 凭据已删除。'))
+                                          .catch((err) => onError(fullErrorMessage(err)))
+                                      }}
+                                    >
+                                      断开并删除
+                                    </Button>
+                                  ) : null}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
                         ) : null}
                       </div>
-                      <p className="tw:m-0 tw:text-app-text-soft tw:type-body-sm">
-                        按来源查看账户余额、额度与消耗；不同来源的连接方式不同。
-                      </p>
-                    </div>
-                    {connectedQueryableSourceIds.length > 0 ? (
-                      <Button
-                        color="secondary"
-                        size="sm"
-                        loading={refreshingUsage}
-                        onClick={refreshUsageSources}
-                      >
-                        刷新余额
-                      </Button>
-                    ) : null}
-                  </header>
-                  <div className="model-center-detail-card-body tw:grid tw:min-w-0 tw:gap-3">
-                    {group!.usageSources.map((source) => {
-                      const method = source.connectionMethod
-                      if (method.kind === 'provider-credential') {
-                        const sourceResult = usageResultById.get(source.sourceId)
-                        return (
-                          <ProviderCredentialUsageCard
-                            credentialName={usageCredentialName(source, sourceResult, apiKeys)}
-                            descriptor={source}
-                            key={source.sourceId}
-                            loading={refreshingSourceIds.includes(source.sourceId)}
-                            result={sourceResult}
-                          />
-                        )
-                      }
-                      if (method.kind === 'billing-key') {
-                        return (
-                          <BillingCredentialConnection
-                            key={source.sourceId}
-                            source={{
-                              ...source,
-                              connectionMethod: method,
-                            }}
-                            onChanged={onRefresh}
-                            onConnect={(input) =>
-                              providerManagementStore
-                                .connectUsageCredential(input)
-                                .then(() => undefined)
-                            }
-                            onDisconnect={(sourceId) =>
-                              providerManagementStore
-                                .disconnectUsageCredential({ sourceId })
-                                .then(() => undefined)
-                            }
-                          />
-                        )
-                      }
-                      if (method.kind === 'oauth') {
-                        return (
-                          <OAuthConnection
-                            connected={source.connection.kind !== 'none'}
-                            description={
-                              source.scope === 'subscription'
-                                ? '独立订阅授权仅用于读取套餐额度，不会成为推理凭据。'
-                                : '此授权仅用于读取账户用量。'
-                            }
-                            target={{ kind: 'usage', sourceId: source.sourceId }}
-                            key={source.sourceId}
-                            title={source.displayName}
-                            onChanged={onRefresh}
-                          />
-                        )
-                      }
-                      if (method.kind === 'external') {
-                        return (
-                          <div
-                            className="tw:grid tw:min-w-0 tw:gap-3 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-4"
-                            key={source.sourceId}
-                          >
-                            <div className="tw:flex tw:min-w-0 tw:items-start tw:justify-between tw:gap-3">
+                    </section>
+                  ) : null}
+                </section>
+                {/* 4. Usage / balance sources */}
+                {(group?.usageSources.length ?? 0) > 0 ? (
+                  <section
+                    aria-label="用量与余额"
+                    className="tw:grid tw:gap-4 tw:border-t tw:border-app-border-subtle tw:pt-6"
+                  >
+                    <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
+                      <div className="tw:grid tw:min-w-0 tw:gap-1">
+                        <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2">
+                          <h3 className="tw:m-0 tw:text-app-text tw:type-title-sm">用量与余额</h3>
+                          {usageCheckedAt ? (
+                            <span className="tw:text-app-text-meta tw:type-caption tw:tabular-nums">
+                              {formatRefreshedAt(usageCheckedAt)}
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="tw:m-0 tw:text-app-text-soft tw:type-body-sm">
+                          按来源查看账户余额、额度与消耗；不同来源的连接方式不同。
+                        </p>
+                      </div>
+                      {connectedQueryableSourceIds.length > 0 ? (
+                        <Button
+                          color="secondary"
+                          size="sm"
+                          loading={refreshingUsage}
+                          onClick={refreshUsageSources}
+                        >
+                          刷新余额
+                        </Button>
+                      ) : null}
+                    </header>
+                    <div className="model-center-detail-card-body tw:grid tw:min-w-0 tw:gap-3">
+                      {group!.usageSources.map((source) => {
+                        const method = source.connectionMethod
+                        if (method.kind === 'provider-credential') {
+                          const sourceResult = usageResultById.get(source.sourceId)
+                          return (
+                            <ProviderCredentialUsageCard
+                              credentialName={usageCredentialName(source, sourceResult, apiKeys)}
+                              descriptor={source}
+                              key={source.sourceId}
+                              loading={refreshingSourceIds.includes(source.sourceId)}
+                              result={sourceResult}
+                            />
+                          )
+                        }
+                        if (method.kind === 'billing-key') {
+                          return (
+                            <BillingCredentialConnection
+                              key={source.sourceId}
+                              source={{
+                                ...source,
+                                connectionMethod: method,
+                              }}
+                              onChanged={onRefresh}
+                              onConnect={(input) =>
+                                providerManagementStore
+                                  .connectUsageCredential(input)
+                                  .then(() => undefined)
+                              }
+                              onDisconnect={(sourceId) =>
+                                providerManagementStore
+                                  .disconnectUsageCredential({ sourceId })
+                                  .then(() => undefined)
+                              }
+                            />
+                          )
+                        }
+                        if (method.kind === 'oauth') {
+                          return (
+                            <OAuthConnection
+                              connected={source.connection.kind !== 'none'}
+                              description={
+                                source.scope === 'subscription'
+                                  ? '独立订阅授权仅用于读取套餐额度，不会成为推理凭据。'
+                                  : '此授权仅用于读取账户用量。'
+                              }
+                              target={{ kind: 'usage', sourceId: source.sourceId }}
+                              key={source.sourceId}
+                              title={source.displayName}
+                              onChanged={onRefresh}
+                            />
+                          )
+                        }
+                        if (method.kind === 'external') {
+                          return (
+                            <div
+                              className="tw:grid tw:min-w-0 tw:gap-3 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-4"
+                              key={source.sourceId}
+                            >
+                              <div className="tw:flex tw:min-w-0 tw:items-start tw:justify-between tw:gap-3">
+                                <div>
+                                  <h4 className="tw:m-0 tw:text-app-text tw:type-row-title">
+                                    {source.displayName}
+                                  </h4>
+                                  <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
+                                    在供应商控制台查看用量与余额。
+                                  </p>
+                                </div>
+                                <span className="usage-badge">
+                                  {usageStatusLabel('unsupported')}
+                                </span>
+                              </div>
+                              <div>
+                                <Button
+                                  color="secondary"
+                                  onClick={() =>
+                                    void desktopClient.openExternalURL(method.consoleUrl)
+                                  }
+                                >
+                                  <ExternalLink aria-hidden size={APP_ICON_SIZE} />
+                                  打开控制台
+                                </Button>
+                              </div>
+                            </div>
+                          )
+                        }
+                        if (source.availability !== 'queryable') {
+                          return (
+                            <div
+                              className="tw:flex tw:min-w-0 tw:items-start tw:justify-between tw:gap-3 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-4"
+                              key={source.sourceId}
+                            >
                               <div>
                                 <h4 className="tw:m-0 tw:text-app-text tw:type-row-title">
                                   {source.displayName}
                                 </h4>
                                 <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
-                                  在供应商控制台查看用量与余额。
+                                  当前接入方式不支持查询余额或用量，请到供应商控制台查看。
                                 </p>
                               </div>
                               <span className="usage-badge">{usageStatusLabel('unsupported')}</span>
                             </div>
-                            <div>
-                              <Button
-                                color="secondary"
-                                onClick={() =>
-                                  void desktopClient.openExternalURL(method.consoleUrl)
-                                }
-                              >
-                                <ExternalLink aria-hidden size={APP_ICON_SIZE} />
-                                打开控制台
-                              </Button>
-                            </div>
-                          </div>
-                        )
-                      }
-                      if (source.availability !== 'queryable') {
-                        return (
-                          <div
-                            className="tw:flex tw:min-w-0 tw:items-start tw:justify-between tw:gap-3 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-4"
-                            key={source.sourceId}
-                          >
-                            <div>
-                              <h4 className="tw:m-0 tw:text-app-text tw:type-row-title">
-                                {source.displayName}
-                              </h4>
-                              <p className="tw:mt-1 tw:mb-0 tw:text-app-text-soft tw:type-body-sm">
-                                当前接入方式不支持查询余额或用量，请到供应商控制台查看。
-                              </p>
-                            </div>
-                            <span className="usage-badge">{usageStatusLabel('unsupported')}</span>
-                          </div>
-                        )
-                      }
-                      return null
-                    })}
-                  </div>
-                </section>
-              ) : null}
-              <section
-                ref={requestRef}
-                className="tw:grid tw:gap-4 tw:border-t tw:border-app-border-subtle tw:pt-6"
-                aria-label="请求配置"
-              >
-                <ProviderRequestSettingsForm
+                          )
+                        }
+                        return null
+                      })}
+                    </div>
+                  </section>
+                ) : null}
+                <section
+                  ref={requestRef}
+                  className="tw:grid tw:gap-4 tw:border-t tw:border-app-border-subtle tw:pt-6"
+                  aria-label="请求配置"
+                >
+                  <ProviderRequestSettingsForm
                     footerHost={requestFooterHost}
                     key={provider.providerID}
                     provider={provider}
@@ -769,10 +793,13 @@ export function ProviderConnectionSection({
                     onSaved={onRefresh}
                     onCancel={() => panel.close()}
                     {...(onDeleteProvider ? { onDelete: onDeleteProvider } : {})}
-                />
-              </section>
-            </div>
-            <div ref={setRequestFooterHost} className="tw:relative tw:z-10 tw:shrink-0 tw:bg-app-panel" />
+                  />
+                </section>
+              </div>
+              <div
+                ref={setRequestFooterHost}
+                className="tw:relative tw:z-10 tw:shrink-0 tw:bg-app-panel"
+              />
             </div>,
             panel.host,
           )

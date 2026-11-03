@@ -1,7 +1,4 @@
-import {
-  SharedModelCatalogCache,
-  downloadCatalogJson,
-} from './SharedModelCatalogCache'
+import { SharedModelCatalogCache, downloadCatalogJson } from './SharedModelCatalogCache'
 import type { RecommendationInput } from './ModelRecommendations'
 
 const REFRESH_INTERVAL_MS = 5 * 60 * 1000
@@ -17,18 +14,12 @@ export { downloadCatalogJson }
  */
 export class ModelRecommendationStore {
   private readonly cache: SharedModelCatalogCache
-  private readonly request: (
-    input: string | URL | Request,
-    init?: RequestInit,
-  ) => Promise<Response>
+  private readonly request: (input: string | URL | Request, init?: RequestInit) => Promise<Response>
   private refreshTimer: ReturnType<typeof setInterval> | undefined
 
   constructor(
     path?: string,
-    request: (
-      input: string | URL | Request,
-      init?: RequestInit,
-    ) => Promise<Response> = fetch,
+    request: (input: string | URL | Request, init?: RequestInit) => Promise<Response> = fetch,
   ) {
     this.cache = SharedModelCatalogCache.forPath(path)
     this.request = request

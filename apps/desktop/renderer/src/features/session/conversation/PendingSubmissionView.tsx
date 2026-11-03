@@ -10,8 +10,7 @@ import {
 } from '../timeline/ConversationItemContext.js'
 import type { PendingSubmission } from '../state/PendingSubmissionStore.js'
 
-const CONTENT_WIDTH_CLASS =
-  'tw:w-[min(var(--page-content-max-width),var(--session-content-w))]'
+const CONTENT_WIDTH_CLASS = 'tw:w-[min(var(--page-content-max-width),var(--session-content-w))]'
 
 const PENDING_CONTENT_CLASS =
   'pending-submission-content tw:mx-auto tw:flex tw:min-w-0 tw:flex-col tw:gap-2'
@@ -57,16 +56,16 @@ export function PendingSubmissionMessages({
             className="canonical-user-message"
             data-input-navigation-id={submission.submissionId}
           >
-          <CanonicalUserMessageContent
-            attachments={(submission.input.attachments ?? []).map(pendingAttachmentDisplay)}
-            content={submission.input.text}
-            contextReferences={[]}
-            createdAt={submission.createdAt}
-            onOpenAttachment={onOpenAttachment}
-            onOpenLocalContext={context.onOpenLocalContext}
-            skills={submission.input.skills}
-            withActions={false}
-          />
+            <CanonicalUserMessageContent
+              attachments={(submission.input.attachments ?? []).map(pendingAttachmentDisplay)}
+              content={submission.input.text}
+              contextReferences={[]}
+              createdAt={submission.createdAt}
+              onOpenAttachment={onOpenAttachment}
+              onOpenLocalContext={context.onOpenLocalContext}
+              skills={submission.input.skills}
+              withActions={false}
+            />
           </article>
           <p className={PENDING_STATUS_CLASS} role="status" aria-live="polite">
             <Spinner />

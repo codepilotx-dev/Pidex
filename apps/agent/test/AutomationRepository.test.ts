@@ -71,15 +71,20 @@ describe('AutomationRepository', () => {
     const { sqlite, profileSqlite, repository } = fixture()
     let now = Date.parse('2026-10-16T00:00:00Z')
     const deadline = now + 5 * 60 * 60 * 1_000
-    repository.create({
-      ...record('automation:five-hour', deadline),
-      schedule: { mode: 'hourly', intervalMinutes: 300 },
-      canonicalRrule: 'FREQ=MINUTELY;INTERVAL=300;BYSECOND=0',
-    }, now)
+    repository.create(
+      {
+        ...record('automation:five-hour', deadline),
+        schedule: { mode: 'hourly', intervalMinutes: 300 },
+        canonicalRrule: 'FREQ=MINUTELY;INTERVAL=300;BYSECOND=0',
+      },
+      now,
+    )
     const ids: string[] = []
     const scheduler = new AutomationScheduler(repository, {
       now: () => now,
-      onClaimed: (runs) => { ids.push(...runs.map((run) => run.id)) },
+      onClaimed: (runs) => {
+        ids.push(...runs.map((run) => run.id))
+      },
     })
     try {
       await scheduler.wake()
@@ -89,7 +94,11 @@ describe('AutomationRepository', () => {
       await scheduler.wake()
       expect(ids).toHaveLength(1)
       expect(repository.read('automation:five-hour')?.status).toBe('active')
-    } finally { scheduler.dispose(); sqlite.close(); profileSqlite.close() }
+    } finally {
+      scheduler.dispose()
+      sqlite.close()
+      profileSqlite.close()
+    }
   })
   test('CRUD 使用 revision CAS、profile 项目检查并软删除', () => {
     const { repository, sqlite, profileSqlite } = fixture()

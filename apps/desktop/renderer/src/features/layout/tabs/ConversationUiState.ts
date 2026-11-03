@@ -635,8 +635,7 @@ function validateTabDescriptor(
           ? tab.eventId
           : null
     const threadId = typeof tab.threadId === 'string' && tab.threadId ? tab.threadId : null
-    const content =
-      typeof tab.content === 'string' && tab.content.trim() ? tab.content : undefined
+    const content = typeof tab.content === 'string' && tab.content.trim() ? tab.content : undefined
     // 旧标签可能既没有聊天身份也没有正文快照；保留它，渲染时再按事件回退查找。
     if (!planItemId) return null
     if (options.validPlanItemIds && !options.validPlanItemIds.includes(planItemId)) return null

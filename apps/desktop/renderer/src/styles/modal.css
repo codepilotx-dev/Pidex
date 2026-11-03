@@ -95,7 +95,13 @@
   }
 
   .toast-stack-container[data-fade-top][data-fade-bottom] {
-    mask-image: linear-gradient(to bottom, transparent, black var(--cpx-sys-space-4), black calc(100% - var(--cpx-sys-space-4)), transparent);
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--cpx-sys-space-4),
+      black calc(100% - var(--cpx-sys-space-4)),
+      transparent
+    );
   }
 
   /* --- Permission code scroll --- */
@@ -289,13 +295,19 @@
     padding: var(--cpx-sys-space-2) var(--cpx-sys-space-3);
     border-radius: var(--cpx-sys-radius-lg);
     background: var(--cpx-sys-color-surface-panel);
-    transition: background-color var(--cpx-sys-motion-panel) ease, box-shadow var(--cpx-sys-motion-panel) ease;
+    transition:
+      background-color var(--cpx-sys-motion-panel) ease,
+      box-shadow var(--cpx-sys-motion-panel) ease;
   }
 
   /* tucked: the same near-white for both, and a faint edge so each
      sliver has a line to read by */
   .tst:not([data-open]) .tst-toast:not([data-front]) {
-    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, var(--cpx-sys-color-surface-panel));
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 6%,
+      var(--cpx-sys-color-surface-panel)
+    );
     box-shadow: 0 0 0 1px color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, transparent);
   }
 
@@ -340,11 +352,11 @@
     color: inherit;
   }
 
-  .tst-toast[data-kind="success"] .tst-icon:not([data-custom]) {
+  .tst-toast[data-kind='success'] .tst-icon:not([data-custom]) {
     color: var(--cpx-sys-color-success-fg);
   }
 
-  .tst-toast[data-kind="error"] .tst-icon:not([data-custom]) {
+  .tst-toast[data-kind='error'] .tst-icon:not([data-custom]) {
     color: var(--cpx-sys-color-danger-fg);
   }
 
@@ -360,11 +372,17 @@
     background: none;
     color: var(--cpx-sys-color-fg-secondary);
     cursor: pointer;
-    transition: background-color var(--cpx-sys-motion-feedback) ease, color var(--cpx-sys-motion-feedback) ease;
+    transition:
+      background-color var(--cpx-sys-motion-feedback) ease,
+      color var(--cpx-sys-motion-feedback) ease;
   }
 
   .tst-x:hover {
-    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, var(--cpx-sys-color-surface-panel));
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 6%,
+      var(--cpx-sys-color-surface-panel)
+    );
     color: var(--cpx-sys-color-fg-primary);
   }
 
@@ -384,7 +402,11 @@
 
 @layer overrides {
   .tst-act {
-    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, var(--cpx-sys-color-surface-panel));
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 6%,
+      var(--cpx-sys-color-surface-panel)
+    );
     color: inherit;
     transition: scale var(--cpx-sys-motion-feedback) cubic-bezier(0.22, 1, 0.36, 1);
   }

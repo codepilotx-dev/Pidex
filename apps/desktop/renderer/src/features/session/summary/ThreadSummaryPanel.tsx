@@ -106,7 +106,6 @@ const AGENT_STATUS_META_LABELS: Record<string, string> = {
   error: '错误',
 }
 
-
 export function ThreadSummaryPopover({
   children,
   open,
@@ -518,7 +517,11 @@ export function ThreadSummaryPanel({
                 type="button"
                 onClick={() => onOpenSubagent?.(agent.id)}
               >
-                <Bot className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
+                <Bot
+                  className={SUMMARY_ROW_ICON_CLASS}
+                  aria-hidden="true"
+                  size="var(--inline-icon-size, 1em)"
+                />
                 <span className="tw:grid tw:min-w-0">
                   <span className={SUMMARY_ROW_LABEL_CLASS}>{agent.name}</span>
                   {agent.summary ? (
@@ -671,7 +674,6 @@ export function ThreadSummaryPanel({
   )
 }
 
-
 function AgentSectionMeta({
   agents,
 }: {
@@ -717,7 +719,11 @@ function BrowserTabRow({
       type="button"
       onClick={() => onActivate?.(tab.tabId)}
     >
-      <Globe className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
+      <Globe
+        className={SUMMARY_ROW_ICON_CLASS}
+        aria-hidden="true"
+        size="var(--inline-icon-size, 1em)"
+      />
       <span className={SUMMARY_ROW_LABEL_CLASS}>{tab.title}</span>
       <small className="tw:flex tw:items-center tw:gap-1.5 tw:whitespace-nowrap tw:text-app-text-meta tw:type-caption">
         {tab.domain ? <span>{tab.domain}</span> : null}
@@ -754,7 +760,11 @@ function ThreadSummarySourceRow({
         type="button"
         onClick={() => onOpenAttachment?.(source.attachment)}
       >
-        <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
+        <Icon
+          className={SUMMARY_ROW_ICON_CLASS}
+          aria-hidden="true"
+          size="var(--inline-icon-size, 1em)"
+        />
         <span className={SUMMARY_ROW_LABEL_CLASS}>{source.label}</span>
       </button>
     )
@@ -768,7 +778,11 @@ function ThreadSummarySourceRow({
         type="button"
         onClick={() => onOpenLocalContext?.(source.reference)}
       >
-        <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
+        <Icon
+          className={SUMMARY_ROW_ICON_CLASS}
+          aria-hidden="true"
+          size="var(--inline-icon-size, 1em)"
+        />
         <span className={SUMMARY_ROW_LABEL_CLASS}>{source.label}</span>
       </button>
     )
@@ -782,7 +796,11 @@ function ThreadSummarySourceRow({
         target="_blank"
         title={source.url}
       >
-        <Link2 className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
+        <Link2
+          className={SUMMARY_ROW_ICON_CLASS}
+          aria-hidden="true"
+          size="var(--inline-icon-size, 1em)"
+        />
         <span className={SUMMARY_ROW_LABEL_CLASS}>{source.label}</span>
       </a>
     )
@@ -793,7 +811,11 @@ function ThreadSummarySourceRow({
       className="thread-summary-row thread-summary-source-static tw:grid tw:w-[calc(100%+16px)] tw:min-w-0 tw:-mx-2 tw:grid-cols-[16px_minmax(0,1fr)] tw:items-center tw:gap-2 tw:px-2 tw:text-app-text tw:type-body"
       title={source.source ?? source.label}
     >
-      <Icon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
+      <Icon
+        className={SUMMARY_ROW_ICON_CLASS}
+        aria-hidden="true"
+        size="var(--inline-icon-size, 1em)"
+      />
       <span className={SUMMARY_ROW_LABEL_CLASS}>{source.label}</span>
     </div>
   )
@@ -817,9 +839,17 @@ function ArtifactRow({
   const row = (
     <>
       {artifact.previewKind === 'image' ? (
-        <ImageIcon className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
+        <ImageIcon
+          className={SUMMARY_ROW_ICON_CLASS}
+          aria-hidden="true"
+          size="var(--inline-icon-size, 1em)"
+        />
       ) : (
-        <Package className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
+        <Package
+          className={SUMMARY_ROW_ICON_CLASS}
+          aria-hidden="true"
+          size="var(--inline-icon-size, 1em)"
+        />
       )}
       <span className={SUMMARY_ROW_LABEL_CLASS}>{artifact.name}</span>
       <small

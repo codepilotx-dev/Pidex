@@ -1,10 +1,4 @@
 {
   "schemaVersion": 1,
-  "exceptions": {
-    "GHSA-vfj7-8cjw-p6xm": {
-      "reason": "braces 只经 Stylelint 依赖链（stylelint -> globby -> fast-glob -> micromatch -> braces）以仓库固定 glob 模式引入，不接受外部输入；上游当前版本仍受影响，暂无修复版本。",
-      "owner": "xiaohai-ouyang",
-      "expires": "2026-10-19"
-    }
-  }
+  "exceptions": {}
 }

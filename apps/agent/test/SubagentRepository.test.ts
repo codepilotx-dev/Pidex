@@ -103,7 +103,9 @@ describe('子 Agent 持久化与调度', () => {
     })
 
     expect(created.task.role).toBe('backend')
-    expect(new ThreadProjection(db).snapshot(thread.id)?.items.find((item) => item.type === 'subagent')).toMatchObject({
+    expect(
+      new ThreadProjection(db).snapshot(thread.id)?.items.find((item) => item.type === 'subagent'),
+    ).toMatchObject({
       role: 'backend',
     })
     db.close()

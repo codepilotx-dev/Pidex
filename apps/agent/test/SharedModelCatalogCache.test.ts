@@ -82,12 +82,14 @@ test('旧两份缓存迁移到共享文件：目录与推荐共用一份，旧�
     // 目录先加载，内部迁移并写出共享缓存；推荐共用同一份内存/文件。
     expect((await directoryStore.providers()).some((entry) => entry.id === 'vendor')).toBe(true)
     expect(await readFile(sharedPath, 'utf8')).toContain('"owner":"pidex-model-catalog"')
-    const resolved = (await recommendations.resolve({
-      providerId: 'relay',
-      baseUrl: 'https://vendor.example/v1',
-      modelId: 'example',
-      modelType: 'chat',
-    })).recommended
+    const resolved = (
+      await recommendations.resolve({
+        providerId: 'relay',
+        baseUrl: 'https://vendor.example/v1',
+        modelId: 'example',
+        modelType: 'chat',
+      })
+    ).recommended
     expect(resolved).toMatchObject({ contextWindow: 128000, cost: { input: 2, output: 3 } })
     // 旧 updatedAt 迁移保留，fingerprint 不抖动。
     expect(await recommendations.version()).toBe(123)
@@ -104,9 +106,7 @@ test('写入前裁剪：只保存消费字段，供应商层仅存差异且可�
   const sharedPath = join(directory, 'shared-model-catalog.json')
   try {
     const store = new ProviderDirectoryStore(path, async (url) =>
-      Response.json(
-        String(url).startsWith('https://pi.dev/') ? pi : catalogPayload(),
-      ),
+      Response.json(String(url).startsWith('https://pi.dev/') ? pi : catalogPayload()),
     )
     await store.refresh()
     const persisted = await readFile(sharedPath, 'utf8')
@@ -137,12 +137,14 @@ test('写入前裁剪：只保存消费字段，供应商层仅存差异且可�
       contextWindow: 65536,
     })
     const restarted = new ModelRecommendationStore(join(directory, 'model-recommendations.json'))
-    const recommended = (await restarted.resolve({
-      providerId: 'relay',
-      baseUrl: 'https://vendor.example/v1',
-      modelId: 'example',
-      modelType: 'chat',
-    })).recommended
+    const recommended = (
+      await restarted.resolve({
+        providerId: 'relay',
+        baseUrl: 'https://vendor.example/v1',
+        modelId: 'example',
+        modelType: 'chat',
+      })
+    ).recommended
     expect(recommended).toMatchObject({
       contextWindow: 128000,
       maxInputTokens: 120000,
@@ -205,8 +207,7 @@ test('别名歧义在迁移后仍不合并', async () => {
     )
     const store = new ModelRecommendationStore(path)
     expect(
-      (await store.resolve({ providerId: 'relay', modelId: 'example', modelType: 'chat' }))
-        .status,
+      (await store.resolve({ providerId: 'relay', modelId: 'example', modelType: 'chat' })).status,
     ).toBe('ambiguous')
   } finally {
     await rm(directory, { recursive: true, force: true })

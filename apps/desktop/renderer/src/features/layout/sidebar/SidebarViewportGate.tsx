@@ -1,17 +1,7 @@
-import {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useRef,
-  type ReactNode,
-} from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, type ReactNode } from 'react'
 
 /** 订阅一个元素的视口可见性；返回退订函数。 */
-type SidebarViewportGate = (
-  element: Element,
-  setVisible: (visible: boolean) => void,
-) => () => void
+type SidebarViewportGate = (element: Element, setVisible: (visible: boolean) => void) => () => void
 
 const SidebarViewportGateContext = createContext<SidebarViewportGate | null>(null)
 

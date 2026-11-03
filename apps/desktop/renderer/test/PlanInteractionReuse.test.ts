@@ -18,8 +18,14 @@ const inlineApproval = read('../src/features/session/approvals/InlineApprovalCar
 describe('Plan 交互在主聊天、侧边聊天与子 Agent 间复用', () => {
   test('主聊天与侧边聊天用同一份审阅卡片与响应 Hook', () => {
     for (const source of [conversationPage, sideChatPanel]) {
-      expectSourceContains(source, "import { PlanApprovalCard } from '../approvals/PlanApprovalCard.js'")
-      expectSourceContains(source, "import { usePlanApprovalResponse } from '../approvals/UsePlanApprovalResponse.js'")
+      expectSourceContains(
+        source,
+        "import { PlanApprovalCard } from '../approvals/PlanApprovalCard.js'",
+      )
+      expectSourceContains(
+        source,
+        "import { usePlanApprovalResponse } from '../approvals/UsePlanApprovalResponse.js'",
+      )
       expectSourceContains(source, '<PlanApprovalCard')
       expectSourceContains(source, 'onRespond={planApproval.respond}')
       expectSourceContains(source, 'freshAvailable={planApproval.freshAvailable}')

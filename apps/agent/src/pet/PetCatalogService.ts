@@ -60,9 +60,13 @@ export class PetCatalogService {
         const cached = await this.readCache()
         if (!cached || !this.isFresh(cached)) await this.refresh()
         else delay = Math.max(1, Date.parse(cached.fetchedAt) + CACHE_TTL_MS - this.now())
-      } catch { /* Retry at the next refresh deadline. */ }
+      } catch {
+        /* Retry at the next refresh deadline. */
+      }
       if (this.stopped) return
-      this.refreshTimer = setTimeout(() => { void refresh() }, delay)
+      this.refreshTimer = setTimeout(() => {
+        void refresh()
+      }, delay)
       this.refreshTimer.unref?.()
     }
     void refresh()

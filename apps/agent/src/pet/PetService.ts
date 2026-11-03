@@ -44,9 +44,13 @@ export class PetService {
     this.catalogService = new PetCatalogService(rootDirectory)
   }
 
-  start() { this.catalogService.start() }
+  start() {
+    this.catalogService.start()
+  }
 
-  dispose() { this.catalogService.dispose() }
+  dispose() {
+    this.catalogService.dispose()
+  }
 
   async list(): Promise<PetDescriptor[]> {
     let entries

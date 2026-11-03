@@ -1,8 +1,9 @@
 import { rm } from 'node:fs/promises'
 
 // Windows 上 SQLite、watcher 或目录句柄释放后可能短暂占用路径。
-// 固定可恢复窗口：每 50ms 重试一次，最多 100 次（约 5 秒）。
-const FIXTURE_REMOVE_ATTEMPTS = 100
+// 固定可恢复窗口：每 50ms 重试一次，最多 200 次（约 10 秒）。共享 runner 上
+// 同时跑着色器、Defender 扫描大文件时，句柄释放会明显慢于本地。
+const FIXTURE_REMOVE_ATTEMPTS = 200
 const FIXTURE_REMOVE_DELAY_MS = 50
 const RETRYABLE_REMOVE_CODES = new Set(['EBUSY', 'EPERM', 'ENOTEMPTY'])
 

@@ -129,7 +129,9 @@ export function ModelRuntimeParametersContent({
     { key: 'custom', label: '自定义', tokens: null },
   ]
 
-  const matchedPresetIndex = numericPresets.findIndex((preset) => preset.tokens === maxContextTokens)
+  const matchedPresetIndex = numericPresets.findIndex(
+    (preset) => preset.tokens === maxContextTokens,
+  )
   const isDefaultValue = maxContextTokens === null || maxContextTokens === undefined
   const isPresetValue = matchedPresetIndex !== -1
   const isCustomValue = !isDefaultValue && !isPresetValue
@@ -146,11 +148,7 @@ export function ModelRuntimeParametersContent({
   }, [maxContextTokens, isDefaultValue, isPresetValue])
 
   const customStopIndex = stops.length - 1
-  const sliderIndex = isCustomMode
-    ? customStopIndex
-    : isDefaultValue
-      ? 0
-      : 1 + matchedPresetIndex
+  const sliderIndex = isCustomMode ? customStopIndex : isDefaultValue ? 0 : 1 + matchedPresetIndex
 
   const [customKInput, setCustomKInput] = useState<string>(() =>
     isCustomValue && maxContextTokens ? String(maxContextTokens / 1000) : '',
@@ -281,8 +279,7 @@ export function ModelRuntimeParametersContent({
         ? '默认'
         : String((maxContextTokens ?? 0) / 1000)
 
-  const contextAriaValue =
-    effectiveKey === 'default' ? '默认' : `${displayInputValue}K`
+  const contextAriaValue = effectiveKey === 'default' ? '默认' : `${displayInputValue}K`
 
   return (
     <div className="tw:flex tw:flex-col" onClick={(event) => event.stopPropagation()}>
@@ -364,11 +361,7 @@ export function ModelRuntimeParametersContent({
                 'tw:disabled:cursor-default tw:disabled:opacity-60',
               )}
             />
-            {showKUnit ? (
-              <span className="tw:type-caption tw:text-app-text-soft">
-                k
-              </span>
-            ) : null}
+            {showKUnit ? <span className="tw:type-caption tw:text-app-text-soft">k</span> : null}
           </div>
         </div>
 
@@ -392,10 +385,7 @@ export function ModelRuntimeParametersContent({
             {inputError}
           </span>
         ) : maxContextTokens !== null && maxContextTokens < minimumTokens ? (
-          <span
-            role="alert"
-            className="tw:type-caption tw:text-app-warning"
-          >
+          <span role="alert" className="tw:type-caption tw:text-app-warning">
             {`系统必要开销约 ${minimumTokens / 1000}K，预算不能低于此值。`}
           </span>
         ) : null}

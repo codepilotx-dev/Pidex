@@ -146,10 +146,7 @@ function commandStateSegments(
 
   if (item.state === 'interrupted') {
     if (duration) {
-      segments.push(
-        { kind: 'verb', text: `在 ${duration}后停止运行 ` },
-        ...target,
-      )
+      segments.push({ kind: 'verb', text: `在 ${duration}后停止运行 ` }, ...target)
     } else {
       segments.push({ kind: 'verb', text: '已停止运行 ' }, ...target)
     }
@@ -515,7 +512,9 @@ export function ToolActivityLabel({
                       : undefined
             }
             key={key}
-            title={segment.kind === 'file' ? absoluteFilePath(segment.text, workspacePath) : undefined}
+            title={
+              segment.kind === 'file' ? absoluteFilePath(segment.text, workspacePath) : undefined
+            }
           >
             {segment.kind === 'file' ? fileDisplayName(segment.text) : segment.text}
           </span>

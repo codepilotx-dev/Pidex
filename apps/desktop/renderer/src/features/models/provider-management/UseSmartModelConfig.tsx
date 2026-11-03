@@ -145,7 +145,11 @@ export function useSmartModelConfig(
           content="按模型 ID、Base URL 匹配 models.dev 推荐。开启后未修改的项持续跟随推荐更新；手动修改某项即固定该项，其余仍跟随。"
         />
         {enabled ? (
-          <Button color="secondary" disabled={busy || !model.id.trim()} onClick={() => void load(true)}>
+          <Button
+            color="secondary"
+            disabled={busy || !model.id.trim()}
+            onClick={() => void load(true)}
+          >
             重新应用推荐
           </Button>
         ) : null}
@@ -190,7 +194,8 @@ export function useSmartModelConfig(
     controls,
     enabled,
     pinned,
-    recommended: preview?.status === 'matched' ? (preview.recommended as ModelRecommendation) : undefined,
+    recommended:
+      preview?.status === 'matched' ? (preview.recommended as ModelRecommendation) : undefined,
     togglePin,
     /** 编辑某个可跟随字段时自动固定它，避免下次跟随把它改回去。 */
     change: (next: EditableModel) => {

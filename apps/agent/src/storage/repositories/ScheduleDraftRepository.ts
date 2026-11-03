@@ -191,9 +191,9 @@ export class ScheduleDraftRepository {
 
   get(id: string): ScheduleDraft | null {
     if (!this.available()) return null
-    const row = this.db.sqlite.query('SELECT * FROM schedule_drafts WHERE id = ?').get(id) as
-      | Row
-      | null
+    const row = this.db.sqlite
+      .query('SELECT * FROM schedule_drafts WHERE id = ?')
+      .get(id) as Row | null
     return row ? this.project(row) : null
   }
 
@@ -250,7 +250,8 @@ export class ScheduleDraftRepository {
    * operationId / toolCallId 幂等返回已落盘草案。
    */
   create(input: ScheduleDraftCreateInput, now: number): ScheduleDraft {
-    const existing = this.findByOperation(input.operationId) ?? this.findByToolCall(input.toolCallId)
+    const existing =
+      this.findByOperation(input.operationId) ?? this.findByToolCall(input.toolCallId)
     if (existing) {
       if (
         existing.threadId !== input.threadId ||
@@ -331,8 +332,7 @@ export class ScheduleDraftRepository {
         id,
         input.expectedRevision,
       )
-    if (result.changes !== 1)
-      throw new AgentError('CONFLICT', '任务规划草案版本或状态已变化', 409)
+    if (result.changes !== 1) throw new AgentError('CONFLICT', '任务规划草案版本或状态已变化', 409)
     return this.get(id)!
   }
 
@@ -350,10 +350,14 @@ export class ScheduleDraftRepository {
    * 确认之外的草案动作（反馈、取消）的幂等台账。同一个 operationId 重试只生效
    * 一次；requestHash 不一致说明 operationId 被复用到了不同请求。
    */
-  lookupOperation(operationId: string): { draftId: string; method: string; requestHash: string } | null {
+  lookupOperation(
+    operationId: string,
+  ): { draftId: string; method: string; requestHash: string } | null {
     if (!this.available()) return null
     const row = this.db.sqlite
-      .query('SELECT draft_id, method, request_hash FROM schedule_draft_operations WHERE operation_id = ?')
+      .query(
+        'SELECT draft_id, method, request_hash FROM schedule_draft_operations WHERE operation_id = ?',
+      )
       .get(operationId) as { draft_id: string; method: string; request_hash: string } | null
     return row ? { draftId: row.draft_id, method: row.method, requestHash: row.request_hash } : null
   }

@@ -68,6 +68,7 @@ export function contextCompactionOperationItem(
     compaction: {
       source: operation.trigger,
       startedAt: operation.createdAt,
+      ...(active ? {} : { finishedAt: Math.max(operation.createdAt, operation.updatedAt) }),
       standalone:
         operation.trigger === 'manual' && (operation.turnId === null || anchor.standalone === true),
     },

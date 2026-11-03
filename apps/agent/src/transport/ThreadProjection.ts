@@ -4,7 +4,11 @@ import {
   contextCompactionItem,
   contextCompactionOperationItem,
 } from '@pidex/session-view/context-compaction'
-import { activeTurnSql, hasThreadEditStorage, ThreadEditRepository } from '../storage/repositories/ThreadEditRepository'
+import {
+  activeTurnSql,
+  hasThreadEditStorage,
+  ThreadEditRepository,
+} from '../storage/repositories/ThreadEditRepository'
 import { safeTurnError } from '@pidex/shared/errors'
 import { SubagentRoleSchema } from '@pidex/shared/thread'
 import { AgentError, decodeStoredTaskMode } from '../Domain'
@@ -710,7 +714,9 @@ export class ThreadProjection {
     const turnIDs = turns.map((turn) => turn.id)
     const operations = this.db.repositories.context
       .compactionOperationsForTurns(threadId, turnIDs)
-      .filter((record) => record.operation.status !== 'skipped' || record.operation.trigger === 'manual')
+      .filter(
+        (record) => record.operation.status !== 'skipped' || record.operation.trigger === 'manual',
+      )
     const records = this.db.repositories.context.compactionsForTurns(threadId, turnIDs)
     const projected: Item[] = []
     for (const record of records) {

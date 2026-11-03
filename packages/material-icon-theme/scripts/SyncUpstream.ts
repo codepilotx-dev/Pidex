@@ -178,7 +178,7 @@ async function generateFiles(
   )
 
   for (const [iconName, definition] of definitions) {
-    const sourcePath = resolve(upstreamRoot, 'dist', definition.iconPath.replaceAll('/', '\\'))
+    const sourcePath = resolve(upstreamRoot, 'dist', definition.iconPath.replaceAll('/', sep))
     const rawSvg = await readFile(sourcePath, 'utf8')
     const { viewBox, body } = monochromeSvg(rawSvg)
     const componentName = toComponentName(iconName)

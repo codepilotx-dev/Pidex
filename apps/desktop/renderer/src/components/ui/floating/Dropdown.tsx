@@ -494,7 +494,11 @@ const DropdownItem = forwardRef<HTMLDivElement, DropdownItemProps>(
         ) : (
           <>
             <div className="tw:flex tw:items-center tw:gap-2 tw:min-w-0 tw:pr-1">
-              {icon && <span className="tw:shrink-0 tw:[&>svg]:size-[var(--inline-icon-size,1em)]">{icon}</span>}
+              {icon && (
+                <span className="tw:shrink-0 tw:[&>svg]:size-[var(--inline-icon-size,1em)]">
+                  {icon}
+                </span>
+              )}
               <div className="tw:min-w-0">
                 <div className="tw:truncate">{children}</div>
                 {description && (

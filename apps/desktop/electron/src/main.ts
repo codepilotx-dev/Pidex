@@ -412,7 +412,7 @@ async function startDesktop(): Promise<void> {
     )
   }
   const token = backgroundRuntime
-    ? await backgroundRuntime.initialize()
+    ? await backgroundRuntime.initialize(process.env.PIDEX_AUTH_TOKEN)
     : (process.env.PIDEX_AUTH_TOKEN ?? randomBytes(32).toString('base64url'))
   const initialAgentOrigin = backgroundRuntime?.origin ?? process.env.PIDEX_AGENT_URL!
   const applicationOrigin = resolveRendererApplicationOrigin({

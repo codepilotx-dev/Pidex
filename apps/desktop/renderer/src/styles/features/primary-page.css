@@ -48,7 +48,8 @@
       width: 15rem;
     }
 
-    .primary-page-layout__header--with-search .primary-page-layout__search:has(.pet-catalog-filters) {
+    .primary-page-layout__header--with-search
+      .primary-page-layout__search:has(.pet-catalog-filters) {
       width: 22rem;
     }
 

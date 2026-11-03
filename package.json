@@ -49,8 +49,10 @@
   },
   "overrides": {
     "@xmldom/xmldom": "0.8.15",
+    "body-parser": "2.4.0",
     "brace-expansion": "5.0.11",
     "browserslist": "4.28.7",
+    "dompurify": "3.4.17",
     "extract-zip": "file:./vendor/extract-zip",
     "fast-uri": "3.1.7",
     "http-cache-semantics": "4.3.0",
@@ -59,8 +61,8 @@
     "nanoid": "3.3.18",
     "sharp": "0.35.5",
     "tar": "7.5.21",
-    "toml": "4.2.0",
-    "undici": "8.10.2",
+    "toml": "5.0.1",
+    "undici": "8.12.3",
     "proxy-addr": "2.0.8",
     "source-map-js": "1.2.2",
     "prosemirror-view": "1.42.6"

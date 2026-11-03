@@ -494,7 +494,9 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const git = new GitWorkspaceService(db, undefined, github)
     const piModels = new PiModelService(providerCredentialStore, {
       logger,
-      directory: new ProviderDirectoryStore(join(dirname(config.piModelCachePath), 'provider-directory.json')),
+      directory: new ProviderDirectoryStore(
+        join(dirname(config.piModelCachePath), 'provider-directory.json'),
+      ),
       ...(options.models ? { models: options.models } : {}),
       modelsStore: new PiModelsFileStore(config.piModelCachePath),
       recommendations: new ModelRecommendationStore(

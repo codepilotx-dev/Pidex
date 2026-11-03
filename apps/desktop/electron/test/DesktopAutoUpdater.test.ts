@@ -26,9 +26,14 @@ describe('桌面自动更新服务', () => {
     const updater = new FakeUpdater()
     const statuses: DesktopUpdateStatus[] = []
     const service = new DesktopAutoUpdater({
-      packaged: true, version: '1.2.3', logger: loggerStub(), updater,
+      packaged: true,
+      version: '1.2.3',
+      logger: loggerStub(),
+      updater,
       onStatusChange: (status) => statuses.push(status),
-      beforeInstall: async () => { throw new Error('后台仍在运行') },
+      beforeInstall: async () => {
+        throw new Error('后台仍在运行')
+      },
     })
     updater.emit('update-downloaded')
     await service.quitAndInstall()

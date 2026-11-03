@@ -743,18 +743,26 @@ try {
     .getByRole('complementary')
     .getByRole('textbox', { name: 'API 地址', exact: true })
     .fill('https://changed.example/v1')
-  await modelPage.getByRole('link', { name: '离开页面', exact: true }).evaluate((link: HTMLAnchorElement) => link.click())
+  await modelPage
+    .getByRole('link', { name: '离开页面', exact: true })
+    .evaluate((link: HTMLAnchorElement) => link.click())
   await modelPage.getByRole('button', { name: '继续编辑', exact: true }).click()
   await expect(
     modelPage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }),
   ).toHaveValue('https://changed.example/v1')
-  await modelPage.getByRole('button', { name: '关闭供应商设置', exact: true }).evaluate((button: HTMLButtonElement) => button.click())
+  await modelPage
+    .getByRole('button', { name: '关闭供应商设置', exact: true })
+    .evaluate((button: HTMLButtonElement) => button.click())
   await modelPage.getByRole('button', { name: '继续编辑', exact: true }).click()
-  await modelPage.getByRole('button', { name: '模拟密钥刷新', exact: true }).evaluate((button: HTMLButtonElement) => button.click())
+  await modelPage
+    .getByRole('button', { name: '模拟密钥刷新', exact: true })
+    .evaluate((button: HTMLButtonElement) => button.click())
   await expect(
     modelPage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }),
   ).toHaveValue('https://changed.example/v1')
-  await modelPage.getByRole('button', { name: '关闭供应商设置', exact: true }).evaluate((button: HTMLButtonElement) => button.click())
+  await modelPage
+    .getByRole('button', { name: '关闭供应商设置', exact: true })
+    .evaluate((button: HTMLButtonElement) => button.click())
   await modelPage.evaluate(() => {
     ;(window as any).__failNext = true
   })
@@ -768,27 +776,39 @@ try {
     await modelPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl),
     'https://changed.example/v1',
   )
-  const autoAddress = modelPage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true })
-  await modelPage.evaluate(() => { (window as any).__holdUpdates = true })
+  const autoAddress = modelPage
+    .getByRole('complementary')
+    .getByRole('textbox', { name: 'API 地址', exact: true })
+  await modelPage.evaluate(() => {
+    ;(window as any).__holdUpdates = true
+  })
   await autoAddress.fill('https://first.example/v1')
   await autoAddress.press('Tab')
-  await expect.poll(() => modelPage.evaluate(() => Boolean((window as any).__releaseUpdate))).toBe(true)
+  await expect
+    .poll(() => modelPage.evaluate(() => Boolean((window as any).__releaseUpdate)))
+    .toBe(true)
   await autoAddress.fill('https://latest.example/v1')
   await autoAddress.press('Tab')
   await modelPage.evaluate(() => {
     ;(window as any).__holdUpdates = false
     ;(window as any).__releaseUpdate()
   })
-  await expect.poll(() => modelPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl)).toBe('https://latest.example/v1')
+  await expect
+    .poll(() => modelPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl))
+    .toBe('https://latest.example/v1')
   await expect(autoAddress).toHaveValue('https://latest.example/v1')
-  await modelPage.evaluate(() => { (window as any).__failNext = true })
+  await modelPage.evaluate(() => {
+    ;(window as any).__failNext = true
+  })
   await autoAddress.fill('https://retry.example/v1')
   await autoAddress.press('Tab')
   await expect(modelPage.getByRole('alert', { includeHidden: true })).toContainText('模拟保存失败')
   await expect(autoAddress).toHaveValue('https://retry.example/v1')
   await autoAddress.focus()
   await autoAddress.press('Tab')
-  await expect.poll(() => modelPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl)).toBe('https://retry.example/v1')
+  await expect
+    .poll(() => modelPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl))
+    .toBe('https://retry.example/v1')
   await modelPage.close()
   const endpointPage = await mount('/providers?provider=mixed&controller=1', false)
   await endpointPage.getByRole('button', { name: '显示右侧边栏', exact: true }).click()
@@ -802,7 +822,9 @@ try {
     .getByRole('textbox', { name: 'Anthropic Messages API 地址', exact: true })
     .fill('https://messages.example')
   await endpointPanel.getByRole('button', { name: '设为默认', exact: true }).last().click()
-  await expect.poll(() => endpointPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl)).toBe('https://messages.example')
+  await expect
+    .poll(() => endpointPage.evaluate(() => (window as any).__providers.mixed.config.baseUrl))
+    .toBe('https://messages.example')
   await expect(endpointPanel.getByRole('button', { name: '保存配置', exact: true })).toHaveCount(0)
   const endpointsSaved = await endpointPage.evaluate(() => (window as any).__providers.mixed.config)
   assert.equal(endpointsSaved.baseUrl, 'https://messages.example')
@@ -826,7 +848,13 @@ try {
   await expect(
     endpointPanel.getByRole('textbox', { name: 'Embeddings API 地址', exact: true }),
   ).toHaveValue('https://vectors.example/v1')
-  await expect.poll(() => endpointPage.evaluate(() => (window as any).__providers.mixed.config.endpoints['openai-embeddings'])).toBe('https://vectors.example/v1')
+  await expect
+    .poll(() =>
+      endpointPage.evaluate(
+        () => (window as any).__providers.mixed.config.endpoints['openai-embeddings'],
+      ),
+    )
+    .toBe('https://vectors.example/v1')
   assert.equal(
     await endpointPage.evaluate(
       () => (window as any).__providers.mixed.config.endpoints['openai-embeddings'],
@@ -883,8 +911,13 @@ try {
     .getByRole('complementary')
     .getByRole('textbox', { name: 'API 地址', exact: true })
     .fill('https://override.example/v1')
-  await builtinPage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }).press('Tab')
-  await expect.poll(() => builtinPage.evaluate(() => (window as any).__providers.google.config.baseUrl)).toBe('https://override.example/v1')
+  await builtinPage
+    .getByRole('complementary')
+    .getByRole('textbox', { name: 'API 地址', exact: true })
+    .press('Tab')
+  await expect
+    .poll(() => builtinPage.evaluate(() => (window as any).__providers.google.config.baseUrl))
+    .toBe('https://override.example/v1')
   assert.equal(
     await builtinPage.evaluate(() => (window as any).__providers.google.config.baseUrl),
     'https://override.example/v1',
@@ -897,8 +930,12 @@ try {
   await builtinPanel
     .getByRole('textbox', { name: '允许模型（逗号分隔，留空表示全部）', exact: true })
     .fill('native, private-model')
-  await builtinPanel.getByRole('textbox', { name: '允许模型（逗号分隔，留空表示全部）', exact: true }).press('Tab')
-  await expect.poll(() => builtinPage.evaluate(() => (window as any).__providers.google.config.allowModels)).toEqual(['native', 'private-model'])
+  await builtinPanel
+    .getByRole('textbox', { name: '允许模型（逗号分隔，留空表示全部）', exact: true })
+    .press('Tab')
+  await expect
+    .poll(() => builtinPage.evaluate(() => (window as any).__providers.google.config.allowModels))
+    .toEqual(['native', 'private-model'])
   assert.deepEqual(
     await builtinPage.evaluate(() => (window as any).__providers.google.config.allowModels),
     ['native', 'private-model'],
@@ -912,7 +949,9 @@ try {
     .getByRole('textbox', { name: 'Chat Completions API 地址', exact: true })
     .fill('https://custom-compatible.example/v1')
   await builtinPanel.getByRole('button', { name: '设为默认', exact: true }).click()
-  await expect.poll(() => builtinPage.evaluate(() => (window as any).__providers.google.config.protocol)).toBe('openai-completions')
+  await expect
+    .poll(() => builtinPage.evaluate(() => (window as any).__providers.google.config.protocol))
+    .toBe('openai-completions')
   assert.equal(
     await builtinPage.evaluate(() => (window as any).__providers.google.config.protocol),
     'openai-completions',
@@ -986,10 +1025,14 @@ try {
     .getByRole('complementary')
     .getByRole('textbox', { name: 'API 地址', exact: true })
     .fill('https://draft.example/v1')
-  await routePage.getByRole('button', { name: '历史后退', exact: true }).evaluate((button: HTMLButtonElement) => button.click())
+  await routePage
+    .getByRole('button', { name: '历史后退', exact: true })
+    .evaluate((button: HTMLButtonElement) => button.click())
   await routePage.getByRole('button', { name: '继续编辑', exact: true }).click()
   await expect(routePage.locator('#location')).toHaveText('provider=google&controller=1')
-  await routePage.getByRole('button', { name: '历史后退', exact: true }).evaluate((button: HTMLButtonElement) => button.click())
+  await routePage
+    .getByRole('button', { name: '历史后退', exact: true })
+    .evaluate((button: HTMLButtonElement) => button.click())
   await routePage.getByRole('button', { name: '放弃修改', exact: true }).click()
   await expect(
     routePage.getByRole('complementary').getByRole('textbox', { name: 'API 地址', exact: true }),

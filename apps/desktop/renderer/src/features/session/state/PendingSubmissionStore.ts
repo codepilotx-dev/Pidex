@@ -187,9 +187,6 @@ export function pendingSubmissionPath(submissionId: string): string {
 }
 
 /** 用户当前是否仍停留在该 pending 页面。 */
-export function isOnPendingSubmissionPage(
-  pathname: string,
-  submissionId: string,
-): boolean {
+export function isOnPendingSubmissionPage(pathname: string, submissionId: string): boolean {
   return readPendingSubmissionRoute(pathname)?.submissionId === submissionId
 }

@@ -282,7 +282,6 @@ export class ComposerDraftStore {
       return { submitOutcomes }
     })
   }
-
 }
 
 /** Session-memory draft registry shared by every Composer placement. */

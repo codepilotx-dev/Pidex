@@ -144,7 +144,9 @@ describe('task planning draft schema', () => {
     seeded.close()
 
     const reopened = new AgentDatabase(databasePaths)
-    expect(probeScheduleDraftStorageCapabilities(reopened.sqlite)).toEqual({ scheduleDrafts: false })
+    expect(probeScheduleDraftStorageCapabilities(reopened.sqlite)).toEqual({
+      scheduleDrafts: false,
+    })
     expect(filterAdvertisedCapabilities(reopened)).not.toContain('schedule.draft.v1')
     expect(filterAdvertisedCapabilities(reopened)).toContain('calendar.manage.v1')
     reopened.close()

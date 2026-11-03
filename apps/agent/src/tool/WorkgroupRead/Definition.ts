@@ -33,8 +33,7 @@ export const createWorkgroupReadDefinition = (
     if (!context.invocation)
       throw new AgentError('PERMISSION_DENIED', '当前上下文不能读取工作组', 403)
     const view = service.readForThread(context.invocation.threadID)
-    if (!view)
-      throw new AgentError('SESSION_GROUP_NOT_FOUND', '当前会话不属于任何工作组', 404)
+    if (!view) throw new AgentError('SESSION_GROUP_NOT_FOUND', '当前会话不属于任何工作组', 404)
     return view
   },
 })

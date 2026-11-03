@@ -317,16 +317,23 @@ describe('Shell ReviewerService', () => {
       const providers = {
         getPiModel: async (ref: Model.Ref) => ({ provider: ref.providerID, id: ref.id }),
         pi: {
-          completeSimple: async (model: { provider: string; id: string }, _context: unknown,
-            options: { signal: AbortSignal }) => {
+          completeSimple: async (
+            model: { provider: string; id: string },
+            _context: unknown,
+            options: { signal: AbortSignal },
+          ) => {
             calls.push(`${model.provider}/${model.id}`)
             if (model.provider === 'configured') {
               if (failure === 'timeout') {
                 return await new Promise((_, reject) => {
-                  options.signal.addEventListener('abort', () => {
-                    timedOut = true
-                    reject(options.signal.reason)
-                  }, { once: true })
+                  options.signal.addEventListener(
+                    'abort',
+                    () => {
+                      timedOut = true
+                      reject(options.signal.reason)
+                    },
+                    { once: true },
+                  )
                 })
               }
               if (failure === 'error') throw new Error('provider failed')
@@ -337,11 +344,19 @@ describe('Shell ReviewerService', () => {
             }
             return {
               stopReason: 'stop',
-              content: [{ type: 'text', text: JSON.stringify({
-                decision: failure === 'deny' ? 'deny' : 'allow',
-                risk: 'low', confidence: 'high', categories: [],
-                requested_scope_valid: true, reason: '审核完成',
-              }) }],
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    decision: failure === 'deny' ? 'deny' : 'allow',
+                    risk: 'low',
+                    confidence: 'high',
+                    categories: [],
+                    requested_scope_valid: true,
+                    reason: '审核完成',
+                  }),
+                },
+              ],
             }
           },
         },
@@ -355,24 +370,31 @@ describe('Shell ReviewerService', () => {
       )
       const result = await service.reviewShell({ command: 'npm test' }, controller.signal, fallback)
       const shouldFallback = failure === 'timeout' || failure === 'error'
-      expect(calls).toEqual(shouldFallback
-        ? ['configured/reviewer', 'fallback/task'] : ['configured/reviewer'])
-      expect(logs.filter(entry => entry.event === 'guardian.review.started')
-        .map(entry => `${entry.details.provider}/${entry.details.model}`)).toEqual(calls)
-      expect(logs.some(entry => entry.event === 'guardian.review.fallback')).toBe(shouldFallback)
+      expect(calls).toEqual(
+        shouldFallback ? ['configured/reviewer', 'fallback/task'] : ['configured/reviewer'],
+      )
+      expect(
+        logs
+          .filter((entry) => entry.event === 'guardian.review.started')
+          .map((entry) => `${entry.details.provider}/${entry.details.model}`),
+      ).toEqual(calls)
+      expect(logs.some((entry) => entry.event === 'guardian.review.fallback')).toBe(shouldFallback)
       if (failure === 'cancel') expect(result.reviewUnavailable).toBe(true)
       else {
         expect(result).toMatchObject({
           decision: failure === 'deny' ? 'deny' : 'allow',
           model: shouldFallback ? 'fallback/task' : 'configured/reviewer',
         })
-        expect(logs.at(-1)).toMatchObject({ event: 'guardian.review.completed',
-          details: { provider: shouldFallback ? 'fallback' : 'configured' } })
+        expect(logs.at(-1)).toMatchObject({
+          event: 'guardian.review.completed',
+          details: { provider: shouldFallback ? 'fallback' : 'configured' },
+        })
       }
       if (failure === 'timeout') {
         expect(timedOut).toBe(true)
-        expect(logs.find(entry => entry.event === 'guardian.review.failed')?.details.code)
-          .toBe('REVIEWER_TIMEOUT')
+        expect(logs.find((entry) => entry.event === 'guardian.review.failed')?.details.code).toBe(
+          'REVIEWER_TIMEOUT',
+        )
       }
     }, 20_000)
   }

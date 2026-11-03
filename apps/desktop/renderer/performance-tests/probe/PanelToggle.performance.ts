@@ -84,7 +84,9 @@ async function enablePanelToggleProbe(page: import('@playwright/test').Page): Pr
   })
 }
 
-async function readPanelToggleProbe(page: import('@playwright/test').Page): Promise<PanelToggleProbe> {
+async function readPanelToggleProbe(
+  page: import('@playwright/test').Page,
+): Promise<PanelToggleProbe> {
   return page.evaluate(
     () =>
       (
@@ -124,7 +126,10 @@ test('sidebar toggle preserves chat context for the composer', async ({ page }) 
     const trigger = page.locator('[data-app-shell-sidebar-trigger]')
     const before = await trigger.getAttribute('title')
     await trigger.click()
-    await expect(trigger).toHaveAttribute('title', before === '收起侧边栏' ? '展开侧边栏' : '收起侧边栏')
+    await expect(trigger).toHaveAttribute(
+      'title',
+      before === '收起侧边栏' ? '展开侧边栏' : '收起侧边栏',
+    )
   }
   const probe = await readPanelToggleProbe(page)
   expect(probe.contextsSeen).toBeGreaterThan(0)

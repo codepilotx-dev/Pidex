@@ -497,8 +497,7 @@ describe('desktop git workflow client', () => {
 
     expect(
       requests.filter(
-        (request) =>
-          request.method === 'git/branch/checkout' || request.method === 'review/status',
+        (request) => request.method === 'git/branch/checkout' || request.method === 'review/status',
       ),
     ).toEqual([
       {
@@ -545,7 +544,6 @@ test('按引用查询提交需要协商能力，并透传引用参数', async ()
   expect(calls).toEqual([{ projectId: project.id, limit: 20, ref: 'other' }])
 })
 
-
 test('非仓库状态共用五小时冷却，手动刷新立即重试且成功后退出冷却', async () => {
   let now = 1_000
   const clock = spyOn(Date, 'now').mockImplementation(() => now)
@@ -559,11 +557,13 @@ test('非仓库状态共用五小时冷却，手动刷新立即重试且成功�
     loadProjectForPath: async () => project,
     operationError: () => '检测失败',
     requireAgentCapability: () => {},
-    rpc: { call: (async () => {
-      calls += 1
-      if (code) throw new AgentRpcError('安全错误', -32000, { code })
-      return { status: agentSyncStatus }
-    }) as never },
+    rpc: {
+      call: (async () => {
+        calls += 1
+        if (code) throw new AgentRpcError('安全错误', -32000, { code })
+        return { status: agentSyncStatus }
+      }) as never,
+    },
     withRequiredAgent: async (operation) => operation(),
   })
   try {
@@ -579,7 +579,9 @@ test('非仓库状态共用五小时冷却，手动刷新立即重试且成功�
     await client.getWorkspaceGitStatus(workspacePath, project.id)
     expect(calls).toBe(2)
     code = null
-    expect((await client.getWorkspaceGitStatus(workspacePath, project.id, { refresh: true })).ok).toBe(true)
+    expect(
+      (await client.getWorkspaceGitStatus(workspacePath, project.id, { refresh: true })).ok,
+    ).toBe(true)
     expect(calls).toBe(3)
     await client.getWorkspaceGitStatus(workspacePath, project.id)
     expect(calls).toBe(4)

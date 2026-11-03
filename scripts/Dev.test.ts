@@ -248,20 +248,40 @@ describe('开发 Agent runtime 描述', () => {
 
 describe('worktree Desktop 实例', () => {
   test('旧 Agent 和启动器已退出时允许避开占用端口，存活实例或显式端口仍拒绝', async () => {
-    const retired = Bun.spawn([process.execPath, '-e', 'process.exit(0)'], { stdout: 'ignore', stderr: 'ignore' })
+    const retired = Bun.spawn([process.execPath, '-e', 'process.exit(0)'], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    })
     await retired.exited
-    const server = Bun.serve({ hostname: '127.0.0.1', port: 0, fetch: () => new Response('occupied') })
-    const previous = { ...validRuntime, ownerPid: retired.pid, agentPid: retired.pid, origin: `http://127.0.0.1:${server.port}` }
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: () => new Response('occupied'),
+    })
+    const previous = {
+      ...validRuntime,
+      ownerPid: retired.pid,
+      agentPid: retired.pid,
+      origin: `http://127.0.0.1:${server.port}`,
+    }
     const connection = resolveDevAgentLaunchConnection(previous, undefined, () => 'unused-token')
     try {
       const port = await allocateDevAgentPort(connection, previous, undefined)
       expect(port).toBeGreaterThan(0)
       expect(port).not.toBe(server.port)
       expect(connection.authToken).toBe(previous.authToken)
-      await expect(allocateDevAgentPort(connection, { ...previous, agentPid: process.pid }, undefined)).rejects.toThrow('AGENT_RECONNECT_PORT_UNAVAILABLE')
-      await expect(allocateDevAgentPort(connection, { ...previous, ownerPid: process.pid }, undefined)).rejects.toThrow('AGENT_RECONNECT_PORT_UNAVAILABLE')
-      await expect(allocateDevAgentPort(connection, previous, server.port)).rejects.toThrow('AGENT_RECONNECT_PORT_UNAVAILABLE')
-    } finally { await server.stop(true) }
+      await expect(
+        allocateDevAgentPort(connection, { ...previous, agentPid: process.pid }, undefined),
+      ).rejects.toThrow('AGENT_RECONNECT_PORT_UNAVAILABLE')
+      await expect(
+        allocateDevAgentPort(connection, { ...previous, ownerPid: process.pid }, undefined),
+      ).rejects.toThrow('AGENT_RECONNECT_PORT_UNAVAILABLE')
+      await expect(allocateDevAgentPort(connection, previous, server.port)).rejects.toThrow(
+        'AGENT_RECONNECT_PORT_UNAVAILABLE',
+      )
+    } finally {
+      await server.stop(true)
+    }
   })
   test('规范路径生成稳定且相互隔离的实例目录', () => {
     const first = createWorktreeInstance('C:/project/main', 'C:/data')

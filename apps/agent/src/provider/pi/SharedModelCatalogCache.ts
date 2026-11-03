@@ -1,10 +1,7 @@
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { randomUUID } from 'node:crypto'
-import {
-  ModelRecommendationIndex,
-  type RecommendationInput,
-} from './ModelRecommendations'
+import { ModelRecommendationIndex, type RecommendationInput } from './ModelRecommendations'
 
 /**
  * models.dev 目录在 Pidex 内只保留一份共享缓存。
@@ -90,8 +87,7 @@ const trimFacts = (raw: Record<string, unknown>): CatalogFacts => {
   const facts: CatalogFacts = {}
   if (typeof raw.name === 'string') facts.name = raw.name
   if (raw.type !== undefined) facts.type = raw.type
-  if (typeof raw.canonical_model_id === 'string')
-    facts.canonical_model_id = raw.canonical_model_id
+  if (typeof raw.canonical_model_id === 'string') facts.canonical_model_id = raw.canonical_model_id
   if (Array.isArray(raw.aliases)) {
     const aliases = raw.aliases.filter((value): value is string => typeof value === 'string')
     if (aliases.length) facts.aliases = aliases
@@ -99,8 +95,7 @@ const trimFacts = (raw: Record<string, unknown>): CatalogFacts => {
   const limit = asObject(raw.limit)
   if (limit) {
     const trimmed: Record<string, unknown> = {}
-    for (const key of LIMIT_KEYS)
-      if (limit[key] !== undefined) trimmed[key] = limit[key]
+    for (const key of LIMIT_KEYS) if (limit[key] !== undefined) trimmed[key] = limit[key]
     if (Object.keys(trimmed).length) facts.limit = trimmed
   }
   const modalities = asObject(raw.modalities)
@@ -203,15 +198,11 @@ const normalizeCatalog = (payload: unknown): StorageCatalog => {
   return { models, providers }
 }
 
-const reconstruct = (
-  delta: ProviderDelta,
-  models: Record<string, CatalogFacts>,
-): CatalogFacts => {
+const reconstruct = (delta: ProviderDelta, models: Record<string, CatalogFacts>): CatalogFacts => {
   if (!delta.ref || models[delta.ref] === undefined) return { ...delta.diff }
   const common = models[delta.ref]!
   const merged: CatalogFacts = {}
-  for (const key of delta.inherited ?? [])
-    if (common[key] !== undefined) merged[key] = common[key]
+  for (const key of delta.inherited ?? []) if (common[key] !== undefined) merged[key] = common[key]
   return { ...merged, ...delta.diff }
 }
 
@@ -335,10 +326,7 @@ export class SharedModelCatalogCache {
 
   /** 下载 + 归一化，但不写盘；供目录刷新在双源都成功后再提交。 */
   async prepare(
-    request: (
-      input: string | URL | Request,
-      init?: RequestInit,
-    ) => Promise<Response> = fetch,
+    request: (input: string | URL | Request, init?: RequestInit) => Promise<Response> = fetch,
   ): Promise<PreparedCatalog> {
     const raw = await downloadCatalogJson(request, CATALOG_URL)
     const normalized = normalizeCatalog(raw)
@@ -362,10 +350,7 @@ export class SharedModelCatalogCache {
 
   /** 独立刷新 models.dev（推荐定时刷新入口）。 */
   refresh(
-    request: (
-      input: string | URL | Request,
-      init?: RequestInit,
-    ) => Promise<Response> = fetch,
+    request: (input: string | URL | Request, init?: RequestInit) => Promise<Response> = fetch,
   ): Promise<{ updatedAt: number }> {
     if (this.inFlight) return this.inFlight
     const next = this.serial(async () => {

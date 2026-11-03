@@ -565,10 +565,7 @@ export function useDesktopComposerController({
     submission: PendingSubmission,
     outcome: ComposerSubmitOutcome,
   ): void {
-    const stillOnPendingPage = isOnPendingSubmissionPage(
-      readPathname(),
-      submission.submissionId,
-    )
+    const stillOnPendingPage = isOnPendingSubmissionPage(readPathname(), submission.submissionId)
     if (outcome.status !== 'failed') {
       pendingSubmissionStore.remove(submission.submissionId)
       return

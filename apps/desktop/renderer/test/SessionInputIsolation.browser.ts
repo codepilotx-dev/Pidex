@@ -279,9 +279,7 @@ try {
   // Append text via onAppendComposerText (tests reading from store.getState().input)
   await page.evaluate(() => (window as any).fixture.appendComposerText('appended text'))
   await settle(page)
-  const currentHomeText = await page.evaluate(
-    () => (window as any).fixture.store.getState().input,
-  )
+  const currentHomeText = await page.evaluate(() => (window as any).fixture.store.getState().input)
   assert.equal(currentHomeText, 'hello home\n\nappended text')
 
   assert.equal(
@@ -294,9 +292,7 @@ try {
   await page.evaluate(() => (window as any).fixture.setRoute('session'))
   await settle(page)
 
-  const sessionRouteLayoutRenders = await page.evaluate(
-    () => (window as any).fixture.counts.layout,
-  )
+  const sessionRouteLayoutRenders = await page.evaluate(() => (window as any).fixture.counts.layout)
   const sessionRouteSidebarRenders = await page.evaluate(
     () => (window as any).fixture.counts.sidebar,
   )
@@ -330,9 +326,7 @@ try {
   await page.evaluate(() => (window as any).fixture.setRoute('working'))
   await settle(page)
 
-  const workingRouteLayoutRenders = await page.evaluate(
-    () => (window as any).fixture.counts.layout,
-  )
+  const workingRouteLayoutRenders = await page.evaluate(() => (window as any).fixture.counts.layout)
   const workingRouteSidebarRenders = await page.evaluate(
     () => (window as any).fixture.counts.sidebar,
   )

@@ -450,7 +450,11 @@ export type DesktopTaskScheduleApi = {
 }
 
 export type DesktopPluginApi = {
-  readPluginAsset(pluginId: string, kind: RpcParams<'plugin/readAsset'>['kind'], workspacePath?: string | null): Promise<RpcResult<'plugin/readAsset'> | null>
+  readPluginAsset(
+    pluginId: string,
+    kind: RpcParams<'plugin/readAsset'>['kind'],
+    workspacePath?: string | null,
+  ): Promise<RpcResult<'plugin/readAsset'> | null>
   installPlugin(pluginId: string): Promise<RpcResult<'plugin/install'>>
   uninstallPlugin(pluginId: string): Promise<RpcResult<'plugin/uninstall'>>
   listPlugins(

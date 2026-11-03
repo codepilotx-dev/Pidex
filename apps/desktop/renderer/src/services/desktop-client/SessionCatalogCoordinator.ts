@@ -170,9 +170,7 @@ function catalogThreadId(event: EventEnvelope): string | null {
       // schema shape crashed reconciliation (and silently dropped the refresh) for
       // every goal-driven `thread/updated`. Accept both, and fall back to the
       // envelope thread id.
-      return (
-        readThreadId(event.payload) ?? event.threadId ?? null
-      )
+      return readThreadId(event.payload) ?? event.threadId ?? null
     case 'thread/settings/updated':
       return event.payload.threadId
     default:

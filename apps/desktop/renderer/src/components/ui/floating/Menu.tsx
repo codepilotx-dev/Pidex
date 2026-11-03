@@ -398,12 +398,8 @@ export function MenuSub({ children, open, defaultOpen = false, onOpenChange }: M
   // Sync with parent coordinator
   useLayoutEffect(() => {
     if (activeOpen) {
-      parentCoord.setActiveBranch(
-        branchId,
-        triggerRef.current,
-        contentRef.current,
-        'right',
-        () => setOpen(false),
+      parentCoord.setActiveBranch(branchId, triggerRef.current, contentRef.current, 'right', () =>
+        setOpen(false),
       )
     } else {
       parentCoord.clearActiveBranch(branchId)

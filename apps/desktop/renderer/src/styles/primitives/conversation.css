@@ -784,18 +784,31 @@
   }
 
   .reasoning-node__sweep {
-    animation: reasoning-node-sweep calc(var(--cpx-sys-motion-loading) * 2) var(--cpx-sys-ease-linear) infinite;
+    animation: reasoning-node-sweep calc(var(--cpx-sys-motion-loading) * 2)
+      var(--cpx-sys-ease-linear) infinite;
   }
 
   @keyframes reasoning-node-sweep {
-    from { transform: translateX(-100%); }
-    to { transform: translateX(100%); }
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
   }
   .execution-plan-card__edge-fade[data-scrollable='true'][data-at-start='false'] {
-    mask-image: linear-gradient(to bottom, transparent, black var(--edge-fade-distance, var(--cpx-sys-space-4)));
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--edge-fade-distance, var(--cpx-sys-space-4))
+    );
   }
   .execution-plan-card__edge-fade[data-scrollable='true'][data-at-end='false'] {
-    mask-image: linear-gradient(to top, transparent, black var(--edge-fade-distance, var(--cpx-sys-space-4)));
+    mask-image: linear-gradient(
+      to top,
+      transparent,
+      black var(--edge-fade-distance, var(--cpx-sys-space-4))
+    );
   }
   .execution-plan-card__edge-fade[data-scrollable='true'][data-at-start='false'][data-at-end='false'] {
     mask-image: linear-gradient(
@@ -832,11 +845,9 @@
   .cpx-agent-activity__path-step[data-state='running']
     > .canonical-process-card
     > .canonical-process-card__summary,
-
   .cpx-agent-activity__path-step[data-state='completed']
     > .canonical-process-card
     > .canonical-process-card__summary,
-
   .cpx-agent-activity__path-step[data-state='failed']::before {
     border-color: var(--cpx-sys-color-danger);
   }
@@ -1756,7 +1767,7 @@
     color: var(--cpx-sys-color-danger);
   }
 
-/* ── Reduced motion ── */
+  /* ── Reduced motion ── */
 
   /* The flash overlay is decorative motion without a transition to zero out. */
   :root[data-reduce-motion='on'] .canonical-lifecycle-tool__icon-flash {

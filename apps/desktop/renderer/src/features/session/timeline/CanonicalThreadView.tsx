@@ -166,11 +166,7 @@ export function CanonicalProcessGroup({
         <span className="cpx-agent-activity__dots">
           {dots}
           {active ? (
-            <LoaderCircle
-              className="canonical-spin"
-              size={APP_ICON_SIZES.sm}
-              aria-hidden="true"
-            />
+            <LoaderCircle className="canonical-spin" size={APP_ICON_SIZES.sm} aria-hidden="true" />
           ) : null}
         </span>
       ) : active ? (
@@ -329,7 +325,10 @@ function groupProcessItems(items: readonly Item[]): RawProcessUnit[] {
     switch (projection.kind) {
       case 'groupable':
         // 子智能体自成一组，与普通工具双向隔开。
-        if (pendingItems.length > 0 && isSubagentGroup() !== (projection.item.type === 'subagent')) {
+        if (
+          pendingItems.length > 0 &&
+          isSubagentGroup() !== (projection.item.type === 'subagent')
+        ) {
           flush()
         }
         pendingItems.push(projection.item)
@@ -640,9 +639,7 @@ function CanonicalThreadViewComponent({
         disclosureState={disclosureState}
         entry={entry}
         forkedFrom={
-          forkedFrom && forkedFrom.inheritedThroughTurnId === entry.turn.id
-            ? forkedFrom
-            : undefined
+          forkedFrom && forkedFrom.inheritedThroughTurnId === entry.turn.id ? forkedFrom : undefined
         }
         previousModel={turns[index - 1]?.turn.model}
         key={entry.id}
@@ -729,7 +726,10 @@ function CanonicalThreadViewComponent({
         </div>
       ) : null}
       {historyError ? (
-        <p role="status" className="tw:text-center tw:text-app-text-meta tw:type-caption tw:[overflow-anchor:none]">
+        <p
+          role="status"
+          className="tw:text-center tw:text-app-text-meta tw:type-caption tw:[overflow-anchor:none]"
+        >
           {historyError}
         </p>
       ) : null}
@@ -985,7 +985,9 @@ function CanonicalConversationTurnComponent({
         const isSubagentGroup = unit.items[0]?.type === 'subagent'
         const agentDots = isSubagentGroup
           ? unit.items
-              .filter((item): item is Extract<Item, { type: 'subagent' }> => item.type === 'subagent')
+              .filter(
+                (item): item is Extract<Item, { type: 'subagent' }> => item.type === 'subagent',
+              )
               .slice(0, 4)
               .map((item) => (
                 <SubagentAvatar
@@ -1072,8 +1074,7 @@ function CanonicalConversationTurnComponent({
         forceExpanded={entry.forceExpandActivity}
         disclosureId={turnActivityDisclosureId}
         hasWork={
-          !compactionOnly &&
-          (entry.turn.startedAt != null || entry.processItems.length > 0 || hasAssistantResult)
+          entry.turn.startedAt != null || entry.processItems.length > 0 || hasAssistantResult
         }
         store={disclosureState}
         turn={entry.turn}

@@ -81,10 +81,7 @@ export function ComposerLaunchSettingsPopover({
   const draft = useStore(composerDraftStore.store, (state) => state.drafts[draftKey])
   const projectKey = composerLaunchProjectKey(workspace)
   const projectId = workspace?.projectId ?? null
-  const settings = readComposerLaunchSettings(
-    draft ?? composerDraftStore.get(draftKey),
-    projectKey,
-  )
+  const settings = readComposerLaunchSettings(draft ?? composerDraftStore.get(draftKey), projectKey)
   const gitAvailable = isComposerLaunchGitWorkspace(workspace)
   const pendingBranch = resolveComposerLaunchBranch(settings, workspace)
   const branchOptions = useMemo(() => {
@@ -120,14 +117,16 @@ export function ComposerLaunchSettingsPopover({
   useEffect(() => {
     if (!open) return
     let active = true
-    void ensureClient().sessionCreationCapabilities().then(
-      (value) => {
-        if (active) setCapabilities(value)
-      },
-      () => {
-        if (active) setCapabilities({ explicitExecution: false, environments: false })
-      },
-    )
+    void ensureClient()
+      .sessionCreationCapabilities()
+      .then(
+        (value) => {
+          if (active) setCapabilities(value)
+        },
+        () => {
+          if (active) setCapabilities({ explicitExecution: false, environments: false })
+        },
+      )
     return () => {
       active = false
     }
@@ -289,9 +288,7 @@ export function ComposerLaunchSettingsPopover({
                     ariaLabel="新建工作树"
                     checked={settings.createWorktree}
                     disabled={worktreeDisabledReason !== null}
-                    onChange={(checked) =>
-                      updateSettings({ ...settings, createWorktree: checked })
-                    }
+                    onChange={(checked) => updateSettings({ ...settings, createWorktree: checked })}
                   />
                 }
               >
@@ -371,8 +368,7 @@ export function ComposerLaunchSettingsPopover({
                 </button>
               </SidebarRow>
               <p className={NOTE_CLASS}>
-                {environmentDisabledReason ??
-                  '沿用项目默认环境；切换后其他界面同步刷新。'}
+                {environmentDisabledReason ?? '沿用项目默认环境；切换后其他界面同步刷新。'}
               </p>
               <div className={DIVIDER_CLASS} />
               <SidebarRow
@@ -508,22 +504,10 @@ export function ComposerLaunchSettingsPopover({
   )
 }
 
-function SubViewHeader({
-  title,
-  onBack,
-}: {
-  title: string
-  onBack: () => void
-}): React.ReactNode {
+function SubViewHeader({ title, onBack }: { title: string; onBack: () => void }): React.ReactNode {
   return (
     <div className="tw:flex tw:items-center tw:gap-1 tw:px-1 tw:pb-1">
-      <Button
-        isIconOnly
-        aria-label="返回"
-        color="ghostSecondary"
-        size="toolbar"
-        onClick={onBack}
-      >
+      <Button isIconOnly aria-label="返回" color="ghostSecondary" size="toolbar" onClick={onBack}>
         <ChevronLeft size={APP_ICON_SIZE} />
       </Button>
       <span className="popover-header tw:p-0">{title}</span>

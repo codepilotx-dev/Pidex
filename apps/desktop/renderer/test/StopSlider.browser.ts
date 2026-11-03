@@ -148,9 +148,12 @@ try {
   // 档位圆点与轨道都要真的画出来。
   const stops = page.locator('.stop-slider-stop')
   assert.ok((await stops.count()) >= 3)
-  const fillWidth = await page.locator('.stop-slider-fill').nth(1).evaluate((node) => {
-    return getComputedStyle(node).width
-  })
+  const fillWidth = await page
+    .locator('.stop-slider-fill')
+    .nth(1)
+    .evaluate((node) => {
+      return getComputedStyle(node).width
+    })
   assert.notEqual(fillWidth, '0px')
   const thumbBg = await page
     .locator('.stop-slider-thumb')

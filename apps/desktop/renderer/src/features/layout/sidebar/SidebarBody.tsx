@@ -1,7 +1,15 @@
 import type React from 'react'
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import {
-  ChevronDown, Ellipsis, Folder, List, MessageSquare, Plus, RefreshCw, SquarePen, X,
+  ChevronDown,
+  Ellipsis,
+  Folder,
+  List,
+  MessageSquare,
+  Plus,
+  RefreshCw,
+  SquarePen,
+  X,
 } from 'lucide-react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
@@ -204,12 +212,21 @@ export function SidebarBody(props: Props): React.ReactNode {
   )
 }
 
-function SidebarDragSurface({ className, ...props }: React.HTMLAttributes<HTMLDivElement>): React.ReactNode {
+function SidebarDragSurface({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>): React.ReactNode {
   const rejected = useSidebarDragRejected()
   return <div {...props} className={cx(className, rejected && 'sidebar-drop-rejected')} />
 }
 
-function SidebarPinnedPresence({ hasItems, children }: { hasItems: boolean; children: React.ReactNode }): React.ReactNode {
+function SidebarPinnedPresence({
+  hasItems,
+  children,
+}: {
+  hasItems: boolean
+  children: React.ReactNode
+}): React.ReactNode {
   const session = useSidebarDragSession()
   const visible = hasItems || Boolean(session && !session.state.keys[0]?.startsWith('section:'))
   return <AnimatePresence initial={false}>{visible ? children : null}</AnimatePresence>
@@ -452,34 +469,51 @@ function SidebarBodyContent({
   }
 
   /** 浮层只展示业务数据：标题与多选数量，不读取 DOM。 */
-  const getDragOverlayModel = useCallback((source: SidebarDragSession | null): SidebarDragOverlayModel | null => {
-    const items = source?.state.keys ?? []
-    const firstKey = items.find((key) => source?.sourceDisplayId.endsWith(`::${key}`)) ?? items[0]
-    if (!firstKey) return null
-    const sessionId = firstKey.startsWith('session:') ? firstKey.slice(8) : null
-    const projectKey = firstKey.startsWith('project:') ? firstKey.slice(8) : null
-    const session = sessionId ? [
-      ...recentSessions,
-      ...pinnedSessions,
-      ...[...projectSessionBuckets.values()].flatMap((bucket) => bucket.allSessions),
-      ...customSections.flatMap((section) => section.entries.flatMap((entry) =>
-        entry.kind === 'session' ? [entry.session] : [],
-      )),
-    ].find((item) => item.id === sessionId) : null
-    const title = sessionId
-      ? session ? sessionResolvedTitle(session, sessionFallbackTitles[sessionId])
-        : (sessionFallbackTitles[sessionId] ?? '聊天')
-      : projectKey
-        ? ([...projectWorkspaces, ...pinnedWorkspaces].find((item) => sidebarProjectKey(item) === projectKey)?.name ??
-          '项目')
-        : (customSections.find((item) => `section:${item.id}` === firstKey)?.title ?? '分组')
-    const icon = sessionId ? <MessageSquare size={APP_ICON_SIZE} />
-      : projectKey ? <Folder size={APP_ICON_SIZE} /> : <List size={APP_ICON_SIZE} />
-    return { title, icon, count: items.length }
-  }, [
-    customSections, pinnedSessions, pinnedWorkspaces, projectSessionBuckets,
-    projectWorkspaces, recentSessions, sessionFallbackTitles,
-  ])
+  const getDragOverlayModel = useCallback(
+    (source: SidebarDragSession | null): SidebarDragOverlayModel | null => {
+      const items = source?.state.keys ?? []
+      const firstKey = items.find((key) => source?.sourceDisplayId.endsWith(`::${key}`)) ?? items[0]
+      if (!firstKey) return null
+      const sessionId = firstKey.startsWith('session:') ? firstKey.slice(8) : null
+      const projectKey = firstKey.startsWith('project:') ? firstKey.slice(8) : null
+      const session = sessionId
+        ? [
+            ...recentSessions,
+            ...pinnedSessions,
+            ...[...projectSessionBuckets.values()].flatMap((bucket) => bucket.allSessions),
+            ...customSections.flatMap((section) =>
+              section.entries.flatMap((entry) => (entry.kind === 'session' ? [entry.session] : [])),
+            ),
+          ].find((item) => item.id === sessionId)
+        : null
+      const title = sessionId
+        ? session
+          ? sessionResolvedTitle(session, sessionFallbackTitles[sessionId])
+          : (sessionFallbackTitles[sessionId] ?? '聊天')
+        : projectKey
+          ? ([...projectWorkspaces, ...pinnedWorkspaces].find(
+              (item) => sidebarProjectKey(item) === projectKey,
+            )?.name ?? '项目')
+          : (customSections.find((item) => `section:${item.id}` === firstKey)?.title ?? '分组')
+      const icon = sessionId ? (
+        <MessageSquare size={APP_ICON_SIZE} />
+      ) : projectKey ? (
+        <Folder size={APP_ICON_SIZE} />
+      ) : (
+        <List size={APP_ICON_SIZE} />
+      )
+      return { title, icon, count: items.length }
+    },
+    [
+      customSections,
+      pinnedSessions,
+      pinnedWorkspaces,
+      projectSessionBuckets,
+      projectWorkspaces,
+      recentSessions,
+      sessionFallbackTitles,
+    ],
+  )
 
   function applyDropOperation(
     operation: SidebarDropOperation,
@@ -821,51 +855,51 @@ function SidebarBodyContent({
               }}
             >
               <SidebarPinnedPresence hasItems={pinnedItems.length > 0}>
-                  <SidebarSectionPresence key="pinned" reducedMotion={reducedMotion}>
-                    <SidebarDropList
-                      list={{
-                        key: 'pinned',
-                        destination: { kind: 'pinned', index: 0 },
-                        order: pinnedItemValues,
-                        onReorder: (order) => {
-                          onManualOrderChange('pinned-items', order)
-                          onPinnedSortChange('manual')
-                        },
-                      }}
-                    >
-                      <SidebarSection
-                        action={
-                          <SidebarSectionActions>
-                            <SidebarPinnedSortMenu
-                              sort={pinnedSort}
-                              onSortChange={onPinnedSortChange}
-                            />
-                          </SidebarSectionActions>
-                        }
-                        disclosureStore={disclosureStore}
-                        sectionId="pinned"
-                        title="置顶"
-                      >
-                        {displayedPinnedItems.length > 0 ? (
-                          <div className="sidebar-reorder-group tw:flex tw:min-w-0 tw:flex-col tw:sidebar-row-gap">
-                            {displayedPinnedItems.map(renderPinnedItem)}
-                          </div>
-                        ) : null}
-                        {hasPinnedItemOverflow ? (
-                          <SidebarShowMoreActions
-                            canCollapse={canCollapsePinnedItems}
-                            canShowMore={canShowMorePinnedItems}
-                            onCollapse={() => setVisiblePinnedLimit(PINNED_INITIAL_LIMIT)}
-                            onShowMore={() =>
-                              setVisiblePinnedLimit((current) =>
-                                Math.min(current + PINNED_LIMIT_STEP, pinnedItems.length),
-                              )
-                            }
+                <SidebarSectionPresence key="pinned" reducedMotion={reducedMotion}>
+                  <SidebarDropList
+                    list={{
+                      key: 'pinned',
+                      destination: { kind: 'pinned', index: 0 },
+                      order: pinnedItemValues,
+                      onReorder: (order) => {
+                        onManualOrderChange('pinned-items', order)
+                        onPinnedSortChange('manual')
+                      },
+                    }}
+                  >
+                    <SidebarSection
+                      action={
+                        <SidebarSectionActions>
+                          <SidebarPinnedSortMenu
+                            sort={pinnedSort}
+                            onSortChange={onPinnedSortChange}
                           />
-                        ) : null}
-                      </SidebarSection>
-                    </SidebarDropList>
-                  </SidebarSectionPresence>
+                        </SidebarSectionActions>
+                      }
+                      disclosureStore={disclosureStore}
+                      sectionId="pinned"
+                      title="置顶"
+                    >
+                      {displayedPinnedItems.length > 0 ? (
+                        <div className="sidebar-reorder-group tw:flex tw:min-w-0 tw:flex-col tw:sidebar-row-gap">
+                          {displayedPinnedItems.map(renderPinnedItem)}
+                        </div>
+                      ) : null}
+                      {hasPinnedItemOverflow ? (
+                        <SidebarShowMoreActions
+                          canCollapse={canCollapsePinnedItems}
+                          canShowMore={canShowMorePinnedItems}
+                          onCollapse={() => setVisiblePinnedLimit(PINNED_INITIAL_LIMIT)}
+                          onShowMore={() =>
+                            setVisiblePinnedLimit((current) =>
+                              Math.min(current + PINNED_LIMIT_STEP, pinnedItems.length),
+                            )
+                          }
+                        />
+                      ) : null}
+                    </SidebarSection>
+                  </SidebarDropList>
+                </SidebarSectionPresence>
               </SidebarPinnedPresence>
 
               <SidebarDropList

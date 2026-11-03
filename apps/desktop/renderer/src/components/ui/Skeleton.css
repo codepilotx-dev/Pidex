@@ -35,14 +35,18 @@
   }
 
   /* 应用减少动画开关显式开启：停用扫光并隐藏高光层。 */
-  :root[data-reduce-motion='on'] :where(.ui-skeleton-region[data-shimmer='true']) .ui-skeleton-block::after,
+  :root[data-reduce-motion='on']
+    :where(.ui-skeleton-region[data-shimmer='true'])
+    .ui-skeleton-block::after,
   :root[data-reduce-motion='on'] .ui-skeleton-block[data-shimmer='true']::after {
     content: none;
   }
 
   /* 未显式设置 reduce-motion 时跟随系统偏好；显式 'off' 不受系统设置影响。 */
   @media (prefers-reduced-motion: reduce) {
-    :root:not([data-reduce-motion='off']) :where(.ui-skeleton-region[data-shimmer='true']) .ui-skeleton-block::after,
+    :root:not([data-reduce-motion='off'])
+      :where(.ui-skeleton-region[data-shimmer='true'])
+      .ui-skeleton-block::after,
     :root:not([data-reduce-motion='off']) .ui-skeleton-block[data-shimmer='true']::after {
       content: none;
     }

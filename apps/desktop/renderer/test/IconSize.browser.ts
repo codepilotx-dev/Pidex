@@ -152,10 +152,7 @@ const compound =
     16,
     renderToString(
       h(Button, {
-        children: [
-          h(Plus, { key: 'leading' }),
-          '菜单',
-        ],
+        children: [h(Plus, { key: 'leading' }), '菜单'],
       }),
     ),
   ) +
@@ -163,10 +160,7 @@ const compound =
     12,
     renderToString(
       h(Button, {
-        children: [
-          '折叠',
-          h(ChevronRight, { key: 'trailing', id: 'compound-trailing' }),
-        ],
+        children: ['折叠', h(ChevronRight, { key: 'trailing', id: 'compound-trailing' })],
       }),
     ),
   )

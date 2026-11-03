@@ -164,7 +164,8 @@ export function SubagentDirectoryPanel({
         onError('当前 Agent 不支持停止子智能体。')
         return
       }
-      void stop.call(desktopClient, taskId)
+      void stop
+        .call(desktopClient, taskId)
         .then(() => refresh())
         .catch((error) => onError(error instanceof Error ? error.message : String(error)))
     },

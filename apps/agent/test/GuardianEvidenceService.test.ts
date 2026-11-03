@@ -64,7 +64,9 @@ describe('GuardianEvidenceService', () => {
     expect(read.text).toContain('content of src/a.ts')
     const listed = await evidence.execute(invocation(), 'guardian_list_dir', { path: '.' })
     expect(listed.isError).toBe(false)
-    const escaped = await evidence.execute(invocation(), 'guardian_read_file', { path: '../secret' })
+    const escaped = await evidence.execute(invocation(), 'guardian_read_file', {
+      path: '../secret',
+    })
     expect(escaped.isError).toBe(true)
     const sensitive = await evidence.execute(invocation(), 'guardian_read_file', {
       path: '.env.local',

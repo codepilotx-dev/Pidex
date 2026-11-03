@@ -243,16 +243,12 @@ describe('GitWorkspaceService', () => {
       },
     }
     const fetched: string[] = []
-    const service = new GitWorkspaceService(
-      db,
-      runner as never,
-      {
-        runRemoteGit: async (_cwd: string, remote: string) => {
-          fetched.push(remote)
-          return { code: 0, stdout: '', stderr: '' }
-        },
+    const service = new GitWorkspaceService(db, runner as never, {
+      runRemoteGit: async (_cwd: string, remote: string) => {
+        fetched.push(remote)
+        return { code: 0, stdout: '', stderr: '' }
       },
-    )
+    })
     try {
       await service.fetch(project.id)
       // Both names survive the CRLF split intact and reach the remote runner trimmed.

@@ -105,7 +105,10 @@ describe('PrimaryPageLayout', () => {
       sessionGroupsSource,
       'session-groups-index tw:flex tw:min-w-0 tw:flex-auto tw:shrink-0 tw:flex-col',
     )
-    expectSourceNotContains(sessionGroupsSource, 'session-groups-index tw:flex tw:min-w-0 tw:min-h-0')
+    expectSourceNotContains(
+      sessionGroupsSource,
+      'session-groups-index tw:flex tw:min-w-0 tw:min-h-0',
+    )
     expectSourceContains(
       sessionGroupsSource,
       'session-group-detail__inner tw:mx-auto tw:flex tw:w-[min(var(--page-content-max-width),100%)] tw:flex-col tw:pb-8',
@@ -121,7 +124,10 @@ describe('PrimaryPageLayout', () => {
       'automation-page-content tw:flex tw:min-w-0 tw:shrink-0 tw:flex-col',
     )
     expectSourceNotContains(automationSource, 'automation-page-content tw:flex tw:min-h-0')
-    expectSourceContains(taskScheduleSource, 'section aria-label="任务与待处理" className="tw:grid tw:shrink-0 tw:gap-2"')
+    expectSourceContains(
+      taskScheduleSource,
+      'section aria-label="任务与待处理" className="tw:grid tw:shrink-0 tw:gap-2"',
+    )
 
     // 插件：目录 panel 具备 tw:shrink-0，详情页包裹层具备 tw:pb-8
     expectSourceContains(pluginsSource, 'plugins-panel tw:grid tw:min-w-0 tw:shrink-0 tw:gap-8')
@@ -136,7 +142,9 @@ describe('PrimaryPageLayout', () => {
       <PrimaryPageLayout
         actions={<button type="button">操作</button>}
         description="页面说明"
-        search={<SearchInput aria-label="搜索" onChange={() => undefined} placeholder="搜索" value="" />}
+        search={
+          <SearchInput aria-label="搜索" onChange={() => undefined} placeholder="搜索" value="" />
+        }
         title="页面标题"
       >
         内容
@@ -145,31 +153,38 @@ describe('PrimaryPageLayout', () => {
 
     expect(html).toContain('primary-page-layout tw:@container')
     expect(html).toContain('primary-page-layout__header--with-search')
-    expect(html).toContain('primary-page-layout__title-row tw:flex tw:min-h-9 tw:min-w-0 tw:items-center')
-    expect(html).toContain('primary-page-layout__actions tw:flex tw:min-h-9 tw:shrink-0 tw:flex-wrap tw:items-center')
-    expect(html).not.toContain('primary-page-layout__actions tw:flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2 tw:pt-1')
+    expect(html).toContain(
+      'primary-page-layout__title-row tw:flex tw:min-h-9 tw:min-w-0 tw:items-center',
+    )
+    expect(html).toContain(
+      'primary-page-layout__actions tw:flex tw:min-h-9 tw:shrink-0 tw:flex-wrap tw:items-center',
+    )
+    expect(html).not.toContain(
+      'primary-page-layout__actions tw:flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2 tw:pt-1',
+    )
     expect(html).toContain('primary-page-layout__search tw:mt-4 tw:w-full tw:min-w-0')
   })
 
   test('keeps title row 36px min-height without permanent search for baseline consistency', () => {
     const html = renderToStaticMarkup(
-      <PrimaryPageLayout
-        description="页面说明"
-        title="页面标题"
-      >
+      <PrimaryPageLayout description="页面说明" title="页面标题">
         内容
       </PrimaryPageLayout>,
     )
 
     expect(html).not.toContain('primary-page-layout__header--with-search')
-    expect(html).toContain('primary-page-layout__title-row tw:flex tw:min-h-9 tw:min-w-0 tw:items-center')
+    expect(html).toContain(
+      'primary-page-layout__title-row tw:flex tw:min-h-9 tw:min-w-0 tw:items-center',
+    )
   })
 
   test('supports permanent search without actions and omits actions container', () => {
     const html = renderToStaticMarkup(
       <PrimaryPageLayout
         description="页面说明"
-        search={<SearchInput aria-label="搜索" onChange={() => undefined} placeholder="搜索" value="" />}
+        search={
+          <SearchInput aria-label="搜索" onChange={() => undefined} placeholder="搜索" value="" />
+        }
         title="页面标题"
       >
         内容
@@ -224,7 +239,13 @@ describe('PrimaryPageLayout', () => {
     expect(modelsSource).not.toContain('expandableSearch')
 
     // 2. All pages with search use permanent pill search: shape="pill", size="md", variant="outlined"
-    for (const source of [automationsSource, modelsSource, petsSource, workflowsSource, projectsSource]) {
+    for (const source of [
+      automationsSource,
+      modelsSource,
+      petsSource,
+      workflowsSource,
+      projectsSource,
+    ]) {
       expect(source).toContain('shape="pill"')
       expect(source).toContain('size="md"')
       expect(source).toContain('variant="outlined"')

@@ -64,40 +64,40 @@ export function SearchablePopoverContent<Option extends SearchablePopoverOption>
       {open ? (
         <Dropdown.Portal>
           <Dropdown.Content
-          size={size}
-          align={align}
-          side={side}
-          sideOffset={sideOffset}
-          showSearch
-          searchValue={search}
-          onSearchValueChange={onSearchChange}
-          searchPlaceholder={searchPlaceholder}
-          searchLabel={searchLabel}
-          aria-label={contentLabel}
-          listLabel={listLabel}
-          title=""
-          emptyText={emptyLabel}
-          footer={footer}
-          className={cx('popover-menu--grid', className)}
-        >
-          <div className={listClassName}>
-            {options.map((option) => (
-              <Dropdown.Item
-                key={option.value}
-                value={option.value}
-                textValue={option.textValue ?? option.value}
-                filter={option.filter}
-                disabled={option.disabled}
-                onSelect={() => {
-                  void onSelect(option)
-                }}
-                asChild
-              >
-                {renderOption(option, option.value === selectedValue)}
-              </Dropdown.Item>
-            ))}
-          </div>
-        </Dropdown.Content>
+            size={size}
+            align={align}
+            side={side}
+            sideOffset={sideOffset}
+            showSearch
+            searchValue={search}
+            onSearchValueChange={onSearchChange}
+            searchPlaceholder={searchPlaceholder}
+            searchLabel={searchLabel}
+            aria-label={contentLabel}
+            listLabel={listLabel}
+            title=""
+            emptyText={emptyLabel}
+            footer={footer}
+            className={cx('popover-menu--grid', className)}
+          >
+            <div className={listClassName}>
+              {options.map((option) => (
+                <Dropdown.Item
+                  key={option.value}
+                  value={option.value}
+                  textValue={option.textValue ?? option.value}
+                  filter={option.filter}
+                  disabled={option.disabled}
+                  onSelect={() => {
+                    void onSelect(option)
+                  }}
+                  asChild
+                >
+                  {renderOption(option, option.value === selectedValue)}
+                </Dropdown.Item>
+              ))}
+            </div>
+          </Dropdown.Content>
         </Dropdown.Portal>
       ) : null}
     </Dropdown.Root>

@@ -250,12 +250,13 @@
     background: var(--cpx-sys-color-diff-removed-line);
   }
 
+  /* 行号是文本，必须用经过对比度校正的 -fg token，而不是原始色相。 */
   .review-codex-diff__number[data-line-type='change-addition'] {
-    color: var(--cpx-sys-color-success);
+    color: var(--cpx-sys-color-diff-added-fg);
   }
 
   .review-codex-diff__number[data-line-type='change-deletion'] {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-diff-removed-fg);
   }
 
   .review-diff-word {

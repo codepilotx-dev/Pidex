@@ -19,9 +19,11 @@ test('Chat 与 Grill 切换时按本轮冻结工具恢复，不沿用历史写�
   models.setProvider(faux.provider)
   const session = await new InMemorySessionRepo().create({ id: crypto.randomUUID() })
   await session.appendActiveToolsChange(['Write', 'PowerShell', 'update_plan'])
-  await session.appendMessage(fauxAssistantMessage(
-    '旧会话工具状态：只有 TerminalRead、generate_interactive_ui、task_schedule_view，没有 request_user_input。',
-  ))
+  await session.appendMessage(
+    fauxAssistantMessage(
+      '旧会话工具状态：只有 TerminalRead、generate_interactive_ui、task_schedule_view，没有 request_user_input。',
+    ),
+  )
   const executor = new ToolExecutor(new ToolRegistry())
   for (const taskMode of ['grill', 'chat', 'grill'] as const) {
     let names: string[] = []

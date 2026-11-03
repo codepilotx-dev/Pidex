@@ -21,7 +21,10 @@ export type SubagentDirectoryRow = {
   terminal: boolean
 }
 
-export function toSubagentDirectoryRow({ task, currentRun }: SubagentProjection): SubagentDirectoryRow {
+export function toSubagentDirectoryRow({
+  task,
+  currentRun,
+}: SubagentProjection): SubagentDirectoryRow {
   const status: SubagentStatus = currentRun?.status ?? 'interrupted'
   return {
     taskId: task.id,

@@ -72,36 +72,64 @@ describe('供应商图标 IPC 契约', () => {
   })
 
   test('网站获取校验窗口来源，失败不透出内部网络错误', async () => {
-    const handlers = new Map<string, (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>>()
+    const handlers = new Map<
+      string,
+      (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>
+    >()
     const mainWindow = {} as WebContents
     const received: unknown[] = []
     registerProviderIconIpc({
-      ipc: { handle: (channel, handler) => handlers.set(channel, handler as never) } as unknown as Pick<IpcMain, 'handle'>,
+      ipc: {
+        handle: (channel, handler) => handlers.set(channel, handler as never),
+      } as unknown as Pick<IpcMain, 'handle'>,
       isMainWindowSender: (sender) => sender === mainWindow,
-      providerIcons: { setWebsiteIcon: async (input: unknown) => { received.push(input); throw new Error('internal DNS detail') } } as never,
+      providerIcons: {
+        setWebsiteIcon: async (input: unknown) => {
+          received.push(input)
+          throw new Error('internal DNS detail')
+        },
+      } as never,
     })
     const handler = handlers.get(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.website)!
     const input = { providerID: 'relay', website: 'https://example.com' }
-    await expect(handler({ sender: {} } as IpcMainInvokeEvent, input)).rejects.toThrow('IPC 调用来源无效')
+    await expect(handler({ sender: {} } as IpcMainInvokeEvent, input)).rejects.toThrow(
+      'IPC 调用来源无效',
+    )
     expect(received).toHaveLength(0)
-    await expect(handler({ sender: mainWindow } as IpcMainInvokeEvent, input)).rejects.toThrow('原图标已保留')
+    await expect(handler({ sender: mainWindow } as IpcMainInvokeEvent, input)).rejects.toThrow(
+      '原图标已保留',
+    )
     expect(received).toEqual([input])
   })
 
   test('上传图标校验窗口来源，失败不透出内部校验细节', async () => {
-    const handlers = new Map<string, (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>>()
+    const handlers = new Map<
+      string,
+      (event: IpcMainInvokeEvent, input: unknown) => Promise<unknown>
+    >()
     const mainWindow = {} as WebContents
     const received: unknown[] = []
     registerProviderIconIpc({
-      ipc: { handle: (channel, handler) => handlers.set(channel, handler as never) } as unknown as Pick<IpcMain, 'handle'>,
+      ipc: {
+        handle: (channel, handler) => handlers.set(channel, handler as never),
+      } as unknown as Pick<IpcMain, 'handle'>,
       isMainWindowSender: (sender) => sender === mainWindow,
-      providerIcons: { setUploadedIcon: async (input: unknown) => { received.push(input); throw new Error('invalid PNG header') } } as never,
+      providerIcons: {
+        setUploadedIcon: async (input: unknown) => {
+          received.push(input)
+          throw new Error('invalid PNG header')
+        },
+      } as never,
     })
     const handler = handlers.get(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.upload)!
     const input = { providerID: 'relay', dataURL: 'data:image/png;base64,AAAA' }
-    await expect(handler({ sender: {} } as IpcMainInvokeEvent, input)).rejects.toThrow('IPC 调用来源无效')
+    await expect(handler({ sender: {} } as IpcMainInvokeEvent, input)).rejects.toThrow(
+      'IPC 调用来源无效',
+    )
     expect(received).toHaveLength(0)
-    await expect(handler({ sender: mainWindow } as IpcMainInvokeEvent, input)).rejects.toThrow('图片格式受支持')
+    await expect(handler({ sender: mainWindow } as IpcMainInvokeEvent, input)).rejects.toThrow(
+      '图片格式受支持',
+    )
     expect(received).toEqual([input])
   })
 })

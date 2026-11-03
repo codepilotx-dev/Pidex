@@ -101,8 +101,12 @@ export function desktopProviderExecutionError(
 
 function isProviderApi(
   value: string,
-): value is 'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai' {
+): value is
+  'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai' {
   return (
-    value === 'openai-completions' || value === 'openai-responses' || value === 'anthropic-messages' || value === 'google-generative-ai'
+    value === 'openai-completions' ||
+    value === 'openai-responses' ||
+    value === 'anthropic-messages' ||
+    value === 'google-generative-ai'
   )
 }

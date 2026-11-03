@@ -220,14 +220,25 @@ test('原生 Gemini SDK 的最终 payload hook 包含视频数据，无需修改
   models.dispose()
 })
 
-
 test('非聊天模型的健康测试走嵌入和重排接口', async () => {
   const calls: string[] = []
   const models = {
-    getPiModel: async (model: Model.Ref) => ({ modelType: model.id === 'embed' ? 'embedding' : 'rerank' }),
-    embed: async () => { calls.push('embed'); return { vectors: [[1]], inputTokens: 1 } },
-    rerank: async () => { calls.push('rerank'); return { results: [{ index: 0, score: 1 }], inputTokens: 1 } },
-    pi: { completeSimple: () => { throw new Error('Must not send a chat request') } },
+    getPiModel: async (model: Model.Ref) => ({
+      modelType: model.id === 'embed' ? 'embedding' : 'rerank',
+    }),
+    embed: async () => {
+      calls.push('embed')
+      return { vectors: [[1]], inputTokens: 1 }
+    },
+    rerank: async () => {
+      calls.push('rerank')
+      return { results: [{ index: 0, score: 1 }], inputTokens: 1 }
+    },
+    pi: {
+      completeSimple: () => {
+        throw new Error('Must not send a chat request')
+      },
+    },
   } as unknown as PiModelService
   const health = new ModelHealthService(models, async () => {})
   expect((await health.probe(ref('embed'))).ok).toBe(true)
@@ -237,13 +248,35 @@ test('非聊天模型的健康测试走嵌入和重排接口', async () => {
 })
 
 test('自定义 Gemini 的音视频与工具开关进入目录，非聊天模型不会伪装成聊天能力', async () => {
-  const models = new PiModelService(repository, { config: { providers: { relay: {
-    kind: 'custom', auth: 'none', base_url: 'https://generativelanguage.googleapis.com/v1beta',
-    models: { chat: { api: 'google-generative-ai', input: ['text', 'audio', 'video'], tools: false, max_input_tokens: 12345 },
-      embed: { api: 'openai-completions', modelType: 'embedding' } },
-  } } } })
+  const models = new PiModelService(repository, {
+    config: {
+      providers: {
+        relay: {
+          kind: 'custom',
+          auth: 'none',
+          base_url: 'https://generativelanguage.googleapis.com/v1beta',
+          models: {
+            chat: {
+              api: 'google-generative-ai',
+              input: ['text', 'audio', 'video'],
+              tools: false,
+              max_input_tokens: 12345,
+            },
+            embed: { api: 'openai-completions', modelType: 'embedding' },
+          },
+        },
+      },
+    },
+  })
   const catalog = await models.models()
-  expect(catalog.find((model) => model.id === 'chat')).toMatchObject({ capabilities: { tools: false, input: ['text', 'audio', 'video'] }, limit: { input: 12345 } })
-  expect(catalog.find((model) => model.id === 'embed')).toMatchObject({ modelType: 'embedding', capabilities: { tools: false, output: ['embedding'] }, variants: [] })
+  expect(catalog.find((model) => model.id === 'chat')).toMatchObject({
+    capabilities: { tools: false, input: ['text', 'audio', 'video'] },
+    limit: { input: 12345 },
+  })
+  expect(catalog.find((model) => model.id === 'embed')).toMatchObject({
+    modelType: 'embedding',
+    capabilities: { tools: false, output: ['embedding'] },
+    variants: [],
+  })
   models.dispose()
 })

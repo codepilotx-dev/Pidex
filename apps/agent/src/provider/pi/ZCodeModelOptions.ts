@@ -63,13 +63,19 @@ const overlay = (
   }
 }
 
-const ruleMatches = (rule: ZCodeOptionRule, input: { modelId: string; api: string; baseUrl?: string | undefined }): boolean => {
+const ruleMatches = (
+  rule: ZCodeOptionRule,
+  input: { modelId: string; api: string; baseUrl?: string | undefined },
+): boolean => {
   if (!matches(rule.modelMatch, input.modelId)) return false
   if (rule.apiTypeMatch !== undefined && rule.apiTypeMatch !== '.*') {
     const pattern = normalizeApi(rule.apiTypeMatch)
     if (!matches(pattern, normalizeApi(input.api))) return false
   }
-  if (rule.baseUrlMatch !== undefined && !(input.baseUrl && matches(rule.baseUrlMatch, input.baseUrl)))
+  if (
+    rule.baseUrlMatch !== undefined &&
+    !(input.baseUrl && matches(rule.baseUrlMatch, input.baseUrl))
+  )
     return false
   return true
 }

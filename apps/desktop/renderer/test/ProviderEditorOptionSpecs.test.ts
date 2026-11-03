@@ -41,7 +41,10 @@ describe('ProviderEditor optionSpecs 往返', () => {
     const editable = editableModel(
       definition({
         optionSpecs: {
-          reasoningLevel: { values: ['none', 'low', 'high', 'max'], map: '{"reasoning_effort": reasoningLevel}' },
+          reasoningLevel: {
+            values: ['none', 'low', 'high', 'max'],
+            map: '{"reasoning_effort": reasoningLevel}',
+          },
           maxOutputTokens: { max: 64_000, map: '{"max_tokens": maxOutputTokens}' },
         },
       }),

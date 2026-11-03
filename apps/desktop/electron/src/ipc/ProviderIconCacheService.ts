@@ -123,10 +123,15 @@ export class ProviderIconCacheService {
   async setWebsiteIcon(input: unknown): Promise<DesktopProviderIconResolution> {
     if (!isRecord(input)) throw new Error('供应商图标参数无效')
     const providerID = requireProviderID(input.providerID)
-    if (input.website !== undefined && (typeof input.website !== 'string' || !input.website.trim() || input.website.length > 2048)) throw new Error('网站地址无效')
+    if (
+      input.website !== undefined &&
+      (typeof input.website !== 'string' || !input.website.trim() || input.website.length > 2048)
+    )
+      throw new Error('网站地址无效')
     // Refuse to overwrite a newer appearance record.
     await this.#readOverride(providerID)
-    const source = typeof input.website === 'string' ? await this.#discoverWebsiteIcon(input.website) : null
+    const source =
+      typeof input.website === 'string' ? await this.#discoverWebsiteIcon(input.website) : null
     await this.#persistOverride(providerID, source)
     return { source }
   }
@@ -145,20 +150,35 @@ export class ProviderIconCacheService {
   }
 
   async #persistOverride(providerID: string, source: string | null): Promise<void> {
-    await writeJsonAtomically(this.#recordPath(`provider:${providerID}`), { version: 1, providerID, source })
+    await writeJsonAtomically(this.#recordPath(`provider:${providerID}`), {
+      version: 1,
+      providerID,
+      source,
+    })
     this.#publish({ url: '', providerID, source })
   }
 
   async #readOverride(providerID: string): Promise<{ source: string | null }> {
     let raw: string
-    try { raw = await readFile(this.#recordPath(`provider:${providerID}`), 'utf8') }
-    catch (error) {
+    try {
+      raw = await readFile(this.#recordPath(`provider:${providerID}`), 'utf8')
+    } catch (error) {
       if (isRecord(error) && error.code === 'ENOENT') return { source: null }
       throw new Error('无法读取供应商图标')
     }
     if (raw.length > 1_500_000) throw new Error('供应商图标记录无效')
     const record: unknown = JSON.parse(raw)
-    if (!isRecord(record) || record.version !== 1 || record.providerID !== providerID || record.source !== null && (typeof record.source !== 'string' || !/^data:image\/(?:png|jpeg|gif|webp|x-icon|svg\+xml);base64,[A-Za-z0-9+/]+=*$/.test(record.source))) throw new Error('供应商图标记录不受支持')
+    if (
+      !isRecord(record) ||
+      record.version !== 1 ||
+      record.providerID !== providerID ||
+      (record.source !== null &&
+        (typeof record.source !== 'string' ||
+          !/^data:image\/(?:png|jpeg|gif|webp|x-icon|svg\+xml);base64,[A-Za-z0-9+/]+=*$/.test(
+            record.source,
+          )))
+    )
+      throw new Error('供应商图标记录不受支持')
     return { source: record.source as string | null }
   }
 
@@ -279,7 +299,13 @@ export class ProviderIconCacheService {
 }
 
 function requireProviderID(input: unknown): string {
-  if (typeof input !== 'string' || !input.trim() || input.length > 256 || /[\u0000-\u001f]/.test(input)) throw new Error('供应商标识无效')
+  if (
+    typeof input !== 'string' ||
+    !input.trim() ||
+    input.length > 256 ||
+    /[\u0000-\u001f]/.test(input)
+  )
+    throw new Error('供应商标识无效')
   return input
 }
 

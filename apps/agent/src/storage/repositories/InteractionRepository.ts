@@ -17,10 +17,7 @@ import {
   hookTrustRequestedPayload,
   hookTrustResolvedPayload,
 } from '../../interaction/HookTrustPayloads'
-import {
-  guardianActionHash,
-  guardianAuthorizationVersion,
-} from '../../permission/Guardian'
+import { guardianActionHash, guardianAuthorizationVersion } from '../../permission/Guardian'
 import type { RiskCategory } from '../../security/ShellRiskClassifier'
 
 export type ProjectModelSettings = {
@@ -716,7 +713,7 @@ export abstract class InteractionRepositoryDatabase extends ExecutionRepositoryD
           guardian ? guardianActionHash(invocation) : null,
           guardian
             ? (guardian.authorizationVersion ??
-              guardianAuthorizationVersion({ sqlite: this.sqlite }, invocation.threadID))
+                guardianAuthorizationVersion({ sqlite: this.sqlite }, invocation.threadID))
             : null,
         )
       const item: import('../../Domain').Item = {

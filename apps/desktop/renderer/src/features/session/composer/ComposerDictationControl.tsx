@@ -4,7 +4,11 @@ import { motion, useReducedMotion } from 'motion/react'
 import { Loader2, Mic, Square, X } from 'lucide-react'
 import { Button } from '../../../components/ui/Button.js'
 import { Tooltip } from '../../../components/ui/Tooltip.js'
-import { APP_ICON_SIZE, APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../../components/ui/IconTokens.js'
+import {
+  APP_ICON_SIZE,
+  APP_ICON_SIZES,
+  APP_ICON_STROKE_WIDTH,
+} from '../../../components/ui/IconTokens.js'
 import type { ComposerEditorHandle } from './ComposerEditor.js'
 import type { ComposerDraftKey } from './ComposerTypes.js'
 import { useComposerDictation } from './UseComposerDictation.js'
@@ -217,14 +221,17 @@ export function ComposerDictationControl({
           disabled={!dictation.available}
           onClick={dictation.toggle}
           size="composer"
-          >
+        >
           <Mic size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
         </Button>
       </Tooltip>
     )
   }
 
-  const expanded = dictation.phase === 'recording' || dictation.phase === 'processing' || dictation.phase === 'error'
+  const expanded =
+    dictation.phase === 'recording' ||
+    dictation.phase === 'processing' ||
+    dictation.phase === 'error'
   return (
     <motion.div
       className="tw:relative tw:inline-flex tw:h-7 tw:shrink-0 tw:items-center tw:justify-end tw:overflow-hidden"
@@ -232,12 +239,9 @@ export function ComposerDictationControl({
       animate={{ width: expanded ? '10rem' : '1.75rem' }}
       transition={{ duration: reducedMotion ? 0 : 0.18, ease: 'easeOut' }}
     >
-      <div className="tw:shrink-0">
-        {renderControl()}
-      </div>
+      <div className="tw:shrink-0">{renderControl()}</div>
     </motion.div>
   )
-
 }
 
 function formatElapsed(elapsedMs: number): string {

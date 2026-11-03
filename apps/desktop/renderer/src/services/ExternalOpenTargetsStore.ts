@@ -37,7 +37,9 @@ export const externalOpenTargetsStateStore = createStore<ExternalOpenTargetsStat
   byPath: {},
 }))
 
-export function useExternalOpenTargets(targetPath: string | null): readonly DesktopExternalOpenTarget[] {
+export function useExternalOpenTargets(
+  targetPath: string | null,
+): readonly DesktopExternalOpenTarget[] {
   const key = targetPath ? cacheKey(targetPath) : ''
   return useStore(
     externalOpenTargetsStateStore,

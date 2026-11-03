@@ -516,9 +516,7 @@ function SidebarSessionGroupComponent({
       now={now}
       pendingPermissionSessionIds={pendingPermissionSessionIds}
       presentation={presentation}
-      projectUnavailable={Boolean(
-        unavailableProjectKeys?.has(sidebarSessionProjectKey(session)),
-      )}
+      projectUnavailable={Boolean(unavailableProjectKeys?.has(sidebarSessionProjectKey(session)))}
       pullRequestItems={pullRequests.byThread.get(session.id) ?? NO_PULL_REQUESTS}
       reducedMotion={reducedMotion}
       reorderable={onManualOrderChange != null}
@@ -833,7 +831,11 @@ function SidebarSessionRowComponent({
             label="正在更新会话标题"
           />
         ) : (
-          <SidebarSessionTitle active={showActions} presentation={presentation} reducedMotion={reducedMotion}>
+          <SidebarSessionTitle
+            active={showActions}
+            presentation={presentation}
+            reducedMotion={reducedMotion}
+          >
             {sessionResolvedTitle(session, fallbackTitle)}
           </SidebarSessionTitle>
         )}
@@ -875,9 +877,7 @@ function SidebarSessionRowComponent({
       indent={showConversationIcon || sessionIndent === 'gutter' ? 'none' : 'session'}
       layout="grid"
       leading={
-        showConversationIcon ? (
-          <MessageCircle aria-hidden="true" size={APP_ICON_SIZE} />
-        ) : undefined
+        showConversationIcon ? <MessageCircle aria-hidden="true" size={APP_ICON_SIZE} /> : undefined
       }
       leadingMode={showConversationIcon ? 'icon' : sessionIndent === 'gutter' ? 'none' : 'spacer'}
       onMouseOver={(event) => {
@@ -1003,7 +1003,9 @@ function SidebarSessionRowComponent({
             </div>
           ) : indicatorState === 'needs-input' ? (
             <SidebarStatusPill kind={waitingForInput ? 'input' : 'approval'} />
-          ) : indicatorState === 'unread' || indicatorState === 'running' || indicatorState === 'error' ? (
+          ) : indicatorState === 'unread' ||
+            indicatorState === 'running' ||
+            indicatorState === 'error' ? (
             <span className="sidebar-indicator tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:text-app-text-meta tw:[&>svg]:size-icon-md">
               <span className="sidebar-status-icon tw:inline-flex tw:size-5 tw:shrink-0 tw:items-center tw:justify-center">
                 {indicatorState === 'error' ? (

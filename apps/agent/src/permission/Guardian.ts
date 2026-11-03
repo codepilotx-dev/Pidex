@@ -75,11 +75,7 @@ export type GuardianTrajectoryEntry = {
 }
 
 export type GuardianReviewStatus =
-  | 'completed'
-  | 'cached'
-  | 'unavailable'
-  | 'timeout'
-  | 'circuit_open'
+  'completed' | 'cached' | 'unavailable' | 'timeout' | 'circuit_open'
 
 export type GuardianReviewSource = 'model' | 'cache' | 'fallback'
 
@@ -121,10 +117,8 @@ const authorizationRank: Record<GuardianUserAuthorization, number> = {
   high: 3,
 }
 
-export const maxGuardianRisk = (
-  first: ShellRiskLevel,
-  second: ShellRiskLevel,
-): ShellRiskLevel => (riskRank[first] >= riskRank[second] ? first : second)
+export const maxGuardianRisk = (first: ShellRiskLevel, second: ShellRiskLevel): ShellRiskLevel =>
+  riskRank[first] >= riskRank[second] ? first : second
 
 export const mergeGuardianCategories = (
   first: readonly RiskCategory[],
@@ -377,8 +371,7 @@ export function guardianAuthorizationVersion(
           threadID,
           rootThreadID,
           local: userMessageFingerprint(db.sqlite, threadID),
-          root:
-            rootThreadID === threadID ? null : userMessageFingerprint(db.sqlite, rootThreadID),
+          root: rootThreadID === threadID ? null : userMessageFingerprint(db.sqlite, rootThreadID),
         }),
         'utf8',
       )
@@ -567,10 +560,7 @@ export function guardianScopeClass(invocation: ToolInvocation): GuardianScopeCla
   if (!capabilities) return 'unknown'
   if (capabilities.process) return 'shell'
   if (capabilities.network !== 'none') return 'network'
-  if (
-    capabilities.filesystem === 'workspace-write' ||
-    capabilities.filesystem === 'host-write'
-  )
+  if (capabilities.filesystem === 'workspace-write' || capabilities.filesystem === 'host-write')
     return 'file-write'
   return 'read'
 }

@@ -21,13 +21,17 @@ describe('SidecarSupervisor owned 生命周期', () => {
     delete process.env.PIDEX_AGENT_URL
     let starts = 0
     let shutdowns = 0
-    const harness = createHarness({ backgroundRuntime: {
-      connect: async () => {
-        starts++
-        return { origin: 'http://127.0.0.1:4312', instanceToken: 'background-instance' }
+    const harness = createHarness({
+      backgroundRuntime: {
+        connect: async () => {
+          starts++
+          return { origin: 'http://127.0.0.1:4312', instanceToken: 'background-instance' }
+        },
+        shutdown: async () => {
+          shutdowns++
+        },
       },
-      shutdown: async () => { shutdowns++ },
-    } })
+    })
     const supervisor = harness.supervisor()
     await supervisor.connect(async () => undefined)
     await supervisor.invalidate()

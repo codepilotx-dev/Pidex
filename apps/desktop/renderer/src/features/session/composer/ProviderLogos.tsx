@@ -8,7 +8,13 @@ import { useProviderIconSource } from '../../../services/desktop-client/Provider
  * Provider appearance overrides and catalogue/model logos share the local cache.
  * Unknown brands retain the generic provider glyph.
  */
-export function ProviderLogo({ logoURL, providerID }: { logoURL?: string; providerID?: string }): React.ReactNode {
+export function ProviderLogo({
+  logoURL,
+  providerID,
+}: {
+  logoURL?: string
+  providerID?: string
+}): React.ReactNode {
   const { source, override } = useProviderIconSource(logoURL, providerID)
   const [loadedSource, setLoadedSource] = useState<string>()
   const fallback = <Server aria-hidden="true" size={14} data-icon-kind="artwork" strokeWidth={2} />

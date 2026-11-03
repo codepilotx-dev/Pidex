@@ -22,9 +22,15 @@ describe('PetCatalogService', () => {
     let wake: (() => void) | undefined
     const timers: ReturnType<typeof setTimeout>[] = []
     const originalSetTimeout = globalThis.setTimeout
-    const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((callback: () => void, delay: number) => {
+    const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: () => void,
+      delay: number,
+    ) => {
       const timer = originalSetTimeout(callback, delay)
-      if (delay === 5 * 60 * 60 * 1_000) { wake = callback; timers.push(timer) }
+      if (delay === 5 * 60 * 60 * 1_000) {
+        wake = callback
+        timers.push(timer)
+      }
       return timer
     }) as typeof setTimeout)
     const fetch = mockFetch(catalogResponses())

@@ -7,7 +7,11 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { Popover as Popover } from '../../../components/ui/floating/Popover.js'
 import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { Brain, Check, ChevronLeft, Eye, Plus, Search, X } from 'lucide-react'
-import type { DesktopModelMetadata, DesktopModelProviderSummary, ModelProviderID } from '../../../../shared/Types.js'
+import type {
+  DesktopModelMetadata,
+  DesktopModelProviderSummary,
+  ModelProviderID,
+} from '../../../../shared/Types.js'
 import { sortModelPresetsByName, type ModelPreset } from '../../../ModelPresets.js'
 import { modelCapabilityBadges } from './ModelCapabilitySummary.js'
 import { centeredScrollTop } from './CenterSelectedModel.js'
@@ -437,7 +441,8 @@ export function ModelPickerPopover({
   }
 
   const isAnchorOnly =
-    React.isValidElement(trigger) && Boolean((trigger.props as Record<string, any>)?.[ 'data-composer-model-anchor'])
+    React.isValidElement(trigger) &&
+    Boolean((trigger.props as Record<string, any>)?.['data-composer-model-anchor'])
 
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
@@ -451,309 +456,336 @@ export function ModelPickerPopover({
       {open ? (
         <Popover.Portal>
           <Popover.Content
-          size="lg"
-          align={align}
-          side={side}
-          sideOffset={sideOffset}
-          className={PANEL_CONTENT_CLASS}
-          style={{ padding: 0 }}
-        >
-          <div className={PANEL_CLASS}>
-            {/* Left provider rail */}
-            <div className={PROVIDER_RAIL_CLASS}>
-              <div className={PROVIDER_LIST_CLASS}>
-                {providerOptions.length > 0 ? (
-                  providerOptions.map((provider) => {
-                    const isActive = !isHubOpen && provider.providerID === activeProviderID
-                    return (
-                      <button
-                        key={provider.providerID}
-                        type="button"
-                        onClick={() => handleProviderSelect(provider.providerID)}
-                        className={cx(
-                          PROVIDER_BUTTON_CLASS,
-                          isActive ? PROVIDER_BUTTON_ACTIVE_CLASS : PROVIDER_BUTTON_IDLE_CLASS,
-                        )}
-                        title={provider.displayName || provider.providerID}
-                      >
-                        <ProviderLogo logoURL={provider.logoURL} providerID={provider.providerID} />
-                      </button>
-                    )
-                  })
-                ) : (
+            size="lg"
+            align={align}
+            side={side}
+            sideOffset={sideOffset}
+            className={PANEL_CONTENT_CLASS}
+            style={{ padding: 0 }}
+          >
+            <div className={PANEL_CLASS}>
+              {/* Left provider rail */}
+              <div className={PROVIDER_RAIL_CLASS}>
+                <div className={PROVIDER_LIST_CLASS}>
+                  {providerOptions.length > 0 ? (
+                    providerOptions.map((provider) => {
+                      const isActive = !isHubOpen && provider.providerID === activeProviderID
+                      return (
+                        <button
+                          key={provider.providerID}
+                          type="button"
+                          onClick={() => handleProviderSelect(provider.providerID)}
+                          className={cx(
+                            PROVIDER_BUTTON_CLASS,
+                            isActive ? PROVIDER_BUTTON_ACTIVE_CLASS : PROVIDER_BUTTON_IDLE_CLASS,
+                          )}
+                          title={provider.displayName || provider.providerID}
+                        >
+                          <ProviderLogo
+                            logoURL={provider.logoURL}
+                            providerID={provider.providerID}
+                          />
+                        </button>
+                      )
+                    })
+                  ) : (
+                    <button
+                      type="button"
+                      className={cx(PROVIDER_BUTTON_CLASS, PROVIDER_BUTTON_ACTIVE_CLASS)}
+                      title={activeProviderID}
+                    >
+                      <ProviderLogo
+                        logoURL={providerLogoURL(activeProviderID)}
+                        providerID={activeProviderID}
+                      />
+                    </button>
+                  )}
+                </div>
+
+                <div className={HUB_TRIGGER_WRAP_CLASS}>
                   <button
                     type="button"
-                    className={cx(PROVIDER_BUTTON_CLASS, PROVIDER_BUTTON_ACTIVE_CLASS)}
-                    title={activeProviderID}
-                  >
-                    <ProviderLogo logoURL={providerLogoURL(activeProviderID)} providerID={activeProviderID} />
-                  </button>
-                )}
-              </div>
-
-              <div className={HUB_TRIGGER_WRAP_CLASS}>
-                <button
-                  type="button"
-                  onClick={() => setIsHubOpen((previous) => !previous)}
-                  className={cx(
-                    HUB_TRIGGER_BUTTON_CLASS,
-                    isHubOpen ? PROVIDER_BUTTON_ACTIVE_CLASS : PROVIDER_BUTTON_IDLE_CLASS,
-                  )}
-                  title="模型中心：发现并配置服务商"
-                >
-                  <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                </button>
-              </div>
-            </div>
-
-            {/* Right panel */}
-            <div className={MODEL_RIGHT_CLASS}>
-              {isHubOpen ? (
-                /* View 2: Model Hub view */
-                <div className={PICKER_VIEW_CLASS}>
-                  <div className={MODELS_HEADER_CLASS}>
-                    <div className={MODELS_HEADER_LEAD_CLASS}>
-                      <button
-                        type="button"
-                        onClick={() => setIsHubOpen(false)}
-                        className={HUB_BACK_CLASS}
-                        title="返回模型列表"
-                      >
-                        <ChevronLeft size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                      </button>
-                      <span className={MODELS_TITLE_CLASS}>模型中心</span>
-                    </div>
-
-                    <div className={HUB_SEARCH_BAR_CLASS}>
-                      <Search
-                        size={APP_ICON_SIZE}
-                        strokeWidth={APP_ICON_STROKE_WIDTH}
-                        className={SEARCH_BAR_ICON_CLASS}
-                      />
-                      <input
-                        ref={hubSearchInputRef}
-                        type="text"
-                        placeholder="搜索服务商..."
-                        value={hubFilterText}
-                        onChange={(event) => setHubFilterText(event.target.value)}
-                        className={HUB_SEARCH_INPUT_CLASS}
-                      />
-                    </div>
-                  </div>
-
-                  <div className={HUB_LIST_CLASS}>
-                    {filteredHubProviders.length > 0 ? (
-                      filteredHubProviders.map((provider) => {
-                        const isConfigured = providerOptions.some(
-                          (option) => option.providerID === provider.id,
-                        )
-                        return (
-                          <div
-                            key={provider.id}
-                            className={HUB_ROW_CLASS}
-                            onClick={() => {
-                              if (isConfigured) handleHubSelect(provider.id)
-                            }}
-                          >
-                            <div className={HUB_ROW_MAIN_CLASS}>
-                              <div className={HUB_ROW_LOGO_CLASS}>
-                                <ProviderLogo logoURL={providerLogoURL(provider.id)} providerID={provider.id} />
-                              </div>
-                              <div className={HUB_ROW_TEXT_CLASS}>
-                                <div className={HUB_ROW_TITLE_CLASS}>
-                                  <span className={HUB_ROW_NAME_CLASS}>{provider.name}</span>
-                                  <span className={HUB_BADGE_CLASS}>{provider.category}</span>
-                                </div>
-                                <p className={HUB_ROW_DESC_CLASS}>{provider.desc}</p>
-                              </div>
-                            </div>
-                            <div className={HUB_ROW_ACTIONS_CLASS}>
-                              {isConfigured ? (
-                                <span className={HUB_BADGE_CONNECTED_CLASS}>已配置</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    handleHubSelect(provider.id)
-                                  }}
-                                  className={HUB_ACTION_BUTTON_CLASS}
-                                >
-                                  去配置
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className={MODELS_EMPTY_CLASS}>没有匹配的服务商</div>
+                    onClick={() => setIsHubOpen((previous) => !previous)}
+                    className={cx(
+                      HUB_TRIGGER_BUTTON_CLASS,
+                      isHubOpen ? PROVIDER_BUTTON_ACTIVE_CLASS : PROVIDER_BUTTON_IDLE_CLASS,
                     )}
-                  </div>
+                    title="模型中心：发现并配置服务商"
+                  >
+                    <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                  </button>
                 </div>
-              ) : (
-                /* View 1: Models Selection View */
-                <div className={PICKER_VIEW_CLASS}>
-                  <div className={MODELS_HEADER_CLASS}>
-                    <span className={MODELS_TITLE_CLASS}>
-                      {currentProvider.displayName || '模型列表'}
-                    </span>
+              </div>
 
-                    <div className={MODELS_HEADER_ACTIONS_CLASS}>
-                      {searchExpanded ? (
-                        <div className={SEARCH_BAR_CLASS}>
-                          <Search
-                            size={APP_ICON_SIZE}
-                            strokeWidth={APP_ICON_STROKE_WIDTH}
-                            className={SEARCH_BAR_ICON_CLASS}
-                          />
-                          <input
-                            ref={searchInputRef}
-                            type="text"
-                            placeholder="过滤模型..."
-                            value={filterText}
-                            onChange={(event) => handleFilterChange(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key !== 'Escape') return
-                              event.stopPropagation()
-                              resetFilter()
-                            }}
-                            className={SEARCH_INPUT_CLASS}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              resetFilter()
-                              searchInputRef.current?.blur()
-                            }}
-                            className={SEARCH_CLEAR_CLASS}
-                            title="清除并关闭"
-                          >
-                            <X size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                          </button>
-                        </div>
-                      ) : (
+              {/* Right panel */}
+              <div className={MODEL_RIGHT_CLASS}>
+                {isHubOpen ? (
+                  /* View 2: Model Hub view */
+                  <div className={PICKER_VIEW_CLASS}>
+                    <div className={MODELS_HEADER_CLASS}>
+                      <div className={MODELS_HEADER_LEAD_CLASS}>
                         <button
                           type="button"
-                          onClick={() => setSearchExpanded(true)}
-                          className={SEARCH_TRIGGER_CLASS}
+                          onClick={() => setIsHubOpen(false)}
+                          className={HUB_BACK_CLASS}
+                          title="返回模型列表"
                         >
-                          <span>快速搜索</span>
-                          <Search size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
+                          <ChevronLeft size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
                         </button>
+                        <span className={MODELS_TITLE_CLASS}>模型中心</span>
+                      </div>
+
+                      <div className={HUB_SEARCH_BAR_CLASS}>
+                        <Search
+                          size={APP_ICON_SIZE}
+                          strokeWidth={APP_ICON_STROKE_WIDTH}
+                          className={SEARCH_BAR_ICON_CLASS}
+                        />
+                        <input
+                          ref={hubSearchInputRef}
+                          type="text"
+                          placeholder="搜索服务商..."
+                          value={hubFilterText}
+                          onChange={(event) => setHubFilterText(event.target.value)}
+                          className={HUB_SEARCH_INPUT_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    <div className={HUB_LIST_CLASS}>
+                      {filteredHubProviders.length > 0 ? (
+                        filteredHubProviders.map((provider) => {
+                          const isConfigured = providerOptions.some(
+                            (option) => option.providerID === provider.id,
+                          )
+                          return (
+                            <div
+                              key={provider.id}
+                              className={HUB_ROW_CLASS}
+                              onClick={() => {
+                                if (isConfigured) handleHubSelect(provider.id)
+                              }}
+                            >
+                              <div className={HUB_ROW_MAIN_CLASS}>
+                                <div className={HUB_ROW_LOGO_CLASS}>
+                                  <ProviderLogo
+                                    logoURL={providerLogoURL(provider.id)}
+                                    providerID={provider.id}
+                                  />
+                                </div>
+                                <div className={HUB_ROW_TEXT_CLASS}>
+                                  <div className={HUB_ROW_TITLE_CLASS}>
+                                    <span className={HUB_ROW_NAME_CLASS}>{provider.name}</span>
+                                    <span className={HUB_BADGE_CLASS}>{provider.category}</span>
+                                  </div>
+                                  <p className={HUB_ROW_DESC_CLASS}>{provider.desc}</p>
+                                </div>
+                              </div>
+                              <div className={HUB_ROW_ACTIONS_CLASS}>
+                                {isConfigured ? (
+                                  <span className={HUB_BADGE_CONNECTED_CLASS}>已配置</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      handleHubSelect(provider.id)
+                                    }}
+                                    className={HUB_ACTION_BUTTON_CLASS}
+                                  >
+                                    去配置
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className={MODELS_EMPTY_CLASS}>没有匹配的服务商</div>
                       )}
                     </div>
                   </div>
+                ) : (
+                  /* View 1: Models Selection View */
+                  <div className={PICKER_VIEW_CLASS}>
+                    <div className={MODELS_HEADER_CLASS}>
+                      <span className={MODELS_TITLE_CLASS}>
+                        {currentProvider.displayName || '模型列表'}
+                      </span>
 
-                  <div className={MODELS_LIST_CLASS} ref={modelsListRef}>
-                    {filteredModels.length > 0 ? (
-                      filteredModels.map((preset) => {
-                        const isSelected = preset.id === selectedModelPreset
-                        const capabilityBadges = modelCapabilityBadges(
-                          currentProviderModelMetadata?.[preset.id],
-                        )
-                        return (
-                          <div
-                            key={preset.id}
-                            ref={(element) => {
-                              if (element) modelRowRefs.current.set(preset.id, element)
-                              else modelRowRefs.current.delete(preset.id)
-                            }}
-                            onClick={() => handleModelSelect(preset.id)}
-                            onMouseEnter={() => setHoveredModelID(preset.id)}
-                            onMouseLeave={() =>
-                              setHoveredModelID((current) => (current === preset.id ? null : current))
-                            }
-                            className={cx(MODEL_ROW_CLASS, isSelected && MODEL_ROW_SELECTED_CLASS)}
-                          >
-                            <div className={MODEL_ROW_MAIN_CLASS}>
-                              <span className={MODEL_ROW_ICON_CLASS}>
-                                <ProviderLogo
-                                  logoURL={modelLogoURL(preset.id, preset.label) ?? currentProvider.logoURL}
-                                  providerID={modelLogoURL(preset.id, preset.label) ? undefined : currentProvider.providerID}
-                                />
-                              </span>
-                              <OverflowTitle
-                                active={hoveredModelID === preset.id}
-                                reducedMotion={reducedMotion}
-                                variant="composer"
-                              >
-                                {preset.label || preset.id}
-                              </OverflowTitle>
-                            </div>
-
-                            <div className={MODEL_ROW_TRAILING_CLASS}>
-                              {capabilityBadges.length > 0 ? (
-                                <div className={CAPABILITIES_CLASS}>
-                                  {capabilityBadges.map((badge) =>
-                                    badge.kind === 'context' ? (
-                                      <span
-                                        key={badge.kind}
-                                        className={CAPABILITY_CHIP_CLASS}
-                                        title={badge.title}
-                                      >
-                                        {badge.label}
-                                      </span>
-                                    ) : (
-                                      <span
-                                        key={badge.kind}
-                                        className={CAPABILITY_CHIP_CLASS}
-                                        role="img"
-                                        aria-label={badge.label}
-                                        title={badge.title}
-                                      >
-                                        {badge.kind === 'vision' ? (
-                                          <Eye
-                                            size={APP_ICON_SIZES.sm}
-                                            strokeWidth={APP_ICON_STROKE_WIDTH}
-                                          />
-                                        ) : (
-                                          <Brain
-                                            size={APP_ICON_SIZES.sm}
-                                            strokeWidth={APP_ICON_STROKE_WIDTH}
-                                          />
-                                        )}
-                                      </span>
-                                    ),
-                                  )}
-                                </div>
-                              ) : null}
-
-                              {isSelected ? (
-                                <span
-                                  aria-hidden="true"
-                                  className={cx(
-                                    MODEL_MARK_CLASS,
-                                    capabilityBadges.length > 0
-                                      ? 'tw:group-hover:hidden'
-                                      : undefined,
-                                  )}
-                                >
-                                  <Check size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                                </span>
-                              ) : null}
-                            </div>
+                      <div className={MODELS_HEADER_ACTIONS_CLASS}>
+                        {searchExpanded ? (
+                          <div className={SEARCH_BAR_CLASS}>
+                            <Search
+                              size={APP_ICON_SIZE}
+                              strokeWidth={APP_ICON_STROKE_WIDTH}
+                              className={SEARCH_BAR_ICON_CLASS}
+                            />
+                            <input
+                              ref={searchInputRef}
+                              type="text"
+                              placeholder="过滤模型..."
+                              value={filterText}
+                              onChange={(event) => handleFilterChange(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key !== 'Escape') return
+                                event.stopPropagation()
+                                resetFilter()
+                              }}
+                              className={SEARCH_INPUT_CLASS}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                resetFilter()
+                                searchInputRef.current?.blur()
+                              }}
+                              className={SEARCH_CLEAR_CLASS}
+                              title="清除并关闭"
+                            >
+                              <X size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                            </button>
                           </div>
-                        )
-                      })
-                    ) : (
-                      <div className={MODELS_EMPTY_CLASS}>
-                        {filterText ? '没有匹配的模型' : '暂无可用的预设模型'}
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSearchExpanded(true)}
+                            className={SEARCH_TRIGGER_CLASS}
+                          >
+                            <span>快速搜索</span>
+                            <Search
+                              size="var(--inline-icon-size, 1em)"
+                              strokeWidth={APP_ICON_STROKE_WIDTH}
+                            />
+                          </button>
+                        )}
                       </div>
-                    )}
-                  </div>
-
-                  {reasoningControl ? (
-                    <div className="composer-model-reasoning-slot tw:mt-2 tw:flex tw:shrink-0 tw:items-center tw:gap-2 tw:border-t tw:border-app-border-subtle tw:px-1 tw:pt-2 tw:type-caption tw:text-app-text-meta">
-                      <span>推理思考</span>
-                      {reasoningControl}
                     </div>
-                  ) : null}
-                </div>
-              )}
+
+                    <div className={MODELS_LIST_CLASS} ref={modelsListRef}>
+                      {filteredModels.length > 0 ? (
+                        filteredModels.map((preset) => {
+                          const isSelected = preset.id === selectedModelPreset
+                          const capabilityBadges = modelCapabilityBadges(
+                            currentProviderModelMetadata?.[preset.id],
+                          )
+                          return (
+                            <div
+                              key={preset.id}
+                              ref={(element) => {
+                                if (element) modelRowRefs.current.set(preset.id, element)
+                                else modelRowRefs.current.delete(preset.id)
+                              }}
+                              onClick={() => handleModelSelect(preset.id)}
+                              onMouseEnter={() => setHoveredModelID(preset.id)}
+                              onMouseLeave={() =>
+                                setHoveredModelID((current) =>
+                                  current === preset.id ? null : current,
+                                )
+                              }
+                              className={cx(
+                                MODEL_ROW_CLASS,
+                                isSelected && MODEL_ROW_SELECTED_CLASS,
+                              )}
+                            >
+                              <div className={MODEL_ROW_MAIN_CLASS}>
+                                <span className={MODEL_ROW_ICON_CLASS}>
+                                  <ProviderLogo
+                                    logoURL={
+                                      modelLogoURL(preset.id, preset.label) ??
+                                      currentProvider.logoURL
+                                    }
+                                    providerID={
+                                      modelLogoURL(preset.id, preset.label)
+                                        ? undefined
+                                        : currentProvider.providerID
+                                    }
+                                  />
+                                </span>
+                                <OverflowTitle
+                                  active={hoveredModelID === preset.id}
+                                  reducedMotion={reducedMotion}
+                                  variant="composer"
+                                >
+                                  {preset.label || preset.id}
+                                </OverflowTitle>
+                              </div>
+
+                              <div className={MODEL_ROW_TRAILING_CLASS}>
+                                {capabilityBadges.length > 0 ? (
+                                  <div className={CAPABILITIES_CLASS}>
+                                    {capabilityBadges.map((badge) =>
+                                      badge.kind === 'context' ? (
+                                        <span
+                                          key={badge.kind}
+                                          className={CAPABILITY_CHIP_CLASS}
+                                          title={badge.title}
+                                        >
+                                          {badge.label}
+                                        </span>
+                                      ) : (
+                                        <span
+                                          key={badge.kind}
+                                          className={CAPABILITY_CHIP_CLASS}
+                                          role="img"
+                                          aria-label={badge.label}
+                                          title={badge.title}
+                                        >
+                                          {badge.kind === 'vision' ? (
+                                            <Eye
+                                              size={APP_ICON_SIZES.sm}
+                                              strokeWidth={APP_ICON_STROKE_WIDTH}
+                                            />
+                                          ) : (
+                                            <Brain
+                                              size={APP_ICON_SIZES.sm}
+                                              strokeWidth={APP_ICON_STROKE_WIDTH}
+                                            />
+                                          )}
+                                        </span>
+                                      ),
+                                    )}
+                                  </div>
+                                ) : null}
+
+                                {isSelected ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className={cx(
+                                      MODEL_MARK_CLASS,
+                                      capabilityBadges.length > 0
+                                        ? 'tw:group-hover:hidden'
+                                        : undefined,
+                                    )}
+                                  >
+                                    <Check
+                                      size={APP_ICON_SIZE}
+                                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                                    />
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className={MODELS_EMPTY_CLASS}>
+                          {filterText ? '没有匹配的模型' : '暂无可用的预设模型'}
+                        </div>
+                      )}
+                    </div>
+
+                    {reasoningControl ? (
+                      <div className="composer-model-reasoning-slot tw:mt-2 tw:flex tw:shrink-0 tw:items-center tw:gap-2 tw:border-t tw:border-app-border-subtle tw:px-1 tw:pt-2 tw:type-caption tw:text-app-text-meta">
+                        <span>推理思考</span>
+                        {reasoningControl}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        </Popover.Content>
+          </Popover.Content>
         </Popover.Portal>
       ) : null}
     </Popover.Root>

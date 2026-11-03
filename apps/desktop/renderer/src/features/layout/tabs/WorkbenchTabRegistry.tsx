@@ -523,9 +523,7 @@ const definitions: readonly WorkbenchTabDefinition[] = [
           onOpenPatchReview={context.subagentDirectory.onOpenPatchReview}
           onOpenTask={context.subagentDirectory.onOpenTask}
           onRefreshDiff={context.subagentDirectory.onRefreshDiff}
-          onSelectTask={(taskId) =>
-            context.subagentDirectory.onSelectTask(tab.threadId, taskId)
-          }
+          onSelectTask={(taskId) => context.subagentDirectory.onSelectTask(tab.threadId, taskId)}
           selectedTaskId={tab.selectedTaskId}
           threadId={tab.threadId}
         />

@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'bun:test'
-import type { DesktopModelProviderSummary, DesktopProviderModelDefinition } from '../shared/Types.js'
+import type {
+  DesktopModelProviderSummary,
+  DesktopProviderModelDefinition,
+} from '../shared/Types.js'
 import {
   resolveModelCapabilities,
   resolveModelContextWindow,

@@ -12,9 +12,9 @@ describe('subagent role resolution', () => {
   })
 
   test('displayName wins over task', () => {
-    expect(
-      resolveSubagentRole({ displayName: 'Frontend', task: '调用 API 并补测试' }),
-    ).toBe('frontend')
+    expect(resolveSubagentRole({ displayName: 'Frontend', task: '调用 API 并补测试' })).toBe(
+      'frontend',
+    )
   })
 
   test('falls back to task keywords, then general', () => {

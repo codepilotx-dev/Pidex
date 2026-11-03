@@ -571,8 +571,7 @@ try {
 
   assert.deepEqual(errors, [])
   console.log(
-    'Chat 提问、Plan 逐题确认、Plan 审阅动作与权限卡的交互检查全部通过。截图目录：' +
-      tmpdir(),
+    'Chat 提问、Plan 逐题确认、Plan 审阅动作与权限卡的交互检查全部通过。截图目录：' + tmpdir(),
   )
 } finally {
   await browser.close()

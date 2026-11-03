@@ -2,28 +2,28 @@
 
 ## 研究基线
 
-| 项目 | 本地路径 | 基线 |
-|---|---|---|
-| ZCode | `D:\GitHubProject\Agent\ZCode` | `3c5b2276` (`chore: sync ZCode source`) |
-| Codex | `D:\GitHubProject\Agent\codex` | `780d7ab097` |
-| Claude Code | `D:\GitHubProject\Agent\claude-code-master` | 无 git 元数据（源码快照） |
+| 项目        | 本地路径                                    | 基线                                    |
+| ----------- | ------------------------------------------- | --------------------------------------- |
+| ZCode       | `D:\GitHubProject\Agent\ZCode`              | `3c5b2276` (`chore: sync ZCode source`) |
+| Codex       | `D:\GitHubProject\Agent\codex`              | `780d7ab097`                            |
+| Claude Code | `D:\GitHubProject\Agent\claude-code-master` | 无 git 元数据（源码快照）               |
 
 研究方法：只读源码，不参考外部文档。逐条追溯 goal 相关的数据模型、状态机、续跑触发点、完成判定与预算执行位置。
 
 ## 结论速览
 
-| 维度 | Claude Code | Codex | ZCode |
-|---|---|---|---|
-| 是否有 goal 模式 | **无** | 有（持久化） | 有（持久化） |
-| 预算语义 | **下限/目标（floor）** | 上限/配额（cap） | 上限/配额（cap） |
-| goal 创建者 | — | 模型工具 `create_goal`（要求用户明确请求） | **只有用户** `/goal` |
-| 完成判定 | — | 模型自审后 `update_goal(complete)` | **独立 verifier 子调用** |
-| 状态集合 | 无 | `active` / `paused` / `blocked` / `usageLimited` / `budgetLimited` / `complete` | `active` / `paused` / `budgetLimited` / `complete` |
-| 续跑实现位点 | query loop 内 `continue` | `start_turn_if_idle` 伪造 turn | runtime command queue 内 loop |
-| 存储 | 内存（`bootstrap/state.ts`） | SQLite `thread_goals` | SQLite `session_target` |
-| Plan 模式 | — | 不记预算（`account_tokens: false`） | 不续跑（`getPlanEnabled()` 直接返回 null） |
-| 子 agent 用量 | 排除（`agentId` 直接 stop） | **计入**（`descendant_token_usage`） | 未单独区分 |
-| goal 执行中用户发消息 | 排队，工具批次边界并入当前 turn | **steer 进当前 goal turn** | 默认排队并 held 到 goal 结束；send now 会暂停 goal |
+| 维度                  | Claude Code                     | Codex                                                                           | ZCode                                              |
+| --------------------- | ------------------------------- | ------------------------------------------------------------------------------- | -------------------------------------------------- |
+| 是否有 goal 模式      | **无**                          | 有（持久化）                                                                    | 有（持久化）                                       |
+| 预算语义              | **下限/目标（floor）**          | 上限/配额（cap）                                                                | 上限/配额（cap）                                   |
+| goal 创建者           | —                               | 模型工具 `create_goal`（要求用户明确请求）                                      | **只有用户** `/goal`                               |
+| 完成判定              | —                               | 模型自审后 `update_goal(complete)`                                              | **独立 verifier 子调用**                           |
+| 状态集合              | 无                              | `active` / `paused` / `blocked` / `usageLimited` / `budgetLimited` / `complete` | `active` / `paused` / `budgetLimited` / `complete` |
+| 续跑实现位点          | query loop 内 `continue`        | `start_turn_if_idle` 伪造 turn                                                  | runtime command queue 内 loop                      |
+| 存储                  | 内存（`bootstrap/state.ts`）    | SQLite `thread_goals`                                                           | SQLite `session_target`                            |
+| Plan 模式             | —                               | 不记预算（`account_tokens: false`）                                             | 不续跑（`getPlanEnabled()` 直接返回 null）         |
+| 子 agent 用量         | 排除（`agentId` 直接 stop）     | **计入**（`descendant_token_usage`）                                            | 未单独区分                                         |
+| goal 执行中用户发消息 | 排队，工具批次边界并入当前 turn | **steer 进当前 goal turn**                                                      | 默认排队并 held 到 goal 结束；send now 会暂停 goal |
 
 ---
 
@@ -66,7 +66,9 @@ const VERBOSE_RE = /\b(?:use|spend)\s+(\d+(?:\.\d+)?)\s*(k|m|b)\s*tokens?\b/i
 ```ts
 let outputTokensAtTurnStart = 0
 let currentTurnTokenBudget: number | null = null
-export function getTurnOutputTokens(): number { return getTotalOutputTokens() - outputTokensAtTurnStart }
+export function getTurnOutputTokens(): number {
+  return getTotalOutputTokens() - outputTokensAtTurnStart
+}
 export function snapshotOutputTokensForTurn(budget: number | null): void {
   outputTokensAtTurnStart = getTotalOutputTokens()
   currentTurnTokenBudget = budget
@@ -108,8 +110,11 @@ export function checkTokenBudget(tracker, agentId, budget, globalTurnTokens) {
 
 ```ts
 state = {
-  messages: [...messagesForQuery, ...assistantMessages,
-    createUserMessage({ content: decision.nudgeMessage, isMeta: true })],
+  messages: [
+    ...messagesForQuery,
+    ...assistantMessages,
+    createUserMessage({ content: decision.nudgeMessage, isMeta: true }),
+  ],
   transition: { reason: 'token_budget_continuation' },
 }
 continue
@@ -178,7 +183,10 @@ export function configureTaskBudgetParams(taskBudget, outputConfig, betas): void
 ```ts
 if (params.taskBudget) {
   const preCompactContext = finalContextTokensFromLastResponse(messagesForQuery)
-  taskBudgetRemaining = Math.max(0, (taskBudgetRemaining ?? params.taskBudget.total) - preCompactContext)
+  taskBudgetRemaining = Math.max(
+    0,
+    (taskBudgetRemaining ?? params.taskBudget.total) - preCompactContext,
+  )
 }
 ```
 
@@ -225,12 +233,17 @@ CREATE TABLE thread_goals (
 
 ```ts
 export type ThreadGoal = {
-  threadId: string, objective: string, status: ThreadGoalStatus,
-  tokenBudget: number | null, tokensUsed: number, timeUsedSeconds: number,
-  createdAt: number, updatedAt: number,
+  threadId: string
+  objective: string
+  status: ThreadGoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  timeUsedSeconds: number
+  createdAt: number
+  updatedAt: number
 }
 
-export type ThreadGoalMutationOrigin = "user" | "automatic"
+export type ThreadGoalMutationOrigin = 'user' | 'automatic'
 ```
 
 `ThreadGoalSetParams.origin` 的注释是一条安全边界：
@@ -419,26 +432,26 @@ const MAX_OBJECTIVE_BYTES: usize = 700;
 
 ```ts
 export const GoalStatus = {
-  Active: "active",
-  Paused: "paused",
-  BudgetLimited: "budget_limited",
-  Complete: "complete",
-} as const;
+  Active: 'active',
+  Paused: 'paused',
+  BudgetLimited: 'budget_limited',
+  Complete: 'complete',
+} as const
 
 export interface SessionGoal {
-  sessionID: SessionId;
+  sessionID: SessionId
   // Compatibility: the persisted row and ACP wire payload still call this targetID.
-  targetID: string;
-  objective: string;
-  summaryTitle: string | null;
-  status: GoalStatus;
-  tokenBudget: number | null;
-  tokensUsed: number;
-  timeUsedSeconds: number;
-  activeInputId?: string | null;
-  activeRunStartedAtMs?: number | null;
-  activeRunLastSeenAtMs?: number | null;
-  time: { created: number; updated: number };
+  targetID: string
+  objective: string
+  summaryTitle: string | null
+  status: GoalStatus
+  tokenBudget: number | null
+  tokensUsed: number
+  timeUsedSeconds: number
+  activeInputId?: string | null
+  activeRunStartedAtMs?: number | null
+  activeRunLastSeenAtMs?: number | null
+  time: { created: number; updated: number }
 }
 ```
 
@@ -492,31 +505,35 @@ while (!options.abortSignal?.aborted) {
 
 三个触发源共用同一个 driver：
 
-| 触发源 | `trigger` | `verifyBeforeFirstContinue` |
-|---|---|---|
-| 普通 user prompt 结束后 | `user-prompt` | `true` |
-| background `task-notification` 后 | `task-notification` | `true` |
-| `/goal` 创建后的首次续跑 | `manual` | `false` |
+| 触发源                            | `trigger`           | `verifyBeforeFirstContinue` |
+| --------------------------------- | ------------------- | --------------------------- |
+| 普通 user prompt 结束后           | `user-prompt`       | `true`                      |
+| background `task-notification` 后 | `task-notification` | `true`                      |
+| `/goal` 创建后的首次续跑          | `manual`            | `false`                     |
 
 **让位语义**：每轮续跑前检查 `runtimeCommandQueue.hasPending()`，有 pending 就停 loop，把控制权交回队列 drain——避免自动续跑饿死用户输入。
 
 候选判定（`target.ts:180`）：
 
 ```ts
-if (!this.sessionStore) return null;
-if (this.getPlanEnabled()) return null;
-if (this.activeTurn || this.activeTurnStartReservation) return null;
-if (!this.sessionPersisted) return null;
+if (!this.sessionStore) return null
+if (this.getPlanEnabled()) return null
+if (this.activeTurn || this.activeTurnStartReservation) return null
+if (!this.sessionPersisted) return null
 
-const target = await this.readSessionTargetForContext(traceContext);
-if (!target || target.status !== "active") return null;
+const target = await this.readSessionTargetForContext(traceContext)
+if (!target || target.status !== 'active') return null
 ```
 
 **Stop 竞态**：verifier 是异步子调用，可能在用户点 Stop 之后才返回。拿到结果后必须**重读** target 状态，不能用校验开始前的旧对象继续续跑：
 
 ```ts
-const latestTarget = await this.readSessionTargetForContext(traceContext);
-if (!latestTarget || latestTarget.status !== "active" || latestTarget.targetID !== target.targetID) {
+const latestTarget = await this.readSessionTargetForContext(traceContext)
+if (
+  !latestTarget ||
+  latestTarget.status !== 'active' ||
+  latestTarget.targetID !== target.targetID
+) {
   // skipped_inactive_after_verification
 }
 ```
@@ -542,11 +559,11 @@ Return only a JSON object with this exact shape:
 **fail-open / fail-closed 的取舍**（`parseGoalCompletionVerificationText`）：
 
 ```ts
-const parsed = parseJsonObject(text);
+const parsed = parseJsonObject(text)
 if (!parsed) {
   // verifier 是 goal 完成闸门，但 provider 偶发坏 JSON 属于裁判链路故障；
   // 按产品语义 fail-open，避免已经交付的 goal 被格式错误卡在继续迭代。
-  return failOpenGoalCompletionVerification("The completion verifier did not return valid JSON.");
+  return failOpenGoalCompletionVerification('The completion verifier did not return valid JSON.')
 }
 ```
 
@@ -592,7 +609,7 @@ where session_id = ? and target_id = ? and active_input_id = ? and active_run_st
 `targetContinuationCandidateForCommand` 里 `if (this.getPlanEnabled()) return null;` ——Plan 模式不自动续跑。CLI 侧另有用户提示（`goal.ts`）：
 
 ```ts
-const PLAN_MODE_GOAL_CONTINUATION_SKIPPED_MESSAGE = "Plan mode 下已记录 goal，但不会自动继续。";
+const PLAN_MODE_GOAL_CONTINUATION_SKIPPED_MESSAGE = 'Plan mode 下已记录 goal，但不会自动继续。'
 ```
 
 与 codex 的差别：codex 是 Plan 模式**不记预算**但保留 goal，ZCode 是 Plan 模式**完全不续跑**。
@@ -603,11 +620,11 @@ const PLAN_MODE_GOAL_CONTINUATION_SKIPPED_MESSAGE = "Plan mode 下已记录 goal
 
 这里讨论的是「作为下一轮 turn 提交」的用户输入。引导式消息（guide / steer）单独在第 5 节讨论，两者在三家产品里的分叉不同。
 
-| | 默认行为 | 消费位置 | 对 goal 的影响 |
-|---|---|---|---|
-| Claude | 入队（`priority:'next'`），在工具批次边界转成 `queued_command` 附件并入当前 turn；纯文本收尾时留到下一轮 | 当前 turn 的工具结果之后 | 预算计数继续，nudge 优先 |
-| Codex | 走 `start_or_steer_turn`，**steer 进当前 turn** | 下一次模型采样边界 | 该 turn 继续计入 goal 用量 |
-| ZCode | **排队并 held**，goal 不结束不消费；显式 send now 才抢占（并暂停 goal） | goal 结束后的新 turn | goal 优先级高于用户输入 |
+|        | 默认行为                                                                                                 | 消费位置                 | 对 goal 的影响             |
+| ------ | -------------------------------------------------------------------------------------------------------- | ------------------------ | -------------------------- |
+| Claude | 入队（`priority:'next'`），在工具批次边界转成 `queued_command` 附件并入当前 turn；纯文本收尾时留到下一轮 | 当前 turn 的工具结果之后 | 预算计数继续，nudge 优先   |
+| Codex  | 走 `start_or_steer_turn`，**steer 进当前 turn**                                                          | 下一次模型采样边界       | 该 turn 继续计入 goal 用量 |
+| ZCode  | **排队并 held**，goal 不结束不消费；显式 send now 才抢占（并暂停 goal）                                  | goal 结束后的新 turn     | goal 优先级高于用户输入    |
 
 一句话：Claude 和 Codex 会把用户的话塞进正在跑的 turn，ZCode 会让用户等 goal。
 
@@ -634,13 +651,13 @@ commandQueue.push({ ...command, priority: command.priority ?? 'next' })
 在 query loop 里，**每个工具执行完的批次边界**会按优先级取快照并转成附件（`query.ts:1570`）：
 
 ```ts
-const queuedCommandsSnapshot = getCommandsByMaxPriority(
-  sleepRan ? 'later' : 'next',
-).filter(cmd => {
-  if (isSlashCommand(cmd)) return false
-  if (isMainThread) return cmd.agentId === undefined
-  return cmd.mode === 'task-notification' && cmd.agentId === currentAgentId
-})
+const queuedCommandsSnapshot = getCommandsByMaxPriority(sleepRan ? 'later' : 'next').filter(
+  (cmd) => {
+    if (isSlashCommand(cmd)) return false
+    if (isMainThread) return cmd.agentId === undefined
+    return cmd.mode === 'task-notification' && cmd.agentId === currentAgentId
+  },
+)
 ```
 
 ```ts
@@ -711,10 +728,10 @@ steer 的拒绝条件（`core/src/session/turn_input.rs:800` 附近）：
 用户输入的路由由 `computeInputRouting`（`bootstrap/src/zcode-protocol-v4/projection-state.ts:157`）决定：
 
 ```ts
-if (context.compacting) return { mode: "enqueue", reasonCode: "compactingAcceptsFutureInput" };
-if (context.goalVerifying) return { mode: "enqueue", reasonCode: "goalVerifierAcceptsFutureInput" };
-if (context.phase === "running" || context.phase === "prewarming") {
-  return { mode: followupMode === "guide" ? "guide" : "enqueue" };
+if (context.compacting) return { mode: 'enqueue', reasonCode: 'compactingAcceptsFutureInput' }
+if (context.goalVerifying) return { mode: 'enqueue', reasonCode: 'goalVerifierAcceptsFutureInput' }
+if (context.phase === 'running' || context.phase === 'prewarming') {
+  return { mode: followupMode === 'guide' ? 'guide' : 'enqueue' }
 }
 ```
 
@@ -724,17 +741,17 @@ if (context.phase === "running" || context.phase === "prewarming") {
 
 ```ts
 export function shouldAutoDrainV4QueueHead(input: {
-  autoDrain: boolean;
-  dispatchState: "queued" | "reserved" | "promoting";
-  sessionBusy: boolean;
-  targetStatus: GoalStatus | null;
+  autoDrain: boolean
+  dispatchState: 'queued' | 'reserved' | 'promoting'
+  sessionBusy: boolean
+  targetStatus: GoalStatus | null
 }): boolean {
   return (
     input.autoDrain &&
-    input.dispatchState === "queued" &&
+    input.dispatchState === 'queued' &&
     !input.sessionBusy &&
-    (input.targetStatus === null || input.targetStatus === "complete")
-  );
+    (input.targetStatus === null || input.targetStatus === 'complete')
+  )
 }
 ```
 
@@ -778,12 +795,12 @@ if (runtimeStop?.kind === "stopped") {
 
 ### 4.4 三者对比的实质
 
-| 问题 | Claude | Codex | ZCode |
-|---|---|---|---|
-| 用户输入算不算打断？ | 不算，插进当前 turn | 不算，steer 进当前 turn | 算，goal 未完成就不消费 |
-| 用户能否直接改方向？ | 能（下一批次看到） | 能（下一采样看到） | 需 guide 模式或 send now |
-| 中断后 goal 会自己重启吗？ | — | **会** | 不会（已暂停） |
-| 停止的粒度 | turn | turn | goal + 队列一起冻结 |
+| 问题                       | Claude              | Codex                   | ZCode                    |
+| -------------------------- | ------------------- | ----------------------- | ------------------------ |
+| 用户输入算不算打断？       | 不算，插进当前 turn | 不算，steer 进当前 turn | 算，goal 未完成就不消费  |
+| 用户能否直接改方向？       | 能（下一批次看到）  | 能（下一采样看到）      | 需 guide 模式或 send now |
+| 中断后 goal 会自己重启吗？ | —                   | **会**                  | 不会（已暂停）           |
+| 停止的粒度                 | turn                | turn                    | goal + 队列一起冻结      |
 
 这背后是产品定位差异：Claude / Codex 把 agent 当成「一个在干活的人」，用户随时能拍肩膀补一句话；ZCode 把 goal 当成「一个有终态的任务」，任务没结束不掺新输入，要掺就得显式打断并接受 goal 暂停的后果。
 
@@ -793,11 +810,11 @@ if (runtimeStop?.kind === "stopped") {
 
 第 4 节讨论的是「下一轮」；这一节讨论「当前这一轮中途插话」。三家在这里的分层完全不同：
 
-| | 是否有独立的 guide 通道 | goal turn 内能否 guide | goal 语义影响 |
-|---|---|---|---|
-| Claude | 无用户选项，**工具批次边界自动 drain** 就是 guide | 能（等同普通 turn） | 预算计时继续，nudge 优先 |
-| Codex | `Steer` 是协议一级概念，`start_or_steer_turn` 自动判断 | **能**，goal turn 是 `TaskKind::Regular` | 同一 turn 内，用量继续计入 goal |
-| ZCode | `delivery: "guide" \| "queue"` 显式二选一 | **能，且绕过 goal 闸门** | verifier 阶段强制降级为 queue |
+|        | 是否有独立的 guide 通道                                | goal turn 内能否 guide                   | goal 语义影响                   |
+| ------ | ------------------------------------------------------ | ---------------------------------------- | ------------------------------- |
+| Claude | 无用户选项，**工具批次边界自动 drain** 就是 guide      | 能（等同普通 turn）                      | 预算计时继续，nudge 优先        |
+| Codex  | `Steer` 是协议一级概念，`start_or_steer_turn` 自动判断 | **能**，goal turn 是 `TaskKind::Regular` | 同一 turn 内，用量继续计入 goal |
+| ZCode  | `delivery: "guide" \| "queue"` 显式二选一              | **能，且绕过 goal 闸门**                 | verifier 阶段强制降级为 queue   |
 
 关键发现：**ZCode 的「goal 优先于用户」只对 queue 生效，guide 能绕过它。**
 
@@ -879,7 +896,7 @@ steer 进去的输入进 turn 级 `pending_input` 队列，`tasks/regular.rs:110
 唯一把 guide 显式建模成产品概念的一家。`contracts/src/interfaces/session.port.ts:43`：
 
 ```ts
-export type InputDelivery = "auto" | "start_turn" | "steer_active_turn";
+export type InputDelivery = 'auto' | 'start_turn' | 'steer_active_turn'
 ```
 
 v4 层缩成 `"guide" | "queue"`，由会话级配置 `followupMode` 决定默认值（默认 `"queue"`，`projection-state.ts:71`）。
@@ -888,14 +905,14 @@ v4 层缩成 `"guide" | "queue"`，由会话级配置 `followupMode` 决定默�
 
 ```ts
 // turn-tools.ts:290 —— 工具批次之后
-await drainInlineGuideForNextRequest(this, state);
+await drainInlineGuideForNextRequest(this, state)
 
 // turn-stop.ts:195 —— 纯文本收尾边界
 if (await drainInlineGuideForNextRequest(this, state)) {
   // 正常 text-only 是可续跑边界：assistant 已持久化，guide 以 user role 进入历史，
   // 保持同一 active turn 继续下一次 provider request，不改投 future queue。
-  state.turnMachine = new TurnMachineImpl(state.turnMachine.aggregateResults());
-  return "continue";
+  state.turnMachine = new TurnMachineImpl(state.turnMachine.aggregateResults())
+  return 'continue'
 }
 ```
 
@@ -908,11 +925,11 @@ return (
   this.activeTurn === activeTurn &&
   !this.permissionFullAccessPending &&
   !this.queueExternalDrainActive &&
-  !this.pendingInputReservations.has(pendingInput?.id ?? "") &&
-  pendingInput?.commandKind !== "sendGoalCommand" &&
-  pendingInput?.commandKind !== "compact" &&
-  pendingInputDelivery(pendingInput) === "guide"
-);
+  !this.pendingInputReservations.has(pendingInput?.id ?? '') &&
+  pendingInput?.commandKind !== 'sendGoalCommand' &&
+  pendingInput?.commandKind !== 'compact' &&
+  pendingInputDelivery(pendingInput) === 'guide'
+)
 ```
 
 **没有任何 goal 状态检查。** 所以在 guide 模式下，用户在 goal 续跑 turn 里发消息，行为跟 Codex 基本一致——并进当前 goal turn。
@@ -926,7 +943,7 @@ return (
 // assistant active turn；只看 phase=running 会在 guide 模式下尝试 steer，
 // core 此时没有 steerable activeTurn，导致用户输入既不进 queue 也不进历史。
 if (context.goalVerifying) {
-  return { mode: "enqueue", reasonCode: "goalVerifierAcceptsFutureInput" };
+  return { mode: 'enqueue', reasonCode: 'goalVerifierAcceptsFutureInput' }
 }
 ```
 
@@ -952,11 +969,11 @@ pendingInput.commandKind !== "compact" &&
 
 ### 5.4 三者对比的实质
 
-| | 轮次消息（queue） | 引导消息（guide） |
-|---|---|---|
-| Claude | goal 期间排队 → 纯文本收尾才下一轮 | 工具边界自动并入 |
-| Codex | goal 期间排队，但用户直接发就走 steer | 同左（没有区分） |
-| ZCode | **goal 未完成则冻结** | **绕过 goal 闸门，并入当前 turn** |
+|        | 轮次消息（queue）                     | 引导消息（guide）                 |
+| ------ | ------------------------------------- | --------------------------------- |
+| Claude | goal 期间排队 → 纯文本收尾才下一轮    | 工具边界自动并入                  |
+| Codex  | goal 期间排队，但用户直接发就走 steer | 同左（没有区分）                  |
+| ZCode  | **goal 未完成则冻结**                 | **绕过 goal 闸门，并入当前 turn** |
 
 ZCode 的设计最清晰：**队列表达「未来意图」，guide 表达「当前纠正」**。goal 闸门防的是前者（既防止自动续跑饿死用户输入，也防止用户输入打断目标），但同时给后者留了通道——用户想纠正方向随时可以，只要用 guide。
 
@@ -968,12 +985,12 @@ Claude 和 Codex 没有这个区分，所以它们选择了「一律并入」，
 
 ### 6.1 预算方向是根本分歧
 
-| | Claude | Codex / ZCode |
-|---|---|---|
-| 语义 | floor：目标是最低消费量 | cap：预算是配额上限 |
-| 未达标 | 系统强制继续（90% 阈值 + 注入 nudge） | 继续工作是常态，与预算无关 |
-| 达标/超支 | 停止 | 停止并改状态 |
-| 适用场景 | 包月不限量、想压榨产出 | 按次计费、防跑飞 |
+|           | Claude                                | Codex / ZCode              |
+| --------- | ------------------------------------- | -------------------------- |
+| 语义      | floor：目标是最低消费量               | cap：预算是配额上限        |
+| 未达标    | 系统强制继续（90% 阈值 + 注入 nudge） | 继续工作是常态，与预算无关 |
+| 达标/超支 | 停止                                  | 停止并改状态               |
+| 适用场景  | 包月不限量、想压榨产出                | 按次计费、防跑飞           |
 
 两套语义不可混在同一个字段里。Pidex 若要做"预算模式"，必须先定方向——它会反向决定状态机要不要 `budget_limited` 之外的第二个终态。
 
@@ -987,11 +1004,11 @@ Claude 和 Codex 没有这个区分，所以它们选择了「一律并入」，
 
 ### 6.3 续跑实现位点
 
-| | 实现 | 优势 | 代价 |
-|---|---|---|---|
-| Claude | query loop 内 `continue` | 最直接 | 无法和其他输入源仲裁 |
-| Codex | `start_turn_if_idle` 伪造 turn | 复用空闲调度 / 输入排队 | 依赖 thread 层 API |
-| ZCode | runtime command queue 内 loop | 与用户输入、后台通知共享"让位"语义 | 需要统一的 command queue |
+|        | 实现                           | 优势                               | 代价                     |
+| ------ | ------------------------------ | ---------------------------------- | ------------------------ |
+| Claude | query loop 内 `continue`       | 最直接                             | 无法和其他输入源仲裁     |
+| Codex  | `start_turn_if_idle` 伪造 turn | 复用空闲调度 / 输入排队            | 依赖 thread 层 API       |
+| ZCode  | runtime command queue 内 loop  | 与用户输入、后台通知共享"让位"语义 | 需要统一的 command queue |
 
 ZCode 的 `runtimeCommandQueue.hasPending()` 检查是这套设计的关键：自动续跑必须给用户输入让路，否则用户永远插不进去。
 
@@ -1030,47 +1047,47 @@ ZCode 两者都没有。没有 `blocked` 时，重复卡住只能靠 verifier �
 
 ### Claude Code
 
-| 路径 | 作用 |
-|---|---|
-| `src/query/tokenBudget.ts` | 续跑决策（阈值、递减收益早停） |
-| `src/utils/tokenBudget.ts` | 输入解析 + nudge 文案 |
-| `src/bootstrap/state.ts:720` | 预算内存状态 |
-| `src/query.ts:280,1308` | tracker 创建、续跑注入 |
-| `src/constants/prompts.ts:538` | 预算语义的系统提示 |
-| `src/QueryEngine.ts:972` | `--max-budget-usd` 硬闸 |
-| `src/services/api/claude.ts:479` | `task_budget` 服务端配额 |
-| `src/components/Spinner.tsx:263` | 预算进度 UI |
-| `src/screens/REPL.tsx:2893,2959` | 预算快照与 turn 结束提示 |
-| `src/cli/print.ts:1831` | PROACTIVE tick |
+| 路径                             | 作用                           |
+| -------------------------------- | ------------------------------ |
+| `src/query/tokenBudget.ts`       | 续跑决策（阈值、递减收益早停） |
+| `src/utils/tokenBudget.ts`       | 输入解析 + nudge 文案          |
+| `src/bootstrap/state.ts:720`     | 预算内存状态                   |
+| `src/query.ts:280,1308`          | tracker 创建、续跑注入         |
+| `src/constants/prompts.ts:538`   | 预算语义的系统提示             |
+| `src/QueryEngine.ts:972`         | `--max-budget-usd` 硬闸        |
+| `src/services/api/claude.ts:479` | `task_budget` 服务端配额       |
+| `src/components/Spinner.tsx:263` | 预算进度 UI                    |
+| `src/screens/REPL.tsx:2893,2959` | 预算快照与 turn 结束提示       |
+| `src/cli/print.ts:1831`          | PROACTIVE tick                 |
 
 ### Codex
 
-| 路径 | 作用 |
-|---|---|
-| `codex-rs/state/goals_migrations/0001_thread_goals.sql` | goal 主表 |
-| `codex-rs/state/goals_migrations/0002_*.sql` | 续跑延迟表 |
-| `codex-rs/ext/goal/src/spec.rs` | 三个工具定义 |
-| `codex-rs/ext/goal/src/runtime.rs:474` | 续跑启动 |
-| `codex-rs/ext/goal/src/accounting.rs` | token/时间记账、预算判定、终态清理 |
-| `codex-rs/ext/goal/src/steering.rs` | prompt 渲染（含 Plan 变体） |
-| `codex-rs/ext/goal/templates/goals/continuation.md` | 续跑 prompt（最重） |
-| `codex-rs/ext/goal/templates/goals/budget_limit.md` | 预算耗尽提示 |
-| `codex-rs/ext/goal/templates/goals/objective_updated.md` | 目标变更提示 |
-| `codex-rs/core/src/context/user_goal.rs` | 用户侧注入（超长省略、宿主标签） |
-| `codex-rs/config/src/config_toml.rs:753` | `[goals] max_goal_token_budget` |
-| `codex-rs/app-server-protocol/schema/typescript/v2/ThreadGoal*.ts` | RPC 协议 |
+| 路径                                                               | 作用                               |
+| ------------------------------------------------------------------ | ---------------------------------- |
+| `codex-rs/state/goals_migrations/0001_thread_goals.sql`            | goal 主表                          |
+| `codex-rs/state/goals_migrations/0002_*.sql`                       | 续跑延迟表                         |
+| `codex-rs/ext/goal/src/spec.rs`                                    | 三个工具定义                       |
+| `codex-rs/ext/goal/src/runtime.rs:474`                             | 续跑启动                           |
+| `codex-rs/ext/goal/src/accounting.rs`                              | token/时间记账、预算判定、终态清理 |
+| `codex-rs/ext/goal/src/steering.rs`                                | prompt 渲染（含 Plan 变体）        |
+| `codex-rs/ext/goal/templates/goals/continuation.md`                | 续跑 prompt（最重）                |
+| `codex-rs/ext/goal/templates/goals/budget_limit.md`                | 预算耗尽提示                       |
+| `codex-rs/ext/goal/templates/goals/objective_updated.md`           | 目标变更提示                       |
+| `codex-rs/core/src/context/user_goal.rs`                           | 用户侧注入（超长省略、宿主标签）   |
+| `codex-rs/config/src/config_toml.rs:753`                           | `[goals] max_goal_token_budget`    |
+| `codex-rs/app-server-protocol/schema/typescript/v2/ThreadGoal*.ts` | RPC 协议                           |
 
 ### ZCode
 
-| 路径 | 作用 |
-|---|---|
-| `apps/zcode-cli/packages/contracts/src/tools/target.ts` | 数据模型 + 全部 prompt 构造器 |
-| `apps/zcode-cli/packages/cli/src/command-center/handlers/goal.ts` | `/goal` 命令 |
-| `apps/zcode-cli/packages/core/src/tool/handlers/target.ts` | `GoalRead` 只读工具 |
-| `apps/zcode-cli/packages/core/src/runtime/methods/target.ts` | 候选判定、续跑执行、用量记账 |
-| `apps/zcode-cli/packages/core/src/runtime/methods/target-continuation-loop.ts` | 统一 driver |
-| `apps/zcode-cli/packages/core/src/runtime/methods/target-completion-verification.ts` | verifier 调用与解析 |
-| `apps/zcode-cli/packages/core/src/runtime/methods/goal-state-reminder.ts` | goal 变更提醒的延迟物化 |
-| `apps/zcode-cli/packages/adapters/src/storage/session-target.ts` | SQL 层的预算判定与用量累加 |
-| `apps/zcode-cli/docs/design/v2/loop/runtime-active-target-loop-plan.md` | 续跑 loop 收敛设计 |
-| `apps/zcode-cli/docs/design/v2/loop/goal-background-task-notification-plan.md` | 后台任务与 goal 的交互 |
+| 路径                                                                                 | 作用                          |
+| ------------------------------------------------------------------------------------ | ----------------------------- |
+| `apps/zcode-cli/packages/contracts/src/tools/target.ts`                              | 数据模型 + 全部 prompt 构造器 |
+| `apps/zcode-cli/packages/cli/src/command-center/handlers/goal.ts`                    | `/goal` 命令                  |
+| `apps/zcode-cli/packages/core/src/tool/handlers/target.ts`                           | `GoalRead` 只读工具           |
+| `apps/zcode-cli/packages/core/src/runtime/methods/target.ts`                         | 候选判定、续跑执行、用量记账  |
+| `apps/zcode-cli/packages/core/src/runtime/methods/target-continuation-loop.ts`       | 统一 driver                   |
+| `apps/zcode-cli/packages/core/src/runtime/methods/target-completion-verification.ts` | verifier 调用与解析           |
+| `apps/zcode-cli/packages/core/src/runtime/methods/goal-state-reminder.ts`            | goal 变更提醒的延迟物化       |
+| `apps/zcode-cli/packages/adapters/src/storage/session-target.ts`                     | SQL 层的预算判定与用量累加    |
+| `apps/zcode-cli/docs/design/v2/loop/runtime-active-target-loop-plan.md`              | 续跑 loop 收敛设计            |
+| `apps/zcode-cli/docs/design/v2/loop/goal-background-task-notification-plan.md`       | 后台任务与 goal 的交互        |
