@@ -52,14 +52,8 @@ const SPRING = { type: 'spring', stiffness: 380, damping: 34, mass: 1 } as const
 const GAP = 4
 const PEEK = 10
 
-export function ToastStack({
-  store = toastStore,
-  embedded = false,
-}: {
-  store?: typeof toastStore
-  embedded?: boolean
-} = {}): React.ReactNode {
-  const toasts = useStore(store, (state) => state.toasts)
+export function ToastStack(): React.ReactNode {
+  const toasts = useStore(toastStore, (state) => state.toasts)
   const reducedMotion = usePrefersReducedMotion()
   const [heights, setHeights] = useState<Record<string, number>>({})
   const [isHovered, setIsHovered] = useState(false)
@@ -77,9 +71,9 @@ export function ToastStack({
     }
     if (toasts.length === 0) {
       setIsHovered(false)
-      store.setHovered(false)
+      toastStore.setHovered(false)
     }
-  }, [toasts, store])
+  }, [toasts])
 
   const isExpanded = (isHovered || isFocused) && toasts.length > 1
   const heightArray = toasts.map((t) => heights[t.id] ?? 52)
@@ -126,7 +120,7 @@ export function ToastStack({
       data-fade-top={(isOverflowing && fadeTop) || undefined}
       data-fade-bottom={(isOverflowing && fadeBottom) || undefined}
       onScroll={updateScrollEdges}
-      className={`tst toast-stack-container ${embedded ? 'tw:relative' : 'tw:absolute tw:top-2 tw:left-1/2 tw:-translate-x-1/2'} tw:z-toast tw:w-[min(420px,calc(100%-1rem))] tw:max-h-[min(calc(100vh-2rem),720px)] tw:[-webkit-app-region:no-drag] ${
+      className={`tst toast-stack-container tw:absolute tw:top-2 tw:left-1/2 tw:-translate-x-1/2 tw:z-toast tw:w-[min(420px,calc(100%-1rem))] tw:max-h-[min(calc(100vh-2rem),720px)] tw:[-webkit-app-region:no-drag] ${
         isOverflowing ? 'tw:overflow-y-auto tw:overflow-x-hidden' : 'tw:overflow-visible'
       }`}
       style={{
@@ -136,22 +130,22 @@ export function ToastStack({
       aria-label="通知列表"
       onPointerOver={() => {
         setIsHovered(true)
-        store.setHovered(true)
+        toastStore.setHovered(true)
       }}
       onPointerOut={(e) => {
         if (!containsRelatedTarget(containerRef.current, e.relatedTarget)) {
           setIsHovered(false)
-          store.setHovered(false)
+          toastStore.setHovered(false)
         }
       }}
       onFocus={() => {
         setIsFocused(true)
-        store.setHovered(true)
+        toastStore.setHovered(true)
       }}
       onBlur={(e) => {
         if (!containsRelatedTarget(containerRef.current, e.relatedTarget)) {
           setIsFocused(false)
-          store.setHovered(false)
+          toastStore.setHovered(false)
         }
       }}
     >
@@ -172,9 +166,9 @@ export function ToastStack({
                 isExpanded={isExpanded}
                 reducedMotion={reducedMotion}
                 onHeightChange={handleHeightChange}
-                onDismiss={() => store.dismiss(toastItem.id)}
+                onDismiss={() => toastStore.dismiss(toastItem.id)}
                 onActivate={() => {
-                  void store.activate(toastItem.id, setDetails).catch((error: unknown) => {
+                  void toastStore.activate(toastItem.id, setDetails).catch((error: unknown) => {
                     window.dispatchEvent(new CustomEvent('desktop:error', { detail: error }))
                   })
                 }}
