@@ -53,7 +53,7 @@ pwsh -NoProfile -File scripts/smoke-installed-win-x64.ps1
 
 ## 从源码开发
 
-环境要求：Windows、Git、Bun 1.3.14。
+环境要求：Windows、Git、Bun 1.4.4。
 
 ```powershell
 git clone https://github.com/codepilotx-dev/Pidex.git
@@ -97,7 +97,7 @@ bun run test:plan -- --live
 
 ## 架构概览
 
-Pidex 是一个 Windows-first TypeScript monorepo，统一使用 Bun 1.3.14。
+Pidex 是一个 Windows-first TypeScript monorepo，统一使用 Bun 1.4.4。
 
 ```text
 apps/

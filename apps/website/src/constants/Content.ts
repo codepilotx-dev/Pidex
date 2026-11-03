@@ -274,6 +274,6 @@ export const FAQS = [
   {
     question: 'How can I install and run Pidex today?',
     answer:
-      'Because Pidex is currently in Beta, official distributions are provided as source code packages via GitHub Releases. You clone the repository or download the source archive, install dependencies with Bun (1.3.14), and build the Windows installer locally via "bun run package:win" or run in dev mode.',
+      'Because Pidex is currently in Beta, official distributions are provided as source code packages via GitHub Releases. You clone the repository or download the source archive, install dependencies with Bun (1.4.4), and build the Windows installer locally via "bun run package:win" or run in dev mode.',
   },
 ]

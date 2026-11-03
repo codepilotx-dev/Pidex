@@ -21,7 +21,7 @@
 
 ## 仓库与多客户端边界
 
-- Pidex 是 Windows-first TypeScript monorepo，统一使用 Bun `1.3.14`。未经明确架构决策，禁止新增、合并、删除或重新划分 workspace（当前无独立 CLI workspace）。
+- Pidex 是 Windows-first TypeScript monorepo，统一使用 Bun `1.4.4`。未经明确架构决策，禁止新增、合并、删除或重新划分 workspace（当前无独立 CLI workspace）。
 - Workspace 职责划分：
   - `apps/agent/`：客户端共享的会话、存储、Provider、模型、工具、权限、审批、编排、Git、Review、Skills、Plugins、MCP、配置、事件、RPC 与 projection 核心能力。
   - `apps/desktop/electron/`：Electron 主进程、preload、窗口、Agent sidecar、Windows 打包与真实 OS 集成。
