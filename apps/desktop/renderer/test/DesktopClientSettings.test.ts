@@ -2266,6 +2266,28 @@ test('聊天宽度经过桌面 bridge 保存并在新 client 中读取', async (
   }
 })
 
+test('上下文展示方式经过桌面 bridge 保存并在新 client 中读取', async () => {
+  const { defaultDesktopStoredSettings } = await import('../shared/SettingsSchema.js')
+  let stored = defaultDesktopStoredSettings()
+  const environment = {
+    window: {
+      DesktopBridge: {
+        getDesktopSettings: async () => stored,
+        saveDesktopSettings: async (settings: typeof stored) => {
+          stored = settings
+          return stored
+        },
+      },
+    },
+  }
+  const client = createDesktopClient(environment)
+  for (const contextUsageView of ['field', 'bar'] as const) {
+    await client.saveDesktopSettings({ ...stored, contextUsageView })
+    const reopened = createDesktopClient(environment)
+    expect((await reopened.getDesktopSettings()).contextUsageView).toBe(contextUsageView)
+  }
+})
+
 test('日程会话显示过滤经过桌面 bridge 保存并在新 client 中读取', async () => {
   const { defaultDesktopStoredSettings, normalizeDesktopStoredSettings } =
     await import('../shared/SettingsSchema.js')

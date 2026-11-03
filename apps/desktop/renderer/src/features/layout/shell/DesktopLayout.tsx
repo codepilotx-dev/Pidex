@@ -379,6 +379,9 @@ export function DesktopLayout(): React.ReactNode {
   const subscribedShowContextUsage = useDesktopRuntimeSettingsField(
     (s) => s.values.showContextUsage,
   )
+  const subscribedContextUsageView = useDesktopRuntimeSettingsField(
+    (s) => s.values.contextUsageView,
+  )
   const subscribedDiffMarkerStyle = useDesktopRuntimeSettingsField((s) => s.values.diffMarkerStyle)
   const subscribedReviewView = useDesktopRuntimeSettingsField((s) => s.values.reviewView)
   const subscribedGitBranchPrefix = useDesktopRuntimeSettingsField((s) => s.values.gitBranchPrefix)
@@ -436,6 +439,7 @@ export function DesktopLayout(): React.ReactNode {
         providerID: subscribedProviderID,
         providerBaseURL: subscribedProviderBaseURL,
         showContextUsage: subscribedShowContextUsage,
+        contextUsageView: subscribedContextUsageView,
         diffMarkerStyle: subscribedDiffMarkerStyle,
         reviewView: subscribedReviewView,
         gitBranchPrefix: subscribedGitBranchPrefix,
@@ -479,6 +483,7 @@ export function DesktopLayout(): React.ReactNode {
       subscribedProviderID,
       subscribedProviderBaseURL,
       subscribedShowContextUsage,
+      subscribedContextUsageView,
       subscribedDiffMarkerStyle,
       subscribedReviewView,
       subscribedGitBranchPrefix,
@@ -521,6 +526,7 @@ export function DesktopLayout(): React.ReactNode {
       providerID: defaultProviderID,
       providerBaseURL,
       showContextUsage,
+      contextUsageView,
       diffMarkerStyle,
       reviewView,
       gitBranchPrefix,
@@ -3726,6 +3732,7 @@ export function DesktopLayout(): React.ReactNode {
             showThinkingOptions,
             deepSeekThinkingControls,
             showContextUsage,
+            contextUsageView,
             contextUsage: isConversationRoute ? null : contextUsage,
             modelPresets: selectedProviderModelPresets,
             providerOptions: providerModelOptions,
@@ -3811,6 +3818,7 @@ export function DesktopLayout(): React.ReactNode {
       showThinkingOptions,
       deepSeekThinkingControls,
       showContextUsage,
+      contextUsageView,
       contextUsage,
       selectedProviderModelPresets,
       providerModelOptions,

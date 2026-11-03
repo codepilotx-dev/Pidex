@@ -192,6 +192,7 @@ export function defaultDesktopStoredSettings(): DesktopStoredSettings {
     providerID: '',
     providerBaseURL: '',
     showContextUsage: true,
+    contextUsageView: 'bar',
     defaultOpenTargetId: 'auto',
     gitBranchPrefix: 'pidex/',
     gitPrMergeMethod: 'merge',
@@ -397,6 +398,7 @@ export function normalizeDesktopStoredSettings(value: unknown): DesktopStoredSet
       typeof parsed.showContextUsage === 'boolean'
         ? parsed.showContextUsage
         : defaults.showContextUsage,
+    contextUsageView: parsed.contextUsageView === 'field' ? 'field' : defaults.contextUsageView,
     defaultOpenTargetId: stringOrDefault(parsed.defaultOpenTargetId, defaults.defaultOpenTargetId),
     gitBranchPrefix: stringOrDefault(parsed.gitBranchPrefix, defaults.gitBranchPrefix),
     worktreeRoot: stringOrDefault(parsed.worktreeRoot, defaults.worktreeRoot),

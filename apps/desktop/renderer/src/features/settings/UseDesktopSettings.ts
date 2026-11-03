@@ -886,6 +886,7 @@ function useDesktopSettingsState(
       providerID,
       providerBaseURL,
       showContextUsage,
+      contextUsageView: committedDraftValues.contextUsageView,
       defaultOpenTargetId,
       gitBranchPrefix,
       gitPrMergeMethod,
@@ -942,6 +943,7 @@ function useDesktopSettingsState(
     [
       committedDraftValues.gitBoardState,
       committedDraftValues.language,
+      committedDraftValues.contextUsageView,
       committedDraftValues.sidebarLayout,
       committedDraftValues.worktreeRoot,
       committedDraftValues.worktreeFetchUpstream,

@@ -152,7 +152,7 @@ describe('composer surface variant', () => {
     expect(html).toContain('chip-dot tw:size-3')
   })
 
-  test('Composer 圆环保留纵向来源、缓存和读写明细布局', () => {
+  test('Composer 圆环默认展示分段条，分类只显示名称，缓存明细独立', () => {
     const html = renderToStaticMarkup(
       <ContextUsagePanel
         contextUsage={{
@@ -170,13 +170,25 @@ describe('composer surface variant', () => {
         }}
       />,
     )
-    expect(html.split('context-usage-panel-segment').length - 1).toBe(2)
-    expect(html).toContain('context-usage-panel-divider')
-    expect(html.split('context-usage-panel-detail-item').length - 1).toBe(3)
-    expect(html.split('context-usage-panel-detail-chip').length - 1).toBe(3)
+    expect(html).not.toContain('class="context-meter-dot"')
+    expect(html.split('class="context-meter-segment"').length - 1).toBe(3)
+    expect(html).toContain('aria-label="总窗口 1M tokens"')
+    expect(html).not.toContain('<details')
+    expect(html).not.toContain('预算详情')
+    expect(html).toContain('context-meter-limit')
+    expect(html).toContain('暂无压缩阈值')
+    expect(html).toContain('aria-label="用量指标"')
+    expect(html).not.toContain('aria-label="展示方式"')
+    expect(html).toContain('role="tabpanel"')
+    expect(html).not.toContain('分类按字符占比分配')
+    expect(html).not.toContain('context-usage-panel-divider')
+    expect(html.split('context-usage-panel-detail-item').length - 1).toBe(0)
+    expect(html.split('context-usage-panel-detail-chip').length - 1).toBe(0)
     expect(html).toContain('平均缓存命中率')
-    expect(html).toContain('59.7%')
-    expect(html).toContain('未缓存')
+    expect(html).toContain('aria-label="上下文用量"')
+    expect(html).toContain('aria-label="平均缓存命中率"')
+    expect(html).not.toContain('59.7%')
+    expect(html).not.toContain('未缓存')
     expect(html).not.toContain('data-usage-layout="title-bar-value"')
     expect(html).not.toContain('data-usage-bar-source')
   })

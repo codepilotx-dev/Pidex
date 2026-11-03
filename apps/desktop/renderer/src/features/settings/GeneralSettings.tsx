@@ -83,6 +83,7 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
   const subscribedEnableFullAccessPermissionMode = useDesktopSettingsDraftValue(
     'enableFullAccessPermissionMode',
   )
+  const contextUsageView = useDesktopSettingsDraftValue('contextUsageView')
   const subscribedShowContextUsage = useDesktopSettingsDraftValue('showContextUsage')
   const subscribedDefaultOpenTargetId = useDesktopSettingsDraftValue('defaultOpenTargetId')
   const subscribedTerminalProfileId = useDesktopSettingsDraftValue('terminalProfileId')
@@ -375,9 +376,7 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
     <SettingsContentArea className="">
       <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
-            常规
-          </h2>
+          <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">常规</h2>
         </div>
 
         <SettingsSection title="权限">
@@ -686,6 +685,25 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
                 onChange={setShowContextUsage}
                 ariaLabelledby={aria.labelledby}
                 ariaDescribedby={aria.describedby}
+              />
+            )}
+          />
+          <SettingsRow
+            title="上下文用量展示方式"
+            description="选择用量浮层中的图形样式"
+            autoSave
+            control={() => (
+              <SegmentedControl
+                value={contextUsageView}
+                ariaLabel="上下文用量展示方式"
+                options={[
+                  { value: 'bar', label: '分段条' },
+                  { value: 'field', label: '点阵' },
+                ]}
+                onChange={(value) => {
+                  draft.setValue('contextUsageView', value)
+                  draft.autoSave()
+                }}
               />
             )}
           />

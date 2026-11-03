@@ -152,6 +152,7 @@ import {
 import type { DesktopSessionGroup } from '../../../services/desktop-client/Types.js'
 import { formatCompactNumber } from '../../../utils/UsageFormatters.js'
 import { cx } from '../../../utils/Cx.js'
+import { containsRelatedTarget } from '../../../utils/DomTargets.js'
 
 type Option<T extends string> = {
   value: T
@@ -312,6 +313,7 @@ type Props = {
   showThinkingOptions: boolean
   deepSeekThinkingControls: boolean
   showContextUsage: boolean
+  contextUsageView?: 'bar' | 'field'
   contextUsage: DesktopContextUsage | null
   modelPresets: ModelPreset[]
   providerOptions: ProviderModelOption[]
@@ -450,6 +452,7 @@ export function ComposerCard({
   showThinkingOptions,
   deepSeekThinkingControls,
   showContextUsage,
+  contextUsageView = 'bar',
   contextUsage,
   modelPresets,
   providerOptions,
@@ -562,6 +565,7 @@ export function ComposerCard({
   const [statusPanelOpen, setStatusPanelOpen] = useState(false)
   const [contextPreviewOpen, setContextPreviewOpen] = useState(false)
   const contextPreviewRef = useRef<HTMLDivElement>(null)
+  const contextPreviewTriggerRef = useRef<HTMLButtonElement>(null)
   const [isStopping, setIsStopping] = useState(false)
   const stoppingRef = useRef(false)
   // 圆环在无统计或关闭展示时会卸载，同时丢弃预览状态，避免数据回来后浮层无故弹出。
@@ -2038,24 +2042,55 @@ export function ComposerCard({
           <div ref={toolbarRightRef} className={TOOLBAR_RIGHT_CLASS}>
             {showRing && footerFit.showRing ? (
               <Popover.Root open={contextPreviewOpen} onOpenChange={setContextPreviewOpen}>
-                <Popover.Anchor asChild>
-                  <span
+                <Popover.Trigger asChild>
+                  <button
+                    ref={contextPreviewTriggerRef}
+                    type="button"
                     aria-label={`上下文窗口使用量：已用 ${usedPercent}%，剩余 ${Math.max(0, 100 - usedPercent)}%`}
-                    className="context-usage-chip tw:group tw:relative tw:inline-flex tw:size-3 tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text-soft"
-                    role="img"
-                    tabIndex={0}
+                    className="context-usage-chip tw:group tw:relative tw:inline-flex tw:size-3 tw:shrink-0 tw:cursor-pointer tw:items-center tw:justify-center tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text-soft tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setContextPreviewOpen(true)
+                      requestAnimationFrame(() =>
+                        contextPreviewRef.current
+                          ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+                          ?.focus(),
+                      )
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === 'ArrowDown' ||
+                        (event.key === 'Tab' && !event.shiftKey && contextPreviewOpen)
+                      ) {
+                        event.preventDefault()
+                        setContextPreviewOpen(true)
+                        requestAnimationFrame(() =>
+                          contextPreviewRef.current
+                            ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+                            ?.focus(),
+                        )
+                      }
+                    }}
                     onPointerEnter={() => setContextPreviewOpen(true)}
                     onPointerLeave={(event) => {
-                      if (!contextPreviewRef.current?.contains(event.relatedTarget as Node | null))
+                      if (
+                        !containsRelatedTarget(
+                          contextPreviewRef.current,
+                          event.relatedTarget,
+                        ) &&
+                        !contextPreviewRef.current?.contains(
+                          event.currentTarget.ownerDocument.activeElement,
+                        ) &&
+                        event.currentTarget.ownerDocument.activeElement !== event.currentTarget
+                      )
                         setContextPreviewOpen(false)
                     }}
                     onFocus={() => {
                       setRingHeld(true)
-                      setContextPreviewOpen(true)
                     }}
                     onBlur={(event) => {
                       setRingHeld(false)
-                      if (!contextPreviewRef.current?.contains(event.relatedTarget))
+                      if (!containsRelatedTarget(contextPreviewRef.current, event.relatedTarget))
                         setContextPreviewOpen(false)
                     }}
                   >
@@ -2079,26 +2114,41 @@ export function ComposerCard({
                         transform={`rotate(-90 ${CONTEXT_RING_VIEWBOX / 2} ${CONTEXT_RING_VIEWBOX / 2})`}
                       />
                     </svg>
-                  </span>
-                </Popover.Anchor>
+                  </button>
+                </Popover.Trigger>
                 <Popover.Portal>
                   <Popover.Content
                     ref={contextPreviewRef}
-                    size="md"
+                    size="auto"
                     side="top"
                     align="end"
                     sideOffset={4}
                     aria-label="上下文窗口使用量"
                     onOpenAutoFocus={(event) => event.preventDefault()}
-                    onCloseAutoFocus={(event) => event.preventDefault()}
                     onPointerEnter={() => setContextPreviewOpen(true)}
-                    onPointerLeave={() => setContextPreviewOpen(false)}
+                    onPointerLeave={(event) => {
+                      if (
+                        !contextPreviewRef.current?.contains(
+                          event.currentTarget.ownerDocument.activeElement,
+                        )
+                      )
+                        setContextPreviewOpen(false)
+                    }}
+                    onBlur={(event) => {
+                      if (
+                        !containsRelatedTarget(event.currentTarget, event.relatedTarget) &&
+                        event.relatedTarget !== contextPreviewTriggerRef.current
+                      )
+                        setContextPreviewOpen(false)
+                    }}
                     className="context-usage-popover tw:z-tooltip tw:overflow-visible tw:text-left tw:whitespace-normal tw:before:absolute tw:before:inset-x-0 tw:before:h-2 tw:before:content-[''] tw:data-[side=top]:before:top-full tw:data-[side=bottom]:before:bottom-full"
-                    role="tooltip"
+                    role="dialog"
                   >
                     <ContextUsagePanel
                       contextUsage={contextUsage}
+                      view={contextUsageView}
                       maxContextTokens={maxContextTokens}
+                      modelContextWindow={selectedModelMetadata?.contextWindow}
                     />
                   </Popover.Content>
                 </Popover.Portal>

@@ -82,4 +82,31 @@ describe('SegmentedControl tabs', () => {
     expect(html).toContain('tw:h-9')
     expect(html).toContain('tw:rounded-full')
   })
+
+  test('supports options with tooltip and ariaLabel', () => {
+    const html = renderToStaticMarkup(
+      <SegmentedControl
+        ariaLabel="图标切换"
+        onChange={() => {}}
+        options={[
+          {
+            value: 'first',
+            ariaLabel: '第一项',
+            tooltip: '第一项提示',
+            label: <span>1</span>,
+          },
+          {
+            value: 'second',
+            ariaLabel: '第二项',
+            tooltip: '第二项提示',
+            label: <span>2</span>,
+          },
+        ]}
+        value="first"
+      />,
+    )
+
+    expect(html).toContain('aria-label="第一项"')
+    expect(html).toContain('aria-label="第二项"')
+  })
 })

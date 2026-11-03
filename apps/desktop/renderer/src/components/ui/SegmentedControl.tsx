@@ -1,13 +1,18 @@
 import { useRef } from 'react'
 import type React from 'react'
 import * as ToggleGroup from '@radix-ui/react-toggle-group'
+import { Tooltip } from './Tooltip.js'
 import { cx } from '../../utils/Cx.js'
 
-type Option<T extends string> = {
+export type SegmentedControlOption<T extends string> = {
   value: T
   label: React.ReactNode
+  ariaLabel?: string
+  tooltip?: React.ReactNode
   disabled?: boolean
 }
+
+type Option<T extends string> = SegmentedControlOption<T>
 
 export type SegmentedControlSize = 'xs' | 'sm' | 'md' | 'lg'
 export type SegmentedControlShape = 'default' | 'pill'
@@ -131,16 +136,29 @@ export function SegmentedControl<T extends string>({
         type="single"
         value={value}
       >
-        {options.map((option) => (
-          <ToggleGroup.Item
-            className={itemClassName}
-            disabled={option.disabled}
-            key={option.value}
-            value={option.value}
-          >
-            {option.label}
-          </ToggleGroup.Item>
-        ))}
+        {options.map((option) => {
+          const resolvedAriaLabel =
+            option.ariaLabel ?? (typeof option.label === 'string' ? option.label : undefined)
+          const item = (
+            <ToggleGroup.Item
+              aria-label={resolvedAriaLabel}
+              className={itemClassName}
+              disabled={option.disabled}
+              key={option.value}
+              value={option.value}
+            >
+              {option.label}
+            </ToggleGroup.Item>
+          )
+          if (option.tooltip) {
+            return (
+              <Tooltip content={option.tooltip} key={option.value} side="top">
+                {item}
+              </Tooltip>
+            )
+          }
+          return item
+        })}
       </ToggleGroup.Root>
     )
   }
@@ -170,9 +188,12 @@ export function SegmentedControl<T extends string>({
     >
       {options.map((option, index) => {
         const selected = option.value === value
-        return (
+        const resolvedAriaLabel =
+          option.ariaLabel ?? (typeof option.label === 'string' ? option.label : undefined)
+        const tabButton = (
           <button
             aria-controls={getPanelId?.(option.value)}
+            aria-label={resolvedAriaLabel}
             aria-selected={selected}
             className={itemClassName}
             disabled={option.disabled}
@@ -192,6 +213,14 @@ export function SegmentedControl<T extends string>({
             {option.label}
           </button>
         )
+        if (option.tooltip) {
+          return (
+            <Tooltip content={option.tooltip} key={option.value} side="top">
+              {tabButton}
+            </Tooltip>
+          )
+        }
+        return tabButton
       })}
     </div>
   )

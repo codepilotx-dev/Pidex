@@ -671,3 +671,14 @@ test('活动日程筛选默认关闭，独立于普通侧栏并保留显式偏�
   expect(saved.sidebarShowScheduledSessions).toBe(false)
   expect(createSidebarStateResetPatch(saved).sidebarActivityShowScheduled).toBe(false)
 })
+
+test('上下文展示方式默认分段条，点阵往返保留，无效值回退默认', () => {
+  expect(defaultDesktopStoredSettings().contextUsageView).toBe('bar')
+  expect(normalizeDesktopStoredSettings({}).contextUsageView).toBe('bar')
+  expect(normalizeDesktopStoredSettings({ contextUsageView: 'field' }).contextUsageView).toBe(
+    'field',
+  )
+  expect(
+    normalizeDesktopStoredSettings({ contextUsageView: 'invalid' as never }).contextUsageView,
+  ).toBe('bar')
+})

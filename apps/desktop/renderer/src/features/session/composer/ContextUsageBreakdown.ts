@@ -91,3 +91,86 @@ export function formatCacheHitRate(hitRate: number | null | undefined): string |
   if (hitRate === null || hitRate === undefined || !Number.isFinite(hitRate)) return null
   return formatPercentValue(Math.max(0, Math.min(1, hitRate)))
 }
+
+/** 点阵先确定已用点数，再以最大余数分配分类，避免独立四舍五入造成总量漂移。 */
+export function buildContextUsageDotOwners(
+  segments: readonly ContextUsageBreakdownSegment[],
+  usedRatio: number,
+): (string | null)[] {
+  const used = Math.round(
+    (Number.isFinite(usedRatio) ? Math.min(1, Math.max(0, usedRatio)) : 0) * 200,
+  )
+  if (segments.length === 0)
+    return Array.from({ length: 200 }, (_, i) => (i < used ? 'used' : null))
+  const allocations = segments.map((segment, index) => ({
+    index,
+    count: Math.floor(segment.percent * used),
+    remainder: (segment.percent * used) % 1,
+  }))
+  const left = used - allocations.reduce((sum, entry) => sum + entry.count, 0)
+  const ranked = [...allocations].sort((a, b) => b.remainder - a.remainder || a.index - b.index)
+  for (let i = 0; i < left; i++) ranked[i]!.count++
+  const owners = allocations.flatMap((entry) =>
+    Array<string>(entry.count).fill(segments[entry.index]!.source),
+  )
+  return [...owners, ...Array<null>(200 - used).fill(null)]
+}
+
+/** 来源身份决定颜色，排序及用量变化不会换色；只消费现有主题图表语义。 */
+export const CONTEXT_USAGE_SOURCE_COLORS: Record<ContextUsageBreakdownSource, string> = {
+  messages: 'var(--cpx-sys-color-charts-cyan)',
+  system_prompt: 'var(--cpx-sys-color-charts-red)',
+  system_tools: 'var(--cpx-sys-color-charts-purple)',
+  mcp_tools: 'var(--cpx-sys-color-charts-orange)',
+  skills: 'var(--cpx-sys-color-charts-blue)',
+  memory: 'var(--cpx-sys-color-charts-green)',
+  project: 'var(--cpx-sys-color-charts-yellow)',
+  other: 'var(--cpx-sys-color-fg-tertiary)',
+}
+/**
+ * 为进度条各分段分配视觉保底最小比例，避免极小用量（如 < 1%）因宽度过窄（< 2px）
+ * 导致在视觉上完全无法辨识，或因 clip-path 缝隙裁切不可见且无法悬停。
+ *
+ * 保证分段比例之和严格等于总预算 totalRatio，多占用的保底宽度从较大分段等比扣除。
+ */
+export function ensureMinSegmentRatios<T extends { ratio: number }>(
+  items: readonly T[],
+  totalRatio: number,
+  minRatio = 0.024,
+): T[] {
+  if (items.length <= 1 || totalRatio <= 0) return [...items]
+
+  const visibleItems = items.filter((item) => item.ratio > 0)
+  if (visibleItems.length === 0) return [...items]
+
+  const capMin = Math.min(minRatio, (totalRatio / visibleItems.length) * 0.5)
+  if (capMin <= 0) return [...items]
+
+  const needsBoost = visibleItems.some((item) => item.ratio < capMin)
+  if (!needsBoost) return [...items]
+
+  let remainingBudget = totalRatio
+  let flexibleSum = 0
+
+  const preAdjusted = items.map((item) => {
+    if (item.ratio <= 0) return { item, boosted: false, ratio: 0 }
+    if (item.ratio < capMin) {
+      remainingBudget -= capMin
+      return { item, boosted: true, ratio: capMin }
+    }
+    flexibleSum += item.ratio
+    return { item, boosted: false, ratio: item.ratio }
+  })
+
+  if (flexibleSum > 0 && remainingBudget > 0) {
+    const scale = remainingBudget / flexibleSum
+    return preAdjusted.map(({ item, boosted, ratio }) => {
+      return {
+        ...item,
+        ratio: boosted ? ratio : ratio * scale,
+      }
+    })
+  }
+
+  return [...items]
+}

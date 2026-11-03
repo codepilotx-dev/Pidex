@@ -1020,6 +1020,7 @@ export type DesktopStoredSettings = {
   providerID: ModelProviderID
   providerBaseURL: string
   showContextUsage: boolean
+  contextUsageView: 'bar' | 'field'
   defaultOpenTargetId: string
   gitBranchPrefix: string
   gitPrMergeMethod: 'merge' | 'squash'

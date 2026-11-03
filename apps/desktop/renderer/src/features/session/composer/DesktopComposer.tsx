@@ -106,6 +106,7 @@ export type DesktopComposerProps = {
   showThinkingOptions: boolean
   deepSeekThinkingControls: boolean
   showContextUsage: boolean
+  contextUsageView?: 'bar' | 'field'
   contextUsage: DesktopContextUsage | null
   modelPresets: ModelPreset[]
   providerOptions: ProviderModelOption[]
@@ -225,6 +226,7 @@ export function DesktopComposer({
   showThinkingOptions,
   deepSeekThinkingControls,
   showContextUsage,
+  contextUsageView = 'bar',
   contextUsage,
   modelPresets,
   providerOptions,
@@ -487,6 +489,7 @@ export function DesktopComposer({
         showThinkingOptions={showThinkingOptions}
         deepSeekThinkingControls={deepSeekThinkingControls}
         showContextUsage={showContextUsage}
+        contextUsageView={contextUsageView}
         contextUsage={contextUsage}
         modelPresets={modelPresets}
         providerOptions={providerOptions}

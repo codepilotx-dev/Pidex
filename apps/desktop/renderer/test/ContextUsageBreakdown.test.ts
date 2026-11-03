@@ -1,11 +1,34 @@
 import { describe, expect, test } from 'bun:test'
 import {
   buildContextUsageBarSegments,
+  buildContextUsageDotOwners,
   buildContextUsageBreakdownSegments,
+  ensureMinSegmentRatios,
   formatCacheHitRate,
 } from '../src/features/session/composer/ContextUsageBreakdown.js'
 
 describe('上下文来源占比', () => {
+  test('点阵以最大余数补齐已用点数，空数据与极值始终保留 200 点', () => {
+    const segments = buildContextUsageBreakdownSegments([
+      { source: 'messages', chars: 1 },
+      { source: 'skills', chars: 1 },
+      { source: 'memory', chars: 1 },
+    ])
+    const owners = buildContextUsageDotOwners(segments, 0.14)
+    expect(owners).toHaveLength(200)
+    expect(owners.filter((owner) => owner !== null)).toHaveLength(28)
+    expect(owners.filter((owner) => owner === 'messages')).toHaveLength(10)
+    expect(owners.filter((owner) => owner === 'skills')).toHaveLength(9)
+    expect(owners.filter((owner) => owner === 'memory')).toHaveLength(9)
+    expect(buildContextUsageDotOwners(segments, 0).every((owner) => owner === null)).toBe(true)
+    expect(buildContextUsageDotOwners(segments, 1).filter(Boolean)).toHaveLength(200)
+    expect(buildContextUsageDotOwners([], 0.5).filter((owner) => owner === 'used')).toHaveLength(
+      100,
+    )
+    expect(buildContextUsageDotOwners([], Number.NaN).filter(Boolean)).toHaveLength(0)
+    expect(buildContextUsageDotOwners(segments, 1.5).filter(Boolean)).toHaveLength(200)
+  })
+
   test('按字符总量归一、降序排列并合并重复来源', () => {
     const segments = buildContextUsageBreakdownSegments([
       { source: 'system_prompt', chars: 30 },
@@ -61,5 +84,25 @@ describe('上下文来源占比', () => {
     expect(buildContextUsageBarSegments(segments, -1)[0]?.windowPercent).toBe(0)
     expect(buildContextUsageBarSegments(segments, Number.NaN)[0]?.windowPercent).toBe(0)
     expect(buildContextUsageBarSegments([], 0.5)).toEqual([])
+  })
+
+  test('为极小占比分段分配保底视觉比例并保持总比例严格守恒', () => {
+    const rawSegments = [
+      { id: 'messages', ratio: 0.5 },
+      { id: 'skills', ratio: 0.3 },
+      { id: 'project', ratio: 0.003 }, // 极小用量 0.3%
+      { id: 'empty', ratio: 0 },
+    ]
+    const totalRatio = 0.803
+    const adjusted = ensureMinSegmentRatios(rawSegments, totalRatio, 0.024)
+
+    const projectSegment = adjusted.find((s) => s.id === 'project')
+    expect(projectSegment?.ratio).toBeGreaterThanOrEqual(0.024)
+
+    const emptySegment = adjusted.find((s) => s.id === 'empty')
+    expect(emptySegment?.ratio).toBe(0)
+
+    const sum = adjusted.reduce((acc, cur) => acc + cur.ratio, 0)
+    expect(sum).toBeCloseTo(totalRatio, 6)
   })
 })

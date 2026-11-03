@@ -71,3 +71,16 @@ test('归档批量部分失败只移除成功记录，保留失败项供重试',
   expect([...result.removed]).toEqual(['a', 'b'])
   expect(result.failed).toBe(1)
 })
+
+test('上下文展示方式经设置草稿保存后可恢复，保留其他设置', async () => {
+  let saved = defaultDesktopStoredSettings()
+  const draft = createDesktopSettingsDraft(saved, async (next) => {
+    saved = normalizeDesktopStoredSettings(next)
+    return saved
+  })
+  draft.setValue('contextUsageView', 'field')
+  await draft.saveFields(['contextUsageView'])
+  const restored = createDesktopSettingsDraft(saved, async (next) => next)
+  expect(restored.values.contextUsageView).toBe('field')
+  expect(restored.values.showContextUsage).toBe(saved.showContextUsage)
+})

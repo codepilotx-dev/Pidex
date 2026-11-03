@@ -5,10 +5,79 @@
 @layer features {
   @charset "UTF-8";
 
+  .context-meter-field {
+    display: grid;
+    grid-template-columns: repeat(20, 11px);
+    grid-template-rows: repeat(10, 11px);
+    grid-auto-flow: column;
+    justify-content: space-between;
+    gap: calc(var(--cpx-sys-space-1) / 2);
+  }
+
+  .context-meter-dot {
+    border-radius: var(--cpx-sys-radius-2xs);
+    background: var(--cpx-sys-color-border-default);
+    transition:
+      background-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-standard),
+      opacity var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard);
+    transition-delay: var(--context-meter-delay, 0ms), 0ms;
+  }
+
+  .context-meter-bar {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--cpx-sys-space-1) / 2);
+    width: 100%;
+    height: 40px;
+    border-radius: var(--cpx-sys-radius-sm);
+    background: transparent;
+  }
+
+  .context-meter-segment {
+    height: 100%;
+    border-radius: var(--cpx-sys-radius-2xs);
+    border: 0;
+    padding: 0;
+    transition:
+      flex-grow var(--cpx-sys-motion-panel) var(--cpx-sys-ease-standard),
+      opacity var(--cpx-sys-motion-feedback) var(--cpx-sys-ease-standard);
+  }
+
+  .context-meter-segment:first-child {
+    border-top-left-radius: var(--cpx-sys-radius-sm);
+    border-bottom-left-radius: var(--cpx-sys-radius-sm);
+  }
+
+  .context-meter-segment:last-child {
+    border-top-right-radius: var(--cpx-sys-radius-sm);
+    border-bottom-right-radius: var(--cpx-sys-radius-sm);
+  }
+
+  .context-meter-limit {
+    flex-shrink: 0;
+    height: calc(100% + var(--cpx-sys-space-2) + var(--cpx-sys-space-1) / 2);
+    margin-block: calc(var(--cpx-sys-space-1) * -1.25);
+    border-left: 2px dashed var(--cpx-sys-color-fg-primary);
+    pointer-events: none;
+    z-index: var(--cpx-sys-z-local);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .context-meter-dot,
+    .context-meter-segment {
+      transition: none;
+      transition-delay: 0ms;
+    }
+  }
+
+  :root[data-reduce-motion='on'] .context-meter-dot {
+    transition-delay: 0ms;
+  }
+
   /*
    * Composer controls residue.
    *
-   * Only the context-usage ring stays here. It is an inline SVG so the stroke
+   * The context meter's transitions and ring stay here. The ring is an inline SVG so the stroke
    * stays a true circle and its centre shows the Composer surface instead of a
    * darker disc at fractional display scaling; the progress arc is drawn with
    * `stroke-dasharray` from the component.
