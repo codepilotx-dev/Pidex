@@ -301,16 +301,16 @@ export function SubagentThreadPanel({
 
       <div
         ref={scrollRef}
-        className="subagent-thread-panel__scroll-region tw:min-h-0 tw:overflow-auto tw:[scrollbar-gutter:stable]"
+        className="subagent-thread-panel__scroll-region thread-scroll-layout tw:min-h-0 tw:overflow-auto tw:[scrollbar-gutter:stable]"
       >
         <div className="subagent-thread-panel__transcript tw:mx-auto tw:grid tw:w-[min(760px,calc(100%-28px))] tw:min-w-0 tw:gap-4 tw:px-0 tw:pt-5 tw:pb-7">
-          <div className="tw:text-app-text-meta tw:type-caption" role="status">
+          <div className="tw:text-app-text-meta tw:type-caption tw:[overflow-anchor:none]" role="status">
             第 {task.depth ?? 1} 层{task.waitingForDescendants ? ' · 等待后代结算' : ''}
             {task.queuedFollowups ? ` · ${task.queuedFollowups} 条后续任务已接纳` : ''}
           </div>
           {run.queueReason ? (
             <div
-              className="subagent-thread-panel__notice tw:flex tw:items-center tw:gap-2 tw:rounded-lg tw:px-3 tw:py-2 tw:bg-app-editor tw:text-app-text-meta tw:type-body-sm"
+              className="subagent-thread-panel__notice tw:flex tw:items-center tw:gap-2 tw:rounded-lg tw:px-3 tw:py-2 tw:bg-app-editor tw:text-app-text-meta tw:type-body-sm tw:[overflow-anchor:none]"
               role="status"
             >
               <LoaderCircle className="tw:animate-spin" size={APP_ICON_SIZE} />
@@ -338,7 +338,7 @@ export function SubagentThreadPanel({
             </div>
           ) : (
             <div
-              className="subagent-thread-panel__empty tw:py-7 tw:text-center tw:text-app-text-meta tw:type-body"
+              className="subagent-thread-panel__empty tw:py-7 tw:text-center tw:text-app-text-meta tw:type-body tw:[overflow-anchor:none]"
               role="status"
             >
               {run.status === 'queued' || run.status === 'preparing'
@@ -348,30 +348,38 @@ export function SubagentThreadPanel({
           )}
 
           {pendingRequest ? (
-            <InlineApprovalCard
-              key={pendingRequest.requestId}
-              request={pendingRequest}
-              identity={task.displayName}
-              disabledReason={canRespond ? undefined : '此子智能体当前不可操作，请通过父任务继续。'}
-              onDecide={
-                callbacks.onRequestRespond ??
-                (() => Promise.reject(new Error('此子智能体当前不可操作。')))
-              }
-              onInterrupt={canStop ? callbacks.onInterrupt : undefined}
-            />
+            <div className="tw:[overflow-anchor:none]">
+              <InlineApprovalCard
+                key={pendingRequest.requestId}
+                request={pendingRequest}
+                identity={task.displayName}
+                disabledReason={canRespond ? undefined : '此子智能体当前不可操作，请通过父任务继续。'}
+                onDecide={
+                  callbacks.onRequestRespond ??
+                  (() => Promise.reject(new Error('此子智能体当前不可操作。')))
+                }
+                onInterrupt={canStop ? callbacks.onInterrupt : undefined}
+              />
+            </div>
           ) : snapshot.pendingPlanApproval ? (
-            <PlanApprovalCard
-              approval={snapshot.pendingPlanApproval}
-              identity={task.displayName}
-              disabledReason="此子智能体没有计划续跑入口，请返回父任务处理。"
-              onRespond={() => Promise.reject(new Error('此子智能体不支持计划操作。'))}
-            />
+            <div className="tw:[overflow-anchor:none]">
+              <PlanApprovalCard
+                approval={snapshot.pendingPlanApproval}
+                identity={task.displayName}
+                disabledReason="此子智能体没有计划续跑入口，请返回父任务处理。"
+                onRespond={() => Promise.reject(new Error('此子智能体不支持计划操作。'))}
+              />
+            </div>
           ) : null}
 
-          {blocked ? <BlockedNotice run={run} viewBlocked={viewBlocked} /> : null}
+          {blocked ? (
+            <div className="tw:[overflow-anchor:none]">
+              <BlockedNotice run={run} viewBlocked={viewBlocked} />
+            </div>
+          ) : null}
           {run.error ? (
             <div
-              className="subagent-thread-panel__error tw:flex tw:items-center tw:gap-2 tw:rounded-lg tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:px-3 tw:py-2 tw:text-app-danger-fg tw:type-body-sm"
+              className="subagent-thread-panel__error tw:flex tw:items-center tw:gap-2 tw:rounded-lg tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:px-3 tw:py-2 tw:text-app-danger-fg tw:type-body-sm tw:[overflow-anchor:none]"
               role="alert"
             >
               <AlertCircle size="var(--inline-icon-size, 1em)" />

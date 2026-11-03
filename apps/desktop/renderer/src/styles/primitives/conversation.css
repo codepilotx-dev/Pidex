@@ -1210,6 +1210,7 @@
     min-width: 0;
   }
   .canonical-command-card__output-text {
+    overflow-anchor: none;
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;
@@ -1224,6 +1225,14 @@
     width: 100%;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+  .canonical-command-card__output-pin {
+    height: 1px;
+    overflow-anchor: none;
+    pointer-events: none;
+  }
+  .canonical-command-card__output-pin[data-following='true'] {
+    overflow-anchor: auto;
   }
 
   /* 长输出按块跳过屏外文本排版，避免展开首帧和高度动画重复布局整个日志。 */

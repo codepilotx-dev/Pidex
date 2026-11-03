@@ -491,7 +491,6 @@ export function ConversationPage(): React.ReactNode {
     [activeSessionId],
   )
   const mainScrollTopRef = React.useRef(0)
-  const scrollRestoredRef = React.useRef<string | null>(null)
 
   const handleTimelineScroll = React.useCallback((scrollTop: number) => {
     mainScrollTopRef.current = scrollTop
@@ -509,6 +508,9 @@ export function ConversationPage(): React.ReactNode {
 
   React.useEffect(() => {
     const sessionId = activeSessionId
+    mainScrollTopRef.current = sessionId
+      ? (loadConversationUiState(sessionId)?.mainScrollTop ?? 0)
+      : 0
 
     return () => {
       if (!sessionId) return
@@ -517,36 +519,6 @@ export function ConversationPage(): React.ReactNode {
       })
     }
   }, [activeSessionId])
-
-  React.useEffect(() => {
-    if (
-      isConversationLoading ||
-      canonicalConversation.loading ||
-      canonicalConversation.state?.thread.id !== activeSessionId ||
-      !activeSessionId
-    ) {
-      return
-    }
-    if (scrollRestoredRef.current === activeSessionId) return
-    const saved = loadConversationUiState(activeSessionId)
-    if (saved?.mainScrollTop && !timelineListRef.current) return
-    scrollRestoredRef.current = activeSessionId
-    mainScrollTopRef.current = saved?.mainScrollTop ?? 0
-    if (saved?.mainScrollTop && timelineListRef.current) {
-      requestAnimationFrame(() => {
-        try {
-          timelineListRef.current?.scrollTo(saved.mainScrollTop)
-        } catch {
-          // VList may not be ready yet; silently ignore
-        }
-      })
-    }
-  }, [
-    activeSessionId,
-    canonicalConversation.loading,
-    canonicalConversation.state,
-    isConversationLoading,
-  ])
 
   const handleRefreshDiff = React.useCallback(() => {
     if (isRefreshingDiff) return
@@ -566,6 +538,7 @@ export function ConversationPage(): React.ReactNode {
   const showComposerStatusSummary = shouldShowComposerStatusSummary({
     hasPlan: composerExecutionPlan !== null,
     changedFileCount: conversationChangeSummary.files.length,
+    canReturnToBottom: canReturnTimelineToBottom,
   })
   const branchReviewState = useBranchReviewSummary(
     workspacePath,
@@ -1815,9 +1788,11 @@ function workflowComposerMode(request: DesktopPermissionRequest | null): Workflo
 export function shouldShowComposerStatusSummary({
   hasPlan,
   changedFileCount,
+  canReturnToBottom,
 }: {
   hasPlan: boolean
   changedFileCount: number
+  canReturnToBottom: boolean
 }): boolean {
-  return hasPlan || changedFileCount > 0
+  return hasPlan || changedFileCount > 0 || canReturnToBottom
 }

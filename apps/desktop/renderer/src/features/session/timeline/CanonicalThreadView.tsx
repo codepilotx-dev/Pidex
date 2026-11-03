@@ -638,7 +638,7 @@ function CanonicalThreadViewComponent({
       data-canonical-turn-count={turns.length}
     >
       {hasOlder ? (
-        <div className="canonical-history-control tw:mx-auto tw:mt-3 tw:mb-1 tw:flex tw:w-[min(var(--page-content-max-width),var(--session-content-w))] tw:justify-center">
+        <div className="canonical-history-control tw:mx-auto tw:mt-3 tw:mb-1 tw:flex tw:w-[min(var(--page-content-max-width),var(--session-content-w))] tw:justify-center tw:[overflow-anchor:none]">
           <button
             className="tw:inline-flex tw:min-h-8 tw:cursor-pointer tw:items-center tw:gap-2 tw:rounded-control tw:border-0 tw:bg-transparent tw:px-3 tw:py-1 tw:text-app-text-soft tw:type-body-sm tw:transition-colors tw:duration-state tw:ease-out tw:hover:bg-app-hover tw:hover:text-app-text tw:disabled:cursor-wait tw:disabled:opacity-65"
             type="button"
@@ -657,7 +657,7 @@ function CanonicalThreadViewComponent({
         </div>
       ) : null}
       {historyError ? (
-        <p role="status" className="tw:text-center tw:text-app-text-meta tw:type-caption">
+        <p role="status" className="tw:text-center tw:text-app-text-meta tw:type-caption tw:[overflow-anchor:none]">
           {historyError}
         </p>
       ) : null}

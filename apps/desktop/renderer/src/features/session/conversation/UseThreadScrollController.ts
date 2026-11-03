@@ -4,6 +4,7 @@ import type { VirtualizerHandle } from 'virtua'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 
 export const THREAD_BOTTOM_THRESHOLD_PX = 24
+export const THREAD_BOTTOM_GEOMETRIC_TOLERANCE_PX = 1.5
 export const LATEST_TURN_PLACEMENT_THRESHOLD_PX = 300
 
 export type ThreadScrollMode = 'static' | 'prework_watch' | 'prework_follow' | 'user_follow'
@@ -239,20 +240,20 @@ export function resolveThreadAtBottomDuringExplicitReturn({
 
 export function scrollVirtualizerToThreadBottom(
   handle: VirtualizerHandle | null,
-  bottomSentinelIndex: number,
+  targetIndex: number,
   smooth: boolean,
   footerOffset = 0,
 ): boolean {
-  if (!handle) return false
+  if (!handle || targetIndex < 0) return false
   try {
-    handle.scrollToIndex(bottomSentinelIndex, {
+    handle.scrollToIndex(targetIndex, {
       align: 'end',
       offset: normalizeThreadFooterOffset(footerOffset),
       smooth,
     })
     return true
   } catch {
-    // The sentinel can briefly be unavailable while virtua applies new data.
+    // The target turn can briefly be unavailable while virtua applies new data.
     // A later resize/count observation will request the bottom again.
     return false
   }
@@ -287,18 +288,6 @@ function readMetrics(
     scrollSize: handle.scrollSize,
     viewportSize: handle.viewportSize,
   }
-}
-
-export function isDisclosureMotion(event: TransitionEvent | AnimationEvent): boolean {
-  return (
-    event.target instanceof HTMLElement &&
-    ('propertyName' in event
-      ? event.propertyName === 'grid-template-rows' &&
-        event.target.classList.contains('ui-disclosure-content')
-      : (event.animationName === 'ui-collapsible-open' ||
-          event.animationName === 'ui-collapsible-close') &&
-        event.target.classList.contains('ui-collapsible-content'))
-  )
 }
 
 function readThreadResizeAnchor(viewport: HTMLElement | null): ThreadResizeAnchor | null {
@@ -364,9 +353,6 @@ export function useThreadScrollController({
     blockSize: number
     inlineSize: number
   } | null>(null)
-  const activeDisclosureTransitionDepthRef = React.useRef(0)
-  const disclosureSettleFrameRef = React.useRef<number | null>(null)
-  const disclosureFixedScrollOffsetRef = React.useRef<number | null>(null)
   const contentReflowActiveUntilRef = React.useRef(0)
   const programmaticScrollUntilRef = React.useRef(0)
   const explicitReturnInProgressRef = React.useRef(false)
@@ -374,6 +360,8 @@ export function useThreadScrollController({
   const sessionKeyRef = React.useRef(sessionKey)
   const layoutResizeActiveRef = React.useRef(layoutResizeActive)
   const resizeAnchorRef = React.useRef<ThreadResizeAnchor | null>(null)
+  const viewportSizeRef = React.useRef({ width: 0, height: 0 })
+  const pendingRestoreRef = React.useRef<number | null>(null)
 
   activeRef.current = active
   itemCountRef.current = itemCount
@@ -429,15 +417,28 @@ export function useThreadScrollController({
         }
         const useSmoothScroll = beginProgrammaticScroll(smooth)
         explicitReturnInProgressRef.current = explicitReturn
-        if (
-          !scrollVirtualizerToThreadBottom(
-            handle,
-            itemCountRef.current,
-            useSmoothScroll,
-            readThreadFooterOffset(scrollRef.current),
-          )
-        ) {
-          explicitReturnInProgressRef.current = false
+        const viewport = scrollRef.current
+        const targetIndex = itemCountRef.current - 1
+        if (!viewport && targetIndex >= 0) {
+          if (
+            !scrollVirtualizerToThreadBottom(
+              handle,
+              targetIndex,
+              useSmoothScroll,
+              readThreadFooterOffset(scrollRef.current),
+            )
+          ) {
+            explicitReturnInProgressRef.current = false
+          }
+        }
+        if (viewport) {
+          const maxScroll = Math.max(0, viewport.scrollHeight - viewport.clientHeight)
+          if (Math.abs(viewport.scrollTop - maxScroll) > 1) {
+            viewport.scrollTo({
+              top: maxScroll,
+              behavior: useSmoothScroll ? 'smooth' : 'instant',
+            })
+          }
         }
       })
     },
@@ -474,44 +475,6 @@ export function useThreadScrollController({
     viewport.scrollTop = targetOffset
   }, [listRef, scrollRef])
 
-  const syncDisclosureTransitionScroll = React.useCallback(
-    (metrics: ScrollMetrics, settled: boolean): void => {
-      const viewport = scrollRef.current
-      const fixedScrollOffset = disclosureFixedScrollOffsetRef.current
-      const shouldFollow =
-        fixedScrollOffset === null &&
-        (modeRef.current === 'prework_follow' ||
-          modeRef.current === 'user_follow' ||
-          (activeRef.current && atBottomRef.current))
-      const targetOffset = shouldFollow
-        ? scrollOffsetForThreadBottomDistance(metrics, 0)
-        : clampThreadScrollOffset(metrics, fixedScrollOffset ?? metrics.scrollOffset)
-
-      if (viewport && Math.abs(targetOffset - metrics.scrollOffset) > 0.5) {
-        programmaticScrollUntilRef.current = Date.now() + 140
-        previousOffsetRef.current = targetOffset
-        viewport.scrollTop = targetOffset
-      }
-
-      previousScrollSizeRef.current = metrics.scrollSize
-      previousDistanceFromBottomRef.current = shouldFollow
-        ? 0
-        : distanceFromThreadBottom({ ...metrics, scrollOffset: targetOffset })
-
-      if (!settled) return
-      if (shouldFollow) setHasNewContent(false)
-      const currentSessionKey = sessionKeyRef.current
-      if (currentSessionKey) {
-        savedThreadScrollStates.set(currentSessionKey, {
-          distanceFromBottom: previousDistanceFromBottomRef.current,
-          mode: modeRef.current,
-          scrollOffset: targetOffset,
-        })
-      }
-    },
-    [scrollRef],
-  )
-
   React.useLayoutEffect(() => {
     if (layoutResizeActive) {
       const metrics = readMetrics(listRef.current, scrollRef.current)
@@ -542,6 +505,20 @@ export function useThreadScrollController({
 
   const handleScroll = React.useCallback(
     (scrollTop: number): void => {
+      if (pendingRestoreRef.current !== null) return
+      const viewport = scrollRef.current
+      if (
+        viewport &&
+        viewportSizeRef.current.height > 0 &&
+        (viewport.clientHeight !== viewportSizeRef.current.height ||
+          viewport.clientWidth !== viewportSizeRef.current.width) &&
+        (atBottomRef.current ||
+          modeRef.current === 'prework_follow' ||
+          modeRef.current === 'user_follow')
+      ) {
+        scrollToEnd(false)
+        return
+      }
       onScroll?.(scrollTop)
       const metrics = readMetrics(listRef.current, scrollRef.current)
       if (!metrics) return
@@ -588,7 +565,7 @@ export function useThreadScrollController({
         })
       }
     },
-    [applyDecision, listRef, onScroll, scrollRef, updateAtBottom],
+    [applyDecision, listRef, onScroll, scrollRef, scrollToEnd, updateAtBottom],
   )
 
   const handleContentResize = React.useCallback(
@@ -603,12 +580,7 @@ export function useThreadScrollController({
         const observedSize = pendingContentSizeRef.current
         pendingContentSizeRef.current = null
         const metrics = readMetrics(listRef.current, scrollRef.current)
-        if (!observedSize || !metrics) return
-
-        if (activeDisclosureTransitionDepthRef.current > 0) {
-          syncDisclosureTransitionScroll(metrics, false)
-          return
-        }
+        if (!observedSize || !metrics || pendingRestoreRef.current !== null) return
 
         const now = performance.now()
         const previousInlineSize = previousContentInlineSizeRef.current
@@ -687,7 +659,11 @@ export function useThreadScrollController({
         if (shouldFollow) {
           previousDistanceFromBottomRef.current = 0
           setHasNewContent(false)
-          scrollToEnd(false)
+          const distance = distanceFromThreadBottom(metrics)
+          const withinTolerance = distance <= THREAD_BOTTOM_GEOMETRIC_TOLERANCE_PX
+          if (metrics.scrollOffset === 0 || !withinTolerance) {
+            scrollToEnd(false)
+          }
           return
         }
         const distance = distanceFromThreadBottom(metrics)
@@ -703,7 +679,7 @@ export function useThreadScrollController({
         }
       })
     },
-    [listRef, restoreResizeAnchor, scrollRef, scrollToEnd, syncDisclosureTransitionScroll],
+    [listRef, restoreResizeAnchor, scrollRef, scrollToEnd],
   )
 
   const returnToBottom = React.useCallback((): void => {
@@ -720,11 +696,12 @@ export function useThreadScrollController({
     scrollToEnd(true, true)
   }, [applyDecision, scrollToEnd])
 
-  React.useEffect(() => {
+  React.useLayoutEffect(() => {
     sessionKeyRef.current = sessionKey
     resizeAnchorRef.current = null
     const savedState = sessionKey ? savedThreadScrollStates.get(sessionKey) : null
     const restoredOffset = savedState?.scrollOffset ?? initialScrollOffset
+    pendingRestoreRef.current = restoredOffset > 0 ? restoredOffset : null
     const preserveHistoricalPosition = savedState
       ? savedState.distanceFromBottom > THREAD_BOTTOM_THRESHOLD_PX
       : initialScrollOffset > 0
@@ -742,24 +719,45 @@ export function useThreadScrollController({
       ? distanceFromThreadBottom({ ...metrics, scrollOffset: restoredOffset })
       : 0
     resetBottomMeasurement()
+  }, [initialScrollOffset, listRef, scrollRef, sessionKey, setMode, resetBottomMeasurement])
 
-    if (restoredOffset > 0) {
+  React.useLayoutEffect(() => {
+    const restoredOffset = pendingRestoreRef.current
+    if (restoredOffset !== null && itemCount > 0) {
       programmaticScrollUntilRef.current = Date.now() + 180
       const frame = requestAnimationFrame(() => {
-        const currentMetrics = readMetrics(listRef.current, scrollRef.current)
-        const targetOffset = currentMetrics
-          ? clampThreadScrollOffset(currentMetrics, restoredOffset)
-          : Math.max(0, restoredOffset)
-        previousOffsetRef.current = targetOffset
+        previousOffsetRef.current = restoredOffset
         if (listRef.current) {
-          listRef.current.scrollTo(targetOffset)
-          return
+          listRef.current.scrollTo(restoredOffset)
+        } else if (scrollRef.current) {
+          scrollRef.current.scrollTop = restoredOffset
         }
-        if (scrollRef.current) scrollRef.current.scrollTop = targetOffset
+        pendingRestoreRef.current = null
       })
       return () => cancelAnimationFrame(frame)
     }
-  }, [initialScrollOffset, listRef, scrollRef, sessionKey, setMode, resetBottomMeasurement])
+  }, [itemCount, listRef, scrollRef, sessionKey])
+
+  React.useEffect(() => {
+    const viewport = scrollRef.current
+    if (!viewport || typeof ResizeObserver === 'undefined') return
+    viewportSizeRef.current = { width: viewport.clientWidth, height: viewport.clientHeight }
+    const observer = new ResizeObserver(() => {
+      const previous = viewportSizeRef.current
+      const next = { width: viewport.clientWidth, height: viewport.clientHeight }
+      if (previous.width === next.width && previous.height === next.height) return
+      viewportSizeRef.current = next
+      if (
+        atBottomRef.current ||
+        modeRef.current === 'prework_follow' ||
+        modeRef.current === 'user_follow'
+      ) {
+        scrollToEnd(false)
+      }
+    })
+    observer.observe(viewport)
+    return () => observer.disconnect()
+  }, [scrollRef, scrollToEnd, sessionKey])
 
   React.useEffect(() => {
     const wasActive = previousActiveRef.current
@@ -785,12 +783,14 @@ export function useThreadScrollController({
       }
 
       try {
-        const latestTurnIndex = Math.max(0, itemCount - 1)
-        const latestTurnDistance = handle.getItemOffset(latestTurnIndex) - metrics.scrollOffset
-        programmaticScrollUntilRef.current = Date.now() + 180
-        if (latestTurnDistance > LATEST_TURN_PLACEMENT_THRESHOLD_PX) {
-          handle.scrollToIndex(latestTurnIndex, { align: 'start' })
-          return
+        if (itemCount > 0) {
+          const latestTurnIndex = itemCount - 1
+          const latestTurnDistance = handle.getItemOffset(latestTurnIndex) - metrics.scrollOffset
+          programmaticScrollUntilRef.current = Date.now() + 180
+          if (latestTurnDistance > LATEST_TURN_PLACEMENT_THRESHOLD_PX) {
+            handle.scrollToIndex(latestTurnIndex, { align: 'start' })
+            return
+          }
         }
       } catch {
         // The virtualizer can still be measuring the new row; bottom anchoring
@@ -828,74 +828,16 @@ export function useThreadScrollController({
     const observer = new ResizeObserver(([entry]) => {
       if (entry) handleContentResize(entry)
     })
-    const handleDisclosureTransitionRun = (event: TransitionEvent | AnimationEvent): void => {
-      if (!isDisclosureMotion(event)) return
-      if (activeDisclosureTransitionDepthRef.current === 0) {
-        const transitionMetrics = readMetrics(listRef.current, scrollRef.current)
-        const shouldFollow =
-          transitionMetrics !== null &&
-          (modeRef.current === 'prework_follow' ||
-            modeRef.current === 'user_follow' ||
-            (activeRef.current && atBottomRef.current))
-        disclosureFixedScrollOffsetRef.current = shouldFollow
-          ? null
-          : (transitionMetrics?.scrollOffset ?? null)
-      }
-      activeDisclosureTransitionDepthRef.current += 1
-    }
-    const handleDisclosureTransitionComplete = (event: TransitionEvent | AnimationEvent): void => {
-      if (!isDisclosureMotion(event)) return
-      activeDisclosureTransitionDepthRef.current = Math.max(
-        0,
-        activeDisclosureTransitionDepthRef.current - 1,
-      )
-      if (activeDisclosureTransitionDepthRef.current > 0) return
-      if (disclosureSettleFrameRef.current !== null) {
-        cancelAnimationFrame(disclosureSettleFrameRef.current)
-      }
-      if (contentResizeFrameRef.current !== null) {
-        cancelAnimationFrame(contentResizeFrameRef.current)
-        contentResizeFrameRef.current = null
-      }
-      pendingContentSizeRef.current = null
-      disclosureSettleFrameRef.current = requestAnimationFrame(() => {
-        disclosureSettleFrameRef.current = null
-        if (activeDisclosureTransitionDepthRef.current > 0) return
-        const transitionMetrics = readMetrics(listRef.current, scrollRef.current)
-        if (transitionMetrics) {
-          syncDisclosureTransitionScroll(transitionMetrics, true)
-        }
-        disclosureFixedScrollOffsetRef.current = null
-      })
-    }
     observer.observe(content)
-    content.addEventListener('transitionrun', handleDisclosureTransitionRun)
-    content.addEventListener('transitionend', handleDisclosureTransitionComplete)
-    content.addEventListener('transitioncancel', handleDisclosureTransitionComplete)
-    content.addEventListener('animationstart', handleDisclosureTransitionRun)
-    content.addEventListener('animationend', handleDisclosureTransitionComplete)
-    content.addEventListener('animationcancel', handleDisclosureTransitionComplete)
     return () => {
       observer.disconnect()
-      content.removeEventListener('transitionrun', handleDisclosureTransitionRun)
-      content.removeEventListener('transitionend', handleDisclosureTransitionComplete)
-      content.removeEventListener('transitioncancel', handleDisclosureTransitionComplete)
-      content.removeEventListener('animationstart', handleDisclosureTransitionRun)
-      content.removeEventListener('animationend', handleDisclosureTransitionComplete)
-      content.removeEventListener('animationcancel', handleDisclosureTransitionComplete)
       if (contentResizeFrameRef.current !== null) {
         cancelAnimationFrame(contentResizeFrameRef.current)
         contentResizeFrameRef.current = null
       }
-      if (disclosureSettleFrameRef.current !== null) {
-        cancelAnimationFrame(disclosureSettleFrameRef.current)
-        disclosureSettleFrameRef.current = null
-      }
-      activeDisclosureTransitionDepthRef.current = 0
-      disclosureFixedScrollOffsetRef.current = null
       pendingContentSizeRef.current = null
     }
-  }, [handleContentResize, listRef, scrollRef, sessionKey, syncDisclosureTransitionScroll])
+  }, [handleContentResize, listRef, scrollRef, sessionKey])
 
   React.useEffect(() => {
     const viewport = scrollRef.current

@@ -64,7 +64,7 @@ export function ComposerChangeSummary({
 
   const changedFileCount = changedFiles.length
   const hasPlan = executionPlan !== null && executionPlan.steps.length > 0
-  if (!hasPlan && changedFileCount <= 0) return null
+  if (!hasPlan && changedFileCount <= 0 && !canReturnToBottom) return null
 
   function openReview(): void {
     setActivePreview(null)
@@ -104,184 +104,192 @@ export function ComposerChangeSummary({
       className="composer-change-summary tw:relative tw:flex tw:w-full tw:max-w-full tw:items-center tw:justify-center tw:self-center tw:gap-2 tw:box-border tw:rounded-xl tw:pointer-events-auto"
       ref={summaryRef}
     >
-      <motion.div
-        className="composer-change-summary__bar-shell tw:flex tw:w-fit tw:min-w-0 tw:max-w-full tw:flex-[0_1_auto]"
-        layout="position"
-        transition={motionTransition(reducedMotion, standardTween)}
-      >
-        <div
-          aria-label="任务变更摘要"
-          className="composer-change-summary__bar tw:relative tw:inline-flex tw:z-1 tw:h-8 tw:min-h-8 tw:w-auto tw:min-w-0 tw:max-w-full tw:flex-[1_1_auto] tw:items-center tw:justify-center tw:gap-0 tw:box-border tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-0 tw:text-app-text tw:type-body-sm tw:shadow-lg tw:backdrop-blur-md"
-          role="group"
+      {hasPlan || changedFileCount > 0 ? (
+        <motion.div
+          className="composer-change-summary__bar-shell tw:flex tw:w-fit tw:min-w-0 tw:max-w-full tw:flex-[0_1_auto]"
+          layout="position"
+          transition={motionTransition(reducedMotion, standardTween)}
         >
-          {hasPlan ? (
-            <TooltipRoot
-              delayDuration={0}
-              interactive
-              open={planExpanded}
-              onOpenChange={(open) => setActivePreview(open ? 'plan' : null)}
-            >
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-controls={planPanelId}
-                  aria-expanded={planExpanded}
-                  className="composer-change-summary__plan tw:inline-flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-none tw:items-center tw:gap-2 tw:rounded-none tw:border-0 tw:bg-transparent tw:py-0 tw:ps-4 tw:pe-0 tw:only:ps-4 tw:only:pe-4 tw:text-inherit tw:whitespace-nowrap tw:enabled:hover:bg-transparent tw:enabled:hover:text-app-text tw:enabled:hover:shadow-none tw:aria-expanded:bg-transparent tw:aria-expanded:text-app-text tw:aria-expanded:shadow-none"
-                  onBlur={(e) => {
-                    const related = e.relatedTarget as Node | null
-                    if (
-                      (related && planPopoverRef.current?.contains(related)) ||
-                      planPopoverRef.current?.matches(':hover')
-                    ) {
+          <div
+            aria-label="任务变更摘要"
+            className="composer-change-summary__bar tw:relative tw:inline-flex tw:z-1 tw:h-8 tw:min-h-8 tw:w-auto tw:min-w-0 tw:max-w-full tw:flex-[1_1_auto] tw:items-center tw:justify-center tw:gap-0 tw:box-border tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-0 tw:text-app-text tw:type-body-sm tw:shadow-lg tw:backdrop-blur-md"
+            role="group"
+          >
+            {hasPlan ? (
+              <TooltipRoot
+                delayDuration={0}
+                interactive
+                open={planExpanded}
+                onOpenChange={(open) => setActivePreview(open ? 'plan' : null)}
+              >
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-controls={planPanelId}
+                    aria-expanded={planExpanded}
+                    className="composer-change-summary__plan tw:inline-flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-none tw:items-center tw:gap-2 tw:rounded-none tw:border-0 tw:bg-transparent tw:py-0 tw:ps-4 tw:pe-0 tw:only:ps-4 tw:only:pe-4 tw:text-inherit tw:whitespace-nowrap tw:enabled:hover:bg-transparent tw:enabled:hover:text-app-text tw:enabled:hover:shadow-none tw:aria-expanded:bg-transparent tw:aria-expanded:text-app-text tw:aria-expanded:shadow-none"
+                    onBlur={(e) => {
+                      const related = e.relatedTarget as Node | null
+                      if (
+                        (related && planPopoverRef.current?.contains(related)) ||
+                        planPopoverRef.current?.matches(':hover')
+                      ) {
+                        e.preventDefault()
+                      }
+                    }}
+                    onClick={(e) => {
                       e.preventDefault()
-                    }
-                  }}
-                  onClick={(e) => {
-                    e.preventDefault()
-                    setActivePreview((prev) => (prev === 'plan' ? null : 'plan'))
-                  }}
-                >
-                  <ExecutionPlanStatusIcon steps={executionPlan.steps} status={planLifecycle} />
-                  {planStatusText}
-                </button>
-              </TooltipTrigger>
-              <TooltipPortal>
-                <TooltipContent
-                  align="center"
-                  aria-label="执行计划"
-                  className="composer-change-summary__plan-popover tw:z-tooltip tw:box-border tw:w-max tw:min-w-[min(16rem,calc(100vw-var(--cpx-sys-space-4)))] tw:max-w-[min(22rem,calc(100vw-var(--cpx-sys-space-4)))] tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:text-app-text tw:shadow-lg tw:backdrop-blur-md"
-                  id={planPanelId}
-                  ref={planPopoverRef}
-                  side="top"
-                  sideOffset={8}
-                  variant="unstyled"
-                  onBlurCapture={(e) => {
-                    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) {
-                      return
-                    }
-                    setActivePreview(null)
-                  }}
-                >
-                  <ExecutionPlanCard item={executionPlan} />
-                </TooltipContent>
-              </TooltipPortal>
-            </TooltipRoot>
-          ) : null}
-          {hasPlan && changedFileCount > 0 ? (
-            <span
-              aria-hidden="true"
-              className="composer-change-summary__separator tw:mx-2 tw:flex-none tw:text-app-text-meta"
-            >
-              ·
-            </span>
-          ) : null}
-          {changedFileCount > 0 ? (
-            <TooltipRoot
-              delayDuration={0}
-              interactive
-              open={filesExpanded}
-              onOpenChange={(open) => setActivePreview(open ? 'files' : null)}
-            >
-              <TooltipTrigger asChild>
-                <button
-                  type="button"
-                  aria-controls={filesPanelId}
-                  aria-expanded={filesExpanded}
-                  aria-label={
-                    diffStatsAvailable
-                      ? `打开审阅面板，${changedFileCount} 个文件已更改，新增 ${formattedAdditions} 行，删除 ${formattedDeletions} 行`
-                      : `打开审阅面板，${changedFileCount} 个文件已更改，增删行数统计暂不可用`
-                  }
-                  className="composer-change-summary__changes tw:inline-flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-[1_1_auto] tw:items-center tw:gap-2 tw:overflow-hidden tw:rounded-none tw:border-0 tw:bg-transparent tw:py-0 tw:ps-0 tw:pe-4 tw:text-ellipsis tw:text-inherit tw:whitespace-nowrap tw:only:ps-4 tw:only:pe-4 tw:enabled:hover:bg-transparent tw:enabled:hover:text-app-text tw:enabled:hover:shadow-none tw:aria-expanded:bg-transparent tw:aria-expanded:text-app-text tw:aria-expanded:shadow-none"
-                  onBlur={(e) => {
-                    const related = e.relatedTarget as Node | null
-                    if (
-                      (related && filesPopoverRef.current?.contains(related)) ||
-                      filesPopoverRef.current?.matches(':hover')
-                    ) {
-                      e.preventDefault()
-                    }
-                  }}
-                  onClick={openReview}
-                >
-                  {changedFileCount} 个文件已更改
-                  {diffStatsAvailable ? (
-                    <span
-                      aria-hidden="true"
-                      className="composer-change-summary__diff tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:tabular-nums"
-                    >
-                      <strong className="tw:text-app-success tw:type-weight-label">
-                        +{formattedAdditions}
-                      </strong>
-                      <em className="tw:text-app-danger tw:not-italic">-{formattedDeletions}</em>
-                    </span>
-                  ) : null}
-                </button>
-              </TooltipTrigger>
-              <TooltipPortal>
-                <TooltipContent
-                  align="center"
-                  aria-label="修改文件"
-                  className="composer-change-summary__files-popover tw:z-tooltip tw:box-border tw:w-max tw:min-w-[min(16rem,calc(100vw-var(--cpx-sys-space-4)))] tw:max-w-[min(22rem,calc(100vw-var(--cpx-sys-space-4)))] tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:text-app-text tw:shadow-lg tw:backdrop-blur-md"
-                  id={filesPanelId}
-                  ref={filesPopoverRef}
-                  side="top"
-                  sideOffset={8}
-                  variant="unstyled"
-                  onBlurCapture={(e) => {
-                    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) {
-                      return
-                    }
-                    setActivePreview(null)
-                  }}
-                >
-                  <div
-                    className="composer-change-summary__files-list tw:grid tw:w-full tw:max-h-[min(18rem,calc(100vh-var(--cpx-sys-space-8)))] tw:gap-1 tw:overflow-y-auto tw:[scrollbar-gutter:stable] tw:p-1.5 tw:[&>[role=listitem]]:w-full tw:[&>[role=listitem]]:min-w-0"
-                    role="list"
+                      setActivePreview((prev) => (prev === 'plan' ? null : 'plan'))
+                    }}
                   >
-                    {changedFiles.map((file) => {
-                      const statsAvailable = file.additions !== null && file.deletions !== null
-                      const fileName = basenameOf(file.path)
-                      return (
-                        <div key={file.path} role="listitem">
-                          <button
-                            aria-label={
-                              statsAvailable
-                                ? `${file.path}，新增 ${file.additions} 行，删除 ${file.deletions} 行`
-                                : `${file.path}，增删行数统计暂不可用`
-                            }
-                            className="composer-change-summary__file-row"
-                            title={file.path}
-                            type="button"
-                            onClick={() => openReviewFile(file.path)}
-                          >
-                            <span className="composer-change-summary__file-name tw:flex-[1_1_auto] tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-start">
-                              {fileName}
-                            </span>
-                            {statsAvailable ? (
-                              <span
-                                aria-hidden="true"
-                                className="composer-change-summary__file-diff tw:inline-flex tw:flex-none tw:ms-auto tw:items-center tw:gap-2 tw:text-app-text-meta tw:type-caption tw:tabular-nums"
-                              >
-                                <strong className="tw:text-app-success tw:type-weight-label">
-                                  +{formatSummaryNumber(file.additions ?? 0)}
-                                </strong>
-                                <em className="tw:text-app-danger tw:not-italic">
-                                  -{formatSummaryNumber(file.deletions ?? 0)}
-                                </em>
+                    <ExecutionPlanStatusIcon steps={executionPlan.steps} status={planLifecycle} />
+                    {planStatusText}
+                  </button>
+                </TooltipTrigger>
+                <TooltipPortal>
+                  <TooltipContent
+                    align="center"
+                    aria-label="执行计划"
+                    className="composer-change-summary__plan-popover tw:z-tooltip tw:box-border tw:w-max tw:min-w-[min(16rem,calc(100vw-var(--cpx-sys-space-4)))] tw:max-w-[min(22rem,calc(100vw-var(--cpx-sys-space-4)))] tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:text-app-text tw:shadow-lg tw:backdrop-blur-md"
+                    id={planPanelId}
+                    ref={planPopoverRef}
+                    side="top"
+                    sideOffset={8}
+                    variant="unstyled"
+                    onBlurCapture={(e) => {
+                      if (
+                        e.relatedTarget instanceof Node &&
+                        e.currentTarget.contains(e.relatedTarget)
+                      ) {
+                        return
+                      }
+                      setActivePreview(null)
+                    }}
+                  >
+                    <ExecutionPlanCard item={executionPlan} />
+                  </TooltipContent>
+                </TooltipPortal>
+              </TooltipRoot>
+            ) : null}
+            {hasPlan && changedFileCount > 0 ? (
+              <span
+                aria-hidden="true"
+                className="composer-change-summary__separator tw:mx-2 tw:flex-none tw:text-app-text-meta"
+              >
+                ·
+              </span>
+            ) : null}
+            {changedFileCount > 0 ? (
+              <TooltipRoot
+                delayDuration={0}
+                interactive
+                open={filesExpanded}
+                onOpenChange={(open) => setActivePreview(open ? 'files' : null)}
+              >
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    aria-controls={filesPanelId}
+                    aria-expanded={filesExpanded}
+                    aria-label={
+                      diffStatsAvailable
+                        ? `打开审阅面板，${changedFileCount} 个文件已更改，新增 ${formattedAdditions} 行，删除 ${formattedDeletions} 行`
+                        : `打开审阅面板，${changedFileCount} 个文件已更改，增删行数统计暂不可用`
+                    }
+                    className="composer-change-summary__changes tw:inline-flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-[1_1_auto] tw:items-center tw:gap-2 tw:overflow-hidden tw:rounded-none tw:border-0 tw:bg-transparent tw:py-0 tw:ps-0 tw:pe-4 tw:text-ellipsis tw:text-inherit tw:whitespace-nowrap tw:only:ps-4 tw:only:pe-4 tw:enabled:hover:bg-transparent tw:enabled:hover:text-app-text tw:enabled:hover:shadow-none tw:aria-expanded:bg-transparent tw:aria-expanded:text-app-text tw:aria-expanded:shadow-none"
+                    onBlur={(e) => {
+                      const related = e.relatedTarget as Node | null
+                      if (
+                        (related && filesPopoverRef.current?.contains(related)) ||
+                        filesPopoverRef.current?.matches(':hover')
+                      ) {
+                        e.preventDefault()
+                      }
+                    }}
+                    onClick={openReview}
+                  >
+                    {changedFileCount} 个文件已更改
+                    {diffStatsAvailable ? (
+                      <span
+                        aria-hidden="true"
+                        className="composer-change-summary__diff tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:tabular-nums"
+                      >
+                        <strong className="tw:text-app-success tw:type-weight-label">
+                          +{formattedAdditions}
+                        </strong>
+                        <em className="tw:text-app-danger tw:not-italic">-{formattedDeletions}</em>
+                      </span>
+                    ) : null}
+                  </button>
+                </TooltipTrigger>
+                <TooltipPortal>
+                  <TooltipContent
+                    align="center"
+                    aria-label="修改文件"
+                    className="composer-change-summary__files-popover tw:z-tooltip tw:box-border tw:w-max tw:min-w-[min(16rem,calc(100vw-var(--cpx-sys-space-4)))] tw:max-w-[min(22rem,calc(100vw-var(--cpx-sys-space-4)))] tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:text-app-text tw:shadow-lg tw:backdrop-blur-md"
+                    id={filesPanelId}
+                    ref={filesPopoverRef}
+                    side="top"
+                    sideOffset={8}
+                    variant="unstyled"
+                    onBlurCapture={(e) => {
+                      if (
+                        e.relatedTarget instanceof Node &&
+                        e.currentTarget.contains(e.relatedTarget)
+                      ) {
+                        return
+                      }
+                      setActivePreview(null)
+                    }}
+                  >
+                    <div
+                      className="composer-change-summary__files-list tw:grid tw:w-full tw:max-h-[min(18rem,calc(100vh-var(--cpx-sys-space-8)))] tw:gap-1 tw:overflow-y-auto tw:[scrollbar-gutter:stable] tw:p-1.5 tw:[&>[role=listitem]]:w-full tw:[&>[role=listitem]]:min-w-0"
+                      role="list"
+                    >
+                      {changedFiles.map((file) => {
+                        const statsAvailable = file.additions !== null && file.deletions !== null
+                        const fileName = basenameOf(file.path)
+                        return (
+                          <div key={file.path} role="listitem">
+                            <button
+                              aria-label={
+                                statsAvailable
+                                  ? `${file.path}，新增 ${file.additions} 行，删除 ${file.deletions} 行`
+                                  : `${file.path}，增删行数统计暂不可用`
+                              }
+                              className="composer-change-summary__file-row"
+                              title={file.path}
+                              type="button"
+                              onClick={() => openReviewFile(file.path)}
+                            >
+                              <span className="composer-change-summary__file-name tw:flex-[1_1_auto] tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-start">
+                                {fileName}
                               </span>
-                            ) : null}
-                          </button>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </TooltipContent>
-              </TooltipPortal>
-            </TooltipRoot>
-          ) : null}
-        </div>
-      </motion.div>
+                              {statsAvailable ? (
+                                <span
+                                  aria-hidden="true"
+                                  className="composer-change-summary__file-diff tw:inline-flex tw:flex-none tw:ms-auto tw:items-center tw:gap-2 tw:text-app-text-meta tw:type-caption tw:tabular-nums"
+                                >
+                                  <strong className="tw:text-app-success tw:type-weight-label">
+                                    +{formatSummaryNumber(file.additions ?? 0)}
+                                  </strong>
+                                  <em className="tw:text-app-danger tw:not-italic">
+                                    -{formatSummaryNumber(file.deletions ?? 0)}
+                                  </em>
+                                </span>
+                              ) : null}
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </TooltipContent>
+                </TooltipPortal>
+              </TooltipRoot>
+            ) : null}
+          </div>
+        </motion.div>
+      ) : null}
       <AnimatePresence initial={false}>
         {canReturnToBottom ? (
           <ComposerReturnToBottomPresence
@@ -329,22 +337,16 @@ function ComposerReturnToBottomPresence({
   running: boolean
 }): React.ReactNode {
   const isPresent = useIsPresent()
-  const [entryComplete, setEntryComplete] = React.useState(reducedMotion)
   const presenceRef = React.useRef<HTMLDivElement | null>(null)
-  const interactive = isPresent && entryComplete
+  const interactive = isPresent
 
   React.useLayoutEffect(() => {
     if (isPresent) return
-    setEntryComplete(false)
     const activeElement = document.activeElement
     if (activeElement instanceof HTMLElement && presenceRef.current?.contains(activeElement)) {
       activeElement.blur()
     }
   }, [isPresent])
-
-  React.useEffect(() => {
-    if (reducedMotion && isPresent) setEntryComplete(true)
-  }, [isPresent, reducedMotion])
 
   return (
     <motion.div
@@ -359,9 +361,6 @@ function ComposerReturnToBottomPresence({
       }}
       inert={!interactive ? true : undefined}
       initial={reducedMotion ? false : { opacity: 0, scale: 0.72 }}
-      onAnimationComplete={() => {
-        if (isPresent) setEntryComplete(true)
-      }}
       transition={
         reducedMotion
           ? instantTween
@@ -379,9 +378,7 @@ function ComposerReturnToBottomPresence({
         title="回到底部"
         type="button"
       >
-        {running ? (
-          <EllipsisAnimationIcon />
-        ) : null}
+        {running ? <EllipsisAnimationIcon /> : null}
         <ArrowDown
           aria-hidden="true"
           className="composer-change-summary__down-arrow"

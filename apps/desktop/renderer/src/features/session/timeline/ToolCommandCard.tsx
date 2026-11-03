@@ -118,7 +118,9 @@ export function ToolCommandCard({
   const [commandExpanded, setCommandExpanded] = React.useState(false)
   const [commandOverflowing, setCommandOverflowing] = React.useState(false)
   const followingRef = React.useRef(active)
+  const pinRef = React.useRef<HTMLDivElement | null>(null)
   const wasExpandedRef = React.useRef(false)
+  const prevWrappedRef = React.useRef(wrapped)
   const edge = useScrollEdgeState(scrollerRef, { contentRef, version: output })
   const exitCode = readCommandExitCode(item.output)
   const outputChunks = React.useMemo(
@@ -155,10 +157,22 @@ export function ToolCommandCard({
       wasExpandedRef.current,
       followingRef.current,
     )
+    const following = active && followingRef.current
+    if (pinRef.current) {
+      pinRef.current.dataset.following = String(following)
+    }
+    const justExpanded = expanded && !wasExpandedRef.current
+    const wrappedChanged = prevWrappedRef.current !== wrapped
+    prevWrappedRef.current = wrapped
     wasExpandedRef.current = expanded
+
     const scroller = scrollerRef.current
     if (!expanded || !scroller) return
-    scroller.scrollTop = commandOutputScrollTop(scroller, active, followingRef.current)
+    const needsBreakZero =
+      following && scroller.scrollTop === 0 && scroller.scrollHeight > scroller.clientHeight
+    if (justExpanded || wrappedChanged || needsBreakZero) {
+      scroller.scrollTop = commandOutputScrollTop(scroller, active, followingRef.current)
+    }
   }, [active, expanded, output, wrapped])
 
   return (
@@ -220,7 +234,11 @@ export function ToolCommandCard({
             tabIndex={0}
             aria-label="返回结果"
             onScroll={(event) => {
-              followingRef.current = isCommandOutputAtBottom(event.currentTarget)
+              const atBottom = isCommandOutputAtBottom(event.currentTarget)
+              followingRef.current = atBottom
+              if (pinRef.current) {
+                pinRef.current.dataset.following = String(active && atBottom)
+              }
             }}
           >
             <pre
@@ -238,6 +256,11 @@ export function ToolCommandCard({
                 </span>
               ))}
             </pre>
+            <div
+              ref={pinRef}
+              className="canonical-command-card__output-pin"
+              data-following={active && followingRef.current}
+            />
           </div>
         </div>
         <div className="canonical-command-card__actions">

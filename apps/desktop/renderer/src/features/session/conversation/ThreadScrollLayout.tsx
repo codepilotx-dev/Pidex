@@ -129,7 +129,7 @@ export function ThreadScrollLayout({
     <div
       ref={scrollRef}
       className={[
-        'thread-scroll-layout tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-x-hidden tw:overflow-y-auto tw:overscroll-contain tw:[overflow-anchor:none] tw:[scrollbar-gutter:stable] tw:[scroll-padding-block-end:var(--thread-scroll-padding-bottom)] ',
+        'thread-scroll-layout tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-x-hidden tw:overflow-y-auto tw:overscroll-contain tw:[scrollbar-gutter:stable] tw:[scroll-padding-block-end:var(--thread-scroll-padding-bottom)]',
         className,
       ]
         .filter(Boolean)
@@ -144,7 +144,7 @@ export function ThreadScrollLayout({
           <footer
             ref={footerRef}
             className={cx(
-              'thread-scroll-layout__footer tw:sticky tw:bottom-0 tw:isolate tw:z-3 tw:mt-auto tw:flex tw:w-full tw:shrink-0 tw:justify-center tw:pointer-events-none tw:[&>*]:pointer-events-auto',
+              'thread-scroll-layout__footer tw:sticky tw:bottom-0 tw:isolate tw:z-3 tw:mt-auto tw:flex tw:w-full tw:shrink-0 tw:justify-center tw:pointer-events-none tw:[overflow-anchor:none] tw:[&>*]:pointer-events-auto',
               footerClassName ?? 'tw:px-4 tw:pb-4',
             )}
             onFocusCapture={handleFooterFocusCapture}

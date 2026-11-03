@@ -10,6 +10,26 @@ import {
 import { ExecutionPlanCard } from '../src/features/session/workflow/ExecutionPlanCard'
 
 describe('ExecutionPlanCard', () => {
+  test('纯文本聊天离开底部时仍提供返回入口，且不渲染空摘要栏', () => {
+    const html = renderToStaticMarkup(
+      <ComposerChangeSummary
+        executionPlan={null}
+        changedFiles={[]}
+        active={false}
+        failed={false}
+        additions={null}
+        deletions={null}
+        canReturnToBottom
+        onOpenReview={() => undefined}
+        onOpenReviewFile={() => undefined}
+        onReturnToBottom={() => undefined}
+      />,
+    )
+    expect(html).toContain('aria-label="回到底部"')
+    expect(html).not.toContain('inert=""')
+    expect(html).not.toContain('aria-hidden="true" class="composer-change-summary__return-presence')
+    expect(html).not.toContain('aria-label="任务变更摘要"')
+  })
   test('changed-file preview uses a feature-owned native row', async () => {
     const [componentSource, stylesheet] = await Promise.all([
       Bun.file(
