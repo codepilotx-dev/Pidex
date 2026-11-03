@@ -50,6 +50,7 @@ jobs:
         uses: ./.github/actions/setup-project
         with:
           ignore-scripts: 'true'
+          workspace: '@pidex/agent'
       - name: Build Windows x64 agent
         if: steps.project.outputs.run == 'true'
         run: bun run build:agent
@@ -137,6 +138,7 @@ jobs:
         uses: ./.github/actions/setup-project
         with:
           ignore-scripts: 'true'
+          workspace: '@pidex/renderer'
       - name: Renderer final-state accessibility
         if: steps.project.outputs.run == 'true'
         run: bun run --cwd apps/desktop/renderer test:a11y --shard=${{ matrix.shard }}/2

@@ -7,6 +7,9 @@ inputs:
   ignore-scripts:
     description: Skip native lifecycle scripts for static checks.
     default: 'false'
+  workspace:
+    description: Install only this workspace and its dependencies; empty installs all workspaces.
+    default: ''
 outputs:
   run:
     description: Whether this change needs code validation.
@@ -47,9 +50,13 @@ runs:
       shell: bash
       env:
         IGNORE_SCRIPTS: ${{ inputs.ignore-scripts }}
+        WORKSPACE: ${{ inputs.workspace }}
       run: |
+        args=(--frozen-lockfile)
         if [[ "$IGNORE_SCRIPTS" == true ]]; then
-          bun install --frozen-lockfile --ignore-scripts
-        else
-          bun install --frozen-lockfile
+          args+=(--ignore-scripts)
         fi
+        if [[ -n "$WORKSPACE" ]]; then
+          args+=(--filter "$WORKSPACE")
+        fi
+        bun install "${args[@]}"
