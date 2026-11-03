@@ -3,7 +3,7 @@ import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { removeFixturePaths } from './FixtureCleanup'
+import { removeFixturePath, removeFixturePaths } from './FixtureCleanup'
 import { GitCommandRunner } from '../src/git/GitCommandRunner'
 import type { AgentLogger } from '../src/observability/AgentLogger'
 import { parsePorcelainStatus } from '../src/review/diff/Parsers'
@@ -116,8 +116,11 @@ describe('GitReviewService', () => {
         args: ['rev-parse', 'HEAD'],
       }),
     ).rejects.toMatchObject({ code: 'GIT_OUTPUT_TOO_LARGE', details: undefined })
+    // 超限终止必须结束整个 git 进程树：只 kill 直接子进程时，Windows 上残留的
+    // 子进程会一直占着仓库目录，随后清理夹具就会 EBUSY。
     review.dispose()
     db.close()
+    await removeFixturePath(roots.pop()!)
   }, 30_000)
 
   test('未跟踪目录标记不被当作文件，仍拒绝越界路径', () => {
