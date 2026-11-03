@@ -60,6 +60,7 @@ import {
 } from './SidebarSessionPaging.js'
 import { useEverOpened } from '../../../hooks/UsePresenceRetention.js'
 import { cx } from '../../../utils/Cx.js'
+import { containsRelatedTarget } from '../../../utils/DomTargets.js'
 import {
   AppContextMenu as SidebarContextMenu,
   type AppContextMenuAction as ContextMenuAction,
@@ -881,21 +882,21 @@ function SidebarSessionRowComponent({
       leadingMode={showConversationIcon ? 'icon' : sessionIndent === 'gutter' ? 'none' : 'spacer'}
       onMouseOver={(event) => {
         if (getDraggingSession()) return
-        if (!event.currentTarget.contains(event.target as Node)) return
+        if (!containsRelatedTarget(event.currentTarget, event.target)) return
         onHoverChange(session.id)
       }}
       onMouseOut={(event) => {
         if (getDraggingSession()) return
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        if (containsRelatedTarget(event.currentTarget, event.relatedTarget)) return
         onHoverChange((current) => (current === session.id ? null : current))
         onRequestArchive((current) => (current === session.id ? null : current))
       }}
       onFocusCapture={(event) => {
-        if (!event.currentTarget.contains(event.target as Node)) return
+        if (!containsRelatedTarget(event.currentTarget, event.target)) return
         onFocusChange(event.target.matches(':focus-visible') ? session.id : null)
       }}
       onBlurCapture={(event) => {
-        if (event.currentTarget.contains(event.relatedTarget as Node | null)) return
+        if (containsRelatedTarget(event.currentTarget, event.relatedTarget)) return
         onFocusChange((current) => (current === session.id ? null : current))
       }}
       trailing={

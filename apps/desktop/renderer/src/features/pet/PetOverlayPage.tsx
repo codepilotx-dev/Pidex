@@ -7,6 +7,7 @@ import { usePetOverlayController } from './UsePetOverlayController.js'
 import { resolvePetDragAnimation } from './PetDirectionModel.js'
 import type { PetAnimationName } from './PetAnimationModel.js'
 import { usePetLookFrame } from './UsePetLookFrame.js'
+import { containsRelatedTarget } from '../../utils/DomTargets.js'
 import '../../styles/lazy/pet-overlay.css'
 
 export function PetOverlayPage(): React.ReactNode {
@@ -82,7 +83,7 @@ export function PetOverlayPage(): React.ReactNode {
         <section
           className="pet-overlay-pill pet-overlay-interactive tw:absolute tw:top-2 tw:right-2 tw:left-2 tw:flex tw:max-h-55 tw:min-h-[70px] tw:flex-col tw:items-stretch tw:gap-2 tw:overflow-auto tw:rounded-xl tw:border tw:border-app-border tw:bg-app-raised tw:px-4 tw:py-3 tw:text-app-text tw:shadow-lg tw:backdrop-blur-none tw:pointer-events-auto"
           onBlurCapture={(event) => {
-            if (event.currentTarget.contains(event.relatedTarget as Node | null)) {
+            if (containsRelatedTarget(event.currentTarget, event.relatedTarget)) {
               return
             }
             setKeyboardFocus(false)

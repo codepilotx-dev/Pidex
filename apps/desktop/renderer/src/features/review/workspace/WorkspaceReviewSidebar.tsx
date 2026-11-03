@@ -137,6 +137,7 @@ import {
 import { filterStatusForFile, type ReviewFilter } from './ReviewFileStatus.js'
 import { hideImportOnlyHunks } from '../diff/ReviewDiffAdapter.js'
 import { cx } from '../../../utils/Cx.js'
+import { containsRelatedTarget } from '../../../utils/DomTargets.js'
 
 const REVIEW_FILE_TREE_RUNTIME_MIN_WIDTH = REVIEW_FILE_TREE_PANEL_MIN_WIDTH + 8 + 260
 
@@ -2398,7 +2399,10 @@ function WorkspaceReviewSidebarImpl({
                 event.target instanceof HTMLElement && event.target.matches(':focus-visible')
             }}
             onBlurCapture={(event) => {
-              if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node))
+              if (
+                event.relatedTarget &&
+                !containsRelatedTarget(event.currentTarget, event.relatedTarget)
+              )
                 wideActionsFocusRef.current = false
             }}
           >
