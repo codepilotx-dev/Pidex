@@ -29,7 +29,10 @@ jobs:
           ignore-scripts: 'true'
       - name: Project quality checks
         if: steps.project.outputs.run == 'true'
-        run: bun run typecheck && bun run format:check && bun run lint && bun run --cwd packages/material-icon-theme sync:check && bun run desktop:css:check
+        run: bun run --parallel --no-exit-on-error typecheck format:check lint desktop:css:check
+      - name: Icon theme sync check
+        if: always() && steps.project.outputs.run == 'true'
+        run: bun run --cwd packages/material-icon-theme sync:check
       - name: Whitespace check
         if: steps.project.outputs.run == 'true'
         shell: bash
@@ -55,6 +58,8 @@ jobs:
       - name: Prepare project
         id: project
         uses: ./.github/actions/setup-project
+        with:
+          ignore-scripts: 'true'
       - name: Unit tests
         if: steps.project.outputs.run == 'true'
         env:

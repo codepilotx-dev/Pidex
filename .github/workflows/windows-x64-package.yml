@@ -48,6 +48,8 @@ jobs:
       - name: Prepare project
         id: project
         uses: ./.github/actions/setup-project
+        with:
+          ignore-scripts: 'true'
       - name: Build Windows x64 agent
         if: steps.project.outputs.run == 'true'
         run: bun run build:agent
@@ -121,6 +123,10 @@ jobs:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -133,7 +139,7 @@ jobs:
           ignore-scripts: 'true'
       - name: Renderer final-state accessibility
         if: steps.project.outputs.run == 'true'
-        run: bun run --cwd apps/desktop/renderer test:a11y
+        run: bun run --cwd apps/desktop/renderer test:a11y --shard=${{ matrix.shard }}/2
 
   release-parity:
     if: always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')

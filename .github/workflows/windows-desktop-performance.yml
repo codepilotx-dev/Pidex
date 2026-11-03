@@ -28,6 +28,8 @@ jobs:
       - name: Prepare project
         id: project
         uses: ./.github/actions/setup-project
+        with:
+          ignore-scripts: 'true'
       - name: Renderer performance observation
         if: steps.project.outputs.run == 'true'
         run: bun scripts/performance/RunSuite.ts --suite=renderer
