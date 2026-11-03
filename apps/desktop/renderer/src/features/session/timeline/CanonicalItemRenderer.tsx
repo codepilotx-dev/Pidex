@@ -1,7 +1,6 @@
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 import React from 'react'
 import {
-  Bot,
   Check,
   ChevronDown,
   ChevronRight,
@@ -57,7 +56,6 @@ import {
 import { CodeBlock } from '../../syntax/CodeBlock.js'
 import { MarkdownMessage } from '../../markdown/index.js'
 import { ConversationMarkdownErrorBoundary } from '../conversation/ConversationTurnErrorBoundary.js'
-import { subagentStatusLabel } from '../subagents/SubagentStatusLabel.js'
 import { useScrollEdgeState } from '../../../hooks/UseScrollEdgeState.js'
 import {
   ConversationItemContext,
@@ -600,8 +598,6 @@ function CanonicalItemRendererContentComponent({
       return (
         <PatchItemView item={item} onApplyPatch={onApplyPatch} onOpenReview={onOpenPatchReview} />
       )
-    case 'subagent':
-      return <SubagentItemView item={item} onOpen={onOpenSubagent} />
   }
 }
 
@@ -1689,35 +1685,6 @@ function sameMutationPath(left: string, right: string): boolean {
   const normalize = (value: string): string =>
     value.replaceAll('\\', '/').toLocaleLowerCase('en-US')
   return normalize(left) === normalize(right)
-}
-
-function SubagentItemView({
-  item,
-  onOpen,
-}: {
-  item: ItemOf<'subagent'>
-  onOpen: (taskId: string) => void
-}): React.ReactNode {
-  return (
-    <button
-      className="canonical-subagent-card"
-      type="button"
-      onClick={() => onOpen(item.subagentTaskId)}
-    >
-      <Bot size="var(--inline-icon-size, 1em)" aria-hidden="true" />
-      <span>
-        <strong>{item.displayName}</strong>
-        <small>{item.task}</small>
-        {item.descendantCount ? (
-          <small>
-            后代 {item.activeDescendantCount ?? 0}/{item.descendantCount} 正在进行
-          </small>
-        ) : null}
-        {item.waitingForDescendants ? <small>等待后代结算</small> : null}
-      </span>
-      <em>{subagentStatusLabel(item.status)}</em>
-    </button>
-  )
 }
 
 function toolStateLabel(state: ToolItem['state']): string {

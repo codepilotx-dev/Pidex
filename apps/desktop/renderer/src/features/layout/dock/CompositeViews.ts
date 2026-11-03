@@ -117,10 +117,10 @@ export const BUILTIN_COMPOSITE_VIEWS: Record<WorkbenchTabKind, CompositeViewDefi
     isSingleton: false,
     canFloat: true,
   },
-  'side-task': {
-    id: 'workbench.view.sideTask',
-    kind: 'side-task',
-    title: '后台任务',
+  'subagent-directory': {
+    id: 'workbench.view.subagentDirectory',
+    kind: 'subagent-directory',
+    title: '子智能体',
     defaultLocation: 'right',
     allowedLocations: ['sidebar', 'right', 'floating'],
     canMove: true,

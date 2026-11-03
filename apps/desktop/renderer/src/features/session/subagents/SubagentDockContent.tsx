@@ -75,16 +75,6 @@ export function SubagentDockContent({
   }
 
   const callbacks: SubagentThreadCallbacks = {
-    onSend: async (message) => {
-      if (!desktopClient.sendSubagent) throw new Error('当前 Agent 不支持补充要求。')
-      await desktopClient.sendSubagent(read.task.id, message)
-      await onRefresh()
-    },
-    onFollowup: async (message) => {
-      if (!desktopClient.followupSubagent) throw new Error('当前 Agent 不支持后续任务。')
-      await desktopClient.followupSubagent(read.task.id, message)
-      await onRefresh()
-    },
     onPatchApplied: async () => {
       await onRefresh()
       onPatchApplied()

@@ -11,7 +11,6 @@ import type {
 
 import { SubagentThreadPanel } from '../src/features/session/subagents/SubagentThreadPanel.js'
 import { QuickChatContext } from '../src/features/session/QuickChatContext.js'
-import { ConversationItemContext } from '../src/features/session/timeline/ConversationItemContext.js'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
 
 const originalWindowDescriptor = Object.getOwnPropertyDescriptor(globalThis, 'window')
@@ -37,18 +36,7 @@ afterAll(() => {
 function TestProviders({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
     <QuickChatContext.Provider value={{} as React.ContextType<typeof QuickChatContext>}>
-      <ConversationItemContext.Provider
-        value={{
-          canCopyFileReferenceContents: () => false,
-          onCopyFileReferenceContents: () => undefined,
-          onOpenFileReference: () => undefined,
-          onSubmitEditedUserMessage: async () => undefined,
-          sessionStatus: 'idle',
-          workspacePath: null,
-        }}
-      >
-        <TooltipProvider>{children}</TooltipProvider>
-      </ConversationItemContext.Provider>
+      <TooltipProvider>{children}</TooltipProvider>
     </QuickChatContext.Provider>
   )
 }
@@ -222,7 +210,7 @@ const fullCapabilities = {
 } as const
 
 describe('subagent thread panel', () => {
-  test('shows complete submitted details in the sidebar without a result card', () => {
+  test('does not append structured results or a message form below the transcript', () => {
     const markup = renderPanel({
       currentRun: run({
         result: {
@@ -246,9 +234,13 @@ describe('subagent thread panel', () => {
       '仍需确认风险',
       'https://example.com/evidence',
     ]) {
-      expect(markup).toContain(text)
+      expect(markup).not.toContain(text)
     }
     expect(markup).not.toContain('canonical-result-card')
+    expect(markup).not.toContain('<textarea')
+    expect(markup).not.toContain('<form')
+    expect(markup).not.toContain('排队后续任务')
+    expect(markup).not.toContain('补充当前要求')
   })
 
   test('renders a read-only workbench thread for a completed subagent', () => {

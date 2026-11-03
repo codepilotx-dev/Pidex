@@ -208,7 +208,7 @@ export function WorkbenchTabStrip({
                   trigger={
                     <div
                       className={cx(
-                        'right-dock-tab-wrap tw:group tw:relative tw:flex tw:h-7 tw:min-w-22.5 tw:max-w-39 tw:flex-[1_1_156px] tw:items-center tw:overflow-hidden tw:rounded-lg tw:border tw:border-transparent tw:px-2 tw:py-1 tw:shadow-none tw:transition-[background-color,border-color,color] tw:duration-state tw:ease-standard tw:[&.dragging]:opacity-50',
+                        'right-dock-tab-wrap tw:group tw:relative tw:flex tw:h-8 tw:min-w-22.5 tw:max-w-39 tw:flex-[1_1_156px] tw:items-center tw:overflow-hidden tw:rounded-md tw:border tw:border-transparent tw:px-2 tw:py-1 tw:shadow-none tw:transition-[background-color,border-color,color] tw:duration-state tw:ease-standard tw:[&.dragging]:opacity-50',
                         active
                           ? 'active tw:bg-app-selected tw:text-app-text'
                           : 'tw:text-app-text-meta tw:hover:bg-app-hover tw:hover:text-app-text-soft tw:has-[:focus-visible]:bg-app-hover tw:has-[:focus-visible]:text-app-text-soft',
@@ -276,7 +276,7 @@ export function WorkbenchTabStrip({
                         <span className="right-dock-tab-icon tw:inline-flex tw:size-[var(--inline-icon-size,1em)] tw:items-center tw:justify-center tw:[&>svg]:size-[var(--inline-icon-size,1em)]">
                           {tabIcon}
                         </span>
-                        <span className="right-dock-tab-title tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:whitespace-nowrap">
+                        <span className="right-dock-tab-title tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-left tw:whitespace-nowrap">
                           {tabTitle}
                         </span>
                       </button>
@@ -291,6 +291,7 @@ export function WorkbenchTabStrip({
                         color="ghost"
                         variant="ghost"
                         size="iconMd"
+                        shape="pill"
                         title={`关闭 ${tabTitle}`}
                         onMouseDown={(event) => {
                           event.preventDefault()

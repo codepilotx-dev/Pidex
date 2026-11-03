@@ -58,6 +58,7 @@ import {
   RightDockSkillPreviewPanel,
 } from '../dock/RightDockPanels.js'
 import { SideChatThreadPanel } from '../../session/conversation/SideChatThreadPanel.js'
+import { SubagentDirectoryPanel } from '../../session/subagents/SubagentDirectoryPanel.js'
 import { UserAttachmentPreviewPanel } from '../../session/attachments/UserAttachmentPreviewPanel.js'
 
 const DesktopBrowserPanel = React.lazy(() =>
@@ -214,10 +215,15 @@ export type WorkbenchTabRenderContext = {
       context: SideChatComposerRenderContext,
     ) => ReactNode
   }
-  sideTask: {
-    activeTaskId: string | null
+  subagentDirectory: {
     availability: WorkbenchTabAvailability
-    content?: ReactNode
+    /** 选中同一父 thread 内的任务，无需额外读取。 */
+    onSelectTask: (threadId: string, taskId: string | null) => void
+    /** 跨父 thread 导航（嵌套/父任务），宿主按 taskId 查出所属父 thread。 */
+    onOpenTask: (taskId: string) => void
+    onError: (message: string) => void
+    onOpenPatchReview: (path?: string) => void
+    onRefreshDiff: () => void
   }
   terminal: {
     availability: WorkbenchTabAvailability
@@ -503,24 +509,27 @@ const definitions: readonly WorkbenchTabDefinition[] = [
     },
   },
   {
-    kind: 'side-task',
+    kind: 'subagent-directory',
     label: '子智能体',
     icon: <Bot size={iconSize} />,
     launcher: false,
     lifecycle: 'unmount-when-hidden',
-    getAvailability: (context) => context.sideTask.availability,
+    getAvailability: (context) => context.subagentDirectory.availability,
     getTitle: () => '子智能体',
     render: (tab, context) =>
-      tab.kind === 'side-task' && context.sideTask.activeTaskId === tab.taskId ? (
-        (context.sideTask.content ?? (
-          <div className="right-dock-empty-state">正在加载子智能体…</div>
-        ))
-      ) : (
-        <div className="right-dock-empty-state">
-          <strong>子智能体已在其他标签切换</strong>
-          <span>选择此标签以恢复对应任务。</span>
-        </div>
-      ),
+      tab.kind === 'subagent-directory' ? (
+        <SubagentDirectoryPanel
+          onError={context.subagentDirectory.onError}
+          onOpenPatchReview={context.subagentDirectory.onOpenPatchReview}
+          onOpenTask={context.subagentDirectory.onOpenTask}
+          onRefreshDiff={context.subagentDirectory.onRefreshDiff}
+          onSelectTask={(taskId) =>
+            context.subagentDirectory.onSelectTask(tab.threadId, taskId)
+          }
+          selectedTaskId={tab.selectedTaskId}
+          threadId={tab.threadId}
+        />
+      ) : null,
   },
 ]
 

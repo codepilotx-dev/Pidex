@@ -8,7 +8,6 @@ import { commandMenuActionStore } from '../../search/CommandMenuActionStore.js'
 import {
   AppWindow,
   Archive,
-  Bot,
   ChevronRight,
   Copy,
   Split,
@@ -69,7 +68,6 @@ import {
 } from '../../layout/tabs/ConversationUiState.js'
 import { CanonicalThreadView } from '../timeline/CanonicalThreadView.js'
 import { normalizePatchActionError } from '../timeline/PatchActionError.js'
-import { subagentStatusLabel } from '../subagents/SubagentStatusLabel.js'
 import { ConversationItemContext } from '../timeline/ConversationItemContext.js'
 import type { ThreadTimelineNavigationHandle } from '../timeline/SessionTimelineView.js'
 import { ThreadComposerDock } from './ThreadComposerDock.js'
@@ -1665,29 +1663,6 @@ export function ConversationPage(): React.ReactNode {
                         <FullScreenWhaleLoading label="正在加载会话内容…" variant="contained" />
                       ) : (
                         <div className="session-timeline-loaded-presence tw:flex tw:w-full tw:min-h-0 tw:flex-[1_0_auto] tw:flex-col tw:animate-[session-timeline-fade-in_var(--cpx-sys-motion-panel)_var(--cpx-sys-ease-out)_both]">
-                          {subagents.length ? (
-                            <div
-                              className="subagent-timeline-summary tw:mx-auto tw:my-2 tw:flex tw:w-[min(var(--page-content-max-width),var(--session-content-w))] tw:flex-col tw:gap-1"
-                              aria-label="子智能体任务"
-                            >
-                              {subagents.map(({ task, currentRun }) => (
-                                <button
-                                  key={task.id}
-                                  type="button"
-                                  onClick={() => onOpenSubagent(task.id)}
-                                  className="tw:grid tw:min-h-[34px] tw:grid-cols-[18px_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:rounded-md tw:border-0 tw:bg-app-editor tw:px-3 tw:py-2 tw:text-left tw:text-app-text tw:cursor-pointer tw:hover:bg-app-hover"
-                                >
-                                  <Bot size="var(--inline-icon-size, 1em)" />
-                                  <span className="tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
-                                    {task.displayName}
-                                  </span>
-                                  <small className="tw:whitespace-nowrap tw:text-app-text-soft">
-                                    {subagentStatusLabel(currentRun?.status ?? 'interrupted')}
-                                  </small>
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
                           <ConversationItemContext.Provider value={conversationItemContextValue}>
                             {firstSubmittedMessage}
                             {canonicalThreadView}

@@ -47,10 +47,8 @@ import {
   shouldCollapseSidebarResize,
 } from '../src/features/layout/UseSidebarResizeCollapseConfirm.js'
 import { getSidebarScrollModeKey } from '../src/features/layout/sidebar/UseSidebarScrollController.js'
-import {
-  buildSidebarSessionHoverCardModel,
-  formatSidebarSessionRelativeTime,
-} from '../src/features/layout/sidebar/SidebarSessionHoverCard.js'
+import { buildSidebarSessionHoverCardModel } from '../src/features/layout/sidebar/SidebarSessionHoverCard.js'
+import { formatSidebarSessionRelativeTime } from '../src/features/layout/sidebar/SessionRelativeTime.js'
 import { countOpenProjectSessions } from '../src/features/layout/sidebar/SidebarProjectHoverCard.js'
 import {
   displayedSidebarSessions,

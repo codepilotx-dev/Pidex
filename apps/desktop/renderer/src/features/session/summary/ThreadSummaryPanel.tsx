@@ -27,6 +27,8 @@ import {
 } from 'lucide-react'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { cx } from '../../../utils/Cx.js'
+import { formatSidebarSessionRelativeTime } from '../../layout/sidebar/SessionRelativeTime.js'
+import { subagentStatusLabel } from '../subagents/SubagentStatusLabel.js'
 import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { BranchSelectPopover } from '../composer/BranchSelectPopover.js'
 import type {
@@ -236,6 +238,8 @@ export function ThreadSummaryPanel({
     fileCount: 0,
   }
   const environment = model.environment
+  // 相对时间在渲染时计算；面板不常驻 ticker（与侧栏一致）。
+  const now = Date.now()
 
   const isSectionExpanded = (id: ThreadSummarySectionId): boolean => !collapsedSections.has(id)
   const toggleSection = (id: ThreadSummarySectionId): void => onToggleSection(id)
@@ -510,12 +514,19 @@ export function ThreadSummaryPanel({
               key={agent.id}
             >
               <button
-                className="interactive-row interactive-row--nav thread-summary-row-group__main tw:grid tw:min-w-0 tw:grid-cols-[16px_minmax(0,1fr)_max-content] tw:bg-transparent tw:text-left tw:type-body"
+                className="interactive-row interactive-row--nav thread-summary-row-group__main tw:grid tw:min-w-0 tw:grid-cols-[16px_minmax(0,1fr)_max-content] tw:items-center tw:bg-transparent tw:text-left tw:type-body"
                 type="button"
                 onClick={() => onOpenSubagent?.(agent.id)}
               >
                 <Bot className={SUMMARY_ROW_ICON_CLASS} aria-hidden="true" size="var(--inline-icon-size, 1em)" />
-                <span className={SUMMARY_ROW_LABEL_CLASS}>{agent.name}</span>
+                <span className="tw:grid tw:min-w-0">
+                  <span className={SUMMARY_ROW_LABEL_CLASS}>{agent.name}</span>
+                  {agent.summary ? (
+                    <small className="tw:min-w-0 tw:truncate tw:text-app-text-meta tw:type-caption">
+                      {agent.summary}
+                    </small>
+                  ) : null}
+                </span>
                 <small
                   className={cx(
                     'tw:whitespace-nowrap tw:type-caption',
@@ -523,6 +534,9 @@ export function ThreadSummaryPanel({
                   )}
                 >
                   {subagentStatusLabel(agent.status)}
+                  {agent.state === 'finished'
+                    ? ` · ${formatSidebarSessionRelativeTime(new Date(agent.recencyAt).toISOString(), now)}`
+                    : ''}
                 </small>
               </button>
               {agent.stoppable ? (
@@ -960,20 +974,6 @@ function ThreadSummarySection({
     </section>
   )
 }
-
-function subagentStatusLabel(status: string): string {
-  if (status === 'completed') return '已完成'
-  if (status === 'failed') return '失败'
-  if (status === 'stopped') return '已停止'
-  if (status === 'interrupted') return '已中断'
-  if (status === 'queued') return '排队中'
-  if (status === 'waiting-question') return '等待回答'
-  if (status === 'waiting-permission') return '等待审批'
-  if (status === 'steering') return '调整中'
-  return '运行中'
-}
-
-
 
 function formatByteSize(sizeBytes: number): string {
   if (!Number.isFinite(sizeBytes) || sizeBytes <= 0) return '0 B'

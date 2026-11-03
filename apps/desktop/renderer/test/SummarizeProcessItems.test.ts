@@ -3,6 +3,7 @@ import type { Item } from '@pidex/shared/thread'
 
 import {
   formatProcessElapsed,
+  formatSubagentGroupLabel,
   summarizeTurnProcessItems,
   summarizeTurnWork,
 } from '../src/features/session/timeline/SummarizeProcessItems.js'
@@ -243,6 +244,97 @@ describe('summarizeTurnProcessItems', () => {
       kind: 'file-change',
       label: '停止了创建文件',
     })
+  })
+})
+
+type SubagentItem = Extract<Item, { type: 'subagent' }>
+
+function subagentItem(
+  displayName: string,
+  status: SubagentItem['status'],
+  id = `subagent-${displayName}`,
+): SubagentItem {
+  return {
+    id,
+    messageID: id,
+    turnId: 'turn-1',
+    agentId: 'agent-1',
+    type: 'subagent',
+    subagentTaskId: `task-${displayName}`,
+    runId: `run-${displayName}`,
+    childThreadId: `thread-${displayName}`,
+    displayName,
+    profile: 'explorer',
+    task: '举例任务',
+    status,
+    queueReason: null,
+    result: null,
+    createdAt: 0,
+  }
+}
+
+describe('subagent group summary', () => {
+  test('joins names by 和 for two and 、+和 for three', () => {
+    expect(formatSubagentGroupLabel([
+      { name: 'Frontend', status: 'completed' },
+      { name: 'Backend', status: 'completed' },
+    ])).toBe('Frontend和Backend 已完成')
+    expect(formatSubagentGroupLabel([
+      { name: 'Frontend', status: 'completed' },
+      { name: 'Backend', status: 'completed' },
+      { name: 'Designer', status: 'completed' },
+    ])).toBe('Frontend、Backend和Designer 已完成')
+  })
+
+  test('folds names beyond three into 另外 N 个', () => {
+    expect(formatSubagentGroupLabel([
+      { name: 'A', status: 'completed' },
+      { name: 'B', status: 'completed' },
+      { name: 'C', status: 'completed' },
+      { name: 'D', status: 'completed' },
+    ])).toBe('A、B和另外 2 个 已完成')
+  })
+
+  test('reports running count first and appends abnormal counts', () => {
+    expect(formatSubagentGroupLabel([
+      { name: 'A', status: 'running' },
+      { name: 'B', status: 'waiting-permission' },
+    ])).toBe('2 个子智能体正在工作…')
+    expect(formatSubagentGroupLabel([
+      { name: 'A', status: 'running' },
+      { name: 'B', status: 'failed' },
+    ])).toBe('1 个子智能体正在工作…（1 个失败）')
+  })
+
+  test('does not read stopped or interrupted as completed', () => {
+    expect(formatSubagentGroupLabel([
+      { name: 'A', status: 'completed' },
+      { name: 'B', status: 'failed' },
+      { name: 'C', status: 'stopped' },
+    ])).toBe('A、B和C 已结束（1 个失败、1 个停止）')
+  })
+
+  test('parent turn activity does not decide the group status', () => {
+    const items = [
+      subagentItem('Frontend', 'completed'),
+      subagentItem('Backend', 'completed'),
+    ]
+    // 父 turn 仍 active，但两个子任务都已完成：应报已完成。
+    expect(summarizeTurnProcessItems(items, 'running').label).toBe(
+      'Frontend和Backend 已完成',
+    )
+
+    // 父 turn 已结束，但子任务仍在运行：不应误报完成。
+    const runningItems = [subagentItem('Designer', 'running')]
+    const result = summarizeTurnProcessItems(runningItems, 'completed')
+    expect(result.active).toBe(true)
+    expect(result.label).toBe('1 个子智能体正在工作…')
+  })
+
+  test('keeps subagent status changes in the summary key', () => {
+    const first = summarizeTurnProcessItems([subagentItem('A', 'running')], 'running')
+    const second = summarizeTurnProcessItems([subagentItem('A', 'completed')], 'running')
+    expect(first.summaryKey).not.toBe(second.summaryKey)
   })
 })
 

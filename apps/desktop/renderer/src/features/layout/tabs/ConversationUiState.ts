@@ -95,7 +95,6 @@ export type ConversationUiState = ConversationUiStateV4
 
 export type ConversationUiValidationOptions = {
   validPlanItemIds?: readonly string[]
-  validSideTaskIds?: readonly string[]
   workspacePath?: string | null
   fileScopes?: readonly {
     projectId?: string
@@ -270,7 +269,7 @@ export function transferConversationUiStateForHandoff(input: {
           tab?.kind !== 'attachment-preview' &&
           tab?.kind !== 'skill-preview' &&
           tab?.kind !== 'goal' &&
-          tab?.kind !== 'side-task' &&
+          tab?.kind !== 'subagent-directory' &&
           tab?.kind !== 'file-preview',
       ),
     )
@@ -305,7 +304,6 @@ export function transferConversationUiStateForHandoff(input: {
     }
     const transferred = validateConversationUiState(candidate, {
       validPlanItemIds: [],
-      validSideTaskIds: [],
     })
     window.localStorage.setItem(STORAGE_PREFIX + input.targetThreadId, JSON.stringify(transferred))
     return { transferred: true }
@@ -652,20 +650,21 @@ function validateTabDescriptor(
     }
   }
   if (
-    tab.kind === 'side-task' &&
+    tab.kind === 'subagent-directory' &&
     typeof tab.id === 'string' &&
-    tab.id.startsWith('side-task:') &&
-    typeof tab.taskId === 'string' &&
-    tab.taskId.length > 0 &&
-    typeof tab.childThreadId === 'string' &&
-    tab.childThreadId.length > 0 &&
-    (!options.validSideTaskIds || options.validSideTaskIds.includes(tab.taskId))
+    tab.id.startsWith('subagent-directory:') &&
+    typeof tab.threadId === 'string' &&
+    tab.threadId.length > 0
   ) {
+    const selectedTaskId =
+      typeof tab.selectedTaskId === 'string' && tab.selectedTaskId.length > 0
+        ? tab.selectedTaskId
+        : undefined
     return {
-      id: tab.id as `side-task:${string}`,
-      kind: 'side-task',
-      taskId: tab.taskId,
-      childThreadId: tab.childThreadId,
+      id: tab.id as `subagent-directory:${string}`,
+      kind: 'subagent-directory',
+      threadId: tab.threadId,
+      ...(selectedTaskId ? { selectedTaskId } : {}),
     }
   }
 

@@ -734,6 +734,22 @@
     white-space: nowrap;
   }
 
+  /* 子智能体组头：最多四个 18px 角色头像，后续叠放 6px。 */
+  .cpx-agent-activity__dots {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+  }
+
+  .cpx-agent-activity__avatar {
+    margin-inline-start: -6px;
+    box-shadow: 0 0 0 1px var(--cpx-sys-color-surface-panel);
+  }
+
+  .cpx-agent-activity__avatar:first-child {
+    margin-inline-start: 0;
+  }
+
   .cpx-agent-activity[data-expandable='false'] > .cpx-agent-activity__header {
     cursor: default;
   }
@@ -816,16 +832,10 @@
   .cpx-agent-activity__path-step[data-state='running']
     > .canonical-process-card
     > .canonical-process-card__summary,
-  .cpx-agent-activity__path-step[data-state='running'] > .canonical-subagent-card {
-    color: var(--cpx-sys-color-fg-secondary);
-  }
 
   .cpx-agent-activity__path-step[data-state='completed']
     > .canonical-process-card
     > .canonical-process-card__summary,
-  .cpx-agent-activity__path-step[data-state='completed'] > .canonical-subagent-card {
-    color: var(--cpx-sys-color-fg-secondary);
-  }
 
   .cpx-agent-activity__path-step[data-state='failed']::before {
     border-color: var(--cpx-sys-color-danger);
@@ -837,9 +847,6 @@
   .cpx-agent-activity__path-step[data-state='failed']
     > .canonical-process-card
     > .canonical-process-card__summary,
-  .cpx-agent-activity__path-step[data-state='failed'] > .canonical-subagent-card {
-    color: var(--cpx-sys-color-fg-secondary);
-  }
 
   /*
    * Activity item rows: the row colour and the reveal states are driven by the
@@ -1749,70 +1756,7 @@
     color: var(--cpx-sys-color-danger);
   }
 
-  .canonical-subagent-card {
-    display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--cpx-sys-space-2);
-    width: 100%;
-    min-height: 48px;
-    padding: var(--cpx-sys-space-2) var(--cpx-sys-space-3);
-    border: 1px solid var(--cpx-sys-color-border-subtle);
-    border-radius: var(--cpx-sys-radius-lg);
-    background: var(--cpx-sys-color-surface-panel);
-    box-shadow: none;
-    color: var(--cpx-sys-color-fg-primary);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition:
-      background var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
-      border-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
-  }
-
-  .canonical-subagent-card__files {
-    overflow: hidden;
-    color: var(--cpx-sys-color-fg-secondary);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .canonical-subagent-card:hover {
-    border-color: var(--cpx-sys-color-border-default);
-    background: var(--cpx-sys-color-hover);
-  }
-
-  .canonical-subagent-card:focus-visible {
-    outline: 2px solid var(--cpx-sys-color-border-focus);
-    outline-offset: 2px;
-  }
-
-  .canonical-subagent-card > span {
-    display: grid;
-    min-width: 0;
-  }
-
-  .canonical-subagent-card strong,
-  .canonical-subagent-card small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .canonical-subagent-card small,
-  .canonical-subagent-card em {
-    color: var(--cpx-sys-color-fg-tertiary);
-    font: var(--cpx-sys-type-caption);
-    font-style: normal;
-  }
-
-  /* Grouped presentation inside the process list. */
-  .cpx-agent-activity__list .canonical-subagent-card {
-    min-height: 38px;
-    padding: var(--cpx-sys-space-1) var(--cpx-sys-space-3);
-  }
-
-  /* ── Reduced motion ── */
+/* ── Reduced motion ── */
 
   /* The flash overlay is decorative motion without a transition to zero out. */
   :root[data-reduce-motion='on'] .canonical-lifecycle-tool__icon-flash {

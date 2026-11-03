@@ -385,6 +385,198 @@ describe('canonical thread switch', () => {
     expect(summaryOnly).not.toContain('lucide-chevron')
   })
 
+  test('isolates subagent items into their own group in both directions', () => {
+    const subagent = (
+      id: string,
+      status: Extract<Item, { type: 'subagent' }>['status'] = 'completed',
+    ): Extract<Item, { type: 'subagent' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'subagent',
+      subagentTaskId: `task-${id}`,
+      runId: `run-${id}`,
+      childThreadId: `child-${id}`,
+      displayName: id,
+      profile: 'explorer',
+      task: '审阅仓库',
+      status,
+      queueReason: null,
+      result: null,
+      createdAt: 1_000,
+    })
+    const tool = (id: string): Extract<Item, { type: 'tool' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'tool',
+      callID: `call-${id}`,
+      tool: 'Bash',
+      title: 'Bash',
+      state: 'completed',
+      input: null,
+      command: 'bun test',
+      output: null,
+      error: null,
+      startedAt: 1_000,
+      finishedAt: 2_000,
+      durationMs: 1_000,
+      createdAt: 1_000,
+    })
+    const model = buildProcessActivityModel(
+      [tool('tool-a'), subagent('agent-a'), subagent('agent-b'), tool('tool-b')],
+      { activitySliceClosed: true, turnActive: false },
+    )
+
+    expect(
+      model.units.map((unit) =>
+        unit.kind === 'group'
+          ? ['group', ...unit.items.map((item) => item.id)]
+          : [unit.kind, unit.item.id],
+      ),
+    ).toEqual([
+      ['activity', 'tool-a'],
+      ['group', 'agent-a', 'agent-b'],
+      ['activity', 'tool-b'],
+    ])
+  })
+
+  test('renders subagents as a single non-expandable line that opens the directory', () => {
+    const subagent = (id: string): Extract<Item, { type: 'subagent' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'subagent',
+      subagentTaskId: `task-${id}`,
+      runId: `run-${id}`,
+      childThreadId: `child-${id}`,
+      displayName: id,
+      profile: 'explorer',
+      task: '审阅仓库',
+      status: 'completed',
+      queueReason: null,
+      result: null,
+      createdAt: 1_000,
+    })
+    const spawned: Item = {
+      id: 'spawn',
+      messageID: 'message-spawn',
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'tool',
+      callID: 'call-spawn',
+      tool: 'spawn_agents',
+      title: 'spawn_agents',
+      state: 'completed',
+      input: null,
+      command: null,
+      error: null,
+      output: null,
+      startedAt: 1_000,
+      finishedAt: 2_000,
+    }
+    const entry = {
+      id: 'turn-1',
+      turn: { id: 'turn-1', status: 'completed', elapsedSeconds: 5, error: null },
+      items: [spawned, subagent('Frontend'), subagent('Backend')],
+      userItems: [],
+      attachments: [],
+      contextReferences: [],
+      processItems: [spawned, subagent('Frontend'), subagent('Backend')],
+      assistantResultItems: [],
+      patchItems: [],
+      postAssistantItems: [],
+      planItem: null,
+      executionPlanItems: [],
+      blockers: [],
+      contentBlocks: [],
+    } as unknown as RenderTurnEntry
+
+    const html = renderToStaticMarkup(
+      <CanonicalTestProviders>
+        <CanonicalConversationTurn
+          disclosureState={disclosureStore('turn-activity:turn-1')}
+          entry={entry}
+          onOpenPlanInRightDock={() => undefined}
+          onOpenSubagent={() => undefined}
+          dockedPlanItemId={null}
+        />
+      </CanonicalTestProviders>,
+    )
+
+    // 内联只有一行摘要：没有展开箭头、没有逐任务卡片、没有生命周期行。
+    expect(html).toContain('Frontend和Backend 已完成')
+    expect(html).toContain('打开子智能体列表')
+    expect(html).not.toContain('cpx-agent-activity__chevron')
+    expect(html).not.toContain('canonical-subagent-card')
+    expect(html).not.toContain('已创建子代理')
+  })
+
+  test('folds spawn/wait lifecycle rows into the subagent group instead of extra lines', () => {
+    const subagent = (
+      id: string,
+      status: Extract<Item, { type: 'subagent' }>['status'] = 'completed',
+    ): Extract<Item, { type: 'subagent' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'subagent',
+      subagentTaskId: `task-${id}`,
+      runId: `run-${id}`,
+      childThreadId: `child-${id}`,
+      displayName: id,
+      profile: 'explorer',
+      task: '审阅仓库',
+      status,
+      queueReason: null,
+      result: null,
+      createdAt: 1_000,
+    })
+    const lifecycle = (id: string, name: string): Extract<Item, { type: 'tool' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'tool',
+      callID: `call-${id}`,
+      tool: name,
+      title: name,
+      state: 'completed',
+      input: null,
+      command: null,
+      output: null,
+      error: null,
+      startedAt: 1_000,
+      finishedAt: 2_000,
+      durationMs: 1_000,
+      createdAt: 1_000,
+    })
+    const model = buildProcessActivityModel(
+      [
+        lifecycle('spawn', 'spawn_agents'),
+        subagent('agent-a'),
+        subagent('agent-b'),
+        lifecycle('wait', 'wait_agents'),
+      ],
+      { activitySliceClosed: true, turnActive: false },
+    )
+
+    // 同轮已有子智能体时，创建与等待行被吸收，只保留一个组。
+    expect(model.units).toHaveLength(1)
+    const [unit] = model.units
+    expect(unit.kind).toBe('group')
+    if (unit.kind === 'group') {
+      expect(unit.items.map((item) => item.id)).toEqual(['agent-a', 'agent-b'])
+      expect(summarizeTurnProcessItems(unit.items, 'completed').label).toBe(
+        'agent-a和agent-b 已完成',
+      )
+    }
+  })
+
   test('groups only consecutive activity and lets lifecycle rows interrupt it', () => {
     const tool = (
       id: string,

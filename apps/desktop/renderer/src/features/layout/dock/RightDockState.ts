@@ -68,7 +68,7 @@ export type WorkbenchTabKind =
   | 'plan'
   | 'goal'
   | 'side-chat'
-  | 'side-task'
+  | 'subagent-directory'
   | 'terminal'
 
 export type WorkbenchTabDescriptor =
@@ -131,10 +131,11 @@ export type WorkbenchTabDescriptor =
       title?: string
     }
   | {
-      id: `side-task:${string}`
-      kind: 'side-task'
-      taskId: string
-      childThreadId: string
+      /** 每个父会话一个目录 tab；`selectedTaskId` 表示当前详情项。 */
+      id: `subagent-directory:${string}`
+      kind: 'subagent-directory'
+      threadId: string
+      selectedTaskId?: string
     }
 
 export type WorkbenchTabId = WorkbenchTabDescriptor['id']

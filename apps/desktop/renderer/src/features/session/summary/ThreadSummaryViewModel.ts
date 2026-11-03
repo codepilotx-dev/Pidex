@@ -40,6 +40,10 @@ export type ThreadSummaryAgent = {
   status: SubagentStatus
   state: 'running' | 'waiting' | 'finished'
   stoppable: boolean
+  /** 结果摘要，缺失时回退到任务描述。 */
+  summary: string
+  /** 排序与相对时间基准：结束时间 → 开始时间 → 创建时间。 */
+  recencyAt: number
 }
 
 export type ThreadSummaryBrowserTabState = 'loading' | 'busy' | 'suspended' | 'error' | 'idle'
@@ -168,12 +172,8 @@ export function deriveThreadSummaryViewModel(
             deletions: input.deletions,
           }
         : null
-  const agents = input.subagents.map(({ task, currentRun }) =>
-    threadSummaryAgentFromProjection(
-      task.id,
-      task.displayName,
-      currentRun?.status ?? 'interrupted',
-    ),
+  const agents = input.subagents.map((projection) =>
+    threadSummaryAgentFromProjection(projection),
   )
   const browserTabs = collectThreadSummaryBrowserTabs(input.browserTabs, input.sessionId)
   const sources = collectThreadSummarySources(input)
@@ -210,21 +210,23 @@ export function deriveThreadSummaryViewModel(
 }
 
 export function threadSummaryAgentFromProjection(
-  id: string,
-  name: string,
-  status: SubagentStatus,
+  projection: SubagentProjection,
 ): ThreadSummaryAgent {
+  const { task, currentRun } = projection
+  const status = currentRun?.status ?? 'interrupted'
   const state = AGENT_RUNNING_STATUSES.has(status)
     ? 'running'
     : AGENT_WAITING_STATUSES.has(status)
       ? 'waiting'
       : 'finished'
   return {
-    id,
-    name,
+    id: task.id,
+    name: task.displayName,
     status,
     state,
     stoppable: state !== 'finished',
+    summary: currentRun?.result?.summary ?? currentRun?.error ?? task.task,
+    recencyAt: currentRun?.finishedAt ?? currentRun?.startedAt ?? task.createdAt,
   }
 }
 

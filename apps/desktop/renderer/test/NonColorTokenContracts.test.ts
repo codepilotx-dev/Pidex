@@ -624,7 +624,6 @@ describe('non-color design token contracts', () => {
       '\\.cpx-agent-activity__details',
       '\\.cpx-agent-activity__file-changes',
       '\\.canonical-lifecycle-tool',
-      '\\.canonical-subagent-card',
     ]) {
       expect(conversation).toMatch(new RegExp(`${selector}\\s*\\{[\\s\\S]*?font:\\s*inherit;`))
     }
@@ -715,9 +714,7 @@ describe('non-color design token contracts', () => {
     expect(conversation).toMatch(
       /\.conversation-page \.workflow-main-scroll-footer \.chat-input__dropdown--suggestion\s*\{\s*width: 100%;\s*max-width: 100%;/,
     )
-    expect(page).toContain(
-      'subagent-timeline-summary tw:mx-auto tw:my-2 tw:flex tw:w-[min(var(--page-content-max-width),var(--session-content-w))]',
-    )
+    expect(page).not.toContain('subagent-timeline-summary')
     expect(conversation).toMatch(/\.right-dock-side-chat\s*\{\s*--session-content-w: 100%;/)
     expect(conversation).toMatch(
       /\.canonical-turn\s*\{[\s\S]*?width:\s*min\(var\(--page-content-max-width\),\s*var\(--session-content-w\)\);[\s\S]*?max-width:\s*var\(--page-content-max-width\);[\s\S]*?margin-inline:\s*auto;/,

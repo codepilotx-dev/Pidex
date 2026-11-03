@@ -54,6 +54,8 @@ import {
   type ProcessSemanticKind,
   type TurnWorkSummary,
 } from './SummarizeProcessItems.js'
+import { resolveSubagentRole } from '../subagents/SubagentRole.js'
+import { SubagentAvatar } from '../subagents/SubagentAvatar.js'
 import {
   getTimelineDisclosureStore,
   releaseTimelineDisclosureStore,
@@ -84,6 +86,10 @@ export type TimelineDisclosureProps = ProcessSummary & {
   canExpand?: boolean
   children?: React.ReactNode
   defaultExpanded?: boolean
+  /** 组头前的 profile 圆点（子智能体组专用）。 */
+  dots?: React.ReactNode
+  /** 提供后组头变成普通按钮：只触发动作，不展开内容。 */
+  onActivate?: () => void
   disclosure?: { store: KeyedDisclosureStore; id: string }
 }
 
@@ -128,9 +134,11 @@ export function CanonicalProcessGroup({
   children,
   defaultExpanded = false,
   disclosure,
+  dots,
   failed,
   kind,
   label,
+  onActivate,
   summaryKey,
 }: TimelineDisclosureProps): React.ReactNode {
   const [localExpanded, setLocalExpanded] = React.useState(defaultExpanded)
@@ -154,7 +162,18 @@ export function CanonicalProcessGroup({
   const SummaryIcon = processSummaryIcon(active ? 'thinking' : failed ? 'failed' : kind)
   const summaryContent = (
     <>
-      {active ? (
+      {dots ? (
+        <span className="cpx-agent-activity__dots">
+          {dots}
+          {active ? (
+            <LoaderCircle
+              className="canonical-spin"
+              size={APP_ICON_SIZES.sm}
+              aria-hidden="true"
+            />
+          ) : null}
+        </span>
+      ) : active ? (
         <LoaderCircle size={APP_ICON_SIZES.sm} className="canonical-spin" aria-hidden="true" />
       ) : failed ? (
         <CircleAlert size={APP_ICON_SIZES.sm} aria-hidden="true" />
@@ -162,7 +181,7 @@ export function CanonicalProcessGroup({
         <SummaryIcon size={APP_ICON_SIZES.sm} aria-hidden="true" />
       )}
       <span className="cpx-agent-activity__summary">{visibleLabel}</span>
-      {canExpand ? (
+      {canExpand && !onActivate ? (
         <ChevronRight
           size={APP_ICON_SIZES.sm}
           className="cpx-agent-activity__chevron"
@@ -171,6 +190,27 @@ export function CanonicalProcessGroup({
       ) : null}
     </>
   )
+
+  // 只触发动作的组头（子智能体组）：不展开、不带 chevron，详情统一在右侧目录。
+  if (onActivate) {
+    return (
+      <div
+        className="cpx-agent-activity"
+        data-expandable="false"
+        data-expanded="false"
+        data-state={datastate}
+      >
+        <button
+          aria-label={`${visibleLabel}，打开子智能体列表`}
+          className="cpx-agent-activity__header"
+          type="button"
+          onClick={onActivate}
+        >
+          {summaryContent}
+        </button>
+      </div>
+    )
+  }
 
   return (
     <Collapsible open={canExpand && expanded} onOpenChange={setExpanded} asChild>
@@ -250,9 +290,28 @@ function useDeferredProcessSummary(label: string, summaryKey: string, defer: boo
   return defer && visible.summaryKey !== summaryKey ? visible.label : label
 }
 
+const SUBAGENT_LIFECYCLE_TOOLS: ReadonlySet<string> = new Set([
+  'spawn_agents',
+  'wait_agents',
+  'send_agent',
+  'stop_agent',
+  'finalize_result',
+])
+
+/** 子智能体生命周期工具行并入子智能体组，避免与组头摘要重复。 */
+function isSubagentLifecycleTool(item: Item): boolean {
+  if (item.type !== 'tool') return false
+  const leaf = (item.tool ?? '').trim().split(/[./]/).at(-1)?.toLowerCase() ?? ''
+  return SUBAGENT_LIFECYCLE_TOOLS.has(leaf)
+}
+
 function groupProcessItems(items: readonly Item[]): RawProcessUnit[] {
   const units: RawProcessUnit[] = []
   let pendingItems: Item[] = []
+  const isSubagentGroup = (): boolean => pendingItems[0]?.type === 'subagent'
+  // 同轮已有子智能体时，spawn/wait/send/stop/finalize 这些生命周期行不再单独出现：
+  // 组头摘要已经表达了「创建 / 等待 / 完成」，其余细节在右侧目录。
+  const absorbsLifecycleRows = items.some((item) => item.type === 'subagent')
   const flush = (): void => {
     const [single] = pendingItems
     if (!single) return
@@ -265,9 +324,14 @@ function groupProcessItems(items: readonly Item[]): RawProcessUnit[] {
   }
 
   for (const item of items) {
+    if (absorbsLifecycleRows && isSubagentLifecycleTool(item)) continue
     const projection = projectProcessItem(item)
     switch (projection.kind) {
       case 'groupable':
+        // 子智能体自成一组，与普通工具双向隔开。
+        if (pendingItems.length > 0 && isSubagentGroup() !== (projection.item.type === 'subagent')) {
+          flush()
+        }
         pendingItems.push(projection.item)
         break
       case 'hidden':
@@ -306,10 +370,18 @@ export function buildProcessActivityModel(
   const units = rawUnits.map((unit, unitIndex): ProcessUnit => {
     if (unit.kind === 'standalone') return unit
     const [single] = unit.items
-    const isLatestActiveUnit = sliceActive && unitIndex === lastUnitIndex
+    // 子智能体组自带各任务状态，交由摘要句判断，不跟随父 turn 的 active。
+    const isSubagentUnit = single?.type === 'subagent'
+    const isLatestActiveUnit = !isSubagentUnit && sliceActive && unitIndex === lastUnitIndex
     const containsActiveItem = unit.items.some(isProcessItemActive)
     if (isLatestActiveUnit) activeGroupKey = unit.key
-    if (single && unit.items.length === 1 && !containsActiveItem && !isLatestActiveUnit) {
+    if (
+      single &&
+      !isSubagentUnit &&
+      unit.items.length === 1 &&
+      !containsActiveItem &&
+      !isLatestActiveUnit
+    ) {
       return {
         kind: 'activity',
         key: `process-item:${single.id}`,
@@ -910,6 +982,43 @@ function CanonicalConversationTurnComponent({
           unit.items,
           unit.key === processActivity.activeGroupKey ? entry.turn.status : 'completed',
         )
+        const isSubagentGroup = unit.items[0]?.type === 'subagent'
+        const agentDots = isSubagentGroup
+          ? unit.items
+              .filter((item): item is Extract<Item, { type: 'subagent' }> => item.type === 'subagent')
+              .slice(0, 4)
+              .map((item) => (
+                <SubagentAvatar
+                  className="cpx-agent-activity__avatar"
+                  key={`avatar:${item.id}`}
+                  role={resolveSubagentRole({
+                    role: item.role,
+                    displayName: item.displayName,
+                    task: item.task,
+                  })}
+                  size="sm"
+                />
+              ))
+          : null
+        // 产品边界：子智能体在父对话里只保留一行进度摘要，完整列表与详情统一在
+        // 右侧「子智能体」目录查看，因此这里不展开、也不渲染逐任务卡片。
+        if (isSubagentGroup) {
+          const first = unit.items[0]
+          return (
+            <CanonicalProcessGroup
+              {...summary}
+              canExpand={false}
+              disclosure={disclosure(`process-group:${entry.turn.id}:${unit.key}`)}
+              dots={agentDots}
+              key={unit.key}
+              onActivate={
+                first && first.type === 'subagent'
+                  ? () => onOpenSubagent(first.subagentTaskId)
+                  : undefined
+              }
+            />
+          )
+        }
         return (
           <CanonicalProcessGroup
             {...summary}

@@ -132,7 +132,7 @@ import {
   useModelProviderController,
 } from '../UseModelProviderController.js'
 import { buildVariantOptions } from '../../models/ReasoningVariantLabels.js'
-import { useSubagentDockController } from '../dock/UseSubagentDockController.js'
+import { useSubagentsAvailability } from '../../session/subagents/UseSubagentsAvailability.js'
 import { useSideChatController } from '../dock/UseSideChatController.js'
 import { WorkbenchShellView } from './WorkbenchShellView.js'
 import { WorkbenchPanelPresence } from '../panels/WorkbenchPanelPresence.js'
@@ -148,7 +148,6 @@ import {
   saveFileDocument,
 } from '../../workspace/FileDocumentStore.js'
 import { SettingsSidebarContent } from '../../settings/SettingsSidebarContent.js'
-import { SubagentDockContent } from '../../session/subagents/SubagentDockContent.js'
 import { WorkbenchPanel } from '../dock/RightDock.js'
 import { AuxiliaryWindowsHost } from '../auxiliary/AuxiliaryWindowsHost.js'
 import type { WorkbenchTabRenderContext } from '../tabs/WorkbenchTabRegistry.js'
@@ -1050,7 +1049,14 @@ export function DesktopLayout(): React.ReactNode {
     setSelectedFile(null)
     inputBinding.replace('')
     setComposerAttachments([])
-  }, [activateSessionById, inputBinding, navigate, setDiffState, setSelectedFile, setWorkspaceState])
+  }, [
+    activateSessionById,
+    inputBinding,
+    navigate,
+    setDiffState,
+    setSelectedFile,
+    setWorkspaceState,
+  ])
 
   const handleGithubWorkspaceCloned = useCallback(
     (selected: DesktopWorkspace): void => {
@@ -1283,7 +1289,10 @@ export function DesktopLayout(): React.ReactNode {
     async (baseline: DesktopGoalBudgetBaseline): Promise<void> => {
       if (!sessionId) throw new Error('当前任务不可用')
       try {
-        await desktopClient.setSessionGoal(sessionId, { tokenBudget: null, budgetBaseline: baseline })
+        await desktopClient.setSessionGoal(sessionId, {
+          tokenBudget: null,
+          budgetBaseline: baseline,
+        })
       } catch (cause) {
         setErrorMessage(cause instanceof Error ? cause.message : String(cause))
         throw cause
@@ -1296,7 +1305,10 @@ export function DesktopLayout(): React.ReactNode {
   }, [openRightDockTab, sessionId])
   useEffect(() => {
     const currentGoal = activeSessionItem?.threadGoal ?? null
-    if ((!currentGoal || currentGoal.status === 'complete') && rightDockState.tabIds.includes('goal')) {
+    if (
+      (!currentGoal || currentGoal.status === 'complete') &&
+      rightDockState.tabIds.includes('goal')
+    ) {
       closePanelTab('right', 'goal')
     }
   }, [activeSessionItem?.threadGoal, closePanelTab, rightDockState.tabIds])
@@ -1421,18 +1433,6 @@ export function DesktopLayout(): React.ReactNode {
     [inputBinding],
   )
 
-  const activeSideTaskId = useMemo(() => {
-    const preferredTarget = workbenchPanelState.focusArea === 'bottom-panel' ? 'bottom' : 'right'
-    const fallbackTarget = preferredTarget === 'right' ? 'bottom' : 'right'
-    for (const target of [preferredTarget, fallbackTarget] as const) {
-      const panel = workbenchPanelState[target]
-      if (!panel.open || !panel.activeTabId) continue
-      const tab = workbenchPanelState.tabsById[panel.activeTabId]
-      if (tab?.kind === 'side-task') return tab.taskId
-    }
-    return null
-  }, [workbenchPanelState])
-
   const activeSideChatTab = useMemo(() => {
     const preferredTarget = workbenchPanelState.focusArea === 'bottom-panel' ? 'bottom' : 'right'
     const fallbackTarget = preferredTarget === 'right' ? 'bottom' : 'right'
@@ -1550,32 +1550,44 @@ export function DesktopLayout(): React.ReactNode {
   const handleOpenSideChat = useCallback((): void => {
     void createSideChat()
   }, [createSideChat])
-  const {
-    selectedSubagentTaskId,
-    selectedSubagent,
-    selectedSubagentError,
-    subagentAvailability,
-    refreshSelectedSubagent,
-    handleOpenSubagent,
-  } = useSubagentDockController({
-    activeSideTaskId,
-    openRightDockTab,
-    onError: handleErrorMessage,
-  })
+  const subagentsAvailability = useSubagentsAvailability()
 
-  const handleCloseSubagentTab = useCallback(
-    (taskId: string): void => {
-      const tabId = `side-task:${taskId}` as const
-      const target: WorkbenchPanelTarget = workbenchPanelState.right.tabIds.includes(tabId)
-        ? 'right'
-        : workbenchPanelState.bottom.tabIds.includes(tabId)
-          ? 'bottom'
-          : null
-      if (!target) return
-      closePanelTab(target, tabId)
-      closePanel(target)
+  /**
+   * 打开（或复用）某个父会话的子智能体目录，并选中目标任务。
+   * 嵌套任务落在其直接父 thread 的目录里，不塞进当前列表。
+   * `openTab` 对已存在 id 会更新 descriptor 并激活，正是这里需要的语义。
+   */
+  const openSubagentDirectory = useCallback(
+    (parentThreadId: string, taskId: string | null): void => {
+      openRightDockTab({
+        id: `subagent-directory:${parentThreadId}`,
+        kind: 'subagent-directory',
+        threadId: parentThreadId,
+        ...(taskId ? { selectedTaskId: taskId } : {}),
+      })
     },
-    [closePanel, closePanelTab, workbenchPanelState],
+    [openRightDockTab],
+  )
+
+  const handleSelectSubagentTask = useCallback(
+    (parentThreadId: string, taskId: string | null): void => {
+      openSubagentDirectory(parentThreadId, taskId)
+    },
+    [openSubagentDirectory],
+  )
+
+  const handleOpenSubagent = useCallback(
+    (taskId: string): void => {
+      if (!desktopClient.readSubagent) {
+        handleErrorMessage('当前桌面桥接不支持读取子智能体')
+        return
+      }
+      void desktopClient
+        .readSubagent(taskId)
+        .then((read) => openSubagentDirectory(read.task.parentThreadId, taskId))
+        .catch((error) => handleErrorMessage(error))
+    },
+    [handleErrorMessage, openSubagentDirectory],
   )
 
   const handleSubmitEditedUserMessage = useCallback(
@@ -2717,23 +2729,6 @@ export function DesktopLayout(): React.ReactNode {
       />
     )
   }
-  const subagentThreadContent = selectedSubagentTaskId ? (
-    <SubagentDockContent
-      availability={subagentAvailability}
-      error={selectedSubagentError}
-      read={selectedSubagent}
-      taskId={selectedSubagentTaskId}
-      onBack={() => {
-        if (selectedSubagentTaskId) handleCloseSubagentTab(selectedSubagentTaskId)
-      }}
-      onError={setErrorMessage}
-      onOpenPatchReview={handleOpenPatchReview}
-      onOpenSubagent={(item) => handleOpenSubagent(item.subagentTaskId)}
-      onOpenParentSubagent={handleOpenSubagent}
-      onPatchApplied={handleRefreshDiff}
-      onRefresh={refreshSelectedSubagent}
-    />
-  ) : undefined
   const planContentByEventId = useMemo(() => {
     const result: Record<string, string> = {}
     for (const event of events) {
@@ -3103,6 +3098,7 @@ export function DesktopLayout(): React.ReactNode {
     }
     return (
       <WorkbenchPanel
+        panelContext={auxiliaryPanelContext}
         target={target}
         state={state}
         tabsById={
@@ -3119,27 +3115,10 @@ export function DesktopLayout(): React.ReactNode {
           ) : undefined
         }
         onCreateTerminal={target === 'bottom' ? handleCreateTerminal : undefined}
-        browserAvailability={{
-          status: browserAvailability,
-          ...(browserAvailability === 'unavailable'
-            ? {
-                reason: '当前环境未连接桌面浏览器宿主。',
-              }
-            : {}),
-        }}
-        browserState={browserState}
-        defaultBranch={derivedDefaultBranch}
-        files={workspaceFiles}
-        gitStatus={gitStatus}
-        isRefreshingReview={false}
-        diffMarkerStyle={diffMarkerStyle}
         maxWidth={rightDockMaxWidth}
         minWidth={rightDockMinWidth}
         maxHeight={bottomPanelMaxHeight}
         minHeight={bottomPanelMinHeight}
-        reviewView={reviewView}
-        reviewTabState={reviewTabState}
-        onReviewSummaryChange={handleReviewSummaryChange}
         onOpenReviewFile={(path) =>
           handleOpenFileFromBrowser(target, {
             path,
@@ -3148,20 +3127,9 @@ export function DesktopLayout(): React.ReactNode {
             depth: 0,
           })
         }
-        planContentByEventId={planContentByEventId}
-        onOpenPlan={handleOpenPlanDock}
-        goal={auxiliaryPanelContext.goal}
-        selectedFile={selectedFile}
         sessionId={sessionId}
-        sessionStatus={sessionStatus}
-        terminalAvailable={terminalAvailable}
         width={rightDockWidth}
         height={bottomPanelHeight}
-        workspace={currentWorkspace}
-        browserDraftKey={mainComposerDraftKey}
-        onAppendComposerText={handleAppendComposerText}
-        onAddComposerFiles={handleAddComposerFiles}
-        onBrowserStateChange={setBrowserState}
         onClose={() => {
           if (providerMode) {
             closeProviderManagement()
@@ -3181,10 +3149,6 @@ export function DesktopLayout(): React.ReactNode {
           void saveTabsBeforeClose([tabId]).then(async (saved) => {
             if (!saved) return
             const tab = workbenchPanelState.tabsById[tabId]
-            if (tab?.kind === 'side-task') {
-              handleCloseSubagentTab(tab.taskId)
-              return
-            }
             await closeBrowserIfIncluded([tabId])
             if (tab?.kind === 'terminal') {
               const termId =
@@ -3244,7 +3208,6 @@ export function DesktopLayout(): React.ReactNode {
             closeTabsToRight(target, tabId)
           })
         }}
-        onCreateBranch={handleCreateBranch}
         onFileLoadError={handleFileLoadError}
         onOpenTab={(tab) => {
           if (providerMode) return
@@ -3263,11 +3226,8 @@ export function DesktopLayout(): React.ReactNode {
           }
           openPanelTab(target, tab)
         }}
-        onOpenWorkspacePath={handleOpenWorkspacePath}
         onOpenFileFromBrowser={(file) => handleOpenFileFromBrowser(target, file)}
         onPreviewFile={(file) => handleOpenFilePreview(target, file)}
-        onRefreshReview={handleRefreshDiff}
-        onReviewTabStateChange={setReviewTabState}
         onResetHeight={handleResetBottomPanelHeight}
         onResetWidth={handleResetRightDockWidth}
         onSelectTab={(tabId) => {
@@ -3277,9 +3237,6 @@ export function DesktopLayout(): React.ReactNode {
         onPopOutTab={providerMode ? undefined : popOutPanelTab}
         onReorderTab={providerMode ? () => {} : reorderPanelTab}
         onPinTab={providerMode ? () => {} : pinTab}
-        onSetFileMarkdownViewMode={setFileMarkdownViewMode}
-        onSetFileViewState={setFileViewState}
-        onAskInSideChat={sideChatSupported ? handleAppendSideChatText : undefined}
         onSetHeight={handleSetBottomPanelHeight}
         onSetWidth={handleSetRightDockWidth}
         onResizeRawSize={target === 'right' && !providerMode ? handleRightDockResizeRaw : undefined}
@@ -3293,54 +3250,16 @@ export function DesktopLayout(): React.ReactNode {
         shouldCommitResizeSize={
           target === 'right' ? (providerMode ? () => true : shouldCommitRightDockResize) : undefined
         }
-        onToggleReviewView={() => setReviewView(reviewView === 'inline' ? 'split' : 'inline')}
         onCreateSideChat={() => void createSideChat()}
-        sideChat={{
-          available: sideChatSupported,
-          focusVersion: sideChatFocusVersion,
-          isCreating: isCreatingSideChat,
-          getPermissionMode: (tab) => getSideChatSettings(tab.id).permissionMode,
-          getModelSelection: (tab) => getSideChatSettings(tab.id),
-          onInteractionError: (message) => setErrorMessage(message),
-          itemContext: (tab, status) => ({
-            modelProviderNames: Object.fromEntries(
-              modelProviders.map((provider) => [provider.providerID, provider.displayName]),
-            ),
-            canCopyFileReferenceContents: canCopyMarkdownFileReferenceContents,
-            onCopyFileReferenceContents: handleCopyMarkdownFileReferenceContents,
-            onOpenFileReference: handleOpenMarkdownFileReference,
-            onOpenAttachment: handleOpenThreadAttachment,
-            onOpenLocalContext: handleOpenThreadLocalContext,
-            canEditUserMessage: desktopClient.supportsMessageEditing?.() ?? false,
-            onSubmitEditedUserMessage: async (input, target) => {
-              if (!desktopClient.editUserMessage) throw new Error('当前会话不支持修改消息')
-              await desktopClient.editUserMessage(tab.threadId, target, input)
-            },
-            sessionStatus: status,
-            workspacePath: currentWorkspace?.path ?? null,
-          }),
-          onOpenPatchReview: handleOpenPatchReview,
-          onOpenPlan: handleOpenPlanDock,
-          onRecreate: (tab) => {
-            void createSideChat().then((created) => {
-              if (!created) return
-              const target = workbenchPanelState.right.tabIds.includes(tab.id) ? 'right' : 'bottom'
-              void requestCloseSideChatTabs([tab]).then((closed) => {
-                if (closed) closePanelTab(target, tab.id)
-              })
+        onRecreateSideChat={(tab) => {
+          void createSideChat().then((created) => {
+            if (!created) return
+            const target = workbenchPanelState.right.tabIds.includes(tab.id) ? 'right' : 'bottom'
+            void requestCloseSideChatTabs([tab]).then((closed) => {
+              if (closed) closePanelTab(target, tab.id)
             })
-          },
-          onStateChange: reportSideChatState,
-          renderComposer: renderSideChatComposer,
+          })
         }}
-        activeSideTaskId={activeSideTaskId}
-        subagentAvailability={{
-          status: subagentAvailability,
-          ...(subagentAvailability === 'unavailable'
-            ? { reason: '当前 Agent 不支持子智能体工作台。' }
-            : {}),
-        }}
-        sideTaskContent={subagentThreadContent}
       />
     )
   }
@@ -3447,15 +3366,18 @@ export function DesktopLayout(): React.ReactNode {
         renderComposer: renderSideChatComposer,
         onRecreate: () => void createSideChat(),
       },
-      sideTask: {
-        activeTaskId: activeSideTaskId,
+      subagentDirectory: {
         availability: {
-          status: subagentAvailability,
-          ...(subagentAvailability === 'unavailable'
+          status: subagentsAvailability,
+          ...(subagentsAvailability === 'unavailable'
             ? { reason: '当前 Agent 不支持子智能体工作台。' }
             : {}),
         },
-        content: subagentThreadContent,
+        onSelectTask: handleSelectSubagentTask,
+        onOpenTask: handleOpenSubagent,
+        onError: handleErrorMessage,
+        onOpenPatchReview: handleOpenPatchReview,
+        onRefreshDiff: handleRefreshDiff,
       },
       terminal: {
         availability: terminalAvailable
@@ -3472,7 +3394,6 @@ export function DesktopLayout(): React.ReactNode {
       },
     }),
     [
-      activeSideTaskId,
       browserAvailability,
       browserState,
       canCopyMarkdownFileReferenceContents,
@@ -3523,8 +3444,10 @@ export function DesktopLayout(): React.ReactNode {
       sideChatFocusVersion,
       sideChatSubmitToSession,
       sideChatSupported,
-      subagentAvailability,
-      subagentThreadContent,
+      subagentsAvailability,
+      handleSelectSubagentTask,
+      handleOpenSubagent,
+      handleErrorMessage,
       terminalAvailable,
       workspaceFiles,
     ],
