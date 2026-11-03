@@ -923,6 +923,14 @@ export function DesktopLayout(): React.ReactNode {
 
   useLayoutEffect(() => {
     if (!sessionsHydrated) return
+    // 兜底只针对“当前路由指向的那一次未知会话”。归档会先把会话从目录里移除，
+    // 路由短暂仍停在归档会话上再回首页；旧计时器必须立即失效，否则会在 1.5 秒
+    // 后补弹一次“找不到对话”。
+    const staleUnknownRouted = unknownRoutedSessionRef.current
+    if (staleUnknownRouted && staleUnknownRouted.id !== routedSessionId) {
+      clearTimeout(staleUnknownRouted.timer)
+      unknownRoutedSessionRef.current = null
+    }
     if (!routedSessionId) {
       activateSessionById(null)
       return
