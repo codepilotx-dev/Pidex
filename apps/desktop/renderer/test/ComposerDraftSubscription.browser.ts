@@ -124,7 +124,7 @@ async function settle(page: Page) {
   )
 }
 try {
-  const page = await browser.newPage()
+  const page = await browser.newPage({ locale: 'zh-CN' })
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   page.on('console', (message) => {

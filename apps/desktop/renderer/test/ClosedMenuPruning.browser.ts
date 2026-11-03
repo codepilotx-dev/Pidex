@@ -288,7 +288,7 @@ async function settle(page: Page) {
 }
 
 try {
-  const page = await browser.newPage()
+  const page = await browser.newPage({ locale: 'zh-CN' })
   await page.route('http://127.0.0.1/**', (route) =>
     route.fulfill({
       contentType: 'text/html',

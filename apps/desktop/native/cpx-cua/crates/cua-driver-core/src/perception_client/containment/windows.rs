@@ -2794,11 +2794,17 @@ mod tests {
                     "failed to inspect a perception worker ACL entry in a test",
                 ));
             }
-            let ace = unsafe { &*raw.cast::<AccessAllowedAce>() };
+            // GetAce 成功且返回非空后，内容按 AccessAllowedAce 布局有效。
+            // 这里按值复制，避免在该指针上构造长期引用。
+            let ace = unsafe { std::ptr::read_unaligned(raw.cast::<AccessAllowedAce>()) };
             if ace.header.ace_type != 0 {
                 continue;
             }
-            let ace_sid = std::ptr::addr_of!(ace.sid_start).cast_mut().cast();
+            let ace_sid = unsafe {
+                raw.cast::<u8>()
+                    .add(std::mem::offset_of!(AccessAllowedAce, sid_start))
+                    .cast()
+            };
             if unsafe { EqualSid(ace_sid, sid) } != FALSE {
                 grants.push((ace.mask, ace.header.ace_flags));
             }

@@ -133,7 +133,7 @@ for await (const chunk of process.stdin) script += chunk.toString('utf8')
 const css = await compileEntryStyles()
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
-  const page = await browser.newPage({ viewport: { width: 1280, height: 900 } })
+  const page = await browser.newPage({ locale: 'zh-CN', viewport: { width: 1280, height: 900 } })
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await page.route('http://localhost/', (route) =>

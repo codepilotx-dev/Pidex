@@ -35,7 +35,7 @@ function iconButton(props: ButtonProps, svgId?: string): string {
 
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
-  const page = await browser.newPage()
+  const page = await browser.newPage({ locale: 'zh-CN' })
   await page.setContent(`<style>${css}
  * {box-sizing:border-box} .desktop-sidebar {--sidebar-current-width:280px;--cpx-sys-motion-micro:0ms; --button-icon-size-xs:14px;} .sidebar-session-meta{display:flex;align-items:center;justify-content:flex-end} .row{height:32px;padding:4px 8px;display:flex;justify-content:flex-end}
  </style><aside class="desktop-sidebar"><header class="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:min-h-13 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between"><span>Coding</span><div class="sidebar-header-actions tw:ml-2 tw:flex tw:min-w-0 tw:items-center tw:gap-1 tw:pr-2">${iconButton({ size: 'icon' }, 'search')}${iconButton({ size: 'icon' }, 'bell')}</div></header><div class="sidebar-standard-mode tw:flex tw:min-w-0 tw:flex-col tw:gap-4 tw:px-2">

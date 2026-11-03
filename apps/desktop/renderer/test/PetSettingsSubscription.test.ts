@@ -1,15 +1,6 @@
-import { expect, test } from 'bun:test'
+import { test } from 'bun:test'
+import { runBrowserRegression, BROWSER_REGRESSION_TIMEOUT_MS } from './helpers/BrowserRegression'
 
 test('direct pet settings entry loads the shared catalog once', async () => {
-  const child = Bun.spawn(
-    [process.execPath, `${import.meta.dir}/PetSettingsSubscription.browser.ts`],
-    { stdout: 'pipe', stderr: 'pipe' },
-  )
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(child.stdout).text(),
-    new Response(child.stderr).text(),
-    child.exited,
-  ])
-  expect({ exitCode, stderr }).toEqual({ exitCode: 0, stderr: '' })
-  expect(stdout).toContain('Pet settings mounted regression passed')
-}, 30_000)
+  await runBrowserRegression(`${import.meta.dir}/PetSettingsSubscription.browser.ts`, 'Pet settings mounted regression passed')
+}, BROWSER_REGRESSION_TIMEOUT_MS)

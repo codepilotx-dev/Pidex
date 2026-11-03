@@ -74,7 +74,7 @@ let script = ''
 for await (const chunk of process.stdin) script += chunk.toString('utf8')
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
-  const page = await browser.newPage()
+  const page = await browser.newPage({ locale: 'zh-CN' })
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
   await page.setContent('<div id="root"></div>')
