@@ -1,5 +1,6 @@
+import { reportStartupLoading, startupSplashActive } from '../../startup/StartupSplashHandoff.js'
 import type React from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { swapStatusText } from '../../startup/StatusTextSwap.js'
 
 export type FullScreenWhaleLoadingProps = {
@@ -36,6 +37,11 @@ export function FullScreenWhaleLoading({
   }, [displayedLabel, label])
 
   const isContained = variant === 'contained'
+  const coveredByStartup = !isContained && startupSplashActive()
+  useLayoutEffect(() => {
+    if (coveredByStartup) return reportStartupLoading(label)
+  }, [coveredByStartup, label])
+  if (coveredByStartup) return null
   const rootClassName = isContained
     ? 'full-screen-whale-loader full-screen-whale-loader--contained'
     : 'full-screen-whale-loader'

@@ -81,7 +81,7 @@ type DesktopClientWindow = {
     revealPathInFolder?(targetPath: string): Promise<void>
   } & Partial<DesktopPetOverlayBridge> &
     Partial<DesktopWindowIpcBridge> &
-    Partial<Pick<DesktopStartupIpcBridge, 'quitDuringStartup'>> &
+    Partial<Pick<DesktopStartupIpcBridge, 'quitDuringStartup' | 'stopBackendAndExit'>> &
     Partial<DesktopDataLocationIpcBridge> &
     Partial<DesktopTerminalIpcBridge> &
     Partial<DesktopUpdateIpcBridge> &
@@ -242,6 +242,8 @@ export type DesktopAgentReviewApi = {
   getAgentReviewCommits(
     workspacePath: string,
     projectId?: string,
+    ref?: string,
+    limit?: number,
   ): Promise<
     Array<{
       sha: string
@@ -426,9 +428,35 @@ export type DesktopCalendarApi = {
   commitSchedulePlan(
     input: Omit<RpcParams<'schedule-plan/commit'>, 'operationId'>,
   ): Promise<RpcResult<'schedule-plan/commit'>>
+  readScheduleDraft(
+    input: RpcParams<'schedule-draft/read'>,
+  ): Promise<RpcResult<'schedule-draft/read'>>
+  commitScheduleDraft(
+    input: Omit<RpcParams<'schedule-draft/commit'>, 'operationId'>,
+  ): Promise<RpcResult<'schedule-draft/commit'>>
+  cancelScheduleDraft(
+    input: RpcParams<'schedule-draft/cancel'>,
+  ): Promise<RpcResult<'schedule-draft/cancel'>>
+  feedbackScheduleDraft(
+    input: Omit<RpcParams<'schedule-draft/feedback'>, 'operationId'>,
+  ): Promise<RpcResult<'schedule-draft/feedback'>>
+}
+
+export type DesktopTaskScheduleApi = {
+  taskSchedule<M extends keyof typeof import('@pidex/agent-protocol').TaskScheduleRpcMethods>(
+    method: M,
+    input: RpcParams<M>,
+  ): Promise<RpcResult<M>>
 }
 
 export type DesktopPluginApi = {
+  readPluginAsset(
+    pluginId: string,
+    kind: RpcParams<'plugin/readAsset'>['kind'],
+    workspacePath?: string | null,
+  ): Promise<RpcResult<'plugin/readAsset'> | null>
+  installPlugin(pluginId: string): Promise<RpcResult<'plugin/install'>>
+  uninstallPlugin(pluginId: string): Promise<RpcResult<'plugin/uninstall'>>
   listPlugins(
     workspacePath?: string | null,
     forceReload?: boolean,
@@ -442,13 +470,6 @@ export type DesktopPluginApi = {
     enabled: boolean,
   ): Promise<RpcResult<'plugin/setEnabled'>['plugin']>
   onPluginsUpdated(callback: (generation: number) => void): () => void
-}
-
-export type DesktopMiniMaxCliApi = {
-  getMiniMaxCliStatus(forceReload?: boolean): Promise<RpcResult<'minimaxCli/status'>>
-  installMiniMaxCli(): Promise<RpcResult<'minimaxCli/install'>>
-  uninstallMiniMaxCli(): Promise<RpcResult<'minimaxCli/uninstall'>>
-  onMiniMaxCliUpdated(callback: (status: RpcResult<'minimaxCli/status'>) => void): () => void
 }
 
 export type DesktopComputerApi = {
@@ -555,6 +576,9 @@ export type DesktopAttachmentApi = {
   getComposerFilePath(file: File): string
   readAttachment(attachmentId: string): Promise<RpcResult<'attachment/read'>>
   readArtifact(threadId: string, artifactId: string): Promise<RpcResult<'artifact/read'>>
+  submitVisualizationFollowUp(
+    input: RpcParams<'visualization/submitFollowUp'>,
+  ): Promise<RpcResult<'visualization/submitFollowUp'>>
   saveAttachmentToDownloads(input: DesktopAttachmentSaveInput): Promise<DesktopAttachmentSaveResult>
   readDraftComposerPath(input: DesktopComposerPathReadInput): Promise<DesktopComposerPathPreview>
   listDraftComposerPath(input: DesktopComposerPathListInput): Promise<DesktopComposerPathListResult>
@@ -570,7 +594,7 @@ export type DesktopLocalContextApi = {
 }
 
 export type DesktopModelProviderRefreshApi = {
-  refreshModelProviders(): Promise<void>
+  refreshModelProviders(providerId?: string): Promise<void>
 }
 
 export type DesktopWindowApi = {
@@ -588,8 +612,8 @@ export type DesktopClient = DesktopApi &
   DesktopRuntimeCapabilityApi &
   DesktopAutomationApi &
   DesktopCalendarApi &
+  DesktopTaskScheduleApi &
   DesktopPluginApi &
-  DesktopMiniMaxCliApi &
   DesktopComputerApi &
   DesktopSessionGroupApi &
   DesktopAttachmentApi &

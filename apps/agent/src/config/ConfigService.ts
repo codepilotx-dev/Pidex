@@ -140,6 +140,7 @@ const PROFILE_ALLOWED_ROOTS = new Set([
 ])
 const KNOWN_CONFIG_ROOTS = new Set([
   'approval_rules',
+  'permission_rules',
   ...PROFILE_ALLOWED_ROOTS,
   'profile',
   'model_providers',
@@ -1064,11 +1065,7 @@ export class ConfigService {
       return { scope: 'user' as const, filePath: this.userConfigPath }
     }
     const project = await this.projectLayer(cwd ?? dirname(dirname(filePath)))
-    if (
-      !project &&
-      cwd &&
-      resolve(filePath) === resolve(cwd, PROJECT_CONFIG_DIRECTORY, CONFIG_FILE_NAME)
-    ) {
+    if (cwd && resolve(filePath) === resolve(cwd, PROJECT_CONFIG_DIRECTORY, CONFIG_FILE_NAME)) {
       const projectRoot = resolve(cwd)
       if (this.trustLevel(projectRoot) !== 'trusted') {
         throw new ConfigServiceError('CONFIG_PROJECT_UNTRUSTED', '项目配置尚未信任')

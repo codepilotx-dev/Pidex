@@ -40,4 +40,73 @@ describe('SegmentedControl tabs', () => {
     expect(segmentedTabIndexAfterKey('End', 0, 2)).toBe(1)
     expect(segmentedTabIndexAfterKey('Enter', 0, 2)).toBeNull()
   })
+
+  test('supports size="lg" and shape="pill" presets', () => {
+    const html = renderToStaticMarkup(
+      <SegmentedControl
+        ariaLabel="插件来源"
+        onChange={() => {}}
+        options={[
+          { value: 'public', label: '公开' },
+          { value: 'personal', label: '个人' },
+        ]}
+        shape="pill"
+        size="lg"
+        value="public"
+      />,
+    )
+
+    expect(html).toContain('data-size="lg"')
+    expect(html).toContain('data-shape="pill"')
+    expect(html).toContain('tw:h-[42px]')
+    expect(html).toContain('tw:rounded-full')
+  })
+
+  test('supports size="md" and shape="pill" presets', () => {
+    const html = renderToStaticMarkup(
+      <SegmentedControl
+        ariaLabel="插件来源"
+        onChange={() => {}}
+        options={[
+          { value: 'public', label: '公开' },
+          { value: 'personal', label: '个人' },
+        ]}
+        shape="pill"
+        size="md"
+        value="public"
+      />,
+    )
+
+    expect(html).toContain('data-size="md"')
+    expect(html).toContain('data-shape="pill"')
+    expect(html).toContain('tw:h-9')
+    expect(html).toContain('tw:rounded-full')
+  })
+
+  test('supports options with tooltip and ariaLabel', () => {
+    const html = renderToStaticMarkup(
+      <SegmentedControl
+        ariaLabel="图标切换"
+        onChange={() => {}}
+        options={[
+          {
+            value: 'first',
+            ariaLabel: '第一项',
+            tooltip: '第一项提示',
+            label: <span>1</span>,
+          },
+          {
+            value: 'second',
+            ariaLabel: '第二项',
+            tooltip: '第二项提示',
+            label: <span>2</span>,
+          },
+        ]}
+        value="first"
+      />,
+    )
+
+    expect(html).toContain('aria-label="第一项"')
+    expect(html).toContain('aria-label="第二项"')
+  })
 })

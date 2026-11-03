@@ -118,28 +118,42 @@ test('canonical completion clears a stale running indicator', () => {
 test('sidebar renders only occupied status icon slots in their existing order', () => {
   const project = mockWorkspace('C:\\sidebar-icons')
   const base = mockSessionSnapshot('icons', project, { workspacePath: project.path }).item
-  for (const hasScheduledRun of [false, true]) {
-    for (const isFork of [false, true]) {
-      for (const state of ['idle', 'unread', 'running'] as const) {
-        const markup = renderSessionRows([
-          {
-            ...base,
-            hasScheduledRun,
-            isFork,
-            status: state === 'running' ? 'running' : 'done',
-            unreadAt: state === 'unread' ? 1 : null,
-          },
-        ])
-        const labels = [
-          ...(hasScheduledRun ? ['日程运行过的会话'] : []),
-          ...(isFork ? ['分叉会话'] : []),
-          ...(state === 'unread' ? ['未读'] : state === 'running' ? ['处理中'] : []),
-        ]
-        expect(countIndicatorSlots(markup)).toBe(labels.length)
-        expect(markup).not.toMatch(/<span[^>]*class="[^"]*sidebar-indicator[^"]*"[^>]*><\/span>/)
-        const positions = labels.map((label) => markup.indexOf(`aria-label="${label}"`))
-        expect(positions.every((position) => position >= 0)).toBe(true)
-        expect(positions).toEqual([...positions].sort((a, b) => a - b))
+  for (const worktree of [false, true]) {
+    for (const hasScheduledRun of [false, true]) {
+      for (const isFork of [false, true]) {
+        for (const state of ['idle', 'unread', 'running'] as const) {
+          const markup = renderSessionRows([
+            {
+              ...base,
+              executionEnvironment: worktree
+                ? {
+                    kind: 'worktree',
+                    worktreeId: 'wt-1',
+                    cwd: project.path,
+                    branchName: 'feature',
+                    status: 'ready',
+                    revision: 1,
+                  }
+                : { kind: 'local', cwd: project.path, revision: 1 },
+              hasScheduledRun,
+              isFork,
+              status: state === 'running' ? 'running' : 'done',
+              unreadAt: state === 'unread' ? 1 : null,
+            },
+          ])
+          // 尾部标记顺序固定为环境、Fork、日程、PR。
+          const labels = [
+            ...(worktree ? ['工作树会话'] : []),
+            ...(isFork ? ['分叉会话'] : []),
+            ...(hasScheduledRun ? ['日程运行过的会话'] : []),
+            ...(state === 'unread' ? ['未读'] : state === 'running' ? ['处理中'] : []),
+          ]
+          expect(countIndicatorSlots(markup)).toBe(labels.length)
+          expect(markup).not.toMatch(/<span[^>]*class="[^"]*sidebar-indicator[^"]*"[^>]*><\/span>/)
+          const positions = labels.map((label) => markup.indexOf(`aria-label="${label}"`))
+          expect(positions.every((position) => position >= 0)).toBe(true)
+          expect(positions).toEqual([...positions].sort((a, b) => a - b))
+        }
       }
     }
   }
@@ -212,4 +226,82 @@ test('status pill progress and snooze are presentation-only opt-ins', () => {
   ])
   expect(row).not.toContain('sidebar-status-pill-progress')
   expect(row).not.toContain('停用自动回答')
+})
+
+test('sidebar failed turn renders error icon and respects visual priority over unread', () => {
+  const project = mockWorkspace('C:\\sidebar-error')
+  const base = mockSessionSnapshot('error-session', project, { workspacePath: project.path }).item
+  const failedSession: SessionListItem = {
+    ...base,
+    status: 'error',
+    latestTurnStatus: 'failed',
+    latestTurnError: 'Network connection lost',
+    unreadAt: 1,
+  }
+
+  const failedMarkup = renderSessionRows([failedSession])
+  expect(failedMarkup).toContain('sidebar-session-error')
+  expect(failedMarkup).toContain('tw:text-app-danger')
+  expect(failedMarkup).toContain('aria-label="任务执行失败"')
+  expect(failedMarkup).not.toContain('sidebar-unread-dot')
+  expect(failedMarkup).not.toContain('sidebar-session-spinner')
+
+  // Running overrides failure (e.g. after retry/new turn begins running)
+  const retryingSession: SessionListItem = {
+    ...failedSession,
+    status: 'running',
+    latestTurnStatus: 'running',
+    latestTurnError: null,
+  }
+  const retryingMarkup = renderSessionRows([retryingSession])
+  expect(retryingMarkup).toContain('sidebar-session-spinner')
+  expect(retryingMarkup).not.toContain('sidebar-session-error')
+
+  // Waiting input overrides failure
+  const waitingInputSession: SessionListItem = {
+    ...failedSession,
+    latestTurnStatus: 'waiting-question',
+  }
+  const waitingInputMarkup = renderSessionRows([waitingInputSession])
+  expect(waitingInputMarkup).toContain('需要用户输入')
+  expect(waitingInputMarkup).not.toContain('sidebar-session-error')
+
+  // Pending permission overrides failure
+  const waitingPermMarkup = renderSessionRows([failedSession], new Set([base.id]))
+  expect(waitingPermMarkup).toContain('等待批准')
+  expect(waitingPermMarkup).not.toContain('sidebar-session-error')
+
+  // Marking as read (unreadAt: null) preserves the error icon
+  const readFailedSession: SessionListItem = {
+    ...failedSession,
+    unreadAt: null,
+  }
+  const readFailedMarkup = renderSessionRows([readFailedSession])
+  expect(readFailedMarkup).toContain('sidebar-session-error')
+  expect(readFailedMarkup).toContain('aria-label="任务执行失败"')
+
+  // Non-failed terminal statuses (e.g., done, interrupted, stopped) do not render error icon
+  const doneSession: SessionListItem = {
+    ...base,
+    status: 'done',
+    latestTurnStatus: 'completed',
+    unreadAt: null,
+  }
+  const doneMarkup = renderSessionRows([doneSession])
+  expect(doneMarkup).not.toContain('sidebar-session-error')
+  expect(doneMarkup).not.toContain('任务执行失败')
+
+  const interruptedSession: SessionListItem = {
+    ...base,
+    status: 'interrupted',
+    latestTurnStatus: 'interrupted',
+    unreadAt: null,
+  }
+  const interruptedMarkup = renderSessionRows([interruptedSession])
+  expect(interruptedMarkup).not.toContain('sidebar-session-error')
+  expect(interruptedMarkup).not.toContain('任务执行失败')
+
+  // Row structure is preserved
+  expect(failedMarkup).toContain('data-sidebar-session-id="error-session"')
+  expect(failedMarkup).toContain('sidebar-session-row')
 })

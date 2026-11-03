@@ -53,6 +53,8 @@ interface DesktopIpcDependencies {
   getSupervisor: () => SidecarSupervisor | undefined
   getLogDirectory: () => string
   quitDuringStartup: () => void
+  retryStartup: (generation: number) => Promise<void>
+  stopBackendAndExit: () => Promise<void>
   broadcastDesktopSettingsChanged: (settings: DesktopSettingsPayload) => void
   isDesktopRendererSender: (sender: WebContents) => boolean
 }
@@ -80,6 +82,16 @@ export function registerDesktopIpc(dependencies: DesktopIpcDependencies): void {
       return attachmentDownloads.save(input)
     },
   )
+
+  ipcMain.handle(DESKTOP_STARTUP_IPC_CHANNELS.snapshot, (event) => {
+    requireMainWindowSender(event, windows)
+    return windows.startupSnapshot
+  })
+  ipcMain.handle(DESKTOP_STARTUP_IPC_CHANNELS.retry, (event, generation: unknown) => {
+    requireMainWindowSender(event, windows)
+    if (!Number.isSafeInteger(generation) || Number(generation) < 0) throw new Error('启动代次无效')
+    return dependencies.retryStartup(Number(generation))
+  })
 
   const grantOwnersWithCleanup = new Set<number>()
   const retainGrantOwner = (sender: WebContents): void => {
@@ -271,6 +283,10 @@ export function registerDesktopIpc(dependencies: DesktopIpcDependencies): void {
   ipcMain.handle(DESKTOP_STARTUP_IPC_CHANNELS.quit, (event) => {
     requireMainWindowSender(event, windows)
     quitDuringStartup()
+  })
+  ipcMain.handle(DESKTOP_STARTUP_IPC_CHANNELS.stopBackendAndExit, async (event) => {
+    requireMainWindowSender(event, windows)
+    await dependencies.stopBackendAndExit()
   })
   ipcMain.handle(DESKTOP_WORKSPACE_IPC_CHANNELS.pickDirectory, async (event) => {
     const ownerWindow = requireMainWindowSender(event, windows)

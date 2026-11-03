@@ -1,13 +1,6 @@
+import { useStore } from 'zustand/react'
 import type React from 'react'
-import {
-  forwardRef,
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react'
+import { forwardRef, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { Dropdown as DropdownMenu } from '../../../components/ui/floating/Dropdown.js'
 import {
@@ -15,11 +8,11 @@ import {
   ChevronRight,
   CircleUser,
   Download,
+  Egg,
   Gauge,
   HelpCircle,
   Keyboard,
   LogOut,
-  PawPrint,
   Settings,
   Sparkles,
 } from 'lucide-react'
@@ -27,11 +20,12 @@ import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens
 import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
 import { Button } from '../../../components/ui/Button.js'
 import { RemoteImage } from '../../../components/ui/RemoteImage.js'
+import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import type { DesktopUpdateStatus, ModelProviderID } from '../../../../shared/Types.js'
 import { PopoverItem, PopoverSeparator } from '../../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
-import { SidebarRow } from './SidebarRow.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import {
   buildDesktopUpdateIndicatorModel,
@@ -48,7 +42,11 @@ import {
   type ProviderUsageSource,
 } from '../../../utils/UsageFormatters.js'
 import { cx } from '../../../utils/Cx.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsField,
+} from '../../settings/UseDesktopSettings.js'
 
 type PopoverUsageRow = {
   id: string
@@ -84,19 +82,19 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
   const location = useLocation()
   const navigate = useNavigate()
   const { t } = useLocale()
-  const { draft, model, providerID: configuredProviderID } = useDesktopSettings()
+  const model = useDesktopSettingsField((settings) => settings.model)
+  const configuredProviderID = useDesktopSettingsField((settings) => settings.providerID)
+  const draftActions = useDesktopSettingsDraftActions()
+  const petEnabled = useDesktopSettingsDraftValue('pet').enabled
   const [menuOpen, setMenuOpen] = useState(false)
   const accountMenuTriggerRef = useRef<HTMLButtonElement>(null)
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false)
+  const [logoutBusy, setLogoutBusy] = useState(false)
   const [usage, setUsage] = useState<ProviderUsageState>(EMPTY_USAGE)
-  const { auth: githubAuth } = useSyncExternalStore(
-    desktopClient.onGithubAccountChange,
-    desktopClient.getGithubAccountSnapshot,
-    desktopClient.getGithubAccountSnapshot,
-  )
+  const githubAuth = useStore(desktopClient.githubAccountStore, (state) => state.auth)
   const [petToggleBusy, setPetToggleBusy] = useState(false)
   const settingsActive = location.pathname.startsWith('/settings/')
   const usageAvailable = Boolean(configuredProviderID && model)
-  const petEnabled = draft.values.pet.enabled
   const [updateStatus, setUpdateStatus] = useState<DesktopUpdateStatus | null>(null)
   const updateIndicator = buildDesktopUpdateIndicatorModel(updateStatus)
 
@@ -161,10 +159,14 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
   }, [menuOpen, refreshGithubAuth])
 
   const logoutGithub = useCallback(async (): Promise<void> => {
+    setLogoutBusy(true)
     try {
       await desktopClient.logoutGithub()
     } catch (error) {
       onReport(error instanceof Error ? error.message : String(error))
+    } finally {
+      setLogoutBusy(false)
+      setLogoutConfirmOpen(false)
     }
   }, [onReport])
 
@@ -185,17 +187,17 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
         }
         await bridge.hidePetOverlay()
       }
-      draft.setValue('pet', (current) => ({
+      draftActions.setValue('pet', (current) => ({
         ...current,
         enabled: nextEnabled,
       }))
-      draft.autoSave()
+      draftActions.autoSave()
     } catch (error) {
       onReport(error instanceof Error ? error.message : String(error))
     } finally {
       setPetToggleBusy(false)
     }
-  }, [draft, onReport, petEnabled, petToggleBusy])
+  }, [draftActions, onReport, petEnabled, petToggleBusy])
 
   const usageRows = useMemo<PopoverUsageRow[]>(() => buildUsageRows(usage), [usage])
   const githubAuthenticated = githubAuth?.authenticated === true
@@ -283,7 +285,8 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
               active={settingsActive || menuOpen}
               ref={accountMenuTriggerRef}
               aria-label={accountTriggerName}
-              className="sidebar-settings-link tw:data-[active=true]:bg-app-selected tw:data-[active=true]:text-app-text"
+              data-position="sidebar"
+              className="sidebar-settings-link"
             >
               {accountAvatar}
             </Button>
@@ -352,17 +355,20 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
         <div className="popover-section">
           {usageAvailable ? (
             <DropdownMenu.Sub>
-              <DropdownMenu.SubTrigger className="popover-item popover-sub-trigger" tabIndex={-1}>
-                <span className="popover-item-leading">
+              <SidebarRow
+                asChild
+                className="popover-item popover-sub-trigger"
+                leading={
                   <span className="popover-item-icon">
                     <Gauge size={APP_ICON_SIZE} />
                   </span>
-                </span>
-                <span className="popover-item-label">{t('剩余用量')}</span>
-                <span className="popover-item-trailing">
-                  <ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />
-                </span>
-              </DropdownMenu.SubTrigger>
+                }
+                trailing={<ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />}
+              >
+                <DropdownMenu.SubTrigger tabIndex={-1}>
+                  <span className="popover-item-label">{t('剩余用量')}</span>
+                </DropdownMenu.SubTrigger>
+              </SidebarRow>
               <DropdownMenu.Portal>
                 <DropdownMenu.SubContent
                   size="sm"
@@ -437,8 +443,8 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
                         {t('了解更多')}
                       </span>
                       <ArrowUpRight
-                        className="popover-usage-action-icon tw:size-icon tw:flex-none tw:text-app-text-meta"
-                        size={APP_ICON_SIZE}
+                        className="popover-usage-action-icon tw:size-[var(--inline-icon-size,1em)] tw:flex-none tw:text-app-text-meta"
+                        size="var(--inline-icon-size, 1em)"
                       />
                     </DropdownMenu.Item>
                   </div>
@@ -448,7 +454,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
           ) : null}
           <PopoverItem
             disabled={petToggleBusy}
-            icon={<PawPrint size={APP_ICON_SIZE} />}
+            icon={<Egg size={APP_ICON_SIZE} />}
             onClick={() => {
               void togglePet()
             }}
@@ -467,17 +473,20 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
         <PopoverSeparator />
         <div className="popover-section">
           <DropdownMenu.Sub>
-            <DropdownMenu.SubTrigger className="popover-item popover-sub-trigger" tabIndex={-1}>
-              <span className="popover-item-leading">
+            <SidebarRow
+              asChild
+              className="popover-item popover-sub-trigger"
+              leading={
                 <span className="popover-item-icon">
                   <HelpCircle size={APP_ICON_SIZE} />
                 </span>
-              </span>
-              <span className="popover-item-label">{t('帮助')}</span>
-              <span className="popover-item-trailing">
-                <ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />
-              </span>
-            </DropdownMenu.SubTrigger>
+              }
+              trailing={<ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />}
+            >
+              <DropdownMenu.SubTrigger tabIndex={-1}>
+                <span className="popover-item-label">{t('帮助')}</span>
+              </DropdownMenu.SubTrigger>
+            </SidebarRow>
             <DropdownMenu.Portal>
               <DropdownMenu.SubContent
                 size="sm"
@@ -526,7 +535,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
               icon={<LogOut size={APP_ICON_SIZE} />}
               onClick={() => {
                 setMenuOpen(false)
-                void logoutGithub()
+                setLogoutConfirmOpen(true)
               }}
             >
               {t('退出登录')}
@@ -537,6 +546,19 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
       <span aria-atomic="true" aria-live="polite" className="tw:sr-only">
         {t(updateIndicator.announcement)}
       </span>
+      <ConfirmationDialog
+        open={logoutConfirmOpen}
+        title={t('退出登录')}
+        description={t('确定要退出 GitHub 登录吗？')}
+        cancelLabel={t('取消')}
+        actionLabel={t('退出登录')}
+        tone="danger"
+        actionDisabled={logoutBusy}
+        onCancel={() => {
+          if (!logoutBusy) setLogoutConfirmOpen(false)
+        }}
+        onAction={() => void logoutGithub()}
+      />
     </footer>
   )
 })

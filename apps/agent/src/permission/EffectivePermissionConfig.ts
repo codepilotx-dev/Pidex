@@ -1,16 +1,14 @@
 import type { PermissionConfig } from '@pidex/shared/thread'
 import type { TaskMode } from '../Domain'
 
-/** Plan mode is a hard runtime ceiling, independent of the thread's saved baseline. */
+/**
+ * Collaboration modes constrain task behavior: Plan and Grill must investigate
+ * instead of implementing. They do not replace the user's file-access scope or
+ * approval policy. A mode-specific read-only rewrite would silently change the
+ * configured preset, so the effective config is exactly the stored config;
+ * mutation is still blocked by tool exposure and the final execution gate.
+ */
 export const resolveEffectivePermissionConfig = (
-  taskMode: TaskMode,
+  _taskMode: TaskMode,
   configured: PermissionConfig,
-): PermissionConfig =>
-  taskMode === 'plan'
-    ? {
-        ...configured,
-        sandboxMode: 'read-only',
-        approvalPolicy:
-          configured.approvalPolicy === 'on-failure' ? 'on-request' : configured.approvalPolicy,
-      }
-    : configured
+): PermissionConfig => configured

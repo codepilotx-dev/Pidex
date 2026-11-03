@@ -53,7 +53,7 @@ export class SessionGroupService {
 
   private requireGroup(groupId: string) {
     const group = this.repository().read(groupId)
-    if (!group) throw new AgentError('SESSION_GROUP_NOT_FOUND', '会话组不存在', 404)
+    if (!group) throw new AgentError('SESSION_GROUP_NOT_FOUND', '工作组不存在', 404)
     return group
   }
 
@@ -195,7 +195,7 @@ export class SessionGroupService {
     const name = input.name.trim()
     const description = input.description?.trim() ?? ''
     if (!name || name.length > 120 || description.length > 4000)
-      throw new AgentError('INVALID_REQUEST', '会话组名称或描述无效', 400)
+      throw new AgentError('INVALID_REQUEST', '工作组名称或描述无效', 400)
     const request = { name, description }
     const replay = this.repository().completedOperation(
       input.operationId,
@@ -247,7 +247,7 @@ export class SessionGroupService {
         ...(request.name !== undefined ? { name: request.name } : {}),
         ...(request.description !== undefined ? { description: request.description } : {}),
       })
-      if (!group) throw new AgentError('CONFLICT', '会话组已被更新，请刷新后重试', 409)
+      if (!group) throw new AgentError('CONFLICT', '工作组已被更新，请刷新后重试', 409)
       const value = { group }
       this.repository().recordOperation(input.operationId, 'session-group/update', request, value)
       return { result: value, event: this.changedEvent(input.groupId, 'updated') }
@@ -259,7 +259,7 @@ export class SessionGroupService {
   async delete(input: { groupId: string; expectedVersion?: number; operationId: string }) {
     const group = this.requireGroup(input.groupId)
     if (input.expectedVersion !== undefined && input.expectedVersion !== group.version)
-      throw new AgentError('CONFLICT', '会话组已被更新，请刷新后重试', 409)
+      throw new AgentError('CONFLICT', '工作组已被更新，请刷新后重试', 409)
     const request = { groupId: input.groupId, expectedVersion: input.expectedVersion ?? null }
     const replay = this.repository().completedOperation(
       input.operationId,
@@ -301,7 +301,7 @@ export class SessionGroupService {
       )
       .get(input.threadId)
     if (busy)
-      throw new AgentError('SESSION_GROUP_THREAD_BUSY', '当前 Turn 结束后才可切换会话组', 409)
+      throw new AgentError('SESSION_GROUP_THREAD_BUSY', '当前 Turn 结束后才可切换工作组', 409)
     const request = { threadId: input.threadId, groupId: input.groupId }
     const replay = this.repository().completedOperation(
       input.operationId,
@@ -366,7 +366,7 @@ export class SessionGroupService {
   }) {
     this.requireGroup(input.groupId)
     if (input.digest && input.digest.length > 6000)
-      throw new AgentError('INVALID_REQUEST', '会话组摘要过长', 400)
+      throw new AgentError('INVALID_REQUEST', '工作组摘要过长', 400)
     const { context, event } = this.db.transaction(() => ({
       context: this.repository().updateContext(input.groupId, input),
       event: this.changedEvent(input.groupId, 'context_changed'),
@@ -402,7 +402,7 @@ export class SessionGroupService {
       if (current.state.contextRevision !== input.expectedContextRevision) {
         throw new AgentError(
           'SESSION_GROUP_CONTEXT_REVISION_CONFLICT',
-          '会话组上下文已更新，请刷新后重试',
+          '工作组上下文已更新，请刷新后重试',
           409,
         )
       }
@@ -440,11 +440,11 @@ export class SessionGroupService {
         if (!entry)
           throw new AgentError(
             'SESSION_GROUP_CONTEXT_ENTRY_NOT_FOUND',
-            '会话组上下文条目不存在',
+            '工作组上下文条目不存在',
             404,
           )
         if (entry.version !== change.expectedEntryVersion)
-          throw new AgentError('CONFLICT', '会话组上下文条目已更新', 409)
+          throw new AgentError('CONFLICT', '工作组上下文条目已更新', 409)
         if (change.op === 'retire') {
           this.db.sqlite
             .query(
@@ -498,7 +498,7 @@ export class SessionGroupService {
 
   diffSource(input: { groupId: string; stepId: string; path?: string }) {
     const step = this.repository().step(input.groupId, input.stepId)
-    if (!step) throw new AgentError('SESSION_GROUP_STEP_NOT_FOUND', '会话组步骤不存在', 404)
+    if (!step) throw new AgentError('SESSION_GROUP_STEP_NOT_FOUND', '工作组步骤不存在', 404)
     if (!step.sourceThreadId)
       throw new AgentError('CHECKPOINT_UNAVAILABLE', '来源会话已删除，无法显示精确 Diff', 409)
     const changed = input.path
@@ -518,37 +518,116 @@ export class SessionGroupService {
     }
   }
 
-  promptForThread(threadId: string) {
+  /** 只读视图：当前会话所属工作组的成员、共享条目与近期进展。 */
+  readForThread(threadId: string) {
     const membership = this.repository().membership(threadId)
     if (!membership) return null
     const group = this.repository().read(membership.group_id)
     const context = this.repository().context(membership.group_id)
     if (!group || !context) return null
-    const all = this.repository().listSteps(membership.group_id, 11)
-    const recent = all.slice(0, 10).reverse()
-    const rawStepText = recent
-      .map((step) => {
-        const files = step.changedFiles
-          .slice(0, 12)
-          .map((file) => `${file.workspaceLabel}:${file.path}`)
-          .join('、')
-        return `- [${step.workspaceLabel}/${step.sourceThreadTitle}/${step.status}] ${step.summary}${files ? `\n  修改：${files}` : ''}${step.failure ? `\n  失败：${step.failure.message}` : ''}`
-      })
-      .join('\n')
-    const prefix = `<session_group_context group_id="${group.id}" context_revision="${context.state.contextRevision}" latest_sequence="${all[0]?.sequence ?? 0}">\n会话组：${group.name}\n${group.description}\n`
-    const suffix =
-      '\n详细证据按需读取；精确文件差异使用 session_group_step_diff。\n</session_group_context>'
-    const available = Math.max(0, 12_000 - prefix.length - suffix.length)
-    const digest = context.state.digest.slice(0, Math.min(6_000, available))
-    const stepBudget = Math.max(
-      0,
-      Math.min(6_000, available - digest.length - '\n最近步骤：\n'.length),
+    const projectName = (projectId: string | null, workspaceCwd: string) =>
+      safeText(
+        projectId ? (this.db.getProject(projectId)?.name ?? basename(workspaceCwd)) : '无项目',
+        80,
+      )
+    const owner = this.db.sqlite
+      .query(
+        'SELECT project_id AS projectId, workspace_cwd AS workspaceCwd FROM threads WHERE id = ?',
+      )
+      .get(threadId) as { projectId: string | null; workspaceCwd: string } | null
+    const members = (
+      this.repository().members(membership.group_id) as Array<{
+        threadId: string
+        title: string
+        projectId: string | null
+        workspaceLabel: string
+        joinedAt: number
+      }>
+    ).map((member) => ({
+      threadId: member.threadId,
+      title: safeText(member.title || '未命名会话', 200),
+      projectName: projectName(member.projectId, member.workspaceLabel),
+      isCurrent: member.threadId === threadId,
+      joinedAt: member.joinedAt,
+    }))
+    const steps = this.repository().listSteps(membership.group_id, 10).reverse()
+    return {
+      group: { id: group.id, name: group.name, description: group.description },
+      currentProject: owner ? projectName(owner.projectId, owner.workspaceCwd) : '无项目',
+      members,
+      sharedEntries: context.entries.map((entry) => ({
+        section: entry.section,
+        title: entry.title,
+        content: entry.content,
+        sourceThreadId: entry.sourceThreadId,
+      })),
+      recentProgress: steps.map((step) => ({
+        sequence: step.sequence,
+        threadId: step.sourceThreadId,
+        threadTitle: step.sourceThreadTitle,
+        projectName: step.workspaceLabel,
+        status: step.status,
+        summary: step.summary,
+        changedFiles: step.changedFiles
+          .slice(0, 20)
+          .map((file) => `${file.workspaceLabel}:${file.path}`),
+        failure: step.failure?.message ?? null,
+      })),
+    }
+  }
+
+  /** 成员索引、共享条目与近期进展；按预算裁剪，成员与条目优先保留。 */
+  promptForThread(threadId: string) {
+    const view = this.readForThread(threadId)
+    if (!view) return null
+    const context = this.repository().context(view.group.id)!
+    const memberLines = view.members.map(
+      (member) =>
+        `- [${member.projectName}] ${member.title}（会话 ID：${member.threadId}）${member.isCurrent ? ' ← 当前会话' : ''}`,
     )
-    const stepText =
-      rawStepText.length > stepBudget
-        ? `${rawStepText.slice(0, Math.max(0, stepBudget - 18))}\n…更多步骤请按需读取。`
-        : rawStepText
-    return `${prefix}${digest}\n最近步骤：\n${stepText}${suffix}`
+    const entryLines = view.sharedEntries.map(
+      (entry) => `- [${entry.section}] ${entry.title}：${entry.content}`,
+    )
+    const progressLines = view.recentProgress.map(
+      (step) =>
+        `- [${step.projectName}/${step.threadTitle}/${step.status}] ${step.summary}${step.changedFiles.length ? `\n  修改：${step.changedFiles.join('、')}` : ''}${step.failure ? `\n  失败：${step.failure}` : ''}`,
+    )
+    const header = [
+      `<session_group_context group_id="${view.group.id}" context_revision="${context.state.contextRevision}" latest_sequence="${view.recentProgress.at(-1)?.sequence ?? 0}">`,
+      `工作组：${view.group.name}`,
+      ...(view.group.description ? [`说明：${view.group.description}`] : []),
+      `当前项目：${view.currentProject}`,
+      '',
+    ].join('\n')
+    const footer = [
+      '',
+      '成员会话的完整历史（含加入工作组之前或之后的用户要求、助手成果与完整计划）用 read_thread 按上面的会话 ID 分页读取；记录较长时用返回的 olderCursor 继续向前翻页。',
+      '摘要与工具标题只能用于定位，不能代替完整文件：跨项目复用前先用 Read/Grep 读取来源项目里的实际代码与素材再动手。',
+      '当前项目与来源项目可能不是同一个仓库；改动前先确认目标项目，来源项目默认只读。',
+      '工作组只提供共享上下文，不会扩大当前会话的文件权限，也不授权修改来源项目。',
+      'workgroup_read 可随时重新读取成员、共享条目与近期进展。',
+      '</session_group_context>',
+    ].join('\n')
+    let remaining = Math.max(0, 12_000 - header.length - footer.length)
+    const sections: string[] = []
+    const take = (title: string, lines: readonly string[], cap: number) => {
+      if (!lines.length) return
+      const budget = Math.min(cap, remaining - title.length - 1)
+      if (budget <= 0) return
+      const text = lines.join('\n')
+      const body =
+        text.length <= budget
+          ? text
+          : `${text.slice(0, Math.max(0, budget - 16))}\n…（后续内容已省略）`
+      sections.push(`${title}\n${body}`)
+      remaining -= title.length + 1 + body.length + 1
+    }
+    take('成员会话：', memberLines, 4_000)
+    take('有效共享条目：', entryLines, 4_000)
+    take('近期进展：', progressLines, 6_000)
+    // 摘要优先级最低：预算不足时先于成员索引、共享条目与近期进展被省略。
+    if (context.state.digest) take('进展摘要：', context.state.digest.split('\n'), 4_000)
+    return `${header}${sections.map((section) => `${section}\n`).join('\n')}${footer}`
   }
 
   async recoverMissingSteps() {

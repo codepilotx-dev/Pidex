@@ -8,12 +8,25 @@ export const CUSTOM_MODEL_PRESET_ID = '__custom__'
 
 export const MODEL_PRESETS: ModelPreset[] = buildModelPresets([])
 
-export function buildModelPresets(models: string[]): ModelPreset[] {
+export function buildModelPresets(
+  models: string[],
+  metadata?: Record<string, { name?: string }>,
+): ModelPreset[] {
   return models.map((model) => ({
     id: model,
-    label: getModelDisplayLabel(model),
+    label: metadata?.[model]?.name || getModelDisplayLabel(model),
     value: model,
   }))
+}
+
+/**
+ * 模型选择器按展示名称做 A→Z 排序。忽略大小写并按数字大小比较，
+ * 让同一系列（如 Qwen3.8 与 Qwen10）保持自然顺序；输入数组不被修改。
+ */
+export function sortModelPresetsByName(presets: readonly ModelPreset[]): ModelPreset[] {
+  return [...presets].sort((left, right) =>
+    left.label.localeCompare(right.label, 'en', { numeric: true, sensitivity: 'base' }),
+  )
 }
 
 export function getModelDisplayLabel(model: string): string {

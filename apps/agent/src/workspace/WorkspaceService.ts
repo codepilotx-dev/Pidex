@@ -464,6 +464,8 @@ export class WorkspaceService {
   private ensureWritable(path: string) {
     if (this.fileAccess === 'read-only')
       throw new AgentError('WORKSPACE_FILE_READONLY', '当前文件访问范围为只读', 403)
+    if (this.readOnlyPathFor(path))
+      throw new AgentError('WORKSPACE_FILE_READONLY', '本地上下文路径为只读', 403)
     const owner = this.rootForPath(path)
     // An explicitly read-only root stays read-only even under full access.
     if (owner) {

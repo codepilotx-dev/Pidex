@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { PetCatalogItem, PetCatalogResult, PetLicenseKind } from '@pidex/agent-protocol'
 import { AgentError } from '../Domain'
@@ -12,9 +12,10 @@ const MANIFEST_BASE_URL = 'https://raw.githubusercontent.com/legeling/awesome-co
 const PREVIEW_BASE_URL = 'https://codexpet.top/assets/previews/'
 const CACHE_FILE_NAME = '.catalog-cache.json'
 const CACHE_VERSION = 1
-const CACHE_TTL_MS = 6 * 60 * 60 * 1_000
+const CACHE_TTL_MS = 5 * 60 * 60 * 1_000
 const MAX_CATALOG_BYTES = 2 * 1024 * 1024
 const MAX_PREVIEW_BYTES = 5 * 1024 * 1024
+const PREVIEW_CACHE_TTL_MS = 5 * 60 * 60 * 1_000
 const MAX_CATALOG_ITEMS = 1_000
 const REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308])
 const PET_SLUG_PATTERN = /^[a-z0-9][a-z0-9-]{0,63}$/
@@ -33,9 +34,13 @@ type CatalogServiceOptions = {
 }
 
 export class PetCatalogService {
+  private refreshTimer: ReturnType<typeof setTimeout> | null = null
+  private stopped = true
   private readonly fetch: typeof globalThis.fetch
   private readonly now: () => number
   private refreshPromise: Promise<CatalogCache> | null = null
+  private readonly previewDownloads = new Map<string, Promise<Uint8Array>>()
+  private readonly previewFailedAt = new Map<string, number>()
 
   constructor(
     private readonly rootDirectory: string,
@@ -43,6 +48,34 @@ export class PetCatalogService {
   ) {
     this.fetch = options.fetch ?? globalThis.fetch
     this.now = options.now ?? Date.now
+  }
+
+  start() {
+    if (!this.stopped) return
+    this.stopped = false
+    const refresh = async () => {
+      if (this.stopped) return
+      let delay = CACHE_TTL_MS
+      try {
+        const cached = await this.readCache()
+        if (!cached || !this.isFresh(cached)) await this.refresh()
+        else delay = Math.max(1, Date.parse(cached.fetchedAt) + CACHE_TTL_MS - this.now())
+      } catch {
+        /* Retry at the next refresh deadline. */
+      }
+      if (this.stopped) return
+      this.refreshTimer = setTimeout(() => {
+        void refresh()
+      }, delay)
+      this.refreshTimer.unref?.()
+    }
+    void refresh()
+  }
+
+  dispose() {
+    this.stopped = true
+    if (this.refreshTimer) clearTimeout(this.refreshTimer)
+    this.refreshTimer = null
   }
 
   async list(installedPetIDs: ReadonlySet<string>, refresh = false): Promise<PetCatalogResult> {
@@ -81,11 +114,75 @@ export class PetCatalogService {
 
   async previewAsset(slug: string): Promise<{
     bytes: Uint8Array
-    contentType: 'image/gif'
+    contentType: 'image/webp'
     etag: string
   }> {
     const item = await this.requireCatalogItem(slug)
-    const url = new URL(`${encodeURIComponent(item.slug)}/gifs/idle.gif`, PREVIEW_BASE_URL)
+    const cached = await this.readPreviewCache(item.slug)
+    let bytes: Uint8Array
+    if (cached) {
+      bytes = cached.bytes
+      if (
+        this.now() - cached.updatedAt >= PREVIEW_CACHE_TTL_MS &&
+        this.now() - (this.previewFailedAt.get(item.slug) ?? -Infinity) >= PREVIEW_CACHE_TTL_MS
+      ) {
+        void this.downloadPreview(item.slug).catch(() => undefined)
+      }
+    } else {
+      bytes = await this.downloadPreview(item.slug)
+    }
+    return {
+      bytes,
+      contentType: 'image/webp',
+      etag: `"${createHash('sha256').update(bytes).digest('hex')}"`,
+    }
+  }
+
+  private async readPreviewCache(slug: string): Promise<{
+    bytes: Uint8Array
+    updatedAt: number
+  } | null> {
+    try {
+      const path = join(this.rootDirectory, '.preview-cache', `${slug}.webp`)
+      const metadata = await stat(path)
+      if (metadata.size > MAX_PREVIEW_BYTES) return null
+      const bytes = await readFile(path)
+      if (!isWebp(bytes) || bytes.byteLength > MAX_PREVIEW_BYTES) return null
+      return { bytes, updatedAt: metadata.mtimeMs }
+    } catch {
+      return null
+    }
+  }
+
+  private downloadPreview(slug: string): Promise<Uint8Array> {
+    const pending = this.previewDownloads.get(slug)
+    if (pending) return pending
+    const request = this.fetchPreview(slug)
+      .then(async (bytes) => {
+        this.previewFailedAt.delete(slug)
+        const directory = join(this.rootDirectory, '.preview-cache')
+        const temporary = join(directory, `${slug}.${crypto.randomUUID()}.tmp`)
+        try {
+          await mkdir(directory, { recursive: true })
+          await writeFile(temporary, bytes)
+          await rename(temporary, join(directory, `${slug}.webp`))
+        } catch {
+          // 磁盘缓存失败不阻断本次预览，也不改动已安装宠物。
+          await rm(temporary, { force: true }).catch(() => undefined)
+        }
+        return bytes
+      })
+      .catch((error) => {
+        this.previewFailedAt.set(slug, this.now())
+        throw error
+      })
+      .finally(() => this.previewDownloads.delete(slug))
+    this.previewDownloads.set(slug, request)
+    return request
+  }
+
+  private async fetchPreview(slug: string): Promise<Uint8Array> {
+    const url = new URL(`${encodeURIComponent(slug)}/webp/idle.webp`, PREVIEW_BASE_URL)
     if (
       url.protocol !== 'https:' ||
       url.hostname !== 'codexpet.top' ||
@@ -95,18 +192,14 @@ export class PetCatalogService {
     }
     const response = await this.fetchNoRedirect(url, '宠物预览')
     const contentType = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase()
-    if (contentType !== 'image/gif') {
-      throw new AgentError('PET_INVALID', '宠物预览只支持 GIF', 400)
+    if (contentType !== 'image/webp') {
+      throw new AgentError('PET_INVALID', '宠物预览只支持 WebP', 400)
     }
     const bytes = await readLimitedBody(response, MAX_PREVIEW_BYTES, '宠物预览超过大小限制')
-    if (!isGif(bytes)) {
+    if (!isWebp(bytes)) {
       throw new AgentError('PET_INVALID', '宠物预览文件签名无效', 400)
     }
-    return {
-      bytes,
-      contentType,
-      etag: `"${createHash('sha256').update(bytes).digest('hex')}"`,
-    }
+    return bytes
   }
 
   private async requireCatalogItem(slug: string): Promise<CatalogPet> {
@@ -412,10 +505,12 @@ async function readLimitedBody(
   return bytes
 }
 
-function isGif(bytes: Uint8Array): boolean {
-  if (bytes.length < 6) return false
-  const signature = String.fromCharCode(...bytes.slice(0, 6))
-  return signature === 'GIF87a' || signature === 'GIF89a'
+function isWebp(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 16 &&
+    String.fromCharCode(...bytes.slice(0, 4)) === 'RIFF' &&
+    String.fromCharCode(...bytes.slice(8, 12)) === 'WEBP'
+  )
 }
 
 function record(value: unknown, name: string): Record<string, unknown> {

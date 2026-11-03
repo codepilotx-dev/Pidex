@@ -13,6 +13,8 @@ type Props = SidebarHoverCardOverlayRenderProps & {
   conversationCount: number
   focusRequest: number
   openCount: number
+  pinLabel?: string
+  pinIcon?: React.ReactNode
   isPinned: boolean
   isUnavailable: boolean
   project: DesktopWorkspace
@@ -29,6 +31,8 @@ export function SidebarProjectHoverCardOverlay({
   conversationCount,
   focusRequest,
   openCount,
+  pinLabel,
+  pinIcon,
   isPinned,
   isUnavailable,
   project,
@@ -56,6 +60,8 @@ export function SidebarProjectHoverCardOverlay({
         conversationCount={conversationCount}
         openCount={openCount}
         unreadCount={unreadCount}
+        pinLabel={pinLabel}
+        pinIcon={pinIcon}
         isPinned={isPinned}
         isUnavailable={isUnavailable}
         project={project}

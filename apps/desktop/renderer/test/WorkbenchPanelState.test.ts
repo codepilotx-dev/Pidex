@@ -219,6 +219,78 @@ describe('workbench dynamic tab state', () => {
     expect(restored.workbench.right.tabIds).toEqual([])
   })
 
+  test('reuses one subagent directory per parent thread and updates the selected task', () => {
+    const first = {
+      id: 'subagent-directory:thread-main',
+      kind: 'subagent-directory',
+      threadId: 'thread-main',
+      selectedTaskId: 'task-1',
+    } as const
+    const second = {
+      ...first,
+      selectedTaskId: 'task-2',
+    } as const
+    let state = open(createDefaultWorkbenchTabsState(), first)
+    state = applyWorkbenchPanelAction(state, { type: 'openTab', target: 'right', tab: second })
+
+    expect(state.right.tabIds).toEqual(['subagent-directory:thread-main'])
+    expect(state.tabsById['subagent-directory:thread-main']).toEqual(second)
+    expect(state.right.activeTabId).toBe('subagent-directory:thread-main')
+
+    // 另一个父会话拥有独立目录。
+    state = open(state, {
+      id: 'subagent-directory:thread-other',
+      kind: 'subagent-directory',
+      threadId: 'thread-other',
+    })
+    expect(state.right.tabIds).toEqual([
+      'subagent-directory:thread-main',
+      'subagent-directory:thread-other',
+    ])
+  })
+
+  test('restores a subagent directory with its selection and drops the legacy side-task tab', () => {
+    const restored = validateConversationUiState({
+      schemaVersion: 4,
+      workbench: {
+        ...createDefaultWorkbenchTabsState(),
+        tabsById: {
+          'subagent-directory:thread-main': {
+            id: 'subagent-directory:thread-main',
+            kind: 'subagent-directory',
+            threadId: 'thread-main',
+            selectedTaskId: 'task-7',
+          },
+          'side-task:task-1': {
+            id: 'side-task:task-1',
+            kind: 'side-task',
+            taskId: 'task-1',
+            childThreadId: 'thread-1',
+          },
+        },
+        right: {
+          open: true,
+          activeTabId: 'side-task:task-1',
+          tabIds: ['subagent-directory:thread-main', 'side-task:task-1'],
+        },
+      },
+      mainScrollTop: 0,
+      sideChatInput: '',
+      sideChatAttachments: [],
+    })
+
+    expect(restored.workbench.tabsById).toEqual({
+      'subagent-directory:thread-main': {
+        id: 'subagent-directory:thread-main',
+        kind: 'subagent-directory',
+        threadId: 'thread-main',
+        selectedTaskId: 'task-7',
+      },
+    })
+    expect(restored.workbench.right.tabIds).toEqual(['subagent-directory:thread-main'])
+    expect(restored.workbench.right.activeTabId).toBe('subagent-directory:thread-main')
+  })
+
   test('matches the Codex launcher order and presentation without changing tab titles', () => {
     const launchers = getWorkbenchLauncherDefinitions()
     const presentation = launchers.map((definition) => ({
@@ -455,13 +527,16 @@ describe('workbench dynamic tab state', () => {
       title: '计划 2',
     })
     state = open(state, {
-      id: 'side-task:task-1',
-      kind: 'side-task',
-      taskId: 'task-1',
-      childThreadId: 'thread-1',
+      id: 'subagent-directory:thread-main',
+      kind: 'subagent-directory',
+      threadId: 'thread-main',
     })
 
-    expect(state.right.tabIds).toEqual(['plan:event-1', 'plan:event-2', 'side-task:task-1'])
+    expect(state.right.tabIds).toEqual([
+      'plan:event-1',
+      'plan:event-2',
+      'subagent-directory:thread-main',
+    ])
     expect(state.tabsById['plan:event-1']).toMatchObject({ content: '# 计划 1\n\n正文' })
   })
 
@@ -505,17 +580,16 @@ describe('workbench dynamic tab state', () => {
     } as const
     let state = open(createDefaultWorkbenchTabsState(), sideChat)
     state = open(state, {
-      id: 'side-task:task-1',
-      kind: 'side-task',
-      taskId: 'task-1',
-      childThreadId: 'thread-1',
+      id: 'subagent-directory:thread-main',
+      kind: 'subagent-directory',
+      threadId: 'thread-main',
     })
 
-    // 返回箭头/标签 × 的同一行为：先移除当前 side-task 标签，再关闭所在面板
+    // 返回箭头/标签 × 的同一行为：先移除当前 subagent-directory 标签，再关闭所在面板
     state = applyWorkbenchPanelAction(state, {
       type: 'closeTab',
       target: 'right',
-      tabId: 'side-task:task-1',
+      tabId: 'subagent-directory:thread-main',
     })
     state = applyWorkbenchPanelAction(state, {
       type: 'closePanel',
@@ -523,7 +597,7 @@ describe('workbench dynamic tab state', () => {
     })
 
     expect(state.right.tabIds).toEqual([sideChat.id])
-    expect(state.tabsById['side-task:task-1']).toBeUndefined()
+    expect(state.tabsById['subagent-directory:thread-main']).toBeUndefined()
     expect(state.right.open).toBe(false)
     expect(state.focusArea).toBe('main')
     // 普通侧边聊天标签不受影响
@@ -533,15 +607,14 @@ describe('workbench dynamic tab state', () => {
 
   test('closing a side task panel returns focus to chat', () => {
     let state = open(createDefaultWorkbenchTabsState(), {
-      id: 'side-task:task-1',
-      kind: 'side-task',
-      taskId: 'task-1',
-      childThreadId: 'thread-1',
+      id: 'subagent-directory:thread-main',
+      kind: 'subagent-directory',
+      threadId: 'thread-main',
     })
     state = applyWorkbenchPanelAction(state, {
       type: 'closeTab',
       target: 'right',
-      tabId: 'side-task:task-1',
+      tabId: 'subagent-directory:thread-main',
     })
     state = applyWorkbenchPanelAction(state, {
       type: 'closePanel',
@@ -849,7 +922,7 @@ describe('workbench dynamic tab state', () => {
         sideChatAttachments: [],
       },
       {
-        validPlanEventIds: ['event-1'],
+        validPlanItemIds: ['event-1'],
         workspacePath: 'F:\\project',
       },
     )
@@ -859,10 +932,17 @@ describe('workbench dynamic tab state', () => {
     expect(state.workbench.bottom.tabIds).toEqual([])
     expect(state.workbench.bottom.activeTabId).toBeNull()
     expect(state.workbench.tabsById['tool-probe']).toBeUndefined()
+    // 旧版持久化标签只有 eventId：归一化后按计划项身份保留，聊天身份留空。
     expect(state.workbench.tabsById).toEqual({
       review,
       [fileTab.id]: fileTab,
-      [planTab.id]: planTab,
+      [planTab.id]: {
+        id: planTab.id,
+        kind: 'plan',
+        planItemId: 'event-1',
+        threadId: '',
+        title: '实现计划',
+      },
     })
     expect(state.workbench.focusArea).toBe('bottom-panel')
     expect(state.schemaVersion).toBe(4)
@@ -1277,12 +1357,18 @@ describe('workbench dynamic tab state', () => {
   test('workspace layout cycles split → chat → split', () => {
     let state = open(createDefaultWorkbenchTabsState(), review)
     expect(getWorkbenchWorkspaceLayout(state)).toBe('split')
+    const { sidebar, tabsById, right, bottom } = state
 
     state = applyWorkbenchPanelAction(state, { type: 'stepWorkspaceLayout' })
     expect(getWorkbenchWorkspaceLayout(state)).toBe('chat')
 
     state = applyWorkbenchPanelAction(state, { type: 'stepWorkspaceLayout' })
     expect(getWorkbenchWorkspaceLayout(state)).toBe('split')
+    // 布局切换不改变侧栏输入与文件回调依赖，允许跳过无关渲染。
+    expect(state.sidebar).toBe(sidebar)
+    expect(state.tabsById).toBe(tabsById)
+    expect(state.right.tabIds).toBe(right.tabIds)
+    expect(state.bottom).toBe(bottom)
   })
 
   test('hiding tabs keeps mounted tabs, their active selection, and the remembered mode', () => {

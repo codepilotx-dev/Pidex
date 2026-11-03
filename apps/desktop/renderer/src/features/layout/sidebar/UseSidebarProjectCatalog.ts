@@ -56,9 +56,22 @@ export function useSidebarProjectCatalog({
 
     refreshProjects()
     const unsubscribe = subscribeProjectCatalogChanges(refreshProjects)
+    // 用户在资源管理器里增删目录不会产生项目事件，重新聚焦/可见时补一次探测。
+    let lastFocusRefreshAt = 0
+    const refreshOnFocus = (): void => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return
+      const now = Date.now()
+      if (now - lastFocusRefreshAt < 1_000) return
+      lastFocusRefreshAt = now
+      refreshProjects()
+    }
+    window.addEventListener('focus', refreshOnFocus)
+    document.addEventListener('visibilitychange', refreshOnFocus)
     return () => {
       cancelled = true
       unsubscribe()
+      window.removeEventListener('focus', refreshOnFocus)
+      document.removeEventListener('visibilitychange', refreshOnFocus)
     }
   }, [onReport, onError])
 

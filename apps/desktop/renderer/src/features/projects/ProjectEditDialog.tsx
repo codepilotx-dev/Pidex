@@ -273,7 +273,7 @@ export function ProjectEditDialog({
                       )}
                       key={folder.id}
                     >
-                      <Folder size={APP_ICON_SIZE} />
+                      <Folder size="var(--inline-icon-size, 1em)" />
                       <span
                         className="project-edit-folder-name tw:min-w-0 tw:flex-1 tw:truncate tw:px-1 tw:type-body"
                         title={folder.path}
@@ -336,7 +336,7 @@ export function ProjectEditDialog({
                     type="button"
                     onClick={() => void addFolder()}
                   >
-                    <FolderPlus size={APP_ICON_SIZE} />
+                    <FolderPlus size="var(--inline-icon-size, 1em)" />
                     <span className="tw:px-1">添加文件夹</span>
                   </button>
                 </div>

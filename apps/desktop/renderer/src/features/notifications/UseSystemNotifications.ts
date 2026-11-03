@@ -1,12 +1,19 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { DesktopSystemNotificationSettings } from '../../../shared/Types.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { TaskNotificationDispatcher } from './TaskNotificationDispatcher.js'
 import { AutomationNotificationDispatcher } from './AutomationNotificationDispatcher.js'
+import { sendTaskScheduleNotifications } from './TaskScheduleNotifications.js'
+import type { TaskNotificationState } from './TaskScheduleNotifications.js'
 
 export function useSystemNotifications(
   settings: DesktopSystemNotificationSettings | undefined,
-): void {
+): TaskNotificationState {
+  const [taskState, setTaskState] = useState<TaskNotificationState>({
+    attention: [],
+    tasks: [],
+    links: [],
+  })
   const dispatcherRef = useRef<TaskNotificationDispatcher | null>(null)
   dispatcherRef.current ??= new TaskNotificationDispatcher((request) => {
     const bridge = window.DesktopBridge
@@ -15,6 +22,49 @@ export function useSystemNotifications(
   })
   const dispatcher = dispatcherRef.current
   dispatcher.setSettings(settings)
+
+  useEffect(() => {
+    let disposed = false
+    let sending = false
+    let rerun = false
+    const send = async () => {
+      if (disposed) return
+      if (sending) {
+        rerun = true
+        return
+      }
+      sending = true
+      try {
+        const pending = await sendTaskScheduleNotifications(
+          desktopClient,
+          settings?.questions ? window.DesktopBridge : undefined,
+          dispatcher,
+        )
+        if (!disposed) setTaskState(pending)
+      } catch {
+        /* Agent 断线后下一次重试。 */
+      } finally {
+        sending = false
+        if (rerun && !disposed) {
+          rerun = false
+          void send()
+        }
+      }
+    }
+    void send()
+    const timer = window.setInterval(() => void send(), 30_000)
+    const unsubscribe = desktopClient.subscribeAgentEventEnvelopes(
+      { liveEventTypes: [] },
+      (events) => {
+        if (events.some((event) => event.type === 'task-schedule/changed')) void send()
+      },
+    )
+    return () => {
+      disposed = true
+      window.clearInterval(timer)
+      unsubscribe()
+    }
+  }, [dispatcher, settings?.questions])
 
   useEffect(() => {
     let disposed = false
@@ -54,4 +104,5 @@ export function useSystemNotifications(
       unsubscribe()
     }
   }, [dispatcher])
+  return taskState
 }

@@ -1,5 +1,10 @@
 import { Model } from '@pidex/model-schema'
 import { AgentThread } from '@pidex/shared'
+import {
+  GuardianReviewSchema,
+  PermissionRuleInputSchema,
+  PermissionRuleSchema,
+} from '@pidex/shared/thread'
 import { Schema } from 'effect'
 import { defineMethod, type MethodMap } from '../wire/Definition'
 import {
@@ -257,7 +262,7 @@ export const PendingQuestionInteractionSchema = Schema.Struct({
   toolCallId: Schema.optional(OpaqueIDSchema),
   questions: Schema.Array(InteractionQuestionSchema)
     .check(Schema.isMinLength(1))
-    .check(Schema.isMaxLength(3)),
+    .check(Schema.isMaxLength(5)),
   autoResolutionMs: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 60_000, maximum: 240_000 })),
   ),
@@ -337,7 +342,7 @@ export const QuestionInteractionResponseSchema = Schema.Union([
     resolution: Schema.Literals(['user', 'auto']),
     answers: Schema.Array(AgentThread.InteractionQuestionAnswerSchema)
       .check(Schema.isMinLength(1))
-      .check(Schema.isMaxLength(3)),
+      .check(Schema.isMaxLength(5)),
   }),
   Schema.Struct({ kind: Schema.Literal('question'), status: Schema.Literal('ignored') }),
 ])
@@ -694,6 +699,7 @@ export const ThreadHistoryReadParamsSchema = Schema.Struct({
 })
 
 export const ThreadHistoryPageResultSchema = Schema.Struct({
+  context: Schema.optional(AgentThread.ThreadContextStateSchema),
   thread: AgentThread.ThreadSchema,
   pendingPlanApproval: Schema.optional(Schema.NullOr(AgentThread.PlanApprovalSchema)),
   subagents: Schema.Array(AgentThread.SubagentProjectionSchema),
@@ -704,6 +710,7 @@ export const ThreadHistoryPageResultSchema = Schema.Struct({
     turns: Schema.Array(AgentThread.TurnSchema),
     inputs: Schema.Array(AgentThread.InputSchema),
   }),
+  historyRevision: Schema.optional(SequenceSchema),
   olderCursor: Schema.NullOr(CursorSchema),
   hasOlder: Schema.Boolean,
   streamPosition: StreamPositionSchema,
@@ -994,6 +1001,16 @@ const TurnContentFields = {
   contextReferenceIds: Schema.optional(Schema.Array(OpaqueIDSchema)),
 }
 
+export const ThreadEditUserMessageParamsSchema = Schema.Struct({
+  operationId: OpaqueIDSchema,
+  threadId: OpaqueIDSchema,
+  turnId: OpaqueIDSchema,
+  inputId: OpaqueIDSchema,
+  content: Schema.String,
+  attachmentIds: Schema.Array(OpaqueIDSchema),
+  contextReferenceIds: Schema.Array(OpaqueIDSchema),
+})
+
 export const TurnStartParamsSchema = Schema.Struct({
   threadId: OpaqueIDSchema,
   inputId: OpaqueIDSchema,
@@ -1010,7 +1027,13 @@ export const TurnStartParamsSchema = Schema.Struct({
   ),
 })
 
+export const QueueGoalIntentSchema = Schema.Struct({
+  objective: NonEmptyStringSchema,
+  tokenBudget: Schema.optional(Schema.NullOr(NonNegativeIntSchema)),
+})
+
 export const QueueAddParamsSchema = Schema.Struct({
+  goal: Schema.optional(QueueGoalIntentSchema),
   threadId: OpaqueIDSchema,
   inputId: OpaqueIDSchema,
   ...TurnContentFields,
@@ -1122,7 +1145,7 @@ export const AttachmentUploadSchema = Schema.Union([
     data: Schema.String,
   }),
   Schema.Struct({
-    kind: Schema.Literal('image'),
+    kind: Schema.Literals(['image', 'audio', 'video']),
     name: NonEmptyStringSchema,
     mediaType: NonEmptyStringSchema,
     encoding: Schema.Literal('base64'),
@@ -1381,16 +1404,10 @@ export const CoreRpcMethods = {
   'approval/rules/list': defineMethod({
     params: Schema.Struct({ threadId: OpaqueIDSchema }),
     result: Schema.Struct({
-      rules: Schema.Array(
-        Schema.Struct({
-          id: NonEmptyStringSchema,
-          kind: Schema.Literals(['network', 'mcp']),
-          target: Schema.Array(Schema.String),
-        }),
-      ),
+      rules: Schema.Array(PermissionRuleSchema),
     }),
     errors: InteractionErrors,
-    capability: 'interaction.scopedGrants.v1',
+    capability: 'permission.rules.v1',
     mutation: false,
   }),
   'approval/reviewState': defineMethod({
@@ -1403,6 +1420,22 @@ export const CoreRpcMethods = {
           tool: Schema.String,
           reason: Schema.String,
           input: Schema.optional(Schema.Record(Schema.String, JsonValueSchema)),
+          decision: Schema.Literals(['allow', 'ask', 'deny']),
+          risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
+          guardian: GuardianReviewSchema,
+          retryOperationId: Schema.optional(OpaqueIDSchema),
+          createdAt: TimestampSchema,
+        }),
+      ),
+      reviews: Schema.Array(
+        Schema.Struct({
+          id: OpaqueIDSchema,
+          tool: Schema.String,
+          reason: Schema.String,
+          input: Schema.optional(Schema.Record(Schema.String, JsonValueSchema)),
+          decision: Schema.Literals(['allow', 'ask', 'deny']),
+          risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
+          guardian: GuardianReviewSchema,
           retryOperationId: Schema.optional(OpaqueIDSchema),
           createdAt: TimestampSchema,
         }),
@@ -1424,10 +1457,25 @@ export const CoreRpcMethods = {
     mutation: true,
   }),
   'approval/rules/revoke': defineMethod({
-    params: Schema.Struct({ threadId: OpaqueIDSchema, ruleId: NonEmptyStringSchema }),
+    params: Schema.Struct({
+      threadId: OpaqueIDSchema,
+      ruleId: NonEmptyStringSchema,
+      expectedVersion: Schema.optional(NonEmptyStringSchema),
+    }),
     result: Schema.Struct({ revoked: Schema.Boolean }),
     errors: InteractionErrors,
-    capability: 'interaction.scopedGrants.v1',
+    capability: 'permission.rules.v1',
+    mutation: true,
+  }),
+  'approval/rules/upsert': defineMethod({
+    params: Schema.Struct({
+      threadId: OpaqueIDSchema,
+      expectedVersion: Schema.optional(NonEmptyStringSchema),
+      rule: PermissionRuleInputSchema,
+    }),
+    result: Schema.Struct({ rule: PermissionRuleSchema }),
+    errors: InteractionErrors,
+    capability: 'permission.rules.v1',
     mutation: true,
   }),
   'project/list': defineMethod({
@@ -1724,6 +1772,22 @@ export const CoreRpcMethods = {
     capability: 'prompt.refresh.v1',
     mutation: true,
   }),
+  'thread/compact/request': defineMethod({
+    params: ThreadCompactParamsSchema,
+    result: Schema.Struct({ operation: AgentThread.ContextCompactionOperationSchema }),
+    errors: ThreadErrors,
+    capability: 'context.compact.lifecycle.v1',
+    mutation: true,
+    exactResult: true,
+  }),
+  'thread/compact/cancel': defineMethod({
+    params: ThreadCompactParamsSchema,
+    result: Schema.Struct({ operation: AgentThread.ContextCompactionOperationSchema }),
+    errors: ThreadErrors,
+    capability: 'context.compact.lifecycle.v1',
+    mutation: true,
+    exactResult: true,
+  }),
   'thread/compact': defineMethod({
     params: ThreadCompactParamsSchema,
     result: ThreadCompactResultSchema,
@@ -1731,6 +1795,14 @@ export const CoreRpcMethods = {
     capability: 'context.compact.v1',
     mutation: true,
     exactResult: true,
+  }),
+  'thread/editUserMessage': defineMethod({
+    params: ThreadEditUserMessageParamsSchema,
+    result: AdmissionSchema,
+    errors: [...ThreadErrors, 'ATTACHMENT_NOT_FOUND', 'LOCAL_CONTEXT_NOT_FOUND'],
+    capability: 'thread.editUserMessage.v1',
+    mutation: true,
+    exactParams: true,
   }),
   'turn/start': defineMethod({
     params: TurnStartParamsSchema,

@@ -1,3 +1,5 @@
+import { ThreadEditUserMessageParamsSchema } from '@pidex/agent-protocol'
+import { Schema } from 'effect'
 import { Effect } from 'effect'
 import type { RpcMethod } from '@pidex/agent-protocol'
 import type { RpcRouter } from '../RpcRouter'
@@ -38,6 +40,8 @@ export const threadHandlers = {
     'prompt/preview',
     'prompt/refresh',
     'thread/compact',
+    'thread/compact/request',
+    'thread/compact/cancel',
     'thread/update',
     'thread/mark-read',
     'thread/mark-unread',
@@ -46,6 +50,7 @@ export const threadHandlers = {
     'thread/delete',
     'thread/patch/diff',
     'thread/patch/apply',
+    'thread/editUserMessage',
     'turn/start',
     'turn/steer',
     'turn/interrupt',
@@ -64,6 +69,7 @@ export const threadHandlers = {
     if (
       (
         [
+          'thread/editUserMessage',
           'turn/start',
           'turn/steer',
           'turn/resume',
@@ -264,6 +270,20 @@ export const threadHandlers = {
           throw new AgentError('CHECKPOINT_UNAVAILABLE', '无法刷新提示词 cache key', 409)
         return { threadId, settings, cacheKey: preview.cacheKey }
       }
+      case 'thread/compact/request':
+        return {
+          operation: threads.requestCompaction(
+            stringParam(params, 'threadId'),
+            stringParam(params, 'operationId'),
+          ),
+        }
+      case 'thread/compact/cancel':
+        return {
+          operation: threads.cancelCompaction(
+            stringParam(params, 'threadId'),
+            stringParam(params, 'operationId'),
+          ),
+        }
       case 'thread/compact':
         return { compaction: await threads.compact(stringParam(params, 'threadId')) }
       case 'thread/update': {
@@ -325,6 +345,20 @@ export const threadHandlers = {
         const threadId = stringParam(params, 'threadId')
         await history.remove(threadId)
         return { threadId, deletedAt: Date.now() }
+      }
+      case 'thread/editUserMessage': {
+        const request = decodeParams(
+          Schema.decodeUnknownSync(ThreadEditUserMessageParamsSchema),
+          rawParams,
+          'thread/editUserMessage',
+        )
+        const result = await threads.editUserMessage(request)
+        return {
+          inputId: result.inputID,
+          turnId: result.turnID,
+          disposition: result.disposition === 'duplicate' ? 'duplicate' : 'accepted',
+          streamPosition: { streamId: request.threadId, sequence: globalEventSequence(db) },
+        }
       }
       case 'turn/start': {
         const start = decodeParams(decodeTurnStart, rawParams, 'turn/start')
@@ -431,6 +465,7 @@ export const threadHandlers = {
               ? {}
               : { expectedVersion: request.expectedVersion }),
           },
+          request.goal,
         )
         const sequence = globalEventSequence(db)
         const turnStatus = db.getTurnStatus(submitted.turnID)
@@ -474,14 +509,14 @@ export const threadHandlers = {
           throw new AgentError('INVALID_REQUEST', 'uploads 参数无效', 400)
         const uploads = params.uploads.map((entry) => {
           const value = record(entry, 'attachment')
-          const kind = enumValue(value.kind, ['text', 'image'] as const, 'kind')
+          const kind = enumValue(value.kind, ['text', 'image', 'audio', 'video'] as const, 'kind')
           const data = stringParam(value, 'data')
           return {
             kind,
             name: stringParam(value, 'name'),
             mimeType: stringParam(value, 'mediaType', 'mimeType'),
             data:
-              kind === 'image' || value.encoding === 'base64'
+              kind !== 'text' || value.encoding === 'base64'
                 ? new Uint8Array(Buffer.from(data, 'base64'))
                 : data,
           }

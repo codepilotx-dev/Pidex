@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto'
 import { Effect } from 'effect'
 import { contentText, type Api, type Model as PiModel, type Models } from '@earendil-works/pi-ai'
 import { AgentHarness } from './harness/AgentHarness'
@@ -6,10 +7,20 @@ import type { AgentRuntime, AgentRuntimeRequest, PendingApproval } from './Agent
 import { executeHarnessRun } from './pi/ExecuteHarnessRun'
 import type {
   ActiveHarness,
+  GoalBudgetStatus,
+  GoalBudgetLifecycle,
   HarnessRuntimeOptions,
   PiRuntimeEventContext,
   PiRuntimeEventSink,
 } from './pi/Types'
+import {
+  computeConvergenceReserve,
+  getRootThreadId,
+  createWrapupMessage,
+} from '../session/GoalDirectiveService'
+import { GOAL_WRAPUP_OUTPUT_TOKENS, goalBudgetAdmission } from '../session/GoalWrapupPolicy'
+import { estimateTokens } from '../context/harness/Compaction'
+import type { GoalUsageEntry } from '../storage/repositories/ThreadGoalLedgerRepository'
 import { piToolResultText } from './pi/PiEventAdapter'
 import {
   SqlitePiSessionRepo,
@@ -19,7 +30,13 @@ import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
 import type { ToolExecutor } from '../tool/ToolExecutor'
 import { PI_LIFECYCLE_TOOLS, type ToolExposureInput } from '../tool/ToolExposurePlan'
-import { toolCatalogSummary, type ToolCatalog, type ToolCatalogEntry } from '../tool/ToolRegistry'
+import {
+  toolCatalogSummary,
+  type ToolCatalog,
+  type ToolCatalogEntry,
+  type ToolPauseRequest,
+} from '../tool/ToolRegistry'
+import { computerOperationRecoveryFrom } from '../nodeRepl/Protocol'
 import { buildCapabilityCatalogSection } from '../prompt/CapabilityCatalog'
 import type { PromptSection } from '../prompt/Types'
 import { resolveEffectivePermissionConfig } from '../permission/EffectivePermissionConfig'
@@ -29,9 +46,14 @@ import { secretScrubber } from '../security/SecretScrubber'
 import { proposedPlanTitle } from './plan/ProposedPlanStreamParser'
 import {
   formatStructuredPlanMarkdown,
+  isReadOnlyTaskMode,
   type ContextUsageBreakdownEntry,
+  type PermissionConfig,
   type StructuredPlan,
 } from '@pidex/shared/thread'
+import type { ScheduleDraft } from '@pidex/shared/schedule-draft'
+import type { ScheduleDraftSubmitInput } from '../calendar/SchedulePlanService'
+import type { ScheduleDraftSubmission } from './plan/ScheduleDraft'
 import { parseApplyPatch } from '../tool/ApplyPatch/ParseApplyPatch'
 import { TurnPiBoundaryRepository } from '../storage/repositories/TurnPiBoundaryRepository'
 import {
@@ -374,6 +396,14 @@ export interface AgentRuntimeServiceOptions {
   artifacts?: ArtifactService
   memoryManager?: MemoryManager | undefined
   observeHarnessEvent?: (context: PiRuntimeEventContext, event: AgentHarnessEvent) => void
+  /**
+   * 任务规划草案服务是后置构造的（依赖调度器就绪），所以用惰性取值器：
+   * 返回 undefined 表示当前 Agent 存储不支持任务规划扩展表，此时
+   * submit_schedule_plan 不暴露也不可执行。
+   */
+  scheduleDrafts?: () =>
+    { submitDraft(input: ScheduleDraftSubmitInput): Promise<ScheduleDraft> } | undefined
+  taskSchedules?: () => import('../calendar/TaskScheduleService').TaskScheduleService | undefined
 }
 
 /** Adapts the existing product lifecycle to Pi without exposing Pi types to RPC. */
@@ -401,8 +431,291 @@ export class AgentRuntimeService implements AgentRuntime {
     }
   }
 
+  /** Budget status for a thread's goal, or null when there is no budget to report. */
+  private goalBudgetStatusFor(rootThreadId: string): GoalBudgetStatus | null {
+    const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+    if (!goal) return null
+    const controls = this.options.db.repositories.threadGoalControls
+    const control = controls.available() ? controls.ensure(goal.id, rootThreadId) : null
+    const tokensUsed = this.options.db.repositories.threadGoalLedger.tokensUsed(goal.id)
+    const remaining =
+      goal.token_budget === null ? null : Math.max(0, goal.token_budget - tokensUsed)
+    const reserve = goal.token_budget === null ? 0 : computeConvergenceReserve(goal.token_budget)
+    return {
+      revision: control?.revision ?? 0,
+      goal: {
+        id: goal.id,
+        threadId: goal.thread_id,
+        objective: goal.objective,
+        status: goal.status,
+        tokenBudget: goal.token_budget,
+        tokensUsed,
+        timeUsedSeconds: goal.time_used_seconds,
+        version: goal.version,
+        createdAt: goal.created_at,
+        updatedAt: goal.updated_at,
+        completedAt: goal.completed_at,
+      },
+      tokensUsed,
+      remaining,
+      reserve,
+      isConvergence: goal.token_budget !== null && (remaining ?? 0) <= reserve,
+    }
+  }
+
+  private goalBudgetLifecycle(): GoalBudgetLifecycle {
+    return {
+      getBudgetStatus: (threadID) =>
+        this.goalBudgetStatusFor(getRootThreadId(this.options.db, threadID)),
+      budgetChange: (threadID) => {
+        const status = this.goalBudgetStatusFor(getRootThreadId(this.options.db, threadID))
+        if (!status || status.goal.status !== 'active') return null
+        const control = this.options.db.repositories.threadGoalControls.get(status.goal.id)
+        if (!control?.budget_revision) return null
+        return {
+          goalId: status.goal.id,
+          revision: control.revision,
+          budgetRevision: control.budget_revision,
+          acknowledged: control.budget_ack_revision,
+          previousBudget: control.previous_budget,
+          budget: status.goal.tokenBudget,
+          tokensUsed: status.tokensUsed,
+        }
+      },
+      acknowledgeBudget: async (request, change) => {
+        if (request.profile && request.profile !== 'main') return
+        const root = getRootThreadId(this.options.db, request.threadID)
+        const events = this.options.db.transaction(() => {
+          const goal = this.options.db.repositories.threadGoals.get(root)
+          const controls = this.options.db.repositories.threadGoalControls
+          const current = controls.get(change.goalId)
+          if (
+            goal?.id !== change.goalId ||
+            goal.status !== 'active' ||
+            current?.revision !== change.revision ||
+            current.budget_revision !== change.budgetRevision ||
+            current.budget_ack_revision >= change.budgetRevision
+          )
+            return []
+          controls.acknowledgeBudget(goal.id, change.budgetRevision)
+          const timestamp = Date.now()
+          const item: Item = {
+            id: randomUUID(),
+            turnID: request.turnID,
+            agentID: request.agentID,
+            type: 'text',
+            status: 'completed',
+            data: {
+              text: `主 Agent 已收到预算变更（${change.previousBudget ?? '不限额'} → ${change.budget ?? '不限额'}，累计已用 ${change.tokensUsed}）。新额度是上限，将按未完成目标重审计划和子任务，不要求用完额度。`,
+              placement: 'result',
+              phase: 'notice',
+            },
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          }
+          this.options.db.upsertItem(request.threadID, item)
+          return [
+            this.options.db.insertEvent(request.threadID, request.turnID, 'item/completed', {
+              item: this.options.db.getItem(item.id)!,
+            }),
+          ]
+        })
+        for (const event of events) await this.publish(event)
+      },
+      /**
+       * Objective edited by the user but not yet consumed by the model. Read
+       * per request so an edit made mid-turn reaches the very next request;
+       * confirmation happens only after the provider accepts it.
+       */
+      pendingObjectiveUpdate: (threadID) => {
+        const rootThreadId = getRootThreadId(this.options.db, threadID)
+        const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+        if (!goal || goal.status !== 'active') return null
+        const control = this.options.db.repositories.threadGoalControls.get(goal.id)
+        if (!control || control.objective_ack_revision >= control.objective_revision) return null
+        return {
+          goal: {
+            id: goal.id,
+            threadId: goal.thread_id,
+            objective: goal.objective,
+            status: goal.status,
+            tokenBudget: goal.token_budget,
+            tokensUsed: goal.tokens_used,
+            timeUsedSeconds: goal.time_used_seconds,
+            version: goal.version,
+            createdAt: goal.created_at,
+            updatedAt: goal.updated_at,
+            completedAt: goal.completed_at,
+          },
+          revision: control.revision,
+          acknowledged: control.objective_ack_revision,
+          objectiveRevision: control.objective_revision,
+        }
+      },
+      acknowledgeObjective: (threadID, revision, objectiveRevision, goalId) => {
+        const rootThreadId = getRootThreadId(this.options.db, threadID)
+        const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+        if (!goal) return
+        const control = this.options.db.repositories.threadGoalControls.get(goal.id)
+        // A newer objective may have arrived while this request was in flight;
+        // never acknowledge a revision the model did not actually see.
+        if (
+          !control ||
+          control.revision !== revision ||
+          goal.id !== goalId ||
+          objectiveRevision !== control.objective_revision
+        )
+          return
+        this.options.db.repositories.threadGoalControls.acknowledgeObjective(
+          goal.id,
+          objectiveRevision,
+        )
+      },
+      checkAdmission: (
+        threadID,
+        estimatedInputTokens,
+        profile,
+        estimatedOutputTokens = GOAL_WRAPUP_OUTPUT_TOKENS,
+        wrapupInputTokens,
+      ) => {
+        const rootThreadId = getRootThreadId(this.options.db, threadID)
+        const status = this.goalBudgetStatusFor(rootThreadId)
+        if (!status || status.remaining === null) return { allowed: true }
+        const denied = (reason: 'budget_exhausted' | 'estimated_exceeds_budget') => ({
+          allowed: false as const,
+          reason,
+          budgetStatus: status,
+        })
+        if (status.remaining <= 0 || status.goal.status === 'budget-limited')
+          return denied('budget_exhausted')
+        const summaryInput =
+          wrapupInputTokens ??
+          estimatedInputTokens + estimateTokens(createWrapupMessage(status.goal, status.tokensUsed))
+        const outputAllowance = Math.min(
+          estimatedOutputTokens,
+          16384,
+          Math.max(
+            Math.min(4096, estimatedOutputTokens),
+            status.remaining -
+              estimatedInputTokens -
+              Math.max(status.reserve, summaryInput + GOAL_WRAPUP_OUTPUT_TOKENS),
+          ),
+        )
+        const admission = goalBudgetAdmission({
+          remaining: status.remaining,
+          reserve: status.reserve,
+          inputTokens: estimatedInputTokens,
+          outputTokens: outputAllowance,
+          wrapupInputTokens: summaryInput,
+        })
+        if (admission !== 'work') {
+          if ((profile && profile !== 'main') || admission === 'denied')
+            return denied('estimated_exceeds_budget')
+          const controls = this.options.db.repositories.threadGoalControls
+          if (!controls.claimWrapup(status.goal.id, status.revision!))
+            return denied('estimated_exceeds_budget')
+          return {
+            allowed: true,
+            budgetStatus: status,
+            wrapup: true,
+            maxTokens: GOAL_WRAPUP_OUTPUT_TOKENS,
+          }
+        }
+        return { allowed: true, budgetStatus: status, maxTokens: outputAllowance }
+      },
+      finishWrapup: async (threadID, status) => {
+        const rootThreadId = getRootThreadId(this.options.db, threadID)
+        const events = this.options.db.transaction(() => {
+          const goal = this.options.db.repositories.threadGoals.get(rootThreadId)
+          const controls = this.options.db.repositories.threadGoalControls
+          if (
+            !goal ||
+            goal.id !== status.goal.id ||
+            goal.status !== 'active' ||
+            controls.revision(goal.id) !== status.revision
+          )
+            return []
+          const measurement = this.options.db.repositories.threadGoalLedger.refreshMeasurement(
+            rootThreadId,
+            'budget-limited',
+          )
+          if (measurement) controls.bump(goal.id, rootThreadId)
+          return measurement ? [measurement.event] : []
+        })
+        for (const event of events) await this.publish(event)
+        if (events.length) await this.publishThreadProjectionChanged(rootThreadId)
+      },
+      handleAdmissionDenied: async (request, decision, estimatedInputTokens) => {
+        const rootThreadId = getRootThreadId(this.options.db, request.threadID)
+        const events = this.options.db.transaction(() => {
+          const goal = this.options.db.repositories.threadGoals.get(rootThreadId)
+          const captured = decision.budgetStatus
+          if (
+            !goal ||
+            goal.id !== captured.goal.id ||
+            !['active', 'budget-limited'].includes(goal.status) ||
+            this.options.db.repositories.threadGoalControls.revision(goal.id) !== captured.revision
+          )
+            return []
+          const measurement = this.options.db.repositories.threadGoalLedger.refreshMeasurement(
+            rootThreadId,
+            'budget-limited',
+          )
+          const timestamp = Date.now()
+          const noticeText =
+            decision.reason === 'budget_exhausted'
+              ? `目标已达到 Token 预算限制，本轮未获准继续（已用 ${captured.tokensUsed}，预算 ${captured.goal.tokenBudget}）。已交付的内容与未完成项请查看当前计划和已有改动；如需继续，请追加预算或取消预算限制。`
+              : `目标即将超出 Token 预算，本轮未获准继续（预估单次请求约需 ${estimatedInputTokens} Token，剩余预算 ${captured.remaining}）。已交付的内容与未完成项请查看当前计划和已有改动；如需继续，请追加预算或取消预算限制。`
+          const noticeItem: Item = {
+            id: randomUUID(),
+            turnID: request.turnID,
+            agentID: request.agentID,
+            type: 'text',
+            status: 'completed',
+            data: { placement: 'result', phase: 'notice', text: noticeText },
+            createdAt: timestamp,
+            updatedAt: timestamp,
+          }
+          this.options.db.upsertItem(request.threadID, noticeItem)
+          return [
+            ...(measurement
+              ? [
+                  measurement.event,
+                  this.options.db.insertEvent(rootThreadId, null, 'thread/updated', {
+                    threadId: rootThreadId,
+                    patch: {},
+                    updatedAt: timestamp,
+                  }),
+                ]
+              : []),
+            this.options.db.insertEvent(request.threadID, request.turnID, 'item/completed', {
+              item: this.options.db.getItem(noticeItem.id) ?? noticeItem,
+            }),
+          ]
+        })
+        for (const event of events) await this.publish(event)
+      },
+    }
+  }
+
   private async publish(event: ReturnType<AgentDatabase['insertEvent']>) {
     await Effect.runPromise(this.options.hub.publish(event))
+  }
+
+  /**
+   * Goal events live on the per-thread stream, so a client that only watches the
+   * global catalog never sees them. Emit the thread-projection event as well: it
+   * carries no payload change but makes every subscribed catalog reconcile, which
+   * is what refreshes the goal row (status + usage) in an open composer.
+   */
+  private async publishThreadProjectionChanged(threadId: string) {
+    await this.publish(
+      this.options.db.insertEvent(threadId, null, 'thread/updated', {
+        threadId,
+        patch: {},
+        updatedAt: Date.now(),
+      }),
+    )
   }
 
   private persistFinishedTool(
@@ -643,6 +956,7 @@ export class AgentRuntimeService implements AgentRuntime {
     onUsage?: AgentRuntimeRequest['onUsage'],
     readContextUsageBreakdown?: () => readonly ContextUsageBreakdownEntry[] | undefined,
   ): PiRuntimeEventSink {
+    let usageGoal: { id: string; threadId: string } | null | undefined
     const pendingFor = (context: PiRuntimeEventContext) => {
       const existing = this.pending.get(context.threadID)
       if (existing) return existing
@@ -656,6 +970,11 @@ export class AgentRuntimeService implements AgentRuntime {
     }
     return {
       event: (context, event) => {
+        if (event.type === 'before_provider_request') {
+          const rootThreadId = getRootThreadId(this.options.db, context.threadID)
+          const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+          usageGoal = goal ? { id: goal.id, threadId: rootThreadId } : null
+        }
         this.options.observeHarnessEvent?.(context, event)
       },
       assistantMessageStarted: async (context, input) => {
@@ -668,7 +987,11 @@ export class AgentRuntimeService implements AgentRuntime {
             agentID: context.agentID,
             type: 'text',
             status: 'running',
-            data: { placement: input.placement, text: '' },
+            data: {
+              placement: input.placement,
+              text: '',
+              ...(input.phase ? { phase: input.phase } : {}),
+            },
             createdAt: timestamp,
             updatedAt: timestamp,
           },
@@ -694,7 +1017,34 @@ export class AgentRuntimeService implements AgentRuntime {
         )
         await this.publish(persisted.event)
       },
+      assistantMessagePhaseChanged: async (context, input) => {
+        const current = this.options.db.getItem(input.itemID)
+        if (!current) return
+        const persisted = this.options.db.upsertItemWithEvent(
+          context.threadID,
+          {
+            ...current,
+            data: {
+              ...current.data,
+              phase: input.phase,
+              placement: input.phase === 'final_answer' ? 'result' : 'process',
+              text: input.text,
+            },
+            updatedAt: Date.now(),
+          },
+          'item/agentMessage/phaseChanged',
+        )
+        await this.publish(persisted.event)
+      },
       textDelta: async (context, input) => {
+        const current = this.options.db.getItem(input.itemID)
+        if (!current || current.status !== 'running') return
+        // Persist the visible prefix before publishing; a stop may never reach a completion save point.
+        this.options.db.upsertItem(context.threadID, {
+          ...current,
+          data: { ...current.data, text: String(current.data.text ?? '') + input.delta },
+          updatedAt: Date.now(),
+        })
         await this.publish(
           createLiveEvent(
             this.options.db,
@@ -753,16 +1103,20 @@ export class AgentRuntimeService implements AgentRuntime {
           reasoning: input.usage.reasoning,
           ...(contextUsageBreakdown?.length ? { breakdown: [...contextUsageBreakdown] } : {}),
         }
-        if (input.text === undefined || text) {
+        if (input.text === undefined || text || this.options.db.getItem(input.textItemID)) {
           const currentText = this.options.db.getItem(input.textItemID)
           pending.items.set(input.textItemID, {
             id: input.textItemID,
             turnID: context.turnID,
             agentID: context.agentID,
             type: 'text',
-            status: 'completed',
+            status:
+              input.completion?.stopReason === 'aborted' || input.completion?.stopReason === 'error'
+                ? 'interrupted'
+                : 'completed',
             data: {
               placement: input.placement,
+              ...(input.phase ? { phase: input.phase } : {}),
               text,
               usage,
               ...(input.completion ? { completion: input.completion } : {}),
@@ -794,6 +1148,50 @@ export class AgentRuntimeService implements AgentRuntime {
           totalTokens: inputTokens + usage.output,
           requests: 1,
         })
+        const rootThreadId = getRootThreadId(this.options.db, context.threadID)
+        const rootGoal =
+          usageGoal === undefined
+            ? this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+            : usageGoal
+        if (rootGoal) {
+          const entry: GoalUsageEntry = {
+            threadId: rootThreadId,
+            goalId: rootGoal.id,
+            agentId: context.agentID,
+            sourceEntryId: input.textItemID,
+            inputTokens: usage.input,
+            outputTokens: usage.output,
+            cacheReadTokens: usage.cacheRead,
+            cacheWriteTokens: usage.cacheWrite,
+            reasoningTokens: usage.reasoning ?? 0,
+          }
+          if (
+            entry.inputTokens +
+              entry.outputTokens +
+              entry.cacheReadTokens +
+              entry.cacheWriteTokens +
+              entry.reasoningTokens >
+            0
+          ) {
+            const inserted = this.options.db.repositories.threadGoalLedger.recordUsage([entry])
+            if (inserted > 0) {
+              const current = this.options.db.repositories.threadGoals.get(rootThreadId)
+              if (current?.id !== rootGoal.id) {
+                this.options.db.repositories.threadGoalLedger.refreshArchivedMeasurement(
+                  rootGoal.id,
+                )
+              }
+              const measurement =
+                current?.id === rootGoal.id
+                  ? this.options.db.repositories.threadGoalLedger.refreshMeasurement(rootThreadId)
+                  : null
+              if (measurement) {
+                await this.publish(measurement.event)
+                await this.publishThreadProjectionChanged(rootThreadId)
+              }
+            }
+          }
+        }
         const content = Array.isArray(input.content) ? input.content : []
         const reasoning = content
           .flatMap((part) => (part.type === 'thinking' ? [part.thinking] : []))
@@ -811,6 +1209,17 @@ export class AgentRuntimeService implements AgentRuntime {
             updatedAt: timestamp,
           })
         }
+      },
+      visualizationPreview: async (context, preview) => {
+        await this.publish(
+          createLiveEvent(
+            this.options.db,
+            context.threadID,
+            context.turnID,
+            'visualization/preview',
+            secretScrubber.scrub(preview),
+          ),
+        )
       },
       toolStarted: async (context, input) => {
         const timestamp = Date.now()
@@ -945,8 +1354,16 @@ export class AgentRuntimeService implements AgentRuntime {
             afterCount: afterContext.messages.length,
             items: afterContext.messages,
             promptText: input.promptText,
-            contextWindowTokens: Math.max(1, Number(runtimeModel.contextWindow) || 1),
+            contextWindowTokens: Math.max(
+              1,
+              Math.min(
+                Number(runtimeModel.contextWindow) || 1,
+                (runtimeModel as typeof runtimeModel & { maxInputTokens?: number })
+                  .maxInputTokens ?? Infinity,
+              ),
+            ),
             trigger: input.trigger,
+            requestBudget: input.budget,
           })
         })
         this.setCompletedCompaction(context.threadID, completed.compaction)
@@ -992,6 +1409,58 @@ export class AgentRuntimeService implements AgentRuntime {
     const persisted = this.options.db.upsertItemWithEvent(input.threadID, item, 'item/completed')
     await this.publish(persisted.event)
     return { status: 'submitted', itemID }
+  }
+
+  /**
+   * 保存 submit_schedule_plan 提交的「任务计划 + 执行安排」草案。只落盘待审阅
+   * 内容并发布草案事件，不创建任务、不激活调度器——确认由 schedule-draft/commit 负责。
+   * 项目、模型与权限来自当前会话与已解析权限，模型参数不能携带这些事实。
+   */
+  private async persistScheduleDraft(input: {
+    threadID: string
+    turnID: string
+    submission: ScheduleDraftSubmission
+    model: AgentRuntimeRequest['fallbackModel']
+    permissionConfig: PermissionConfig
+  }): Promise<{ status: 'submitted'; draftId: string; draft: ScheduleDraft }> {
+    const service = this.options.scheduleDrafts?.()
+    if (!service)
+      throw new AgentError('TOOL_NOT_AVAILABLE', '当前 Agent 存储不支持任务规划草案', 409)
+    const projectId = this.options.db.threadProjectID(input.threadID) ?? null
+    const draft = await service.submitDraft({
+      threadId: input.threadID,
+      turnId: input.turnID,
+      toolCallId: `${input.turnID}:schedule-draft`,
+      name: input.submission.name,
+      prompt: input.submission.prompt,
+      taskPlan: input.submission.taskPlan,
+      trigger: input.submission.trigger,
+      conditions: input.submission.conditions,
+      conditionFallback: input.submission.conditionFallback,
+      acceptance: input.submission.acceptance,
+      notificationPolicy: input.submission.notificationPolicy,
+      missedRuns: input.submission.missedRuns,
+      execution: projectId
+        ? {
+            kind: 'standalone',
+            projectId,
+            targetThreadId: null,
+            environment: input.submission.environment ?? { kind: 'local' },
+            model: input.model,
+            reasoningEffort: input.model.variant ?? null,
+            permissionConfig: input.permissionConfig,
+          }
+        : {
+            kind: 'thread',
+            projectId: null,
+            targetThreadId: input.threadID,
+            environment: null,
+            model: input.model,
+            reasoningEffort: input.model.variant ?? null,
+            permissionConfig: input.permissionConfig,
+          },
+    })
+    return { status: 'submitted', draftId: draft.id, draft }
   }
 
   async run(request: AgentRuntimeRequest) {
@@ -1163,13 +1632,47 @@ export class AgentRuntimeService implements AgentRuntime {
                 (part) => part.type === 'toolCall' && part.id === request.resume!.toolCallID,
               )
             : undefined
-        if (!assistantEntry || !toolCall || toolCall.type !== 'toolCall')
-          throw new Error('Pi checkpoint 中找不到待恢复的 tool call')
-        const alreadySettled = this.options.db.hasPersistedToolResult(
-          request.turnID,
-          request.resume.toolCallID,
+        if (
+          !assistantEntry ||
+          assistantEntry.type !== 'message' ||
+          assistantEntry.message.role !== 'assistant' ||
+          !toolCall ||
+          toolCall.type !== 'toolCall'
         )
-        if (!alreadySettled) await session.moveTo(assistantEntry.id)
+          throw new Error('Pi checkpoint 中找不到待恢复的 tool call')
+        // A node_repl approval resumes only the recorded internal operation. The
+        // pause never persisted a script, so the call is re-executed with the
+        // recovery record instead of the stale pause result.
+        const nodeReplRecovery = computerOperationRecoveryFrom(request.resume.interruption)
+        const alreadySettled =
+          !nodeReplRecovery &&
+          this.options.db.hasPersistedToolResult(request.turnID, request.resume.toolCallID)
+        if (!alreadySettled) {
+          const callIDs = new Set(
+            assistantEntry.message.content.flatMap((part) =>
+              part.type === 'toolCall' ? [part.id] : [],
+            ),
+          )
+          // Rewinding replaces pause placeholders, but must retain settled siblings,
+          // including results committed by an earlier approval before a restart.
+          const settledSiblings = new Map(
+            entries.flatMap((entry) => {
+              if (entry.type !== 'message' || entry.message.role !== 'toolResult') return []
+              const message = entry.message
+              if (
+                !callIDs.has(message.toolCallId) ||
+                message.toolCallId === request.resume!.toolCallID ||
+                (message.details as { __piPause?: boolean } | undefined)?.__piPause === true ||
+                (message.isError &&
+                  piToolResultText(message, { tool: message.toolName }) === '等待用户审批')
+              )
+                return []
+              return [[message.toolCallId, message] as const]
+            }),
+          )
+          await session.moveTo(assistantEntry.id)
+          for (const message of settledSiblings.values()) await session.appendMessage(message)
+        }
         let resolutionText =
           request.resume.decision === 'deny'
             ? request.resume.answer
@@ -1234,7 +1737,9 @@ export class AgentRuntimeService implements AgentRuntime {
           request.resume.decision === 'allow' &&
           !lifecycleNames.has(toolCall.name)
         ) {
-          const completed = this.options.db.completedToolCall(request.resume.toolCallID)
+          const completed = nodeReplRecovery
+            ? null
+            : this.options.db.completedToolCall(request.resume.toolCallID)
           if (completed && toolCall.name !== 'Read' && toolCall.name !== 'workspace.read') {
             resolutionDetails = secretScrubber.scrub(completed.output)
             resolutionText = resumedToolResultText(completed.output, completed.name)
@@ -1265,6 +1770,7 @@ export class AgentRuntimeService implements AgentRuntime {
                   ...(request.resume.authorizationFingerprint
                     ? { approvedAuthorizationFingerprint: request.resume.authorizationFingerprint }
                     : {}),
+                  ...(nodeReplRecovery ? { computerRecovery: nodeReplRecovery } : {}),
                 },
               )
               resolutionDetails = secretScrubber.scrub(resolution)
@@ -1315,11 +1821,35 @@ export class AgentRuntimeService implements AgentRuntime {
           })
           for (const event of completedEvents) await this.publish(event)
         }
+        if (request.resume.decision) {
+          if (request.signal.aborted) throw new AgentError('RUN_ABORTED', '任务已停止', 499)
+          const waitingEvent = this.options.db.transaction(() => {
+            const interactions = this.options.db.repositories.interactions
+            const resolved = interactions.resolvedApprovalForResume(request.turnID)
+            const pending = interactions
+              .pendingApprovalIDs(request.threadID)
+              .some(
+                ({ id }) => this.options.db.getApprovalCheckpoint(id)?.turnID === request.turnID,
+              )
+            if (!resolved && !pending) return null
+            const status = resolved ? 'queued' : 'waiting_permission'
+            this.options.db.updateTurnStatus(request.turnID, status)
+            this.options.db.updateAgentStatus(request.agentID, status)
+            storage.flush()
+            return this.options.db.insertEvent(request.threadID, request.turnID, 'agent/upserted', {
+              agent: this.options.db.getAgentExecution(request.agentID),
+            })
+          })
+          if (waitingEvent) {
+            await this.publish(waitingEvent)
+            return { status: 'paused' as const, output: '' }
+          }
+        }
       }
       const previousRuntime = this.active.get(request.threadID)
       if (previousRuntime) {
         try {
-          await previousRuntime.harness.abort()
+          await previousRuntime.harness.abort(true)
           await previousRuntime.harness.waitForIdle()
         } finally {
           previousRuntime.unsubscribe()
@@ -1346,6 +1876,9 @@ export class AgentRuntimeService implements AgentRuntime {
         permissionConfig: effectivePermissionConfig,
         model: request.fallbackModel,
         taskSummary: request.content,
+        // Lets the node_repl entry arrange the durable application-approval pause
+        // from inside tool execution, without re-running any script.
+        requestPause: (approval: ToolPauseRequest) => pause(approval),
       }
       // 按来源实测的上下文字符量只对本次 run 有意义，用闭包保存，
       // 由 executeHarnessRun 在每次 provider 请求前刷新、由 eventSink 读取。
@@ -1369,6 +1902,7 @@ export class AgentRuntimeService implements AgentRuntime {
       }
       const runtimeOptions: HarnessRuntimeOptions = {
         activated: (threadID, active) => this.active.set(threadID, active),
+        ...(request.onRuntimeReady ? { onRuntimeReady: request.onRuntimeReady } : {}),
         toolExecutor: this.options.toolExecutor,
         harnessFactory: {
           resolve: async () => ({
@@ -1418,11 +1952,23 @@ export class AgentRuntimeService implements AgentRuntime {
           return { block: true, reason: '等待用户审批', pause: true }
         },
         compaction: {
-          shouldAutoCompact: (threadID) =>
-            this.options.contextCompaction.shouldAutoCompact(threadID),
+          lifecycle: this.options.contextCompaction,
+          shouldAutoCompact: (threadID) => {
+            const rootThreadId = getRootThreadId(this.options.db, threadID)
+            const goal = this.options.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+            if (goal) {
+              if (goal.status === 'budget-limited') return false
+              if (goal.token_budget !== null) {
+                const tokensUsed = this.options.db.repositories.threadGoalLedger.tokensUsed(goal.id)
+                if (goal.token_budget - tokensUsed <= 0) return false
+              }
+            }
+            return this.options.contextCompaction.shouldAutoCompact(threadID)
+          },
           recordFailure: (threadID, trigger) =>
             this.options.contextCompaction.recordFailure(threadID, trigger),
         },
+        goalBudget: this.goalBudgetLifecycle(),
         lifecycle: {
           skillList: async () =>
             composition.bindings.skills
@@ -1470,7 +2016,8 @@ export class AgentRuntimeService implements AgentRuntime {
             return { __piPause: true, status: 'waiting_for_user' }
           },
           requestPermissions: async (input, toolCallID) => {
-            if (request.taskMode === 'plan') throw new Error('Plan 模式禁止请求或提升权限')
+            if (isReadOnlyTaskMode(request.taskMode))
+              throw new Error('Plan 与 Grill 模式禁止请求或提升权限')
             const decision = await this.options.toolExecutor.previewApproval(
               'request_permissions',
               input,
@@ -1511,7 +2058,7 @@ export class AgentRuntimeService implements AgentRuntime {
             if (!request.updatePlan) throw new Error('当前 turn 未配置执行计划服务')
             return request.updatePlan(input, toolCallID)
           },
-          updateGoal: async (input, toolCallID) => {
+          updateGoal: async (input, toolCallID, _signal, identity) => {
             if (request.taskMode !== 'chat' || (request.profile ?? 'main') !== 'main')
               throw new AgentError(
                 'TOOL_NOT_ALLOWED_IN_MODE',
@@ -1520,7 +2067,7 @@ export class AgentRuntimeService implements AgentRuntime {
               )
             if (!request.updateGoal)
               throw new AgentError('TOOL_NOT_AVAILABLE', '当前任务没有可更新的 Goal', 409)
-            return request.updateGoal(input.status, toolCallID)
+            return request.updateGoal(input, toolCallID, identity)
           },
           submitPlan: async (input) => {
             if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main')
@@ -1536,11 +2083,42 @@ export class AgentRuntimeService implements AgentRuntime {
               plan: input,
             })
           },
+          submitSchedulePlan: async (input) => {
+            if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main')
+              throw new AgentError(
+                'TOOL_NOT_ALLOWED_IN_MODE',
+                'submit_schedule_plan 仅允许 Plan 模式的主 Agent 使用',
+                403,
+              )
+            return this.persistScheduleDraft({
+              threadID: request.threadID,
+              turnID: request.turnID,
+              submission: input,
+              model: request.fallbackModel,
+              permissionConfig: effectivePermissionConfig,
+            })
+          },
+          submitTaskSchedule: async (input, toolCallID) => {
+            if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main')
+              throw new AgentError(
+                'TOOL_NOT_ALLOWED_IN_MODE',
+                '仅允许 Plan 主 Agent 提交时间草案',
+                403,
+              )
+            const service = this.options.taskSchedules?.()
+            if (!service?.available())
+              throw new AgentError('TOOL_NOT_AVAILABLE', '时间安排草案能力不可用', 409)
+            const proposal = service.propose({
+              ...input,
+              operationId: `task-arrangement:${toolCallID}`,
+            })
+            return { status: 'submitted', proposal, reviewUrl: '/automations' }
+          },
           spawnAgents: async (input, toolCallID) =>
             executeSubagentTool('spawn_agents', input, toolCallID, async (input) => {
               const agents = Array.isArray(input.agents) ? input.agents : []
               if (
-                request.taskMode === 'plan' &&
+                isReadOnlyTaskMode(request.taskMode) &&
                 agents.some(
                   (agent) =>
                     !agent ||
@@ -1548,7 +2126,7 @@ export class AgentRuntimeService implements AgentRuntime {
                     (agent as Record<string, unknown>).profile !== 'explorer',
                 )
               )
-                throw new Error('Plan 模式只能创建 Explorer 子 Agent')
+                throw new Error('Plan 与 Grill 模式只能创建 Explorer 子 Agent')
               return request.delegation?.spawn(input as never, {
                 permissionConfig: effectivePermissionConfig,
                 ...(request.allowedTools ? { allowedTools: request.allowedTools } : {}),
@@ -1611,10 +2189,16 @@ export class AgentRuntimeService implements AgentRuntime {
           finalizeResult: async (input: SubagentResult) => input,
         },
       }
-      await request.onRuntimeReady?.()
       const resumedContent = request.resume
-        ? `<interaction_resolution toolCallId=${JSON.stringify(request.resume.toolCallID ?? 'unknown')}>${JSON.stringify({ answer: request.resume.answer, decision: request.resume.decision ?? null })}</interaction_resolution>\n继续处理已恢复的 Pi session；不得重新执行已完成或已被用户拒绝的同一个工具调用。若用户给出调整要求，必须据此改用其他方案。`
+        ? `<interaction_resolution toolCallId=${JSON.stringify(request.resume.toolCallID ?? 'unknown')}>${JSON.stringify({ answer: request.resume.answer, decision: request.resume.decision ?? null })}</interaction_resolution>\n继续处理已恢复的 Pi session；复用上述 toolCallId 的处理结果，不得重复执行该 ID，也不得自行换工具或等价命令绕过用户拒绝。此限制不禁止用户后续明确要求再次执行相同命令：那是新的工具调用，必须使用新的 toolCallId 并重新判权，不能复用一次批准。若用户给出调整要求，必须据此处理。`
         : request.content
+      const threadLimit = this.options.db.repositories.threads.getThreadSettings(
+        request.threadID,
+      )?.maxContextTokens
+      // 客户端把“未设置”以 null 传上来；null 不能遮住会话设置，否则会话额度永远进不了预算。
+      const requestedLimit =
+        typeof request.maxContextTokens === 'number' ? request.maxContextTokens : undefined
+      const maxContextTokens = requestedLimit ?? threadLimit ?? null
       let result: Awaited<ReturnType<typeof executeHarnessRun>>
       try {
         result = await executeHarnessRun(runtimeOptions, {
@@ -1631,6 +2215,7 @@ export class AgentRuntimeService implements AgentRuntime {
           ...(request.defaultCwd ? { defaultCwd: request.defaultCwd } : {}),
           model,
           policyModel: request.fallbackModel,
+          maxContextTokens,
           ...(resolved.ref.variant
             ? {
                 thinkingLevel: String(
@@ -1719,16 +2304,17 @@ export class AgentRuntimeService implements AgentRuntime {
       {
         taskMode: request.taskMode,
         sandboxMode:
-          request.taskMode === 'plan'
-            ? 'read-only'
-            : 'permissionConfig' in request
-              ? request.permissionConfig.sandboxMode
-              : request.sandboxMode,
+          'permissionConfig' in request
+            ? request.permissionConfig.sandboxMode
+            : request.sandboxMode,
         approvalPolicy:
           'permissionConfig' in request
             ? request.permissionConfig.approvalPolicy
             : request.approvalPolicy,
         ...(request.profile ? { profile: request.profile } : {}),
+        ...(runtime.updateGoal || ('hasActiveGoal' in request && request.hasActiveGoal)
+          ? { hasActiveGoal: true }
+          : {}),
         ...(runtime.skillService
           ? { hasSkillService: true }
           : 'hasSkillService' in request && request.hasSkillService
@@ -1753,6 +2339,8 @@ export class AgentRuntimeService implements AgentRuntime {
         ...(request.activeDeferredTools
           ? { activeDeferredTools: request.activeDeferredTools }
           : {}),
+        ...(this.options.scheduleDrafts?.() ? { hasScheduleDrafts: true } : {}),
+        ...(this.options.taskSchedules?.()?.available() ? { hasTaskSchedules: true } : {}),
       },
       runtime.toolCatalog,
     )
@@ -1785,36 +2373,58 @@ export class AgentRuntimeService implements AgentRuntime {
       definitions,
     })
   }
-  async compact(threadID: string, instructions?: string, promptText?: string) {
+  requestCompaction(threadID: string, operationId: string) {
+    const operation = this.options.contextCompaction.request(threadID, operationId)
+    queueMicrotask(() => this.options.contextCompaction.startIdle(threadID))
+    return operation
+  }
+
+  cancelCompaction(threadID: string, operationId: string) {
+    return this.options.contextCompaction.cancel(threadID, operationId)
+  }
+
+  async compact(
+    threadID: string,
+    instructions?: string,
+    promptText?: string,
+    signal?: AbortSignal,
+  ) {
+    this.options.contextCompaction.begin(threadID, 'manual')
+    try {
+      return await this.compactIdle(threadID, instructions, promptText, signal)
+    } catch (error) {
+      const nothing =
+        error instanceof Error && 'code' in error && error.code === 'nothing_to_compact'
+      this.options.contextCompaction.finish(
+        threadID,
+        signal?.aborted ? 'cancelled' : nothing ? 'skipped' : 'failed',
+        signal?.aborted ? 'stopped' : nothing ? 'already-compacted' : 'provider-failed',
+      )
+      throw error
+    }
+  }
+
+  private async compactIdle(
+    threadID: string,
+    instructions?: string,
+    promptText?: string,
+    signal?: AbortSignal,
+  ) {
+    const maxContextTokens =
+      this.options.db.repositories.threads.getThreadSettings(threadID)?.maxContextTokens ?? null
     const runtime = this.active.get(threadID)
     if (runtime) {
-      await runtime.compact('manual', instructions)
+      await runtime.harness.compact(instructions, signal, undefined, undefined, maxContextTokens)
       const completed = this.completedCompactions.get(threadID)
       if (!completed) throw new Error('Pi 压缩完成但缺少产品压缩记录')
       return completed
     }
-    const row = this.options.db.sqlite
-      .query(
-        `
-      SELECT a.session_id, a.model_ref, t.project_id,
-             t.workspace_root, t.workspace_cwd
-      FROM agent_executions AS a
-      JOIN threads AS t ON t.id = a.thread_id
-      WHERE a.thread_id = ? AND a.profile = 'main'
-      ORDER BY a.created_at DESC LIMIT 1
-    `,
-      )
-      .get(threadID) as {
-      session_id: string
-      model_ref: string
-      project_id: string | null
-      workspace_root: string | null
-      workspace_cwd: string | null
-    } | null
+    const row = this.options.db.repositories.context.latestSession(threadID)
     if (!row) throw new Error('Pi session 不存在，无法执行手动压缩')
     const ref = JSON.parse(row.model_ref) as { providerID: string; id: string }
     const model = this.options.models.getModel(ref.providerID, ref.id)
     if (!model) throw new Error(`Pi 模型 ${ref.providerID}/${ref.id} 不可用`)
+    const frozen = this.options.db.repositories.runtimeCompositions.get(row.turn_id)?.snapshot
     const session = await this.repo.openForThread(row.session_id, threadID)
     const storage = session.getStorage() as SqlitePiSessionStorage
     const harness = new AgentHarness({
@@ -1822,10 +2432,16 @@ export class AgentRuntimeService implements AgentRuntime {
       models: this.options.models,
       model,
       tools: [],
-      systemPrompt: '',
+      systemPrompt: promptText ?? frozen?.prompt.instructions ?? '',
+      maxContextTokens,
     })
     const beforeCount = (await session.getEntries()).length
-    const result = await harness.compact(instructions)
+    const result = await harness.compact(
+      instructions,
+      signal,
+      undefined,
+      this.options.contextCompaction.state(threadID).budget?.fixedTokens,
+    )
     const entryID = await storage.getLeafId()
     const piEntry = entryID ? await session.getEntry(entryID) : undefined
     if (!piEntry || piEntry.type !== 'compaction') {
@@ -1846,8 +2462,15 @@ export class AgentRuntimeService implements AgentRuntime {
         afterCount: afterContext.messages.length,
         items: afterContext.messages,
         promptText: promptText ?? '',
-        contextWindowTokens: Math.max(1, Number(model.contextWindow) || 1),
+        contextWindowTokens: Math.max(
+          1,
+          Math.min(
+            Number(model.contextWindow) || 1,
+            (model as typeof model & { maxInputTokens?: number }).maxInputTokens ?? Infinity,
+          ),
+        ),
         trigger: 'manual',
+        requestBudget: harness.getContextBudget(),
       })
     })
     this.setCompletedCompaction(threadID, completed.compaction)
@@ -1860,11 +2483,13 @@ export class AgentRuntimeService implements AgentRuntime {
     content: string,
     images?: import('@earendil-works/pi-ai').ImageContent[],
     inputID?: string,
+    media?: import('../provider/pi/MediaInput').MediaInput[],
   ) {
     const runtime = this.active.get(threadID)
     if (!runtime) throw new Error('Pi Harness 尚未启动')
     await runtime.harness.steer(content, {
       ...(images ? { images } : {}),
+      ...(media ? { media } : {}),
       ...(inputID ? { inputId: inputID } : {}),
     })
   }
@@ -1876,6 +2501,9 @@ export class AgentRuntimeService implements AgentRuntime {
   }
 
   async abort(threadID: string) {
+    const operation = this.options.contextCompaction.pending(threadID)
+    if (operation?.status === 'queued')
+      this.options.contextCompaction.finish(threadID, 'cancelled', 'stopped')
     const runtime = this.active.get(threadID)
     if (runtime) await runtime.harness.abort()
   }

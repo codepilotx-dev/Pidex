@@ -1,4 +1,5 @@
 import { Effect } from 'effect'
+import { QUESTION_CHOICES_READ_MAX, isReadOnlyTaskMode } from '@pidex/shared/thread'
 import { AgentError } from '../Domain'
 import type { PendingApproval, PlanCheckpoint } from '../orchestration/AgentRuntimeTypes'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
@@ -43,7 +44,12 @@ type StoredAnswer = {
   answers: Array<{ questionId: string; choiceIds: string[]; text?: string; skipped?: true }>
 }
 
-const storedQuestions = (payload: Record<string, unknown>): InteractionQuestion[] => {
+/**
+ * 把已落库的 question payload 归一化为 InteractionQuestion。写入侧上限只约束
+ * 模型，读取侧必须接受任何构建写入的问题，否则同一份共享数据会出现“看得到
+ * 卡片却无法作答”。InteractionService.listPending 复用本函数。
+ */
+export const storedQuestions = (payload: Record<string, unknown>): InteractionQuestion[] => {
   if (!Array.isArray(payload.questions)) return []
   return payload.questions.flatMap((value) => {
     const question = record(value)
@@ -69,7 +75,7 @@ const storedQuestions = (payload: Record<string, unknown>): InteractionQuestion[
           ]
         : []
     })
-    if (choices.length > 3) return []
+    if (choices.length > QUESTION_CHOICES_READ_MAX) return []
     return [
       {
         id: question.id,
@@ -201,7 +207,8 @@ export class QuestionService {
       options: first.choices.map(({ label }) => label),
       questions,
       answerFormat: approval.questions?.length ? 'structured' : 'legacy',
-      ...(approval.autoResolutionMs && this.db.getTurnInput(turnID)?.taskMode !== 'plan'
+      ...(approval.autoResolutionMs &&
+      !isReadOnlyTaskMode(this.db.getTurnInput(turnID)?.taskMode ?? 'chat')
         ? { autoResolutionMs: approval.autoResolutionMs }
         : {}),
       checkpoint: approval.checkpoint,
@@ -268,13 +275,40 @@ export class QuestionService {
     const answer = Object.prototype.hasOwnProperty.call(storedAnswer, 'value')
       ? storedAnswer.value
       : null
+    const resolved = record(answer)
+    const questions = storedQuestions(payload)
+    // Model-facing labels remove index guessing; persisted IDs remain unchanged.
+    const answerForModel = Array.isArray(resolved.answers)
+      ? {
+          ...resolved,
+          answers: resolved.answers.map((value) => {
+            const item = record(value)
+            const question = questions.find(({ id }) => id === item.questionId)
+            return question
+              ? {
+                  ...item,
+                  question: question.prompt,
+                  selectedChoices: question.choices
+                    .filter(
+                      ({ id }) => Array.isArray(item.choiceIds) && item.choiceIds.includes(id),
+                    )
+                    .map(({ id, label }) => ({ id, label })),
+                }
+              : item
+          }),
+        }
+      : answer
     return {
       id: row.id,
       approval: {
         state,
         interruption,
         answer:
-          typeof answer === 'string' ? answer : answer == null ? null : JSON.stringify(answer),
+          typeof answerForModel === 'string'
+            ? answerForModel
+            : answerForModel == null
+              ? null
+              : JSON.stringify(answerForModel),
         checkpointID: row.id,
       },
     }
@@ -341,7 +375,8 @@ export class QuestionService {
     const pending = this.db.repositories.interactions
       .pendingQuestions()
       .find((row) => row.id === id)
-    if (!pending || this.db.getTurnInput(pending.turnID)?.taskMode === 'plan') return
+    if (!pending || isReadOnlyTaskMode(this.db.getTurnInput(pending.turnID)?.taskMode ?? 'chat'))
+      return
     this.autoResolution.track({
       id,
       deadline: createdAt + timeout,

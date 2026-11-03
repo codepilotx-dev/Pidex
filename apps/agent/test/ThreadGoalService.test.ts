@@ -1,3 +1,4 @@
+import { QueuedGoalRepository } from '../src/storage/repositories/QueuedGoalRepository'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -272,6 +273,7 @@ describe('ThreadGoalService', () => {
     const projection = new ThreadProjection(db)
 
     expect(projection.snapshot(thread.id)?.goal ?? null).toBeNull()
+    expect(projection.list().find((item) => item.id === thread.id)?.goal).toBeNull()
 
     const goal = (
       await service.set({
@@ -282,6 +284,7 @@ describe('ThreadGoalService', () => {
       })
     ).goal
     expect(projection.snapshot(thread.id)?.goal).toEqual(goal)
+    expect(projection.list().find((item) => item.id === thread.id)?.goal).toEqual(goal)
 
     await service.clear({
       threadId: thread.id,
@@ -289,6 +292,7 @@ describe('ThreadGoalService', () => {
       operationId: 'goal:clear:snapshot',
     })
     expect(projection.snapshot(thread.id)?.goal ?? null).toBeNull()
+    expect(projection.list().find((item) => item.id === thread.id)?.goal).toBeNull()
     db.close()
   })
 
@@ -431,4 +435,294 @@ describe('ThreadGoalService', () => {
     expect(projection.snapshot(countThread.id)?.goal ?? null).toBeNull()
     db.close()
   })
+})
+
+test('排队目标跨重启保留，执行时原子生效，失败回滚且编辑删除不改变当前目标', async () => {
+  const fixtureValue = await fixture()
+  let db = fixtureValue.db
+  const thread = db.createThread('排队目标')
+  const initial = fixtureValue.service.admitInTransaction({
+    threadId: thread.id,
+    objective: '原目标',
+    expectedVersion: null,
+  }).goal
+  const first = db.createTurn(thread.id, submit('第一个目标'))
+  const second = db.createTurn(thread.id, submit('第二个目标'))
+  new QueuedGoalRepository(db).put(first.inputID, { objective: '第一个目标' })
+  new QueuedGoalRepository(db).put(second.inputID, { objective: '第二个目标', tokenBudget: 123 })
+  expect(fixtureValue.service.get(thread.id).goal?.objective).toBe('原目标')
+  db.close()
+  db = new AgentDatabase(fixtureValue.path)
+  const service = new ThreadGoalService(db, await Effect.runPromise(EventHub.make))
+  const pending = new QueuedGoalRepository(db)
+  expect(pending.get(first.inputID)?.objective).toBe('第一个目标')
+  expect(
+    new ThreadProjection(db).snapshot(thread.id)?.inputs.find((input) => input.id === first.inputID)
+      ?.goal?.objective,
+  ).toBe('第一个目标')
+  const input = db.getTurnInput(first.turnID)!
+  expect(() =>
+    db.startTurnExecution(first.turnID, input, () => {
+      service.applyInputInTransaction(thread.id, input.id, 'chat')
+      throw new Error('模拟启动失败')
+    }),
+  ).toThrow('模拟启动失败')
+  expect(db.getTurnStatus(first.turnID)).toBe('queued')
+  expect(service.get(thread.id).goal?.objective).toBe('原目标')
+  expect(pending.get(input.id)?.objective).toBe('第一个目标')
+  const started = db.startTurnExecution(first.turnID, input, () =>
+    service.applyInputInTransaction(thread.id, input.id, 'chat'),
+  )!
+  expect(started.events[0]?.method).toBe('thread/goal/updated')
+  expect(service.get(thread.id).goal?.objective).toBe('第一个目标')
+  expect(pending.get(input.id)).toBeUndefined()
+  expect(db.startTurnExecution(first.turnID, input)).toBeNull()
+  await expect(
+    service.set({
+      threadId: thread.id,
+      status: 'paused',
+      expectedVersion: initial.version,
+      operationId: 'stale',
+    }),
+  ).rejects.toMatchObject({ code: 'CONFLICT' })
+  db.updateQueuedInput(thread.id, second.inputID, '编辑后的目标', { operationID: 'edit' })
+  expect(pending.get(second.inputID)).toMatchObject({ objective: '编辑后的目标', tokenBudget: 123 })
+  expect(service.get(thread.id).goal?.objective).toBe('第一个目标')
+  db.removeQueuedInput(thread.id, second.inputID, { operationID: 'remove' })
+  expect(pending.get(second.inputID)).toBeUndefined()
+  expect(service.get(thread.id).goal?.objective).toBe('第一个目标')
+  db.close()
+})
+
+test('Plan 和 Grill 启动时暂停目标，Chat 保留目标，只有 Chat 可自动续跑', async () => {
+  const { db, service } = await fixture()
+  const thread = db.createThread()
+  service.admitInTransaction({ threadId: thread.id, objective: '持续工作', expectedVersion: null })
+  for (const taskMode of ['plan', 'grill'] as const) {
+    const turn = db.createTurn(thread.id, { ...submit('规划或访谈'), taskMode })
+    db.startTurnExecution(turn.turnID, db.getTurnInput(turn.turnID)!, () =>
+      service.applyInputInTransaction(thread.id, turn.inputID, taskMode),
+    )
+    expect(service.get(thread.id).goal?.status).toBe('paused')
+    expect(db.repositories.threadGoalContinuations.canContinue(thread.id, taskMode)).toBe(false)
+    await service.set({
+      threadId: thread.id,
+      status: 'active',
+      expectedVersion: service.get(thread.id).goal!.version,
+      operationId: `resume-${taskMode}`,
+    })
+  }
+  expect(service.applyInputInTransaction(thread.id, 'ordinary-chat', 'chat')).toBeUndefined()
+  expect(service.get(thread.id).goal?.status).toBe('active')
+  expect(db.repositories.threadGoalContinuations.canContinue(thread.id, 'chat')).toBe(true)
+  const queued = db.createTurn(thread.id, submit('用户排队输入'))
+  expect(db.repositories.threadGoalContinuations.canContinue(thread.id, 'chat')).toBe(false)
+  db.removeQueuedInput(thread.id, queued.inputID, { operationID: 'remove-user' })
+  db.close()
+})
+
+test('66→67 新增队列目标表，未知对象和更高版本原样保留', async () => {
+  const { db, path } = await fixture()
+  db.sqlite.exec(
+    "DROP TABLE queued_goal_intents; CREATE TABLE future_goal_data (value TEXT); INSERT INTO future_goal_data VALUES ('keep'); PRAGMA user_version = 66",
+  )
+  db.close()
+  const migrated = new AgentDatabase(path)
+  expect(new QueuedGoalRepository(migrated).available()).toBe(true)
+  expect(filterAdvertisedCapabilities(migrated)).toContain('queue.goal.v1')
+  expect(migrated.sqlite.query('SELECT value FROM future_goal_data').get()).toEqual({
+    value: 'keep',
+  })
+  migrated.sqlite.exec('DROP TABLE queued_goal_intents; PRAGMA user_version = 99')
+  migrated.close()
+  const future = new AgentDatabase(path)
+  expect(future.sqlite.query('PRAGMA user_version').get()).toEqual({ user_version: 99 })
+  expect(filterAdvertisedCapabilities(future)).not.toContain('queue.goal.v1')
+  expect(new QueuedGoalRepository(future).available()).toBe(false)
+  expect(future.sqlite.query('SELECT value FROM future_goal_data').get()).toEqual({ value: 'keep' })
+  future.close()
+})
+
+describe('Goal 预算只允许放宽', () => {
+  test('降低预算、不限额转有限与相同值：拒绝与保持', async () => {
+    const { db, service } = await fixture()
+    const thread = db.createThread('预算只放宽')
+    const created = (
+      await service.set({
+        threadId: thread.id,
+        objective: '预算规则',
+        tokenBudget: 200,
+        expectedVersion: null,
+        operationId: 'budget:create',
+      })
+    ).goal
+
+    const before = service.get(thread.id).goal!
+    const eventCount = () =>
+      (
+        db.sqlite.query('SELECT COUNT(*) AS count FROM thread_goal_operations').get() as {
+          count: number
+        }
+      ).count
+    const operationsBefore = eventCount()
+    // A narrowing request must fail without moving the goal, its version or the
+    // idempotency log.
+    await expect(
+      service.set({
+        threadId: thread.id,
+        tokenBudget: 100,
+        expectedVersion: before.version,
+        operationId: 'budget:narrow',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(service.get(thread.id).goal).toEqual(before)
+    expect(eventCount()).toBe(operationsBefore)
+    expect(goalEvents(db)).toHaveLength(1)
+
+    // Same value is a no-op write, not a violation.
+    const same = await service.set({
+      threadId: thread.id,
+      tokenBudget: 200,
+      expectedVersion: before.version,
+      operationId: 'budget:same',
+    })
+    expect(same.goal.tokenBudget).toBe(200)
+
+    // Removing the cap is widening.
+    const unlimited = await service.set({
+      threadId: thread.id,
+      tokenBudget: null,
+      expectedVersion: same.goal.version,
+      operationId: 'budget:unlimited',
+    })
+    expect(unlimited.goal.tokenBudget).toBeNull()
+
+    // An unlimited goal may never become finite again.
+    const unlimitedBefore = service.get(thread.id).goal!
+    await expect(
+      service.set({
+        threadId: thread.id,
+        tokenBudget: 5_000,
+        expectedVersion: unlimitedBefore.version,
+        operationId: 'budget:recap',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(service.get(thread.id).goal).toEqual(unlimitedBefore)
+
+    // Omitted budget keeps the stored value rather than re-applying a default.
+    const kept = await service.set({
+      threadId: thread.id,
+      objective: '预算规则（正文更新）',
+      expectedVersion: unlimitedBefore.version,
+      operationId: 'budget:omit',
+    })
+    expect(kept.goal.tokenBudget).toBeNull()
+    expect(created.id).toBe(kept.goal.id)
+    db.close()
+  })
+
+  test('已完成目标不能通过预算操作改变预算或重开', async () => {
+    const { db, service } = await fixture()
+    const thread = db.createThread('完成目标预算')
+    const created = (
+      await service.set({
+        threadId: thread.id,
+        objective: '完成即冻结',
+        tokenBudget: 100,
+        expectedVersion: null,
+        operationId: 'budget:done-create',
+      })
+    ).goal
+    const completed = await service.set({
+      threadId: thread.id,
+      status: 'complete',
+      expectedVersion: created.version,
+      operationId: 'budget:done-complete',
+    })
+    expect(completed.goal.status).toBe('complete')
+
+    await expect(
+      service.set({
+        threadId: thread.id,
+        tokenBudget: 500,
+        expectedVersion: completed.goal.version,
+        operationId: 'budget:done-raise',
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(service.get(thread.id).goal).toEqual(completed.goal)
+
+    // Omitted budget on a completed goal stays allowed and keeps it complete.
+    const edited = await service.set({
+      threadId: thread.id,
+      objective: '完成即冻结（正文）',
+      expectedVersion: completed.goal.version,
+      operationId: 'budget:done-objective',
+    })
+    expect(edited.goal).toMatchObject({ status: 'complete', tokenBudget: 100 })
+    db.close()
+  })
+
+  test('排队意图在预算基准变化后执行时被拒绝，且不改动当前目标', async () => {
+    const { db, service } = await fixture()
+    const thread = db.createThread('排队预算')
+    const created = (
+      await service.set({
+        threadId: thread.id,
+        objective: '排队预算基准',
+        tokenBudget: 300,
+        expectedVersion: null,
+        operationId: 'budget:queue-create',
+      })
+    ).goal
+
+    const turn = db.createTurn(thread.id, submit('排队目标'))
+    // The queued intent was authored against the 300 cap, which has since been raised.
+    new QueuedGoalRepository(db).put(turn.inputID, { objective: '排队目标', tokenBudget: 150 })
+    await service.set({
+      threadId: thread.id,
+      tokenBudget: 400,
+      expectedVersion: created.version,
+      operationId: 'budget:queue-raise',
+    })
+
+    expect(() =>
+      db.startTurnExecution(turn.turnID, db.getTurnInput(turn.turnID)!, () =>
+        service.applyInputInTransaction(thread.id, turn.inputID, 'chat'),
+      ),
+    ).toThrow('不能降低')
+    expect(db.getTurnStatus(turn.turnID)).toBe('queued')
+    expect(service.get(thread.id).goal).toMatchObject({
+      objective: '排队预算基准',
+      tokenBudget: 400,
+    })
+    // The rejected intent survives so admission failure stays visible and retryable.
+    expect(new QueuedGoalRepository(db).get(turn.inputID)?.tokenBudget).toBe(150)
+    db.close()
+  })
+})
+
+test('direct Goal budget writes reject non-safe integers without changing state or events', async () => {
+  const { db, service } = await fixture()
+  const thread = db.createThread('budget validation')
+  const { goal } = await service.set({
+    threadId: thread.id,
+    objective: '交付',
+    tokenBudget: 200,
+    expectedVersion: null,
+    operationId: 'create-safe',
+  })
+  const events = goalEvents(db)
+  for (const tokenBudget of [NaN, Infinity, -1, 200.5, Number.MAX_SAFE_INTEGER + 1]) {
+    await expect(
+      service.set({
+        threadId: thread.id,
+        tokenBudget,
+        expectedVersion: goal.version,
+        operationId: `bad-${tokenBudget}`,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_REQUEST' })
+    expect(service.get(thread.id).goal).toEqual(goal)
+    expect(goalEvents(db)).toEqual(events)
+  }
+  db.close()
 })

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type Ref } from 'react'
+import { useStore } from 'zustand/react'
 import type { BrowserAnnotation } from '@pidex/shared/browser-annotation'
 import type { ComposerDraftKey } from '../session/composer/ComposerTypes.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
@@ -12,6 +13,7 @@ export function BrowserAnnotationCard({
   onDelete,
   editedBody,
   onDraftEdit,
+  containerRef,
 }: {
   annotation: BrowserAnnotation
   source?: string
@@ -19,6 +21,7 @@ export function BrowserAnnotationCard({
   onDelete?: () => void
   editedBody?: string
   onDraftEdit?: (body: string | undefined) => void
+  containerRef?: Ref<HTMLElement>
 }) {
   const [editing, setEditing] = useState(editedBody !== undefined),
     [body, setBody] = useState(editedBody ?? annotation.body)
@@ -26,7 +29,10 @@ export function BrowserAnnotationCard({
     setBody(editedBody ?? annotation.body)
   }, [annotation.body, editedBody])
   return (
-    <article className="browser-annotation-card tw:flex tw:gap-2 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-2 tw:type-body-sm tw:text-app-text">
+    <article
+      ref={containerRef}
+      className="browser-annotation-card tw:flex tw:gap-2 tw:rounded-md tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-2 tw:type-body-sm tw:text-app-text"
+    >
       {source ? (
         <img
           className="tw:size-20 tw:shrink-0 tw:self-start tw:rounded-sm tw:object-contain"
@@ -101,10 +107,8 @@ export function BrowserAnnotationCard({
 }
 
 export function BrowserAnnotationDraftCards({ draftKey }: { draftKey: ComposerDraftKey }) {
-  const [, update] = useState(0)
-  useEffect(() => composerDraftStore.subscribe(() => update((v) => v + 1)), [])
-  const draft = composerDraftStore.get(draftKey)
-  if (!draft.browserAnnotations?.length) return null
+  const draft = useStore(composerDraftStore.store, (state) => state.drafts[draftKey])
+  if (!draft?.browserAnnotations?.length) return null
   return (
     <div
       className="browser-annotation-cards tw:flex tw:max-h-80 tw:flex-col tw:gap-2 tw:overflow-auto tw:p-2"

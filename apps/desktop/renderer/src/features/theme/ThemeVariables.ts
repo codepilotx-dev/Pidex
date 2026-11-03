@@ -157,12 +157,12 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
     roles.accentForeground,
   )
   const syntax = dark ? DARK_SYNTAX : LIGHT_SYNTAX
-  const shadowResting = dark ? '0 1px 2px rgb(0 0 0 / 20%)' : '0 1px 2px rgb(0 0 0 / 2%)'
-  const shadowRaised = dark
-    ? '0 2px 8px rgb(0 0 0 / 40%)'
-    : '0 2px 8px rgb(0 0 0 / 4%), 0 1px 2px rgb(0 0 0 / 2%)'
-  const shadowFloating = '0 16px 48px rgb(0 0 0 / 24%)'
-  const shadowControl = dark ? '0 1px 2px rgb(0 0 0 / 20%)' : '0 1px 2px rgb(0 0 0 / 2%)'
+  const shadowResting = 'none'
+  const shadowRaised = 'none'
+  const shadowFloating = dark
+    ? 'inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 20px 52px -8px rgb(0 0 0 / 58%), 0 6px 16px -4px rgb(0 0 0 / 40%)'
+    : '0 16px 40px -6px rgb(0 0 0 / 14%), 0 4px 12px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 10%)'
+  const shadowControl = 'none'
 
   return {
     // System Layer: Foundation & Contrast
@@ -175,12 +175,16 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
     '--cpx-sys-color-surface-canvas': theme.surface,
     '--cpx-sys-color-surface-recessed': isNeutralDefault
       ? dark
-        ? '#0f0f0f'
+        ? '#080808'
         : 'var(--cpx-ref-gray-3)'
       : roles.surfaceRecessed,
     '--cpx-sys-color-surface-panel': isNeutralDefault ? 'var(--cpx-ref-gray-2)' : roles.panel,
     '--cpx-sys-color-surface-control': isNeutralDefault ? 'var(--cpx-ref-gray-2)' : roles.control,
-    '--cpx-sys-color-surface-raised': isNeutralDefault ? 'var(--cpx-ref-gray-2)' : roles.raised,
+    '--cpx-sys-color-surface-raised': isNeutralDefault
+      ? dark
+        ? 'var(--cpx-ref-gray-3)'
+        : '#ffffff'
+      : roles.raised,
     '--cpx-sys-color-surface-editor': isNeutralDefault
       ? 'var(--cpx-ref-gray-2)'
       : roles.editorBackground,
@@ -188,13 +192,9 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
     '--cpx-sys-color-surface-active': isNeutralDefault ? 'var(--cpx-ref-gray-5)' : roles.raised,
 
     // Workbench region surfaces
-    '--cpx-sys-color-workbench-sidebar-bg': dark
-      ? isNeutralDefault
-        ? 'var(--cpx-sys-color-surface-recessed)'
-        : roles.surfaceRecessed
-      : isNeutralDefault
-        ? 'var(--cpx-ref-gray-2)'
-        : roles.panel,
+    '--cpx-sys-color-workbench-sidebar-bg': isNeutralDefault
+      ? 'var(--cpx-sys-color-surface-recessed)'
+      : roles.surfaceRecessed,
     '--cpx-sys-color-workbench-titlebar-bg': 'var(--cpx-sys-color-workbench-sidebar-bg)',
     '--cpx-sys-color-workbench-main-bg': 'var(--cpx-sys-color-surface-canvas)',
     '--cpx-sys-color-workbench-panel-bg': 'var(--cpx-sys-color-workbench-main-bg)',
@@ -212,11 +212,11 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
 
     // System Layer: Borders
     '--cpx-sys-color-border-subtle': isNeutralDefault
-      ? 'var(--cpx-ref-gray-a6)'
+      ? 'var(--cpx-ref-gray-a5)'
       : roles.borderLight,
-    '--cpx-sys-color-border-default': isNeutralDefault ? 'var(--cpx-ref-gray-a7)' : roles.border,
+    '--cpx-sys-color-border-default': isNeutralDefault ? 'var(--cpx-ref-gray-a6)' : roles.border,
     '--cpx-sys-color-border-strong': isNeutralDefault
-      ? 'var(--cpx-ref-gray-a8)'
+      ? 'var(--cpx-ref-gray-a7)'
       : roles.borderHeavy,
     '--cpx-sys-color-border-focus': isNeutralDefault
       ? 'color-mix(in srgb, var(--cpx-sys-color-accent) 50%, transparent)'
@@ -285,13 +285,13 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
     '--cpx-sys-glass-bg': isNeutralDefault
       ? 'var(--cpx-ref-gray-surface)'
       : `color-mix(in srgb, ${roles.raised} 85%, transparent)`,
-    '--cpx-sys-glass-border': isNeutralDefault ? 'var(--cpx-ref-gray-a6)' : roles.borderLight,
+    '--cpx-sys-glass-border': isNeutralDefault ? 'var(--cpx-ref-gray-a5)' : roles.borderLight,
     '--cpx-sys-glass-shadow': shadowFloating,
 
     // System Layer: Interactive states
-    '--cpx-sys-color-hover': isNeutralDefault ? 'var(--cpx-ref-gray-a3)' : interactionHover,
-    '--cpx-sys-color-active': isNeutralDefault ? 'var(--cpx-ref-gray-a5)' : interactionSelected,
-    '--cpx-sys-color-selected': isNeutralDefault ? 'var(--cpx-ref-gray-a4)' : interactionSelected,
+    '--cpx-sys-color-hover': isNeutralDefault ? 'var(--cpx-ref-gray-a2)' : interactionHover,
+    '--cpx-sys-color-active': isNeutralDefault ? 'var(--cpx-ref-gray-a2)' : interactionHover,
+    '--cpx-sys-color-selected': isNeutralDefault ? 'var(--cpx-ref-gray-a3)' : interactionSelected,
 
     // System Layer: Diff semantic tones
     '--cpx-sys-color-diff-added-fg': added.foreground,
@@ -304,19 +304,11 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
     '--cpx-sys-color-diff-removed-text': removed.textBackground,
 
     // System Layer: Shadows
-    '--cpx-sys-shadow-resting': isNeutralDefault
-      ? dark
-        ? 'inset 0 1px 0 rgba(238, 238, 238, 0.04)'
-        : 'inset 0 1px 0 rgba(255, 255, 255, 0.7)'
-      : shadowResting,
-    '--cpx-sys-shadow-raised': isNeutralDefault
-      ? dark
-        ? 'inset 0 1px 0 rgba(238, 238, 238, 0.04)'
-        : 'inset 0 1px 0 rgba(255, 255, 255, 0.7)'
-      : shadowRaised,
+    '--cpx-sys-shadow-resting': 'none',
+    '--cpx-sys-shadow-raised': 'none',
     '--cpx-sys-shadow-prominent': shadowFloating,
     '--cpx-sys-shadow-floating': shadowFloating,
-    '--cpx-sys-shadow-control': isNeutralDefault ? 'none' : shadowControl,
+    '--cpx-sys-shadow-control': 'none',
 
     // System Layer: Fonts
     '--cpx-sys-font-family-sans': fontFamilyWithFace(
@@ -341,12 +333,12 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
 
     // Component Layer: genuinely component-specific runtime overrides
     '--cpx-comp-switch-thumb-fill': '#ffffff',
-    '--cpx-comp-scrollbar-slider-bg': isNeutralDefault ? 'var(--cpx-ref-gray-a7)' : roles.border,
+    '--cpx-comp-scrollbar-slider-bg': isNeutralDefault ? 'var(--cpx-ref-gray-a6)' : roles.border,
     '--cpx-comp-scrollbar-slider-hover-bg': isNeutralDefault
-      ? 'var(--cpx-ref-gray-a8)'
+      ? 'var(--cpx-ref-gray-a7)'
       : roles.borderHeavy,
     '--cpx-comp-scrollbar-slider-active-bg': isNeutralDefault
-      ? 'var(--cpx-ref-gray-a8)'
+      ? 'var(--cpx-ref-gray-a7)'
       : roles.borderHeavy,
     '--cpx-comp-glass-filter': 'blur(16px)',
   }

@@ -25,6 +25,7 @@ import type {
   ThreadCreationSurface,
   ThreadListItem,
   ThreadExecutionEnvironment,
+  ThreadPullRequestList,
   ThreadSnapshot,
   ThreadGoal,
 } from '@pidex/shared/thread'
@@ -209,9 +210,20 @@ export type DesktopGoalSubmission = Omit<
   'expectedVersion'
 >
 
+/**
+ * Observed budget of the goal a budget edit is computed against. The UI derives the
+ * new total from it, so a concurrent replacement or budget change can be detected
+ * instead of silently applying the wrong total.
+ */
+export type DesktopGoalBudgetBaseline = {
+  goalId: string
+  tokenBudget: number | null
+}
+
 export type DesktopUserMessageInput = {
   text: string
-  taskMode?: 'chat' | 'plan'
+  goal?: DesktopGoalSubmission
+  taskMode?: 'chat' | 'plan' | 'grill'
   skills?: readonly import('@pidex/agent-protocol').SkillSelection[]
   attachments?: DesktopComposerAttachment[]
   retainedAttachmentIds?: string[]
@@ -401,6 +413,8 @@ export type PushBranchInput = {
   workspacePath: string
   setUpstream?: boolean
   forceWithLease?: boolean
+  /** When set the agent resolves the thread's real worktree directory. */
+  threadId?: string
 }
 
 export type CreatePullRequestInput = {
@@ -409,6 +423,31 @@ export type CreatePullRequestInput = {
   title: string
   body?: string
   draft?: boolean
+  /** When set the agent resolves the thread's real worktree directory. */
+  threadId?: string
+}
+
+export type ListThreadPullRequestsOptions = {
+  /**
+   * 是否在读取前探测会话当前目录的仓库与分支；默认 true。
+   * 后台轮询传 false，仅刷新远端 PR 状态而复用已缓存的本地环境。
+   */
+  refreshEnvironment?: boolean
+}
+
+export type DesktopThreadPullRequestsResult =
+  { ok: true; threads: ThreadPullRequestList[] } | { ok: false; error: string; errorCode?: string }
+
+export type DesktopThreadPullRequestMutationResult =
+  { ok: true; thread: ThreadPullRequestList } | { ok: false; error: string; errorCode?: string }
+
+export type LinkThreadPullRequestInput = { threadId: string; url: string }
+
+export type UnlinkThreadPullRequestInput = {
+  threadId: string
+  owner: string
+  repository: string
+  number: number
 }
 
 export type DiscardWorkspaceChangesInput = {
@@ -569,8 +608,11 @@ export type ModelProviderID = CoreModelProviderID
 export type DesktopModelProviderKind = ModelProviderKind
 
 export type DesktopModelMetadata = ModelMetadata & {
+  inputTokens?: number
+  nativeApi?: string
   variants?: string[]
-  providerApi?: 'openai-completions' | 'openai-responses' | 'anthropic-messages'
+  providerApi?:
+    'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai'
 }
 
 export type DesktopProviderAvailability =
@@ -588,13 +630,18 @@ export type DesktopProviderAvailability =
 export type DesktopModelProviderSummary = Omit<ModelProviderSummary, 'modelMetadata'> & {
   modelCount?: number
   providerKind?: 'builtin' | 'custom'
-  catalogOrigin?: 'user' | 'pi-bundled'
+  catalogOrigin?: 'user' | 'pi-bundled' | 'pi-remote' | 'models-dev'
   availability?: DesktopProviderAvailability
   readOnly?: boolean
   protocol?: 'pi-native' | 'openai-compatible' | 'unsupported'
   enabled?: boolean
   authMethods?: readonly ('api-key' | 'oauth')[]
-  providerApis?: readonly ('openai-completions' | 'openai-responses' | 'anthropic-messages')[]
+  providerApis?: readonly (
+    'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai'
+  )[]
+  nativeApis?: readonly string[]
+  endpointDefaults?: Readonly<Record<string, string>>
+  defaultApi?: string
   config?: DesktopListedProviderDefinition
   unresolvedMigrationIssues?: readonly string[]
   modelMetadata?: Record<string, DesktopModelMetadata>
@@ -819,6 +866,10 @@ export type DesktopBuiltinProviderDefinition = Extract<
 >
 export type DesktopCustomProviderDefinition = RpcParams<'provider/create'>['definition']
 export type DesktopProviderModelDefinition = DesktopCustomProviderDefinition['models'][number]
+/** 未保存的 Provider 请求草稿；`apiKey` 只用于单次请求，不落盘、不进事件。 */
+export type DesktopProviderDraft = NonNullable<RpcParams<'provider/model/discover'>['draft']>
+/** 可发起模型列表读取与最小生成探测的四类 wire 协议。 */
+export type DesktopProviderChatApi = RpcParams<'provider/model/discover'>['api']
 export type DesktopProviderCredential = RpcResult<'provider/credential/list'>['credentials'][number]
 export type DesktopAuthTarget = RpcParams<'auth/session/start'>['target']
 export type DesktopAuthSession = RpcResult<'auth/session/status'>['session']
@@ -921,6 +972,7 @@ export type ProjectAppearance = {
 }
 
 export type DesktopStoredSettings = {
+  gitBoardState?: string | null
   language: 'system' | 'zh-CN' | 'en-US'
   enableParetoCodeRouter?: boolean
   enableFusionRouter?: boolean
@@ -968,6 +1020,7 @@ export type DesktopStoredSettings = {
   providerID: ModelProviderID
   providerBaseURL: string
   showContextUsage: boolean
+  contextUsageView: 'bar' | 'field'
   defaultOpenTargetId: string
   gitBranchPrefix: string
   gitPrMergeMethod: 'merge' | 'squash'
@@ -1113,6 +1166,7 @@ export type {
   DesktopSystemFontFace,
   DesktopSystemFontsResult,
   DesktopThemeFontFace,
+  DesktopThemeFonts,
   DesktopThemeMode,
   DesktopThemeVariant,
 } from '@pidex/shared/desktop-theme'
@@ -1120,6 +1174,7 @@ import type {
   DesktopChromeTheme,
   DesktopThemeSettingsV6 as SharedDesktopThemeSettingsV6,
   DesktopThemeSettingsV7 as SharedDesktopThemeSettingsV7,
+  DesktopThemeSettingsV8 as SharedDesktopThemeSettingsV8,
   DesktopThemeVariant,
 } from '@pidex/shared/desktop-theme'
 
@@ -1133,7 +1188,9 @@ export type DesktopThemeSettingsV6 = SharedDesktopThemeSettingsV6<HighlightTheme
 
 export type DesktopThemeSettingsV7 = SharedDesktopThemeSettingsV7<HighlightThemeSlug>
 
-export type DesktopThemeSettings = DesktopThemeSettingsV7
+export type DesktopThemeSettingsV8 = SharedDesktopThemeSettingsV8<HighlightThemeSlug>
+
+export type DesktopThemeSettings = DesktopThemeSettingsV8
 
 export type DesktopPermissionGrantScope = 'tool-call' | 'turn' | 'session'
 
@@ -1165,7 +1222,10 @@ export type DesktopSessionMessage = AgentSessionMessage
 
 export type DesktopToolLogEntry = AgentToolLogEntry
 
-export type DesktopContextUsage = AgentContextUsage
+export type DesktopContextUsage = AgentContextUsage & {
+  /** 运行中展示的额度来自当前轮冻结预算，而不是下一轮即将生效的设置。 */
+  budgetFrozen?: boolean
+}
 
 export type DesktopSessionListItem = {
   storageSource?: 'local' | undefined
@@ -1211,6 +1271,7 @@ export type DesktopSessionListItem = {
   permissionMode: DesktopPermissionMode
   collaborationMode?: DesktopCollaborationMode
   planModeActive?: boolean
+  grillModeActive?: boolean
   providerID?: ModelProviderID
   model: string | null
   effort?: string | null
@@ -1224,6 +1285,7 @@ export type DesktopSessionListItem = {
   threadGoal?: DesktopThreadGoal | null
   unreadAt?: string | null
   latestTurnStatus?: ThreadListItem['latestTurnStatus']
+  latestTurnError?: string | null
   pendingPlanApproval?: boolean
   creationSurface?: ThreadCreationSurface
   lastMessageAt?: string | null
@@ -1235,6 +1297,7 @@ export type DesktopSessionSettingsSnapshot = {
   permissionConfig: DesktopPermissionConfig
   collaborationMode?: DesktopCollaborationMode
   planModeActive?: boolean
+  grillModeActive?: boolean
   providerID?: ModelProviderID
   providerBaseURL?: string
   model?: string
@@ -1249,6 +1312,7 @@ export type DesktopSessionSettingsSnapshot = {
   installPidexDependencies?: boolean
   enableMemory?: boolean
   rustSearchAndDiffKernels?: boolean
+  maxContextTokens?: number | null
 }
 
 export type DesktopQueuedFollowUp = {
@@ -1335,10 +1399,22 @@ export type DesktopWorktreeEligibility = {
   defaultMode: 'local' | 'worktree'
 }
 
+/**
+ * 只对本次创建有效的执行位置选择，类型直接复用 `thread/create.workspace.execution`。
+ * 显式选择优先于项目默认的自动选择，但不会改写项目执行偏好。
+ */
+export type DesktopSessionExecution = NonNullable<
+  Extract<RpcParams<'thread/create'>['workspace'], { kind: 'project' }>['execution']
+>
+
 export type CreateDesktopSessionOptions = {
   creationSurface?: ThreadCreationSurface
   appServerThreadId?: string | null
   localRouterMode?: LocalRouterMode
+  /** 首页发起设置的显式执行位置；省略时沿用原有自动选择逻辑。 */
+  execution?: DesktopSessionExecution
+  /** 失败后重试时复用同一个创建操作，避免重复创建工作树。 */
+  operationId?: string
   projectId?: string
   workspacePath?: string
   /** Optional workflow the new thread joins. */
@@ -1348,6 +1424,7 @@ export type CreateDesktopSessionOptions = {
   permissionConfig?: DesktopPermissionConfig
   collaborationMode?: DesktopCollaborationMode
   planModeActive?: boolean
+  grillModeActive?: boolean
   providerID?: ModelProviderID
   providerBaseURL?: string
   model?: string
@@ -1689,7 +1766,14 @@ export type DesktopApi = {
   approvalReviewState(threadId: string): Promise<RpcResult<'approval/reviewState'>>
   retryApproval(threadId: string, reviewId: string): Promise<void>
   listApprovalRules(threadId: string): Promise<RpcResult<'approval/rules/list'>>
-  revokeApprovalRule(threadId: string, ruleId: string): Promise<void>
+  upsertApprovalRule(
+    params: RpcParams<'approval/rules/upsert'>,
+  ): Promise<RpcResult<'approval/rules/upsert'>>
+  revokeApprovalRule(
+    threadId: string,
+    ruleId: string,
+    expectedVersion?: string,
+  ): Promise<RpcResult<'approval/rules/revoke'>>
   writeConfigBatch(params: DesktopConfigBatchWriteParams): Promise<DesktopConfigWriteResult>
   listConfigProfiles(): Promise<DesktopConfigProfileListResult>
   selectConfigProfile(profileId: string | null): Promise<DesktopConfigProfileSelectResult>
@@ -1814,6 +1898,19 @@ export type DesktopApi = {
     providerID: ModelProviderID,
     model?: DesktopModelRef,
   ): Promise<RpcResult<'provider/test'>>
+  /** 立即同步上游模型列表；首次只建基线，之后返回下架/候选差异。 */
+  syncProviderModels(providerId: ModelProviderID): Promise<RpcResult<'provider/model/sync'>>
+  /** 对草稿地址逐协议（或批量模型）做最小生成探测，不落盘。 */
+  detectProviderProtocols(
+    params: RpcParams<'provider/protocol/detect'>,
+  ): Promise<RpcResult<'provider/protocol/detect'>>
+  /** 用未保存草稿探测单个模型可达性；缺省用合成 providerID 构造 Model.Ref。 */
+  testProviderDraft(input: {
+    providerId?: ModelProviderID
+    modelId: string
+    api: DesktopProviderChatApi
+    draft: DesktopProviderDraft
+  }): Promise<RpcResult<'provider/test'>>
   previewModelHealth(): Promise<RpcResult<'model/health/preview'>>
   startModelHealth(operationId: string): Promise<RpcResult<'model/health/start'>>
   readModelHealth(runId: string): Promise<RpcResult<'model/health/read'>>
@@ -1821,10 +1918,19 @@ export type DesktopApi = {
   createProvider(definition: DesktopCustomProviderDefinition): Promise<void>
   updateProvider(providerId: ModelProviderID, definition: DesktopProviderDefinition): Promise<void>
   deleteProvider(providerId: ModelProviderID): Promise<void>
-  discoverProviderModels(
-    providerId: ModelProviderID,
-    api: DesktopProviderModelDefinition['api'],
-  ): Promise<DesktopProviderModelDefinition[]>
+  modelRecommendations?: {
+    supported(): Promise<boolean>
+    preview(
+      input: RpcParams<'model/recommendation/preview'>,
+    ): Promise<RpcResult<'model/recommendation/preview'>>
+    refresh(): Promise<RpcResult<'model/recommendation/refresh'>>
+  }
+  /** 读取上游模型列表；提供 draft 时用于保存前获取，不访问已保存配置。 */
+  discoverProviderModels(input: {
+    providerId?: ModelProviderID
+    api: DesktopProviderChatApi
+    draft?: DesktopProviderDraft
+  }): Promise<DesktopProviderModelDefinition[]>
   startAuthSession(target: DesktopAuthTarget): Promise<DesktopAuthSession>
   respondAuthSession(
     sessionId: string,
@@ -1904,7 +2010,19 @@ export type DesktopApi = {
     branchName: string,
     projectId?: string,
   ): Promise<DesktopWorkspace>
-  getWorkspaceGitStatus(workspacePath: string, projectId?: string): Promise<DesktopGitStatusResult>
+  getWorkspaceGitStatus(
+    workspacePath: string,
+    projectId?: string,
+    options?: { refresh?: boolean },
+  ): Promise<DesktopGitStatusResult>
+  fetchWorkspaceRepository(
+    workspacePath: string,
+    projectId?: string,
+  ): Promise<DesktopGitStatusResult>
+  pullWorkspaceRepository(
+    workspacePath: string,
+    projectId?: string,
+  ): Promise<DesktopGitStatusResult>
   createWorkspaceBranch(input: CreateBranchInput): Promise<DesktopGitWorkspaceResult>
   commitWorkspaceChanges(input: CommitChangesInput): Promise<DesktopGitOperationResult>
   pushWorkspaceBranch(input: PushBranchInput): Promise<DesktopGitOperationResult>
@@ -1913,6 +2031,16 @@ export type DesktopApi = {
     input: RestoreSessionTurnChangesInput,
   ): Promise<DesktopGitOperationResult>
   createPullRequest(input: CreatePullRequestInput): Promise<DesktopPullRequestResult>
+  listThreadPullRequests(
+    threadIds: string[],
+    options?: ListThreadPullRequestsOptions,
+  ): Promise<DesktopThreadPullRequestsResult>
+  linkThreadPullRequest(
+    input: LinkThreadPullRequestInput,
+  ): Promise<DesktopThreadPullRequestMutationResult>
+  unlinkThreadPullRequest(
+    input: UnlinkThreadPullRequestInput,
+  ): Promise<DesktopThreadPullRequestMutationResult>
   getWorkspaceReviewDiff(input: DesktopReviewDiffInput): Promise<DesktopReviewDiffResult>
   applyWorkspaceReviewOperation(
     input: DesktopReviewOperationInput,
@@ -1963,6 +2091,7 @@ export type DesktopApi = {
   listSessions(options?: { archived?: boolean }): Promise<DesktopSessionSnapshot[]>
   getSessionCatalogStatus(): Promise<DesktopSessionCatalogStatus>
   getSession(sessionId: string): Promise<DesktopSessionSnapshot>
+  synchronizeSession(sessionId: string): Promise<void>
   getActiveSessionId(): Promise<string | null>
   setActiveSession(sessionId: string | null): Promise<void>
   /**
@@ -1992,11 +2121,38 @@ export type DesktopApi = {
     mode: DesktopPermissionMode,
   ): Promise<DesktopSessionSnapshot>
   setSessionPlanModeActive(sessionId: string, active: boolean): Promise<DesktopSessionSnapshot>
+  setSessionGrillModeActive(sessionId: string, active: boolean): Promise<DesktopSessionSnapshot>
+  setSessionMaxContextTokens(
+    sessionId: string,
+    maxContextTokens: number | null,
+  ): Promise<DesktopSessionSnapshot>
+  getModelRuntimePreferences?(): Promise<
+    Array<{
+      providerID: string
+      modelID: string
+      variant: string | null
+      maxContextTokens: number | null
+      updatedAt: number
+    }>
+  >
+  setModelRuntimePreference?(input: {
+    providerID: string
+    modelID: string
+    threadId?: string
+    variant?: string | null
+    maxContextTokens?: number | null
+  }): Promise<{ ok: true }>
   setSessionLocalRouterMode(
     sessionId: string,
     mode: LocalRouterMode,
   ): Promise<DesktopSessionSnapshot>
   openExternalURL(url: string): Promise<void>
+  supportsMessageEditing?(): boolean
+  editUserMessage?(
+    sessionId: string,
+    target: { turnId: string; inputId: string; operationId: string },
+    input: DesktopUserMessageInput,
+  ): Promise<void>
   sendUserMessage(
     sessionId: string,
     content: DesktopUserMessageInput,
@@ -2025,6 +2181,8 @@ export type DesktopApi = {
   ): Promise<DesktopSessionSnapshot>
   removeQueuedFollowUp(sessionId: string, followUpId: string): Promise<DesktopSessionSnapshot>
   resumeQueuedFollowUps(sessionId: string): Promise<DesktopSessionSnapshot>
+  supportsQueuedCompaction(): boolean
+  cancelCompaction(sessionId: string, operationId: string): Promise<void>
   compactSession(sessionId: string): Promise<void>
   getSessionPromptPreview(sessionId: string): Promise<unknown>
   rollbackSession(input: DesktopRollbackRequest): Promise<DesktopRollbackResult>
@@ -2035,6 +2193,8 @@ export type DesktopApi = {
       objective?: string
       status?: 'active' | 'paused' | 'complete'
       tokenBudget?: number | null
+      /** Required for budget edits on an existing goal; ignored when creating one. */
+      budgetBaseline?: DesktopGoalBudgetBaseline
     },
   ): Promise<DesktopThreadGoal>
   clearSessionGoal(sessionId: string): Promise<boolean>

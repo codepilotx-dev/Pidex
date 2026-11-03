@@ -1,6 +1,8 @@
 import { Model, Provider } from '@pidex/model-schema'
 import { Schema } from 'effect'
 
+import { MaxContextTokensSchema } from './thread/Settings'
+
 export const ModelRefSchema = Model.Ref
 export type ModelRef = typeof ModelRefSchema.Type
 
@@ -22,3 +24,12 @@ export const ModelCatalogSchema = Schema.Struct({
   reviewerModel: Schema.NullOr(Model.Ref),
 })
 export type ModelCatalog = typeof ModelCatalogSchema.Type
+
+export const ModelRuntimePreferenceSchema = Schema.Struct({
+  providerId: Provider.ID,
+  modelId: Model.ID,
+  variant: Schema.NullOr(Schema.String),
+  maxContextTokens: Schema.NullOr(MaxContextTokensSchema),
+  updatedAt: Schema.Number,
+})
+export type ModelRuntimePreference = typeof ModelRuntimePreferenceSchema.Type

@@ -1,11 +1,16 @@
 import type React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Check, MessagesSquare, Plus, Unlink } from 'lucide-react'
-import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../components/ui/IconTokens.js'
+import {
+  APP_ICON_SIZE,
+  APP_ICON_SIZES,
+  APP_ICON_STROKE_WIDTH,
+} from '../../components/ui/IconTokens.js'
 import {
   SearchablePopoverAction,
   SearchablePopoverContent,
 } from '../../components/ui/SearchablePopoverContent.js'
+import { SidebarRow } from '../../components/ui/SidebarRow.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import type { DesktopSessionGroup } from '../../services/desktop-client/Types.js'
 
@@ -63,8 +68,8 @@ export function SessionGroupSwitcherPopover({
   return (
     <SearchablePopoverContent
       className="popover-session-group"
-      contentLabel="选择工作流"
-      emptyLabel="没有匹配的工作流"
+      contentLabel="选择工作组"
+      emptyLabel="没有匹配的工作组"
       footer={
         onCreate ? (
           <SearchablePopoverAction
@@ -75,16 +80,18 @@ export function SessionGroupSwitcherPopover({
               onOpenChange(false)
             }}
           >
-            新建工作流
+            新建工作组
           </SearchablePopoverAction>
         ) : undefined
       }
-      listLabel="工作流"
+      listLabel="工作组"
       open={open && !disabled}
       options={options}
       renderOption={(option, selected) => (
-        <>
-          <span className="popover-item-leading">
+        <SidebarRow
+          active={selected}
+          className={option.group ? 'popover-item rich' : 'popover-item'}
+          leading={
             <span className="popover-item-icon">
               {option.group ? (
                 <MessagesSquare size={APP_ICON_SIZE} />
@@ -92,29 +99,36 @@ export function SessionGroupSwitcherPopover({
                 <Unlink size={APP_ICON_SIZE} />
               )}
             </span>
-          </span>
+          }
+          trailing={
+            selected ? (
+              <Check
+                className="popover-item-check"
+                size={APP_ICON_SIZES.sm}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+            ) : null
+          }
+        >
           {option.group ? (
-            <span className="popover-item-label popover-item-label--rich">
+            <span className="popover-item-label popover-item-label--rich tw:w-full tw:min-w-0">
               <span className="popover-item-title">{option.group.name}</span>
               <span className="popover-item-description">
-                {option.group.memberCount} 个任务 · {option.group.projectLabels.length} 个项目
+                {option.group.memberCount} 个会话 · {option.group.projectLabels.length} 个项目
               </span>
             </span>
           ) : (
-            <span className="popover-item-label">不使用工作流</span>
+            <span className="popover-item-label">不使用工作组</span>
           )}
-          <span className="popover-item-trailing">
-            {selected ? <Check size={APP_ICON_SIZES.sm} /> : null}
-          </span>
-        </>
+        </SidebarRow>
       )}
       search={search}
-      searchLabel="搜索工作流"
-      searchPlaceholder="搜索工作流"
+      searchLabel="搜索工作组"
+      searchPlaceholder="搜索工作组"
       selectedValue={value ?? '__none__'}
       side={side}
       trigger={trigger}
-      size="md"
+      size="sm"
       onOpenChange={onOpenChange}
       onSearchChange={setSearch}
       onSelect={async (option) => {

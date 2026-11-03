@@ -3,6 +3,53 @@ import { createToolExposurePlan } from '../src/tool/ToolExposurePlan'
 import { ToolCatalog } from '../src/tool/ToolRegistry'
 import type { SubagentProfile, TaskMode } from '../src/Domain'
 import type { ApprovalPolicy } from '@pidex/shared/thread'
+import { AgentRuntimeService } from '../src/orchestration/AgentRuntimeService'
+import { createLifecycleTools } from '../src/orchestration/pi/PiToolAdapter'
+import type { ToolExposureInput } from '../src/tool/ToolExposurePlan'
+
+test('运行时重建 Goal 工具暴露后仍可调用 complete/blocked，普通聊天和 allowlist 不扩大', async () => {
+  const runtime = new AgentRuntimeService({
+    db: {} as never,
+    toolExecutor: {
+      exposurePlan: (input: ToolExposureInput) => createToolExposurePlan(new ToolCatalog(), input),
+    } as never,
+  } as never)
+  const input = {
+    taskMode: 'chat' as const,
+    sandboxMode: 'workspace-write' as const,
+    approvalPolicy: 'never' as const,
+  }
+  expect(runtime.toolExposure(input).allows('update_goal')).toBe(false)
+  expect(runtime.toolExposure({ ...input, hasActiveGoal: true }).allows('update_goal')).toBe(true)
+  const request = {
+    taskMode: 'chat' as const,
+    permissionConfig: {
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'never',
+      approvalsReviewer: 'user',
+    },
+    updateGoal: async () => {},
+  }
+  const plan = runtime.toolExposure(request as never)
+  expect(plan.allows('update_goal')).toBe(true)
+  expect(
+    runtime.toolExposure({ ...request, allowedTools: ['Read'] } as never).allows('update_goal'),
+  ).toBe(false)
+  const calls: string[] = []
+  const tools = createLifecycleTools(
+    {
+      updateGoal: async ({ status }) => {
+        calls.push(status)
+        return { status }
+      },
+    },
+    { ...request, exposedTools: plan.exposed } as never,
+  )
+  const goalTool = tools.find(({ name }) => name === 'update_goal')!
+  await goalTool.execute('complete-call', { status: 'complete' }, undefined, undefined)
+  await goalTool.execute('blocked-call', { status: 'blocked' }, undefined, undefined)
+  expect(calls).toEqual(['complete', 'blocked'])
+})
 
 const exposure = (input: {
   taskMode: TaskMode
@@ -20,12 +67,43 @@ const exposure = (input: {
   })
 
 describe('ToolExposurePlan finalize_result exposure', () => {
-  test('Chat 主 Agent 暴露 finalize_result 结构化交付工具', () => {
+  test('纯时间草案仅由支持该能力的 Plan 主 Agent 提交，allowlist 仍有效', () => {
+    const input = {
+      taskMode: 'plan' as const,
+      sandboxMode: 'read-only' as const,
+      approvalPolicy: 'never' as const,
+      hasTaskSchedules: true,
+    }
+    expect(createToolExposurePlan(new ToolCatalog(), input).allows('submit_task_schedule')).toBe(
+      true,
+    )
+    expect(
+      createToolExposurePlan(new ToolCatalog(), { ...input, hasTaskSchedules: false }).allows(
+        'submit_task_schedule',
+      ),
+    ).toBe(false)
+    expect(
+      createToolExposurePlan(new ToolCatalog(), { ...input, profile: 'explorer' }).allows(
+        'submit_task_schedule',
+      ),
+    ).toBe(false)
+    expect(
+      createToolExposurePlan(new ToolCatalog(), { ...input, taskMode: 'chat' }).allows(
+        'submit_task_schedule',
+      ),
+    ).toBe(false)
+    expect(
+      createToolExposurePlan(new ToolCatalog(), { ...input, allowedTools: ['Read'] }).allows(
+        'submit_task_schedule',
+      ),
+    ).toBe(false)
+  })
+  test('Chat 主 Agent 以文本收尾，不暴露 finalize_result', () => {
     const plan = exposure({ taskMode: 'chat', profile: 'main' })
-    expect(plan.allows('finalize_result')).toBe(true)
+    expect(plan.allows('finalize_result')).toBe(false)
     expect(plan.allows('update_plan')).toBe(true)
     expect(plan.allows('request_permissions')).toBe(true)
-    expect(plan.exposed).toContain('finalize_result')
+    expect(plan.exposed).not.toContain('finalize_result')
   })
 
   test('Plan 主 Agent 不暴露 finalize_result，改以 submit_plan 交付', () => {
@@ -35,6 +113,50 @@ describe('ToolExposurePlan finalize_result exposure', () => {
     expect(plan.allows('request_permissions')).toBe(false)
     expect(plan.allows('submit_plan')).toBe(true)
     expect(plan.exposed).toContain('submit_plan')
+    expect(plan.exposed).toContain('PowerShell')
+    expect(plan.exposed).toContain('Bash')
+    expect(plan.exposed).toContain('Grep')
+    expect(plan.exposed).not.toContain('Write')
+    expect(plan.exposed).not.toContain('Edit')
+  })
+
+  test('Grill 主 Agent 使用调查权限、可提问与派发 Explorer，但不暴露计划提交', () => {
+    const plan = exposure({ taskMode: 'grill', profile: 'main', sandboxMode: 'danger-full-access' })
+    expect(plan.allows('request_user_input')).toBe(true)
+    expect(plan.allows('spawn_agents')).toBe(true)
+    expect(plan.allows('submit_plan')).toBe(false)
+    expect(plan.allows('submit_schedule_plan')).toBe(false)
+    expect(plan.allows('update_plan')).toBe(false)
+    expect(plan.allows('update_goal')).toBe(false)
+    expect(plan.allows('request_permissions')).toBe(false)
+    expect(plan.exposed).toContain('Read')
+    expect(plan.exposed).toContain('Grep')
+    expect(plan.exposed).toContain('PowerShell')
+    expect(plan.exposed).not.toContain('Write')
+    expect(plan.exposed).not.toContain('Edit')
+  })
+
+  test('Plan、Grill 与 Explorer 暴露同一调查工具集，写工具仍不可见', () => {
+    for (const [taskMode, profile] of [
+      ['plan', 'main'],
+      ['grill', 'main'],
+      ['chat', 'explorer'],
+      ['plan', 'explorer'],
+    ] as const) {
+      const plan = exposure({ taskMode, profile })
+      for (const name of ['Read', 'Glob', 'Grep', 'Bash', 'PowerShell'])
+        expect(plan.exposed).toContain(name)
+      for (const name of ['Write', 'Edit', 'apply_patch']) expect(plan.exposed).not.toContain(name)
+    }
+  })
+
+  test('暴露计划沿用配置的文件访问范围，不再改写为 read-only', () => {
+    const full = exposure({ taskMode: 'plan', sandboxMode: 'danger-full-access' })
+    expect(full.exposed).toContain('PowerShell')
+    const readOnly = exposure({ taskMode: 'plan', sandboxMode: 'read-only' })
+    expect(readOnly.exposed).toContain('PowerShell')
+    expect(readOnly.exposed).toContain('Read')
+    expect(readOnly.exposed).not.toContain('Write')
   })
 
   test('submit_plan 只属于 Plan 主 Agent', () => {
@@ -69,11 +191,11 @@ describe('ToolExposurePlan finalize_result exposure', () => {
     expect(plan.allows('wait_agents')).toBe(true)
   })
 
-  test('主 Agent 的 finalize_result 服从 Skill allowlist，子 Agent 的收尾工具不被剥离', () => {
+  test('Skill allowlist 不恢复主 Agent 收尾工具，子 Agent 的收尾工具不被剥离', () => {
     const main = exposure({
       taskMode: 'chat',
       profile: 'main',
-      allowedTools: ['Read'],
+      allowedTools: ['Read', 'finalize_result'],
     })
     expect(main.allows('Read')).toBe(true)
     expect(main.allows('finalize_result')).toBe(false)

@@ -3,7 +3,10 @@ import { desktopClient } from '../../services/desktop-client/index.js'
 import { Button } from '../../components/ui/Button.js'
 import { useSpeechStatus } from '../speech/UseSpeechStatus.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+} from './UseDesktopSettings.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsRow } from './SettingsRow.js'
@@ -42,8 +45,10 @@ function speechStatusDescription(
 
 export function VoiceSettings({ onNotice }: { onNotice?: (message: string) => void }) {
   const { t } = useLocale()
-  const { draft } = useDesktopSettings()
-  const preferredInputDeviceId = draft.values['desktop.voice.preferredInputDeviceId']
+  const draft = useDesktopSettingsDraftActions()
+  const preferredInputDeviceId = useDesktopSettingsDraftValue(
+    'desktop.voice.preferredInputDeviceId',
+  )
   const speech = useSpeechStatus()
   const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([])
   const refreshAudioInputs = useCallback(async () => {
@@ -70,7 +75,7 @@ export function VoiceSettings({ onNotice }: { onNotice?: (message: string) => vo
     <SettingsContentArea>
       <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+          <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
             {t('语音')}
           </h2>
         </div>

@@ -15,6 +15,7 @@ import type {
   DesktopRuntimeStatus,
   DesktopWorkspace,
 } from '../../../shared/Types.js'
+import { notifyProjectCatalogChanged } from '../projects/ProjectCatalogEvents.js'
 import { upsertRecentWorkspace } from '../settings/SettingsStorage.js'
 import { normalizePathForComparison } from '../../utils/PathUtils.js'
 import { errorMessageOf } from '@pidex/shared/errors'
@@ -30,6 +31,8 @@ export type UseWorkspaceStateOptions = {
 }
 
 export type RefreshWorkspaceOptions = {
+  /** 仅显式刷新绕过非 Git 仓库探测冷却。 */
+  refreshGitStatus?: boolean
   clearSelectedFile?: boolean
   expectedSessionId?: string | null
   force?: boolean
@@ -392,7 +395,7 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
             refreshOptions.expectedSessionId ?? activeSessionIdRef.current,
           )
         }
-        void refreshWorkspaceGitProjection(result.context)
+        void refreshWorkspaceGitProjection(result.context, refreshOptions.refreshGitStatus === true)
       } catch (error) {
         if (isWorkspaceUnavailableError(error)) {
           onWorkspaceUnavailableRef.current?.(target)
@@ -426,7 +429,10 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
     }
   }
 
-  async function refreshWorkspaceGitProjection(target: DesktopWorkspace): Promise<void> {
+  async function refreshWorkspaceGitProjection(
+    target: DesktopWorkspace,
+    refresh = false,
+  ): Promise<void> {
     const identity = workspaceIdentity(target)
     if (appliedWorkspaceIdentityRef.current !== identity) return
     const sequence = ++gitRequestSequenceRef.current
@@ -454,7 +460,8 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
     const projection = await resolveWorkspaceGitProjection(
       target,
       {
-        loadGitStatus: () => desktopClient.getWorkspaceGitStatus(target.path, target.projectId),
+        loadGitStatus: () =>
+          desktopClient.getWorkspaceGitStatus(target.path, target.projectId, { refresh }),
         loadBranches: () => desktopClient.getAgentReviewBranches(target.path, target.projectId),
         loadReviewSummary: (source) =>
           desktopClient.getAgentReviewSummary({
@@ -472,6 +479,7 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
   const chooseWorkspace = useCallback(async (): Promise<DesktopWorkspace | null> => {
     try {
       const selected = await desktopClient.chooseWorkspace()
+      if (selected) notifyProjectCatalogChanged()
       return selected
     } catch (error) {
       onErrorRef.current(errorMessageOf(error))
@@ -483,6 +491,7 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
     async (target: DesktopWorkspace): Promise<DesktopWorkspace | null> => {
       try {
         const selected = await desktopClient.openWorkspace(target.path, target.projectId)
+        if (selected) notifyProjectCatalogChanged()
         return selected
       } catch (error) {
         if (isWorkspaceUnavailableError(error)) {

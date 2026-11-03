@@ -13,9 +13,51 @@ import { ProviderCredentialStoreManager } from '../src/auth/ProviderCredentialSt
 import type { ProviderCredentialStoreKind } from '../src/auth/ProviderCredentialRepository'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import { EncryptedCredentialStore } from '../src/provider/pi/EncryptedCredentialStore'
+import { ProviderCredentialService } from '../src/provider/ProviderCredentialService'
 
 const roots: string[] = []
 const databases: AgentDatabase[] = []
+
+test('按供应商清理全部启用、停用及 OAuth 凭据，也能清理历史遗留凭据', async () => {
+  const { encrypted, authJson } = await setup()
+  await Effect.runPromise(authJson.initialize())
+  for (const repository of [encrypted, authJson]) {
+    const key = await Effect.runPromise(
+      repository.createApiKey({
+        integrationID: 'deleted-custom',
+        label: 'fixture',
+        key: 'fixture-key',
+      }),
+    )
+    await Effect.runPromise(repository.setEnabled(key.id, false))
+    await Effect.runPromise(
+      repository.upsertOAuth({
+        providerID: 'deleted-custom',
+        methodID: 'oauth',
+        value: {
+          type: 'oauth',
+          methodID: 'oauth',
+          access: 'fixture-access',
+          refresh: 'fixture-refresh',
+          expires: Date.now() + 60000,
+        },
+      }),
+    )
+    await Effect.runPromise(
+      repository.createApiKey({
+        integrationID: 'other-custom',
+        label: 'other',
+        key: 'fixture-other',
+      }),
+    )
+    const service = new ProviderCredentialService({} as never, repository)
+    await service.deleteAll('deleted-custom')
+    expect(repository.listProviderCredentials('deleted-custom')).toEqual([])
+    expect(repository.listProviderCredentials('other-custom')).toHaveLength(1)
+    await service.deleteAll('deleted-custom')
+    expect(repository.listProviderCredentials('other-custom')).toHaveLength(1)
+  }
+})
 
 afterEach(async () => {
   for (const database of databases.splice(0)) database.close()

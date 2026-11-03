@@ -24,6 +24,9 @@ dist-ssr
 .pidex
 .codepilotx
 data
+!apps/agent/src/provider/pi/data/
+!apps/agent/src/provider/pi/data/zcode-model-options.ts
+!apps/agent/src/provider/pi/data/ZCODE-NOTICE.md
 release
 !docs/release/
 !docs/release/**

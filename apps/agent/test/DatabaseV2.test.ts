@@ -17,7 +17,10 @@ import {
   initializeSchema,
 } from '../src/storage/database/SchemaInitializer'
 import { PROFILE_APPLICATION_ID, PROFILE_SCHEMA_VERSION } from '../src/storage/database/Schema'
-import { probeThreadsStorageCapabilities } from '../src/storage/database/StorageCapabilities'
+import {
+  probeThreadMessageForksStorageCapabilities,
+  probeThreadsStorageCapabilities,
+} from '../src/storage/database/StorageCapabilities'
 import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { filterAdvertisedCapabilities } from '../src/transport/rpc/handlers/SystemCapabilities'
 
@@ -1735,5 +1738,47 @@ describe('数据库兼容与迁移', () => {
         .get(existing.id),
     ).toEqual({ future_semantic_note: 'keep' })
     reopened.close()
+  })
+
+  test('schema 68 前向迁移到 schema 69 为 thread_message_forks 增加 target_turn_id 列并保留历史数据', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-history-v68-to-v69-'))
+    paths.push(root)
+    const databasePaths = {
+      historyPath: join(root, 'history.sqlite'),
+      profilePath: join(root, 'profile.sqlite'),
+    }
+    new AgentDatabase(databasePaths).close()
+
+    // 模拟 schema 68 状态：删去 target_turn_id 列并回退 user_version
+    const legacy = new Database(databasePaths.historyPath)
+    legacy.exec(`
+      CREATE TABLE thread_message_forks_old (
+        target_thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,
+        source_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,
+        source_turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,
+        source_item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,
+        operation_id TEXT NOT NULL REFERENCES thread_message_fork_operations(operation_id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL
+      );
+      DROP TABLE thread_message_forks;
+      ALTER TABLE thread_message_forks_old RENAME TO thread_message_forks;
+      PRAGMA user_version = 68;
+    `)
+    expect(probeThreadMessageForksStorageCapabilities(legacy).forkTargetTurnId).toBe(false)
+    legacy.close()
+
+    const migrated = new AgentDatabase(databasePaths)
+    expect(migrated.sqlite.query('PRAGMA user_version').get()).toEqual({
+      user_version: SCHEMA_VERSION,
+    })
+    expect(probeThreadMessageForksStorageCapabilities(migrated.sqlite).forkTargetTurnId).toBe(true)
+
+    const columns = (
+      migrated.sqlite.query('PRAGMA table_info(thread_message_forks)').all() as Array<{
+        name: string
+      }>
+    ).map((col) => col.name)
+    expect(columns).toContain('target_turn_id')
+    migrated.close()
   })
 })

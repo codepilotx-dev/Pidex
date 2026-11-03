@@ -1,3 +1,4 @@
+import { decodeStoredTaskMode } from '../../Domain'
 import { Database } from 'bun:sqlite'
 import { isAbsolute, relative } from 'node:path'
 import {
@@ -11,7 +12,6 @@ import type {
   AgentExecution,
   ModelRef,
   PermissionConfig,
-  TaskMode,
   ToolInvocation,
 } from '../../Domain'
 
@@ -231,7 +231,8 @@ export type PermissionColumns = {
 }
 
 export type ThreadSettingsColumns = PermissionColumns & {
-  task_mode: TaskMode
+  task_mode: string
+  max_context_tokens?: number | null
 }
 
 export const permissionConfigFromRow = (row: PermissionColumns): PermissionConfig => ({
@@ -241,8 +242,9 @@ export const permissionConfigFromRow = (row: PermissionColumns): PermissionConfi
 })
 
 export const threadSettingsFromRow = (row: ThreadSettingsColumns): ThreadSettings => ({
-  taskMode: row.task_mode,
+  taskMode: decodeStoredTaskMode(row.task_mode),
   permissionConfig: permissionConfigFromRow(row),
+  ...(row.max_context_tokens != null ? { maxContextTokens: Number(row.max_context_tokens) } : {}),
 })
 
 export const defaultThreadSettings = (): ThreadSettings => ({
@@ -262,6 +264,7 @@ export abstract class RepositoryCore {
   ): EventEnvelope
   protected abstract requireProject(projectID: string): StoredProject
   abstract threadWorkspace(threadID: string): StoredThreadWorkspace | null
+  abstract threadWorkspaceOwner(threadID: string): string | null
   abstract projectMembership(threadID: string): string | null
   abstract projectMembershipSql(alias?: 't'): string
   abstract getAgentExecution(agentID: string): AgentExecution | null

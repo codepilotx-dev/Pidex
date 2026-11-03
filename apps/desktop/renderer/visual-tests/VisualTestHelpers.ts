@@ -58,15 +58,16 @@ export async function prepareVisualTheme(
         surface: '#111111',
       }
       localStorage.setItem(
-        'pidex.desktop.appearance.v6',
+        'pidex.desktop.appearance.v8',
         JSON.stringify({
-          version: 6,
+          version: 8,
           mode: selectedMode,
           chromeThemes: { light, dark },
           codeThemeIds: {
             light: 'codex-light',
             dark: 'codex-dark',
           },
+          fonts: { code: null, ui: null },
           pointerCursorEnabled: false,
           reduceMotion: values.reduceMotion ?? 'on',
           fontSmoothingEnabled: true,

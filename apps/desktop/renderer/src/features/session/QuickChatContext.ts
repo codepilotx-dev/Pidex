@@ -15,7 +15,8 @@ import type {
 } from '../../../shared/Types.js'
 import type { OpenPlanInDockRequest } from './workflow/WorkflowPlanCard.js'
 import type { MarkdownFileOpenOptions, MarkdownFileReference } from '../markdown/index.js'
-import type { DesktopComposerProps } from './composer/DesktopComposer.js'
+import type { SessionDisplayStore } from './state/SessionDisplayStore.js'
+import type { SessionBoundComposerProps } from './composer/SessionBoundComposer.js'
 import type { NewSessionRecentTask } from './NewSessionSuggestions.js'
 import type { Attachment, LocalContextReference } from '@pidex/shared/thread'
 import type { ThreadArtifactPreviewInput } from './attachments/AttachmentPreviewDescriptor.js'
@@ -28,7 +29,7 @@ export type ProviderModelOption = {
 }
 
 export type QuickChatComposerDraftBridge = {
-  value: string
+  store: SessionDisplayStore
   replace: (value: string) => void
   focus?: () => void
 }
@@ -36,7 +37,6 @@ export type QuickChatComposerDraftBridge = {
 export type QuickChatContextValue = {
   isConversationRoute: boolean
   isConversationLoading: boolean
-  sidebarCollapsed: boolean
   activeSessionId: string | null
   activeSessionPinnedAt: string | null
   sessionTitle: string | null
@@ -76,7 +76,10 @@ export type QuickChatContextValue = {
   onGoalResume: () => void
   canCopyFileReferenceContents: (reference: MarkdownFileReference) => boolean
   onCopyFileReferenceContents: (reference: MarkdownFileReference) => void | Promise<void>
-  onSubmitEditedUserMessage: (input: DesktopUserMessageInput) => Promise<void>
+  onSubmitEditedUserMessage: (
+    input: DesktopUserMessageInput,
+    target: { turnId: string; inputId: string; operationId: string },
+  ) => Promise<void>
   onAppendComposerText: (text: string) => void
   onAppendSideChatText: (text: string) => void
   onOpenSideChat: () => void
@@ -108,13 +111,13 @@ export type QuickChatContextValue = {
     >,
   ) => void | Promise<void>
   sessionStatus: DesktopSessionStatus
-  composerProps: DesktopComposerProps | null
+  composerProps: SessionBoundComposerProps | null
   composerDraft?: QuickChatComposerDraftBridge
   bottomPanelVisible: boolean
   /** 右工作区处于内容全宽：聊天区域被隐藏，摘要浮层需要随之关闭。 */
   layoutResizeActive: boolean
   onToggleBottomPanel: () => void
-  rightDockPlanEventId: string | null
+  dockedPlanItemId: string | null
 }
 
 export const QuickChatContext = createContext<QuickChatContextValue | null>(null)

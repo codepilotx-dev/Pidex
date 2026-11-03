@@ -3,6 +3,7 @@ import { Dropdown as DropdownMenu } from './floating/Dropdown.js'
 import { Check, ChevronDown, ChevronRight, ChevronUp } from 'lucide-react'
 import { APP_ICON_STROKE_WIDTH, APP_ICON_SIZES } from './IconTokens.js'
 import { Tooltip } from './Tooltip.js'
+import { SidebarRow } from './SidebarRow.js'
 import { cx } from '../../utils/Cx.js'
 
 type BaseProps = {
@@ -37,85 +38,58 @@ type RadioItemProps = BaseProps & {
   value: string
 }
 
-type ItemContentProps = BaseProps & {
-  indicator?: React.ReactNode
-  selected?: boolean
-}
-
-function buildItemClassName({
-  active,
-  hasRichContent,
-  selected,
-}: {
-  active?: boolean
-  hasRichContent: boolean
-  selected?: boolean
-}): string {
-  return [
-    'interactive-row',
-    'interactive-row--menu',
-    'popover-item',
-    'tw:w-full',
-    'tw:min-w-0',
-    'tw:items-center',
-    'tw:text-left',
-    hasRichContent ? 'rich' : '',
-    active ? 'active' : '',
-    selected ? 'selected' : '',
-  ]
-    .filter(Boolean)
-    .join(' ')
-}
-
-function PopoverItemContent({
-  children,
-  description,
-  icon,
+function renderTrailing({
+  arrowDirection = 'right',
   indicator,
   shortcut,
   withArrow,
-  arrowDirection = 'right',
-}: ItemContentProps): React.ReactNode {
+}: {
+  arrowDirection?: 'up' | 'down' | 'right'
+  indicator?: React.ReactNode
+  shortcut?: React.ReactNode
+  withArrow?: boolean
+}): React.ReactNode {
+  if (!shortcut && !indicator && !withArrow) return undefined
+
   return (
     <>
-      <span className="popover-item-leading">
-        {icon ? <span className="popover-item-icon">{icon}</span> : null}
-      </span>
-      {description ? (
-        <span className="popover-item-label popover-item-label--rich">
-          <span className="popover-item-title">{children}</span>
-          <span className="popover-item-description">{description}</span>
-        </span>
-      ) : (
-        <span className="popover-item-label">{children}</span>
-      )}
-      <span className="popover-item-trailing">
-        {shortcut ? <span className="popover-item-shortcut">{shortcut}</span> : null}
-        {indicator ??
-          (withArrow ? (
-            arrowDirection === 'down' ? (
-              <ChevronDown
-                className="popover-item-arrow"
-                size={APP_ICON_SIZES.sm}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            ) : arrowDirection === 'up' ? (
-              <ChevronUp
-                className="popover-item-arrow"
-                size={APP_ICON_SIZES.sm}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            ) : (
-              <ChevronRight
-                className="popover-item-arrow"
-                size={APP_ICON_SIZES.sm}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            )
-          ) : null)}
-      </span>
+      {shortcut ? <span className="popover-item-shortcut">{shortcut}</span> : null}
+      {indicator}
+      {withArrow ? (
+        arrowDirection === 'down' ? (
+          <ChevronDown
+            className="popover-item-arrow"
+            size={APP_ICON_SIZES.sm}
+            strokeWidth={APP_ICON_STROKE_WIDTH}
+          />
+        ) : arrowDirection === 'up' ? (
+          <ChevronUp
+            className="popover-item-arrow"
+            size={APP_ICON_SIZES.sm}
+            strokeWidth={APP_ICON_STROKE_WIDTH}
+          />
+        ) : (
+          <ChevronRight
+            className="popover-item-arrow"
+            size={APP_ICON_SIZES.sm}
+            strokeWidth={APP_ICON_STROKE_WIDTH}
+          />
+        )
+      ) : null}
     </>
   )
+}
+
+function renderBody(children: React.ReactNode, description?: React.ReactNode): React.ReactNode {
+  if (description) {
+    return (
+      <span className="popover-item-label popover-item-label--rich tw:w-full tw:min-w-0">
+        <span className="popover-item-title">{children}</span>
+        <span className="popover-item-description">{description}</span>
+      </span>
+    )
+  }
+  return <span className="popover-item-label">{children}</span>
 }
 
 function withOptionalTooltip(item: React.ReactElement, meta: React.ReactNode): React.ReactNode {
@@ -151,42 +125,42 @@ export function PopoverItem({
   onMouseLeave,
 }: Props): React.ReactNode {
   const hasRichContent = Boolean(description)
+  const isSelectedWithCheck = Boolean(selected && withCheck)
+  const indicator = isSelectedWithCheck ? (
+    <Check
+      className="popover-item-check"
+      size={APP_ICON_SIZES.sm}
+      strokeWidth={APP_ICON_STROKE_WIDTH}
+    />
+  ) : undefined
+
   const item = (
-    <DropdownMenu.Item
-      className={buildItemClassName({ active, hasRichContent, selected })}
-      disabled={disabled}
-      onPointerEnter={onMouseEnter}
-      onPointerLeave={onMouseLeave}
-      onSelect={(event) => {
-        if (disabled) {
-          event.preventDefault()
-          return
-        }
-        if (keepOpen) {
-          event.preventDefault()
-        }
-        onClick?.()
-      }}
+    <SidebarRow
+      asChild
+      active={active || (selected && !withCheck)}
+      className={cx('popover-item', hasRichContent && 'rich')}
+      leading={icon ? <span className="popover-item-icon">{icon}</span> : undefined}
+      leadingMode={icon ? 'icon' : 'none'}
+      trailing={renderTrailing({ arrowDirection, indicator, shortcut, withArrow })}
     >
-      <PopoverItemContent
-        arrowDirection={arrowDirection}
-        description={description}
-        icon={icon}
-        indicator={
-          selected && withCheck ? (
-            <Check
-              className="popover-item-check"
-              size={APP_ICON_SIZES.sm}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-          ) : undefined
-        }
-        shortcut={shortcut}
-        withArrow={withArrow}
+      <DropdownMenu.Item
+        disabled={disabled}
+        onPointerEnter={onMouseEnter}
+        onPointerLeave={onMouseLeave}
+        onSelect={(event) => {
+          if (disabled) {
+            event.preventDefault()
+            return
+          }
+          if (keepOpen) {
+            event.preventDefault()
+          }
+          onClick?.()
+        }}
       >
-        {children}
-      </PopoverItemContent>
-    </DropdownMenu.Item>
+        {renderBody(children, description)}
+      </DropdownMenu.Item>
+    </SidebarRow>
   )
 
   return withOptionalTooltip(item, meta)
@@ -209,37 +183,38 @@ export function PopoverCheckboxItem({
   onMouseLeave,
 }: CheckboxProps): React.ReactNode {
   const hasRichContent = Boolean(description)
+  const indicator = (
+    <DropdownMenu.ItemIndicator asChild>
+      <Check
+        className="popover-item-check"
+        size={APP_ICON_SIZES.sm}
+        strokeWidth={APP_ICON_STROKE_WIDTH}
+      />
+    </DropdownMenu.ItemIndicator>
+  )
+
   const item = (
-    <DropdownMenu.CheckboxItem
-      checked={checked}
-      className={buildItemClassName({ active, hasRichContent, selected: checked })}
-      disabled={disabled}
-      onCheckedChange={onCheckedChange}
-      onPointerEnter={onMouseEnter}
-      onPointerLeave={onMouseLeave}
-      onSelect={(event) => {
-        if (keepOpen) event.preventDefault()
-      }}
+    <SidebarRow
+      asChild
+      active={active}
+      className={cx('popover-item', hasRichContent && 'rich')}
+      leading={icon ? <span className="popover-item-icon">{icon}</span> : undefined}
+      leadingMode={icon ? 'icon' : 'none'}
+      trailing={renderTrailing({ arrowDirection, indicator, shortcut, withArrow })}
     >
-      <PopoverItemContent
-        arrowDirection={arrowDirection}
-        description={description}
-        icon={icon}
-        indicator={
-          <DropdownMenu.ItemIndicator asChild>
-            <Check
-              className="popover-item-check"
-              size={APP_ICON_SIZES.sm}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-          </DropdownMenu.ItemIndicator>
-        }
-        shortcut={shortcut}
-        withArrow={withArrow}
+      <DropdownMenu.CheckboxItem
+        checked={checked}
+        disabled={disabled}
+        onCheckedChange={onCheckedChange}
+        onPointerEnter={onMouseEnter}
+        onPointerLeave={onMouseLeave}
+        onSelect={(event) => {
+          if (keepOpen) event.preventDefault()
+        }}
       >
-        {children}
-      </PopoverItemContent>
-    </DropdownMenu.CheckboxItem>
+        {renderBody(children, description)}
+      </DropdownMenu.CheckboxItem>
+    </SidebarRow>
   )
   return withOptionalTooltip(item, meta)
 }
@@ -271,33 +246,34 @@ export function PopoverRadioItem({
   onMouseLeave,
 }: RadioItemProps): React.ReactNode {
   const hasRichContent = Boolean(description)
+  const indicator = (
+    <DropdownMenu.ItemIndicator asChild>
+      <Check
+        className="popover-item-check"
+        size={APP_ICON_SIZES.sm}
+        strokeWidth={APP_ICON_STROKE_WIDTH}
+      />
+    </DropdownMenu.ItemIndicator>
+  )
+
   const item = (
-    <DropdownMenu.RadioItem
-      className={buildItemClassName({ active, hasRichContent })}
-      disabled={disabled}
-      value={value}
-      onPointerEnter={onMouseEnter}
-      onPointerLeave={onMouseLeave}
+    <SidebarRow
+      asChild
+      active={active}
+      className={cx('popover-item', hasRichContent && 'rich')}
+      leading={icon ? <span className="popover-item-icon">{icon}</span> : undefined}
+      leadingMode={icon ? 'icon' : 'none'}
+      trailing={renderTrailing({ arrowDirection, indicator, shortcut, withArrow })}
     >
-      <PopoverItemContent
-        arrowDirection={arrowDirection}
-        description={description}
-        icon={icon}
-        indicator={
-          <DropdownMenu.ItemIndicator asChild>
-            <Check
-              className="popover-item-check"
-              size={APP_ICON_SIZES.sm}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-          </DropdownMenu.ItemIndicator>
-        }
-        shortcut={shortcut}
-        withArrow={withArrow}
+      <DropdownMenu.RadioItem
+        disabled={disabled}
+        value={value}
+        onPointerEnter={onMouseEnter}
+        onPointerLeave={onMouseLeave}
       >
-        {children}
-      </PopoverItemContent>
-    </DropdownMenu.RadioItem>
+        {renderBody(children, description)}
+      </DropdownMenu.RadioItem>
+    </SidebarRow>
   )
   return withOptionalTooltip(item, meta)
 }

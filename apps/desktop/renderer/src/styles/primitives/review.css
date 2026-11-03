@@ -90,8 +90,8 @@
     --review-diffs-line-padding-inline: 1ch;
     --review-diffs-indicator-padding-inline-start: 2ch;
     --review-diffs-comment-padding: 0 2ch 0 1ch;
-    --review-diffs-font-size: var(--cpx-sys-font-size-code, 13px);
-    --review-diffs-line-height: var(--cpx-sys-line-height-code);
+    --review-diffs-font-size: var(--cpx-sys-font-size-code, 12px);
+    --review-diffs-line-height: max(24px, calc(1em * var(--cpx-sys-line-height-code)));
 
     box-sizing: border-box;
     width: 100%;
@@ -250,12 +250,13 @@
     background: var(--cpx-sys-color-diff-removed-line);
   }
 
+  /* 行号是文本，必须用经过对比度校正的 -fg token，而不是原始色相。 */
   .review-codex-diff__number[data-line-type='change-addition'] {
-    color: var(--cpx-sys-color-success);
+    color: var(--cpx-sys-color-diff-added-fg);
   }
 
   .review-codex-diff__number[data-line-type='change-deletion'] {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-diff-removed-fg);
   }
 
   .review-diff-word {
@@ -358,7 +359,7 @@
 
   .review-codex-diff__hunk {
     box-sizing: content-box;
-    height: var(--cpx-sys-space-8);
+    height: var(--cpx-sys-space-6);
     margin-block: var(--review-diffs-gap-block);
     background: var(--cpx-sys-color-surface-raised);
     color: var(--cpx-sys-color-fg-tertiary);
@@ -366,30 +367,11 @@
     user-select: none;
   }
 
-  .review-codex-diff__hunk--gutter {
-    padding-left: var(--review-diffs-gap-inline);
-  }
-
-  .review-codex-diff__hunk--content {
-    padding-right: var(--review-diffs-gap-inline);
-  }
-
   .review-codex-diff__hunk [data-separator-wrapper] {
     height: 100%;
     min-width: 0;
     display: flex;
     align-items: center;
-    background: var(--cpx-sys-color-surface-editor);
-    border-radius: 0 var(--cpx-sys-radius-md) var(--cpx-sys-radius-md) 0;
-  }
-
-  .review-codex-diff__hunk--gutter::after {
-    content: '';
-    width: 100%;
-    height: 100%;
-    display: block;
-    background: var(--cpx-sys-color-surface-editor);
-    border-radius: var(--cpx-sys-radius-md) 0 0 var(--cpx-sys-radius-md);
   }
 
   .review-codex-diff__hunk [data-separator-content] {

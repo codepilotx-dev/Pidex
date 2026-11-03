@@ -1,3 +1,4 @@
+import type { ContextBudget, ContextCompactionOperation } from '@pidex/shared/thread'
 import type { ContextUsageBreakdownEntry } from '@pidex/shared/thread'
 
 export type { AgentPermissionRequest } from './Permissions.js'
@@ -20,6 +21,8 @@ export type AgentSessionStatus =
 export type AgentThinkingMode = 'default' | 'enabled' | 'adaptive' | 'disabled'
 
 export type AgentContextUsage = {
+  budget?: ContextBudget
+  compactionOperation?: ContextCompactionOperation
   provider?: string
   model?: string
   usedTokens: number

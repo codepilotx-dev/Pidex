@@ -9,7 +9,7 @@
 推荐使用 stdio。先生成可直接粘贴到“设置 → 插件 → MCP → 高级 JSON”的配置：
 
 ```powershell
-bun run debug:mcp:config:stdio
+bun apps/agent/scripts/McpDebugServer.ts --print-config=stdio
 ```
 
 保存配置并重载 MCP 后，可以让模型调用 `echo`，再通过 `mcp_list_resources` 和
@@ -21,8 +21,8 @@ bun run debug:mcp:config:stdio
 也可以单独启动 HTTP Server：
 
 ```powershell
-bun run debug:mcp:http
-bun run debug:mcp:config:http
+bun apps/agent/scripts/McpDebugServer.ts --transport=http --port=43121
+bun apps/agent/scripts/McpDebugServer.ts --print-config=http
 ```
 
 HTTP 固定监听 `127.0.0.1:43121`，并保持黑盒模式，不接收 Pidex 内部会话摘要。
@@ -35,8 +35,8 @@ bun apps/agent/scripts/McpDebugServer.ts --transport=http --port=0 --port-file=d
 调试 OAuth、动态客户端注册、PKCE 和 token refresh 时，使用：
 
 ```powershell
-bun run debug:mcp:oauth
-bun run debug:mcp:config:oauth
+bun apps/agent/scripts/McpDebugServer.ts --transport=http --port=43121 --oauth
+bun apps/agent/scripts/McpDebugServer.ts --print-config=oauth
 ```
 
 把第二条命令输出的配置保存后，MCP 行会进入“需要认证”。点击“认证”后，调试授权页会

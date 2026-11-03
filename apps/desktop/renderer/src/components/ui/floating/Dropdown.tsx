@@ -21,6 +21,7 @@ import {
   Slot,
   useControllableState,
   useDismissableLayer,
+  useExitPresence,
   useFocusReturn,
   usePortal,
   useTopLayer,
@@ -204,7 +205,11 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
     const context = useDropdown()
     const contentRef = useRef<HTMLDivElement>(null)
     const menu = useMenuSurface(contentRef)
-    const popover = useTopLayer(contentRef, context.open)
+    const present = useExitPresence(context.open, contentRef)
+    useLayoutEffect(() => {
+      menu.setPresent(present)
+    }, [present, menu])
+    const popover = useTopLayer(contentRef, present)
     const searchRef = useRef<HTMLInputElement>(null)
     const anchorRef = useRef<HTMLElement | null>(null)
     anchorRef.current =
@@ -267,16 +272,20 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
       if (context.open)
         setEmpty(!contentRef.current?.querySelector('[data-dropdown-item]:not([hidden])'))
     }, [context.open, children, query, showSearch])
-    if (!context.open) return null
+    if (!present) return null
     const listboxId = `${context.contentId}-listbox`
+    const [actualSide, actualAlign = align] = (coords?.actualPlacement ?? `${side}-${align}`).split(
+      '-',
+    )
     return (
       <div
         {...props}
         ref={mergeRefs(ref, contentRef)}
         popover={popover}
         id={context.contentId}
-        data-state="open"
-        data-side={coords?.actualPlacement.split('-')[0] ?? side}
+        data-state={context.open ? 'open' : 'closed'}
+        data-side={actualSide}
+        data-align={actualAlign}
         data-popover-size={size}
         data-theme-component="dropdown-surface"
         tabIndex={-1}
@@ -485,7 +494,11 @@ const DropdownItem = forwardRef<HTMLDivElement, DropdownItemProps>(
         ) : (
           <>
             <div className="tw:flex tw:items-center tw:gap-2 tw:min-w-0 tw:pr-1">
-              {icon && <span className="tw:flex-shrink-0">{icon}</span>}
+              {icon && (
+                <span className="tw:shrink-0 tw:[&>svg]:size-[var(--inline-icon-size,1em)]">
+                  {icon}
+                </span>
+              )}
               <div className="tw:min-w-0">
                 <div className="tw:truncate">{children}</div>
                 {description && (
@@ -497,9 +510,9 @@ const DropdownItem = forwardRef<HTMLDivElement, DropdownItemProps>(
             </div>
             {selected && (
               <Check
-                size={13}
+                size="var(--inline-icon-size, 1em)"
                 strokeWidth={2.8}
-                className="tw:text-[var(--cpx-sys-color-accent)] tw:flex-shrink-0 tw:ml-1.5"
+                className="tw:flex-shrink-0 tw:ml-1.5"
               />
             )}
           </>

@@ -1,9 +1,11 @@
 import * as React from 'react'
+import { createStore } from 'zustand/vanilla'
 
 export type KeyedDisclosureStore = {
   getSnapshot: (key: string) => boolean
   getExpandedKeys: () => readonly string[]
-  getVersion: () => number
+  /** 聚合订阅的快照：展开集合本身，引用变化即代表有键变化。 */
+  getVersion: () => ReadonlySet<string>
   subscribe: (key: string, listener: () => void) => () => void
   subscribeAll: (listener: () => void) => () => void
   setExpanded: (key: string, expanded: boolean) => void
@@ -56,16 +58,18 @@ export function createKeyedDisclosureStore({
   persistDelayMs = 200,
   maxExpandedKeys,
 }: KeyedDisclosureStoreOptions): KeyedDisclosureStore {
-  let expandedKeys = new Set(initialExpandedKeys)
-  const listeners = new Map<string, Set<() => void>>()
-  const allListeners = new Set<() => void>()
-  let version = 0
+  /** 展开集合是唯一可订阅状态；按键订阅与聚合版本号由 Zustand 的 setState 驱动。 */
+  const stateStore = createStore<{ expandedKeys: ReadonlySet<string> }>()(() => ({
+    expandedKeys: new Set(initialExpandedKeys),
+  }))
   let persistTimer: number | null = null
   let persistPending = false
   let destroyed = false
 
+  const expandedSet = (): ReadonlySet<string> => stateStore.getState().expandedKeys
+
   const normalizedExpandedKeys = (): readonly string[] => {
-    const keys = [...expandedKeys]
+    const keys = [...expandedSet()]
     return maxExpandedKeys == null ? keys : keys.slice(-maxExpandedKeys)
   }
 
@@ -86,65 +90,48 @@ export function createKeyedDisclosureStore({
     persistTimer = globalThis.setTimeout(flush, persistDelayMs)
   }
 
-  const notifyKey = (key: string): void => {
-    for (const listener of listeners.get(key) ?? []) listener()
-  }
-
-  const notifyAll = (): void => {
-    version++
-    for (const listener of allListeners) listener()
-  }
-
   const store: KeyedDisclosureStore = {
-    getSnapshot: (key) => expandedKeys.has(key),
+    getSnapshot: (key) => expandedSet().has(key),
     getExpandedKeys: normalizedExpandedKeys,
-    getVersion: () => version,
-    subscribe: (key, listener) => {
-      const keyListeners = listeners.get(key) ?? new Set<() => void>()
-      keyListeners.add(listener)
-      listeners.set(key, keyListeners)
-      return () => {
-        keyListeners.delete(listener)
-        if (keyListeners.size === 0) listeners.delete(key)
-      }
-    },
-    subscribeAll: (listener) => {
-      allListeners.add(listener)
-      return () => allListeners.delete(listener)
-    },
+    getVersion: () => expandedSet(),
+    subscribe: (key, listener) =>
+      stateStore.subscribe((next, previous) => {
+        if (next.expandedKeys.has(key) !== previous.expandedKeys.has(key)) listener()
+      }),
+    subscribeAll: (listener) => stateStore.subscribe(listener),
     setExpanded: (key, expanded) => {
-      if (destroyed || expandedKeys.has(key) === expanded) return
-      if (expanded) expandedKeys.add(key)
-      else expandedKeys.delete(key)
-      if (maxExpandedKeys != null && expandedKeys.size > maxExpandedKeys) {
-        expandedKeys = new Set(normalizedExpandedKeys())
-      }
-      notifyKey(key)
-      notifyAll()
+      const current = expandedSet()
+      if (destroyed || current.has(key) === expanded) return
+      const next = new Set(current)
+      if (expanded) next.add(key)
+      else next.delete(key)
+      stateStore.setState({
+        expandedKeys:
+          maxExpandedKeys != null && next.size > maxExpandedKeys
+            ? new Set([...next].slice(-maxExpandedKeys))
+            : next,
+      })
       schedulePersist()
     },
     replace: (nextExpandedKeys) => {
       if (destroyed) return
+      const current = expandedSet()
       const next = new Set(nextExpandedKeys)
       const changedKeys = new Set<string>()
-      for (const key of expandedKeys) {
+      for (const key of current) {
         if (!next.has(key)) changedKeys.add(key)
       }
       for (const key of next) {
-        if (!expandedKeys.has(key)) changedKeys.add(key)
+        if (!current.has(key)) changedKeys.add(key)
       }
       if (changedKeys.size === 0) return
-      expandedKeys = next
-      for (const key of changedKeys) notifyKey(key)
-      notifyAll()
+      stateStore.setState({ expandedKeys: next })
     },
     flush,
     destroy: () => {
       if (destroyed) return
       flush()
       destroyed = true
-      listeners.clear()
-      allListeners.clear()
       lifecycleStores.delete(store)
       releaseLifecycleListeners()
     },

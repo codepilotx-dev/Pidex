@@ -11,7 +11,11 @@ export function mockThreadHistoryPage(
   const createdAt = Date.parse(snapshot.item.createdAt) || Date.now()
   const updatedAt = Date.parse(snapshot.updatedAt) || createdAt
   const permissionConfig = snapshot.settings.permissionConfig
-  const mode = snapshot.settings.planModeActive ? 'plan' : 'chat'
+  const mode = snapshot.settings.planModeActive
+    ? 'plan'
+    : snapshot.settings.grillModeActive
+      ? 'grill'
+      : 'chat'
   const model = { providerID: 'mock', id: snapshot.settings.model ?? 'mock' }
   const bundles: Array<Record<string, unknown>> = []
   let current: {

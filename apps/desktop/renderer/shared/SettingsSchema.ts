@@ -88,12 +88,15 @@ export const SIDEBAR_STATE_VERSION = 2
 
 export const DEFAULT_SIDEBAR_DESTINATION_ORDER: readonly string[] = [
   'automations',
+  'git',
   'plugins',
+  'providers',
+  'pets',
   'sessionGroups',
 ]
 
-/** 默认直接显示的入口是“已安排”与“插件”，其余可用入口先收进“更多”。 */
-export const DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS: readonly string[] = ['sessionGroups']
+/** 宠物市场和工作组入口收进“更多”，其余可用入口直接显示。 */
+export const DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS: readonly string[] = ['pets', 'sessionGroups']
 
 export const DEFAULT_SIDEBAR_CUSTOMIZATION: SidebarCustomization = {
   version: 1,
@@ -189,6 +192,7 @@ export function defaultDesktopStoredSettings(): DesktopStoredSettings {
     providerID: '',
     providerBaseURL: '',
     showContextUsage: true,
+    contextUsageView: 'bar',
     defaultOpenTargetId: 'auto',
     gitBranchPrefix: 'pidex/',
     gitPrMergeMethod: 'merge',
@@ -394,6 +398,7 @@ export function normalizeDesktopStoredSettings(value: unknown): DesktopStoredSet
       typeof parsed.showContextUsage === 'boolean'
         ? parsed.showContextUsage
         : defaults.showContextUsage,
+    contextUsageView: parsed.contextUsageView === 'field' ? 'field' : defaults.contextUsageView,
     defaultOpenTargetId: stringOrDefault(parsed.defaultOpenTargetId, defaults.defaultOpenTargetId),
     gitBranchPrefix: stringOrDefault(parsed.gitBranchPrefix, defaults.gitBranchPrefix),
     worktreeRoot: stringOrDefault(parsed.worktreeRoot, defaults.worktreeRoot),
@@ -484,6 +489,7 @@ export function normalizeDesktopStoredSettings(value: unknown): DesktopStoredSet
       typeof parsed.rustSearchAndDiffKernels === 'boolean'
         ? parsed.rustSearchAndDiffKernels
         : defaults.rustSearchAndDiffKernels,
+    gitBoardState: typeof parsed.gitBoardState === 'string' ? parsed.gitBoardState : null,
     sidebarLayout: parsed.sidebarLayout === 'classic' ? 'classic' : 'modern',
     sidebarOrganization: isDesktopSidebarOrganization(parsed.sidebarOrganization)
       ? parsed.sidebarOrganization
@@ -943,7 +949,24 @@ export function upsertRecentWorkspace(
     return next
   }
   // Append new workspace to the end
-  return [...workspaces, workspace].slice(-MAX_RECENT_WORKSPACES)
+  return trimRecentWorkspaces([...workspaces, workspace])
+}
+
+/**
+ * 置顶状态保存在最近工作区列表中，置顶条目不受最近数量上限约束；
+ * 超出上限时只裁剪最旧的未置顶条目，避免新打开项目把置顶项目挤出列表。
+ */
+function trimRecentWorkspaces(workspaces: DesktopWorkspace[]): DesktopWorkspace[] {
+  let overflow =
+    workspaces.filter((workspace) => !workspace.pinnedAt).length - MAX_RECENT_WORKSPACES
+  if (overflow <= 0) return workspaces
+  return workspaces.filter((workspace) => {
+    if (overflow > 0 && !workspace.pinnedAt) {
+      overflow -= 1
+      return false
+    }
+    return true
+  })
 }
 
 function normalizeProjectFolders(

@@ -5,6 +5,8 @@ import { BrowserRpcMethods, type BrowserHostRpcMethodMap } from './Browser'
 import { AutomationRpcMethods } from './Automation'
 import { BaseRpcMethods } from './Base'
 import { CalendarRpcMethods } from './Calendar'
+import { TaskScheduleRpcMethods } from './TaskSchedule'
+import { ScheduleDraftRpcMethods } from './ScheduleDraft'
 import { PlanApprovalRpcMethods } from './PlanApproval'
 import { HandoffRpcMethods } from './Handoff'
 import { ThreadGoalRpcMethods } from './Goal'
@@ -24,6 +26,8 @@ export const RpcMethods = {
   ...AutomationRpcMethods,
   ...BaseRpcMethods,
   ...CalendarRpcMethods,
+  ...TaskScheduleRpcMethods,
+  ...ScheduleDraftRpcMethods,
   ...PlanApprovalRpcMethods,
   ...HandoffRpcMethods,
   ...ThreadGoalRpcMethods,
@@ -69,6 +73,8 @@ export * from './Browser'
 export * from './Core'
 export * from './Automation'
 export * from './Calendar'
+export * from './TaskSchedule'
+export * from './ScheduleDraft'
 export * from './PlanApproval'
 export * from './Config'
 export * from './Extended'

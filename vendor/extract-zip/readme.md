@@ -8,6 +8,11 @@ targets that resolve outside the extraction root before calling `fs.symlink`.
 It addresses CVE-2026-56876 / GHSA-jmr9-qjv8-65gv without changing the public
 CommonJS API, CLI, extraction modes, or `onEntry` callback.
 
+Pidex also adds an optional synchronous `filter(entry)` callback. Returning
+`false` skips the entry before creating directories or extracting its contents;
+throwing aborts extraction. Plugin installation uses this to validate the archive
+and extract only the selected plugin. Existing callers retain the same behavior.
+
 ## JS API
 
 ```javascript

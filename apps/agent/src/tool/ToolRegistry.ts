@@ -7,7 +7,7 @@ import {
   type ToolInvocation,
 } from '../Domain'
 import { WorkspaceService, type WorkspaceFileRevision } from '../workspace/WorkspaceService'
-import type { PermissionConfig, SandboxMode } from '@pidex/shared/thread'
+import { isReadOnlyTaskMode, type PermissionConfig, type SandboxMode } from '@pidex/shared/thread'
 import type { Model } from '@pidex/model-schema'
 import type { ToolExecutionMode as PiToolExecutionMode } from '../orchestration/harness/AgentTypes'
 import type { Tool as PiAiTool } from '@earendil-works/pi-ai'
@@ -26,6 +26,7 @@ import type { TurnPatchMutationFile } from '../patch/TurnPatchTypes'
 import { diffLines } from 'diff'
 import type { FileAccessProfile } from '../permission/ExecutionPolicy'
 import { fileAccessProfileFromV4 } from '../permission/ExecutionPolicy'
+import type { ComputerOperationRecovery } from '../nodeRepl/Protocol'
 
 export type ToolCapabilities = {
   filesystem: 'none' | 'read' | 'workspace-write' | 'host-write'
@@ -33,6 +34,13 @@ export type ToolCapabilities = {
   process: boolean
   externalState: boolean
   userInteraction: boolean
+  /**
+   * Host-registered fact: the tool only reads existing state. Starting a helper
+   * process (for example a search binary) stays an implementation detail, not
+   * a mutation. Only built-in definitions set this; model input, MCP
+   * annotations and plugin metadata never grant investigation access.
+   */
+  readOnly?: boolean
 }
 
 export type ApprovalStrategy = 'policy' | 'always-review' | 'never-review'
@@ -45,10 +53,13 @@ export type ToolProgress = {
   details?: unknown
 }
 export type ToolStructuredResult = {
+  artifacts?: Array<{ artifactId: string; name: string; mimeType: string; data: string }>
   images?: Array<{ type: 'image'; data: string; mimeType: string }>
   content: string
   details: unknown
   addedToolNames?: string[]
+  /** Stops the agent loop after this batch; used by durable pauses. */
+  terminate?: boolean
 }
 export type PromptFactory = string | ((context: ToolContext) => string)
 export type { ToolAffectedPath, ToolAuthorizationScope, ToolReviewSummary } from '../Domain'
@@ -67,6 +78,18 @@ export type ToolInputInspection = {
     content: string
     scope: 'user' | 'project'
   }[]
+}
+
+/** Minimal structural pause request; the runtime owns durable checkpointing. */
+export type ToolPauseRequest = {
+  kind: 'permission'
+  toolCallID: string
+  checkpoint: {
+    state: string
+    interruption: unknown
+    toolCallID: string
+    authorizationFingerprint?: string
+  }
 }
 export type ToolOrigin =
   | { kind: 'builtin' }
@@ -102,7 +125,7 @@ export interface ToolCatalogEntry<Input = unknown, Output = unknown> {
   inspectInput?: (
     input: Input,
     context: ToolContext,
-  ) => ToolInputInspection | Promise<ToolInputInspection>
+  ) => ToolInputInspection | undefined | Promise<ToolInputInspection | undefined>
   progress?: (input: Input, context: ToolContext) => ToolProgress | undefined
   auditResult?: (output: Output) => unknown
   formatResult?: (output: Output, context: ToolContext) => ToolStructuredResult
@@ -122,6 +145,15 @@ export interface ToolContext {
   fileSnapshots?: ToolFileSnapshots
   /** Host-inspected scope for the exact input being executed. */
   computerGrant?: 'chat' | 'persistent'
+  /**
+   * Host-only: the internal operation recorded in an approval checkpoint. When
+   * present the entry resumes only that operation instead of re-running a script.
+   */
+  computerRecovery?: ComputerOperationRecovery
+  /** Host-only: grant resolved with the approval, consumed by the recovered read. */
+  approvedComputerGrant?: 'chat' | 'persistent'
+  /** Host-only: arrange a durable approval pause from inside tool execution. */
+  requestPause?: (approval: ToolPauseRequest) => Promise<void>
   authorizationScope?: ToolAuthorizationScope
   fileSaved?: (input: { filePath: string; content: string }) => Promise<void>
   /** Persists host-only reversible evidence after a successful managed file mutation. */
@@ -152,6 +184,7 @@ const noCapabilities = (): ToolCapabilities => ({
   process: false,
   externalState: false,
   userInteraction: false,
+  readOnly: false,
 })
 const jsonObject = (properties: Record<string, unknown>, required?: string[]) => ({
   type: 'object',
@@ -476,7 +509,7 @@ export const requestPermissionsDefinition: ToolDefinition<
   name: 'request_permissions',
   description: [
     '为下一次工具调用、当前 turn 或当前运行会话请求临时权限，并等待用户或自动审核的决定。',
-    '工作区外文件操作应先申请所需路径；授权不能覆盖敏感路径规则、Plan 或显式只读根。never 策略下本工具不可用，需由用户调整审批设置。',
+    '普通文件读取、外部写入和联网均应直接调用实际工具，由宿主根据当前预设和已有授权决定是否审批；不要预先调用本工具。仅在实际工具明确要求申请临时权限时使用。授权不能覆盖敏感路径规则、Plan 或显式只读根。never 策略下本工具不可用。',
     '每条申请都必须给出 justification，并至少包含一项 readPaths、writePaths 或 networkDomains；没有可申请权限时不要调用本工具。',
   ].join('\n'),
   schema: requestPermissionsSchema,
@@ -499,8 +532,7 @@ export const requestPermissionsDefinition: ToolDefinition<
       networkDomains: {
         type: 'array',
         items: { type: 'string' },
-        description:
-          '需要 Shell 访问的域名，例如 npmjs.org；这是完全访问模式下仍然需要审批的主要能力。',
+        description: '需要 Shell 访问的域名，例如 npmjs.org；完全访问模式下无需申请联网权限。',
       },
       escalationToken: { type: 'string', format: 'uuid' },
       justification: {
@@ -559,7 +591,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
       },
       ['file_path'],
     ),
-    capabilities: { ...noCapabilities(), filesystem: 'read' },
+    capabilities: { ...noCapabilities(), filesystem: 'read', readOnly: true },
     allowedModes: allModes,
     allowedProfiles: allProfiles,
     approvalStrategy: 'policy',
@@ -831,7 +863,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
       },
       ['pattern'],
     ),
-    capabilities: { ...noCapabilities(), filesystem: 'read', process: true },
+    capabilities: { ...noCapabilities(), filesystem: 'read', process: true, readOnly: true },
     allowedModes: allModes,
     allowedProfiles: allProfiles,
     approvalStrategy: 'policy',
@@ -952,7 +984,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
       },
       ['pattern'],
     ),
-    capabilities: { ...noCapabilities(), filesystem: 'read', process: true },
+    capabilities: { ...noCapabilities(), filesystem: 'read', process: true, readOnly: true },
     allowedModes: allModes,
     allowedProfiles: allProfiles,
     approvalStrategy: 'policy',
@@ -966,8 +998,8 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
     name: sdkName,
     description:
       sdkName === 'Bash'
-        ? '以工作区为默认 cwd，经 Pi tool_call、统一权限、Hook、hard-deny 与幂等门禁后，以当前用户身份执行 Bash 命令。计划模式禁用；无 OS 文件或网络沙箱。'
-        : '以工作区为默认 cwd，经 Pi tool_call、统一权限、Hook、hard-deny 与幂等门禁后，以当前用户身份执行 PowerShell 命令。计划模式禁用；无 OS 文件或网络沙箱。',
+        ? '以工作区为默认 cwd，经 Pi tool_call、统一权限、Hook、hard-deny 与幂等门禁后，以当前用户身份执行 Bash 命令。Plan 与 Grill 只允许用于调查（读取、搜索、测试、构建和检查），不得实施；无 OS 文件或网络沙箱。'
+        : '以工作区为默认 cwd，经 Pi tool_call、统一权限、Hook、hard-deny 与幂等门禁后，以当前用户身份执行 PowerShell 命令。Plan 与 Grill 只允许用于调查（读取、搜索、测试、构建和检查），不得实施；无 OS 文件或网络沙箱。',
     schema: shellSchema,
     inputSchema: shellInputSchema,
     capabilities: {
@@ -978,7 +1010,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
       userInteraction: false,
     },
     allowedModes: allModes,
-    allowedProfiles: ['main', 'default', 'worker'],
+    allowedProfiles: ['main', 'default', 'explorer', 'worker'],
     approvalStrategy: 'policy',
     visibility: 'eager',
     executionMode: 'sequential',
@@ -1065,12 +1097,17 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
 ]
 
 export const toolMayMutate = (tool: ToolCatalogEntry) =>
-  tool.capabilities.filesystem === 'workspace-write' ||
-  tool.capabilities.filesystem === 'host-write' ||
-  tool.capabilities.externalState
+  tool.capabilities.readOnly !== true &&
+  (tool.capabilities.filesystem === 'workspace-write' ||
+    tool.capabilities.filesystem === 'host-write' ||
+    tool.capabilities.externalState)
 const isShell = (tool: ToolCatalogEntry) => tool.sdkName === 'Bash' || tool.sdkName === 'PowerShell'
 export const toolAllowedInTaskMode = (tool: ToolCatalogEntry, mode: TaskMode) =>
-  tool.allowedModes.includes(mode) && (mode !== 'plan' || !toolMayMutate(tool))
+  // Grill mirrors Plan's investigation surface; mutating tools stay out even if
+  // a definition forgets to narrow its allowedModes. Shell stays available so
+  // the existing risk, rule, hook and approval chain decides each command.
+  (tool.allowedModes.includes(mode) || (mode === 'grill' && tool.allowedModes.includes('plan'))) &&
+  (!isReadOnlyTaskMode(mode) || isShell(tool) || !toolMayMutate(tool))
 export const toolAllowedForFileAccess = (tool: ToolCatalogEntry, profile: FileAccessProfile) =>
   profile !== 'read-only' ||
   isShell(tool) ||

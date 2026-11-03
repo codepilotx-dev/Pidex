@@ -1,6 +1,8 @@
 import { Credential, Model, Provider } from '@pidex/model-schema'
 import {
+  MaxContextTokensSchema,
   ModelCatalogSchema,
+  ModelRuntimePreferenceSchema,
   SubagentProjectionSchema,
   SubagentRunSchema,
   SubagentTaskSchema,
@@ -77,6 +79,7 @@ export const PiProviderApiSchema = Schema.Literals([
   'openai-completions',
   'openai-responses',
   'anthropic-messages',
+  'google-generative-ai',
 ])
 
 const NonNegativeNumberSchema = Schema.Number.check(Schema.isGreaterThanOrEqualTo(0))
@@ -100,10 +103,16 @@ const ThinkingLevelMapSchema = Schema.Struct({
 
 export const ProviderModelDefinitionSchema = Schema.Struct({
   id: Model.ID,
+  group: Schema.optional(Schema.String.check(Schema.isMaxLength(128))),
   name: Schema.optional(NonEmptyStringSchema),
   api: PiProviderApiSchema,
   enabled: Schema.optional(Schema.Boolean),
+  modelType: Schema.optional(Schema.Literals(['chat', 'embedding', 'rerank'])),
+  tools: Schema.optional(Schema.Boolean),
   contextWindow: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
+  ),
+  maxInputTokens: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
   ),
   maxTokens: Schema.optional(
@@ -111,16 +120,117 @@ export const ProviderModelDefinitionSchema = Schema.Struct({
   ),
   reasoning: Schema.optional(Schema.Boolean),
   input: Schema.optional(
-    Schema.Array(Schema.Literals(['text', 'image'])).check(
+    Schema.Array(Schema.Literals(['text', 'image', 'audio', 'video'])).check(
       Schema.isMinLength(1),
-      Schema.isMaxLength(2),
+      Schema.isMaxLength(4),
     ),
   ),
   cost: Schema.optional(ProviderModelCostSchema),
   headers: Schema.optional(PublicHeadersSchema),
   thinkingLevelMap: Schema.optional(ThinkingLevelMapSchema),
+  /** 双层参数规格：reasoningLevel.values/map 与 maxOutputTokens.max/map。 */
+  optionSpecs: Schema.optional(Model.OptionSpecs),
   compat: Schema.optional(Schema.Record(Schema.String, JsonValueSchema)),
+  /** 已脱离推荐值的字段清单；其余字段继续跟随 models.dev 推荐。 */
+  smartConfig: Schema.optional(Model.SmartConfig),
 })
+
+/** Wire protocols that can list models and run a minimal generation probe. */
+export const ProviderChatApiSchema = Schema.Literals([
+  'openai-completions',
+  'openai-responses',
+  'anthropic-messages',
+  'google-generative-ai',
+])
+export type ProviderChatApi = typeof ProviderChatApiSchema.Type
+
+const ProviderEndpointsSchema = Schema.Struct({
+  'openai-completions': Schema.optional(NonEmptyStringSchema),
+  'openai-responses': Schema.optional(NonEmptyStringSchema),
+  'anthropic-messages': Schema.optional(NonEmptyStringSchema),
+  'google-generative-ai': Schema.optional(NonEmptyStringSchema),
+  'openai-embeddings': Schema.optional(NonEmptyStringSchema),
+  'jina-rerank': Schema.optional(NonEmptyStringSchema),
+})
+
+const TransientApiKeySchema = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(4096))
+
+/**
+ * Unsaved provider request draft. Discovery, testing and protocol detection use
+ * it without persisting it; `apiKey` is a transient request input that never
+ * reaches config, caches, events or logs.
+ */
+export const ProviderRequestDraftSchema = Schema.Struct({
+  baseUrl: NonEmptyStringSchema,
+  endpoints: Schema.optional(ProviderEndpointsSchema),
+  auth: Schema.Literals(['api-key', 'none']),
+  headers: Schema.optional(PublicHeadersSchema),
+  allowInsecureHttp: Schema.optional(Schema.Boolean),
+  apiKey: Schema.optional(TransientApiKeySchema),
+})
+export type ProviderRequestDraft = typeof ProviderRequestDraftSchema.Type
+
+/** Persisted baseline of the last successful upstream model list. */
+export const ProviderModelSyncSchema = Schema.Struct({
+  fetchedAt: TimestampSchema,
+  api: ProviderChatApiSchema,
+  models: Schema.Array(Model.ID).check(Schema.isMaxLength(1000)),
+})
+export type ProviderModelSync = typeof ProviderModelSyncSchema.Type
+
+export const ProviderModelSyncSummarySchema = Schema.Struct({
+  fetchedAt: TimestampSchema,
+  api: ProviderChatApiSchema,
+  modelCount: NonNegativeIntSchema,
+})
+export type ProviderModelSyncSummary = typeof ProviderModelSyncSummarySchema.Type
+
+export const ProviderModelSyncResultSchema = Schema.Struct({
+  providerId: Provider.ID,
+  api: ProviderChatApiSchema,
+  fetchedAt: TimestampSchema,
+  candidates: Schema.Array(ProviderModelDefinitionSchema).check(Schema.isMaxLength(1000)),
+  removedModelIds: Schema.Array(Model.ID).check(Schema.isMaxLength(1000)),
+  baselineCreated: Schema.Boolean,
+  totalFetched: NonNegativeIntSchema,
+  catalogVersion: SequenceSchema,
+})
+export type ProviderModelSyncResult = typeof ProviderModelSyncResultSchema.Type
+
+export const ModelHealthFailureCategorySchema = Schema.Literals([
+  'authentication',
+  'configuration',
+  'network',
+  'rate-limit',
+  'timeout',
+  'provider',
+  'unknown',
+])
+export type ModelHealthFailureCategory = typeof ModelHealthFailureCategorySchema.Type
+
+export const ProtocolDetectionCellSchema = Schema.Struct({
+  protocol: ProviderChatApiSchema,
+  status: Schema.Literals(['success', 'failed']),
+  latencyMs: Schema.optional(NonNegativeIntSchema),
+  category: Schema.optional(ModelHealthFailureCategorySchema),
+  message: Schema.optional(Schema.String.check(Schema.isMaxLength(1024))),
+})
+export type ProtocolDetectionCell = typeof ProtocolDetectionCellSchema.Type
+
+export const ProtocolDetectionModelSchema = Schema.Struct({
+  model: Model.ID,
+  cells: Schema.Array(ProtocolDetectionCellSchema),
+})
+export type ProtocolDetectionModel = typeof ProtocolDetectionModelSchema.Type
+
+export const ProtocolDetectionResultSchema = Schema.Struct({
+  mode: Schema.Literals(['single', 'batch']),
+  protocols: Schema.Array(ProviderChatApiSchema),
+  models: Schema.Array(ProtocolDetectionModelSchema),
+  totalModels: NonNegativeIntSchema,
+  skippedModels: NonNegativeIntSchema,
+})
+export type ProtocolDetectionResult = typeof ProtocolDetectionResultSchema.Type
 
 export const BuiltinProviderDefinitionSchema = Schema.Struct({
   kind: Schema.Literal('builtin'),
@@ -128,34 +238,51 @@ export const BuiltinProviderDefinitionSchema = Schema.Struct({
   enabled: Schema.Boolean,
   allowModels: Schema.Array(Model.ID),
   denyModels: Schema.Array(Model.ID),
+  baseUrl: Schema.optional(NonEmptyStringSchema),
+  endpoints: Schema.optional(Schema.Record(NonEmptyStringSchema, NonEmptyStringSchema)),
+  allowInsecureHttp: Schema.optional(Schema.Boolean),
   models: Schema.Array(
     Schema.Struct({
+      ...ProviderModelDefinitionSchema.fields,
+      api: Schema.optional(PiProviderApiSchema),
       id: Model.ID,
       enabled: Schema.Boolean,
     }),
   ),
-  /**
-   * Optional global wire protocol for builtin providers that expose more than
-   * one endpoint. Only DeepSeek accepts it; the Agent rejects other builtin
-   * providers that carry the field.
-   */
-  protocol: Schema.optional(PiProviderApiSchema),
+  protocol: Schema.optional(
+    NonEmptyStringSchema.check(
+      Schema.isPattern(
+        /^(?:openai-completions|openai-responses|anthropic-messages|google-generative-ai|google-vertex|azure-openai-responses|bedrock-converse-stream|mistral-conversations|openai-codex-responses|pi-messages)$/,
+      ),
+    ),
+  ),
 })
 
 export const CustomProviderDefinitionSchema = Schema.Struct({
   kind: Schema.Literal('custom'),
+  directorySource: Schema.optional(Schema.Literals(['pi-remote', 'models-dev'])),
   id: Provider.ID,
   name: NonEmptyStringSchema,
   enabled: Schema.Boolean,
   baseUrl: NonEmptyStringSchema,
+  endpoints: Schema.optional(
+    Schema.Struct({
+      'openai-completions': Schema.optional(NonEmptyStringSchema),
+      'openai-responses': Schema.optional(NonEmptyStringSchema),
+      'anthropic-messages': Schema.optional(NonEmptyStringSchema),
+      'google-generative-ai': Schema.optional(NonEmptyStringSchema),
+      'openai-embeddings': Schema.optional(NonEmptyStringSchema),
+      'jina-rerank': Schema.optional(NonEmptyStringSchema),
+    }),
+  ),
   auth: Schema.Literals(['api-key', 'none']),
   env: Schema.Array(NonEmptyStringSchema),
   allowInsecureHttp: Schema.Boolean,
   headers: PublicHeadersSchema,
-  models: Schema.Array(ProviderModelDefinitionSchema).check(
-    Schema.isMinLength(1),
-    Schema.isMaxLength(500),
-  ),
+  /** Baseline recorded when a provider is created after a pre-save model fetch. */
+  modelSync: Schema.optional(ProviderModelSyncSchema),
+  /** Custom providers may keep zero models so a fully delisted upstream can still sync. */
+  models: Schema.Array(ProviderModelDefinitionSchema).check(Schema.isMaxLength(500)),
 })
 
 export const ConfigurableProviderDefinitionSchema = Schema.Union([
@@ -170,6 +297,7 @@ const ProviderListEntrySchema = Schema.Struct({
   authConfigured: Schema.Boolean,
   config: ProviderDefinitionSchema,
   modelCount: Schema.optional(NonNegativeIntSchema),
+  modelSync: Schema.optional(ProviderModelSyncSummarySchema),
 })
 
 const ProviderConfigIssueSchema = Schema.Struct({
@@ -293,6 +421,7 @@ export const ProviderTestResultSchema = Schema.Union([
   Schema.Struct({
     providerId: Provider.ID,
     model: Schema.optional(Model.Ref),
+    api: Schema.optional(PiProviderApiSchema),
     status: Schema.Literal('reachable'),
     testedAt: TimestampSchema,
     latencyMs: NonNegativeIntSchema,
@@ -300,6 +429,7 @@ export const ProviderTestResultSchema = Schema.Union([
   Schema.Struct({
     providerId: Provider.ID,
     model: Schema.optional(Model.Ref),
+    api: Schema.optional(PiProviderApiSchema),
     status: Schema.Literal('unavailable'),
     testedAt: TimestampSchema,
     category: Schema.Literals([
@@ -311,16 +441,6 @@ export const ProviderTestResultSchema = Schema.Union([
     ]),
     message: Schema.String,
   }),
-])
-
-const ModelHealthFailureCategorySchema = Schema.Literals([
-  'authentication',
-  'configuration',
-  'network',
-  'rate-limit',
-  'timeout',
-  'provider',
-  'unknown',
 ])
 
 export const ModelHealthItemSchema = Schema.Union([
@@ -617,9 +737,18 @@ export const ExtendedRpcMethods = {
   }),
 
   'model/refresh': defineMethod({
-    params: OperationParamsSchema,
+    params: Schema.Struct({
+      ...OperationParamsSchema.fields,
+      providerId: Schema.optional(Provider.ID),
+    }),
     result: CatalogResultSchema,
-    errors: ['PROVIDER_UNAVAILABLE', 'CONFLICT', 'RATE_LIMITED', 'INTERNAL_ERROR'] as const,
+    errors: [
+      'INVALID_REQUEST',
+      'PROVIDER_UNAVAILABLE',
+      'CONFLICT',
+      'RATE_LIMITED',
+      'INTERNAL_ERROR',
+    ] as const,
     capability: null,
     mutation: true,
   }),
@@ -648,8 +777,10 @@ export const ExtendedRpcMethods = {
 
   'provider/test': defineMethod({
     params: Schema.Struct({
-      providerId: Provider.ID,
+      providerId: Schema.optional(Provider.ID),
       model: Schema.optional(Model.Ref),
+      api: Schema.optional(ProviderChatApiSchema),
+      draft: Schema.optional(ProviderRequestDraftSchema),
     }),
     result: ProviderTestResultSchema,
     errors: ['PROVIDER_UNAVAILABLE', 'RATE_LIMITED', 'INVALID_REQUEST', 'INTERNAL_ERROR'] as const,
@@ -760,8 +891,9 @@ export const ExtendedRpcMethods = {
 
   'provider/model/discover': defineMethod({
     params: Schema.Struct({
-      providerId: Provider.ID,
-      api: PiProviderApiSchema,
+      providerId: Schema.optional(Provider.ID),
+      api: ProviderChatApiSchema,
+      draft: Schema.optional(ProviderRequestDraftSchema),
     }),
     result: Schema.Struct({
       models: Schema.Array(ProviderModelDefinitionSchema),
@@ -770,9 +902,50 @@ export const ExtendedRpcMethods = {
       'PROVIDER_NOT_FOUND',
       'PROVIDER_UNAVAILABLE',
       'RATE_LIMITED',
+      'INVALID_REQUEST',
       'INTERNAL_ERROR',
     ] as const,
     capability: 'provider.config.pi.v1',
+    exactParams: true,
+    exactResult: true,
+    mutation: false,
+  }),
+
+  'provider/model/sync': defineMethod({
+    params: Schema.Struct({
+      providerId: Provider.ID,
+    }),
+    result: ProviderModelSyncResultSchema,
+    errors: [
+      'PROVIDER_NOT_FOUND',
+      'PROVIDER_UNAVAILABLE',
+      'INVALID_REQUEST',
+      'CONFLICT',
+      'RATE_LIMITED',
+      'INTERNAL_ERROR',
+    ] as const,
+    capability: 'provider.modelSync.v1',
+    exactParams: true,
+    exactResult: true,
+    mutation: true,
+  }),
+
+  'provider/protocol/detect': defineMethod({
+    params: Schema.Struct({
+      draft: ProviderRequestDraftSchema,
+      providerId: Schema.optional(Provider.ID),
+      model: Schema.optional(Model.ID),
+      batch: Schema.optional(Schema.Boolean),
+    }),
+    result: ProtocolDetectionResultSchema,
+    errors: [
+      'INVALID_REQUEST',
+      'PROVIDER_NOT_FOUND',
+      'PROVIDER_UNAVAILABLE',
+      'RATE_LIMITED',
+      'INTERNAL_ERROR',
+    ] as const,
+    capability: 'provider.protocolDetection.v1',
     exactParams: true,
     exactResult: true,
     mutation: false,
@@ -1009,6 +1182,33 @@ export const ExtendedRpcMethods = {
     capability: 'provider.auth.pi.v1',
     exactParams: true,
     exactResult: true,
+    mutation: true,
+  }),
+
+  'provider/modelPreferences/list': defineMethod({
+    params: Schema.Struct({}),
+    result: Schema.Struct({
+      preferences: Schema.Array(ModelRuntimePreferenceSchema),
+    }),
+    errors: ['RATE_LIMITED', 'INTERNAL_ERROR'] as const,
+    capability: 'model.preferences.v1',
+    mutation: false,
+  }),
+
+  'provider/modelPreferences/set': defineMethod({
+    params: Schema.Struct({
+      ...OperationParamsSchema.fields,
+      providerId: Provider.ID,
+      modelId: Model.ID,
+      threadId: Schema.optional(Schema.String),
+      variant: Schema.optional(Schema.NullOr(Schema.String)),
+      maxContextTokens: Schema.optional(Schema.NullOr(MaxContextTokensSchema)),
+    }),
+    result: Schema.Struct({
+      preference: ModelRuntimePreferenceSchema,
+    }),
+    errors: ['INVALID_REQUEST', 'RATE_LIMITED', 'INTERNAL_ERROR'] as const,
+    capability: 'model.preferences.v1',
     mutation: true,
   }),
 

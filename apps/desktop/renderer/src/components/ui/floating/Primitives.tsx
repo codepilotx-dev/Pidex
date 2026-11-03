@@ -7,6 +7,7 @@ import React, {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
   type HTMLAttributes,
@@ -28,8 +29,8 @@ export function useControllableState<T>(
   const setValue = useCallback(
     (next: T) => {
       if (Object.is(currentRef.current, next)) return
+      currentRef.current = next
       if (value === undefined) {
-        currentRef.current = next
         setInternalValue(next)
       }
       onChange?.(next)
@@ -57,6 +58,8 @@ interface SlotProps extends HTMLAttributes<HTMLElement> {
 // Only the clone boundary needs loose props: the child chooses the DOM element.
 export const Slot = forwardRef<HTMLElement, SlotProps>(({ children, ...props }, ref) => {
   const child = Children.only(children) as React.ReactElement<Record<string, any>>
+  const childRef = child.props.ref as Ref<HTMLElement> | undefined
+  const composedRef = useMemo(() => mergeRefs(ref, childRef), [ref, childRef])
   const merged: Record<string, any> = { ...props, ...child.props }
   for (const name of Object.keys(props)) {
     const parentValue = (props as Record<string, any>)[name]
@@ -70,7 +73,7 @@ export const Slot = forwardRef<HTMLElement, SlotProps>(({ children, ...props }, 
   }
   merged.className = [props.className, child.props.className].filter(Boolean).join(' ')
   merged.style = { ...props.style, ...child.props.style }
-  merged.ref = mergeRefs(ref, child.props.ref as Ref<HTMLElement> | undefined)
+  merged.ref = composedRef
   // State and accessibility attributes belong to the primitive.
   for (const name of Object.keys(props)) {
     if (name.startsWith('aria-') || name.startsWith('data-') || name === 'disabled')
@@ -87,13 +90,16 @@ export interface PortalProps {
   anchor?: HTMLElement | null
 }
 export function Portal({ children, container, anchor }: PortalProps) {
-  if (typeof document === 'undefined') return null
-  const host =
-    container ??
-    (anchor ?? document.activeElement)?.closest<HTMLElement>(
-      '[role="dialog"], [role="alertdialog"]',
-    ) ??
-    document.body
+  // Focus entering this portal must not make its own content the next host.
+  const [defaultHost] = useState(() =>
+    typeof document === 'undefined'
+      ? null
+      : ((anchor ?? document.activeElement)?.closest<HTMLElement>(
+          '[role="dialog"], [role="alertdialog"]',
+        ) ?? document.body),
+  )
+  const host = container ?? defaultHost
+  if (!host) return null
   return createPortal(
     <PortalContext.Provider value={host}>{children}</PortalContext.Provider>,
     host,
@@ -115,6 +121,61 @@ export function useTopLayer(ref: RefObject<HTMLElement | null>, open: boolean) {
     }
   }, [topLayer, ref, open])
   return topLayer ? ('manual' as const) : undefined
+}
+
+export function useExitPresence(open: boolean, contentRef: RefObject<HTMLElement | null>): boolean {
+  const [present, setPresent] = useState(open)
+
+  useLayoutEffect(() => {
+    if (open) {
+      setPresent(true)
+      return
+    }
+
+    if (!present) return
+
+    const el = contentRef.current
+    if (typeof window === 'undefined' || !el) {
+      setPresent(false)
+      return
+    }
+
+    const reducedMotion =
+      document.documentElement.dataset.reduceMotion === 'on' ||
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (reducedMotion) {
+      setPresent(false)
+      return
+    }
+
+    let finished = false
+    const finish = () => {
+      if (finished) return
+      finished = true
+      setPresent(false)
+    }
+
+    const onTransitionEnd = (e: TransitionEvent) => {
+      if (e.target === el) finish()
+    }
+
+    const onAnimationEnd = (e: AnimationEvent) => {
+      if (e.target === el) finish()
+    }
+
+    el.addEventListener('transitionend', onTransitionEnd)
+    el.addEventListener('animationend', onAnimationEnd)
+    const timer = setTimeout(finish, 250)
+
+    return () => {
+      el.removeEventListener('transitionend', onTransitionEnd)
+      el.removeEventListener('animationend', onAnimationEnd)
+      clearTimeout(timer)
+    }
+  }, [open, present, contentRef])
+
+  return present
 }
 
 export interface DismissEvents {
@@ -237,20 +298,35 @@ export function useFocusReturn(
 ) {
   const closeHandler = useRef(onCloseAutoFocus)
   closeHandler.current = onCloseAutoFocus
+  // StrictMode 探针会在首次挂载后立即清理再重挂副作用。关闭回调一旦同步执行，
+  // 恢复的焦点会落在浮层外，把刚打开的菜单当成外部焦点关掉；因此把恢复推迟到
+  // 微任务，并允许紧随其后的重挂载取消它。
+  const cancelPendingRestore = useRef<(() => void) | null>(null)
   useLayoutEffect(() => {
     if (!open) return
+    cancelPendingRestore.current?.()
+    cancelPendingRestore.current = null
     const previous = document.activeElement as HTMLElement | null
     const content = contentRef.current
     return () => {
-      const event = new Event('floating.closeAutoFocus', { cancelable: true })
-      closeHandler.current?.(event)
-      if (event.defaultPrevented) return
-      if (document.activeElement === document.body || content?.contains(document.activeElement)) {
+      const restore =
+        document.activeElement === document.body ||
+        Boolean(content?.contains(document.activeElement))
+      let cancelled = false
+      cancelPendingRestore.current = () => {
+        cancelled = true
+      }
+      queueMicrotask(() => {
+        if (cancelled) return
+        cancelPendingRestore.current = null
+        const event = new Event('floating.closeAutoFocus', { cancelable: true })
+        closeHandler.current?.(event)
+        if (event.defaultPrevented || !restore) return
         const anchor = targetRef?.current
         const target =
           anchor && (anchor.tabIndex >= 0 || anchor.hasAttribute('tabindex')) ? anchor : previous
         if (target?.isConnected) target.focus()
-      }
+      })
     }
   }, [open, contentRef, targetRef])
 }

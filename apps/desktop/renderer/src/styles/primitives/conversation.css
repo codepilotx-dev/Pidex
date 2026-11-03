@@ -32,42 +32,41 @@
 @layer primitives {
   /* ── Conversation geometry contract ── */
 
+  .quick-chat-view,
   .conversation-page {
     --cpx-sys-layout-conversation-max-width: 48rem;
     --page-content-max-width: var(--cpx-sys-layout-conversation-max-width);
-    --thread-scroll-footer-fade-height: 48px;
+    --session-content-w: 100%;
+  }
+
+  .quick-chat-view > .quick-chat-hero-region,
+  .quick-chat-view > .quick-chat-composer-region {
+    width: 100%;
+    max-width: calc(var(--page-content-max-width) + 2 * var(--cpx-sys-space-4));
+    margin-inline: auto;
+    padding-inline: var(--cpx-sys-space-4);
+  }
+
+  /*
+   * Keep the timeline and sticky composer inside the same padded column,
+   * including when auto margins collapse in a narrow workspace.
+   */
+  .conversation-page .thread-scroll-layout__inner {
+    width: 100%;
+    max-width: calc(var(--page-content-max-width) + 2 * var(--cpx-sys-space-4));
+    margin-inline: auto;
+    padding-inline: var(--cpx-sys-space-4);
+    padding-top: var(--cpx-sys-space-6);
+  }
+
+  .conversation-page {
+    --thread-scroll-footer-fade-height: 72px;
     --thread-scroll-content-bottom-gap: 24px;
-    --conversation-shift-offset: 0px;
     --conversation-rail-inline-start: var(--cpx-sys-space-2);
-    --conversation-rail-width: 36px;
-    --conversation-rail-gap: var(--cpx-sys-space-1);
-    --conversation-content-inline-start: calc(
-      var(--conversation-rail-inline-start) + var(--conversation-rail-width) +
-        var(--conversation-rail-gap)
-    );
-    --conversation-content-inline-end: var(--cpx-sys-space-4);
-    --session-content-w: calc(
-      100% - var(--conversation-content-inline-start) - var(--conversation-content-inline-end)
-    );
+    --session-timeline-width: 100%;
     --conversation-item-gap: var(--cpx-sys-space-4);
     --conversation-grouped-item-gap: 4px;
     --thread-resource-row-padding-x: 12px;
-  }
-
-  @media (max-width: 760px) {
-    .conversation-page {
-      --session-content-inline-gutter: 16px;
-      --conversation-content-inline-start: var(--cpx-sys-space-4);
-      --conversation-content-inline-end: var(--cpx-sys-space-4);
-    }
-
-    .conversation-page .chat-session-actions {
-      gap: var(--cpx-sys-space-1);
-    }
-
-    .conversation-page .thread-scroll-layout__footer {
-      padding-inline: 0;
-    }
   }
 
   /* Session header title keeps its row rhythm inside the conversation shell. */
@@ -87,21 +86,6 @@
     background: transparent;
   }
 
-  .conversation-page .workflow-page__main {
-    --conversation-shift-offset: 0px;
-  }
-
-  .conversation-page
-    .workflow-page__main[data-thread-summary-inline='true'][data-thread-summary-mode='shift'] {
-    --conversation-shift-offset: -154px;
-  }
-
-  .conversation-page .session-timeline-main,
-  .conversation-page .workflow-page__composer-inner {
-    transform: translateX(var(--conversation-shift-offset, 0px));
-    transition: transform var(--cpx-sys-motion-panel) var(--cpx-sys-ease-standard);
-  }
-
   .conversation-page .workflow-page__composer {
     width: 100%;
     max-width: 100%;
@@ -110,13 +94,17 @@
   }
 
   .conversation-page .workflow-page__composer-inner {
-    width: min(var(--page-content-max-width), var(--session-content-w));
+    width: 100%;
     min-width: 0;
     max-width: var(--page-content-max-width);
     margin-inline: auto;
   }
 
-  .conversation-page .thread-summary-inline,
+  .conversation-page .workflow-main-scroll-footer .chat-input__dropdown--suggestion {
+    width: 100%;
+    max-width: 100%;
+  }
+
   .conversation-page .thread-summary-panel {
     border-color: color-mix(in srgb, var(--cpx-sys-color-border-subtle) 82%, transparent);
   }
@@ -132,6 +120,7 @@
     margin-inline: 0;
   }
 
+  /* The scrollbar gutter is reserved, so the thumb is always visible chrome. */
   .conversation-page .thread-scroll-layout {
     scrollbar-width: thin;
     scrollbar-color: var(--cpx-sys-color-border-subtle) transparent;
@@ -155,6 +144,7 @@
   .conversation-page .thread-scroll-layout__footer {
     position: sticky;
     bottom: 0;
+    margin-top: auto;
     padding: 0 0 var(--cpx-sys-space-3);
   }
 
@@ -172,16 +162,44 @@
     );
   }
 
+  .canonical-turn-activity__divider {
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      color-mix(in srgb, var(--cpx-sys-color-border-subtle) 65%, transparent) 25%,
+      color-mix(in srgb, var(--cpx-sys-color-border-subtle) 65%, transparent) 75%,
+      transparent 100%
+    );
+  }
+
+  .conversation-page .thread-scroll-layout::before {
+    content: '';
+    position: sticky;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 24px;
+    margin-bottom: -24px;
+    z-index: 10;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      var(--cpx-sys-color-surface-canvas) 0%,
+      transparent 100%
+    );
+  }
+
   /* ── Turn shell ── */
 
   /*
-   * The turn owns the conversation container query and the rendering isolation
-   * used by the virtualized timeline, plus the reading rhythm that every
-   * narrative block inherits from.
+   * The turn owns the conversation container query and the reading rhythm that
+   * every narrative block inherits from. It intentionally does not opt into
+   * `content-visibility`: the virtualizer already bounds the mounted row range,
+   * and browser placeholder measurement stacked on top of virtua's dynamic
+   * measurement produced large gaps and scroll jumping.
    */
   .canonical-turn {
-    content-visibility: auto;
-    contain-intrinsic-block-size: auto 420px;
     container-type: inline-size;
     display: grid;
     gap: var(--cpx-sys-space-4);
@@ -220,7 +238,7 @@
   }
 
   .canonical-turn__process {
-    gap: var(--cpx-sys-space-4);
+    gap: var(--cpx-sys-space-3);
   }
 
   .canonical-turn__process > .cpx-agent-activity > .cpx-agent-activity__header,
@@ -243,8 +261,8 @@
 
   .canonical-turn__thinking svg,
   .canonical-turn__status svg {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 
   .canonical-turn__status--error {
@@ -325,8 +343,8 @@
   }
 
   .canonical-turn-error button svg {
-    width: var(--cpx-sys-icon-size);
-    height: var(--cpx-sys-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 
   .canonical-markdown-error {
@@ -382,7 +400,64 @@
     flex-shrink: 0;
   }
 
+  /* ── Fork origin divider ── */
+
+  .canonical-fork-origin-divider {
+    display: flex;
+    align-items: center;
+    gap: var(--cpx-sys-space-4);
+    width: min(var(--page-content-max-width), var(--session-content-w));
+    max-width: 100%;
+    margin-inline: auto;
+    padding-block: var(--cpx-sys-space-4);
+    color: var(--cpx-sys-color-fg-tertiary);
+    font: var(--cpx-sys-type-body-sm);
+    text-align: center;
+  }
+
+  .canonical-fork-origin-divider::before,
+  .canonical-fork-origin-divider::after {
+    flex: 1 0 var(--cpx-sys-space-4);
+    border-top: 1px solid var(--cpx-sys-color-border-subtle);
+    content: '';
+  }
+
+  .canonical-fork-origin-divider__link {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cpx-sys-space-2);
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--cpx-sys-color-fg-tertiary);
+    text-decoration: none;
+    border-radius: var(--cpx-sys-radius-sm);
+    padding: var(--cpx-sys-space-1) var(--cpx-sys-space-2);
+    transition:
+      color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
+      background-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
+  }
+
+  .canonical-fork-origin-divider__link:hover {
+    color: var(--cpx-sys-color-fg-secondary);
+    background-color: var(--cpx-sys-color-hover);
+  }
+
+  .canonical-fork-origin-divider__link:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+
+  .canonical-fork-origin-divider__link > svg {
+    flex-shrink: 0;
+  }
+
+  .right-dock-side-chat {
+    --session-content-w: 100%;
+    --session-timeline-width: 100%;
+  }
+
   .right-dock-side-chat .canonical-model-switch-divider,
+  .right-dock-side-chat .canonical-fork-origin-divider,
   .right-dock-side-chat .canonical-turn,
   .right-dock-side-chat .canonical-turn-error,
   .right-dock-side-chat .workflow-page__composer-inner {
@@ -565,12 +640,12 @@
     opacity: 0;
   }
 
-  .canonical-user-message:hover .canonical-message-actions,
-  .canonical-user-message:focus-within .canonical-message-actions,
-  .canonical-turn:hover .canonical-message-actions--assistant,
-  .canonical-turn:focus-within .canonical-message-actions--assistant,
+  .canonical-user-message:has(.canonical-user-message__bubble:hover) .canonical-message-actions,
+  .canonical-user-message:has(.attachment-file-pill:hover) .canonical-message-actions,
+  .canonical-message-actions:hover,
+  .canonical-user-message:is(:focus-visible, :has(:focus-visible)) .canonical-message-actions,
   .canonical-text-item:hover .canonical-message-actions,
-  .canonical-text-item:focus-within .canonical-message-actions {
+  .canonical-text-item:is(:focus-visible, :has(:focus-visible)) .canonical-message-actions {
     opacity: 1;
   }
 
@@ -659,6 +734,22 @@
     white-space: nowrap;
   }
 
+  /* 子智能体组头：最多四个 18px 角色头像，后续叠放 6px。 */
+  .cpx-agent-activity__dots {
+    display: inline-flex;
+    flex: none;
+    align-items: center;
+  }
+
+  .cpx-agent-activity__avatar {
+    margin-inline-start: -6px;
+    box-shadow: 0 0 0 1px var(--cpx-sys-color-surface-panel);
+  }
+
+  .cpx-agent-activity__avatar:first-child {
+    margin-inline-start: 0;
+  }
+
   .cpx-agent-activity[data-expandable='false'] > .cpx-agent-activity__header {
     cursor: default;
   }
@@ -679,53 +770,59 @@
     margin-block: var(--conversation-grouped-item-gap, var(--cpx-sys-space-1)) 0;
   }
 
-  .cpx-agent-activity[data-state='failed'] > .cpx-agent-activity__header {
-    color: var(--cpx-sys-color-danger);
-  }
-
-  .cpx-agent-activity[data-state='active'] > .cpx-agent-activity__header {
-    color: var(--cpx-sys-color-accent-fg);
-  }
-
-  .cpx-agent-activity__edge-fade,
   .execution-plan-card__edge-fade {
     position: relative;
     min-width: 0;
   }
 
-  .cpx-agent-activity__edge-fade::before,
-  .cpx-agent-activity__edge-fade::after {
+  .reasoning-node__shimmer {
     position: absolute;
-    z-index: var(--cpx-sys-z-local);
-    inset-inline: 0;
-    height: var(--cpx-sys-space-6);
-    content: '';
+    inset: 0;
+    overflow: hidden;
+    color: var(--cpx-sys-color-fg-primary);
     pointer-events: none;
-    opacity: 0;
-  }
-  .cpx-agent-activity__edge-fade::before {
-    top: 0;
-    background: linear-gradient(
-      to bottom,
-      var(--edge-fade-fill, var(--cpx-sys-color-surface-canvas)),
-      transparent
-    );
-  }
-  .cpx-agent-activity__edge-fade::after {
-    bottom: 0;
-    background: linear-gradient(
-      to top,
-      var(--edge-fade-fill, var(--cpx-sys-color-surface-canvas)),
-      transparent
-    );
-  }
-  .cpx-agent-activity__edge-fade[data-scrollable='true'][data-at-start='false']::before,
-  .cpx-agent-activity__edge-fade[data-scrollable='true'][data-at-end='false']::after {
-    opacity: 1;
   }
 
-  .right-dock-side-chat .cpx-agent-activity__edge-fade {
-    --edge-fade-fill: var(--cpx-sys-color-surface-panel);
+  .reasoning-node__sweep {
+    animation: reasoning-node-sweep calc(var(--cpx-sys-motion-loading) * 2)
+      var(--cpx-sys-ease-linear) infinite;
+  }
+
+  @keyframes reasoning-node-sweep {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(100%);
+    }
+  }
+  .execution-plan-card__edge-fade[data-scrollable='true'][data-at-start='false'] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--edge-fade-distance, var(--cpx-sys-space-4))
+    );
+  }
+  .execution-plan-card__edge-fade[data-scrollable='true'][data-at-end='false'] {
+    mask-image: linear-gradient(
+      to top,
+      transparent,
+      black var(--edge-fade-distance, var(--cpx-sys-space-4))
+    );
+  }
+  .execution-plan-card__edge-fade[data-scrollable='true'][data-at-start='false'][data-at-end='false'] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--edge-fade-distance, var(--cpx-sys-space-4)),
+      black calc(100% - var(--edge-fade-distance, var(--cpx-sys-space-4))),
+      transparent
+    );
+  }
+
+  /* 工具列表独立滚动，展开详情不应把整个会话不断撑高。 */
+  .cpx-agent-activity__list {
+    max-height: 224px;
   }
 
   /* Path steps colour their grouped children from the parent state. */
@@ -748,17 +845,9 @@
   .cpx-agent-activity__path-step[data-state='running']
     > .canonical-process-card
     > .canonical-process-card__summary,
-  .cpx-agent-activity__path-step[data-state='running'] > .canonical-subagent-card {
-    color: var(--cpx-sys-color-accent-fg);
-  }
-
   .cpx-agent-activity__path-step[data-state='completed']
     > .canonical-process-card
     > .canonical-process-card__summary,
-  .cpx-agent-activity__path-step[data-state='completed'] > .canonical-subagent-card {
-    color: var(--cpx-sys-color-fg-secondary);
-  }
-
   .cpx-agent-activity__path-step[data-state='failed']::before {
     border-color: var(--cpx-sys-color-danger);
   }
@@ -769,9 +858,6 @@
   .cpx-agent-activity__path-step[data-state='failed']
     > .canonical-process-card
     > .canonical-process-card__summary,
-  .cpx-agent-activity__path-step[data-state='failed'] > .canonical-subagent-card {
-    color: var(--cpx-sys-color-danger);
-  }
 
   /*
    * Activity item rows: the row colour and the reveal states are driven by the
@@ -850,7 +936,7 @@
   .cpx-agent-activity__header:focus-visible,
   .cpx-agent-activity__header:active,
   .cpx-agent-activity__item-header:hover,
-  .cpx-agent-activity__item-header:focus-within,
+  .cpx-agent-activity__item-header:is(:focus-visible, :has(:focus-visible)),
   .cpx-agent-activity__item-header:active {
     background: transparent;
     color: var(--cpx-sys-color-fg-primary);
@@ -868,9 +954,11 @@
   }
 
   .cpx-agent-activity__header:hover > .cpx-agent-activity__chevron,
-  .cpx-agent-activity__header:focus-within > .cpx-agent-activity__chevron,
+  .cpx-agent-activity__header:is(:focus-visible, :has(:focus-visible))
+    > .cpx-agent-activity__chevron,
   .cpx-agent-activity__item-header:hover > .cpx-agent-activity__chevron,
-  .cpx-agent-activity__item-header:focus-within > .cpx-agent-activity__chevron {
+  .cpx-agent-activity__item-header:is(:focus-visible, :has(:focus-visible))
+    > .cpx-agent-activity__chevron {
     opacity: 1;
   }
 
@@ -878,8 +966,8 @@
   .cpx-agent-activity__item-header
     > svg:not(.cpx-agent-activity__chevron, .canonical-process-card__chevron) {
     flex: 0 0 auto;
-    width: var(--cpx-sys-icon-size-md);
-    height: var(--cpx-sys-icon-size-md);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 
   .cpx-agent-activity__item-header--tool {
@@ -923,8 +1011,8 @@
 
   .cpx-agent-activity__icon {
     flex: 0 0 auto;
-    width: var(--cpx-sys-icon-size-md);
-    height: var(--cpx-sys-icon-size-md);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     color: inherit;
   }
 
@@ -952,7 +1040,7 @@
   }
 
   .cpx-agent-activity__item[data-state='error'] > .cpx-agent-activity__item-header {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-fg-secondary);
   }
 
   .cpx-agent-activity__file-link {
@@ -982,8 +1070,8 @@
 
   .cpx-agent-activity__chevron {
     flex: 0 0 auto;
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     opacity: 0;
     transform: rotate(0deg);
     transition:
@@ -1017,7 +1105,7 @@
 
   .cpx-agent-activity__file-changes[data-state='error'],
   .cpx-agent-activity__file-changes[data-state='interrupted'] {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-fg-secondary);
   }
 
   .cpx-agent-activity__review-indicator {
@@ -1058,18 +1146,61 @@
   }
   .canonical-command-card__command {
     position: relative;
-    display: flex;
-    gap: var(--cpx-sys-space-2);
-    padding: var(--cpx-sys-space-2);
-    padding-right: calc(var(--cpx-sys-space-8) + var(--cpx-sys-space-2));
-    font: var(--cpx-sys-type-code);
+    min-width: 0;
+    padding: var(--cpx-sys-space-1) var(--cpx-sys-space-2);
   }
-  .canonical-command-card__command pre {
+
+  /* 命令区收起态限高两行、展开态限高十行并可滚动；两个状态共用同一视口，
+     $ 提示符与正文一起滚动，滚到命令中段时不会留下悬空的行首标记。 */
+  .canonical-command-card__command-viewport {
+    min-width: 0;
+    padding-right: calc(var(--cpx-sys-space-8) + var(--cpx-sys-space-2));
+  }
+  .canonical-command-card__command-viewport > pre {
     min-width: 0;
     margin: 0;
-    font: inherit;
+    font: var(--cpx-sys-type-code);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+    max-height: calc(var(--cpx-sys-line-height-code) * 2);
+    overflow: hidden;
+    scrollbar-width: thin;
+    scrollbar-color: transparent transparent;
+  }
+  .canonical-command-card__command-viewport > pre[data-expanded='true'] {
+    max-height: calc(var(--cpx-sys-line-height-code) * 10);
+    overflow-y: auto;
+  }
+  .canonical-command-card__command-viewport > pre[data-expanded='true']:hover {
+    scrollbar-color: var(--cpx-sys-color-border-strong) transparent;
+  }
+
+  /* 折叠入口对齐命令正文，不占用右侧复制按钮位置。 */
+  .canonical-command-card__command-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cpx-sys-space-1);
+    margin: 0 var(--cpx-sys-space-2) var(--cpx-sys-space-2) calc(var(--cpx-sys-space-2) + 2ch);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--cpx-sys-color-fg-tertiary);
+    font: var(--cpx-sys-type-caption);
+    cursor: pointer;
+  }
+  .canonical-command-card__command-toggle:hover {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+  .canonical-command-card__command-toggle:focus-visible {
+    outline: 1px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+    border-radius: var(--cpx-sys-radius-control);
+  }
+  .canonical-command-card__chevron {
+    transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
+  }
+  .canonical-command-card__chevron.is-expanded {
+    transform: rotate(180deg);
   }
   .canonical-command-shell__prompt {
     color: var(--cpx-sys-color-fg-tertiary);
@@ -1086,8 +1217,9 @@
     display: flex;
     gap: var(--cpx-sys-space-1);
   }
-  .canonical-command-card__command:is(:hover, :focus-within) .canonical-command-card__copy,
-  .canonical-command-card__output:is(:hover, :focus-within) .canonical-command-card__actions {
+  .canonical-command-card__command:is(:hover, :has(:focus-visible)) .canonical-command-card__copy,
+  .canonical-command-card__output:is(:hover, :has(:focus-visible))
+    .canonical-command-card__actions {
     opacity: 1;
     pointer-events: auto;
   }
@@ -1096,6 +1228,7 @@
     min-width: 0;
   }
   .canonical-command-card__output-text {
+    overflow-anchor: none;
     width: max-content;
     min-width: 100%;
     box-sizing: border-box;
@@ -1110,6 +1243,20 @@
     width: 100%;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+  .canonical-command-card__output-pin {
+    height: 1px;
+    overflow-anchor: none;
+    pointer-events: none;
+  }
+  .canonical-command-card__output-pin[data-following='true'] {
+    overflow-anchor: auto;
+  }
+
+  /* 长输出按块跳过屏外文本排版，避免展开首帧和高度动画重复布局整个日志。 */
+  .canonical-command-card__output-chunk {
+    display: block;
+    content-visibility: auto;
   }
   .canonical-command-card .canonical-command-shell__scroller {
     max-height: 144px;
@@ -1181,8 +1328,8 @@
   }
 
   .canonical-command-shell__status svg {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     stroke-width: var(--cpx-sys-icon-stroke-width);
   }
 
@@ -1414,8 +1561,8 @@
   /* ── File mutation ── */
 
   .canonical-file-mutation__message > svg {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     stroke-width: var(--cpx-sys-icon-stroke-width);
   }
 
@@ -1432,8 +1579,8 @@
 
   .canonical-lifecycle-tool > svg,
   .canonical-lifecycle-tool__icon > svg {
-    width: var(--cpx-sys-icon-size-md);
-    height: var(--cpx-sys-icon-size-md);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     flex: none;
     stroke-width: var(--cpx-sys-icon-stroke-width);
   }
@@ -1441,8 +1588,8 @@
   .canonical-lifecycle-tool__icon {
     position: relative;
     display: grid;
-    width: var(--cpx-sys-icon-size-md);
-    height: var(--cpx-sys-icon-size-md);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     flex: none;
     overflow: hidden;
   }
@@ -1465,7 +1612,7 @@
 
   .canonical-lifecycle-tool[data-state='error'],
   .canonical-lifecycle-tool[data-state='interrupted'] {
-    color: var(--cpx-sys-color-danger);
+    color: var(--cpx-sys-color-fg-secondary);
   }
 
   /* Blocker and patch cards keep the shared card shell (patch root is pinned). */
@@ -1506,8 +1653,8 @@
   }
 
   .canonical-patch-card__icon svg {
-    width: var(--cpx-sys-icon-size-lg);
-    height: var(--cpx-sys-icon-size-lg);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 
   .canonical-patch-card__summary {
@@ -1531,13 +1678,6 @@
     flex-wrap: nowrap;
     justify-content: flex-end;
     gap: var(--cpx-sys-space-2);
-  }
-
-  .canonical-patch-card__action {
-    min-height: 30px;
-    padding-inline: var(--cpx-sys-space-3);
-    gap: var(--cpx-sys-space-1);
-    white-space: nowrap;
   }
 
   .canonical-patch-card__file {
@@ -1596,18 +1736,14 @@
     color: var(--cpx-sys-color-fg-primary);
   }
 
-  .canonical-patch-card__disclosure:active:not(:disabled) {
-    background: var(--cpx-sys-color-selected);
-  }
-
   .canonical-patch-card__disclosure:focus-visible {
     outline: 2px solid var(--cpx-sys-color-border-focus);
     outline-offset: -2px;
   }
 
   .canonical-patch-card__disclosure svg {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     transition: transform var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
   }
 
@@ -1629,69 +1765,6 @@
 
   .canonical-diff-remove {
     color: var(--cpx-sys-color-danger);
-  }
-
-  .canonical-subagent-card {
-    display: grid;
-    grid-template-columns: 20px minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--cpx-sys-space-2);
-    width: 100%;
-    min-height: 48px;
-    padding: var(--cpx-sys-space-2) var(--cpx-sys-space-3);
-    border: 1px solid var(--cpx-sys-color-border-subtle);
-    border-radius: var(--cpx-sys-radius-lg);
-    background: var(--cpx-sys-color-surface-panel);
-    box-shadow: none;
-    color: var(--cpx-sys-color-fg-primary);
-    font: inherit;
-    text-align: left;
-    cursor: pointer;
-    transition:
-      background var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
-      border-color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
-  }
-
-  .canonical-subagent-card__files {
-    overflow: hidden;
-    color: var(--cpx-sys-color-fg-secondary);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .canonical-subagent-card:hover {
-    border-color: var(--cpx-sys-color-border-default);
-    background: var(--cpx-sys-color-hover);
-  }
-
-  .canonical-subagent-card:focus-visible {
-    outline: 2px solid var(--cpx-sys-color-border-focus);
-    outline-offset: 2px;
-  }
-
-  .canonical-subagent-card > span {
-    display: grid;
-    min-width: 0;
-  }
-
-  .canonical-subagent-card strong,
-  .canonical-subagent-card small {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  .canonical-subagent-card small,
-  .canonical-subagent-card em {
-    color: var(--cpx-sys-color-fg-tertiary);
-    font: var(--cpx-sys-type-caption);
-    font-style: normal;
-  }
-
-  /* Grouped presentation inside the process list. */
-  .cpx-agent-activity__list .canonical-subagent-card {
-    min-height: 38px;
-    padding: var(--cpx-sys-space-1) var(--cpx-sys-space-3);
   }
 
   /* ── Reduced motion ── */

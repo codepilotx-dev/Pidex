@@ -34,7 +34,7 @@ _Open-source, Windows-first desktop workspace for AI-assisted coding._
 - **Agent 编程流程**：执行结构化文件读取与修改、Shell 命令和计划，在关键节点处理权限审批、结构化提问、中断恢复与上下文管理。
 - **代码审阅与 Git**：提供统一或分离 Diff、文件树、行级评论、暂存、取消暂存、还原、提交、推送与 Pull Request 操作。
 - **模型与供应商**：通过 Pi Provider 目录管理 API Key、OAuth、自定义 Endpoint、自定义模型和推理等级。
-- **扩展与工具**：统一管理 Skills、Plugins 与 MCP，并提供内置浏览器、集成终端、Actions 和工作空间依赖。
+- **扩展与工具**：统一管理 Skills、Plugins 与 MCP，并提供内置浏览器、集成终端、Actions 和工作空间依赖。非自带插件从 [Pidex-Plugins 官方仓库](https://github.com/codepilotx-dev/Pidex-Plugins) 获取；展示资料随插件分发，创建与发布步骤见[插件作者指南](https://github.com/codepilotx-dev/Pidex-Plugins#创建插件)。
 - **并行与隔离工作流**：支持子智能体、托管 worktree、任务 Handoff、项目记忆和 Profile 配置。
 
 ## 下载与安装
@@ -53,7 +53,7 @@ pwsh -NoProfile -File scripts/smoke-installed-win-x64.ps1
 
 ## 从源码开发
 
-环境要求：Windows、Git、Bun 1.3.14。
+环境要求：Windows、Git、Bun 1.4.4。
 
 ```powershell
 git clone https://github.com/codepilotx-dev/Pidex.git
@@ -67,6 +67,7 @@ bun run dev:desktop
 
 `bun run dev` 仅显示上述分步启动提示。关闭 Desktop 不会停止开发 Agent；结束终端 A 才会停止它。
 多个 Git worktree 可以分别运行 `bun run dev:desktop`：每个 worktree 自动使用独立的 Renderer 端口、Electron 实例与开发状态目录，但继续共享终端 A 中的 Agent 和用户数据。同一 worktree 重复启动时只聚焦已有实例；Agent 代码以运行 `dev:agent` 的 worktree 为准。
+每个 worktree 首次运行 `bun run dev:desktop` 会自动构建缺失的 CPX-CUA 原生运行时（Rust release，耗时较长）；产物已就绪或想跳过构建时使用 `bun run dev:desktop --no-build`，此时若缺少 `apps/desktop/native/cpx-cua/dist/cpx-cua.exe` 会直接提示先运行 `bun run build:cua`。启动参数只接受 `--no-build`，其他参数会立即报错。
 
 常用验证命令：
 
@@ -79,9 +80,24 @@ bun run build:desktop
 
 `bun run package:win` 用于生成 Windows x64 NSIS 安装包，不属于普通开发流程的必跑命令。参与开发前请阅读[贡献指南](CONTRIBUTING.md)。
 
+单独运行 workspace 或专项检查时，直接使用以下命令：
+
+```powershell
+bun run --cwd apps/desktop/renderer dev
+bun run --cwd apps/desktop/electron dev
+bun run --cwd apps/website dev
+bun run --cwd apps/website build
+bun test scripts/performance/Metrics.test.ts
+bun run test:plan -- --rpc
+# 真实模型验收会联网并产生模型费用
+bun run test:plan -- --live
+```
+
+完整桌面开发仍使用 `dev:agent` 与 `dev:desktop`。MCP 调试命令见 [MCP 对话调试实验室](docs/development/mcp-debug-lab.md)。
+
 ## 架构概览
 
-Pidex 是一个 Windows-first TypeScript monorepo，统一使用 Bun 1.3.14。
+Pidex 是一个 Windows-first TypeScript monorepo，统一使用 Bun 1.4.4。
 
 ```text
 apps/

@@ -17,7 +17,10 @@ import type { OpenPlanInDockRequest } from '../workflow/WorkflowPlanCard.js'
 import { CanonicalThreadView } from '../timeline/CanonicalThreadView.js'
 import type { ThreadTimelineNavigationHandle } from '../timeline/SessionTimelineView.js'
 import { useCanonicalThreadConversation } from '../timeline/UseCanonicalThreadConversation.js'
-import { selectCanonicalConversationAuxiliaryState } from './CanonicalConversationSelectors.js'
+import {
+  selectCanonicalConversationAuxiliaryState,
+  selectCanonicalLatestPlanItemId,
+} from './CanonicalConversationSelectors.js'
 import {
   ConversationItemContext,
   type ConversationItemContextValue,
@@ -118,7 +121,7 @@ export function SideChatThreadPanel({
       data-side-chat-thread-id={tab.threadId}
     >
       <ThreadScrollLayout
-        className="right-dock-side-chat__timeline tw:min-h-0 tw:flex-1"
+        className="right-dock-side-chat__timeline tw:flex tw:min-h-0 tw:flex-1 tw:flex-col"
         footer={
           !creating && !expired ? (
             <ThreadComposerDock ref={surfaceRef}>
@@ -126,6 +129,9 @@ export function SideChatThreadPanel({
                 <InlineApprovalCard
                   onInterrupt={() => desktopClient.interruptSession(tab.threadId)}
                   currentPermissionMode={permissionMode}
+                  taskMode={
+                    conversation.state ? conversation.state.thread.settings.taskMode : 'chat'
+                  }
                   request={auxiliary.pendingPermissions[0]}
                   onDecide={(
                     request,
@@ -153,6 +159,8 @@ export function SideChatThreadPanel({
                   approval={pendingPlanApproval}
                   disabledReason={planApproval.disabledReason}
                   onRespond={planApproval.respond}
+                  onOpenPlan={onOpenPlan}
+                  freshAvailable={planApproval.freshAvailable}
                 />
               ) : (
                 composer
@@ -223,7 +231,9 @@ export function SideChatThreadPanel({
               onOpenSubagent={() => undefined}
               onReload={conversation.reload}
               readThreadPatchDiff={desktopClient.readThreadPatchDiff}
-              rightDockPlanEventId={null}
+              dockedPlanItemId={null}
+              latestPlanItemId={selectCanonicalLatestPlanItemId(conversation.state)}
+              pendingPlanItemId={pendingPlanApproval?.planItemId ?? null}
               scrollRef={scrollRef}
               threadId={tab.threadId}
               turns={conversation.turns}

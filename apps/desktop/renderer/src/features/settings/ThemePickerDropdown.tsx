@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Dropdown as DropdownMenu } from '../../components/ui/floating/Dropdown.js'
 import { Dropdown } from '../../components/ui/Dropdown.js'
 import { PopoverItem } from '../../components/ui/PopoverItem.js'
+import { SidebarRow } from '../../components/ui/SidebarRow.js'
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import { buildPopoverSizingStyle } from '../../components/ui/PopoverSizing.js'
 import { cx } from '../../utils/Cx.js'
@@ -38,7 +39,7 @@ export function ThemeBadge({
     <span
       aria-hidden="true"
       className={cx(
-        'appearance-theme-badge tw:inline-flex tw:size-5 tw:shrink-0 tw:items-center tw:justify-center tw:rounded-full tw:type-label tw:select-none tw:border tw:border-app-border-subtle',
+        'appearance-theme-badge tw:inline-flex tw:size-6 tw:shrink-0 tw:items-center tw:justify-center tw:rounded-full tw:type-caption tw:select-none tw:border tw:border-app-border-subtle',
         className,
       )}
       style={
@@ -89,7 +90,7 @@ export function ThemePickerDropdown({
     <button
       aria-label={t(ariaLabel)}
       className={cx(
-        'settings-dropdown settings-dropdown-trigger appearance-theme-trigger tw:inline-flex tw:min-h-7 tw:w-auto tw:min-w-44 tw:max-w-64 tw:items-center tw:justify-between tw:gap-2 tw:rounded-pill tw:border tw:border-app-border tw:bg-app-control tw:px-2.5 tw:py-0 tw:text-app-text tw:type-control tw:cursor-pointer tw:outline-none tw:transition-[background-color,border-color,color] tw:hover:border-app-border-strong tw:focus-visible:outline-solid tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus',
+        'settings-dropdown settings-dropdown-trigger appearance-theme-trigger tw:inline-flex tw:h-7 tw:min-h-7 tw:w-auto tw:min-w-44 tw:max-w-64 tw:items-center tw:justify-between tw:gap-2 tw:rounded-pill tw:border tw:border-app-border tw:bg-app-control tw:px-2.5 tw:py-0 tw:text-app-text tw:type-control tw:cursor-pointer tw:outline-none tw:transition-[background-color,border-color,color] tw:hover:border-app-border-strong tw:focus-visible:outline-solid tw:focus-visible:outline-2 tw:focus-visible:outline-offset-1 tw:focus-visible:outline-app-focus',
         triggerClassName,
       )}
       data-theme-component="dropdown-trigger"
@@ -104,7 +105,7 @@ export function ThemePickerDropdown({
       </span>
       <ChevronDown
         className="tw:text-app-text-soft tw:shrink-0"
-        size={APP_ICON_SIZES.sm}
+        size="var(--inline-icon-size, 1em)"
         strokeWidth={APP_ICON_STROKE_WIDTH}
       />
     </button>
@@ -117,7 +118,8 @@ export function ThemePickerDropdown({
       collisionPadding={6}
       side="bottom"
       sideOffset={4}
-      size="sm"
+      size="auto"
+      className="tw:min-w-40"
       trigger={triggerButton}
     >
       {/* 1. 顶层项：Pidex */}
@@ -132,24 +134,27 @@ export function ThemePickerDropdown({
 
       {/* 2. 二级子菜单：Codex 主题 */}
       <DropdownMenu.Sub>
-        <DropdownMenu.SubTrigger
-          className="popover-item popover-sub-trigger tw:w-full tw:min-w-0 tw:items-center tw:text-left"
-          tabIndex={-1}
-        >
-          <span className="popover-item-leading">
+        <SidebarRow
+          asChild
+          active={!isDefault}
+          className={cx('popover-item popover-sub-trigger', !isDefault && 'active')}
+          leading={
             <span className="popover-item-icon">
-              <ThemeBadge />
+              <ThemeBadge seed={!isDefault ? activeSeed : undefined} />
             </span>
-          </span>
-          <span className="popover-item-label">{t('Codex 主题')}</span>
-          <span className="popover-item-trailing">
+          }
+          trailing={
             <ChevronRight
               className="popover-item-arrow"
               size={APP_ICON_SIZES.sm}
               strokeWidth={APP_ICON_STROKE_WIDTH}
             />
-          </span>
-        </DropdownMenu.SubTrigger>
+          }
+        >
+          <DropdownMenu.SubTrigger tabIndex={-1}>
+            <span className="popover-item-label">{t('Codex 主题')}</span>
+          </DropdownMenu.SubTrigger>
+        </SidebarRow>
         <DropdownMenu.Portal>
           <DropdownMenu.SubContent
             aria-label={t('Codex 主题列表')}

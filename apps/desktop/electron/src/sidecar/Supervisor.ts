@@ -6,6 +6,7 @@ import {
 import { randomBytes } from 'node:crypto'
 import { join, resolve } from 'node:path'
 import type { DesktopLogger } from '../logging/DesktopLogger.js'
+import type { BackgroundRuntime } from './BackgroundRuntime.js'
 import { HostProcessTreeKiller, type ProcessTreeKiller } from '../terminal/ProcessTree.js'
 import { normalizeOrigin } from '../security/Navigation.js'
 import {
@@ -43,6 +44,7 @@ const SHUTDOWN_TIMEOUT_MS = 4_000
 const SIGTERM_TIMEOUT_MS = 2_000
 const PROCESS_TREE_TIMEOUT_MS = 2_000
 const WATCHDOG_INTERVAL_MS = 2_000
+const WATCHDOG_PROBE_TIMEOUT_MS = 2_000
 const WATCHDOG_FAILURE_LIMIT = 3
 
 export type AgentConnectionState = 'connected' | 'disconnected' | 'unknown'
@@ -93,6 +95,7 @@ interface OwnedSidecarProcess {
 type FetchLike = (input: string, init?: RequestInit) => Promise<Response>
 
 export interface SidecarSupervisorDependencies {
+  backgroundRuntime?: BackgroundRuntime
   appRuntime: SidecarAppRuntime
   spawnProcess?: (
     executable: string,
@@ -135,6 +138,7 @@ export interface SidecarSupervisorDependencies {
 }
 
 export class SidecarSupervisor {
+  readonly #backgroundRuntime: BackgroundRuntime | undefined
   readonly #token: string
   readonly #logger: DesktopLogger
   readonly #moduleDirectory: string
@@ -174,6 +178,7 @@ export class SidecarSupervisor {
     dataLocation: SidecarDataLocation,
     dependencies: SidecarSupervisorDependencies,
   ) {
+    this.#backgroundRuntime = dependencies.backgroundRuntime
     this.#token = token
     this.#logger = logger
     this.#moduleDirectory = moduleDirectory
@@ -279,6 +284,24 @@ export class SidecarSupervisor {
     return attempt
   }
 
+  async shutdown(): Promise<void> {
+    const connection = this.#connection
+    const onLost = this.#onConnectionLost
+    this.#clearWatchdog()
+    try {
+      if (this.#backgroundRuntime) await this.#backgroundRuntime.shutdown()
+      else if (this.#owned) await this.#disposeCurrentOwned()
+      else throw new Error('外部 Agent 请由服务器管理员显式停止')
+    } catch (error) {
+      if (connection && onLost) this.watch(connection, onLost)
+      throw error
+    }
+  }
+
+  get ownsBackend(): boolean {
+    return Boolean(this.#backgroundRuntime || this.#owned)
+  }
+
   async invalidate(): Promise<void> {
     this.#clearWatchdog()
     this.#connection = undefined
@@ -304,7 +327,7 @@ export class SidecarSupervisor {
         connection.origin,
         this.#fetch,
         this.#token,
-        1_000,
+        WATCHDOG_PROBE_TIMEOUT_MS,
         connection.instanceToken,
       )
         .then(() => {
@@ -316,7 +339,9 @@ export class SidecarSupervisor {
           if (watchdogEpoch !== this.#watchdogEpoch) return
           if (!this.#isConnectionCurrent(connection)) return
           failures += 1
-          this.#logger.warn('sidecar.watchdog-error', {
+          // 单次超时通常是 sidecar 事件循环短暂繁忙，降为 debug；连续失败才告警。
+          const log = failures > 1 ? this.#logger.warn : this.#logger.debug
+          log.call(this.#logger, 'sidecar.watchdog-error', {
             origin: connection.origin,
             failures,
             message: formatError(error),
@@ -439,9 +464,6 @@ export class SidecarSupervisor {
       PIDEX_BUILTIN_PLUGINS_DIR: this.#app.isPackaged
         ? join(this.#app.resourcesPath, 'agent', 'plugins')
         : process.env.PIDEX_BUILTIN_PLUGINS_DIR,
-      PIDEX_BUILTIN_INTEGRATIONS_DIR: this.#app.isPackaged
-        ? join(this.#app.resourcesPath, 'agent', 'integrations')
-        : process.env.PIDEX_BUILTIN_INTEGRATIONS_DIR,
       PIDEX_LEGACY_DATA_DIR: join(this.#app.getPath('userData'), 'agent'),
       PIDEX_LEGACY_APPEARANCE_SETTINGS_PATH: join(
         this.#app.getPath('userData'),
@@ -463,6 +485,15 @@ export class SidecarSupervisor {
         : process.env.PIDEX_STATIC_DIR,
     }
     reportStage('spawn-process')
+    if (this.#backgroundRuntime) {
+      const connection = await this.#backgroundRuntime.connect(command, childEnvironment)
+      return {
+        ...connection,
+        managed: true,
+        port: Number(new URL(connection.origin).port),
+        generation: identity.generation,
+      }
+    }
     const child = this.#spawnProcess(command.executable, command.args, {
       cwd: command.cwd,
       windowsHide: true,

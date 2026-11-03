@@ -1,4 +1,5 @@
 import { describe, expect, test } from 'bun:test'
+import { hasTaskPlanningInvocation } from '../src/features/session/composer/ComposerSkillToken.js'
 import {
   buildDesktopUserMessageContent,
   desktopUserMessageInputToPreviewText,
@@ -24,6 +25,40 @@ function draft(overrides: Partial<ComposerDraft> = {}): ComposerDraft {
     ...overrides,
   }
 }
+
+test('引用任务规划自动提交 Plan，普通插件仍为 Chat，且不同时创建 Goal', () => {
+  const document = {
+    text: '安排下周执行',
+    tokens: [
+      {
+        id: 'planner',
+        kind: 'plugin' as const,
+        label: '任务规划',
+        value: 'plugin://task-planning',
+        from: 0,
+        to: 0,
+      },
+    ],
+  }
+  expect(hasTaskPlanningInvocation(document)).toBe(true)
+  const prepared = prepareComposerSubmission(draft({ document, goalModeEnabled: true }))
+  expect('input' in prepared && prepared.input.taskMode).toBe('plan')
+  expect('goal' in prepared).toBe(false)
+  const skill = prepareComposerSubmission(
+    draft({
+      skills: [
+        { name: 'task-planning', path: 'plugin://task-planning/skills/task-planning/SKILL.md' },
+      ],
+    }),
+  )
+  expect('input' in skill && skill.input.taskMode).toBe('plan')
+  const other = prepareComposerSubmission(
+    draft({
+      document: { ...document, tokens: [{ ...document.tokens[0]!, value: 'plugin://other' }] },
+    }),
+  )
+  expect('input' in other && other.input.taskMode).toBe('chat')
+})
 
 describe('composer submit transaction', () => {
   test('引用保留正文位置与同位置顺序，计划前缀移除不修改源草稿', () => {
@@ -93,6 +128,31 @@ describe('composer submit transaction', () => {
       expect(source.document.text).toBe('/plan 设计权限系统\n保留现有数据')
     },
   )
+  test('仅 /grill 与访谈模式提交 Grill，技能与旧别名不切换模式', () => {
+    const prepared = prepareComposerSubmission(
+      draft({ document: createComposerDocument('/grill 澄清需求'), goalModeEnabled: true }),
+    )
+    expect('input' in prepared && prepared.input).toMatchObject({
+      text: '澄清需求',
+      taskMode: 'grill',
+    })
+    expect('goal' in prepared).toBe(false)
+    const skill = prepareComposerSubmission(
+      draft({
+        skills: [{ name: 'grill-me', path: 'builtin://grill-me/SKILL.md' }],
+        goalModeEnabled: true,
+      }),
+    )
+    expect('input' in skill && skill.input.taskMode).toBe('chat')
+    expect('goal' in skill).toBe(true)
+    const alias = prepareComposerSubmission(
+      draft({ document: createComposerDocument('/grill-me 澄清需求') }),
+    )
+    expect('input' in alias && alias.input.taskMode).toBe('chat')
+    const selected = prepareComposerSubmission(draft({ collaborationMode: 'grill' }))
+    expect('input' in selected && selected.input.taskMode).toBe('grill')
+  })
+
   test('serializes plugin-only references with stable identity and preserves stale drafts', () => {
     const store = new ComposerDraftStore(() => 'plugin-draft')
     store.update('home', (current) => ({
@@ -414,6 +474,19 @@ describe('composer submit transaction', () => {
     expect('input' in prepared && prepared.input.skills?.[0]?.name).toBe('review')
   })
 
+  test('message content preserves authored brackets without appending attachment summaries', () => {
+    const input = {
+      text: '保留 [image.png] 和 [用户原文]',
+      attachments: [
+        { id: 'image', name: 'image.png', kind: 'image' as const, status: 'ready' as const },
+      ],
+      skills: [{ name: 'review', path: 'skills/review' }],
+    }
+    expect(buildDesktopUserMessageContent(input).text).toBe(input.text)
+    expect(buildDesktopUserMessageContent(input).attachments).toHaveLength(1)
+    expect(desktopUserMessageInputToPreviewText(input)).toContain('[image.png]')
+  })
+
   test('serializes visible task and browser references and allows reference-only submission', () => {
     const prepared = prepareComposerSubmission(
       draft({
@@ -560,4 +633,33 @@ describe('composer submit transaction', () => {
       sessionId: 'session-running',
     })
   })
+})
+
+test('三种显式命令优先于草稿模式，保留附件且不重写普通正文中的命令', () => {
+  for (const [command, mode] of [
+    ['goal', 'chat'],
+    ['plan', 'plan'],
+    ['grill', 'grill'],
+  ] as const) {
+    const source = draft({
+      document: createComposerDocument(`/${command} 修复登录`),
+      collaborationMode: 'plan',
+      goalModeEnabled: true,
+    })
+    const prepared = prepareComposerSubmission(source)
+    expect('input' in prepared && prepared.input).toMatchObject({
+      text: '修复登录',
+      taskMode: mode,
+      attachments: [],
+    })
+    expect('goal' in prepared ? prepared.goal?.objective : undefined).toBe(
+      command === 'goal' ? '修复登录' : undefined,
+    )
+    expect(source.document.text).toBe(`/${command} 修复登录`)
+  }
+  const normal = prepareComposerSubmission(
+    draft({ document: createComposerDocument('解释 /goal 修复登录') }),
+  )
+  expect('goal' in normal).toBe(false)
+  expect('input' in normal && normal.input.text).toBe('解释 /goal 修复登录')
 })

@@ -1,25 +1,69 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useMemo, useState, type ReactNode } from 'react'
-import { Link, useLocation } from 'react-router-dom'
-import { ChevronDown, ChevronRight, Plus } from 'lucide-react'
+import { Link, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { Calendar, ChevronDown, ChevronRight, History, Plus } from 'lucide-react'
 import { useSharedAutomationController } from '../../automation/AutomationControllerProvider.js'
 import { formatAutomationTime, runStatusLabel } from '../../automation/AutomationModel.js'
+import { TAB_OPTIONS, type AutomationTab } from '../../automation/AutomationView.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
+import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
 
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { Button } from '../../../components/ui/Button.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
-import { SidebarEmptyRow, SidebarRow } from './SidebarRow.js'
+import { SidebarEmptyRow, SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 
+const TAB_ICONS: Record<AutomationTab, typeof Calendar> = {
+  calendar: Calendar,
+  runs: History,
+}
+
 export function SidebarScheduledPane(): ReactNode {
-  const controller = useSharedAutomationController()
+  const controller = useSharedAutomationController(
+    useShallow((state) => ({
+      setQuery: state.setQuery,
+      runs: state.runs,
+      query: state.query,
+      cancelDraft: state.cancelDraft,
+      filter: state.filter,
+      setFilter: state.setFilter,
+      supported: state.supported,
+      loading: state.loading,
+      error: state.error,
+      refresh: state.refresh,
+      filteredAutomations: state.filteredAutomations,
+      markRunRead: state.markRunRead,
+    })),
+  )
   const location = useLocation()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const { t } = useLocale()
-  const selectedId = new URLSearchParams(location.search).get('automationId')
-  const selectedRunId = new URLSearchParams(location.search).get('automationRunId')
+  const onAutomationsRoute = location.pathname === '/automations'
+  const tab: AutomationTab =
+    onAutomationsRoute && searchParams.get('tab') === 'runs' ? 'runs' : 'calendar'
+  const selectedId = onAutomationsRoute ? searchParams.get('automationId') : null
+  const selectedRunId = onAutomationsRoute ? searchParams.get('automationRunId') : null
+  const hasDetailTarget =
+    Boolean(selectedId) ||
+    Boolean(selectedRunId) ||
+    Boolean(searchParams.get('scheduledTaskId')) ||
+    searchParams.get('automationMode') === 'create' ||
+    searchParams.get('scheduledTaskMode') === 'create'
   const [expanded, setExpanded] = useState<ReadonlySet<string>>(new Set())
   const [runLimits, setRunLimits] = useState<Record<string, number>>({})
+
+  function browse(nextTab: AutomationTab): void {
+    controller.setQuery('')
+    if (nextTab === 'calendar') {
+      navigate('/automations')
+    } else {
+      navigate('/automations?tab=runs')
+    }
+  }
+
   const runsByTask = useMemo(() => {
     const groups = new Map<string, (typeof controller.runs)[number][]>()
     for (const run of controller.runs) {
@@ -33,28 +77,56 @@ export function SidebarScheduledPane(): ReactNode {
 
   return (
     <div className="sidebar-scheduled-pane tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:py-2">
-      <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:px-3">
-        <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('已安排')}</h2>
-        <Link
+      <header className="sidebar-pane-heading tw:flex tw:min-h-9 tw:shrink-0 tw:items-center tw:justify-between tw:gap-2 tw:px-3">
+        <SearchHeading
+          title={<h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{t('已安排')}</h2>}
+          search={
+            <SearchInput
+              variant="outlined"
+              aria-label={t('搜索已安排任务')}
+              placeholder={t('搜索已安排任务')}
+              value={controller.query}
+              onChange={controller.setQuery}
+            />
+          }
+        />
+        <Button
+          asChild
+          isIconOnly
+          color="ghostSecondary"
+          size="toolbar"
           aria-label={t('新建任务')}
           title={t('新建任务')}
-          className="ui-button icon-button"
-          data-color="ghost"
-          data-size="icon"
-          data-uniform="true"
-          onClick={controller.cancelDraft}
-          to="/automations?automationMode=create"
         >
-          <Plus size={APP_ICON_SIZE} />
-        </Link>
+          <Link onClick={controller.cancelDraft} to="/automations?automationMode=create">
+            <Plus aria-hidden size={APP_ICON_SIZE} />
+          </Link>
+        </Button>
       </header>
-      <div className="sidebar-pane-filters tw:flex tw:flex-col tw:gap-2 tw:p-2">
-        <SearchInput
-          aria-label={t('搜索已安排任务')}
-          placeholder={t('搜索已安排任务')}
-          value={controller.query}
-          onChange={controller.setQuery}
-        />
+      <div className="tw:flex tw:flex-col tw:sidebar-row-gap tw:p-2">
+        {TAB_OPTIONS.map((option) => {
+          const Icon = TAB_ICONS[option.value]
+          const active = onAutomationsRoute && tab === option.value && !hasDetailTarget
+          return (
+            <SidebarRow
+              active={active}
+              asChild
+              key={option.value}
+              layout="flex"
+              leading={<Icon aria-hidden size={APP_ICON_SIZE} />}
+            >
+              <button
+                type="button"
+                aria-current={active ? 'page' : undefined}
+                onClick={() => browse(option.value)}
+              >
+                {t(option.label)}
+              </button>
+            </SidebarRow>
+          )
+        })}
+      </div>
+      <div className="sidebar-pane-filters tw:flex tw:flex-col tw:gap-2 tw:px-2 tw:pb-2">
         <SegmentedControl
           ariaLabel={t('任务状态')}
           options={[
@@ -66,7 +138,10 @@ export function SidebarScheduledPane(): ReactNode {
           onChange={controller.setFilter}
         />
       </div>
-      <ScrollArea className="sidebar-scheduled-scroll tw:min-h-0 tw:flex-1 tw:p-2">
+      <ScrollArea
+        className="sidebar-scheduled-scroll tw:min-h-0 tw:flex-1 tw:p-2"
+        contentClassName="tw:flex tw:flex-col tw:sidebar-row-gap"
+      >
         {controller.supported === false ? (
           <SidebarEmptyRow>{t('当前连接不支持已安排任务')}</SidebarEmptyRow>
         ) : controller.loading ? (
@@ -89,7 +164,10 @@ export function SidebarScheduledPane(): ReactNode {
             const runs = runsByTask.get(task.id) ?? []
             const limit = runLimits[task.id] ?? 5
             return (
-              <section key={task.id} className="sidebar-scheduled-task">
+              <section
+                key={task.id}
+                className="sidebar-scheduled-task tw:flex tw:flex-col tw:sidebar-row-gap"
+              >
                 <div className="sidebar-scheduled-task-heading tw:flex tw:min-w-0 tw:items-center">
                   <Button
                     isIconOnly
@@ -129,7 +207,7 @@ export function SidebarScheduledPane(): ReactNode {
                   </SidebarRow>
                 </div>
                 {open ? (
-                  <div className="sidebar-scheduled-runs tw:pl-6">
+                  <div className="sidebar-scheduled-runs tw:flex tw:flex-col tw:sidebar-row-gap tw:pl-6">
                     {runs.length === 0 ? (
                       <SidebarEmptyRow>{t('暂无执行记录')}</SidebarEmptyRow>
                     ) : (

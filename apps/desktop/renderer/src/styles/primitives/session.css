@@ -28,8 +28,17 @@
  * outranking the shared primitives they rewrite.
  */
 @layer primitives {
+  .conversation-page {
+    /* Keep the compatibility transform from nesting @supports inside ::highlight. */
+    --conversation-action-selection-background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-accent) 32%,
+      transparent
+    );
+  }
+
   ::highlight(conversation-action-selection) {
-    background: color-mix(in srgb, var(--cpx-sys-color-accent) 32%, transparent);
+    background: var(--conversation-action-selection-background);
     color: inherit;
   }
 
@@ -201,6 +210,10 @@
     }
   }
 
+  .conversation-turn-preview-card {
+    box-shadow: var(--cpx-comp-dropdown-menu-shadow);
+  }
+
   /* --- Turn preview markdown ---------------------------------------- */
 
   .preview-card-assistant-text .md-body {
@@ -293,8 +306,9 @@
     overflow: hidden;
     border: 1px solid var(--cpx-sys-color-border-subtle);
     border-radius: var(--cpx-sys-radius-full);
-    background: var(--cpx-sys-color-surface-canvas);
-    box-shadow: var(--cpx-sys-shadow-resting);
+    background: var(--cpx-sys-color-surface-raised);
+    box-shadow: var(--cpx-sys-shadow-floating);
+    backdrop-filter: var(--cpx-sys-blur-md);
     color: var(--cpx-sys-color-fg-primary);
     cursor: pointer;
     transition:
@@ -310,16 +324,12 @@
     color: var(--cpx-sys-color-fg-primary);
   }
 
-  .composer-change-summary__return:active {
-    transform: scale(0.95);
-  }
-
   .composer-change-summary__return:focus-visible {
     outline: 2px solid var(--cpx-sys-color-border-focus);
     outline-offset: 2px;
   }
 
-  .composer-change-summary__thinking-dots,
+  .composer-change-summary__ellipsis,
   .composer-change-summary__down-arrow {
     position: absolute;
     transition:
@@ -327,31 +337,36 @@
       transform var(--cpx-sys-motion-enter) var(--cpx-sys-ease-standard);
   }
 
-  .composer-change-summary__thinking-dots {
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--cpx-sys-space-1);
+  .composer-change-summary__ellipsis {
     opacity: 1;
     transform: scale(1);
   }
 
-  .composer-change-summary__thinking-dots span {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--cpx-sys-radius-full);
-    background: currentcolor;
-    animation: composer-change-summary-dot-bounce var(--cpx-sys-motion-loading)
+  .composer-change-summary__ellipsis circle {
+    transform-box: fill-box;
+    transform-origin: center;
+    animation: composer-change-summary-ellipsis-bounce var(--cpx-sys-motion-loading)
       var(--cpx-sys-ease-standard) infinite;
   }
 
-  .composer-change-summary__thinking-dots span:nth-child(2) {
-    animation-delay: 0.2s;
+  .composer-change-summary__ellipsis circle[cx='5'] {
+    animation-delay: 0s;
   }
 
-  .composer-change-summary__thinking-dots span:nth-child(3) {
-    animation-delay: 0.4s;
+  .composer-change-summary__ellipsis circle[cx='12'] {
+    animation-delay: 0.16s;
+  }
+
+  .composer-change-summary__ellipsis circle[cx='19'] {
+    animation-delay: 0.32s;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .composer-change-summary__ellipsis circle {
+      transform: none;
+      opacity: 1;
+      animation: none;
+    }
   }
 
   .composer-change-summary__down-arrow {
@@ -365,7 +380,7 @@
   }
 
   .composer-change-summary__return[data-running='true']:is(:hover, :focus-visible)
-    .composer-change-summary__thinking-dots {
+    .composer-change-summary__ellipsis {
     opacity: 0;
     transform: scale(0.75);
   }
@@ -427,6 +442,20 @@
   .composer-change-summary__file-row:focus-visible {
     outline: 2px solid var(--cpx-sys-color-border-focus);
     outline-offset: 1px;
+  }
+
+  @keyframes composer-change-summary-ellipsis-bounce {
+    0%,
+    80%,
+    100% {
+      transform: translateY(0) scale(0.75);
+      opacity: 0.35;
+    }
+
+    40% {
+      transform: translateY(-2px) scale(1.2);
+      opacity: 1;
+    }
   }
 
   @keyframes composer-change-summary-spin {
@@ -516,6 +545,9 @@
    * `--thread-scroll-padding-bottom`/`-footer-height`/`-viewport-height` as
    * inline styles; the two fade values are read by the bottom sentinel and by
    * the sticky footer's fade pseudo-element in `_canonical-conversation.scss`.
+   *
+   * The gutter is reserved on every host (main thread and side chats) so that
+   * gaining or losing the scrollbar never changes the reading column width.
    */
   .thread-scroll-layout {
     --thread-scroll-footer-fade-height: 32px;
@@ -523,27 +555,19 @@
     --thread-scroll-footer-height: 0px;
     --thread-scroll-padding-bottom: 16px;
     --thread-scroll-viewport-height: 100%;
+
+    scrollbar-gutter: stable;
   }
 
   /* --- Thread summary geometry -------------------------------------- */
 
-  /*
-   * 置顶摘要的共享宽度：内联面板从 `.workflow-page__main` 继承，浮层挂在
-   * Portal 上，必须自己再声明一次。值与迁移前一致（space-1 × 75 = 300px）。
-   */
-  .workflow-page__main,
   .thread-summary-popover {
     --thread-summary-inline-width: calc(var(--cpx-sys-space-1) * 75);
-  }
-
-  .workflow-page__main {
-    --thread-summary-inline-edge: var(--cpx-sys-space-4);
   }
 
   /* --- Quick chat surface geometry ---------------------------------- */
 
   .quick-chat-view {
-    --page-content-max-width: var(--cpx-sys-layout-conversation-max-width);
     --quick-chat-surface-width: min(var(--page-content-max-width), 100%);
     padding-top: var(--cpx-sys-space-4);
   }
@@ -582,7 +606,11 @@
     --new-session-suggestion-tone: var(--cpx-sys-color-accent);
   }
 
-  .thread-scroll-layout::-webkit-scrollbar,
+  /*
+   * The global hide rule must not win over ConversationPage's visible thin
+   * scrollbar; only non-conversation hosts keep the hidden scrollbar.
+   */
+  .quick-chat-view::-webkit-scrollbar,
   .conversation-turn-nav-list::-webkit-scrollbar {
     display: none;
     width: 0;
@@ -649,6 +677,21 @@
     to {
       opacity: 1;
       transform: translateY(0);
+    }
+  }
+
+  .thread-summary-error {
+    border: var(--cpx-comp-surface-edge);
+    border-radius: var(--cpx-sys-radius-container);
+    background: var(--cpx-comp-surface-raised);
+    backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));
+    box-shadow: var(--cpx-sys-shadow-raised);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .thread-summary-error {
+      backdrop-filter: none;
+      background: var(--cpx-comp-surface-floating);
     }
   }
 }

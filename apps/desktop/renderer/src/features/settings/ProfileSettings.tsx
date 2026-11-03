@@ -1,5 +1,6 @@
+import { useStore } from 'zustand/react'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../components/ui/IconTokens.js'
-import React, { useEffect, useMemo, useState, useSyncExternalStore } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import { Popover as Popover } from '../../components/ui/floating/Popover.js'
 import { Edit3, GitFork, Globe, Mail, MapPin, RefreshCw, Star, User } from 'lucide-react'
 import { SettingsContentArea } from './SettingsContentArea.js'
@@ -25,11 +26,8 @@ const STATUS_EMOJI_OPTIONS = [
 
 export function ProfileSettings(): React.ReactNode {
   const navigate = useNavigate()
-  const { auth: githubAuth, overview: githubOverview } = useSyncExternalStore(
-    desktopClient.onGithubAccountChange,
-    desktopClient.getGithubAccountSnapshot,
-    desktopClient.getGithubAccountSnapshot,
-  )
+  const githubAuth = useStore(desktopClient.githubAccountStore, (state) => state.auth)
+  const githubOverview = useStore(desktopClient.githubAccountStore, (state) => state.overview)
   const [githubOverviewError, setGithubOverviewError] = useState<string | null>(null)
   const [statusEditorOpen, setStatusEditorOpen] = useState(false)
   const [statusEmoji, setStatusEmoji] = useState('speech_balloon')
@@ -147,7 +145,7 @@ export function ProfileSettings(): React.ReactNode {
             <ProfileLoadingSkeleton />
           ) : (
             <>
-              <section className="profile-hero tw:mx-auto tw:flex tw:max-w-[732px] tw:flex-col tw:items-center tw:text-center tw:[&>h1]:m-0 tw:[&>h1]:w-full tw:[&>h1]:truncate tw:[&>h1]:px-2 tw:[&>h1]:text-app-text tw:[&>h1]:type-title-xl tw:[&>h1]:tracking-[0.003em]">
+              <section className="profile-hero tw:mx-auto tw:flex tw:max-w-[732px] tw:flex-col tw:items-center tw:text-center tw:[&>h1]:m-0 tw:[&>h1]:w-full tw:[&>h1]:truncate tw:[&>h1]:px-2 tw:[&>h1]:text-app-text tw:[&>h1]:type-page-title">
                 <div className="profile-avatar-wrap tw:relative tw:mx-auto tw:mt-0 tw:mb-4 tw:size-20">
                   <div
                     className="profile-avatar tw:inline-flex tw:size-20 tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-pill tw:bg-app-accent tw:text-app-text tw:text-[length:var(--cpx-sys-font-size-3xl)] tw:[&_img]:block tw:[&_img]:size-full tw:[&_img]:object-cover tw:[&_svg]:size-3.5"
@@ -165,17 +163,15 @@ export function ProfileSettings(): React.ReactNode {
                   </div>
                   {user ? (
                     <Popover.Trigger asChild>
-                      <Button
-                        isIconOnly
-                        className="profile-avatar-badge tw:absolute tw:-right-1.5 tw:-bottom-0.5 tw:w-7.5 tw:inline-flex tw:items-center tw:justify-center tw:rounded-pill tw:border-[3px] tw:border-app-canvas tw:bg-app-raised tw:text-app-text tw:text-[length:var(--cpx-sys-space-5)] tw:cursor-pointer tw:shadow-none tw:focus-visible:outline-solid tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus"
-                        color="ghostSecondary"
+                      <button
+                        className="profile-avatar-badge tw:type-control tw:focus-visible:outline-none tw:focus-visible:ring-2 tw:focus-visible:ring-app-accent tw:focus-visible:ring-offset-2 tw:focus-visible:ring-offset-app-main tw:h-7 tw:min-h-7 tw:p-0 tw:aspect-square tw:shrink-0 tw:whitespace-nowrap tw:select-none tw:transition-[background-color,border-color,color,opacity,transform,box-shadow] tw:duration-150 tw:ease-out tw:[-webkit-app-region:no-drag] tw:absolute tw:-right-1.5 tw:-bottom-0.5 tw:w-7.5 tw:inline-flex tw:items-center tw:justify-center tw:rounded-sm tw:border-[3px] tw:border-transparent tw:bg-transparent tw:text-app-text-soft tw:text-[length:var(--cpx-sys-space-5)] tw:cursor-pointer tw:shadow-none tw:focus-visible:outline-solid tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus"
+                        aria-label={currentStatus?.message ?? '设置状态'}
                         onClick={openStatusEditor}
-                        size="toolbar"
                         title={currentStatus?.message ?? '设置状态'}
                         type="button"
                       >
                         {statusEmojiGlyph(currentStatus?.emoji)}
-                      </Button>
+                      </button>
                     </Popover.Trigger>
                   ) : null}
                 </div>
@@ -209,7 +205,7 @@ export function ProfileSettings(): React.ReactNode {
                   </div>
                 ) : null}
                 {githubOverview ? (
-                  <div className="profile-meta-line tw:mt-3 tw:flex tw:max-w-[640px] tw:flex-wrap tw:justify-center tw:gap-x-4 tw:gap-y-2 tw:text-app-text-soft tw:text-[length:var(--cpx-sys-font-size-xs)] tw:[&>span]:inline-flex tw:[&>span]:min-w-0 tw:[&>span]:items-center tw:[&>span]:gap-1 tw:[&>span]:[overflow-wrap:anywhere] tw:[&_svg]:size-icon-sm">
+                  <div className="profile-meta-line tw:mt-3 tw:flex tw:max-w-[640px] tw:flex-wrap tw:justify-center tw:gap-x-4 tw:gap-y-2 tw:text-app-text-soft tw:text-[length:var(--cpx-sys-font-size-xs)] tw:[&>span]:inline-flex tw:[&>span]:min-w-0 tw:[&>span]:items-center tw:[&>span]:gap-1 tw:[&>span]:[overflow-wrap:anywhere] tw:[&_svg]:size-[var(--inline-icon-size,1em)]">
                     <ProfileMeta
                       icon={<User size={APP_ICON_SIZES.sm} />}
                       value={`${githubOverview.user.followers} followers`}
@@ -463,8 +459,8 @@ function ProfileLoadingSkeleton(): React.ReactNode {
       <section className="profile-loading-stats" aria-hidden="true">
         {Array.from({ length: 5 }, (_, index) => (
           <div key={index}>
-            <SkeletonBlock />
-            <SkeletonBlock />
+            <SkeletonBlock className="tw:h-[18px] tw:w-[42px] tw:rounded-md" />
+            <SkeletonBlock className="tw:h-[14px] tw:w-[62px] tw:rounded-md" />
           </div>
         ))}
       </section>
@@ -472,7 +468,7 @@ function ProfileLoadingSkeleton(): React.ReactNode {
         <SkeletonBlock className="profile-loading-heading tw:h-5 tw:w-23 tw:rounded-md" />
         <div className="profile-loading-contributions tw:grid tw:grid-cols-12 tw:gap-1">
           {Array.from({ length: 84 }, (_, index) => (
-            <SkeletonBlock key={index} />
+            <SkeletonBlock key={index} className="tw:aspect-square tw:w-full tw:rounded-md" />
           ))}
         </div>
       </section>
@@ -482,12 +478,12 @@ function ProfileLoadingSkeleton(): React.ReactNode {
       >
         <div>
           {Array.from({ length: 5 }, (_, index) => (
-            <SkeletonBlock key={index} />
+            <SkeletonBlock key={index} className="tw:h-5 tw:w-full tw:rounded-md" />
           ))}
         </div>
         <div>
           {Array.from({ length: 5 }, (_, index) => (
-            <SkeletonBlock key={index} />
+            <SkeletonBlock key={index} className="tw:h-5 tw:w-full tw:rounded-md" />
           ))}
         </div>
       </section>
@@ -549,7 +545,7 @@ function ProfileRepositoryRow({
       <span className="profile-repository-name tw:min-w-0 tw:flex-1 tw:truncate tw:text-app-text">
         {repository.fullName}
       </span>
-      <span className="profile-repository-count tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-text-soft tw:tabular-nums tw:[&_svg]:size-icon-sm">
+      <span className="profile-repository-count tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-text-soft tw:tabular-nums tw:[&_svg]:size-[var(--inline-icon-size,1em)]">
         <Star size={APP_ICON_SIZE} />
         {repository.stargazerCount.toLocaleString()}
       </span>

@@ -3,6 +3,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { Split, LoaderCircle, X } from 'lucide-react'
 
 import { Button } from '../../../../components/ui/Button.js'
+import { toUserErrorMessage } from '../../../../utils/Errors.js'
 
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../../../components/ui/IconTokens.js'
 import { useDialogFocusRestore } from '../../../../components/ui/UseDialogFocusRestore.js'
@@ -105,13 +106,13 @@ export function ConversationForkDialog({
 
           {awaitingSetup ? (
             <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-2">
-              <Button color="danger" disabled={busy} onClick={onAbandon}>
+              <Button size="md" color="danger" disabled={busy} onClick={onAbandon}>
                 放弃并删除
               </Button>
-              <Button color="secondary" disabled={busy} onClick={onContinueWithoutSetup}>
+              <Button size="md" color="secondary" disabled={busy} onClick={onContinueWithoutSetup}>
                 跳过并继续
               </Button>
-              <Button color="primary" disabled={busy} onClick={onRetrySetup}>
+              <Button size="md" color="primary" disabled={busy} onClick={onRetrySetup}>
                 重新尝试
               </Button>
             </div>
@@ -143,7 +144,7 @@ function DestinationButton({
       <Split
         aria-hidden="true"
         className="tw:shrink-0"
-        size={APP_ICON_SIZE}
+        size="var(--inline-icon-size, 1em)"
         strokeWidth={APP_ICON_STROKE_WIDTH}
       />
       <span className="tw:grid tw:min-w-0 tw:gap-1">
@@ -190,7 +191,7 @@ function ForkProgress({
       ) : null}
       {operation?.status === 'failed' ? (
         <p className="tw:m-0 tw:type-body-sm tw:text-app-text-soft" role="alert">
-          {operation.errorCode ?? '分叉操作失败。'}
+          {toUserErrorMessage(operation.errorCode ?? '分叉操作失败。')}
         </p>
       ) : null}
     </div>

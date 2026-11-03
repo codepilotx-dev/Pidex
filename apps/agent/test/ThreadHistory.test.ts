@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { Effect } from 'effect'
+import { Effect, Schema } from 'effect'
+import { RpcMethods } from '@pidex/agent-protocol'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -221,6 +222,62 @@ describe('Thread 历史', () => {
       { id: turn.inputID, turnId: turn.turnID, role: 'user' },
     ])
     expect(snapshot?.items).toMatchObject([{ id: 'item-1', type: 'text', text: '回答' }])
+  })
+
+  test('压缩节点从持久化记录恢复，分页和快照刷新不丢失或迁移到后续轮次', async () => {
+    const { db, projection } = await makeHistory()
+    const thread = db.createThread('压缩历史')
+    const first = db.createTurn(thread.id, input('第一轮'), 'completed')
+    const second = db.createTurn(thread.id, input('第二轮'), 'completed')
+    db.sqlite.query('UPDATE turns SET created_at = ? WHERE id = ?').run(1_000, first.turnID)
+    db.sqlite.query('UPDATE turns SET created_at = ? WHERE id = ?').run(3_000, second.turnID)
+    for (const [id, turnID, createdAt] of [
+      ['manual-compaction', null, 2_000],
+      ['automatic-compaction', first.turnID, 4_000],
+    ] as const) {
+      db.repositories.context.insertCompaction({
+        id,
+        threadID: thread.id,
+        turnID,
+        createdAt,
+        beforeCount: 10,
+        afterCount: 4,
+        beforeTokens: 100_000,
+        afterTokens: 40_000,
+        targetTokens: 55_000,
+        baselineVersion: 1,
+        usageSampleID: `usage-${id}`,
+        summary: '摘要',
+        reference: {
+          version: 1,
+          kind: 'pi-compaction-reference',
+          sessionID: db.getAgentExecution(first.agentID)!.sessionID,
+          entryID: id,
+          firstKeptEntryID: null,
+          trigger: turnID ? 'automatic' : 'manual',
+          afterTokensSource: 'compaction-estimate',
+        },
+      })
+    }
+    const snapshot = projection.snapshot(thread.id)!
+    expect(snapshot.items).toMatchObject([
+      {
+        id: 'activity:context-compression:manual-compaction',
+        turnId: first.turnID,
+        contextTokens: 40_000,
+      },
+      {
+        id: 'activity:context-compression:automatic-compaction',
+        turnId: first.turnID,
+        contextTokens: 40_000,
+      },
+    ])
+    const latest = projection.historyPage(thread.id, { limit: 1 })!
+    expect(latest.turns[0]?.turn.id).toBe(second.turnID)
+    expect(latest.turns[0]?.items).toHaveLength(0)
+    const older = projection.historyPage(thread.id, { before: latest.olderCursor!, limit: 1 })!
+    expect(older.turns[0]?.items).toEqual(snapshot.items)
+    expect(new ThreadProjection(db).snapshot(thread.id)?.items).toEqual(snapshot.items)
   })
 
   test('按稳定排他游标分页 Turn，并将 queued Turn 与附件独立投影', async () => {
@@ -553,5 +610,265 @@ describe('Thread 历史', () => {
     expect(byId.get(active.id)?.pendingPlanApproval).toBe(false)
     expect(byId.get(superseded.id)?.latestTurnStatus).toBe('completed')
     expect(byId.get(active.id)?.latestTurnStatus).toBe('running')
+  })
+})
+
+describe('历史 task_mode 读取兼容', () => {
+  test('旧模式与未知模式不影响列表编码和分页，读取不改写原值', async () => {
+    const { db, projection, history } = await makeHistory()
+    const modes = ['chat', 'plan', 'legacy-mode', 'future-mode']
+    const ids = modes.map((mode, index) => {
+      const thread = db.createThread(mode)
+      db.sqlite
+        .query('UPDATE threads SET task_mode = ?, archived_at = ?, updated_at = ? WHERE id = ?')
+        .run(mode, index >= 2 ? 100 : null, index + 1, thread.id)
+      return thread.id
+    })
+    for (const archived of [false, true, undefined]) {
+      const seen: string[] = []
+      let cursor: string | undefined
+      do {
+        const page = projection.listPage({
+          ...(archived === undefined ? {} : { archived }),
+          limit: 1,
+          ...(cursor ? { cursor } : {}),
+        })
+        expect(() => Schema.encodeSync(RpcMethods['thread/list'].result)(page)).not.toThrow()
+        for (const thread of page.threads) {
+          const index = ids.indexOf(thread.id)
+          expect(thread.settings.taskMode).toBe(modes[index] === 'plan' ? 'plan' : 'chat')
+          expect(history.getListItem(thread.id)?.settings.taskMode).toBe(thread.settings.taskMode)
+          seen.push(thread.id)
+        }
+        cursor = page.nextCursor ?? undefined
+      } while (cursor)
+      expect(seen).toEqual(
+        [...(archived === undefined ? ids : archived ? ids.slice(2) : ids.slice(0, 2))].reverse(),
+      )
+    }
+    expect(
+      ids.map(
+        (id) =>
+          (
+            db.sqlite.query('SELECT task_mode FROM threads WHERE id = ?').get(id) as {
+              task_mode: string
+            }
+          ).task_mode,
+      ),
+    ).toEqual(modes)
+  })
+
+  test('详情、历史和恢复输入兼容旧模式，权限更新保留原模式，显式模式更新正常保存', async () => {
+    const { db, projection } = await makeHistory()
+    const thread = db.createThread('旧模式历史')
+    const turn = db.createTurn(thread.id, input('保留这条消息'))
+    db.sqlite.query("UPDATE threads SET task_mode = 'legacy-mode' WHERE id = ?").run(thread.id)
+    db.sqlite
+      .query("UPDATE inputs SET task_mode = 'legacy-mode' WHERE turn_id = ?")
+      .run(turn.turnID)
+    db.sqlite.query("UPDATE turns SET mode = 'legacy-mode' WHERE id = ?").run(turn.turnID)
+    const streamPosition = { streamId: 'fixture', sequence: 0 }
+    const snapshot = projection.snapshot(thread.id)!
+    expect(snapshot.thread.settings.taskMode).toBe('chat')
+    expect(snapshot.inputs[0]?.mode).toBe('chat')
+    expect(snapshot.turns[0]?.mode).toBe('chat')
+    expect(() =>
+      Schema.encodeSync(RpcMethods['thread/read'].result)({ snapshot, streamPosition }),
+    ).not.toThrow()
+    const page = projection.historyPage(thread.id)!
+    expect(() =>
+      Schema.encodeSync(RpcMethods['thread/history/read'].result)({ ...page, streamPosition }),
+    ).not.toThrow()
+    expect(db.getTurnInput(turn.turnID)?.taskMode).toBe('chat')
+    expect(db.getThreadSettings(thread.id)?.taskMode).toBe('chat')
+    expect(db.queuedInput(turn.inputID)?.task_mode).toBe('chat')
+    db.sqlite.query("UPDATE inputs SET status = 'mailbox' WHERE id = ?").run(turn.inputID)
+    expect(db.guideMailbox(turn.turnID)[0]?.taskMode).toBe('chat')
+    db.updateThreadSettings(thread.id, {
+      permissionConfig: { ...input('').permissionConfig, approvalsReviewer: 'user' },
+    })
+    expect(db.sqlite.query('SELECT task_mode FROM threads WHERE id = ?').get(thread.id)).toEqual({
+      task_mode: 'legacy-mode',
+    })
+    expect(
+      db.sqlite.query('SELECT task_mode, content FROM inputs WHERE id = ?').get(turn.inputID),
+    ).toEqual({ task_mode: 'legacy-mode', content: '保留这条消息' })
+    expect(db.sqlite.query('SELECT mode FROM turns WHERE id = ?').get(turn.turnID)).toEqual({
+      mode: 'legacy-mode',
+    })
+    db.updateThreadSettings(thread.id, { taskMode: 'chat' })
+    expect(db.sqlite.query('SELECT task_mode FROM threads WHERE id = ?').get(thread.id)).toEqual({
+      task_mode: 'chat',
+    })
+  })
+
+  test('RPC 写入仍拒绝旧模式和未知模式', () => {
+    expect(() =>
+      Schema.decodeUnknownSync(RpcMethods['thread/settings/update'].params)({
+        threadId: 'fixture',
+        settings: { taskMode: 'chat' },
+        operationId: 'fixture',
+      }),
+    ).not.toThrow()
+    for (const taskMode of ['legacy-mode', 'future-mode']) {
+      expect(() =>
+        Schema.decodeUnknownSync(RpcMethods['thread/settings/update'].params)({
+          threadId: 'fixture',
+          settings: { taskMode },
+          operationId: 'fixture',
+        }),
+      ).toThrow()
+    }
+  })
+})
+
+describe('侧边栏展示轮次与错误投影', () => {
+  test('列表与单条查询输出一致的状态与错误，且遵循展示优先级与安全过滤', async () => {
+    const { db, history, projection } = await makeHistory()
+    const thread = db.createThread('失败测试')
+
+    // 1. 只有排队轮次：状态为 queued，错误为 null
+    const queuedTurn = db.createTurn(thread.id, input('第一条排队中'))
+    let listRow = projection.list().find((item) => item.id === thread.id)!
+    let singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('queued')
+    expect(listRow.latestTurnError).toBeNull()
+    expect(singleRow.latestTurnStatus).toBe('queued')
+    expect(singleRow.latestTurnError).toBeNull()
+
+    // 2. 轮次失败：输出安全错误详情
+    db.finalizeTurn({
+      threadID: thread.id,
+      turnID: queuedTurn.turnID,
+      agentID: queuedTurn.agentID,
+      status: 'failed',
+      message: '模型上下文超限，无法继续生成',
+    })
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('failed')
+    expect(listRow.latestTurnError).toBe('模型上下文超限，无法继续生成')
+    expect(singleRow.latestTurnStatus).toBe('failed')
+    expect(singleRow.latestTurnError).toBe('模型上下文超限，无法继续生成')
+
+    // Snapshot 上的 Turn 也输出一致的安全错误
+    const snapshot = projection.snapshot(thread.id)!
+    expect(snapshot.turns.find((t) => t.id === queuedTurn.turnID)?.error).toBe(
+      '模型上下文超限，无法继续生成',
+    )
+
+    // 3. 失败后追加排队输入（尚未开始执行）：最近非排队失败优先于新排队轮次
+    const nextQueued = db.createTurn(thread.id, input('追问但尚未开始执行'))
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('failed')
+    expect(listRow.latestTurnError).toBe('模型上下文超限，无法继续生成')
+    expect(singleRow.latestTurnStatus).toBe('failed')
+    expect(singleRow.latestTurnError).toBe('模型上下文超限，无法继续生成')
+
+    // 4. 新轮次开始执行（活动轮次）：立即清除失败提示
+    db.updateTurnStatus(nextQueued.turnID, 'running')
+    db.updateAgentStatus(nextQueued.agentID, 'running')
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('running')
+    expect(listRow.latestTurnError).toBeNull()
+    expect(singleRow.latestTurnStatus).toBe('running')
+    expect(singleRow.latestTurnError).toBeNull()
+
+    // 5. 新活动轮次存在时，更较新的排队轮次不会遮住活动轮次
+    db.createTurn(thread.id, input('再次排队'))
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('running')
+    expect(listRow.latestTurnError).toBeNull()
+
+    // 6. 成功完成的轮次不携带错误
+    db.finalizeTurn({
+      threadID: thread.id,
+      turnID: nextQueued.turnID,
+      agentID: nextQueued.agentID,
+      status: 'completed',
+    })
+    // 移除剩余排队使得完成态成为展示轮次
+    db.sqlite.query("DELETE FROM turns WHERE status = 'queued'").run()
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('completed')
+    expect(listRow.latestTurnError).toBeNull()
+
+    // 7. 无法证明安全的错误（如含原始堆栈或密钥）返回 null
+    const unsafeThread = db.createThread('不安全错误测试')
+    const unsafeTurn = db.createTurn(unsafeThread.id, input('触发内部报错'))
+    db.finalizeTurn({
+      threadID: unsafeThread.id,
+      turnID: unsafeTurn.turnID,
+      agentID: unsafeTurn.agentID,
+      status: 'failed',
+      message: 'Internal Error: raw exception at Object.<anonymous> (F:\\secret\\app.ts:1:1)',
+    })
+    const unsafeList = projection.list().find((item) => item.id === unsafeThread.id)!
+    const unsafeSingle = history.getListItem(unsafeThread.id)!
+    expect(unsafeList.latestTurnStatus).toBe('failed')
+    expect(unsafeList.latestTurnError).toBeNull()
+    expect(unsafeSingle.latestTurnStatus).toBe('failed')
+    expect(unsafeSingle.latestTurnError).toBeNull()
+    expect(projection.snapshot(unsafeThread.id)!.turns[0]?.error).toBeNull()
+
+    // 8. 缺根执行或空错误均返回 null
+    const noAgentThread = db.createThread('无根执行测试')
+    const noAgentTurn = db.createTurn(noAgentThread.id, input('测试'))
+    db.sqlite
+      .query("UPDATE turns SET status = 'failed', root_agent_id = 'missing-agent-id' WHERE id = ?")
+      .run(noAgentTurn.turnID)
+    const noAgentList = projection.list().find((item) => item.id === noAgentThread.id)!
+    expect(noAgentList.latestTurnStatus).toBe('failed')
+    expect(noAgentList.latestTurnError).toBeNull()
+
+    // 9. 相同 created_at 的稳定选择（按 id 降序）
+    const tieThread = db.createThread('平局测试')
+    const turnA = db.createTurn(tieThread.id, input('轮次A'))
+    const turnB = db.createTurn(tieThread.id, input('轮次B'))
+    const [smallerTurn, largerTurn] = turnA.turnID < turnB.turnID ? [turnA, turnB] : [turnB, turnA]
+    db.sqlite
+      .query("UPDATE turns SET status = 'completed', created_at = 5000 WHERE id = ?")
+      .run(smallerTurn.turnID)
+    db.sqlite
+      .query("UPDATE turns SET status = 'failed', created_at = 5000 WHERE id = ?")
+      .run(largerTurn.turnID)
+    const tieList = projection.list().find((item) => item.id === tieThread.id)!
+    // largerTurn id 字典序大于 smallerTurn，两者 created_at 相同且非排队，选择 largerTurn
+    expect(tieList.latestTurnStatus).toBe('failed')
+
+    // 10. 中断、取消与停止轮次不暴露错误
+    const interruptedThread = db.createThread('中断测试')
+    const intTurn = db.createTurn(interruptedThread.id, input('被中断'))
+    db.finalizeTurn({
+      threadID: interruptedThread.id,
+      turnID: intTurn.turnID,
+      agentID: intTurn.agentID,
+      status: 'interrupted',
+      message: '用户主动中断任务',
+    })
+    const intList = projection.list().find((item) => item.id === interruptedThread.id)!
+    const intSingle = history.getListItem(interruptedThread.id)!
+    expect(intList.latestTurnStatus).toBe('interrupted')
+    expect(intList.latestTurnError).toBeNull()
+    expect(intSingle.latestTurnStatus).toBe('interrupted')
+    expect(intSingle.latestTurnError).toBeNull()
+
+    // 11. 引号包裹的敏感 Unix 路径被安全过滤为 null
+    const quotedPathThread = db.createThread('引号路径测试')
+    const quotedTurn = db.createTurn(quotedPathThread.id, input('读取凭据'))
+    db.finalizeTurn({
+      threadID: quotedPathThread.id,
+      turnID: quotedTurn.turnID,
+      agentID: quotedTurn.agentID,
+      status: 'failed',
+      message: 'Cannot read file: "/etc/shadow" permission denied',
+    })
+    const quotedList = projection.list().find((item) => item.id === quotedPathThread.id)!
+    expect(quotedList.latestTurnStatus).toBe('failed')
+    expect(quotedList.latestTurnError).toBeNull()
   })
 })

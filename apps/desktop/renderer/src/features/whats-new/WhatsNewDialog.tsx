@@ -78,7 +78,7 @@ export function WhatsNewDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop whats-new-dialog-backdrop tw:overflow-hidden" />
         <Dialog.Content
-          className="ui-dialog-surface ui-dialog-surface--centered whats-new-dialog tw:grid tw:w-[min(1040px,calc(100vw-var(--cpx-sys-space-8)))] tw:h-[min(80vh,760px)] tw:min-h-0 tw:min-w-0 tw:grid-rows-[auto_minmax(0,1fr)] tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-underlay tw:shadow-lg tw:text-app-text"
+          className="ui-dialog-surface ui-dialog-surface--centered whats-new-dialog tw:grid tw:w-[min(1040px,calc(100vw-var(--cpx-sys-space-8)))] tw:h-[min(80vh,760px)] tw:min-h-0 tw:min-w-0 tw:grid-rows-[auto_minmax(0,1fr)] tw:overflow-hidden tw:rounded-xl tw:border-0 tw:bg-app-raised tw:shadow-lg tw:text-app-text"
           onCloseAutoFocus={(event) => {
             if (!restoreFocusElement?.isConnected) return
             event.preventDefault()
@@ -92,7 +92,7 @@ export function WhatsNewDialog({
           <header className="whats-new-dialog-header tw:grid tw:grid-cols-[auto_minmax(0,1fr)_auto] tw:items-start tw:gap-3 tw:border-b tw:border-app-border-subtle tw:px-6 tw:py-5">
             <span
               aria-hidden="true"
-              className="whats-new-heading-icon tw:inline-flex tw:size-9.5 tw:shrink-0 tw:items-center tw:justify-center tw:rounded-lg tw:border tw:border-app-border tw:bg-app-underlay tw:text-app-text tw:[&>svg]:size-icon-lg"
+              className="whats-new-heading-icon tw:inline-flex tw:size-9.5 tw:shrink-0 tw:items-center tw:justify-center tw:rounded-lg tw:border-0 tw:bg-app-panel tw:text-app-text tw:[&>svg]:size-icon-lg"
             >
               <Sparkles size={APP_ICON_SIZE} />
             </span>
@@ -187,6 +187,7 @@ function ReleaseNotesContent({
               当前仅显示随应用提供的版本记录，在线历史版本暂时不可用。
             </p>
             <Button
+              size="md"
               className="whats-new-fallback-action tw:justify-self-start"
               color="primary"
               loading={refreshing}
@@ -293,6 +294,7 @@ function ReleaseDetails({
         {canOpenRelease ? (
           <div className="whats-new-release-actions tw:mt-5 tw:flex tw:justify-end">
             <Button
+              size="md"
               color="secondary"
               onClick={() => {
                 void desktopClient.openExternalURL(release.htmlUrl)
@@ -366,13 +368,13 @@ function ReleaseNotesError({
   return (
     <section
       aria-live="polite"
-      className="whats-new-state tw:m-6 tw:grid tw:justify-items-start tw:gap-2 tw:rounded-lg tw:border tw:border-app-border tw:bg-app-underlay tw:p-7"
+      className="whats-new-state tw:m-6 tw:grid tw:justify-items-start tw:gap-2 tw:rounded-lg tw:border-0 tw:bg-app-panel tw:p-7"
     >
       <strong>{message.title}</strong>
       <p className="tw:m-0 tw:mb-2 tw:max-w-[620px] tw:text-app-text-meta tw:[line-height:var(--cpx-sys-line-height-normal)]">
         {message.description}
       </p>
-      <Button color="secondary" onClick={onRetry}>
+      <Button size="md" color="secondary" onClick={onRetry}>
         <RefreshCw size={APP_ICON_SIZE} />
         重试
       </Button>
@@ -388,7 +390,7 @@ function ReleaseNotesEmpty({
   title: string
 }): React.ReactNode {
   return (
-    <section className="whats-new-state tw:m-6 tw:grid tw:justify-items-start tw:gap-2 tw:rounded-lg tw:border tw:border-app-border tw:bg-app-underlay tw:p-7">
+    <section className="whats-new-state tw:m-6 tw:grid tw:justify-items-start tw:gap-2 tw:rounded-lg tw:border-0 tw:bg-app-panel tw:p-7">
       <strong>{title}</strong>
       <p className="tw:m-0 tw:mb-2 tw:max-w-[620px] tw:text-app-text-meta tw:[line-height:var(--cpx-sys-line-height-normal)]">
         {description}

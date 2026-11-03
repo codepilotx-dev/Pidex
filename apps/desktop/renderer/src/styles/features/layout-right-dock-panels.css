@@ -81,7 +81,7 @@
     align-items: center;
     gap: var(--cpx-sys-space-2);
     padding: 0 var(--cpx-sys-space-2);
-    border-bottom: 1px solid var(--cpx-sys-color-border-subtle);
+    border-bottom: 0;
     background: var(--cpx-sys-color-workbench-panel-bg);
     color: var(--cpx-sys-color-fg-secondary);
   }
@@ -190,9 +190,6 @@
     min-width: 0;
     align-items: center;
     gap: 0;
-  }
-  .file-breadcrumb-toolbar__open-group .icon-button {
-    border: 1px solid var(--cpx-sys-color-border-subtle);
   }
 
   .file-breadcrumb-toolbar__open {
@@ -321,21 +318,5 @@
 
   .desktop-main-route {
     min-width: 0;
-  }
-
-  .file-breadcrumb-toolbar
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    ):hover,
-  .file-breadcrumb-toolbar
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    )[data-state='open'],
-  .file-breadcrumb-toolbar
-    .icon-button[data-color]:where(
-      :enabled:not([aria-disabled='true']):not([aria-pressed='true'])
-    )[data-active] {
-    background: var(--cpx-sys-color-hover);
-    color: var(--cpx-sys-color-fg-primary);
   }
 }

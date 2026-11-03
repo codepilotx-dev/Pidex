@@ -41,9 +41,6 @@ const SETTINGS_PANELS: Record<SettingsTabId, SettingsPanel> = {
   billing: lazy(() =>
     import('./UsageBillingSettings.js').then((m) => ({ default: m.UsageBillingSettings })),
   ),
-  providers: lazy(() =>
-    import('../models/ModelCenterView.js').then((m) => ({ default: m.ProviderSettings })),
-  ),
   plugins: lazy(() =>
     import('./plugins/PluginsSettingsPage.js').then((m) => ({ default: m.PluginsSettingsPage })),
   ),

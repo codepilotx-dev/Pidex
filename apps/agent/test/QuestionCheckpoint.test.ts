@@ -4,12 +4,13 @@ import { RpcMethods, decodeServerRequestResult } from '@pidex/agent-protocol'
 import { ThreadReadViewRepository } from '../src/session/ThreadReadViewRepository'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { QuestionService } from '../src/session/QuestionService'
+import { QuestionService, storedQuestions } from '../src/session/QuestionService'
 import { createLifecycleTools } from '../src/orchestration/pi/PiToolAdapter'
 import { EventHub } from '../src/storage/events/EventHub'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import { Model, Provider } from '@pidex/model-schema'
 import { interactionQuestions, requestUserInputSchema } from '../src/session/QuestionInput'
+import { QUESTION_CHOICES_WRITE_MAX } from '@pidex/shared/thread'
 import { QuestionAutoResolutionScheduler } from '../src/interaction/QuestionAutoResolutionScheduler'
 
 const databases: AgentDatabase[] = []
@@ -50,6 +51,22 @@ describe('问题 checkpoint', () => {
         },
       ])[0]?.choices.map((choice) => choice.recommended),
     ).toEqual([false, true])
+    // 写入侧契约不变：模型仍只能提交 2 至 3 个选项。
+    expect(
+      requestUserInputSchema.safeParse({
+        questions: [
+          {
+            id: 'wide',
+            header: '方向',
+            question: '哪些方向？',
+            options: [1, 2, 3, 4].map((index) => ({
+              label: `选项 ${index}`,
+              description: '说明',
+            })),
+          },
+        ],
+      }).success,
+    ).toBe(false)
     const service = new QuestionService(db, hub)
     const id = await service.checkpoint(thread.id, turn.turnID, turn.agentID, {
       kind: 'clarification',
@@ -180,10 +197,16 @@ describe('问题 checkpoint', () => {
         ],
       })
       const restored = new QuestionService(reopened, hub)
-      expect(JSON.parse(restored.claimResolvedCheckpoint(turn.turnID)!.approval.answer!)).toEqual({
+      const answerForModel = JSON.parse(
+        restored.claimResolvedCheckpoint(turn.turnID)!.approval.answer!,
+      )
+      expect(answerForModel).toMatchObject({
         resolution: 'user',
         answers,
       })
+      expect(answerForModel.answers[0].selectedChoices).toEqual([])
+      if (!skipAll)
+        expect(answerForModel.answers[1].selectedChoices).toEqual([{ id: 'format:1', label: 'B' }])
       restored.dispose()
     },
   )
@@ -224,7 +247,70 @@ describe('问题 checkpoint', () => {
     ).rejects.toThrow()
   })
 
-  test('rich questions 按结构化 answers 恢复，不压平多题答案', async () => {
+  test('request_user_input 接受 5 题 5 选项，并按多选推导 maxAnswers', async () => {
+    const received: unknown[] = []
+    const [tool] = createLifecycleTools(
+      {
+        requestUserInput: async (input) => {
+          received.push(input)
+          return { paused: true }
+        },
+      },
+      { exposedTools: ['request_user_input'] } as never,
+    )
+    const questions = Array.from({ length: 5 }, (_, questionIndex) => ({
+      id: `q${questionIndex}`,
+      header: `题${questionIndex}`,
+      question: `问题 ${questionIndex}`,
+      options: Array.from({ length: QUESTION_CHOICES_WRITE_MAX }, (_, optionIndex) => ({
+        label: `选项 ${optionIndex}`,
+        description: '说明',
+      })),
+      ...(questionIndex === 0 ? { multiSelect: true } : {}),
+    }))
+    await tool!.execute('question-five', { questions } as never, new AbortController().signal)
+    expect(received).toEqual([{ questions }])
+
+    const derived = interactionQuestions(questions)
+    expect(derived[0]?.maxAnswers).toBe(QUESTION_CHOICES_WRITE_MAX + 1)
+    expect(derived[1]?.maxAnswers).toBe(1)
+    expect(interactionQuestions([{ ...questions[0]!, multiSelect: false }])[0]?.maxAnswers).toBe(1)
+
+    await expect(
+      tool!.execute(
+        'question-six',
+        { questions: [...questions, questions[0]] } as never,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow()
+    await expect(
+      tool!.execute(
+        'question-single-option',
+        { questions: [{ ...questions[1]!, options: [questions[1]!.options[0]!] }] } as never,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow()
+    // 写入侧契约不变：超过共享写入上限仍被拒绝。
+    await expect(
+      tool!.execute(
+        'question-over-write-max',
+        {
+          questions: [
+            {
+              ...questions[1]!,
+              options: Array.from({ length: QUESTION_CHOICES_WRITE_MAX + 1 }, (_, index) => ({
+                label: `选项 ${index}`,
+                description: '说明',
+              })),
+            },
+          ],
+        } as never,
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow()
+  })
+
+  test('多选经 RPC 契约校验、持久化与恢复，单选仍拒绝多项', async () => {
     const db = new AgentDatabase(
       join(tmpdir(), `pidex-question-rich-${crypto.randomUUID()}.sqlite`),
     )
@@ -252,6 +338,7 @@ describe('问题 checkpoint', () => {
           id: 'delivery',
           header: '发送方式',
           question: '下一条消息如何处理？',
+          multiSelect: true,
           options: [
             { label: 'Steer', description: '进入当前 Turn' },
             { label: '排队', description: '等待下一 Turn' },
@@ -282,16 +369,38 @@ describe('问题 checkpoint', () => {
     expect(row.tool_call_id).toBe('question-call')
     expect(JSON.parse(row.payload).questions).toHaveLength(2)
 
-    await questions.reply(id, [
-      { questionId: 'delivery', choiceIds: ['delivery:0'] },
+    const answers = [
+      { questionId: 'delivery', choiceIds: ['delivery:0', 'delivery:1'], text: '补充说明' },
       { questionId: 'persist', choiceIds: [], text: '需要持久化' },
-    ])
+    ]
+    const request = Schema.decodeUnknownSync(RpcMethods['interaction/respond'].params)({
+      interactionId: id,
+      expectedVersion: 2,
+      operationId: crypto.randomUUID(),
+      response: { kind: 'question', status: 'answered', resolution: 'user', answers },
+    })
+    if (request.response.kind !== 'question' || request.response.status !== 'answered')
+      throw new Error('expected question answer')
+    await expect(
+      questions.reply(id, [
+        answers[0],
+        { questionId: 'persist', choiceIds: ['persist:0', 'persist:1'] },
+      ]),
+    ).rejects.toMatchObject({ code: 'INVALID_QUESTION_ANSWER' })
+    await questions.reply(id, request.response.answers)
     const checkpoint = questions.claimResolvedCheckpoint(turn.turnID)
     expect(JSON.parse(checkpoint!.approval.answer!)).toEqual({
       resolution: 'user',
       answers: [
-        { questionId: 'delivery', choiceIds: ['delivery:0'] },
-        { questionId: 'persist', choiceIds: [], text: '需要持久化' },
+        {
+          ...answers[0],
+          question: '下一条消息如何处理？',
+          selectedChoices: [
+            { id: 'delivery:0', label: 'Steer' },
+            { id: 'delivery:1', label: '排队' },
+          ],
+        },
+        { ...answers[1], question: '是否持久化？', selectedChoices: [] },
       ],
     })
   })
@@ -429,5 +538,171 @@ describe('问题 checkpoint', () => {
       result: operation.response,
       resolvedAt: expect.any(Number),
     })
+  })
+
+  test('Plan 轮次不产生倒计时也不参与自动作答，空答案不会被当成用户决定', async () => {
+    const db = new AgentDatabase(
+      join(tmpdir(), `pidex-question-plan-auto-${crypto.randomUUID()}.sqlite`),
+    )
+    databases.push(db)
+    const hub = await Effect.runPromise(EventHub.make)
+    const model = Model.Ref.make({
+      providerID: Provider.ID.make('openai'),
+      id: Model.ID.make('test'),
+    })
+    const permissionConfig = {
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'user',
+    } as const
+    const askQuestions = [
+      {
+        id: 'scope',
+        header: '范围',
+        question: '覆盖哪些客户端？',
+        options: [
+          { label: '仅桌面端', description: '集中完成桌面交互' },
+          { label: '桌面端与 CLI', description: '同时设计共享能力' },
+        ],
+      },
+    ]
+    const admission = (taskMode: 'plan' | 'chat') => {
+      const thread = db.createThread()
+      const input = {
+        content: '规划',
+        model,
+        permissionConfig,
+        strategy: 'queue',
+        taskMode,
+      } as const
+      const turn = db.createTurn(thread.id, input)
+      db.startTurnExecution(turn.turnID, { ...input, id: turn.inputID })
+      return { thread, turn }
+    }
+    const service = new QuestionService(db, hub)
+    const track = spyOn(QuestionAutoResolutionScheduler.prototype, 'track')
+    const reply = spyOn(QuestionService.prototype, 'reply')
+
+    // Plan 轮次：即使模型请求了 autoResolutionMs，也不暴露倒计时、不登记定时器。
+    const plan = admission('plan')
+    const planId = await service.checkpoint(plan.thread.id, plan.turn.turnID, plan.turn.agentID, {
+      kind: 'clarification',
+      questions: askQuestions,
+      autoResolutionMs: 60_000,
+      checkpoint: { state: '{"version":2}', interruption: { name: 'request_user_input' } },
+    })
+    expect(
+      db.repositories.interactions.pendingQuestionPayload(planId)?.autoResolutionMs,
+    ).toBeUndefined()
+    expect(track).not.toHaveBeenCalled()
+    const restoreCandidates = db.repositories.interactions.pendingAutoResolutionQuestions()
+    expect(restoreCandidates.map((row) => row.id)).toContain(planId)
+    expect(
+      restoreCandidates.find((row) => row.id === planId)?.payload.autoResolutionMs,
+    ).toBeUndefined()
+
+    // 旧版本写入的 Plan 倒计时即使已经过期，恢复时也不能自动作答。
+    db.sqlite
+      .query(
+        "UPDATE question_requests SET payload = json_set(payload, '$.autoResolutionMs', 60000), created_at = 1 WHERE id = ?",
+      )
+      .run(planId)
+    expect(
+      db.repositories.interactions.pendingAutoResolutionQuestions().map((row) => row.id),
+    ).toContain(planId)
+    service.restoreAutoResolutions()
+    expect(track).not.toHaveBeenCalled()
+    expect(reply).not.toHaveBeenCalled()
+
+    // 空答案没有变成用户决定：问题仍然待答，也没有写入任何 resolution 事件。
+    expect(db.repositories.interactions.isQuestionPending(planId)).toBe(true)
+    expect(
+      db.sqlite
+        .query(
+          "SELECT COUNT(*) AS count FROM events WHERE method = 'interaction/resolved' AND turn_id = ?",
+        )
+        .get(plan.turn.turnID),
+    ).toEqual({ count: 0 })
+
+    // 对照：Chat 轮次保留倒计时并登记定时器，说明豁免只针对 Plan。
+    const chat = admission('chat')
+    const chatId = await service.checkpoint(chat.thread.id, chat.turn.turnID, chat.turn.agentID, {
+      kind: 'clarification',
+      questions: askQuestions,
+      autoResolutionMs: 60_000,
+      checkpoint: { state: '{"version":2}', interruption: { name: 'request_user_input' } },
+    })
+    expect(db.repositories.interactions.pendingQuestionPayload(chatId)?.autoResolutionMs).toBe(
+      60_000,
+    )
+    expect(track).toHaveBeenCalledTimes(1)
+
+    reply.mockRestore()
+    track.mockRestore()
+    service.dispose()
+  })
+
+  /**
+   * 共享 ~/.pidex 时，其它构建可能写入超过本构建写入上限的选项。读取侧必须
+   * 接受并允许作答，否则会出现“卡片可见但永久无法回答”。
+   */
+  test('读取侧接受超出写入上限的选项并允许作答', async () => {
+    const db = new AgentDatabase(join(tmpdir(), `cpx-question-wide-${crypto.randomUUID()}.sqlite`))
+    databases.push(db)
+    const hub = await Effect.runPromise(EventHub.make)
+    const thread = db.createThread()
+    const input = {
+      content: '澄清',
+      model: Model.Ref.make({ providerID: Provider.ID.make('openai'), id: Model.ID.make('test') }),
+      permissionConfig: {
+        sandboxMode: 'workspace-write' as const,
+        approvalPolicy: 'on-request' as const,
+        approvalsReviewer: 'user' as const,
+      },
+      strategy: 'queue' as const,
+      taskMode: 'chat' as const,
+    }
+    const turn = db.createTurn(thread.id, input)
+    db.startTurnExecution(turn.turnID, { ...input, id: turn.inputID })
+    const choices = ['a', 'b', 'c', 'd', 'e'].map((id) => ({
+      id,
+      label: `选项 ${id}`,
+      description: id,
+      recommended: false,
+    }))
+    const questions = [
+      {
+        id: 'optimization_axis',
+        header: '方向',
+        prompt: '主要指哪个方向？',
+        choices,
+        allowFreeform: true,
+        required: true,
+        minAnswers: 1,
+        maxAnswers: 1,
+      },
+    ]
+    // 直接落库，模拟其它构建写入的 payload。
+    const { question } = db.createResumableQuestion({
+      threadID: thread.id,
+      turnID: turn.turnID,
+      agentID: turn.agentID,
+      toolCallID: 'call-wide',
+      payload: { questions, question: questions[0]!.prompt, options: choices.map((c) => c.label) },
+      payloadVersion: 2,
+      checkpoint: { payload: { state: '', interruption: null }, version: 1 },
+    })
+    expect(storedQuestions({ questions })[0]?.choices).toHaveLength(5)
+
+    const service = new QuestionService(db, hub)
+    await service.reply(
+      question.id,
+      { answers: [{ questionId: 'optimization_axis', choiceIds: ['e'] }] },
+      false,
+      'user',
+      false,
+    )
+    expect(db.repositories.interactions.isQuestionPending(question.id)).toBe(false)
+    service.dispose()
   })
 })

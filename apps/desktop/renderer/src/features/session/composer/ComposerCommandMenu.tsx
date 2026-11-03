@@ -1,5 +1,5 @@
 import type React from 'react'
-import { useLayoutEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { VList, type VListHandle } from 'virtua'
 import { cx } from '../../../utils/Cx.js'
 import type { ComposerCommand } from './ComposerSlashCommands.js'
@@ -50,7 +50,7 @@ const MENU_ITEM_DISABLED_CLASS =
   'is-disabled tw:cursor-not-allowed tw:pointer-events-none tw:text-app-text-meta tw:opacity-58'
 const ITEM_LEADING_CLASS = cx(
   'chat-input__dropdown-leading tw:inline-flex tw:size-4 tw:items-center tw:justify-center tw:text-app-text',
-  'tw:[&>svg]:block tw:[&>svg]:size-icon',
+  'tw:[&>svg]:block tw:[&>svg]:size-[var(--inline-icon-size,1em)]',
 )
 const ITEM_COPY_CLASS =
   'chat-input__dropdown-copy tw:flex tw:min-w-0 tw:items-baseline tw:gap-2 tw:overflow-hidden'
@@ -90,6 +90,7 @@ export function ComposerCommandMenu({
 }: Props): React.ReactNode {
   const rootRef = useRef<HTMLDivElement>(null)
   const listRef = useRef<VListHandle>(null)
+  const maskFrameRef = useRef<number | null>(null)
   const [mask, setMask] = useState('none')
   const rows: MenuRow[] = []
   let previousSection: string | undefined
@@ -100,24 +101,32 @@ export function ComposerCommandMenu({
     previousSection = item.section
   }
   const virtual = rows.length > 50
-  function updateMask(): void {
-    const root = rootRef.current
-    const list = listRef.current
-    const offset = virtual ? (list?.scrollOffset ?? 0) : (root?.scrollTop ?? 0)
-    const size = virtual ? (list?.scrollSize ?? 0) : (root?.scrollHeight ?? 0)
-    const viewport = virtual ? (list?.viewportSize ?? 0) : (root?.clientHeight ?? 0)
-    const top = offset > 1
-    const bottom = size - viewport - offset > 1
-    setMask(top && bottom ? 'both' : top ? 'top' : bottom ? 'bottom' : 'none')
-  }
-  useLayoutEffect(() => {
+  const updateMask = useCallback((): void => {
+    if (maskFrameRef.current !== null) return
+    maskFrameRef.current = requestAnimationFrame(() => {
+      maskFrameRef.current = null
+      const root = rootRef.current
+      const list = listRef.current
+      const offset = virtual ? (list?.scrollOffset ?? 0) : (root?.scrollTop ?? 0)
+      const size = virtual ? (list?.scrollSize ?? 0) : (root?.scrollHeight ?? 0)
+      const viewport = virtual ? (list?.viewportSize ?? 0) : (root?.clientHeight ?? 0)
+      const top = offset > 1
+      const bottom = size - viewport - offset > 1
+      setMask(top && bottom ? 'both' : top ? 'top' : bottom ? 'bottom' : 'none')
+    })
+  }, [virtual])
+  useEffect(() => {
     const root = rootRef.current
     if (!root) return
     updateMask()
     const observer = new ResizeObserver(updateMask)
     observer.observe(root)
-    return () => observer.disconnect()
-  }, [items, virtual])
+    return () => {
+      observer.disconnect()
+      if (maskFrameRef.current !== null) cancelAnimationFrame(maskFrameRef.current)
+      maskFrameRef.current = null
+    }
+  }, [items, updateMask])
   useLayoutEffect(() => {
     const index = rows.findIndex((row) => row.key === activeKey)
     if (index < 0) return
@@ -126,6 +135,7 @@ export function ComposerCommandMenu({
       const root = rootRef.current
       const item = document.getElementById(composerMenuItemId(id, activeKey!))
       if (!root || !item) return
+      if (activeKey === items[0]?.key && root.scrollTop === 0) return
       const viewport = root.getBoundingClientRect()
       const row = item.getBoundingClientRect()
       root.scrollTop = composerMenuScrollTop(

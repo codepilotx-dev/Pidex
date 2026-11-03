@@ -1,3 +1,5 @@
+import type { ContextBudget, ContextCompactionOperation } from '@pidex/shared/thread'
+import type { ContextUsageAnchor } from '../../context/ContextBudget'
 import type {
   ImageContent,
   Model,
@@ -240,6 +242,7 @@ export class SessionError extends Error {
 }
 
 export type AgentHarnessErrorCode =
+  | 'nothing_to_compact'
   | 'busy'
   | 'invalid_state'
   | 'invalid_argument'
@@ -248,6 +251,7 @@ export type AgentHarnessErrorCode =
   | 'auth'
   | 'compaction'
   | 'branch_summary'
+  | 'goal_budget'
   | 'unknown'
 
 /** Public AgentHarness failure with a stable top-level classification. */
@@ -639,6 +643,15 @@ export interface AfterProviderResponseEvent {
   headers: Record<string, string>
 }
 
+export interface ProviderTextResetEvent {
+  type: 'provider_text_reset'
+}
+export interface ProviderTextPhaseEvent {
+  type: 'provider_text_phase'
+  contentIndex: number
+  phase: 'commentary' | 'partial_answer' | 'final_answer'
+}
+
 export interface ToolCallEvent {
   type: 'tool_call'
   toolCallId: string
@@ -754,6 +767,8 @@ export type AgentHarnessOwnEvent<
   | BeforeProviderRequestEvent
   | BeforeProviderPayloadEvent
   | AfterProviderResponseEvent
+  | ProviderTextResetEvent
+  | ProviderTextPhaseEvent
   | ToolCallEvent
   | ToolResultEvent
   | SessionBeforeCompactEvent
@@ -792,6 +807,7 @@ export interface BeforeProviderPayloadResult {
 
 export interface ToolCallResult {
   block?: boolean
+  pause?: boolean
   reason?: string
 }
 
@@ -829,6 +845,8 @@ export type AgentHarnessEventResultMap = {
   before_provider_request: BeforeProviderRequestResult | undefined
   before_provider_payload: BeforeProviderPayloadResult | undefined
   after_provider_response: undefined
+  provider_text_reset: undefined
+  provider_text_phase: undefined
   tool_call: ToolCallResult | undefined
   tool_result: ToolResultPatch | undefined
   session_before_compact: SessionBeforeCompactResult | undefined
@@ -966,6 +984,25 @@ interface AgentHarnessOptionsBase<
   systemPrompt?: AgentHarnessSystemPrompt<TContext, TSkill, TPromptTemplate, TTool>
   /** Curated stream/provider request options. Snapshotted at turn start. */
   streamOptions?: AgentHarnessStreamOptions
+  contextCompaction?: {
+    anchor?: ContextUsageAnchor | null | undefined
+    pending(): boolean
+    canCompact(): boolean | Promise<boolean>
+    enabled(): boolean | Promise<boolean>
+    start(
+      trigger: 'manual' | 'automatic' | 'reactive',
+      phase: ContextCompactionOperation['phase'],
+    ): AbortSignal | Promise<AbortSignal>
+    finish(
+      status: ContextCompactionOperation['status'],
+      reason: ContextCompactionOperation['reason'],
+    ): void | Promise<void>
+    onBudget(
+      budget: ContextBudget,
+      anchor?: ContextUsageAnchor | null | undefined,
+    ): void | Promise<void>
+    onFailure(trigger: 'manual' | 'automatic' | 'reactive'): void | Promise<void>
+  }
   /** Optional retry policy for generated compaction and branch-summary requests. */
   retry?: RetryPolicy
   model: Model<any>
@@ -975,6 +1012,37 @@ interface AgentHarnessOptionsBase<
   toolExecution?: ToolExecutionMode
   steeringMode?: QueueMode
   followUpMode?: QueueMode
+  maxContextTokens?: number | null
+  goalBudget?:
+    | {
+        prepareWrapupContext?(
+          context: import('@earendil-works/pi-ai').Context,
+        ): import('@earendil-works/pi-ai').Context | null
+        checkAdmission(
+          estimatedInputTokens: number,
+          estimatedOutputTokens: number,
+          wrapupInputTokens?: number,
+        ):
+          | Promise<{
+              allowed: boolean
+              reason?: 'budget_exhausted' | 'estimated_exceeds_budget'
+              stopSubagent?: boolean
+              /** The request fits the budget only if this turn wraps the goal up. */
+              wrapup?: boolean
+              maxTokens?: number
+              wrapupMessage?: Extract<AgentMessage, { role: 'user' }>
+            }>
+          | {
+              allowed: boolean
+              reason?: 'budget_exhausted' | 'estimated_exceeds_budget'
+              stopSubagent?: boolean
+              /** The request fits the budget only if this turn wraps the goal up. */
+              wrapup?: boolean
+              maxTokens?: number
+              wrapupMessage?: Extract<AgentMessage, { role: 'user' }>
+            }
+      }
+    | undefined
 }
 
 export type AgentHarnessOptions<

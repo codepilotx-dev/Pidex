@@ -25,7 +25,7 @@ import {
   APP_ICON_STROKE_WIDTH,
 } from '../src/components/ui/IconTokens.js'
 import { FileTypeIcon, FolderTypeIcon } from '../src/features/layout/FileTypeIcon.js'
-import { SidebarRow } from '../src/features/layout/sidebar/SidebarRow.js'
+import { SidebarRow } from '../src/components/ui/SidebarRow.js'
 import { PluginIcon } from '../src/features/plugins/PluginIcon.js'
 import { ProviderLogo } from '../src/features/session/composer/ProviderLogos.js'
 
@@ -38,15 +38,19 @@ const sizes: [ButtonSize, number, number][] = [
   ['default', 24, 16],
   ['icon', 28, 16],
   ['iconLarge', 36, 20],
-  ['iconMd', 20, 12],
-  ['iconSm', 16, 12],
+  ['iconMd', 24, 12],
+  ['iconSm', 24, 12],
   ['large', 36, 20],
   ['medium', 32, 16],
   ['tabStripAction', 36, 16],
   ['toolbar', 28, 16],
   ['toolbarLabel', 28, 16],
+  ['xs', 24, 12],
+  ['sm', 28, 12],
+  ['md', 32, 16],
+  ['lg', 36, 20],
 ]
-const expected = (size: number, content: string) =>
+const expected = (size: number | 'em', content: string) =>
   `<div data-expected-icon-size="${size}">${content}</div>`
 const buttons = sizes
   .map(([size, , iconSize]) =>
@@ -54,6 +58,7 @@ const buttons = sizes
       iconSize,
       renderToString(
         h(Button, {
+          isIconOnly: true,
           id: `button-${size}`,
           size,
           children: h(Plus),
@@ -69,8 +74,8 @@ const states =
       h(
         'div',
         null,
-        h(Button, { id: 'disabled', disabled: true, children: h(Plus) }),
-        h(Button, { id: 'loading', loading: true, children: '加载中' }),
+        h(Button, { id: 'disabled', isIconOnly: true, disabled: true, children: h(Plus) }),
+        h(Button, { id: 'loading', isIconOnly: true, loading: true, children: '加载中' }),
       ),
     ),
   ) +
@@ -95,22 +100,22 @@ const overrides = Object.entries(APP_ICON_SIZES)
     ),
   )
   .join('')
-const send = [ArrowUp, Square, Activity]
-  .map((Icon) =>
+const send = [h(ArrowUp), h(Square), h(Spinner, { size: 'medium' })]
+  .map((child) =>
     expected(
-      20,
+      16,
       renderToString(
         h(
           'div',
           { className: 'composer' },
           h(Button, {
             isIconOnly: true,
-            iconSize: 'lg',
+            iconSize: 'md',
             size: 'composer',
             color: 'primary',
             title: '发送',
             className: 'send-button',
-            children: h(Icon),
+            children: child,
           }),
         ),
       ),
@@ -142,18 +147,23 @@ const icon = renderToString(h(Plus, { size: APP_ICON_SIZE }))
 const arrow = renderToString(
   h(ChevronRight, { className: 'popover-item-arrow', size: APP_ICON_SIZES.sm }),
 )
-const compound = expected(
-  16,
-  renderToString(
-    h(Button, {
-      children: [
-        h(Plus, { key: 'leading' }),
-        '菜单',
-        h(ChevronRight, { key: 'trailing', id: 'compound-trailing' }),
-      ],
-    }),
-  ),
-)
+const compound =
+  expected(
+    16,
+    renderToString(
+      h(Button, {
+        children: [h(Plus, { key: 'leading' }), '菜单'],
+      }),
+    ),
+  ) +
+  expected(
+    12,
+    renderToString(
+      h(Button, {
+        children: ['折叠', h(ChevronRight, { key: 'trailing', id: 'compound-trailing' })],
+      }),
+    ),
+  )
 const forward = expected(
   16,
   renderToString(
@@ -205,7 +215,7 @@ const logo = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   const page = await browser.newPage({ viewport: { width: 1200, height: 900 } })
-  await page.setContent(`<html data-reduce-motion="on"><head><style>${css}</style></head><body>
+  await page.setContent(`<html lang="zh-CN" data-reduce-motion="on"><head><style>${css}</style></head><body>
     <section id="buttons">${buttons}${states}${overrides}${send}${compound}${forward}</section>
     <div style="position:relative;height:32px;width:280px"><aside class="desktop-sidebar" style="--sidebar-current-width:280px">${expected(16, `<span class="sidebar-indicator">${sidebarStatus}</span>`)}${expected(16, nav)}${sidebarActions}${expected(20, renderToString(h(Button, { isIconOnly: true, iconSize: 'lg', size: 'toolbar', color: 'ghost', title: '显式尺寸', children: h(Plus) })))}</aside></div>
     <div class="popover-menu popover-menu--grid">
@@ -225,14 +235,16 @@ try {
       .evaluateAll((elements) =>
         elements.map((element) => {
           const { width, height } = element.getBoundingClientRect()
+          const expectedValue = element
+            .closest('[data-expected-icon-size]')
+            ?.getAttribute('data-expected-icon-size')
+          const probe = document.createElement('span')
+          probe.style.cssText = 'display:inline-block;width:1em;height:1em'
+          probe.style.font = getComputedStyle(element).font
+          document.body.append(probe)
           const expectedSize =
-            element.id === 'compound-trailing'
-              ? 12
-              : Number(
-                  element
-                    .closest('[data-expected-icon-size]')
-                    ?.getAttribute('data-expected-icon-size'),
-                )
+            expectedValue === 'em' ? probe.getBoundingClientRect().width : Number(expectedValue)
+          probe.remove()
           return {
             name: `${element.parentElement?.outerHTML.slice(0, 120)} / ${element.tagName}`,
             width,
@@ -243,8 +255,14 @@ try {
       )
     assert.ok(dimensions.length > 20)
     for (const { name, width, height, expectedSize } of dimensions) {
-      assert.equal(width, expectedSize, `${name}: width`)
-      assert.equal(height, expectedSize, `${name}: height`)
+      assert.ok(
+        Math.abs(width - expectedSize) < 0.05,
+        `${name}: width ${width} expected ${expectedSize}`,
+      )
+      assert.ok(
+        Math.abs(height - expectedSize) < 0.05,
+        `${name}: height ${height} expected ${expectedSize}`,
+      )
     }
     const strokes = await page.locator('.lucide').evaluateAll((elements) =>
       elements.map((element) => ({
@@ -329,18 +347,37 @@ try {
   )
   // Load the actual feature entries after initial paint, preserving their production cascade layers.
 
-  await page.locator('#lazy').evaluate((element, source) => {
-    element.innerHTML = `<span class="plugin-catalog-card__icon"><span class="plugin-logo plugin-logo--themed"><img alt="" class="plugin-logo__image plugin-logo__image--light" src="${source}"><img alt="" class="plugin-logo__image plugin-logo__image--dark" src="${source}"></span></span>`
-  }, logo)
+  const logoMarkup = renderToString(
+    h(
+      'span',
+      { style: { display: 'inline-flex', width: 40, height: 40 } },
+      h(PluginIcon, { name: 'plugin', logoSource: logo }),
+    ),
+  )
+  await page.locator('#lazy').evaluate((element, markup) => {
+    element.innerHTML = markup
+  }, logoMarkup)
   for (const theme of ['', 'dark-theme']) {
     await page.locator('html').evaluate((element, theme) => {
       element.className = theme
     }, theme)
-    await checkIcons()
-    assert.equal(
-      await page.locator('.plugin-logo__image--dark').isVisible(),
-      theme === 'dark-theme',
-    )
+    for (const lang of ['zh-CN', 'en-US']) {
+      await page.locator('html').evaluate((element, lang) => {
+        element.setAttribute('lang', lang)
+      }, lang)
+      for (const fontSize of ['11px', '14px', '16px']) {
+        await page.locator('html').evaluate((element, size) => {
+          element.style.setProperty('--cpx-sys-font-size-ui', size)
+          element.style.setProperty('--cpx-sys-font-size-md', size)
+        }, fontSize)
+        for (const font of ['sans-serif', 'Arial', 'MiSans']) {
+          await page.locator('html').evaluate((element, font) => {
+            element.style.setProperty('--cpx-sys-font-family-sans', font)
+          }, font)
+          await checkIcons()
+        }
+      }
+    }
     assert.equal(
       await page
         .locator('.plugin-logo__image:visible')
@@ -349,7 +386,7 @@ try {
     )
   }
   console.log(
-    '12/16/20px icons and 1.6 Lucide stroke verified: button variants/overrides/loading, send states, sidebar navigation, menu leading/trailing, file fallback/lazy wrapper and empty state; artwork stroke, brand/content geometry and click target heights retained.',
+    '12/16/20px icons and 1.6 Lucide stroke verified: button variants/overrides/loading, send states, 1em sidebar navigation, menu leading/trailing, file fallback/lazy wrapper and empty state; artwork stroke, brand/content geometry and click target heights retained.',
   )
 } finally {
   await browser.close()

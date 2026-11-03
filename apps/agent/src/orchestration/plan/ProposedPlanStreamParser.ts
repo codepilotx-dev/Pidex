@@ -29,12 +29,17 @@ export class ProposedPlanStreamParser {
     return chunks
   }
 
-  finish(): { chunks: ProposedPlanChunk[]; text: string; plan: string | null } {
+  flushBoundary(): ProposedPlanChunk[] {
     const chunks: ProposedPlanChunk[] = []
     if (this.buffer) {
       this.consumeLine(this.buffer, chunks)
       this.buffer = ''
     }
+    return chunks
+  }
+
+  finish(): { chunks: ProposedPlanChunk[]; text: string; plan: string | null } {
+    const chunks = this.flushBoundary()
     if (this.mode === 'plan') this.completeCurrentPlan()
     const plan = this.completedPlan?.trim()
     return {

@@ -1,11 +1,14 @@
+import { createStore, type StoreApi } from 'zustand/vanilla'
 import type {
   ComposerDocument,
   ComposerDraft,
   ComposerDraftKey,
+  ComposerLaunchSettings,
   ComposerSkillInvocation,
   ComposerSubmitOutcome,
 } from './ComposerTypes.js'
 import { createComposerDocument } from './ComposerTypes.js'
+import { mergeComposerLaunchSettings } from './ComposerLaunch.js'
 import { skillInvocationsFromComposerDocument } from './ComposerSkillToken.js'
 
 type CreateClientId = () => string
@@ -15,33 +18,62 @@ type ComposerDraftHandoff = {
   replacement: ComposerDraft
 }
 
+type ComposerDraftState = {
+  drafts: Readonly<Record<string, ComposerDraft>>
+  submitOutcomes: Readonly<Record<string, ComposerSubmitOutcome>>
+}
+
+/**
+ * 会话内共享的草稿注册表。状态可订阅；草稿读取保持深拷贝，
+ * 避免调用方直接改写 Store 内对象。
+ */
 export class ComposerDraftStore {
-  readonly #drafts = new Map<ComposerDraftKey, ComposerDraft>()
-  readonly #submitOutcomes = new Map<ComposerDraftKey, ComposerSubmitOutcome>()
-  readonly #listeners = new Set<() => void>()
+  readonly #store: StoreApi<ComposerDraftState>
   readonly #createClientId: CreateClientId
+  /** 仅由 get() 惰性创建、尚未写入的草稿；不参与订阅快照。 */
+  readonly #lazy = new Map<ComposerDraftKey, ComposerDraft>()
 
   constructor(createClientId: CreateClientId = defaultCreateClientId) {
     this.#createClientId = createClientId
+    this.#store = createStore<ComposerDraftState>()(() => ({
+      drafts: {},
+      submitOutcomes: {},
+    }))
+  }
+
+  get store(): StoreApi<ComposerDraftState> {
+    return this.#store
+  }
+
+  subscribe = (listener: () => void): (() => void) => this.#store.subscribe(listener)
+
+  #read(key: ComposerDraftKey): ComposerDraft | undefined {
+    return this.#store.getState().drafts[key] ?? this.#lazy.get(key)
+  }
+
+  #write(key: ComposerDraftKey, draft: ComposerDraft): ComposerDraft {
+    const next = cloneDraft(draft)
+    this.#lazy.delete(key)
+    this.#store.setState((state) => ({ drafts: { ...state.drafts, [key]: next } }))
+    return cloneDraft(next)
   }
 
   get(key: ComposerDraftKey): ComposerDraft {
-    const existing = this.#drafts.get(key)
+    const existing = this.#read(key)
     if (existing) return cloneDraft(existing)
+    // 读取即创建属于初始化而非内容变更：先留在本地，首次写入才进入 Store。
     const created = createEmptyComposerDraft(this.#createClientId())
-    this.#drafts.set(key, created)
+    this.#lazy.set(key, created)
     return cloneDraft(created)
   }
 
   peek(key: ComposerDraftKey): ComposerDraft | undefined {
-    const draft = this.#drafts.get(key)
+    const draft = this.#read(key)
     return draft ? cloneDraft(draft) : undefined
   }
 
   set(key: ComposerDraftKey, draft: ComposerDraft): ComposerDraft {
-    const next = cloneDraft(draft)
-    this.#drafts.set(key, next)
-    return cloneDraft(next)
+    return this.#write(key, draft)
   }
 
   update(key: ComposerDraftKey, update: (draft: ComposerDraft) => ComposerDraft): ComposerDraft {
@@ -52,7 +84,6 @@ export class ComposerDraftStore {
     update: (draft: ComposerDraft) => ComposerDraft,
   ): ComposerDraft {
     const next = this.update(key, update)
-    this.#emit()
     return next
   }
 
@@ -66,7 +97,6 @@ export class ComposerDraftStore {
         tokens: [],
       },
     })
-    this.#emit()
     return next
   }
 
@@ -79,18 +109,19 @@ export class ComposerDraftStore {
       skillInvocation,
       skills: skillInvocation ? [{ ...skillInvocation }] : [],
     }))
-    this.#emit()
     return next
   }
 
   /** Hand a draft to its new session and rotate the source identity atomically. */
   handoff(from: ComposerDraftKey, to: ComposerDraftKey): ComposerDraftHandoff | undefined {
-    const submitted = this.#drafts.get(from)
+    const submitted = this.#read(from)
     if (!submitted) return undefined
     const replacement = createEmptyComposerDraft(this.#createClientId())
-    this.#drafts.set(to, submitted)
-    this.#drafts.set(from, replacement)
-    this.#emit()
+    this.#lazy.delete(from)
+    this.#lazy.delete(to)
+    this.#store.setState((state) => ({
+      drafts: { ...state.drafts, [to]: submitted, [from]: replacement },
+    }))
     return {
       submitted: cloneDraft(submitted),
       replacement: cloneDraft(replacement),
@@ -99,14 +130,80 @@ export class ComposerDraftStore {
 
   clear(key: ComposerDraftKey): ComposerDraft {
     const next = createEmptyComposerDraft(this.#createClientId())
-    this.#drafts.set(key, next)
+    this.#lazy.delete(key)
+    this.#store.setState((state) => ({ drafts: { ...state.drafts, [key]: next } }))
     return cloneDraft(next)
+  }
+
+  /** 删除已交接到真实会话但尚未发送的草稿，不为其生成替代草稿。 */
+  discard(key: ComposerDraftKey): void {
+    this.#lazy.delete(key)
+    this.#store.setState((state) => {
+      if (!(key in state.drafts)) return state
+      const { [key]: _discarded, ...drafts } = state.drafts
+      return { drafts }
+    })
+  }
+
+  /**
+   * 撤销一次尚未发送的交手：把草稿放回来源页，并放弃已经交给目标会话的副本。
+   * 只在尚未进入真实会话时使用，避免覆盖目标页正在使用的草稿。
+   */
+  revertHandoff(
+    from: ComposerDraftKey,
+    to: ComposerDraftKey,
+    submitted: ComposerDraft,
+  ): ComposerDraft {
+    this.#lazy.delete(from)
+    this.#lazy.delete(to)
+    this.#store.setState((state) => {
+      const { [to]: _target, ...drafts } = state.drafts
+      const restored = cloneDraft(submitted)
+      return { drafts: { ...drafts, [from]: restored } }
+    })
+    return cloneDraft(submitted)
   }
 
   setSkills(key: ComposerDraftKey, skills: ComposerSkillInvocation[]): ComposerDraft {
     const next = this.update(key, (current) => ({ ...current, skills, skillInvocation: undefined }))
-    this.#emit()
     return next
+  }
+
+  setLaunchSettings(
+    key: ComposerDraftKey,
+    projectKey: string,
+    settings: ComposerLaunchSettings,
+  ): ComposerDraft {
+    return this.update(key, (current) => mergeComposerLaunchSettings(current, projectKey, settings))
+  }
+
+  /**
+   * 失败重试复用同一 operationId；执行位置、分支或首次消息标题变化时重新分配，
+   * 避免 `thread/create` 把不同请求当成同一个操作。
+   */
+  beginLaunchAttempt(
+    key: ComposerDraftKey,
+    input: { projectKey: string; signature: string; createId?: () => string },
+  ): string {
+    const current = this.get(key)
+    const existing = current.launchAttempt
+    if (
+      existing &&
+      existing.projectKey === input.projectKey &&
+      existing.signature === input.signature
+    ) {
+      return existing.operationId
+    }
+    const operationId = (input.createId ?? defaultCreateClientId)()
+    this.set(key, {
+      ...current,
+      launchAttempt: {
+        projectKey: input.projectKey,
+        signature: input.signature,
+        operationId,
+      },
+    })
+    return operationId
   }
 
   addSkill(key: ComposerDraftKey, skill: ComposerSkillInvocation): ComposerDraft {
@@ -127,7 +224,7 @@ export class ComposerDraftStore {
     consumedClientId: string,
     options: { clearContent: boolean; browserAnnotations?: ComposerDraft['browserAnnotations'] },
   ): ComposerDraft {
-    const current = this.#drafts.get(key)
+    const current = this.#read(key)
     if (!current || current.clientId !== consumedClientId) {
       return current ? cloneDraft(current) : this.get(key)
     }
@@ -142,6 +239,8 @@ export class ComposerDraftStore {
     const next = options.clearContent
       ? createEmptyComposerDraft(nextClientId)
       : { ...current, clientId: nextClientId }
+    // 创建已成功完成，后续发送不应再复用本次创建的 operationId。
+    next.launchAttempt = undefined
     next.browserAnnotations = remaining
     next.browserAnnotationImages = (current.browserAnnotationImages ?? []).filter((image) =>
       remaining.some((annotation) => annotation.screenshotName === image.name),
@@ -152,37 +251,36 @@ export class ComposerDraftStore {
         remaining.some((annotation) => annotation.id === id),
       ),
     )
-    this.#drafts.set(key, next)
-    this.#emit()
+    this.#store.setState((state) => ({ drafts: { ...state.drafts, [key]: next } }))
     return cloneDraft(next)
   }
 
   delete(key: ComposerDraftKey): void {
-    this.#drafts.delete(key)
-    this.clearSubmitOutcome(key)
+    this.#lazy.delete(key)
+    this.#store.setState((state) => {
+      if (!(key in state.drafts) && !(key in state.submitOutcomes)) return state
+      const { [key]: _draft, ...drafts } = state.drafts
+      const { [key]: _outcome, ...submitOutcomes } = state.submitOutcomes
+      return { drafts, submitOutcomes }
+    })
   }
 
   getSubmitOutcome(key: ComposerDraftKey): ComposerSubmitOutcome | null {
-    return this.#submitOutcomes.get(key) ?? null
+    return this.#store.getState().submitOutcomes[key] ?? null
   }
 
   setSubmitOutcome(key: ComposerDraftKey, outcome: ComposerSubmitOutcome): void {
-    this.#submitOutcomes.set(key, outcome)
-    this.#emit()
+    this.#store.setState((state) => ({
+      submitOutcomes: { ...state.submitOutcomes, [key]: outcome },
+    }))
   }
 
   clearSubmitOutcome(key: ComposerDraftKey): void {
-    if (!this.#submitOutcomes.delete(key)) return
-    this.#emit()
-  }
-
-  subscribe(listener: () => void): () => void {
-    this.#listeners.add(listener)
-    return () => this.#listeners.delete(listener)
-  }
-
-  #emit(): void {
-    for (const listener of this.#listeners) listener()
+    if (!(key in this.#store.getState().submitOutcomes)) return
+    this.#store.setState((state) => {
+      const { [key]: _removed, ...submitOutcomes } = state.submitOutcomes
+      return { submitOutcomes }
+    })
   }
 }
 
@@ -229,6 +327,15 @@ export function cloneDraft(draft: ComposerDraft): ComposerDraft {
       : undefined,
     skills: draft.skills?.map((skill) => ({ ...skill })),
     skillInvocation: draft.skillInvocation ? { ...draft.skillInvocation } : undefined,
+    launchSettingsByProject: draft.launchSettingsByProject
+      ? Object.fromEntries(
+          Object.entries(draft.launchSettingsByProject).map(([projectKey, settings]) => [
+            projectKey,
+            { ...settings },
+          ]),
+        )
+      : undefined,
+    launchAttempt: draft.launchAttempt ? { ...draft.launchAttempt } : undefined,
   }
 }
 

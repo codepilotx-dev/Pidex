@@ -30,6 +30,106 @@ import {
 } from '../src/canonical/index'
 
 const model = { providerID: 'openai', id: 'gpt-test' }
+
+test('可视化预览按 revision 收敛，完成与历史结果独立于折叠过程，迟到事件不能恢复脚本预览', () => {
+  const active = turn('visualization-turn')
+  let state = createCanonicalThreadState(
+    page([
+      {
+        turn: active,
+        inputs: [],
+        messages: [],
+        agents: [],
+        items: [],
+        approvals: [],
+        attachments: [],
+        contextReferences: [],
+      },
+    ]),
+  )
+  const preview = {
+    toolCallId: 'ui-stream',
+    turnId: active.id,
+    agentId: active.rootAgentId,
+    revision: 2,
+    title: '计算器',
+    summary: '调整参数',
+    initialHeight: 240,
+    css: '',
+    html: '<p>预览',
+    cssComplete: true,
+  }
+  state = applyThreadEnvelope(state, live('preview-2', 'visualization/preview', preview))
+  state = applyThreadEnvelope(
+    state,
+    live('preview-1', 'visualization/preview', { ...preview, revision: 1 }),
+  )
+  const streamed = state.itemsById.get(preview.toolCallId)
+  if (streamed?.type !== 'tool') throw new Error('Missing preview')
+  expect(streamed.visualizationPreview?.revision).toBe(2)
+  expect(selectRenderTurnEntries(state)[0].contentBlocks[0].kind).toBe('visualization')
+  expect(selectRenderTurnEntries(state)[0].processItems).toHaveLength(1)
+  expect(selectRenderTurnEntries(state)[0].processItems[0]).toMatchObject({
+    input: {},
+    resultBlocks: undefined,
+  })
+  const reconciled = reconcileLatestThreadPage(
+    state,
+    page([{ turn: active, inputs: [], messages: [], agents: [], items: [], approvals: [] }]),
+  )
+  expect(reconciled.itemsById.get(preview.toolCallId)).toMatchObject({
+    visualizationPreview: { revision: 2 },
+  })
+  const final = {
+    ...streamed,
+    state: 'completed' as const,
+    visualizationPreview: undefined,
+    resultBlocks: [
+      {
+        type: 'json' as const,
+        value: {
+          kind: 'pidex.visualization',
+          version: 1,
+          document: {
+            title: '计算器',
+            summary: '调整参数',
+            libraries: [],
+            initialHeight: 240,
+            css: '',
+            html: '<p>完成</p>',
+            jsFunctions: '',
+            jsExpressions: [],
+          },
+          resources: [],
+        },
+      },
+    ],
+  }
+  state = applyThreadEnvelope(state, durable(11, 'tool/callCompleted', { item: final }))
+  state = applyThreadEnvelope(
+    state,
+    live('late-preview', 'visualization/preview', { ...preview, revision: 3 }, 11),
+  )
+  expect(state.itemsById.get(preview.toolCallId)).toMatchObject({ state: 'completed' })
+  expect(
+    (state.itemsById.get(preview.toolCallId) as typeof streamed).visualizationPreview,
+  ).toBeUndefined()
+  const history = createCanonicalThreadState(
+    page([
+      {
+        turn: { ...active, status: 'completed' },
+        inputs: [],
+        messages: [],
+        agents: [],
+        items: [final],
+        approvals: [],
+        attachments: [],
+        contextReferences: [],
+      },
+    ]),
+  )
+  expect(selectRenderTurnEntries(history)[0].contentBlocks[0].kind).toBe('visualization')
+})
 const permissionConfig = {
   sandboxMode: 'workspace-write',
   approvalPolicy: 'on-request',
@@ -241,6 +341,72 @@ test('preserves plan approval on snapshot/history hydration and clears it on new
   expect(createCanonicalThreadState(page([])).pendingPlanApproval).toBeNull()
 })
 
+test('queue lifecycle clears both indexes without deleting history or reviving on replay', () => {
+  const queuedTurn = { ...turn('queued'), status: 'queued' as const, startedAt: null }
+  const queuedInput = {
+    ...input(queuedTurn.sourceInputID, queuedTurn.id, 1),
+    state: 'queued' as const,
+  }
+  const initial = createCanonicalThreadState({
+    ...page([]),
+    queue: { version: 1, pauseReason: null, turns: [queuedTurn], inputs: [queuedInput] },
+  })
+  const events = [
+    durable(11, 'turn/started', {
+      turn: { ...queuedTurn, status: 'running' },
+      input: { ...queuedInput, state: 'active' },
+    }),
+    ...(['turn/completed', 'turn/failed', 'turn/interrupted'] as const).map((type) =>
+      durable(11, type, { turn: { ...queuedTurn, status: type.slice(5) as Turn['status'] } }),
+    ),
+    durable(11, 'queue/updated', {
+      threadId: thread.id,
+      action: 'removed',
+      inputId: queuedInput.id,
+      version: 2,
+    }),
+    durable(11, 'queue/updated', {
+      threadId: thread.id,
+      action: 'removed',
+      turnId: queuedTurn.id,
+      version: 2,
+    }),
+  ]
+  for (const event of events) {
+    let state = applyThreadEnvelope(initial, event)
+    expect(state.queue.turnIds).toEqual([])
+    expect(state.queue.inputIds).toEqual([])
+    expect(state.inputsById.has(queuedInput.id)).toBe(true)
+    expect(state.turnsById.has(queuedTurn.id)).toBe(true)
+    if (event.type === 'queue/updated') {
+      expect(state.inputsById.get(queuedInput.id)?.state).toBe('cancelled')
+      expect(state.turnsById.get(queuedTurn.id)?.status).toBe('cancelled')
+      expect(selectVisibleTurnEntries(state)).toEqual([])
+      expect(selectRenderTurnEntries(state)).toEqual([])
+      expect(selectRenderTurnEntries(reconcileLatestThreadPage(state, page([])))).toEqual([])
+      const cancelledPage = {
+        ...page([
+          {
+            turn: { ...queuedTurn, status: 'cancelled' as const },
+            inputs: [queuedInput],
+            messages: [],
+            agents: [],
+            items: [],
+            approvals: [],
+          },
+        ]),
+      }
+      expect(selectRenderTurnEntries(createCanonicalThreadState(cancelledPage))).toEqual([])
+      expect(selectRenderTurnEntries(prependOlderThreadPage(state, cancelledPage))).toEqual([])
+    } else {
+      expect(selectVisibleTurnEntries(state).map((entry) => entry.id)).toEqual([queuedTurn.id])
+    }
+    state = applyThreadEnvelope(state, event)
+    expect(state.queue.turnIds).toEqual([])
+    expect(state.queue.inputIds).toEqual([])
+  }
+})
+
 function turn(id: string, sourceInputID = `input-${id}`): Turn {
   return {
     id,
@@ -426,6 +592,17 @@ describe('canonical thread state', () => {
         answers,
         answer: skip ? '' : 'b',
       })
+      const resumedItems = [
+        resolved.itemsById.get('group')!,
+        textItem('after-answer', activeTurn.id, activeTurn.rootAgentId),
+      ]
+      const resumed = selectRenderTurnEntries(
+        createCanonicalThreadState(page([{ ...bundle, items: resumedItems }])),
+      )[0]!
+      expect(resumed.processItems.map((item) => item.id)).toEqual(['group'])
+      expect(resumed.assistantResultItems.map((item) => item.id)).toEqual(['after-answer'])
+      expect(resumed.postAssistantItems).toEqual([])
+      expect(resumed.contentBlocks.map((block) => block.kind)).toEqual(['process', 'assistant'])
       expect(
         createCanonicalThreadState(
           page([{ ...bundle, items: [resolved.itemsById.get('group')!] }]),
@@ -1220,7 +1397,7 @@ describe('canonical thread state', () => {
     expect(entry?.contentBlocks.map((block) => block.kind)).toEqual(['process', 'assistant'])
   })
 
-  test('projects context compaction after the assistant result with stable turn and agent anchors', () => {
+  test('projects context compaction into the process without changing the final answer or anchors', () => {
     const explicitTurn = turn('turn-compaction-explicit')
     const latestTurn = turn('turn-compaction-latest')
     const explicitRoot = agent('agent-compaction-explicit-root', explicitTurn.id)
@@ -1277,6 +1454,7 @@ describe('canonical thread state', () => {
       agentId: explicitLatestAgent.id,
       type: 'activity',
       activity: 'context-compression',
+      contextTokens: 400,
       status: 'completed',
     })
     const explicitEntry = selectRenderTurnEntries(withExplicitAnchor).find(
@@ -1285,8 +1463,12 @@ describe('canonical thread state', () => {
     expect(explicitEntry?.assistantResultItems.map((item) => item.id)).toEqual([
       'result-compaction-explicit',
     ])
-    expect(explicitEntry?.postAssistantItems.map((item) => item.id)).toEqual([explicitActivityId])
-    expect(explicitEntry?.contentBlocks.map((block) => block.kind)).toEqual(['assistant', 'post'])
+    expect(explicitEntry?.processItems.map((item) => item.id)).toEqual([explicitActivityId])
+    expect(explicitEntry?.postAssistantItems).toEqual([])
+    expect(explicitEntry?.contentBlocks.map((block) => block.kind)).toEqual([
+      'process',
+      'assistant',
+    ])
 
     const withLatestFallback = applyThreadEnvelope(
       withExplicitAnchor,
@@ -1677,5 +1859,288 @@ describe('canonical thread state', () => {
 
     expect(reconciled.turnOrder).toEqual([freshTurn.id])
     expect(reconciled.turnsById.has(cachedTurn.id)).toBe(false)
+  })
+})
+
+test('消息阶段优先选择主任务最终回答，后续活动控制展开且完成恢复默认', () => {
+  const activeTurn = turn('turn-phases')
+  const root = agent(activeTurn.rootAgentId, activeTurn.id)
+  const child = { ...agent('child-phases', activeTurn.id, 'child-run'), parentAgentId: root.id }
+  const commentary = {
+    ...textItem('commentary', activeTurn.id, '检查中'),
+    phase: 'commentary' as const,
+    ordinal: 0,
+  }
+  const first = {
+    ...textItem('first-final', activeTurn.id, '前一个结果'),
+    phase: 'final_answer' as const,
+    ordinal: 1,
+  }
+  const final = {
+    ...textItem('final', activeTurn.id, '最终回答'),
+    phase: 'final_answer' as const,
+    ordinal: 2,
+  }
+  const childFinal = { ...final, id: 'child-final', agentId: child.id, ordinal: 3 }
+  const tool: Extract<Item, { type: 'tool' }> = {
+    id: 'after-final',
+    messageID: 'tool-message',
+    turnId: activeTurn.id,
+    agentId: root.id,
+    type: 'tool',
+    callID: 'call',
+    tool: 'Read',
+    title: 'Read',
+    state: 'completed',
+    input: {},
+    command: null,
+    output: 'ok',
+    error: null,
+    startedAt: 1,
+    finishedAt: 2,
+    durationMs: 1,
+    ordinal: 4,
+    createdAt: 30,
+  }
+  const make = (items: Item[], status: Turn['status'] = 'running') =>
+    createCanonicalThreadState(
+      page([
+        {
+          turn: { ...activeTurn, status },
+          inputs: [],
+          messages: [],
+          agents: [root, child],
+          items,
+          approvals: [],
+        },
+      ]),
+    )
+  const state = make([commentary, first, final, childFinal, tool])
+  const [entry] = selectRenderTurnEntries(state)
+  expect(entry!.assistantResultItems.map((item) => item.id)).toEqual(['final'])
+  expect(entry!.processItems.map((item) => item.id)).toEqual([
+    'commentary',
+    'first-final',
+    'child-final',
+    'after-final',
+  ])
+  expect(entry!.forceExpandActivity).toBe(false)
+  expect(
+    selectRenderTurnEntries(state, { type: 'subagent', runId: 'child-run' })[0]!
+      .assistantResultItems[0]!.id,
+  ).toBe('child-final')
+  expect(
+    selectRenderTurnEntries(make([commentary, final, { ...tool, state: 'running' }]))[0]!
+      .forceExpandActivity,
+  ).toBe(true)
+  expect(
+    selectRenderTurnEntries(
+      make([commentary, final, { ...commentary, id: 'new-work', ordinal: 5 }]),
+    )[0]!.forceExpandActivity,
+  ).toBe(true)
+  expect(
+    selectRenderTurnEntries(
+      make([commentary, final, { ...commentary, id: 'new-work', ordinal: 5 }], 'completed'),
+    )[0]!.forceExpandActivity,
+  ).toBe(false)
+  for (const status of ['interrupted', 'failed', 'cancelled', 'stopped'] as const)
+    expect(selectRenderTurnEntries(make([commentary, final], status))[0]!.forceExpandActivity).toBe(
+      true,
+    )
+  expect(selectRenderTurnEntries(make([commentary], 'completed'))[0]!.assistantResultItems).toEqual(
+    [],
+  )
+  const partial = { ...final, id: 'partial', phase: 'partial_answer' as const }
+  expect(selectRenderTurnEntries(make([commentary, partial]))[0]!.assistantResultItems).toEqual([])
+  expect(
+    selectRenderTurnEntries(make([commentary, partial], 'completed'))[0]!.assistantResultItems[0]!
+      .id,
+  ).toBe('partial')
+})
+
+test('流式阶段更新、持久重放和快照得到同一回答且不重复 delta', () => {
+  const activeTurn = turn('turn-phase-replay')
+  const root = agent(activeTurn.rootAgentId, activeTurn.id)
+  const bundle = {
+    turn: activeTurn,
+    inputs: [],
+    messages: [],
+    agents: [root],
+    items: [] as Item[],
+    approvals: [],
+  }
+  const initial = createCanonicalThreadState(page([bundle], 0))
+  const text = { ...textItem('phase-replay', activeTurn.id, ''), placement: 'process' as const }
+  const started = durable(1, 'item/started', { item: text })
+  const delta = live(
+    'phase-delta',
+    'item/agentMessage/delta',
+    { itemId: text.id, turnId: activeTurn.id, agentId: root.id, itemType: 'text', delta: '回答' },
+    1,
+  )
+  const phased = {
+    ...text,
+    phase: 'final_answer' as const,
+    placement: 'result' as const,
+    text: '回答',
+  }
+  const changed = durable(2, 'item/agentMessage/phaseChanged', { item: phased })
+  const completed = { ...phased, status: 'completed' as const }
+  const ended = durable(3, 'item/completed', { item: completed })
+  const realtime = applyThreadEnvelopes(initial, [started, delta, changed])
+  expect(selectRenderTurnEntries(realtime)[0]!.assistantResultItems[0]!.text).toBe('回答')
+  const terminal = applyThreadEnvelopes(realtime, [ended])
+  const replay = applyThreadEnvelopes(initial, [started, changed, ended])
+  const snapshot = createCanonicalThreadState(page([{ ...bundle, items: [completed] }], 3))
+  const result = (state: typeof initial) => selectRenderTurnEntries(state)[0]!.assistantResultItems
+  expect(result(terminal)).toEqual(result(replay))
+  expect(result(terminal)).toEqual(result(snapshot))
+})
+
+test('编辑事件移除旧轮，重放和迟到历史页不会恢复失活记录', () => {
+  const old = turn('edit-old')
+  const user = input('edit-input', old.id, 1)
+  const original = page([
+    { turn: old, inputs: [user], messages: [], agents: [], items: [], approvals: [] },
+  ])
+  const cut = durable(11, 'thread/history/edited', { removedTurnIds: [old.id], historyRevision: 1 })
+  let state = applyThreadEnvelope(createCanonicalThreadState(original), cut)
+  expect(selectRenderTurnEntries(state)).toHaveLength(0)
+  state = prependOlderThreadPage(state, original)
+  expect(selectRenderTurnEntries(state)).toHaveLength(0)
+  expect(state.inputsById.has(user.id)).toBe(false)
+  expect(applyThreadEnvelope(state, cut)).toBe(state)
+  const refreshed = reconcileLatestThreadPage(createCanonicalThreadState(original), {
+    ...original,
+    turns: [],
+    historyRevision: 1,
+    streamPosition: { ...original.streamPosition, sequence: 11 },
+  })
+  expect(selectRenderTurnEntries(refreshed)).toHaveLength(0)
+})
+
+test('context budgets and operation state survive replay and snapshot hydration', () => {
+  const base = createCanonicalThreadState(page([]))
+  const budget = {
+    contextWindowTokens: 200000,
+    inputBudgetTokens: 131904,
+    outputReserveTokens: 64000,
+    usedTokens: 50000,
+    triggerTokens: 131904,
+    targetTokens: 110000,
+    source: 'compaction-estimate' as const,
+    sampledAt: 10,
+  }
+  const operation = {
+    operationId: 'compact-operation',
+    threadId: base.thread.id,
+    sessionId: null,
+    agentId: null,
+    trigger: 'manual' as const,
+    phase: 'mid-turn' as const,
+    status: 'queued' as const,
+    compactionId: null,
+    reason: null,
+    createdAt: 9,
+    updatedAt: 10,
+  }
+  const updated = applyThreadEnvelopes(base, [
+    durable(11, 'context/usageUpdated', { budget }),
+    durable(12, 'context/compactionUpdated', { operation }),
+  ])
+  expect(updated.context).toEqual({ budget, operation })
+  const restored = createCanonicalThreadState({ ...page([]), context: updated.context! })
+  expect(restored.context).toEqual(updated.context)
+})
+
+test('手动压缩生命周期在同一个会话节点更新，多次操作保留各自节点', () => {
+  const active = turn('manual-turn')
+  let state = createCanonicalThreadState(
+    page([{ turn: active, inputs: [], messages: [], agents: [], items: [], approvals: [] }]),
+  )
+  const operation = {
+    operationId: 'manual-one',
+    threadId: state.thread.id,
+    sessionId: null,
+    agentId: null,
+    trigger: 'manual' as const,
+    phase: 'settled' as const,
+    status: 'queued' as const,
+    compactionId: null,
+    reason: null,
+    createdAt: 10,
+    updatedAt: 10,
+  }
+  for (const [index, status] of (['queued', 'running', 'failed'] as const).entries()) {
+    state = applyThreadEnvelope(
+      state,
+      durable(index + 11, 'context/compactionUpdated', { operation: { ...operation, status } }),
+    )
+    expect(state.itemsById.size).toBe(1)
+    expect(selectRenderTurnEntries(state)[0].processItems[0]).toMatchObject({
+      id: 'activity:context-compression-operation:manual-one',
+      turnId: active.id,
+      status: status === 'failed' ? 'interrupted' : 'running',
+    })
+  }
+  const second = {
+    ...operation,
+    operationId: 'manual-two',
+    status: 'running' as const,
+    createdAt: 20,
+  }
+  state = applyThreadEnvelope(
+    state,
+    durable(14, 'context/compactionUpdated', { operation: second }),
+  )
+  state = applyThreadEnvelope(
+    state,
+    durable(15, 'context/compacted', {
+      compactionId: 'result-two',
+      trigger: 'manual',
+      beforeCount: 10,
+      afterCount: 2,
+      beforeTokens: 20000,
+      afterTokens: 10000,
+      targetTokens: 16000,
+      baselineVersion: 1,
+      usageSampleId: 'sample',
+    }),
+  )
+  state = applyThreadEnvelope(
+    state,
+    durable(16, 'context/compactionUpdated', {
+      operation: { ...second, status: 'completed', compactionId: 'result-two' },
+    }),
+  )
+  expect(state.itemsById.size).toBe(2)
+  expect(state.itemsById.get('activity:context-compression-operation:manual-two')).toMatchObject({
+    title: '上下文已压缩',
+    status: 'completed',
+    contextTokens: 10000,
+    createdAt: 20,
+  })
+  state = applyThreadEnvelope(
+    state,
+    durable(17, 'context/compactionUpdated', {
+      operation: { ...operation, operationId: 'manual-three', status: 'running', createdAt: 30 },
+    }),
+  )
+  state = applyThreadEnvelope(
+    state,
+    durable(18, 'context/compactionUpdated', {
+      operation: {
+        ...operation,
+        operationId: 'manual-three',
+        status: 'skipped',
+        reason: 'already-compacted',
+        createdAt: 30,
+      },
+    }),
+  )
+  expect(state.itemsById.size).toBe(3)
+  expect(state.itemsById.get('activity:context-compression-operation:manual-three')).toMatchObject({
+    title: '无需压缩上下文',
+    status: 'completed',
   })
 })

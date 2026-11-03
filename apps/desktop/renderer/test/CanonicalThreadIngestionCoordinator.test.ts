@@ -7,7 +7,9 @@ import { CanonicalThreadIngestionCoordinator } from '../src/features/session/tim
 import {
   deliverCanonicalBatch,
   hasTerminalTurnEvent,
+  isCurrentCanonicalThreadRequest,
   isTerminalTurnEnvelope,
+  subscriptionStoppedErrorState,
 } from '../src/features/session/timeline/UseCanonicalThreadConversation.js'
 
 const permissionConfig = {
@@ -435,5 +437,22 @@ describe('complete navigation history', () => {
       }),
     ).toBeNull()
     expect(reads).toBe(0)
+  })
+})
+
+describe('canonical subscription stop', () => {
+  test('订阅停止自动恢复时展示固定错误横幅，旧代次回调不改写新会话状态', () => {
+    const state = subscriptionStoppedErrorState(thread.id)
+    expect(state).toEqual({
+      threadId: thread.id,
+      message: '会话事件流已停止自动恢复，请重新加载会话。',
+    })
+    // 文案固定：不包含任何出错通知的原始内容，换会话也保持一致。
+    expect(subscriptionStoppedErrorState('thread-other').message).toBe(state.message)
+
+    // 订阅回调先经 threadId + generation 双校验，旧代次不会写到新会话的错误横幅上。
+    expect(isCurrentCanonicalThreadRequest(thread.id, 2, thread.id, 2)).toBe(true)
+    expect(isCurrentCanonicalThreadRequest(thread.id, 2, 'thread-other', 1)).toBe(false)
+    expect(isCurrentCanonicalThreadRequest('thread-other', 2, thread.id, 2)).toBe(false)
   })
 })

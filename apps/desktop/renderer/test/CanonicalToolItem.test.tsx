@@ -1,6 +1,7 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import {
+  commandOutputChunks,
   commandOutputFollowing,
   commandOutputScrollTop,
   isCommandOutputAtBottom,
@@ -28,9 +29,16 @@ import {
   ToolExecutionCard,
 } from '../src/features/session/timeline/CanonicalItemRenderer.js'
 import { ResultCardView } from '../src/features/session/timeline/ResultCardView.js'
+import {
+  historicalDeliveryText,
+  subagentResultMarkdown,
+} from '../src/features/session/timeline/StructuredDeliveryText.js'
 import { CodeBlock } from '../src/features/syntax/CodeBlock.js'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
-import { AttachmentFilePill } from '../src/features/session/attachments/AttachmentRowPrimitives.js'
+import {
+  AttachmentFilePill,
+  AttachmentFileRow,
+} from '../src/features/session/attachments/AttachmentRowPrimitives.js'
 import { threadPatchDiffToDesktopFile } from '../src/features/session/timeline/FileMutationDiffContent.js'
 import {
   createThreadPatchDiffLoader,
@@ -93,6 +101,20 @@ function resultCardEnvelope(overrides: { card?: Record<string, unknown> } = {}) 
 }
 
 describe('canonical tool item display', () => {
+  test('chunks long output without changing whitespace or line height estimates', () => {
+    for (const count of [0, 1, 63, 64, 65, 128, 4000]) {
+      for (const suffix of ['', '\n']) {
+        const output =
+          Array.from({ length: count }, (_, i) => `  ${i} 中文\tvalue\r`).join('\n') + suffix
+        const chunks = commandOutputChunks(output)
+        expect(chunks.map((chunk) => chunk.text).join('')).toBe(output)
+        expect(chunks.every((chunk) => chunk.lineCount <= 64)).toBe(true)
+        expect(chunks.reduce((sum, chunk) => sum + chunk.lineCount, 0)).toBe(
+          output === '' ? 0 : output.split('\n').length - (output.endsWith('\n') ? 1 : 0),
+        )
+      }
+    }
+  })
   test('routes command and result details by activity before shell-name fallback', () => {
     expect(toolDetailKind(toolItem())).toBe('command')
     for (const kind of ['generic', 'format', 'test', 'lint', 'skill_script'] as const) {
@@ -193,6 +215,55 @@ describe('canonical tool item display', () => {
     expect(markup).not.toMatch(/class="[^"]*attachment-file-pill__open[^"]*ui-button/)
   })
 
+  test('uses the shared tooltip instead of a native title for local attachment paths', () => {
+    const markup = renderToStaticMarkup(
+      <AttachmentFilePill
+        name="notes.txt"
+        path="C:/workspace/notes.txt"
+        onOpen={() => undefined}
+      />,
+    )
+    expect(markup).toContain('data-state="closed"')
+    expect(markup).not.toContain('title="notes.txt"')
+    expect(markup).toContain('打开 notes.txt')
+  })
+
+  test('shows two files and collapses the rest behind a counted stack', () => {
+    const files = ['one.txt', 'two.txt', 'three.txt', 'four.txt', 'five.txt'].map((name) => (
+      <AttachmentFilePill key={name} name={name} />
+    ))
+    const collapsed = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件">{files}</AttachmentFileRow>,
+    )
+    expect(collapsed).toContain('one.txt')
+    expect(collapsed).toContain('two.txt')
+    expect(collapsed).not.toContain('three.txt')
+    expect(collapsed).toContain('展开其余 3 个文件')
+    expect(collapsed).not.toContain('title="展开其余')
+    const expanded = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件" defaultExpanded>
+        {files}
+      </AttachmentFileRow>,
+    )
+    for (const name of ['one.txt', 'two.txt', 'three.txt', 'four.txt', 'five.txt']) {
+      expect(expanded).toContain(name)
+    }
+    expect(expanded.match(/aria-expanded="true"/g)).toHaveLength(1)
+    expect(expanded).toContain('收起文件列表')
+    const pair = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件">{files.slice(0, 2)}</AttachmentFileRow>,
+    )
+    expect(pair).not.toContain('展开其余')
+    const manyFiles = Array.from({ length: 40 }, (_, index) => (
+      <AttachmentFilePill key={index} name={`file-${index}.txt`} />
+    ))
+    const manyCollapsed = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件">{manyFiles}</AttachmentFileRow>,
+    )
+    expect(manyCollapsed).toContain('展开其余 38 个文件')
+    expect(manyCollapsed.match(/<svg\b/g)).toHaveLength(4)
+  })
+
   test('cleanCommandOutput extracts stdout/stderr and drops process JSON envelope', () => {
     const rawEnvelope = JSON.stringify({
       exitCode: 0,
@@ -241,18 +312,23 @@ describe('canonical tool item display', () => {
     )
     expect(cleanCommandSummary('cd "C:\\Program Files" ; npm test')).toBe('npm test')
     expect(cleanCommandSummary('git status')).toBe('git status')
+    expect(cleanCommandSummary('bun run typecheck 2>&1|grep -E"error TS" Ihead -20')).toBe(
+      'bun run typecheck',
+    )
+    expect(cleanCommandSummary('bun run typecheck 2>&1|tail-20')).toBe('bun run typecheck')
+    expect(cleanCommandSummary('bun test 2>&1 | Select-String "FAIL"')).toBe('bun test')
   })
   test('formats command durations independently from semantic summaries', () => {
     expect(formatToolDuration(250)).toBe('1 秒')
     expect(formatToolDuration(84_000)).toBe('1 分 24 秒')
-    expect(buildToolItemDisplay(toolItem()).expandedLabel).toBe('已运行 bun test · 1 秒')
+    expect(buildToolItemDisplay(toolItem()).expandedLabel).toBe('已在 1 秒内运行 bun test')
     expect(
       buildToolSemanticSummary(
         toolItem({
           activity: undefined,
         }),
       ).collapsedLabel,
-    ).toBe('已运行 bun test · 1 秒')
+    ).toBe('已在 1 秒内运行 bun test')
     expect(
       buildToolSemanticSummary(
         toolItem({
@@ -270,7 +346,7 @@ describe('canonical tool item display', () => {
         }),
         { nowMs: 2_500 },
       ).collapsedLabel,
-    ).toBe('正在运行 bun test · 2 秒')
+    ).toBe('正在运行 bun test（已用时 2 秒）')
   })
 
   test('only allows an active command to expand after output arrives', () => {
@@ -312,8 +388,8 @@ describe('canonical tool item display', () => {
             workspacePath: 'src/ConversationPage.tsx',
           },
         },
-        '正在读取 src/ConversationPage.tsx',
-        '已读取 src/ConversationPage.tsx',
+        '正在查阅 src/ConversationPage.tsx',
+        '已查阅 src/ConversationPage.tsx',
         'read',
       ],
       [
@@ -332,8 +408,8 @@ describe('canonical tool item display', () => {
       ],
       [
         { type: 'read', subject: 'skill', target: { displayLabel: 'reverse-engineer-ui-feature' } },
-        '正在读取 reverse-engineer-ui-feature 技能',
-        '已读取 reverse-engineer-ui-feature 技能',
+        '正在研读 reverse-engineer-ui-feature 技能',
+        '已研读 reverse-engineer-ui-feature 技能',
         'skill',
       ],
       [{ type: 'web_search' }, '正在搜索网页', '已搜索网页', 'web-search'],
@@ -346,13 +422,13 @@ describe('canonical tool item display', () => {
       [
         { type: 'command', kind: 'skill_script', skillName: 'review', scriptName: 'check.py' },
         '正在运行 review 技能中的脚本 check.py',
-        '已运行 review 技能中的脚本 check.py · 1 秒',
+        '已在 1 秒内运行 review 技能中的脚本 check.py',
         'command',
       ],
       [
         { type: 'command', kind: 'current_time' },
         '正在检查当前日期和时间',
-        '已检查当前日期和时间 · 1 秒',
+        '已在 1 秒内完成检查当前日期和时间',
         'current-time',
       ],
     ] as const
@@ -444,7 +520,7 @@ describe('canonical tool item display', () => {
           state: 'interrupted',
         }),
       ).collapsedLabel,
-    ).toBe('已停止执行 bun test · 1 秒')
+    ).toBe('在 1 秒后停止运行 bun test')
     expect(
       buildToolSemanticSummary(
         toolItem({
@@ -459,7 +535,7 @@ describe('canonical tool item display', () => {
           tool: 'Read',
         }),
       ).collapsedLabel,
-    ).toBe('已停止读取 ConversationPage.tsx')
+    ).toBe('已停止查阅 ConversationPage.tsx')
     expect(
       buildToolItemDisplay(
         toolItem({
@@ -674,7 +750,9 @@ describe('canonical tool item display', () => {
       expect(isStandaloneLifecycleTool(completed)).toBe(true)
 
       const runningMarkup = renderToStaticMarkup(<LifecycleToolItemView item={running} />)
-      const completedMarkup = renderToStaticMarkup(<LifecycleToolItemView item={completed} />)
+      const completedMarkup = renderToStaticMarkup(
+        <LifecycleToolItemView item={completed} isSubagent />,
+      )
       const failedMarkup = renderToStaticMarkup(
         <LifecycleToolItemView
           item={toolItem({
@@ -790,6 +868,29 @@ describe('canonical tool item display', () => {
     expect(markup).toContain('<details class="md-code-disclosure">')
     expect(markup).not.toContain('<pre')
     expect(markup).not.toContain('lucide-chevron')
+  })
+
+  test('renders the command viewport with a collapsed two-line limit by default', () => {
+    const command = ['bun -e \'const fs=require("fs")\';', 'second line', 'third line'].join(
+      String.fromCharCode(10),
+    )
+    const item = toolItem({ command })
+    const markup = renderToStaticMarkup(
+      <TooltipProvider>
+        <ToolExecutionCard item={item} view={buildToolItemDisplay(item)} />
+      </TooltipProvider>,
+    )
+
+    expect(markup).toContain('canonical-command-card__command-viewport')
+    // 命令正文与 $ 提示符同处一个滚动视口，收起态不展开。
+    expect(markup).toContain('data-expanded="false"')
+    expect(markup).toContain('aria-label="执行内容"')
+    expect(markup).toContain('third line')
+    // 测试环境没有布局，收起态不渲染实测得出的折叠按钮。
+    expect(markup).not.toContain('canonical-command-card__command-toggle')
+    // 结果区不提供折叠入口。
+    const output = markup.slice(markup.indexOf('aria-label="返回结果"'))
+    expect(output).not.toContain('canonical-command-card__command-toggle')
   })
 
   test('keeps ordinary code blocks on a standalone surface', () => {
@@ -918,19 +1019,21 @@ describe('canonical tool item display', () => {
       </TooltipProvider>,
     )
 
-    expect(collapsed.replace(/<[^>]*>/g, '')).toContain('已运行 bun test · 1 秒')
-    expect(collapsed).toContain('class="cpx-agent-activity__duration"> · 1 秒</span>')
-    expect(collapsed).not.toContain('title="已运行 bun test · 1 秒"')
+    expect(collapsed.replace(/<[^>]*>/g, '')).toContain('已在 1 秒内运行 bun test')
+    expect(collapsed).toContain('class="cpx-agent-activity__duration">1 秒</span>')
+    expect(collapsed).not.toContain('title="已在 1 秒内运行 bun test"')
     expect(collapsed).not.toContain('aria-label="执行内容"')
-    expect(collapsed).toContain('data-mount-policy="until-exit"')
+    expect(collapsed).toContain('ui-collapsible-content')
+    expect(collapsed).toContain('data-state="closed"')
     expect(collapsed).toContain('aria-hidden="true"')
     expect(collapsed).toContain('inert')
     expect(collapsed).not.toContain('canonical-command-shell')
     expect(collapsed).toContain('lucide-chevron-right')
     expect(collapsed).not.toContain('lucide-chevron-down')
-    expect(expanded.replace(/<[^>]*>/g, '')).toContain('已运行 bun test · 1 秒')
-    expect(expanded).not.toContain('title="已运行 bun test · 1 秒"')
+    expect(expanded.replace(/<[^>]*>/g, '')).toContain('已在 1 秒内运行 bun test')
+    expect(expanded).not.toContain('title="已在 1 秒内运行 bun test"')
     expect(expanded).toContain('aria-label="执行内容"')
+    expect(expanded).not.toContain('transition-[grid-template-rows]')
     expect(expanded).toContain('lucide-chevron-right')
     expect(expanded).not.toContain('lucide-chevron-down')
   })
@@ -960,10 +1063,57 @@ describe('canonical tool item display', () => {
     })
 
     const markup = renderToStaticMarkup(<FileMutationItemView item={item} />)
-    expect(markup).toContain('已编辑 src/a.ts')
-    expect(markup).toContain('已创建 src/b.ts')
+    expect(markup).toContain('已编辑 a.ts')
+    expect(markup).toContain('已创建 b.ts')
     expect(markup).toContain('+2')
     expect(markup).not.toContain('+0</small><small')
+  })
+
+  test('shows only the file name and keeps the absolute path in the hover title', () => {
+    const renderInWorkspace = (item: ToolItem) =>
+      renderToStaticMarkup(
+        <ConversationItemContext.Provider
+          value={{
+            canCopyFileReferenceContents: () => false,
+            onCopyFileReferenceContents: () => undefined,
+            onOpenFileReference: () => undefined,
+            onSubmitEditedUserMessage: async () => undefined,
+            sessionStatus: 'idle',
+            workspacePath: 'C:\\workspace',
+          }}
+        >
+          <FileMutationItemView item={item} />
+        </ConversationItemContext.Provider>,
+      )
+
+    const relative = renderInWorkspace(
+      toolItem({
+        command: null,
+        input: { file_path: 'src/features/a.ts' },
+        output: null,
+        tool: 'Edit',
+      }),
+    )
+    expect(relative).toContain('已编辑 a.ts')
+    expect(relative).not.toContain('已编辑 src/features/a.ts')
+    expect(relative).toContain('title="C:/workspace/src/features/a.ts"')
+
+    const absolute = renderInWorkspace(
+      toolItem({
+        command: null,
+        input: { file_path: 'C:\\outside\\probe.mjs' },
+        output: null,
+        tool: 'Write',
+      }),
+    )
+    expect(absolute).toContain('已编辑 probe.mjs')
+    expect(absolute).toContain('title="C:/outside/probe.mjs"')
+
+    const unknown = renderInWorkspace(
+      toolItem({ command: null, input: {}, output: null, tool: 'Edit' }),
+    )
+    expect(unknown).toContain('已编辑 文件')
+    expect(unknown).not.toContain('title=')
   })
 
   test('only exposes completed file mutations backed by diff evidence', () => {
@@ -1363,7 +1513,7 @@ describe('canonical tool item display', () => {
     }
   })
 
-  test('reuses the same card under the finalize_result lifecycle row', () => {
+  test('renders historical main delivery as text and keeps child submission compact', () => {
     const item = toolItem({
       command: null,
       input: {},
@@ -1377,11 +1527,90 @@ describe('canonical tool item display', () => {
       </TooltipProvider>,
     )
 
-    expect(markup).toContain('canonical-lifecycle-entry')
-    expect(markup).toContain('已提交子代理结果')
-    expect(markup).toContain('canonical-result-card')
+    expect(markup).toContain('canonical-text-item--result')
+    expect(markup).not.toContain('已提交子代理结果')
+    expect(markup).not.toContain('canonical-result-card')
     expect(markup).toContain('回归通过并修复了参数校验')
+    expect(markup).toContain('空参数不再通过')
+    expect(markup).toContain('https://example.com/report')
     expect(markup).not.toContain('canonical-tool-result-block--json')
+    const childMarkup = renderToStaticMarkup(<LifecycleToolItemView item={item} isSubagent />)
+    expect(childMarkup).toContain('已提交子代理结果')
+    expect(childMarkup).not.toContain('回归通过并修复了参数校验')
+    expect(childMarkup).not.toContain('canonical-result-card')
+    for (const state of ['running', 'error', 'interrupted'] as const) {
+      const statusMarkup = renderToStaticMarkup(<LifecycleToolItemView item={{ ...item, state }} />)
+      expect(statusMarkup).toContain(`data-state="${state}"`)
+      expect(statusMarkup).not.toContain('canonical-result-card')
+    }
+  })
+
+  test('keeps every result field and unknown historical payload without rewriting data', () => {
+    const result = {
+      outcome: 'partial' as const,
+      summary: '仍有未决问题',
+      findings: [{ title: '发现', detail: '结论证据', severity: 'warning' as const }],
+      changedFiles: [{ path: 'src/tool.ts', summary: '修复边界' }],
+      validation: [{ command: 'bun test', status: 'failed' as const, output: '失败详情' }],
+      risks: ['需进一步确认'],
+      references: [{ kind: 'file' as const, value: 'src/tool.ts', label: '实现' }],
+    }
+    const item = toolItem({
+      tool: 'finalize_result',
+      resultBlocks: [{ type: 'json', value: result }],
+    })
+    const before = JSON.stringify(item)
+    const text = historicalDeliveryText(item, 'C:\\workspace')!
+    expect(text).toBe(subagentResultMarkdown(result, 'C:\\workspace'))
+    for (const value of [
+      '部分完成',
+      '结论证据',
+      '修复边界',
+      'bun test（失败）',
+      '失败详情',
+      '需进一步确认',
+      '[实现](<src/tool.ts>)',
+    ]) {
+      expect(text).toContain(value)
+    }
+    expect(JSON.stringify(item)).toBe(before)
+    const mirrored = historicalDeliveryText(
+      {
+        ...item,
+        input: { ...result, summary: '未经脱敏的输入内容' },
+        output: '已提交结构化结果（outcome: succeeded · 已完成）\n摘要：回归通过并修复了参数校验',
+        resultBlocks: [
+          {
+            type: 'text',
+            text: '已提交结构化结果（outcome: succeeded · 已完成）\n摘要：回归通过并修复了参数校验',
+          },
+          { type: 'json', value: resultCardEnvelope() },
+        ],
+      },
+      'C:\\workspace',
+    )!
+    expect(mirrored.match(/回归通过并修复了参数校验/gu)).toHaveLength(1)
+    expect(mirrored).not.toContain('已提交结构化结果')
+    expect(mirrored).not.toContain('未经脱敏的输入内容')
+    const fullOutput = '已提交结构化结果（outcome: succeeded · 已完成）\n摘要：未截短的完整摘要'
+    expect(
+      historicalDeliveryText({
+        ...item,
+        resultBlocks: [
+          { type: 'text', text: fullOutput },
+          { type: 'json', value: resultCardEnvelope() },
+        ],
+      }),
+    ).toContain('未截短的完整摘要')
+    expect(
+      historicalDeliveryText({
+        ...item,
+        resultBlocks: [{ type: 'json', value: { future: '未知内容' } }],
+      }),
+    ).toContain('未知内容')
+    expect(historicalDeliveryText({ ...item, resultBlocks: [], output: '原始交付' })).toBe(
+      '原始交付',
+    )
   })
 
   test('only opens workspace-relative file references', () => {

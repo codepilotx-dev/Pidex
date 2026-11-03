@@ -118,33 +118,36 @@ export function CommitPopover({
           <div className="review-popover-actions tw:flex tw:flex-col tw:gap-1 tw:border-t tw:border-app-border tw:pt-1">
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               disabled={false}
               onClick={() => onCommit(message, includeUnstaged)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <ArrowUpToLine size={APP_ICON_SIZE} />
+                <ArrowUpToLine size="var(--inline-icon-size, 1em)" />
                 提交
               </span>
               <span className="shortcut">Ctrl+Enter</span>
             </Button>
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               onClick={() => onCommitAndPush(message, includeUnstaged)}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <ArrowUp size={APP_ICON_SIZE} />
+                <ArrowUp size="var(--inline-icon-size, 1em)" />
                 提交并推送
               </span>
             </Button>
             <Button
               color="primary"
-              className="tw:w-full tw:justify-between"
+              fullWidth
+              className="tw:justify-between"
               onClick={() => onPush()}
             >
               <span className="review-popover-action-label tw:inline-flex tw:items-center tw:gap-2">
-                <ArrowDown size={APP_ICON_SIZE} />
+                <ArrowDown size="var(--inline-icon-size, 1em)" />
                 推送
               </span>
             </Button>

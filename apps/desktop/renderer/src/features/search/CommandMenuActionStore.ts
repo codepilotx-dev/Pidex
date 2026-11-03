@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 
 export type CommandMenuActionGroup = 'workspace-actions' | 'task-transfer'
 export type CommandMenuActionAvailability = 'available' | 'disabled' | 'loading'
@@ -22,34 +23,32 @@ export type CommandMenuActionSnapshot = CommandMenuActionRegistration & {
   token: symbol
 }
 
-export type CommandMenuActionStore = {
-  getSnapshot: () => readonly CommandMenuActionSnapshot[]
-  getServerSnapshot: () => readonly CommandMenuActionSnapshot[]
-  subscribe: (listener: () => void) => () => void
+export type CommandMenuActionState = {
+  actions: readonly CommandMenuActionSnapshot[]
+}
+
+export type CommandMenuActionActions = {
   register: (action: CommandMenuActionRegistration, token?: symbol) => () => void
   update: (token: symbol, action: CommandMenuActionRegistration) => void
 }
 
+export type CommandMenuActionStore = StoreApi<CommandMenuActionState> & CommandMenuActionActions
+
 export function createCommandMenuActionStore(): CommandMenuActionStore {
+  const store = createStore<CommandMenuActionState>()(() => ({ actions: [] }))
+  /** token 用于识别同一动作的注册周期；不进入订阅快照。 */
   const entries = new Map<symbol, CommandMenuActionSnapshot>()
-  const listeners = new Set<() => void>()
-  let snapshot: readonly CommandMenuActionSnapshot[] = []
   let nextSequence = 0
 
   const publish = (): void => {
-    snapshot = [...entries.values()].sort(
-      (left, right) => left.order - right.order || left.sequence - right.sequence,
-    )
-    for (const listener of listeners) listener()
+    store.setState({
+      actions: [...entries.values()].sort(
+        (left, right) => left.order - right.order || left.sequence - right.sequence,
+      ),
+    })
   }
 
-  return {
-    getSnapshot: () => snapshot,
-    getServerSnapshot: () => snapshot,
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
+  return Object.assign(store, {
     register: (action, suppliedToken) => {
       const token = suppliedToken ?? Symbol(action.id)
       const conflicting = [...entries.values()].find((entry) => entry.id === action.id)
@@ -70,7 +69,7 @@ export function createCommandMenuActionStore(): CommandMenuActionStore {
       entries.set(token, { ...action, sequence: current.sequence, token })
       publish()
     },
-  }
+  })
 }
 
 export function filterCommandMenuActions(

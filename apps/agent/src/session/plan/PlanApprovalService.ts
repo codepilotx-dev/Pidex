@@ -168,10 +168,12 @@ export class PlanApprovalService {
         if (!source || !settings) throw new AgentError('CONFLICT', '计划执行上下文不可用', 409)
         await start(
           {
+            // 反馈轮次的用户消息就是用户原话；源计划由 ThreadService 依据
+            // next_turn_id 关联重建为 prompt context，不塞进用户消息文本。
             content:
               response.action === 'implement'
                 ? implementationPrompt(approval.markdown)
-                : `请根据以下修改意见继续调查并更新计划，不要实施：\n\n${feedback}\n\n原计划：\n${approval.markdown}`,
+                : (feedback ?? ''),
             model: model ?? source.model,
             permissionConfig: settings.permissionConfig,
             taskMode: response.action === 'implement' ? 'chat' : 'plan',

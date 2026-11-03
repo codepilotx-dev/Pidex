@@ -1,5 +1,11 @@
+import { prepareMediaInput, type MediaInput } from '../../provider/pi/MediaInput'
+import { contextBudget, RequestContextUsage } from '../../context/ContextBudget'
+import type { ContextBudget } from '@pidex/shared/thread'
+import type { Context } from '@earendil-works/pi-ai'
+import { createProviderMessagePhaseReader } from './ProviderMessagePhase'
 import {
   type AssistantMessage,
+  createAssistantMessageEventStream,
   contentText,
   type ImageContent,
   type Model,
@@ -27,8 +33,9 @@ import {
   compact,
   DEFAULT_COMPACTION_SETTINGS,
   prepareCompaction,
+  estimateTokens,
 } from '../../context/harness/Compaction.ts'
-import { convertToLlm } from './Messages.ts'
+import { convertToLlm, createCompactionSummaryMessage } from './Messages.ts'
 import { formatPromptTemplateInvocation } from '../../prompt/harness/PromptTemplates.ts'
 import { formatSkillInvocation } from '../../prompt/harness/Skills.ts'
 import type {
@@ -67,10 +74,14 @@ import {
   type HarnessTurnComposition,
 } from './TurnComposition.ts'
 
-function createUserMessage(text: string, images?: ImageContent[]): UserMessage {
+function createUserMessage(
+  text: string,
+  images?: ImageContent[],
+  media?: MediaInput[],
+): UserMessage {
   const content: Array<{ type: 'text'; text: string } | ImageContent> = [{ type: 'text', text }]
   if (images) content.push(...images)
-  return { role: 'user', content, timestamp: Date.now() }
+  return { role: 'user', content, timestamp: Date.now(), ...(media?.length ? { media } : {}) }
 }
 
 function createFailureMessage(
@@ -224,12 +235,18 @@ export class AgentHarness<
     AgentHarnessSystemPrompt<TContext, TSkill, TPromptTemplate, TTool> | undefined
   private toolContext: AgentHarnessToolContextSource<TContext> | undefined
   private streamOptions: AgentHarnessStreamOptions
+  private readonly contextCompaction: AgentHarnessOptions['contextCompaction']
+  private readonly requestUsage: RequestContextUsage
+  private lastBudget: ContextBudget | undefined
+  private samplingContext: { context: Context; identity: string } | undefined
+  private requestCount = 0
   private retry: RetryPolicy | undefined
   private resources: AgentHarnessResources<TSkill, TPromptTemplate>
   private tools = new Map<string, TTool>()
   private activeToolNames: string[]
   private readonly deferredToolCatalog: DeferredToolCatalog<TTool> | undefined
   private toolExecution: import('./AgentTypes.ts').ToolExecutionMode
+  private maxContextTokens: number | null | undefined
   private restoredActiveTools = false
   private activationQueue: Promise<void> = Promise.resolve()
   private steerQueue: UserMessage[] = []
@@ -239,17 +256,22 @@ export class AgentHarness<
   private nextTurnQueue: AgentMessage[] = []
   private readonly queuedInputIds = new WeakMap<AgentMessage, string>()
   private handlers = new Map<string, Set<AgentHarnessHandler>>()
+  private goalBudget?: AgentHarnessOptions['goalBudget']
 
   constructor(options: AgentHarnessOptions<TContext, TSkill, TPromptTemplate, TTool>) {
     this.session = options.session
+    this.goalBudget = options.goalBudget
     this.models = options.models
     this.resources = options.resources ?? {}
     this.streamOptions = cloneStreamOptions(options.streamOptions)
     this.retry = options.retry
+    this.contextCompaction = options.contextCompaction
+    this.requestUsage = new RequestContextUsage(options.contextCompaction?.anchor)
     this.systemPrompt = options.systemPrompt
     this.toolContext = options.toolContext
     this.deferredToolCatalog = options.deferredToolCatalog
     this.toolExecution = options.toolExecution ?? 'parallel'
+    this.maxContextTokens = options.maxContextTokens
     this.validateUniqueNames(
       (options.tools ?? []).map((tool) => tool.name),
       'Duplicate tool name(s)',
@@ -312,11 +334,18 @@ export class AgentHarness<
     const handlers = this.getHandlers(event.type as TType)
     if (!handlers || handlers.size === 0) return undefined
     let lastResult: AgentHarnessEventResultMap[TType] | undefined
+    let currentEvent = event
     for (const handler of handlers) {
       try {
-        const result = await handler(event)
+        const result = await handler(currentEvent)
         if (result !== undefined) {
           lastResult = result
+          if (currentEvent.type === 'context' && (result as { messages?: unknown[] })?.messages) {
+            currentEvent = {
+              ...currentEvent,
+              messages: (result as { messages: AgentMessage[] }).messages,
+            } as typeof event
+          }
         }
       } catch (error) {
         throw normalizeHookError(error)
@@ -419,10 +448,32 @@ export class AgentHarness<
     }
   }
 
+  private async resolveSystemPrompt(
+    activeTools: TTool[],
+    resources = this.getResources(),
+  ): Promise<string> {
+    if (typeof this.systemPrompt === 'string') return this.systemPrompt
+    if (!this.systemPrompt) return 'You are a helpful assistant.'
+    return this.systemPrompt({
+      session: this.session,
+      model: this.model,
+      thinkingLevel: this.thinkingLevel,
+      activeTools,
+      resources,
+    })
+  }
+
   private async createTurnState(): Promise<
     AgentHarnessTurnState<TContext, TSkill, TPromptTemplate, TTool>
   > {
     const context = await this.session.buildContext()
+    const configuredModel = this.model as typeof this.model & {
+      tools?: boolean
+      modelType?: string
+    }
+    if (configuredModel.modelType && configuredModel.modelType !== 'chat')
+      throw new AgentHarnessError('invalid_argument', '嵌入与重排模型不能用于聊天')
+    const toolsEnabled = configuredModel.tools !== false
     if (!this.restoredActiveTools) {
       const restoredNames = context.activeToolNames ?? this.activeToolNames
       await this.loadDeferredTools(restoredNames)
@@ -452,29 +503,18 @@ export class AgentHarness<
     if (!composition) {
       const resources = this.getResources()
       const toolContext = await this.resolveToolContext()
-      const tools = [...this.tools.values()]
-      const activeTools = this.activeToolNames
+      const tools = toolsEnabled ? [...this.tools.values()] : []
+      const activeTools = (toolsEnabled ? this.activeToolNames : [])
         .map((name) => this.tools.get(name))
         .filter((tool): tool is TTool => tool !== undefined)
-      let systemPrompt = 'You are a helpful assistant.'
-      if (typeof this.systemPrompt === 'string') {
-        systemPrompt = this.systemPrompt
-      } else if (this.systemPrompt) {
-        systemPrompt = await this.systemPrompt({
-          session: this.session,
-          model: this.model,
-          thinkingLevel: this.thinkingLevel,
-          activeTools,
-          resources,
-        })
-      }
+      const systemPrompt = await this.resolveSystemPrompt(activeTools, resources)
       composition = await buildHarnessTurnComposition({
         model: this.model,
         thinkingLevel: this.thinkingLevel,
         systemPrompt,
         tools,
-        initialActiveToolNames: this.activeToolNames,
-        deferredToolNames: (this.deferredToolCatalog?.names() ?? []).filter(
+        initialActiveToolNames: toolsEnabled ? this.activeToolNames : [],
+        deferredToolNames: (toolsEnabled ? (this.deferredToolCatalog?.names() ?? []) : []).filter(
           (name) => !this.tools.has(name),
         ),
         resources,
@@ -483,7 +523,7 @@ export class AgentHarness<
       })
       this.currentTurnComposition = composition
     }
-    const activeTools = this.activeToolNames
+    const activeTools = (toolsEnabled ? this.activeToolNames : [])
       .map((name) => this.tools.get(name))
       .filter((tool): tool is TTool => tool !== undefined)
     return {
@@ -516,6 +556,102 @@ export class AgentHarness<
     getTurnState: () => AgentHarnessTurnState<TContext, TSkill, TPromptTemplate, TTool>,
   ): StreamFn {
     return async (model, context, streamOptions) => {
+      const generation = await this.contextGeneration()
+      let budget = this.requestUsage.snapshot(
+        model,
+        context,
+        generation,
+        'estimated',
+        this.maxContextTokens,
+      )
+      this.lastBudget = budget
+      await this.contextCompaction?.onBudget(budget)
+      let wrapupTurn = false
+      let goalMaxTokens: number | undefined
+      const wrapupContext = this.goalBudget?.prepareWrapupContext?.(context)
+      if (this.goalBudget) {
+        const decision = await this.goalBudget.checkAdmission(
+          budget.usedTokens,
+          budget.outputReserveTokens,
+          this.goalBudget.prepareWrapupContext
+            ? wrapupContext
+              ? new RequestContextUsage().estimate(wrapupContext, 'goal-wrapup')
+              : Infinity
+            : undefined,
+        )
+        if (!decision.allowed) {
+          if (decision.stopSubagent) {
+            const assistantMessage: AssistantMessage = {
+              role: 'assistant',
+              content: [
+                { type: 'text', text: '已达到目标 Token 预算限制，子任务已安全结束当前回合。' },
+              ],
+              api: model.api,
+              provider: model.provider,
+              model: model.id,
+              stopReason: 'stop',
+              timestamp: Date.now(),
+              usage: {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalTokens: 0,
+                cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+              },
+            }
+            const stream = createAssistantMessageEventStream()
+            stream.push({ type: 'start', partial: assistantMessage })
+            stream.push({ type: 'done', reason: 'stop', message: assistantMessage })
+            return stream
+          }
+          throw new AgentHarnessError('goal_budget', '目标预算受限')
+        }
+        wrapupTurn = decision.wrapup === true
+        goalMaxTokens = decision.maxTokens
+        if (wrapupTurn && wrapupContext) {
+          context = wrapupContext
+          budget = this.requestUsage.snapshot(
+            model,
+            context,
+            generation,
+            'estimated',
+            this.maxContextTokens,
+          )
+          this.lastBudget = budget
+        }
+        if (decision.wrapupMessage) context.messages.push(decision.wrapupMessage)
+      }
+      if (!wrapupTurn && this.contextCompaction && (await this.contextCompaction.canCompact())) {
+        const manual = this.contextCompaction.pending()
+        if (
+          manual ||
+          (budget.usedTokens >= budget.triggerTokens && (await this.contextCompaction.enabled()))
+        ) {
+          try {
+            await this.runCompaction(
+              manual ? 'manual' : 'automatic',
+              undefined,
+              streamOptions?.signal,
+              context,
+            )
+          } catch (error) {
+            if (streamOptions?.signal?.aborted || budget.usedTokens >= budget.triggerTokens)
+              throw error
+          }
+          budget = this.lastBudget!
+        }
+      }
+      if (budget.usedTokens >= budget.triggerTokens)
+        throw new AgentHarnessError(
+          'compaction',
+          '已接近上下文预算且无法完成压缩，本次请求未发送；请减少输入、新建会话或调整上下文预算',
+        )
+      this.samplingContext = {
+        context: { ...context, messages: [...context.messages] },
+        identity: this.requestUsage.identity(model, context, await this.contextGeneration()),
+      }
+      this.requestCount += 1
       const turnState = getTurnState()
       const snapshotOptions: AgentHarnessStreamOptions = { ...turnState.streamOptions }
       const requestOptions = await this.emitBeforeProviderRequest(
@@ -523,19 +659,33 @@ export class AgentHarness<
         turnState.sessionId,
         snapshotOptions,
       )
-      return this.models.streamSimple(model, context, {
+      const readPhase = createProviderMessagePhaseReader()
+      await this.emitOwn({ type: 'provider_text_reset' }, streamOptions?.signal)
+      const mediaInput = prepareMediaInput(model, context)
+      // A wrap-up request is text only: the reserved budget belongs to the
+      // summary, so no tool may extend the work it is meant to close out.
+      if (wrapupTurn) mediaInput.context.tools = []
+      return this.models.streamSimple(model, mediaInput.context, {
+        maxTokens: goalMaxTokens ?? budget.outputReserveTokens,
+        onProviderStreamEvent: async (value) => {
+          const event = readPhase(value)
+          if (event) await this.emitOwn(event, streamOptions?.signal)
+        },
         ...(requestOptions.cacheRetention !== undefined
           ? { cacheRetention: requestOptions.cacheRetention }
           : {}),
         ...(requestOptions.headers !== undefined ? { headers: requestOptions.headers } : {}),
-        ...(requestOptions.maxRetries !== undefined
-          ? { maxRetries: requestOptions.maxRetries }
-          : {}),
+        ...(wrapupTurn
+          ? { maxRetries: 0 }
+          : requestOptions.maxRetries !== undefined
+            ? { maxRetries: requestOptions.maxRetries }
+            : {}),
         ...(requestOptions.maxRetryDelayMs !== undefined
           ? { maxRetryDelayMs: requestOptions.maxRetryDelayMs }
           : {}),
         ...(requestOptions.metadata !== undefined ? { metadata: requestOptions.metadata } : {}),
-        onPayload: async (payload) => await this.emitBeforeProviderPayload(model, payload),
+        onPayload: async (payload) =>
+          mediaInput.applyPayload(await this.emitBeforeProviderPayload(model, payload)),
         onResponse: async (response) => {
           const headers = { ...(response.headers as Record<string, string>) }
           await this.emitOwn(
@@ -607,6 +757,7 @@ export class AgentHarness<
           ? {
               ...(result.block !== undefined ? { block: result.block } : {}),
               ...(result.reason !== undefined ? { reason: result.reason } : {}),
+              ...(result.pause !== undefined ? { pause: result.pause } : {}),
             }
           : undefined
       },
@@ -634,6 +785,13 @@ export class AgentHarness<
               terminate: patch.terminate,
             }
           : undefined
+      },
+      recoverContextOverflow: async () => {
+        if (!this.contextCompaction || !(await this.contextCompaction.canCompact()))
+          throw new AgentHarnessError('compaction', '模型上下文超限，当前无法压缩')
+        await this.runCompaction('reactive', undefined, this.runAbortController?.signal)
+        const state = await this.createTurnState()
+        return this.createContext(state)
       },
       prepareNextTurn: async () => {
         await this.flushPendingSessionWrites()
@@ -731,6 +889,23 @@ export class AgentHarness<
     if (event.type === 'message_end') {
       await this.session.appendMessage(event.message)
       await this.emitAny(event, signal)
+      if (event.message.role === 'assistant' && this.samplingContext) {
+        const anchor = this.requestUsage.measured(
+          this.samplingContext.context,
+          this.samplingContext.identity,
+          event.message,
+        )
+        if (anchor && this.lastBudget) {
+          this.lastBudget = {
+            ...this.lastBudget,
+            usedTokens: anchor.tokens,
+            source: 'measured',
+            sampledAt: Date.now(),
+          }
+          await this.contextCompaction?.onBudget(this.lastBudget, anchor)
+        }
+        this.samplingContext = undefined
+      }
       return
     }
     if (event.type === 'turn_end') {
@@ -748,6 +923,21 @@ export class AgentHarness<
         hadPendingMutations,
         activeToolNames: [...this.activeToolNames],
       })
+      if (
+        !signal?.aborted &&
+        this.contextCompaction?.pending() &&
+        (await this.contextCompaction.canCompact())
+      ) {
+        try {
+          await this.runCompaction('manual', undefined, signal)
+        } catch (error) {
+          if (
+            signal?.aborted ||
+            (this.lastBudget && this.lastBudget.usedTokens >= this.lastBudget.triggerTokens)
+          )
+            throw error
+        }
+      }
       return
     }
     if (event.type === 'agent_end') {
@@ -780,7 +970,7 @@ export class AgentHarness<
   private async executeTurn(
     turnState: AgentHarnessTurnState<TContext, TSkill, TPromptTemplate, TTool>,
     text: string,
-    options?: { images?: ImageContent[] },
+    options?: { images?: ImageContent[]; media?: MediaInput[] },
   ): Promise<AssistantMessage> {
     let activeTurnState = turnState
     this.activeComposition = turnState.composition
@@ -791,11 +981,11 @@ export class AgentHarness<
       const turnContext = buildTurnContext({
         composition: state.composition,
         stepIndex,
-        currentActiveToolNames: this.activeToolNames,
+        currentActiveToolNames: state.activeTools.map((tool) => tool.name),
       })
       const stepContext = buildStepContext({
         stepIndex,
-        currentActiveNames: this.activeToolNames,
+        currentActiveNames: state.activeTools.map((tool) => tool.name),
         toolPolicy: state.composition.toolPolicy,
       })
       await this.emitOwn({
@@ -807,7 +997,7 @@ export class AgentHarness<
       })
     }
     await emitComposition(turnState)
-    let messages: AgentMessage[] = [createUserMessage(text, options?.images)]
+    let messages: AgentMessage[] = [createUserMessage(text, options?.images, options?.media)]
     if (this.nextTurnQueue.length > 0) {
       const queuedMessages = this.nextTurnQueue.splice(0)
       try {
@@ -887,7 +1077,10 @@ export class AgentHarness<
     }
   }
 
-  async prompt(text: string, options?: { images?: ImageContent[] }): Promise<AssistantMessage> {
+  async prompt(
+    text: string,
+    options?: { images?: ImageContent[]; media?: MediaInput[] },
+  ): Promise<AssistantMessage> {
     if (this.phase !== 'idle') throw new AgentHarnessError('busy', 'AgentHarness is busy')
     this.phase = 'turn'
     const finishRunPromise = this.startRunPromise()
@@ -944,11 +1137,11 @@ export class AgentHarness<
 
   async steer(
     text: string,
-    options?: { images?: ImageContent[]; inputId?: string },
+    options?: { images?: ImageContent[]; media?: MediaInput[]; inputId?: string },
   ): Promise<void> {
     if (this.phase === 'idle')
       throw new AgentHarnessError('invalid_state', 'Cannot steer while idle')
-    const message = createUserMessage(text, options?.images)
+    const message = createUserMessage(text, options?.images, options?.media)
     if (options?.inputId) this.queuedInputIds.set(message, options.inputId)
     this.steerQueue.push(message)
     await this.emitQueueUpdate()
@@ -956,11 +1149,11 @@ export class AgentHarness<
 
   async followUp(
     text: string,
-    options?: { images?: ImageContent[]; inputId?: string },
+    options?: { images?: ImageContent[]; media?: MediaInput[]; inputId?: string },
   ): Promise<void> {
     if (this.phase === 'idle')
       throw new AgentHarnessError('invalid_state', 'Cannot follow up while idle')
-    const message = createUserMessage(text, options?.images)
+    const message = createUserMessage(text, options?.images, options?.media)
     if (options?.inputId) this.queuedInputIds.set(message, options.inputId)
     this.followUpQueue.push(message)
     await this.emitQueueUpdate()
@@ -968,9 +1161,9 @@ export class AgentHarness<
 
   async nextTurn(
     text: string,
-    options?: { images?: ImageContent[]; inputId?: string },
+    options?: { images?: ImageContent[]; media?: MediaInput[]; inputId?: string },
   ): Promise<void> {
-    const message = createUserMessage(text, options?.images)
+    const message = createUserMessage(text, options?.images, options?.media)
     if (options?.inputId) this.queuedInputIds.set(message, options.inputId)
     this.nextTurnQueue.push(message)
     await this.emitQueueUpdate()
@@ -988,63 +1181,296 @@ export class AgentHarness<
     }
   }
 
-  async compact(customInstructions?: string): Promise<CompactResult> {
+  async compact(
+    customInstructions?: string,
+    signal?: AbortSignal,
+    requestContext?: Context,
+    fixedPrefixTokens?: number,
+    maxContextTokens = this.maxContextTokens,
+  ): Promise<CompactResult> {
     if (this.phase !== 'idle')
       throw new AgentHarnessError('busy', 'compact() requires idle harness')
+    const previousMaxContextTokens = this.maxContextTokens
+    this.maxContextTokens = maxContextTokens
     this.phase = 'compaction'
     try {
-      const model = this.model
-      if (!model) throw new AgentHarnessError('invalid_state', 'No model set for compaction')
-      const branchEntries = await this.session.getBranch()
-      const preparationResult = prepareCompaction(branchEntries, DEFAULT_COMPACTION_SETTINGS)
-      if (!preparationResult.ok) throw preparationResult.error
-      const preparation = preparationResult.value
-      if (!preparation) throw new AgentHarnessError('compaction', 'Nothing to compact')
-      const hookResult = await this.emitHook({
-        type: 'session_before_compact',
-        preparation,
-        branchEntries,
+      return await this.runCompaction(
+        'manual',
         customInstructions,
-        signal: new AbortController().signal,
-      })
-      if (hookResult?.cancel) throw new AgentHarnessError('compaction', 'Compaction cancelled')
-      const provided = hookResult?.compaction
-      const compactResult = provided
-        ? { ok: true as const, value: provided }
-        : await compact(
-            preparation,
-            this.models,
-            model,
-            customInstructions,
-            undefined,
-            this.thinkingLevel,
-            this.retry,
-            this.retryCallbacks('compaction'),
-          )
-      if (!compactResult.ok) throw compactResult.error
-      const result = compactResult.value
-      const entryId = await this.session.appendCompaction(
-        result.summary,
-        result.firstKeptEntryId,
-        result.tokensBefore,
-        result.details,
-        provided !== undefined,
-        result.usage,
-        result.retainedTail,
+        signal,
+        requestContext,
+        fixedPrefixTokens,
       )
-      const entry = await this.session.getEntry(entryId)
-      if (entry?.type === 'compaction') {
-        await this.emitOwn({
-          type: 'session_compact',
-          compactionEntry: entry,
-          fromHook: provided !== undefined,
-        })
-      }
-      return result
-    } catch (error) {
-      throw normalizeHarnessError(error, 'compaction')
     } finally {
+      this.maxContextTokens = previousMaxContextTokens
       this.phase = 'idle'
+    }
+  }
+
+  getContextBudget() {
+    return this.lastBudget
+  }
+
+  private async contextGeneration() {
+    const entries = await this.session.getBranch()
+    return `${(await this.session.getMetadata()).id}:${[...entries].reverse().find((entry) => entry.type === 'compaction')?.id ?? ''}`
+  }
+
+  private async runCompaction(
+    trigger: 'manual' | 'automatic' | 'reactive',
+    customInstructions?: string,
+    signal?: AbortSignal,
+    requestContext?: Context,
+    fixedPrefixTokens?: number,
+  ): Promise<CompactResult> {
+    const lifecycle = this.contextCompaction
+    const operationSignal = await lifecycle?.start(
+      trigger,
+      this.phase === 'idle' || this.phase === 'compaction'
+        ? 'settled'
+        : this.requestCount
+          ? 'mid-turn'
+          : 'pre-request',
+    )
+    const compactSignal =
+      signal && operationSignal
+        ? AbortSignal.any([signal, operationSignal])
+        : (signal ?? operationSignal)
+    try {
+      return await this.compactSession(
+        customInstructions,
+        compactSignal,
+        requestContext,
+        fixedPrefixTokens,
+      )
+    } catch (error) {
+      const nothing = error instanceof AgentHarnessError && error.code === 'nothing_to_compact'
+      await lifecycle?.finish(
+        compactSignal?.aborted ? 'cancelled' : nothing ? 'skipped' : 'failed',
+        compactSignal?.aborted
+          ? 'stopped'
+          : nothing
+            ? 'already-compacted'
+            : error instanceof AgentHarnessError && error.code === 'compaction'
+              ? 'budget-exceeded'
+              : 'provider-failed',
+      )
+      if (!nothing && !compactSignal?.aborted && trigger !== 'manual')
+        await lifecycle?.onFailure(trigger)
+      throw error
+    }
+  }
+
+  private async compactSession(
+    customInstructions?: string,
+    signal?: AbortSignal,
+    requestContext?: Context,
+    fixedPrefixTokens?: number,
+  ): Promise<CompactResult> {
+    let appended = false
+    const previousBudget = this.lastBudget
+    try {
+      await this.flushPendingSessionWrites()
+      const model = this.model
+      const configuredModel = model as typeof model & { tools?: boolean; modelType?: string }
+      if (configuredModel.modelType && configuredModel.modelType !== 'chat')
+        throw new AgentHarnessError('invalid_argument', '嵌入与重排模型不能用于聊天')
+      const original = (await this.session.buildContext()).messages
+      const originalLlm = convertToLlm(original)
+      const extras = requestContext?.messages.slice(originalLlm.length) ?? []
+      // 压缩只准备上下文与预算，不恢复历史工具；空闲 Harness 没有工具执行目录。
+      const activeTools = (configuredModel.tools === false ? [] : this.activeToolNames)
+        .map((name) => this.tools.get(name))
+        .filter((tool): tool is TTool => tool !== undefined)
+      const context: Context = requestContext ?? {
+        systemPrompt:
+          this.currentTurnComposition?.systemPrompt ??
+          (await this.resolveSystemPrompt(activeTools)),
+        tools: activeTools,
+        messages: originalLlm,
+      }
+      const budget = contextBudget(model, this.maxContextTokens)
+      const entries = (await this.session.getBranch()).filter(
+        (entry) =>
+          !(
+            entry.type === 'message' &&
+            entry.message.role === 'assistant' &&
+            ['error', 'aborted'].includes(entry.message.stopReason)
+          ),
+      )
+      const protectedInput = [...original].reverse().find((message) => message.role === 'user')
+      // Cold idle compaction retains the last request's fixed overhead without reloading or widening its tools.
+      const extraPrefixTokens = Math.max(
+        0,
+        (fixedPrefixTokens ?? 0) - this.requestUsage.fixedTokens(context),
+      )
+      const fixedTokens =
+        extraPrefixTokens +
+        this.requestUsage.estimate(
+          {
+            ...context,
+            messages: [...(protectedInput ? convertToLlm([protectedInput]) : []), ...extras],
+          },
+          '',
+        )
+      let summaryLimit = 13107
+      let tailLimit = 20000
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        signal?.throwIfAborted()
+        const available = (attempt ? budget.triggerTokens - 1 : budget.targetTokens) - fixedTokens
+        if (available < 2) {
+          if (!attempt) continue
+          throw new AgentHarnessError(
+            'compaction',
+            '固定提示词、工具或最新输入过大，无法腾出安全上下文空间',
+          )
+        }
+        const summaryTokens = Math.min(summaryLimit, model.maxTokens, Math.floor(available / 2))
+        const preparationResult = prepareCompaction(entries, {
+          ...DEFAULT_COMPACTION_SETTINGS,
+          keepRecentTokens: Math.min(tailLimit, available - summaryTokens),
+          summaryTokens,
+        })
+        if (!preparationResult.ok) throw preparationResult.error
+        const preparation = preparationResult.value
+        if (!preparation) throw new AgentHarnessError('nothing_to_compact', 'Nothing to compact')
+        if (protectedInput) {
+          const same = (message: AgentMessage) =>
+            JSON.stringify(message) === JSON.stringify(protectedInput)
+          preparation.messagesToSummarize = preparation.messagesToSummarize.filter(
+            (message) => !same(message),
+          )
+          preparation.turnPrefixMessages = preparation.turnPrefixMessages.filter(
+            (message) => !same(message),
+          )
+          if (!preparation.retainedTail.some(same)) preparation.retainedTail.unshift(protectedInput)
+        }
+        if (
+          preparation.retainedTail.reduce((sum, message) => sum + estimateTokens(message), 0) >
+          preparation.settings.keepRecentTokens
+        ) {
+          // A completed oversized tool batch can be summarized as a unit; never retain an orphan tool result.
+          preparation.messagesToSummarize = [
+            ...preparation.messagesToSummarize,
+            ...preparation.turnPrefixMessages,
+            ...preparation.retainedTail,
+          ].filter((message) => message !== protectedInput)
+          preparation.turnPrefixMessages = []
+          preparation.retainedTail = protectedInput ? [protectedInput] : []
+          preparation.isSplitTurn = false
+        }
+        const hookResult = await this.emitHook({
+          type: 'session_before_compact',
+          preparation,
+          branchEntries: entries,
+          customInstructions,
+          signal: signal ?? new AbortController().signal,
+        })
+        if (hookResult?.cancel) throw new AgentHarnessError('compaction', 'Compaction cancelled')
+        const provided = hookResult?.compaction
+        const candidate = provided
+          ? { ok: true as const, value: provided }
+          : await compact(
+              preparation,
+              this.models,
+              model,
+              customInstructions,
+              signal,
+              this.thinkingLevel,
+              this.retry,
+              this.retryCallbacks('compaction'),
+              (summaryContext) => {
+                if (this.maxContextTokens == null) return
+                const summaryBudget = this.requestUsage.snapshot(
+                  model,
+                  summaryContext,
+                  '',
+                  'estimated',
+                  this.maxContextTokens,
+                )
+                if (summaryBudget.usedTokens >= summaryBudget.inputBudgetTokens) {
+                  throw new AgentHarnessError(
+                    'compaction',
+                    '压缩请求超过上下文预算，本次请求未发送；请减少输入、新建会话或调整上下文预算',
+                  )
+                }
+              },
+            )
+        if (!candidate.ok) throw candidate.error
+        const result = candidate.value
+        if (!result.summary.trim()) throw new AgentHarnessError('compaction', '压缩未生成有效摘要')
+        const retainedTail = result.retainedTail ?? preparation.retainedTail
+        const rebuilt = convertToLlm([
+          createCompactionSummaryMessage(
+            result.summary,
+            result.tokensBefore,
+            new Date().toISOString(),
+          ),
+          ...retainedTail,
+        ])
+        const estimate = this.requestUsage.snapshot(
+          model,
+          { ...context, messages: [...rebuilt, ...extras] },
+          '',
+          'compaction-estimate',
+          this.maxContextTokens,
+        )
+        const after = {
+          ...estimate,
+          usedTokens: estimate.usedTokens + extraPrefixTokens,
+          fixedTokens: (estimate.fixedTokens ?? 0) + extraPrefixTokens,
+        }
+        if (after.usedTokens >= after.triggerTokens) {
+          if (!attempt) {
+            // A larger retry budget repeats oversized summaries and retained tails.
+            summaryLimit = Math.max(1, Math.floor(summaryTokens / 2))
+            tailLimit = Math.floor(preparation.settings.keepRecentTokens / 2)
+            continue
+          }
+          throw new AgentHarnessError(
+            'compaction',
+            '压缩后仍超过安全触发线，请减少输入或调整模型额度',
+          )
+        }
+        signal?.throwIfAborted()
+        appended = true
+        const entryId = await this.session.appendCompaction(
+          result.summary,
+          result.firstKeptEntryId,
+          result.tokensBefore,
+          result.details,
+          provided !== undefined,
+          result.usage,
+          retainedTail,
+        )
+        signal?.throwIfAborted()
+        this.requestUsage.invalidate()
+        this.lastBudget = after
+        const entry = await this.session.getEntry(entryId)
+        if (entry?.type === 'compaction')
+          await this.emitOwn({
+            type: 'session_compact',
+            compactionEntry: entry,
+            fromHook: provided !== undefined,
+          })
+        await this.contextCompaction?.onBudget(after, null)
+        if (requestContext)
+          requestContext.messages = [
+            ...convertToLlm((await this.session.buildContext()).messages),
+            ...extras,
+          ]
+        return result
+      }
+      throw new AgentHarnessError('compaction', '无法恢复上下文预算')
+    } catch (error) {
+      if (appended) {
+        const storage = this.session.getStorage() as ReturnType<Session['getStorage']> & {
+          discardPending?: () => void
+        }
+        storage.discardPending?.()
+        this.lastBudget = previousBudget
+      }
+      throw normalizeHarnessError(error, 'compaction')
     }
   }
 
@@ -1354,7 +1780,9 @@ export class AgentHarness<
     this.streamOptions = cloneStreamOptions(streamOptions)
   }
 
-  async abort(): Promise<AbortResult> {
+  async abort(preserveQueuedCompaction = false): Promise<AbortResult> {
+    if (!preserveQueuedCompaction && this.contextCompaction?.pending())
+      await this.contextCompaction.finish('cancelled', 'stopped')
     const clearedSteer = [...this.steerQueue]
     const clearedFollowUp = [...this.followUpQueue]
     this.steerQueue = []

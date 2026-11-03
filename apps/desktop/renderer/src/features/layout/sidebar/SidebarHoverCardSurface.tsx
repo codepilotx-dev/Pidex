@@ -32,6 +32,7 @@ export function SidebarHoverCardSurface({
   positionOutsideSidebar = false,
   requestOpenChange,
   returnFocusToAnchor,
+  warmHandoff,
 }: Props): React.ReactNode {
   const contentRef = useRef<HTMLDivElement | null>(null)
   const sidebarEdgeRef = useMemo<{ current: VirtualAnchor }>(
@@ -86,6 +87,7 @@ export function SidebarHoverCardSurface({
           align="start"
           aria-label={ariaLabel}
           collisionPadding={6}
+          data-warm-handoff={warmHandoff ? 'true' : undefined}
           id={contentId}
           ref={contentRef}
           side="right"

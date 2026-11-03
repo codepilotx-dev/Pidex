@@ -21,6 +21,7 @@ import { desktopClient } from '../../../services/desktop-client/index.js'
 import {
   loadExternalOpenTargets,
   openPathWithExternalTarget,
+  useExternalOpenTargets,
 } from '../../../services/ExternalOpenTargetsStore.js'
 import type { MarkdownFileViewMode } from '../dock/RightDockState.js'
 
@@ -52,7 +53,6 @@ export function FileBreadcrumbToolbar({
   onToggleMarkdownViewMode,
 }: FileBreadcrumbToolbarProps): React.ReactNode {
   const [openTargetMenu, setOpenTargetMenu] = useState(false)
-  const [openTargets, setOpenTargets] = useState<DesktopExternalOpenTarget[]>([])
   const segments = useMemo(
     () => buildBreadcrumbSegments(path, workspace, workspacePath),
     [path, workspace, workspacePath],
@@ -61,42 +61,21 @@ export function FileBreadcrumbToolbar({
     () => resolveAbsolutePath(workspacePath, path),
     [path, workspacePath],
   )
+  const openTargets = useExternalOpenTargets(absolutePath)
   const preferredOpenTarget = openTargets.find((target) => target.preferred) ?? openTargets[0]
-
-  function rememberPreferredTarget(target: DesktopExternalOpenTarget): void {
-    const next = openTargets.map((candidate) => ({
-      ...candidate,
-      preferred: candidate.id === target.id,
-    }))
-    setOpenTargets(next)
-  }
 
   function openWithTarget(target: DesktopExternalOpenTarget): void {
     if (!absolutePath) return
-    rememberPreferredTarget(target)
     void openPathWithExternalTarget(absolutePath, target.id)
   }
 
   useEffect(() => {
-    if (!absolutePath) {
-      setOpenTargets([])
-      return
-    }
-    let active = true
-    void loadExternalOpenTargets(absolutePath)
-      .then((targets) => {
-        if (active) setOpenTargets(targets)
-      })
-      .catch(() => {
-        if (active) setOpenTargets([])
-      })
-    return () => {
-      active = false
-    }
+    if (!absolutePath) return
+    void loadExternalOpenTargets(absolutePath).catch(() => undefined)
   }, [absolutePath])
 
   return (
-    <header className="file-breadcrumb-toolbar tw:flex tw:h-10 tw:min-h-10 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-app-border-subtle tw:bg-app-dock tw:px-2">
+    <header className="file-breadcrumb-toolbar tw:flex tw:h-10 tw:min-h-10 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:bg-app-dock tw:px-2">
       <div
         aria-label={`文件路径：${path}`}
         className="file-breadcrumb-toolbar__path tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:overflow-hidden tw:type-control"
@@ -157,7 +136,7 @@ export function FileBreadcrumbToolbar({
         <div className="file-breadcrumb-toolbar__open-group">
           <Button
             isIconOnly
-            color="ghostSecondary"
+            variant="outline"
             size="toolbar"
             className="file-breadcrumb-toolbar__open"
             disabled={!absolutePath || !preferredOpenTarget}
@@ -189,7 +168,7 @@ export function FileBreadcrumbToolbar({
               <Button
                 isIconOnly
                 className="file-breadcrumb-toolbar__open-menu"
-                color="ghostSecondary"
+                variant="outline"
                 disabled={!absolutePath || openTargets.length === 0}
                 size="toolbar"
                 title="选择外部打开方式"

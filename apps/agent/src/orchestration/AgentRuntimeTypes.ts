@@ -1,3 +1,8 @@
+import {
+  isReadOnlyTaskMode,
+  type ContextCompactionOperation,
+  type SubagentRole,
+} from '@pidex/shared/thread'
 import type {
   ModelRef,
   PermissionConfig,
@@ -63,6 +68,7 @@ export interface DelegationController {
         name?: string
         profile: 'default' | 'explorer' | 'worker'
         task: string
+        role?: SubagentRole
         workspaceMode?: 'shared' | 'worktree'
         model?: ModelRef
       }>
@@ -120,6 +126,7 @@ export interface AgentRuntimeRequest {
   signal: AbortSignal
   workspace: WorkspaceService
   defaultCwd?: string
+  maxContextTokens?: number | null
   resume?: PlanCheckpoint
   /** Durable gate acquired before starting a fresh runtime (for example Hook trust). */
   startupGateLeaseID?: string
@@ -143,12 +150,16 @@ export interface AgentRuntimeRequest {
   resolveModel(fallback: ModelRef): Promise<{ ref: ModelRef; model: unknown }>
   pause(approval: PendingApproval): Promise<void>
   updatePlan?(input: ExecutionPlanInput, toolCallID: string): Promise<unknown>
-  updateGoal?(status: 'complete' | 'blocked', toolCallID: string): Promise<unknown>
+  updateGoal?(
+    input: { status: 'complete' | 'blocked'; blocker?: string | undefined },
+    toolCallID: string,
+    identity?: { goalId: string; revision: number },
+  ): Promise<unknown>
   /** Subagent-only safe-boundary control; main Chat steer does not use this callback. */
   checkSafeBoundary?: () => Promise<boolean>
   attachments?: Array<
     | { kind: 'text'; name: string; text: string }
-    | { kind: 'image'; name: string; mediaType: string; base64: string }
+    | { kind: 'image' | 'audio' | 'video'; name: string; mediaType: string; base64: string }
   >
 }
 
@@ -158,10 +169,23 @@ export type AgentRuntimeResult =
 
 export interface AgentRuntime {
   run(request: AgentRuntimeRequest): Promise<AgentRuntimeResult>
-  steer(threadID: string, content: string, images?: RuntimeImage[], inputID?: string): Promise<void>
+  steer(
+    threadID: string,
+    content: string,
+    images?: RuntimeImage[],
+    inputID?: string,
+    media?: import('../provider/pi/MediaInput').MediaInput[],
+  ): Promise<void>
   followUp(threadID: string, content: string): Promise<void>
   abort(threadID: string): Promise<void>
-  compact(threadID: string, instructions?: string, promptText?: string): Promise<ContextCompaction>
+  requestCompaction(threadID: string, operationId: string): ContextCompactionOperation
+  cancelCompaction(threadID: string, operationId: string): ContextCompactionOperation
+  compact(
+    threadID: string,
+    instructions?: string,
+    promptText?: string,
+    signal?: AbortSignal,
+  ): Promise<ContextCompaction>
   toolExposure(input: ToolExposureInput): ToolExposurePlan
   /** Capability summary for the discoverable scope; preview reuses the turn generation. */
   capabilityCatalog(input: ToolExposureInput, toolCatalog?: ToolCatalog): PromptSection
@@ -172,5 +196,5 @@ export interface AgentRuntime {
 export function isMainAgentRequestUserInputEnabled(
   request: Pick<AgentRuntimeRequest, 'taskMode' | 'defaultModeRequestUserInput'>,
 ) {
-  return request.taskMode === 'plan' || request.defaultModeRequestUserInput === true
+  return isReadOnlyTaskMode(request.taskMode) || request.defaultModeRequestUserInput === true
 }

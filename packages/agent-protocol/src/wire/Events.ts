@@ -1,3 +1,4 @@
+import { ContextBudgetSchema, ContextCompactionOperationSchema } from '@pidex/shared/thread'
 import { ComputerStateSchema } from '../methods/Computer'
 import { Model, Provider } from '@pidex/model-schema'
 import { AutomationRunStatusSchema, AutomationStatusSchema } from '@pidex/shared/automation'
@@ -8,9 +9,11 @@ import {
   ExecutionPlanItemSchema,
   InputSchema,
   ItemSchema,
+  TextItemSchema,
   QueueActionSchema,
   SubagentProjectionSchema,
   ThreadGoalSchema,
+  ThreadPullRequestSummarySchema,
   ThreadSchema,
   ThreadSettingsSchema,
   ToolItemSchema,
@@ -18,6 +21,8 @@ import {
   TurnStatusSchema,
 } from '@pidex/shared/thread'
 import { Schema } from 'effect'
+import { ModelRuntimePreferenceSchema } from '@pidex/shared'
+import { VisualizationPreviewSchema } from '@pidex/shared/visualization'
 import { defineEvent, type EventPayloadOf } from './Definition'
 import {
   ApprovalRequestParamsSchema,
@@ -57,6 +62,22 @@ const ToolTerminalPayloadSchema = Schema.Struct({
 })
 
 export const EventManifest = {
+  'visualization/preview': defineEvent({
+    payload: VisualizationPreviewSchema,
+    version: 1,
+    durability: 'live',
+    stream: 'thread',
+    capability: 'visualizations.v1',
+    reconcilesWith: 'tool/callCompleted',
+  }),
+  'task-schedule/changed': defineEvent({
+    payload: Schema.Struct({ taskId: OpaqueIDSchema, changedAt: TimestampSchema }),
+    version: 1,
+    durability: 'durable',
+    stream: 'global',
+    capability: 'task.schedule.v1',
+    reconcilesWith: 'task-schedule/list',
+  }),
   'mcp/elicitationRequested': defineEvent({
     payload: Schema.Struct({
       interactionId: OpaqueIDSchema,
@@ -309,6 +330,16 @@ export const EventManifest = {
     stream: 'global',
     capability: 'events.replay.v1',
   }),
+  'thread/history/edited': defineEvent({
+    payload: Schema.Struct({
+      removedTurnIds: Schema.Array(OpaqueIDSchema),
+      historyRevision: VersionSchema,
+    }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'thread.editUserMessage.v1',
+  }),
   'thread/updated': defineEvent({
     payload: Schema.Struct({ thread: ThreadSchema, version: VersionSchema }),
     version: 1,
@@ -325,6 +356,22 @@ export const EventManifest = {
     version: 1,
     durability: 'durable',
     stream: 'thread',
+    capability: 'events.replay.v1',
+  }),
+  // 分叉/移交会创建并发布一个原本隐藏的目标会话：客户端必须刷新会话目录，
+  // 否则刚跳转过去时会话还未出现在目录里。payload 兼容消息分叉与 handoff 两种写入方。
+  'thread/forked': defineEvent({
+    payload: Schema.Struct({
+      sourceThreadId: OpaqueIDSchema,
+      threadId: Schema.optional(OpaqueIDSchema),
+      targetThreadId: Schema.optional(OpaqueIDSchema),
+      lastTurnId: Schema.optional(OpaqueIDSchema),
+      sourceItemId: Schema.optional(OpaqueIDSchema),
+      operationId: Schema.optional(OpaqueIDSchema),
+    }),
+    version: 1,
+    durability: 'durable',
+    stream: 'global',
     capability: 'events.replay.v1',
   }),
   'thread/prompt-settings/updated': defineEvent({
@@ -381,6 +428,17 @@ export const EventManifest = {
     stream: 'thread',
     capability: 'thread.bookmarks.v1',
     reconcilesWith: 'thread/bookmarks/list',
+  }),
+  'thread/pull-requests/updated': defineEvent({
+    payload: Schema.Struct({
+      threadId: OpaqueIDSchema,
+      items: Schema.Array(ThreadPullRequestSummarySchema),
+    }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'github.threadPullRequests.v1',
+    reconcilesWith: 'github/thread/pullRequests',
   }),
   'turn/queued': defineEvent({
     payload: Schema.Struct({ turn: TurnSchema, input: InputSchema }),
@@ -468,6 +526,13 @@ export const EventManifest = {
     durability: 'durable',
     stream: 'thread',
     capability: 'events.replay.v1',
+  }),
+  'item/agentMessage/phaseChanged': defineEvent({
+    payload: Schema.Struct({ item: TextItemSchema }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'thread.message-phase.v1',
   }),
   'item/completed': defineEvent({
     payload: Schema.Struct({ item: ItemSchema }),
@@ -611,6 +676,20 @@ export const EventManifest = {
     stream: 'thread',
     capability: 'events.replay.v1',
   }),
+  'context/compactionUpdated': defineEvent({
+    payload: Schema.Struct({ operation: ContextCompactionOperationSchema }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'context.compact.lifecycle.v1',
+  }),
+  'context/usageUpdated': defineEvent({
+    payload: Schema.Struct({ budget: ContextBudgetSchema }),
+    version: 1,
+    durability: 'durable',
+    stream: 'thread',
+    capability: 'context.compact.lifecycle.v1',
+  }),
   'context/compacted': defineEvent({
     payload: Schema.Struct({
       compactionId: OpaqueIDSchema,
@@ -703,6 +782,14 @@ export const EventManifest = {
     stream: 'global',
     capability: 'provider.auth.pi.v1',
     reconcilesWith: 'provider/credential/list',
+  }),
+  'provider/modelPreferences/updated': defineEvent({
+    payload: Schema.Struct({ preference: ModelRuntimePreferenceSchema }),
+    version: 1,
+    durability: 'live',
+    stream: 'global',
+    capability: 'model.preferences.v1',
+    reconcilesWith: 'provider/modelPreferences/list',
   }),
   'auth/session/updated': defineEvent({
     payload: Schema.Struct({ session: AuthSessionSchema }),

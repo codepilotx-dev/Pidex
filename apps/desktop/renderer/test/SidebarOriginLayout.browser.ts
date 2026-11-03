@@ -1,4 +1,7 @@
-// Run from apps/desktop/renderer: node --experimental-strip-types test/SidebarOriginLayout.browser.ts
+// Bundle with Bun (--target=node), then run with Node, like IconSize.browser.ts.
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
+import { Button, type ButtonProps } from '../src/components/ui/Button.js'
 import { chromium } from '@playwright/test'
 import { strict as assert } from 'node:assert'
 import { compileEntryStyles } from './helpers/RendererStyles.js'
@@ -7,7 +10,7 @@ const css = await compileEntryStyles()
 
 /*
  * 侧栏外观已迁移到 TSX 的 `tw:` utility，因此这里的固定 DOM 必须使用与组件一致的
- * 类名清单（语义类 + utility），否则测不到真实几何。
+ * 类名清单（语义类 + utility），否则测不到真实几何；按钮直接由真实组件生成。
  */
 const INDICATOR_CLASS =
   'sidebar-indicator tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:text-app-text-meta tw:[&>svg]:size-icon-md'
@@ -20,17 +23,27 @@ const SECTION_ACTIONS_CLASS =
 const PROJECT_ACTIONS_CLASS =
   'sidebar-project-actions tw:relative tw:flex tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto tw:opacity-0 tw:pointer-events-none'
 
+function iconButton(props: ButtonProps, svgId?: string): string {
+  return renderToStaticMarkup(
+    createElement(
+      Button,
+      { isIconOnly: true, variant: 'ghost', ...props },
+      createElement('svg', { id: svgId }),
+    ),
+  )
+}
+
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   const page = await browser.newPage()
   await page.setContent(`<style>${css}
  * {box-sizing:border-box} .desktop-sidebar {--sidebar-current-width:280px;--cpx-sys-motion-micro:0ms; --button-icon-size-xs:14px;} .sidebar-session-meta{display:flex;align-items:center;justify-content:flex-end} .row{height:32px;padding:4px 8px;display:flex;justify-content:flex-end}
- </style><aside class="desktop-sidebar"><header class="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:min-h-13 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between"><span>Coding</span><div class="sidebar-header-actions tw:ml-2 tw:flex tw:min-w-0 tw:items-center tw:gap-1 tw:pr-2"><button class="ui-button icon-button" data-size="icon" data-uniform><svg id="search"></svg></button><button class="ui-button icon-button" data-size="icon" data-uniform><svg id="bell"></svg></button></div></header><div class="sidebar-standard-mode tw:flex tw:min-w-0 tw:flex-col tw:gap-4 tw:px-2">
+ </style><aside class="desktop-sidebar"><header class="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:min-h-13 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between"><span>Coding</span><div class="sidebar-header-actions tw:ml-2 tw:flex tw:min-w-0 tw:items-center tw:gap-1 tw:pr-2">${iconButton({ size: 'icon' }, 'search')}${iconButton({ size: 'icon' }, 'bell')}</div></header><div class="sidebar-standard-mode tw:flex tw:min-w-0 tw:flex-col tw:gap-4 tw:px-2">
  <div class="row"><div class="sidebar-session-meta tw:min-w-0 tw:gap-1"><span class="${INDICATOR_CLASS}"><svg id="clock"></svg></span><span class="${INDICATOR_CLASS}"><span id="dot" class="${UNREAD_DOT_CLASS}"></span></span></div></div>
- <div class="row"><div class="sidebar-session-meta tw:min-w-0 tw:gap-1"><div class="${SESSION_ACTIONS_CLASS}"><button class="ui-button icon-button" data-size="compact" data-uniform><svg id="pin"></svg></button><button class="ui-button icon-button" data-size="compact" data-uniform><svg id="archive"></svg></button></div></div></div>
+ <div class="row"><div class="sidebar-session-meta tw:min-w-0 tw:gap-1"><div class="${SESSION_ACTIONS_CLASS}">${iconButton({ size: 'compact' }, 'pin')}${iconButton({ size: 'compact' }, 'archive')}</div></div></div>
  <div class="row"><div class="sidebar-session-meta tw:min-w-0 tw:gap-1"><span class="${INDICATOR_CLASS}"><svg id="idle-clock"></svg></span></div></div>
- <div class="row sidebar-project-header tw:cursor-pointer tw:group"><span class="sidebar-row-trailing"><div class="${PROJECT_ACTIONS_CLASS}"><button id="project-more" class="ui-button icon-button" data-size="compact" data-uniform><svg></svg></button><button id="project-action" class="ui-button icon-button" data-size="compact" data-uniform><svg></svg></button></div><span class="sidebar-project-unread ${INDICATOR_CLASS} tw:pointer-events-none tw:absolute tw:inset-y-0 tw:end-0 tw:my-auto tw:group-hover:hidden tw:group-has-[:focus-visible]:hidden"><span id="project-dot" class="${UNREAD_DOT_CLASS}"></span></span></span></div>
- <div class="row sidebar-section-header tw:sticky tw:top-0 tw:z-local tw:grid tw:min-h-[var(--sidebar-row-height)] tw:w-full tw:grid-cols-[minmax(0,1fr)_var(--sidebar-trailing-width)] tw:items-center tw:gap-x-2 tw:rounded-md tw:px-2 tw:select-none tw:focus-within:outline-none tw:group"><button id="section-title">项目</button><div class="${SECTION_ACTIONS_CLASS}"><button id="section-menu" class="ui-button icon-button" data-size="iconMd" data-uniform data-state="closed"><svg id="section-more"></svg></button><button class="ui-button icon-button" data-size="iconMd" data-uniform><svg id="section-add"></svg></button></div></div>
+ <div class="row sidebar-project-header tw:cursor-pointer tw:group"><span class="sidebar-row-trailing"><div class="${PROJECT_ACTIONS_CLASS}">${iconButton({ size: 'compact', id: 'project-more' })}${iconButton({ size: 'compact', id: 'project-action' })}</div><span class="sidebar-project-unread ${INDICATOR_CLASS} tw:pointer-events-none tw:absolute tw:inset-y-0 tw:end-0 tw:my-auto tw:group-hover:hidden tw:group-has-[:focus-visible]:hidden"><span id="project-dot" class="${UNREAD_DOT_CLASS}"></span></span></span></div>
+ <div class="row sidebar-section-header tw:sticky tw:top-0 tw:z-local tw:grid tw:min-h-[var(--sidebar-row-height)] tw:w-full tw:grid-cols-[minmax(0,1fr)_var(--sidebar-trailing-width)] tw:items-center tw:gap-x-2 tw:rounded-md tw:px-2 tw:select-none tw:focus-within:outline-none tw:group"><button id="section-title">项目</button><div class="${SECTION_ACTIONS_CLASS}">${iconButton({ size: 'iconMd', id: 'section-menu', 'data-state': 'closed' }, 'section-more')}${iconButton({ size: 'iconMd' }, 'section-add')}</div></div>
  </div></aside>`)
   for (const width of [240, 280, 360]) {
     await page

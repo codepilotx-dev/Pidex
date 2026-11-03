@@ -16,8 +16,9 @@ export function catalogProviderToDesktop(
       const cost = model.cost[0]
       const metadata: DesktopModelMetadata = {
         id: model.id,
-        name: model.name,
+        name: model.name || model.id,
         contextWindow: model.limit.context,
+        inputTokens: model.limit.input,
         outputTokens: model.limit.output,
         inputCost: cost?.input,
         outputCost: cost?.output,
@@ -28,14 +29,17 @@ export function catalogProviderToDesktop(
           (output) => output === 'json' || output === 'structured',
         ),
         vision: model.capabilities.input.includes('image'),
+        // 推理能力以目录返回的思考档位为准：有任意档位即视为支持推理。
+        reasoning: model.variants.length > 0,
         modalities: {
           input: [...model.capabilities.input],
           output: [...model.capabilities.output],
         },
-        modelType: model.family,
+        modelType: model.modelType ?? model.family,
         tags: [model.status],
         variants: model.variants.map((variant) => variant.id),
         providerApi: isProviderApi(model.api.name) ? model.api.name : undefined,
+        nativeApi: model.api.name,
       }
       return [model.id, metadata]
     }),
@@ -47,6 +51,9 @@ export function catalogProviderToDesktop(
     availability: extendedProvider.availability,
     logoURL: provider.source.kind === 'builtin' ? modelsDevLogoURL(provider.id) : undefined,
     providerApis: provider.source.apis.filter(isProviderApi),
+    nativeApis: [...provider.source.apis],
+    ...(provider.source.endpoints ? { endpointDefaults: provider.source.endpoints } : {}),
+    ...(provider.source.defaultApi ? { defaultApi: provider.source.defaultApi } : {}),
     enabled: provider.disabled !== true,
     authMethods: [
       provider.auth.apiKey ? ('api-key' as const) : null,
@@ -94,8 +101,12 @@ export function desktopProviderExecutionError(
 
 function isProviderApi(
   value: string,
-): value is 'openai-completions' | 'openai-responses' | 'anthropic-messages' {
+): value is
+  'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai' {
   return (
-    value === 'openai-completions' || value === 'openai-responses' || value === 'anthropic-messages'
+    value === 'openai-completions' ||
+    value === 'openai-responses' ||
+    value === 'anthropic-messages' ||
+    value === 'google-generative-ai'
   )
 }

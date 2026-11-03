@@ -23,6 +23,7 @@ import {
 import { SettingsDropdown } from '../SettingsDropdown.js'
 import { useLastNonNull } from '../../../hooks/UsePresenceRetention.js'
 import { errorMessageOf as rawErrorMessage } from '@pidex/shared/errors'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../SettingsManagementDialogSizing.js'
 
 type TransportType = DesktopMcpServerConfig['type']
 
@@ -305,7 +306,7 @@ export function McpEditorDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
         <Dialog.Content
-          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:max-h-[min(48rem,calc(100vh-3rem))] tw:w-[min(44rem,calc(100vw-3rem))] tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text"
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text ${SETTINGS_MANAGEMENT_DIALOG_SIZE.mcpEditor}`}
           onCloseAutoFocus={(event) => {
             if (!restoreFocusElement?.isConnected) return
             event.preventDefault()
@@ -324,7 +325,7 @@ export function McpEditorDialog({
               <Dialog.Description className="tw:type-body-sm tw:mt-1 tw:mb-0 tw:text-app-text-soft">
                 使用结构化字段配置 stdio 或 Streamable HTTP；HTTP 会在协议不兼容时自动回退 SSE。
               </Dialog.Description>
-              <Button color="secondary" className="tw:mt-1" onClick={onOpenDocumentation}>
+              <Button size="md" color="secondary" className="tw:mt-1" onClick={onOpenDocumentation}>
                 官方 MCP 文档
                 <ExternalLink aria-hidden="true" size={APP_ICON_SIZE} />
               </Button>
@@ -667,7 +668,7 @@ export function McpEditorDialog({
           <footer className="settings-management-dialog-footer tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2">
             <span>
               {server?.removable ? (
-                <Button color="danger" disabled={busy} onClick={() => onRemove(server)}>
+                <Button size="md" color="danger" disabled={busy} onClick={() => onRemove(server)}>
                   <Trash2
                     aria-hidden="true"
                     size={APP_ICON_SIZE}
@@ -679,9 +680,17 @@ export function McpEditorDialog({
             </span>
             <span className="tw:flex tw:items-center tw:gap-2">
               <Dialog.Close asChild>
-                <Button color="secondary">关闭</Button>
+                <Button size="md" color="secondary">
+                  关闭
+                </Button>
               </Dialog.Close>
-              <Button color="primary" disabled={busy} loading={busy} onClick={() => void save()}>
+              <Button
+                size="md"
+                color="primary"
+                disabled={busy}
+                loading={busy}
+                onClick={() => void save()}
+              >
                 保存
               </Button>
             </span>
@@ -828,11 +837,7 @@ function ValueListField({
             </Button>
           </div>
         ))}
-        <Button
-          color="primary"
-          className="tw:w-full tw:justify-center"
-          onClick={() => onChange([...rows, createValueRow()])}
-        >
+        <Button color="primary" fullWidth onClick={() => onChange([...rows, createValueRow()])}>
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           {addLabel}
         </Button>
@@ -899,11 +904,7 @@ function MapListField({
             </Button>
           </div>
         ))}
-        <Button
-          color="primary"
-          className="tw:w-full tw:justify-center"
-          onClick={() => onChange([...rows, createMapRow()])}
-        >
+        <Button color="primary" fullWidth onClick={() => onChange([...rows, createMapRow()])}>
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           {addLabel}
         </Button>
@@ -963,7 +964,7 @@ function ToolApprovalListField({
         ))}
         <Button
           color="primary"
-          className="tw:w-full tw:justify-center"
+          fullWidth
           onClick={() => onChange([...rows, createMapRow('', 'auto')])}
         >
           <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />

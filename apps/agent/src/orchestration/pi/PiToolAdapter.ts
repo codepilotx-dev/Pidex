@@ -2,10 +2,13 @@ import { subagentToolDefinitions } from '../../subagent/ToolDefinitions'
 import type { AgentToolResult } from '../harness/AgentTypes'
 import { Type, type TSchema } from '@earendil-works/pi-ai'
 import { AgentError } from '../../Domain'
+import { QUESTION_CHOICES_WRITE_MAX } from '@pidex/shared/thread'
+import { taskArrangementInput } from '../../tool/TaskSchedule/Definitions'
 import { secretScrubber } from '../../security/SecretScrubber'
 import { requestPermissionsDefinition, type ToolDefinition } from '../../tool/ToolRegistry'
 import { executionPlanInputSchema } from '../plan/ExecutionPlanInput'
 import { parseStructuredPlan, structuredPlanParameters } from '../plan/StructuredPlan'
+import { parseScheduleDraft, scheduleDraftParameters } from '../plan/ScheduleDraft'
 import type {
   HarnessRuntimeRequest,
   PiLifecycleCallbacks,
@@ -104,12 +107,14 @@ export function adaptToolDefinition(
       })
       if (definition.formatResult) {
         const formatted = definition.formatResult(output, toolContext)
-        const safe = secretScrubber.scrub({ ...formatted, images: undefined })
+        const safe = secretScrubber.scrub({ ...formatted, images: undefined, artifacts: undefined })
         return {
           content: [{ type: 'text', text: safe.content }, ...(formatted.images ?? [])],
           details: safe.details,
           structuredContent: safe.details,
+          ...(formatted.artifacts ? { artifacts: formatted.artifacts } : {}),
           ...(safe.addedToolNames ? { addedToolNames: safe.addedToolNames } : {}),
+          ...(safe.terminate ? { terminate: true } : {}),
         }
       }
       return textResult(output)
@@ -239,7 +244,13 @@ export function createLifecycleTools(
     add(
       lifecycleTool(
         'request_user_input',
-        '向用户提出 1 至 3 个必须回答的问题，默认一次一题。每题提供 2 至 3 个选项，或空选项列表供纯文字回答；界面允许自由输入。Plan 模式必须等待用户回答，不设置 autoResolutionMs。',
+        [
+          '向用户提出 1 至 5 个必须回答的问题，默认一次一题。每题提供 2 至 5 个选项，或空选项列表供纯文字回答；界面始终允许自由输入。',
+          'multiSelect=true 表示多选，用户可同时勾选多个选项并补充自由文本。recommended=true 标记推荐项，界面会预选它；没有推荐项时用户必须自行选择。',
+          '回答中的 selectedChoices 是宿主匹配的选项 ID 与文案，以它确认选择；choiceIds 是不透明标识，不猜测零基或一基索引。自由文字 text 与 skipped 状态分别保留，不用选项文案覆盖。',
+          '用户选择“跳过”时该题以 skipped: true 返回：它只是暂定假设，不是已确认决策。依赖它的后续结论必须标注依赖关系，并在假设被修改或否定时重新验证。',
+          'Plan 与 Grill 模式必须等待用户回答，不设置 autoResolutionMs。',
+        ].join('\n'),
         Type.Object({
           questions: Type.Array(
             Type.Object({
@@ -252,11 +263,11 @@ export function createLifecycleTools(
                   description: Type.String({ minLength: 1 }),
                   recommended: Type.Optional(Type.Boolean()),
                 }),
-                { maxItems: 3, anyOf: [{ maxItems: 0 }, { minItems: 2 }] },
+                { maxItems: QUESTION_CHOICES_WRITE_MAX, anyOf: [{ maxItems: 0 }, { minItems: 2 }] },
               ),
               multiSelect: Type.Optional(Type.Boolean()),
             }),
-            { minItems: 1, maxItems: 3 },
+            { minItems: 1, maxItems: 5 },
           ),
           autoResolutionMs: Type.Optional(Type.Integer({ minimum: 60_000, maximum: 240_000 })),
         }),
@@ -329,10 +340,30 @@ export function createLifecycleTools(
     add(
       lifecycleTool(
         'update_goal',
-        '更新当前 Goal 的终态。只有目标确实完成时使用 complete；只有必须等待用户输入或外部状态变化时使用 blocked。调用后再用 finalize_result 收尾。',
-        Type.Object({ status: Type.Union([Type.Literal('complete'), Type.Literal('blocked')]) }),
+        [
+          'Set the terminal state of the current goal. After the call, describe the result in a plain Markdown reply.',
+          '',
+          'status="complete": use only when the objective is achieved and no required work remains. Derive the requirements from the objective and every referenced file, plan, specification and user instruction. For each explicit requirement, named artifact, command, test and deliverable, identify the evidence that proves it, then inspect the current state. Treat uncertain or indirect evidence as not achieved. The audit must prove completion, not merely fail to find remaining work. A narrower or easier-to-verify subset is not the objective.',
+          '',
+          'status="blocked": use only when the same blocking condition has repeated for at least three consecutive goal turns, counting the user-triggered turn and any automatic goal continuations. Do not use it the first time a blocker appears. Supply the blocking condition in `blocker` as a stable, reusable description of the missing input, external dependency or unavailable capability — not a description of work you have not done yet. Reuse the same wording across those turns; a different wording is counted as a different condition. The host returns an error before the threshold is reached; retrying within the same turn does not increase the count and is not a way past the check. Keep doing meaningful work, and if there is genuinely nothing left to do, end the turn honestly instead.',
+          '',
+          'Waiting: only a host-registered approval, question or live child task counts as waiting. Do not report "blocked" to express that you are waiting, and do not retry a fixed number of times.',
+          '',
+          'You cannot use this tool to resume, create, re-budget or otherwise change a goal; those are user actions. A budget limit is not completion.',
+        ].join('\n'),
+        Type.Object({
+          status: Type.Union([Type.Literal('complete'), Type.Literal('blocked')]),
+          blocker: Type.Optional(Type.String({ maxLength: 1000 })),
+        }),
         async (input, id, signal) =>
-          callbacks.updateGoal!({ status: input.status as 'complete' | 'blocked' }, id, signal),
+          callbacks.updateGoal!(
+            {
+              status: input.status as 'complete' | 'blocked',
+              ...(typeof input.blocker === 'string' ? { blocker: input.blocker } : {}),
+            },
+            id,
+            signal,
+          ),
       ),
     )
   }
@@ -366,6 +397,55 @@ export function createLifecycleTools(
       ),
     )
   }
+  if (
+    callbacks.submitSchedulePlan &&
+    request.taskMode === 'plan' &&
+    (request.profile ?? 'main') === 'main'
+  ) {
+    add(
+      lifecycleTool(
+        'submit_schedule_plan',
+        [
+          '提交「任务计划 + 执行安排」草案并结束当前轮。必须先完成调查与澄清，再单独调用本工具；本工具必须是该条回复中唯一的工具调用。',
+          '用户已给出明确 Plan 时，把该 Plan 作为固定快照提交（source 指明来源），不要重新规划任务。',
+          '只提交可以确定的信息：触发时间、条件、执行环境与验收方式都必须来自用户回答或可确认的上下文。',
+          '本工具只保存待审阅草案，不会安排或执行任何任务；不要调用 schedule_plan_propose 或 automation_create。',
+          '信息不足时不要调用本工具：继续用普通文本提问，或用 request_user_input 逐题确认。',
+        ].join('\n'),
+        scheduleDraftParameters,
+        async (input, id, signal) => {
+          if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main') {
+            throw new AgentError(
+              'TOOL_NOT_ALLOWED_IN_MODE',
+              'submit_schedule_plan 仅允许 Plan 模式的主 Agent 使用',
+              403,
+            )
+          }
+          const parsed = parseScheduleDraft(input)
+          return callbacks.submitSchedulePlan!(parsed, id, signal)
+        },
+        true,
+      ),
+    )
+  }
+  if (callbacks.submitTaskSchedule && request.exposedTools.includes('submit_task_schedule'))
+    add(
+      lifecycleTool(
+        'submit_task_schedule',
+        '仅提交时间安排草案并结束本轮；不要求执行方案、项目或模型，也不会创建任务或开始执行。先读取任务与日历，已有任务引用 taskId 和 revision，新任务填写 name 和 owner；无法安排的任务说明原因。必须是该条回复中唯一的工具调用。用户在自动化页面确认后生效。',
+        Type.Unsafe(taskArrangementInput.toJSONSchema()),
+        async (input, id, signal) => {
+          if (request.taskMode !== 'plan' || (request.profile ?? 'main') !== 'main')
+            throw new AgentError(
+              'TOOL_NOT_ALLOWED_IN_MODE',
+              '仅允许 Plan 主 Agent 提交时间草案',
+              403,
+            )
+          return callbacks.submitTaskSchedule!(taskArrangementInput.parse(input), id, signal)
+        },
+        true,
+      ),
+    )
   if (callbacks.spawnAgents)
     add(
       lifecycleTool(
@@ -374,7 +454,8 @@ export function createLifecycleTools(
           '把边界明确、有独立产出、能隔离大量中间信息或适合并行的问题委派给一个或多个并行子代理。',
           '委派前先判断：小型、强耦合或能直接用工具并发完成的工作应由你自己完成。尊重用户和适用仓库规则对并行或委派的明确要求；数量上限由宿主按队列执行，模型不需要自行预设默认数量。',
           'agents 中每个 task 都必须是自包含的任务描述：包含目标、范围、关键背景、约束与预期证据，且不得假设子代理能看到本会话未显式提供的上下文。不要为了获得一段总结而创建子代理。',
-          'Plan 模式只能创建 explorer 子代理。共享工作区中的写任务必须明确文件范围，避免同时修改同一文件。递归深度上限由宿主限制。',
+          'Plan 与 Grill 模式只能创建 explorer 子代理。共享工作区中的写任务必须明确文件范围，避免同时修改同一文件。递归深度上限由宿主限制。',
+          'role 只用于视觉职能标识（头像），不授予权限，也不改变 profile、模型、工具或工作区策略；不确定时省略。',
         ].join('\n'),
         Type.Unsafe(
           subagentToolDefinitions.find((definition) => definition.sdkName === 'spawn_agents')!
@@ -458,7 +539,7 @@ export function createLifecycleTools(
         '任务收尾时提交结构化交付结果并结束当前轮。先完成实际操作和必要验证再单独调用；summary 必须非空并说明做了什么与结果如何，没有内容的列表提交空数组。',
         'outcome 是对任务结果的如实陈述：succeeded=已完成；partial=部分完成；blocked=受阻或无法继续。提交部分完成或受阻结果也是合法交付；validation 只能记录实际执行过的验证及其结果，不得编造验证成功。',
         '提交本身不批准未决操作、不应用修改，也不替用户处理未决问题。本工具必须是该条回复中唯一的工具调用：先执行并验证其他工作，然后在单独一条回复中提交。',
-        '子 Agent 收尾必须提交结构化结果；主 Agent 仅在任务式工作收尾时使用本工具，普通问答直接以文本结束。',
+        '子 Agent 收尾必须提交结构化结果，供父任务复核并在子代理侧栏查看；主 Agent 以普通文本回答收尾。',
       ].join('\n'),
       parameters: structuredResultParameters,
       executionMode: 'sequential',
@@ -495,6 +576,8 @@ export function createPiTools(
     'update_plan',
     'update_goal',
     'submit_plan',
+    'submit_schedule_plan',
+    'submit_task_schedule',
     'spawn_agents',
     'wait_agents',
     'send_agent',

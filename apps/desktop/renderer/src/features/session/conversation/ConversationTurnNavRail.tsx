@@ -147,7 +147,7 @@ function PreviewCard({
 
   return (
     <div
-      className="conversation-turn-preview-card tw:box-border tw:w-80 tw:max-w-[calc(100vw-16px)] tw:rounded-xl tw:border-[0.5px] tw:border-app-border tw:bg-app-raised tw:p-2 tw:text-app-text tw:type-caption tw:shadow-lg"
+      className="conversation-turn-preview-card tw:box-border tw:w-80 tw:max-w-[calc(100vw-16px)] tw:rounded-xl tw:border-[0.5px] tw:border-app-border tw:bg-app-raised tw:p-2 tw:text-app-text tw:type-caption"
       data-thread-user-message-navigation-tooltip-preview
     >
       <span className="tw:sr-only">
@@ -270,10 +270,13 @@ export function ConversationTurnNavRail({
   const lastPreviewCloseAtRef = React.useRef(Number.NEGATIVE_INFINITY)
   const previewAnchorRef = React.useRef<HTMLElement | null>(null)
   const previewCloseTimerRef = React.useRef<number | null>(null)
+  const previewItemIdRef = React.useRef<string | null>(null)
   const previewCardRef = React.useRef<HTMLDivElement | null>(null)
   const [hasInlineClearance, setHasInlineClearance] = React.useState(false)
   const [previewItemId, setPreviewItemId] = React.useState<string | null>(null)
+  const [previewWarm, setPreviewWarm] = React.useState(false)
   const [scrubItemId, setScrubItemId] = React.useState<string | null>(null)
+  previewItemIdRef.current = previewItemId
   const edges = useScrollEdgeState(listRef, { version: `${hasInlineClearance}:${items.length}` })
   const indexes = React.useMemo(
     () => new Map(items.map((item, index) => [item.id, index])),
@@ -320,17 +323,22 @@ export function ConversationTurnNavRail({
       clearHoverTimer()
       cancelPreviewClose()
       previewAnchorRef.current = buttonRefs.current.get(itemId) ?? null
+      const alreadyOpen = previewItemIdRef.current === itemId
+      // 已有预览驻留或仍在预热窗口内都算预热；前者同时修掉划过相邻刻度仍等 150ms 的缺陷。
       const isHandoff =
+        previewItemIdRef.current !== null ||
         performance.now() - lastPreviewCloseAtRef.current <= TURN_NAV_HANDOFF_WINDOW_MS
-      if (immediate || isHandoff) {
+      const show = (): void => {
+        if (!alreadyOpen) setPreviewWarm(isHandoff)
         setPreviewItemId(itemId)
+      }
+      if (immediate || isHandoff) {
+        show()
         return
       }
       hoverTimerRef.current = window.setTimeout(() => {
         hoverTimerRef.current = null
-        if (hoveredItemIdRef.current === itemId) {
-          setPreviewItemId(itemId)
-        }
+        if (hoveredItemIdRef.current === itemId) show()
       }, TURN_NAV_HOVER_DELAY_MS)
     },
     [cancelPreviewClose, clearHoverTimer],
@@ -353,15 +361,29 @@ export function ConversationTurnNavRail({
       frame.querySelector<HTMLElement>('.canonical-turn-error') ??
       frame.querySelector<HTMLElement>('.workflow-page__composer-inner') ??
       frame.querySelector<HTMLElement>('.session-timeline-container')
-    const observedContent = resolveContent()
-    if (!observedContent) return
 
     let frameId: number | null = null
+    let currentObservedContent: HTMLElement | null = null
+
+    const observer =
+      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => updateVisibility())
+
     const updateVisibility = (): void => {
       if (frameId !== null) return
       frameId = window.requestAnimationFrame(() => {
         frameId = null
         const content = resolveContent()
+        if (content !== currentObservedContent) {
+          if (currentObservedContent) {
+            observer?.unobserve(currentObservedContent)
+            currentObservedContent.removeEventListener('transitionend', updateVisibility)
+          }
+          currentObservedContent = content
+          if (content) {
+            observer?.observe(content)
+            content.addEventListener('transitionend', updateVisibility)
+          }
+        }
         if (!content) return
         const frameRect = frame.getBoundingClientRect()
         const contentRect = content.getBoundingClientRect()
@@ -371,11 +393,16 @@ export function ConversationTurnNavRail({
       })
     }
 
-    updateVisibility()
-    const observer =
-      typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(updateVisibility)
     observer?.observe(frame)
-    observer?.observe(observedContent)
+    updateVisibility()
+
+    // 初次挂载时消息内容可能处于异步拉取或首帧虚拟化阶段，通过 childList 监听正文挂载，确保一挂载立即点亮导轨
+    const contentMountObserver =
+      typeof MutationObserver === 'undefined'
+        ? null
+        : new MutationObserver(() => updateVisibility())
+    contentMountObserver?.observe(frame, { childList: true, subtree: true })
+
     const styleHost = frame.closest<HTMLElement>('.workflow-page__main')
     const styleObserver =
       typeof MutationObserver === 'undefined' || !styleHost
@@ -387,14 +414,16 @@ export function ConversationTurnNavRail({
         attributes: true,
       })
     }
-    observedContent.addEventListener('transitionend', updateVisibility)
     window.addEventListener('resize', updateVisibility)
 
     return () => {
       if (frameId !== null) window.cancelAnimationFrame(frameId)
       observer?.disconnect()
+      contentMountObserver?.disconnect()
       styleObserver?.disconnect()
-      observedContent.removeEventListener('transitionend', updateVisibility)
+      if (currentObservedContent) {
+        currentObservedContent.removeEventListener('transitionend', updateVisibility)
+      }
       window.removeEventListener('resize', updateVisibility)
     }
   }, [items.length])
@@ -683,7 +712,9 @@ export function ConversationTurnNavRail({
             align="center"
             anchor={previewAnchorRef}
             aria-label="用户消息预览"
+            variant="unstyled"
             className="conversation-turn-preview-tooltip tw:animate-none tw:w-auto tw:border-0 tw:bg-transparent tw:p-0 tw:shadow-none"
+            data-warm-handoff={previewWarm ? 'true' : undefined}
             onBlurCapture={schedulePreviewClose}
             onFocusCapture={cancelPreviewClose}
             onOpenAutoFocus={(event) => {

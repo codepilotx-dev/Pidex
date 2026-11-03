@@ -4,6 +4,8 @@ import { createDesktopClient } from '../src/services/desktop-client/index.js'
 describe('desktop plugin client', () => {
   test('uses typed plugin RPC methods and supplies mutation operation ids', async () => {
     const requests: Array<{ method: string; params: unknown }> = []
+    let legacyCatalog = false
+    let catalogError: string | undefined
     const plugin = {
       id: 'task-planning',
       name: '任务规划',
@@ -12,6 +14,7 @@ describe('desktop plugin client', () => {
       developerName: 'Pidex',
       category: 'Productivity',
       source: 'bundled',
+      inMarketplace: true,
       installationPolicy: 'INSTALLED_BY_DEFAULT',
       installed: true,
       enabled: true,
@@ -36,7 +39,13 @@ describe('desktop plugin client', () => {
           result: {
             protocol: 'thread-rpc-v4',
             serverInfo: { name: 'test', version: '1' },
-            capabilities: ['rpc.typed.v1', 'plugins.manage.v1', 'plugins.details.v1'],
+            capabilities: [
+              'rpc.typed.v1',
+              'plugins.manage.v1',
+              'plugins.details.v1',
+              'plugins.lifecycle.v1',
+              'plugins.assets.v1',
+            ],
             limits: {
               maxFrameBytes: 1024,
               maxSubscriptions: 4,
@@ -52,10 +61,32 @@ describe('desktop plugin client', () => {
         return Response.json({
           jsonrpc: '2.0',
           id: body.id,
-          result: { plugins: [plugin], generation: 1, updatedAt: 1 },
+          result: {
+            plugins: [legacyCatalog ? { ...plugin, inMarketplace: undefined } : plugin],
+            generation: 1,
+            updatedAt: 1,
+            ...(legacyCatalog
+              ? {}
+              : {
+                  sections: [{ id: 'included', title: '自带插件', pluginIds: ['task-planning'] }],
+                }),
+            ...(catalogError ? { catalogError } : {}),
+          },
+        })
+      if (body.method === 'plugin/readAsset')
+        return Response.json({
+          jsonrpc: '2.0',
+          id: body.id,
+          result: { mimeType: 'image/png', base64: 'cG5n' },
         })
       if (body.method === 'plugin/getDetails')
         return Response.json({ jsonrpc: '2.0', id: body.id, result: { details } })
+      if (body.method === 'plugin/install' || body.method === 'plugin/uninstall')
+        return Response.json({
+          jsonrpc: '2.0',
+          id: body.id,
+          result: { pluginId: body.params.pluginId, generation: 3, updatedAt: 3 },
+        })
       if (body.method === 'plugin/setEnabled')
         return Response.json({
           jsonrpc: '2.0',
@@ -66,11 +97,31 @@ describe('desktop plugin client', () => {
     }
     const client = createDesktopClient({ fetch: fetcher })
 
+    expect(await client.readPluginAsset('pidex-demo', 'logo', 'F:\\workspace')).toEqual({
+      mimeType: 'image/png',
+      base64: 'cG5n',
+    })
+    expect(requests.find((item) => item.method === 'plugin/readAsset')?.params).toEqual({
+      pluginId: 'pidex-demo',
+      kind: 'logo',
+      workspace: 'F:\\workspace',
+    })
+    await client.installPlugin('pidex-demo')
+    await client.uninstallPlugin('pidex-demo')
     const listed = await client.listPlugins('F:\\workspace', true)
     const loadedDetails = await client.getPluginDetails('task-planning', 'F:\\workspace')
     const disabled = await client.setPluginEnabled('task-planning', false)
 
+    for (const method of ['plugin/install', 'plugin/uninstall']) {
+      expect(requests.find((item) => item.method === method)?.params).toEqual({
+        pluginId: 'pidex-demo',
+        operationId: expect.any(String),
+      })
+    }
     expect(listed.plugins[0]?.id).toBe('task-planning')
+    expect(listed.plugins[0]?.inMarketplace).toBe(true)
+    expect(listed.sections?.[0]?.pluginIds).toEqual(['task-planning'])
+    expect(listed.catalogError).toBeUndefined()
     expect(disabled.enabled).toBe(false)
     expect(loadedDetails).toEqual(details)
     expect(requests.find((item) => item.method === 'initialize')?.params).toMatchObject({
@@ -89,6 +140,12 @@ describe('desktop plugin client', () => {
       enabled: false,
       operationId: expect.any(String),
     })
+    legacyCatalog = true
+    const legacy = await client.listPlugins()
+    expect(legacy.plugins[0]?.id).toBe('task-planning')
+    expect(legacy.catalogError).toContain('重启开发 Agent')
+    catalogError = '插件目录获取失败，请检查网络后刷新重试。'
+    expect((await client.listPlugins()).catalogError).toBe(catalogError)
   })
 
   test('reports a missing versioned capability without duplicating its version', async () => {
@@ -119,6 +176,8 @@ describe('desktop plugin client', () => {
     }
     const client = createDesktopClient({ fetch: fetcher })
 
+    expect(await client.readPluginAsset('task-planning', 'logo')).toBeNull()
+    expect(methods).not.toContain('plugin/readAsset')
     expect(await client.getPluginDetails('task-planning')).toBeNull()
     expect(methods).not.toContain('plugin/getDetails')
     expect(client.listPlugins()).rejects.toThrow(

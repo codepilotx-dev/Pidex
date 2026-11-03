@@ -9,12 +9,90 @@ import { Model, Provider } from '@pidex/model-schema'
 import { Capabilities, type ProtocolCapability } from '@pidex/agent-protocol'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import { AgentError } from '../src/Domain'
+import { PiModelServiceError } from '../src/provider/pi/PiModelService'
 import { RpcRouter, type RpcRouterDependencies } from '../src/transport/rpc/RpcRouter'
 import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { TerminalOutputMirror } from '../src/terminal/TerminalOutputMirror'
 import { rpcTransportAuthority } from '../src/transport/Server'
+import { TurnCoordinator } from '../src/session/TurnCoordinator'
+import { ThreadHistoryService } from '../src/session/ThreadHistoryService'
 
 const roots: string[] = []
+
+test('model parameter preferences round trip through RPC', async () => {
+  const { db, initialize, call } = await fixture()
+  await initialize()
+  const result = await call('provider/modelPreferences/set', {
+    operationId: 'preferences:test',
+    providerId: 'workbuddy',
+    modelId: 'hy4-preview',
+    variant: 'high',
+    maxContextTokens: 96_500,
+  })
+  expect(result.error).toBeUndefined()
+  expect(result.result.preference).toMatchObject({ variant: 'high', maxContextTokens: 96_500 })
+  const listed = await call('provider/modelPreferences/list', {})
+  expect(listed.error).toBeUndefined()
+  expect(listed.result.preferences).toHaveLength(1)
+  db.close()
+})
+
+test('session context limit and model preference save through one transactional call', async () => {
+  const { db, initialize, call } = await fixture()
+  await initialize()
+  const thread = db.createThread('参数保存事务')
+  const saved = await call('provider/modelPreferences/set', {
+    operationId: 'preferences:session',
+    threadId: thread.id,
+    providerId: 'workbuddy',
+    modelId: 'hy4-preview',
+    maxContextTokens: 128_000,
+  })
+  expect(saved.error).toBeUndefined()
+  expect(db.repositories.threads.getThreadSettings(thread.id)?.maxContextTokens).toBe(128_000)
+  expect((await call('provider/modelPreferences/list', {})).result.preferences).toMatchObject([
+    { providerId: 'workbuddy', modelId: 'hy4-preview', maxContextTokens: 128_000 },
+  ])
+
+  // 只改思考档位时不得覆盖已保存的会话额度。
+  const thinkingOnly = await call('provider/modelPreferences/set', {
+    operationId: 'preferences:thinking',
+    threadId: thread.id,
+    providerId: 'workbuddy',
+    modelId: 'hy4-preview',
+    variant: 'high',
+  })
+  expect(thinkingOnly.error).toBeUndefined()
+  expect(db.repositories.threads.getThreadSettings(thread.id)?.maxContextTokens).toBe(128_000)
+  expect((await call('provider/modelPreferences/list', {})).result.preferences).toMatchObject([
+    {
+      providerId: 'workbuddy',
+      modelId: 'hy4-preview',
+      variant: 'high',
+      maxContextTokens: 128_000,
+    },
+  ])
+
+  // 切回模型默认时删除会话额度行，而不是写入空值。
+  const cleared = await call('provider/modelPreferences/set', {
+    operationId: 'preferences:clear',
+    threadId: thread.id,
+    providerId: 'workbuddy',
+    modelId: 'hy4-preview',
+    maxContextTokens: null,
+  })
+  expect(cleared.error).toBeUndefined()
+  expect(db.repositories.threads.getThreadSettings(thread.id)?.maxContextTokens).toBeUndefined()
+  expect((await call('provider/modelPreferences/list', {})).result.preferences).toMatchObject([
+    {
+      providerId: 'workbuddy',
+      modelId: 'hy4-preview',
+      variant: 'high',
+      maxContextTokens: null,
+    },
+  ])
+  db.close()
+})
 afterEach(async () => {
   await removeFixturePaths(roots.splice(0))
 })
@@ -107,7 +185,7 @@ const fixture = async (
       github,
       hub: { publish: () => Effect.void },
       threads: { resumeHookTrust: () => undefined },
-      history: null,
+      history: new ThreadHistoryService(db, { publish: () => Effect.void } as never),
       approvals: null,
       questions: null,
       subagents: null,
@@ -177,6 +255,32 @@ const fixture = async (
 }
 
 describe('RPC v4 Router', () => {
+  test('连接关闭只清理连接资源，不中止后端普通任务，重连保留执行句柄', async () => {
+    const coordinator = new TurnCoordinator()
+    const handle = coordinator.reserve('thread:background', 'turn:background')
+    let stopped = 0
+    const { db, router, initialize } = await fixture({
+      threads: {
+        resumeHookTrust: () => undefined,
+        stop: async () => {
+          stopped++
+          handle.controller.abort()
+        },
+      } as never,
+    })
+    try {
+      const connected = await initialize()
+      router.closeConnection(connected.result.connectionId)
+      await Bun.sleep(10)
+      expect(stopped).toBe(0)
+      expect(handle.controller.signal.aborted).toBe(false)
+      expect(coordinator.active('thread:background')?.turnID).toBe('turn:background')
+      await initialize()
+      expect(handle.controller.signal.aborted).toBe(false)
+    } finally {
+      db.close()
+    }
+  })
   test('归档先移除定时任务并停止活动 turn，失败不写入归档', async () => {
     const calls: string[] = []
     let fail = false
@@ -1253,8 +1357,14 @@ describe('RPC v4 Router', () => {
   })
 
   test('provider/delete 不再被遗留 model_provider 阻塞', async () => {
+    const deletedCredentials: string[] = []
     const providerID = Schema.decodeUnknownSync(Provider.ID)('provider:custom')
     const value = await fixture({
+      providerCredentials: {
+        deleteAll: async (id: string) => {
+          deletedCredentials.push(id)
+        },
+      } as unknown as RpcRouterDependencies['providerCredentials'],
       providers: {
         list: async () => [],
         models: async () => [],
@@ -1276,13 +1386,20 @@ describe('RPC v4 Router', () => {
     expect(deleted.error).toBeUndefined()
     expect(deleted.result).toMatchObject({ providerId: String(providerID), deleted: true })
     expect(value.configDocument.model_providers).toEqual({})
+    expect(deletedCredentials).toEqual([String(providerID)])
     expect(value.configDocument.model_provider).toBe(String(providerID))
     value.db.close()
   })
 
   test('provider/delete 仍被真实专用模型引用阻塞', async () => {
+    let credentialsDeleted = false
     const providerID = Schema.decodeUnknownSync(Provider.ID)('provider:custom')
     const value = await fixture({
+      providerCredentials: {
+        deleteAll: async () => {
+          credentialsDeleted = true
+        },
+      } as unknown as RpcRouterDependencies['providerCredentials'],
       providers: {
         list: async () => [],
         models: async () => [],
@@ -1305,6 +1422,26 @@ describe('RPC v4 Router', () => {
       message: 'Provider 仍被最近模型或专用模型引用',
     })
     expect(value.configDocument.model_providers).toHaveProperty(String(providerID))
+    expect(credentialsDeleted).toBe(false)
+    value.db.close()
+  })
+
+  test('provider/delete 凭据清理失败时保留供应商入口', async () => {
+    const value = await fixture({
+      providerCredentials: {
+        deleteAll: async () => {
+          throw new AgentError('CREDENTIAL_WRITE_FAILED', '凭据删除失败', 500)
+        },
+      } as unknown as RpcRouterDependencies['providerCredentials'],
+    })
+    await value.initialize()
+    value.configDocument.model_providers = { 'provider:custom': { kind: 'custom' } }
+    const result = await value.call('provider/delete', {
+      providerId: 'provider:custom',
+      operationId: 'operation:delete-failed',
+    })
+    expect(result.error.data.code).toBe('INTERNAL_ERROR')
+    expect(value.configDocument.model_providers).toHaveProperty('provider:custom')
     value.db.close()
   })
 
@@ -1393,7 +1530,10 @@ describe('RPC v4 Router', () => {
     expect(listCalls).toBe(1)
     expect(modelCalls).toBe(1)
 
-    await call('model/refresh', { operationId: 'operation:model-refresh-paged' })
+    await call('model/refresh', {
+      operationId: 'operation:model-refresh-paged',
+      providerId: providerID,
+    })
     const expired = await call('model/list', {
       providerId: providerID,
       enabled: true,
@@ -1404,16 +1544,79 @@ describe('RPC v4 Router', () => {
     db.close()
   })
 
+  test('model refresh failures use the declared provider error without exposing causes', async () => {
+    const { db, call, initialize } = await fixture({
+      providers: {
+        refresh: async () => {
+          throw new PiModelServiceError('CATALOG_REFRESH_FAILED', 'private upstream failure', {
+            cause: new Error('private credential or endpoint'),
+          })
+        },
+      } as unknown as RpcRouterDependencies['providers'],
+    })
+    try {
+      await initialize()
+      const result = await call('model/refresh', {
+        operationId: 'operation:failed-refresh',
+        providerId: 'google',
+      })
+      expect(result.error).toMatchObject({
+        message: '模型目录刷新失败，请检查提供商连接、凭据和模型接口后重试。',
+        data: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
+      })
+      expect(JSON.stringify(result)).not.toContain('private')
+    } finally {
+      db.close()
+    }
+  })
+
+  test('model refresh returns safe provider diagnostics for the toast', async () => {
+    const { db, call, initialize } = await fixture({
+      providers: {
+        refresh: async () => {
+          throw new PiModelServiceError(
+            'CATALOG_REFRESH_FAILED',
+            'private upstream failure',
+            { cause: new Error('private credential') },
+            ['openai：凭据鉴权失败（HTTP 401）'],
+          )
+        },
+      } as unknown as RpcRouterDependencies['providers'],
+    })
+    try {
+      await initialize()
+      const result = await call('model/refresh', {
+        operationId: 'operation:refresh-diagnostics',
+        providerId: 'openai',
+      })
+      expect(result.error).toMatchObject({
+        message: '模型目录刷新失败（1 个提供商）：openai：凭据鉴权失败（HTTP 401）。',
+        data: { code: 'PROVIDER_UNAVAILABLE', retryable: true },
+      })
+      expect(JSON.stringify(result)).not.toContain('private')
+    } finally {
+      db.close()
+    }
+  })
+
   test('model mutations and refresh return their declared versioned results', async () => {
     let refreshCalls = 0
+    let reloadCalls = 0
+    const refreshScopes: Array<string | undefined> = []
     const { db, call, initialize } = await fixture({
       providers: {
         list: async () => [],
         models: async () => [],
-        refresh: async () => {
+        refresh: async (_force: boolean, providerId?: string) => {
           refreshCalls += 1
+          refreshScopes.push(providerId)
         },
       } as unknown as RpcRouterDependencies['providers'],
+      piModels: {
+        refreshDirectory: async () => {
+          reloadCalls += 1
+        },
+      } as unknown as RpcRouterDependencies['piModels'],
     })
     await initialize()
     expect(
@@ -1448,7 +1651,15 @@ describe('RPC v4 Router', () => {
       providers: [],
       catalogVersion: 4,
     })
-    expect(refreshCalls).toBe(1)
+    expect(refreshCalls).toBe(0)
+    expect(reloadCalls).toBe(1)
+    expect(refreshScopes).toEqual([])
+    const scoped = await call('model/refresh', {
+      operationId: 'operation:google-refresh',
+      providerId: 'google',
+    })
+    expect(scoped.error).toBeUndefined()
+    expect(refreshScopes).toEqual(['google'])
     db.close()
   })
 
@@ -1504,6 +1715,55 @@ describe('RPC v4 Router', () => {
     expect((configDocument.model_providers as Record<string, unknown>)[provider.id]).toMatchObject({
       name: 'Fixture provider',
       base_url: 'https://example.com/v1',
+    })
+    const stored = (configDocument.model_providers as Record<string, Record<string, unknown>>)[
+      provider.id
+    ]!
+    stored.future_setting = { keep: true }
+    ;(stored.models as Record<string, Record<string, unknown>>)['fixture-model']!.future_parameter =
+      42
+    const updated = await call('provider/update', {
+      providerId: provider.id,
+      definition: {
+        kind: 'custom',
+        id: provider.id,
+        name: 'Updated',
+        enabled: true,
+        baseUrl: 'https://updated.example/v1',
+        auth: 'none',
+        env: [],
+        allowInsecureHttp: false,
+        headers: {},
+        models: [{ id: 'fixture-model', api: 'openai-completions' }],
+      },
+      operationId: 'operation:provider-update',
+    })
+    expect(updated.error).toBeUndefined()
+    expect(stored.future_setting).toEqual({ keep: true })
+    expect(
+      (stored.models as Record<string, Record<string, unknown>>)['fixture-model']!.future_parameter,
+    ).toBe(42)
+    expect(stored.base_url).toBe('https://updated.example/v1')
+    const builtin = await call('provider/update', {
+      providerId: 'nvidia',
+      definition: {
+        kind: 'builtin',
+        id: 'nvidia',
+        enabled: true,
+        allowModels: [],
+        denyModels: [],
+        baseUrl: 'https://gateway.example/v1',
+        models: [
+          { id: 'private-model', enabled: true, api: 'openai-completions', maxTokens: 65536 },
+        ],
+      },
+      operationId: 'operation:builtin-update',
+    })
+    expect(builtin.error).toBeUndefined()
+    expect((configDocument.model_providers as Record<string, unknown>).nvidia).toMatchObject({
+      kind: 'builtin',
+      base_url: 'https://gateway.example/v1',
+      models: { 'private-model': { enabled: true, api: 'openai-completions', maxTokens: 65536 } },
     })
 
     const invalidCreate = await call('provider/create', {

@@ -22,6 +22,7 @@ export interface ElectronAutoUpdaterLike {
 }
 
 interface DesktopAutoUpdaterOptions {
+  beforeInstall?: () => Promise<void>
   packaged: boolean
   version: string
   logger: DesktopLogger
@@ -124,6 +125,7 @@ export class DesktopAutoUpdater {
     }
     this.operation = 'install'
     try {
+      await this.options.beforeInstall?.()
       this.updater.quitAndInstall()
     } catch {
       this.publishFailure('install')

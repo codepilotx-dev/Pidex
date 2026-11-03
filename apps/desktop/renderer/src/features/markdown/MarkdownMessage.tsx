@@ -1,4 +1,5 @@
 import React, { memo, useMemo, useRef } from 'react'
+import * as Dialog from '@radix-ui/react-dialog'
 import type { Token, Tokens } from 'marked'
 import {
   AlertCircle,
@@ -12,10 +13,13 @@ import {
   FolderOpen,
   Info,
   Lightbulb,
+  Maximize2,
+  X,
 } from 'lucide-react'
 import type { DesktopExternalOpenTarget } from '../../../shared/Types.js'
 import { AppContextMenu, type AppContextMenuAction } from '../../components/ui/AppContextMenu.js'
 import { Button } from '../../components/ui/Button.js'
+import { useDialogFocusRestore } from '../../components/ui/UseDialogFocusRestore.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import { OpenTargetIcon } from '../../components/ui/OpenTargetIcon.js'
 import { desktopClient, desktopClipboard } from '../../services/desktop-client/index.js'
@@ -24,6 +28,7 @@ import {
   openPathWithExternalTarget,
   openPathWithPreferredExternalTarget,
   prefetchExternalOpenTargets,
+  useExternalOpenTargets,
 } from '../../services/ExternalOpenTargetsStore.js'
 import { cx } from '../../utils/Cx.js'
 import { FileTypeIcon } from '../layout/FileTypeIcon.js'
@@ -662,7 +667,24 @@ function MarkdownTable({
 }): React.ReactNode {
   const [copied, setCopied] = React.useState(false)
   const [downloadStatus, setDownloadStatus] = React.useState('')
+  const [expanded, setExpanded] = React.useState(false)
+  const [overflowing, setOverflowing] = React.useState(false)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
+  const tableRef = useRef<HTMLTableElement | null>(null)
+  const { onCloseAutoFocus } = useDialogFocusRestore(expanded)
   const html = tableToHtml(table)
+
+  React.useEffect(() => {
+    const scroll = scrollRef.current
+    const content = tableRef.current
+    if (!scroll || !content) return
+    const measure = (): void => setOverflowing(scroll.scrollWidth > scroll.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(scroll)
+    observer.observe(content)
+    return () => observer.disconnect()
+  }, [source])
 
   async function downloadTable(): Promise<void> {
     try {
@@ -683,14 +705,37 @@ function MarkdownTable({
     }
   }
 
+  const renderContent = (preview: boolean): React.ReactNode => (
+    <table ref={preview ? undefined : tableRef}>
+      <thead>
+        <tr>
+          {table.header.map((cell, index) =>
+            renderTableCell(cell, context, `table-head-${index}`, true),
+          )}
+        </tr>
+      </thead>
+      <tbody>
+        {table.rows.map((row, rowIndex) => (
+          <tr key={`table-row-${rowIndex}`}>
+            {row.map((cell, cellIndex) =>
+              renderTableCell(cell, context, `table-cell-${rowIndex}-${cellIndex}`, false),
+            )}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  )
+
   return (
-    <figure className={cx('md-table-block', context.allowWideBlocks && 'md-wide-block')}>
-      <div className="md-table-actions">
+    <figure
+      className={cx('md-table-block tw:group/table', context.allowWideBlocks && 'md-wide-block')}
+    >
+      <div className="md-table-actions tw:opacity-0 tw:transition-opacity tw:group-hover/table:opacity-100 tw:group-has-[:focus-visible]/table:opacity-100 tw:pointer-coarse:opacity-100">
         {context.presentation === 'conversation' ? (
           <Button
             isIconOnly
             variant="text"
-            size="toolbar"
+            size={context.presentation === 'conversation' ? 'xs' : 'toolbar'}
             aria-label="下载 CSV"
             title="下载 CSV"
             type="button"
@@ -701,9 +746,9 @@ function MarkdownTable({
         ) : null}
         <Button
           isIconOnly
-          className={cx('md-table-copy', copied && 'is-copied')}
+          className={cx('md-table-copy tw:border', copied && 'is-copied')}
           variant={context.presentation === 'conversation' ? 'text' : 'ghost'}
-          size="toolbar"
+          size={context.presentation === 'conversation' ? 'xs' : 'toolbar'}
           title={copied ? '已复制' : '复制表格'}
           type="button"
           onClick={() => void copyTable()}
@@ -714,27 +759,57 @@ function MarkdownTable({
             <Copy aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
           )}
         </Button>
+        {context.allowWideBlocks || overflowing ? (
+          <Button
+            isIconOnly
+            variant="text"
+            size="xs"
+            aria-label="展开表格"
+            title="展开表格"
+            aria-haspopup="dialog"
+            aria-expanded={expanded}
+            onClick={() => setExpanded(true)}
+          >
+            <Maximize2 aria-hidden="true" size={APP_ICON_SIZE} />
+          </Button>
+        ) : null}
       </div>
-      <div className="md-table-scroll" tabIndex={0}>
-        <table>
-          <thead>
-            <tr>
-              {table.header.map((cell, index) =>
-                renderTableCell(cell, context, `table-head-${index}`, true),
-              )}
-            </tr>
-          </thead>
-          <tbody>
-            {table.rows.map((row, rowIndex) => (
-              <tr key={`table-row-${rowIndex}`}>
-                {row.map((cell, cellIndex) =>
-                  renderTableCell(cell, context, `table-cell-${rowIndex}-${cellIndex}`, false),
-                )}
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="md-table-scroll" ref={scrollRef} tabIndex={0}>
+        {renderContent(false)}
       </div>
+      <Dialog.Root open={expanded} onOpenChange={setExpanded}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="ui-dialog-backdrop tw:fixed tw:inset-0 tw:z-modal" />
+          <Dialog.Content
+            className="ui-dialog-surface ui-dialog-surface--centered tw:z-modal tw:flex tw:w-[calc(100vw-4rem)] tw:max-h-[calc(100vh-4rem)] tw:min-h-0 tw:flex-col tw:gap-3 tw:p-4 tw:text-app-text tw:outline-none"
+            aria-describedby={undefined}
+            onCloseAutoFocus={onCloseAutoFocus}
+          >
+            <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
+              <Dialog.Title className="tw:m-0 tw:type-row-title">表格预览</Dialog.Title>
+              <Dialog.Close asChild>
+                <Button
+                  isIconOnly
+                  color="ghostSecondary"
+                  size="xs"
+                  aria-label="关闭表格预览"
+                  title="关闭表格预览"
+                >
+                  <X aria-hidden="true" size={APP_ICON_SIZE} />
+                </Button>
+              </Dialog.Close>
+            </header>
+            <div
+              className="md-body md-table-block tw:min-h-0 tw:overflow-auto"
+              role="region"
+              aria-label="可滚动表格"
+              tabIndex={0}
+            >
+              {renderContent(true)}
+            </div>
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
       {downloadStatus ? (
         <p className="md-table-status" role="status">
           {downloadStatus}
@@ -1126,6 +1201,20 @@ function openFile(context: RenderContext, path: string): void {
   void openPathWithPreferredExternalTarget(target).catch(() => undefined)
 }
 
+/**
+ * 文件引用的长路径在分隔符后给出换行机会，避免正文把文件名从中间硬断行（如 `CanonicalThreadVie` / `w.tsx`）。
+ * 单个路径段仍超出可用宽度时，由 `overflow-wrap: anywhere` 作为最后手段兜底。
+ */
+function renderFileReferenceLabel(children: React.ReactNode): React.ReactNode {
+  if (typeof children !== 'string') return children
+  const segments = children.split(/([/\\])/u)
+  if (segments.length < 2) return children
+  return segments.flatMap((segment, index) =>
+    // 带捕获组切分后，奇数下标必定是路径分隔符，其后才是可换行位置。
+    index % 2 === 1 ? [segment, <wbr key={`path-break-${index}`} />] : [segment],
+  )
+}
+
 function FileReferenceButton({
   children,
   className,
@@ -1140,7 +1229,7 @@ function FileReferenceButton({
   title: string
 }): React.ReactNode {
   const absolutePath = resolveWorkspacePath(context.cwd, reference.path)
-  const [openTargets, setOpenTargets] = React.useState<DesktopExternalOpenTarget[]>([])
+  const openTargets = useExternalOpenTargets(absolutePath)
   const [loadingTargets, setLoadingTargets] = React.useState(false)
   const canCopyContents = context.canCopyFileReferenceContents?.(reference) ?? false
 
@@ -1152,8 +1241,7 @@ function FileReferenceButton({
     if (!absolutePath) return
     setLoadingTargets(true)
     void loadExternalOpenTargets(absolutePath)
-      .then(setOpenTargets)
-      .catch(() => setOpenTargets([]))
+      .catch(() => undefined)
       .finally(() => setLoadingTargets(false))
   }
   const open = (preview: boolean): void => {
@@ -1165,16 +1253,7 @@ function FileReferenceButton({
   }
   const openWithTarget = (targetId: string): void => {
     if (!absolutePath) return
-    void openPathWithExternalTarget(absolutePath, targetId)
-      .then((selected) => {
-        setOpenTargets((current) =>
-          current.map((target) => ({
-            ...target,
-            preferred: target.id === selected.id,
-          })),
-        )
-      })
-      .catch(() => undefined)
+    void openPathWithExternalTarget(absolutePath, targetId).catch(() => undefined)
   }
   const preferredTarget = openTargets.find((target) => target.preferred) ?? openTargets[0]
   const targetActions: AppContextMenuAction[] =
@@ -1304,7 +1383,7 @@ function FileReferenceButton({
                 strokeWidth={APP_ICON_STROKE_WIDTH}
               />
             </span>
-            <span className="md-file-reference__label">{children}</span>
+            <span className="md-file-reference__label">{renderFileReferenceLabel(children)}</span>
           </span>
         </button>
       }

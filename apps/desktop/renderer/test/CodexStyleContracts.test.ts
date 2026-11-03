@@ -4,7 +4,6 @@ import { Dropdown, matchesDropdownSearch } from '../src/components/ui/floating/D
 import { ContextMenu, menuKeyDown, selectMenuItem } from '../src/components/ui/floating/Menu.js'
 import { computeFloatingPosition } from '../src/components/ui/floating/UseFloatingPosition.js'
 import { buildPopoverSizingStyle } from '../src/components/ui/PopoverSizing.js'
-import { ComposerModeSwitcher } from '../src/features/session/composer/ComposerModeSwitcher.js'
 import { ReasoningMenu } from '../src/features/session/composer/ReasoningMenu.js'
 import { DropdownActions } from '../src/components/ui/DropdownActions.js'
 import { describe, expect, test } from 'bun:test'
@@ -15,6 +14,7 @@ describe('Codex CPX design system token contract', () => {
     expect(buildPopoverSizingStyle({ size: 'sm' })).toEqual({ '--popover-width': '220px' })
     expect(buildPopoverSizingStyle({ size: 'md' })).toEqual({ '--popover-width': '280px' })
     expect(buildPopoverSizingStyle({ size: 'lg' })).toEqual({ '--popover-width': '360px' })
+    expect(buildPopoverSizingStyle({ size: 'auto' })).toEqual({ '--popover-width': 'auto' })
     expect(buildPopoverSizingStyle()).toEqual(buildPopoverSizingStyle({ size: 'md' }))
   })
   test('guards interaction semantics and visual ownership without broad exceptions', async () => {
@@ -27,12 +27,10 @@ describe('Codex CPX design system token contract', () => {
     }
 
     expect(manifest.interactionContract.interactiveRowAllowedFiles).toEqual([
-      'src/components/ui/DropdownActions.tsx',
-      'src/components/ui/PopoverItem.tsx',
-      'src/components/ui/SearchablePopoverContent.tsx',
       'src/features/session/summary/ThreadSummaryPanel.tsx',
     ])
     expect(checker).toContain('feature styles must not target .ui-button')
+    expect(checker).toContain('feature styles must not target .icon-button')
     expect(checker).toContain('legacy interactive-row escape modifier is forbidden')
     expect(checker).toContain('Button must not represent persistent pressed/selected state')
     expect(checker).toContain('Popover radio-group trigger must not use Button')
@@ -98,24 +96,33 @@ describe('Codex CPX design system token contract', () => {
   })
 
   test('maps Dropdown states and searchable gutters through shared contracts', async () => {
-    const [tokens, popover, rows, select, searchablePopover, projectSwitcher, branchSwitcher] =
-      await Promise.all([
-        Bun.file(
-          new URL('../src/styles/design-system/codex-semantic-tokens.css', import.meta.url),
-        ).text(),
-        Bun.file(new URL('../src/styles/popover.css', import.meta.url)).text(),
-        Bun.file(new URL('../src/styles/components/interactive-row.css', import.meta.url)).text(),
-        Bun.file(new URL('../src/components/ui/Select.tsx', import.meta.url)).text(),
-        Bun.file(
-          new URL('../src/components/ui/SearchablePopoverContent.tsx', import.meta.url),
-        ).text(),
-        Bun.file(
-          new URL('../src/features/session/composer/ProjectSwitcherPopover.tsx', import.meta.url),
-        ).text(),
-        Bun.file(
-          new URL('../src/features/session/composer/BranchSelectPopover.tsx', import.meta.url),
-        ).text(),
-      ])
+    const [
+      tokens,
+      popover,
+      rows,
+      sidebarRow,
+      select,
+      searchablePopover,
+      projectSwitcher,
+      branchSwitcher,
+    ] = await Promise.all([
+      Bun.file(
+        new URL('../src/styles/design-system/codex-semantic-tokens.css', import.meta.url),
+      ).text(),
+      Bun.file(new URL('../src/styles/popover.css', import.meta.url)).text(),
+      Bun.file(new URL('../src/styles/components/interactive-row.css', import.meta.url)).text(),
+      Bun.file(new URL('../src/components/ui/SidebarRow.css', import.meta.url)).text(),
+      Bun.file(new URL('../src/components/ui/Select.tsx', import.meta.url)).text(),
+      Bun.file(
+        new URL('../src/components/ui/SearchablePopoverContent.tsx', import.meta.url),
+      ).text(),
+      Bun.file(
+        new URL('../src/features/session/composer/ProjectSwitcherPopover.tsx', import.meta.url),
+      ).text(),
+      Bun.file(
+        new URL('../src/features/session/composer/BranchSelectPopover.tsx', import.meta.url),
+      ).text(),
+    ])
 
     expectSourceContains(
       tokens,
@@ -125,7 +132,7 @@ describe('Codex CPX design system token contract', () => {
     expectSourceContains(popover, ".popover-surface[data-theme-component='dropdown-surface']")
     expectSourceContains(popover, '--cpx-comp-row-hover-bg: var(--cpx-comp-dropdown-item-hover-bg)')
     expectSourceContains(rows, '--cpx-comp-row-selected-bg, var(--cpx-sys-color-selected)')
-    expectSourceContains(rows, '.popover-item[aria-selected="true"]')
+    expectSourceContains(sidebarRow, '.sidebar-row[aria-selected="true"]')
     expectSourceContains(rows, '.settings-dropdown-item:has(.settings-dropdown-item-indicator)')
     expectSourceContains(rows, '.permission-select-item:has(.permission-select-item-indicator)')
     expectSourceContains(rows, '--cpx-comp-row-bg, transparent')
@@ -223,20 +230,28 @@ describe('Codex CPX design system token contract', () => {
     ])
 
     // primary：foreground 实底、反色文字；secondary：5% 弱背景、透明边框。
+    // 外观已从 utility 收回共享样式，按 data-variant 选择器验证同一分区。
     expectSourceContains(
       buttons,
-      'tw:border-app-border-strong tw:bg-app-primary-action tw:text-app-primary-action-foreground',
+      ":is(button, a)[data-size][data-variant][data-variant='primary'] {",
     )
+    expectSourceContains(buttons, 'background: var(--cpx-comp-button-primary-bg);')
+    expectSourceContains(buttons, 'color: var(--cpx-comp-button-primary-fg);')
     expectSourceContains(tokens, '--cpx-comp-button-primary-bg: var(--cpx-sys-color-fg-primary);')
     expectSourceContains(
       tokens,
       '--cpx-comp-button-primary-fg: var(--cpx-sys-color-surface-canvas);',
     )
     expectSourceContains(
-      buttons,
-      'tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_5%,transparent)]',
+      tokens,
+      '--cpx-comp-button-bg: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 5%, transparent);',
     )
-    expectSourceContains(buttons, 'tw:border-transparent tw:text-app-text')
+    expectSourceContains(
+      buttons,
+      ":is(button, a)[data-size][data-variant][data-variant='secondary'] {",
+    )
+    expectSourceContains(buttons, 'background: var(--cpx-comp-button-bg);')
+    expectSourceContains(buttons, 'color: var(--cpx-comp-button-fg);')
     // 设置行不再锁死 64px：行本身不携带固定高度，高度由 12px 块级内边距
     // 驱动（compact 档 8px）；`+` 兄弟行的 0.5px 分隔线仍是共享几何。
     expect(settings).not.toMatch(/\.settings-row\s*\{[\s\S]*?min-height: 64px;/)
@@ -299,9 +314,10 @@ describe('Codex CPX design system token contract', () => {
 
     expectSourceContains(settings, '.settings-management-list')
     expectSourceContains(settings, '.settings-management-dialog-row')
-    expectSourceContains(providerCatalog, 'settings-management-list')
+    expectSourceNotContains(providerCatalog, 'settings-management-list')
+    expectSourceContains(providerCatalog, 'model-center-catalog-list')
     expectSourceContains(extensionRow, 'settings-management-row')
-    // 供应商目录不再用 auto-fill 卡片网格，改走共享管理列表几何。
+    // 供应商目录按平铺网格展示，不再包裹大卡片管理列表外框。
     expectSourceNotContains(providerCatalog, 'repeat(auto-fill')
     expectSourceContains(plugins, 'settings-content-inner plugins-settings-content')
     expect(plugins).not.toMatch(/tw:(?:max-w-\[60rem\]|px-8|py-16)/)
@@ -319,24 +335,31 @@ describe('Codex CPX design system token contract', () => {
   })
 
   test('keeps primary routes and workbench panels on their shared alignment axes', async () => {
-    const [automationView, pets, pullRequests, setup, review, browser] = await Promise.all([
-      Bun.file(new URL('../src/features/automation/AutomationView.tsx', import.meta.url)).text(),
-      Bun.file(new URL('../src/features/pet/PetCatalogPage.tsx', import.meta.url)).text(),
-      Bun.file(
-        new URL('../src/features/pull-requests/PullRequestsPlaceholder.tsx', import.meta.url),
-      ).text(),
-      Bun.file(new URL('../src/features/models/setup/ModelSetupPage.tsx', import.meta.url)).text(),
-      Bun.file(
-        new URL('../src/features/review/workspace/WorkspaceReviewSidebar.tsx', import.meta.url),
-      ).text(),
-      Bun.file(new URL('../src/features/browser/DesktopBrowserPanel.tsx', import.meta.url)).text(),
-    ])
+    const [automationView, pets, pullRequests, setup, review, browser, primaryPageCss] =
+      await Promise.all([
+        Bun.file(new URL('../src/features/automation/AutomationView.tsx', import.meta.url)).text(),
+        Bun.file(new URL('../src/features/pet/PetCatalogPage.tsx', import.meta.url)).text(),
+        Bun.file(
+          new URL('../src/features/pull-requests/PullRequestsPlaceholder.tsx', import.meta.url),
+        ).text(),
+        Bun.file(
+          new URL('../src/features/models/setup/ModelSetupPage.tsx', import.meta.url),
+        ).text(),
+        Bun.file(
+          new URL('../src/features/review/workspace/WorkspaceReviewSidebar.tsx', import.meta.url),
+        ).text(),
+        Bun.file(
+          new URL('../src/features/browser/DesktopBrowserPanel.tsx', import.meta.url),
+        ).text(),
+        Bun.file(new URL('../src/styles/features/primary-page.css', import.meta.url)).text(),
+      ])
 
     // 自动化页只通过共享 PrimaryPageLayout 渲染，不再覆盖其内部结构类名。
     expectSourceContains(automationView, '<PrimaryPageLayout')
     expect(automationView).not.toMatch(/primary-page-layout__(?:header|body)/)
     expectSourceContains(pets, '<PrimaryPageLayout')
     expectSourceContains(pullRequests, '<PrimaryPageLayout')
+    expectSourceContains(primaryPageCss, 'padding-bottom: var(--cpx-sys-space-8);')
     // 模型引导页的两行网格改由 TSX utility 承担（原 `_model-setup.scss` 规则）。
     expectSourceContains(setup, 'tw:grid-rows-[36px_minmax(0,1fr)]')
     expectSourceContains(review, 'tw:px-4 tw:py-4 tw:type-control')
@@ -345,27 +368,25 @@ describe('Codex CPX design system token contract', () => {
   })
 
   test('keeps prominent elevation distinct from flat and transient surfaces', async () => {
-    const [systemTokens, componentTokens, cards, composer, summary, rightDock] = await Promise.all([
+    const [systemTokens, componentTokens, composer, summary, rightDock] = await Promise.all([
       Bun.file(new URL('../src/styles/design-system/tokens.css', import.meta.url)).text(),
       Bun.file(
         new URL('../src/styles/design-system/codex-semantic-tokens.css', import.meta.url),
       ).text(),
-      Bun.file(new URL('../src/styles/components/card.css', import.meta.url)).text(),
-      Bun.file(new URL('../src/styles/features/composer-shell.css', import.meta.url)).text(),
+      Bun.file(new URL('../src/styles/primitives/composer.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/primitives/session.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/features/layout-right-dock.css', import.meta.url)).text(),
     ])
 
     expect(systemTokens.match(/--cpx-sys-shadow-prominent:/g)).toHaveLength(1)
-    expectSourceContains(
-      systemTokens,
-      '--cpx-sys-shadow-raised: inset 0 1px 0 rgba(255, 255, 255, 0.7);',
-    )
+    expectSourceContains(systemTokens, '--cpx-sys-shadow-raised: none;')
     expectSourceContains(
       componentTokens,
       '--cpx-comp-composer-shadow: var(--cpx-sys-shadow-prominent);',
     )
-    expect(cards).toMatch(/\.composer\s*\{[\s\S]*?box-shadow: var\(--cpx-comp-composer-shadow\);/)
+    expect(composer).toMatch(
+      /\.composer\s*\{[\s\S]*?box-shadow: var\(--cpx-comp-composer-shadow\);/,
+    )
     expectSourceNotContains(composer, 'box-shadow: var(--cpx-sys-shadow-floating)')
     expect(summary).toMatch(
       /\.thread-summary-panel\s*\{[\s\S]*?box-shadow: var\(--cpx-sys-shadow-prominent\);/,
@@ -421,7 +442,6 @@ describe('Codex CPX design system token contract', () => {
       Bun.file(new URL('../src/styles/features/composer-shell.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/primitives/conversation.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/primitives/session.css', import.meta.url)).text(),
-      Bun.file(new URL('../src/styles/components/card.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/features/layout-right-dock.css', import.meta.url)).text(),
     ])
 
@@ -474,7 +494,8 @@ describe('Codex CPX design system token contract', () => {
 
     // 圆角由语义角色 utility 表达，不再使用按档位缩放的局部变量。
     expectSourceNotContains(buttons, '--button-radius-scale')
-    expect(buttons).toMatch(/tw:rounded-(?:lg|md|2xl|full)/)
+    // 圆角按尺寸档位读取语义 token，胶囊形状统一读 full。
+    expect(buttons).toMatch(/border-radius: var\(--cpx-sys-radius-(?:xs|sm|md|full)\)/)
     expectSourceNotContains(buttons, '@supports (corner-shape: superellipse(1.5))')
     expectSourceContains(composer, '--composer-radius: var(--cpx-sys-radius-prominent);')
     expect(composer).toMatch(
@@ -490,10 +511,7 @@ describe('Codex CPX design system token contract', () => {
     expect(composer).not.toMatch(
       /\.composer-stack\[data-placement=['"]new-session['"]\][^{]*\{[^}]*--composer-radius/,
     )
-    expectSourceContains(
-      composer,
-      '.composer-stack[data-composer-utility-bar-variant="home"][data-surface]',
-    )
+    expectSourceContains(composer, '.composer-stack .composer-editor-content')
     expectSourceContains(
       composer,
       '.composer-stack[data-composer-utility-bar-variant="home"][data-surface="coding"]',
@@ -509,15 +527,26 @@ describe('Codex CPX design system token contract', () => {
     expectSourceNotContains(composer, 'calc(var(--cpx-sys-radius-xl) * 2)')
     expect(conversation.match(/border-radius: var\(--cpx-sys-radius-2xl\);/g)).toHaveLength(1)
     expectSourceContains(conversation, 'border-radius: var(--user-message-bubble-radius);')
+    expectSourceNotContains(
+      conversation,
+      '.canonical-user-message:hover .canonical-message-actions',
+    )
+    expectSourceNotContains(
+      conversation,
+      '.canonical-turn:hover .canonical-message-actions--assistant',
+    )
+    expectSourceContains(
+      conversation,
+      '.canonical-user-message:has(.canonical-user-message__bubble:hover)',
+    )
     expectSourceNotContains(conversation, 'var(--cpx-sys-radius-optical-scale)')
     expectSourceContains(conversation, 'corner-shape: var(--cpx-sys-corner-shape);')
     expectSourceContains(summary, 'border-radius: var(--cpx-sys-radius-prominent);')
     expectSourceContains(summary, 'corner-shape: var(--cpx-sys-corner-shape);')
-    expectSourceNotContains(cards, '--cpx-sys-radius-prominent')
     expectSourceNotContains(rightDock, '--cpx-sys-radius-prominent')
   })
 
-  test('keeps user messages and inline summaries on dedicated semantics', async () => {
+  test('keeps user messages and compact summary popovers on dedicated semantics', async () => {
     const [systemTokens, conversation, summary, threadSummary] = await Promise.all([
       Bun.file(new URL('../src/styles/design-system/tokens.css', import.meta.url)).text(),
       Bun.file(new URL('../src/styles/primitives/conversation.css', import.meta.url)).text(),
@@ -537,18 +566,20 @@ describe('Codex CPX design system token contract', () => {
 
     expect(summary.match(/--thread-summary-inline-width:/g)).toHaveLength(1)
     expect(summary).toMatch(
-      /\.workflow-page__main,\s*\.thread-summary-popover\s*\{[\s\S]*?--thread-summary-inline-width: calc\(var\(--cpx-sys-space-1\) \* 75\);/,
+      /\.thread-summary-popover\s*\{[\s\S]*?--thread-summary-inline-width: calc\(var\(--cpx-sys-space-1\) \* 75\);/,
     )
-    expect(summary).not.toMatch(
-      /\.workflow-page__main\[data-thread-summary-inline=['"]true['"]\][\s\S]*?padding-inline-end:/,
+    expect(threadSummary).toContain(
+      'thread-summary-popover tw:w-[var(--thread-summary-inline-width)]',
     )
-    // 内联面板保留布局宽度；浮层使用 UI-Design 尺寸，内容填满容器。
-    const inlinePanelClass =
-      threadSummary.match(/className="(thread-summary-inline [^"]*)"/)?.[1] ?? ''
-    expect(inlinePanelClass).toContain('tw:w-[var(--thread-summary-inline-width)]')
-    expectSourceContains(threadSummary, "const THREAD_SUMMARY_WIDTH_CLASS = 'tw:w-full'")
-    expectSourceContains(threadSummary, 'thread-summary-popover ${THREAD_SUMMARY_WIDTH_CLASS}')
-    expect(summary).not.toMatch(/width:\s*(?:260|272|300)px/)
+    expect(threadSummary).toContain('tw:[&]:p-0')
+    expect(threadSummary).toContain(
+      'thread-summary-panel tw:w-full tw:flex tw:min-h-0 tw:flex-col tw:gap-1',
+    )
+    expect(threadSummary).toContain('tw:overflow-y-auto tw:py-2')
+    expect(threadSummary).toContain('tw:pb-2 tw:last:pb-0')
+    expect(threadSummary).toContain('tw:max-w-[calc(100vw-24px)]')
+    expect(threadSummary).not.toContain('thread-summary-inline tw:absolute')
+    expect(conversation).not.toContain('--conversation-shift-offset')
   })
 
   test('keeps component tokens private to shared component styles', async () => {
@@ -600,7 +631,7 @@ describe('Codex CPX design system token contract', () => {
     )
     expectSourceContains(
       systemTokens,
-      '--cpx-sys-color-workbench-sidebar-bg: var(--cpx-ref-gray-2);',
+      '--cpx-sys-color-workbench-sidebar-bg: var(--cpx-ref-gray-3);',
     )
     expectSourceContains(
       systemTokens,
@@ -650,7 +681,7 @@ describe('Codex CPX design system token contract', () => {
     // titlebar 表面，工作台主体取 main 表面并保留左侧分隔边框。
     expectSourceContains(chrome, 'tw:bg-app-titlebar')
     expectSourceContains(workbenchShell, 'tw:bg-app-main')
-    expectSourceContains(workbenchShell, 'tw:border-l tw:border-app-border')
+    expectSourceContains(workbenchShell, 'tw:border-l tw:border-app-border-subtle')
     expect(workbenchLayout).not.toMatch(/\.desktop-workspace-panel--bottom\s*\{[^}]*border-top:/)
 
     // Panel and toolbar borders moved out of the dock stylesheet into the
@@ -658,7 +689,7 @@ describe('Codex CPX design system token contract', () => {
     expectSourceContains(tabStrip, 'tw:rounded-md')
     expectSourceContains(dockFrame, 'tw:border-l tw:border-app-border')
     expectSourceContains(dockFrame, 'tw:border-t tw:border-app-border')
-    expectSourceContains(panelSurface, 'tw:border-b tw:border-app-border-subtle')
+    expectSourceNotContains(panelSurface, 'tw:border-b tw:border-app-border-subtle')
     expectSourceContains(modal, '--cpx-comp-modal-bg')
     expectSourceContains(modal, '--cpx-comp-modal-shadow')
     expectSourceContains(popover, '--cpx-comp-dropdown-menu-bg')
@@ -684,7 +715,7 @@ describe('UI-Design native floating behavior', () => {
       ),
     )
     expect(html.match(/\bpopover-item-check\b/g)).toHaveLength(1)
-    expect(html).toMatch(/popover-item-trailing[^>]*>\s*<svg/)
+    expect(html).toMatch(/sidebar-row-trailing[^>]*>\s*<svg/)
   })
   test('search fills the available frame width at every preset without intrinsic sizing', () => {
     for (const size of ['sm', 'md', 'lg'] as const) {
@@ -734,8 +765,7 @@ describe('UI-Design native floating behavior', () => {
     expect(html).not.toContain('tw:flex')
     expect(html).not.toContain('tw:px-2.5')
   })
-  test('composer mode and reasoning use native selection menus; model panel keeps a flush frame', async () => {
-    const mode = renderToStaticMarkup(createElement(ComposerModeSwitcher, { mode: 'coding' }))
+  test('composer reasoning uses native selection menus; model panel keeps a flush frame', async () => {
     const reasoning = renderToStaticMarkup(
       createElement(ReasoningMenu, {
         trigger: createElement('button', null, '默认'),
@@ -744,7 +774,6 @@ describe('UI-Design native floating behavior', () => {
         onThinkingChange: () => {},
       }),
     )
-    expect(mode).toContain('aria-haspopup="listbox"')
     expect(reasoning).toContain('aria-haspopup="listbox"')
     const model = await Bun.file(
       new URL('../src/features/session/composer/ModelPickerPopover.tsx', import.meta.url),
@@ -949,10 +978,17 @@ describe('UI-Design native floating behavior', () => {
     expect(primitives).toContain('event.defaultPrevented')
     expect(dropdown).toContain("useControllableState(searchValue, '', onSearchValueChange)")
     expect(dropdown).toContain('role="status"')
+    expect(dropdown).toContain('data-align={actualAlign}')
     expect(menus).toContain('next ? 120 : 140')
     expect(menus).toContain('sub.triggerRef.current?.focus()')
+    expect(menus).toContain('data-align={actualAlign}')
+    expect(menus).toContain('data-align={placement.align}')
     expect(overlays).toContain(":root[data-reduce-motion='on']")
-    for (const name of ['dropdown-menu', 'popover', 'context-menu', 'select'])
+    expect(overlays).toContain("&[data-side='bottom']")
+    expect(overlays).toContain("&[data-align='end']")
+    expect(overlays).toContain('transform-origin: top right;')
+    expect(overlays).toContain('scale: 0.95;')
+    for (const name of ['dropdown-menu', 'popover', 'context-menu', 'select', 'tooltip'])
       expect(manifest).not.toContain(`@radix-ui/react-${name}`)
   })
 })

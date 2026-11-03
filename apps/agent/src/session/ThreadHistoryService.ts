@@ -4,11 +4,14 @@ import {
   type ThreadListItem,
   type ThreadSettingsPatch,
 } from '@pidex/shared/thread'
-import { AgentError } from '../Domain'
+import { AgentError, decodeStoredTaskMode } from '../Domain'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
+import { publishAgentEvent } from '../storage/events/EventPublisher'
 import { normalizeThreadTitle } from './ThreadTitleService'
+import { safeTurnError } from '@pidex/shared/errors'
 import { THREAD_ORIGIN_PROJECTION_SQL } from '../storage/repositories/ThreadRepository'
+import { probeThreadContextLimitsStorageCapabilities } from '../storage/database/StorageCapabilities'
 
 export type ThreadMetadataPatch = {
   title?: string | null
@@ -24,15 +27,17 @@ type ThreadRow = {
   first_user_message: string | null
   message_count: number
   latest_turn_status: string | null
+  latest_turn_error: string | null
   archived_at: number | null
   unread_at: number | null
   has_scheduled_run: number
   is_scheduled_session: number
   is_fork: number
-  task_mode: ThreadListItem['settings']['taskMode']
+  task_mode: string
   sandbox_mode: ThreadListItem['settings']['permissionConfig']['sandboxMode']
   approval_policy: string
   approvals_reviewer: ThreadListItem['settings']['permissionConfig']['approvalsReviewer']
+  max_context_tokens?: number | null
   created_at: number
   updated_at: number
 }
@@ -41,6 +46,7 @@ const turnStatus = (status: string | null): ThreadListItem['latestTurnStatus'] =
   if (!status) return null
   if (status === 'waiting_permission') return 'waiting-permission'
   if (status === 'waiting_question') return 'waiting-question'
+  if (status === 'waiting_subagents') return 'waiting-subagents'
   if (
     status === 'queued' ||
     status === 'running' ||
@@ -60,21 +66,37 @@ export class ThreadHistoryService {
   ) {}
 
   getListItem(threadID: string): ThreadListItem | null {
+    const { threadContextLimits: hasLimits } = probeThreadContextLimitsStorageCapabilities(
+      this.db.sqlite,
+    )
     const row = this.db.sqlite
       .query(
         `
       SELECT t.id, t.project_id, t.git_branch, t.title, t.preview, t.first_user_message, t.message_count, t.archived_at,
         t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.created_at, t.updated_at,
         read_state.unread_at, ${THREAD_ORIGIN_PROJECTION_SQL},
-        (SELECT u.status FROM turns AS u WHERE u.thread_id = t.id ORDER BY u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_status
+        (SELECT u.status FROM turns AS u WHERE u.thread_id = t.id
+          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting-permission', 'waiting_question', 'waiting-question', 'waiting_subagents', 'waiting-subagents') THEN 0 WHEN u.status != 'queued' THEN 1 ELSE 2 END,
+            u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_status,
+        (SELECT CASE WHEN u.status = 'failed' THEN ae.error ELSE NULL END
+          FROM turns AS u
+          LEFT JOIN agent_executions AS ae ON ae.id = u.root_agent_id
+          WHERE u.thread_id = t.id
+          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting-permission', 'waiting_question', 'waiting-question', 'waiting_subagents', 'waiting-subagents') THEN 0 WHEN u.status != 'queued' THEN 1 ELSE 2 END,
+            u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_error,
+        ${hasLimits ? 'l.max_context_tokens' : 'NULL AS max_context_tokens'}
       FROM threads AS t
       LEFT JOIN thread_read_state AS read_state ON read_state.thread_id = t.id
+      ${hasLimits ? 'LEFT JOIN thread_context_limits AS l ON l.thread_id = t.id' : ''}
       WHERE t.id = ?
     `,
       )
       .get(threadID) as ThreadRow | null
     if (!row) return null
     const workspace = this.db.threadWorkspace(threadID)
+    const latestTurnStatus = turnStatus(row.latest_turn_status)
+    const latestTurnError =
+      latestTurnStatus === 'failed' ? safeTurnError(row.latest_turn_error) : null
     return {
       id: row.id,
       storageSource: 'local',
@@ -88,16 +110,20 @@ export class ThreadHistoryService {
       preview: row.preview,
       firstUserMessage: row.first_user_message,
       messageCount: row.message_count,
-      latestTurnStatus: turnStatus(row.latest_turn_status),
+      latestTurnStatus,
+      latestTurnError,
       archivedAt: row.archived_at,
       unreadAt: row.unread_at,
       settings: {
-        taskMode: row.task_mode,
+        taskMode: decodeStoredTaskMode(row.task_mode),
         permissionConfig: {
           sandboxMode: row.sandbox_mode,
           approvalPolicy: decodeApprovalPolicy(row.approval_policy),
           approvalsReviewer: row.approvals_reviewer,
         },
+        ...(row.max_context_tokens != null
+          ? { maxContextTokens: Number(row.max_context_tokens) }
+          : {}),
       },
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -202,6 +228,35 @@ export class ThreadHistoryService {
     const result = this.db.updateThreadSettings(threadID, patch)
     if (result.event) await Effect.runPromise(this.hub.publish(result.event))
     return { threadId: threadID, settings: result.settings, version: result.version }
+  }
+
+  async saveModelRuntimePreference(input: {
+    providerId: string
+    modelId: string
+    threadId?: string
+    variant?: string | null
+    maxContextTokens?: number | null
+  }) {
+    const result = this.db.transaction(() => {
+      if (input.threadId && !this.db.getThread(input.threadId))
+        throw new AgentError('INVALID_REQUEST', '会话不存在', 400)
+      const settings =
+        input.threadId && input.maxContextTokens !== undefined
+          ? this.db.updateThreadSettings(input.threadId, {
+              maxContextTokens: input.maxContextTokens,
+            })
+          : null
+      const preference = this.db.repositories.modelRuntimePreferences.set(input)
+      return { preference, settingsEvent: settings?.event ?? null }
+    })
+    // 会话设置是持久事件：事务内已写入 events 表，提交后保持原有发布语义。
+    if (result.settingsEvent) await Effect.runPromise(this.hub.publish(result.settingsEvent))
+    // 模型偏好更新在协议 manifest 中是实时事件。持久化由事务内的偏好表完成，
+    // 通知必须经发布边界补齐 afterSequence 锚点，且不得再写入 events 表。
+    await publishAgentEvent(this.db, this.hub, null, null, 'provider/modelPreferences/updated', {
+      preference: result.preference,
+    })
+    return { preference: result.preference }
   }
 
   async remove(threadID: string) {

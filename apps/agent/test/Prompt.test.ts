@@ -75,6 +75,7 @@ describe('能力目录', () => {
     expect(rendered.length).toBeLessThan(CAPABILITY_DESCRIPTION_MAX_CHARS + 20)
     expect(rendered).toContain('…')
     expect(section.content).toContain('offset')
+    expect(section.content).toContain('不是本轮全部工具')
   })
 
   test('超出总预算时明确说明还有未展示能力', () => {
@@ -784,5 +785,48 @@ describe('电脑控制提示', () => {
 
   test('没有电脑控制服务时不注入该提示', () => {
     expect(compose(undefined)).not.toContain('电脑控制')
+  })
+})
+
+describe('协作模式提示', () => {
+  const mode = (taskMode: 'chat' | 'plan' | 'grill'): string =>
+    createPromptSections({
+      permissionInstructions: '',
+      mode: taskMode,
+      profile: 'main',
+      userMessage: '你好',
+    }).find((section) => section.id === `mode.${taskMode}`)!.content
+
+  test('Plan、Grill 与 Explorer 共用同一调查定义', () => {
+    const explorer = createPromptSections({
+      permissionInstructions: '',
+      mode: 'chat',
+      profile: 'explorer',
+      userMessage: '你好',
+    }).find((section) => section.id === 'profile.explorer')!.content
+    for (const content of [mode('plan'), mode('grill'), explorer]) {
+      expect(content).toContain('不修改受版本控制文件的测试、构建和检查')
+      expect(content).toContain('不得创建、修改或删除业务文件')
+      expect(content).toContain('显式拒绝')
+    }
+    expect(mode('plan')).not.toContain('禁用通用 Shell')
+    expect(mode('grill')).not.toContain('只读调查工具')
+  })
+
+  test('Grill 模式要求设计树、暂定假设与无默认出口门禁', () => {
+    expect(mode('grill')).toContain('设计树')
+    expect(mode('grill')).toContain('概念层 Frontier')
+    expect(mode('grill')).toContain('[依赖暂定假设')
+    expect(mode('grill')).toContain('需求共识清单')
+    expect(mode('grill')).toContain('三个选项都不得标记 recommended')
+    expect(mode('grill')).toContain('不设置 autoResolutionMs')
+    expect(mode('grill')).toContain('这两个出口都只确认需求，不是实施授权')
+    expect(mode('grill')).toContain('不要仅凭延迟目录或历史会话')
+  })
+
+  test('Plan 模式选项与题数上限与工具契约一致', () => {
+    expect(mode('plan')).toContain('最多五题')
+    expect(mode('plan')).toContain('选项二至五个')
+    expect(mode('plan')).toContain('multiSelect')
   })
 })

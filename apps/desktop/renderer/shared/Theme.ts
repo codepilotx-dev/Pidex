@@ -2,6 +2,7 @@ import type {
   DesktopChromeTheme,
   DesktopThemeConfigV1,
   DesktopThemeFontFace,
+  DesktopThemeFonts,
   DesktopThemeSettings,
   DesktopThemeVariant,
 } from './Types.js'
@@ -13,6 +14,7 @@ import {
   desktopThemeFontFaceMatchesFamily,
   isNewerDesktopThemeSettingsVersion,
   normalizeDesktopAccentPreset,
+  resolveSharedFontsFromVariants,
 } from '@pidex/shared/desktop-theme'
 import {
   HIGHLIGHT_THEMES,
@@ -49,22 +51,26 @@ export function resetAdvancedDesktopThemeSettings(
   settings: DesktopThemeSettings,
 ): DesktopThemeSettings {
   const defaults = DEFAULT_DESKTOP_THEME_SETTINGS
+  // Advanced reset clears the code font, every face selection, and the
+  // contrast; it deliberately keeps the chosen UI font family and the light and
+  // dark palettes, which live in the visual section.
+  const fonts: DesktopThemeFonts = {
+    ...settings.fonts,
+    code: defaults.fonts.code,
+    codeFace: defaults.fonts.codeFace ?? null,
+    uiFace: defaults.fonts.uiFace ?? null,
+  }
   const resetTheme = (variant: DesktopThemeVariant): DesktopChromeTheme => {
     const theme = settings.chromeThemes[variant]
-    const defaultTheme = defaults.chromeThemes[variant]
     return {
       ...theme,
-      contrast: defaultTheme.contrast,
-      fonts: {
-        ...theme.fonts,
-        uiFace: defaultTheme.fonts.uiFace ?? null,
-        code: defaultTheme.fonts.code,
-        codeFace: defaultTheme.fonts.codeFace ?? null,
-      },
+      contrast: defaults.chromeThemes[variant].contrast,
+      fonts: { ...fonts },
     }
   }
   return {
     ...settings,
+    fonts,
     chromeThemes: { light: resetTheme('light'), dark: resetTheme('dark') },
     fontSizes: { ...defaults.fontSizes },
     reduceMotion: defaults.reduceMotion,
@@ -73,13 +79,26 @@ export function resetAdvancedDesktopThemeSettings(
   }
 }
 
+/**
+ * Builds the per-variant theme a component consumes. V8 stores fonts once for
+ * the whole appearance, so both variants resolve to the same font set while
+ * every color stays variant-specific.
+ */
 export function getDesktopThemeForSelection(
   settings: DesktopThemeSettings,
   variant: DesktopThemeVariant,
 ): DesktopThemeConfigV1 {
   return {
     codeThemeId: settings.codeThemeIds[variant],
-    theme: settings.chromeThemes[variant],
+    theme: {
+      ...settings.chromeThemes[variant],
+      fonts: {
+        code: settings.fonts.code,
+        codeFace: settings.fonts.codeFace ?? null,
+        ui: settings.fonts.ui,
+        uiFace: settings.fonts.uiFace ?? null,
+      },
+    },
     variant,
   }
 }
@@ -100,19 +119,23 @@ export function getCodeThemeSelectionForVariant(
 
 export function normalizeDesktopThemeSettings(value: unknown): DesktopThemeSettings {
   const record = isRecord(value) ? value : {}
-  if (record.version !== 6 && record.version !== 7) {
+  if (record.version !== 6 && record.version !== 7 && record.version !== 8) {
     return cloneDefaultDesktopThemeSettings()
   }
   const chromeThemes = isRecord(record.chromeThemes) ? record.chromeThemes : {}
+  const mode = normalizeMode(record.mode)
+  const normalizedThemes = {
+    light: normalizeChromeTheme(chromeThemes.light, DEFAULT_LIGHT_CHROME_THEME, 'light'),
+    dark: normalizeChromeTheme(chromeThemes.dark, DEFAULT_DARK_CHROME_THEME, 'dark'),
+  }
+  const fonts = normalizeThemeFonts(record.fonts, mode, normalizedThemes)
 
   return {
-    version: 7,
-    mode: normalizeMode(record.mode),
-    chromeThemes: {
-      light: normalizeChromeTheme(chromeThemes.light, DEFAULT_LIGHT_CHROME_THEME, 'light'),
-      dark: normalizeChromeTheme(chromeThemes.dark, DEFAULT_DARK_CHROME_THEME, 'dark'),
-    },
+    version: 8,
+    mode,
+    chromeThemes: withSharedVariantFonts(normalizedThemes, fonts),
     codeThemeIds: normalizeCodeThemeIds(record),
+    fonts,
     pointerCursorEnabled:
       typeof record.pointerCursorEnabled === 'boolean'
         ? record.pointerCursorEnabled
@@ -144,14 +167,77 @@ function cloneDefaultDesktopThemeSettings(): DesktopThemeSettings {
       },
     },
     codeThemeIds: { ...DEFAULT_DESKTOP_THEME_SETTINGS.codeThemeIds },
+    fonts: { ...DEFAULT_DESKTOP_THEME_SETTINGS.fonts },
     fontSizes: { ...DEFAULT_DESKTOP_THEME_SETTINGS.fontSizes },
   }
+}
+
+export function applySharedDesktopThemeFonts(
+  settings: DesktopThemeSettings,
+  patch: Partial<DesktopThemeFonts>,
+): DesktopThemeSettings {
+  const fonts: DesktopThemeFonts = {
+    code: settings.fonts.code,
+    codeFace: settings.fonts.codeFace ?? null,
+    ui: settings.fonts.ui,
+    uiFace: settings.fonts.uiFace ?? null,
+    ...patch,
+  }
+  return normalizeDesktopThemeSettings({
+    ...settings,
+    fonts,
+    chromeThemes: withSharedVariantFonts(settings.chromeThemes, fonts),
+  })
 }
 
 function normalizeMode(value: unknown): DesktopThemeSettings['mode'] {
   return value === 'light' || value === 'dark' || value === 'system'
     ? value
     : DEFAULT_DESKTOP_THEME_SETTINGS.mode
+}
+
+function normalizeThemeFonts(
+  value: unknown,
+  mode: DesktopThemeSettings['mode'],
+  themes: Record<DesktopThemeVariant, DesktopChromeTheme>,
+): DesktopThemeFonts {
+  if (!isRecord(value)) {
+    // V6/V7 documents keep their fonts on the variants; the active mode's
+    // variant owns the value so the visible theme survives the upgrade.
+    return resolveSharedFontsFromVariants(themes, mode)
+  }
+  const code = normalizeOptionalFont(value.code)
+  const ui = normalizeOptionalFont(value.ui)
+  const codeFace = normalizeOptionalFontFace(value.codeFace)
+  const uiFace = normalizeOptionalFontFace(value.uiFace)
+  return {
+    code,
+    codeFace: desktopThemeFontFaceMatchesFamily(code, codeFace) ? codeFace : null,
+    ui,
+    uiFace: desktopThemeFontFaceMatchesFamily(ui, uiFace) ? uiFace : null,
+  }
+}
+
+/**
+ * Mirrors the shared fonts onto both variants. Older readers and the
+ * `DesktopThemeConfigV1` shape still read variant fonts, so the written value
+ * must never disagree with the shared setting.
+ */
+function withSharedVariantFonts(
+  themes: Record<DesktopThemeVariant, DesktopChromeTheme>,
+  fonts: DesktopThemeFonts,
+): Record<DesktopThemeVariant, DesktopChromeTheme> {
+  // Both variants point at one shared object so the two copies cannot drift
+  // apart; the face keys are always explicit so a stale subkey cannot survive.
+  const shared: DesktopThemeFonts = {
+    ...fonts,
+    codeFace: fonts.codeFace ?? null,
+    uiFace: fonts.uiFace ?? null,
+  }
+  return {
+    light: { ...themes.light, fonts: shared },
+    dark: { ...themes.dark, fonts: shared },
+  }
 }
 
 function normalizeReducedMotion(value: unknown): DesktopThemeSettings['reduceMotion'] {

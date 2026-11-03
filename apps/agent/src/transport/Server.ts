@@ -15,6 +15,7 @@ import type { ApprovalService } from '../permission/ApprovalService'
 import type { QuestionService } from '../session/QuestionService'
 import { RpcRouter } from './rpc/RpcRouter'
 import type { PullRequestWatchService } from '../github/PullRequestWatchService'
+import type { ThreadPullRequestService } from '../github/ThreadPullRequestService'
 import { proxyRendererRequest } from './RendererProxy'
 import { buildEventNextNotification } from './EventEnvelope'
 import type { AgentLogger } from '../observability/AgentLogger'
@@ -23,6 +24,8 @@ import type { ProviderCredentialService } from '../provider/ProviderCredentialSe
 import type { ProviderCredentialStoreManager } from '../auth/ProviderCredentialStoreManager'
 import type { PiModelService } from '../provider/pi'
 import type { ModelHealthService } from '../provider/ModelHealthService'
+import type { ModelSyncService } from '../provider/ModelSyncService'
+import type { ProtocolDetectionService } from '../provider/ProtocolDetectionService'
 import type { PiAuthSessionService } from '../auth/PiAuthSessionService'
 import type { SubagentService } from '../subagent/SubagentService'
 import type { AttachmentService } from '../subagent/AttachmentService'
@@ -39,7 +42,6 @@ import type { PetService } from '../pet/PetService'
 import type { ReleaseNotesService } from '../release-notes/ReleaseNotesService'
 import type { SkillManagementService } from '../prompt/SkillManagementService'
 import type { PluginManagementService } from '../plugin/PluginManagementService'
-import type { MiniMaxCliIntegrationService } from '../integration/minimax-cli/MiniMaxCliIntegrationService'
 import type { McpRuntimeService } from '../mcp/McpRuntimeService'
 import type { TaskSuggestionService } from '../suggestion/TaskSuggestionService'
 import type { ConfigService } from '../config/ConfigService'
@@ -86,6 +88,8 @@ export interface TransportDependencies {
   piModels: PiModelService
   apiKeys: ApiKeyService
   modelHealth: ModelHealthService
+  modelSync: ModelSyncService
+  protocolDetection: ProtocolDetectionService
   providerCredentials: ProviderCredentialService
   providerCredentialStore: ProviderCredentialStoreManager
   authSessions: PiAuthSessionService
@@ -100,7 +104,6 @@ export interface TransportDependencies {
   releaseNotes: ReleaseNotesService
   skills: SkillManagementService
   plugins: PluginManagementService
-  minimaxCli: MiniMaxCliIntegrationService
   mcp: McpRuntimeService
   suggestions: TaskSuggestionService
   logger: AgentLogger
@@ -123,8 +126,10 @@ export interface TransportDependencies {
   sessionGroups: SessionGroupService
   threadGoals: ThreadGoalService
   threadBookmarks: ThreadBookmarkService
+  threadPullRequests: ThreadPullRequestService
   automation: AutomationService
   calendar: CalendarService
+  taskSchedules?: import('../calendar/TaskScheduleService').TaskScheduleService
   scheduledTasks: ScheduledTaskService
   schedulePlans: SchedulePlanService
   memoryManager?: MemoryManager | undefined
@@ -261,6 +266,7 @@ export const rpcTransportAuthority = (
 }
 const isPlainObject = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value)
+const DESKTOP_GIT_BOARD_SETTINGS_KEY = 'desktop.git-board.v1'
 const DESKTOP_RUNTIME_SETTINGS_KEY = 'desktop.runtime-state.v1'
 const DESKTOP_TERMINAL_SETTINGS_KEY = 'desktop.terminal-settings.v1'
 const DEPRECATED_DESKTOP_SIDEBAR_FIELDS = new Set(['sidebarSectionOrder'])
@@ -369,7 +375,7 @@ const desktopConfigEdits = (
   Object.entries(value).flatMap(([key, child]) => {
     if (prefix.length === 0 && DEPRECATED_DESKTOP_SIDEBAR_FIELDS.has(key)) return []
     if (prefix.length === 0 && DESKTOP_RUNTIME_FIELDS.has(key)) return []
-    if (prefix.length === 0 && key === 'terminalProfileId') return []
+    if (prefix.length === 0 && (key === 'terminalProfileId' || key === 'gitBoardState')) return []
     if (prefix.length === 0 && (key === 'browserAllowedSites' || key === 'browserSitePermissions'))
       return []
     if (prefix.length === 0 && key === 'permissionConfig' && isPlainObject(child)) {
@@ -491,7 +497,6 @@ export const createApp = (dependencies: TransportDependencies) => {
     releaseNotes,
     skills,
     plugins,
-    minimaxCli,
     suggestions,
     logger,
   } = dependencies
@@ -515,6 +520,8 @@ export const createApp = (dependencies: TransportDependencies) => {
     piModels,
     apiKeys,
     modelHealth,
+    modelSync: dependencies.modelSync,
+    protocolDetection: dependencies.protocolDetection,
     providerCredentials,
     providerCredentialStore,
     authSessions,
@@ -528,7 +535,6 @@ export const createApp = (dependencies: TransportDependencies) => {
     releaseNotes,
     skills,
     plugins,
-    minimaxCli,
     suggestions,
     usage: dependencies.usage,
     mcp: dependencies.mcp,
@@ -550,9 +556,11 @@ export const createApp = (dependencies: TransportDependencies) => {
     sessionGroups: dependencies.sessionGroups,
     threadGoals: dependencies.threadGoals,
     threadBookmarks: dependencies.threadBookmarks,
+    threadPullRequests: dependencies.threadPullRequests,
     automation: dependencies.automation,
     ...(dependencies.prWatches ? { prWatches: dependencies.prWatches } : {}),
     calendar: dependencies.calendar,
+    ...(dependencies.taskSchedules ? { taskSchedules: dependencies.taskSchedules } : {}),
     scheduledTasks: dependencies.scheduledTasks,
     schedulePlans: dependencies.schedulePlans,
     memoryManager: dependencies.memoryManager,
@@ -787,6 +795,10 @@ export const createApp = (dependencies: TransportDependencies) => {
       // Capture the durable high-watermarks only after live delivery is
       // subscribed so commits racing replay are buffered rather than lost.
       const replayTarget = globalEventSequence(db)
+      for (const event of hub.visualizationSnapshots(replayTarget)) {
+        if (appliesToAnyStream(event) && liveEventDeliveryAllowed(event, subscription))
+          buffered.push(event)
+      }
       const deliverDurableThrough = async (streamId: string, target: number) => {
         let cursor = cursors.get(streamId) ?? 0
         let delivered = 0
@@ -935,6 +947,7 @@ export const createApp = (dependencies: TransportDependencies) => {
     return context.json({
       ...desktopProjection(result.config),
       ...currentRuntime,
+      gitBoardState: db.getSetting<string>(DESKTOP_GIT_BOARD_SETTINGS_KEY) ?? null,
       ...(terminalProfileId === null || typeof terminalProfileId === 'string'
         ? { terminalProfileId }
         : {}),
@@ -944,6 +957,13 @@ export const createApp = (dependencies: TransportDependencies) => {
   app.put('/api/config/desktop-projection', async (context) => {
     const settings = await context.req.json().catch(() => null)
     if (!isPlainObject(settings)) throw new AgentError('INVALID_REQUEST', '桌面设置参数无效', 400)
+    if (
+      settings.gitBoardState !== undefined &&
+      settings.gitBoardState !== null &&
+      typeof settings.gitBoardState !== 'string'
+    ) {
+      throw new AgentError('INVALID_REQUEST', 'Git 看板设置无效', 400)
+    }
     const hasTerminalProfileId = Object.prototype.hasOwnProperty.call(settings, 'terminalProfileId')
     const terminalProfileId = settings.terminalProfileId
     if (
@@ -968,6 +988,9 @@ export const createApp = (dependencies: TransportDependencies) => {
         Object.entries(settings).filter(([key]) => DESKTOP_RUNTIME_FIELDS.has(key)),
       ),
     )
+    if (typeof settings.gitBoardState === 'string') {
+      db.setSetting(DESKTOP_GIT_BOARD_SETTINGS_KEY, settings.gitBoardState)
+    }
     if (hasTerminalProfileId) {
       const current = db.getSetting<Record<string, unknown>>(DESKTOP_TERMINAL_SETTINGS_KEY) ?? {}
       db.setSetting(DESKTOP_TERMINAL_SETTINGS_KEY, { ...current, terminalProfileId })

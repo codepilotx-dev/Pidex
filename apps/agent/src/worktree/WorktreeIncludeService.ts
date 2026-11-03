@@ -2,6 +2,7 @@ import { constants } from 'node:fs'
 import { copyFile, lstat, mkdir, realpath } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { AgentError } from '../Domain'
+import { hasWindowsDeviceName, windowsWorktreeFiles } from './WindowsWorktreeFiles'
 
 type GitOutput = (cwd: string, args: readonly string[]) => Promise<string>
 
@@ -108,6 +109,16 @@ export class WorktreeIncludeService {
     return this.copyRegularFiles(sourceRoot, targetRoot, [...selected])
   }
 
+  async copyUntracked(sourceRoot: string, targetRoot: string) {
+    return this.copyRegularFiles(
+      sourceRoot,
+      targetRoot,
+      splitZero(
+        await this.gitOutput(sourceRoot, ['ls-files', '--others', '--exclude-standard', '-z']),
+      ),
+    )
+  }
+
   async copyRegularFiles(
     sourceRootInput: string,
     targetRootInput: string,
@@ -128,6 +139,13 @@ export class WorktreeIncludeService {
           }
           if (await hasUnsafeNode(sourceRoot, relativePath, true)) {
             skipped += 1
+            return
+          }
+          if (hasWindowsDeviceName(relativePath)) {
+            if (await windowsWorktreeFiles({ operation: 'copy', source, target })) {
+              copied += 1
+              copiedPaths.push(relativePath)
+            } else skipped += 1
             return
           }
           const metadata = await lstat(source)
@@ -182,6 +200,12 @@ export class WorktreeIncludeService {
       }
       if (await hasUnsafeNode(sourceRoot, relativePath, true)) {
         skipped += 1
+        continue
+      }
+      if (hasWindowsDeviceName(relativePath)) {
+        if (await windowsWorktreeFiles({ operation: 'check', source, target }))
+          paths.push(relativePath)
+        else skipped += 1
         continue
       }
       const metadata = await lstat(source).catch((cause: NodeJS.ErrnoException) =>

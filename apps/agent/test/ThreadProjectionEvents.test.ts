@@ -1,3 +1,6 @@
+import { ContextCompactionService } from '../src/context/ContextCompactionService'
+import { createPromptCacheKey } from '../src/prompt/PromptCache'
+import { ThreadGoalService } from '../src/session/ThreadGoalService'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -8,6 +11,8 @@ import {
   RpcMethods,
   type EventEnvelope as WireEventEnvelope,
 } from '@pidex/agent-protocol'
+import { AgentRuntimeService } from '../src/orchestration/AgentRuntimeService'
+import type { PiRuntimeEventSink } from '../src/orchestration/pi/Types'
 import { Model, Provider } from '@pidex/model-schema'
 import type { EventEnvelope } from '../src/Domain'
 import { removeFixturePaths } from './FixtureCleanup'
@@ -15,10 +20,16 @@ import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import { EventHub } from '../src/storage/events/EventHub'
 import { buildEventNextNotification } from '../src/transport/EventEnvelope'
 import { ThreadHistoryService } from '../src/session/ThreadHistoryService'
+import { eventDeliveryAllowed } from '../src/transport/Server'
 import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { SubagentRepository } from '../src/subagent/SubagentRepository'
 import { interactionQuestions } from '../src/session/QuestionInput'
 import { ThreadReadViewRepository } from '../src/session/ThreadReadViewRepository'
+import { ApprovalService } from '../src/permission/ApprovalService'
+import { PermissionDecisionEngine } from '../src/permission/PermissionDecisionEngine'
+import { ToolRegistry } from '../src/tool/ToolRegistry'
+import { recoverInterruptedRuns } from '../src/storage/recovery/InterruptedRunRecovery'
+import type { ToolInvocation } from '../src/Domain'
 
 const roots: string[] = []
 const databases: AgentDatabase[] = []
@@ -49,10 +60,11 @@ const permission = {
 const decodeFromStorage = (
   event: EventEnvelope,
   projection: ThreadProjection,
+  streamId = 'thread',
 ): WireEventEnvelope => {
   const notification = buildEventNextNotification({
     subscriptionId: 'sub-test',
-    streamId: 'thread',
+    streamId,
     event,
     projection,
   })
@@ -82,6 +94,171 @@ const seedTurn = (db: AgentDatabase, threadID: string) => {
 }
 
 describe('v4 会话事件投影契约', () => {
+  test('首次 prompt 设置事件与后续 Goal/Turn 事件能连续解码，旧 outbox 也可重放', async () => {
+    const { db, projection, hub } = await fixture()
+    const thread = db.createThread('实时状态')
+    const settings = db.saveThreadPromptSettings(thread.id, {
+      engine: 'prompt-engine-v2',
+      version: 2,
+      settings: {},
+    })
+    const settingsEvent = decodeFromStorage(settings.event, projection, 'global')
+    expect(() =>
+      decodeEventEnvelope({ ...settingsEvent, payload: settings.event.params }),
+    ).toThrow()
+    expect(settingsEvent).toMatchObject({
+      type: 'thread/prompt-settings/updated',
+      payload: {
+        threadId: thread.id,
+        cacheKey: createPromptCacheKey(thread.id),
+        promptVersion: 'prompt-engine-v2',
+        baselineVersion: 1,
+      },
+    })
+    const goals = new ThreadGoalService(db, hub)
+    const goal = (
+      await goals.set({
+        threadId: thread.id,
+        objective: '交付',
+        expectedVersion: null,
+        operationId: 'create',
+      })
+    ).goal
+    const turn = seedTurn(db, thread.id)
+    db.claimTurnExecution(turn.turnID)
+    db.finalizeTurn({
+      threadID: thread.id,
+      turnID: turn.turnID,
+      agentID: turn.agentID,
+      status: 'completed',
+    })
+    await goals.set({
+      threadId: thread.id,
+      status: 'paused',
+      expectedVersion: goals.get(thread.id).goal!.version,
+      operationId: 'pause',
+    })
+    const events = db.eventsAfter(settings.event.id - 1, thread.id, 500)
+    const decoded = events.map((event) => decodeFromStorage(event, projection, 'global'))
+    expect(decoded.some((event) => event.type === 'turn/completed')).toBe(true)
+    expect(decoded.at(-1)).toMatchObject({
+      type: 'thread/goal/updated',
+      payload: { goal: { id: goal.id, status: 'paused' } },
+    })
+  })
+  test.each([false, true])(
+    '待审批重启快照与实时事件一致，不依赖工具执行记录（旧展示字段：%s）',
+    async (legacy) => {
+      const { root, db: initialDB, hub, projection } = await fixture()
+      let db = initialDB
+      const thread = db.createThread('审批展示恢复')
+      const turn = seedTurn(db, thread.id)
+      db.claimTurnExecution(turn.turnID)
+      const tools = new ToolRegistry()
+      let approvals = new ApprovalService(db, hub, tools)
+      const invocation: ToolInvocation = {
+        id: 'pending-shell',
+        threadID: thread.id,
+        turnID: turn.turnID,
+        agentID: turn.agentID,
+        name: 'PowerShell',
+        input: {
+          command: 'Write-Output "api_key=projection-secret"',
+          cwd: root,
+          additionalPermissions: { readPaths: [root], writePaths: [join(root, 'target.txt')] },
+        },
+        permissionConfig: { ...permission, approvalPolicy: 'untrusted', approvalsReviewer: 'user' },
+        model,
+        taskMode: 'chat',
+        durableApproval: true,
+      }
+      const decision = new PermissionDecisionEngine().evaluate(
+        invocation,
+        tools.get(invocation.name),
+      )
+      if (decision.action !== 'review') throw new Error('fixture requires approval')
+      const prepared = approvals.prepare(
+        invocation,
+        { decision: 'ask', risk: 'medium', reason: '确认命令' },
+        decision,
+      )
+      if (legacy) delete prepared.requestPayload.tool
+      approvals.persist(prepared)
+      await approvals.attachRunState(invocation.id, '{"engine":"pi"}', {
+        toolCallID: invocation.id,
+      })
+      const row = db.sqlite
+        .query(
+          "SELECT id, thread_id, turn_id, method, params, created_at FROM events WHERE method = 'approval/requested' AND turn_id = ?",
+        )
+        .get(turn.turnID) as {
+        id: number
+        thread_id: string
+        turn_id: string
+        method: string
+        params: string
+        created_at: number
+      }
+      const stored = {
+        id: row.id,
+        threadId: row.thread_id,
+        turnId: row.turn_id,
+        method: row.method,
+        params: JSON.parse(row.params),
+        createdAt: row.created_at,
+      } as EventEnvelope
+      const live = decodeFromStorage(stored, projection).payload as Record<string, unknown>
+      expect(live).toMatchObject({ tool: 'PowerShell', cwd: root })
+      expect(live.command).not.toContain('projection-secret')
+      const before = projection
+        .snapshot(thread.id)!
+        .approvals.find((value) => value.id === prepared.approvalID)
+      expect(before).toMatchObject({
+        id: live.interactionId,
+        toolCallID: live.toolCallId,
+        threadId: live.threadId,
+        turnId: live.turnId,
+        agentId: live.agentId,
+        tool: live.tool,
+        command: live.command,
+        cwd: live.cwd,
+        requestedPermissions: live.requestedPermissions,
+        risk: live.risk,
+        reason: live.reason,
+        paths: [join(root, 'target.txt'), root],
+        status: 'pending',
+      })
+      expect(db.sqlite.query('SELECT COUNT(*) AS count FROM tool_calls').get()).toEqual({
+        count: 0,
+      })
+      db.close()
+      db = new AgentDatabase(join(root, 'agent.sqlite'))
+      databases.push(db)
+      recoverInterruptedRuns(db)
+      const restored = new ThreadProjection(db)
+        .snapshot(thread.id)!
+        .approvals.find((value) => value.id === prepared.approvalID)
+      expect(restored).toEqual(before)
+      expect(JSON.stringify(restored)).not.toContain('projection-secret')
+      expect(JSON.stringify(restored)).not.toContain('invocationHash')
+      expect(JSON.stringify(restored)).not.toContain('runState')
+      expect(db.sqlite.query('SELECT COUNT(*) AS count FROM tool_calls').get()).toEqual({
+        count: 0,
+      })
+      approvals = new ApprovalService(db, hub, tools)
+      await approvals.respond(prepared.approvalID, legacy ? 'deny' : 'allow')
+      expect(approvals.claimResume(turn.turnID)).toMatchObject({
+        toolCallID: invocation.id,
+        approvalID: prepared.approvalID,
+        decision: legacy ? 'deny' : 'allow',
+      })
+      expect(approvals.claimResume(turn.turnID)).toBeNull()
+      expect(db.sqlite.query('SELECT COUNT(*) AS count FROM tool_calls').get()).toEqual({
+        count: 0,
+      })
+    },
+  )
+
   test.each([false, true])(
     '真实提问历史严格编码保留完整问题（缺省答题数量：%s）',
     async (omitLimits) => {
@@ -784,5 +961,429 @@ describe('v4 会话事件投影契约', () => {
     expect(itemChat?.creationSurface).toBe('chat')
     const itemLegacy = list.find((t) => t.id === threadLegacy.id)
     expect(itemLegacy?.creationSurface).toBeUndefined()
+  })
+})
+
+test('阶段变更使用持久事件原位更新，实时、重放与数据库恢复分类一致', async () => {
+  const { db, projection } = await fixture()
+  const thread = db.createThread()
+  const turn = seedTurn(db, thread.id)
+  db.startTurnExecution(turn.turnID, { ...turn.input, id: turn.inputID })
+  const agent = db.agentForTurn(turn.turnID)!
+  const context = { threadID: thread.id, turnID: turn.turnID, agentID: agent.id }
+  const events: EventEnvelope[] = []
+  const runtime = new AgentRuntimeService({
+    db,
+    hub: {} as never,
+    models: {} as never,
+    toolExecutor: {} as never,
+    contextCompaction: {} as never,
+  })
+  const internals = runtime as unknown as {
+    publish(event: EventEnvelope): Promise<void>
+    eventSink(
+      storage: unknown,
+      session: unknown,
+      model: unknown,
+      sessionID: string,
+    ): PiRuntimeEventSink
+  }
+  internals.publish = async (event) => {
+    events.push(event)
+  }
+  const sink = internals.eventSink(
+    { flush() {} },
+    {},
+    { provider: 'openai', id: 'model', contextWindow: 1000 },
+    'session',
+  )
+  const ids = {
+    textItemID: 'phase-text',
+    reasoningItemID: 'phase-reasoning',
+    planItemID: 'phase-plan',
+  }
+  await sink.assistantMessageStarted!(context, { ...ids, placement: 'process' })
+  await sink.textDelta!(context, { itemID: ids.textItemID, delta: '回答' })
+  await sink.assistantMessagePhaseChanged!(context, {
+    itemID: ids.textItemID,
+    phase: 'final_answer',
+    text: '回答',
+  })
+  const phaseEvent = events.find((event) => event.method === 'item/agentMessage/phaseChanged')!
+  const phaseEnvelope = decodeFromStorage(phaseEvent, projection)
+  expect(phaseEnvelope.type).toBe('item/agentMessage/phaseChanged')
+  expect(eventDeliveryAllowed(phaseEvent, { capabilities: new Set(['events.replay.v1']) })).toBe(
+    false,
+  )
+  expect(
+    eventDeliveryAllowed(phaseEvent, { capabilities: new Set(['thread.message-phase.v1']) }),
+  ).toBe(true)
+  expect(db.getItem(ids.textItemID)!.data).toMatchObject({
+    phase: 'final_answer',
+    text: '回答',
+    placement: 'result',
+  })
+  if (phaseEnvelope.type !== 'item/agentMessage/phaseChanged') throw new Error('阶段事件缺失')
+  expect(phaseEnvelope.payload.item).toMatchObject({
+    phase: 'final_answer',
+    text: '回答',
+    status: 'streaming',
+  })
+  await sink.assistantMessageCompleted!(context, {
+    ...ids,
+    placement: 'result',
+    phase: 'final_answer',
+    text: '回答',
+    content: [],
+    provider: 'openai',
+    api: 'openai-responses',
+    model: 'model',
+    usage: { input: 1, output: 1, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
+  })
+  await sink.savePoint!(context, { hadPendingMutations: true })
+  const completedEvent = decodeFromStorage(
+    events.find((event) => event.method === 'item/completed')!,
+    projection,
+  )
+  if (completedEvent.type !== 'item/completed') throw new Error('完成事件缺失')
+  const restored = new ThreadReadViewRepository(db).history(thread.id, { limit: 10 })
+  const items = restored.turns.flatMap((turn) => turn.items).filter((item) => item.type === 'text')
+  expect(items).toHaveLength(1)
+  expect(completedEvent.payload.item).toEqual(items[0]!)
+  expect(items[0]).toMatchObject({
+    id: ids.textItemID,
+    phase: 'final_answer',
+    text: '回答',
+    status: 'completed',
+  })
+})
+
+test('已发布的正文增量在完成前中止仍可从持久快照恢复，迟到增量不改终态', async () => {
+  const { db, root } = await fixture()
+  const thread = db.createThread()
+  const turn = seedTurn(db, thread.id)
+  db.startTurnExecution(turn.turnID, { ...turn.input, id: turn.inputID })
+  const context = { threadID: thread.id, turnID: turn.turnID, agentID: turn.agentID }
+  const runtime = new AgentRuntimeService({
+    db,
+    hub: {} as never,
+    models: {} as never,
+    toolExecutor: {} as never,
+    contextCompaction: {} as never,
+  })
+  const internals = runtime as unknown as {
+    publish(event: EventEnvelope): Promise<void>
+    eventSink(
+      storage: unknown,
+      session: unknown,
+      model: unknown,
+      sessionID: string,
+    ): PiRuntimeEventSink
+  }
+  const published: EventEnvelope[] = []
+  internals.publish = async (event) => {
+    published.push(event)
+  }
+  const sink = internals.eventSink(
+    { discardPending() {} },
+    {},
+    { provider: 'openai', id: 'model', contextWindow: 1000 },
+    'session',
+  )
+  const ids = { textItemID: 'stopped-text', reasoningItemID: 'reasoning', planItemID: 'plan' }
+  await sink.assistantMessageStarted!(context, { ...ids, placement: 'process' })
+  await sink.textDelta!(context, { itemID: ids.textItemID, delta: '001 已输出\n' })
+  await sink.textDelta!(context, { itemID: ids.textItemID, delta: '002 部分回答' })
+  expect(db.getItem(ids.textItemID)!.data.text).toBe('001 已输出\n002 部分回答')
+  await sink.aborted!(context)
+  db.repositories.executions.finalizeTurn({
+    ...context,
+    status: 'interrupted',
+    pauseReason: 'interrupted',
+  })
+  recoverInterruptedRuns(db)
+  recoverInterruptedRuns(db)
+  await sink.textDelta!(context, { itemID: ids.textItemID, delta: '迟到 END' })
+  const reopened = new AgentDatabase(join(root, 'agent.sqlite'))
+  databases.push(reopened)
+  const history = new ThreadReadViewRepository(reopened).history(thread.id, { limit: 10 })
+  const texts = history.turns.flatMap((entry) => entry.items).filter((item) => item.type === 'text')
+  expect(texts).toHaveLength(1)
+  expect(texts[0]).toMatchObject({
+    id: ids.textItemID,
+    text: '001 已输出\n002 部分回答',
+    status: 'interrupted',
+  })
+  expect(db.sqlite.query('SELECT status FROM turns WHERE id = ?').get(turn.turnID)).toEqual({
+    status: 'interrupted',
+  })
+  expect(published.filter((event) => event.method === 'item/agentMessage/delta')).toHaveLength(2)
+  expect(
+    db.sqlite
+      .query("SELECT count(*) AS n FROM events WHERE turn_id = ? AND method = 'turn/completed'")
+      .get(turn.turnID),
+  ).toEqual({ n: 0 })
+})
+
+test('手动压缩失败按操作恢复为会话节点，不依赖最新状态提示', async () => {
+  const { db, projection } = await fixture()
+  const thread = db.createThread('手动压缩节点')
+  const turn = seedTurn(db, thread.id)
+  for (const [index, status] of (['failed', 'completed'] as const).entries()) {
+    db.repositories.context.saveOperation({
+      operationId: `manual-${index}`,
+      threadId: thread.id,
+      sessionId: null,
+      agentId: null,
+      trigger: 'manual',
+      phase: 'settled',
+      status,
+      compactionId: null,
+      reason: status === 'failed' ? 'budget-exceeded' : null,
+      createdAt: Date.now() + index,
+      updatedAt: Date.now() + index,
+    })
+  }
+  db.claimTurnExecution(turn.turnID)
+  const snapshot = new ThreadProjection(db).snapshot(thread.id)!
+  expect(projection.historyPage(thread.id)?.turns.flatMap((bundle) => bundle.items)).toEqual([
+    ...snapshot.items,
+  ])
+  expect(snapshot.items.filter((item) => item.type === 'activity')).toMatchObject([
+    {
+      id: 'activity:context-compression-operation:manual-0',
+      turnId: turn.turnID,
+      status: 'interrupted',
+    },
+    {
+      id: 'activity:context-compression-operation:manual-1',
+      turnId: turn.turnID,
+      status: 'completed',
+    },
+  ])
+  expect(projection.snapshot(thread.id)?.items).toEqual([...snapshot.items])
+})
+
+test.each([
+  [false, 'failed', 'budget-exceeded', '压缩失败：上下文预算不足'],
+  [true, 'failed', 'budget-exceeded', '压缩失败：上下文预算不足'],
+  [true, 'failed', 'provider-failed', '压缩失败'],
+  [true, 'cancelled', 'stopped', '压缩已取消'],
+  [true, 'skipped', 'already-compacted', '无需压缩上下文'],
+  [true, 'interrupted', 'restart', '压缩因重启中断'],
+] as const)(
+  '压缩状态经过真实事件与历史恢复一致（空闲：%s，状态：%s）',
+  async (idle, status, reason, title) => {
+    const { db, projection } = await fixture()
+    const thread = db.createThread('压缩归属')
+    const turn = seedTurn(db, thread.id)
+    db.startTurnExecution(turn.turnID, { ...turn.input, id: turn.inputID })
+    if (idle)
+      db.finalizeTurn({
+        threadID: thread.id,
+        turnID: turn.turnID,
+        agentID: turn.agentID,
+        status: 'completed',
+      })
+    const page = new ThreadReadViewRepository(db).history(thread.id, {})
+    const service = new ContextCompactionService(db)
+    const operation = service.request(thread.id, 'manual-anchor')
+    expect(operation.turnId).toBe(idle ? null : turn.turnID)
+    service.finish(thread.id, status, reason)
+    const events = db
+      .eventsAfter(page.streamPosition.sequence)
+      .filter((event) => event.method === 'context/compactionUpdated')
+    const wire = events.map((event) => decodeFromStorage(event, projection, thread.id))
+    expect(wire).toHaveLength(2)
+    expect(wire.at(-1)?.payload).toMatchObject({
+      operation: { turnId: operation.turnId, status },
+    })
+    const restored = new ThreadReadViewRepository(db).history(thread.id, {})
+    const items = restored.turns.flatMap((bundle) => bundle.items)
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      title,
+      status: status === 'skipped' ? 'completed' : 'interrupted',
+      compaction: { standalone: idle },
+    })
+    expect(new ThreadProjection(db).snapshot(thread.id)?.items).toEqual(items)
+  },
+)
+
+describe('ThreadProjection forkedFrom 字段投影契约', () => {
+  test('消息分叉目标会话投影 forkedFrom，包含直接来源与继承末尾 turnId', async () => {
+    const { db, projection } = await fixture()
+    const sourceThread = db.createThread('来源会话')
+    const sourceTurn = seedTurn(db, sourceThread.id)
+    const targetThread = db.createThread('分叉目标')
+    const targetTurn = seedTurn(db, targetThread.id)
+
+    const sourceItemId = `item-${sourceTurn.turnID}`
+    db.sqlite
+      .query(
+        `INSERT INTO items (id, thread_id, turn_id, agent_id, type, status, data, ordinal, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'text', 'completed', '{}', 0, 1, 1)`,
+      )
+      .run(sourceItemId, sourceThread.id, sourceTurn.turnID, sourceTurn.agentID)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_fork_operations (
+          operation_id, source_thread_id, source_turn_id, source_item_id, target_thread_id,
+          destination_kind, request_hash, status, step, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'same-worktree', 'hash-1', 'completed', 'complete', 1, 1, 1)`,
+      )
+      .run('op-1', sourceThread.id, sourceTurn.turnID, sourceItemId, targetThread.id)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_forks (target_thread_id, source_thread_id, source_turn_id, source_item_id, operation_id, created_at, target_turn_id)
+         VALUES (?, ?, ?, ?, ?, 1, ?)`,
+      )
+      .run(
+        targetThread.id,
+        sourceThread.id,
+        sourceTurn.turnID,
+        sourceItemId,
+        'op-1',
+        targetTurn.turnID,
+      )
+
+    const projected = projection.snapshot(targetThread.id)
+    expect(projected?.thread.forkedFrom).toEqual({
+      threadId: sourceThread.id,
+      inheritedThroughTurnId: targetTurn.turnID,
+    })
+  })
+
+  test('旧分叉缺少 target_turn_id 或关联对象失效时不投影 forkedFrom', async () => {
+    const { db, projection } = await fixture()
+    const sourceThread = db.createThread('来源会话')
+    const sourceTurn = seedTurn(db, sourceThread.id)
+    const targetThread = db.createThread('旧分叉目标')
+
+    const legacyItemId = `item-${sourceTurn.turnID}`
+    db.sqlite
+      .query(
+        `INSERT INTO items (id, thread_id, turn_id, agent_id, type, status, data, ordinal, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'text', 'completed', '{}', 0, 1, 1)`,
+      )
+      .run(legacyItemId, sourceThread.id, sourceTurn.turnID, sourceTurn.agentID)
+
+    // 缺少 target_turn_id
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_fork_operations (
+          operation_id, source_thread_id, source_turn_id, source_item_id, target_thread_id,
+          destination_kind, request_hash, status, step, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'same-worktree', 'hash-legacy', 'completed', 'complete', 1, 1, 1)`,
+      )
+      .run('op-legacy', sourceThread.id, sourceTurn.turnID, legacyItemId, targetThread.id)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_forks (target_thread_id, source_thread_id, source_turn_id, source_item_id, operation_id, created_at, target_turn_id)
+         VALUES (?, ?, ?, ?, ?, 1, NULL)`,
+      )
+      .run(targetThread.id, sourceThread.id, sourceTurn.turnID, legacyItemId, 'op-legacy')
+
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+  })
+
+  test('Handoff 会话 (thread_forks) 不暴露 forkedFrom', async () => {
+    const { db, projection } = await fixture()
+    const sourceThread = db.createThread('Handoff 来源')
+    const targetThread = db.createThread('Handoff 目标')
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_handoff_operations (
+          operation_id, source_thread_id, target_thread_id, destination_kind, direction,
+          request_hash, status, step, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, 'local', 'local-to-worktree', 'hash-handoff', 'completed', 'complete', 1, 1, 1)`,
+      )
+      .run('op-handoff', sourceThread.id, targetThread.id)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_forks (target_thread_id, source_thread_id, operation_id, created_at)
+         VALUES (?, ?, ?, 1)`,
+      )
+      .run(targetThread.id, sourceThread.id, 'op-handoff')
+
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+  })
+
+  test('来源删除、边界 Turn 删除、Turn 失活或来源处于隐藏态时，省略 forkedFrom', async () => {
+    const { db, projection } = await fixture()
+    const sourceThread = db.createThread('来源会话')
+    const sourceTurn = seedTurn(db, sourceThread.id)
+    const targetThread = db.createThread('目标会话')
+    const targetTurn = seedTurn(db, targetThread.id)
+
+    const sourceItemId = `item-${sourceTurn.turnID}`
+    db.sqlite
+      .query(
+        `INSERT INTO items (id, thread_id, turn_id, agent_id, type, status, data, ordinal, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'text', 'completed', '{}', 0, 1, 1)`,
+      )
+      .run(sourceItemId, sourceThread.id, sourceTurn.turnID, sourceTurn.agentID)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_fork_operations (
+          operation_id, source_thread_id, source_turn_id, source_item_id, target_thread_id,
+          destination_kind, request_hash, status, step, revision, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, 'same-worktree', 'hash-test', 'completed', 'complete', 1, 1, 1)`,
+      )
+      .run('op-edge', sourceThread.id, sourceTurn.turnID, sourceItemId, targetThread.id)
+
+    db.sqlite
+      .query(
+        `INSERT INTO thread_message_forks (target_thread_id, source_thread_id, source_turn_id, source_item_id, operation_id, created_at, target_turn_id)
+         VALUES (?, ?, ?, ?, ?, 1, ?)`,
+      )
+      .run(
+        targetThread.id,
+        sourceThread.id,
+        sourceTurn.turnID,
+        sourceItemId,
+        'op-edge',
+        targetTurn.turnID,
+      )
+
+    // 初始状态下有效
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toEqual({
+      threadId: sourceThread.id,
+      inheritedThroughTurnId: targetTurn.turnID,
+    })
+
+    // 情况 1: target_turn 成为 inactive turn（编辑回退）
+    db.sqlite
+      .query(
+        `INSERT INTO thread_edits (operation_id, thread_id, request_hash, source_turn_id, source_input_id, input_id, turn_id, created_at)
+         VALUES ('edit-op-1', ?, 'hash-edit', ?, 'inp-1', 'inp-2', ?, 1)`,
+      )
+      .run(targetThread.id, targetTurn.turnID, targetTurn.turnID)
+    db.sqlite
+      .query('INSERT INTO thread_inactive_turns (turn_id, operation_id) VALUES (?, ?)')
+      .run(targetTurn.turnID, 'edit-op-1')
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+
+    // 恢复 active
+    db.sqlite.query('DELETE FROM thread_inactive_turns WHERE turn_id = ?').run(targetTurn.turnID)
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeDefined()
+
+    // 情况 2: sourceThread 处于未发布的隐藏状态（archived_at = -1）
+    db.sqlite.query('UPDATE threads SET archived_at = -1 WHERE id = ?').run(sourceThread.id)
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
+
+    // 恢复正常归档状态（例如用户主动归档的时间戳）
+    db.sqlite.query('UPDATE threads SET archived_at = 123456789 WHERE id = ?').run(sourceThread.id)
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeDefined()
+
+    // 情况 3: targetTurn 被删除
+    db.sqlite.query('DELETE FROM turns WHERE id = ?').run(targetTurn.turnID)
+    expect(projection.snapshot(targetThread.id)?.thread.forkedFrom).toBeUndefined()
   })
 })

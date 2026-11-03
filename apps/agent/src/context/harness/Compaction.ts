@@ -129,7 +129,9 @@ export async function completeSimpleWithRetries(
   options: SimpleStreamOptions,
   retry?: RetryPolicy,
   callbacks?: RetryCallbacks,
+  beforeRequest?: (context: Context) => void,
 ): Promise<AssistantMessage> {
+  beforeRequest?.(context)
   // Summaries are standalone requests, so isolate routing and avoid cache writes that cannot be reused.
   const requestOptions: SimpleStreamOptions = {
     ...options,
@@ -175,6 +177,7 @@ export interface CompactionSettings {
   reserveTokens: number
   /** Approximate recent-context tokens to keep after compaction. */
   keepRecentTokens: number
+  summaryTokens?: number
 }
 
 /** Default compaction settings used by the harness. */
@@ -309,8 +312,12 @@ function estimateTextAndImageContentChars(
 export function estimateMessageChars(message: AgentMessage): number {
   switch (message.role) {
     case 'user': {
-      return estimateTextAndImageContentChars(
-        (message as { content: string | Array<{ type: string; text?: string }> }).content,
+      return (
+        estimateTextAndImageContentChars(
+          (message as { content: string | Array<{ type: string; text?: string }> }).content,
+        ) +
+        ((message as typeof message & { media?: unknown[] }).media?.length ?? 0) *
+          ESTIMATED_IMAGE_CHARS
       )
     }
     case 'assistant': {
@@ -504,16 +511,17 @@ Use this EXACT format:
 - [Issues preventing progress, if any]
 
 ## Key Decisions
-- **[Decision]**: [Brief rationale]
+- **[Decision]**: [Brief rationale; include any budget trade-offs and rationale]
 
 ## Next Steps
-1. [Ordered list of what should happen next]
+1. [Ordered list of what should happen next; preserve uncompleted required deliverables and evidence]
 
 ## Critical Context
 - [Any data, examples, or references needed to continue]
 - [Or "(none)" if not applicable]
 
-Keep each section concise. Preserve exact file paths, function names, and error messages.`
+Keep each section concise. Preserve exact file paths, function names, and error messages.
+Note: Recovery and continuation rely on actual workspace files and the latest goal status, not outdated summaries.`
 
 const UPDATE_SUMMARIZATION_PROMPT = `The messages above are NEW conversation messages to incorporate into the existing summary provided in <previous-summary> tags.
 
@@ -521,8 +529,9 @@ Update the existing structured summary with new information. RULES:
 - PRESERVE all existing information from the previous summary
 - ADD new progress, decisions, and context from the new messages
 - UPDATE the Progress section: move items from "In Progress" to "Done" when completed
-- UPDATE "Next Steps" based on what was accomplished
+- UPDATE "Next Steps" based on what was accomplished; preserve uncompleted required deliverables and evidence
 - PRESERVE exact file paths, function names, and error messages
+- PRESERVE budget trade-offs and decisions in Key Decisions
 - If something is no longer relevant, you may remove it
 
 Use this EXACT format:
@@ -544,15 +553,16 @@ Use this EXACT format:
 - [Current blockers - remove if resolved]
 
 ## Key Decisions
-- **[Decision]**: [Brief rationale] (preserve all previous, add new)
+- **[Decision]**: [Brief rationale; preserve all previous, add new including budget trade-offs]
 
 ## Next Steps
-1. [Update based on current state]
+1. [Update based on current state; preserve uncompleted required deliverables and evidence]
 
 ## Critical Context
 - [Preserve important context, add new if needed]
 
-Keep each section concise. Preserve exact file paths, function names, and error messages.`
+Keep each section concise. Preserve exact file paths, function names, and error messages.
+Note: Recovery and continuation rely on actual workspace files and the latest goal status, not outdated summaries.`
 
 /** Generate or update a conversation summary for compaction. */
 export async function generateSummary(
@@ -594,6 +604,7 @@ export async function generateSummaryWithUsage(
   thinkingLevel?: ThinkingLevel,
   retry?: RetryPolicy,
   callbacks?: RetryCallbacks,
+  beforeRequest?: (context: Context) => void,
 ): Promise<Result<{ text: string; usage: Usage }, CompactionError>> {
   const maxTokens = Math.min(
     Math.floor(0.8 * reserveTokens),
@@ -631,6 +642,7 @@ export async function generateSummaryWithUsage(
     completionOptions,
     retry,
     callbacks,
+    beforeRequest,
   )
   if (response.stopReason === 'aborted') {
     return err(new CompactionError('aborted', response.errorMessage || 'Summarization aborted'))
@@ -645,6 +657,8 @@ export async function generateSummaryWithUsage(
   }
 
   const textContent = contentText(response.content)
+  if (!textContent.trim() || response.stopReason === 'length')
+    return err(new CompactionError('summarization_failed', '压缩摘要为空或不完整'))
 
   return ok({ text: textContent, usage: response.usage })
 }
@@ -785,6 +799,7 @@ export async function compact(
   thinkingLevel?: ThinkingLevel,
   retry?: RetryPolicy,
   callbacks?: RetryCallbacks,
+  beforeRequest?: (context: Context) => void,
 ): Promise<Result<CompactionResult, CompactionError>> {
   const {
     firstKeptEntryId,
@@ -818,13 +833,16 @@ export async function compact(
         messagesToSummarize,
         models,
         model,
-        settings.reserveTokens,
+        settings.summaryTokens === undefined
+          ? settings.reserveTokens
+          : Math.floor((settings.summaryTokens * (messagesToSummarize.length ? 0.5 : 1)) / 0.8),
         signal,
         customInstructions,
         previousSummary,
         thinkingLevel,
         retry,
         callbacks,
+        beforeRequest,
       )
       if (!historyResult.ok) return err(historyResult.error)
       historyText = historyResult.value.text
@@ -834,11 +852,14 @@ export async function compact(
       turnPrefixMessages,
       models,
       model,
-      settings.reserveTokens,
+      settings.summaryTokens === undefined
+        ? settings.reserveTokens
+        : Math.floor((settings.summaryTokens * (messagesToSummarize.length ? 0.5 : 1)) / 0.5),
       signal,
       thinkingLevel,
       retry,
       callbacks,
+      beforeRequest,
     )
     if (!turnPrefixResult.ok) return err(turnPrefixResult.error)
     summary = `${historyText}\n\n---\n\n**Turn Context (split turn):**\n\n${turnPrefixResult.value.text}`
@@ -850,13 +871,16 @@ export async function compact(
       messagesToSummarize,
       models,
       model,
-      settings.reserveTokens,
+      settings.summaryTokens === undefined
+        ? settings.reserveTokens
+        : Math.floor(settings.summaryTokens / 0.8),
       signal,
       customInstructions,
       previousSummary,
       thinkingLevel,
       retry,
       callbacks,
+      beforeRequest,
     )
     if (!summaryResult.ok) return err(summaryResult.error)
     summary = summaryResult.value.text
@@ -884,6 +908,7 @@ async function generateTurnPrefixSummary(
   thinkingLevel?: ThinkingLevel,
   retry?: RetryPolicy,
   callbacks?: RetryCallbacks,
+  beforeRequest?: (context: Context) => void,
 ): Promise<Result<{ text: string; usage: Usage }, CompactionError>> {
   const maxTokens = Math.min(
     Math.floor(0.5 * reserveTokens),
@@ -911,6 +936,7 @@ async function generateTurnPrefixSummary(
     completionOptions,
     retry,
     callbacks,
+    beforeRequest,
   )
   if (response.stopReason === 'aborted') {
     return err(
@@ -926,8 +952,8 @@ async function generateTurnPrefixSummary(
     )
   }
 
-  return ok({
-    text: contentText(response.content),
-    usage: response.usage,
-  })
+  const text = contentText(response.content)
+  if (!text.trim() || response.stopReason === 'length')
+    return err(new CompactionError('summarization_failed', '压缩摘要为空或不完整'))
+  return ok({ text, usage: response.usage })
 }

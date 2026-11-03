@@ -1,4 +1,4 @@
-import { resolveTaskExecution } from '../../features/session/TaskExecutionMode.js'
+import { resolveSessionCreationExecution } from '../../features/session/TaskExecutionMode.js'
 import { reconcileQuestionDrafts } from '../../features/session/approvals/AskUserQuestionModel.js'
 import {
   DESKTOP_AGENT_EVENT_CHANNEL,
@@ -47,7 +47,7 @@ import {
   isNewerDesktopThemeSettingsVersion,
   normalizeDesktopThemeSettings,
 } from '../../../shared/Theme.js'
-import { desktopUserMessageInputToPreviewText } from '../../../shared/DesktopUserMessage.js'
+import { formatCanonicalSkillInvocation } from '../../../shared/DesktopUserMessage.js'
 import { resolvePreferredOpenTarget } from './OpenTargetSelection.js'
 import type {
   CreateDesktopSessionOptions,
@@ -116,17 +116,25 @@ const RENDERER_PROTOCOL = 'thread-rpc-v4' as const
  */
 const SESSION_STATUS_RECONCILE_INTERVAL_MS = 30_000
 export const RENDERER_CAPABILITIES = [
+  'thread.goal.v1',
+  'queue.goal.v1',
+  'visualizations.v1',
+  'artifacts.read.v1',
   'rpc.typed.v1',
   'events.replay.v1',
+  'thread.message-phase.v1',
   'events.live.v1',
   'interactions.serverRequests.v1',
   'interaction.recovery.v1',
   'interaction.questionSkip.v1',
   'interaction.scopedGrants.v1',
+  'permission.rules.v1',
+  'model.preferences.v1',
   'interaction.questionPause.v1',
   'mcp.elicitation.v1',
   'approval.retry.v1',
   'turn.admission.v1',
+  'thread.editUserMessage.v1',
   'skills.invocation.v1',
   'plan.approval.v1',
   'plan.structured.v1',
@@ -142,11 +150,15 @@ export const RENDERER_CAPABILITIES = [
   'git.review.batch.v1',
   'git.review.context.v1',
   'git.review.uncommitted.v1',
+  'git.review.commit-ref.v1',
   'git.workspace.v1',
+  'git.sync.v1',
   'ai.review.v1',
   'github.oauth.v1',
   'github.pullRequests.v1',
+  'github.threadPullRequests.v1',
   'context.compact.v1',
+  'context.compact.lifecycle.v1',
   'hooks.trust.v1',
   'subagents.v1',
   'subagents.recursive.v1',
@@ -155,13 +167,20 @@ export const RENDERER_CAPABILITIES = [
   'prompt.preview.sensitive.v1',
   'model.catalog.paged.v1',
   'model.health.v1',
+  'model.operations.v1',
+  'model.recommendations.v1',
+  'model.media-input.v1',
   'provider.config.pi.v1',
+  'provider.modelSync.v1',
+  'provider.protocolDetection.v1',
+  'provider.builtinOverrides.v1',
   'provider.auth.pi.v1',
   'tooling.management.v1',
   'skills.manage.v1',
   'plugins.manage.v1',
   'plugins.details.v1',
-  'integrations.minimax-cli.v1',
+  'plugins.lifecycle.v1',
+  'plugins.assets.v1',
   'mcp.manage.v1',
   'mcp.oauth.v1',
   'config.manage.v1',
@@ -172,7 +191,9 @@ export const RENDERER_CAPABILITIES = [
   'speech.transcription.v1',
   'automation.manage.v1',
   'calendar.manage.v1',
+  'schedule.draft.v1',
   'session-group.v1' as ProtocolCapability,
+  'workflow.v1',
   'computer.use.v1' as ProtocolCapability,
   'computer.policy.v1' as ProtocolCapability,
 ] as const satisfies ReadonlyArray<ProtocolCapability>
@@ -201,7 +222,6 @@ import type {
   DesktopComputerApi,
   DesktopLocalContextApi,
   DesktopModelProviderRefreshApi,
-  DesktopMiniMaxCliApi,
   DesktopPluginApi,
   DesktopRuntimeCapabilityApi,
   DesktopSpeechApi,
@@ -257,7 +277,6 @@ export function createAgentSessionDesktopClient(
     DesktopSpeechApi &
     DesktopModelProviderRefreshApi &
     DesktopPluginApi &
-    DesktopMiniMaxCliApi &
     DesktopComputerApi &
     DesktopCalendarApi,
   allowBrowserMockFallback: boolean,
@@ -313,6 +332,7 @@ export function createAgentSessionDesktopClient(
   const sharedGlobalEventListeners = new Set<{
     liveEventTypes: ReadonlySet<LiveEventType>
     callback: (events: readonly EventEnvelope[]) => void | Promise<void>
+    onSubscriptionError?: (error: unknown) => void | Promise<void>
   }>()
   const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const confirmedReadThroughBySessionId = new Map<string, number>()
@@ -418,24 +438,24 @@ export function createAgentSessionDesktopClient(
     return operation()
   }
 
-  /**
-   * Goal mutations are optimistic-concurrency guarded. On conflict we refresh the
-   * canonical snapshot and surface a retryable message instead of overwriting the
-   * newer version the other writer produced.
-   */
-  async function runGoalMutation<T>(operation: () => Promise<T>): Promise<T> {
-    try {
-      return await operation()
-    } catch (error) {
-      if (error instanceof AgentRpcError && error.errorCode === 'CONFLICT') {
-        await refreshAgentSessionStoreChange().catch(() => emitSessionStoreChange())
-        const conflict = new Error('目标已被其他操作更新，已刷新为最新状态，请重试。') as Error & {
-          code: string
-        }
-        conflict.code = 'GOAL_VERSION_CONFLICT'
-        throw conflict
+  /** Retry status-only mutations once; callers verify that the target goal has not changed. */
+  async function runGoalMutation<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+    retryConflict = false,
+  ): Promise<T> {
+    for (let attempt = 0; ; attempt += 1) {
+      try {
+        return await operation()
+      } catch (error) {
+        if (!(error instanceof AgentRpcError) || error.errorCode !== 'CONFLICT') throw error
+        await loadAgentSessionSnapshot(sessionId).catch(() => null)
+        emitSessionStoreChange()
+        if (retryConflict && attempt === 0) continue
+        throw Object.assign(new Error(`${error.message}；已刷新最新状态，请重试。`), {
+          code: 'GOAL_VERSION_CONFLICT',
+        })
       }
-      throw error
     }
   }
 
@@ -925,12 +945,17 @@ export function createAgentSessionDesktopClient(
     // already includes the event, but an older list/read snapshot must not
     // restore the session to running.
     if (!lifecycleIsTerminal && currentEpoch <= requestEpoch) return snapshot
+    const targetError =
+      lifecycle.status === 'failed'
+        ? (lifecycle.error ?? snapshot.item.latestTurnError ?? null)
+        : null
     return {
       ...snapshot,
       item: {
         ...snapshot.item,
         status: agentTurnStatusToDesktopStatus(lifecycle.status),
         latestTurnStatus: lifecycle.status,
+        latestTurnError: targetError,
       },
     }
   }
@@ -945,12 +970,19 @@ export function createAgentSessionDesktopClient(
     )
     const cached = sessionSnapshots.get(update.threadId)
     if (!cached) return
+    const targetError =
+      update.status === 'failed'
+        ? (update.error ??
+          (cached.item.latestTurnStatus === 'failed' ? cached.item.latestTurnError : null) ??
+          null)
+        : null
     sessionSnapshots.set(update.threadId, {
       ...cached,
       item: {
         ...cached.item,
         status: agentTurnStatusToDesktopStatus(update.status),
         latestTurnStatus: update.status,
+        latestTurnError: targetError,
       },
     })
     emitSessionStoreChange()
@@ -959,6 +991,18 @@ export function createAgentSessionDesktopClient(
   function clearSessionLifecycle(sessionId: string): void {
     lifecycleEpochBySessionId.delete(sessionId)
     latestLifecycleBySessionId.delete(sessionId)
+  }
+
+  /**
+   * Drops every remembered lifecycle status. A subscription that just (re)connected
+   * resumes at the live position, so any lifecycle event published inside that gap
+   * is lost while what this client remembers survives. A remembered terminal status
+   * would then win against every later catalog read for that thread and pin its row
+   * to the finished turn. After a reconnect the persisted catalog is the authority.
+   */
+  function resetSessionLifecycles(): void {
+    lifecycleEpochBySessionId.clear()
+    latestLifecycleBySessionId.clear()
   }
 
   async function listAgentSessions(options?: {
@@ -1098,6 +1142,9 @@ export function createAgentSessionDesktopClient(
 
   function reconcileAgentSessionStore(): Promise<void> {
     if (sessionStoreReconcile) return sessionStoreReconcile
+    // The subscription that drives this reconcile just started at its live
+    // position, so the lifecycle memory may be missing events from the gap.
+    resetSessionLifecycles()
     providerCredentialsCache = null
     invalidateModelCatalog()
     notifyModelProviderChanged()
@@ -1159,7 +1206,8 @@ export function createAgentSessionDesktopClient(
       if (
         current &&
         current.status === status.status &&
-        current.latestTurnStatus === status.latestTurnStatus
+        current.latestTurnStatus === status.latestTurnStatus &&
+        (current.latestTurnError ?? null) === (status.latestTurnError ?? null)
       ) {
         return
       }
@@ -1221,14 +1269,17 @@ export function createAgentSessionDesktopClient(
     refreshTimers.set(sessionId, timer)
   }
 
-  function taskModeForSession(sessionId: string): 'chat' | 'plan' {
-    return sessionSnapshots.get(sessionId)?.item.planModeActive ? 'plan' : 'chat'
+  function taskModeForSession(sessionId: string): 'chat' | 'plan' | 'grill' {
+    const item = sessionSnapshots.get(sessionId)?.item
+    return item?.grillModeActive ? 'grill' : item?.planModeActive ? 'plan' : 'chat'
   }
 
   function permissionConfigForSession(sessionId: string) {
+    const snapshot = sessionSnapshots.get(sessionId)
     return (
       sessionPermissionConfigs.get(sessionId) ??
-      desktopPermissionModeToPermissionConfig(sessionSnapshots.get(sessionId)?.item.permissionMode)
+      snapshot?.settings.permissionConfig ??
+      desktopPermissionModeToPermissionConfig(snapshot?.item.permissionMode)
     )
   }
 
@@ -1242,6 +1293,7 @@ export function createAgentSessionDesktopClient(
   ): Promise<DesktopSessionSnapshot> {
     const current = sessionSnapshots.get(sessionId) ?? (await loadAgentSessionSnapshot(sessionId))
     const planModeActive = settings.taskMode === 'plan'
+    const grillModeActive = settings.taskMode === 'grill'
     const collaborationMode = collaborationModeFromPlanModeActive(planModeActive)
     const permissionMode = permissionModeFromConfig(settings.permissionConfig)
     const snapshot: DesktopSessionSnapshot = {
@@ -1251,12 +1303,15 @@ export function createAgentSessionDesktopClient(
         collaborationMode,
         permissionMode,
         planModeActive,
+        grillModeActive,
       },
       settings: {
         ...current.settings,
         collaborationMode,
         permissionConfig: settings.permissionConfig,
         planModeActive,
+        grillModeActive,
+        maxContextTokens: settings.maxContextTokens ?? null,
       },
     }
     sessionSnapshots.set(sessionId, snapshot)
@@ -1287,6 +1342,8 @@ export function createAgentSessionDesktopClient(
     const payload = await buildAgentAttachmentUploads(input, (attachmentId) =>
       rpc.call('attachment/read', { attachmentId }),
     )
+    if (payload.some((attachment) => attachment.kind === 'audio' || attachment.kind === 'video'))
+      requireAgentCapability('model.media-input.v1')
     if (!payload.length) return []
     const response = await rpc.call('attachment/import', {
       uploads: payload,
@@ -1504,6 +1561,7 @@ export function createAgentSessionDesktopClient(
   }
 
   const turnQueueClient = createAgentTurnQueueClient({
+    supportsGoalQueue: () => agentCapabilities.has('queue.goal.v1'),
     rpc,
     requireSkillInvocationCapability: () => requireAgentCapability('skills.invocation.v1'),
     awaitPendingSettingsUpdate,
@@ -1639,25 +1697,6 @@ export function createAgentSessionDesktopClient(
     return agentPluginApiPromise
   }
 
-  type AgentMiniMaxCliApi = ReturnType<
-    (typeof import('./AgentMinimaxCliApi.js'))['createAgentMiniMaxCliApi']
-  >
-  let agentMiniMaxCliApiPromise: Promise<AgentMiniMaxCliApi> | null = null
-  const loadAgentMiniMaxCliApi = (): Promise<AgentMiniMaxCliApi> => {
-    agentMiniMaxCliApiPromise ??= import('./AgentMinimaxCliApi.js').then((module) =>
-      module.createAgentMiniMaxCliApi({
-        mockClient,
-        requireAgentCapability,
-        rpc: {
-          call: rpc.call,
-          subscribeEnvelope: subscribeGlobalEventEnvelopes,
-        },
-        withAgentOrMock,
-      }),
-    )
-    return agentMiniMaxCliApiPromise
-  }
-
   type AgentComputerApi = ReturnType<
     (typeof import('./AgentComputerApi.js'))['createAgentComputerApi']
   >
@@ -1715,6 +1754,38 @@ export function createAgentSessionDesktopClient(
     return agentModelHealthApiPromise
   }
 
+  type AgentProviderModelSyncApi = ReturnType<
+    (typeof import('./AgentProviderModelSyncApi.js'))['createAgentProviderModelSyncApi']
+  >
+  let agentProviderModelSyncApiPromise: Promise<AgentProviderModelSyncApi> | null = null
+  const loadAgentProviderModelSyncApi = (): Promise<AgentProviderModelSyncApi> => {
+    agentProviderModelSyncApiPromise ??= import('./AgentProviderModelSyncApi.js').then((module) =>
+      module.createAgentProviderModelSyncApi({
+        mockClient,
+        requireAgentCapability,
+        rpc,
+        withAgentOrMock,
+      }),
+    )
+    return agentProviderModelSyncApiPromise
+  }
+
+  type AgentProtocolDetectionApi = ReturnType<
+    (typeof import('./AgentProtocolDetectionApi.js'))['createAgentProtocolDetectionApi']
+  >
+  let agentProtocolDetectionApiPromise: Promise<AgentProtocolDetectionApi> | null = null
+  const loadAgentProtocolDetectionApi = (): Promise<AgentProtocolDetectionApi> => {
+    agentProtocolDetectionApiPromise ??= import('./AgentProtocolDetectionApi.js').then((module) =>
+      module.createAgentProtocolDetectionApi({
+        mockClient,
+        requireAgentCapability,
+        rpc,
+        withAgentOrMock,
+      }),
+    )
+    return agentProtocolDetectionApiPromise
+  }
+
   type AgentSessionGroupApi = ReturnType<
     (typeof import('./AgentSessionGroupApi.js'))['createAgentSessionGroupApi']
   >
@@ -1769,7 +1840,6 @@ export function createAgentSessionDesktopClient(
       ...AGENT_LIVE_EVENT_FILTERS.modelHealth,
       ...AGENT_LIVE_EVENT_FILTERS.skills,
       ...AGENT_LIVE_EVENT_FILTERS.plugins,
-      ...AGENT_LIVE_EVENT_FILTERS.minimaxCli,
       ...AGENT_LIVE_EVENT_FILTERS.tooling,
       ...AGENT_LIVE_EVENT_FILTERS.mcp,
       'speech/statusChanged',
@@ -1792,6 +1862,7 @@ export function createAgentSessionDesktopClient(
     const entry = {
       liveEventTypes: new Set(options.liveEventTypes ?? []),
       callback,
+      ...(options.onSubscriptionError ? { onSubscriptionError: options.onSubscriptionError } : {}),
     }
     sharedGlobalEventListeners.add(entry)
     startSessionCatalogSubscription()
@@ -1868,6 +1939,14 @@ export function createAgentSessionDesktopClient(
       {
         liveEventTypes: sharedGlobalLiveEventTypes,
         onReplayComplete: () => reconcileAgentSessionStore(),
+        onSubscriptionError: (error) => {
+          notifyReconciliationError(error)
+          for (const entry of [...sharedGlobalEventListeners]) {
+            void Promise.resolve(entry.onSubscriptionError?.(error)).catch((cause) => {
+              console.error('共享全局事件订阅错误处理失败：', cause)
+            })
+          }
+        },
       },
       async (events) => {
         await catalogCoordinator.deliverBatch(events)
@@ -1954,6 +2033,11 @@ export function createAgentSessionDesktopClient(
         () => rpc.call('attachment/read', { attachmentId }),
         () => mockClient.readAttachment(attachmentId),
       ),
+    submitVisualizationFollowUp: (input) =>
+      withRequiredAgent(() => {
+        requireAgentCapability('visualizations.v1')
+        return rpc.call('visualization/submitFollowUp', input)
+      }),
     readArtifact: (threadId, artifactId) =>
       withRequiredAgent(() => {
         requireAgentCapability('artifacts.read.v1')
@@ -2067,10 +2151,15 @@ export function createAgentSessionDesktopClient(
         dispose()
       }
     },
+    readPluginAsset: (pluginId, kind, workspacePath) =>
+      loadAgentPluginApi().then((api) => api.readPluginAsset(pluginId, kind, workspacePath)),
     listPlugins: (workspacePath, forceReload) =>
       loadAgentPluginApi().then((api) => api.listPlugins(workspacePath, forceReload)),
     getPluginDetails: (pluginId, workspacePath) =>
       loadAgentPluginApi().then((api) => api.getPluginDetails(pluginId, workspacePath)),
+    installPlugin: (pluginId) => loadAgentPluginApi().then((api) => api.installPlugin(pluginId)),
+    uninstallPlugin: (pluginId) =>
+      loadAgentPluginApi().then((api) => api.uninstallPlugin(pluginId)),
     setPluginEnabled: (pluginId, enabled) =>
       loadAgentPluginApi().then((api) => api.setPluginEnabled(pluginId, enabled)),
     onPluginsUpdated: (callback) => {
@@ -2079,22 +2168,6 @@ export function createAgentSessionDesktopClient(
       void loadAgentPluginApi().then((api) => {
         if (disposed) return
         dispose = api.onPluginsUpdated(callback)
-      })
-      return () => {
-        disposed = true
-        dispose()
-      }
-    },
-    getMiniMaxCliStatus: (forceReload) =>
-      loadAgentMiniMaxCliApi().then((api) => api.getMiniMaxCliStatus(forceReload)),
-    installMiniMaxCli: () => loadAgentMiniMaxCliApi().then((api) => api.installMiniMaxCli()),
-    uninstallMiniMaxCli: () => loadAgentMiniMaxCliApi().then((api) => api.uninstallMiniMaxCli()),
-    onMiniMaxCliUpdated: (callback) => {
-      let disposed = false
-      let dispose = () => {}
-      void loadAgentMiniMaxCliApi().then((api) => {
-        if (disposed) return
-        dispose = api.onMiniMaxCliUpdated(callback)
       })
       return () => {
         disposed = true
@@ -2157,6 +2230,13 @@ export function createAgentSessionDesktopClient(
       loadAgentAutomationApi().then((api) => api.markAllAutomationRunsRead(input)),
     previewAutomationSchedule: (input) =>
       loadAgentAutomationApi().then((api) => api.previewAutomationSchedule(input)),
+    taskSchedule: (method, input) =>
+      withRequiredAgent(async () => {
+        requireAgentCapability('task.schedule.v1')
+        return rpc.call(method as never, input as never) as Promise<
+          import('@pidex/agent-protocol').RpcResult<typeof method>
+        >
+      }),
     listCalendarOccurrences: (input) =>
       loadAgentCalendarApi().then((api) => api.listCalendarOccurrences(input)),
     readScheduledTask: (input) =>
@@ -2171,6 +2251,14 @@ export function createAgentSessionDesktopClient(
     readSchedulePlan: (input) => loadAgentCalendarApi().then((api) => api.readSchedulePlan(input)),
     commitSchedulePlan: (input) =>
       loadAgentCalendarApi().then((api) => api.commitSchedulePlan(input)),
+    readScheduleDraft: (input) =>
+      loadAgentCalendarApi().then((api) => api.readScheduleDraft(input)),
+    commitScheduleDraft: (input) =>
+      loadAgentCalendarApi().then((api) => api.commitScheduleDraft(input)),
+    cancelScheduleDraft: (input) =>
+      loadAgentCalendarApi().then((api) => api.cancelScheduleDraft(input)),
+    feedbackScheduleDraft: (input) =>
+      loadAgentCalendarApi().then((api) => api.feedbackScheduleDraft(input)),
     listSessionGroups: () => loadAgentSessionGroupApi().then((api) => api.listSessionGroups()),
     readSessionGroup: (groupId) =>
       loadAgentSessionGroupApi().then((api) => api.readSessionGroup(groupId)),
@@ -2202,10 +2290,22 @@ export function createAgentSessionDesktopClient(
     clearGithubUserStatus: () => loadAgentGitApi().then((api) => api.clearGithubUserStatus()),
     pushWorkspaceBranch: (input) => loadAgentGitApi().then((api) => api.pushWorkspaceBranch(input)),
     createPullRequest: (input) => loadAgentGitApi().then((api) => api.createPullRequest(input)),
-    getWorkspaceGitStatus: (workspacePath) =>
-      loadAgentGitApi().then((api) => api.getWorkspaceGitStatus(workspacePath)),
-    checkoutWorkspaceBranch: (workspacePath, branchName) =>
-      loadAgentGitApi().then((api) => api.checkoutWorkspaceBranch(workspacePath, branchName)),
+    listThreadPullRequests: (threadIds, options) =>
+      loadAgentGitApi().then((api) => api.listThreadPullRequests(threadIds, options)),
+    linkThreadPullRequest: (input) =>
+      loadAgentGitApi().then((api) => api.linkThreadPullRequest(input)),
+    unlinkThreadPullRequest: (input) =>
+      loadAgentGitApi().then((api) => api.unlinkThreadPullRequest(input)),
+    getWorkspaceGitStatus: (workspacePath, projectId, options) =>
+      loadAgentGitApi().then((api) => api.getWorkspaceGitStatus(workspacePath, projectId, options)),
+    fetchWorkspaceRepository: (workspacePath, projectId) =>
+      loadAgentGitApi().then((api) => api.fetchWorkspaceRepository(workspacePath, projectId)),
+    pullWorkspaceRepository: (workspacePath, projectId) =>
+      loadAgentGitApi().then((api) => api.pullWorkspaceRepository(workspacePath, projectId)),
+    checkoutWorkspaceBranch: (workspacePath, branchName, projectId) =>
+      loadAgentGitApi().then((api) =>
+        api.checkoutWorkspaceBranch(workspacePath, branchName, projectId),
+      ),
     createWorkspaceBranch: (input) =>
       loadAgentGitApi().then((api) => api.createWorkspaceBranch(input)),
     commitWorkspaceChanges: (input) =>
@@ -2222,8 +2322,10 @@ export function createAgentSessionDesktopClient(
       loadAgentReviewApi().then((api) => api.applyAgentReviewBatch(input)),
     getAgentReviewBranches: (workspacePath) =>
       loadAgentReviewApi().then((api) => api.getAgentReviewBranches(workspacePath)),
-    getAgentReviewCommits: (workspacePath) =>
-      loadAgentReviewApi().then((api) => api.getAgentReviewCommits(workspacePath)),
+    getAgentReviewCommits: (workspacePath, projectId, ref, limit) =>
+      loadAgentReviewApi().then((api) =>
+        api.getAgentReviewCommits(workspacePath, projectId, ref, limit),
+      ),
     listAgentReviewComments: (input) =>
       loadAgentReviewApi().then((api) => api.listAgentReviewComments(input)),
     saveAgentReviewComment: (input) =>
@@ -2707,13 +2809,22 @@ export function createAgentSessionDesktopClient(
       }),
     listApprovalRules: (threadId) =>
       withRequiredAgent(async () => {
-        requireAgentCapability('interaction.scopedGrants.v1')
+        requireAgentCapability('permission.rules.v1')
         return rpc.call('approval/rules/list', { threadId })
       }),
-    revokeApprovalRule: (threadId, ruleId) =>
+    upsertApprovalRule: (params) =>
       withRequiredAgent(async () => {
-        requireAgentCapability('interaction.scopedGrants.v1')
-        await rpc.call('approval/rules/revoke', { threadId, ruleId })
+        requireAgentCapability('permission.rules.v1')
+        return rpc.call('approval/rules/upsert', params)
+      }),
+    revokeApprovalRule: (threadId, ruleId, expectedVersion) =>
+      withRequiredAgent(async () => {
+        requireAgentCapability('permission.rules.v1')
+        return rpc.call('approval/rules/revoke', {
+          threadId,
+          ruleId,
+          ...(expectedVersion ? { expectedVersion } : {}),
+        })
       }),
     writeConfigBatch: (params) =>
       withAgentOrMock(
@@ -3056,16 +3167,19 @@ export function createAgentSessionDesktopClient(
           context: input.context,
         })
       }),
-    refreshModelProviders: () =>
+    refreshModelProviders: (providerId) =>
       withAgentOrMock(
         async () => {
           await rpc.call('model/refresh', {
             operationId: crypto.randomUUID(),
+            ...(providerId !== undefined
+              ? { providerId: providerId as RpcParams<'model/refresh'>['providerId'] }
+              : {}),
           })
           invalidateModelCatalog()
           providerCredentialsCache = null
         },
-        () => mockClient.refreshModelProviders(),
+        () => mockClient.refreshModelProviders(providerId),
       ),
     listModelProviders: () =>
       withAgentOrMock(
@@ -3298,6 +3412,12 @@ export function createAgentSessionDesktopClient(
       loadAgentProviderCredentialApi().then((api) => api.deleteProviderCredential(credentialId)),
     testModelProvider: (providerID, model) =>
       loadAgentModelHealthApi().then((api) => api.testModelProvider(providerID, model)),
+    syncProviderModels: (providerId) =>
+      loadAgentProviderModelSyncApi().then((api) => api.syncProviderModels(providerId)),
+    detectProviderProtocols: (params) =>
+      loadAgentProtocolDetectionApi().then((api) => api.detectProviderProtocols(params)),
+    testProviderDraft: (input) =>
+      loadAgentProtocolDetectionApi().then((api) => api.testProviderDraft(input)),
     previewModelHealth: () => loadAgentModelHealthApi().then((api) => api.previewModelHealth()),
     startModelHealth: (operationId) =>
       loadAgentModelHealthApi().then((api) => api.startModelHealth(operationId)),
@@ -3326,13 +3446,23 @@ export function createAgentSessionDesktopClient(
       })
       invalidateModelCatalog()
     },
-    discoverProviderModels: async (providerId, api) => {
-      const result = await rpc.call('provider/model/discover', {
-        providerId: providerId as RpcParams<'provider/model/discover'>['providerId'],
-        api,
-      })
-      return [...result.models]
+    modelRecommendations: {
+      supported: async () =>
+        (await isAgentAvailable()) && agentCapabilities.has('model.recommendations.v1'),
+      preview: async (input) => {
+        requireAgentCapability('model.recommendations.v1')
+        return rpc.call('model/recommendation/preview', input)
+      },
+      refresh: async () => {
+        requireAgentCapability('model.recommendations.v1')
+        const result = await rpc.call('model/recommendation/refresh', {
+          operationId: crypto.randomUUID(),
+        })
+        return result
+      },
     },
+    discoverProviderModels: (input) =>
+      loadAgentProviderModelSyncApi().then((api) => api.discoverProviderModels(input)),
     startAuthSession: async (target) => {
       const result = await rpc.call('auth/session/start', {
         target,
@@ -3378,20 +3508,27 @@ export function createAgentSessionDesktopClient(
           const advancedPermission: PermissionConfig =
             options.permissionConfig ?? stored.permissionConfig
           const settings: ThreadSettings = {
-            taskMode: planModeActiveFromCollaborationMode(collaborationMode) ? 'plan' : 'chat',
+            taskMode: planModeActiveFromCollaborationMode(collaborationMode)
+              ? 'plan'
+              : options.grillModeActive === true
+                ? 'grill'
+                : 'chat',
             permissionConfig: advancedPermission,
           }
           const supportsCreationSurface = agentCapabilities.has('thread.creation-surface.v1')
           const creationSurface =
             supportsCreationSurface && options.creationSurface ? options.creationSurface : undefined
-          // The execution location is automatic: the project setting wins, otherwise the
-          // project type decides. A failed probe is silently Local, and an older agent
-          // that never negotiated thread.execution.v2 keeps the legacy Local behaviour.
+          // The execution location is explicit when the caller carried a launch
+          // selection; otherwise the project setting wins, then the project type.
+          // A failed probe is silently Local, and an older agent that never
+          // negotiated thread.execution.v2 keeps the legacy Local behaviour.
+          const supportsExplicitExecution = agentCapabilities.has('thread.execution.v2')
           const execution = project
-            ? resolveTaskExecution({
-                supportsExecution: agentCapabilities.has('thread.execution.v2'),
+            ? resolveSessionCreationExecution({
+                execution: options.execution,
+                supportsExplicitExecution,
                 projectExecutionEnvironment: project.settings?.executionEnvironment,
-                eligibility: agentCapabilities.has('thread.execution.v2')
+                eligibility: supportsExplicitExecution
                   ? await rpc
                       .call('worktree/eligibility', { projectId: project.id })
                       .catch(() => null)
@@ -3411,10 +3548,11 @@ export function createAgentSessionDesktopClient(
             ...(creationSurface ? { creationSurface } : {}),
             ...(options.workflowId ? { workflowId: options.workflowId } : {}),
             title: options.sessionName,
-            operationId: crypto.randomUUID(),
+            operationId: options.operationId ?? crypto.randomUUID(),
           })
           const snapshot = agentThreadSnapshotToDesktop(sharedSnapshot, project)
           sessionSnapshots.set(snapshot.item.id, snapshot)
+          sessionPermissionConfigs.set(snapshot.item.id, snapshot.settings.permissionConfig)
           activeSessionId = snapshot.item.id
           await refreshAgentSessionStoreChange().catch(() => emitSessionStoreChange())
           return {
@@ -3441,6 +3579,14 @@ export function createAgentSessionDesktopClient(
       withAgentOrMock(
         () => loadAgentSessionSnapshot(sessionId),
         () => mockClient.getSession(sessionId),
+      ),
+    synchronizeSession: async (sessionId) =>
+      withAgentOrMock(
+        async () => {
+          await loadAgentSessionSnapshot(sessionId)
+          emitSessionStoreChange()
+        },
+        () => mockClient.synchronizeSession(sessionId),
       ),
     listSubagents: async (threadId) => {
       const response = await rpc.call<{ subagents: SubagentProjection[] }>('subagent/list', {
@@ -3625,7 +3771,10 @@ export function createAgentSessionDesktopClient(
       withAgentOrMock(
         () =>
           updateThreadSettings(sessionId, {
-            permissionConfig: desktopPermissionModeToPermissionConfig(mode),
+            permissionConfig: desktopPermissionModeToPermissionConfig(
+              mode,
+              permissionConfigForSession(sessionId),
+            ),
           }),
         () => mockClient.setSessionPermissionMode(sessionId, mode),
       ),
@@ -3636,6 +3785,53 @@ export function createAgentSessionDesktopClient(
             taskMode: active ? 'plan' : 'chat',
           }),
         () => mockClient.setSessionPlanModeActive(sessionId, active),
+      ),
+    setSessionGrillModeActive: (sessionId, active) =>
+      withAgentOrMock(
+        () =>
+          updateThreadSettings(sessionId, {
+            taskMode: active ? 'grill' : 'chat',
+          }),
+        () => mockClient.setSessionGrillModeActive(sessionId, active),
+      ),
+    setSessionMaxContextTokens: (sessionId, maxContextTokens) =>
+      withAgentOrMock(
+        () =>
+          updateThreadSettings(sessionId, {
+            maxContextTokens,
+          }),
+        () => mockClient.setSessionMaxContextTokens(sessionId, maxContextTokens),
+      ),
+    getModelRuntimePreferences: () =>
+      withAgentOrMock(
+        async () => {
+          const res = await rpc.call('provider/modelPreferences/list', {})
+          return res.preferences.map((p) => ({
+            providerID: String(p.providerId),
+            modelID: String(p.modelId),
+            variant: p.variant,
+            maxContextTokens: p.maxContextTokens,
+            updatedAt: p.updatedAt,
+          }))
+        },
+        () => mockClient.getModelRuntimePreferences?.() ?? Promise.resolve([]),
+      ),
+    setModelRuntimePreference: (input) =>
+      withAgentOrMock(
+        async () => {
+          await rpc.call('provider/modelPreferences/set', {
+            providerId: input.providerID as any,
+            modelId: input.modelID as any,
+            ...(input.threadId ? { threadId: input.threadId } : {}),
+            operationId: crypto.randomUUID(),
+            ...(input.variant !== undefined ? { variant: input.variant } : {}),
+            ...(input.maxContextTokens !== undefined
+              ? { maxContextTokens: input.maxContextTokens }
+              : {}),
+          })
+          return { ok: true }
+        },
+        () => mockClient.setModelRuntimePreference?.(input) ?? Promise.resolve({ ok: true }),
       ),
     setSessionLocalRouterMode: (sessionId, mode) =>
       withUnsupportedAgentFallback('setSessionLocalRouterMode', () =>
@@ -3659,6 +3855,20 @@ export function createAgentSessionDesktopClient(
         },
         () => mockClient.disposeSession(sessionId),
       ),
+    supportsMessageEditing: () => agentCapabilities.has('thread.editUserMessage.v1'),
+    editUserMessage: async (sessionId, target, input) => {
+      if (!(await isAgentAvailable())) throw new Error('Agent RPC 当前不可用')
+      requireAgentCapability('thread.editUserMessage.v1')
+      await rpc.call('thread/editUserMessage', {
+        threadId: sessionId,
+        ...target,
+        content: input.text,
+        attachmentIds: [...(input.retainedAttachmentIds ?? [])],
+        contextReferenceIds: [...(input.retainedContextReferenceIds ?? [])],
+      })
+      await loadAgentSessionSnapshot(sessionId).catch(() => null)
+      emitSessionStoreChange()
+    },
     sendUserMessage: async (sessionId, input, model, inputId, goal) =>
       withAgentOrMock(
         async () => {
@@ -3673,7 +3883,7 @@ export function createAgentSessionDesktopClient(
               ...(goal ? { goal: { ...goal, expectedVersion: current?.version ?? null } } : {}),
             })
           }
-          if (goal) await runGoalMutation(submit)
+          if (goal) await runGoalMutation(sessionId, submit)
           else await submit()
         },
         () => mockClient.sendUserMessage(sessionId, input, model, inputId, goal),
@@ -3709,7 +3919,7 @@ export function createAgentSessionDesktopClient(
           if (input.skills?.length) requireAgentCapability('skills.invocation.v1')
           await turnQueueClient.callQueueMutation(sessionId, 'queue/update', {
             inputId: followUpId,
-            content: desktopUserMessageInputToPreviewText({ ...input, skills: undefined }),
+            content: formatCanonicalSkillInvocation(input.skillInvocation, input.text),
             ...(input.skills ? { skills: [...input.skills] } : {}),
             ...(shouldReplaceAttachments ? { attachmentIds: imported?.attachmentIds ?? [] } : {}),
             ...(shouldReplaceContextReferences
@@ -3744,10 +3954,22 @@ export function createAgentSessionDesktopClient(
         },
         () => mockClient.resumeQueuedFollowUps(sessionId),
       ),
+    supportsQueuedCompaction: () => agentCapabilities.has('context.compact.lifecycle.v1'),
+    cancelCompaction: async (sessionId, operationId) => {
+      requireAgentCapability('context.compact.lifecycle.v1')
+      await rpc.call('thread/compact/cancel', { threadId: sessionId, operationId })
+    },
     compactSession: (sessionId) =>
       withAgentOrMock(
         async () => {
           requireAgentCapability('compact')
+          if (agentCapabilities.has('context.compact.lifecycle.v1')) {
+            await rpc.call('thread/compact/request', {
+              threadId: sessionId,
+              operationId: crypto.randomUUID(),
+            })
+            return
+          }
           await rpc.call('thread/compact', {
             threadId: sessionId,
             operationId: crypto.randomUUID(),
@@ -3775,69 +3997,130 @@ export function createAgentSessionDesktopClient(
         },
         () => mockClient.getSessionGoal(sessionId),
       ),
-    setSessionGoal: (sessionId, input) =>
-      withAgentOrMock(
+    setSessionGoal: (sessionId, input) => {
+      let originalGoal: { id: string; objective: string } | null | undefined
+      return withAgentOrMock(
         async () =>
-          runGoalMutation(async () => {
-            if (!agentCapabilities.has('thread.goal.v1'))
-              unsupportedAgentOperation('setSessionGoal (thread.goal.v1)')
-            const current = (await rpc.call('thread/goal/get', { threadId: sessionId })).goal
-            const snapshot = (await rpc.call('thread/read', { threadId: sessionId })).snapshot
-            const running = snapshot.turns.some((turn) =>
-              [
-                'queued',
-                'running',
-                'waiting-permission',
-                'waiting-question',
-                'waiting-subagents',
-              ].includes(turn.status),
-            )
-            if (input.objective?.trim() && input.status !== 'paused' && !running) {
-              await turnQueueClient.submitMessage(
-                sessionId,
-                { text: input.objective.trim() },
-                'start',
-                {
-                  goal: {
-                    objective: input.objective.trim(),
-                    expectedVersion: current?.version ?? null,
-                    ...(input.tokenBudget === undefined ? {} : { tokenBudget: input.tokenBudget }),
-                  },
-                },
+          runGoalMutation(
+            sessionId,
+            async () => {
+              if (!agentCapabilities.has('thread.goal.v1'))
+                unsupportedAgentOperation('setSessionGoal (thread.goal.v1)')
+              const current = (await rpc.call('thread/goal/get', { threadId: sessionId })).goal
+              if (
+                originalGoal !== undefined &&
+                (originalGoal?.id !== current?.id || originalGoal?.objective !== current?.objective)
               )
-              return (await rpc.call('thread/goal/get', { threadId: sessionId })).goal!
-            }
-            const result = await rpc.call('thread/goal/set', {
-              threadId: sessionId,
-              expectedVersion: current?.version ?? null,
-              operationId: crypto.randomUUID(),
-              ...(input.objective === undefined ? {} : { objective: input.objective }),
-              ...(input.status === undefined ? {} : { status: input.status }),
-              ...(input.tokenBudget === undefined ? {} : { tokenBudget: input.tokenBudget }),
-            })
-            await refreshAgentSessionStoreChange().catch(() => emitSessionStoreChange())
-            return result.goal
-          }),
+                throw Object.assign(new Error('目标已被替换，已刷新，请确认新目标后重试。'), {
+                  code: 'GOAL_VERSION_CONFLICT',
+                })
+              originalGoal = current
+              if (
+                current &&
+                input.tokenBudget !== undefined &&
+                input.tokenBudget !== current.tokenBudget &&
+                !input.budgetBaseline
+              )
+                throw new Error('修改已有目标预算需要当前目标与预算基准，请刷新后重试。')
+              // A budget edit is computed from the budget the panel showed. Re-read
+              // that baseline before writing, so a concurrent replacement or budget
+              // change is reported instead of applying a total derived from stale data.
+              if (input.budgetBaseline) {
+                const baseline = input.budgetBaseline
+                if (
+                  current?.id !== baseline.goalId ||
+                  (current?.tokenBudget ?? null) !== baseline.tokenBudget
+                ) {
+                  await loadAgentSessionSnapshot(sessionId).catch(() => null)
+                  emitSessionStoreChange()
+                  throw Object.assign(new Error('目标或预算已被更新，已刷新，请确认后重试。'), {
+                    code: 'GOAL_VERSION_CONFLICT',
+                  })
+                }
+              }
+              const snapshot = input.objective?.trim()
+                ? (await rpc.call('thread/read', { threadId: sessionId })).snapshot
+                : null
+              const running = snapshot?.turns.some((turn) =>
+                [
+                  'queued',
+                  'running',
+                  'waiting-permission',
+                  'waiting-question',
+                  'waiting-subagents',
+                ].includes(turn.status),
+              )
+              if (!current && input.objective?.trim() && input.status !== 'paused' && !running) {
+                await turnQueueClient.submitMessage(
+                  sessionId,
+                  { text: input.objective.trim() },
+                  'start',
+                  {
+                    goal: {
+                      objective: input.objective.trim(),
+                      expectedVersion: current?.version ?? null,
+                      ...(input.tokenBudget === undefined
+                        ? {}
+                        : { tokenBudget: input.tokenBudget }),
+                    },
+                  },
+                )
+                return (await rpc.call('thread/goal/get', { threadId: sessionId })).goal!
+              }
+              const result = await rpc.call('thread/goal/set', {
+                threadId: sessionId,
+                expectedVersion: current?.version ?? null,
+                operationId: crypto.randomUUID(),
+                ...(input.objective === undefined ? {} : { objective: input.objective }),
+                ...(input.status === undefined ? {} : { status: input.status }),
+                ...(input.tokenBudget === undefined ? {} : { tokenBudget: input.tokenBudget }),
+              })
+              await loadAgentSessionSnapshot(sessionId)
+              emitSessionStoreChange()
+              return result.goal
+            },
+            input.objective === undefined && input.tokenBudget === undefined,
+          ),
         () => mockClient.setSessionGoal(sessionId, input),
-      ),
-    clearSessionGoal: (sessionId) =>
-      withAgentOrMock(
+      )
+    },
+    clearSessionGoal: (sessionId) => {
+      let originalGoal: { id: string; objective: string } | null | undefined
+      return withAgentOrMock(
         async () =>
-          runGoalMutation(async () => {
-            if (!agentCapabilities.has('thread.goal.v1'))
-              unsupportedAgentOperation('clearSessionGoal (thread.goal.v1)')
-            const current = (await rpc.call('thread/goal/get', { threadId: sessionId })).goal
-            if (!current) return true
-            await rpc.call('thread/goal/clear', {
-              threadId: sessionId,
-              expectedVersion: current.version,
-              operationId: crypto.randomUUID(),
-            })
-            await refreshAgentSessionStoreChange().catch(() => emitSessionStoreChange())
-            return true
-          }),
+          runGoalMutation(
+            sessionId,
+            async () => {
+              if (!agentCapabilities.has('thread.goal.v1'))
+                unsupportedAgentOperation('clearSessionGoal (thread.goal.v1)')
+              const current = (await rpc.call('thread/goal/get', { threadId: sessionId })).goal
+              if (!current) {
+                await loadAgentSessionSnapshot(sessionId)
+                emitSessionStoreChange()
+                return true
+              }
+              if (
+                originalGoal &&
+                (originalGoal.id !== current.id || originalGoal.objective !== current.objective)
+              )
+                throw Object.assign(new Error('目标已被替换，已刷新，请确认新目标后重试。'), {
+                  code: 'GOAL_VERSION_CONFLICT',
+                })
+              originalGoal = current
+              await rpc.call('thread/goal/clear', {
+                threadId: sessionId,
+                expectedVersion: current.version,
+                operationId: crypto.randomUUID(),
+              })
+              await loadAgentSessionSnapshot(sessionId)
+              emitSessionStoreChange()
+              return true
+            },
+            true,
+          ),
         () => mockClient.clearSessionGoal(sessionId),
-      ),
+      )
+    },
     listThreadBookmarks: (sessionId) =>
       withAgentOrMock(
         async () => {

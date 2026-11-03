@@ -9,14 +9,15 @@ import type {
   DesktopSessionStatus,
 } from '../../../../shared/Types.js'
 import {
+  agentQueuedInputToDesktop,
   agentTurnStatusToDesktopStatus,
   approvalToRequest,
   latestItemContextUsage,
+  contextStateUsage,
   questionToRequest,
   toolToRequest,
 } from '../../../services/AgentThreadAdapter.js'
 import { sessionTitleFromContent } from '../../../UiTypes.js'
-import { desktopUserMessageInputToPreviewText } from '../../../../shared/DesktopUserMessage.js'
 
 export type SourceLink = {
   label: string
@@ -37,13 +38,11 @@ export type CanonicalConversationAuxiliaryState = {
 const completedResultSourceLinks = new WeakMap<object, SourceLink[]>()
 
 /**
- * Raw lifecycle status of the turn the canonical projection currently reports:
+ * Turn the canonical projection currently reports as the display turn:
  * the newest active turn, otherwise the newest turn that is not waiting in the
  * queue. Returns `null` when the projection holds no usable turn yet.
  */
-export function selectCanonicalLatestTurnStatus(
-  state: CanonicalThreadState | null,
-): Turn['status'] | null {
+export function selectCanonicalLatestTurn(state: CanonicalThreadState | null): Turn | null {
   if (!state) return null
   const queueTurnIds = new Set(state.queue.turnIds)
   const activeTurn = [...state.turnsById.values()]
@@ -53,19 +52,30 @@ export function selectCanonicalLatestTurnStatus(
         (turn.status === 'running' || turn.status.startsWith('waiting-')),
     )
     .sort((left, right) => (right.startedAt ?? 0) - (left.startedAt ?? 0))[0]
-  if (activeTurn) return activeTurn.status
+  if (activeTurn) return activeTurn
   const latestTurn = [...state.turnOrder]
     .reverse()
     .map((id) => state.turnsById.get(id))
     .find((turn) => turn && !queueTurnIds.has(turn.id))
-  return latestTurn?.status ?? null
+  return latestTurn ?? null
+}
+
+/**
+ * Raw lifecycle status of the turn the canonical projection currently reports:
+ * the newest active turn, otherwise the newest turn that is not waiting in the
+ * queue. Returns `null` when the projection holds no usable turn yet.
+ */
+export function selectCanonicalLatestTurnStatus(
+  state: CanonicalThreadState | null,
+): Turn['status'] | null {
+  return selectCanonicalLatestTurn(state)?.status ?? null
 }
 
 export type CanonicalSessionLifecycle = {
   status: DesktopSessionStatus
   latestTurnStatus: Turn['status']
+  latestTurnError: string | null
 }
-
 /**
  * Lifecycle published to list surfaces such as the sidebar, which cannot read
  * the canonical projection for every session. Unlike
@@ -76,17 +86,19 @@ export type CanonicalSessionLifecycle = {
 export function selectCanonicalSessionLifecycle(
   state: CanonicalThreadState | null,
 ): CanonicalSessionLifecycle | null {
-  const latestTurnStatus = selectCanonicalLatestTurnStatus(state)
-  if (latestTurnStatus) {
+  const latestTurn = selectCanonicalLatestTurn(state)
+  if (latestTurn) {
     return {
-      status: agentTurnStatusToDesktopStatus(latestTurnStatus),
-      latestTurnStatus,
+      status: agentTurnStatusToDesktopStatus(latestTurn.status),
+      latestTurnStatus: latestTurn.status,
+      latestTurnError: latestTurn.status === 'failed' ? (latestTurn.error ?? null) : null,
     }
   }
   if (state && state.queue.turnIds.length > 0) {
     return {
       status: agentTurnStatusToDesktopStatus('queued'),
       latestTurnStatus: 'queued',
+      latestTurnError: null,
     }
   }
   return null
@@ -97,6 +109,20 @@ export function selectCanonicalSessionStatus(
 ): DesktopSessionStatus | null {
   if (!state) return null
   return agentTurnStatusToDesktopStatus(selectCanonicalLatestTurnStatus(state) ?? undefined)
+}
+
+/**
+ * 该聊天最新的完整计划项：只有它显示右栏打开入口。生成中的计划不作为
+ * “最新”身份，避免把半成品当成可审阅对象。
+ */
+export function selectCanonicalLatestPlanItemId(state: CanonicalThreadState | null): string | null {
+  if (!state) return null
+  let latest: Extract<Item, { type: 'plan' }> | null = null
+  for (const item of state.itemsById.values()) {
+    if (item.type !== 'plan' || item.status !== 'completed') continue
+    if (!latest || item.createdAt >= latest.createdAt) latest = item
+  }
+  return latest?.id ?? null
 }
 
 export function selectCanonicalConversationAuxiliaryState(
@@ -122,7 +148,7 @@ export function selectCanonicalConversationAuxiliaryState(
       inputs.length > 0 ||
       items.some((item) => item.type === 'text' && item.text.trim().length > 0),
     pendingPermissions: selectPendingPermissions(state),
-    contextUsage: latestItemContextUsage(items),
+    contextUsage: contextStateUsage(state.context, latestItemContextUsage(items)),
     queuedFollowUps: selectQueuedFollowUps(state),
     queuePauseReason: state.queue.pauseReason,
     sessionStatus: selectCanonicalSessionStatus(state),
@@ -147,17 +173,10 @@ function selectQueuedFollowUps(state: CanonicalThreadState): DesktopQueuedFollow
   }
   return orderedInputIds.flatMap((inputId) => {
     const input = state.inputsById.get(inputId)
-    if (!input) return []
-    return [
-      {
-        id: input.id,
-        input: { text: input.content, ...(input.skills ? { skills: input.skills } : {}) },
-        previewText: input.skills?.length
-          ? desktopUserMessageInputToPreviewText({ text: input.content, skills: input.skills })
-          : input.content,
-        createdAt: new Date(input.createdAt).toISOString(),
-      },
-    ]
+    if (!input || input.state !== 'queued') return []
+    const turn = input.turnId ? state.turnsById.get(input.turnId) : undefined
+    if (turn && turn.status !== 'queued') return []
+    return [agentQueuedInputToDesktop(input)]
   })
 }
 

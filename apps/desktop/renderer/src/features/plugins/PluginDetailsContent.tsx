@@ -1,3 +1,5 @@
+import type { PluginDetails } from '@pidex/agent-protocol'
+import { desktopClient } from '../../services/desktop-client/index.js'
 import type React from 'react'
 import { ExternalLink } from 'lucide-react'
 import { useRef } from 'react'
@@ -5,7 +7,12 @@ import { Button } from '../../components/ui/Button.js'
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
 import type { PluginCatalogItem } from './PluginCatalog.js'
-import { PLUGIN_CATEGORY_LABELS, pluginPrimaryAction, pluginStatusLabel } from './PluginCatalog.js'
+import {
+  PLUGIN_CATEGORY_LABELS,
+  PLUGIN_SOURCE_LABELS,
+  pluginPrimaryAction,
+  pluginStatusLabel,
+} from './PluginCatalog.js'
 import { cx } from '../../utils/Cx.js'
 import {
   DETAILS_METADATA_CLASS,
@@ -21,12 +28,20 @@ type ActionProps = {
   onPrimaryAction: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
 }
 
-export function PluginDetailsMetadata({ item }: { item: PluginCatalogItem }): React.ReactNode {
+export function PluginDetailsMetadata({
+  item,
+  details,
+}: {
+  item: PluginCatalogItem
+  details?: PluginDetails | null
+}): React.ReactNode {
   return (
     <dl className={cx('plugin-details-metadata', DETAILS_METADATA_CLASS)}>
       <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
         <dt className={DETAILS_METADATA_LABEL_CLASS}>来源</dt>
-        <dd className={DETAILS_METADATA_VALUE_CLASS}>{PLUGIN_CATEGORY_LABELS[item.category]}</dd>
+        <dd className={DETAILS_METADATA_VALUE_CLASS}>
+          {item.source ? PLUGIN_SOURCE_LABELS[item.source] : PLUGIN_CATEGORY_LABELS[item.category]}
+        </dd>
       </div>
       <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
         <dt className={DETAILS_METADATA_LABEL_CLASS}>状态</dt>
@@ -44,73 +59,49 @@ export function PluginDetailsMetadata({ item }: { item: PluginCatalogItem }): Re
           <dd className={DETAILS_METADATA_VALUE_CLASS}>{item.developerName}</dd>
         </div>
       ) : null}
-      {item.capabilities?.length ? (
+      {details?.displayCapabilities.length ? (
         <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
           <dt className={DETAILS_METADATA_LABEL_CLASS}>能力</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>{item.capabilities.join('、')}</dd>
+          <dd className={DETAILS_METADATA_VALUE_CLASS}>{details.displayCapabilities.join('、')}</dd>
         </div>
       ) : null}
-      {item.skills?.length ? (
-        <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
-          <dt className={DETAILS_METADATA_LABEL_CLASS}>技能</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>{item.skills.join('、')}</dd>
+      {item.productCategory ? (
+        <div className={DETAILS_METADATA_ROW_CLASS}>
+          <dt className={DETAILS_METADATA_LABEL_CLASS}>类别</dt>
+          <dd className={DETAILS_METADATA_VALUE_CLASS}>{item.productCategory}</dd>
         </div>
       ) : null}
+      {(['websiteURL', 'privacyPolicyURL', 'termsOfServiceURL'] as const).map((key) => {
+        const url = details?.[key]
+        const label = {
+          websiteURL: '网站',
+          privacyPolicyURL: '隐私政策',
+          termsOfServiceURL: '服务条款',
+        }[key]
+        return url ? (
+          <div className={DETAILS_METADATA_ROW_CLASS} key={key}>
+            <dt className={DETAILS_METADATA_LABEL_CLASS}>{label}</dt>
+            <dd className={DETAILS_METADATA_VALUE_CLASS}>
+              <Button
+                color="ghostSecondary"
+                size="toolbar"
+                onClick={() => void desktopClient.openExternalURL(url)}
+              >
+                打开{label}
+                <ExternalLink aria-hidden="true" size={APP_ICON_SIZE} />
+              </Button>
+            </dd>
+          </div>
+        ) : null
+      })}
       {item.unavailableReason ? (
         <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
           <dt className={DETAILS_METADATA_LABEL_CLASS}>说明</dt>
           <dd className={DETAILS_METADATA_VALUE_CLASS}>{item.unavailableReason}</dd>
         </div>
       ) : null}
-      {item.miniMaxCli?.latestVersion ? (
-        <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
-          <dt className={DETAILS_METADATA_LABEL_CLASS}>最新版本</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>{item.miniMaxCli.latestVersion}</dd>
-        </div>
-      ) : null}
-      {item.miniMaxCli ? (
-        <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
-          <dt className={DETAILS_METADATA_LABEL_CLASS}>认证</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>
-            {miniMaxAuthLabel(item.miniMaxCli.authStatus)}
-          </dd>
-        </div>
-      ) : null}
-      {item.miniMaxCli?.credentialSource ? (
-        <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
-          <dt className={DETAILS_METADATA_LABEL_CLASS}>当前 Key</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>
-            {item.miniMaxCli.credentialSource.label} ·{' '}
-            {item.miniMaxCli.credentialSource.maskedValue}
-          </dd>
-        </div>
-      ) : null}
-      {item.miniMaxCli?.credentialSource ? (
-        <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
-          <dt className={DETAILS_METADATA_LABEL_CLASS}>区域</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>
-            {item.miniMaxCli.credentialSource.region === 'cn' ? '中国' : 'Global'}
-          </dd>
-        </div>
-      ) : null}
-      {item.miniMaxCli?.quotaLabel ? (
-        <div className={cx('plugin-details-metadata__row', DETAILS_METADATA_ROW_CLASS)}>
-          <dt className={DETAILS_METADATA_LABEL_CLASS}>套餐</dt>
-          <dd className={DETAILS_METADATA_VALUE_CLASS}>{item.miniMaxCli.quotaLabel}</dd>
-        </div>
-      ) : null}
     </dl>
   )
-}
-
-function miniMaxAuthLabel(
-  status: NonNullable<PluginCatalogItem['miniMaxCli']>['authStatus'],
-): string {
-  if (status === 'coding-plan-synced') return '正在使用 API Key Hub 当前 Coding Plan Key'
-  if (status === 'oauth') return '已通过 MiniMax 登录'
-  if (status === 'api-key') return '已配置 MiniMax API Key'
-  if (status === 'not-authenticated') return '尚未登录，实际使用时再登录'
-  return '暂时无法确认'
 }
 
 export function PluginDetailsPrimaryAction({

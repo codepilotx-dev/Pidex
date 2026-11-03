@@ -132,11 +132,12 @@ describe('fixed Codex UI themes', () => {
     )
     expect(light['--cpx-sys-color-fg-primary']).toBe('var(--cpx-ref-gray-12)')
     expect(light['--cpx-sys-color-fg-secondary']).toBe('var(--cpx-ref-gray-11)')
-    expect(light['--cpx-sys-color-border-subtle']).toBe('var(--cpx-ref-gray-a6)')
-    expect(light['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a7)')
-    expect(light['--cpx-sys-color-border-strong']).toBe('var(--cpx-ref-gray-a8)')
-    expect(light['--cpx-sys-color-hover']).toBe('var(--cpx-ref-gray-a3)')
-    expect(light['--cpx-sys-color-selected']).toBe('var(--cpx-ref-gray-a4)')
+    expect(light['--cpx-sys-color-border-subtle']).toBe('var(--cpx-ref-gray-a5)')
+    expect(light['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a6)')
+    expect(light['--cpx-sys-color-border-strong']).toBe('var(--cpx-ref-gray-a7)')
+    expect(light['--cpx-sys-color-hover']).toBe('var(--cpx-ref-gray-a2)')
+    expect(light['--cpx-sys-color-active']).toBe('var(--cpx-ref-gray-a2)')
+    expect(light['--cpx-sys-color-selected']).toBe('var(--cpx-ref-gray-a3)')
     expect(light['--cpx-sys-color-diff-added-line']).not.toBe(
       light['--cpx-sys-color-surface-editor'],
     )
@@ -148,7 +149,7 @@ describe('fixed Codex UI themes', () => {
     expect(dark['--cpx-sys-color-surface-canvas']).toBe('#111111')
     expect(dark['--cpx-sys-color-surface-editor']).toBe('var(--cpx-ref-gray-2)')
     expect(dark['--cpx-sys-color-surface-panel']).toBe('var(--cpx-ref-gray-2)')
-    expect(dark['--cpx-sys-color-surface-raised']).toBe('var(--cpx-ref-gray-2)')
+    expect(dark['--cpx-sys-color-surface-raised']).toBe('var(--cpx-ref-gray-3)')
     expect(dark['--cpx-sys-color-accent-fg']).toBe('var(--cpx-ref-blue-11)')
     expect(dark['--cpx-sys-color-accent-subtle-bg']).toBe('var(--cpx-ref-blue-a3)')
     expect(dark['--cpx-sys-color-surface-recessed']).not.toBe(
@@ -157,11 +158,12 @@ describe('fixed Codex UI themes', () => {
     expect(dark['--cpx-sys-color-fg-primary']).toBe('var(--cpx-ref-gray-12)')
     expect(dark['--cpx-sys-color-surface-panel']).not.toBe(dark['--cpx-sys-color-surface-canvas'])
     expect(dark['--cpx-sys-color-fg-secondary']).toBe('var(--cpx-ref-gray-11)')
-    expect(dark['--cpx-sys-color-border-subtle']).toBe('var(--cpx-ref-gray-a6)')
-    expect(dark['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a7)')
-    expect(dark['--cpx-sys-color-border-strong']).toBe('var(--cpx-ref-gray-a8)')
-    expect(dark['--cpx-sys-color-hover']).toBe('var(--cpx-ref-gray-a3)')
-    expect(dark['--cpx-sys-color-selected']).toBe('var(--cpx-ref-gray-a4)')
+    expect(dark['--cpx-sys-color-border-subtle']).toBe('var(--cpx-ref-gray-a5)')
+    expect(dark['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a6)')
+    expect(dark['--cpx-sys-color-border-strong']).toBe('var(--cpx-ref-gray-a7)')
+    expect(dark['--cpx-sys-color-hover']).toBe('var(--cpx-ref-gray-a2)')
+    expect(dark['--cpx-sys-color-active']).toBe('var(--cpx-ref-gray-a2)')
+    expect(dark['--cpx-sys-color-selected']).toBe('var(--cpx-ref-gray-a3)')
     expect(dark['--cpx-sys-color-fg-on-accent']).toBe('var(--cpx-ref-blue-contrast)')
   })
 
@@ -195,22 +197,18 @@ describe('fixed Codex UI themes', () => {
     const light = deriveThemeVariables(DEFAULT_LIGHT_THEME)
     const dark = deriveThemeVariables(DEFAULT_DARK_THEME)
 
-    expect(light['--cpx-sys-shadow-resting']).toBe('inset 0 1px 0 rgba(255, 255, 255, 0.7)')
-    expect(light['--cpx-sys-shadow-raised']).toBe('inset 0 1px 0 rgba(255, 255, 255, 0.7)')
-    expect(dark['--cpx-sys-shadow-resting']).toBe('inset 0 1px 0 rgba(238, 238, 238, 0.04)')
-    expect(dark['--cpx-sys-shadow-raised']).toBe('inset 0 1px 0 rgba(238, 238, 238, 0.04)')
+    expect(light['--cpx-sys-shadow-resting']).toBe('none')
+    expect(light['--cpx-sys-shadow-raised']).toBe('none')
+    expect(dark['--cpx-sys-shadow-resting']).toBe('none')
+    expect(dark['--cpx-sys-shadow-raised']).toBe('none')
 
     const stylesheet = await Bun.file(
       new URL('../src/styles/design-system/tokens.css', import.meta.url),
     ).text()
     const normalizedStylesheet = stylesheet.replace(/\s+/g, ' ')
 
-    expect(normalizedStylesheet).toContain(
-      '--cpx-sys-shadow-raised: inset 0 1px 0 rgba(255, 255, 255, 0.7);',
-    )
-    expect(normalizedStylesheet).toContain(
-      '--cpx-sys-shadow-resting: inset 0 1px 0 rgba(255, 255, 255, 0.7);',
-    )
+    expect(normalizedStylesheet).toContain('--cpx-sys-shadow-raised: none;')
+    expect(normalizedStylesheet).toContain('--cpx-sys-shadow-resting: none;')
     expect(normalizedStylesheet).toContain('--cpx-sys-shadow-floating')
   })
 
@@ -434,9 +432,9 @@ describe('fixed Codex UI themes', () => {
       pointerCursorEnabled: false,
       fontSizes: { ui: 17, code: 15 },
     })
-
     expect(migrated).toMatchObject({
-      version: 7,
+      version: 8,
+      fonts: { code: null, ui: null, uiFace: null, codeFace: null },
       mode: 'system',
       codeThemeIds: {
         light: 'codex-new-light',
@@ -444,20 +442,20 @@ describe('fixed Codex UI themes', () => {
       },
       reduceMotion: 'system',
       pointerCursorEnabled: false,
-      fontSizes: { ui: 14, code: 13 },
+      fontSizes: { ui: 14, code: 12 },
     })
     expect(migrated.chromeThemes.light).not.toHaveProperty('opaqueWindows')
     expect(migrated.chromeThemes.dark).not.toHaveProperty('opaqueWindows')
   })
 
-  test('uses code size 13 for new settings without migrating a saved size 12', () => {
-    expect(DEFAULT_DESKTOP_THEME_SETTINGS.fontSizes.code).toBe(13)
+  test('uses code size 12 for new settings without migrating a saved size 13', () => {
+    expect(DEFAULT_DESKTOP_THEME_SETTINGS.fontSizes.code).toBe(12)
     expect(
       normalizeDesktopThemeSettings({
         ...DEFAULT_DESKTOP_THEME_SETTINGS,
-        fontSizes: { ui: 14, code: 12 },
+        fontSizes: { ui: 14, code: 13 },
       }).fontSizes,
-    ).toEqual({ ui: 14, code: 12 })
+    ).toEqual({ ui: 14, code: 13 })
   })
 
   test('keeps separate light and dark selections and rejects mismatches', () => {
@@ -487,7 +485,7 @@ describe('fixed Codex UI themes', () => {
     })
   })
 
-  test('resets a previous V2 single selection to V7 defaults', () => {
+  test('resets a previous V2 single selection to V8 defaults', () => {
     expect(
       normalizeDesktopThemeSettings({
         version: 2,
@@ -549,7 +547,7 @@ describe('fixed Codex UI themes', () => {
     // Floating shadow must strictly use pure black (rgb(0 0 0 / ...)) and never use ink or white halos
     expect(light['--cpx-sys-shadow-floating']).toContain('rgb(0 0 0 /')
     expect(dark['--cpx-sys-shadow-floating']).toContain('rgb(0 0 0 /')
-    expect(dark['--cpx-sys-shadow-floating']).not.toContain('255')
+    expect(dark['--cpx-sys-shadow-floating']).toContain('inset 0 1px 0 rgba(255, 255, 255, 0.06)')
 
     expect(light['--cpx-sys-color-scrim']).toBe('rgba(0, 0, 0, 0.25)')
     expect(dark['--cpx-sys-color-scrim']).toBe('rgba(0, 0, 0, 0.65)')
@@ -560,7 +558,9 @@ describe('fixed Codex UI themes', () => {
     const dark = deriveThemeVariables(DEFAULT_DARK_THEME)
 
     // In default light: sidebar is gray-2, titlebar follows sidebar, main/panel are canvas
-    expect(light['--cpx-sys-color-workbench-sidebar-bg']).toBe('var(--cpx-ref-gray-2)')
+    expect(light['--cpx-sys-color-workbench-sidebar-bg']).toBe(
+      'var(--cpx-sys-color-surface-recessed)',
+    )
     expect(light['--cpx-sys-color-workbench-titlebar-bg']).toBe(
       'var(--cpx-sys-color-workbench-sidebar-bg)',
     )
@@ -620,7 +620,7 @@ describe('fixed Codex UI themes', () => {
     })
     // 3-digit '#111' should be recognized as default dark surface '#111111'
     expect(darkShort['--cpx-sys-color-surface-panel']).toBe('var(--cpx-ref-gray-2)')
-    expect(darkShort['--cpx-sys-color-surface-recessed']).toBe('#0f0f0f')
+    expect(darkShort['--cpx-sys-color-surface-recessed']).toBe('#080808')
   })
 
   test('keeps neutral reference palette when only accent is customized', () => {
@@ -635,7 +635,7 @@ describe('fixed Codex UI themes', () => {
     // Neutral roles stay pinned to CSS reference palettes
     expect(customAccent['--cpx-sys-color-surface-panel']).toBe('var(--cpx-ref-gray-2)')
     expect(customAccent['--cpx-sys-color-fg-primary']).toBe('var(--cpx-ref-gray-12)')
-    expect(customAccent['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a7)')
+    expect(customAccent['--cpx-sys-color-border-default']).toBe('var(--cpx-ref-gray-a6)')
 
     // Accent roles diverge to custom derived values
     expect(customAccent['--cpx-sys-color-accent']).toBe('#e02e2a')

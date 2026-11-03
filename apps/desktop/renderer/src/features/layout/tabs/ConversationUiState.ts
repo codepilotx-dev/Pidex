@@ -94,8 +94,7 @@ export type ConversationUiStateV4 = {
 export type ConversationUiState = ConversationUiStateV4
 
 export type ConversationUiValidationOptions = {
-  validPlanEventIds?: readonly string[]
-  validSideTaskIds?: readonly string[]
+  validPlanItemIds?: readonly string[]
   workspacePath?: string | null
   fileScopes?: readonly {
     projectId?: string
@@ -173,7 +172,8 @@ export function omitEphemeralSideChatTabs(workbench: WorkbenchTabsState): Workbe
         ([, tab]) =>
           tab?.kind === 'side-chat' ||
           tab?.kind === 'attachment-preview' ||
-          tab?.kind === 'skill-preview',
+          tab?.kind === 'skill-preview' ||
+          tab?.kind === 'goal',
       )
       .map(([tabId]) => tabId),
   )
@@ -268,7 +268,8 @@ export function transferConversationUiStateForHandoff(input: {
           tab?.kind !== 'side-chat' &&
           tab?.kind !== 'attachment-preview' &&
           tab?.kind !== 'skill-preview' &&
-          tab?.kind !== 'side-task' &&
+          tab?.kind !== 'goal' &&
+          tab?.kind !== 'subagent-directory' &&
           tab?.kind !== 'file-preview',
       ),
     )
@@ -302,8 +303,7 @@ export function transferConversationUiStateForHandoff(input: {
       },
     }
     const transferred = validateConversationUiState(candidate, {
-      validPlanEventIds: [],
-      validSideTaskIds: [],
+      validPlanItemIds: [],
     })
     window.localStorage.setItem(STORAGE_PREFIX + input.targetThreadId, JSON.stringify(transferred))
     return { transferred: true }
@@ -626,38 +626,44 @@ function validateTabDescriptor(
       ...(isPositiveInteger(tab.endColumn) ? { endColumn: tab.endColumn } : {}),
     }
   }
-  if (
-    tab.kind === 'plan' &&
-    typeof tab.id === 'string' &&
-    tab.id.startsWith('plan:') &&
-    typeof tab.eventId === 'string' &&
-    tab.eventId.length > 0 &&
-    typeof tab.title === 'string' &&
-    (!options.validPlanEventIds || options.validPlanEventIds.includes(tab.eventId))
-  ) {
+  if (tab.kind === 'plan' && typeof tab.id === 'string' && typeof tab.title === 'string') {
+    // 新标签携带聊天与计划项身份；更早持久化的标签只有 eventId 和正文快照。
+    const planItemId =
+      typeof tab.planItemId === 'string'
+        ? tab.planItemId
+        : typeof tab.eventId === 'string'
+          ? tab.eventId
+          : null
+    const threadId = typeof tab.threadId === 'string' && tab.threadId ? tab.threadId : null
+    const content = typeof tab.content === 'string' && tab.content.trim() ? tab.content : undefined
+    // 旧标签可能既没有聊天身份也没有正文快照；保留它，渲染时再按事件回退查找。
+    if (!planItemId) return null
+    if (options.validPlanItemIds && !options.validPlanItemIds.includes(planItemId)) return null
     return {
-      id: tab.id as `plan:${string}`,
+      id: `plan:${planItemId}`,
       kind: 'plan',
-      eventId: tab.eventId,
+      planItemId,
+      threadId: threadId ?? '',
       title: tab.title,
-      ...(typeof tab.content === 'string' && tab.content.trim() ? { content: tab.content } : {}),
+      ...(content ? { content } : {}),
     }
   }
   if (
-    tab.kind === 'side-task' &&
+    tab.kind === 'subagent-directory' &&
     typeof tab.id === 'string' &&
-    tab.id.startsWith('side-task:') &&
-    typeof tab.taskId === 'string' &&
-    tab.taskId.length > 0 &&
-    typeof tab.childThreadId === 'string' &&
-    tab.childThreadId.length > 0 &&
-    (!options.validSideTaskIds || options.validSideTaskIds.includes(tab.taskId))
+    tab.id.startsWith('subagent-directory:') &&
+    typeof tab.threadId === 'string' &&
+    tab.threadId.length > 0
   ) {
+    const selectedTaskId =
+      typeof tab.selectedTaskId === 'string' && tab.selectedTaskId.length > 0
+        ? tab.selectedTaskId
+        : undefined
     return {
-      id: tab.id as `side-task:${string}`,
-      kind: 'side-task',
-      taskId: tab.taskId,
-      childThreadId: tab.childThreadId,
+      id: tab.id as `subagent-directory:${string}`,
+      kind: 'subagent-directory',
+      threadId: tab.threadId,
+      ...(selectedTaskId ? { selectedTaskId } : {}),
     }
   }
 

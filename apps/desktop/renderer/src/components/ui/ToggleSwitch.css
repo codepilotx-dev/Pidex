@@ -1,0 +1,38 @@
+/*
+ * ToggleSwitch private styles: forced-colors and thumb fills that cannot be utility-based.
+ */
+@layer primitives {
+  .toggle-knob {
+    border-color: var(--cpx-sys-color-border-default);
+    background: var(--cpx-comp-switch-thumb-fill);
+  }
+
+  .toggle-knob[data-state='unchecked'] {
+    border-color: var(--cpx-sys-color-border-default);
+    background: var(--cpx-comp-switch-thumb-fill);
+  }
+
+  .toggle-switch[data-state='checked'] .toggle-knob,
+  .toggle-knob[data-state='checked'],
+  .toggle-switch[aria-checked='true'] .toggle-knob {
+    border-color: transparent;
+    background: var(--cpx-comp-switch-thumb-fill);
+  }
+
+  .toggle-knob[data-disabled] {
+    border-color: var(--cpx-sys-color-border-subtle);
+    background: var(--cpx-comp-surface-raised);
+  }
+
+  @media (forced-colors: active) {
+    .toggle-knob {
+      border-color: ButtonText;
+      background: ButtonText;
+    }
+
+    .toggle-knob[data-disabled] {
+      border-color: GrayText;
+      background: GrayText;
+    }
+  }
+}

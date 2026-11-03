@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { usePrefersReducedMotion } from '../hooks/UsePrefersReducedMotion.js'
 import { enterTween, exitTween, motionTransition } from '../features/motion/MotionTransitions.js'
 import { APP_ICON_SIZE, APP_ICON_STROKE_WIDTH } from './ui/IconTokens.js'
+import { containsRelatedTarget } from '../utils/DomTargets.js'
 import { Button } from './ui/Button.js'
 
 import { Toast, ToastDivider } from './ui/Toast.js'
@@ -79,7 +80,7 @@ export function PageZoomCapsule(): React.ReactNode {
           }}
           initial={reducedMotion ? false : { opacity: 0, y: -4 }}
           onBlur={(event) => {
-            if (!event.currentTarget.contains(event.relatedTarget)) {
+            if (!containsRelatedTarget(event.currentTarget, event.relatedTarget)) {
               focusedRef.current = false
               resumeHide()
             }

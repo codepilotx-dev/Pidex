@@ -13,14 +13,9 @@
 @import './base.css';
 @import './design-system/tokens.css';
 @import './design-system/codex-semantic-tokens.css';
-@import './primitives/scroll-area.css';
-@import './primitives/skeleton.css';
-@import './primitives/search-input.css';
-@import './primitives/date-picker.css';
-@import './primitives/switch.css';
 @import './primitives/chrome.css';
 @import './primitives/right-dock.css';
-@import './primitives/button.css';
+@import './primitives/interaction.css';
 @import './primitives/overlays.css';
 @import './primitives/sidebar.css';
 @import './primitives/review.css';
@@ -29,12 +24,8 @@
 @import './primitives/file-editor.css';
 @import './primitives/composer.css';
 @import './primitives/conversation.css';
-@import './components/card.css';
-@import './components/chip.css';
-@import './components/input.css';
 @import './components/interactive-row.css';
 @import './components/menu-item.css';
-@import './components/switch.css';
 @import './popover.css';
 @import './modal.css';
 @import './features/layout-workbench.css';
@@ -44,6 +35,7 @@
 @import './features/composer-shell.css';
 @import './features/composer-controls.css';
 @import './features/composer-status.css';
+@import './features/conversation-reasoning.css';
 @import './features/primary-page.css';
 @import './role-weight.css';
 @import './markdown.css';
@@ -98,13 +90,13 @@
   --text-lg: var(--cpx-sys-font-size-lg);
   --text-lg--line-height: var(--cpx-sys-line-height-body-lg);
   --text-xl: var(--cpx-sys-font-size-xl);
-  --text-xl--line-height: var(--cpx-sys-line-height-heading-md);
+  --text-xl--line-height: var(--cpx-sys-line-height-heading-sm);
   --text-2xl: var(--cpx-sys-font-size-2xl);
-  --text-2xl--line-height: var(--cpx-sys-line-height-heading-lg);
+  --text-2xl--line-height: var(--cpx-sys-line-height-heading-md);
   --text-3xl: var(--cpx-sys-font-size-3xl);
-  --text-3xl--line-height: var(--cpx-sys-line-height-heading-xl);
+  --text-3xl--line-height: var(--cpx-sys-line-height-heading-lg);
   --text-4xl: var(--cpx-sys-font-size-4xl);
-  --text-4xl--line-height: var(--cpx-sys-line-height-display);
+  --text-4xl--line-height: var(--cpx-sys-line-height-heading-xl);
   --text-code: var(--cpx-sys-font-size-code);
   --text-code--line-height: var(--cpx-sys-line-height-code);
 
@@ -266,6 +258,12 @@
   --color-app-info-border: var(--cpx-sys-color-info-subtle-border);
   --color-app-info-fg: var(--cpx-sys-color-info-fg);
 
+  /* Context capacity tiers */
+  --color-app-context-cyan: var(--cpx-sys-color-context-tier-cyan);
+  --color-app-context-jade: var(--cpx-sys-color-context-tier-jade);
+  --color-app-context-amber: var(--cpx-sys-color-context-tier-amber);
+  --color-app-context-violet: var(--cpx-sys-color-context-tier-violet);
+
   /* Primary action */
   --color-app-primary-action: var(--cpx-comp-button-primary-bg);
   --color-app-primary-action-foreground: var(--cpx-comp-button-primary-fg);
@@ -378,6 +376,11 @@
   letter-spacing: var(--cpx-sys-letter-spacing-row-title);
 }
 
+@utility type-page-title {
+  font: var(--cpx-sys-type-page-title);
+  letter-spacing: var(--cpx-sys-letter-spacing-heading-lg);
+}
+
 @utility type-title-sm {
   font: var(--cpx-sys-type-heading-sm);
   letter-spacing: var(--cpx-sys-letter-spacing-heading-sm);
@@ -407,4 +410,12 @@
 @utility type-code {
   font: var(--cpx-sys-type-code);
   letter-spacing: var(--cpx-sys-letter-spacing-code);
+}
+
+@utility sidebar-row-gap {
+  gap: var(--sidebar-row-gap);
+}
+
+@utility sidebar-row-padding-top {
+  padding-top: var(--sidebar-row-gap);
 }

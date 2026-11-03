@@ -1,3 +1,6 @@
+import { createCanonicalThreadState, selectRenderTurnEntries } from '@pidex/session-view'
+import { decodeEventEnvelope } from '@pidex/agent-protocol'
+import { CanonicalThreadIngestionCoordinator } from '../src/features/session/timeline/CanonicalThreadIngestionCoordinator.js'
 import { describe, expect, test } from 'bun:test'
 import type React from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
@@ -12,8 +15,13 @@ import {
 } from '../src/features/session/timeline/CanonicalThreadView.js'
 import { QuickChatContext } from '../src/features/session/QuickChatContext.js'
 import { ConversationItemContext } from '../src/features/session/timeline/ConversationItemContext.js'
-import { CanonicalUserInput } from '../src/features/session/timeline/CanonicalItemRenderer.js'
+import {
+  CanonicalItemRenderer,
+  CanonicalUserInput,
+} from '../src/features/session/timeline/CanonicalItemRenderer.js'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
+import { liveItemTailStore } from '../src/features/session/state/LiveItemTailStore.js'
+import { ReasoningWaitingIndicator } from '../src/features/session/timeline/ReasoningWaitingIndicator.js'
 import { createKeyedDisclosureStore } from '../src/components/ui/KeyedDisclosureStore.js'
 import {
   isCurrentCanonicalThreadRequest,
@@ -27,6 +35,79 @@ import {
 function disclosureStore(...expandedKeys: string[]) {
   return createKeyedDisclosureStore({ initialExpandedKeys: expandedKeys })
 }
+
+test('reasoning nodes survive completion and interruption and preserve expansion', () => {
+  for (const status of ['streaming', 'completed', 'interrupted'] as const) {
+    const item: Extract<Item, { type: 'reasoning' }> = {
+      id: 'reasoning-hidden',
+      messageID: 'message',
+      turnId: 'turn',
+      agentId: 'agent',
+      type: 'reasoning',
+      text: '**完整思考内容**',
+      status,
+    }
+    const render = (expanded: boolean) =>
+      renderToStaticMarkup(
+        <CanonicalItemRenderer
+          item={item}
+          disclosure={{
+            id: `process-item:${item.id}`,
+            store: disclosureStore(...(expanded ? [`process-item:${item.id}`] : [])),
+          }}
+          dockedPlanItemId={null}
+          onOpenPlanInRightDock={() => {}}
+          onOpenSubagent={() => {}}
+        />,
+      )
+    const collapsed = render(false)
+    expect(collapsed).toContain(
+      status === 'streaming' ? '正在思考' : status === 'interrupted' ? '思考已中断' : '思考',
+    )
+    expect(collapsed.includes('reasoning-node__preview')).toBe(status === 'streaming')
+    const expanded = render(true)
+    expect(expanded).toContain('**完整思考内容**')
+    expect(expanded).not.toContain('reasoning-node__preview')
+    expect(expanded).toContain('aria-expanded="true"')
+  }
+})
+
+test('reasoning tail reveals the node and removes only its active waiting indicator', () => {
+  const item = {
+    id: 'reasoning-tail',
+    type: 'reasoning',
+    text: '',
+    status: 'streaming',
+  } as Extract<Item, { type: 'reasoning' }>
+  const render = () =>
+    renderToStaticMarkup(
+      <CanonicalItemRenderer
+        item={item}
+        threadId="reasoning-test"
+        dockedPlanItemId={null}
+        onOpenPlanInRightDock={() => {}}
+        onOpenSubagent={() => {}}
+      />,
+    )
+  const waiting = (reasoning = item) =>
+    renderToStaticMarkup(<ReasoningWaitingIndicator item={reasoning} threadId="reasoning-test" />)
+  try {
+    expect(render()).toBe('')
+    expect(waiting()).toContain('正在思考')
+    liveItemTailStore.append('reasoning-test', item.id, 'reasoning', '追加内容')
+    expect(render()).toContain('追加内容')
+    expect(waiting()).toBe('')
+    item.text = '已有内容'
+    expect(render()).toContain('已有内容追加内容')
+    item.text += liveItemTailStore.read('reasoning-test', item.id)
+    liveItemTailStore.clearThread('reasoning-test')
+    expect(render()).toContain('已有内容追加内容')
+    expect(render()).not.toContain('追加内容追加内容')
+    expect(waiting({ ...item, status: 'completed' })).toContain('正在思考')
+  } finally {
+    liveItemTailStore.clearThread('reasoning-test')
+  }
+})
 
 function CanonicalTestProviders({ children }: { children: React.ReactNode }): React.ReactNode {
   return (
@@ -48,6 +129,91 @@ function CanonicalTestProviders({ children }: { children: React.ReactNode }): Re
 }
 
 describe('canonical thread switch', () => {
+  test('historical assistant action rows show their original timestamp after completion', () => {
+    const item: Extract<Item, { type: 'text' }> = {
+      id: 'reply-time',
+      messageID: 'reply',
+      turnId: 'turn',
+      agentId: 'agent',
+      type: 'text',
+      placement: 'result',
+      status: 'completed',
+      text: '回复正文',
+      createdAt: 1234,
+    }
+    const render = (status: typeof item.status) =>
+      renderToStaticMarkup(
+        <CanonicalTestProviders>
+          <CanonicalItemRenderer
+            item={{ ...item, status }}
+            showAssistantActions
+            dockedPlanItemId={null}
+            onOpenPlanInRightDock={() => {}}
+            onOpenSubagent={() => {}}
+          />
+        </CanonicalTestProviders>,
+      )
+    expect(render('completed')).toContain('dateTime="1970-01-01T00:00:01.234Z"')
+    expect(render('streaming')).not.toContain('<time')
+  })
+  test('historical delivery remains visible outside collapsed main activity', () => {
+    const delivery: Item = {
+      id: 'delivery',
+      messageID: 'message',
+      turnId: 'turn',
+      agentId: 'agent',
+      type: 'tool',
+      callID: 'call',
+      tool: 'finalize_result',
+      title: '提交结果',
+      state: 'completed',
+      input: null,
+      command: null,
+      error: null,
+      output: '历史完整交付',
+      startedAt: 1,
+      finishedAt: 2,
+    }
+    const entry = {
+      id: 'turn',
+      turn: { id: 'turn', status: 'completed', elapsedSeconds: 1, error: null },
+      items: [delivery],
+      userItems: [],
+      attachments: [],
+      contextReferences: [],
+      processItems: [delivery],
+      assistantResultItems: [],
+      patchItems: [],
+      postAssistantItems: [],
+      planItem: null,
+      executionPlanItems: [],
+      blockers: [],
+      contentBlocks: [],
+    } as unknown as RenderTurnEntry
+    const render = (isSubagent = false) =>
+      renderToStaticMarkup(
+        <CanonicalTestProviders>
+          <CanonicalConversationTurn
+            isSubagent={isSubagent}
+            disclosureState={disclosureStore('turn-activity:turn')}
+            entry={entry}
+            onOpenPlanInRightDock={() => undefined}
+            onOpenSubagent={() => undefined}
+            dockedPlanItemId={null}
+          />
+        </CanonicalTestProviders>,
+      )
+    const main = render()
+    expect(main).toContain('canonical-turn__result')
+    expect(main).toContain('历史完整交付')
+    expect(main).not.toContain('已提交子代理结果')
+    expect(main).not.toContain('canonical-result-card')
+    const child = render(true)
+    expect(child).toContain('已提交子代理结果')
+    expect(child).not.toContain('历史完整交付')
+    expect(child).not.toContain('canonical-turn__result')
+  })
+
   test('Skill 在 canonical 用户消息正文中展示，不依赖聊天标题', () => {
     const input = {
       id: 'input-skill',
@@ -80,7 +246,37 @@ describe('canonical thread switch', () => {
     expect(markup).not.toContain('lucide-box')
     expect(markup).toContain('user-message-markdown__measurement has-inline-prefix')
     expect(markup).toContain('你好')
+    expect(markup).toContain('dateTime="1970-01-01T00:00:00.001Z"')
     expect(markup).not.toContain('skills/mmx-cli/SKILL.md')
+  })
+  test('正式用户消息只保留外壳上的唯一操作栏', () => {
+    const input = {
+      id: 'input-actions',
+      threadId: 'thread-actions',
+      turnId: 'turn-actions',
+      content: '检查操作栏',
+      delivery: 'start',
+      mode: 'chat',
+      model: { providerID: 'openai', id: 'gpt-5' },
+      permissionConfig: {
+        sandboxMode: 'workspace-write',
+        approvalPolicy: 'on-request',
+        approvalsReviewer: 'user',
+      },
+      state: 'completed',
+      createdAt: 1,
+    } as React.ComponentProps<typeof CanonicalUserInput>['input']
+    const markup = renderToStaticMarkup(
+      <CanonicalTestProviders>
+        <CanonicalUserInput
+          input={input}
+          attachments={[]}
+          contextReferences={[]}
+          registerInputRow={() => undefined}
+        />
+      </CanonicalTestProviders>,
+    )
+    expect(markup.match(/aria-label="用户消息操作"/g)).toHaveLength(1)
   })
   test('does not expose state from the previous thread', () => {
     const state = {
@@ -98,7 +294,7 @@ describe('canonical thread switch', () => {
     expect(isCurrentCanonicalThreadRequest('thread-a', 2, 'thread-a', 1)).toBe(false)
   })
 
-  test('initializes completed groups collapsed and active groups expanded', () => {
+  test('initializes every process group collapsed and follows manual expansion', () => {
     const completed = renderToStaticMarkup(
       <CanonicalProcessGroup
         active={false}
@@ -167,14 +363,15 @@ describe('canonical thread switch', () => {
     )
 
     expect(completed).not.toContain('expensive-tool-card')
-    expect(completed).toContain('data-mount-policy="until-exit"')
+    expect(completed).toContain('data-state="closed"')
     expect(completed).toContain('aria-hidden="true"')
     expect(completed).toContain('inert')
     expect(completed).not.toContain('lucide-check')
     expect(completed).toContain('lucide-square-terminal')
     expect(completed).toContain('lucide-chevron-right')
     expect(completed).not.toContain('lucide-chevron-down')
-    expect(active).toContain('active-tool-card')
+    expect(active).not.toContain('active-tool-card')
+    expect(active).toContain('data-state="active"')
     expect(active).toContain('lucide-loader-circle')
     expect(active).toContain('lucide-chevron-right')
     expect(failed).not.toContain('failed-tool-card')
@@ -186,6 +383,198 @@ describe('canonical thread switch', () => {
     expect(summaryOnly).toContain('正在思考')
     expect(summaryOnly).not.toContain('<button')
     expect(summaryOnly).not.toContain('lucide-chevron')
+  })
+
+  test('isolates subagent items into their own group in both directions', () => {
+    const subagent = (
+      id: string,
+      status: Extract<Item, { type: 'subagent' }>['status'] = 'completed',
+    ): Extract<Item, { type: 'subagent' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'subagent',
+      subagentTaskId: `task-${id}`,
+      runId: `run-${id}`,
+      childThreadId: `child-${id}`,
+      displayName: id,
+      profile: 'explorer',
+      task: '审阅仓库',
+      status,
+      queueReason: null,
+      result: null,
+      createdAt: 1_000,
+    })
+    const tool = (id: string): Extract<Item, { type: 'tool' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'tool',
+      callID: `call-${id}`,
+      tool: 'Bash',
+      title: 'Bash',
+      state: 'completed',
+      input: null,
+      command: 'bun test',
+      output: null,
+      error: null,
+      startedAt: 1_000,
+      finishedAt: 2_000,
+      durationMs: 1_000,
+      createdAt: 1_000,
+    })
+    const model = buildProcessActivityModel(
+      [tool('tool-a'), subagent('agent-a'), subagent('agent-b'), tool('tool-b')],
+      { activitySliceClosed: true, turnActive: false },
+    )
+
+    expect(
+      model.units.map((unit) =>
+        unit.kind === 'group'
+          ? ['group', ...unit.items.map((item) => item.id)]
+          : [unit.kind, unit.item.id],
+      ),
+    ).toEqual([
+      ['activity', 'tool-a'],
+      ['group', 'agent-a', 'agent-b'],
+      ['activity', 'tool-b'],
+    ])
+  })
+
+  test('renders subagents as a single non-expandable line that opens the directory', () => {
+    const subagent = (id: string): Extract<Item, { type: 'subagent' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'subagent',
+      subagentTaskId: `task-${id}`,
+      runId: `run-${id}`,
+      childThreadId: `child-${id}`,
+      displayName: id,
+      profile: 'explorer',
+      task: '审阅仓库',
+      status: 'completed',
+      queueReason: null,
+      result: null,
+      createdAt: 1_000,
+    })
+    const spawned: Item = {
+      id: 'spawn',
+      messageID: 'message-spawn',
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'tool',
+      callID: 'call-spawn',
+      tool: 'spawn_agents',
+      title: 'spawn_agents',
+      state: 'completed',
+      input: null,
+      command: null,
+      error: null,
+      output: null,
+      startedAt: 1_000,
+      finishedAt: 2_000,
+    }
+    const entry = {
+      id: 'turn-1',
+      turn: { id: 'turn-1', status: 'completed', elapsedSeconds: 5, error: null },
+      items: [spawned, subagent('Frontend'), subagent('Backend')],
+      userItems: [],
+      attachments: [],
+      contextReferences: [],
+      processItems: [spawned, subagent('Frontend'), subagent('Backend')],
+      assistantResultItems: [],
+      patchItems: [],
+      postAssistantItems: [],
+      planItem: null,
+      executionPlanItems: [],
+      blockers: [],
+      contentBlocks: [],
+    } as unknown as RenderTurnEntry
+
+    const html = renderToStaticMarkup(
+      <CanonicalTestProviders>
+        <CanonicalConversationTurn
+          disclosureState={disclosureStore('turn-activity:turn-1')}
+          entry={entry}
+          onOpenPlanInRightDock={() => undefined}
+          onOpenSubagent={() => undefined}
+          dockedPlanItemId={null}
+        />
+      </CanonicalTestProviders>,
+    )
+
+    // 内联只有一行摘要：没有展开箭头、没有逐任务卡片、没有生命周期行。
+    expect(html).toContain('Frontend和Backend 已完成')
+    expect(html).toContain('打开子智能体列表')
+    expect(html).not.toContain('cpx-agent-activity__chevron')
+    expect(html).not.toContain('canonical-subagent-card')
+    expect(html).not.toContain('已创建子代理')
+  })
+
+  test('folds spawn/wait lifecycle rows into the subagent group instead of extra lines', () => {
+    const subagent = (
+      id: string,
+      status: Extract<Item, { type: 'subagent' }>['status'] = 'completed',
+    ): Extract<Item, { type: 'subagent' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'subagent',
+      subagentTaskId: `task-${id}`,
+      runId: `run-${id}`,
+      childThreadId: `child-${id}`,
+      displayName: id,
+      profile: 'explorer',
+      task: '审阅仓库',
+      status,
+      queueReason: null,
+      result: null,
+      createdAt: 1_000,
+    })
+    const lifecycle = (id: string, name: string): Extract<Item, { type: 'tool' }> => ({
+      id,
+      messageID: `message-${id}`,
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'tool',
+      callID: `call-${id}`,
+      tool: name,
+      title: name,
+      state: 'completed',
+      input: null,
+      command: null,
+      output: null,
+      error: null,
+      startedAt: 1_000,
+      finishedAt: 2_000,
+      durationMs: 1_000,
+      createdAt: 1_000,
+    })
+    const model = buildProcessActivityModel(
+      [
+        lifecycle('spawn', 'spawn_agents'),
+        subagent('agent-a'),
+        subagent('agent-b'),
+        lifecycle('wait', 'wait_agents'),
+      ],
+      { activitySliceClosed: true, turnActive: false },
+    )
+
+    // 同轮已有子智能体时，创建与等待行被吸收，只保留一个组。
+    expect(model.units).toHaveLength(1)
+    const [unit] = model.units
+    expect(unit.kind).toBe('group')
+    if (unit.kind === 'group') {
+      expect(unit.items.map((item) => item.id)).toEqual(['agent-a', 'agent-b'])
+      expect(summarizeTurnProcessItems(unit.items, 'completed').label).toBe(
+        'agent-a和agent-b 已完成',
+      )
+    }
   })
 
   test('groups only consecutive activity and lets lifecycle rows interrupt it', () => {
@@ -273,7 +662,7 @@ describe('canonical thread switch', () => {
     })
   })
 
-  test('uses commentary as a hard boundary and keeps reasoning only with exploration', () => {
+  test('uses commentary and reasoning as hard boundaries, excluding empty terminal reasoning', () => {
     const tool = (
       id: string,
       state: 'completed' | 'error' = 'completed',
@@ -317,12 +706,10 @@ describe('canonical thread switch', () => {
     expect(model.units).toMatchObject([
       { kind: 'activity', item: { id: 'failed-edit' } },
       { kind: 'standalone', item: { id: 'commentary-1' } },
-      {
-        kind: 'group',
-        items: [{ id: 'command-1' }, { id: 'command-2' }],
-      },
+      { kind: 'activity', item: { id: 'command-1' } },
+      { kind: 'standalone', item: { id: 'reasoning-1' } },
+      { kind: 'activity', item: { id: 'command-2' } },
     ])
-    expect(JSON.stringify(model)).not.toContain('reasoning-1')
 
     const exploration = {
       ...tool('read-1'),
@@ -343,19 +730,36 @@ describe('canonical thread switch', () => {
       }),
     ).toMatchObject({
       units: [
-        {
-          kind: 'group',
-          items: [{ id: 'read-1' }, { id: 'reasoning-1' }, { id: 'command-after-read' }],
-        },
+        { kind: 'activity', item: { id: 'read-1' } },
+        { kind: 'standalone', item: { id: 'reasoning-1' } },
+        { kind: 'activity', item: { id: 'command-after-read' } },
       ],
     })
 
     expect(
       buildProcessActivityModel([reasoning], { activitySliceClosed: true, turnActive: false }),
-    ).toEqual({ activeGroupKey: null, showThinkingFallback: false, units: [] })
+    ).toMatchObject({
+      activeGroupKey: null,
+      showThinkingFallback: false,
+      units: [{ kind: 'standalone', item: reasoning }],
+    })
     expect(
       buildProcessActivityModel([reasoning], { activitySliceClosed: false, turnActive: true }),
-    ).toEqual({ activeGroupKey: null, showThinkingFallback: true, units: [] })
+    ).toMatchObject({
+      activeGroupKey: null,
+      showThinkingFallback: true,
+      units: [{ kind: 'standalone', item: reasoning }],
+    })
+
+    for (const status of ['completed', 'interrupted'] as const) {
+      const empty = { ...reasoning, text: ' \n', status }
+      expect(
+        buildProcessActivityModel([tool('before'), empty, tool('after')], {
+          activitySliceClosed: true,
+          turnActive: false,
+        }).units,
+      ).toMatchObject([{ kind: 'group', items: [{ id: 'before' }, { id: 'after' }] }])
+    }
 
     const runningCommand = {
       ...tool('running-command'),
@@ -369,9 +773,12 @@ describe('canonical thread switch', () => {
         turnActive: true,
       }),
     ).toMatchObject({
-      activeGroupKey: 'process-group:running-command',
-      showThinkingFallback: false,
-      units: [{ kind: 'group', items: [{ id: 'running-command' }] }],
+      activeGroupKey: null,
+      showThinkingFallback: true,
+      units: [
+        { kind: 'group', items: [{ id: 'running-command' }] },
+        { kind: 'standalone', item: reasoning },
+      ],
     })
 
     expect(
@@ -500,18 +907,18 @@ describe('canonical thread switch', () => {
                   question,
                 },
               ],
-              contentBlocks: [],
+              contentBlocks: [{ kind: 'assistant', id: `assistant:${answer.id}`, items: [answer] }],
             } as unknown as RenderTurnEntry
           }
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
 
     expect(markup).not.toContain('折叠后不可见的处理说明')
-    expect(markup).toContain('data-mount-policy="until-exit"')
+    expect(markup).toContain('data-state="closed"')
     expect(markup).toContain('aria-hidden="true"')
     // 折叠活动外仍展示询问与等待状态；问题正文由输入区域承载，时间线不再回显。
     expect(markup).toContain('canonical-turn__blockers')
@@ -602,7 +1009,7 @@ describe('canonical thread switch', () => {
       totalDeletions: 0,
       createdAt: 3_000,
     } as const
-    const postAssistantActivity = {
+    const compactionActivity = {
       id: 'context-compression-post',
       messageID: 'message-context-compression-post',
       turnId: 'turn-1',
@@ -621,17 +1028,17 @@ describe('canonical thread switch', () => {
         elapsedSeconds: 359,
         error: null,
       },
-      items: [processText, planTool, tool, answer, patch, postAssistantActivity],
+      items: [processText, planTool, tool, answer, patch, compactionActivity],
       userItems: [],
       attachments: [],
-      processItems: [processText, planTool, tool],
+      processItems: [processText, planTool, tool, compactionActivity],
       assistantResultItems: [answer],
       patchItems: [patch],
-      postAssistantItems: [postAssistantActivity],
+      postAssistantItems: [],
       planItem: null,
       executionPlanItems: [],
       blockers: [],
-      contentBlocks: [],
+      contentBlocks: [{ kind: 'assistant', id: `assistant:${answer.id}`, items: [answer] }],
     } as unknown as RenderTurnEntry
     const markup = renderToStaticMarkup(
       <CanonicalTestProviders>
@@ -640,7 +1047,7 @@ describe('canonical thread switch', () => {
           entry={entry}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -651,7 +1058,7 @@ describe('canonical thread switch', () => {
           entry={entry}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -662,13 +1069,14 @@ describe('canonical thread switch', () => {
           entry={{
             ...entry,
             assistantResultItems: [],
+            contentBlocks: [],
             items: [processText, planTool, tool],
             patchItems: [],
             turn: { ...entry.turn, status: 'running' },
           }}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -692,7 +1100,7 @@ describe('canonical thread switch', () => {
           }}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -708,7 +1116,7 @@ describe('canonical thread switch', () => {
           }}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -726,7 +1134,7 @@ describe('canonical thread switch', () => {
           }}
           onOpenPlanInRightDock={() => undefined}
           onOpenSubagent={() => undefined}
-          rightDockPlanEventId={null}
+          dockedPlanItemId={null}
         />
       </CanonicalTestProviders>,
     )
@@ -735,10 +1143,10 @@ describe('canonical thread switch', () => {
     const workStatusIndex = visibleText.indexOf('已处理 5m 59s')
     const processTextIndex = visibleText.indexOf('中间处理说明标记')
     const lifecycleIndex = visibleText.indexOf('已更新计划')
-    const commandsIndex = visibleText.indexOf('bun test · 1 秒')
+    const commandsIndex = visibleText.indexOf('bun test')
     const answerIndex = visibleText.indexOf('最终回复标记')
     const patchIndex = visibleText.indexOf('已编辑 1 个文件')
-    const postAssistantIndex = visibleText.indexOf('上下文已自动压缩标记')
+    const compactionIndex = visibleText.indexOf('上下文已自动压缩标记')
     expect(processTextIndex).toBeGreaterThan(-1)
     expect(workStatusIndex).toBeGreaterThan(-1)
     expect(workStatusIndex).toBeLessThan(processTextIndex)
@@ -746,16 +1154,23 @@ describe('canonical thread switch', () => {
     expect(commandsIndex).toBeGreaterThan(lifecycleIndex)
     expect(answerIndex).toBeGreaterThan(commandsIndex)
     expect(patchIndex).toBeGreaterThan(answerIndex)
-    expect(postAssistantIndex).toBeGreaterThan(patchIndex)
+    expect(compactionIndex).toBeGreaterThan(commandsIndex)
+    expect(compactionIndex).toBeLessThan(answerIndex)
+    expect(
+      markup.slice(
+        markup.indexOf('canonical-turn__process'),
+        markup.indexOf('canonical-turn__result'),
+      ),
+    ).toContain('上下文已自动压缩标记')
     expect(markup).not.toContain('运行了 1 条命令')
     expect(markup).not.toContain('canonical-process-group--commands')
     expect(markup).toContain('cpx-agent-activity__item')
     expect(markup).toContain('data-presentation="grouped"')
-    expect(multiCommandMarkup).toContain('运行命令')
+    expect(multiCommandMarkup).toContain('运行了命令')
     expect(multiCommandMarkup).not.toContain('cpx-agent-activity__path-step')
     expect(multiCommandMarkup).not.toContain('canonical-process-group--commands')
     expect(multiCommandMarkup).not.toContain('canonical-command-shell')
-    expect(activeWithAnswerMarkup).toContain('运行命令')
+    expect(activeWithAnswerMarkup).toContain('运行了命令')
     expect(activeWithAnswerMarkup).not.toContain('正在思考')
     expect(activeWithAnswerMarkup).not.toContain('lucide-loader-circle')
     expect(activeWithAnswerMarkup).toContain('data-expandable="true"')
@@ -768,13 +1183,13 @@ describe('canonical thread switch', () => {
     )
     const processSection = nestedBoundaryMarkup.slice(processSectionStart, processSectionEnd)
     expect(processSection).toContain('中间处理说明标记')
-    expect(processSection).toContain('运行命令')
+    expect(processSection).toContain('运行了命令')
     expect(processSection).toContain('继续处理说明标记')
     expect(processSection).toContain('已更新计划')
     expect(processSection.indexOf('中间处理说明标记')).toBeLessThan(
-      processSection.indexOf('运行命令'),
+      processSection.indexOf('运行了命令'),
     )
-    expect(processSection.indexOf('运行命令')).toBeLessThan(
+    expect(processSection.indexOf('运行了命令')).toBeLessThan(
       processSection.indexOf('继续处理说明标记'),
     )
     expect(processSection.indexOf('继续处理说明标记')).toBeLessThan(
@@ -787,6 +1202,7 @@ describe('canonical thread switch', () => {
     expect(collapsedMarkup).toContain('aria-expanded="false"')
     expect(collapsedMarkup).not.toContain('中间处理说明标记')
     expect(collapsedMarkup).not.toContain('bun test')
+    expect(collapsedMarkup).not.toContain('上下文已自动压缩标记')
     expect(collapsedMarkup).toContain('aria-hidden="true"')
     expect(collapsedMarkup).toContain('inert')
     expect(collapsedMarkup).toContain('最终回复标记')
@@ -799,7 +1215,7 @@ describe('canonical thread switch', () => {
     expect(markup.match(/canonical-message-actions--assistant/g)).toHaveLength(1)
   })
 
-  test('summarizes process items into neutral stage labels and auto-expands active groups', () => {
+  test('summarizes process items into neutral stage labels and keeps groups collapsed', () => {
     const tool = (
       id: string,
       activity: Extract<Item, { type: 'tool' }>['activity'],
@@ -830,7 +1246,7 @@ describe('canonical thread switch', () => {
     const integrationTool = tool('gh-1', { type: 'integration', source: 'GitHub' })
 
     const runningSummary = summarizeTurnProcessItems([readTool, cmdTool], 'running')
-    expect(runningSummary.label).toBe('读取文件、运行命令')
+    expect(runningSummary.label).toBe('正在查阅代码并执行命令…')
     expect(runningSummary.active).toBe(true)
 
     const integrationSummary = summarizeTurnProcessItems([integrationTool], 'completed')
@@ -848,8 +1264,8 @@ describe('canonical thread switch', () => {
         <span data-testid="running-step">step output</span>
       </CanonicalProcessGroup>,
     )
-    expect(activeMarkup).toContain('data-expanded="true"')
-    expect(activeMarkup).toContain('running-step')
+    expect(activeMarkup).toContain('data-expanded="false"')
+    expect(activeMarkup).not.toContain('running-step')
 
     const completedMarkup = renderToStaticMarkup(
       <CanonicalProcessGroup
@@ -866,4 +1282,391 @@ describe('canonical thread switch', () => {
     expect(processItemPathState(cmdTool)).toBe('running')
     expect(processItemPathState({ ...cmdTool, state: 'error' })).toBe('failed')
   })
+})
+
+test('Radix 强制展开不覆盖保存选择，结束后恢复且内层分组共用 keyed store', () => {
+  const store = disclosureStore()
+  const process = {
+    id: 'process',
+    messageID: 'm',
+    turnId: 'turn',
+    agentId: 'agent',
+    type: 'text',
+    placement: 'process',
+    phase: 'commentary',
+    text: '过程标记',
+    status: 'completed',
+    createdAt: 1,
+  } as const
+  const final = {
+    ...process,
+    id: 'final',
+    placement: 'result',
+    phase: 'final_answer',
+    text: '回答标记',
+    status: 'streaming',
+  } as const
+  const render = (force: boolean) =>
+    renderToStaticMarkup(
+      <CanonicalTestProviders>
+        <CanonicalConversationTurn
+          disclosureState={store}
+          entry={
+            {
+              id: 'turn',
+              turn: { id: 'turn', status: 'running', elapsedSeconds: 2, error: null },
+              items: [process, final],
+              userItems: [],
+              attachments: [],
+              processItems: [process],
+              assistantResultItems: [final],
+              patchItems: [],
+              postAssistantItems: [],
+              planItem: null,
+              executionPlanItems: [],
+              blockers: [],
+              contentBlocks: [{ kind: 'assistant', id: `assistant:${final.id}`, items: [final] }],
+              forceExpandActivity: force,
+            } as unknown as RenderTurnEntry
+          }
+          onOpenPlanInRightDock={() => undefined}
+          onOpenSubagent={() => undefined}
+          dockedPlanItemId={null}
+        />
+      </CanonicalTestProviders>,
+    )
+  expect(render(false)).not.toContain('过程标记')
+  expect(render(false)).toContain('回答标记')
+  expect(render(true)).toContain('过程标记')
+  expect(store.getSnapshot('turn-activity:turn')).toBe(false)
+  expect(render(false)).not.toContain('过程标记')
+  store.setExpanded('turn-activity:turn', true)
+  expect(render(false)).toContain('过程标记')
+  const group = (active: boolean) =>
+    renderToStaticMarkup(
+      <CanonicalProcessGroup
+        active={active}
+        failed={false}
+        kind="command"
+        label="运行命令"
+        summaryKey="group"
+        disclosure={{ store, id: 'process-group:turn:group' }}
+      >
+        <span>内层标记</span>
+      </CanonicalProcessGroup>,
+    )
+  expect(group(false)).not.toContain('内层标记')
+  expect(group(true)).not.toContain('内层标记')
+  expect(store.getSnapshot('process-group:turn:group')).toBe(false)
+  store.setExpanded('process-group:turn:group', true)
+  expect(group(true)).toContain('内层标记')
+})
+
+test.each(['idle-manual', 'active-manual', 'automatic', 'reactive'] as const)(
+  '真实会话组件按 Codex 归属显示压缩，默认折叠不吞空闲手动节点：%s',
+  async (scenario) => {
+    const idle = scenario === 'idle-manual'
+    const manual = scenario === 'idle-manual' || scenario === 'active-manual'
+    const config = {
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'user',
+    } as const
+    const turn = {
+      id: 'compression-turn',
+      threadId: 'compression-thread',
+      sourceInputID: 'input',
+      status: idle ? ('completed' as const) : ('running' as const),
+      mode: 'chat' as const,
+      model: { providerID: 'openai', id: 'test' },
+      permissionConfig: config,
+      rootAgentId: 'agent',
+      mergedInputIDs: [],
+      startedAt: 1,
+      finishedAt: idle ? 2 : null,
+      elapsedSeconds: 1,
+      error: null,
+    }
+    const answer = {
+      id: 'answer',
+      messageID: 'message',
+      turnId: turn.id,
+      agentId: 'agent',
+      type: 'text',
+      placement: 'result',
+      phase: 'final_answer',
+      status: 'completed',
+      text: '原有回复',
+      createdAt: 2,
+    } as const
+    const state = createCanonicalThreadState({
+      thread: {
+        id: turn.threadId,
+        title: 'test',
+        projectID: null,
+        gitBranch: null,
+        settings: { taskMode: 'chat', permissionConfig: config },
+        createdAt: 1,
+        updatedAt: 1,
+      },
+      subagents: [],
+      olderCursor: null,
+      hasOlder: false,
+      streamPosition: { streamId: turn.threadId, sequence: 0 },
+      turns: [
+        {
+          turn,
+          inputs: [],
+          agents: [],
+          messages: [],
+          approvals: [],
+          items: [
+            {
+              id: 'thought',
+              messageID: 'thought-message',
+              turnId: turn.id,
+              agentId: 'agent',
+              type: 'reasoning',
+              text: '原有思考',
+              status: 'completed',
+              createdAt: 1,
+            },
+            ...(idle ? [answer] : []),
+          ],
+        },
+      ],
+    })
+    const coordinator = new CanonicalThreadIngestionCoordinator({
+      threadId: turn.threadId,
+      initialState: state,
+    })
+    const operation = {
+      operationId: 'operation',
+      threadId: turn.threadId,
+      turnId: idle ? null : turn.id,
+      sessionId: null,
+      agentId: 'agent',
+      trigger: manual
+        ? ('manual' as const)
+        : scenario === 'reactive'
+          ? ('reactive' as const)
+          : ('automatic' as const),
+      phase: 'settled' as const,
+      status: 'running' as const,
+      compactionId: null,
+      reason: null,
+      createdAt: Date.now() - 11_000,
+      updatedAt: Date.now(),
+    }
+    const envelope = (sequence: number, type: string, payload: unknown) =>
+      decodeEventEnvelope({
+        eventId: String(sequence),
+        streamId: turn.threadId,
+        threadId: turn.threadId,
+        type,
+        version: type === 'turn/completed' ? 2 : 1,
+        durability: 'durable',
+        sequence,
+        occurredAt: Date.now(),
+        payload,
+      })
+    const render = () =>
+      renderToStaticMarkup(
+        <CanonicalTestProviders>
+          {selectRenderTurnEntries(coordinator.getSnapshot()!).map((entry) => (
+            <CanonicalConversationTurn
+              key={entry.id}
+              entry={entry}
+              disclosureState={disclosureStore()}
+              dockedPlanItemId={null}
+              onOpenPlanInRightDock={() => {}}
+              onOpenSubagent={() => {}}
+            />
+          ))}
+        </CanonicalTestProviders>,
+      )
+    try {
+      await coordinator.deliverBatch([envelope(1, 'context/compactionUpdated', { operation })])
+      const running = render()
+      if (idle) {
+        expect(running).toContain('正在压缩上下文 · 可能需要几分钟')
+        expect(running.indexOf('原有回复')).toBeLessThan(running.indexOf('正在压缩上下文'))
+        expect(selectRenderTurnEntries(coordinator.getSnapshot()!)).toHaveLength(2)
+      } else {
+        expect(running).toContain('正在压缩上下文')
+        expect(selectRenderTurnEntries(coordinator.getSnapshot()!)).toHaveLength(1)
+      }
+      await coordinator.deliverBatch([
+        envelope(2, 'context/compacted', {
+          compactionId: 'result',
+          trigger: operation.trigger,
+          beforeCount: 3,
+          afterCount: 1,
+          beforeTokens: 20_000,
+          afterTokens: 10_000,
+          targetTokens: 16_000,
+          baselineVersion: 1,
+          usageSampleId: 'sample',
+        }),
+        envelope(3, 'context/compactionUpdated', {
+          operation: { ...operation, status: 'completed', compactionId: 'result' },
+        }),
+      ])
+      if (!idle)
+        await coordinator.deliverBatch([
+          envelope(4, 'item/completed', { item: answer }),
+          envelope(5, 'turn/completed', {
+            turn: { ...turn, status: 'completed', finishedAt: Date.now() },
+          }),
+        ])
+      expect(coordinator.getSnapshot()!.itemsById.size).toBe(3)
+      const completed = render()
+      if (idle) {
+        expect(completed.match(/上下文已压缩/g)).toHaveLength(1)
+        expect(completed).not.toContain('正在压缩上下文')
+        expect(completed.indexOf('原有回复')).toBeLessThan(completed.indexOf('上下文已压缩'))
+        const nodeTurn = completed.slice(completed.lastIndexOf('<article class="canonical-turn"'))
+        expect(nodeTurn).toContain('canonical-turn-activity__summary')
+        // 时长取压缩操作自身耗时（约 11s），而非所在轮次的 1s。
+        expect(nodeTurn).toContain('已处理 11s')
+        expect(nodeTurn).not.toContain('aria-expanded')
+        expect(nodeTurn).not.toContain('Token ')
+      }
+      if (!idle) expect(completed).not.toContain(manual ? '上下文已压缩' : '上下文已自动压缩')
+      const entries = selectRenderTurnEntries(coordinator.getSnapshot()!)
+      const nodeEntry = entries.at(-1)!
+      const expanded = renderToStaticMarkup(
+        <CanonicalTestProviders>
+          <CanonicalConversationTurn
+            entry={nodeEntry}
+            disclosureState={disclosureStore(`turn-activity:${nodeEntry.id}`)}
+            dockedPlanItemId={null}
+            onOpenPlanInRightDock={() => {}}
+            onOpenSubagent={() => {}}
+          />
+        </CanonicalTestProviders>,
+      )
+      expect(expanded).toContain(manual ? '上下文已压缩' : '上下文已自动压缩')
+    } finally {
+      coordinator.dispose()
+    }
+  },
+)
+
+test.each(['running', 'completed'] as const)(
+  '只有压缩活动时显示处理时长但不提供折叠入口：%s',
+  (status) => {
+    const item: Extract<Item, { type: 'activity' }> = {
+      id: 'sole-compaction',
+      messageID: 'message',
+      turnId: 'sole-turn',
+      agentId: 'agent',
+      type: 'activity',
+      activity: 'context-compression',
+      title: status === 'running' ? '正在压缩上下文' : '上下文已自动压缩',
+      status,
+      createdAt: Date.now(),
+    }
+    const entry = {
+      id: item.turnId,
+      turn: {
+        id: item.turnId,
+        status: 'completed',
+        startedAt: Date.now(),
+        elapsedSeconds: 1,
+        error: null,
+      },
+      items: [item],
+      userItems: [],
+      attachments: [],
+      contextReferences: [],
+      processItems: [item],
+      assistantResultItems: [],
+      patchItems: [],
+      postAssistantItems: [],
+      planItem: null,
+      executionPlanItems: [],
+      blockers: [],
+      contentBlocks: [],
+    } as unknown as RenderTurnEntry
+    const markup = renderToStaticMarkup(
+      <CanonicalTestProviders>
+        <CanonicalConversationTurn
+          entry={entry}
+          disclosureState={disclosureStore()}
+          dockedPlanItemId={null}
+          onOpenPlanInRightDock={() => {}}
+          onOpenSubagent={() => {}}
+        />
+      </CanonicalTestProviders>,
+    )
+    expect(markup).toContain(item.title)
+    expect(markup).toContain('canonical-turn-activity__summary')
+    expect(markup).toContain('已处理 1s')
+    expect(markup).not.toContain('aria-expanded')
+  },
+)
+
+test('assistant actions align to the left in Codex order with optional goal status and divider', () => {
+  const textItem = {
+    id: 'text-1',
+    messageID: 'msg-1',
+    turnId: 'turn-1',
+    agentId: 'agent-1',
+    type: 'text',
+    text: '你好，你好。',
+    status: 'completed',
+    createdAt: 1730547240000,
+    placement: 'result',
+  } as Extract<Item, { type: 'text' }>
+
+  // 1. With goal duration
+  const markupWithGoal = renderToStaticMarkup(
+    <CanonicalTestProviders>
+      <CanonicalItemRenderer
+        item={textItem}
+        showAssistantActions={true}
+        goalAchievedDuration="12s"
+        dockedPlanItemId={null}
+        onOpenPlanInRightDock={() => {}}
+        onOpenSubagent={() => {}}
+      />
+    </CanonicalTestProviders>,
+  )
+
+  expect(markupWithGoal).toContain('canonical-message-actions--assistant')
+  expect(markupWithGoal).toContain('toolbar-divider')
+  expect(markupWithGoal).toContain('canonical-goal-achieved')
+  expect(markupWithGoal).toContain('已在 12s 内达成目标')
+  expect(markupWithGoal).toContain('lucide-circle-check')
+
+  // Verify order: copy button -> divider -> goal achieved -> sent time
+  const copyIdx = markupWithGoal.indexOf('aria-label="复制"')
+  const dividerIdx = markupWithGoal.indexOf('toolbar-divider')
+  const goalIdx = markupWithGoal.indexOf('canonical-goal-achieved')
+  const timeIdx = markupWithGoal.indexOf('<time')
+  expect(copyIdx).toBeGreaterThan(-1)
+  expect(dividerIdx).toBeGreaterThan(copyIdx)
+  expect(goalIdx).toBeGreaterThan(dividerIdx)
+  expect(timeIdx).toBeGreaterThan(goalIdx)
+
+  // 2. Without goal duration
+  const markupWithoutGoal = renderToStaticMarkup(
+    <CanonicalTestProviders>
+      <CanonicalItemRenderer
+        item={textItem}
+        showAssistantActions={true}
+        goalAchievedDuration={null}
+        dockedPlanItemId={null}
+        onOpenPlanInRightDock={() => {}}
+        onOpenSubagent={() => {}}
+      />
+    </CanonicalTestProviders>,
+  )
+  expect(markupWithoutGoal).not.toContain('toolbar-divider')
+  expect(markupWithoutGoal).not.toContain('canonical-goal-achieved')
+  const noGoalCopyIdx = markupWithoutGoal.indexOf('aria-label="复制"')
+  const noGoalTimeIdx = markupWithoutGoal.indexOf('<time')
+  expect(noGoalCopyIdx).toBeGreaterThan(-1)
+  expect(noGoalTimeIdx).toBeGreaterThan(noGoalCopyIdx)
 })

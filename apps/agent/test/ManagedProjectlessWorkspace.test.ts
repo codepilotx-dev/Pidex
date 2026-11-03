@@ -144,7 +144,7 @@ describe('ManagedProjectlessWorkspaceService', () => {
     }
   })
 
-  test('项目 resolver 保留持久 cwd，并刷新当前可用目录根', async () => {
+  test('项目 resolver 以持久 roots 为执行范围，显式空 roots 不扩大项目目录', async () => {
     const root = await mkdtemp(join(tmpdir(), 'pidex-project-workspace-test-'))
     roots.push(root)
     const primary = join(root, 'primary')
@@ -152,6 +152,31 @@ describe('ManagedProjectlessWorkspaceService', () => {
     const missing = join(root, 'missing')
     const cwd = join(secondary, 'work')
     await Promise.all([mkdir(primary), mkdir(cwd, { recursive: true })])
+    const project = {
+      id: 'project',
+      primaryFolderId: 'primary',
+      rootPath: primary,
+      folders: [
+        {
+          id: 'primary',
+          path: primary,
+          role: 'primary' as const,
+          availability: 'available' as const,
+        },
+        {
+          id: 'secondary',
+          path: secondary,
+          role: 'secondary' as const,
+          availability: 'available' as const,
+        },
+        {
+          id: 'missing',
+          path: missing,
+          role: 'secondary' as const,
+          availability: 'missing' as const,
+        },
+      ],
+    }
     const db = {
       threadWorkspace: () => ({
         kind: 'project' as const,
@@ -161,53 +186,67 @@ describe('ManagedProjectlessWorkspaceService', () => {
         instructionSources: [join(primary, 'AGENTS.md')],
         outputDirectory: null,
       }),
-      getProject: () => ({
-        id: 'project',
-        primaryFolderId: 'primary',
-        folders: [
-          {
-            id: 'primary',
-            path: primary,
-            role: 'primary' as const,
-            availability: 'available' as const,
-          },
-          {
-            id: 'secondary',
-            path: secondary,
-            role: 'secondary' as const,
-            availability: 'available' as const,
-          },
-          {
-            id: 'missing',
-            path: missing,
-            role: 'secondary' as const,
-            availability: 'missing' as const,
-          },
-        ],
-      }),
+      getProject: () => project,
     }
-    const resolver = new ThreadWorkspaceResolver(db as never, null as never)
 
-    const resolved = await resolver.resolve('thread')
-
-    expect(resolved.cwd).toBe(resolve(cwd))
-    expect(resolved.workspaceRoot).toBe(resolve(primary))
-    expect(resolved.workspace.roots).toEqual([resolve(primary), resolve(secondary)])
-    expect(resolved.runtimeWorkspaceRoots.map(({ folderId }) => folderId)).toEqual([
-      'primary',
-      'secondary',
+    // Explicitly empty roots stay on the persisted cwd; the project's other
+    // folders are not silently added to this thread's scope.
+    const emptyRoots = await new ThreadWorkspaceResolver(db as never, null as never).resolve(
+      'thread',
+    )
+    expect(emptyRoots.cwd).toBe(resolve(cwd))
+    expect(emptyRoots.workspaceRoot).toBe(resolve(cwd))
+    expect(emptyRoots.workspace.roots).toEqual([resolve(cwd)])
+    expect(emptyRoots.runtimeWorkspaceRoots).toEqual([
+      { folderId: resolve(cwd), path: resolve(cwd), role: 'primary' },
     ])
-    expect(resolved.instructionSources).toEqual([join(primary, 'AGENTS.md')])
-    const descriptor = db.threadWorkspace()
-    const snapshot = { ...descriptor, runtimeWorkspaceRoots: resolved.runtimeWorkspaceRoots }
+
+    const snapshot = {
+      ...db.threadWorkspace(),
+      runtimeWorkspaceRoots: [
+        { folderId: 'primary', path: primary, role: 'primary' as const },
+        { folderId: 'secondary', path: secondary, role: 'secondary' as const },
+      ],
+    }
+    const pinned = await new ThreadWorkspaceResolver(
+      { ...db, threadWorkspace: () => snapshot } as never,
+      null as never,
+    ).resolve('thread')
+    expect(pinned.workspaceRoot).toBe(resolve(primary))
+    expect(pinned.cwd).toBe(resolve(cwd))
+    expect(pinned.instructionSources).toEqual([join(primary, 'AGENTS.md')])
+
+    // Switching the project's primary folder leaves the thread's scope where it was.
     const changed = new ThreadWorkspaceResolver(
       {
         ...db,
         threadWorkspace: () => snapshot,
-        getProject: () => ({ ...db.getProject(), primaryFolderId: 'secondary' }),
+        getProject: () => ({ ...project, primaryFolderId: 'secondary', rootPath: secondary }),
       } as never,
       null as never,
     )
     expect((await changed.resolve('thread')).workspaceRoot).toBe(resolve(primary))
+
+    // A temporarily missing secondary root drops out of this execution view but
+    // stays in the persisted description, so recovering it keeps the directory usable.
+    const resolvedWithMissing = await new ThreadWorkspaceResolver(
+      {
+        ...db,
+        threadWorkspace: () => ({
+          ...snapshot,
+          runtimeWorkspaceRoots: [
+            ...snapshot.runtimeWorkspaceRoots,
+            { folderId: 'missing', path: missing, role: 'secondary' as const },
+          ],
+        }),
+      } as never,
+      null as never,
+    ).resolve('thread')
+    expect(resolvedWithMissing.workspace.roots).toEqual([resolve(primary), resolve(secondary)])
+    expect(resolvedWithMissing.runtimeWorkspaceRoots.map(({ folderId }) => folderId)).toEqual([
+      'primary',
+      'secondary',
+      'missing',
+    ])
   })
 })

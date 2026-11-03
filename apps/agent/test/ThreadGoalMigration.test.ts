@@ -134,9 +134,12 @@ describe('thread goal schema migration', () => {
     expect(tableNames(migrated)).toEqual([
       'thread_goal_active_intervals',
       'thread_goal_continuations',
+      'thread_goal_controls',
       'thread_goal_history',
       'thread_goal_operations',
+      'thread_goal_turn_observations',
       'thread_goal_usage_ledger',
+      'thread_goal_verifications',
       'thread_goals',
     ])
     expect(
@@ -187,4 +190,42 @@ describe('thread goal schema migration', () => {
     expect(tableNames(reopened)).not.toContain('thread_goal_history')
     reopened.close()
   })
+})
+
+test('schema 70 upgrades budget receipts and verifier decisions without rewriting Goal or unknown data', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'pidex-goal-71-'))
+  paths.push(root)
+  const path = join(root, 'agent.sqlite')
+  const db = new AgentDatabase(path)
+  const service = new ThreadGoalService(db, await Effect.runPromise(EventHub.make))
+  const thread = db.createThread('migration')
+  const { goal } = await service.set({
+    threadId: thread.id,
+    objective: '保留目标',
+    tokenBudget: 100000,
+    expectedVersion: null,
+    operationId: 'create',
+  })
+  db.sqlite.exec(`ALTER TABLE thread_goal_controls DROP COLUMN budget_revision;
+    ALTER TABLE thread_goal_controls DROP COLUMN budget_ack_revision;
+    ALTER TABLE thread_goal_controls DROP COLUMN previous_budget;
+    ALTER TABLE thread_goal_verifications DROP COLUMN continuation;
+    CREATE TABLE future_goal_data (payload TEXT);
+    INSERT INTO future_goal_data VALUES ('preserve');
+    PRAGMA user_version = 70;`)
+  db.close()
+  const migrated = new AgentDatabase(path)
+  expect(migrated.repositories.threadGoals.get(thread.id)).toEqual(goal)
+  expect(migrated.repositories.threadGoalControls.get(goal.id)).toMatchObject({
+    budget_revision: 0,
+    budget_ack_revision: 0,
+    previous_budget: null,
+  })
+  expect(migrated.sqlite.query('SELECT payload FROM future_goal_data').get()).toEqual({
+    payload: 'preserve',
+  })
+  expect(migrated.sqlite.query('PRAGMA user_version').get()).toEqual({
+    user_version: SCHEMA_VERSION,
+  })
+  migrated.close()
 })

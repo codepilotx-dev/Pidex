@@ -1,19 +1,24 @@
+import { activeTurnSql } from './ThreadEditRepository'
 import { resolve } from 'node:path'
 import {
   DEFAULT_PERMISSION_CONFIG,
   decodeApprovalPolicy,
   encodeApprovalPolicy,
   type ThreadCreationSurface,
+  type ThreadForkOrigin,
   type ThreadSettings,
   type ThreadSettingsPatch,
 } from '@pidex/shared/thread'
-import { AgentError } from '../../Domain'
-import { probeThreadsStorageCapabilities } from '../database/StorageCapabilities'
+import { AgentError, decodeStoredTaskMode } from '../../Domain'
+import {
+  probeThreadContextLimitsStorageCapabilities,
+  probeThreadMessageForksStorageCapabilities,
+  probeThreadsStorageCapabilities,
+} from '../database/StorageCapabilities'
 import type {
   EventEnvelope,
   Item,
   PermissionConfig,
-  TaskMode,
   ThreadSnapshot,
   TurnStatus,
 } from '../../Domain'
@@ -101,7 +106,8 @@ type PermissionColumns = {
 }
 
 type ThreadSettingsColumns = PermissionColumns & {
-  task_mode: TaskMode
+  task_mode: string
+  max_context_tokens?: number | null
 }
 
 const permissionConfigFromRow = (row: PermissionColumns): PermissionConfig => ({
@@ -111,8 +117,9 @@ const permissionConfigFromRow = (row: PermissionColumns): PermissionConfig => ({
 })
 
 const threadSettingsFromRow = (row: ThreadSettingsColumns): ThreadSettings => ({
-  taskMode: row.task_mode,
+  taskMode: decodeStoredTaskMode(row.task_mode),
   permissionConfig: permissionConfigFromRow(row),
+  ...(row.max_context_tokens != null ? { maxContextTokens: Number(row.max_context_tokens) } : {}),
 })
 
 const defaultThreadSettings = (): ThreadSettings => ({
@@ -156,43 +163,78 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
   }
 
   getThreadSettings(threadID: string): ThreadSettings | null {
-    const row = this.sqlite
-      .query(
-        'SELECT task_mode, sandbox_mode, approval_policy, approvals_reviewer FROM threads WHERE id = ?',
-      )
-      .get(threadID) as ThreadSettingsColumns | null
+    const hasLimits = probeThreadContextLimitsStorageCapabilities(this.sqlite).threadContextLimits
+    const sql = hasLimits
+      ? 'SELECT t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, l.max_context_tokens FROM threads t LEFT JOIN thread_context_limits l ON l.thread_id = t.id WHERE t.id = ?'
+      : 'SELECT task_mode, sandbox_mode, approval_policy, approvals_reviewer FROM threads WHERE id = ?'
+    const row = this.sqlite.query(sql).get(threadID) as ThreadSettingsColumns | null
     return row ? threadSettingsFromRow(row) : null
   }
 
   protected syncThreadSettings(threadID: string, patch: ThreadSettingsPatch) {
-    const existing = this.getThreadSettings(threadID)
-    if (!existing) throw new Error('Thread not found')
+    const hasLimits = probeThreadContextLimitsStorageCapabilities(this.sqlite).threadContextLimits
+    const stored = this.sqlite
+      .query(
+        hasLimits
+          ? 'SELECT t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, l.max_context_tokens FROM threads t LEFT JOIN thread_context_limits l ON l.thread_id = t.id WHERE t.id = ?'
+          : 'SELECT task_mode, sandbox_mode, approval_policy, approvals_reviewer FROM threads WHERE id = ?',
+      )
+      .get(threadID) as ThreadSettingsColumns | null
+    if (!stored) throw new Error('Thread not found')
+    const existing = threadSettingsFromRow(stored)
     const settings: ThreadSettings = {
       taskMode: patch.taskMode ?? existing.taskMode,
       permissionConfig: patch.permissionConfig ?? existing.permissionConfig,
+      ...(patch.maxContextTokens !== undefined
+        ? patch.maxContextTokens === null
+          ? {}
+          : { maxContextTokens: patch.maxContextTokens }
+        : existing.maxContextTokens !== undefined
+          ? { maxContextTokens: existing.maxContextTokens }
+          : {}),
     }
+    const contextLimitChanged =
+      patch.maxContextTokens !== undefined &&
+      (patch.maxContextTokens ?? undefined) !== (existing.maxContextTokens ?? undefined)
     const unchanged =
-      settings.taskMode === existing.taskMode &&
+      (patch.taskMode === undefined || patch.taskMode === stored.task_mode) &&
       settings.permissionConfig.sandboxMode === existing.permissionConfig.sandboxMode &&
       encodeApprovalPolicy(settings.permissionConfig.approvalPolicy) ===
         encodeApprovalPolicy(existing.permissionConfig.approvalPolicy) &&
-      settings.permissionConfig.approvalsReviewer === existing.permissionConfig.approvalsReviewer
+      settings.permissionConfig.approvalsReviewer === existing.permissionConfig.approvalsReviewer &&
+      !contextLimitChanged
     if (unchanged) return { settings, event: null }
     this.sqlite
       .query(
         `
         UPDATE threads
-        SET task_mode = ?, sandbox_mode = ?, approval_policy = ?, approvals_reviewer = ?
+        SET task_mode = COALESCE(?, task_mode), sandbox_mode = ?, approval_policy = ?, approvals_reviewer = ?
         WHERE id = ?
       `,
       )
       .run(
-        settings.taskMode,
+        patch.taskMode ?? null,
         settings.permissionConfig.sandboxMode,
         encodeApprovalPolicy(settings.permissionConfig.approvalPolicy),
         settings.permissionConfig.approvalsReviewer,
         threadID,
       )
+    if (contextLimitChanged && hasLimits) {
+      const timestamp = now()
+      if (patch.maxContextTokens === null) {
+        this.sqlite.query('DELETE FROM thread_context_limits WHERE thread_id = ?').run(threadID)
+      } else if (patch.maxContextTokens !== undefined) {
+        this.sqlite
+          .query(
+            `INSERT INTO thread_context_limits (thread_id, max_context_tokens, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(thread_id) DO UPDATE SET
+               max_context_tokens = excluded.max_context_tokens,
+               updated_at = excluded.updated_at`,
+          )
+          .run(threadID, patch.maxContextTokens, timestamp)
+      }
+    }
     const event = this.insertEvent(threadID, null, 'thread/settings/updated', {
       threadId: threadID,
       settings,
@@ -381,6 +423,20 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
             timestamp,
           )
       }
+      if (
+        settings.maxContextTokens != null &&
+        probeThreadContextLimitsStorageCapabilities(this.sqlite).threadContextLimits
+      ) {
+        this.sqlite
+          .query(
+            `INSERT INTO thread_context_limits (thread_id, max_context_tokens, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(thread_id) DO UPDATE SET
+               max_context_tokens = excluded.max_context_tokens,
+               updated_at = excluded.updated_at`,
+          )
+          .run(id, settings.maxContextTokens, timestamp)
+      }
       const persistedWorkspace = this.threadWorkspace(id)
       const event = this.insertEvent(id, null, 'thread/created', {
         thread: {
@@ -411,9 +467,12 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
   }
 
   getThread(threadID: string): ThreadSnapshot | null {
+    const hasLimits = probeThreadContextLimitsStorageCapabilities(this.sqlite).threadContextLimits
     const thread = this.sqlite
       .query(
-        'SELECT id, title, git_branch, task_mode, sandbox_mode, approval_policy, approvals_reviewer, created_at, updated_at FROM threads WHERE id = ?',
+        hasLimits
+          ? 'SELECT t.id, t.title, t.git_branch, t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.created_at, t.updated_at, l.max_context_tokens FROM threads t LEFT JOIN thread_context_limits l ON l.thread_id = t.id WHERE t.id = ?'
+          : 'SELECT id, title, git_branch, task_mode, sandbox_mode, approval_policy, approvals_reviewer, created_at, updated_at FROM threads WHERE id = ?',
       )
       .get(threadID) as
       | ({
@@ -427,13 +486,13 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
     if (!thread) return null
     const turns = this.sqlite
       .query(
-        'SELECT id, root_agent_id, status, mode, started_at, finished_at FROM turns WHERE thread_id = ? ORDER BY created_at',
+        `SELECT id, root_agent_id, status, mode, started_at, finished_at FROM turns WHERE thread_id = ? AND ${activeTurnSql('turns', this)} ORDER BY created_at`,
       )
       .all(threadID) as Array<{
       id: string
       root_agent_id: string
       status: TurnStatus
-      mode: TaskMode
+      mode: string
       started_at: number | null
       finished_at: number | null
     }>
@@ -462,7 +521,7 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
         id: turn.id,
         rootAgentID: turn.root_agent_id,
         status: turn.status,
-        mode: turn.mode,
+        mode: decodeStoredTaskMode(turn.mode),
         startedAt: turn.started_at,
         finishedAt: turn.finished_at,
         items: items
@@ -482,6 +541,31 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
         const agent = this.getAgentExecution(turn.root_agent_id)
         return agent ? [agent] : []
       }),
+    }
+  }
+
+  getThreadForkOrigin(threadID: string): ThreadForkOrigin | null {
+    if (!probeThreadMessageForksStorageCapabilities(this.sqlite).forkTargetTurnId) {
+      return null
+    }
+    const row = this.sqlite
+      .query(
+        `
+        SELECT f.source_thread_id, f.target_turn_id
+        FROM thread_message_forks AS f
+        JOIN threads AS source_thread ON source_thread.id = f.source_thread_id
+        JOIN turns AS target_turn ON target_turn.id = f.target_turn_id AND target_turn.thread_id = f.target_thread_id
+        WHERE f.target_thread_id = ?
+          AND f.target_turn_id IS NOT NULL
+          AND (source_thread.archived_at IS NULL OR source_thread.archived_at <> -1)
+          AND ${activeTurnSql('target_turn', this)}
+      `,
+      )
+      .get(threadID) as { source_thread_id: string; target_turn_id: string } | null
+    if (!row) return null
+    return {
+      threadId: row.source_thread_id,
+      inheritedThroughTurnId: row.target_turn_id,
     }
   }
 
@@ -545,7 +629,7 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
         `
         SELECT id, root_agent_id, status
         FROM turns
-        WHERE thread_id = ?
+        WHERE thread_id = ? AND ${activeTurnSql('turns', this)}
         ORDER BY created_at DESC, id DESC
         LIMIT 1
       `,
@@ -570,7 +654,7 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
           `
         SELECT id, root_agent_id
         FROM turns
-        WHERE thread_id = ? AND status = 'completed'
+        WHERE thread_id = ? AND ${activeTurnSql('turns', this)} AND status = 'completed'
         ORDER BY created_at DESC, id DESC
         LIMIT ?
       `,
@@ -669,13 +753,14 @@ export abstract class ThreadRepositoryDatabase extends RepositoryCore {
   }
 
   activeTurn(threadID: string) {
-    return this.sqlite
+    const row = this.sqlite
       .query(
         `SELECT id, status, mode, sandbox_mode, approval_policy, approvals_reviewer, model_ref FROM turns WHERE thread_id = ? AND status IN ('running', 'waiting_permission', 'waiting_question', 'waiting_subagents') ORDER BY created_at DESC LIMIT 1`,
       )
       .get(threadID) as
-      | ({ id: string; status: TurnStatus; mode: TaskMode; model_ref: string } & PermissionColumns)
+      | ({ id: string; status: TurnStatus; mode: string; model_ref: string } & PermissionColumns)
       | null
+    return row ? { ...row, mode: decodeStoredTaskMode(row.mode) } : null
   }
 }
 

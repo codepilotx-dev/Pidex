@@ -1,14 +1,21 @@
+import { reportStartupReady } from '../../../startup/StartupSplashHandoff.js'
 import { history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history'
 import { baseKeymap, splitBlock } from 'prosemirror-commands'
 import { keymap } from 'prosemirror-keymap'
 import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
-import { AllSelection, EditorState, NodeSelection, TextSelection } from 'prosemirror-state'
+import { AllSelection, EditorState, NodeSelection, Plugin, TextSelection } from 'prosemirror-state'
 import type { Transaction } from 'prosemirror-state'
 import { EditorView } from 'prosemirror-view'
-import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react'
-import { useEditCommands } from '../../../components/ui/EditCommandProvider.js'
+import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react'
+import { useEditCommandActions } from '../../../components/ui/EditCommandProvider.js'
 import type { ComposerDocument, ComposerDocumentToken } from './ComposerTypes.js'
 import { composerDocumentsEqual } from './ComposerSkillToken.js'
+import { focusComposerIfAvailable } from './ComposerFocus.js'
+
+/** 只读编辑器的文档不可变：仍可选中/复制，但不应用任何改动。 */
+const readOnlyPlugin = new Plugin({
+  filterTransaction: (transaction) => transaction.docChanged === false,
+})
 
 export const composerSchema = new Schema({
   nodes: {
@@ -88,12 +95,14 @@ export const composerSchema = new Schema({
 
 export type ComposerEditorHandle = {
   focus: () => void
+  focusIfAvailable: (returnFrom?: Element | null) => void
   insertText: (text: string) => void
   replaceTextRange: (start: number, end: number, text: string) => void
   replaceTextRangeWithToken: (start: number, end: number, token: ComposerDocumentToken) => void
 }
 
 export type ComposerEditorProps = {
+  focusKey?: string
   value: string
   document?: ComposerDocument
   placeholder: string
@@ -101,6 +110,8 @@ export type ComposerEditorProps = {
   ariaDescribedBy?: string
   ariaActiveDescendant?: string
   ariaExpanded: boolean
+  /** 只读模式：保留内容与焦点，但不接受编辑、粘贴或快捷键提交。 */
+  readOnly?: boolean
   onChange: (value: string) => void
   onDocumentChange?: (document: ComposerDocument) => void
   onTokenActivate?: (token: ComposerDocumentToken) => void
@@ -114,6 +125,7 @@ export type ComposerEditorProps = {
 export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorProps>(
   function ComposerEditor(
     {
+      focusKey,
       value,
       document,
       placeholder,
@@ -121,6 +133,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       ariaDescribedBy,
       ariaActiveDescendant,
       ariaExpanded,
+      readOnly = false,
       onChange,
       onDocumentChange,
       onTokenActivate,
@@ -132,7 +145,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
     },
     forwardedRef,
   ) {
-    const { registerTarget } = useEditCommands()
+    const { registerTarget } = useEditCommandActions()
     const mountRef = useRef<HTMLDivElement | null>(null)
     const viewRef = useRef<EditorView | null>(null)
     const callbacksRef = useRef({
@@ -161,6 +174,10 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       forwardedRef,
       () => ({
         focus: () => viewRef.current?.focus(),
+        focusIfAvailable: (returnFrom) => {
+          const view = viewRef.current
+          if (view) focusComposerIfAvailable(view.dom, () => view.focus(), returnFrom)
+        },
         insertText: (text) => {
           const view = viewRef.current
           if (!view || !text) return
@@ -173,7 +190,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           const from = positionAtTextOffset(view.state.doc, start)
           const to = positionAtTextOffset(view.state.doc, end)
           view.dispatch(view.state.tr.insertText(text, from, to).scrollIntoView())
-          view.focus()
+          focusComposerIfAvailable(view.dom, () => view.focus())
         },
         replaceTextRangeWithToken: (start, end, token) => {
           const view = viewRef.current
@@ -193,7 +210,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       [],
     )
 
-    useEffect(() => {
+    useLayoutEffect(() => {
       const mount = mountRef.current
       if (!mount) return
 
@@ -212,6 +229,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
             'Mod-y': redo,
           }),
           keymap(baseKeymap),
+          ...(readOnly ? [readOnlyPlugin] : []),
         ],
       })
 
@@ -221,6 +239,8 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           'aria-label': '消息输入框',
           role: 'combobox',
           'aria-autocomplete': 'list',
+          // ProseMirror 会把 undefined 写成字符串 "undefined"，只读属性必须整体省略。
+          ...(readOnly ? { 'aria-readonly': 'true', 'data-composer-readonly': 'true' } : {}),
           spellcheck: 'true',
           class: 'composer-editor-content',
         },
@@ -293,6 +313,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       })
 
       viewRef.current = view
+      if (window.location.hash.split('?')[0] === '#/new' && view.editable) reportStartupReady()
       const unregisterEditTarget = registerTarget(view.dom, {
         getCapabilities: () => {
           const selection = view.state.selection
@@ -331,7 +352,16 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       }
       // The view owns its lifetime; callback changes flow through callbacksRef.
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [registerTarget])
+    }, [registerTarget, readOnly])
+
+    useEffect(() => {
+      if (!focusKey) return
+      const frame = requestAnimationFrame(() => {
+        const view = viewRef.current
+        if (view) focusComposerIfAvailable(view.dom, () => view.focus())
+      })
+      return () => cancelAnimationFrame(frame)
+    }, [focusKey])
 
     useEffect(() => {
       const view = viewRef.current

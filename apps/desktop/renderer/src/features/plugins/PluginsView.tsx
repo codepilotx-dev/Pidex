@@ -1,26 +1,22 @@
 import type React from 'react'
-import type { PluginDetails } from '@pidex/agent-protocol'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertOctagon,
   ArrowLeft,
   ChevronRight,
   Clock,
-  ListFilter,
   RefreshCw,
   Settings,
-  Settings2,
+  ChevronDown,
+  Plus,
+  Server,
 } from 'lucide-react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button } from '../../components/ui/Button.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
 
-import {
-  PopoverLabel,
-  PopoverRadioGroup,
-  PopoverRadioItem,
-} from '../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
+import { PopoverItem } from '../../components/ui/PopoverItem.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
@@ -31,42 +27,36 @@ import {
 } from '../../components/ui/IconTokens.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import type { DesktopSkillCatalogItem, DesktopSkillOwnerFilter } from '../../../shared/Types.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutletContext.js'
-import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
+import { preparePluginPrompt } from './PluginPrompt.js'
+import { usePluginDetails } from './UsePluginDetails.js'
 import { CatalogDetailsView } from './CatalogDetailsView.js'
 import { PluginCatalogCard } from './PluginCatalogCard.js'
-import { PluginIcon } from './PluginIcon.js'
 import { SkillCatalogCard } from './SkillCatalogCard.js'
 import {
   catalogBrowseParams,
   catalogDetailsParams,
   parseCatalogLocation,
   type CatalogDetailsTarget,
-  type CatalogTab,
 } from './CatalogDetailsDeepLink.js'
 import {
-  PLUGIN_CATALOG_DESCRIPTORS,
   filterPluginCatalog,
-  groupPluginCatalogBySource,
+  groupMarketplacePlugins,
   mergePluginCatalog,
   pluginPrimaryAction,
-  selectInstalledPluginOverview,
   type PluginCatalogItem,
-  type PluginCategoryFilter,
-  type PluginStatusFilter,
 } from './PluginCatalog.js'
 import { groupSkillsForDisplay } from './SkillCatalog.js'
 import { usePluginCatalog } from './UsePluginCatalog.js'
-import { useMiniMaxCli } from './UseMiniMaxCli.js'
 import { cx } from '../../utils/Cx.js'
 import {
   DETAILS_BREADCRUMB_CLASS,
   DETAILS_BREADCRUMB_CURRENT_CLASS,
-  FORCED_COLORS_FOCUS_CLASS,
   FORCED_COLORS_SURFACE_CLASS,
 } from './CatalogClassNames.js'
+
+const catalogScrollPositions = new Map<string, number>()
 
 const SKILLS_SH_API_DOCS_URL = 'https://www.skills.sh/docs/api#authentication'
 
@@ -78,24 +68,10 @@ const PLUGINS_EMPTY_BASE =
 const PLUGINS_CALLOUT_BASE =
   'tw:flex tw:min-w-0 tw:items-start tw:gap-3 tw:rounded-container tw:border tw:border-app-danger-border tw:bg-app-danger-subtle tw:p-4 tw:shadow-none tw:@max-[479px]/plugins-page:items-stretch tw:@max-[479px]/plugins-page:flex-wrap'
 
-const TAB_OPTIONS: ReadonlyArray<{ value: CatalogTab; label: string }> = [
-  { value: 'plugins', label: '插件' },
-  { value: 'skills', label: '技能' },
-]
-
-const CATEGORY_OPTIONS: ReadonlyArray<{ value: PluginCategoryFilter; label: string }> = [
-  { value: 'all', label: '全部' },
-  { value: 'included', label: 'Featured' },
-  { value: 'manageable', label: '可管理' },
-  { value: 'external', label: '外部' },
-]
-
-const STATUS_OPTIONS: ReadonlyArray<{ value: PluginStatusFilter; label: string }> = [
-  { value: 'all', label: '全部状态' },
-  { value: 'enabled', label: '已启用' },
-  { value: 'disabled', label: '已禁用' },
-  { value: 'unavailable', label: '当前不可用' },
-]
+const DIRECTORY_OPTIONS = [
+  { value: 'public', label: '公开' },
+  { value: 'personal', label: '个人' },
+] as const
 
 const SKILL_OWNER_OPTIONS: ReadonlyArray<{ value: DesktopSkillOwnerFilter; label: string }> = [
   { value: 'all', label: '全部' },
@@ -109,18 +85,31 @@ export function PluginsView(): React.ReactNode {
   const [searchParams, setSearchParams] = useSearchParams()
   const location = useMemo(() => parseCatalogLocation(searchParams), [searchParams])
   const { tab, target } = location
-  const [pluginQuery, setPluginQuery] = useState('')
+  const pluginQuery = searchParams.get('q') ?? ''
+  const pluginDirectory = searchParams.get('directory') === 'personal' ? 'personal' : 'public'
+  const selectedSection = searchParams.get('section')
+  const [addOpen, setAddOpen] = useState(false)
+  const [addError, setAddError] = useState<string | null>(null)
+  function updateBrowse(key: string, value: string) {
+    setSearchParams(
+      (current) => {
+        const next = new URLSearchParams(current)
+        if (value) next.set(key, value)
+        else next.delete(key)
+        if (key !== 'section') next.delete('section')
+        if (key === 'directory') next.delete('category')
+        return next
+      },
+      { replace: key === 'q' },
+    )
+  }
+  const setPluginQuery = (value: string) => updateBrowse('q', value)
   const [skillQuery, setSkillQuery] = useState('')
-  const [pluginCategory, setPluginCategory] = useState<PluginCategoryFilter>('all')
-  const [pluginStatus, setPluginStatus] = useState<PluginStatusFilter>('all')
   const [skillOwner, setSkillOwner] = useState<DesktopSkillOwnerFilter>('official')
-  const [filterMenuOpen, setFilterMenuOpen] = useState(false)
   const [announcement, setAnnouncement] = useState('')
   const [busyPluginIds, setBusyPluginIds] = useState<Set<string>>(() => new Set())
   const [pluginErrors, setPluginErrors] = useState<Record<string, string>>({})
-  const [confirmMiniMaxUninstall, setConfirmMiniMaxUninstall] = useState(false)
-  const [pluginDetails, setPluginDetails] = useState<Record<string, PluginDetails | null>>({})
-  const pluginDetailsRequestsRef = useRef(new Set<string>())
+  const [removingPlugin, setRemovingPlugin] = useState<PluginCatalogItem | null>(null)
   const [skills, setSkills] = useState<DesktopSkillCatalogItem[] | undefined>()
   const [skillsLoading, setSkillsLoading] = useState(false)
   const [skillsError, setSkillsError] = useState<string | null>(null)
@@ -132,12 +121,12 @@ export function PluginsView(): React.ReactNode {
   const lastTargetRef = useRef<CatalogDetailsTarget | null>(null)
   const {
     plugins,
+    sections,
     error: pluginLoadError,
     loading: pluginsLoading,
     refresh: refreshPlugins,
     setEnabled: setPluginEnabled,
   } = usePluginCatalog(workspacePath)
-  const miniMaxCli = useMiniMaxCli()
 
   useEffect(() => {
     if (!location.invalid) return
@@ -175,31 +164,36 @@ export function PluginsView(): React.ReactNode {
   }, [skillOwner, skillQuery, skillsReloadKey, tab])
 
   const pluginItems = useMemo(
-    () =>
-      mergePluginCatalog(PLUGIN_CATALOG_DESCRIPTORS, plugins, pluginLoadError, {
-        status: miniMaxCli.status,
-        loading: miniMaxCli.loading,
-        unsupported: miniMaxCli.unsupported,
-        error: miniMaxCli.error,
-      }),
-    [
-      miniMaxCli.error,
-      miniMaxCli.loading,
-      miniMaxCli.status,
-      miniMaxCli.unsupported,
-      plugins,
-      pluginLoadError,
-    ],
+    () => mergePluginCatalog(plugins, workspacePath),
+    [plugins, workspacePath],
   )
-  const visiblePlugins = useMemo(
-    () => filterPluginCatalog(pluginItems, pluginQuery, pluginCategory, pluginStatus),
-    [pluginCategory, pluginItems, pluginQuery, pluginStatus],
+  const directoryPlugins = pluginItems.filter((item) =>
+    pluginDirectory === 'public'
+      ? item.inMarketplace
+      : item.installed || item.source === 'workspace' || item.source === 'personal',
   )
-  const installedPluginOverview = useMemo(
-    () => selectInstalledPluginOverview(pluginItems),
-    [pluginItems],
-  )
-  const pluginGroups = useMemo(() => groupPluginCatalogBySource(visiblePlugins), [visiblePlugins])
+  const visiblePlugins = filterPluginCatalog(directoryPlugins, pluginQuery, 'all', 'all')
+  const pluginGroups: Array<{ id: string; label: string; items: PluginCatalogItem[] }> = (() => {
+    if (pluginDirectory === 'personal')
+      return (
+        [
+          ['bundled', '自带插件'],
+          ['installed', '已安装'],
+          ['workspace', '项目插件'],
+          ['personal', '个人插件'],
+        ] as const
+      )
+        .map(([id, label]) => ({
+          id,
+          label,
+          items: visiblePlugins.filter((item) => item.source === id),
+        }))
+        .filter((group) => group.items.length)
+    if (pluginQuery) return [{ id: 'results', label: '插件', items: visiblePlugins }]
+    const groups = groupMarketplacePlugins(visiblePlugins, sections)
+    if (selectedSection) return groups.filter((group) => group.id === selectedSection)
+    return groups.filter((group) => group.items.length)
+  })()
   const skillGroups = useMemo(() => groupSkillsForDisplay(skills ?? []), [skills])
   const selectedPlugin =
     target?.kind === 'plugin' ? (pluginItems.find((item) => item.id === target.id) ?? null) : null
@@ -209,35 +203,7 @@ export function PluginsView(): React.ReactNode {
     ? `${workspacePath ?? ''}\u0000${selectedPlugin.id}`
     : null
 
-  useEffect(() => {
-    if (
-      !selectedPlugin ||
-      !selectedPluginDetailsKey ||
-      Object.hasOwn(pluginDetails, selectedPluginDetailsKey) ||
-      pluginDetailsRequestsRef.current.has(selectedPluginDetailsKey)
-    )
-      return
-    let cancelled = false
-    pluginDetailsRequestsRef.current.add(selectedPluginDetailsKey)
-    desktopClient
-      .getPluginDetails(selectedPlugin.id, workspacePath)
-      .then((details) => {
-        if (!cancelled) {
-          setPluginDetails((current) => ({ ...current, [selectedPluginDetailsKey]: details }))
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setPluginDetails((current) => ({ ...current, [selectedPluginDetailsKey]: null }))
-        }
-      })
-      .finally(() => {
-        pluginDetailsRequestsRef.current.delete(selectedPluginDetailsKey)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [pluginDetails, selectedPlugin, selectedPluginDetailsKey, workspacePath])
+  const selectedDetails = usePluginDetails(selectedPlugin, workspacePath)
 
   useEffect(() => {
     if (target) {
@@ -250,14 +216,15 @@ export function PluginsView(): React.ReactNode {
     lastTargetRef.current = null
     window.requestAnimationFrame(() => {
       const selector = `[data-catalog-item-id="${previousTarget.kind}:${CSS.escape(previousTarget.id)}"]`
-      document.querySelector<HTMLButtonElement>(selector)?.focus() ??
-        searchInputRef.current?.focus()
+      const item = document.querySelector<HTMLButtonElement>(selector)
+      if (item) item.focus({ preventScroll: true })
+      else searchInputRef.current?.focus({ preventScroll: true })
     })
   }, [target])
 
   useEffect(() => {
     if (!target || location.invalid) return
-    const targetLoaded = target.kind === 'plugin' || skills !== undefined
+    const targetLoaded = target.kind === 'plugin' ? plugins !== undefined : skills !== undefined
     const targetExists = target.kind === 'plugin' ? selectedPlugin !== null : selectedSkill !== null
     if (targetLoaded && !targetExists) {
       setSearchParams(catalogBrowseParams(searchParams, tab), { replace: true })
@@ -269,18 +236,13 @@ export function PluginsView(): React.ReactNode {
     selectedSkill,
     setSearchParams,
     skills,
+    plugins,
     tab,
     target,
   ])
 
-  function showTab(nextTab: CatalogTab): void {
-    setSearchParams(catalogBrowseParams(searchParams, nextTab))
-    scrollRegionRef.current?.scrollTo({ top: 0 })
-  }
-
   function openDetails(nextTarget: CatalogDetailsTarget): void {
     setSearchParams(catalogDetailsParams(searchParams, nextTarget))
-    scrollRegionRef.current?.scrollTo({ top: 0 })
   }
 
   function closeDetails(): void {
@@ -308,33 +270,17 @@ export function PluginsView(): React.ReactNode {
       }
       return
     }
-    if (action.kind === 'install-minimax' || action.kind === 'update-minimax') {
-      setBusyPluginIds((current) => new Set(current).add(item.id))
-      try {
-        const result = await miniMaxCli.install()
-        setAnnouncement(
-          `MiniMax CLI ${action.kind === 'update-minimax' ? '更新' : '安装'}完成，当前版本 ${result.installedVersion ?? '可用'}。`,
-        )
-        window.requestAnimationFrame(() => trigger.isConnected && trigger.focus())
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'MiniMax CLI 安装失败。'
-        setPluginErrors((current) => ({ ...current, [item.id]: message }))
-        setAnnouncement(message)
-      } finally {
-        setBusyPluginIds((current) => {
-          const next = new Set(current)
-          next.delete(item.id)
-          return next
-        })
-      }
-      return
-    }
-    if (action.kind !== 'toggle-plugin') return
-    if (!item.installed || (item.status !== 'enabled' && item.status !== 'disabled')) return
     setBusyPluginIds((current) => new Set(current).add(item.id))
     try {
-      const result = await setPluginEnabled(item.id, checked ?? !action.checked)
-      setAnnouncement(`${item.name}已${result.enabled ? '启用' : '禁用'}。`)
+      if (action.kind === 'install') {
+        await desktopClient.installPlugin(item.id)
+        setAnnouncement(`${item.name}已安装。`)
+        refreshPlugins()
+        selectedDetails.retry()
+      } else if (action.kind === 'toggle-plugin') {
+        const result = await setPluginEnabled(item.id, checked ?? !action.checked)
+        setAnnouncement(`${item.name}已${result.enabled ? '启用' : '禁用'}。`)
+      }
       window.requestAnimationFrame(() => trigger.isConnected && trigger.focus())
     } catch (error) {
       const message = error instanceof Error ? error.message : `${item.name}状态更新失败。`
@@ -374,193 +320,290 @@ export function PluginsView(): React.ReactNode {
     }
   }
 
-  const activeLoading = tab === 'plugins' ? pluginsLoading || miniMaxCli.loading : skillsLoading
+  const activeLoading = tab === 'plugins' ? pluginsLoading : skillsLoading
+  const browseScrollKey = JSON.stringify([
+    workspacePath,
+    tab,
+    pluginDirectory,
+    pluginQuery,
+    selectedSection,
+    skillQuery,
+    skillOwner,
+  ])
+  useLayoutEffect(() => {
+    const element = scrollRegionRef.current
+    if (target || activeLoading || !element) return
+    element.scrollTop = catalogScrollPositions.get(browseScrollKey) ?? 0
+    return () => {
+      catalogScrollPositions.delete(browseScrollKey)
+      catalogScrollPositions.set(browseScrollKey, element.scrollTop)
+      if (catalogScrollPositions.size > 32)
+        catalogScrollPositions.delete(catalogScrollPositions.keys().next().value!)
+    }
+  }, [browseScrollKey, target, activeLoading])
 
-  async function uninstallMiniMaxCli(): Promise<void> {
+  async function uninstallPlugin(): Promise<void> {
+    if (!removingPlugin || busyPluginIds.has(removingPlugin.id)) return
+    const item = removingPlugin
+    setBusyPluginIds((current) => new Set(current).add(item.id))
     try {
-      await miniMaxCli.uninstall()
-      setAnnouncement('MiniMax CLI 已卸载，保存的登录信息也已删除。')
-      setConfirmMiniMaxUninstall(false)
+      await desktopClient.uninstallPlugin(item.id)
+      setAnnouncement(`${item.name}已移除。`)
+      setRemovingPlugin(null)
+      selectedDetails.retry()
+      refreshPlugins()
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'MiniMax CLI 卸载失败。'
-      setPluginErrors((current) => ({ ...current, minimax: message }))
+      const message = error instanceof Error ? error.message : '插件移除失败。'
+      setPluginErrors((current) => ({ ...current, [item.id]: message }))
       setAnnouncement(message)
+      setRemovingPlugin(null)
+    } finally {
+      setBusyPluginIds((current) => {
+        const next = new Set(current)
+        next.delete(item.id)
+        return next
+      })
     }
   }
 
-  function tryPluginPrompt(prompt: string): void {
-    composerDraftStore.prefillTextIfEmpty('home', prompt)
-    navigate('/new')
+  async function tryPluginPrompt(prompt: string): Promise<void> {
+    const item = selectedPlugin
+    if (!item || busyPluginIds.has(item.id)) return
+    setBusyPluginIds((current) => new Set(current).add(item.id))
+    setPluginErrors((current) => ({ ...current, [item.id]: '' }))
+    try {
+      await preparePluginPrompt(item, prompt)
+      refreshPlugins()
+      navigate('/new')
+    } catch (cause) {
+      setPluginErrors((current) => ({
+        ...current,
+        [item.id]: cause instanceof Error ? cause.message : '插件准备失败，请重试。',
+      }))
+    } finally {
+      setBusyPluginIds((current) => {
+        const next = new Set(current)
+        next.delete(item.id)
+        return next
+      })
+    }
   }
+
+  const headerSearch = (
+    <SearchInput
+      aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
+      className="plugins-header-search"
+      onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
+      placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}
+      ref={searchInputRef}
+      shape="pill"
+      size="md"
+      value={tab === 'plugins' ? pluginQuery : skillQuery}
+      variant="outlined"
+    />
+  )
+
+  const headerActions = (
+    <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
+      <Button
+        aria-busy={activeLoading}
+        disabled={activeLoading}
+        isIconOnly
+        onClick={() => {
+          if (tab === 'plugins') {
+            refreshPlugins()
+          } else {
+            setSkillsReloadKey((value) => value + 1)
+          }
+        }}
+        shape="pill"
+        size="md"
+        title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
+        variant="ghost"
+      >
+        <RefreshCw aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+      </Button>
+      <Button
+        isIconOnly
+        onClick={() => navigate('/settings/plugins')}
+        shape="pill"
+        size="md"
+        title="管理插件设置"
+        variant="ghost"
+      >
+        <Settings aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+      </Button>
+      {tab === 'plugins' ? (
+        <PopoverMenu
+          align="end"
+          open={addOpen}
+          onOpenChange={setAddOpen}
+          size="md"
+          trigger={
+            <Button color="primary" shape="pill" size="md">
+              添加
+              <ChevronDown aria-hidden="true" size={APP_ICON_SIZE} />
+            </Button>
+          }
+        >
+          <PopoverItem
+            icon={<Plus aria-hidden="true" size={APP_ICON_SIZE} />}
+            onClick={() => {
+              setAddOpen(false)
+              void desktopClient
+                .openExternalURL('https://github.com/codepilotx-dev/Pidex-Plugins#创建插件')
+                .catch((cause) =>
+                  setAddError(cause instanceof Error ? cause.message : '无法打开作者指南。'),
+                )
+            }}
+          >
+            创建插件
+          </PopoverItem>
+          <PopoverItem
+            icon={<Server aria-hidden="true" size={APP_ICON_SIZE} />}
+            onClick={() => {
+              setAddOpen(false)
+              navigate('/settings/plugins?tab=mcps&create=mcp')
+            }}
+          >
+            创建自定义 MCP 服务器
+          </PopoverItem>
+        </PopoverMenu>
+      ) : null}
+    </div>
+  )
 
   return (
     <>
-      <WorkspaceHeaderItem align="start" id="plugins.navigation" order={0} slot="left">
-        {target?.kind === 'plugin' ? (
-          <div className={cx('plugins-detail-breadcrumb', DETAILS_BREADCRUMB_CLASS)}>
-            <Button
-              color="ghostSecondary"
-              onClick={closeDetails}
-              ref={backButtonRef}
-              size="toolbar"
-            >
-              插件
-            </Button>
-            <ChevronRight
-              aria-hidden="true"
-              size={APP_ICON_SIZES.sm}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-            <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>
-              {selectedPlugin?.name ?? target.id}
-            </span>
-          </div>
-        ) : target ? (
-          <Button color="ghostSecondary" onClick={closeDetails} ref={backButtonRef} size="toolbar">
-            <ArrowLeft
-              aria-hidden="true"
-              size={APP_ICON_SIZE}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-            返回{tab === 'plugins' ? '插件' : '技能'}
-          </Button>
-        ) : (
-          <SegmentedControl
-            ariaLabel="扩展类型"
-            className="plugins-segmented-tabs"
-            getPanelId={(value) => `${value}-panel`}
-            getTabId={(value) => `${value}-tab`}
-            onChange={showTab}
-            overflowMode="fit"
-            options={TAB_OPTIONS}
-            semantics="tabs"
-            value={tab}
-          />
-        )}
-      </WorkspaceHeaderItem>
-      {target?.kind === 'plugin' ? null : (
-        <WorkspaceHeaderItem align="end" id="plugins.actions" order={100} slot="right">
-          <div className="plugins-header-actions tw:flex tw:min-w-0 tw:items-center tw:gap-2">
-            <Button
-              isIconOnly
-              aria-busy={activeLoading}
-              color="ghostSecondary"
-              disabled={activeLoading}
-              onClick={() => {
-                if (tab === 'plugins') {
-                  refreshPlugins()
-                  miniMaxCli.refresh()
-                } else {
-                  setSkillsReloadKey((value) => value + 1)
-                }
-              }}
-              size="toolbar"
-              title={`刷新${tab === 'plugins' ? '插件' : '技能'}目录`}
-            >
-              <RefreshCw
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            </Button>
-            <Button
-              isIconOnly
-              color="ghostSecondary"
-              onClick={() => navigate('/settings/plugins')}
-              size="toolbar"
-              title="管理插件设置"
-            >
-              <Settings2
-                aria-hidden="true"
-                size={APP_ICON_SIZE}
-                strokeWidth={APP_ICON_STROKE_WIDTH}
-              />
-            </Button>
-          </div>
-        </WorkspaceHeaderItem>
-      )}
-
       {target ? (
         <main className="plugins-details-page tw:h-full tw:w-full tw:min-w-0 tw:overflow-auto tw:bg-app-canvas tw:p-5 tw:@container/plugins-page">
-          {selectedPlugin ? (
-            <CatalogDetailsView
-              busy={busyPluginIds.has(selectedPlugin.id)}
-              details={
-                selectedPluginDetailsKey ? (pluginDetails[selectedPluginDetailsKey] ?? null) : null
-              }
-              error={pluginErrors[selectedPlugin.id]}
-              item={selectedPlugin}
-              kind="plugin"
-              onPrimaryAction={(item, trigger, checked) =>
-                void runPluginAction(item, trigger, checked)
-              }
-              onTryPrompt={tryPluginPrompt}
-              onUninstall={
-                selectedPlugin.id === 'minimax' ? () => setConfirmMiniMaxUninstall(true) : undefined
-              }
-            />
-          ) : selectedSkill ? (
-            <CatalogDetailsView
-              installing={installingSkillIds.has(selectedSkill.id)}
-              item={selectedSkill}
-              kind="skill"
-              onInstall={(item) => void installSkill(item)}
-              onOpenSource={(item) => item.url && void desktopClient.openExternalURL(item.url)}
-            />
-          ) : (
-            <div className="catalog-details-view tw:grid tw:mx-auto tw:w-[min(var(--page-content-max-width),100%)] tw:gap-7">
-              <CatalogSkeleton label={`正在加载${tab === 'plugins' ? '插件' : '技能'}详情`} />
+          <div className="tw:mx-auto tw:min-w-0 tw:w-[min(var(--page-content-max-width),100%)] tw:pb-8">
+            <div className="tw:mb-4 tw:flex tw:min-w-0 tw:items-center">
+              {target.kind === 'plugin' ? (
+                <div className={cx('plugins-detail-breadcrumb', DETAILS_BREADCRUMB_CLASS)}>
+                  <Button
+                    color="ghostSecondary"
+                    onClick={closeDetails}
+                    ref={backButtonRef}
+                    size="toolbar"
+                  >
+                    插件
+                  </Button>
+                  <ChevronRight
+                    aria-hidden="true"
+                    size="var(--inline-icon-size, 1em)"
+                    strokeWidth={APP_ICON_STROKE_WIDTH}
+                  />
+                  <span className={DETAILS_BREADCRUMB_CURRENT_CLASS}>
+                    {selectedPlugin?.name ?? target.id}
+                  </span>
+                </div>
+              ) : (
+                <Button
+                  color="ghostSecondary"
+                  onClick={closeDetails}
+                  ref={backButtonRef}
+                  size="toolbar"
+                >
+                  <ArrowLeft
+                    aria-hidden="true"
+                    size={APP_ICON_SIZE}
+                    strokeWidth={APP_ICON_STROKE_WIDTH}
+                  />
+                  返回{tab === 'plugins' ? '插件' : '技能'}
+                </Button>
+              )}
             </div>
-          )}
+            {selectedPlugin ? (
+              <CatalogDetailsView
+                busy={busyPluginIds.has(selectedPlugin.id)}
+                details={selectedDetails.details}
+                detailsError={selectedDetails.error}
+                onRetryDetails={selectedDetails.retry}
+                error={pluginErrors[selectedPlugin.id]}
+                item={selectedPlugin}
+                kind="plugin"
+                key={selectedPluginDetailsKey}
+                workspacePath={workspacePath}
+                onPrimaryAction={(item, trigger, checked) =>
+                  void runPluginAction(item, trigger, checked)
+                }
+                onTryPrompt={(prompt) => void tryPluginPrompt(prompt)}
+                onUninstall={
+                  selectedPlugin.canUninstall ? () => setRemovingPlugin(selectedPlugin) : undefined
+                }
+              />
+            ) : selectedSkill ? (
+              <CatalogDetailsView
+                installing={installingSkillIds.has(selectedSkill.id)}
+                item={selectedSkill}
+                kind="skill"
+                onInstall={(item) => void installSkill(item)}
+                onOpenSource={(item) => item.url && void desktopClient.openExternalURL(item.url)}
+              />
+            ) : (
+              <div className="catalog-details-view tw:grid tw:mx-auto tw:w-[min(var(--page-content-max-width),100%)] tw:gap-7">
+                <CatalogSkeleton label={`正在加载${tab === 'plugins' ? '插件' : '技能'}详情`} />
+              </div>
+            )}
+          </div>
         </main>
       ) : (
         <PrimaryPageLayout
+          actions={headerActions}
           className="plugins-primary-page tw:@container/plugins-page"
+          search={headerSearch}
+          scrollContainerRef={scrollRegionRef}
+          title={tab === 'plugins' ? '插件' : '技能'}
           description={
             tab === 'plugins' ? '在常用工具中扩展 Pidex 的能力。' : '查找并添加可复用的工作流指令。'
           }
-          scrollContainerRef={scrollRegionRef}
-          search={
-            <SearchInput
-              aria-label={tab === 'plugins' ? '搜索插件' : '搜索技能'}
-              onChange={tab === 'plugins' ? setPluginQuery : setSkillQuery}
-              placeholder={tab === 'plugins' ? '搜索插件' : '搜索技能'}
-              ref={searchInputRef}
-              value={tab === 'plugins' ? pluginQuery : skillQuery}
-            />
-          }
-          title={tab === 'plugins' ? '插件' : '技能'}
         >
           <div aria-live="polite" className="plugins-sr-status tw:sr-only">
             {announcement}
           </div>
+          {addError ? (
+            <CatalogCallout
+              title="无法打开作者指南"
+              message={addError}
+              onRetry={() => {
+                setAddError(null)
+                void desktopClient
+                  .openExternalURL('https://github.com/codepilotx-dev/Pidex-Plugins#创建插件')
+                  .catch((cause) =>
+                    setAddError(cause instanceof Error ? cause.message : '打开失败。'),
+                  )
+              }}
+            />
+          ) : null}
           {tab === 'plugins' ? (
             <PluginDirectory
+              onUninstall={setRemovingPlugin}
               busyPluginIds={busyPluginIds}
               clearFilters={() => {
-                setPluginQuery('')
-                setPluginCategory('all')
-                setPluginStatus('all')
+                setSearchParams((current) => {
+                  const next = new URLSearchParams(current)
+                  next.delete('q')
+                  next.delete('category')
+                  next.delete('section')
+                  return next
+                })
               }}
               groups={pluginGroups}
-              installed={installedPluginOverview}
               loadError={pluginLoadError}
               loading={pluginsLoading}
-              manage={() => navigate('/settings/plugins')}
               onOpenDetails={(item) => openDetails({ kind: 'plugin', id: item.id, tab: 'plugins' })}
               onPrimaryAction={(item, trigger, checked) =>
                 void runPluginAction(item, trigger, checked)
               }
-              onFilterMenuOpenChange={setFilterMenuOpen}
               pluginErrors={pluginErrors}
-              pluginCategory={pluginCategory}
-              pluginStatus={pluginStatus}
+              directory={pluginDirectory}
+              setDirectory={(value) => updateBrowse('directory', value)}
+              section={selectedSection}
+              openSection={(value) => updateBrowse('section', value)}
               query={pluginQuery}
               refresh={refreshPlugins}
-              setPluginCategory={setPluginCategory}
-              setPluginStatus={setPluginStatus}
-              filterMenuOpen={filterMenuOpen}
-              total={visiblePlugins.length}
+              total={pluginGroups.reduce((total, group) => total + group.items.length, 0)}
             />
           ) : (
             <SkillDirectory
@@ -584,190 +627,101 @@ export function PluginsView(): React.ReactNode {
         </PrimaryPageLayout>
       )}
       <ConfirmationDialog
-        actionDisabled={miniMaxCli.busy}
-        actionLabel="卸载并删除登录信息"
-        description="将卸载系统中的 MiniMax CLI，并删除它保存的 API Key 或 OAuth 登录信息。"
-        onAction={() => void uninstallMiniMaxCli()}
-        onCancel={() => setConfirmMiniMaxUninstall(false)}
-        open={confirmMiniMaxUninstall}
-        title="卸载 MiniMax CLI？"
+        actionDisabled={!!removingPlugin && busyPluginIds.has(removingPlugin.id)}
+        actionLabel="移除插件"
+        description={`将移除 ${removingPlugin?.name ?? '插件'} 的下载文件，之后可以重新安装。`}
+        onAction={() => void uninstallPlugin()}
+        onCancel={() => setRemovingPlugin(null)}
+        open={removingPlugin !== null}
+        title="移除插件？"
         tone="danger"
       />
     </>
   )
 }
 
-type CatalogStatusMenuProps = {
-  open: boolean
-  onOpenChange: (open: boolean) => void
-  pluginStatus: PluginStatusFilter
-  setPluginStatus: (value: PluginStatusFilter) => void
-}
-
-function CatalogStatusMenu(props: CatalogStatusMenuProps): React.ReactNode {
-  return (
-    <PopoverMenu
-      align="end"
-      onOpenChange={props.onOpenChange}
-      open={props.open}
-      trigger={
-        <Button isIconOnly color="secondary" size="toolbar" title="筛选目录">
-          <ListFilter aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-        </Button>
-      }
-      size="md"
-    >
-      <PopoverLabel>状态</PopoverLabel>
-      <PopoverRadioGroup
-        onValueChange={(value) => props.setPluginStatus(value as PluginStatusFilter)}
-        value={props.pluginStatus}
-      >
-        {STATUS_OPTIONS.map((option) => (
-          <PopoverRadioItem key={option.value} value={option.value}>
-            {option.label}
-          </PopoverRadioItem>
-        ))}
-      </PopoverRadioGroup>
-    </PopoverMenu>
-  )
-}
-
 type PluginDirectoryProps = {
+  onUninstall: (item: PluginCatalogItem) => void
   busyPluginIds: Set<string>
   clearFilters: () => void
-  filterMenuOpen: boolean
-  groups: ReturnType<typeof groupPluginCatalogBySource>
-  installed: PluginCatalogItem[]
+  groups: Array<{ id: string; label: string; items: PluginCatalogItem[] }>
   loadError: string | null
   loading: boolean
-  manage: () => void
-  onFilterMenuOpenChange: (open: boolean) => void
   onOpenDetails: (item: PluginCatalogItem) => void
   onPrimaryAction: (item: PluginCatalogItem, trigger: HTMLButtonElement, checked?: boolean) => void
-  pluginCategory: PluginCategoryFilter
+  directory: 'public' | 'personal'
+  setDirectory: (value: string) => void
+  section: string | null
+  openSection: (value: string) => void
   pluginErrors: Record<string, string>
-  pluginStatus: PluginStatusFilter
   query: string
   refresh: () => void
-  setPluginCategory: (value: PluginCategoryFilter) => void
-  setPluginStatus: (value: PluginStatusFilter) => void
   total: number
 }
 
 function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
   return (
-    <div
-      aria-labelledby="plugins-tab"
-      className="plugins-panel tw:grid tw:min-w-0 tw:gap-8"
-      id="plugins-panel"
-      role="tabpanel"
-    >
-      <section
-        aria-labelledby="included-plugins-title"
-        className="plugins-included-overview tw:grid tw:gap-1"
-      >
-        <header className="plugins-section-heading tw:flex tw:min-h-8 tw:min-w-0 tw:items-center tw:justify-between tw:gap-3 tw:border-b tw:border-b-app-border-subtle tw:pb-2">
-          <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm" id="included-plugins-title">
-            已安装
-          </h2>
-          <span className="plugins-sr-status tw:sr-only">共 {props.installed.length} 个插件</span>
-          <Button
-            isIconOnly
-            color="ghostSecondary"
-            onClick={props.manage}
-            size="toolbar"
-            title="管理插件设置"
-          >
-            <Settings aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-          </Button>
-        </header>
-        <ul className="plugins-included-overview__list tw:m-0 tw:flex tw:h-11 tw:min-w-0 tw:list-none tw:flex-nowrap tw:gap-1 tw:overflow-hidden tw:p-0">
-          {props.installed.length === 0 ? (
-            <li className="plugins-included-overview__empty tw:inline-flex tw:items-center tw:text-app-text-soft tw:type-body-sm">
-              暂无已启用插件
-            </li>
-          ) : null}
-          {props.installed.map((item) => (
-            <li key={item.id}>
-              <button
-                aria-label={`查看 ${item.name} 详情`}
-                className={cx(
-                  'plugins-included-overview__item tw:group tw:inline-flex tw:size-11 tw:cursor-pointer tw:items-center tw:justify-center tw:rounded-xl tw:border-0 tw:bg-transparent tw:p-1 tw:text-app-text tw:focus-visible:outline-2 tw:focus-visible:outline-solid tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus',
-                  FORCED_COLORS_SURFACE_CLASS,
-                  FORCED_COLORS_FOCUS_CLASS,
-                )}
-                data-catalog-item-id={`plugin:${item.id}`}
-                data-plugin-tone={item.tone}
-                onClick={() => props.onOpenDetails(item)}
-                title={item.name}
-                type="button"
-              >
-                <span
-                  className={cx(
-                    'plugins-included-overview__logo tw:inline-flex tw:size-9 tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-lg tw:border-[0.5px] tw:border-app-border-subtle tw:bg-app-raised tw:shadow-lg tw:transition-transform tw:duration-feedback tw:ease-standard tw:group-hover:-translate-y-1',
-                    FORCED_COLORS_SURFACE_CLASS,
-                  )}
-                >
-                  <PluginIcon
-                    logoDarkSource={item.logoDarkSource}
-                    logoSource={item.logoSource}
-                    name={item.iconName}
-                  />
-                </span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-
+    <div className="plugins-panel tw:grid tw:min-w-0 tw:shrink-0 tw:gap-8" id="plugins-panel">
       <div className="plugins-directory-navigation tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3 tw:@max-[479px]/plugins-page:items-stretch">
         <SegmentedControl
           ariaLabel="插件来源"
-          onChange={props.setPluginCategory}
-          options={CATEGORY_OPTIONS}
+          onChange={props.setDirectory}
+          options={DIRECTORY_OPTIONS}
           overflowMode="fit"
-          value={props.pluginCategory}
-        />
-        <CatalogStatusMenu
-          onOpenChange={props.onFilterMenuOpenChange}
-          open={props.filterMenuOpen}
-          pluginStatus={props.pluginStatus}
-          setPluginStatus={props.setPluginStatus}
+          shape="pill"
+          size="md"
+          value={props.directory}
         />
       </div>
 
+      {props.section ? (
+        <Button color="ghostSecondary" onClick={() => props.openSection('')}>
+          返回全部栏目
+        </Button>
+      ) : null}
       {props.loadError ? (
         <CatalogCallout
           message={props.loadError}
           onRetry={props.refresh}
-          title="无法读取可管理插件状态"
+          title="插件目录刷新失败"
         />
       ) : null}
 
-      {props.loading ? (
+      {props.loading && props.total === 0 ? (
         <CatalogSkeleton label="正在加载插件目录" />
-      ) : props.total === 0 ? (
+      ) : props.total === 0 && props.loadError ? null : props.total === 0 ? (
         <CatalogEmpty
           actionLabel="清除筛选"
-          message={
-            props.query ? `没有找到与“${props.query}”匹配的插件。` : '清除来源或状态筛选后再试。'
-          }
+          message={props.query ? `没有找到与“${props.query}”匹配的插件。` : '清除来源筛选后再试。'}
           onAction={props.clearFilters}
           title={props.query ? '没有匹配的插件' : '当前筛选没有结果'}
         />
       ) : (
         <div className="plugins-source-groups tw:grid tw:min-w-0 tw:gap-8">
           {props.groups.map((group) => (
-            <section
-              className="plugins-source-group tw:grid tw:min-w-0 tw:gap-3"
-              key={group.category}
-            >
+            <section className="plugins-source-group tw:grid tw:min-w-0 tw:gap-3" key={group.id}>
               <header className="plugins-section-heading tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-3">
-                <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">{group.label}</h2>
+                <h2 className="tw:m-0 tw:text-app-text tw:type-title-sm">
+                  {props.directory === 'public' && !props.query && !props.section ? (
+                    <button
+                      className="tw:inline-flex tw:cursor-pointer tw:items-center tw:gap-1 tw:rounded-control tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus"
+                      type="button"
+                      onClick={() => props.openSection(group.id)}
+                    >
+                      {group.label}
+                      <ChevronRight aria-hidden="true" size={APP_ICON_SIZE} />
+                    </button>
+                  ) : (
+                    group.label
+                  )}
+                </h2>
                 <span className="plugins-sr-status tw:sr-only">共 {group.items.length} 项</span>
               </header>
               <ul className="plugins-catalog-grid tw:m-0 tw:grid tw:grid-cols-2 tw:min-w-0 tw:list-none tw:gap-x-7 tw:gap-y-4 tw:p-0 tw:@max-[580px]/plugins-page:grid-cols-1">
-                {group.items.map((item) => (
+                {(props.directory === 'public' && !props.section && !props.query
+                  ? group.items.slice(0, 8)
+                  : group.items
+                ).map((item) => (
                   <PluginCatalogCard
                     busy={props.busyPluginIds.has(item.id)}
                     error={props.pluginErrors[item.id]}
@@ -775,6 +729,7 @@ function PluginDirectory(props: PluginDirectoryProps): React.ReactNode {
                     key={item.id}
                     onOpenDetails={(plugin) => props.onOpenDetails(plugin)}
                     onPrimaryAction={props.onPrimaryAction}
+                    onUninstall={props.onUninstall}
                   />
                 ))}
               </ul>
@@ -806,10 +761,8 @@ function SkillDirectory(props: SkillDirectoryProps): React.ReactNode {
   return (
     <div
       aria-busy={props.loading || undefined}
-      aria-labelledby="skills-tab"
-      className="plugins-panel tw:grid tw:min-w-0 tw:gap-8"
+      className="plugins-panel tw:grid tw:min-w-0 tw:shrink-0 tw:gap-8"
       id="skills-panel"
-      role="tabpanel"
     >
       <div className="plugins-directory-navigation tw:flex tw:min-w-0 tw:flex-wrap tw:items-center tw:justify-between tw:gap-3 tw:@max-[479px]/plugins-page:items-stretch">
         <SegmentedControl
@@ -817,6 +770,8 @@ function SkillDirectory(props: SkillDirectoryProps): React.ReactNode {
           onChange={props.setSkillOwner}
           options={SKILL_OWNER_OPTIONS}
           overflowMode="fit"
+          shape="pill"
+          size="md"
           value={props.skillOwner}
         />
       </div>

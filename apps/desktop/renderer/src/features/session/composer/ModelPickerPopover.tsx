@@ -3,25 +3,31 @@ import {
   APP_ICON_STROKE_WIDTH,
   APP_ICON_SIZE,
 } from '../../../components/ui/IconTokens.js'
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Popover as Popover } from '../../../components/ui/floating/Popover.js'
-import { ChevronDown, ChevronLeft, Plus, Search, X } from 'lucide-react'
-import type { DesktopModelProviderSummary, ModelProviderID } from '../../../../shared/Types.js'
-import type { ModelPreset } from '../../../ModelPresets.js'
-import {
-  resolveThinkingLabel,
-  resolveThinkingOptions,
-  type ThinkingOption,
-} from './ThinkingLevelPopover.js'
+import { Tooltip } from '../../../components/ui/Tooltip.js'
+import { Brain, Check, ChevronLeft, Eye, Plus, Search, X } from 'lucide-react'
+import type {
+  DesktopModelMetadata,
+  DesktopModelProviderSummary,
+  ModelProviderID,
+} from '../../../../shared/Types.js'
+import { sortModelPresetsByName, type ModelPreset } from '../../../ModelPresets.js'
+import { modelCapabilityBadges } from './ModelCapabilitySummary.js'
+import { centeredScrollTop } from './CenterSelectedModel.js'
 import { cx } from '../../../utils/Cx.js'
 import { ProviderLogo } from './ProviderLogos.js'
-import { ReasoningMenu } from './ReasoningMenu.js'
+import { modelLogoURL } from '../../../services/desktop-client/ModelLogo.js'
+import { OverflowTitle } from '../../../components/ui/OverflowTitle.js'
+import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 
 /*
  * Integrated model picker. `.composer-model-name` and `.composer-reasoning-menu-*`
  * keep their font in `src/styles/primitives/composer.css` (the selected state
  * raises the weight, which cannot be a utility next to the `font` shorthand
- * roles), and the provider/model lists hide their scrollbar there too.
+ * roles), and the provider/model lists hide their scrollbar there too. The same
+ * file owns the model name's overflow fade and scroll rules, because the name is
+ * measured at runtime by `OverflowTitle`.
  */
 const PANEL_CONTENT_CLASS = 'composer-model-panel-content tw:overflow-hidden'
 const PANEL_CLASS =
@@ -107,7 +113,7 @@ const MODELS_LIST_CLASS =
 const HUB_LIST_CLASS =
   'composer-models-list composer-hub-list tw:flex tw:flex-1 tw:flex-col tw:gap-1.5 tw:overflow-y-auto tw:px-0.5'
 const MODEL_ROW_CLASS = cx(
-  'composer-model-row tw:group tw:flex tw:cursor-pointer tw:items-center tw:justify-between',
+  'composer-model-row tw:group tw:flex tw:min-h-8.5 tw:cursor-pointer tw:items-center tw:justify-between',
   'tw:rounded-control tw:px-3 tw:py-2',
   'tw:transition-colors tw:duration-feedback tw:ease-standard tw:hover:bg-app-hover',
 )
@@ -118,20 +124,16 @@ const MODEL_ROW_MAIN_CLASS =
 const MODEL_ROW_ICON_CLASS = 'composer-model-row-icon tw:size-icon-md tw:shrink-0 tw:text-app-text'
 const MODEL_ROW_TRAILING_CLASS =
   'composer-model-row-trailing tw:flex tw:shrink-0 tw:items-center tw:gap-2'
-const MODEL_DOT_CLASS = cx(
-  'composer-model-dot tw:flex tw:size-4.5 tw:shrink-0 tw:items-center tw:justify-center tw:rounded-full',
-  'tw:transition-colors tw:duration-feedback tw:ease-standard',
+const MODEL_MARK_CLASS = cx(
+  'composer-model-row-mark tw:flex tw:size-4.5 tw:shrink-0 tw:items-center tw:justify-center',
+  'tw:text-app-text',
 )
-const MODEL_DOT_IDLE_CLASS =
-  'tw:border-[1.5px] tw:border-app-border tw:group-hover:border-app-border-strong'
-const MODEL_DOT_SELECTED_CLASS = 'is-selected tw:bg-app-accent'
-const MODEL_DOT_INNER_CLASS =
-  'composer-model-dot-inner tw:size-1.5 tw:rounded-full tw:bg-app-on-accent'
-const EFFORT_PILL_CLASS = cx(
-  'composer-effort-pill tw:inline-flex tw:cursor-pointer tw:items-center tw:gap-1 tw:rounded-compact tw:border-0',
-  'tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_10%,transparent)] tw:px-2 tw:py-0.5 tw:text-app-text tw:type-label',
-  'tw:transition-colors tw:duration-feedback tw:ease-standard',
-  'tw:hover:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_16%,transparent)]',
+const CAPABILITIES_CLASS =
+  'composer-model-capabilities tw:hidden tw:shrink-0 tw:items-center tw:gap-1 tw:group-hover:flex'
+const CAPABILITY_CHIP_CLASS = cx(
+  'composer-model-capability tw:inline-flex tw:h-4.5 tw:shrink-0 tw:items-center tw:justify-center tw:gap-1',
+  'tw:rounded-indicator tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_9%,transparent)]',
+  'tw:px-1.5 tw:text-app-text-soft tw:type-label tw:tabular-nums',
 )
 const HUB_ROW_CLASS = cx(
   'composer-hub-row tw:flex tw:cursor-pointer tw:items-center tw:justify-between tw:gap-2.5',
@@ -171,6 +173,7 @@ export type ProviderModelOption = {
   displayName: string
   modelPresets: ModelPreset[]
   logoURL?: string
+  modelMetadata?: Record<string, DesktopModelMetadata>
 }
 
 export type ModelPickerPopoverProps = {
@@ -181,13 +184,6 @@ export type ModelPickerPopoverProps = {
   selectedModelPreset?: string
   providerOptions: ProviderModelOption[]
   allProviders?: readonly DesktopModelProviderSummary[]
-  deepSeekThinkingControls: boolean
-  showThinkingOptions: boolean
-  thinkingMode: string
-  thinkingPreviewMode?: string | null
-  thinkingOptions: ThinkingOption[]
-  onThinkingChange: (mode: string) => void
-  onThinkingPreviewChange?: (mode: string | null) => void
   onProviderModelChange: (providerID: ModelProviderID, modelID: string) => void
   onProviderOpen?: (providerID: ModelProviderID) => void
   onProviderSearch?: (providerID: ModelProviderID, query: string) => void
@@ -195,6 +191,12 @@ export type ModelPickerPopoverProps = {
   align?: 'start' | 'center' | 'end'
   side?: 'top' | 'right' | 'bottom' | 'left'
   sideOffset?: number
+  /**
+   * Optional reasoning control rendered in the panel footer. The composer hides
+   * the inline capsule label at tight widths and re-exposes the same control
+   * here; callers without this slot keep the original panel layout.
+   */
+  reasoningControl?: React.ReactNode
 }
 
 type HubProviderItem = {
@@ -215,13 +217,6 @@ export function ModelPickerPopover({
   selectedModelPreset,
   providerOptions,
   allProviders,
-  deepSeekThinkingControls,
-  showThinkingOptions,
-  thinkingMode,
-  thinkingPreviewMode,
-  thinkingOptions,
-  onThinkingChange,
-  onThinkingPreviewChange,
   onProviderModelChange,
   onProviderOpen,
   onProviderSearch,
@@ -229,6 +224,7 @@ export function ModelPickerPopover({
   align = 'end',
   side = 'top',
   sideOffset = 4,
+  reasoningControl,
 }: ModelPickerPopoverProps): React.ReactNode {
   const [activeProviderID, setActiveProviderID] = useState<ModelProviderID>(
     selectedProviderID ?? providerOptions[0]?.providerID ?? 'openai',
@@ -237,19 +233,15 @@ export function ModelPickerPopover({
   const [searchExpanded, setSearchExpanded] = useState(false)
   const [filterText, setFilterText] = useState('')
   const [hubFilterText, setHubFilterText] = useState('')
+  const [hoveredModelID, setHoveredModelID] = useState<string | null>(null)
+  const reducedMotion = usePrefersReducedMotion()
   const searchInputRef = useRef<HTMLInputElement>(null)
   const hubSearchInputRef = useRef<HTMLInputElement>(null)
+  const modelsListRef = useRef<HTMLDivElement>(null)
+  const modelRowRefs = useRef(new Map<string, HTMLDivElement>())
+  const previousProviderIDRef = useRef<ModelProviderID | null>(null)
   const providerSearchTimersRef = useRef(new Map<ModelProviderID, ReturnType<typeof setTimeout>>())
   const lastForwardedQueryRef = useRef('')
-
-  const effectiveThinkingOptions = useMemo(
-    () => resolveThinkingOptions(deepSeekThinkingControls, thinkingOptions),
-    [deepSeekThinkingControls, thinkingOptions],
-  )
-  const currentThinkingLabel = resolveThinkingLabel(
-    effectiveThinkingOptions,
-    thinkingPreviewMode ?? thinkingMode,
-  )
 
   useEffect(() => {
     if (selectedProviderID) setActiveProviderID(selectedProviderID)
@@ -268,6 +260,7 @@ export function ModelPickerPopover({
       setSearchExpanded(false)
       setFilterText('')
       setHubFilterText('')
+      setHoveredModelID(null)
     }
   }, [open, activeProviderID, onProviderOpen, onProviderSearch])
 
@@ -296,12 +289,46 @@ export function ModelPickerPopover({
 
   const filteredModels = useMemo(() => {
     const query = filterText.trim().toLowerCase()
-    if (!query) return currentProvider.modelPresets
-    return currentProvider.modelPresets.filter(
-      (model) =>
-        model.label.toLowerCase().includes(query) || model.id.toLowerCase().includes(query),
-    )
+    const models = query
+      ? currentProvider.modelPresets.filter(
+          (model) =>
+            model.label.toLowerCase().includes(query) || model.id.toLowerCase().includes(query),
+        )
+      : currentProvider.modelPresets
+    // 选择器固定按模型名 A→Z 展示；搜索只缩小范围，不改变排序规则。
+    return sortModelPresetsByName(models)
   }, [currentProvider, filterText])
+
+  const currentProviderModelMetadata = useMemo(
+    () =>
+      currentProvider.modelMetadata ??
+      allProviders?.find((provider) => provider.providerID === activeProviderID)?.modelMetadata,
+    [activeProviderID, allProviders, currentProvider.modelMetadata],
+  )
+
+  // 打开面板（或切换服务商）时把选中模型滚到列表中间；搜索期间不抢滚动位置。
+  useLayoutEffect(() => {
+    const list = modelsListRef.current
+    const providerChanged = previousProviderIDRef.current !== activeProviderID
+    previousProviderIDRef.current = activeProviderID
+    if (!open || isHubOpen || !list) return
+    const row = selectedModelPreset ? modelRowRefs.current.get(selectedModelPreset) : undefined
+    if (filterText.trim()) return
+    if (!row) {
+      if (providerChanged) list.scrollTop = 0
+      return
+    }
+    const listRect = list.getBoundingClientRect()
+    const rowRect = row.getBoundingClientRect()
+    list.scrollTop = centeredScrollTop({
+      scrollTop: list.scrollTop,
+      scrollHeight: list.scrollHeight,
+      listTop: listRect.top,
+      listClientHeight: list.clientHeight,
+      rowTop: rowRect.top,
+      rowHeight: rowRect.height,
+    })
+  }, [open, isHubOpen, activeProviderID, selectedModelPreset, filterText, filteredModels])
 
   const hubProviders = useMemo<HubProviderItem[]>(() => {
     if (allProviders && allProviders.length > 0) {
@@ -413,278 +440,354 @@ export function ModelPickerPopover({
     handleProviderSelect(hubProviderID as ModelProviderID)
   }
 
+  const isAnchorOnly =
+    React.isValidElement(trigger) &&
+    Boolean((trigger.props as Record<string, any>)?.['data-composer-model-anchor'])
+
   return (
     <Popover.Root open={open} onOpenChange={onOpenChange}>
-      <Popover.Trigger asChild>{trigger}</Popover.Trigger>
-      <Popover.Portal>
-        <Popover.Content
-          size="lg"
-          align={align}
-          side={side}
-          sideOffset={sideOffset}
-          className={PANEL_CONTENT_CLASS}
-          style={{ padding: 0 }}
-        >
-          <div className={PANEL_CLASS}>
-            {/* Left provider rail */}
-            <div className={PROVIDER_RAIL_CLASS}>
-              <div className={PROVIDER_LIST_CLASS}>
-                {providerOptions.length > 0 ? (
-                  providerOptions.map((provider) => {
-                    const isActive = !isHubOpen && provider.providerID === activeProviderID
-                    return (
-                      <button
-                        key={provider.providerID}
-                        type="button"
-                        onClick={() => handleProviderSelect(provider.providerID)}
-                        className={cx(
-                          PROVIDER_BUTTON_CLASS,
-                          isActive ? PROVIDER_BUTTON_ACTIVE_CLASS : PROVIDER_BUTTON_IDLE_CLASS,
-                        )}
-                        title={provider.displayName || provider.providerID}
-                      >
-                        <ProviderLogo logoURL={provider.logoURL} />
-                      </button>
-                    )
-                  })
-                ) : (
+      {isAnchorOnly ? (
+        <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+      ) : (
+        <Tooltip content="选择推理强度" shortcut="Ctrl+Shift+M" side="top" disabled={open}>
+          <Popover.Trigger asChild>{trigger}</Popover.Trigger>
+        </Tooltip>
+      )}
+      {open ? (
+        <Popover.Portal>
+          <Popover.Content
+            size="lg"
+            align={align}
+            side={side}
+            sideOffset={sideOffset}
+            className={PANEL_CONTENT_CLASS}
+            style={{ padding: 0 }}
+          >
+            <div className={PANEL_CLASS}>
+              {/* Left provider rail */}
+              <div className={PROVIDER_RAIL_CLASS}>
+                <div className={PROVIDER_LIST_CLASS}>
+                  {providerOptions.length > 0 ? (
+                    providerOptions.map((provider) => {
+                      const isActive = !isHubOpen && provider.providerID === activeProviderID
+                      return (
+                        <button
+                          key={provider.providerID}
+                          type="button"
+                          onClick={() => handleProviderSelect(provider.providerID)}
+                          className={cx(
+                            PROVIDER_BUTTON_CLASS,
+                            isActive ? PROVIDER_BUTTON_ACTIVE_CLASS : PROVIDER_BUTTON_IDLE_CLASS,
+                          )}
+                          title={provider.displayName || provider.providerID}
+                        >
+                          <ProviderLogo
+                            logoURL={provider.logoURL}
+                            providerID={provider.providerID}
+                          />
+                        </button>
+                      )
+                    })
+                  ) : (
+                    <button
+                      type="button"
+                      className={cx(PROVIDER_BUTTON_CLASS, PROVIDER_BUTTON_ACTIVE_CLASS)}
+                      title={activeProviderID}
+                    >
+                      <ProviderLogo
+                        logoURL={providerLogoURL(activeProviderID)}
+                        providerID={activeProviderID}
+                      />
+                    </button>
+                  )}
+                </div>
+
+                <div className={HUB_TRIGGER_WRAP_CLASS}>
                   <button
                     type="button"
-                    className={cx(PROVIDER_BUTTON_CLASS, PROVIDER_BUTTON_ACTIVE_CLASS)}
-                    title={activeProviderID}
-                  >
-                    <ProviderLogo logoURL={providerLogoURL(activeProviderID)} />
-                  </button>
-                )}
-              </div>
-
-              <div className={HUB_TRIGGER_WRAP_CLASS}>
-                <button
-                  type="button"
-                  onClick={() => setIsHubOpen((previous) => !previous)}
-                  className={cx(
-                    HUB_TRIGGER_BUTTON_CLASS,
-                    isHubOpen ? PROVIDER_BUTTON_ACTIVE_CLASS : PROVIDER_BUTTON_IDLE_CLASS,
-                  )}
-                  title="模型中心：发现并配置服务商"
-                >
-                  <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                </button>
-              </div>
-            </div>
-
-            {/* Right panel */}
-            <div className={MODEL_RIGHT_CLASS}>
-              {isHubOpen ? (
-                /* View 2: Model Hub view */
-                <div className={PICKER_VIEW_CLASS}>
-                  <div className={MODELS_HEADER_CLASS}>
-                    <div className={MODELS_HEADER_LEAD_CLASS}>
-                      <button
-                        type="button"
-                        onClick={() => setIsHubOpen(false)}
-                        className={HUB_BACK_CLASS}
-                        title="返回模型列表"
-                      >
-                        <ChevronLeft size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                      </button>
-                      <span className={MODELS_TITLE_CLASS}>模型中心</span>
-                    </div>
-
-                    <div className={HUB_SEARCH_BAR_CLASS}>
-                      <Search
-                        size={APP_ICON_SIZE}
-                        strokeWidth={APP_ICON_STROKE_WIDTH}
-                        className={SEARCH_BAR_ICON_CLASS}
-                      />
-                      <input
-                        ref={hubSearchInputRef}
-                        type="text"
-                        placeholder="搜索服务商..."
-                        value={hubFilterText}
-                        onChange={(event) => setHubFilterText(event.target.value)}
-                        className={HUB_SEARCH_INPUT_CLASS}
-                      />
-                    </div>
-                  </div>
-
-                  <div className={HUB_LIST_CLASS}>
-                    {filteredHubProviders.length > 0 ? (
-                      filteredHubProviders.map((provider) => {
-                        const isConfigured = providerOptions.some(
-                          (option) => option.providerID === provider.id,
-                        )
-                        return (
-                          <div
-                            key={provider.id}
-                            className={HUB_ROW_CLASS}
-                            onClick={() => {
-                              if (isConfigured) handleHubSelect(provider.id)
-                            }}
-                          >
-                            <div className={HUB_ROW_MAIN_CLASS}>
-                              <div className={HUB_ROW_LOGO_CLASS}>
-                                <ProviderLogo logoURL={providerLogoURL(provider.id)} />
-                              </div>
-                              <div className={HUB_ROW_TEXT_CLASS}>
-                                <div className={HUB_ROW_TITLE_CLASS}>
-                                  <span className={HUB_ROW_NAME_CLASS}>{provider.name}</span>
-                                  <span className={HUB_BADGE_CLASS}>{provider.category}</span>
-                                </div>
-                                <p className={HUB_ROW_DESC_CLASS}>{provider.desc}</p>
-                              </div>
-                            </div>
-                            <div className={HUB_ROW_ACTIONS_CLASS}>
-                              {isConfigured ? (
-                                <span className={HUB_BADGE_CONNECTED_CLASS}>已配置</span>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={(event) => {
-                                    event.stopPropagation()
-                                    handleHubSelect(provider.id)
-                                  }}
-                                  className={HUB_ACTION_BUTTON_CLASS}
-                                >
-                                  去配置
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className={MODELS_EMPTY_CLASS}>没有匹配的服务商</div>
+                    onClick={() => setIsHubOpen((previous) => !previous)}
+                    className={cx(
+                      HUB_TRIGGER_BUTTON_CLASS,
+                      isHubOpen ? PROVIDER_BUTTON_ACTIVE_CLASS : PROVIDER_BUTTON_IDLE_CLASS,
                     )}
-                  </div>
+                    title="模型中心：发现并配置服务商"
+                  >
+                    <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                  </button>
                 </div>
-              ) : (
-                /* View 1: Models Selection View */
-                <div className={PICKER_VIEW_CLASS}>
-                  <div className={MODELS_HEADER_CLASS}>
-                    <span className={MODELS_TITLE_CLASS}>
-                      {currentProvider.displayName || '模型列表'}
-                    </span>
+              </div>
 
-                    <div className={MODELS_HEADER_ACTIONS_CLASS}>
-                      {searchExpanded ? (
-                        <div className={SEARCH_BAR_CLASS}>
-                          <Search
-                            size={APP_ICON_SIZE}
-                            strokeWidth={APP_ICON_STROKE_WIDTH}
-                            className={SEARCH_BAR_ICON_CLASS}
-                          />
-                          <input
-                            ref={searchInputRef}
-                            type="text"
-                            placeholder="过滤模型..."
-                            value={filterText}
-                            onChange={(event) => handleFilterChange(event.target.value)}
-                            onKeyDown={(event) => {
-                              if (event.key !== 'Escape') return
-                              event.stopPropagation()
-                              resetFilter()
-                            }}
-                            className={SEARCH_INPUT_CLASS}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              resetFilter()
-                              searchInputRef.current?.blur()
-                            }}
-                            className={SEARCH_CLEAR_CLASS}
-                            title="清除并关闭"
-                          >
-                            <X size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
-                          </button>
-                        </div>
-                      ) : (
+              {/* Right panel */}
+              <div className={MODEL_RIGHT_CLASS}>
+                {isHubOpen ? (
+                  /* View 2: Model Hub view */
+                  <div className={PICKER_VIEW_CLASS}>
+                    <div className={MODELS_HEADER_CLASS}>
+                      <div className={MODELS_HEADER_LEAD_CLASS}>
                         <button
                           type="button"
-                          onClick={() => setSearchExpanded(true)}
-                          className={SEARCH_TRIGGER_CLASS}
+                          onClick={() => setIsHubOpen(false)}
+                          className={HUB_BACK_CLASS}
+                          title="返回模型列表"
                         >
-                          <span>快速搜索</span>
-                          <Search size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                          <ChevronLeft size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
                         </button>
+                        <span className={MODELS_TITLE_CLASS}>模型中心</span>
+                      </div>
+
+                      <div className={HUB_SEARCH_BAR_CLASS}>
+                        <Search
+                          size={APP_ICON_SIZE}
+                          strokeWidth={APP_ICON_STROKE_WIDTH}
+                          className={SEARCH_BAR_ICON_CLASS}
+                        />
+                        <input
+                          ref={hubSearchInputRef}
+                          type="text"
+                          placeholder="搜索服务商..."
+                          value={hubFilterText}
+                          onChange={(event) => setHubFilterText(event.target.value)}
+                          className={HUB_SEARCH_INPUT_CLASS}
+                        />
+                      </div>
+                    </div>
+
+                    <div className={HUB_LIST_CLASS}>
+                      {filteredHubProviders.length > 0 ? (
+                        filteredHubProviders.map((provider) => {
+                          const isConfigured = providerOptions.some(
+                            (option) => option.providerID === provider.id,
+                          )
+                          return (
+                            <div
+                              key={provider.id}
+                              className={HUB_ROW_CLASS}
+                              onClick={() => {
+                                if (isConfigured) handleHubSelect(provider.id)
+                              }}
+                            >
+                              <div className={HUB_ROW_MAIN_CLASS}>
+                                <div className={HUB_ROW_LOGO_CLASS}>
+                                  <ProviderLogo
+                                    logoURL={providerLogoURL(provider.id)}
+                                    providerID={provider.id}
+                                  />
+                                </div>
+                                <div className={HUB_ROW_TEXT_CLASS}>
+                                  <div className={HUB_ROW_TITLE_CLASS}>
+                                    <span className={HUB_ROW_NAME_CLASS}>{provider.name}</span>
+                                    <span className={HUB_BADGE_CLASS}>{provider.category}</span>
+                                  </div>
+                                  <p className={HUB_ROW_DESC_CLASS}>{provider.desc}</p>
+                                </div>
+                              </div>
+                              <div className={HUB_ROW_ACTIONS_CLASS}>
+                                {isConfigured ? (
+                                  <span className={HUB_BADGE_CONNECTED_CLASS}>已配置</span>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={(event) => {
+                                      event.stopPropagation()
+                                      handleHubSelect(provider.id)
+                                    }}
+                                    className={HUB_ACTION_BUTTON_CLASS}
+                                  >
+                                    去配置
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+                          )
+                        })
+                      ) : (
+                        <div className={MODELS_EMPTY_CLASS}>没有匹配的服务商</div>
                       )}
                     </div>
                   </div>
+                ) : (
+                  /* View 1: Models Selection View */
+                  <div className={PICKER_VIEW_CLASS}>
+                    <div className={MODELS_HEADER_CLASS}>
+                      <span className={MODELS_TITLE_CLASS}>
+                        {currentProvider.displayName || '模型列表'}
+                      </span>
 
-                  <div className={MODELS_LIST_CLASS}>
-                    {filteredModels.length > 0 ? (
-                      filteredModels.map((preset) => {
-                        const isSelected = preset.id === selectedModelPreset
-                        return (
-                          <div
-                            key={preset.id}
-                            onClick={() => handleModelSelect(preset.id)}
-                            className={cx(MODEL_ROW_CLASS, isSelected && MODEL_ROW_SELECTED_CLASS)}
+                      <div className={MODELS_HEADER_ACTIONS_CLASS}>
+                        {searchExpanded ? (
+                          <div className={SEARCH_BAR_CLASS}>
+                            <Search
+                              size={APP_ICON_SIZE}
+                              strokeWidth={APP_ICON_STROKE_WIDTH}
+                              className={SEARCH_BAR_ICON_CLASS}
+                            />
+                            <input
+                              ref={searchInputRef}
+                              type="text"
+                              placeholder="过滤模型..."
+                              value={filterText}
+                              onChange={(event) => handleFilterChange(event.target.value)}
+                              onKeyDown={(event) => {
+                                if (event.key !== 'Escape') return
+                                event.stopPropagation()
+                                resetFilter()
+                              }}
+                              className={SEARCH_INPUT_CLASS}
+                            />
+                            <button
+                              type="button"
+                              onClick={() => {
+                                resetFilter()
+                                searchInputRef.current?.blur()
+                              }}
+                              className={SEARCH_CLEAR_CLASS}
+                              title="清除并关闭"
+                            >
+                              <X size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setSearchExpanded(true)}
+                            className={SEARCH_TRIGGER_CLASS}
                           >
-                            <div className={MODEL_ROW_MAIN_CLASS}>
-                              <span className={MODEL_ROW_ICON_CLASS}>
-                                <ProviderLogo logoURL={currentProvider.logoURL} />
-                              </span>
-                              <span className="composer-model-name tw:truncate tw:tracking-[-0.01em] tw:text-app-text">
-                                {preset.label || preset.id}
-                              </span>
-                            </div>
+                            <span>快速搜索</span>
+                            <Search
+                              size="var(--inline-icon-size, 1em)"
+                              strokeWidth={APP_ICON_STROKE_WIDTH}
+                            />
+                          </button>
+                        )}
+                      </div>
+                    </div>
 
-                            <div className={MODEL_ROW_TRAILING_CLASS}>
-                              {isSelected && showThinkingOptions ? (
-                                <ReasoningMenu
-                                  thinkingMode={thinkingMode}
-                                  thinkingPreviewMode={thinkingPreviewMode}
-                                  thinkingOptions={effectiveThinkingOptions}
-                                  onThinkingChange={onThinkingChange}
-                                  onThinkingPreviewChange={onThinkingPreviewChange}
-                                  side="top"
-                                  sideOffset={6}
-                                  align="end"
-                                  trigger={
-                                    <button
-                                      type="button"
-                                      onClick={(event) => event.stopPropagation()}
-                                      className={EFFORT_PILL_CLASS}
-                                      title="选择推理思考强度"
-                                      aria-label={`推理思考强度：${currentThinkingLabel}`}
-                                    >
-                                      <span>{currentThinkingLabel}</span>
-                                      <ChevronDown
-                                        size={APP_ICON_SIZES.sm}
-                                        strokeWidth={APP_ICON_STROKE_WIDTH}
-                                      />
-                                    </button>
-                                  }
-                                />
-                              ) : null}
+                    <div className={MODELS_LIST_CLASS} ref={modelsListRef}>
+                      {filteredModels.length > 0 ? (
+                        filteredModels.map((preset) => {
+                          const isSelected = preset.id === selectedModelPreset
+                          const capabilityBadges = modelCapabilityBadges(
+                            currentProviderModelMetadata?.[preset.id],
+                          )
+                          return (
+                            <div
+                              key={preset.id}
+                              ref={(element) => {
+                                if (element) modelRowRefs.current.set(preset.id, element)
+                                else modelRowRefs.current.delete(preset.id)
+                              }}
+                              onClick={() => handleModelSelect(preset.id)}
+                              onMouseEnter={() => setHoveredModelID(preset.id)}
+                              onMouseLeave={() =>
+                                setHoveredModelID((current) =>
+                                  current === preset.id ? null : current,
+                                )
+                              }
+                              className={cx(
+                                MODEL_ROW_CLASS,
+                                isSelected && MODEL_ROW_SELECTED_CLASS,
+                              )}
+                            >
+                              <div className={MODEL_ROW_MAIN_CLASS}>
+                                <span className={MODEL_ROW_ICON_CLASS}>
+                                  <ProviderLogo
+                                    logoURL={
+                                      modelLogoURL(preset.id, preset.label) ??
+                                      currentProvider.logoURL
+                                    }
+                                    providerID={
+                                      modelLogoURL(preset.id, preset.label)
+                                        ? undefined
+                                        : currentProvider.providerID
+                                    }
+                                  />
+                                </span>
+                                <OverflowTitle
+                                  active={hoveredModelID === preset.id}
+                                  reducedMotion={reducedMotion}
+                                  variant="composer"
+                                >
+                                  {preset.label || preset.id}
+                                </OverflowTitle>
+                              </div>
 
-                              <div
-                                aria-hidden="true"
-                                className={cx(
-                                  MODEL_DOT_CLASS,
-                                  isSelected ? MODEL_DOT_SELECTED_CLASS : MODEL_DOT_IDLE_CLASS,
-                                )}
-                              >
-                                {isSelected ? <div className={MODEL_DOT_INNER_CLASS} /> : null}
+                              <div className={MODEL_ROW_TRAILING_CLASS}>
+                                {capabilityBadges.length > 0 ? (
+                                  <div className={CAPABILITIES_CLASS}>
+                                    {capabilityBadges.map((badge) =>
+                                      badge.kind === 'context' ? (
+                                        <span
+                                          key={badge.kind}
+                                          className={CAPABILITY_CHIP_CLASS}
+                                          title={badge.title}
+                                        >
+                                          {badge.label}
+                                        </span>
+                                      ) : (
+                                        <span
+                                          key={badge.kind}
+                                          className={CAPABILITY_CHIP_CLASS}
+                                          role="img"
+                                          aria-label={badge.label}
+                                          title={badge.title}
+                                        >
+                                          {badge.kind === 'vision' ? (
+                                            <Eye
+                                              size={APP_ICON_SIZES.sm}
+                                              strokeWidth={APP_ICON_STROKE_WIDTH}
+                                            />
+                                          ) : (
+                                            <Brain
+                                              size={APP_ICON_SIZES.sm}
+                                              strokeWidth={APP_ICON_STROKE_WIDTH}
+                                            />
+                                          )}
+                                        </span>
+                                      ),
+                                    )}
+                                  </div>
+                                ) : null}
+
+                                {isSelected ? (
+                                  <span
+                                    aria-hidden="true"
+                                    className={cx(
+                                      MODEL_MARK_CLASS,
+                                      capabilityBadges.length > 0
+                                        ? 'tw:group-hover:hidden'
+                                        : undefined,
+                                    )}
+                                  >
+                                    <Check
+                                      size={APP_ICON_SIZE}
+                                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                                    />
+                                  </span>
+                                ) : null}
                               </div>
                             </div>
-                          </div>
-                        )
-                      })
-                    ) : (
-                      <div className={MODELS_EMPTY_CLASS}>
-                        {filterText ? '没有匹配的模型' : '暂无可用的预设模型'}
+                          )
+                        })
+                      ) : (
+                        <div className={MODELS_EMPTY_CLASS}>
+                          {filterText ? '没有匹配的模型' : '暂无可用的预设模型'}
+                        </div>
+                      )}
+                    </div>
+
+                    {reasoningControl ? (
+                      <div className="composer-model-reasoning-slot tw:mt-2 tw:flex tw:shrink-0 tw:items-center tw:gap-2 tw:border-t tw:border-app-border-subtle tw:px-1 tw:pt-2 tw:type-caption tw:text-app-text-meta">
+                        <span>推理思考</span>
+                        {reasoningControl}
                       </div>
-                    )}
+                    ) : null}
                   </div>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        </Popover.Content>
-      </Popover.Portal>
+          </Popover.Content>
+        </Popover.Portal>
+      ) : null}
     </Popover.Root>
   )
 }

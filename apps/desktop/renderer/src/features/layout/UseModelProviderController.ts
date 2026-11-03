@@ -40,7 +40,16 @@ export function useModelProviderController({
   const [modelProviders, setModelProviders] = useState<DesktopModelProviderSummary[]>([])
   const modelCatalogLoading = useModelCatalogLoading()
   const modelPresets = useMemo(
-    () => buildModelPresets(providerState?.models ?? providerState?.provider.defaultModels ?? []),
+    () =>
+      buildModelPresets(
+        (providerState?.models ?? providerState?.provider.defaultModels ?? []).filter(
+          (id) =>
+            !['embedding', 'rerank'].includes(
+              providerState?.modelMetadata?.[id]?.modelType ?? 'chat',
+            ),
+        ),
+        providerState?.modelMetadata,
+      ),
     [providerState],
   )
   const providerIDRef = useRef(providerID)
@@ -64,24 +73,34 @@ export function useModelProviderController({
         const models = isSelected
           ? (providerState?.models ?? provider.defaultModels)
           : provider.defaultModels
+        const modelMetadata =
+          isSelected && providerState?.modelMetadata
+            ? { ...provider.modelMetadata, ...providerState.modelMetadata }
+            : provider.modelMetadata
         return {
           providerID: provider.providerID,
           displayName: provider.displayName,
-          modelPresets: buildModelPresets(models),
+          modelPresets: buildModelPresets(
+            models.filter(
+              (id) => !['embedding', 'rerank'].includes(modelMetadata?.[id]?.modelType ?? 'chat'),
+            ),
+            modelMetadata,
+          ),
           baseURL: provider.baseURL,
           logoURL: provider.logoURL,
+          modelMetadata,
         }
       })
   }, [modelProviders, providerState])
   const selectedProviderID = providerID
-  const selectedProviderModelPresets =
-    providerModelOptions.find((provider) => provider.providerID === selectedProviderID)
-      ?.modelPresets ?? []
-  const resolvedSelectedModelPreset = resolveModelPresetId(
-    model,
-    undefined,
-    selectedProviderModelPresets,
+  const selectedProviderModelPresets = useMemo(
+    () =>
+      providerModelOptions.find((provider) => provider.providerID === selectedProviderID)
+        ?.modelPresets ?? [],
+    [providerModelOptions, selectedProviderID],
   )
+  const resolvedSelectedModelPreset =
+    resolveModelPresetId(model, undefined, selectedProviderModelPresets) || model || ''
   const selectedProviderSummary =
     modelProviders.find((provider) => provider.providerID === selectedProviderID) ??
     (providerState && providerState.provider.providerID === selectedProviderID
@@ -92,7 +111,10 @@ export function useModelProviderController({
       ? providerState.modelMetadata?.[model]
       : undefined) ?? selectedProviderSummary?.modelMetadata?.[model]
   const selectedVariant = selection?.variant ?? 'default'
-  const variantOptions = buildVariantOptions(selectedModelMetadata?.variants)
+  const variantOptions = useMemo(
+    () => buildVariantOptions(selectedModelMetadata?.variants),
+    [selectedModelMetadata?.variants],
+  )
   const deepSeekThinkingControls = isDeepSeekThinkingModel({
     providerID: selectedProviderID,
     model,
@@ -102,7 +124,9 @@ export function useModelProviderController({
     deepSeekThinkingControls ||
     selectedProviderSummary?.kind === 'anthropic' ||
     selectedModelMetadata?.reasoning === true ||
-    Boolean(selectedModelMetadata?.variants?.length)
+    Boolean(selectedModelMetadata?.variants?.length) ||
+    Boolean(selection?.variant) ||
+    (Boolean(selection?.thinkingMode) && selection?.thinkingMode !== 'default')
   const selectedModelAvailable = Boolean(
     model &&
     selectedProviderSummary &&
@@ -153,6 +177,7 @@ export function useModelProviderController({
         void withModelCatalogLoading(() =>
           desktopClient.fetchProviderModels({
             providerID: next.selectedProviderID,
+            all: true,
           }),
         )
           .then((result) => {
@@ -221,27 +246,67 @@ export function useModelProviderController({
     onSelectionChange({ ...selection, thinkingMode: 'default', variant: undefined })
   }, [selection, selectionLoading, selectedModelMetadata, thinkingMode, onSelectionChange])
 
+  const selectionRef = useRef(selection)
+  selectionRef.current = selection
+  const saveQueue = useRef(Promise.resolve())
+  const selectionRevision = useRef(0)
+  const switchRevision = useRef(0)
+
+  const saveParameters = useCallback(
+    (patch: { variant?: string | null; maxContextTokens?: number | null }): void => {
+      const previous = selectionRef.current
+      if (!previous || selectionLoading || !desktopClient.setModelRuntimePreference) return
+      const revision = ++selectionRevision.current
+      const variant = patch.variant !== undefined ? (patch.variant ?? undefined) : previous.variant
+      const next = {
+        ...previous,
+        ...('maxContextTokens' in patch ? { maxContextTokens: patch.maxContextTokens } : {}),
+        variant,
+        thinkingMode: (variant === 'enabled' || variant === 'adaptive' || variant === 'disabled'
+          ? variant
+          : 'default') as DesktopThinkingMode,
+      }
+      selectionRef.current = next
+      onSelectionChange(next)
+      const requestedSession = sessionId
+      saveQueue.current = saveQueue.current
+        .then(async () => {
+          await desktopClient.setModelRuntimePreference!({
+            providerID: previous.providerID,
+            modelID: previous.model,
+            ...(requestedSession ? { threadId: requestedSession } : {}),
+            ...patch,
+          })
+        })
+        .catch(() => {
+          setNoticeMessage('模型运行时参数保存失败，请重试')
+          if (revision === selectionRevision.current && selectionRef.current === next) {
+            selectionRef.current = previous
+            onSelectionChange(previous)
+          }
+        })
+    },
+    [selectionLoading, sessionId, onSelectionChange, setNoticeMessage],
+  )
+
   const handleVariantChange = useCallback(
     (variant: string): void => {
-      if (!selection || selectionLoading) return
       if (variant !== 'default' && !selectedModelMetadata?.variants?.includes(variant)) return
-      const nextThinkingMode =
-        variant === 'enabled' || variant === 'adaptive' || variant === 'disabled'
-          ? variant
-          : 'default'
-      onSelectionChange({
-        ...selection,
-        thinkingMode: nextThinkingMode,
-        variant: variant === 'default' ? undefined : variant,
-      })
+      saveParameters({ variant: variant === 'default' ? null : variant })
     },
-    [selection, selectionLoading, selectedModelMetadata, onSelectionChange],
+    [selectedModelMetadata, saveParameters],
   )
   const handleThinkingChange = useCallback(
     (mode: DesktopThinkingMode): void => {
       handleVariantChange(mode)
     },
     [handleVariantChange],
+  )
+  const handleMaxContextTokensChange = useCallback(
+    (tokens: number | null): void => {
+      saveParameters({ maxContextTokens: tokens })
+    },
+    [saveParameters],
   )
 
   const handleProviderModelChange = useCallback(
@@ -260,17 +325,66 @@ export function useModelProviderController({
         modelProviders.find((provider) => provider.providerID === providerID)?.modelMetadata?.[
           preset.value
         ]
-      const variant =
-        selection.variant ??
-        (selection.thinkingMode !== 'default' ? selection.thinkingMode : undefined)
-      const preserveThinking = Boolean(variant && metadata?.variants?.includes(variant))
-      onSelectionChange({
-        ...selection,
-        providerID,
-        model: preset.value,
-        variant: preserveThinking ? variant : undefined,
-        thinkingMode: preserveThinking ? selection.thinkingMode : 'default',
-      })
+
+      const switchId = ++switchRevision.current
+      const sourceSelection = selection
+      void (async () => {
+        await saveQueue.current
+        let restoredVariant: string | undefined = undefined
+        let restoredMaxContextTokens: number | null | undefined = undefined
+        try {
+          if (desktopClient.getModelRuntimePreferences) {
+            const preferences = await desktopClient.getModelRuntimePreferences()
+            const pref = preferences.find(
+              (p) => p.providerID === providerID && p.modelID === preset.value,
+            )
+            if (pref) {
+              if (pref.variant && metadata?.variants?.includes(pref.variant)) {
+                restoredVariant = pref.variant
+              }
+              if (pref.maxContextTokens !== undefined && pref.maxContextTokens !== null) {
+                restoredMaxContextTokens = metadata?.contextWindow
+                  ? Math.min(pref.maxContextTokens, metadata.contextWindow)
+                  : pref.maxContextTokens
+              } else if (pref.maxContextTokens === null) {
+                restoredMaxContextTokens = null
+              }
+            }
+          }
+        } catch {
+          setNoticeMessage('模型偏好读取失败，请重试')
+          return
+        }
+
+        if (switchId !== switchRevision.current || selectionRef.current !== sourceSelection) return
+        const variant = restoredVariant
+        const preserveThinking = Boolean(variant && metadata?.variants?.includes(variant))
+        const finalVariant = preserveThinking ? variant : undefined
+        const finalThinkingMode = preserveThinking
+          ? finalVariant === 'enabled' || finalVariant === 'adaptive' || finalVariant === 'disabled'
+            ? finalVariant
+            : 'default'
+          : 'default'
+        // A model switch resolves against the target model; never carry the source model's limit.
+        const finalMaxContextTokens =
+          restoredMaxContextTokens !== undefined ? restoredMaxContextTokens : null
+
+        onSelectionChange({
+          ...selection,
+          providerID,
+          model: preset.value,
+          variant: finalVariant,
+          thinkingMode: finalThinkingMode,
+          maxContextTokens: finalMaxContextTokens,
+        })
+
+        if (sessionId) {
+          void desktopClient
+            .setSessionMaxContextTokens(sessionId, finalMaxContextTokens)
+            .catch(() => setNoticeMessage('最大输入上下文保存失败'))
+        }
+      })()
+
       if (sessionId && hasMessages) setNoticeMessage('在对话过程中切换模型会降低性能表现')
     },
     [
@@ -332,44 +446,12 @@ export function useModelProviderController({
     [setErrorMessage],
   )
 
+  // The picker filters locally after loading every configured model on open.
   const handleProviderSearch = useCallback(
-    (() => {
-      const generations = new Map<string, number>()
-      return (providerID: ModelProviderID, query: string): void => {
-        const requestId = providerStateRequestIdRef.current
-        const generation = (generations.get(providerID) ?? 0) + 1
-        generations.set(providerID, generation)
-        void desktopClient
-          .fetchProviderModels({ providerID, query, limit: 100 })
-          .then((result) => {
-            if (
-              generations.get(providerID) !== generation ||
-              requestId !== providerStateRequestIdRef.current
-            )
-              return
-            setModelProviders((current) =>
-              current.map((provider) =>
-                provider.providerID === providerID
-                  ? {
-                      ...provider,
-                      defaultModels: result.models,
-                      modelMetadata: result.modelMetadata,
-                    }
-                  : provider,
-              ),
-            )
-          })
-          .catch((error) => {
-            if (
-              generations.get(providerID) !== generation ||
-              requestId !== providerStateRequestIdRef.current
-            )
-              return
-            setErrorMessage(error instanceof Error ? error.message : String(error))
-          })
-      }
-    })(),
-    [setErrorMessage],
+    (providerID: ModelProviderID, _query: string): void => {
+      handleProviderOpen(providerID)
+    },
+    [handleProviderOpen],
   )
 
   return {
@@ -395,6 +477,8 @@ export function useModelProviderController({
     selectedVariant,
     variantOptions,
     handleVariantChange,
+    maxContextTokens: selection?.maxContextTokens ?? null,
+    handleMaxContextTokensChange,
     selectedModelUnavailableMessage,
     refreshProviderState,
   }

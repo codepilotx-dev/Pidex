@@ -6,9 +6,9 @@ import {
 } from '../src/features/terminal/TerminalTheme.js'
 
 describe('terminal theme', () => {
-  test('parses the code font size with a 13px default and 8-24px bounds', () => {
-    expect(parseTerminalFontSize('')).toBe(13)
-    expect(parseTerminalFontSize('not-a-size')).toBe(13)
+  test('parses the code font size with a 12px default and 8-24px bounds', () => {
+    expect(parseTerminalFontSize('')).toBe(12)
+    expect(parseTerminalFontSize('not-a-size')).toBe(12)
     expect(parseTerminalFontSize('7px')).toBe(8)
     expect(parseTerminalFontSize('13.5px')).toBe(13.5)
     expect(parseTerminalFontSize('30px')).toBe(24)

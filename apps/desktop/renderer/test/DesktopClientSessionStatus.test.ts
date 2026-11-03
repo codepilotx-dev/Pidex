@@ -246,4 +246,122 @@ describe('session status single source', () => {
 
     expect(observedStatuses).toContain('done')
   })
+
+  test('a reconnect hands a lifecycle status the catalog has outgrown back to the catalog', async () => {
+    const source = {
+      onmessage: null as ((event: MessageEvent) => void) | null,
+      onerror: null as (() => void) | null,
+      close: () => {},
+    }
+    const fetcher = async (path: string, init?: RequestInit): Promise<Response> => {
+      const body = init?.body ? JSON.parse(String(init.body)) : null
+      const params = body?.params ?? {}
+      if (path !== '/rpc') throw new Error(`Unhandled request: ${path}`)
+      if (body?.method === 'initialize') return rpc(body.id, initializedResult())
+      if (body?.method === 'initialized') return new Response(null, { status: 204 })
+      if (body?.method === 'event/subscribe') {
+        return rpc(body.id, {
+          subscriptionId: 'subscription-1',
+          highWatermarks: [{ streamId: 'global', sequence: 12 }],
+        })
+      }
+      if (body?.method === 'event/unsubscribe') return rpc(body.id, { ok: true })
+      if (body?.method === 'event/ack') {
+        return rpc(body.id, {
+          subscriptionId: params.subscriptionId,
+          acknowledged: params.positions,
+        })
+      }
+      if (body?.method === 'interaction/listPending') {
+        return rpc(body.id, { interactions: [], nextCursor: null })
+      }
+      if (body?.method === 'project/list') {
+        return rpc(body.id, { projects: [project], nextCursor: null })
+      }
+      if (body?.method === 'thread/list') {
+        // The persisted catalog: the thread's current turn is in flight.
+        return rpc(body.id, {
+          threads: [threadItem({ latestTurnStatus: 'running' })],
+          nextCursor: null,
+        })
+      }
+      throw new Error(`Unexpected RPC method: ${body?.method}`)
+    }
+    const client = createDesktopClient({
+      fetch: fetcher,
+      eventSourceFactory: () => source as unknown as EventSource,
+    })
+    const observedStatuses: string[] = []
+    await client.listSessions()
+    const unsubscribe = client.onSessionStoreChange((change) => {
+      observedStatuses.push(...statusesFrom(change))
+    })
+    for (let index = 0; index < 20 && !source.onmessage; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+
+    // What this client remembers is the previous turn's terminal status: the
+    // `turn/started` of the in-flight turn happened while its subscription was
+    // down and a restarted subscription resumes at the live position.
+    source.onmessage?.({
+      data: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'event/next',
+        params: {
+          subscriptionId: 'subscription-1',
+          event: {
+            eventId: 'event-13',
+            streamId: 'global',
+            type: 'turn/completed',
+            version: 2,
+            occurredAt: now,
+            threadId: 'session-status',
+            turnId: 'turn-previous',
+            durability: 'durable',
+            sequence: 13,
+            payload: {
+              turn: {
+                id: 'turn-previous',
+                threadId: 'session-status',
+                sourceInputID: 'input-previous',
+                status: 'completed',
+                mode: 'chat',
+                model: { providerID: 'openai', id: 'gpt-5' },
+                permissionConfig: defaultThreadSettings.permissionConfig,
+                rootAgentId: 'agent-previous',
+                mergedInputIDs: [],
+                startedAt: now,
+                finishedAt: now + 1_000,
+                elapsedSeconds: 1,
+                error: null,
+              },
+            },
+          },
+        },
+      }),
+    } as MessageEvent)
+    for (let index = 0; index < 50 && !observedStatuses.includes('done'); index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    expect(observedStatuses).toContain('done')
+
+    // The reconnected stream reconciles from the catalog, which already reports
+    // the running turn; the remembered terminal status must not outrank it.
+    source.onmessage?.({
+      data: JSON.stringify({
+        jsonrpc: '2.0',
+        method: 'event/replayComplete',
+        params: {
+          subscriptionId: 'subscription-1',
+          positions: [{ streamId: 'global', sequence: 13 }],
+        },
+      }),
+    } as MessageEvent)
+    for (let index = 0; index < 50 && !observedStatuses.includes('running'); index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    }
+    unsubscribe()
+
+    expect(observedStatuses).toContain('running')
+  })
 })

@@ -58,6 +58,7 @@ export type SkillPreviewTab = {
 }
 
 export type WorkbenchTabKind =
+  | 'provider-management'
   | 'review'
   | 'browser'
   | 'file-browser'
@@ -65,12 +66,15 @@ export type WorkbenchTabKind =
   | 'attachment-preview'
   | 'skill-preview'
   | 'plan'
+  | 'goal'
   | 'side-chat'
-  | 'side-task'
+  | 'subagent-directory'
   | 'terminal'
 
 export type WorkbenchTabDescriptor =
+  | ProviderManagementTab
   | { id: 'review'; kind: 'review' }
+  | { id: 'goal'; kind: 'goal'; threadId?: string }
   | {
       id: `browser:${string}`
       kind: 'browser'
@@ -103,9 +107,11 @@ export type WorkbenchTabDescriptor =
   | {
       id: `plan:${string}`
       kind: 'plan'
-      eventId: string
+      /** 计划项身份：与所属聊天一起绑定 canonical projection。 */
+      planItemId: string
+      threadId: string
       title: string
-      /** Markdown captured when opened; older persisted tabs may omit it. */
+      /** 打开瞬间的 Markdown 快照；历史标签只有它，仍可阅读。 */
       content?: string
     }
   | {
@@ -125,13 +131,22 @@ export type WorkbenchTabDescriptor =
       title?: string
     }
   | {
-      id: `side-task:${string}`
-      kind: 'side-task'
-      taskId: string
-      childThreadId: string
+      /** 每个父会话一个目录 tab；`selectedTaskId` 表示当前详情项。 */
+      id: `subagent-directory:${string}`
+      kind: 'subagent-directory'
+      threadId: string
+      selectedTaskId?: string
     }
 
 export type WorkbenchTabId = WorkbenchTabDescriptor['id']
+
+export type ProviderManagementSection = 'credentials' | 'request'
+export type ProviderManagementTab = {
+  id: 'provider-management'
+  kind: 'provider-management'
+  providerId: string
+  section: ProviderManagementSection
+}
 
 export function createSkillPreviewTab(input: {
   name: string

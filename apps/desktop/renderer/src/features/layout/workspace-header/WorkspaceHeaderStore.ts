@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 
 export type WorkspaceHeaderSlot = 'left' | 'center' | 'right'
 export type WorkspaceHeaderAlign = 'start' | 'center' | 'end'
@@ -17,36 +18,32 @@ export type WorkspaceHeaderItemSnapshot = WorkspaceHeaderItemRegistration & {
   token: symbol
 }
 
-export type WorkspaceHeaderStore = {
-  getSnapshot: () => readonly WorkspaceHeaderItemSnapshot[]
-  getServerSnapshot: () => readonly WorkspaceHeaderItemSnapshot[]
-  subscribe: (listener: () => void) => () => void
+export type WorkspaceHeaderState = {
+  items: readonly WorkspaceHeaderItemSnapshot[]
+}
+
+export type WorkspaceHeaderActions = {
   register: (item: WorkspaceHeaderItemRegistration, token?: symbol) => () => void
   update: (token: symbol, item: WorkspaceHeaderItemRegistration) => void
 }
+
+export type WorkspaceHeaderStore = StoreApi<WorkspaceHeaderState> & WorkspaceHeaderActions
 
 function itemKey(item: Pick<WorkspaceHeaderItemRegistration, 'id' | 'routeScope'>): string {
   return `${item.routeScope}\u0000${item.id}`
 }
 
 export function createWorkspaceHeaderStore(): WorkspaceHeaderStore {
+  const store = createStore<WorkspaceHeaderState>()(() => ({ items: [] }))
+  /** 注册条目按 key 索引；symbol token 用于识别过期清理，不进入订阅快照。 */
   const entries = new Map<string, WorkspaceHeaderItemSnapshot>()
-  const listeners = new Set<() => void>()
-  let snapshot: readonly WorkspaceHeaderItemSnapshot[] = []
   let nextSequence = 0
 
   const publish = (): void => {
-    snapshot = [...entries.values()]
-    for (const listener of listeners) listener()
+    store.setState({ items: [...entries.values()] })
   }
 
-  return {
-    getSnapshot: () => snapshot,
-    getServerSnapshot: () => snapshot,
-    subscribe: (listener) => {
-      listeners.add(listener)
-      return () => listeners.delete(listener)
-    },
+  return Object.assign(store, {
     register: (item, suppliedToken) => {
       const key = itemKey(item)
       const token = suppliedToken ?? Symbol(item.id)
@@ -76,7 +73,7 @@ export function createWorkspaceHeaderStore(): WorkspaceHeaderStore {
       entries.set(nextKey, { ...item, sequence: current.sequence, token })
       publish()
     },
-  }
+  })
 }
 
 export const workspaceHeaderStore = createWorkspaceHeaderStore()

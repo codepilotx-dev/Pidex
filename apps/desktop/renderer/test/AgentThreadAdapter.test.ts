@@ -11,10 +11,12 @@ import {
   agentEventsFromNotification,
   agentQuestionIdFromRequestId,
   agentThreadListItemToDesktop,
+  agentThreadListItemToDesktopSnapshot,
   agentThreadSnapshotToDesktop,
   agentTurnStatusToDesktopStatus,
   desktopPermissionModeToPermissionConfig,
   latestItemContextUsage,
+  contextStateUsage,
   permissionModeFromPermissionConfig,
   questionToRequest,
   approvalToRequest,
@@ -104,7 +106,7 @@ describe('agent thread adapter', () => {
         projectID: project.id,
         gitBranch: null,
         workspace: projectWorkspace,
-        settings: { taskMode: 'chat', permissionConfig },
+        settings: { taskMode: 'chat', permissionConfig, maxContextTokens: 100_000 },
         archivedAt: null,
         createdAt: 1,
         updatedAt: 3,
@@ -157,6 +159,10 @@ describe('agent thread adapter', () => {
     for (const variant of [undefined, 'default', 'enabled', 'adaptive', 'disabled', 'high']) {
       snapshot.turns = [{ ...actual, model: { ...actual.model, variant } }, queued]
       const restored = agentThreadSnapshotToDesktop(snapshot)
+      expect(restored.settings.maxContextTokens).toBe(100_000)
+      expect(agentThreadListItemToDesktopSnapshot(snapshot.thread).settings.maxContextTokens).toBe(
+        100_000,
+      )
       const expectedThinkingMode =
         variant === 'enabled' || variant === 'adaptive' || variant === 'disabled'
           ? variant
@@ -185,6 +191,91 @@ describe('agent thread adapter', () => {
     expect(agentTurnStatusToDesktopStatus('completed')).toBe('done')
     expect(agentTurnStatusToDesktopStatus('failed')).toBe('error')
     expect(agentTurnStatusToDesktopStatus('interrupted')).toBe('interrupted')
+  })
+
+  test('maps latestTurnError only when latestTurnStatus is failed', () => {
+    const threadItem: ThreadListItem = {
+      id: 'thread-1',
+      title: 'Failed Task',
+      storageSource: 'local',
+      projectID: null,
+      gitBranch: null,
+      hasScheduledRun: false,
+      isScheduledSession: false,
+      isFork: false,
+      preview: null,
+      firstUserMessage: null,
+      messageCount: 1,
+      latestTurnStatus: 'failed',
+      latestTurnError: 'Context limit exceeded',
+      workspace: { kind: 'projectless', cwd: 'F:\\CodeProject' },
+      archivedAt: null,
+      unreadAt: null,
+      settings: {
+        taskMode: 'chat',
+        permissionConfig: {
+          sandboxMode: 'workspace-write',
+          approvalPolicy: 'never',
+          approvalsReviewer: 'user',
+        },
+      },
+      createdAt: 1_000,
+      updatedAt: 2_000,
+    }
+
+    const failedDesktop = agentThreadListItemToDesktop(threadItem, null)
+    expect(failedDesktop.latestTurnError).toBe('Context limit exceeded')
+
+    const nonFailedDesktop = agentThreadListItemToDesktop(
+      {
+        ...threadItem,
+        latestTurnStatus: 'completed',
+        latestTurnError: 'stale error',
+      },
+      null,
+    )
+    expect(nonFailedDesktop.latestTurnError).toBeNull()
+
+    const snapshotWithError = agentThreadSnapshotToDesktop({
+      thread: {
+        ...threadItem,
+        settings: {
+          taskMode: 'chat',
+          permissionConfig: {
+            sandboxMode: 'workspace-write',
+            approvalPolicy: 'never',
+            approvalsReviewer: 'user',
+          },
+        },
+      },
+      inputs: [],
+      turns: [
+        {
+          id: 'turn-1',
+          threadId: 'thread-1',
+          sourceInputID: 'input-1',
+          status: 'failed',
+          mode: 'chat',
+          model: { providerID: 'anthropic', id: 'claude-3-5-sonnet' },
+          permissionConfig: {
+            sandboxMode: 'workspace-write',
+            approvalPolicy: 'never',
+            approvalsReviewer: 'user',
+          },
+          rootAgentId: 'agent-1',
+          mergedInputIDs: [],
+          startedAt: 10,
+          finishedAt: 20,
+          elapsedSeconds: 10,
+          error: 'Process crashed with SIGKILL',
+        },
+      ],
+      items: [],
+      events: [],
+      interactions: [],
+      approvals: [],
+    })
+    expect(snapshotWithError.item.latestTurnError).toBe('Process crashed with SIGKILL')
   })
 
   test('maps built-in permission modes without widening the default sandbox', () => {
@@ -226,11 +317,62 @@ describe('agent thread adapter', () => {
     ).toBe('auto-review')
     expect(
       permissionModeFromPermissionConfig({
+        sandboxMode: 'workspace-write',
+        approvalPolicy: 'untrusted',
+        approvalsReviewer: 'auto_review',
+      }),
+    ).toBe('custom')
+    expect(
+      permissionModeFromPermissionConfig({
+        sandboxMode: 'workspace-write',
+        approvalPolicy: {
+          type: 'granular' as const,
+          sandboxApproval: true,
+          rules: true,
+          skillApproval: true,
+          requestPermissions: true,
+          mcpTools: true,
+          mcpElicitations: true,
+        },
+        approvalsReviewer: 'auto_review',
+      }),
+    ).toBe('custom')
+    expect(
+      permissionModeFromPermissionConfig({
         sandboxMode: 'danger-full-access',
         approvalPolicy: 'never',
         approvalsReviewer: 'auto_review',
       }),
-    ).toBe('full-access')
+    ).toBe('custom')
+  })
+
+  test('round-trips every shared preset and keeps reviewer-aware full access custom', () => {
+    for (const mode of ['default', 'auto-review', 'full-access'] as const) {
+      const config = desktopPermissionModeToPermissionConfig(mode)
+      expect(permissionModeFromPermissionConfig(config)).toBe(mode)
+    }
+    // Full access identity includes the reviewer; an automatic reviewer is custom.
+    const configuredReviewer = desktopPermissionModeToPermissionConfig('full-access')
+    expect(
+      permissionModeFromPermissionConfig({
+        ...configuredReviewer,
+        approvalsReviewer: 'auto_review',
+      }),
+    ).toBe('custom')
+  })
+
+  test('keeps the current custom config when the custom mode is selected', () => {
+    const current = {
+      sandboxMode: 'workspace-write' as const,
+      approvalPolicy: 'untrusted' as const,
+      approvalsReviewer: 'auto_review' as const,
+    }
+    expect(desktopPermissionModeToPermissionConfig('custom', current)).toEqual(current)
+    expect(desktopPermissionModeToPermissionConfig('custom')).toEqual({
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'on-request',
+      approvalsReviewer: 'user',
+    })
   })
 
   test('maps thread list item status and workspace fields', () => {
@@ -262,7 +404,8 @@ describe('agent thread adapter', () => {
     expect(item.workspacePath).toBe(project.rootPath)
     expect(item.preview).toBe('预览')
     expect(item.firstPrompt).toBe('第一条消息')
-    expect(item.permissionMode).toBe('full-access')
+    // Full access recognition includes approvalsReviewer; auto review makes it custom.
+    expect(item.permissionMode).toBe('custom')
     expect(item.planModeActive).toBe(true)
     expect(item.gitBranch).toBe('codex/hover-card')
     expect(item.unreadAt).toBe('2023-11-14T22:13:20.500Z')
@@ -682,7 +825,8 @@ describe('agent thread adapter', () => {
 
     const desktop = agentThreadSnapshotToDesktop(snapshot, project)
     expect(desktop.item.planModeActive).toBe(false)
-    expect(desktop.item.permissionMode).toBe('full-access')
+    // Thread settings include an automatic reviewer, so the preset identity is custom.
+    expect(desktop.item.permissionMode).toBe('custom')
   })
 
   test('projects queued inputs in queue order without duplicating them in the timeline', () => {
@@ -1747,7 +1891,113 @@ describe('agent thread adapter', () => {
       { source: 'messages', chars: 120 },
       { source: 'system_tools', chars: 30 },
     ])
+    const compression: Item = {
+      id: 'compressed',
+      messageID: 'compressed',
+      turnId: 'turn-1',
+      agentId: 'agent-1',
+      type: 'activity',
+      activity: 'context-compression',
+      title: '上下文已压缩',
+      contextTokens: 2_000,
+      status: 'completed',
+      createdAt: 3_000,
+    }
+    const compressedUsage = latestItemContextUsage([withoutBreakdown, withBreakdown, compression])
+    expect(compressedUsage).toMatchObject({
+      usedTokens: 2_000,
+      contextWindow: 200_000,
+      usedPercent: 1,
+      remainingTokens: 198_000,
+    })
+    expect(compressedUsage?.breakdown).toBeUndefined()
+    expect(compressedUsage?.promptCacheReadTokens).toBeUndefined()
+    expect(latestItemContextUsage([compression, withBreakdown])?.usedTokens).toBe(10_000)
     // 累计 cacheRead 9000 / 累计 prompt 侧 11000，而不是只看最后一条。
     expect(usage?.averageCacheHitRate).toBeCloseTo(9_000 / 11_000, 6)
   })
+})
+
+test('Agent context budget replaces stale totals while preserving breakdown and cache details', () => {
+  const budget = {
+    contextWindowTokens: 200000,
+    inputBudgetTokens: 131904,
+    outputReserveTokens: 64000,
+    usedTokens: 42000,
+    triggerTokens: 131904,
+    targetTokens: 110000,
+    source: 'compaction-estimate' as const,
+    sampledAt: 1,
+  }
+  const usage = contextStateUsage(
+    { budget, operation: null },
+    {
+      usedTokens: 180000,
+      averageCacheHitRate: 0.95,
+      breakdown: [{ source: 'messages', chars: 12000 }],
+      promptCacheReadTokens: 139400,
+      promptCacheWriteTokens: 0,
+      promptUncachedTokens: 3100,
+      reasoningTokens: 323,
+    },
+  )
+  expect(usage).toMatchObject({
+    usedTokens: 42000,
+    usedPercent: (42000 / 131904) * 100,
+    contextWindow: 131904,
+    remainingTokens: 89904,
+    averageCacheHitRate: 0.95,
+    breakdown: [{ source: 'messages', chars: 12000 }],
+    promptCacheReadTokens: 139400,
+    promptCacheWriteTokens: 0,
+    promptUncachedTokens: 3100,
+    reasoningTokens: 323,
+    budget,
+  })
+})
+
+test('Agent context usage preserves over-limit percentages after a lower session cap', () => {
+  const usage = contextStateUsage(
+    {
+      budget: {
+        contextWindowTokens: 200_000,
+        inputBudgetTokens: 160_000,
+        outputReserveTokens: 32_000,
+        usedTokens: 150_000,
+        triggerTokens: 160_000,
+        targetTokens: 110_000,
+        source: 'estimated' as const,
+        sampledAt: 1,
+      },
+      operation: null,
+    },
+    null,
+    100_000,
+  )
+  expect(usage?.usedPercent).toBe(150)
+  expect(usage?.remainingPercent).toBe(-50)
+})
+
+test('running turn keeps the frozen budget and is flagged for next-round display', () => {
+  const usage = contextStateUsage(
+    {
+      budget: {
+        contextWindowTokens: 200_000,
+        inputBudgetTokens: 160_000,
+        outputReserveTokens: 32_000,
+        usedTokens: 20_000,
+        triggerTokens: 128_000,
+        targetTokens: 88_000,
+        source: 'estimated' as const,
+        sampledAt: 1,
+      },
+      operation: null,
+    },
+    null,
+    64_000,
+    true,
+  )
+  expect(usage?.budgetFrozen).toBe(true)
+  expect(usage?.contextWindow).toBe(160_000)
+  expect(usage?.usedPercent).toBeCloseTo(12.5, 6)
 })

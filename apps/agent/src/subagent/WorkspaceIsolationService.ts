@@ -227,6 +227,7 @@ export class WorkspaceIsolationService {
   private static async runRawGit(cwd: string, args: readonly string[]): Promise<GitResult> {
     const process = Bun.spawn(['git', ...args], {
       cwd,
+      windowsHide: true,
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',
@@ -255,6 +256,7 @@ export class WorkspaceIsolationService {
     ]
     const process = Bun.spawn(command, {
       cwd,
+      windowsHide: true,
       env: { ...processEnv(), ...env },
       stdin: input === undefined ? 'ignore' : new Blob([input]),
       stdout: 'pipe',

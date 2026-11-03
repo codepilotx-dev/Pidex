@@ -2,12 +2,13 @@ import { ThreadProjection } from '../src/transport/ThreadProjection'
 import { ProjectService } from '../src/project/ProjectService'
 import { ThreadWorkspaceResolver } from '../src/workspace/ThreadWorkspaceResolver'
 import { ManagedProjectlessWorkspaceService } from '../src/workspace/ManagedProjectlessWorkspaceService'
-import { afterEach, describe, expect, test } from 'bun:test'
+import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
 import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
+import { Model, Provider } from '@pidex/model-schema'
 import { removeFixturePaths } from './FixtureCleanup'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 import {
@@ -25,6 +26,30 @@ const legacyMemoryKey = (path: string) =>
   createHash('sha256')
     .update(path.replaceAll('\\', '/').replace(/\/$/, '').toLocaleLowerCase('en-US'))
     .digest('hex')
+
+/** Counts profile-database queries issued inside `run`. */
+function withProfileQueryCount<T>(db: AgentDatabase, run: () => T): { result: T; queries: number } {
+  const database = db.profileSqlite
+  const mutable = db as unknown as { profileSqlite: typeof database }
+  let queries = 0
+  mutable.profileSqlite = new Proxy(database, {
+    get(target, property, receiver) {
+      if (property === 'query') {
+        return (...args: unknown[]) => {
+          queries += 1
+          return (target.query as (...values: unknown[]) => unknown)(...args)
+        }
+      }
+      const value = Reflect.get(target, property, receiver)
+      return typeof value === 'function' ? value.bind(target) : value
+    },
+  })
+  try {
+    return { result: run(), queries }
+  } finally {
+    mutable.profileSqlite = database
+  }
+}
 
 describe('项目共享上下文存储', () => {
   test('项目编辑原子保存，清空与移除保留聊天目录，撤销不覆盖后来归属', async () => {
@@ -271,5 +296,253 @@ describe('项目共享上下文存储', () => {
     expect(profile.query('PRAGMA foreign_key_check').all()).toEqual([])
     profile.close()
     history.close()
+  })
+
+  test('项目修改与操作完成记录同事务提交，重复请求只产生一次结果', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-project-operation-'))
+    temporaryPaths.push(root)
+    const db = new AgentDatabase(join(root, 'history.sqlite'))
+    try {
+      const service = new ProjectService(db)
+      const project = db.createProject({ primaryPath: root, name: 'Before' })
+      db.profileSqlite.exec(`
+        CREATE TRIGGER test_block_operation_completion
+        BEFORE UPDATE OF status ON project_operations
+        WHEN NEW.status = 'completed'
+        BEGIN SELECT RAISE(ABORT, 'operation completion blocked'); END;
+      `)
+      const operationID = crypto.randomUUID()
+      expect(() =>
+        service.update({
+          projectID: project.id,
+          name: 'After',
+          expectedVersion: project.updatedAt,
+          operationID,
+        }),
+      ).toThrow()
+
+      // The mutation and its operation record roll back together.
+      expect(db.getProject(project.id)?.name).toBe('Before')
+      expect(db.getProject(project.id)?.updatedAt).toBe(project.updatedAt)
+      expect(db.projectOperation(operationID)).toBeNull()
+
+      db.profileSqlite.exec('DROP TRIGGER test_block_operation_completion')
+      const update = () =>
+        service.update({
+          projectID: project.id,
+          name: 'After',
+          expectedVersion: project.updatedAt,
+          operationID,
+        })
+      const updated = update()
+      expect(updated.project.name).toBe('After')
+      expect(update()).toEqual(updated)
+      expect(
+        db.profileSqlite
+          .query('SELECT COUNT(*) AS count FROM project_operations WHERE operation_id = ?')
+          .get(operationID),
+      ).toEqual({ count: 1 })
+      expect(() =>
+        service.update({
+          projectID: project.id,
+          name: 'Elsewhere',
+          expectedVersion: project.updatedAt,
+          operationID,
+        }),
+      ).toThrow('operationId')
+
+      const createOperationID = crypto.randomUUID()
+      const created = await service.create({ primaryPath: root, operationID: createOperationID })
+      expect(await service.create({ primaryPath: root, operationID: createOperationID })).toEqual(
+        created,
+      )
+      expect(
+        db.profileSqlite
+          .query('SELECT COUNT(*) AS count FROM projects WHERE id = ?')
+          .get(created.project.id),
+      ).toEqual({ count: 1 })
+    } finally {
+      db.close()
+    }
+  })
+
+  test('打开项目只更新最近打开时间，版本单调递增且无变化操作不递增', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-project-version-'))
+    temporaryPaths.push(root)
+    const main = join(root, 'main')
+    const nested = join(root, 'nested')
+    await Promise.all([mkdir(main), mkdir(nested)])
+    const db = new AgentDatabase(join(root, 'history.sqlite'))
+    try {
+      const service = new ProjectService(db)
+      const project = db.createProject({ primaryPath: root, name: 'Versioned' })
+
+      // Opening a project must not invalidate a pending edit version.
+      const opened = service.open({ projectID: project.id, operationID: crypto.randomUUID() })
+      expect(opened.project.updatedAt).toBe(project.updatedAt)
+      expect(opened.project.lastOpenedAt).toBeGreaterThanOrEqual(project.updatedAt)
+      expect(
+        service.update({
+          projectID: project.id,
+          name: 'Renamed',
+          expectedVersion: project.updatedAt,
+          operationID: crypto.randomUUID(),
+        }).project.name,
+      ).toBe('Renamed')
+
+      // A revision that ran ahead of the wall clock still advances by one step.
+      const project2 = db.createProject({ primaryPath: main, name: 'Ahead' })
+      const ahead = project2.updatedAt + 60_000
+      db.profileSqlite
+        .query('UPDATE projects SET updated_at = ? WHERE id = ?')
+        .run(ahead, project2.id)
+      const added = await service.addFolder({
+        projectID: project2.id,
+        path: nested,
+        operationID: crypto.randomUUID(),
+      })
+      expect(added.project.updatedAt).toBe(ahead + 1)
+
+      const duplicate = await service.addFolder({
+        projectID: project2.id,
+        path: nested,
+        operationID: crypto.randomUUID(),
+      })
+      expect(duplicate.changed).toBe(false)
+      expect(duplicate.project.updatedAt).toBe(ahead + 1)
+
+      const samePrimary = service.setPrimaryFolder({
+        projectID: project2.id,
+        folderID: duplicate.project.primaryFolderId,
+        operationID: crypto.randomUUID(),
+      })
+      expect(samePrimary.changed).toBe(false)
+      expect(samePrimary.project.updatedAt).toBe(ahead + 1)
+
+      const renamed = service.update({
+        projectID: project2.id,
+        name: 'Ahead',
+        expectedVersion: ahead + 1,
+        operationID: crypto.randomUUID(),
+      })
+      expect(renamed.project.updatedAt).toBe(ahead + 1)
+
+      // Concurrent edits from the same revision still conflict.
+      const committed = service.update({
+        projectID: project2.id,
+        name: 'Other',
+        expectedVersion: ahead + 1,
+        operationID: crypto.randomUUID(),
+      })
+      expect(committed.project.updatedAt).toBe(ahead + 2)
+      expect(() =>
+        service.update({
+          projectID: project2.id,
+          name: 'Stale',
+          expectedVersion: ahead + 1,
+          operationID: crypto.randomUUID(),
+        }),
+      ).toThrow('已被其他操作更新')
+    } finally {
+      db.close()
+    }
+  })
+
+  test('项目列表批量读取目录与设置，唯一目录只探测一次', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-project-list-'))
+    temporaryPaths.push(root)
+    const shared = join(root, 'shared')
+    const gone = join(root, 'gone')
+    await mkdir(shared)
+    const db = new AgentDatabase(join(root, 'history.sqlite'))
+    try {
+      const make = (name: string, paths: string[], openedAt: number) => {
+        const project = db.createProject({ primaryPath: paths[0] ?? root, name })
+        if (paths.length !== 1)
+          db.editProject({ projectID: project.id, name, paths, expectedVersion: project.updatedAt })
+        db.profileSqlite
+          .query('UPDATE projects SET last_opened_at = ? WHERE id = ?')
+          .run(openedAt, project.id)
+        return project.id
+      }
+      const first = make('First', [shared], 4)
+      const second = make('Second', [shared, gone], 3)
+      const empty = make('Empty', [], 2)
+      const last = make('Last', [gone], 1)
+      const model = Model.Ref.make({
+        providerID: Provider.ID.make('openai'),
+        id: Model.ID.make('gpt-5'),
+      })
+      db.saveProjectSettings(first, { defaultModel: model, instructions: 'keep' }, 1)
+
+      const listed = db.listProjects()
+      const byID = new Map(listed.map((project) => [project.id, project]))
+      expect(listed.map((project) => project.id)).toEqual([first, second, empty, last])
+      expect(
+        byID.get(second)?.folders.map(({ path, availability }) => [path, availability]),
+      ).toEqual([
+        [resolve(shared), 'available'],
+        [resolve(gone), 'missing'],
+      ])
+      expect(byID.get(empty)?.folders).toEqual([])
+      expect(byID.get(empty)?.primaryFolderId).toBe('')
+      expect(byID.get(empty)?.rootPath).toBe('')
+      expect(byID.get(empty)?.settings).toEqual({
+        defaultModel: null,
+        instructions: '',
+        executionEnvironment: 'auto',
+        version: 1,
+      })
+      expect(byID.get(first)?.settings).toEqual({
+        defaultModel: model,
+        instructions: 'keep',
+        executionEnvironment: 'auto',
+        version: 2,
+      })
+      // Directory filtering runs in SQL and keeps the recency order.
+      expect(db.listProjects({ folderPath: shared }).map((project) => project.id)).toEqual([
+        first,
+        second,
+      ])
+      expect(db.listProjects({ folderPath: gone }).map((project) => project.id)).toEqual([
+        second,
+        last,
+      ])
+
+      let probes = 0
+      mock.module('node:fs', () => {
+        const actual = require('node:fs') as typeof import('node:fs')
+        return {
+          ...actual,
+          statSync: (path: string, ...rest: unknown[]) => {
+            probes += 1
+            return (actual.statSync as (...args: unknown[]) => unknown)(path, ...rest)
+          },
+        }
+      })
+      probes = 0
+      db.listProjects()
+      // Four folder rows over two distinct normalized paths.
+      expect(probes).toBe(2)
+
+      // Query count is constant instead of growing per project.
+      expect(withProfileQueryCount(db, () => db.listProjects()).queries).toBe(3)
+      expect(withProfileQueryCount(db, () => db.listProjects({ folderPath: shared })).queries).toBe(
+        3,
+      )
+
+      // A recovered directory is reported available again on the next read.
+      await mkdir(gone)
+      expect(
+        db
+          .listProjects({ folderPath: gone })
+          .map((project) => project.folders.map((folder) => folder.availability)),
+      ).toEqual([['available', 'available'], ['available']])
+
+      db.profileSqlite.query('DELETE FROM projects WHERE id IN (?, ?)').run(empty, last)
+      expect(withProfileQueryCount(db, () => db.listProjects()).queries).toBe(3)
+    } finally {
+      db.close()
+    }
   })
 })

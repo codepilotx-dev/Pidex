@@ -3,6 +3,10 @@ import { mkdirSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { RepositoryDatabase } from '../repositories/RepositoryDatabase'
 import { PlanApprovalRepository } from '../repositories/PlanApprovalRepository'
+import { ScheduleDraftRepository } from '../repositories/ScheduleDraftRepository'
+import { TaskScheduleRepository } from '../repositories/TaskScheduleRepository'
+import { PermissionRuleRepository } from '../repositories/PermissionRuleRepository'
+import { ModelRuntimePreferenceRepository } from '../repositories/ModelRuntimePreferenceRepository'
 import { credentialRepositoryDatabase } from '../repositories/CredentialRepository'
 import { ContextRepository } from '../repositories/ContextRepository'
 import { executionRepository } from '../repositories/ExecutionRepository'
@@ -25,7 +29,9 @@ import { SessionGroupRepository } from '../repositories/SessionGroupRepository'
 import { ThreadGoalRepository } from '../repositories/ThreadGoalRepository'
 import { ThreadGoalLedgerRepository } from '../repositories/ThreadGoalLedgerRepository'
 import { ThreadGoalContinuationRepository } from '../repositories/ThreadGoalContinuationRepository'
+import { ThreadGoalControlRepository } from '../repositories/ThreadGoalControlRepository'
 import { ThreadBookmarkRepository } from '../repositories/ThreadBookmarkRepository'
+import { ThreadPullRequestRepository } from '../repositories/ThreadPullRequestRepository'
 import { ThreadWorktreeOperationRepository } from '../repositories/ThreadWorktreeOperationRepository'
 import { configureConnection, shrinkDatabaseMemory } from './Connection'
 import { backfillProjectThreadWorkspaces, initializeSchema } from './SchemaInitializer'
@@ -90,11 +96,17 @@ export class AgentDatabase extends RepositoryDatabase {
       threadGoals: new ThreadGoalRepository(this),
       threadGoalLedger: new ThreadGoalLedgerRepository(this),
       threadGoalContinuations: new ThreadGoalContinuationRepository(this),
+      threadGoalControls: new ThreadGoalControlRepository(this),
       threadBookmarks: new ThreadBookmarkRepository(this),
+      threadPullRequests: new ThreadPullRequestRepository(this),
       threadWorktreeOperations: new ThreadWorktreeOperationRepository(this),
       automations: new AutomationRepository(this),
       scheduledTasks: new ScheduledTaskRepository(this),
       schedulePlanProposals: new SchedulePlanProposalRepository(this),
+      scheduleDrafts: new ScheduleDraftRepository(this),
+      taskSchedules: new TaskScheduleRepository(this),
+      permissionRules: new PermissionRuleRepository(this),
+      modelRuntimePreferences: new ModelRuntimePreferenceRepository(this),
     }
     this.artifacts = new ArtifactRepository(sqlite)
     this.repositories.planApprovals.recover()

@@ -1,7 +1,9 @@
+import { hasThreadEditStorage } from '../storage/repositories/ThreadEditRepository'
 import type { Model } from '@pidex/model-schema'
 import type {
   PermissionConfig,
   SubagentProfile,
+  SubagentRole,
   SubagentProjection,
   SubagentResult,
   SubagentRun,
@@ -9,11 +11,27 @@ import type {
   SubagentTask,
 } from '@pidex/shared/thread'
 import { encodeApprovalPolicy } from '@pidex/shared/thread'
-import { AgentError, type AgentExecution, type EventEnvelope } from '../Domain'
+import { AgentError, type AgentExecution, type EventEnvelope, type TaskMode } from '../Domain'
 import { subagentCollaborationAvailable } from './SubagentCollaborationRepository'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 
 const parse = <T>(value: string): T => JSON.parse(value) as T
+
+const SUBAGENT_ROLES: ReadonlySet<string> = new Set([
+  'frontend',
+  'backend',
+  'devops',
+  'qa',
+  'designer',
+  'data',
+  'docs',
+  'product',
+  'general',
+])
+
+/** 只识别已知角色；未知值原样留在库中，展示时按缺失回退。 */
+const isSubagentRole = (value: unknown): value is SubagentRole =>
+  typeof value === 'string' && SUBAGENT_ROLES.has(value)
 const stringify = (value: unknown) => JSON.stringify(value ?? null)
 const now = () => Date.now()
 const terminalStatuses = new Set<SubagentStatus>(['completed', 'failed', 'stopped', 'interrupted'])
@@ -31,13 +49,14 @@ export type SpawnSubagentInput = {
   parentAgentID: string
   displayName: string
   profile: Exclude<SubagentProfile, 'main'>
+  role?: SubagentRole
   task: string
   model: Model.Ref
   permissionCeiling: PermissionConfig
   allowedTools?: readonly string[]
   workspaceMode: 'shared' | 'worktree'
   workspaceRoot: string
-  taskMode?: 'chat' | 'plan'
+  taskMode?: TaskMode
 }
 
 export type SubagentClaim = {
@@ -67,18 +86,20 @@ export class SubagentRepository {
         : input.permissionCeiling
     return this.db.transaction(() => {
       const parent = this.db.sqlite
-        .query('SELECT project_id FROM threads WHERE id = ?')
-        .get(input.parentThreadID) as { project_id: string | null } | null
+        .query('SELECT id FROM threads WHERE id = ?')
+        .get(input.parentThreadID) as { id: string } | null
       if (!parent) throw new Error(`Parent thread ${input.parentThreadID} 不存在`)
+      // 子 Agent 不持有自己的工作区描述符：工作区与执行绑定按父线程解析
+      // （见 WorkspaceRepository.threadWorkspace）。写入 project_id 会与
+      // threads_workspace_insert_valid 的 legacy 描述符约束冲突并中止整批创建。
       this.db.sqlite
         .query(
-          `INSERT INTO threads (id, title, kind, parent_thread_id, project_id, task_mode, sandbox_mode, approval_policy, approvals_reviewer, created_at, updated_at) VALUES (?, ?, 'subagent', ?, ?, ?, ?, ?, ?, ?, ?)`,
+          `INSERT INTO threads (id, title, kind, parent_thread_id, task_mode, sandbox_mode, approval_policy, approvals_reviewer, created_at, updated_at) VALUES (?, ?, 'subagent', ?, ?, ?, ?, ?, ?, ?)`,
         )
         .run(
           childThreadID,
           input.displayName,
           input.parentThreadID,
-          parent.project_id,
           input.taskMode ?? 'chat',
           permission.sandboxMode,
           encodeApprovalPolicy(permission.approvalPolicy),
@@ -88,7 +109,7 @@ export class SubagentRepository {
         )
       this.db.sqlite
         .query(
-          `INSERT INTO subagent_tasks (id, parent_thread_id, parent_turn_id, parent_agent_id, child_thread_id, display_name, profile, task, permission_ceiling, workspace_mode, workspace_state, current_run_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
+          `INSERT INTO subagent_tasks (id, parent_thread_id, parent_turn_id, parent_agent_id, child_thread_id, display_name, profile, role, task, permission_ceiling, workspace_mode, workspace_state, current_run_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)`,
         )
         .run(
           taskID,
@@ -98,6 +119,7 @@ export class SubagentRepository {
           childThreadID,
           input.displayName,
           input.profile,
+          input.role ?? null,
           input.task,
           stringify(input.permissionCeiling),
           input.workspaceMode,
@@ -164,6 +186,7 @@ export class SubagentRepository {
             childThreadId: childThreadID,
             displayName: input.displayName,
             profile: input.profile,
+            ...(input.role ? { role: input.role } : {}),
             task: input.task,
             status: 'queued',
             queueReason: null,
@@ -212,7 +235,7 @@ export class SubagentRepository {
     content?: string
     model: Model.Ref
     permission: PermissionConfig
-    taskMode: 'chat' | 'plan'
+    taskMode: TaskMode
     sequence: number
     timestamp: number
   }) {
@@ -298,7 +321,7 @@ export class SubagentRepository {
   task(taskID: string): SubagentTask | null {
     const row = this.db.sqlite
       .query(
-        'SELECT id, parent_thread_id, parent_turn_id, parent_agent_id, child_thread_id, display_name, profile, task, permission_ceiling, workspace_mode, workspace_state, current_run_id, created_at, updated_at FROM subagent_tasks WHERE id = ?',
+        'SELECT id, parent_thread_id, parent_turn_id, parent_agent_id, child_thread_id, display_name, profile, role, task, permission_ceiling, workspace_mode, workspace_state, current_run_id, created_at, updated_at FROM subagent_tasks WHERE id = ?',
       )
       .get(taskID) as Record<string, string | number | null> | null
     if (!row) return null
@@ -346,6 +369,7 @@ export class SubagentRepository {
       ).count,
       displayName: String(row.display_name),
       profile: String(row.profile) as SubagentTask['profile'],
+      ...(isSubagentRole(row.role) ? { role: row.role } : {}),
       task: String(row.task),
       permissionCeiling: parse(String(row.permission_ceiling)),
       workspace,
@@ -391,11 +415,14 @@ export class SubagentRepository {
   }
 
   projectionForThread(threadID: string, includeDescendants = false): SubagentProjection[] {
+    const active = hasThreadEditStorage(this.db)
+      ? 'NOT EXISTS (SELECT 1 FROM thread_inactive_turns WHERE turn_id = t.parent_turn_id)'
+      : '1 = 1'
     const rows = this.db.sqlite
       .query(
         includeDescendants
-          ? `WITH RECURSIVE tree AS (SELECT id, child_thread_id FROM subagent_tasks WHERE parent_thread_id = ? UNION ALL SELECT t.id, t.child_thread_id FROM subagent_tasks t JOIN tree p ON t.parent_thread_id = p.child_thread_id) SELECT id FROM tree`
-          : 'SELECT id FROM subagent_tasks WHERE parent_thread_id = ? ORDER BY created_at',
+          ? `WITH RECURSIVE tree AS (SELECT t.id, t.child_thread_id FROM subagent_tasks t WHERE t.parent_thread_id = ? AND ${active} UNION ALL SELECT t.id, t.child_thread_id FROM subagent_tasks t JOIN tree p ON t.parent_thread_id = p.child_thread_id WHERE ${active}) SELECT id FROM tree`
+          : `SELECT t.id FROM subagent_tasks t WHERE t.parent_thread_id = ? AND ${active} ORDER BY t.created_at`,
       )
       .all(threadID) as Array<{ id: string }>
     return rows.flatMap(({ id }) => {
@@ -550,12 +577,7 @@ export class SubagentRepository {
     const timestamp = now()
     const model = input.model ?? previousRun.model
     const permission = input.permission ?? previousRun.permissionConfig
-    const taskMode =
-      (
-        this.db.sqlite
-          .query('SELECT task_mode FROM threads WHERE id = ?')
-          .get(task.childThreadId) as { task_mode: 'chat' | 'plan' } | null
-      )?.task_mode ?? 'chat'
+    const taskMode = this.db.getThreadSettings(task.childThreadId)?.taskMode ?? 'chat'
     const turnID = crypto.randomUUID()
     const agentID = crypto.randomUUID()
     const inputID = crypto.randomUUID()

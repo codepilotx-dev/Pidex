@@ -1,9 +1,12 @@
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { Provider as TooltipProvider } from '@radix-ui/react-tooltip'
+import { TooltipProvider } from '../src/components/ui/Tooltip.js'
 import { DesktopSettingsProvider } from '../src/features/settings/UseDesktopSettings.js'
-import { SidebarNavigationRail } from '../src/features/layout/sidebar/SidebarNavigationRail.js'
+import {
+  SidebarNavigationRail,
+  SidebarNavigationRailBody,
+} from '../src/features/layout/sidebar/SidebarNavigationRail.js'
 import { SidebarHeader, SidebarNewTaskNav } from '../src/features/layout/sidebar/SidebarTopNav.js'
 import type { SidebarShellController } from '../src/features/layout/SidebarShellState.js'
 import {
@@ -13,7 +16,8 @@ import {
 import { resolveConversationProject } from '../src/features/projects/ProjectDetailsModel.js'
 import { expectSourceContains, expectSourceNotContains } from './SourceContract.js'
 import { isSidebarPreviewHeld as isSidebarPreviewHeldForTest } from '../src/features/layout/SidebarShellState.js'
-import { describe, expect, test } from 'bun:test'
+import { describe, expect, spyOn, test } from 'bun:test'
+import * as settingsStorage from '../src/features/settings/SettingsStorage.js'
 import { readFileSync } from 'node:fs'
 import type { ProtocolCapability } from '@pidex/agent-protocol'
 import type { DesktopRemovedWorkspace, DesktopWorkspace } from '../shared/Types.js'
@@ -43,12 +47,11 @@ import {
   shouldCollapseSidebarResize,
 } from '../src/features/layout/UseSidebarResizeCollapseConfirm.js'
 import { getSidebarScrollModeKey } from '../src/features/layout/sidebar/UseSidebarScrollController.js'
-import {
-  buildSidebarSessionHoverCardModel,
-  formatSidebarSessionRelativeTime,
-} from '../src/features/layout/sidebar/SidebarSessionHoverCard.js'
+import { buildSidebarSessionHoverCardModel } from '../src/features/layout/sidebar/SidebarSessionHoverCard.js'
+import { formatSidebarSessionRelativeTime } from '../src/features/layout/sidebar/SessionRelativeTime.js'
 import { countOpenProjectSessions } from '../src/features/layout/sidebar/SidebarProjectHoverCard.js'
 import {
+  displayedSidebarSessions,
   getSidebarSessionDisplayGroups,
   sessionReadStatusActionLabel,
 } from '../src/features/layout/sidebar/SidebarSessionGroup.js'
@@ -62,6 +65,8 @@ import {
   deriveSidebarSessionVisualState,
   filterSidebarActivitySessions,
   hasSidebarUnreadSessions,
+  isProjectWorkspaceUnavailable,
+  isSidebarProjectUnavailable,
   labelForDayOffset,
   localDayOrdinal,
   reorderSidebarPinnedItemKeys,
@@ -85,7 +90,11 @@ import {
   TOP_NAV_ITEMS,
 } from '../src/features/layout/sidebar/SidebarTopNav.js'
 import { newSessionPath } from '../src/features/session/NewSessionSurface.js'
-import { SETTINGS_GROUPS, SETTINGS_ITEMS } from '../src/features/settings/SettingsRegistry.js'
+import {
+  SETTINGS_GROUPS,
+  SETTINGS_ITEMS,
+  SETTINGS_SEARCH_DOCUMENTS,
+} from '../src/features/settings/SettingsRegistry.js'
 
 const unknownSidebarCapabilities: SidebarCapabilityState = {
   status: 'unknown',
@@ -109,6 +118,149 @@ function sidebarNavItems(
 }
 
 describe('Codex 侧栏导航', () => {
+  test('首次加载用贴近布局的骨架替代鲸鱼动画，就绪后直接切换真实内容', () => {
+    const sidebar = readFileSync(
+      new URL('../src/features/layout/DesktopSidebar.tsx', import.meta.url),
+      'utf8',
+    )
+    // 就绪判定沿用原有加载条件并用 useEverOpened 固定：首次就绪前渲染骨架，
+    // 之后刷新保留真实内容不回退；加载失败沿用现有错误展示（非 loading 即就绪）。
+    expect(sidebar).toContain('const initiallyReady = useEverOpened(')
+    expect(sidebar).toContain(
+      "settingsLoaded && catalogStatus.state !== 'loading' && projectCatalogState.status !== 'loading'",
+    )
+    expect(sidebar).toContain('return <SidebarLoadingSkeleton />')
+    expect(sidebar).toContain('label="正在加载侧栏"')
+    expect(sidebar).toContain('shimmer')
+    expect(sidebar.indexOf('if (!initiallyReady) {')).toBeLessThan(sidebar.indexOf('<SidebarBody'))
+    // 不再登记全屏启动动画等待，也不再渲染鲸鱼加载组件。
+    expect(sidebar).not.toContain('reportStartupLoading')
+    expect(sidebar).not.toContain('FullScreenWhaleLoading')
+    expect(sidebar).not.toContain('正在加载任务目录…')
+    expect(sidebar).not.toContain('scrollHeader=')
+  })
+
+  test('导航轨首载显示入口骨架，移除整列隐藏与启动等待登记', () => {
+    const rail = readFileSync(
+      new URL('../src/features/layout/sidebar/SidebarNavigationRail.tsx', import.meta.url),
+      'utf8',
+    )
+    expect(rail).toContain('const initiallyReady = useEverOpened(')
+    expect(rail).not.toContain('reportStartupLoading')
+    expect(rail).not.toContain('tw:invisible')
+    expect(rail).not.toContain('inert=')
+    expect(rail).toContain('label="正在加载侧栏导航"')
+    expect(rail).toContain('shimmer')
+  })
+
+  test('折叠切换不重建未变化会话行，右键菜单惰性构建动作', () => {
+    const group = readFileSync(
+      new URL('../src/features/layout/sidebar/SidebarSessionGroup.tsx', import.meta.url),
+      'utf8',
+    )
+    // 行组件 memo 化：折叠上下文、分页等分组级状态不进入行 props，
+    // 折叠切换时未变化的行按浅比较直接复用。
+    expect(group).toContain('const SidebarSessionRow = memo(')
+    expect(group.split('useDisclosureContentExpanded(').length - 1).toBe(1)
+    // 右键菜单以构建函数惰性传入，关闭期间不构建动作、不渲染条目。
+    expect(group).toContain('actions={() => buildActions(session)}')
+    // PR 后台订阅继续随可见性启停。
+    expectSourceContains(group, 'displayedSidebarSessions(')
+    expectSourceContains(group, 'disclosureExpanded,')
+  })
+
+  test('全部固定后更多仍可用，首页忽略隐藏配置，宠物可固定且能力过滤保持生效', () => {
+    const settings = settingsStorage.defaultDesktopSettings()
+    const stored = spyOn(settingsStorage, 'readStoredDesktopSettings').mockReturnValue({
+      ...settings,
+      sidebarCustomization: {
+        ...settings.sidebarCustomization,
+        hiddenDestinationIds: ['home'],
+        destinationOrder: ['pets', 'plugins', 'providers', 'automations', 'sessionGroups'],
+      },
+    })
+    try {
+      const render = (capabilityState: SidebarCapabilityState) =>
+        renderToStaticMarkup(
+          createElement(
+            MemoryRouter,
+            null,
+            createElement(
+              DesktopSettingsProvider,
+              null,
+              createElement(
+                TooltipProvider,
+                null,
+                createElement(SidebarNavigationRailBody, {
+                  shell: { mode: 'docked' } as unknown as SidebarShellController,
+                  activePane: 'chats',
+                  capabilityState,
+                  onOpenWhatsNew: () => {},
+                  onReport: () => {},
+                }),
+              ),
+            ),
+          ),
+        )
+      const pinned = render(
+        readySidebarCapabilities(
+          'pets.management.v1',
+          'skills.manage.v1',
+          'session-group.v1',
+          'git.review.v1',
+        ),
+      )
+      expect(pinned.indexOf('aria-label="Git 看板"')).toBeGreaterThan(
+        pinned.indexOf('aria-label="其他入口"'),
+      )
+      expect(pinned).toContain('aria-label="首页"')
+      expect(pinned).toContain('aria-label="宠物市场"')
+      expect(pinned).toContain('aria-label="更多"')
+      const moreIndex = pinned.indexOf('aria-label="更多"')
+      expect(pinned.indexOf('aria-label="插件"')).toBeLessThan(
+        pinned.indexOf('aria-label="已安排"'),
+      )
+      expect(pinned.indexOf('aria-label="已安排"')).toBeLessThan(moreIndex)
+      expect(pinned.indexOf('aria-label="宠物市场"')).toBeGreaterThan(moreIndex)
+      expect(pinned.indexOf('aria-label="供应商"')).toBeGreaterThan(
+        pinned.indexOf('aria-label="宠物市场"'),
+      )
+      expect(pinned.indexOf('aria-label="工作组"')).toBeGreaterThan(
+        pinned.indexOf('aria-label="供应商"'),
+      )
+      expect(render(unknownSidebarCapabilities)).not.toContain('aria-label="宠物市场"')
+    } finally {
+      stored.mockRestore()
+    }
+  })
+
+  test('宠物市场收进更多且路由激活宠物侧栏', () => {
+    const rail = renderToStaticMarkup(
+      createElement(
+        MemoryRouter,
+        { initialEntries: ['/pets'] },
+        createElement(
+          DesktopSettingsProvider,
+          null,
+          createElement(
+            TooltipProvider,
+            null,
+            createElement(SidebarNavigationRailBody, {
+              shell: { mode: 'docked' } as unknown as SidebarShellController,
+              activePane: 'pets',
+              capabilityState: readySidebarCapabilities('pets.management.v1'),
+              onOpenWhatsNew: () => {},
+              onReport: () => {},
+            }),
+          ),
+        ),
+      ),
+    )
+    expect(rail).not.toContain('aria-label="宠物市场"')
+    expect(rail).toContain('aria-label="更多"')
+    expect(sidebarPaneForRoute('/pets', false)).toBe('pets')
+  })
+
   test('新版图标栏只放页面入口，聊天操作保留在首页面板', () => {
     const shell = { mode: 'docked' } as unknown as SidebarShellController
     const render = (child: ReturnType<typeof createElement>) =>
@@ -126,10 +278,13 @@ describe('Codex 侧栏导航', () => {
         capabilityState: unknownSidebarCapabilities,
         onOpenWhatsNew: () => {},
         onReport: () => {},
-        onPinPanel: () => {},
       }),
     )
-    expect(rail).toContain('aria-label="首页"')
+    expect(rail).toContain('aria-busy="true"')
+    expect(rail).toContain('data-shimmer="true"')
+    expect(rail).not.toContain('tw:invisible')
+    expect(rail).not.toContain('inert=')
+    expect(rail).not.toContain('aria-label="首页"')
     expect(rail).not.toContain('title="首页"')
     expect(rail).not.toContain('aria-label="项目"')
     expect(rail).not.toContain('aria-label="设置"')
@@ -142,7 +297,9 @@ describe('Codex 侧栏导航', () => {
     expect(header).toContain('搜索任务')
     expect(header).toContain('查看活动')
     expect(header).toContain('新聊天')
-    expect(header).toContain('sidebar-new-chat-button')
+    expect(header).toContain('sidebar-product-mode-select')
+    expect(header).toContain('Coding')
+    expect(header.indexOf('</header>')).toBeLessThan(header.indexOf('sidebar-new-task-nav'))
     const newChat = render(
       createElement(SidebarNewTaskNav, {
         label: '新聊天',
@@ -172,10 +329,14 @@ describe('Codex 侧栏导航', () => {
       TOP_NAV_ITEMS.map((item) => ({ view: item.view, label: item.label, path: item.path })),
     ).toEqual([
       { view: 'new', label: '新建任务', path: '/new' },
-      { view: 'sessionGroups', label: '工作流', path: '/workflows' },
+      { view: 'sessionGroups', label: '工作组', path: '/workflows' },
       { view: 'automations', label: '已安排', path: '/automations' },
+      { view: 'git', label: 'Git 看板', path: '/git' },
       { view: 'plugins', label: '插件', path: '/plugins' },
+      { view: 'providers', label: '供应商', path: '/providers' },
+      { view: 'pets', label: '宠物市场', path: '/pets' },
     ])
+    expect(sidebarPaneForRoute('/git', false)).toBe('git')
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/search')).toBeFalse()
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/sites')).toBeFalse()
     expect(TOP_NAV_ITEMS.some((item) => item.path === '/pull-requests')).toBeFalse()
@@ -236,13 +397,17 @@ describe('Codex 侧栏导航', () => {
   test('普通组织模式下固定分组只包含新建任务', () => {
     const { fixedItems, scrollableItems } = splitSidebarTopNavItems(sidebarNavItems(false))
     expect(fixedItems.map((item) => item.view)).toEqual(['new'])
-    expect(scrollableItems.map((item) => item.view)).toEqual(['automations'])
+    expect(scrollableItems.map((item) => item.view)).toEqual(['automations', 'providers'])
   })
 
   test('扁平组织模式下项目位于可滚动分组首位而不是固定分组', () => {
     const { fixedItems, scrollableItems } = splitSidebarTopNavItems(sidebarNavItems(true))
     expect(fixedItems.map((item) => item.view)).toEqual(['new'])
-    expect(scrollableItems.map((item) => item.view)).toEqual(['projects', 'automations'])
+    expect(scrollableItems.map((item) => item.view)).toEqual([
+      'projects',
+      'automations',
+      'providers',
+    ])
   })
 
   test('可滚动分组不重复包含新建对话，且固定入口跟随 Surface', () => {
@@ -276,18 +441,18 @@ describe('Codex 侧栏导航', () => {
     )
   })
 
-  test('协商 session-group.v1 后会话组位于新建对话之后、项目之前', () => {
+  test('协商 session-group.v1 后工作组位于新建对话之后、项目之前', () => {
     expect(
       sidebarNavItems(true, undefined, readySidebarCapabilities('session-group.v1')).map(
         (item) => item.view,
       ),
-    ).toEqual(['new', 'sessionGroups', 'projects', 'automations'])
+    ).toEqual(['new', 'sessionGroups', 'projects', 'automations', 'providers'])
   })
 
   test('明确缺少 GitHub 能力时隐藏拉取请求但保留固定产品入口', () => {
     const items = sidebarNavItems(false, undefined, readySidebarCapabilities())
 
-    expect(items.map((item) => item.view)).toEqual(['new', 'automations'])
+    expect(items.map((item) => item.view)).toEqual(['new', 'automations', 'providers'])
   })
 
   test('插件入口满足 Skills 或 MCP 任一能力即可显示', () => {
@@ -330,28 +495,37 @@ describe('Codex 侧栏导航', () => {
     const integrations = SETTINGS_GROUPS.find((group) => group.id === 'integrations')
 
     expect(integrations?.items.map((item) => item.routeId)).toEqual([
-      'providers',
       'plugins',
       'browser',
       'computer',
     ])
-    const providers = SETTINGS_ITEMS.find((item) => item.routeId === 'providers')
-    expect(providers?.rows.map((row) => row.title)).toEqual([
-      '供应商目录',
-      '账户连接',
-      '模型目录',
-      '自定义 Provider',
-    ])
     expect(SETTINGS_ITEMS.some((item) => item.routeId === 'mcp')).toBeFalse()
+  })
+
+  test('供应商不再作为设置页，改由一级导航承载', () => {
+    expect(SETTINGS_ITEMS.some((item) => item.routeId === 'providers')).toBeFalse()
+    expect(SETTINGS_SEARCH_DOCUMENTS.some((doc) => doc.tabId === 'providers')).toBeFalse()
+    expect(TOP_NAV_ITEMS.find((item) => item.view === 'providers')?.path).toBe('/providers')
   })
 })
 
 describe('设置导航', () => {
-  test('宠物设置保留商店入口但主侧栏不增加商店项', () => {
+  test('宠物设置保留市场入口且一级导航按宠物管理能力显示', () => {
     const pets = SETTINGS_ITEMS.find((item) => item.routeId === 'pets')
 
-    expect(pets?.rows.some((row) => row.title === '社区宠物商店')).toBeTrue()
-    expect(TOP_NAV_ITEMS.some((item) => item.path === '/pets')).toBeFalse()
+    expect(pets?.rows.some((row) => row.title === '宠物市场')).toBeTrue()
+    expect(TOP_NAV_ITEMS.find((item) => item.view === 'pets')?.path).toBe('/pets')
+    expect(sidebarNavItems(false).some((item) => item.view === 'pets')).toBeFalse()
+    expect(
+      sidebarNavItems(false, undefined, readySidebarCapabilities()).some(
+        (item) => item.view === 'pets',
+      ),
+    ).toBeFalse()
+    expect(
+      sidebarNavItems(false, undefined, readySidebarCapabilities('pets.management.v1')).some(
+        (item) => item.view === 'pets',
+      ),
+    ).toBeTrue()
   })
 
   test('工作空间依赖项是编码分组中的独立页面', () => {
@@ -414,6 +588,8 @@ describe('sidebar shell modes', () => {
         '/settings/appearance',
         '/plugins',
         '/plugins/detail',
+        '/providers',
+        '/providers/detail',
         '/workflows',
       ].map((path) => sidebarPaneForRoute(path, false)),
     ).toEqual([
@@ -425,6 +601,8 @@ describe('sidebar shell modes', () => {
       'settings',
       'plugins',
       'plugins',
+      'providers',
+      'providers',
       null,
     ])
     expect(sidebarPaneForRoute('/threads/task-1', true)).toBe('activity')
@@ -722,6 +900,29 @@ describe('sidebar view model', () => {
       extraSessions: items.slice(20, 40),
       canShowMore: true,
       canCollapse: true,
+    })
+  })
+
+  test('只有展开且在当前分页内的会话进入 PR 订阅范围', () => {
+    const items: string[] = Array.from({ length: 8 }, (_, index) => `session-${index}`)
+    const paged = getSidebarSessionDisplayGroups(items, 5, 5)
+
+    expect(displayedSidebarSessions(true, paged)).toEqual(items.slice(0, 5))
+    expect(displayedSidebarSessions(true, { ...paged, extraSessions: items.slice(5, 8) })).toEqual(
+      items,
+    )
+    expect(displayedSidebarSessions(false, paged)).toEqual([])
+    expect(displayedSidebarSessions(true, paged, items)).toEqual(items)
+  })
+
+  test('recent session paging collapses to its five-item default', () => {
+    const items = Array.from({ length: 25 }, (_, index) => index)
+
+    expect(getSidebarSessionDisplayGroups(items, 5, 5)).toMatchObject({
+      baseSessions: items.slice(0, 5),
+      extraSessions: [],
+      canShowMore: true,
+      canCollapse: false,
     })
   })
 
@@ -1096,9 +1297,53 @@ describe('sidebar session hover card projection', () => {
       relativeTime: '19 分',
       projectLabel: 'Pidex',
       gitBranch: 'codex/hover-card',
+      environmentLabel: null,
+      environmentKind: null,
+      pullRequests: [],
       unread: false,
       isRunning: false,
+      errorMessage: null,
     })
+  })
+
+  test('悬浮卡在任务失败时展示错误信息并保留多行排版，非失败状态不显示错误', () => {
+    const base = session('thread-err', 'F:\\CodeProject\\Pidex')
+    const multilineError = 'Error: Connection timeout\n  at fetch (retry 3/3)'
+
+    // 失败状态且带错误详情
+    const failedWithDetail = {
+      ...base,
+      status: 'error' as const,
+      latestTurnStatus: 'failed' as const,
+      latestTurnError: multilineError,
+    }
+    expect(buildSidebarSessionHoverCardModel(failedWithDetail).errorMessage).toBe(multilineError)
+
+    // 失败状态但无错误文本回退到标准文案
+    const failedWithoutDetail = {
+      ...base,
+      status: 'error' as const,
+      latestTurnStatus: 'failed' as const,
+      latestTurnError: '   ',
+    }
+    expect(buildSidebarSessionHoverCardModel(failedWithoutDetail).errorMessage).toBe('任务执行失败')
+
+    // 非失败状态不暴露错误
+    const completedWithStaleError = {
+      ...base,
+      status: 'done' as const,
+      latestTurnStatus: 'completed' as const,
+      latestTurnError: multilineError,
+    }
+    expect(buildSidebarSessionHoverCardModel(completedWithStaleError).errorMessage).toBeNull()
+
+    const running = {
+      ...base,
+      status: 'running' as const,
+      latestTurnStatus: 'running' as const,
+      latestTurnError: null,
+    }
+    expect(buildSidebarSessionHoverCardModel(running).errorMessage).toBeNull()
   })
 
   test('悬浮卡携带未读状态并按活动任务统计已开启数量', () => {
@@ -1930,4 +2175,41 @@ describe('聊天 header 项目归属', () => {
     expect(resolveConversationProject(active, [], legacy)).toBe(legacy)
     expect(resolveConversationProject(active, [], second)).toBeNull()
   })
+})
+
+test('项目只在全部源目录都缺失时才算不可用', () => {
+  const folder = (path: string, availability: 'available' | 'missing') => ({
+    id: path,
+    name: path,
+    path,
+    role: 'primary' as const,
+    availability,
+    order: 0,
+    createdAt: 0,
+    updatedAt: 0,
+  })
+  const project = (folders?: ReturnType<typeof folder>[]) => ({
+    name: 'P',
+    path: 'F:\\P',
+    ...(folders ? { folders } : {}),
+  })
+
+  expect(isProjectWorkspaceUnavailable(project())).toBeFalse()
+  expect(isProjectWorkspaceUnavailable(project([]))).toBeFalse()
+  expect(isProjectWorkspaceUnavailable(project([folder('F:\\P', 'available')]))).toBeFalse()
+  expect(
+    isProjectWorkspaceUnavailable(
+      project([folder('F:\\P', 'missing'), folder('F:\\P2', 'available')]),
+    ),
+  ).toBeFalse()
+  expect(
+    isProjectWorkspaceUnavailable(
+      project([folder('F:\\P', 'missing'), folder('F:\\P2', 'missing')]),
+    ),
+  ).toBeTrue()
+  // 运行时探测到的不可用仍然优先，保持原有兜底语义。
+  expect(
+    isSidebarProjectUnavailable(project([folder('F:\\P', 'available')]), new Set(['f:/p'])),
+  ).toBeTrue()
+  expect(isSidebarProjectUnavailable(project([folder('F:\\P', 'missing')]), new Set())).toBeTrue()
 })

@@ -1,5 +1,7 @@
+import { SidebarDropList, useSidebarDragList } from './SidebarDragContext.js'
+import { sortSessionsForSidebar } from '../../session/state/SessionSorting.js'
 import type React from 'react'
-import { memo, useEffect, useId, useState } from 'react'
+import { memo, useEffect, useId, useMemo, useState } from 'react'
 import {
   Archive,
   FolderOpen,
@@ -25,14 +27,14 @@ import {
 import { DropdownActions } from '../../../components/ui/DropdownActions.js'
 import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
-import { SidebarRow } from './SidebarRow.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { SidebarSessionGroup } from './SidebarSessionGroup.js'
 import {
   AppContextMenu as SidebarContextMenu,
   type AppContextMenuAction as ContextMenuAction,
 } from '../../../components/ui/AppContextMenu.js'
 import { cx } from '../../../utils/Cx.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import {
   DEFAULT_PROJECT_APPEARANCE,
   PROJECT_APPEARANCE_COLOR_CLASS,
@@ -53,8 +55,6 @@ const SESSION_KEY_SEPARATOR = '|'
 type Props = {
   /** 项目行在默认区域的全局拖放序号。 */
   dropIndex?: number
-  onItemDragStart?: (sessionId: string) => void
-  onItemDragEnd?: () => void
   currentSectionId?: string | null
   onMoveProjectToSection?: (project: DesktopWorkspace, sectionId: string) => void
   onMoveProjectToDefault?: (project: DesktopWorkspace) => void
@@ -91,8 +91,6 @@ type Props = {
 
 function SidebarProjectGroupComponent({
   dropIndex,
-  onItemDragStart,
-  onItemDragEnd,
   currentSectionId = null,
   onMoveProjectToSection,
   onMoveProjectToDefault,
@@ -126,22 +124,42 @@ function SidebarProjectGroupComponent({
   onUnpinWorkspace,
   onReport = () => undefined,
 }: Props): React.ReactNode {
-  const [hovered, setHovered] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [confirmArchiveOpen, setConfirmArchiveOpen] = useState(false)
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
   const [managerOpen, setManagerOpen] = useState(false)
   const [managedProject, setManagedProject] = useState(project)
   const [processingAction, setProcessingAction] = useState<'archive' | null>(null)
-  const { projectAppearances } = useDesktopSettings()
+  const projectAppearances = useDesktopSettingsField((settings) => settings.projectAppearances)
 
   useEffect(() => setManagedProject(project), [project])
 
   const projectKey = sidebarProjectKey(managedProject)
+  const parentList = useSidebarDragList()
+  const headerOrder = sortSessionsForSidebar(bucket.allSessions, {
+    sort,
+    needsInputSessionIds: pendingPermissionSessionIds,
+    unreadSessionIds: new Set(
+      bucket.allSessions.filter((session) => session.unreadAt).map((session) => session.id),
+    ),
+    scopeKey: `project:${projectKey}`,
+    manualOrderByScope,
+  }).map((session) => `session:${session.id}`)
   const disclosureKey = sidebarProjectDisclosureKey(managedProject)
+  // 项目接收区的高频 accept/判权用集合缓存，与 sessionKeys 同源构建。
+  const headerSessionKeys = useMemo(
+    () => bucket.allSessions.map((session) => `session:${session.id}`),
+    [bucket.allSessions],
+  )
+  const headerSessionKeySet = useMemo(() => new Set(headerSessionKeys), [headerSessionKeys])
   const isExpanded = useDisclosureExpanded(disclosureStore, disclosureKey)
   const projectSessionsId = useId()
   const projectSessions = bucket.displaySessions
+  // 项目目录全部不存在时，其下会话标题一并转灰。
+  const projectUnavailableKeys = useMemo(
+    () => (isUnavailable ? new Set([projectKey]) : null),
+    [isUnavailable, projectKey],
+  )
   const hasCollapsedUnread =
     !isExpanded && projectSessions.some((session) => Boolean(session.unreadAt))
   const countedProjectSessions = bucket.allSessions
@@ -151,7 +169,6 @@ function SidebarProjectGroupComponent({
     workspace?.projectId && managedProject.projectId
       ? workspace.projectId === managedProject.projectId
       : normalizeSidebarPath(workspace?.path ?? '') === normalizeSidebarPath(managedProject.path)
-  const actionsVisible = hovered || menuOpen
   const isPinned = Boolean(managedProject.pinnedAt)
   const appearance = managedProject.projectId
     ? (projectAppearances[managedProject.projectId] ?? DEFAULT_PROJECT_APPEARANCE)
@@ -273,7 +290,7 @@ function SidebarProjectGroupComponent({
       <SidebarContextMenu
         actions={contextActions()}
         layout="grid"
-        size="md"
+        size="sm"
         trigger={
           <SidebarRow
             className={cx(
@@ -293,16 +310,14 @@ function SidebarProjectGroupComponent({
                 )}
               />
             }
-            onMouseEnter={() => setHovered(true)}
-            onMouseLeave={() => setHovered(false)}
             trailing={
               <>
                 <div
                   className={cx(
-                    'sidebar-project-actions tw:relative tw:flex tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
-                    actionsVisible
-                      ? 'is-visible tw:opacity-100 tw:pointer-events-auto'
-                      : 'tw:opacity-0 tw:pointer-events-none',
+                    'sidebar-project-actions tw:relative tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
+                    menuOpen
+                      ? 'is-visible tw:flex tw:opacity-100 tw:pointer-events-auto'
+                      : 'tw:hidden tw:group-hover:flex tw:group-has-[:focus-visible]:flex tw:opacity-100 tw:pointer-events-auto',
                   )}
                   onClick={(event) => event.stopPropagation()}
                 >
@@ -310,7 +325,7 @@ function SidebarProjectGroupComponent({
                     className="popover-sidebar-project popover-menu--grid"
                     open={menuOpen}
                     side="bottom"
-                    size="md"
+                    size="sm"
                     trigger={
                       <Button
                         isIconOnly
@@ -327,21 +342,22 @@ function SidebarProjectGroupComponent({
                   >
                     <DropdownActions actions={contextActions()} />
                   </PopoverMenu>
-                  <Button
-                    isIconOnly
-                    aria-label="新建对话"
-                    className="sidebar-project-action-button"
-                    variant="text"
-                    iconSize="md"
-                    disabled={isUnavailable}
-                    size="compact"
-                    title="新建对话"
-                    onClick={() => onCreateSession(managedProject)}
-                  >
-                    <SquarePen size={APP_ICON_SIZE} />
-                  </Button>
+                  {isUnavailable ? null : (
+                    <Button
+                      isIconOnly
+                      aria-label="新建对话"
+                      className="sidebar-project-action-button"
+                      variant="text"
+                      iconSize="md"
+                      size="compact"
+                      title="新建对话"
+                      onClick={() => onCreateSession(managedProject)}
+                    >
+                      <SquarePen size={APP_ICON_SIZE} />
+                    </Button>
+                  )}
                 </div>
-                {hasCollapsedUnread && !actionsVisible ? (
+                {hasCollapsedUnread && !menuOpen ? (
                   <span
                     className="sidebar-project-unread sidebar-indicator tw:pointer-events-none tw:absolute tw:inset-y-0 tw:end-0 tw:my-auto tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:text-app-text-meta tw:group-hover:hidden tw:group-has-[:focus-visible]:hidden tw:group-has-[[data-state=open]]:hidden"
                     role="img"
@@ -355,23 +371,43 @@ function SidebarProjectGroupComponent({
               </>
             }
           >
-            <SidebarProjectHoverCard
-              appearance={appearance}
-              conversationCount={countedProjectSessions.length}
-              openCount={openCount}
-              unreadCount={unreadCount}
-              isPinned={isPinned}
-              isUnavailable={isUnavailable}
-              project={managedProject}
-              projectKey={projectKey}
-              onEdit={() => setManagerOpen(true)}
-              onOpenFolder={(path) => {
-                void desktopClient.openPathWithDefaultTarget(path)
+            <SidebarDropList
+              className="tw:flex tw:min-w-0 tw:flex-1"
+              list={{
+                key: `project:${projectKey}`,
+                instanceId: `${parentList?.instanceId ?? parentList?.key}:header:${projectKey}`,
+                destination: { kind: 'project', projectKey, index: 0 },
+                sessionsOnly: true,
+                order: headerOrder,
+                sessionKeys: headerSessionKeys,
+                sessionKeySet: headerSessionKeySet,
+                onReorder: (order) => {
+                  onManualOrderChange?.(
+                    `project:${projectKey}`,
+                    order.map((key) => key.slice(8)),
+                  )
+                  onSortChange?.('manual')
+                },
               }}
-              onTogglePinned={togglePinned}
             >
-              {projectButton}
-            </SidebarProjectHoverCard>
+              <SidebarProjectHoverCard
+                appearance={appearance}
+                conversationCount={countedProjectSessions.length}
+                openCount={openCount}
+                unreadCount={unreadCount}
+                isPinned={isPinned}
+                isUnavailable={isUnavailable}
+                project={managedProject}
+                projectKey={projectKey}
+                onEdit={() => setManagerOpen(true)}
+                onOpenFolder={(path) => {
+                  void desktopClient.openPathWithDefaultTarget(path)
+                }}
+                onTogglePinned={togglePinned}
+              >
+                {projectButton}
+              </SidebarProjectHoverCard>
+            </SidebarDropList>
           </SidebarRow>
         }
       />
@@ -402,7 +438,7 @@ function SidebarProjectGroupComponent({
       />
       <DisclosureContent
         className="sidebar-project-sessions-disclosure"
-        contentClassName="sidebar-project-sessions-disclosure__content tw:pt-0.5"
+        contentClassName="sidebar-project-sessions-disclosure__content tw:sidebar-row-padding-top"
         expanded={projectSessions.length > 0 && isExpanded}
         id={projectSessionsId}
         mountPolicy="always"
@@ -414,9 +450,8 @@ function SidebarProjectGroupComponent({
             customSections={customSections}
             pendingPermissionSessionIds={pendingPermissionSessionIds}
             titleLoadingIds={titleLoadingIds}
+            unavailableProjectKeys={projectUnavailableKeys}
             groupKey={`project:${projectKey}`}
-            onItemDragEnd={onItemDragEnd}
-            onItemDragStart={onItemDragStart}
             onMoveToDefault={onMoveToDefault}
             onMoveToSection={onMoveToSection}
             manualOrderByScope={manualOrderByScope}

@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, writeFile } from 'node:fs/promises'
+import { afterEach, describe, expect, spyOn, test } from 'bun:test'
+import { mkdtemp, readFile, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { removeFixturePaths } from './FixtureCleanup'
@@ -15,6 +15,54 @@ afterEach(async () => {
 })
 
 describe('PetCatalogService', () => {
+  test('后端独立启动五小时目录刷新，显式释放后不再安排下一轮', async () => {
+    const root = await temporaryRoot()
+    let now = Date.parse('2026-10-16T00:00:00Z')
+    let requests = 0
+    let wake: (() => void) | undefined
+    const timers: ReturnType<typeof setTimeout>[] = []
+    const originalSetTimeout = globalThis.setTimeout
+    const timerSpy = spyOn(globalThis, 'setTimeout').mockImplementation(((
+      callback: () => void,
+      delay: number,
+    ) => {
+      const timer = originalSetTimeout(callback, delay)
+      if (delay === 5 * 60 * 60 * 1_000) {
+        wake = callback
+        timers.push(timer)
+      }
+      return timer
+    }) as typeof setTimeout)
+    const fetch = mockFetch(catalogResponses())
+    const service = new PetCatalogService(root, {
+      now: () => now,
+      fetch: (async (input, init) => {
+        if (input.toString() === catalogUrl) requests++
+        return fetch(input, init)
+      }) as typeof globalThis.fetch,
+    })
+    try {
+      service.start()
+      for (let i = 0; i < 100 && !wake; i++) await Bun.sleep(5)
+      expect(requests).toBe(1)
+      expect(wake).toBeDefined()
+      now += 5 * 60 * 60 * 1_000
+      clearTimeout(timers[0])
+      wake!()
+      for (let i = 0; i < 100 && timers.length < 2; i++) await Bun.sleep(5)
+      expect(requests).toBe(2)
+      expect(timers).toHaveLength(2)
+      service.dispose()
+      wake!()
+      await Bun.sleep(10)
+      expect(requests).toBe(2)
+      expect(timers).toHaveLength(2)
+    } finally {
+      service.dispose()
+      timerSpy.mockRestore()
+      for (const timer of timers) clearTimeout(timer)
+    }
+  })
   test('normalizes the community catalog and marks installed pets', async () => {
     const root = await temporaryRoot()
     const service = new PetCatalogService(root, {
@@ -74,6 +122,32 @@ describe('PetCatalogService', () => {
     })
   })
 
+  test('catalog cache expires after five hours while allowing manual refresh before expiry', async () => {
+    const root = await temporaryRoot()
+    let now = Date.parse('2026-10-16T00:00:00Z')
+    let catalogRequests = 0
+    const fetch = mockFetch(catalogResponses())
+    const service = new PetCatalogService(root, {
+      now: () => now,
+      fetch: (async (input, init) => {
+        if (input.toString() === catalogUrl) catalogRequests++
+        return fetch(input, init)
+      }) as typeof globalThis.fetch,
+    })
+    await service.list(new Set())
+    now += 4 * 60 * 60 * 1_000
+    expect((await service.list(new Set())).cacheState).toBe('fresh')
+    expect(catalogRequests).toBe(1)
+    await service.list(new Set(), true)
+    expect(catalogRequests).toBe(2)
+    now += 5 * 60 * 60 * 1_000 - 1
+    expect((await service.list(new Set())).cacheState).toBe('fresh')
+    now++
+    expect((await service.list(new Set())).cacheState).toBe('stale')
+    await service.list(new Set(), true)
+    expect(catalogRequests).toBe(3)
+  })
+
   test('atomically replaces an existing cache during explicit refresh', async () => {
     const root = await temporaryRoot()
     let displayName = '流萤'
@@ -122,18 +196,18 @@ describe('PetCatalogService', () => {
     })
   })
 
-  test('proxies only a bounded GIF preview for a catalog slug', async () => {
+  test('proxies only a bounded WebP preview for a catalog slug', async () => {
     const root = await temporaryRoot()
-    const gif = new TextEncoder().encode('GIF89a-preview')
+    const webp = new TextEncoder().encode('RIFF0000WEBPVP8 preview')
     const service = new PetCatalogService(root, {
       fetch: mockFetch({
         ...catalogResponses(),
-        'https://codexpet.top/assets/previews/firefly--lingxiaotian/gifs/idle.gif': new Response(
-          gif,
+        'https://codexpet.top/assets/previews/firefly--lingxiaotian/webp/idle.webp': new Response(
+          webp,
           {
             headers: {
-              'Content-Type': 'image/gif',
-              'Content-Length': String(gif.byteLength),
+              'Content-Type': 'image/webp',
+              'Content-Length': String(webp.byteLength),
             },
           },
         ),
@@ -142,9 +216,105 @@ describe('PetCatalogService', () => {
     await service.list(new Set(), true)
 
     const preview = await service.previewAsset('firefly--lingxiaotian')
-    expect(preview.contentType).toBe('image/gif')
-    expect(new TextDecoder().decode(preview.bytes)).toBe('GIF89a-preview')
+    expect(preview.contentType).toBe('image/webp')
+    expect(preview.bytes).toEqual(webp)
     await expect(service.previewAsset('not-in-catalog')).rejects.toThrow('社区宠物不存在')
+  })
+
+  test('rejects preview responses with an invalid WebP signature or content type', async () => {
+    for (const [contentType, body, message] of [
+      ['image/webp', 'GIF89a-preview', '文件签名无效'],
+      ['text/html', '<html>not an image</html>', '只支持 WebP'],
+    ] as const) {
+      const service = new PetCatalogService(await temporaryRoot(), {
+        fetch: mockFetch({
+          ...catalogResponses(),
+          'https://codexpet.top/assets/previews/firefly--lingxiaotian/webp/idle.webp': new Response(
+            body,
+            {
+              headers: { 'Content-Type': contentType },
+            },
+          ),
+        }),
+      })
+      await expect(service.previewAsset('firefly--lingxiaotian')).rejects.toThrow(message)
+    }
+  })
+
+  test('shares concurrent preview downloads and serves disk cache after restart offline', async () => {
+    const root = await temporaryRoot()
+    const webp = new TextEncoder().encode('RIFF0000WEBPVP8 preview')
+    const previewUrl = 'https://codexpet.top/assets/previews/firefly--lingxiaotian/webp/idle.webp'
+    let previewRequests = 0
+    const fetch = mockFetch({
+      ...catalogResponses(),
+      [previewUrl]: new Response(webp, { headers: { 'Content-Type': 'image/webp' } }),
+    })
+    const service = new PetCatalogService(root, {
+      fetch: (async (input, init) => {
+        if (input.toString() === previewUrl) previewRequests++
+        return fetch(input, init)
+      }) as typeof globalThis.fetch,
+    })
+    await service.list(new Set(), true)
+    const [first, second] = await Promise.all([
+      service.previewAsset('firefly--lingxiaotian'),
+      service.previewAsset('firefly--lingxiaotian'),
+    ])
+    expect(previewRequests).toBe(1)
+    expect(first.bytes).toEqual(second.bytes)
+    const cachedPath = join(root, '.preview-cache', 'firefly--lingxiaotian.webp')
+    expect(await readFile(cachedPath)).toEqual(Buffer.from(webp))
+
+    let offlineRequests = 0
+    const offline = new PetCatalogService(root, {
+      fetch: (() => {
+        offlineRequests++
+        return Promise.reject(new Error('offline'))
+      }) as unknown as typeof globalThis.fetch,
+    })
+    expect((await offline.previewAsset('firefly--lingxiaotian')).bytes).toEqual(webp)
+    expect(offlineRequests).toBe(0)
+
+    const expiredAt = new Date(Date.now() - 6 * 60 * 60 * 1_000)
+    await utimes(cachedPath, expiredAt, expiredAt)
+    expect((await offline.previewAsset('firefly--lingxiaotian')).bytes).toEqual(webp)
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(offlineRequests).toBe(1)
+    expect((await offline.previewAsset('firefly--lingxiaotian')).bytes).toEqual(webp)
+    expect(offlineRequests).toBe(1)
+    expect(await readFile(cachedPath)).toEqual(Buffer.from(webp))
+  })
+
+  test('serves expired previews immediately while refreshing their disk cache', async () => {
+    const root = await temporaryRoot()
+    const previewUrl = 'https://codexpet.top/assets/previews/firefly--lingxiaotian/webp/idle.webp'
+    const oldImage = new TextEncoder().encode('RIFF0000WEBPVP8 old')
+    const newImage = new TextEncoder().encode('RIFF0000WEBPVP8 new')
+    let releaseDownload!: (response: Response) => void
+    const download = new Promise<Response>((resolve) => {
+      releaseDownload = resolve
+    })
+    const fetch = mockFetch({
+      ...catalogResponses(),
+      [previewUrl]: new Response(oldImage, { headers: { 'Content-Type': 'image/webp' } }),
+    })
+    const seeded = new PetCatalogService(root, { fetch })
+    await seeded.previewAsset('firefly--lingxiaotian')
+    const cachedPath = join(root, '.preview-cache', 'firefly--lingxiaotian.webp')
+    const expiredAt = new Date(Date.now() - 6 * 60 * 60 * 1_000)
+    await utimes(cachedPath, expiredAt, expiredAt)
+    const refreshing = new PetCatalogService(root, {
+      fetch: (async () => download) as unknown as typeof globalThis.fetch,
+    })
+    expect((await refreshing.previewAsset('firefly--lingxiaotian')).bytes).toEqual(oldImage)
+    releaseDownload(new Response(newImage, { headers: { 'Content-Type': 'image/webp' } }))
+    // 等待后台原子写入完成，不要求调用者等待更新。
+    for (let attempt = 0; attempt < 100; attempt++) {
+      if ((await readFile(cachedPath)).equals(Buffer.from(newImage))) break
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    expect((await refreshing.previewAsset('firefly--lingxiaotian')).bytes).toEqual(newImage)
   })
 
   test('classifies supported, attributed, restricted and unknown licenses', () => {

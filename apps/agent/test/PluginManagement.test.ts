@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import extractZip from 'extract-zip'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { PluginGetDetailsResultSchema, PluginListResultSchema } from '@pidex/agent-protocol'
@@ -14,6 +15,7 @@ import { DEFAULT_PERMISSION_CONFIG } from '@pidex/shared/thread'
 import { extractPluginReferences, pluginReferenceData } from '../src/plugin/PluginReferences'
 import type { RpcRouter } from '../src/transport/rpc/RpcRouter'
 import { pluginHandlers } from '../src/transport/rpc/handlers/Plugins'
+import { marketplacePath, parseCatalog } from '../src/plugin/PluginMarketplace'
 import {
   PluginSettingsConflictError,
   PluginSettingsRepository,
@@ -502,4 +504,336 @@ describe('PluginManagementService', () => {
       }),
     ])
   })
+})
+
+// Stored ZIP fixtures keep the download/extraction test independent of OS archive tools.
+function pluginZip(files: Record<string, string | Buffer>, symlink?: string) {
+  const local: Buffer[] = []
+  const directory: Buffer[] = []
+  let offset = 0
+  for (const [path, content] of Object.entries(files)) {
+    const name = Buffer.from(path)
+    const data = Buffer.from(content)
+    const crc = Bun.hash.crc32(data)
+    const header = Buffer.alloc(30)
+    header.writeUInt32LE(0x04034b50, 0)
+    header.writeUInt16LE(20, 4)
+    header.writeUInt32LE(crc, 14)
+    header.writeUInt32LE(data.length, 18)
+    header.writeUInt32LE(data.length, 22)
+    header.writeUInt16LE(name.length, 26)
+    const central = Buffer.alloc(46)
+    central.writeUInt32LE(0x02014b50, 0)
+    central.writeUInt16LE(0x0314, 4)
+    central.writeUInt16LE(20, 6)
+    central.writeUInt32LE(crc, 16)
+    central.writeUInt32LE(data.length, 20)
+    central.writeUInt32LE(data.length, 24)
+    central.writeUInt16LE(name.length, 28)
+    central.writeUInt32LE(path === symlink ? 0xa1ff0000 : 0x81a40000, 38)
+    central.writeUInt32LE(offset, 42)
+    local.push(header, name, data)
+    directory.push(central, name)
+    offset += header.length + name.length + data.length
+  }
+  const central = Buffer.concat(directory)
+  const end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0)
+  end.writeUInt16LE(directory.length / 2, 8)
+  end.writeUInt16LE(directory.length / 2, 10)
+  end.writeUInt32LE(central.length, 12)
+  end.writeUInt32LE(offset, 16)
+  return Buffer.concat([...local, central, end])
+}
+
+async function downloadablePlugin() {
+  const root = await temporaryRoot()
+  const source = await writePlugin({ root: join(root, 'source'), id: 'pidex-demo' })
+  const commit = 'a'.repeat(40)
+  const prefix = `Pidex-Plugins-${commit}/plugins/pidex-demo`
+  const manifest = await readFile(join(source, '.codex-plugin/plugin.json'), 'utf8')
+  const files = {
+    [`${prefix}/.codex-plugin/plugin.json`]: manifest,
+    [`${prefix}/skills/pidex-demo/SKILL.md`]: await readFile(
+      join(source, 'skills/pidex-demo/SKILL.md'),
+      'utf8',
+    ),
+    [`Pidex-Plugins-${commit}/README.md`]: 'This repository file is not installed.',
+  }
+  const catalog = {
+    schemaVersion: 1,
+    plugins: [
+      {
+        id: 'pidex-demo',
+        path: 'plugins/pidex-demo',
+        version: '1.0.0',
+        name: 'Pidex Demo',
+        description: 'Demo',
+        developerName: 'Pidex',
+        category: 'Demo',
+      },
+    ],
+  }
+  let archive: Buffer = pluginZip(files)
+  let offline = false
+  let calls = 0
+  const urls: string[] = []
+  const fetcher = (async (url: string | URL | Request) => {
+    calls++
+    if (offline) throw new Error('offline with sensitive path')
+    const path = String(url)
+    urls.push(path)
+    if (path.endsWith('/assets/logo.png')) return new Response(new Uint8Array(testPng))
+    if (path.endsWith('/commits/main')) return Response.json({ sha: commit })
+    if (path.endsWith('/marketplace.json')) return Response.json(catalog)
+    if (path.endsWith(`/zip/${commit}`)) return new Response(new Uint8Array(archive))
+    throw new Error(`Unexpected request ${path}`)
+  }) as typeof fetch
+  const roots = {
+    builtinPluginsRoot: join(root, 'bundled'),
+    dataRoot: root,
+    userHome: root,
+    fetcher,
+  }
+  const settings = new PluginSettingsRepository(settingsDatabase())
+  const service = new PluginManagementService(settings, roots)
+  return {
+    root,
+    roots,
+    service,
+    settings,
+    catalog,
+    files,
+    prefix,
+    offline: () => {
+      offline = true
+    },
+    calls: () => calls,
+    urls,
+    archive: (bytes: Buffer) => {
+      archive = bytes
+    },
+  }
+}
+
+describe('downloaded plugin lifecycle', () => {
+  test('installs, loads Skill, survives restart, preserves disabled state and removes/reinstalls', async () => {
+    const fixture = await downloadablePlugin()
+    const { service, root } = fixture
+    const events: number[] = []
+    service.subscribe((_id, generation) => events.push(generation))
+    expect((await service.list()).plugins[0]).toMatchObject({ installed: false, canInstall: true })
+    const input = { pluginId: 'pidex-demo', operationId: 'install-1' }
+    const installed = await service.install(input)
+    expect(await service.install(input)).toEqual(installed)
+    expect(events).toHaveLength(1)
+    expect(await readdir(join(root, 'plugins/installed/pidex-demo'))).toEqual(
+      expect.arrayContaining(['.codex-plugin', 'skills']),
+    )
+    expect(await Bun.file(join(root, 'plugins/installed/pidex-demo/README.md')).exists()).toBe(
+      false,
+    )
+    const restarted = new PluginManagementService(fixture.settings, fixture.roots)
+    expect((await restarted.listLocal()).plugins[0]).toMatchObject({
+      installed: true,
+      canUninstall: true,
+    })
+    const beforeScan = fixture.calls()
+    const skills = new SkillService({ pluginSkillRoots: () => restarted.enabledSkillRoots() })
+    await skills.scan({ workspaceRoot: root, dataRoot: root, userHome: root })
+    expect((await skills.read('pidex-demo')).body).toContain('生成任务规划')
+    expect(
+      (
+        await pluginReferenceData('[@Demo](plugin://pidex-demo)', restarted, root, skills.list())
+      )[0],
+    ).toContain('用户引用了插件')
+    expect(fixture.calls()).toBe(beforeScan)
+    await restarted.setEnabled({
+      pluginId: input.pluginId,
+      enabled: false,
+      operationId: 'disable-1',
+    })
+    expect(await restarted.enabledSkillRoots()).toEqual([])
+    const removal = { pluginId: input.pluginId, operationId: 'remove-1' }
+    const removed = await restarted.uninstall(removal)
+    expect(await restarted.uninstall(removal)).toEqual(removed)
+    expect(
+      await Bun.file(join(root, 'plugins/installed/pidex-demo/.codex-plugin/plugin.json')).exists(),
+    ).toBe(false)
+    await restarted.install({ pluginId: input.pluginId, operationId: 'install-2' })
+    expect((await restarted.listLocal()).plugins[0]).toMatchObject({
+      installed: true,
+      enabled: false,
+    })
+    await restarted.setEnabled({ pluginId: input.pluginId, enabled: true, operationId: 'enable-1' })
+    expect(await restarted.enabledSkillRoots()).toHaveLength(1)
+    await expect(restarted.uninstall(input)).rejects.toMatchObject({ code: 'CONFLICT' })
+  })
+
+  test('keeps bundled identities authoritative and rejects their removal', async () => {
+    const fixture = await downloadablePlugin()
+    await writePlugin({ root: fixture.roots.builtinPluginsRoot, id: 'pidex-demo', extension: true })
+    const listed = await fixture.service.list()
+    expect(listed.plugins).toHaveLength(1)
+    expect(listed.plugins[0]).toMatchObject({ source: 'bundled', inMarketplace: true })
+    expect(listed.plugins[0]?.canUninstall).not.toBe(true)
+    await expect(
+      fixture.service.install({ pluginId: 'pidex-demo', operationId: 'install' }),
+    ).rejects.toMatchObject({ code: 'PATH_DENIED' })
+    await expect(
+      fixture.service.uninstall({ pluginId: 'pidex-demo', operationId: 'remove' }),
+    ).rejects.toMatchObject({ code: 'PATH_DENIED' })
+  })
+
+  test('offline refresh retains cached catalog and installed plugins without leaking errors', async () => {
+    const fixture = await downloadablePlugin()
+    await fixture.service.install({ pluginId: 'pidex-demo', operationId: 'install' })
+    fixture.offline()
+    const restarted = new PluginManagementService(fixture.settings, fixture.roots)
+    const result = await restarted.list({ forceReload: true })
+    expect(result.plugins[0]?.installed).toBe(true)
+    expect(result.catalogError).toContain('刷新重试')
+    expect(JSON.stringify(result)).not.toContain('sensitive path')
+    await restarted.uninstall({ pluginId: 'pidex-demo', operationId: 'remove' })
+    expect((await restarted.list()).plugins[0]).toMatchObject({
+      installed: false,
+      canInstall: true,
+    })
+    await expect(
+      restarted.install({ pluginId: 'pidex-demo', operationId: 'failed-install' }),
+    ).rejects.toMatchObject({ code: 'INTERNAL_ERROR' })
+    expect(await readdir(join(fixture.root, 'plugins/installed'))).toEqual([])
+  })
+
+  test('rejects traversal, symlinks and mismatched versions before installing', async () => {
+    expect(() => marketplacePath('../outside')).toThrow()
+    for (const kind of ['traversal', 'symlink', 'version'] as const) {
+      const fixture = await downloadablePlugin()
+      let files = { ...fixture.files }
+      let link: string | undefined
+      if (kind === 'traversal') files[`${fixture.prefix}/../escape`] = 'escape'
+      if (kind === 'symlink') {
+        link = `${fixture.prefix}/linked`
+        files[link] = '../outside'
+      }
+      if (kind === 'version') {
+        const name = `${fixture.prefix}/.codex-plugin/plugin.json`
+        files[name] = files[name]!.replace('1.0.0', '2.0.0')
+      }
+      fixture.archive(pluginZip(files, link))
+      await expect(
+        fixture.service.install({ pluginId: 'pidex-demo', operationId: kind }),
+      ).rejects.toBeDefined()
+      expect(await readdir(join(fixture.root, 'plugins/installed'))).toEqual([])
+    }
+  })
+
+  test('vendor filter skips unrelated entries before creating directories', async () => {
+    const root = await temporaryRoot()
+    const archive = join(root, 'test.zip')
+    await writeFile(archive, pluginZip({ 'selected/hello': 'hello', 'unselected/file': 'skip' }))
+    const output = join(root, 'output')
+    await extractZip(archive, {
+      dir: output,
+      filter: (entry) => entry.fileName.startsWith('selected/'),
+    })
+    expect(await readdir(output)).toEqual(['selected'])
+  })
+})
+
+const testPng = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aV1sAAAAASUVORK5CYII=',
+  'base64',
+)
+
+test('catalog metadata and pinned assets survive offline restart; installed version owns its details', async () => {
+  const fixture = await downloadablePlugin()
+  const entry = fixture.catalog.plugins[0]!
+  Object.assign(entry, {
+    longDescription: '远程详细介绍',
+    displayCapabilities: ['演示'],
+    logo: './assets/logo.png',
+    websiteURL: 'https://example.com/demo',
+  })
+  Object.assign(fixture.catalog, {
+    sections: [{ id: 'featured', title: '推荐', pluginIds: ['pidex-demo'] }],
+  })
+  const listed = await fixture.service.list()
+  expect(listed.sections).toEqual([{ id: 'featured', title: '推荐', pluginIds: ['pidex-demo'] }])
+  expect(listed.plugins[0]).toMatchObject({ inMarketplace: true, assetKinds: ['logo'] })
+  expect((await fixture.service.getDetails({ pluginId: 'pidex-demo' })).details).toMatchObject({
+    longDescription: '远程详细介绍',
+    websiteURL: 'https://example.com/demo',
+    displayCapabilities: ['演示'],
+  })
+  const image = await fixture.service.readAsset({ pluginId: 'pidex-demo', kind: 'logo' })
+  expect(image).toEqual({ mimeType: 'image/png', base64: testPng.toString('base64') })
+  expect(fixture.urls.at(-1)).toContain(`/${'a'.repeat(40)}/plugins/pidex-demo/assets/logo.png`)
+  fixture.offline()
+  const restarted = new PluginManagementService(fixture.settings, fixture.roots)
+  expect(await restarted.readAsset({ pluginId: 'pidex-demo', kind: 'logo' })).toEqual(image)
+  expect((await restarted.list()).plugins[0]).toMatchObject({ inMarketplace: true })
+})
+
+test('installed metadata and assets take precedence and reject unsafe/missing images safely', async () => {
+  const fixture = await downloadablePlugin()
+  const manifestKey = `${fixture.prefix}/.codex-plugin/plugin.json`
+  const manifest = JSON.parse(fixture.files[manifestKey]!)
+  Object.assign(manifest.interface, {
+    longDescription: '本地版本介绍',
+    logo: './assets/logo.png',
+    privacyPolicyURL: 'https://example.com/privacy',
+  })
+  fixture.archive(
+    pluginZip({
+      ...fixture.files,
+      [manifestKey]: JSON.stringify(manifest),
+      [`${fixture.prefix}/assets/logo.png`]: testPng,
+    }),
+  )
+  await fixture.service.install({ pluginId: 'pidex-demo', operationId: 'install-assets' })
+  Object.assign(fixture.catalog.plugins[0]!, { longDescription: '更新的远程介绍' })
+  await fixture.service.list({ forceReload: true })
+  expect((await fixture.service.getDetails({ pluginId: 'pidex-demo' })).details).toMatchObject({
+    longDescription: '本地版本介绍',
+    privacyPolicyURL: 'https://example.com/privacy',
+  })
+  const calls = fixture.calls()
+  expect((await fixture.service.readAsset({ pluginId: 'pidex-demo', kind: 'logo' })).base64).toBe(
+    testPng.toString('base64'),
+  )
+  expect(fixture.calls()).toBe(calls)
+  await expect(
+    fixture.service.readAsset({ pluginId: 'pidex-demo', kind: 'logoDark' }),
+  ).rejects.toMatchObject({ code: 'PLUGIN_INVALID', message: '插件图片暂不可用' })
+  await writeFile(
+    join(fixture.root, 'plugins/installed/pidex-demo/assets/logo.png'),
+    'invalid image',
+  )
+  await expect(
+    fixture.service.readAsset({ pluginId: 'pidex-demo', kind: 'logo' }),
+  ).rejects.toMatchObject({ code: 'PLUGIN_INVALID' })
+  expect((await fixture.service.listLocal()).plugins[0]?.status).toBe('ready')
+  for (const logo of [
+    '../escape.png',
+    'https://example.com/logo.png',
+    'assets/../../escape.png',
+    'assets/icon.svg',
+  ]) {
+    expect(() =>
+      parseCatalog({ ...fixture.catalog, plugins: [{ ...fixture.catalog.plugins[0], logo }] }),
+    ).toThrow()
+  }
+  expect(() =>
+    parseCatalog({
+      ...fixture.catalog,
+      sections: [{ id: 'featured', title: '推荐', pluginIds: ['missing'] }],
+    }),
+  ).toThrow()
+  expect(() =>
+    parseCatalog({
+      ...fixture.catalog,
+      plugins: [fixture.catalog.plugins[0], fixture.catalog.plugins[0]],
+    }),
+  ).toThrow()
 })

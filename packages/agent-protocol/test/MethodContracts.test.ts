@@ -1,6 +1,8 @@
 import { describe, expect, test } from 'bun:test'
 import { Credential, Model, Provider } from '@pidex/model-schema'
 import { Schema } from 'effect'
+import { TextItemSchema } from '@pidex/shared/thread'
+import { defaultTaskSchedule } from '@pidex/shared/task-schedule'
 import { RpcMethods, type RpcMethod, type RpcParams, type RpcResult } from '../src/methods/index'
 import { AllRpcMethods } from '../src/methods/Host'
 import { Capabilities, ProtocolCapabilitySchema } from '../src/runtime/Capabilities'
@@ -302,6 +304,17 @@ const githubPullRequest = {
   changedFiles: 1,
   mergeable: true,
 }
+
+const githubThreadPullRequestSummary = {
+  owner: 'octocat',
+  repository: 'fixture',
+  number: 7,
+  url: 'https://github.com/octocat/fixture/pull/7',
+  title: 'Fixture pull request',
+  origin: 'discovered',
+  primary: true,
+  status: { state: 'mergeable', reason: null, stale: false, checkedAt: 1_800_000_000_000 },
+} as const
 
 const githubProfileRepository = {
   id: 'repo:1',
@@ -673,6 +686,49 @@ const schedulePlanProposal = {
   committedAt: null,
 } as const
 
+const scheduleDraft = {
+  id: 'schedule-draft:1',
+  revision: 1,
+  threadId: 'thread:1',
+  turnId: 'turn:1',
+  toolCallId: 'tool-call:1',
+  status: 'pending',
+  name: '登录页面改进',
+  prompt: '按已确认的计划改进登录页面',
+  taskPlan: {
+    source: 'current-plan-item',
+    sourceRef: 'turn:1:plan',
+    contentHash: 'a'.repeat(64),
+    structured: {
+      title: '登录页面改进',
+      summary: '改善登录页的可用性与错误提示。',
+      changes: [{ area: '桌面展示', items: ['调整登录表单布局'] }],
+      interfaceChanges: [],
+      tests: ['人工验收登录流程'],
+      assumptions: [],
+    },
+  },
+  trigger: { kind: 'once', at: 2_000, timeZone: scheduledTask.timeZone },
+  conditions: { dependsOn: [], requireEnvironment: true, notBefore: null, deadline: null },
+  conditionFallback: 'skip',
+  acceptance: { kind: 'manual' },
+  notificationPolicy: 'failures',
+  missedRuns: 'catch-up',
+  execution: {
+    kind: scheduledTask.kind,
+    projectId: scheduledTask.projectId,
+    targetThreadId: scheduledTask.targetThreadId,
+    environment: scheduledTask.execution,
+    model: scheduledTask.model,
+    reasoningEffort: scheduledTask.reasoningEffort,
+    permissionConfig: scheduledTask.permissionConfig,
+  },
+  createdRefs: [],
+  createdAt: 1_000,
+  updatedAt: 1_000,
+  committedAt: null,
+} as const
+
 const browserTab = {
   tabId: 'browser:1',
   windowId: 'window:1',
@@ -764,7 +820,140 @@ const watch = {
   worktreeId: 'worktree:1',
   reason: null,
 }
+function taskScheduleFixtures() {
+  const task = {
+    ...defaultTaskSchedule('任务'),
+    id: 'task:1',
+    revision: 1,
+    readyAt: null,
+    nextRunAt: null,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const occurrence = {
+    id: 'occurrence:1',
+    taskId: task.id,
+    revision: 1,
+    scheduledFor: 1,
+    status: 'awaiting-acceptance' as const,
+    executionSucceeded: true,
+    resultVersion: 1,
+    result: '完成结果',
+    feedback: '',
+    snapshot: task,
+    scheduledTaskId: null,
+    threadId: null,
+    attention: 'awaiting-acceptance' as const,
+    reminderAt: 1,
+    reminderVersion: 1,
+    notifiedVersion: 0,
+    createdAt: 1,
+    updatedAt: 1,
+  }
+  const proposal = {
+    id: 'proposal:1',
+    revision: 1,
+    status: 'pending' as const,
+    items: [{ taskId: task.id, expectedRevision: 1, at: 1, durationMinutes: 30 }],
+    unscheduled: [],
+    createdAt: 1,
+  }
+  const versioned = { id: task.id, expectedRevision: 1, operationId: 'operation:1' }
+  return {
+    'task-schedule/list': methodFixture(
+      'task-schedule/list',
+      {},
+      { tasks: [task], occurrences: [occurrence], links: [], proposals: [proposal] },
+    ),
+    'task-schedule/plans': methodFixture(
+      'task-schedule/plans',
+      { threadId: 'thread:1' },
+      { plans: [{ itemId: 'item:1', title: '方案', content: '方案正文' }] },
+    ),
+    'task-schedule/save': methodFixture(
+      'task-schedule/save',
+      { name: '任务', operationId: 'operation:1' },
+      { task },
+    ),
+    'task-schedule/link': methodFixture(
+      'task-schedule/link',
+      { ...versioned, threadId: 'thread:1', role: 'planning' },
+      { task },
+    ),
+    'task-schedule/plan': methodFixture(
+      'task-schedule/plan',
+      { ...versioned, content: '方案正文' },
+      { task },
+    ),
+    'task-schedule/start': methodFixture('task-schedule/start', versioned, { occurrence }),
+    'task-schedule/result': methodFixture(
+      'task-schedule/result',
+      { ...versioned, id: occurrence.id, resultVersion: 1, result: '结果' },
+      { occurrence },
+    ),
+    'task-schedule/accept': methodFixture(
+      'task-schedule/accept',
+      { ...versioned, id: occurrence.id, resultVersion: 1, decision: 'pass' },
+      { occurrence },
+    ),
+    'task-schedule/snooze': methodFixture(
+      'task-schedule/snooze',
+      { ...versioned, id: occurrence.id, until: 2 },
+      { occurrence },
+    ),
+    'task-schedule/notify': methodFixture(
+      'task-schedule/notify',
+      { id: occurrence.id, reminderVersion: 1 },
+      { occurrence },
+    ),
+    'task-schedule/propose': methodFixture(
+      'task-schedule/propose',
+      { operationId: 'operation:1', items: proposal.items, unscheduled: [] },
+      { proposal },
+    ),
+    'task-schedule/arrange': methodFixture(
+      'task-schedule/arrange',
+      { ...versioned, id: proposal.id },
+      { proposal },
+    ),
+  }
+}
 const fixtures = {
+  'model/recommendation/preview': {
+    params: { providerId: 'relay', modelId: 'example', modelType: 'chat' },
+    result: { status: 'matched', recommended: { contextWindow: 128000 }, updatedAt: 1 },
+  },
+  'model/recommendation/refresh': {
+    params: { operationId: 'recommendations:1' },
+    result: { updatedAt: 1 },
+  },
+  'model/embed': methodFixture(
+    'model/embed',
+    { model: { providerID: providerId, id: modelId }, input: ['hello'] },
+    { vectors: [[1, 2]], inputTokens: 1 },
+  ),
+  'model/rerank': methodFixture(
+    'model/rerank',
+    { model: { providerID: providerId, id: modelId }, query: 'hello', documents: ['hello'] },
+    { results: [{ index: 0, score: 0.9 }], inputTokens: 1 },
+  ),
+  'visualization/submitFollowUp': methodFixture(
+    'visualization/submitFollowUp',
+    {
+      threadId: 'thread-1',
+      itemId: 'ui-1',
+      inputId: 'input-1',
+      text: '继续分析',
+      selection: { count: 4 },
+    },
+    {
+      inputId: 'input-1',
+      turnId: 'turn-2',
+      disposition: 'accepted',
+      streamPosition: { streamId: 'thread-1', sequence: 1 },
+    },
+  ),
+  ...taskScheduleFixtures(),
   'git/message/generate': methodFixture(
     'git/message/generate',
     { projectId: project.id, kind: 'commit', paths: ['src/index.ts'] },
@@ -857,17 +1046,48 @@ const fixtures = {
   'approval/rules/list': methodFixture(
     'approval/rules/list',
     { threadId: 'thread:1' },
-    { rules: [] },
+    {
+      rules: [
+        {
+          id: 'rule:1',
+          effect: 'ask',
+          scope: 'chat',
+          source: 'chat',
+          match: { kind: 'network', domain: 'example.com' },
+          editable: true,
+          version: '3',
+        },
+      ],
+    },
   ),
   'approval/rules/revoke': methodFixture(
     'approval/rules/revoke',
-    { threadId: 'thread:1', ruleId: 'rule:1' },
+    { threadId: 'thread:1', ruleId: 'rule:1', expectedVersion: '3' },
     { revoked: true },
+  ),
+  'approval/rules/upsert': methodFixture(
+    'approval/rules/upsert',
+    {
+      threadId: 'thread:1',
+      expectedVersion: '3',
+      rule: { effect: 'allow', scope: 'project', match: { kind: 'tool', tool: 'Bash' } },
+    },
+    {
+      rule: {
+        id: 'rule:2',
+        effect: 'allow',
+        scope: 'project',
+        source: 'project',
+        match: { kind: 'tool', tool: 'Bash' },
+        editable: true,
+        version: '4',
+      },
+    },
   ),
   'approval/reviewState': methodFixture(
     'approval/reviewState',
     { threadId: 'thread:1' },
-    { manualAllows: 3, denials: [] },
+    { manualAllows: 3, denials: [], reviews: [] },
   ),
   'approval/retry': methodFixture(
     'approval/retry',
@@ -1216,6 +1436,51 @@ const fixtures = {
         committedAt: 1_100,
       },
     },
+  ),
+  'schedule-draft/read': methodFixture(
+    'schedule-draft/read',
+    { id: scheduleDraft.id },
+    { draft: scheduleDraft },
+  ),
+  'schedule-draft/commit': methodFixture(
+    'schedule-draft/commit',
+    {
+      id: scheduleDraft.id,
+      expectedRevision: scheduleDraft.revision,
+      operationId: 'operation:schedule-draft-commit',
+      trigger: scheduleDraft.trigger,
+      conditions: scheduleDraft.conditions,
+      conditionFallback: scheduleDraft.conditionFallback,
+      acceptance: scheduleDraft.acceptance,
+      notificationPolicy: scheduleDraft.notificationPolicy,
+      missedRuns: scheduleDraft.missedRuns,
+      execution: scheduleDraft.execution,
+    },
+    {
+      draft: {
+        ...scheduleDraft,
+        revision: 2,
+        status: 'committed',
+        createdRefs: [{ kind: 'scheduled-task', id: scheduledTask.id }],
+        updatedAt: 1_100,
+        committedAt: 1_100,
+      },
+    },
+  ),
+  'schedule-draft/cancel': methodFixture(
+    'schedule-draft/cancel',
+    { id: scheduleDraft.id, expectedRevision: scheduleDraft.revision },
+    { draft: { ...scheduleDraft, revision: 2, status: 'cancelled', updatedAt: 1_100 } },
+  ),
+  'schedule-draft/feedback': methodFixture(
+    'schedule-draft/feedback',
+    {
+      id: scheduleDraft.id,
+      expectedRevision: scheduleDraft.revision,
+      operationId: 'operation:schedule-draft-feedback',
+      feedback: '先完成提问交互',
+    },
+    { draft: { ...scheduleDraft, revision: 2, status: 'cancelled', updatedAt: 1_100 } },
   ),
   'automation/list': methodFixture(
     'automation/list',
@@ -2003,6 +2268,67 @@ const fixtures = {
       },
     },
   ),
+  'thread/compact/request': methodFixture(
+    'thread/compact/request',
+    {
+      threadId: threadListItem.id,
+      operationId: 'compact-request',
+    },
+    {
+      operation: {
+        operationId: 'compact-request',
+        threadId: threadListItem.id,
+        sessionId: null,
+        agentId: null,
+        trigger: 'manual',
+        phase: 'settled',
+        status: 'queued',
+        compactionId: null,
+        reason: null,
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    },
+  ),
+  'thread/compact/cancel': methodFixture(
+    'thread/compact/cancel',
+    {
+      threadId: threadListItem.id,
+      operationId: 'compact-request',
+    },
+    {
+      operation: {
+        operationId: 'compact-request',
+        threadId: threadListItem.id,
+        sessionId: null,
+        agentId: null,
+        trigger: 'manual',
+        phase: 'settled',
+        status: 'cancelled',
+        compactionId: null,
+        reason: 'stopped',
+        createdAt: 1,
+        updatedAt: 2,
+      },
+    },
+  ),
+  'thread/editUserMessage': {
+    params: {
+      operationId: 'edit-1',
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      inputId: 'input-1',
+      content: 'edited',
+      attachmentIds: [],
+      contextReferenceIds: [],
+    },
+    result: {
+      inputId: 'input-2',
+      turnId: 'turn-2',
+      disposition: 'accepted',
+      streamPosition: { streamId: 'thread-1', sequence: 1 },
+    },
+  },
   'turn/start': methodFixture(
     'turn/start',
     {
@@ -2221,6 +2547,21 @@ const fixtures = {
       generation: 2,
       updatedAt: 2,
     },
+  ),
+  'plugin/readAsset': methodFixture(
+    'plugin/readAsset',
+    { pluginId: 'pidex-demo', kind: 'logo' },
+    { mimeType: 'image/png', base64: 'aGVsbG8=' },
+  ),
+  'plugin/install': methodFixture(
+    'plugin/install',
+    { pluginId: 'pidex-demo', operationId: 'install-demo' },
+    { pluginId: 'pidex-demo', generation: 2, updatedAt: 2 },
+  ),
+  'plugin/uninstall': methodFixture(
+    'plugin/uninstall',
+    { pluginId: 'pidex-demo', operationId: 'uninstall-demo' },
+    { pluginId: 'pidex-demo', generation: 3, updatedAt: 3 },
   ),
   'plugin/list': methodFixture(
     'plugin/list',
@@ -3096,6 +3437,60 @@ const fixtures = {
     },
     { models: customProviderDefinition.models },
   ),
+  'provider/model/sync': methodFixture(
+    'provider/model/sync',
+    { providerId },
+    {
+      providerId,
+      api: 'openai-completions',
+      fetchedAt: 2,
+      candidates: customProviderDefinition.models,
+      removedModelIds: [modelId],
+      baselineCreated: false,
+      totalFetched: customProviderDefinition.models.length + 1,
+      catalogVersion: 2,
+    },
+  ),
+  'provider/protocol/detect': methodFixture(
+    'provider/protocol/detect',
+    {
+      draft: {
+        baseUrl: 'https://example.test/v1',
+        endpoints: { 'openai-responses': 'https://example.test/v1' },
+        auth: 'api-key',
+        headers: { 'x-client-version': '0.1.0' },
+        apiKey: 'fixture-transient-key',
+      },
+      providerId,
+      model: modelId,
+      batch: false,
+    },
+    {
+      mode: 'single',
+      protocols: [
+        'openai-completions',
+        'openai-responses',
+        'anthropic-messages',
+        'google-generative-ai',
+      ],
+      models: [
+        {
+          model: modelId,
+          cells: [
+            { protocol: 'openai-completions', status: 'success', latencyMs: 12 },
+            {
+              protocol: 'openai-responses',
+              status: 'failed',
+              category: 'configuration',
+              message: 'HTTP 404',
+            },
+          ],
+        },
+      ],
+      totalModels: 1,
+      skippedModels: 0,
+    },
+  ),
   'provider/credential/list': methodFixture(
     'provider/credential/list',
     { providerId },
@@ -3186,6 +3581,40 @@ const fixtures = {
     'provider/apiKey/test',
     { credentialId },
     { credential: providerCredentialSummary, ok: true, message: 'API Key 可用。' },
+  ),
+  'provider/modelPreferences/list': methodFixture(
+    'provider/modelPreferences/list',
+    {},
+    {
+      preferences: [
+        {
+          providerId,
+          modelId: modelRef.id,
+          variant: 'high',
+          maxContextTokens: 500_000,
+          updatedAt: 1,
+        },
+      ],
+    },
+  ),
+  'provider/modelPreferences/set': methodFixture(
+    'provider/modelPreferences/set',
+    {
+      providerId,
+      modelId: modelRef.id,
+      variant: 'high',
+      maxContextTokens: 500_000,
+      operationId: 'operation:model-preferences-set',
+    },
+    {
+      preference: {
+        providerId,
+        modelId: modelRef.id,
+        variant: 'high',
+        maxContextTokens: 500_000,
+        updatedAt: 1,
+      },
+    },
   ),
   'auth/session/start': methodFixture(
     'auth/session/start',
@@ -3361,6 +3790,25 @@ const fixtures = {
       },
     },
   ),
+  'github/thread/pullRequests': methodFixture(
+    'github/thread/pullRequests',
+    { threadIds: [project.id] },
+    {
+      threads: [{ threadId: project.id, items: [githubThreadPullRequestSummary] }],
+    },
+  ),
+  'github/thread/pullRequest/link': methodFixture(
+    'github/thread/pullRequest/link',
+    { threadId: project.id, url: githubPullRequest.htmlUrl },
+    {
+      thread: { threadId: project.id, items: [githubThreadPullRequestSummary] },
+    },
+  ),
+  'github/thread/pullRequest/unlink': methodFixture(
+    'github/thread/pullRequest/unlink',
+    { threadId: project.id, owner: 'octocat', repository: 'fixture', number: 7 },
+    { thread: { threadId: project.id, items: [] } },
+  ),
   'git/branch/create': methodFixture(
     'git/branch/create',
     {
@@ -3386,6 +3834,36 @@ const fixtures = {
       projectId: project.id,
       branchName: 'main',
     },
+    {
+      project,
+      status: {
+        branchName: 'main',
+        upstream: 'origin/main',
+        ahead: 0,
+        behind: 0,
+        clean: true,
+        files: [],
+      },
+    },
+  ),
+  'git/fetch': methodFixture(
+    'git/fetch',
+    { projectId: project.id },
+    {
+      project,
+      status: {
+        branchName: 'main',
+        upstream: 'origin/main',
+        ahead: 1,
+        behind: 0,
+        clean: true,
+        files: [],
+      },
+    },
+  ),
+  'git/pull': methodFixture(
+    'git/pull',
+    { projectId: project.id },
     {
       project,
       status: {
@@ -3591,7 +4069,7 @@ const fixtures = {
   ),
   'review/commits': methodFixture(
     'review/commits',
-    { projectId: project.id, limit: 50 },
+    { projectId: project.id, limit: 50, ref: 'main' },
     {
       commits: [
         {
@@ -5766,6 +6244,28 @@ describe('RPC method schema contracts', () => {
     ).toThrow()
   })
 
+  test('Git 同步方法使用独立能力且只接受项目标识', () => {
+    expect(Capabilities).toContain('git.sync.v1')
+    for (const method of ['git/fetch', 'git/pull'] as const) {
+      expect(RpcMethods[method]).toMatchObject({
+        capability: 'git.sync.v1',
+        mutation: true,
+        exactParams: true,
+        exactResult: true,
+      })
+      const decode = Schema.decodeUnknownSync(RpcMethods[method].params, {
+        onExcessProperty: 'error',
+      })
+      expect(decode(fixtures[method].params)).toEqual(fixtures[method].params)
+      expect(() =>
+        decode({ projectId: project.id, workspacePath: 'F:\\private-workspace' }),
+      ).toThrow()
+      expect(Schema.decodeUnknownSync(RpcMethods[method].result)(fixtures[method].result)).toEqual(
+        fixtures[method].result,
+      )
+    }
+  })
+
   test('批量 Review Diff 使用独立的向后兼容能力', () => {
     expect(RpcMethods['review/file-diffs'].capability).toBe('git.review.batch.v1')
     expect(Capabilities).toContain('git.review.batch.v1')
@@ -5819,7 +6319,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(314)
+    expect(methods).toHaveLength(351)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6187,7 +6687,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(293)
+    expect(Object.keys(RpcMethods)).toHaveLength(330)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })
@@ -6195,6 +6695,17 @@ describe('RPC method schema contracts', () => {
   test('插件管理使用精确契约并由独立能力保护', () => {
     expect(Capabilities).toContain('plugins.manage.v1')
     expect(Capabilities).toContain('plugins.details.v1')
+    expect(Capabilities).toContain('plugins.assets.v1')
+    expect(RpcMethods['plugin/readAsset']).toMatchObject({
+      capability: 'plugins.assets.v1',
+      mutation: false,
+      exactParams: true,
+    })
+    expect(() =>
+      Schema.decodeUnknownSync(RpcMethods['plugin/readAsset'].params, {
+        onExcessProperty: 'error',
+      })({ pluginId: 'pidex-demo', kind: 'logo', path: '../secret' }),
+    ).toThrow()
     expect(Schema.decodeUnknownSync(ProtocolCapabilitySchema)('plugins.manage.v1')).toBe(
       'plugins.manage.v1',
     )
@@ -6566,6 +7077,43 @@ describe('RPC method schema contracts', () => {
     ).toThrow()
   })
 
+  test('accepts optional builtin overrides while retaining old builtin definitions', () => {
+    expect(Capabilities).toContain('provider.builtinOverrides.v1')
+    const decode = Schema.decodeUnknownSync(RpcMethods['provider/update'].params, {
+      onExcessProperty: 'error',
+    })
+    const definition = {
+      kind: 'builtin' as const,
+      id: providerId,
+      enabled: true,
+      allowModels: [],
+      denyModels: [],
+      baseUrl: 'https://gateway.example/v1',
+      models: [{ id: modelId, enabled: true, name: 'Renamed', maxTokens: 65536 }],
+    }
+    expect(
+      decode({ providerId, definition, operationId: 'operation:builtin-overrides' }).definition,
+    ).toEqual(definition)
+    expect(
+      decode({
+        providerId,
+        definition: {
+          ...definition,
+          protocol: 'google-generative-ai',
+          endpoints: { 'google-generative-ai': 'https://gateway.example/v1' },
+        },
+        operationId: 'operation:native-endpoint',
+      }).definition,
+    ).toMatchObject({ protocol: 'google-generative-ai' })
+    expect(() =>
+      decode({
+        providerId,
+        definition: { ...definition, models: [{ id: modelId, enabled: true, maxTokens: -1 }] },
+        operationId: 'operation:builtin-invalid',
+      }),
+    ).toThrow()
+  })
+
   test('health run schema rejects invalid states, negative latency, and unknown categories', () => {
     const decodeItem = Schema.decodeUnknownSync(ModelHealthItemSchema)
     expect(
@@ -6722,4 +7270,29 @@ describe('RPC method schema contracts', () => {
     expect(decodeResult(validResult)).toEqual(validResult)
     expect(() => decodeResult({ ...validResult, extra: 1 })).toThrow()
   })
+})
+
+test('消息阶段为可选字段，未知阶段降级且事件按独立能力协商', () => {
+  const item = {
+    id: 'text',
+    messageID: 'message',
+    turnId: 'turn',
+    agentId: 'agent',
+    type: 'text',
+    placement: 'result',
+    text: '回答',
+    status: 'streaming',
+    createdAt: 1,
+  }
+  const decode = Schema.decodeUnknownSync(TextItemSchema)
+  expect(decode(item)).not.toHaveProperty('phase')
+  expect(decode({ ...item, phase: 'future_phase' }).phase).toBeUndefined()
+  for (const phase of ['commentary', 'partial_answer', 'final_answer'] as const)
+    expect(decode({ ...item, phase }).phase).toBe(phase)
+  const event = EventManifest['item/agentMessage/phaseChanged']
+  expect(event.capability).toBe('thread.message-phase.v1')
+  expect(event.durability).toBe('durable')
+  expect(
+    Schema.decodeUnknownSync(event.payload)({ item: { ...item, phase: 'final_answer' } }).item.id,
+  ).toBe('text')
 })

@@ -24,7 +24,7 @@ export async function pluginReferenceData(
 ): Promise<string[]> {
   const ids = extractPluginReferences(content)
   if (!ids.length) return []
-  const catalog = plugins ? (await plugins.list({ workspace })).plugins : []
+  const catalog = plugins ? (await plugins.listLocal(workspace)).plugins : []
   return ids.map((id) => {
     const plugin = catalog.find((entry) => entry.id === id)
     if (

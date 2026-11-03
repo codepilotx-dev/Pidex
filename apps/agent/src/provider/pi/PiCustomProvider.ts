@@ -11,26 +11,37 @@ import type {
   PiCustomModelConfig,
   PiCustomProviderConfig,
 } from './PiProviderConfig'
+import type { Model as PidexModel } from '@pidex/model-schema'
 import { piProviderApiStreams as streams } from './PiProviderApis'
 
-const toPiModel = (
+export const toPiModel = (
   providerID: string,
   provider: PiCustomProviderConfig,
   model: PiCustomModelConfig,
-): Model<Api> => ({
+): Model<Api> & {
+  inputExplicit: boolean
+  modelType?: NonNullable<PiCustomModelConfig['modelType']>
+  tools?: boolean
+  optionSpecs?: PidexModel.OptionSpecs
+} => ({
   id: model.id,
   name: model.name,
   api: model.api,
   provider: providerID,
-  baseUrl: provider.baseUrl,
+  baseUrl: provider.endpoints?.[model.api] ?? provider.baseUrl,
   reasoning: model.reasoning,
-  input: [...model.input],
+  inputExplicit: true,
+  input: [...model.input] as Model<Api>['input'],
+  ...(model.modelType ? { modelType: model.modelType } : {}),
+  ...(model.tools !== undefined ? { tools: model.tools } : {}),
   cost: { ...model.cost },
   contextWindow: model.contextWindow,
+  ...(model.maxInputTokens !== undefined ? { maxInputTokens: model.maxInputTokens } : {}),
   maxTokens: model.maxTokens,
   ...(Object.keys(model.headers).length ? { headers: { ...model.headers } } : {}),
   ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
   ...(model.compat ? { compat: structuredClone(model.compat) } : {}),
+  ...(model.optionSpecs ? { optionSpecs: structuredClone(model.optionSpecs) } : {}),
 })
 
 export const createPiCustomProvider = (
@@ -41,8 +52,13 @@ export const createPiCustomProvider = (
     .filter((model) => model.enabled)
     .map((model) => toPiModel(providerID, config, model))
   const requiredApis = new Set(models.map((model) => model.api as CustomProviderApi))
+  // A fully delisted upstream may leave a custom provider with zero models.
+  // Pi still requires one stream implementation to register a provider, so a
+  // placeholder is used; it is never dispatched because no model references it.
   const api = Object.fromEntries(
-    [...requiredApis].map((id) => [id, streams[id]()] as const),
+    (requiredApis.size > 0 ? [...requiredApis] : ['openai-completions' as const]).map(
+      (id) => [id, streams[id]()] as const,
+    ),
   ) as Partial<Record<Api, ProviderStreams>>
   return createProvider({
     id: providerID,
@@ -125,29 +141,24 @@ export const discoverOpenAIModels = async (
     offset += chunk.byteLength
   }
   const document = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes)) as unknown
-  if (
-    typeof document !== 'object' ||
-    document === null ||
-    !('data' in document) ||
-    !Array.isArray(document.data)
-  ) {
+  if (typeof document !== 'object' || document === null) {
+    throw new Error('Model discovery returned an invalid OpenAI catalog')
+  }
+  const codex = !('data' in document)
+  const entries = 'data' in document ? document.data : 'models' in document ? document.models : null
+  if (!Array.isArray(entries)) {
     throw new Error('Model discovery returned an invalid OpenAI catalog')
   }
   const models = new Map<string, DiscoveredOpenAIModel>()
-  for (const candidate of document.data) {
-    if (
-      typeof candidate === 'object' &&
-      candidate !== null &&
-      'id' in candidate &&
-      typeof candidate.id === 'string' &&
-      candidate.id.trim()
-    ) {
-      models.set(candidate.id, {
-        id: candidate.id,
-        name:
-          'name' in candidate && typeof candidate.name === 'string' && candidate.name.trim()
-            ? candidate.name
-            : candidate.id,
+  for (const candidate of entries) {
+    if (typeof candidate !== 'object' || candidate === null) continue
+    const record = candidate as Record<string, unknown>
+    const id = codex ? record.slug : record.id
+    const name = codex ? record.display_name : record.name
+    if (typeof id === 'string' && id.trim()) {
+      models.set(id, {
+        id,
+        name: typeof name === 'string' && name.trim() ? name : id,
       })
     }
   }

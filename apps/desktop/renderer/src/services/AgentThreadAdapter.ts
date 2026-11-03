@@ -1,8 +1,5 @@
-import {
-  DEFAULT_PERMISSION_CONFIG,
-  AUTO_REVIEW_PERMISSION_CONFIG,
-  FULL_ACCESS_PERMISSION_CONFIG,
-} from '@pidex/shared/thread'
+import type { ThreadContextState } from '@pidex/shared/thread'
+import { matchPermissionPreset, permissionConfigForPreset } from '@pidex/shared/thread'
 import type {
   ApprovalRequest,
   Input,
@@ -44,16 +41,12 @@ export function agentQuestionIdFromRequestId(requestId: string): string | null {
     : null
 }
 
+/** Generates the stored config from the shared preset catalog; custom keeps `current`. */
 export function desktopPermissionModeToPermissionConfig(
   mode: DesktopPermissionMode | undefined,
+  current?: PermissionConfig,
 ): PermissionConfig {
-  return {
-    ...(mode === 'auto-review'
-      ? AUTO_REVIEW_PERMISSION_CONFIG
-      : mode === 'full-access'
-        ? FULL_ACCESS_PERMISSION_CONFIG
-        : DEFAULT_PERMISSION_CONFIG),
-  }
+  return permissionConfigForPreset(mode ?? 'default', current)
 }
 
 export function agentTurnStatusToDesktopStatus(
@@ -77,6 +70,7 @@ export function agentThreadListItemToDesktop(
   const workspace = threadWorkspaceToDesktopWorkspace(thread.workspace, project)
   const standalone = thread.projectID === null
   const planModeActive = thread.settings.taskMode === 'plan'
+  const grillModeActive = thread.settings.taskMode === 'grill'
   return {
     id: thread.id,
     projectId: thread.projectID,
@@ -101,6 +95,7 @@ export function agentThreadListItemToDesktop(
     permissionMode: permissionModeFromPermissionConfig(thread.settings.permissionConfig),
     collaborationMode: collaborationModeFromPlanModeActive(planModeActive),
     planModeActive,
+    grillModeActive,
     model: null,
     reviewModel: null,
     thinkingMode: 'default',
@@ -110,7 +105,9 @@ export function agentThreadListItemToDesktop(
     status: agentTurnStatusToDesktopStatus(thread.latestTurnStatus),
     unreadAt: isoOrNull(thread.unreadAt),
     latestTurnStatus: thread.latestTurnStatus,
+    latestTurnError: thread.latestTurnStatus === 'failed' ? (thread.latestTurnError ?? null) : null,
     pendingPlanApproval: thread.pendingPlanApproval === true,
+    ...(thread.goal === undefined ? {} : { threadGoal: thread.goal }),
     lastMessageAt: isoOrNull(thread.updatedAt),
     createdAt: iso(thread.createdAt),
   }
@@ -126,8 +123,10 @@ export function agentThreadListItemToDesktopSnapshot(
     workspace: threadWorkspaceToDesktopWorkspace(thread.workspace, project),
     settings: {
       permissionConfig: thread.settings.permissionConfig,
+      maxContextTokens: thread.settings.maxContextTokens ?? null,
       collaborationMode: item.collaborationMode,
       planModeActive: item.planModeActive,
+      grillModeActive: item.grillModeActive,
       thinkingMode: 'default',
       sessionName: item.sessionName ?? undefined,
       additionalDirectories: [],
@@ -160,6 +159,7 @@ export function agentThreadSnapshotToDesktop(
   const workspace = threadWorkspaceToDesktopWorkspace(snapshot.thread.workspace, project)
   const standalone = snapshot.thread.projectID === null
   const planModeActive = snapshot.thread.settings.taskMode === 'plan'
+  const grillModeActive = snapshot.thread.settings.taskMode === 'grill'
   const events = snapshotEvents(snapshot)
   const latestMessage = events
     .slice()
@@ -195,6 +195,7 @@ export function agentThreadSnapshotToDesktop(
     permissionMode: permissionModeFromPermissionConfig(snapshot.thread.settings.permissionConfig),
     collaborationMode: collaborationModeFromPlanModeActive(planModeActive),
     planModeActive,
+    grillModeActive,
     providerID: latestModel?.providerID,
     model: latestModel?.id ?? null,
     reviewModel: null,
@@ -204,6 +205,7 @@ export function agentThreadSnapshotToDesktop(
     additionalDirectoryCount: 0,
     status: agentTurnStatusToDesktopStatus(latestTurn?.status),
     latestTurnStatus: latestTurn?.status ?? null,
+    latestTurnError: latestTurn?.status === 'failed' ? (latestTurn.error ?? null) : null,
     pendingPlanApproval: snapshot.pendingPlanApproval?.status === 'pending',
     threadGoal: snapshot.goal,
     lastMessageAt: iso(snapshot.thread.updatedAt),
@@ -214,8 +216,10 @@ export function agentThreadSnapshotToDesktop(
     workspace,
     settings: {
       permissionConfig: snapshot.thread.settings.permissionConfig,
+      maxContextTokens: snapshot.thread.settings.maxContextTokens ?? null,
       collaborationMode: item.collaborationMode,
       planModeActive,
+      grillModeActive,
       providerID: latestModel?.providerID,
       model: latestModel?.id,
       variant,
@@ -236,10 +240,15 @@ export function agentThreadSnapshotToDesktop(
         })),
       toolLog: snapshot.items.flatMap(itemToToolLog),
       pendingPermissions: pendingPermissionRequests(events),
-      contextUsage: latestItemContextUsage(
-        snapshot.items,
-        latestTurn?.model.providerID ?? latestInput?.model.providerID,
-        latestTurn?.model.id ?? latestInput?.model.id,
+      contextUsage: contextStateUsage(
+        snapshot.context,
+        latestItemContextUsage(
+          snapshot.items,
+          latestTurn?.model.providerID ?? latestInput?.model.providerID,
+          latestTurn?.model.id ?? latestInput?.model.id,
+        ),
+        snapshot.thread.settings?.maxContextTokens,
+        latestTurn?.status === 'running' || Boolean(latestTurn?.status?.startsWith('waiting-')),
       ),
     },
     events,
@@ -284,18 +293,32 @@ export function agentQueuedFollowUpsToDesktop(snapshot: ThreadSnapshot): Desktop
   return [...orderedInputIds, ...remainingInputIds].flatMap((inputId) => {
     const input = queuedInputs.get(inputId)
     if (!input) return []
-    return [
-      {
-        id: input.id,
-        input: { text: input.content, ...(input.skills ? { skills: input.skills } : {}) },
-        previewText: [
-          ...(input.skills?.map((skill) => `$${skill.name}`) ?? []),
-          input.content,
-        ].join(' '),
-        createdAt: iso(input.createdAt),
-      },
-    ]
+    return [agentQueuedInputToDesktop(input)]
   })
+}
+
+export function agentQueuedInputToDesktop(input: Input): DesktopQueuedFollowUp {
+  return {
+    id: input.id,
+    input: {
+      text: input.content,
+      taskMode: input.mode,
+      ...(input.goal ? { goal: input.goal } : {}),
+      ...(input.skills ? { skills: input.skills } : {}),
+    },
+    previewText: [
+      ...(input.goal
+        ? ['目标']
+        : input.mode === 'plan'
+          ? ['计划']
+          : input.mode === 'grill'
+            ? ['访谈']
+            : []),
+      ...(input.skills?.map((skill) => `$${skill.name}`) ?? []),
+      input.content,
+    ].join(' '),
+    createdAt: iso(input.createdAt),
+  }
 }
 
 function queuePauseReasonFromSnapshot(snapshot: ThreadSnapshot): DesktopQueuePauseReason | null {
@@ -330,7 +353,11 @@ export function agentEventsFromNotification(notification: AgentNotification): De
     const status = statusFromNotification(params)
     return status ? [{ ...base, type: 'status', status }] : []
   }
-  if (notification.method === 'item/started' || notification.method === 'item/completed') {
+  if (
+    notification.method === 'item/started' ||
+    notification.method === 'item/completed' ||
+    notification.method === 'item/agentMessage/phaseChanged'
+  ) {
     return isItem(params.item) ? itemToAgentEvents(threadId, params.item) : []
   }
   if (notification.method === 'item/agentMessage/delta') {
@@ -734,6 +761,54 @@ function itemToAgentEvents(threadId: string, item: Item): DesktopAgentEvent[] {
   return []
 }
 
+export function contextStateUsage(
+  state: ThreadContextState | null | undefined,
+  fallback: DesktopContextUsage | null,
+  maxContextTokens?: number | null,
+  activeTurn = false,
+): DesktopContextUsage | null {
+  let base: DesktopContextUsage | null = null
+  if (!state?.budget) {
+    base = state?.operation
+      ? { ...(fallback ?? { usedTokens: 0 }), compactionOperation: state.operation }
+      : fallback
+  } else {
+    const budget = state.budget
+    const physicalInput = budget.physicalInputBudgetTokens ?? budget.inputBudgetTokens
+    const effectiveWindow =
+      activeTurn || maxContextTokens === undefined
+        ? budget.inputBudgetTokens
+        : Math.min(maxContextTokens ?? physicalInput, physicalInput)
+    const usedPercent = Math.max(0, (budget.usedTokens / effectiveWindow) * 100)
+    base = {
+      ...fallback,
+      usedTokens: budget.usedTokens,
+      contextWindow: effectiveWindow,
+      remainingTokens: Math.max(0, effectiveWindow - budget.usedTokens),
+      usedPercent,
+      remainingPercent: 100 - usedPercent,
+      percentUsed: usedPercent,
+      budget,
+      ...(activeTurn ? { budgetFrozen: true } : {}),
+      ...(state.operation ? { compactionOperation: state.operation } : {}),
+    }
+  }
+
+  if (base && !activeTurn && maxContextTokens && base.contextWindow > maxContextTokens) {
+    const effectiveWindow = Math.min(maxContextTokens, base.contextWindow)
+    const usedPercent = Math.max(0, (base.usedTokens / effectiveWindow) * 100)
+    return {
+      ...base,
+      contextWindow: effectiveWindow,
+      remainingTokens: Math.max(0, effectiveWindow - base.usedTokens),
+      usedPercent,
+      remainingPercent: 100 - usedPercent,
+      percentUsed: usedPercent,
+    }
+  }
+  return base
+}
+
 export function itemContextUsage(
   item: Item,
   fallbackProvider?: string,
@@ -750,7 +825,7 @@ export function itemContextUsage(
   if (!contextWindow) return null
 
   const usedTokens = input + cacheRead + cacheWrite
-  const usedPercent = Math.min(100, Math.max(0, (usedTokens / contextWindow) * 100))
+  const usedPercent = Math.max(0, (usedTokens / contextWindow) * 100)
   const provider = stringValue(value.provider) || fallbackProvider
   const model = stringValue(value.model) || fallbackModel
 
@@ -788,11 +863,32 @@ function latestRawItemContextUsage(
   fallbackProvider?: string,
   fallbackModel?: string,
 ): DesktopContextUsage | null {
+  let compactedTokens: number | undefined
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
+    if (
+      item?.type === 'activity' &&
+      item.activity === 'context-compression' &&
+      item.status === 'completed'
+    ) {
+      compactedTokens ??= nonNegativeNumber(item.contextTokens) ?? undefined
+    }
     if (!item || item.type !== 'text' || item.status !== 'completed') continue
     const usage = itemContextUsage(item, fallbackProvider, fallbackModel)
-    if (usage) return usage
+    if (!usage) continue
+    if (compactedTokens === undefined) return usage
+    const usedPercent = Math.min(100, (compactedTokens / usage.contextWindow) * 100)
+    return {
+      provider: usage.provider,
+      model: usage.model,
+      contextWindow: usage.contextWindow,
+      usedTokens: compactedTokens,
+      totalTokens: compactedTokens,
+      remainingTokens: Math.max(0, usage.contextWindow - compactedTokens),
+      usedPercent,
+      percentUsed: usedPercent,
+      remainingPercent: 100 - usedPercent,
+    }
   }
   return null
 }
@@ -913,6 +1009,24 @@ export function approvalToRequest(approval: ApprovalRequest): DesktopPermissionR
     requestKind: permissionGrant ? 'permission-grant' : approval.command ? 'shell-command' : 'tool',
     ...(permissionGrant ? { permissionGrant } : {}),
     ...(approval.computerApp ? { computerApp: { ...approval.computerApp } } : {}),
+    ...(approval.guardian ? { guardian: approval.guardian } : {}),
+    ...(approval.autoReviewFallbackReason
+      ? { autoReviewFallbackReason: approval.autoReviewFallbackReason }
+      : {}),
+  }
+}
+
+function guardianFromParams(
+  params: Record<string, unknown>,
+): Pick<DesktopPermissionRequest, 'guardian' | 'autoReviewFallbackReason'> {
+  const guardian =
+    params.guardian && typeof params.guardian === 'object' && !Array.isArray(params.guardian)
+      ? (params.guardian as DesktopPermissionRequest['guardian'])
+      : undefined
+  const fallbackReason = stringValue(params.autoReviewFallbackReason)
+  return {
+    ...(guardian ? { guardian } : {}),
+    ...(fallbackReason ? { autoReviewFallbackReason: fallbackReason } : {}),
   }
 }
 
@@ -969,6 +1083,7 @@ function approvalParamsToRequest(params: Record<string, unknown>): DesktopPermis
       : {}),
     description: stringValue(params.reason) || '需要批准工具调用',
     requestKind: command ? 'shell-command' : 'tool',
+    ...guardianFromParams(params),
   }
 }
 
@@ -1007,6 +1122,7 @@ function permissionParamsToRequest(params: Record<string, unknown>): DesktopPerm
     },
     description: stringValue(params.reason) || '需要额外权限',
     requestKind: 'permission-grant',
+    ...guardianFromParams(params),
     permissionGrant: {
       requestedPermissions,
       requestedScope,
@@ -1135,16 +1251,8 @@ function eventTime(params: Record<string, unknown>): number {
 export function permissionModeFromPermissionConfig(
   config: PermissionConfig | undefined,
 ): DesktopPermissionMode {
-  if (config?.sandboxMode === 'danger-full-access' && config.approvalPolicy === 'never')
-    return 'full-access'
-  if (config?.approvalsReviewer === 'auto_review') return 'auto-review'
-  if (
-    config?.sandboxMode === 'workspace-write' &&
-    config.approvalPolicy === 'on-request' &&
-    config.approvalsReviewer === 'user'
-  )
-    return 'default'
-  return 'custom'
+  // Unknown configs stay custom; preset identity always comes from the shared catalog.
+  return config ? matchPermissionPreset(config) : 'custom'
 }
 
 export function projectToDesktopWorkspace(

@@ -171,6 +171,50 @@ describe('AgentHarness deferred activation', () => {
 })
 
 describe('AgentHarness turn composition', () => {
+  test('工具能力关闭时不暴露工具，也不保留可激活工具入口', async () => {
+    const setup = setupProvider([fauxAssistantMessage('plain answer')])
+    const repo = new InMemorySessionRepo()
+    const session = await repo.create({ id: crypto.randomUUID() })
+    const harness = new AgentHarness({
+      session,
+      models: setup.models,
+      model: Object.assign(setup.faux.getModel(), { tools: false }),
+      tools: [
+        {
+          name: 'forbidden_tool',
+          label: 'Tool',
+          description: 'Must not be exposed',
+          parameters: Type.Object({}),
+          execute: async () => {
+            throw new Error('Must not execute')
+          },
+        },
+      ],
+    })
+    const exposed: string[][] = []
+    harness.subscribe((event) => {
+      if (event.type === 'turn_composition') exposed.push(event.activeToolNames)
+    })
+    const result = await harness.prompt('hello')
+    expect(result.stopReason).not.toBe('error')
+    expect(exposed).toEqual([[]])
+  })
+
+  test('blocks provider requests beyond the configured maximum input budget', async () => {
+    const setup = setupProvider([fauxAssistantMessage('should not be requested')])
+    const repo = new InMemorySessionRepo()
+    const session = await repo.create({ id: crypto.randomUUID() })
+    const harness = new AgentHarness({
+      session,
+      models: setup.models,
+      model: Object.assign(setup.faux.getModel(), { maxInputTokens: 1 }),
+    })
+    const result = await harness.prompt('a message exceeding the configured one-token input budget')
+    expect(result.stopReason).toBe('error')
+    expect(result.errorMessage).toContain('已接近上下文预算')
+    expect(result.errorMessage).toContain('本次请求未发送')
+  })
+
   test('resolves an async system prompt at each turn boundary, never in the constructor', async () => {
     let resolutions = 0
     const setup = setupProvider([fauxAssistantMessage('first'), fauxAssistantMessage('second')])
@@ -327,4 +371,46 @@ describe('AgentHarness live steering', () => {
 
     expect(consumed).toEqual([['input:steer:first'], ['input:steer:second']])
   })
+})
+
+test('Harness 将 Provider 阶段归一化后按 SDK 更新顺序送入 adapter', async () => {
+  const setup = setupProvider([fauxAssistantMessage('回答')])
+  const original = setup.models.streamSimple.bind(setup.models)
+  setup.models.streamSimple = (model, context, options) => {
+    const stream = original(model, context, options)
+    const iterate = stream[Symbol.asyncIterator].bind(stream)
+    stream[Symbol.asyncIterator] = async function* () {
+      await options?.onProviderStreamEvent?.({ type: 'response.created' }, model)
+      await options?.onProviderStreamEvent?.(
+        {
+          type: 'response.output_item.added',
+          output_index: 0,
+          item: {
+            type: 'message',
+            phase: 'final_answer',
+            id: 'provider-only-id',
+            content: 'provider-only-content',
+          },
+        },
+        model,
+      )
+      yield* { [Symbol.asyncIterator]: iterate }
+    }
+    return stream
+  }
+  const repo = new InMemorySessionRepo()
+  const session = await repo.create({ id: crypto.randomUUID() })
+  const harness = new AgentHarness({ session, models: setup.models, model: setup.faux.getModel() })
+  const events: unknown[] = []
+  harness.subscribe((event) => {
+    if (event.type === 'provider_text_reset' || event.type === 'provider_text_phase')
+      events.push(event)
+  })
+  await harness.prompt('回答')
+  expect(events).toContainEqual({
+    type: 'provider_text_phase',
+    contentIndex: 0,
+    phase: 'final_answer',
+  })
+  expect(JSON.stringify(events)).not.toContain('provider-only')
 })

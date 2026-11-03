@@ -73,6 +73,9 @@ export function WorkbenchTabStrip({
 }: WorkbenchTabStripProps): React.ReactNode {
   const tabRefs = useRef(new Map<WorkbenchTabId, HTMLButtonElement>())
   const [menuOpen, setMenuOpen] = useState(false)
+  const providerManagementOnly = state.tabIds.some(
+    (id) => tabsById[id]?.kind === 'provider-management',
+  )
   const launchers = useMemo(
     () =>
       getWorkbenchLauncherDefinitions().filter(
@@ -205,14 +208,14 @@ export function WorkbenchTabStrip({
                   trigger={
                     <div
                       className={cx(
-                        'right-dock-tab-wrap tw:group tw:relative tw:flex tw:h-7 tw:min-w-22.5 tw:max-w-39 tw:flex-[1_1_156px] tw:items-center tw:overflow-hidden tw:rounded-lg tw:border tw:border-transparent tw:px-2 tw:py-1 tw:shadow-none tw:transition-[background-color,border-color,color] tw:duration-state tw:ease-standard tw:[&.dragging]:opacity-50',
+                        'right-dock-tab-wrap tw:group tw:relative tw:flex tw:h-8 tw:min-w-22.5 tw:max-w-39 tw:flex-[1_1_156px] tw:items-center tw:overflow-hidden tw:rounded-md tw:border tw:border-transparent tw:px-2 tw:py-1 tw:shadow-none tw:transition-[background-color,border-color,color] tw:duration-state tw:ease-standard tw:[&.dragging]:opacity-50',
                         active
                           ? 'active tw:bg-app-selected tw:text-app-text'
-                          : 'tw:text-app-text-meta tw:hover:bg-app-hover tw:hover:text-app-text-soft tw:focus-within:bg-app-hover tw:focus-within:text-app-text-soft',
+                          : 'tw:text-app-text-meta tw:hover:bg-app-hover tw:hover:text-app-text-soft tw:has-[:focus-visible]:bg-app-hover tw:has-[:focus-visible]:text-app-text-soft',
                         hasDivider && 'has-divider',
                       )}
                       data-panel-tab={tab.id}
-                      draggable
+                      draggable={!providerManagementOnly}
                       onDragEnd={(event) => event.currentTarget.classList.remove('dragging')}
                       onDragOver={(event) => event.preventDefault()}
                       onDragStart={(event) => {
@@ -244,7 +247,7 @@ export function WorkbenchTabStrip({
                         aria-controls={`workbench-panel-${target}-${domId(tab.id)}`}
                         aria-selected={active}
                         className={cx(
-                          'right-dock-tab tw:pr-5 tw:relative tw:inline-flex tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:items-center tw:gap-2 tw:overflow-hidden tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0 tw:text-inherit tw:whitespace-nowrap tw:type-control tw:focus-visible:outline-app-accent/72',
+                          'right-dock-tab tw:pr-7 tw:relative tw:inline-flex tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:items-center tw:gap-2 tw:overflow-hidden tw:rounded-md tw:border-0 tw:bg-transparent tw:p-0 tw:text-inherit tw:whitespace-nowrap tw:type-control',
                           active && 'active',
                           tab.kind === 'file-preview' && tab.preview && 'preview tw:italic',
                         )}
@@ -270,23 +273,25 @@ export function WorkbenchTabStrip({
                           onCloseTab(tab.id)
                         }}
                       >
-                        <span className="right-dock-tab-icon tw:inline-flex tw:size-icon tw:items-center tw:justify-center tw:[&>svg]:size-icon">
+                        <span className="right-dock-tab-icon tw:inline-flex tw:size-[var(--inline-icon-size,1em)] tw:items-center tw:justify-center tw:[&>svg]:size-[var(--inline-icon-size,1em)]">
                           {tabIcon}
                         </span>
-                        <span className="right-dock-tab-title tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:whitespace-nowrap">
+                        <span className="right-dock-tab-title tw:min-w-0 tw:flex-1 tw:overflow-hidden tw:text-left tw:whitespace-nowrap">
                           {tabTitle}
                         </span>
                       </button>
                       <Button
                         isIconOnly
                         className={cx(
-                          'right-dock-tab-close tw:absolute tw:right-1 tw:top-1/2 tw:-translate-y-1/2 tw:z-local tw:inline-flex tw:items-center tw:justify-center tw:rounded-md tw:border-0 tw:bg-transparent tw:text-app-text-meta tw:transition-[background-color,color,opacity] tw:duration-feedback tw:ease-standard tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-focus-within:opacity-100 tw:group-focus-within:pointer-events-auto tw:focus-visible:pointer-events-auto tw:focus-visible:bg-app-hover tw:focus-visible:text-app-text tw:focus-visible:opacity-100 tw:focus-visible:outline-app-accent/72',
+                          'right-dock-tab-close tw:border-0 tw:transition-[background-color,color,opacity] tw:duration-feedback tw:ease-standard tw:focus-visible:bg-app-hover tw:focus-visible:text-app-text tw:absolute tw:right-1 tw:top-1/2 tw:-translate-y-1/2 tw:z-local tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:focus-visible:pointer-events-auto tw:focus-visible:opacity-100',
                           active
                             ? 'tw:pointer-events-auto tw:opacity-100'
                             : 'tw:pointer-events-none tw:opacity-0',
                         )}
                         color="ghost"
+                        variant="ghost"
                         size="iconMd"
+                        shape="pill"
                         title={`关闭 ${tabTitle}`}
                         onMouseDown={(event) => {
                           event.preventDefault()
@@ -310,7 +315,7 @@ export function WorkbenchTabStrip({
           {target === 'bottom' ? (
             <Button
               isIconOnly
-              className="right-dock-add-button tw:hover:shadow-none tw:focus-visible:outline-app-accent/72"
+              className="right-dock-add-button"
               color="ghostSecondary"
               size="toolbar"
               title="新建终端"
@@ -318,7 +323,7 @@ export function WorkbenchTabStrip({
             >
               <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
             </Button>
-          ) : state.tabIds.length > 0 ? (
+          ) : state.tabIds.length > 0 && !providerManagementOnly ? (
             <PopoverMenu
               align="end"
               avoidCollisions={false}
@@ -331,7 +336,7 @@ export function WorkbenchTabStrip({
               trigger={
                 <Button
                   isIconOnly
-                  className="right-dock-add-button tw:hover:shadow-none tw:focus-visible:outline-app-accent/72"
+                  className="right-dock-add-button"
                   color="ghostSecondary"
                   size="toolbar"
                   title="添加标签"
@@ -400,7 +405,7 @@ export function WorkbenchTabStrip({
       {target === 'bottom' && onClosePanel ? (
         <Button
           isIconOnly
-          className="bottom-panel-close tw:ml-1 tw:focus-visible:outline-app-accent/72"
+          className="bottom-panel-close tw:ml-1"
           color="ghostSecondary"
           size="toolbar"
           title="关闭底部面板"

@@ -31,6 +31,17 @@ export function createEnvironmentDomainClient(rpc: Rpc) {
         throw new Error('当前 Agent 不支持多环境设置。请完整退出应用，并在更新 Agent 后重新启动。')
       return rpc.call('local-environment/project/list', { projectId })
     },
+    /**
+     * 首页发起设置只使用已协商的能力：旧 Agent 不能表达显式执行位置时
+     * 对应设置必须禁用并说明原因，而不是悄悄换一个执行位置。
+     */
+    async sessionCreationCapabilities() {
+      const initialized = await rpc.ensureInitialized()
+      return {
+        explicitExecution: initialized.capabilities.includes('thread.execution.v2'),
+        environments: initialized.capabilities.includes('local-environment.multiple.v1'),
+      }
+    },
     readProjectEnvironment: (projectId: string, environmentId: string) =>
       rpc.call('local-environment/project/read', { projectId, environmentId }),
     createProjectEnvironment: (projectId: string, name: string) =>
@@ -128,7 +139,11 @@ export function environmentDomainClient(): EnvironmentDomainClient {
       )) as Rpc['call']
     singleton = createEnvironmentDomainClient({
       call,
-      ensureInitialized: async () => ({ capabilities: [] }) as never,
+      // 浏览器预览没有真实 Agent 握手，按 mock 环境声明发起设置依赖的能力。
+      ensureInitialized: async () =>
+        ({
+          capabilities: ['thread.execution.v2', 'local-environment.multiple.v1'],
+        }) as never,
     })
     return singleton
   }

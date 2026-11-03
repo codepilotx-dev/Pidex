@@ -1,9 +1,15 @@
+import { useMemo } from 'react'
 import type React from 'react'
 import { useEffect, useState } from 'react'
 import { Trash2 } from 'lucide-react'
 import { desktopBrowserClient } from '../../services/desktop-client/DesktopBrowserClient.js'
 import type { DesktopBrowserSitePermission } from '../../../shared/Types.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  useDesktopSettingsField,
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+} from './UseDesktopSettings.js'
 import { APP_ICON_SIZE } from '../../components/ui/IconTokens.js'
 import { SettingsSection } from './SettingsSection.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
@@ -13,8 +19,20 @@ import { SettingsRow } from './SettingsRow.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 
 export function BrowserSettings(): React.ReactNode {
-  const settings = useDesktopSettings()
-  const { browserAllowedSites, setBrowserAllowedSites, draft } = settings
+  const browserAllowedSites = useDesktopSettingsField((s) => s.browserAllowedSites)
+  const setBrowserAllowedSites = useDesktopSettingsField((s) => s.setBrowserAllowedSites)
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const draft = useMemo(
+    () => ({
+      ...subscribedDraftActions,
+      values: {},
+      dirty: subscribedDraftDirty,
+      saving: subscribedDraftSaving,
+    }),
+    [subscribedDraftActions, subscribedDraftDirty, subscribedDraftSaving],
+  )
   const [sitePermissions, setSitePermissions] = useState<DesktopBrowserSitePermission[]>([])
   const [allowAllSites, setAllowAllSites] = useState(false)
   const [allSitesSaving, setAllSitesSaving] = useState(false)
@@ -91,9 +109,7 @@ export function BrowserSettings(): React.ReactNode {
     <SettingsContentArea className="">
       <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
-            浏览器
-          </h2>
+          <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">浏览器</h2>
           <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
             在工作台管理多个网页，并让 Agent 在后台完成常用浏览器操作。
           </p>

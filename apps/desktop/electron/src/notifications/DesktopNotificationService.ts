@@ -3,6 +3,7 @@ import {
   normalizeDesktopNotificationRequest,
   type DesktopNotificationRequest,
   type DesktopNotificationResult,
+  type DesktopNotificationActivation,
 } from '@pidex/shared/desktop-notification-ipc'
 import type { DesktopLogger } from '../logging/DesktopLogger.js'
 
@@ -24,13 +25,10 @@ export type DesktopNotificationServiceOptions = {
   resolveIconPath(): string
   isMainWindowFocused(): boolean
   focusMainWindow(): void
-  publishActivation(activation: { notificationId: string; threadId: string }): void
+  publishActivation(activation: DesktopNotificationActivation): void
 }
 
-export type DesktopNotificationActivation = {
-  notificationId: string
-  threadId: string
-}
+export type { DesktopNotificationActivation } from '@pidex/shared/desktop-notification-ipc'
 
 // 进程级防重复容量，与 Renderer 最近 500 个 ID 的去重窗口一致。
 const MAX_SEEN_IDS = 500
@@ -67,7 +65,9 @@ export class DesktopNotificationService {
       this.#options.focusMainWindow()
       this.#options.publishActivation({
         notificationId: request.notificationId,
-        threadId: request.threadId,
+        ...(request.threadId ? { threadId: request.threadId } : {}),
+        ...(request.taskId ? { taskId: request.taskId } : {}),
+        ...(request.occurrenceId ? { occurrenceId: request.occurrenceId } : {}),
       })
     })
     notification.onClose(() => this.#release(notification))

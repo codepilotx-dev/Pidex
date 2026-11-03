@@ -57,7 +57,7 @@ export type GoalMeasurement = {
   event: EventEnvelope
 }
 
-type VisibleGoalRow = {
+export type VisibleGoalRow = {
   id: string
   thread_id: string
   objective: string
@@ -135,7 +135,7 @@ export class ThreadGoalLedgerRepository {
     )
   }
 
-  private visibleGoal(threadId: string): VisibleGoalRow | null {
+  visibleGoal(threadId: string): VisibleGoalRow | null {
     if (!this.hasTable('thread_goals')) return null
     return this.db.sqlite
       .query('SELECT * FROM thread_goals WHERE thread_id = ?')
@@ -309,11 +309,11 @@ export class ThreadGoalLedgerRepository {
     const rows = this.db.sqlite
       .query(
         `
-      SELECT started_at, ended_at FROM thread_goal_active_intervals
-      WHERE goal_id = ? AND ended_at IS NOT NULL ORDER BY started_at, ended_at
+      SELECT started_at, COALESCE(ended_at, ?) AS ended_at FROM thread_goal_active_intervals
+      WHERE goal_id = ? ORDER BY started_at, ended_at
     `,
       )
-      .all(goalId) as Array<{ started_at: number; ended_at: number }>
+      .all(this.now(), goalId) as Array<{ started_at: number; ended_at: number }>
     let total = 0
     let currentStart: number | null = null
     let currentEnd = 0
@@ -363,13 +363,16 @@ export class ThreadGoalLedgerRepository {
    * Recomputes totals and the machine-managed status band, then emits the goal update.
    * Must run inside the caller's transaction so ledger, totals, status and event commit together.
    */
-  refreshMeasurement(threadId: string): GoalMeasurement | null {
+  refreshMeasurement(threadId: string, admissionStatus?: 'budget-limited'): GoalMeasurement | null {
     if (!this.available()) return null
     const goal = this.visibleGoal(threadId)
     if (!goal) return null
     const tokensUsed = this.tokensUsed(goal.id)
     const timeUsedSeconds = this.timeUsedSeconds(goal.id)
-    const status = this.deriveStatus(goal, tokensUsed)
+    const status =
+      admissionStatus && goal.status === 'active'
+        ? admissionStatus
+        : this.deriveStatus(goal, tokensUsed)
     // A turn that changed nothing measurable must not bump the version or emit an event.
     if (
       tokensUsed === goal.tokens_used &&
@@ -408,6 +411,13 @@ export class ThreadGoalLedgerRepository {
     return { goal: updated, event }
   }
 
+  /** Late verifier usage belongs to the archived goal, never its replacement. */
+  refreshArchivedMeasurement(goalId: string): void {
+    this.db.sqlite
+      .query('UPDATE thread_goal_history SET tokens_used = ?, version = version + 1 WHERE id = ?')
+      .run(this.tokensUsed(goalId), goalId)
+  }
+
   /**
    * Only the machine-managed band is derived: an explicit `paused`/`complete`, or the
    * approval and quota states owned by other subsystems, is never overwritten here.
@@ -415,6 +425,7 @@ export class ThreadGoalLedgerRepository {
   private deriveStatus(goal: VisibleGoalRow, tokensUsed: number): ThreadGoalStatus {
     if (goal.status !== 'active' && goal.status !== 'budget-limited') return goal.status
     if (goal.token_budget !== null && tokensUsed >= goal.token_budget) return 'budget-limited'
-    return 'active'
+    // 预估下一请求超额也会受限；只能由明确的预算调整或恢复操作解除。
+    return goal.status
   }
 }

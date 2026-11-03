@@ -27,7 +27,7 @@
 
   .ui-dialog-surface {
     background: var(--cpx-comp-modal-bg, var(--cpx-comp-surface-floating));
-    border: var(--cpx-comp-modal-border, var(--cpx-comp-surface-edge));
+    border: 0;
     box-shadow: var(--cpx-comp-modal-shadow, var(--cpx-sys-shadow-floating));
     border-radius: var(--cpx-comp-modal-radius, var(--cpx-sys-radius-prominent));
   }
@@ -60,12 +60,6 @@
   }
 
   .toast-stack-container {
-    position: absolute;
-    top: var(--cpx-sys-space-2);
-    left: 50%;
-    z-index: var(--cpx-sys-z-toast);
-    transform: translateX(-50%);
-    width: min(420px, calc(100% - var(--cpx-sys-space-4)));
     scrollbar-width: none;
     -ms-overflow-style: none;
   }
@@ -74,6 +68,40 @@
     display: none;
     width: 0;
     height: 0;
+  }
+
+  .toast-stack-container[data-scrollable] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--cpx-sys-color-border-strong) transparent;
+  }
+
+  .toast-stack-container[data-scrollable]::-webkit-scrollbar {
+    display: block;
+    width: var(--cpx-sys-space-1);
+    height: var(--cpx-sys-space-1);
+  }
+
+  .toast-stack-container[data-scrollable]::-webkit-scrollbar-thumb {
+    border-radius: var(--cpx-sys-radius-full);
+    background: var(--cpx-sys-color-border-strong);
+  }
+
+  .toast-stack-container[data-fade-top] {
+    mask-image: linear-gradient(to bottom, transparent, black var(--cpx-sys-space-4), black);
+  }
+
+  .toast-stack-container[data-fade-bottom] {
+    mask-image: linear-gradient(to top, transparent, black var(--cpx-sys-space-4), black);
+  }
+
+  .toast-stack-container[data-fade-top][data-fade-bottom] {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      black var(--cpx-sys-space-4),
+      black calc(100% - var(--cpx-sys-space-4)),
+      transparent
+    );
   }
 
   /* --- Permission code scroll --- */
@@ -87,31 +115,9 @@
     white-space: pre;
   }
 
-  /* --- Git Workflow Modal --- */
-  .git-workflow-modal {
-    width: min(720px, 100%);
-  }
-
-  .git-workflow-form label {
-    display: grid;
-    gap: 6px;
-    color: var(--cpx-sys-color-fg-primary);
-    font: var(--cpx-sys-type-body);
-  }
-  .git-workflow-form input,
-  .git-workflow-form textarea {
-    width: 100%;
-    padding: 0.57em var(--cpx-comp-button-padding-inline);
-    border: 1px solid var(--cpx-sys-color-border-default);
-    border-radius: var(--cpx-comp-input-radius);
-    background: var(--cpx-sys-color-surface-control);
-    color: var(--cpx-sys-color-fg-primary);
-    font: inherit;
-  }
-  .git-workflow-form textarea {
-    resize: vertical;
-  }
-
+  /* --- Git Workflow Modal ---
+     Form controls are `components/ui` primitives now, so only the scroll shell
+     and the status glyph stay here; element selectors would restyle Button/Checkbox. */
   .git-workflow-files-scroll-area {
     display: grid;
     max-height: 260px;
@@ -128,43 +134,11 @@
     gap: 6px;
     padding: var(--cpx-sys-space-3);
   }
-  .git-workflow-files-scroll-content > div,
-  .git-workflow-files-scroll-content .git-workflow-check {
-    display: flex;
-    align-items: center;
-    gap: var(--cpx-sys-space-2);
-  }
-  .git-workflow-files-scroll-content > div {
-    justify-content: space-between;
-  }
-  .git-workflow-files-scroll-content button {
-    padding: var(--cpx-comp-button-padding-block-compact)
-      var(--cpx-comp-button-padding-inline-compact);
-    border: 1px solid var(--cpx-sys-color-border-subtle);
-    border-radius: var(--cpx-comp-button-radius-md);
-    background: var(--cpx-sys-color-surface-control);
-    line-height: var(--cpx-sys-line-height-tight);
-  }
-  .git-workflow-files-scroll-content label {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--cpx-sys-space-2);
-  }
-  .git-workflow-files-scroll-content label span {
-    min-width: 0;
-    overflow: hidden;
-    color: var(--cpx-sys-color-fg-primary);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
+
+  /* Status glyph: kept because the label rows themselves use `tw:` utilities. */
   .git-workflow-files-scroll-content small {
     color: var(--cpx-sys-color-fg-tertiary);
     font-family: var(--cpx-sys-font-family-mono);
-  }
-
-  .git-workflow-check {
-    justify-content: start;
   }
 
   .git-workflow-error {
@@ -297,4 +271,153 @@
 
   /* ConfirmationDialog surface typography lives as Tailwind utilities in
    * components/ui/ConfirmationDialog.tsx. */
+}
+
+/* ══ Toast stack ══════════════════════════════════════════
+   Three toasts stacked, fanning into a list on hover. Tones are the
+   reference's: the front one white, the tucked ones a barely-there
+   2% grey — both the same, so they read as paper behind paper rather
+   than a darkening ramp. Where the reference separates them with a
+   soft shadow, this uses a faint hairline (no drop shadows on the
+   bench). Status icons are their own solid colours, never faded.
+   Pidex maps the paper and ink to the active theme's system tokens. */
+@layer primitives {
+  .tst {
+    font-family: var(--cpx-sys-font-family-sans);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .tst-toast {
+    width: max-content;
+    min-width: min(300px, 100%);
+    max-width: 100%;
+    box-sizing: border-box;
+    padding: var(--cpx-sys-space-2) var(--cpx-sys-space-3);
+    border-radius: var(--cpx-sys-radius-lg);
+    background: var(--cpx-sys-color-surface-panel);
+    transition:
+      background-color var(--cpx-sys-motion-panel) ease,
+      box-shadow var(--cpx-sys-motion-panel) ease;
+  }
+
+  /* tucked: the same near-white for both, and a faint edge so each
+     sliver has a line to read by */
+  .tst:not([data-open]) .tst-toast:not([data-front]) {
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 6%,
+      var(--cpx-sys-color-surface-panel)
+    );
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, transparent);
+  }
+
+  .tst-content {
+    display: flex;
+    align-items: center;
+    gap: var(--cpx-sys-space-3);
+    transition: opacity var(--cpx-sys-motion-panel) ease;
+  }
+
+  /* only the front one is read while stacked; the rest are slivers */
+  .tst:not([data-open]) .tst-toast:not([data-front]) > * {
+    opacity: 0;
+  }
+
+  .tst-message {
+    flex: 1;
+    min-width: 0;
+    padding: 0;
+    border: 0;
+    border-radius: var(--cpx-sys-radius-xs);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+
+  .tst-message:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+
+  .tst-icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  .tst-icon[data-custom] {
+    color: inherit;
+  }
+
+  .tst-toast[data-kind='success'] .tst-icon:not([data-custom]) {
+    color: var(--cpx-sys-color-success-fg);
+  }
+
+  .tst-toast[data-kind='error'] .tst-icon:not([data-custom]) {
+    color: var(--cpx-sys-color-danger-fg);
+  }
+
+  .tst-x {
+    flex: none;
+    width: var(--cpx-sys-space-7);
+    height: var(--cpx-sys-space-7);
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--cpx-sys-radius-full);
+    background: none;
+    color: var(--cpx-sys-color-fg-secondary);
+    cursor: pointer;
+    transition:
+      background-color var(--cpx-sys-motion-feedback) ease,
+      color var(--cpx-sys-motion-feedback) ease;
+  }
+
+  .tst-x:hover {
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 6%,
+      var(--cpx-sys-color-surface-panel)
+    );
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .tst-x:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tst-toast,
+    .tst-content,
+    .tst-x {
+      transition: none;
+    }
+  }
+}
+
+@layer overrides {
+  .tst-act {
+    background: color-mix(
+      in srgb,
+      var(--cpx-sys-color-fg-primary) 6%,
+      var(--cpx-sys-color-surface-panel)
+    );
+    color: inherit;
+    transition: scale var(--cpx-sys-motion-feedback) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tst-act:active {
+    scale: 0.96;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tst-act {
+      transition: none;
+    }
+  }
 }

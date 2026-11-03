@@ -368,7 +368,7 @@ function ModelDistribution({
               <span>
                 <Link
                   className="usage-provider-link"
-                  to={`/settings/providers?provider=${encodeURIComponent(String(model.providerId))}&section=models`}
+                  to={`/providers?provider=${encodeURIComponent(String(model.providerId))}&section=models`}
                 >
                   {model.displayName}
                 </Link>

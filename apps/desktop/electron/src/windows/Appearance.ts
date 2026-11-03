@@ -1,19 +1,19 @@
 import { app, BrowserWindow, nativeTheme } from 'electron'
 import { DESKTOP_APPEARANCE_IPC_CHANNELS } from '@pidex/shared/desktop-appearance-ipc'
-import type { DesktopChromeTheme, DesktopThemeSettingsV7 } from '@pidex/shared/desktop-theme'
+import type { DesktopChromeTheme, DesktopThemeSettingsV8 } from '@pidex/shared/desktop-theme'
 import { resolveStartupPageTheme } from './StartupPage.js'
 
 export type SystemThemeVariant = 'light' | 'dark'
 
 export class WindowAppearanceController {
-  #currentSettings: DesktopThemeSettingsV7
+  #currentSettings: DesktopThemeSettingsV8
   #themeChangeCallback?: (
     theme: Pick<DesktopChromeTheme, 'surface' | 'ink' | 'accent'> & {
       surfaceUnder: string
     },
   ) => void
 
-  constructor(initialSettings: DesktopThemeSettingsV7) {
+  constructor(initialSettings: DesktopThemeSettingsV8) {
     this.#currentSettings = initialSettings
   }
 
@@ -27,7 +27,7 @@ export class WindowAppearanceController {
     this.#themeChangeCallback = callback
   }
 
-  updateSettings(settings: DesktopThemeSettingsV7): void {
+  updateSettings(settings: DesktopThemeSettingsV8): void {
     this.#currentSettings = settings
     this.#notifyThemeChange()
   }

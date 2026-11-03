@@ -287,12 +287,14 @@ export function composeRuntimeComposition(
   )
   const exposureInput: ToolExposureInput = {
     taskMode: input.taskMode,
-    sandboxMode: input.taskMode === 'plan' ? 'read-only' : effectivePermissionConfig.sandboxMode,
+    sandboxMode: effectivePermissionConfig.sandboxMode,
     approvalPolicy: effectivePermissionConfig.approvalPolicy,
     profile: input.profile,
     hasSkillService: true,
     hasProjectSources: false,
     defaultModeRequestUserInput: false,
+    // Grill keeps read-only explorer delegation; Plan keeps its existing
+    // delegation rule and only constrains implementation, not investigation.
     delegationEnabled: input.profile === 'main' && input.taskMode !== 'plan',
     ...(input.allowedTools ? { allowedTools: input.allowedTools } : {}),
   }

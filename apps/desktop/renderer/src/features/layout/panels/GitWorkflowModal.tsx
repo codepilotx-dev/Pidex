@@ -3,12 +3,15 @@ import { useEffect, useMemo, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import type { DesktopGitStatus, DesktopWorkspace } from '../../../../shared/Types.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
+import { Checkbox } from '../../../components/ui/Checkbox.js'
+import { Input } from '../../../components/ui/Input.js'
+import { Textarea } from '../../../components/ui/Textarea.js'
 import { Button } from '../../../components/ui/Button.js'
 import { cx } from '../../../utils/Cx.js'
 import { useDialogFocusRestore } from '../../../components/ui/UseDialogFocusRestore.js'
 import { useLastNonNull } from '../../../hooks/UsePresenceRetention.js'
 import { environmentDomainClient } from '../../../services/desktop-client/EnvironmentDomainClient.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 
 export type GitWorkflowMode = 'branch' | 'commitPush' | 'commit' | 'push' | 'pullRequest'
 
@@ -42,7 +45,7 @@ export function GitWorkflowModal({
   onRefreshWorkspace,
 }: Props): React.ReactNode {
   const retainedMode = useLastNonNull(currentMode)
-  const settings = useDesktopSettings()
+  const gitDraftPullRequest = useDesktopSettingsField((settings) => settings.gitDraftPullRequest)
   const open = currentMode !== null
   const mode = open ? currentMode : retainedMode
   const [branchName, setBranchName] = useState(gitBranchPrefix)
@@ -53,7 +56,7 @@ export function GitWorkflowModal({
   const [prTitle, setPrTitle] = useState('')
   const [prTitleEdited, setPrTitleEdited] = useState(false)
   const [prBody, setPrBody] = useState('')
-  const [draftPr, setDraftPr] = useState(settings.gitDraftPullRequest)
+  const [draftPr, setDraftPr] = useState(gitDraftPullRequest)
   const [localError, setLocalError] = useState<string | null>(null)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -78,11 +81,11 @@ export function GitWorkflowModal({
     setCommitMessage('')
     setSelectedPaths(changedFiles.map((file) => file.path))
     setSetUpstream(!gitStatus?.upstream)
-    setForceWithLease(allowForcePush)
+    setForceWithLease(false)
     setPrTitle(gitStatus?.branchName ?? '')
     setPrTitleEdited(false)
     setPrBody('')
-    setDraftPr(settings.gitDraftPullRequest)
+    setDraftPr(gitDraftPullRequest)
   }, [open, currentMode, workspace?.path])
 
   const selectedPathSet = useMemo(() => new Set(selectedPaths), [selectedPaths])
@@ -143,6 +146,7 @@ export function GitWorkflowModal({
         workspacePath: workspace.path,
         setUpstream,
         forceWithLease,
+        ...(threadId ? { threadId } : {}),
       })
       if ('error' in result) {
         throw new Error(result.error)
@@ -161,6 +165,7 @@ export function GitWorkflowModal({
         title: prTitle,
         body: prBody,
         draft: draftPr,
+        ...(threadId ? { threadId } : {}),
       })
       if ('error' in result) {
         throw new Error(result.error)
@@ -194,28 +199,40 @@ export function GitWorkflowModal({
     <Dialog.Root
       open={open}
       onOpenChange={(nextOpen) => {
-        if (!nextOpen) onClose()
+        if (!nextOpen && !isSubmitting) onClose()
       }}
     >
       <Dialog.Portal>
         <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
         <Dialog.Content
           aria-describedby="git-workflow-description"
-          className="ui-dialog-surface ui-dialog-surface--centered permission-modal git-workflow-modal"
+          className="ui-dialog-surface ui-dialog-surface--centered permission-modal tw:grid tw:w-[min(40rem,calc(100%-3rem))] tw:max-h-[calc(100dvh-3rem)] tw:gap-4 tw:overflow-y-auto tw:p-5 tw:type-body"
           onCloseAutoFocus={onCloseAutoFocus}
         >
           <header className={cx('tw:flex', 'tw:items-center', 'tw:justify-between', 'tw:gap-3')}>
             <Dialog.Title asChild>
-              <h2>{title}</h2>
+              <h2 className="tw:m-0 tw:type-title-sm">{title}</h2>
             </Dialog.Title>
-            <span>{workspace?.name ?? '无项目'}</span>
+            <span className="tw:max-w-[50%] tw:truncate tw:type-caption">
+              {workspace?.name ?? '无项目'}
+            </span>
           </header>
-          <Dialog.Description id="git-workflow-description">
+          <Dialog.Description
+            id="git-workflow-description"
+            className="tw:m-0 tw:break-all tw:type-caption tw:text-app-text-meta"
+          >
             {workspace?.path ?? '请选择一个本地项目后再操作 Git。'}
           </Dialog.Description>
+          {(mode === 'push' || mode === 'commitPush') && (
+            <p className="tw:m-0 tw:type-body-sm tw:text-app-text-meta">
+              当前分支：{gitStatus?.branchName ?? 'detached HEAD'} · 上游：
+              {gitStatus?.upstream ?? '未设置'}
+            </p>
+          )}
           {localError ? <div className="git-workflow-error">{localError}</div> : null}
           {(mode === 'commit' || mode === 'commitPush' || mode === 'pullRequest') && (
             <Button
+              size="md"
               color="secondary"
               title="清空已有内容后可以重新生成"
               disabled={
@@ -231,20 +248,26 @@ export function GitWorkflowModal({
             </Button>
           )}
           {mode === 'branch' ? (
-            <div className={cx('git-workflow-form', 'tw:grid', 'tw:gap-3')}>
-              <label>
+            <div className={cx('tw:grid', 'tw:gap-3')}>
+              <label className="tw:grid tw:min-w-0 tw:gap-2 tw:type-body-sm">
                 <span>分支名称</span>
-                <input value={branchName} onChange={(event) => setBranchName(event.target.value)} />
+                <Input
+                  disabled={isSubmitting}
+                  value={branchName}
+                  onChange={(event) => setBranchName(event.target.value)}
+                />
               </label>
             </div>
           ) : null}
           {mode === 'commitPush' || mode === 'commit' || mode === 'push' ? (
-            <div className={cx('git-workflow-form', 'tw:grid', 'tw:gap-3')}>
+            <div className={cx('tw:grid', 'tw:gap-3')}>
               {mode !== 'push' ? (
                 <>
-                  <label>
+                  <label className="tw:grid tw:min-w-0 tw:gap-2 tw:type-body-sm">
                     <span>提交信息</span>
-                    <textarea
+                    <Textarea
+                      rows={4}
+                      className="tw:w-full tw:resize-y"
                       value={commitMessage}
                       disabled={isSubmitting}
                       onChange={(event) => setCommitMessage(event.target.value)}
@@ -252,26 +275,37 @@ export function GitWorkflowModal({
                   </label>
                   <div className="git-workflow-files-scroll-area">
                     <div className="git-workflow-files-scroll-content">
-                      <div>
+                      <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
                         <strong>变更文件</strong>
-                        <button
+                        <Button
+                          variant="text"
+                          disabled={isSubmitting}
                           type="button"
                           onClick={() => setSelectedPaths(changedFiles.map((file) => file.path))}
                         >
                           全选
-                        </button>
+                        </Button>
                       </div>
                       {changedFiles.length === 0 ? (
                         <p>当前没有可提交的文件。</p>
                       ) : (
                         changedFiles.map((file) => (
-                          <label key={`${file.status}:${file.path}`}>
-                            <input
+                          <label
+                            key={`${file.status}:${file.path}`}
+                            className="tw:flex tw:min-w-0 tw:items-center tw:gap-2"
+                          >
+                            <Checkbox
                               checked={selectedPathSet.has(file.path)}
-                              type="checkbox"
-                              onChange={() => togglePath(file.path)}
+                              disabled={isSubmitting}
+                              ariaLabel={file.path}
+                              onCheckedChange={() => togglePath(file.path)}
                             />
-                            <span title={file.path}>{file.path}</span>
+                            <span
+                              className="tw:min-w-0 tw:flex-1 tw:truncate tw:type-body-sm"
+                              title={file.path}
+                            >
+                              {file.path}
+                            </span>
                             <small>{file.status.trim() || 'M'}</small>
                           </label>
                         ))
@@ -282,33 +316,31 @@ export function GitWorkflowModal({
               ) : null}
               {mode !== 'commit' ? (
                 <>
-                  <label className="git-workflow-check">
-                    <input
-                      checked={setUpstream}
-                      type="checkbox"
-                      onChange={(event) => setSetUpstream(event.target.checked)}
-                    />
-                    <span>首次推送时设置 upstream</span>
-                  </label>
+                  <Checkbox
+                    checked={setUpstream}
+                    disabled={isSubmitting}
+                    onCheckedChange={(checked) => setSetUpstream(checked === true)}
+                  >
+                    首次推送时设置 upstream
+                  </Checkbox>
                   {allowForcePush ? (
-                    <label className="git-workflow-check">
-                      <input
-                        checked={forceWithLease}
-                        type="checkbox"
-                        onChange={(event) => setForceWithLease(event.target.checked)}
-                      />
-                      <span>使用 --force-with-lease</span>
-                    </label>
+                    <Checkbox
+                      checked={forceWithLease}
+                      disabled={isSubmitting}
+                      onCheckedChange={(checked) => setForceWithLease(checked === true)}
+                    >
+                      使用 --force-with-lease
+                    </Checkbox>
                   ) : null}
                 </>
               ) : null}
             </div>
           ) : null}
           {mode === 'pullRequest' ? (
-            <div className={cx('git-workflow-form', 'tw:grid', 'tw:gap-3')}>
-              <label>
+            <div className={cx('tw:grid', 'tw:gap-3')}>
+              <label className="tw:grid tw:min-w-0 tw:gap-2 tw:type-body-sm">
                 <span>标题</span>
-                <input
+                <Input
                   disabled={isSubmitting}
                   value={prTitle}
                   onChange={(event) => {
@@ -317,22 +349,23 @@ export function GitWorkflowModal({
                   }}
                 />
               </label>
-              <label>
+              <label className="tw:grid tw:min-w-0 tw:gap-2 tw:type-body-sm">
                 <span>描述</span>
-                <textarea
+                <Textarea
+                  rows={4}
+                  className="tw:w-full tw:resize-y"
                   disabled={isSubmitting}
                   value={prBody}
                   onChange={(event) => setPrBody(event.target.value)}
                 />
               </label>
-              <label className="git-workflow-check">
-                <input
-                  checked={draftPr}
-                  type="checkbox"
-                  onChange={(event) => setDraftPr(event.target.checked)}
-                />
-                <span>创建为 draft PR</span>
-              </label>
+              <Checkbox
+                checked={draftPr}
+                disabled={isSubmitting}
+                onCheckedChange={(checked) => setDraftPr(checked === true)}
+              >
+                创建为 draft PR
+              </Checkbox>
             </div>
           ) : null}
           <div
@@ -345,14 +378,17 @@ export function GitWorkflowModal({
             )}
           >
             <Dialog.Close asChild>
-              <Button color="secondary">取消</Button>
+              <Button size="md" color="secondary" disabled={isSubmitting}>
+                取消
+              </Button>
             </Dialog.Close>
             {mode === 'commitPush' || mode === 'commit' || mode === 'push' ? (
               <>
                 {mode !== 'push' ? (
                   <Button
+                    size="md"
                     color="secondary"
-                    disabled={isSubmitting || changedFiles.length === 0}
+                    disabled={isSubmitting || selectedPaths.length === 0 || !commitMessage.trim()}
                     type="button"
                     onClick={() => void submitCommit()}
                   >
@@ -361,6 +397,7 @@ export function GitWorkflowModal({
                 ) : null}
                 {mode !== 'commit' ? (
                   <Button
+                    size="md"
                     color="primary"
                     disabled={isSubmitting}
                     type="button"
@@ -372,6 +409,7 @@ export function GitWorkflowModal({
               </>
             ) : (
               <Button
+                size="md"
                 color="primary"
                 disabled={isSubmitting}
                 type="button"

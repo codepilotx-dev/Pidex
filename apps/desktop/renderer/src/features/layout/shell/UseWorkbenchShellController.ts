@@ -1,6 +1,8 @@
 import type { FileEditorViewState } from '../../editor/FileEditor.js'
 import { desktopBrowserClient } from '../../../services/desktop-client/DesktopBrowserClient.js'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useStore } from 'zustand/react'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 import { SIDEBAR_MAX_WIDTH, useDesktopLayout } from '../UseDesktopLayout.js'
 import {
   applyWorkbenchTabsAction,
@@ -68,11 +70,32 @@ import {
   type SidebarPane,
 } from '../sidebar/SidebarNavigation.js'
 
+type WorkbenchShellState = {
+  panelState: WorkbenchTabsState
+  layoutState: WorkbenchLayoutState | null
+}
+
+function useWorkbenchPanelState(store: StoreApi<WorkbenchShellState>): WorkbenchTabsState {
+  return useStore(store, (state) => state.panelState)
+}
+
+function useWorkbenchLayoutState(
+  store: StoreApi<WorkbenchShellState>,
+): WorkbenchLayoutState | null {
+  return useStore(store, (state) => state.layoutState)
+}
+
 const NON_NATIVE_RESIZE_SETTLE_MS = 500
 
 export function useWorkbenchShellController({
   activePane,
-}: { activePane?: SidebarPane | null } = {}) {
+  panelRouteActive = true,
+  temporaryRightPanelOpen = false,
+}: {
+  activePane?: SidebarPane | null
+  panelRouteActive?: boolean
+  temporaryRightPanelOpen?: boolean
+} = {}) {
   const railWidth = SIDEBAR_RAIL_WIDTH
   const layout = useDesktopLayout(MODERN_SIDEBAR_DEFAULT_WIDTH)
   const {
@@ -81,8 +104,53 @@ export function useWorkbenchShellController({
     setSidebarCollapsed,
     setSidebarWidth: setSidebarWidthLegacy,
   } = layout
-  const [workbenchPanelState, setWorkbenchPanelState] = useState<WorkbenchTabsState>(
-    createDefaultWorkbenchTabsState,
+  /**
+   * 工作台面板与布局是跨面板共享的展示状态；用实例级 Store 承载，
+   * 让后续订阅者按字段读取，同时保留控制器内的拖拽与持久化机制。
+   */
+  const [workbenchStore] = useState(() =>
+    createStore<{
+      panelState: WorkbenchTabsState
+      layoutState: WorkbenchLayoutState | null
+    }>()(() => ({
+      panelState: createDefaultWorkbenchTabsState(),
+      layoutState: null,
+    })),
+  )
+  const workbenchPanelState = useWorkbenchPanelState(workbenchStore)
+  const workbenchLayoutState = useWorkbenchLayoutState(workbenchStore)
+  const setWorkbenchPanelState = useMemo(
+    () =>
+      (
+        updater: WorkbenchTabsState | ((current: WorkbenchTabsState) => WorkbenchTabsState),
+      ): void => {
+        workbenchStore.setState((state) => ({
+          panelState:
+            typeof updater === 'function'
+              ? (updater as (current: WorkbenchTabsState) => WorkbenchTabsState)(state.panelState)
+              : updater,
+        }))
+      },
+    [workbenchStore],
+  )
+  const setWorkbenchLayoutState = useMemo(
+    () =>
+      (
+        updater:
+          | WorkbenchLayoutState
+          | null
+          | ((current: WorkbenchLayoutState | null) => WorkbenchLayoutState | null),
+      ): void => {
+        workbenchStore.setState((state) => ({
+          layoutState:
+            typeof updater === 'function'
+              ? (updater as (current: WorkbenchLayoutState | null) => WorkbenchLayoutState | null)(
+                  state.layoutState,
+                )
+              : updater,
+        }))
+      },
+    [workbenchStore],
   )
   const workspaceRef = useRef<HTMLDivElement>(null)
   const workspaceMeasuredRef = useRef(false)
@@ -106,10 +174,6 @@ export function useWorkbenchShellController({
   )
   /** 拖拽期间的原始指针尺寸；越界判定只读它，松手/取消后回到已提交布局。 */
   const [rightDockDragRaw, setRightDockDragRaw] = useState<number | null>(null)
-
-  const [workbenchLayoutState, setWorkbenchLayoutState] = useState<WorkbenchLayoutState | null>(
-    null,
-  )
 
   const workspaceView = getWorkspaceView(workbenchPanelState)
   const committedWorkspaceLayout = getWorkbenchWorkspaceLayout(workbenchPanelState)
@@ -143,7 +207,10 @@ export function useWorkbenchShellController({
   const bottomPanelHeight = workbenchLayoutState?.bottomPanelHeight ?? responsiveBottomPanelHeight
 
   // 右栏隐藏时宿主仍保留挂载：实时尺寸必须收敛到 0，否则空白按分屏宽度占位。
-  const rightPanelLiveResize = useLiveResizeValue(rightPanelCommittedSize, !rightDockVisible)
+  const rightPanelLiveResize = useLiveResizeValue(
+    rightPanelCommittedSize,
+    !((panelRouteActive && rightDockVisible) || temporaryRightPanelOpen),
+  )
   const bottomPanelLiveResize = useLiveResizeValue(bottomPanelHeight)
 
   const latestWorkspaceSizeRef = useRef<WorkbenchSize>(workspaceSize)
@@ -173,46 +240,56 @@ export function useWorkbenchShellController({
     setSidebarCollapsed(true)
   }, [setSidebarCollapsed])
 
-  const dispatchPanelAction = useCallback((action: WorkbenchPanelAction): void => {
-    setWorkbenchPanelState((current) => {
-      const tab = 'tabId' in action ? current.tabsById[action.tabId] : undefined
-      if (
-        tab?.kind === 'browser' &&
-        ((action.type === 'moveTab' && action.target === 'sidebar') || action.type === 'popOutTab')
+  const dispatchPanelAction = useCallback(
+    (action: WorkbenchPanelAction): void => {
+      setWorkbenchPanelState((current) => {
+        const tab = 'tabId' in action ? current.tabsById[action.tabId] : undefined
+        if (
+          tab?.kind === 'browser' &&
+          ((action.type === 'moveTab' && action.target === 'sidebar') ||
+            action.type === 'popOutTab')
+        )
+          return current
+        const next = applyWorkbenchTabsAction(current, action)
+        if (
+          tab?.kind === 'browser' &&
+          (action.type === 'moveTab' || action.type === 'reorderTab' || action.type === 'openTab')
+        ) {
+          const panel = next.bottom.tabIds.includes(tab.id) ? 'bottom' : 'right'
+          void desktopBrowserClient
+            .forTab(tab.tabId)
+            .layout(panel, next[panel].tabIds.indexOf(tab.id))
+            .catch(() => {})
+        }
+        return next
+      })
+    },
+    [setWorkbenchPanelState],
+  )
+
+  const dispatchLayoutAction = useCallback(
+    (action: WorkbenchLayoutAction): void => {
+      setWorkbenchLayoutState((current) =>
+        current != null ? applyWorkbenchLayoutAction(current, action) : current,
       )
-        return current
-      const next = applyWorkbenchTabsAction(current, action)
-      if (
-        tab?.kind === 'browser' &&
-        (action.type === 'moveTab' || action.type === 'reorderTab' || action.type === 'openTab')
-      ) {
-        const panel = next.bottom.tabIds.includes(tab.id) ? 'bottom' : 'right'
-        void desktopBrowserClient
-          .forTab(tab.tabId)
-          .layout(panel, next[panel].tabIds.indexOf(tab.id))
-          .catch(() => {})
-      }
-      return next
-    })
-  }, [])
+    },
+    [setWorkbenchLayoutState],
+  )
 
-  const dispatchLayoutAction = useCallback((action: WorkbenchLayoutAction): void => {
-    setWorkbenchLayoutState((current) =>
-      current != null ? applyWorkbenchLayoutAction(current, action) : current,
-    )
-  }, [])
-
-  const setWorkspaceLayout = useCallback((layout: WorkspaceLayout): void => {
-    setWorkbenchPanelState((current) =>
-      applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
-    )
-  }, [])
+  const setWorkspaceLayout = useCallback(
+    (layout: WorkspaceLayout): void => {
+      setWorkbenchPanelState((current) =>
+        applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
+      )
+    },
+    [setWorkbenchPanelState],
+  )
 
   const stepWorkspaceLayout = useCallback((): void => {
     setWorkbenchPanelState((current) =>
       applyWorkbenchTabsAction(current, { type: 'stepWorkspaceLayout' }),
     )
-  }, [])
+  }, [setWorkbenchPanelState])
 
   const moveRightDockFocusToMain = useCallback((): void => {
     const activeElement = document.activeElement
@@ -258,16 +335,19 @@ export function useWorkbenchShellController({
     [dispatchPanelAction],
   )
 
-  const togglePanel = useCallback((target: WorkbenchPanelTarget): void => {
-    setWorkbenchPanelState((current) => {
-      const opening = target === 'right' ? !current.right.open : !current[target].open
-      const next = applyWorkbenchTabsAction(current, { type: 'togglePanel', target })
-      if (opening) {
-        focusPanelController(target)
-      }
-      return next
-    })
-  }, [])
+  const togglePanel = useCallback(
+    (target: WorkbenchPanelTarget): void => {
+      setWorkbenchPanelState((current) => {
+        const opening = target === 'right' ? !current.right.open : !current[target].open
+        const next = applyWorkbenchTabsAction(current, { type: 'togglePanel', target })
+        if (opening) {
+          focusPanelController(target)
+        }
+        return next
+      })
+    },
+    [setWorkbenchPanelState, workbenchStore],
+  )
 
   const closePanel = useCallback(
     (target: WorkbenchPanelTarget): void => {
@@ -283,12 +363,9 @@ export function useWorkbenchShellController({
       tabId: WorkbenchTabId,
       index?: number,
     ): void => {
-      if (target === 'sidebar' && sidebarCollapsed) {
-        setSidebarCollapsed(false)
-      }
       dispatchPanelAction({ type: 'moveTab', source, target, tabId, index })
     },
-    [dispatchPanelAction, setSidebarCollapsed, sidebarCollapsed],
+    [dispatchPanelAction],
   )
 
   const popOutPanelTab = useCallback(
@@ -417,14 +494,17 @@ export function useWorkbenchShellController({
    * 松手结算：分屏写回有效尺寸；隐藏内容只提交布局，不覆盖此前的
    * split 尺寸，也不在存储里留下越界值。
    */
-  const resolveRightDockResizeCommit = useCallback((rawSize: number): boolean => {
-    const layout = resolveRightDockDragLayout(rawSize)
-    if (layout === 'split') return true
-    setWorkbenchPanelState((current) =>
-      applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
-    )
-    return false
-  }, [])
+  const resolveRightDockResizeCommit = useCallback(
+    (rawSize: number): boolean => {
+      const layout = resolveRightDockDragLayout(rawSize)
+      if (layout === 'split') return true
+      setWorkbenchPanelState((current) =>
+        applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
+      )
+      return false
+    },
+    [setWorkbenchPanelState],
+  )
 
   const handleResetRightDockWidth = useCallback((): void => {
     const defaultWidth = getResponsiveRightDockDefaultWidth(
@@ -465,13 +545,14 @@ export function useWorkbenchShellController({
 
   const handleOpenPlanDock = useCallback(
     (plan: OpenPlanInDockRequest): void => {
-      // 计划未生成完成时不允许在右栏打开：tab 内容取自打开瞬间的快照，流式
-      // 期间打开会冻结半成品。这是所有 renderer 打开路径的唯一汇聚点。
+      // 计划未生成完成时不允许在右栏打开：生成期间没有完整可审阅的计划。
+      // 这是所有 renderer 打开路径的唯一汇聚点。
       if (!plan.openable) return
       openRightDockTab({
-        id: `plan:${plan.eventId}`,
+        id: `plan:${plan.planItemId}`,
         kind: 'plan',
-        eventId: plan.eventId,
+        planItemId: plan.planItemId,
+        threadId: plan.threadId,
         title: plan.title,
         content: plan.content,
       })
@@ -490,6 +571,10 @@ export function useWorkbenchShellController({
   const toggleSidebarCollapsed = useCallback((): void => {
     sidebarShell.toggle()
   }, [sidebarShell.toggle])
+
+  const toggleBottomPanelVisible = useCallback((): void => {
+    togglePanel('bottom')
+  }, [togglePanel])
 
   useEffect(() => {
     const workspaceElement = workspaceRef.current
@@ -696,7 +781,7 @@ export function useWorkbenchShellController({
       observer.disconnect()
       clearPendingSettlement()
     }
-  }, [moveRightDockFocusToMain])
+  }, [moveRightDockFocusToMain, setWorkbenchLayoutState, resizeActivityCoordinator])
 
   useEffect(() => {
     if (workspaceMeasuredRef.current) return
@@ -738,7 +823,13 @@ export function useWorkbenchShellController({
         },
       }
     })
-  }, [rightDockVisible, bottomPanelState.open, sidebarCollapsed, workbenchLayoutState])
+  }, [
+    rightDockVisible,
+    bottomPanelState.open,
+    sidebarCollapsed,
+    workbenchLayoutState,
+    setWorkbenchLayoutState,
+  ])
 
   useEffect(() => {
     const previous = previousWorkspaceLayoutRef.current
@@ -819,7 +910,7 @@ export function useWorkbenchShellController({
     handleSetBottomPanelHeight,
     handleResetBottomPanelHeight,
     handleOpenPlanDock,
-    toggleBottomPanelVisible: () => togglePanel('bottom'),
+    toggleBottomPanelVisible,
     togglePanel,
     closePanel,
     movePanelTab,

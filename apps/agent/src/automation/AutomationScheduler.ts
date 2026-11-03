@@ -13,6 +13,7 @@ export type AutomationSchedulerOptions = {
     onClaimed: (tasks: ScheduledTask[]) => void | Promise<void>
   }
   onError?: (cause: unknown) => void
+  taskSchedules?: { tick(): Promise<void>; nextDeadline(): number | null }
 }
 
 /** Timers are wake-up hints; SQLite claim state remains the durable owner. */
@@ -62,6 +63,7 @@ export class AutomationScheduler {
   private async drain() {
     this.clearTimer()
     try {
+      await this.options.taskSchedules?.tick()
       const runs = this.repository.claimDue(this.now(), 'scheduled')
       if (runs.length) await this.options.onClaimed(runs)
       const tasks = this.options.scheduledTasks?.repository.claimDue(this.now()) ?? []
@@ -76,6 +78,7 @@ export class AutomationScheduler {
     const deadlines = [
       this.repository.nextDeadline(),
       this.options.scheduledTasks?.repository.nextDeadline() ?? null,
+      this.options.taskSchedules?.nextDeadline() ?? null,
     ].filter((value): value is number => value !== null)
     const deadline = deadlines.length ? Math.min(...deadlines) : null
     if (deadline === null) return

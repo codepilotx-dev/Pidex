@@ -210,6 +210,7 @@ describe('read_thread 工具冻结行为', () => {
       process: false,
       externalState: false,
       userInteraction: false,
+      readOnly: true,
     })
   })
 

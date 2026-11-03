@@ -13,7 +13,7 @@ const providers = [
 const selected = { providerID: 'minimax-cn-coding-plan', id: 'MiniMax-M3' };
 let deferCatalog = false;
 const pending = [];
-const metadata = { 'gpt-5': { reasoning: true, variants: ['low', 'high'] } };
+const metadata = { 'gpt-5': { name: 'Configured GPT', reasoning: true, variants: ['low', 'high'] } };
 function state(providerID = selected.providerID) {
   const provider = providers.find(item => item.providerID === providerID);
   return { provider, selectedProviderID: providerID, models: provider.defaultModels, modelMetadata: metadata,
@@ -25,7 +25,11 @@ export function releaseState() { deferCatalog = false; pending.splice(0).forEach
 export const desktopClient = {
   getModelProviderState: async providerID => { if (deferCatalog) await new Promise(resolve => pending.push(resolve)); return state(providerID); },
   listModelProviders: async () => providers,
-  fetchProviderModels: async ({ providerID }) => ({ models: state(providerID).models, modelMetadata: metadata }),
+  setSessionMaxContextTokens: async () => {},
+  fetchProviderModels: async ({ providerID, all, query }) => {
+    if (!all || query) throw Error('Picker must load the complete configured catalog');
+    return { models: state(providerID).models, modelMetadata: metadata };
+  },
   saveModelProvider: async () => { document.body.dataset.saveStarted = '1'; throw Error('Global default must not change'); },
 };
 `
@@ -47,6 +51,8 @@ function Harness() {
     <output id="selection">{controller.selectedProviderID + '/' + controller.model}</output>
     <output id="configured">{String(controller.modelConfigured)}</output>
     <output id="preset">{controller.resolvedSelectedModelPreset}</output>
+    <output id="model-label">{controller.providerModelOptions.find(p => p.providerID === 'openai')?.modelPresets.find(p => p.id === 'gpt-5')?.label}</output>
+    <button onClick={() => controller.handleProviderSearch('openai', 'mini')}>Search models</button>
     <output id="variant">{controller.selectedVariant}</output>
     <output id="error">{error}</output>
     <output id="unavailable">{controller.selectedModelUnavailableMessage}</output>
@@ -140,6 +146,9 @@ try {
   assert.deepEqual(errors, [])
   await page.getByRole('button', { name: 'Toggle loading' }).click()
   await check('minimax-cn-coding-plan/MiniMax-M3')
+  await page.getByRole('button', { name: 'Search models', exact: true }).click()
+  await expect(page.locator('#model-label')).toHaveText('Configured GPT')
+  await expect(page.getByRole('button', { name: 'openai/gpt-5', exact: true })).toBeVisible()
   await page.getByRole('button', { name: 'openai/gpt-5', exact: true }).click()
   await check('openai/gpt-5')
   await page.getByRole('button', { name: 'High', exact: true }).click()

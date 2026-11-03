@@ -1,4 +1,7 @@
+import { useFieldState } from '../../hooks/UseFieldState.js'
 import { CONFIG_UPDATED_EVENT, desktopClient } from '../../services/desktop-client/index.js'
+import { useStore } from 'zustand/react'
+import { createStore, type StoreApi } from 'zustand/vanilla'
 import { LocaleProvider } from '../i18n/LocaleProvider.js'
 import {
   createContext,
@@ -9,6 +12,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type Context,
   type ReactNode,
 } from 'react'
 import type { DrawerTab } from '../../UiTypes.js'
@@ -197,6 +201,8 @@ export type UseDesktopSettingsResult = {
   syncExternalSettingsPatch: (patch: Partial<StoredDesktopSettings>) => void
   saveFirstUseSetupCompleted: (value: 0 | 1) => Promise<void>
   draft: DesktopSettingsDraft
+  /** 与 `draft` 相同的动作，但 identity 稳定，供草稿字段订阅读取。 */
+  draftActions: DesktopSettingsDraftActions
   flushDesktopSettings: () => Promise<void>
 }
 
@@ -233,6 +239,14 @@ type DesktopSettingsDraftSetter = <Key extends keyof StoredDesktopSettings>(
     | StoredDesktopSettings[Key]
     | ((current: StoredDesktopSettings[Key]) => StoredDesktopSettings[Key]),
 ) => void
+
+export type DesktopSettingsDraftActions = {
+  setValue: DesktopSettingsDraftSetter
+  save: () => Promise<StoredDesktopSettings>
+  saveFields: (keys: readonly (keyof StoredDesktopSettings)[]) => Promise<StoredDesktopSettings>
+  reset: () => void
+  autoSave: () => void
+}
 
 export type DesktopSettingsDraft = {
   values: StoredDesktopSettings
@@ -325,8 +339,28 @@ export function createDesktopSettingsDraft(
   }
 }
 
-const DesktopSettingsContext = createContext<UseDesktopSettingsResult | null>(null)
-const DesktopRuntimeSettingsContext = createContext<UseDesktopRuntimeSettingsResult | null>(null)
+/** 设置字段的订阅快照：Provider 每次提交后写入，供字段 selector 读取。 */
+type DesktopSettingsFieldSnapshot = {
+  settings: UseDesktopSettingsResult
+  runtime: UseDesktopRuntimeSettingsResult
+}
+
+type DesktopSettingsFieldStore = StoreApi<DesktopSettingsFieldSnapshot>
+
+type DesktopSettingsHotData = {
+  desktopSettingsFieldStoreContext?: Context<DesktopSettingsFieldStore | null>
+}
+
+const hotData = import.meta.hot?.data as DesktopSettingsHotData | undefined
+
+// 热更新时保留 Context 身份，避免已有 Provider 与更新后的 Hook 引用不同实例。
+const DesktopSettingsFieldStoreContext =
+  hotData?.desktopSettingsFieldStoreContext ?? createContext<DesktopSettingsFieldStore | null>(null)
+
+if (import.meta.hot) {
+  const data = import.meta.hot.data as DesktopSettingsHotData
+  data.desktopSettingsFieldStoreContext = DesktopSettingsFieldStoreContext
+}
 
 export function DesktopSettingsProvider({
   children,
@@ -336,204 +370,376 @@ export function DesktopSettingsProvider({
   access?: DesktopSettingsAccess
 }): ReactNode {
   const state = useDesktopSettingsState(access)
+  const [fieldStore] = useState(() => createStore<DesktopSettingsFieldSnapshot>()(() => state))
+  // Provider 是唯一写入口：提交后把最新快照写入字段 Store，避免渲染期写外部 Store。
+  useEffect(() => {
+    fieldStore.setState(state)
+  })
   return createElement(
-    DesktopRuntimeSettingsContext.Provider,
-    { value: state.runtime },
-    createElement(
-      DesktopSettingsContext.Provider,
-      { value: state.settings },
-      createElement(LocaleProvider, { preference: state.runtime.values.language }, children),
-    ),
+    DesktopSettingsFieldStoreContext.Provider,
+    { value: fieldStore },
+    createElement(LocaleProvider, { preference: state.runtime.values.language }, children),
   )
 }
 
-export function useDesktopSettings(): UseDesktopSettingsResult {
-  const settings = useContext(DesktopSettingsContext)
-  if (!settings) {
+function useDesktopSettingsFieldStore(): DesktopSettingsFieldStore {
+  const store = useContext(DesktopSettingsFieldStoreContext)
+  if (!store) {
     throw new Error('useDesktopSettings 必须在 DesktopSettingsProvider 内使用')
   }
-  return settings
+  return store
 }
 
-export function useDesktopRuntimeSettings(): UseDesktopRuntimeSettingsResult {
-  const settings = useContext(DesktopRuntimeSettingsContext)
-  if (!settings) {
-    throw new Error('useDesktopRuntimeSettings 必须在 DesktopSettingsProvider 内使用')
-  }
-  return settings
+/** 按字段订阅设置；聚合字段用 `useShallow`，字段本身保持引用稳定。 */
+export function useDesktopSettingsField<T>(selector: (state: UseDesktopSettingsResult) => T): T {
+  return useStore(useDesktopSettingsFieldStore(), (state) => selector(state.settings))
+}
+
+/** 按字段订阅运行时设置。 */
+export function useDesktopRuntimeSettingsField<T>(
+  selector: (state: UseDesktopRuntimeSettingsResult) => T,
+): T {
+  return useStore(useDesktopSettingsFieldStore(), (state) => selector(state.runtime))
+}
+
+/** 按键订阅设置草稿值；只在该键变化时重渲染。 */
+export function useDesktopSettingsDraftValue<Key extends keyof StoredDesktopSettings>(
+  key: Key,
+): StoredDesktopSettings[Key] {
+  return useDesktopSettingsField((settings) => settings.draft.values[key])
+}
+
+export function useDesktopSettingsDraftDirty(): boolean {
+  return useDesktopSettingsField((settings) => settings.draft.dirty)
+}
+
+export function useDesktopSettingsDraftSaving(): boolean {
+  return useDesktopSettingsField((settings) => settings.draft.saving)
+}
+
+/** 稳定的草稿动作集合；identity 在挂载期内不变。 */
+export function useDesktopSettingsDraftActions(): DesktopSettingsDraftActions {
+  return useDesktopSettingsField((settings) => settings.draftActions)
 }
 
 function useDesktopSettingsState(
   access: DesktopSettingsAccess = 'read-write',
 ): DesktopSettingsState {
   const initial = readStoredDesktopSettings()
-  const [enableParetoCodeRouter, setEnableParetoCodeRouter] = useState<boolean>(
-    initial.enableParetoCodeRouter ?? false,
+  const [stateStore] = useState(() =>
+    createStore(() => ({
+      enableParetoCodeRouter: (initial.enableParetoCodeRouter ?? false) as boolean,
+      enableFusionRouter: (initial.enableFusionRouter ?? false) as boolean,
+      enableAutoReviewPermissionMode: (initial.enableAutoReviewPermissionMode ?? false) as boolean,
+      enableFullAccessPermissionMode: (initial.enableFullAccessPermissionMode ?? false) as boolean,
+      model: initial.model,
+      generationModel: initial.generationModel,
+      organizationModel: initial.organizationModel,
+      codingModel: initial.codingModel,
+      securityModel: initial.securityModel,
+      sessionName: initial.sessionName,
+      thinkingMode: initial.thinkingMode as DesktopThinkingMode,
+      systemPrompt: initial.systemPrompt,
+      appendSystemPrompt: initial.appendSystemPrompt,
+      additionalDirectories: initial.additionalDirectories,
+      recentWorkspaces: initial.recentWorkspaces as DesktopWorkspace[],
+      projectAppearances: initial.projectAppearances as Record<string, ProjectAppearance>,
+      lastActiveWorkspacePath: initial.lastActiveWorkspacePath,
+      removedWorkspaces: initial.removedWorkspaces,
+      drawerTab: initial.drawerTab as DrawerTab,
+      selectedModelPreset: initial.selectedModelPreset as string,
+      providerID: initial.providerID as ModelProviderID,
+      providerBaseURL: initial.providerBaseURL,
+      showContextUsage: initial.showContextUsage,
+      defaultOpenTargetId: initial.defaultOpenTargetId,
+      gitBranchPrefix: initial.gitBranchPrefix,
+      gitPrMergeMethod: initial.gitPrMergeMethod as 'merge' | 'squash',
+      gitShowPrIconsInSidebar: initial.gitShowPrIconsInSidebar,
+      gitDraftPullRequest: initial.gitDraftPullRequest,
+      gitAutoDeleteWorktree: initial.gitAutoDeleteWorktree,
+      gitAutoDeleteWorktreeLimit: initial.gitAutoDeleteWorktreeLimit,
+      allowForcePush: initial.allowForcePush,
+      commitMessagePrompt: initial.commitMessagePrompt,
+      pullRequestPrompt: initial.pullRequestPrompt,
+      sandboxMode: initial.sandboxMode as DesktopSandboxMode,
+      allowNetworkAccess: initial.allowNetworkAccess,
+      installPidexDependencies: initial.installPidexDependencies,
+      workspaceDependenciesMigrated: initial.workspaceDependenciesMigrated,
+      firstUseSetupCompleted: initial.firstUseSetupCompleted as 0 | 1 | undefined,
+      personality: initial.personality as DesktopPersonality,
+      customInstructions: initial.customInstructions,
+      enableMemory: initial.enableMemory,
+      skipToolAidedChats: initial.skipToolAidedChats,
+      defaultModeRequestUserInput: initial.defaultModeRequestUserInput,
+      githubMemorySyncEnabled: initial.githubMemorySyncEnabled,
+      githubMemoryRepository: initial.githubMemoryRepository,
+      reviewView: initial.reviewView as DesktopReviewView,
+      reviewDelivery: initial.reviewDelivery as DesktopReviewDelivery,
+      conversationWidth: initial.conversationWidth as StoredDesktopSettings['conversationWidth'],
+      diffMarkerStyle: initial.diffMarkerStyle as DesktopDiffMarkerStyle,
+      rustSearchAndDiffKernels: initial.rustSearchAndDiffKernels,
+      sidebarOrganization: initial.sidebarOrganization as DesktopSidebarOrganization,
+      sidebarProductMode: initial.sidebarProductMode as SidebarProductMode,
+      sidebarProjectSort: initial.sidebarProjectSort as DesktopSidebarSort,
+      sidebarSort: initial.sidebarSort as DesktopSidebarSort,
+      sidebarTimelineEnabled: (initial.sidebarTimelineEnabled ?? false) as boolean,
+      sidebarTimelinePriorityEnabled: (initial.sidebarTimelinePriorityEnabled ?? true) as boolean,
+      sidebarActivityShowWork: (initial.sidebarActivityShowWork ?? true) as boolean,
+      sidebarActivityShowChat: (initial.sidebarActivityShowChat ?? true) as boolean,
+      sidebarShowScheduledSessions: (initial.sidebarShowScheduledSessions ?? true) as boolean,
+      sidebarActivityShowScheduled: (initial.sidebarActivityShowScheduled ?? false) as boolean,
+      sidebarActivityShowPinned: (initial.sidebarActivityShowPinned ?? false) as boolean,
+      sidebarActivityCoachmarkDismissed: (initial.sidebarActivityCoachmarkDismissed ??
+        false) as boolean,
+      sidebarManualOrder: initial.sidebarManualOrder as Record<string, string[]>,
+      sidebarSessionPins: initial.sidebarSessionPins as Record<string, string>,
+      collapsedSidebarProjectPaths: initial.collapsedSidebarProjectPaths as string[],
+      sidebarSectionOrder: initial.sidebarSectionOrder as SidebarSectionId[],
+      browserAllowedSites: initial.browserAllowedSites as string[],
+      collapsedSidebarSections: initial.collapsedSidebarSections as SidebarSectionId[],
+      browserSitePermissions: initial.browserSitePermissions as DesktopBrowserSitePermission[],
+      sidebarCustomization: (initial.sidebarCustomization ??
+        DEFAULT_SIDEBAR_CUSTOMIZATION) as SidebarCustomization,
+      settingsLoaded: false,
+      draftValues: cloneDesktopSettings(initial) as StoredDesktopSettings,
+      committedDraftValues: initial as StoredDesktopSettings,
+      draftSaving: false,
+    })),
   )
-  const [enableFusionRouter, setEnableFusionRouter] = useState<boolean>(
-    initial.enableFusionRouter ?? false,
+  const [enableParetoCodeRouter, setEnableParetoCodeRouter] = useFieldState(
+    stateStore,
+    'enableParetoCodeRouter',
   )
-  const [enableAutoReviewPermissionMode, setEnableAutoReviewPermissionMode] = useState<boolean>(
-    initial.enableAutoReviewPermissionMode ?? false,
+  const [enableFusionRouter, setEnableFusionRouter] = useFieldState(
+    stateStore,
+    'enableFusionRouter',
   )
-  const [enableFullAccessPermissionMode, setEnableFullAccessPermissionMode] = useState<boolean>(
-    initial.enableFullAccessPermissionMode ?? false,
+  const [enableAutoReviewPermissionMode, setEnableAutoReviewPermissionMode] = useFieldState(
+    stateStore,
+    'enableAutoReviewPermissionMode',
   )
-  const [model, setModel] = useState(initial.model)
-  const [generationModel, setGenerationModel] = useState(initial.generationModel)
-  const [organizationModel, setOrganizationModel] = useState(initial.organizationModel)
-  const [codingModel, setCodingModel] = useState(initial.codingModel)
-  const [securityModel, setSecurityModel] = useState(initial.securityModel)
-  const [sessionName, setSessionName] = useState(initial.sessionName)
-  const [thinkingMode, setThinkingMode] = useState<DesktopThinkingMode>(initial.thinkingMode)
-  const [systemPrompt, setSystemPrompt] = useState(initial.systemPrompt)
-  const [appendSystemPrompt, setAppendSystemPrompt] = useState(initial.appendSystemPrompt)
-  const [additionalDirectories, setAdditionalDirectories] = useState(initial.additionalDirectories)
-  const [recentWorkspaces, setRecentWorkspaces] = useState<DesktopWorkspace[]>(
-    initial.recentWorkspaces,
+  const [enableFullAccessPermissionMode, setEnableFullAccessPermissionMode] = useFieldState(
+    stateStore,
+    'enableFullAccessPermissionMode',
   )
-  const [projectAppearances, setProjectAppearances] = useState<Record<string, ProjectAppearance>>(
-    initial.projectAppearances,
+  const [model, setModel] = useFieldState(stateStore, 'model')
+  const [generationModel, setGenerationModel] = useFieldState(stateStore, 'generationModel')
+  const [organizationModel, setOrganizationModel] = useFieldState(stateStore, 'organizationModel')
+  const [codingModel, setCodingModel] = useFieldState(stateStore, 'codingModel')
+  const [securityModel, setSecurityModel] = useFieldState(stateStore, 'securityModel')
+  const [sessionName, setSessionName] = useFieldState(stateStore, 'sessionName')
+  const [thinkingMode, setThinkingMode] = useFieldState(stateStore, 'thinkingMode')
+  const [systemPrompt, setSystemPrompt] = useFieldState(stateStore, 'systemPrompt')
+  const [appendSystemPrompt, setAppendSystemPrompt] = useFieldState(
+    stateStore,
+    'appendSystemPrompt',
   )
-  const [lastActiveWorkspacePath, setLastActiveWorkspacePath] = useState(
-    initial.lastActiveWorkspacePath,
+  const [additionalDirectories, setAdditionalDirectories] = useFieldState(
+    stateStore,
+    'additionalDirectories',
   )
-  const [removedWorkspaces, setRemovedWorkspaces] = useState(initial.removedWorkspaces)
-  const [drawerTab, setDrawerTab] = useState<DrawerTab>(initial.drawerTab)
-  const [selectedModelPreset, setSelectedModelPreset] = useState<string>(
-    initial.selectedModelPreset,
+  const [recentWorkspaces, setRecentWorkspaces] = useFieldState(stateStore, 'recentWorkspaces')
+  const [projectAppearances, setProjectAppearances] = useFieldState(
+    stateStore,
+    'projectAppearances',
   )
-  const [providerID, setProviderID] = useState<ModelProviderID>(initial.providerID)
-  const [providerBaseURL, setProviderBaseURL] = useState(initial.providerBaseURL)
-  const [showContextUsage, setShowContextUsage] = useState(initial.showContextUsage)
-  const [defaultOpenTargetId, setDefaultOpenTargetId] = useState(initial.defaultOpenTargetId)
-  const [gitBranchPrefix, setGitBranchPrefix] = useState(initial.gitBranchPrefix)
-  const [gitPrMergeMethod, setGitPrMergeMethod] = useState<'merge' | 'squash'>(
-    initial.gitPrMergeMethod,
+  const [lastActiveWorkspacePath, setLastActiveWorkspacePath] = useFieldState(
+    stateStore,
+    'lastActiveWorkspacePath',
   )
-  const [gitShowPrIconsInSidebar, setGitShowPrIconsInSidebar] = useState(
-    initial.gitShowPrIconsInSidebar,
+  const [removedWorkspaces, setRemovedWorkspaces] = useFieldState(stateStore, 'removedWorkspaces')
+  const [drawerTab, setDrawerTab] = useFieldState(stateStore, 'drawerTab')
+  const [selectedModelPreset, setSelectedModelPreset] = useFieldState(
+    stateStore,
+    'selectedModelPreset',
   )
-  const [gitDraftPullRequest, setGitDraftPullRequest] = useState(initial.gitDraftPullRequest)
-  const [gitAutoDeleteWorktree, setGitAutoDeleteWorktree] = useState(initial.gitAutoDeleteWorktree)
-  const [gitAutoDeleteWorktreeLimit, setGitAutoDeleteWorktreeLimit] = useState(
-    initial.gitAutoDeleteWorktreeLimit,
+  const [providerID, setProviderID] = useFieldState(stateStore, 'providerID')
+  const [providerBaseURL, setProviderBaseURL] = useFieldState(stateStore, 'providerBaseURL')
+  const [showContextUsage, setShowContextUsage] = useFieldState(stateStore, 'showContextUsage')
+  const [defaultOpenTargetId, setDefaultOpenTargetId] = useFieldState(
+    stateStore,
+    'defaultOpenTargetId',
   )
-  const [allowForcePush, setAllowForcePush] = useState(initial.allowForcePush)
-  const [commitMessagePrompt, setCommitMessagePrompt] = useState(initial.commitMessagePrompt)
-  const [pullRequestPrompt, setPullRequestPrompt] = useState(initial.pullRequestPrompt)
-  const [sandboxMode, setSandboxMode] = useState<DesktopSandboxMode>(initial.sandboxMode)
-  const [allowNetworkAccess, setAllowNetworkAccess] = useState(initial.allowNetworkAccess)
-  const [installPidexDependencies, setInstallPidexDependencies] = useState(
-    initial.installPidexDependencies,
+  const [gitBranchPrefix, setGitBranchPrefix] = useFieldState(stateStore, 'gitBranchPrefix')
+  const [gitPrMergeMethod, setGitPrMergeMethod] = useFieldState(stateStore, 'gitPrMergeMethod')
+  const [gitShowPrIconsInSidebar, setGitShowPrIconsInSidebar] = useFieldState(
+    stateStore,
+    'gitShowPrIconsInSidebar',
   )
-  const [workspaceDependenciesMigrated, setWorkspaceDependenciesMigrated] = useState(
-    initial.workspaceDependenciesMigrated,
+  const [gitDraftPullRequest, setGitDraftPullRequest] = useFieldState(
+    stateStore,
+    'gitDraftPullRequest',
   )
-  const [firstUseSetupCompleted, setFirstUseSetupCompleted] = useState<0 | 1 | undefined>(
-    initial.firstUseSetupCompleted,
+  const [gitAutoDeleteWorktree, setGitAutoDeleteWorktree] = useFieldState(
+    stateStore,
+    'gitAutoDeleteWorktree',
   )
-  const [personality, setPersonality] = useState<DesktopPersonality>(initial.personality)
-  const [customInstructions, setCustomInstructions] = useState(initial.customInstructions)
-  const [enableMemory, setEnableMemory] = useState(initial.enableMemory)
-  const [skipToolAidedChats, setSkipToolAidedChats] = useState(initial.skipToolAidedChats)
-  const [defaultModeRequestUserInput, setDefaultModeRequestUserInput] = useState(
-    initial.defaultModeRequestUserInput,
+  const [gitAutoDeleteWorktreeLimit, setGitAutoDeleteWorktreeLimit] = useFieldState(
+    stateStore,
+    'gitAutoDeleteWorktreeLimit',
   )
-  const [githubMemorySyncEnabled, setGithubMemorySyncEnabled] = useState(
-    initial.githubMemorySyncEnabled,
+  const [allowForcePush, setAllowForcePush] = useFieldState(stateStore, 'allowForcePush')
+  const [commitMessagePrompt, setCommitMessagePrompt] = useFieldState(
+    stateStore,
+    'commitMessagePrompt',
   )
-  const [githubMemoryRepository, setGithubMemoryRepository] = useState(
-    initial.githubMemoryRepository,
+  const [pullRequestPrompt, setPullRequestPrompt] = useFieldState(stateStore, 'pullRequestPrompt')
+  const [sandboxMode, setSandboxMode] = useFieldState(stateStore, 'sandboxMode')
+  const [allowNetworkAccess, setAllowNetworkAccess] = useFieldState(
+    stateStore,
+    'allowNetworkAccess',
   )
-  const [reviewView, setReviewView] = useState<DesktopReviewView>(initial.reviewView)
-  const [reviewDelivery, setReviewDelivery] = useState<DesktopReviewDelivery>(
-    initial.reviewDelivery,
+  const [installPidexDependencies, setInstallPidexDependencies] = useFieldState(
+    stateStore,
+    'installPidexDependencies',
   )
-  const [conversationWidth, setConversationWidth] = useState<
-    StoredDesktopSettings['conversationWidth']
-  >(initial.conversationWidth)
-  const [diffMarkerStyle, setDiffMarkerStyle] = useState<DesktopDiffMarkerStyle>(
-    initial.diffMarkerStyle,
+  const [workspaceDependenciesMigrated, setWorkspaceDependenciesMigrated] = useFieldState(
+    stateStore,
+    'workspaceDependenciesMigrated',
   )
-  const [rustSearchAndDiffKernels, setRustSearchAndDiffKernels] = useState(
-    initial.rustSearchAndDiffKernels,
+  const [firstUseSetupCompleted, setFirstUseSetupCompleted] = useFieldState(
+    stateStore,
+    'firstUseSetupCompleted',
   )
-  const [sidebarOrganization, setSidebarOrganization] = useState<DesktopSidebarOrganization>(
-    initial.sidebarOrganization,
+  const [personality, setPersonality] = useFieldState(stateStore, 'personality')
+  const [customInstructions, setCustomInstructions] = useFieldState(
+    stateStore,
+    'customInstructions',
   )
-  const [sidebarProductMode, setSidebarProductMode] = useState<SidebarProductMode>(
-    initial.sidebarProductMode,
+  const [enableMemory, setEnableMemory] = useFieldState(stateStore, 'enableMemory')
+  const [skipToolAidedChats, setSkipToolAidedChats] = useFieldState(
+    stateStore,
+    'skipToolAidedChats',
   )
-  const [sidebarProjectSort, setSidebarProjectSort] = useState<DesktopSidebarSort>(
-    initial.sidebarProjectSort,
+  const [defaultModeRequestUserInput, setDefaultModeRequestUserInput] = useFieldState(
+    stateStore,
+    'defaultModeRequestUserInput',
   )
-  const [sidebarSort, setSidebarSort] = useState<DesktopSidebarSort>(initial.sidebarSort)
-  const [sidebarTimelineEnabled, setSidebarTimelineEnabled] = useState<boolean>(
-    initial.sidebarTimelineEnabled ?? false,
+  const [githubMemorySyncEnabled, setGithubMemorySyncEnabled] = useFieldState(
+    stateStore,
+    'githubMemorySyncEnabled',
   )
-  const [sidebarTimelinePriorityEnabled, setSidebarTimelinePriorityEnabled] = useState<boolean>(
-    initial.sidebarTimelinePriorityEnabled ?? true,
+  const [githubMemoryRepository, setGithubMemoryRepository] = useFieldState(
+    stateStore,
+    'githubMemoryRepository',
   )
-  const [sidebarActivityShowWork, setSidebarActivityShowWork] = useState<boolean>(
-    initial.sidebarActivityShowWork ?? true,
+  const [reviewView, setReviewView] = useFieldState(stateStore, 'reviewView')
+  const [reviewDelivery, setReviewDelivery] = useFieldState(stateStore, 'reviewDelivery')
+  const [conversationWidth, setConversationWidth] = useFieldState(stateStore, 'conversationWidth')
+  const [diffMarkerStyle, setDiffMarkerStyle] = useFieldState(stateStore, 'diffMarkerStyle')
+  const [rustSearchAndDiffKernels, setRustSearchAndDiffKernels] = useFieldState(
+    stateStore,
+    'rustSearchAndDiffKernels',
   )
-  const [sidebarActivityShowChat, setSidebarActivityShowChat] = useState<boolean>(
-    initial.sidebarActivityShowChat ?? true,
+  const [sidebarOrganization, setSidebarOrganization] = useFieldState(
+    stateStore,
+    'sidebarOrganization',
   )
-  const [sidebarShowScheduledSessions, setSidebarShowScheduledSessions] = useState<boolean>(
-    initial.sidebarShowScheduledSessions ?? true,
+  const [sidebarProductMode, setSidebarProductMode] = useFieldState(
+    stateStore,
+    'sidebarProductMode',
   )
-  const [sidebarActivityShowScheduled, setSidebarActivityShowScheduled] = useState<boolean>(
-    initial.sidebarActivityShowScheduled ?? false,
+  const [sidebarProjectSort, setSidebarProjectSort] = useFieldState(
+    stateStore,
+    'sidebarProjectSort',
   )
-  const [sidebarActivityShowPinned, setSidebarActivityShowPinned] = useState<boolean>(
-    initial.sidebarActivityShowPinned ?? false,
+  const [sidebarSort, setSidebarSort] = useFieldState(stateStore, 'sidebarSort')
+  const [sidebarTimelineEnabled, setSidebarTimelineEnabled] = useFieldState(
+    stateStore,
+    'sidebarTimelineEnabled',
   )
-  const [sidebarActivityCoachmarkDismissed, setSidebarActivityCoachmarkDismissed] =
-    useState<boolean>(initial.sidebarActivityCoachmarkDismissed ?? false)
-  const [sidebarManualOrder, setSidebarManualOrder] = useState<Record<string, string[]>>(
-    initial.sidebarManualOrder,
+  const [sidebarTimelinePriorityEnabled, setSidebarTimelinePriorityEnabled] = useFieldState(
+    stateStore,
+    'sidebarTimelinePriorityEnabled',
   )
-  const [sidebarSessionPins, setSidebarSessionPins] = useState<Record<string, string>>(
-    initial.sidebarSessionPins,
+  const [sidebarActivityShowWork, setSidebarActivityShowWork] = useFieldState(
+    stateStore,
+    'sidebarActivityShowWork',
   )
-  const [collapsedSidebarProjectPaths, setCollapsedSidebarProjectPaths] = useState<string[]>(
-    initial.collapsedSidebarProjectPaths,
+  const [sidebarActivityShowChat, setSidebarActivityShowChat] = useFieldState(
+    stateStore,
+    'sidebarActivityShowChat',
   )
-  const [sidebarSectionOrder, setSidebarSectionOrder] = useState<SidebarSectionId[]>(
-    initial.sidebarSectionOrder,
+  const [sidebarShowScheduledSessions, setSidebarShowScheduledSessions] = useFieldState(
+    stateStore,
+    'sidebarShowScheduledSessions',
   )
-  const [browserAllowedSites, setBrowserAllowedSites] = useState<string[]>(
-    initial.browserAllowedSites,
+  const [sidebarActivityShowScheduled, setSidebarActivityShowScheduled] = useFieldState(
+    stateStore,
+    'sidebarActivityShowScheduled',
   )
-  const [collapsedSidebarSections, setCollapsedSidebarSections] = useState<SidebarSectionId[]>(
-    initial.collapsedSidebarSections,
+  const [sidebarActivityShowPinned, setSidebarActivityShowPinned] = useFieldState(
+    stateStore,
+    'sidebarActivityShowPinned',
   )
-  const [browserSitePermissions, setBrowserSitePermissions] = useState<
-    DesktopBrowserSitePermission[]
-  >(initial.browserSitePermissions)
-  const [sidebarCustomization, setSidebarCustomization] = useState<SidebarCustomization>(
-    initial.sidebarCustomization ?? DEFAULT_SIDEBAR_CUSTOMIZATION,
+  const [sidebarActivityCoachmarkDismissed, setSidebarActivityCoachmarkDismissed] = useFieldState(
+    stateStore,
+    'sidebarActivityCoachmarkDismissed',
   )
-  const [settingsLoaded, setSettingsLoaded] = useState(false)
+  const [sidebarManualOrder, setSidebarManualOrder] = useFieldState(
+    stateStore,
+    'sidebarManualOrder',
+  )
+  const [sidebarSessionPins, setSidebarSessionPins] = useFieldState(
+    stateStore,
+    'sidebarSessionPins',
+  )
+  const [collapsedSidebarProjectPaths, setCollapsedSidebarProjectPaths] = useFieldState(
+    stateStore,
+    'collapsedSidebarProjectPaths',
+  )
+  const [sidebarSectionOrder, setSidebarSectionOrder] = useFieldState(
+    stateStore,
+    'sidebarSectionOrder',
+  )
+  const [browserAllowedSites, setBrowserAllowedSites] = useFieldState(
+    stateStore,
+    'browserAllowedSites',
+  )
+  const [collapsedSidebarSections, setCollapsedSidebarSections] = useFieldState(
+    stateStore,
+    'collapsedSidebarSections',
+  )
+  const [browserSitePermissions, setBrowserSitePermissions] = useFieldState(
+    stateStore,
+    'browserSitePermissions',
+  )
+  const [sidebarCustomization, setSidebarCustomization] = useFieldState(
+    stateStore,
+    'sidebarCustomization',
+  )
+  const [settingsLoaded, setSettingsLoaded] = useFieldState(stateStore, 'settingsLoaded')
   const skipNextAutoSaveRef = useRef(false)
   const initialLoadRef = useRef(true)
-  const [draftValues, setDraftValues] = useState<StoredDesktopSettings>(
-    cloneDesktopSettings(initial),
+  const [draftValues, setDraftValuesState] = useFieldState(stateStore, 'draftValues')
+  const setDraftValues = useCallback(
+    (
+      update: StoredDesktopSettings | ((current: StoredDesktopSettings) => StoredDesktopSettings),
+    ) => {
+      setDraftValuesState((current) =>
+        shareDesktopSettingsValues(
+          current,
+          typeof update === 'function' ? update(current) : update,
+        ),
+      )
+    },
+    [setDraftValuesState],
   )
-  const [committedDraftValues, setCommittedDraftValues] = useState<StoredDesktopSettings>(initial)
+  const [committedDraftValues, setCommittedDraftValues] = useFieldState(
+    stateStore,
+    'committedDraftValues',
+  )
   const draftValuesRef = useRef(draftValues)
   draftValuesRef.current = draftValues
   const permissionMode = permissionModeForConfig(committedDraftValues.permissionConfig)
   const setPermissionMode = useCallback((value: DesktopPermissionMode) => {
     setCommittedDraftValues((current) => ({
       ...current,
-      permissionConfig: permissionConfigForMode(value),
+      permissionConfig: permissionConfigForMode(value, current.permissionConfig),
     }))
   }, [])
   const draftDirtyKeysRef = useRef<Set<keyof StoredDesktopSettings>>(new Set())
-  const [draftSaving, setDraftSaving] = useState(false)
+  const [draftSaving, setDraftSaving] = useFieldState(stateStore, 'draftSaving')
 
   useEffect(() => {
     let mounted = true
@@ -647,6 +853,7 @@ function useDesktopSettingsState(
 
   const effectiveSettings = useMemo<StoredDesktopSettings>(
     () => ({
+      gitBoardState: committedDraftValues.gitBoardState ?? null,
       language: committedDraftValues.language,
       sidebarLayout: committedDraftValues.sidebarLayout,
       worktreeRoot: committedDraftValues.worktreeRoot,
@@ -679,6 +886,7 @@ function useDesktopSettingsState(
       providerID,
       providerBaseURL,
       showContextUsage,
+      contextUsageView: committedDraftValues.contextUsageView,
       defaultOpenTargetId,
       gitBranchPrefix,
       gitPrMergeMethod,
@@ -733,7 +941,9 @@ function useDesktopSettingsState(
       notifications: committedDraftValues.notifications,
     }),
     [
+      committedDraftValues.gitBoardState,
       committedDraftValues.language,
+      committedDraftValues.contextUsageView,
       committedDraftValues.sidebarLayout,
       committedDraftValues.worktreeRoot,
       committedDraftValues.worktreeFetchUpstream,
@@ -864,6 +1074,7 @@ function useDesktopSettingsState(
   }, [])
 
   const applySettingsSnapshot = useCallback((snapshot: StoredDesktopSettings): void => {
+    snapshot = shareDesktopSettingsValues(effectiveSettingsRef.current, snapshot)
     setEnableParetoCodeRouter(snapshot.enableParetoCodeRouter ?? false)
     setEnableFusionRouter(snapshot.enableFusionRouter ?? false)
     setEnableAutoReviewPermissionMode(snapshot.enableAutoReviewPermissionMode ?? false)
@@ -995,7 +1206,7 @@ function useDesktopSettingsState(
       throw new Error('此窗口不允许保存桌面设置')
     }
     const snapshot = mergeDesktopSettingsDraft(
-      effectiveSettings,
+      effectiveSettingsRef.current,
       draftValuesRef.current,
       draftDirtyKeysRef.current,
     )
@@ -1011,12 +1222,12 @@ function useDesktopSettingsState(
     } finally {
       setDraftSaving(false)
     }
-  }, [applySettingsSnapshot, effectiveSettings, access])
+  }, [applySettingsSnapshot, access])
 
   const resetDraft = useCallback((): void => {
-    setDraftValues(cloneDesktopSettings(effectiveSettings))
+    setDraftValues(cloneDesktopSettings(effectiveSettingsRef.current))
     draftDirtyKeysRef.current.clear()
-  }, [effectiveSettings])
+  }, [])
 
   const saveDraftRef = useRef(saveDraft)
   saveDraftRef.current = saveDraft
@@ -1051,6 +1262,18 @@ function useDesktopSettingsState(
       void saveDraftRef.current()
     }, 0)
   }, [])
+
+  /** 草稿动作与页面状态分离：identity 稳定，消费者可按键订阅而无需整份 draft。 */
+  const draftActions = useMemo<DesktopSettingsDraftActions>(
+    () => ({
+      setValue: setDraftValue,
+      save: saveDraft,
+      saveFields,
+      reset: resetDraft,
+      autoSave,
+    }),
+    [setDraftValue, saveDraft, saveFields, resetDraft, autoSave],
+  )
 
   const draft = useMemo<DesktopSettingsDraft>(
     () => ({
@@ -1241,6 +1464,7 @@ function useDesktopSettingsState(
     syncExternalSettingsPatch,
     saveFirstUseSetupCompleted,
     draft,
+    draftActions,
     flushDesktopSettings,
   }
   return { settings, runtime }
@@ -1309,6 +1533,20 @@ function updateDesktopSettingsValue<Key extends keyof StoredDesktopSettings>(
     ...current,
     [key]: cloneDesktopSettingsValue(nextValue),
   } as StoredDesktopSettings
+}
+
+/** 全量回读保留未变化字段的引用，避免无关设置触发字段订阅。 */
+function shareDesktopSettingsValues(
+  current: StoredDesktopSettings,
+  next: StoredDesktopSettings,
+): StoredDesktopSettings {
+  const shared = { ...next }
+  for (const key of Object.keys(next) as (keyof StoredDesktopSettings)[]) {
+    if (desktopSettingsValueEqual(current[key], next[key])) {
+      ;(shared as Record<keyof StoredDesktopSettings, unknown>)[key] = current[key]
+    }
+  }
+  return desktopSettingsEqual(current, shared) ? current : shared
 }
 
 function desktopSettingsValueEqual(left: unknown, right: unknown): boolean {

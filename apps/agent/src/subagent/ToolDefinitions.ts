@@ -16,6 +16,20 @@ const schemas = {
               name: z.string().optional(),
               profile: z.enum(['default', 'explorer', 'worker']),
               task: z.string().trim().min(1),
+              // 仅用于视觉职能标识；不授予权限，也不改变 profile、模型、工具或工作区策略。
+              role: z
+                .enum([
+                  'frontend',
+                  'backend',
+                  'devops',
+                  'qa',
+                  'designer',
+                  'data',
+                  'docs',
+                  'product',
+                  'general',
+                ])
+                .optional(),
               workspaceMode: z.enum(['shared', 'worktree']).optional(),
               model: z
                 .object({ providerID: z.string(), id: z.string(), variant: z.string().optional() })

@@ -12,16 +12,21 @@ import {
 import type { WorkspaceService } from '../workspace/WorkspaceService'
 import { buildFileDiff } from '../patch/TurnPatchService'
 import {
+  toolAllowedInTaskMode,
   toolNameMatches,
   type ToolCatalog,
   type ToolFileSnapshots,
   type ToolInputInspection,
+  type ToolPauseRequest,
   type ToolProgress,
   type ToolRegistry,
 } from './ToolRegistry'
+import type { ComputerOperationRecovery } from '../nodeRepl/Protocol'
 import { createToolExposurePlan, type ToolExposureInput } from './ToolExposurePlan'
 import {
   DEFAULT_PERMISSION_CONFIG,
+  isFullAccessPermissionConfig,
+  isReadOnlyTaskMode,
   type AdditionalPermissions,
   type PermissionConfig,
   type PermissionGrantScope,
@@ -41,6 +46,7 @@ import { resolveEffectivePermissionConfig } from '../permission/EffectivePermiss
 import { executionPolicyFromV4 } from '../permission/ExecutionPolicy'
 import { filePathProtection, resolveProtectionPath } from '../permission/FilePathProtection'
 import { PermissionGrantStore } from '../permission/PermissionGrantStore'
+import { simpleCommandArgv, type PermissionRuleFacts } from '../permission/ApprovalRules'
 import { pathContains } from '../permission/PathPermissions'
 import { analyzeShellRisk, type ShellSecurityLevel } from '../security/ShellRiskClassifier'
 import { secretScrubber } from '../security/SecretScrubber'
@@ -88,13 +94,6 @@ export function shellRuntimeDependencies(command: string): ManagedToolID[] {
   return [...dependencies]
 }
 
-/** 仅在命令片段的首项识别官方 MiniMax CLI，避免匹配引号或普通参数文本。 */
-export function shellUsesMiniMaxCli(command: string): boolean {
-  return shellCommandSegments(command).some(
-    (segment) => segment.executable === 'mmx' && !segment.executableIsPath,
-  )
-}
-
 export interface ToolExecutionContext {
   subagentLifecycle?: (name: string, input: Record<string, unknown>) => Promise<unknown>
   threadID: string
@@ -118,6 +117,13 @@ export interface ToolExecutionContext {
   /** Host-derived scope fingerprint bound to the claimed approval. */
   approvedAuthorizationFingerprint?: string
   approvedComputerGrant?: 'chat' | 'persistent'
+  /**
+   * Host-only: internal operation recorded in the claimed approval checkpoint.
+   * The node_repl entry resumes only this operation; the script is never replayed.
+   */
+  computerRecovery?: ComputerOperationRecovery
+  /** Host-only: arranges a durable approval pause from inside tool execution. */
+  requestPause?: (approval: ToolPauseRequest) => Promise<void>
   /** Runs normalization, hard-deny, hooks and review without executing the tool. */
   authorizationOnly?: boolean
   /** Optional active Skill ceiling. It can only remove tools from the effective policy. */
@@ -154,6 +160,8 @@ export interface ToolExecutorOptions {
   userConfigPath?: string
   validateConfigDocument?: (text: string, scope: 'user' | 'project') => void
   authorizeShell: (invocation: ToolInvocation, signal: AbortSignal) => Promise<PermissionDecision>
+  /** Optional Guardian Beta observation; must never block tool execution. */
+  observeToolStart?: (invocation: ToolInvocation) => void
   recordToolCall?: (
     invocation: ToolInvocation,
     status: 'running' | 'completed' | 'error' | 'interrupted',
@@ -188,13 +196,18 @@ export interface ToolExecutorOptions {
   runHost?: typeof runHostCommand
   resolveTooling?: ToolingResolver
   resolveToolingEnvironment?: ToolingEnvironmentResolver
-  resolveMiniMaxCliPathEntries?: () => Promise<readonly string[]>
   resolveShellSecurityLevel?: () => ShellSecurityLevel
   runToolProcess?: ToolProcessRunner
   fileSaved?: (input: { workspaceRoot: string; filePath: string; content: string }) => Promise<void>
   recordMutation?: (batch: TurnPatchMutationBatch) => Promise<void>
   discardMutationEvidence?: (input: { threadID: string; turnID: string }) => Promise<void>
   permissionGrants?: PermissionGrantStore
+  /** Host-owned rule facts loaded immediately before the final permission gate. */
+  resolvePermissionRules?: (invocation: ToolInvocation) => Promise<PermissionRuleFacts>
+  /** Called when a turn ends so stale async authorization state cannot survive it. */
+  settleTurn?: (threadID: string, turnID: string) => void
+  /** Invalidates in-flight Guardian scores when host evaluation denies an action. */
+  onPermissionDenied?: (invocation: ToolInvocation) => void
   logger?: AgentLogger
 }
 
@@ -339,8 +352,8 @@ export class ToolExecutor {
         : canonicalName === 'request_permissions'
           ? await this.normalizePermissionRequest(parsedInput, context)
           : parsedInput
-    if (context.taskMode === 'plan' && canonicalName === 'request_permissions') {
-      throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式禁止请求或提升权限', 403)
+    if (isReadOnlyTaskMode(context.taskMode) && canonicalName === 'request_permissions') {
+      throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 与 Grill 模式禁止请求或提升权限', 403)
     }
     if (canonicalName === 'request_permissions' && typeof normalized.escalationToken === 'string') {
       throw new AgentError(
@@ -425,7 +438,7 @@ export class ToolExecutor {
     let workspace = context.workspace.withFileAccess(
       executionPolicyFromV4(permissionConfig).fileAccess,
     )
-    const skipProjectHooks = context.skipHooks || context.taskMode === 'plan'
+    const skipProjectHooks = context.skipHooks
     if (this.options?.userConfigPath) {
       workspace.grantEditorAlias('@pidex/config.json', this.options.userConfigPath)
     }
@@ -455,12 +468,13 @@ export class ToolExecutor {
       turnID: context.turnID,
       agentID: context.agentID ?? context.turnID,
       requested: fileRequested,
+      workspaceRoot: context.workspace.rootPath,
     }
     const fileGrant =
-      externalPaths.length && !workspace.allowsOutsideWorkspace()
+      writesFiles && externalPaths.length && !workspace.allowsOutsideWorkspace()
         ? this.permissionGrants.authorize(fileGrantLookup)
         : null
-    if (fileGrant) workspace = workspace.withPermissionPaths(fileRequested)
+    if (externalPaths.length) workspace = workspace.withPermissionPaths(fileRequested)
     const fileSnapshots = this.fileSnapshots(context, workspace)
     const baseInvocation: ToolInvocation = {
       id: context.toolCallID ?? crypto.randomUUID(),
@@ -473,24 +487,31 @@ export class ToolExecutor {
       model,
       taskMode: context.taskMode,
     }
-    const inspection = definition.inspectInput
+    const rawInspection = definition.inspectInput
+      ? await definition.inspectInput(input, {
+          signal: context.signal,
+          taskMode: context.taskMode,
+          profile: context.profile ?? 'main',
+          workspace,
+          permissionConfig,
+          model,
+          fileSnapshots,
+          invocation: {
+            threadID: context.threadID,
+            turnID: context.turnID,
+            agentID: baseInvocation.agentID,
+            toolCallID: baseInvocation.id,
+          },
+          ...(context.computerRecovery ? { computerRecovery: context.computerRecovery } : {}),
+          ...(context.approvedComputerGrant
+            ? { approvedComputerGrant: context.approvedComputerGrant }
+            : {}),
+          ...(context.onProgress ? { onProgress: context.onProgress } : {}),
+        })
+      : undefined
+    const inspection = rawInspection
       ? this.validateToolInputInspection(
-          await definition.inspectInput(input, {
-            signal: context.signal,
-            taskMode: context.taskMode,
-            profile: context.profile ?? 'main',
-            workspace,
-            permissionConfig,
-            model,
-            fileSnapshots,
-            invocation: {
-              threadID: context.threadID,
-              turnID: context.turnID,
-              agentID: baseInvocation.agentID,
-              toolCallID: baseInvocation.id,
-            },
-            ...(context.onProgress ? { onProgress: context.onProgress } : {}),
-          }),
+          rawInspection,
           definition.capabilities.filesystem === 'none',
         )
       : undefined
@@ -537,14 +558,22 @@ export class ToolExecutor {
         approvalStrategy: definition.approvalStrategy,
         ...(definition.origin ? { origin: definition.origin } : {}),
       },
-      ...(sensitiveEnvironment ||
-      protectedGitWrite ||
-      protectedConfigWrite ||
-      inspection?.grantsForbidden
-        ? { grantsForbidden: true }
-        : {}),
+      ...(inspection?.grantsForbidden ? { grantsForbidden: true } : {}),
       permissionFacts: {
+        ...(fileTool || name === 'apply_patch'
+          ? {
+              risk:
+                sensitiveEnvironment ||
+                protectedGitWrite ||
+                protectedConfigWrite ||
+                authorizationScope.ruleRequiresApproval
+                  ? ('high' as const)
+                  : ('low' as const),
+            }
+          : {}),
+        externalWrite: writesFiles && externalPaths.length > 0,
         ...inspection?.permissionFacts,
+        workspaceRoot: context.workspace.rootPath,
         ruleRequiresApproval: Boolean(
           inspection?.permissionFacts?.ruleRequiresApproval ||
           sensitiveEnvironment ||
@@ -552,14 +581,34 @@ export class ToolExecutor {
           protectedConfigWrite ||
           authorizationScope?.ruleRequiresApproval,
         ),
+        ...(() => {
+          const networkDomains = [
+            ...requestedPermissions(input).networkDomains.map((domain) =>
+              domain.trim().toLowerCase(),
+            ),
+            ...(authorizationScope?.browserOrigin
+              ? [new URL(authorizationScope.browserOrigin).hostname.toLowerCase()]
+              : []),
+          ].filter(Boolean)
+          const observedPaths = canonicalTarget && fileTool ? [canonicalTarget] : canonicalPaths
+          if (!observedPaths.length && networkDomains.length === 0) return {}
+          return {
+            ruleTargets: {
+              ...(observedPaths.length
+                ? writesFiles
+                  ? { writePaths: observedPaths }
+                  : { readPaths: observedPaths }
+                : {}),
+              networkDomains,
+            },
+          }
+        })(),
       },
       ...(authorizationScope ? { authorizationScope } : {}),
       ...(context.authorizationOnly ? { durableApproval: true } : {}),
     }
     setFilePhase?.('authorization')
     let resolved = this.decisions.evaluate(invocation, definition)
-    if (resolved.action === 'deny')
-      throw new AgentError('TOOL_PERMISSION_DENIED', resolved.reason, 403, resolved)
     const resumedApproval = context.approvedToolCallID === invocation.id
     if (
       resumedApproval &&
@@ -571,20 +620,6 @@ export class ToolExecutor {
         '工具输入或受影响文件范围已变化，需要重新审批',
         409,
       )
-    }
-    if (context.taskMode === 'plan' && this.options?.hooks) {
-      this.options.logger?.info('hook.skipped', {
-        context: {
-          threadId: context.threadID,
-          turnId: context.turnID,
-          ...(context.agentID ? { agentId: context.agentID } : {}),
-          toolCallId: invocation.id,
-        },
-        details: {
-          tool: name,
-          reason: 'plan_mode_host_process_disabled',
-        },
-      })
     }
     const hookResults =
       skipProjectHooks || resumedApproval
@@ -605,7 +640,10 @@ export class ToolExecutor {
             },
           )) ?? [])
     const denied = hookResults.find(({ result }) => result.decision === 'deny')
-    if (denied)
+    if (
+      denied &&
+      !(isFullAccessPermissionConfig(permissionConfig) && !isReadOnlyTaskMode(context.taskMode))
+    )
       throw new AgentError('HOOK_DENIED', denied.result.reason ?? 'PreToolUse Hook 拒绝执行', 403)
     const narrowed = hookResults
       .map(({ result }) => result.narrowedInput)
@@ -630,11 +668,21 @@ export class ToolExecutor {
           'PreToolUse Hook 要求审批',
       }
     resolved = this.decisions.evaluate(invocation, definition)
+    await this.loadPermissionRules(invocation, context.signal)
+    if (
+      fileGrant &&
+      !hookAsked &&
+      !invocation.permissionFacts?.ruleRequiresApproval &&
+      invocation.permissionFacts?.ruleEffect !== 'deny' &&
+      invocation.permissionFacts?.ruleEffect !== 'ask'
+    )
+      invocation.permissionFacts = { ...invocation.permissionFacts, ruleEffect: 'allow' }
+    resolved = this.decisions.evaluate(invocation, definition)
     if (resolved.action === 'deny')
       throw new AgentError('TOOL_PERMISSION_DENIED', resolved.reason, 403, resolved)
     const grant =
-      !resumedApproval && !hookAsked && resolved.action === 'review'
-        ? this.permissionGrantFor(invocation, definition, !context.authorizationOnly)
+      !resumedApproval && !hookAsked && resolved.action === 'review' && !resolved.forceHumanApproval
+        ? (fileGrant ?? this.permissionGrantFor(invocation, definition, !context.authorizationOnly))
         : null
     let authorization: PermissionDecision = {
       decision: 'allow',
@@ -678,10 +726,9 @@ export class ToolExecutor {
           // Existing execution validation remains authoritative when no text preview is available.
         }
       }
-      authorization = await this.options.authorizeShell(
-        secretScrubber.scrub(invocation),
-        context.signal,
-      )
+      if (context.approvedToolCallID !== invocation.id && !context.authorizationOnly)
+        this.options?.observeToolStart?.(invocation)
+      authorization = await this.options.authorizeShell(invocation, context.signal)
     }
     if (context.authorizationOnly) {
       return {
@@ -734,6 +781,11 @@ export class ToolExecutor {
         ...(resumedApproval && invocation.name === 'ComputerRead' && context.approvedComputerGrant
           ? { computerGrant: context.approvedComputerGrant }
           : {}),
+        ...(context.computerRecovery ? { computerRecovery: context.computerRecovery } : {}),
+        ...(context.approvedComputerGrant
+          ? { approvedComputerGrant: context.approvedComputerGrant }
+          : {}),
+        ...(context.requestPause ? { requestPause: context.requestPause } : {}),
         model,
         deferredTools,
         fileSnapshots,
@@ -803,7 +855,7 @@ export class ToolExecutor {
           : {}),
         ...(context.onProgress ? { onProgress: context.onProgress } : {}),
       })
-      if (name === 'request_permissions') {
+      if (name === 'request_permissions' && !isFullAccessPermissionConfig(permissionConfig)) {
         const grantResult = await this.applyPermissionGrant(
           {
             scope: input.scope,
@@ -989,19 +1041,14 @@ export class ToolExecutor {
       ...(context.agentID ? { agentId: context.agentID } : {}),
       ...(context.toolCallID ? { toolCallId: context.toolCallID } : {}),
     }
-    if (context.taskMode === 'plan') {
-      options.logger?.warn('shell.execution.failed', {
-        context: logContext,
-        details: {
-          shellTool,
-          backend: 'host-hook',
-          phase: 'task-mode',
-          code: 'PLAN_SHELL_DISABLED',
-          durationMs: 0,
-        },
-      })
-      throw new AgentError('PLAN_SHELL_DISABLED', 'Plan 模式禁止执行 Bash 或 PowerShell', 403)
-    }
+    // The mode surface and the final execution gate share one rule: Plan and
+    // Grill may run Shell investigation commands through the normal host chain.
+    if (!toolAllowedInTaskMode(catalog.get(shellTool), context.taskMode))
+      throw new AgentError(
+        'TOOL_NOT_ALLOWED_IN_MODE',
+        `工具 ${shellTool} 不允许在 ${context.taskMode} 模式执行`,
+        403,
+      )
     const permissionConfig = context.permissionConfig ?? DEFAULT_PERMISSION_CONFIG
     const executionPolicy = executionPolicyFromV4(permissionConfig)
     const model =
@@ -1054,19 +1101,7 @@ export class ToolExecutor {
     const cwd = await realpath(requestedCwd).catch(() => {
       throw new AgentError('SHELL_CWD_NOT_FOUND', 'Shell cwd 不存在或无法解析', 400)
     })
-    if (executionPolicy.fileAccess !== 'full-access') {
-      const outsideWorkspace = !context.workspace.containsPath(cwd)
-      if (
-        outsideWorkspace &&
-        !(shell.additionalPermissions?.readPaths ?? []).some((path) => pathContains(path, cwd))
-      ) {
-        throw new AgentError(
-          'SHELL_CWD_PERMISSION_REQUIRED',
-          '工作区外 cwd 必须在 additionalPermissions.readPaths 中声明',
-          403,
-        )
-      }
-    }
+
     const invocation: ToolInvocation = {
       id: context.toolCallID ?? crypto.randomUUID(),
       threadID: context.threadID,
@@ -1082,6 +1117,13 @@ export class ToolExecutor {
       permissionConfig,
       model,
       taskMode: context.taskMode,
+      toolPolicy: {
+        sdkName: catalog.get(shellTool).sdkName,
+        capabilities: catalog.get(shellTool).capabilities,
+        allowedModes: catalog.get(shellTool).allowedModes,
+        approvalStrategy: catalog.get(shellTool).approvalStrategy,
+        ...(catalog.get(shellTool).origin ? { origin: catalog.get(shellTool).origin } : {}),
+      },
       ...(context.authorizationOnly ? { durableApproval: true } : {}),
     }
     const preflightStartedAt = Date.now()
@@ -1093,6 +1135,7 @@ export class ToolExecutor {
       const staticRisk = analyzeShellRisk({
         command: shell.command,
         cwd,
+        workspaceRoot,
         securityLevel: options.resolveShellSecurityLevel?.() ?? 'balanced',
         ...(shell.additionalPermissions
           ? { additionalPermissions: shell.additionalPermissions }
@@ -1101,12 +1144,56 @@ export class ToolExecutor {
         ...(context.taskSummary ? { taskSummary: context.taskSummary } : {}),
       })
       risk = staticRisk.risk
-      if (staticRisk.hardDenied)
-        throw new AgentError('SHELL_HARD_DENY', staticRisk.reason, 403, staticRisk)
+      if (!staticRisk.requestedScopeValid)
+        throw new AgentError('INVALID_TOOL_INPUT', '申请的额外权限范围无效', 400)
+
       invocation.permissionFacts = {
-        ruleRequiresApproval: staticRisk.requiresApproval,
-        risk: staticRisk.risk,
+        workspaceRoot: context.workspace.rootPath,
+        riskCategories: staticRisk.categories,
+        ruleRequiresApproval:
+          staticRisk.hardDenied ||
+          (staticRisk.requiresApproval &&
+            !staticRisk.categories.every((category) => category === 'scope_escape')),
+        networkAccess: staticRisk.categories.includes('network_access'),
+        externalCommand:
+          !context.workspace.containsPath(cwd) || staticRisk.categories.includes('scope_escape'),
+        destructive:
+          staticRisk.destructive &&
+          !staticRisk.categories.every((category) => category === 'scope_escape'),
+        risk:
+          staticRisk.categories.length > 0 &&
+          staticRisk.categories.every((category) => category === 'scope_escape')
+            ? 'low'
+            : staticRisk.risk,
         approvalReason: staticRisk.reason,
+        ruleTargets: {
+          command: shell.command,
+          argv: simpleCommandArgv(shell.command),
+          networkDomains: [
+            ...new Set([
+              ...(shell.additionalPermissions?.networkDomains ?? [])
+                .map((domain) => domain.trim().toLowerCase())
+                .filter(Boolean),
+              ...(staticRisk.categories.includes('network_access')
+                ? Array.from(shell.command.matchAll(/https?:\/\/[^\s"'`<>|;&)]+/gi)).flatMap(
+                    ([url]) => {
+                      try {
+                        return [new URL(url).hostname.toLowerCase()]
+                      } catch {
+                        return []
+                      }
+                    },
+                  )
+                : []),
+            ]),
+          ],
+          ...(additionalPermissions?.readPaths
+            ? { readPaths: additionalPermissions.readPaths }
+            : {}),
+          ...(additionalPermissions?.writePaths
+            ? { writePaths: additionalPermissions.writePaths }
+            : {}),
+        },
       }
       invocation.authorizationScope = {
         affectedPaths: [],
@@ -1149,7 +1236,10 @@ export class ToolExecutor {
           : hookResults.length > 0
             ? 'continue'
             : 'skipped'
-      if (denied)
+      if (
+        denied &&
+        !(isFullAccessPermissionConfig(permissionConfig) && !isReadOnlyTaskMode(context.taskMode))
+      )
         throw new AgentError('HOOK_DENIED', denied.result.reason ?? 'PreToolUse Hook 拒绝执行', 403)
       const narrowed = hookResults
         .map(({ result }) => result.narrowedInput)
@@ -1180,13 +1270,38 @@ export class ToolExecutor {
             hookResults.find(({ result }) => result.decision === 'ask')?.result.reason ??
             'PreToolUse Hook 要求审批',
         }
+      await this.loadPermissionRules(invocation, context.signal)
+      if (!resumedApproval && !context.authorizationOnly)
+        this.options?.observeToolStart?.(invocation)
+      const temporary =
+        !invocation.permissionFacts?.hookRequiresApproval &&
+        !invocation.permissionFacts?.ruleRequiresApproval &&
+        !invocation.permissionFacts?.destructive &&
+        !staticRisk.categories.some(
+          (category) => category !== 'network_access' && category !== 'scope_escape',
+        )
+          ? this.permissionGrantFor(invocation, catalog.get(shellTool), false)
+          : null
+      if (
+        temporary &&
+        invocation.permissionFacts?.ruleEffect !== 'deny' &&
+        invocation.permissionFacts?.ruleEffect !== 'ask'
+      )
+        invocation.permissionFacts = { ...invocation.permissionFacts, ruleEffect: 'allow' }
       const finalDecision = this.decisions.evaluate(invocation, catalog.get(shellTool))
       phase = 'authorization'
-      const grant = resumedApproval
-        ? null
-        : this.permissionGrantFor(invocation, catalog.get(shellTool), !context.authorizationOnly)
-      if (finalDecision.action === 'deny' && !grant)
+      if (finalDecision.action === 'deny') {
+        this.options?.onPermissionDenied?.(invocation)
         throw new AgentError('TOOL_PERMISSION_DENIED', finalDecision.reason, 403, finalDecision)
+      }
+      const hookAsked = invocation.permissionFacts?.hookRequiresApproval === true
+      const grant =
+        resumedApproval ||
+        hookAsked ||
+        (finalDecision.action !== 'review' && !temporary) ||
+        (finalDecision.action === 'review' && finalDecision.forceHumanApproval)
+          ? null
+          : this.permissionGrantFor(invocation, catalog.get(shellTool), !context.authorizationOnly)
       const decision = resumedApproval
         ? ({
             decision: 'allow',
@@ -1199,7 +1314,7 @@ export class ToolExecutor {
               risk: staticRisk.risk,
               reason: `已使用 ${grant.scope} 临时权限`,
             } satisfies PermissionDecision)
-          : await this.options.authorizeShell(secretScrubber.scrub(invocation), context.signal)
+          : await this.options.authorizeShell(invocation, context.signal)
       options.logger?.info('shell.preflight.completed', {
         context: logContext,
         details: {
@@ -1330,8 +1445,8 @@ export class ToolExecutor {
     },
     context: ToolExecutionContext,
   ) {
-    if (context.taskMode === 'plan')
-      throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式禁止请求或提升权限', 403)
+    if (isReadOnlyTaskMode(context.taskMode))
+      throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 与 Grill 模式禁止请求或提升权限', 403)
     if (!['tool-call', 'turn', 'session'].includes(String(input.scope))) {
       throw new AgentError('INVALID_TOOL_INPUT', '权限 scope 无效', 400)
     }
@@ -1351,6 +1466,7 @@ export class ToolExecutor {
       scope: input.scope as PermissionGrantScope,
       requested,
       granted,
+      workspaceRoot: context.workspace.rootPath,
     })
     return grant
       ? { granted: true, grantId: grant.id, scope: grant.scope, permissions: grant.permissions }
@@ -1363,6 +1479,24 @@ export class ToolExecutor {
 
   clearTurnPermissionGrants(threadID: string, turnID: string) {
     this.permissionGrants.clearTurn(threadID, turnID)
+    this.options?.settleTurn?.(threadID, turnID)
+  }
+
+  /**
+   * Loads Allow/Ask/Deny rule facts after Hook rewriting and immediately before
+   * the final permission gate. The decision engine stays pure; only the host
+   * reads configuration, chat rules and canonical targets.
+   */
+  private async loadPermissionRules(invocation: ToolInvocation, signal: AbortSignal) {
+    if (!this.options?.resolvePermissionRules) return
+    if (signal.aborted) throw new AgentError('RUN_ABORTED', '任务已停止', 499)
+    const facts = await this.options.resolvePermissionRules(invocation)
+    invocation.permissionFacts = {
+      ...invocation.permissionFacts,
+      ruleFactsLoaded: true,
+      ...(facts.effect ? { ruleEffect: facts.effect } : {}),
+      ...(facts.ids.length ? { ruleIDs: facts.ids } : {}),
+    }
   }
 
   clearThreadPermissionGrants(threadID: string) {
@@ -1497,9 +1631,14 @@ export class ToolExecutor {
     const facts = value.permissionFacts
     if (
       facts &&
-      (['ruleRequiresApproval', 'hookRequiresApproval', 'skillScript'].some(
-        (key) => key in facts && typeof facts[key as keyof typeof facts] !== 'boolean',
-      ) ||
+      ([
+        'ruleRequiresApproval',
+        'hookRequiresApproval',
+        'skillScript',
+        'networkAccess',
+        'externalWrite',
+        'externalCommand',
+      ].some((key) => key in facts && typeof facts[key as keyof typeof facts] !== 'boolean') ||
         (facts.approvalCategories !== undefined &&
           (!Array.isArray(facts.approvalCategories) ||
             facts.approvalCategories.some(
@@ -1591,16 +1730,25 @@ export class ToolExecutor {
     consumeToolCall: boolean,
   ) {
     if (!hasRequestedPermissions(invocation.input)) return null
-    const requestedDecision = this.decisions.evaluate(invocation, tool)
-    if (requestedDecision.action === 'allow') return null
-    const baselineInput = { ...invocation.input }
-    delete baselineInput.additionalPermissions
-    const baseline = this.decisions.evaluate({ ...invocation, input: baselineInput }, tool)
-    if (baseline.action !== 'allow') return null
+    const facts = invocation.permissionFacts
+    if (
+      invocation.grantsForbidden ||
+      facts?.hookRequiresApproval ||
+      facts?.ruleRequiresApproval ||
+      facts?.destructive ||
+      facts?.forcedApproval ||
+      facts?.ruleEffect === 'deny' ||
+      facts?.ruleEffect === 'ask' ||
+      facts?.risk === 'high' ||
+      facts?.risk === 'critical' ||
+      (!facts?.risk && (tool.capabilities.externalState || tool.origin?.kind === 'mcp'))
+    )
+      return null
     return this.permissionGrants.authorize({
       threadID: invocation.threadID,
       turnID: invocation.turnID,
       agentID: invocation.agentID,
+      ...(facts?.workspaceRoot ? { workspaceRoot: facts.workspaceRoot } : {}),
       requested: requestedPermissions(invocation.input),
       consumeToolCall,
     })
@@ -1687,10 +1835,7 @@ export class ToolExecutor {
         )
       }
     }
-    const miniMaxCliPathEntries = shellUsesMiniMaxCli(command)
-      ? ((await this.options?.resolveMiniMaxCliPathEntries?.()) ?? [])
-      : []
-    const env = toolingPathOverride([...environment.pathEntries, ...miniMaxCliPathEntries])
+    const env = toolingPathOverride(environment.pathEntries)
     if (process.platform === 'win32' && shellTool === 'Bash') {
       const resolution = await (this.options?.resolveTooling ?? resolveManagedTool)('git-bash', {
         signal,

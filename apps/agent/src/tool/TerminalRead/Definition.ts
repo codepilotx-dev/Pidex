@@ -44,6 +44,7 @@ export const createTerminalReadDefinition = (
     process: false,
     externalState: false,
     userInteraction: true,
+    readOnly: true,
   },
   allowedModes: ['chat', 'plan'],
   allowedProfiles: ['main'],

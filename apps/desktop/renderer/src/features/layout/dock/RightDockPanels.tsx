@@ -1,7 +1,7 @@
 import { lazy, Suspense, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { FileEditorViewState } from '../../editor/FileEditor.js'
 import type React from 'react'
-import { Check, Copy, Download, Folder, FolderOpen, ListChecks } from 'lucide-react'
+import { Check, Copy, Download, Folder, FolderOpen, ListChecks, Undo2 } from 'lucide-react'
 import {
   APP_ICON_SIZE,
   APP_ICON_STROKE_WIDTH,
@@ -16,14 +16,28 @@ import {
   useTransform,
   type MotionValue,
 } from 'motion/react'
-import type { DesktopFileEntry, DesktopWorkspace } from '../../../../shared/Types.js'
+import type {
+  DesktopFileEntry,
+  DesktopGoalBudgetBaseline,
+  DesktopThreadGoal,
+  DesktopWorkspace,
+} from '../../../../shared/Types.js'
 import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
 import { Button } from '../../../components/ui/Button.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { MarkdownMessage } from '../../markdown/index.js'
 import { usePlanDocumentActions } from '../../session/workflow/PlanDocumentActions.js'
+import {
+  StructuredPlanView,
+  type OpenPlanInDockRequest,
+} from '../../session/workflow/WorkflowPlanCard.js'
+import { useCanonicalThreadConversation } from '../../session/timeline/UseCanonicalThreadConversation.js'
+import { selectCanonicalLatestPlanItemId } from '../../session/conversation/CanonicalConversationSelectors.js'
 import { resolveLanguageFromPath } from '../../syntax/index.js'
 import { cx } from '../../../utils/Cx.js'
+import { resolveGoalBudgetAppend } from '../../session/composer/ComposerTypes.js'
+import { compactTokenCount } from '../../session/composer/ComposerGoalRow.js'
+import { toast } from '../../../components/toast/ToastState.js'
 import {
   prefetchFileDocument,
   fileDocumentLoadErrorMessage,
@@ -78,7 +92,18 @@ type FilesPanelProps = {
 }
 
 type PlanPanelProps = {
-  content: string | null
+  /** 计划项身份：与所属聊天一起绑定 canonical projection。 */
+  planItemId: string
+  threadId: string
+  /** canonical 投影不可用时的回退：历史标签只保存了打开瞬间的正文。 */
+  fallbackContent: string | null
+  onOpenPlan?: (request: OpenPlanInDockRequest) => void
+}
+
+function planTitleOf(item: { structured?: { title: string }; markdown: string }): string | null {
+  if (item.structured?.title) return item.structured.title
+  const heading = item.markdown.match(/^\s*#\s+(.+)$/m)?.[1]?.trim()
+  return heading || null
 }
 
 export function RightDockSkillPreviewPanel({ tab }: { tab: SkillPreviewTab }): React.ReactNode {
@@ -136,8 +161,248 @@ export function RightDockSkillPreviewPanel({ tab }: { tab: SkillPreviewTab }): R
   )
 }
 
-export function RightDockPlanPanel({ content }: PlanPanelProps): React.ReactNode {
+function formatRelativeUpdatedLabel(updatedAt: number): string {
+  const diffSeconds = Math.max(0, Math.floor((Date.now() - updatedAt) / 1000))
+  if (diffSeconds < 60) return '刚刚更新'
+  if (diffSeconds < 3600) return `${Math.floor(diffSeconds / 60)} 分钟前更新`
+  if (diffSeconds < 86400) return `${Math.floor(diffSeconds / 3600)} 小时前更新`
+  return `${Math.floor(diffSeconds / 86400)} 天前更新`
+}
+
+export function RightDockGoalPanel({
+  goal,
+  onSaveGoal,
+  onAppendBudget,
+  onRemoveBudgetLimit,
+}: {
+  goal: DesktopThreadGoal | null
+  onSaveGoal?: (objective: string) => Promise<void>
+  onAppendBudget?: (nextTotal: number, baseline: DesktopGoalBudgetBaseline) => Promise<void>
+  onRemoveBudgetLimit?: (baseline: DesktopGoalBudgetBaseline) => Promise<void>
+}): React.ReactNode {
+  const savedObjective = goal?.objective ?? ''
+  const savedBudget = goal?.tokenBudget ?? null
+  const [draft, setDraft] = useState(savedObjective)
+  const [appendDraft, setAppendDraft] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [budgetError, setBudgetError] = useState<string | null>(null)
+  const [budgetPending, setBudgetPending] = useState(false)
+  const previousSavedRef = useRef(savedObjective)
+  const previousGoalIdRef = useRef(goal?.id ?? null)
+
+  useEffect(() => {
+    const previousSaved = previousSavedRef.current
+    previousSavedRef.current = savedObjective
+    if (draft === previousSaved) setDraft(savedObjective)
+  }, [draft, savedObjective])
+
+  // Usage refreshes rewrite the same goal, so only a different goal identity resets
+  // the in-progress append amount.
+  useEffect(() => {
+    const goalId = goal?.id ?? null
+    if (previousGoalIdRef.current === goalId) return
+    previousGoalIdRef.current = goalId
+    setAppendDraft('')
+    setBudgetError(null)
+  }, [goal?.id])
+
+  const trimmedDraft = draft.trim()
+  const isObjectiveDirty = trimmedDraft !== savedObjective.trim()
+  const canSave = Boolean(onSaveGoal && !saving && isObjectiveDirty && trimmedDraft.length > 0)
+  const baseline = goal ? { goalId: goal.id, tokenBudget: savedBudget } : null
+  const append = savedBudget !== null ? resolveGoalBudgetAppend(savedBudget, appendDraft) : null
+  const nextTotal = append?.status === 'valid' ? append.nextTotal : null
+  const canAppend = Boolean(
+    onAppendBudget && baseline && append?.status === 'valid' && !budgetPending,
+  )
+  const appendHint =
+    append?.status === 'invalid'
+      ? '追加量需为正整数'
+      : append?.status === 'overflow'
+        ? '追加后超出可用范围'
+        : append?.status === 'valid' && goal
+          ? `追加后上限 ${compactTokenCount(append.nextTotal)}，剩余 ${compactTokenCount(Math.max(0, append.nextTotal - goal.tokensUsed))}`
+          : ''
+  const budgetEditable =
+    goal !== null && goal.status !== 'complete' && savedBudget !== null && Boolean(onAppendBudget)
+
+  async function handleSave(): Promise<void> {
+    if (!canSave || !onSaveGoal) return
+    setSaving(true)
+    try {
+      await onSaveGoal(trimmedDraft)
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : '目标更新失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function handleReset(): void {
+    setDraft(savedObjective)
+  }
+
+  async function handleAppend(): Promise<void> {
+    if (!canAppend || !onAppendBudget || !baseline || nextTotal === null) return
+    setBudgetPending(true)
+    setBudgetError(null)
+    try {
+      await onAppendBudget(nextTotal, baseline)
+      setAppendDraft('')
+    } catch (cause) {
+      setBudgetError(cause instanceof Error ? cause.message : '追加预算失败')
+    } finally {
+      setBudgetPending(false)
+    }
+  }
+
+  async function handleRemoveLimit(): Promise<void> {
+    if (!onRemoveBudgetLimit || !baseline || budgetPending) return
+    setBudgetPending(true)
+    setBudgetError(null)
+    try {
+      await onRemoveBudgetLimit(baseline)
+    } catch (cause) {
+      setBudgetError(cause instanceof Error ? cause.message : '取消预算上限失败')
+    } finally {
+      setBudgetPending(false)
+    }
+  }
+
+  return (
+    <div
+      aria-label="编辑目标"
+      className="right-dock-goal-panel tw:flex tw:h-full tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:bg-app-dock"
+    >
+      <div className="tw:flex tw:shrink-0 tw:flex-col tw:gap-1.5 tw:border-b tw:border-app-border-subtle tw:px-4 tw:py-2">
+        <div className="tw:flex tw:items-center tw:justify-between tw:gap-2">
+          <span className="tw:text-app-text-meta tw:type-caption tw:select-none">
+            {goal ? formatRelativeUpdatedLabel(goal.updatedAt) : '尚未设置目标'}
+          </span>
+          <div className="tw:flex tw:items-center tw:gap-1.5">
+            <Button
+              color="ghostSecondary"
+              size="sm"
+              aria-label="撤销未保存的修改"
+              disabled={!isObjectiveDirty || saving}
+              onClick={handleReset}
+            >
+              <Undo2 size={15} />
+            </Button>
+            <Button color="primary" size="sm" disabled={!canSave} onClick={() => void handleSave()}>
+              {saving ? '保存中…' : '保存'}
+            </Button>
+          </div>
+        </div>
+        {goal ? (
+          <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-1.5">
+            <span className="tw:text-app-text-meta tw:type-caption tw:tabular-nums">
+              {savedBudget === null
+                ? '预算：不限额'
+                : `预算：${compactTokenCount(goal.tokensUsed)} / ${compactTokenCount(savedBudget)}`}
+            </span>
+            {budgetEditable ? (
+              <>
+                <input
+                  id="dock-goal-append-budget"
+                  type="number"
+                  min={1}
+                  aria-label="追加 Token 预算"
+                  placeholder="追加 Token"
+                  value={appendDraft}
+                  disabled={budgetPending}
+                  onChange={(event) => {
+                    setAppendDraft(event.target.value)
+                    setBudgetError(null)
+                  }}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' && !event.shiftKey) {
+                      event.preventDefault()
+                      void handleAppend()
+                    }
+                  }}
+                  className="tw:h-7 tw:w-28 tw:rounded tw:border tw:border-app-border-subtle tw:bg-transparent tw:px-2 tw:py-0.5 tw:text-app-text tw:type-caption tw:tabular-nums tw:outline-none tw:placeholder:text-app-text-meta tw:focus:border-app-focus"
+                />
+                <Button
+                  color="ghostSecondary"
+                  size="sm"
+                  disabled={!canAppend}
+                  onClick={() => void handleAppend()}
+                >
+                  追加预算
+                </Button>
+                <Button
+                  color="ghostSecondary"
+                  size="sm"
+                  disabled={budgetPending || !onRemoveBudgetLimit}
+                  onClick={() => void handleRemoveLimit()}
+                >
+                  取消预算上限
+                </Button>
+                <span className="tw:text-app-text-soft tw:type-caption tw:tabular-nums">
+                  {appendHint}
+                </span>
+              </>
+            ) : null}
+            {budgetError ? (
+              <span role="alert" className="tw:text-app-danger tw:type-caption">
+                {budgetError}
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:p-4">
+        <textarea
+          aria-label="目标内容"
+          value={draft}
+          autoFocus
+          disabled={saving || !onSaveGoal}
+          placeholder="输入此任务的目标…"
+          onChange={(event) => setDraft(event.target.value)}
+          onKeyDown={(event) => {
+            if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault()
+              void handleSave()
+            }
+          }}
+          className="tw:min-h-0 tw:w-full tw:flex-1 tw:resize-none tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text tw:type-body tw:outline-none tw:placeholder:text-app-text-meta"
+        />
+      </div>
+    </div>
+  )
+}
+
+export function RightDockPlanPanel({
+  planItemId,
+  threadId,
+  fallbackContent,
+  onOpenPlan,
+}: PlanPanelProps): React.ReactNode {
+  const conversation = useCanonicalThreadConversation(threadId || null)
+  const state = conversation.state
+  const item = state?.itemsById.get(planItemId)
+  const structured = item?.type === 'plan' ? item.structured : undefined
+  const canonicalMarkdown = item?.type === 'plan' && item.markdown.trim() ? item.markdown : null
+  const content = canonicalMarkdown ?? fallbackContent
+  const latestItemId = selectCanonicalLatestPlanItemId(state)
+  const latestItem = latestItemId ? state?.itemsById.get(latestItemId) : undefined
+  const hasNewer = Boolean(latestItemId && latestItemId !== planItemId)
+  const pendingReview = state?.pendingPlanApproval?.planItemId === planItemId
+  const title = (item?.type === 'plan' ? planTitleOf(item) : null) ?? null
   const actions = usePlanDocumentActions(content ?? '')
+
+  const openLatest = (): void => {
+    if (!onOpenPlan || !latestItemId || latestItem?.type !== 'plan') return
+    onOpenPlan({
+      planItemId: latestItemId,
+      threadId,
+      title: planTitleOf(latestItem) ?? '计划',
+      content: latestItem.markdown,
+      openable: true,
+    })
+  }
+
   if (!content) {
     return (
       <ScrollArea
@@ -163,15 +428,30 @@ export function RightDockPlanPanel({ content }: PlanPanelProps): React.ReactNode
       contentClassName="right-dock-plan-scroll-content tw:min-w-0 tw:p-4"
     >
       <article className="right-dock-plan-document tw:mx-auto tw:w-full tw:max-w-[48rem] tw:text-app-text">
-        <div className="tw:flex tw:justify-end tw:gap-2 tw:pb-3">
-          <Button onClick={actions.copy}>{actions.copied ? <Check /> : <Copy />}复制计划</Button>
-          <Button onClick={actions.exportMarkdown}>
-            <Download />
-            导出 PLAN.md
-          </Button>
+        <div className="tw:flex tw:flex-wrap tw:items-center tw:justify-between tw:gap-2 tw:pb-3">
+          <span className="tw:text-app-text-meta tw:type-label">
+            {hasNewer ? '历史计划' : pendingReview ? '计划 · 待审阅' : '计划'}
+          </span>
+          <div className="tw:flex tw:items-center tw:gap-2">
+            {hasNewer && onOpenPlan && latestItemId ? (
+              <Button color="secondary" onClick={openLatest}>
+                有新版计划
+              </Button>
+            ) : null}
+            <Button onClick={actions.copy}>{actions.copied ? <Check /> : <Copy />}复制计划</Button>
+            <Button onClick={actions.exportMarkdown}>
+              <Download />
+              导出 PLAN.md
+            </Button>
+          </div>
         </div>
         {actions.error ? <p role="alert">{actions.error}</p> : null}
-        <MarkdownMessage text={content} />
+        {title ? (
+          <h2 className="right-dock-plan-title tw:m-0 tw:pb-2 tw:text-app-text tw:type-body-lg">
+            {title}
+          </h2>
+        ) : null}
+        {structured ? <StructuredPlanView plan={structured} /> : <MarkdownMessage text={content} />}
       </article>
     </ScrollArea>
   )
@@ -333,7 +613,7 @@ export function RightDockFilesPanel({
             />
             <aside
               aria-label="工作区文件树"
-              className="right-dock-editor-file-tree tw:grow tw:shrink tw:basis-auto tw:h-full tw:min-h-0 tw:min-w-0 tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-underlay"
+              className="right-dock-editor-file-tree tw:grow tw:shrink tw:basis-auto tw:h-full tw:min-h-0 tw:min-w-0 tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-dock"
             >
               <WorkspaceFileTree
                 key={workspacePath}
@@ -657,7 +937,7 @@ export function RightDockFilePreviewPanel({
             />
             <aside
               aria-label="当前文件的工作区文件树"
-              className="right-dock-editor-file-tree tw:grow tw:shrink tw:basis-auto tw:h-full tw:min-h-0 tw:min-w-0 tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-underlay"
+              className="right-dock-editor-file-tree tw:grow tw:shrink tw:basis-auto tw:h-full tw:min-h-0 tw:min-w-0 tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-dock"
             >
               <WorkspaceFileTree
                 activePath={expectedPath}

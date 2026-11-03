@@ -94,7 +94,9 @@ export function buildDeepSeekProtocolDefinition(
   config: DesktopBuiltinProviderDefinition,
   protocol: DeepSeekProtocol,
 ): DesktopBuiltinProviderDefinition {
+  const { protocol: _protocol, ...rest } = config
   return {
+    ...rest,
     kind: 'builtin',
     id: config.id,
     enabled: config.enabled,

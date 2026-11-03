@@ -1,4 +1,5 @@
 import { isRecord } from '@pidex/shared/guards'
+import { QUESTION_CHOICES_READ_MAX } from '@pidex/shared/thread'
 export type AskUserQuestionOption = {
   id?: string
   label: string
@@ -132,16 +133,30 @@ export function enterQuestionAction(
   return currentQuestionIndex >= questionCount - 1 ? 'confirm-and-submit' : 'confirm-and-next'
 }
 
+/**
+ * Only an explicit recommended option is preselected. Without one the user must
+ * choose, so Enter can never submit an option the model did not actually propose.
+ */
 export function initialQuestionState(question: {
-  options: Array<{ id?: string; label: string }>
+  options: Array<{ id?: string; label: string; recommended?: boolean }>
   multiSelect?: boolean
 }): QuestionState {
-  const firstOption = question.multiSelect ? undefined : question.options[0]
+  const recommended = question.options
+    .filter((option) => option.recommended === true)
+    .map(questionOptionId)
   return {
-    selected: firstOption ? [questionOptionId(firstOption)] : [],
+    selected: question.multiSelect ? recommended : recommended.slice(0, 1),
     custom: '',
     answered: false,
   }
+}
+
+/** Structured interviews share one default; the blank form is kept for tests and callers. */
+export function initialPlanQuestionState(question?: {
+  options: Array<{ id?: string; label: string; recommended?: boolean }>
+  multiSelect?: boolean
+}): QuestionState {
+  return question ? initialQuestionState(question) : { selected: [], custom: '', answered: false }
 }
 
 export function toggleMultiSelectOption(current: QuestionState, label: string): QuestionState {
@@ -319,7 +334,9 @@ export function shouldDeferAskUserQuestionShortcutToTextEntry(
 
 export function parseAskUserQuestions(input: Record<string, unknown>): AskUserQuestion[] | null {
   const rawQuestions =
-    Array.isArray(input.questions) && input.questions.length > 0 ? input.questions : null
+    Array.isArray(input.questions) && input.questions.length > 0 && input.questions.length <= 5
+      ? input.questions
+      : null
   if (!rawQuestions) return null
 
   const questions: AskUserQuestion[] = []
@@ -328,7 +345,12 @@ export function parseAskUserQuestions(input: Record<string, unknown>): AskUserQu
     const question = stringValue(rawQuestion.question)
     const header = stringValue(rawQuestion.header)
     const rawOptions = rawQuestion.options
-    if (!question || !Array.isArray(rawOptions) || rawOptions.length > 3 || rawOptions.length === 1)
+    if (
+      !question ||
+      !Array.isArray(rawOptions) ||
+      rawOptions.length > QUESTION_CHOICES_READ_MAX ||
+      rawOptions.length === 1
+    )
       return null
 
     const options: AskUserQuestionOption[] = []

@@ -2,6 +2,7 @@ import type { RpcMethod } from '@pidex/agent-protocol'
 import { Provider } from '@pidex/model-schema'
 import {
   PiProviderConfigValidationError,
+  PiModelServiceError,
   serializePiProviderDefinition,
 } from '../../../provider/pi'
 import type { PiProviderDefinitionInput } from '../../../provider/pi'
@@ -14,6 +15,8 @@ import type { RpcHandlerGroup } from './Types'
 
 const providerMethods = [
   'provider/list',
+  'provider/modelPreferences/list',
+  'provider/modelPreferences/set',
   'model/list',
   'model/refresh',
   'model/setDefault',
@@ -27,6 +30,8 @@ const providerMethods = [
   'provider/update',
   'provider/delete',
   'provider/model/discover',
+  'provider/model/sync',
+  'provider/protocol/detect',
   'provider/credential/list',
   'provider/credential/setActive',
   'provider/credential/setEnabled',
@@ -77,7 +82,6 @@ const recentNewThreadModel = (
 
 const emitCredentialUpdated = async (runtime: RpcRouter, providerID: string) => {
   await runtime.emit('provider/credential/updated', { providerId: providerID })
-  await runtime.dependencies.minimaxCli.credentialChanged(providerID)
 }
 
 const assertCredentialProviderAvailable = async (
@@ -100,6 +104,28 @@ const legacyTestCategory = (
 ): 'authentication' | 'configuration' | 'network' | 'rate-limit' | 'unknown' =>
   category === 'timeout' || category === 'provider' ? 'unknown' : category
 
+const draftChatApis = new Set([
+  'openai-completions',
+  'openai-responses',
+  'anthropic-messages',
+  'google-generative-ai',
+])
+
+type DraftChatApi =
+  'openai-completions' | 'openai-responses' | 'anthropic-messages' | 'google-generative-ai'
+
+const draftChatApiParam = (value: unknown): DraftChatApi => {
+  if (typeof value !== 'string' || !draftChatApis.has(value)) {
+    throw new AgentError('INVALID_REQUEST', 'API 协议参数无效', 400)
+  }
+  return value as DraftChatApi
+}
+
+const stringParamOrNull = (params: Record<string, unknown>, name: string): string | undefined => {
+  const value = params[name]
+  return typeof value === 'string' && value.trim() ? value : undefined
+}
+
 export const providerHandlers = {
   name: 'provider',
   methods: providerMethods,
@@ -118,6 +144,8 @@ export const providerHandlers = {
       providerCredentialStore,
       authSessions,
       modelHealth,
+      modelSync,
+      protocolDetection,
     } = runtime.dependencies
     const params = optionalRecord(rawParams)
     switch (method) {
@@ -138,6 +166,10 @@ export const providerHandlers = {
               if (!configured && provider.source.kind === 'custom') {
                 throw new AgentError('INTERNAL_ERROR', '自定义 Provider 缺少可编辑配置', 500)
               }
+              const modelSync =
+                configured?.kind === 'custom'
+                  ? await piModels.modelSyncSummary(String(provider.id))
+                  : undefined
               return {
                 ...provider,
                 authConfigured:
@@ -151,6 +183,7 @@ export const providerHandlers = {
                   denyModels: [],
                   models: [],
                 },
+                ...(modelSync ? { modelSync } : {}),
               }
             }),
           ),
@@ -161,14 +194,49 @@ export const providerHandlers = {
           })),
         }
       }
+      case 'provider/modelPreferences/list': {
+        const preferences = runtime.dependencies.db.repositories.modelRuntimePreferences.list()
+        return { preferences }
+      }
+      case 'provider/modelPreferences/set': {
+        const providerId = stringParam(params, 'providerId')
+        const modelId = stringParam(params, 'modelId')
+        return runtime.dependencies.history.saveModelRuntimePreference({
+          providerId,
+          modelId,
+          ...(params.threadId !== undefined ? { threadId: stringParam(params, 'threadId') } : {}),
+          ...(params.variant !== undefined ? { variant: params.variant as string | null } : {}),
+          ...(params.maxContextTokens !== undefined
+            ? { maxContextTokens: params.maxContextTokens as number | null }
+            : {}),
+        })
+      }
       case 'model/list':
         return runtime.modelCatalog(params)
       case 'model/refresh':
-        await providers.refresh(true)
+        try {
+          if (params.providerId === undefined) await piModels.refreshDirectory()
+          else await providers.refresh(true, stringParam(params, 'providerId'))
+        } catch (cause) {
+          if (cause instanceof PiModelServiceError && cause.code === 'CATALOG_REFRESH_FAILED') {
+            throw new AgentError(
+              'PROVIDER_UNAVAILABLE',
+              cause.refreshFailures.length > 0
+                ? `模型目录刷新失败（${cause.refreshFailures.length} 个提供商）：${cause.refreshFailures.slice(0, 5).join('；')}${cause.refreshFailures.length > 5 ? '；其余失败请查看 Agent 日志' : ''}。`
+                : '模型目录刷新失败，请检查提供商连接、凭据和模型接口后重试。',
+              502,
+            )
+          }
+          throw cause
+        }
         return runtime.publishCatalogUpdated()
       case 'model/setDefault': {
         const model = modelRefOrNull(params.model)
-        if (model) await providers.resolve(model)
+        if (model) {
+          const selected = await providers.resolve(model)
+          if (selected.modelType && selected.modelType !== 'chat')
+            throw new AgentError('INVALID_REQUEST', '嵌入与重排模型不能设为聊天模型', 400)
+        }
         // 兼容外壳：旧客户端的“默认模型”语义现在映射为新建任务最近选择。
         await config.batchWrite({
           edits: [
@@ -189,7 +257,11 @@ export const providerHandlers = {
       }
       case 'model/setReviewer': {
         const model = modelRefOrNull(params.model)
-        if (model) await providers.resolve(model)
+        if (model) {
+          const selected = await providers.resolve(model)
+          if (selected.modelType && selected.modelType !== 'chat')
+            throw new AgentError('INVALID_REQUEST', '嵌入与重排模型不能设为聊天模型', 400)
+        }
         await config.batchWrite({
           edits: [
             {
@@ -202,12 +274,48 @@ export const providerHandlers = {
         return { reviewerModel: model, settingsVersion: catalog.catalogVersion }
       }
       case 'provider/test': {
-        const providerID = stringParam(params, 'providerId')
         const explicitModel = params.model ? modelRefOrNull(params.model) : null
+        const testedAt = Date.now()
+        if (params.draft !== undefined) {
+          const draft = object(params.draft, 'draft')
+          const api = draftChatApiParam(params.api)
+          if (!explicitModel) {
+            throw new AgentError('INVALID_REQUEST', '草稿测试需要显式指定模型', 400)
+          }
+          const draftProviderID =
+            stringParamOrNull(params, 'providerId') ?? String(explicitModel.providerID)
+          const probe = await modelHealth.probeDraft(
+            api,
+            String(explicitModel.id),
+            draft as never,
+            typeof draft.apiKey === 'string' && draft.apiKey ? draft.apiKey : undefined,
+          )
+          const modelField = { model: explicitModel }
+          const apiField = probe.api ? { api: probe.api } : {}
+          if (!probe.ok) {
+            return {
+              providerId: draftProviderID,
+              ...modelField,
+              ...apiField,
+              status: 'unavailable',
+              testedAt,
+              category: legacyTestCategory(probe.category),
+              message: probe.message,
+            }
+          }
+          return {
+            providerId: draftProviderID,
+            ...modelField,
+            ...apiField,
+            status: 'reachable',
+            testedAt,
+            latencyMs: probe.latencyMs,
+          }
+        }
+        const providerID = stringParam(params, 'providerId')
         if (explicitModel && String(explicitModel.providerID) !== providerID) {
           throw new AgentError('INVALID_REQUEST', '显式传入的模型与 Provider 不匹配', 400)
         }
-        const testedAt = Date.now()
         let ref = explicitModel
         if (!ref) {
           const recent = recentNewThreadModel(config.snapshot())
@@ -243,10 +351,12 @@ export const providerHandlers = {
         // The legacy method only carries `model` when the caller asked for it;
         // old clients without the field keep receiving the old shape.
         const modelField = explicitModel ? { model: ref } : {}
+        const apiField = probe.api ? { api: probe.api } : {}
         if (!probe.ok) {
           return {
             providerId: providerID,
             ...modelField,
+            ...apiField,
             status: 'unavailable',
             testedAt,
             category: legacyTestCategory(probe.category),
@@ -256,6 +366,7 @@ export const providerHandlers = {
         return {
           providerId: providerID,
           ...modelField,
+          ...apiField,
           status: 'reachable',
           testedAt,
           latencyMs: probe.latencyMs,
@@ -306,8 +417,14 @@ export const providerHandlers = {
         } catch (cause) {
           if (cause instanceof PiProviderConfigValidationError) {
             const firstIssue = cause.issues[0]
+            // optionSpecs 的受限 CEL 校验消息是安全且面向用户的，直接透出以指明具体字段。
+            const specific =
+              firstIssue?.message && /Map \(CEL\)|optionSpecs/u.test(firstIssue.message)
+                ? firstIssue.message.trim()
+                : undefined
             const detail =
-              firstIssue?.code === 'BUILTIN_OVERRIDE'
+              specific ??
+              (firstIssue?.code === 'BUILTIN_OVERRIDE'
                 ? `Provider ID "${providerID}" 与系统内置 Provider 重名，请使用其他 ID（如 custom-${providerID}）`
                 : firstIssue?.code === 'UNSAFE_URL'
                   ? 'Base URL 格式无效，或明文 HTTP 需要开启允许非 loopback 明文 HTTP'
@@ -315,7 +432,7 @@ export const providerHandlers = {
                     ? '自定义 Provider 请求头中不能包含敏感认证凭据'
                     : firstIssue?.code === 'INVALID_MODEL'
                       ? '模型配置不合法，请检查模型 ID 与参数设置'
-                      : 'Provider 配置不合法'
+                      : 'Provider 配置不合法')
             throw new AgentError('INVALID_REQUEST', `Provider 配置不合法：${detail}`, 400, {
               issues: cause.issues.map((issue) => ({
                 providerId: issue.providerID,
@@ -326,10 +443,60 @@ export const providerHandlers = {
           }
           throw cause
         }
+        const previous = configured[providerID]
+        const previousModels =
+          previous && typeof previous === 'object' && 'models' in previous
+            ? previous.models
+            : undefined
+        if (
+          previousModels &&
+          typeof previousModels === 'object' &&
+          !Array.isArray(previousModels)
+        ) {
+          const knownModelFields = new Set([
+            'group',
+            'id',
+            'api',
+            'name',
+            'enabled',
+            'contextWindow',
+            'context_window',
+            'maxTokens',
+            'max_tokens',
+            'reasoning',
+            'input',
+            'cost',
+            'headers',
+            'thinkingLevelMap',
+            'thinking_level_map',
+            'compat',
+            'smartConfig',
+            'smart_config',
+            'optionSpecs',
+            'option_specs',
+          ])
+          const models = serialized.value.models as Record<string, Record<string, unknown>>
+          for (const [id, model] of Object.entries(models)) {
+            const previousModel = (previousModels as Record<string, unknown>)[id]
+            if (!previousModel || typeof previousModel !== 'object') continue
+            models[id] = {
+              ...Object.fromEntries(
+                Object.entries(previousModel).filter(([key]) => !knownModelFields.has(key)),
+              ),
+              ...model,
+            }
+          }
+        }
         await config.batchWrite({
           edits: [
             { keyPath: ['model_catalog', 'schema_version'], value: 2 },
-            { keyPath: ['model_providers', providerID], value: serialized.value as never },
+            ...Object.entries(serialized.value).map(([key, value]) => ({
+              keyPath: ['model_providers', providerID, key],
+              value: value as never,
+            })),
+            ...(definition.kind === 'builtin' && !definition.protocol
+              ? [{ keyPath: ['model_providers', providerID, 'protocol'], value: null }]
+              : []),
           ],
         })
         await providers.reload()
@@ -359,34 +526,52 @@ export const providerHandlers = {
         if (recent?.providerID === providerID || specializedReferencesProvider) {
           throw new AgentError('CONFLICT', 'Provider 仍被最近模型或专用模型引用', 409)
         }
+        // Keep the provider manageable if credential storage refuses the deletion.
+        await providerCredentials.deleteAll(providerID)
         await config.batchWrite({
           edits: [{ keyPath: ['model_providers', providerID], value: null }],
         })
         await providers.reload()
+        await emitCredentialUpdated(runtime, providerID)
         const catalog = await runtime.publishCatalogUpdated()
         return { providerId: providerID, deleted: true, catalogVersion: catalog.catalogVersion }
       }
       case 'provider/model/discover': {
-        const providerID = stringParam(params, 'providerId')
-        const api = stringParam(params, 'api') as
-          'openai-completions' | 'openai-responses' | 'anthropic-messages'
-        if (api === 'anthropic-messages') {
-          throw new AgentError('PROVIDER_UNAVAILABLE', 'Anthropic 兼容端点不支持自动发现', 400)
-        }
-        const discovered = await piModels.discoverModels(providerID)
-        return {
-          models: discovered.map((model) => ({
-            id: model.id,
-            name: model.name,
+        const api = draftChatApiParam(params.api)
+        const providerID = stringParamOrNull(params, 'providerId')
+        const draft = params.draft === undefined ? undefined : object(params.draft, 'draft')
+        if (draft) {
+          const result = await modelSync.discoverDraft({
             api,
-            enabled: true,
-            contextWindow: 32_768,
-            maxTokens: 8_192,
-            reasoning: false,
-            input: ['text'],
-            cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-          })),
+            draft: draft as never,
+            ...(providerID ? { providerId: providerID } : {}),
+          })
+          return { models: result.models }
         }
+        if (!providerID) {
+          throw new AgentError('INVALID_REQUEST', '模型发现需要 providerId 或草稿配置', 400)
+        }
+        const discovered = await modelSync.discoverSaved(providerID, api)
+        return { models: discovered }
+      }
+      case 'provider/model/sync': {
+        const providerID = stringParam(params, 'providerId')
+        const result = await modelSync.sync(providerID)
+        await providers.reload()
+        const catalog = await runtime.publishCatalogUpdated()
+        return { ...result, catalogVersion: catalog.catalogVersion }
+      }
+      case 'provider/protocol/detect': {
+        const draft = object(params.draft, 'draft')
+        const providerID = stringParamOrNull(params, 'providerId')
+        const model = stringParamOrNull(params, 'model')
+        const result = await protocolDetection.detect({
+          draft: draft as never,
+          ...(providerID ? { providerId: providerID } : {}),
+          ...(model ? { model } : {}),
+          batch: params.batch === true,
+        })
+        return result
       }
       case 'provider/credential/list':
         return {

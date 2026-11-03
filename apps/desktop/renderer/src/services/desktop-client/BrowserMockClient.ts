@@ -19,8 +19,10 @@ import {
   resolveCollaborationMode,
 } from '../../shims/core/agent/SessionContract.js'
 import type { CatalogProvider, ModelRef, Project } from '@pidex/shared'
+import { threadGoalBudgetViolation } from '@pidex/shared/thread'
 import type {
   PermissionConfig,
+  PermissionRule,
   SubagentProjection,
   ThreadListItem,
   ThreadSettings,
@@ -80,6 +82,7 @@ import type {
   DesktopSubagentRead,
   DesktopUpdateStatus,
   DesktopUserMessageInput,
+  DesktopProviderModelDefinition,
   DesktopWorkspace,
   ModelProviderID,
 } from '../../../shared/Types.js'
@@ -118,14 +121,13 @@ import type {
   DesktopComputerApi,
   DesktopLocalContextApi,
   DesktopModelProviderRefreshApi,
-  DesktopMiniMaxCliApi,
   DesktopPluginApi,
   DesktopRuntimeCapabilityApi,
   DesktopSpeechApi,
   DesktopSpeechStatus,
 } from './Types.js'
 
-const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v6'
+const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v8'
 
 const BROWSER_UNAVAILABLE_SPEECH_STATUS = {
   state: 'unsupported',
@@ -162,7 +164,6 @@ export function createBrowserMockDesktopClient(
   DesktopCalendarApi &
   DesktopModelProviderRefreshApi &
   DesktopPluginApi &
-  DesktopMiniMaxCliApi &
   DesktopComputerApi {
   let settings: DesktopStoredSettings = defaultDesktopStoredSettings()
   const visualFixture = createBrowserVisualFixture()
@@ -177,6 +178,33 @@ export function createBrowserMockDesktopClient(
   if (visualFixture?.item.id === 'visual-scroll-edge' || performanceFixture) {
     settings = { ...settings, collapsedSidebarSections: [] }
   }
+  if (performanceFixture?.projects.length) {
+    settings = {
+      ...settings,
+      recentWorkspaces: performanceFixture.projects.map((project, index) => ({
+        ...project,
+        pinnedAt: index === 0 ? new Date().toISOString() : null,
+      })),
+      sidebarSessionPins: Object.fromEntries(
+        performanceFixture.sessions
+          .slice(0, 5)
+          .map((session) => [session.item.id, new Date().toISOString()]),
+      ),
+      sidebarCustomization: {
+        ...settings.sidebarCustomization!,
+        sections: [0, 1].map((index) => ({
+          id: `performance-section-${index}`,
+          title: `性能分组 ${index + 1}`,
+          itemKeys: performanceFixture.sessions
+            .slice(-40 + index * 20, index === 0 ? -20 : undefined)
+            .map((session) => `session:${session.item.id}`),
+          sort: 'manual',
+          collapsed: false,
+        })),
+        sectionOrder: ['performance-section-0', 'performance-section-1'],
+      },
+    }
+  }
   let configDocument: Record<string, JsonValue> = {
     desktop: { ...settings } as unknown as JsonValue,
   }
@@ -186,7 +214,21 @@ export function createBrowserMockDesktopClient(
   let browserState: DesktopBrowserState = emptyBrowserState()
   let githubLoginMode: DesktopGithubAuthMode = 'browser'
   const sessions = new Map<string, DesktopSessionSnapshot>()
+  // 模拟 thread/create 的 operationId 幂等：重试同一个创建操作时返回已有会话。
+  const sessionCreationOperations = new Map<string, string>()
+  const mockModelPreferences = new Map<
+    string,
+    {
+      providerID: string
+      modelID: string
+      variant: string | null
+      maxContextTokens: number | null
+      updatedAt: number
+    }
+  >()
   const sideChatSessionIds = new Set<string>()
+  const approvalRules = new Map<string, PermissionRule[]>()
+  let mockApprovalRuleVersion = 1
   let activeSessionId: string | null = null
   const sessionStoreListeners = new Set<(change: DesktopSessionStoreChange) => void>()
   const settingsListeners = new Set<(change: DesktopSettingsChange) => void>()
@@ -225,17 +267,6 @@ export function createBrowserMockDesktopClient(
       },
     ],
   }
-  let mockMiniMaxCliStatus: RpcResult<'minimaxCli/status'> = {
-    installationStatus: 'not-installed',
-    latestVersion: '1.0.22',
-    updateAvailable: false,
-    nodeVersion: 'v22.22.1',
-    npmVersion: '10.9.4',
-    authStatus: 'not-authenticated',
-    generation: 1,
-    updatedAt: Date.now(),
-  }
-
   let mockComputerState: RpcResult<'computer/state'> = {
     enabled: false,
     available: false,
@@ -254,10 +285,21 @@ export function createBrowserMockDesktopClient(
       ? {
           apiKeyConfigured: true,
           logoURL: '/favicon.png',
+          defaultModels: ['mock', 'workbuddy/deepseek-v4.1-flash'],
           modelMetadata: {
             mock: {
               id: 'mock',
               name: 'Browser Mock',
+              contextWindow: 1_048_576,
+              vision: true,
+              reasoning: true,
+              variants: ['low', 'medium', 'high'],
+            },
+            'workbuddy/deepseek-v4.1-flash': {
+              id: 'workbuddy/deepseek-v4.1-flash',
+              name: 'workbuddy/deepseek-v4.1-flash',
+              contextWindow: 1_048_576,
+              vision: true,
               reasoning: true,
               variants: ['low', 'medium', 'high'],
             },
@@ -379,6 +421,15 @@ export function createBrowserMockDesktopClient(
     activeSessionId = performanceFixture.activeSessionId
   }
 
+  // Provider 模型同步 mock 的进程内基线：首次调用建基线，之后模拟上游下架。
+  const mockProviderSyncCounts = new Map<string, number>()
+  const mockProtocols = [
+    'openai-completions',
+    'openai-responses',
+    'anthropic-messages',
+    'google-generative-ai',
+  ] as const
+
   return {
     getSpeechStatus: async () => BROWSER_UNAVAILABLE_SPEECH_STATUS,
     installSpeech: async () => BROWSER_UNAVAILABLE_SPEECH_STATUS,
@@ -389,6 +440,9 @@ export function createBrowserMockDesktopClient(
     onSpeechStatusUpdated: () => () => {},
     openMicrophonePrivacySettings: async () => {},
     readAttachment: async (attachmentId) => readBrowserFixtureAttachment(attachmentId),
+    submitVisualizationFollowUp: async () => {
+      throw new Error('浏览器模拟环境不支持可视化追问。')
+    },
     readArtifact: async () => {
       throw new Error('浏览器模拟环境不支持 artifact 读取。')
     },
@@ -408,10 +462,45 @@ export function createBrowserMockDesktopClient(
     getRuntimeCapabilities: async () =>
       (await import('@pidex/agent-protocol/capabilities')).Capabilities,
     pauseQuestion: async () => {},
-    approvalReviewState: async () => ({ manualAllows: 0, denials: [] }),
+    approvalReviewState: async () => ({ manualAllows: 0, denials: [], reviews: [] }),
     retryApproval: async () => {},
-    listApprovalRules: async () => ({ rules: [] }),
-    revokeApprovalRule: async () => {},
+    listApprovalRules: async (threadId) => ({
+      rules: [...(approvalRules.get(threadId) ?? [])],
+    }),
+    upsertApprovalRule: async ({ threadId, expectedVersion, rule }) => {
+      const current = approvalRules.get(threadId) ?? []
+      const existing = rule.id ? current.find((entry) => entry.id === rule.id) : undefined
+      if (rule.id && !existing) throw new Error('CONFLICT: 规则已被删除，请刷新后重试')
+      if (expectedVersion && existing?.version && expectedVersion !== existing.version)
+        throw new Error('CONFLICT: 规则版本已变化，请刷新后重试')
+      const id = rule.id ?? `mock-permission-rule-${mockApprovalRuleVersion}`
+      const next: PermissionRule = {
+        id,
+        effect: rule.effect,
+        scope: rule.scope,
+        source: rule.scope,
+        match: rule.match,
+        editable: true,
+        version: String(mockApprovalRuleVersion++),
+      }
+      approvalRules.set(
+        threadId,
+        existing ? current.map((entry) => (entry.id === id ? next : entry)) : [next, ...current],
+      )
+      return { rule: next }
+    },
+    revokeApprovalRule: async (threadId, ruleId, expectedVersion) => {
+      const current = approvalRules.get(threadId) ?? []
+      const existing = current.find((entry) => entry.id === ruleId)
+      if (!existing) return { revoked: false }
+      if (expectedVersion && existing.version && expectedVersion !== existing.version)
+        throw new Error('CONFLICT: 规则版本已变化，请刷新后重试')
+      approvalRules.set(
+        threadId,
+        current.filter((entry) => entry.id !== ruleId),
+      )
+      return { revoked: true }
+    },
     listAutomations: async () => ({ automations: [] }),
     listAutomationRuns: async () => ({ runs: [] }),
     readAutomation: async () => {
@@ -462,6 +551,18 @@ export function createBrowserMockDesktopClient(
     },
     commitSchedulePlan: async () => {
       throw new Error('浏览器模拟环境不保存规划草案。')
+    },
+    readScheduleDraft: async () => {
+      throw new Error('浏览器模拟环境中不存在该任务规划草案。')
+    },
+    commitScheduleDraft: async () => {
+      throw new Error('浏览器模拟环境不保存任务规划草案。')
+    },
+    cancelScheduleDraft: async () => {
+      throw new Error('浏览器模拟环境不保存任务规划草案。')
+    },
+    feedbackScheduleDraft: async () => {
+      throw new Error('浏览器模拟环境不保存任务规划草案。')
     },
     getAuthStatus: async () => mockAuthStatus(),
     getRuntimeStatus: async () => mockRuntimeStatus(),
@@ -673,6 +774,7 @@ export function createBrowserMockDesktopClient(
       browserState = { ...browserState, allowedSites: [], sitePermissions: [] }
       return browserState
     },
+    readPluginAsset: async () => null,
     listPlugins: async () => ({
       plugins: [mockTaskPlanningPlugin],
       generation: mockPluginGeneration,
@@ -680,6 +782,12 @@ export function createBrowserMockDesktopClient(
     }),
     getPluginDetails: async (pluginId) =>
       pluginId === mockTaskPlanningPlugin.id ? mockTaskPlanningDetails : null,
+    installPlugin: async () => {
+      throw new Error('演示客户端不执行插件下载，请连接 Agent。')
+    },
+    uninstallPlugin: async () => {
+      throw new Error('演示客户端不执行插件移除，请连接 Agent。')
+    },
     setPluginEnabled: async (pluginId, enabled) => {
       if (pluginId !== mockTaskPlanningPlugin.id) {
         throw new Error('PLUGIN_NOT_FOUND')
@@ -689,31 +797,6 @@ export function createBrowserMockDesktopClient(
       return mockTaskPlanningPlugin
     },
     onPluginsUpdated: () => () => {},
-    getMiniMaxCliStatus: async () => mockMiniMaxCliStatus,
-    installMiniMaxCli: async () => {
-      mockMiniMaxCliStatus = {
-        ...mockMiniMaxCliStatus,
-        installationStatus: 'installed',
-        installedVersion: mockMiniMaxCliStatus.latestVersion ?? '1.0.22',
-        updateAvailable: false,
-        generation: mockMiniMaxCliStatus.generation + 1,
-        updatedAt: Date.now(),
-      }
-      return mockMiniMaxCliStatus
-    },
-    uninstallMiniMaxCli: async () => {
-      const { installedVersion: _installedVersion, ...remaining } = mockMiniMaxCliStatus
-      mockMiniMaxCliStatus = {
-        ...remaining,
-        installationStatus: 'not-installed',
-        updateAvailable: false,
-        authStatus: 'not-authenticated',
-        generation: mockMiniMaxCliStatus.generation + 1,
-        updatedAt: Date.now(),
-      }
-      return mockMiniMaxCliStatus
-    },
-    onMiniMaxCliUpdated: () => () => {},
     getComputerState: async () => mockComputerState,
     discoverComputerApps: async () => ({ apps: [] }),
     configureComputer: async (input) => {
@@ -884,6 +967,91 @@ export function createBrowserMockDesktopClient(
           id: 'mock-model',
         }) as Extract<RpcResult<'provider/test'>, { status: 'reachable' }>['model'],
       }) as RpcResult<'provider/test'>,
+    // 首次同步只建基线并返回候选；第二次模拟上游下架，便于验证移除提示。
+    syncProviderModels: async (providerId) => {
+      const previousSyncCount = mockProviderSyncCounts.get(providerId) ?? 0
+      mockProviderSyncCounts.set(providerId, previousSyncCount + 1)
+      const baselineCreated = previousSyncCount === 0
+      return {
+        providerId: providerId as RpcParams<'provider/model/sync'>['providerId'],
+        api: 'openai-completions',
+        fetchedAt: Date.now(),
+        candidates: (baselineCreated
+          ? [
+              {
+                id: 'mock-sync-model',
+                name: 'Mock Sync Model',
+                api: 'openai-completions',
+                enabled: false,
+              },
+              { id: 'mock-sync-model-2', api: 'openai-completions', enabled: false },
+            ]
+          : []) as unknown as RpcResult<'provider/model/sync'>['candidates'],
+        removedModelIds: (baselineCreated
+          ? []
+          : [
+              'mock-sync-model-retired',
+            ]) as unknown as RpcResult<'provider/model/sync'>['removedModelIds'],
+        baselineCreated,
+        totalFetched: baselineCreated ? 2 : 1,
+        catalogVersion: previousSyncCount + 1,
+      }
+    },
+    // 固定四协议矩阵：首个协议成功，其余按认证/超时/未知失败，单模型与批量共用。
+    detectProviderProtocols: async (params) => {
+      const mode = params.batch ? 'batch' : 'single'
+      const models =
+        mode === 'batch'
+          ? ['mock-sync-model', 'mock-sync-model-2']
+          : [params.model ?? 'mock-sync-model']
+      return {
+        mode,
+        protocols: [...mockProtocols],
+        models: models.map((model, modelIndex) => ({
+          model,
+          cells: mockProtocols.map((protocol, protocolIndex) =>
+            protocolIndex === 0
+              ? { protocol, status: 'success', latencyMs: 24 + modelIndex * 4 }
+              : {
+                  protocol,
+                  status: 'failed',
+                  category:
+                    protocolIndex === 1
+                      ? 'authentication'
+                      : protocolIndex === 2
+                        ? 'timeout'
+                        : 'unknown',
+                  message: `${protocol} 在浏览器 mock 模式下不可用。`,
+                },
+          ),
+        })),
+        totalModels: models.length,
+        skippedModels: mode === 'batch' ? 1 : 0,
+      } as unknown as RpcResult<'provider/protocol/detect'>
+    },
+    // 草稿探测不访问网络：模型 id 或地址含特定关键字时模拟不可达。
+    testProviderDraft: async (input) => {
+      const providerId = (input.providerId ?? 'draft') as Extract<
+        RpcResult<'provider/test'>,
+        { status: 'reachable' }
+      >['providerId']
+      const testedAt = Date.now()
+      const model = {
+        providerID: providerId,
+        id: input.modelId,
+      } as Extract<RpcResult<'provider/test'>, { status: 'reachable' }>['model']
+      if (input.modelId.includes('unavailable') || input.draft.baseUrl.includes('unreachable')) {
+        return {
+          providerId,
+          model,
+          status: 'unavailable',
+          testedAt,
+          category: 'configuration',
+          message: '浏览器 mock 模式模拟草稿模型不可达。',
+        }
+      }
+      return { providerId, model, status: 'reachable', testedAt, latencyMs: 18 }
+    },
     previewModelHealth: async () => ({
       totalRequests: 0,
       excludedProviders: [],
@@ -928,7 +1096,11 @@ export function createBrowserMockDesktopClient(
     createProvider: async () => undefined,
     updateProvider: async () => undefined,
     deleteProvider: async () => undefined,
-    discoverProviderModels: async () => [],
+    discoverProviderModels: async (input) =>
+      [
+        { id: 'mock-sync-model', name: 'Mock Sync Model', api: input.api, enabled: false },
+        { id: 'mock-sync-model-2', api: input.api, enabled: false },
+      ] as unknown as DesktopProviderModelDefinition[],
     startAuthSession: async (target) =>
       ({
         id: crypto.randomUUID(),
@@ -990,7 +1162,7 @@ export function createBrowserMockDesktopClient(
     }),
     listProjects: async (folderPath) => {
       if (folderPath) return [{ ...mockWorkspace(folderPath), projectId: `mock:${folderPath}` }]
-      return []
+      return performanceFixture?.projects ?? []
     },
     updateProject: async (input) => ({
       ...mockWorkspace(''),
@@ -1053,6 +1225,14 @@ export function createBrowserMockDesktopClient(
       branchName,
     }),
     getWorkspaceGitStatus: async () => ({ ok: true, status: cleanGitStatus() }),
+    fetchWorkspaceRepository: async () => ({
+      ok: false,
+      error: '浏览器 mock 模式不会执行 Fetch。',
+    }),
+    pullWorkspaceRepository: async () => ({
+      ok: false,
+      error: '浏览器 mock 模式不会执行 Pull。',
+    }),
     createWorkspaceBranch: async (input) => ({
       ok: true,
       workspace: {
@@ -1080,6 +1260,18 @@ export function createBrowserMockDesktopClient(
     createPullRequest: async () => ({
       ok: false,
       error: '浏览器 mock 模式不会创建 Pull Request。',
+    }),
+    listThreadPullRequests: async (threadIds, _options) => ({
+      ok: true,
+      threads: threadIds.map((threadId) => ({ threadId, items: [] })),
+    }),
+    linkThreadPullRequest: async () => ({
+      ok: false,
+      error: '浏览器 mock 模式不会关联 Pull Request。',
+    }),
+    unlinkThreadPullRequest: async () => ({
+      ok: false,
+      error: '浏览器 mock 模式不会解除 Pull Request 关联。',
     }),
     getWorkspaceReviewDiff: async () => emptyReviewDiff(),
     applyWorkspaceReviewOperation: async () => ({
@@ -1151,22 +1343,15 @@ export function createBrowserMockDesktopClient(
     applyNewDesignTheme: async () => {
       themeSettings = normalizeDesktopThemeSettings({
         ...themeSettings,
+        fonts: { ...DEFAULT_DESKTOP_THEME_SETTINGS.fonts },
         chromeThemes: {
           light: {
             ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.light,
-            fonts: {
-              ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.light.fonts,
-              code: themeSettings.chromeThemes.light.fonts.code,
-              codeFace: themeSettings.chromeThemes.light.fonts.codeFace,
-            },
+            fonts: { ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.light.fonts },
           },
           dark: {
             ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.dark,
-            fonts: {
-              ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.dark.fonts,
-              code: themeSettings.chromeThemes.dark.fonts.code,
-              codeFace: themeSettings.chromeThemes.dark.fonts.codeFace,
-            },
+            fonts: { ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.dark.fonts },
           },
         },
         fontSizes: {
@@ -1182,12 +1367,25 @@ export function createBrowserMockDesktopClient(
       return themeSettings
     },
     createSession: async (options) => {
+      if (options.operationId) {
+        const existingId = sessionCreationOperations.get(options.operationId)
+        const existing = existingId ? sessions.get(existingId) : undefined
+        if (existing) {
+          activeSessionId = existing.item.id
+          return {
+            sessionId: existing.item.id,
+            workspace: existing.workspace,
+            standalone: existing.item.standalone,
+          }
+        }
+      }
       const workspace = options.workspacePath
         ? mockWorkspace(options.workspacePath)
         : mockWorkspace('')
       const sessionId = `browser-mock-${sessions.size + 1}`
       const snapshot = mockSessionSnapshot(sessionId, workspace, options)
       sessions.set(sessionId, snapshot)
+      if (options.operationId) sessionCreationOperations.set(options.operationId, sessionId)
       activeSessionId = sessionId
       emitSessionStoreChange()
       return {
@@ -1277,6 +1475,10 @@ export function createBrowserMockDesktopClient(
       if (!snapshot) throw new Error(`Mock session not found: ${sessionId}`)
       return snapshot
     },
+    synchronizeSession: async (sessionId) => {
+      if (!sessions.has(sessionId)) throw new Error(`Mock session not found: ${sessionId}`)
+      emitSessionStoreChange()
+    },
     getActiveSessionId: async () => activeSessionId,
     setActiveSession: async (sessionId) => {
       activeSessionId = sessionId
@@ -1361,16 +1563,61 @@ export function createBrowserMockDesktopClient(
       const collaborationMode = collaborationModeFromPlanModeActive(active)
       const next = {
         ...snapshot,
-        item: { ...snapshot.item, collaborationMode, planModeActive: active },
+        item: {
+          ...snapshot.item,
+          collaborationMode,
+          planModeActive: active,
+          grillModeActive: false,
+        },
         settings: {
           ...snapshot.settings,
           collaborationMode,
           planModeActive: active,
+          grillModeActive: false,
         },
       }
       sessions.set(sessionId, next)
       emitSessionStoreChange()
       return next
+    },
+    setSessionGrillModeActive: async (sessionId, active) => {
+      const snapshot = requireMockSession(sessions, sessionId)
+      const next = {
+        ...snapshot,
+        item: { ...snapshot.item, planModeActive: false, grillModeActive: active },
+        settings: { ...snapshot.settings, planModeActive: false, grillModeActive: active },
+      }
+      sessions.set(sessionId, next)
+      emitSessionStoreChange()
+      return next
+    },
+    setSessionMaxContextTokens: async (sessionId, maxContextTokens) => {
+      const snapshot = requireMockSession(sessions, sessionId)
+      const next = {
+        ...snapshot,
+        settings: { ...snapshot.settings, maxContextTokens },
+      }
+      sessions.set(sessionId, next)
+      emitSessionStoreChange()
+      return next
+    },
+    getModelRuntimePreferences: async () => {
+      return Array.from(mockModelPreferences.values())
+    },
+    setModelRuntimePreference: async (input) => {
+      const key = `${input.providerID}:${input.modelID}`
+      const existing = mockModelPreferences.get(key)
+      mockModelPreferences.set(key, {
+        providerID: input.providerID,
+        modelID: input.modelID,
+        variant: input.variant !== undefined ? input.variant : (existing?.variant ?? null),
+        maxContextTokens:
+          input.maxContextTokens !== undefined
+            ? input.maxContextTokens
+            : (existing?.maxContextTokens ?? null),
+        updatedAt: Date.now(),
+      })
+      return { ok: true }
     },
     setSessionLocalRouterMode: async (sessionId, mode) => {
       const snapshot = requireMockSession(sessions, sessionId)
@@ -1464,6 +1711,8 @@ export function createBrowserMockDesktopClient(
       mockSessionSnapshot('mock', { path: '', name: 'Mock', branchName: null }, {}),
     resumeQueuedFollowUps: async () =>
       mockSessionSnapshot('mock', { path: '', name: 'Mock', branchName: null }, {}),
+    supportsQueuedCompaction: () => false,
+    cancelCompaction: async () => {},
     compactSession: async () => {},
     getSessionPromptPreview: async () => null,
     rollbackSession: async () => ({
@@ -1471,19 +1720,34 @@ export function createBrowserMockDesktopClient(
       restoredFiles: [],
     }),
     getSessionGoal: async () => null,
-    setSessionGoal: async () => ({
-      id: 'goal:mock',
-      threadId: 'mock',
-      objective: '',
-      status: 'active',
-      tokenBudget: null,
-      tokensUsed: 0,
-      timeUsedSeconds: 0,
-      version: 1,
-      completedAt: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    }),
+    setSessionGoal: async (_sessionId, input) => {
+      // Mirror the agent rule so browser previews cannot narrow a budget either.
+      if (input.budgetBaseline && input.tokenBudget !== undefined) {
+        const violation = threadGoalBudgetViolation(
+          input.budgetBaseline.tokenBudget,
+          input.tokenBudget,
+        )
+        if (violation)
+          throw new Error(
+            violation === 'capped'
+              ? '目标当前不限额，不能再设置有限预算'
+              : '目标预算只能增加或取消上限，不能降低',
+          )
+      }
+      return {
+        id: 'goal:mock',
+        threadId: 'mock',
+        objective: '',
+        status: 'active',
+        tokenBudget: input.tokenBudget ?? null,
+        tokensUsed: 0,
+        timeUsedSeconds: 0,
+        version: 1,
+        completedAt: null,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      }
+    },
     clearSessionGoal: async () => true,
     listThreadBookmarks: async (sessionId) => ({
       threadId: sessionId,

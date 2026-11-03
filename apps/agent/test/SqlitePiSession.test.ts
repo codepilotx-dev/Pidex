@@ -28,6 +28,58 @@ const setup = async () => {
 }
 
 describe('SqlitePiSessionRepo', () => {
+  test('新旧审批暂停结果不能作为已完成工具，真正的成功或失败结果仍幂等恢复', async () => {
+    const { db, repo, threadID } = await setup()
+    const turn = db.createTurn(threadID, {
+      content: 'approval resume',
+      model: Model.Ref.make({ providerID: Provider.ID.make('openai'), id: Model.ID.make('test') }),
+      permissionConfig: {
+        sandboxMode: 'workspace-write',
+        approvalPolicy: 'on-request',
+        approvalsReviewer: 'user',
+      },
+      strategy: 'queue',
+      taskMode: 'chat',
+    })
+    const session = await repo.create({
+      id: db.getAgentExecution(turn.agentID)!.sessionID,
+      threadID,
+      agentID: turn.agentID,
+    })
+    for (const [id, text, details, isError] of [
+      ['legacy', '等待用户审批', {}, true],
+      ['paused', 'waiting', { __piPause: true }, true],
+      ['permission', 'waiting', { __piPause: true }, false],
+      ['done', 'done', {}, false],
+      ['error', 'real execution failed', {}, true],
+    ] as const) {
+      await session.appendMessage({
+        role: 'toolResult',
+        toolCallId: id,
+        toolName: 'Write',
+        content: [{ type: 'text', text }],
+        details,
+        isError,
+        timestamp: 1,
+      })
+    }
+    const storage = session.getStorage() as SqlitePiSessionStorage
+    storage.flush()
+    for (const id of ['legacy', 'paused', 'permission'])
+      expect(db.hasPersistedToolResult(turn.turnID, id)).toBe(false)
+    for (const id of ['done', 'error'])
+      expect(db.hasPersistedToolResult(turn.turnID, id)).toBe(true)
+    await session.appendMessage({
+      role: 'toolResult',
+      toolCallId: 'legacy',
+      toolName: 'Write',
+      content: [{ type: 'text', text: 'written' }],
+      isError: false,
+      timestamp: 2,
+    })
+    storage.flush()
+    expect(db.hasPersistedToolResult(turn.turnID, 'legacy')).toBe(true)
+  })
   test('缓冲当前轮写入并在 flush 后恢复完整上下文和统计', async () => {
     const { db, repo, threadID } = await setup()
     const session = await repo.create({ id: 'session-main', threadID, agentID: 'agent-main' })

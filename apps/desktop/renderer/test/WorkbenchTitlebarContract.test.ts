@@ -71,7 +71,7 @@ describe('workbench chrome contract', () => {
     const layout = readRendererFile('src/features/layout/shell/DesktopLayout.tsx')
     const menuBar = readRendererFile('src/features/layout/MenuBar.tsx')
 
-    expectSourceContains(layout, 'useDesktopRuntimeSettings()')
+    expectSourceContains(layout, 'useDesktopRuntimeSettingsField(')
     expectSourceNotContains(layout, 'useDesktopSettings()')
     expectSourceNotContains(layout, 'useEditCommands()')
     expectSourceContains(menuBar, 'useEditCommands()')

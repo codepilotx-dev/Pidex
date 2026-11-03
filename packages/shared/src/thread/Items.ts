@@ -1,5 +1,6 @@
 import { Model } from '@pidex/model-schema'
-import { Option, Schema } from 'effect'
+import { VisualizationPreviewSchema } from '../Visualization'
+import { Option, Schema, SchemaGetter } from 'effect'
 import {
   RESULT_CARD_ENVELOPE_KIND,
   RESULT_CARD_ENVELOPE_VERSION,
@@ -23,6 +24,7 @@ import {
   SubagentProfileSchema,
   SubagentQueueReasonSchema,
   SubagentResultSchema,
+  SubagentRoleSchema,
   SubagentStatusSchema,
 } from './Subagent'
 import { TurnSchema } from './Schema'
@@ -45,6 +47,12 @@ export const InputSchema = Schema.Struct({
   turnId: Schema.NullOr(Schema.String),
   content: Schema.String,
   skills: Schema.optional(Schema.Array(SkillSelectionSchema)),
+  goal: Schema.optional(
+    Schema.Struct({
+      objective: Schema.String,
+      tokenBudget: Schema.optional(Schema.NullOr(Schema.Number)),
+    }),
+  ),
   delivery: InputDeliverySchema,
   origin: Schema.optional(InputOriginSchema),
   mode: TaskModeSchema,
@@ -170,6 +178,15 @@ export const QuestionChoiceSchema = Schema.Struct({
 export type QuestionChoice = typeof QuestionChoiceSchema.Type
 
 const QuestionTextSchema = Schema.String.check(Schema.isMinLength(1))
+
+/** 模型可写入的单题选项上限；工具 schema 与写入校验共用。 */
+export const QUESTION_CHOICES_WRITE_MAX = 3
+/**
+ * 读取侧选项上限：必须不低于任何写入方上限，否则其它构建写入的问题会被
+ * 静默丢弃或解码失败。保留防御性上限，避免异常数据撑爆界面。
+ */
+export const QUESTION_CHOICES_READ_MAX = 10
+
 export const InteractionQuestionChoiceSchema = Schema.Struct({
   id: QuestionTextSchema,
   label: QuestionTextSchema,
@@ -183,10 +200,10 @@ export const InteractionQuestionSchema = Schema.Struct({
   choices: Schema.Array(InteractionQuestionChoiceSchema)
     .check(
       Schema.makeFilter((choices) => choices.length !== 1, {
-        expected: 'zero or two to three choices',
+        expected: 'zero or at least two choices',
       }),
     )
-    .check(Schema.isMaxLength(3)),
+    .check(Schema.isMaxLength(QUESTION_CHOICES_READ_MAX)),
   allowFreeform: Schema.Literal(true),
   required: Schema.Literal(true),
   minAnswers: Schema.optional(Schema.Int.check(Schema.isGreaterThanOrEqualTo(0))),
@@ -194,7 +211,7 @@ export const InteractionQuestionSchema = Schema.Struct({
 })
 export const InteractionQuestionAnswerSchema = Schema.Struct({
   questionId: QuestionTextSchema,
-  choiceIds: Schema.Array(QuestionTextSchema).check(Schema.isMaxLength(1)),
+  choiceIds: Schema.Array(QuestionTextSchema).check(Schema.isMaxLength(QUESTION_CHOICES_READ_MAX)),
   text: Schema.optional(Schema.String),
   skipped: Schema.optional(Schema.Literal(true)),
 })
@@ -235,6 +252,15 @@ export const ModelUsageSchema = Schema.Struct({
 })
 export type ModelUsage = typeof ModelUsageSchema.Type
 
+export const MessagePhaseSchema = Schema.Literals(['commentary', 'partial_answer', 'final_answer'])
+export type MessagePhase = typeof MessagePhaseSchema.Type
+
+export function readMessagePhase(value: unknown): MessagePhase | undefined {
+  return value === 'commentary' || value === 'partial_answer' || value === 'final_answer'
+    ? value
+    : undefined
+}
+
 export const TextItemSchema = Schema.Struct({
   id: Schema.String,
   messageID: Schema.String,
@@ -242,6 +268,14 @@ export const TextItemSchema = Schema.Struct({
   agentId: Schema.String,
   type: Schema.Literal('text'),
   placement: Schema.Literals(['process', 'result']),
+  phase: Schema.optional(
+    Schema.Unknown.pipe(
+      Schema.decodeTo(Schema.UndefinedOr(MessagePhaseSchema), {
+        decode: SchemaGetter.transform(readMessagePhase),
+        encode: SchemaGetter.transform((phase) => phase),
+      }),
+    ),
+  ),
   text: Schema.String,
   status: Schema.Literals(['streaming', 'completed', 'interrupted']),
   usage: Schema.optional(ModelUsageSchema),
@@ -282,6 +316,16 @@ export const ActivityItemSchema = Schema.Struct({
   activity: Schema.Literals(['context-compression', 'file-edit', 'build', 'notice']),
   title: Schema.String,
   detail: Schema.optional(Schema.String),
+  contextTokens: Schema.optional(Schema.Number),
+  compaction: Schema.optional(
+    Schema.Struct({
+      source: Schema.Literals(['manual', 'automatic', 'reactive']),
+      startedAt: Schema.Number,
+      /** 压缩操作结束时间；进行中或缺省表示尚未结束。 */
+      finishedAt: Schema.optional(Schema.Number),
+      standalone: Schema.Boolean,
+    }),
+  ),
   commands: Schema.optional(Schema.Array(ActivityCommandSchema)),
   status: Schema.Literals(['running', 'completed', 'error', 'interrupted']),
   ordinal: Schema.optional(Schema.Number),
@@ -352,6 +396,7 @@ export const ToolActivityDescriptorSchema = Schema.Union([
 export type ToolActivityDescriptor = typeof ToolActivityDescriptorSchema.Type
 
 export const ToolItemSchema = Schema.Struct({
+  visualizationPreview: Schema.optional(VisualizationPreviewSchema),
   id: Schema.String,
   messageID: Schema.String,
   turnId: Schema.String,
@@ -533,6 +578,8 @@ export const SubagentItemSchema = Schema.Struct({
   childThreadId: Schema.String,
   displayName: Schema.String,
   profile: SubagentProfileSchema,
+  /** 派生自 task.role，仅供时间线独立渲染；不单独持久化。 */
+  role: Schema.optional(SubagentRoleSchema),
   task: Schema.String,
   status: SubagentStatusSchema,
   queueReason: SubagentQueueReasonSchema,
@@ -574,6 +621,23 @@ export const ComputerAppApprovalSchema = Schema.Struct({
   allowPersistentApproval: Schema.Boolean,
 })
 
+export const GuardianReviewSchema = Schema.Struct({
+  status: Schema.Literals(['completed', 'cached', 'unavailable', 'timeout', 'circuit_open']),
+  source: Schema.Literals(['model', 'cache', 'fallback']),
+  risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
+  userAuthorization: Schema.Literals(['unknown', 'low', 'medium', 'high']),
+  confidence: Schema.Literals(['low', 'medium', 'high']),
+  categories: Schema.Array(RiskCategorySchema),
+  rationale: Schema.String,
+  reviewedAt: Schema.Number,
+  scoreLag: Schema.optional(Schema.Number),
+  fallbackReason: Schema.optional(Schema.String),
+  model: Schema.optional(Schema.String),
+  /** Authorization version captured at review start; changed versions invalidate allow. */
+  authorizationVersion: Schema.optional(Schema.String),
+})
+export type GuardianReview = typeof GuardianReviewSchema.Type
+
 export const ApprovalRequestSchema = Schema.Struct({
   grantOptions: Schema.optional(
     Schema.Array(
@@ -602,6 +666,8 @@ export const ApprovalRequestSchema = Schema.Struct({
   computerApp: Schema.optional(ComputerAppApprovalSchema),
   requestedPermissions: AdditionalPermissionsSchema,
   review: Schema.NullOr(ShellReviewSchema),
+  guardian: Schema.optional(GuardianReviewSchema),
+  autoReviewFallbackReason: Schema.optional(Schema.String),
   risk: Schema.Literals(['low', 'medium', 'high', 'critical']),
   reason: Schema.String,
   status: Schema.Literals(['pending', 'allowed', 'denied', 'cancelled']),
@@ -621,7 +687,7 @@ export type ApprovalRequest = typeof ApprovalRequestSchema.Type
 
 export const AttachmentSchema = Schema.Struct({
   id: Schema.String,
-  kind: Schema.Literals(['text', 'image']),
+  kind: Schema.Literals(['text', 'image', 'audio', 'video']),
   name: Schema.String,
   mediaType: Schema.String,
   sizeBytes: Schema.Number,
