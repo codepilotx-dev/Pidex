@@ -321,6 +321,57 @@ describe('独立开发启动命令', () => {
     expect(desktop).not.toContain("spawn(['bun'")
   })
 
+  test('电脑控制产物缺失时 --no-build 继续启动，普通模式保留构建及失败处理', async () => {
+    const desktop = await readFile(new URL('./DevDesktop.ts', import.meta.url), 'utf8')
+    // 只执行启动前置函数，避免测试拉起 Vite、Electron 或真实 Cargo 构建。
+    const source = desktop.slice(
+      desktop.indexOf('async function ensureCuaRuntime('),
+      desktop.indexOf('/** 启动失败'),
+    )
+    const compiled = new Bun.Transpiler({ loader: 'ts' }).transformSync(source)
+    for (const scenario of [
+      { exists: false, noBuild: true, exitCode: 0, builds: 0 },
+      { exists: true, noBuild: true, exitCode: 0, builds: 0 },
+      { exists: true, noBuild: false, exitCode: 0, builds: 0 },
+      { exists: false, noBuild: false, exitCode: 0, builds: 1 },
+      { exists: false, noBuild: false, exitCode: 7, builds: 1 },
+    ]) {
+      const commands: string[][] = []
+      const messages: string[] = []
+      const ensure = new Function(
+        'existsSync',
+        'resolve',
+        'root',
+        'spawn',
+        'console',
+        'process',
+        'cuaBuildFailedCode',
+        `${compiled}; return ensureCuaRuntime`,
+      )(
+        () => scenario.exists,
+        join,
+        '.',
+        (command: string[]) => {
+          commands.push(command)
+          return { exited: Promise.resolve(scenario.exitCode) }
+        },
+        { log: (message: string) => messages.push(message) },
+        process,
+        'CUA_BUILD_FAILED:',
+      ) as (noBuild: boolean) => Promise<void>
+      if (scenario.exitCode)
+        await expect(ensure(scenario.noBuild)).rejects.toThrow('CUA_BUILD_FAILED:7')
+      else await ensure(scenario.noBuild)
+      expect(commands).toHaveLength(scenario.builds)
+      if (scenario.builds) expect(commands[0]).toEqual([process.execPath, 'run', 'build:cua'])
+      if (!scenario.exists && scenario.noBuild) {
+        expect(messages.join('')).toContain('bun run build:cua')
+        expect(messages.join('')).toContain('电脑控制暂不可用')
+      }
+    }
+    expect(desktop).not.toContain('CUA_MISSING')
+  })
+
   test('未知启动参数立即失败并保留可用参数提示', async () => {
     const dataDir = await mkdtemp(join(tmpdir(), 'pidex-unknown-argument-'))
     try {

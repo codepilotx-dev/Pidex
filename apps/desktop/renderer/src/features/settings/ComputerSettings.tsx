@@ -65,7 +65,11 @@ export function ComputerSettings(): React.ReactNode {
               />
             }
           />
-          {state.enabled && !state.available ? <p role="status">电脑控制运行时尚未就绪。</p> : null}
+          {state.enabled && !state.available ? (
+            <p role="status" className="tw:m-0 tw:p-5 tw:text-app-text-soft tw:type-body-sm">
+              电脑控制暂不可用，请确认本机运行时已就绪。
+            </p>
+          ) : null}
           {state.policy?.valid === false ? <p role="status">{state.policy.reason}</p> : null}
           {state.policy?.managed ? <p>部分应用访问可能受管理员策略限制。</p> : null}
           {error ? <p role="status">{error}</p> : null}
