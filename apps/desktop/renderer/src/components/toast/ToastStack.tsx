@@ -43,6 +43,7 @@ import {
 } from './ToastState.js'
 import { usePrefersReducedMotion } from '../../hooks/UsePrefersReducedMotion.js'
 import { Button } from '../ui/Button.js'
+import { containsRelatedTarget } from '../../utils/DomTargets.js'
 import { ToastContent } from './ToastContent.js'
 
 /* a touch under critical: it settles with a hint of give, no wobble */
@@ -58,6 +59,17 @@ export function ToastStack(): React.ReactNode {
   const [isFocused, setIsFocused] = useState(false)
   const [isOverflowing, setIsOverflowing] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    // 删除聚焦的通知按钮不一定触发 blur，不能让旧焦点把后续通知永久展开。
+    if (!containsRelatedTarget(containerRef.current, containerRef.current?.ownerDocument.activeElement ?? null)) {
+      setIsFocused(false)
+    }
+    if (toasts.length === 0) {
+      setIsHovered(false)
+      toastStore.setHovered(false)
+    }
+  }, [toasts])
 
   const isExpanded = (isHovered || isFocused) && toasts.length > 1
   const heightArray = toasts.map((t) => heights[t.id] ?? 64)
@@ -102,8 +114,7 @@ export function ToastStack(): React.ReactNode {
         toastStore.setHovered(true)
       }}
       onPointerOut={(e) => {
-        const to = e.relatedTarget as Node | null
-        if (!to || !containerRef.current?.contains(to)) {
+        if (!containsRelatedTarget(containerRef.current, e.relatedTarget)) {
           setIsHovered(false)
           toastStore.setHovered(false)
         }
@@ -113,8 +124,7 @@ export function ToastStack(): React.ReactNode {
         toastStore.setHovered(true)
       }}
       onBlur={(e) => {
-        const to = e.relatedTarget as Node | null
-        if (!to || !containerRef.current?.contains(to)) {
+        if (!containsRelatedTarget(containerRef.current, e.relatedTarget)) {
           setIsFocused(false)
           toastStore.setHovered(false)
         }
