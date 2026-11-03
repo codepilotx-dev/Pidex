@@ -203,7 +203,8 @@ describe('开发 Agent runtime 描述', () => {
         await rm(dataDir, { recursive: true, force: true })
       }
     },
-    15_000,
+    // 子进程要冷启动 Bun 并做多次加锁/清理，共享 runner 上并发时 15 秒会偶发超时。
+    60_000,
   )
 
   test('显式指定的历史端口被占用时安全失败并保留原连接描述', async () => {
