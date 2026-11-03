@@ -37,7 +37,7 @@ const outputRoots = [
   {
     directory: rendererIconsDirectory,
     isGenerated: (name: string) =>
-      /^Shard[0-9A-F]+\.ts$/.test(name) || /^(Index|Loaders)\.ts$/.test(name),
+      /^Shard[0-9A-F]+\.ts$/.test(name) || /^(index|Loaders)\.ts$/.test(name),
   },
 ] as const
 const check = process.argv.includes('--check')
@@ -227,7 +227,7 @@ ${entries.join('\n')}
     content: generatedShardLoaders(),
   })
   generated.push({
-    path: join(rendererIconsDirectory, 'Index.ts'),
+    path: join(rendererIconsDirectory, 'index.ts'),
     content: `${generatedHeader()}export { createMaterialIcon } from "./CreateIcon"
 export type { MaterialSvgIconProps } from "./CreateIcon"
 export { iconShard, loadIconShard, type IconComponent, type IconShard } from "./Loaders"

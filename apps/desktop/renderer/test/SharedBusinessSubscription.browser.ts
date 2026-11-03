@@ -116,7 +116,9 @@ let script = ''
 for await (const chunk of process.stdin) script += chunk.toString('utf8')
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
-  const page = await browser.newPage({ reducedMotion: 'reduce' })
+  // 断言使用中文标签，必须与 playwright.config 一样固定 zh-CN；否则 runner 的
+  // en-US 系统语言会让界面走英文词表，取不到中文文案。
+  const page = await browser.newPage({ reducedMotion: 'reduce', locale: 'zh-CN' })
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
   page.on('console', (m) => {
@@ -136,6 +138,9 @@ try {
   )
   await page.addScriptTag({ content: script })
   await page.evaluate(() => (window as any).fixture.mount())
+  // 先确认设备枚举已渲染出目标文案，再走固定 settle；共享 runner 上冷启动
+  // Chrome + 打包后的 React 树首次渲染远慢于本地，纯固定等待会偶发抢跑。
+  await page.getByLabel('听写输入设备').waitFor({ state: 'visible', timeout: 30_000 })
   const settle = () => page.evaluate(() => new Promise((resolve) => setTimeout(resolve, 100)))
   await page.waitForFunction(() => (window as any).fixture.settingsLoaded)
   await settle()
