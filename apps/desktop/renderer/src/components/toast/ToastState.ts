@@ -1,5 +1,6 @@
 import type React from 'react'
 import { createStore } from 'zustand/vanilla'
+import { toUserErrorMessage } from '../../utils/Errors.js'
 
 export type ToastTone = 'error' | 'status' | 'info'
 
@@ -14,7 +15,11 @@ export interface ToastItem {
   appearance?: 'action'
   tone: ToastTone
   message: React.ReactNode
-  description?: React.ReactNode
+  details?: React.ReactNode
+  onActivate?: () => void | Promise<void>
+  /** undefined 使用状态图标，null 隐藏图标。 */
+  icon?: React.ReactNode
+  actions?: React.ReactNode
   textKey: string
   timestamp: number
   duration: number
@@ -34,7 +39,11 @@ export interface ShowToastOptions {
   appearance?: 'action'
   tone?: ToastTone
   message: React.ReactNode
-  description?: React.ReactNode
+  details?: React.ReactNode
+  onActivate?: () => void | Promise<void>
+  /** undefined 使用状态图标，null 隐藏图标。 */
+  icon?: React.ReactNode
+  actions?: React.ReactNode
   duration?: number
   expiresAt?: number
   onDismiss?: () => void
@@ -83,6 +92,7 @@ export interface ToastCardTransform {
  * @param heights 各卡片的测量高度数组
  * @param gap 展开时的卡片垂直间距，默认 8px
  * @param peek 折叠状态下各层卡片向上露出的高度，默认 14px
+ * @param frameHeight 折叠时使用可视区域高度，避免隐藏通知把前景卡片向下推
  */
 export function calculateCardTransform(
   index: number,
@@ -90,6 +100,7 @@ export function calculateCardTransform(
   heights: number[] = [],
   gap = 8,
   peek = 14,
+  frameHeight?: number,
 ): ToastCardTransform {
   const count = Math.max(heights.length, index + 1)
   const defaultHeight = 44
@@ -102,7 +113,7 @@ export function calculateCardTransform(
 
   // index 0（最新通知）在容器最底部的 y 坐标（折叠和展开时位置完全相同！）
   const frontHeight = heights[0] ?? defaultHeight
-  const frontY = totalHeight - frontHeight
+  const frontY = (frameHeight ?? totalHeight) - frontHeight
 
   if (!isExpanded) {
     if (index === 0) {
@@ -161,6 +172,14 @@ export function createToastStore(options?: {
 
   function show(toastOptions: ShowToastOptions): string {
     const tone = toastOptions.tone ?? 'error'
+    const original = toastOptions.message
+    const summary = tone === 'error' && typeof original === 'string' ? toUserErrorMessage(original) : original
+    const needsSummary = typeof summary === 'string' && (summary.includes('\n') || summary.length > 80)
+    const message = needsSummary
+      ? tone === 'error' ? '操作失败，点击查看详情' : '操作结果已更新，点击查看详情'
+      : summary
+    const details = toastOptions.details !== undefined ? toastOptions.details
+      : original !== message ? original : undefined
     const textKey =
       toastOptions.dedupeKey ??
       (typeof toastOptions.message === 'string'
@@ -180,8 +199,11 @@ export function createToastStore(options?: {
         updated[existingIndex] = {
           ...existing,
           timestamp: now,
-          message: toastOptions.message,
-          description: toastOptions.description,
+          message,
+          details,
+          onActivate: toastOptions.onActivate,
+          icon: toastOptions.icon,
+          actions: toastOptions.actions,
           appearance: toastOptions.appearance,
           expiresAt: toastOptions.expiresAt,
           action: toastOptions.action,
@@ -201,8 +223,11 @@ export function createToastStore(options?: {
       id,
       appearance: toastOptions.appearance,
       tone,
-      message: toastOptions.message,
-      description: toastOptions.description,
+      message,
+      details,
+      onActivate: toastOptions.onActivate,
+      icon: toastOptions.icon,
+      actions: toastOptions.actions,
       textKey,
       timestamp: now,
       duration: toastOptions.duration ?? defaultDuration,
@@ -242,6 +267,15 @@ export function createToastStore(options?: {
     item.onDismiss?.()
   }
 
+  async function activate(id: string, openDetails: (notice: Pick<ToastItem, 'message' | 'details'>) => void): Promise<void> {
+    const item = getState().toasts.find((toast) => toast.id === id)
+    if (!item) return
+    if (item.onActivate) await item.onActivate()
+    else if (item.details != null) openDetails({ message: item.message, details: item.details })
+    else return
+    dismiss(id)
+  }
+
   function dismissAll(): void {
     const state = getState()
     const current = [...state.toasts]
@@ -263,6 +297,7 @@ export function createToastStore(options?: {
     subscribe: store.subscribe,
     show,
     dismiss,
+    activate,
     dismissAll,
     setHovered,
     _clearTimer: clearTimer,

@@ -265,3 +265,48 @@ describe('toastState & transform calculations', () => {
     })
   })
 })
+
+
+it('自定义图标和按钮插槽支持创建、去重更新及显式隐藏', () => {
+  const store = createToastStore()
+  const id = store.show({ message: '内容', icon: '归档图标', actions: '自定义按钮' })
+  expect(store.getState().toasts[0]).toMatchObject({ id, icon: '归档图标', actions: '自定义按钮' })
+  store.show({ message: '内容', icon: null, actions: null })
+  expect(store.getState().toasts).toHaveLength(1)
+  expect(store.getState().toasts[0]).toMatchObject({ id, icon: null, actions: null })
+})
+
+
+it('五条通知折叠时只预留三条高度，最新通知不被旧通知向下推', () => {
+  const heights = [52, 64, 52, 64, 52]
+  const frameHeight = 52 + 64 + 52 + 2 * 4
+  expect(calculateCardTransform(0, false, heights, 4, 10, frameHeight).y).toBe(frameHeight - 52)
+  expect(calculateCardTransform(1, false, heights, 4, 10, frameHeight).y).toBe(frameHeight - 52 - 10)
+  // 展开时仍保留完整列表坐标，由三条高度的容器内部滚动访问旧通知。
+  expect(calculateCardTransform(0, true, heights, 4, 10).y).toBe(heights.reduce((sum, height) => sum + height, 0) + 4 * 4 - 52)
+})
+
+
+it('打开详情保存独立快照并关闭 Toast，业务目标优先于详情', async () => {
+  const store = createToastStore()
+  let snapshot: unknown
+  const id = store.show({ tone: 'info', message: '查看结果', details: '完整结果' })
+  await store.activate(id, (notice) => { snapshot = notice })
+  expect(store.getState().toasts).toHaveLength(0)
+  expect(snapshot).toEqual({ message: '查看结果', details: '完整结果' })
+  let navigated = false
+  const navigation = store.show({ tone: 'info', message: '查看设置', details: '不应打开', onActivate: () => { navigated = true } })
+  await store.activate(navigation, () => { throw new Error('不应打开详情') })
+  expect(navigated).toBe(true)
+  expect(store.getState().toasts).toHaveLength(0)
+})
+
+it('异步业务目标打开失败时保留 Toast，未配置目标的普通通知不关闭', async () => {
+  const store = createToastStore()
+  const id = store.show({ message: '跳转', onActivate: async () => { throw new Error('打开失败') } })
+  await expect(store.activate(id, () => {})).rejects.toThrow('打开失败')
+  expect(store.getState().toasts[0]?.id).toBe(id)
+  const plain = store.show({ message: '普通提示' })
+  await store.activate(plain, () => { throw new Error('不应打开详情') })
+  expect(store.getState().toasts.some((item) => item.id === plain)).toBe(true)
+})

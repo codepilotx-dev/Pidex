@@ -34,6 +34,7 @@ test('StrictMode 清理重挂不会关闭归档提示，用户关闭仍通知父
   const setup = mountNotice(() => closes++)
   const cleanup = setup()
   expect(store.getState().toasts).toHaveLength(1)
+  expect(store.getState().toasts[0]?.message).toBe('已归档的聊天')
   cleanup()
   expect(closes).toBe(0)
   const finalCleanup = setup()

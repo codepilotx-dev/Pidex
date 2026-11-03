@@ -4336,16 +4336,9 @@ function ArchiveConversationNotice({
       tone: 'status',
       appearance: 'action',
       dedupeKey: 'archive-conversation-notice',
-      message: (
-        <span className="tw:inline-flex tw:items-center tw:gap-3 tw:px-1.5 tw:type-heading-sm tw:whitespace-nowrap">
-          <Archive
-            aria-hidden="true"
-            className="tw:size-[var(--inline-icon-size,1em)] tw:shrink-0"
-            size="var(--inline-icon-size, 1em)"
-          />
-          已归档的聊天
-        </span>
-      ),
+      icon: <Archive aria-hidden="true" size={18} />,
+      message: '已归档的聊天',
+      onActivate: () => onOpenSettingsRef.current(),
       action: {
         label: '查看',
         onClick: () => {
