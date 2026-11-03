@@ -38,6 +38,7 @@ export type SidebarSessionHoverCardModel = {
   pullRequests: readonly ThreadPullRequestSummary[]
   unread: boolean
   isRunning: boolean
+  errorMessage: string | null
 }
 
 export function formatSidebarSessionRelativeTime(
@@ -72,6 +73,10 @@ export function buildSidebarSessionHoverCardModel(
       : environment.kind === 'local'
         ? '本地工作区'
         : `工作树 · ${WORKTREE_STATUS_LABEL[environment.status] ?? environment.status}`
+  const errorMessage =
+    session.latestTurnStatus === 'failed'
+      ? session.latestTurnError?.trim() || '任务执行失败'
+      : null
   return {
     title: resolved || sessionDisplayTitle(session, fallbackTitle),
     relativeTime: formatSidebarSessionRelativeTime(session.lastMessageAt ?? session.createdAt, now),
@@ -82,6 +87,7 @@ export function buildSidebarSessionHoverCardModel(
     pullRequests,
     unread: Boolean(session.unreadAt),
     isRunning: session.status === 'running',
+    errorMessage,
   }
 }
 

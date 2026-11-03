@@ -116,6 +116,63 @@ describe('SessionCatalogCoordinator', () => {
 
     expect(calls).toEqual(['lifecycle:completed:5', 'refresh:thread-1'])
   })
+
+  test('delivers sanitized error details for failed turn events and null for clean ones', async () => {
+    let capturedError: string | null | undefined
+    let capturedStatus: string | undefined
+    const coordinator = new SessionCatalogCoordinator({
+      onCatalogUpdated: () => {},
+      onProviderCredentialUpdated: () => {},
+      onConfigUpdated: () => {},
+      onWorkspaceFileChanged: () => {},
+      onWorkspaceGitChanged: () => {},
+      onLifecycleUpdated: (update) => {
+        capturedStatus = update.status
+        capturedError = update.error
+      },
+      refreshThreads: async () => {},
+    })
+
+    const turn = {
+      id: 'turn-1',
+      threadId: 'thread-1',
+      sourceInputID: 'input-1',
+      status: 'failed' as const,
+      mode: 'chat' as const,
+      model: { providerID: 'openai', id: 'gpt-5' },
+      permissionConfig: {
+        sandboxMode: 'workspace-write' as const,
+        approvalPolicy: 'on-request' as const,
+        approvalsReviewer: 'user' as const,
+      },
+      rootAgentId: 'agent-1',
+      mergedInputIDs: [],
+      startedAt: 1,
+      finishedAt: 2,
+      elapsedSeconds: 1,
+      error: '网络请求超时，请重试',
+    }
+
+    const failedEvent: EventEnvelope = {
+      eventId: 'ev-failed-1',
+      streamId: 'thread-1',
+      type: 'turn/failed',
+      version: 2,
+      occurredAt: 2,
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      durability: 'durable',
+      sequence: 10,
+      payload: {
+        turn,
+        error: { code: 'NETWORK_TIMEOUT', message: '网络请求超时，请重试', retryable: true },
+      },
+    }
+
+    await coordinator.deliverBatch([failedEvent])
+    expect(capturedStatus).toBe('failed')
+    expect(capturedError).toBe('网络请求超时，请重试')
+  })
 })
 
 function lifecycleEvent(

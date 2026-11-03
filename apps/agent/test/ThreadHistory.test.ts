@@ -698,3 +698,151 @@ describe('历史 task_mode 读取兼容', () => {
     }
   })
 })
+
+describe('侧边栏展示轮次与错误投影', () => {
+  test('列表与单条查询输出一致的状态与错误，且遵循展示优先级与安全过滤', async () => {
+    const { db, history, projection } = await makeHistory()
+    const thread = db.createThread('失败测试')
+
+    // 1. 只有排队轮次：状态为 queued，错误为 null
+    const queuedTurn = db.createTurn(thread.id, input('第一条排队中'))
+    let listRow = projection.list().find((item) => item.id === thread.id)!
+    let singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('queued')
+    expect(listRow.latestTurnError).toBeNull()
+    expect(singleRow.latestTurnStatus).toBe('queued')
+    expect(singleRow.latestTurnError).toBeNull()
+
+    // 2. 轮次失败：输出安全错误详情
+    db.finalizeTurn({
+      threadID: thread.id,
+      turnID: queuedTurn.turnID,
+      agentID: queuedTurn.agentID,
+      status: 'failed',
+      message: '模型上下文超限，无法继续生成',
+    })
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('failed')
+    expect(listRow.latestTurnError).toBe('模型上下文超限，无法继续生成')
+    expect(singleRow.latestTurnStatus).toBe('failed')
+    expect(singleRow.latestTurnError).toBe('模型上下文超限，无法继续生成')
+
+    // Snapshot 上的 Turn 也输出一致的安全错误
+    const snapshot = projection.snapshot(thread.id)!
+    expect(snapshot.turns.find((t) => t.id === queuedTurn.turnID)?.error).toBe(
+      '模型上下文超限，无法继续生成',
+    )
+
+    // 3. 失败后追加排队输入（尚未开始执行）：最近非排队失败优先于新排队轮次
+    const nextQueued = db.createTurn(thread.id, input('追问但尚未开始执行'))
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('failed')
+    expect(listRow.latestTurnError).toBe('模型上下文超限，无法继续生成')
+    expect(singleRow.latestTurnStatus).toBe('failed')
+    expect(singleRow.latestTurnError).toBe('模型上下文超限，无法继续生成')
+
+    // 4. 新轮次开始执行（活动轮次）：立即清除失败提示
+    db.updateTurnStatus(nextQueued.turnID, 'running')
+    db.updateAgentStatus(nextQueued.agentID, 'running')
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('running')
+    expect(listRow.latestTurnError).toBeNull()
+    expect(singleRow.latestTurnStatus).toBe('running')
+    expect(singleRow.latestTurnError).toBeNull()
+
+    // 5. 新活动轮次存在时，更较新的排队轮次不会遮住活动轮次
+    db.createTurn(thread.id, input('再次排队'))
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('running')
+    expect(listRow.latestTurnError).toBeNull()
+
+    // 6. 成功完成的轮次不携带错误
+    db.finalizeTurn({
+      threadID: thread.id,
+      turnID: nextQueued.turnID,
+      agentID: nextQueued.agentID,
+      status: 'completed',
+    })
+    // 移除剩余排队使得完成态成为展示轮次
+    db.sqlite.query("DELETE FROM turns WHERE status = 'queued'").run()
+    listRow = projection.list().find((item) => item.id === thread.id)!
+    singleRow = history.getListItem(thread.id)!
+    expect(listRow.latestTurnStatus).toBe('completed')
+    expect(listRow.latestTurnError).toBeNull()
+
+    // 7. 无法证明安全的错误（如含原始堆栈或密钥）返回 null
+    const unsafeThread = db.createThread('不安全错误测试')
+    const unsafeTurn = db.createTurn(unsafeThread.id, input('触发内部报错'))
+    db.finalizeTurn({
+      threadID: unsafeThread.id,
+      turnID: unsafeTurn.turnID,
+      agentID: unsafeTurn.agentID,
+      status: 'failed',
+      message: 'Internal Error: raw exception at Object.<anonymous> (F:\\secret\\app.ts:1:1)',
+    })
+    const unsafeList = projection.list().find((item) => item.id === unsafeThread.id)!
+    const unsafeSingle = history.getListItem(unsafeThread.id)!
+    expect(unsafeList.latestTurnStatus).toBe('failed')
+    expect(unsafeList.latestTurnError).toBeNull()
+    expect(unsafeSingle.latestTurnStatus).toBe('failed')
+    expect(unsafeSingle.latestTurnError).toBeNull()
+    expect(projection.snapshot(unsafeThread.id)!.turns[0]?.error).toBeNull()
+
+    // 8. 缺根执行或空错误均返回 null
+    const noAgentThread = db.createThread('无根执行测试')
+    const noAgentTurn = db.createTurn(noAgentThread.id, input('测试'))
+    db.sqlite
+      .query("UPDATE turns SET status = 'failed', root_agent_id = 'missing-agent-id' WHERE id = ?")
+      .run(noAgentTurn.turnID)
+    const noAgentList = projection.list().find((item) => item.id === noAgentThread.id)!
+    expect(noAgentList.latestTurnStatus).toBe('failed')
+    expect(noAgentList.latestTurnError).toBeNull()
+
+    // 9. 相同 created_at 的稳定选择（按 id 降序）
+    const tieThread = db.createThread('平局测试')
+    const turnA = db.createTurn(tieThread.id, input('轮次A'))
+    const turnB = db.createTurn(tieThread.id, input('轮次B'))
+    const [smallerTurn, largerTurn] =
+      turnA.turnID < turnB.turnID ? [turnA, turnB] : [turnB, turnA]
+    db.sqlite.query("UPDATE turns SET status = 'completed', created_at = 5000 WHERE id = ?").run(smallerTurn.turnID)
+    db.sqlite.query("UPDATE turns SET status = 'failed', created_at = 5000 WHERE id = ?").run(largerTurn.turnID)
+    const tieList = projection.list().find((item) => item.id === tieThread.id)!
+    // largerTurn id 字典序大于 smallerTurn，两者 created_at 相同且非排队，选择 largerTurn
+    expect(tieList.latestTurnStatus).toBe('failed')
+
+    // 10. 中断、取消与停止轮次不暴露错误
+    const interruptedThread = db.createThread('中断测试')
+    const intTurn = db.createTurn(interruptedThread.id, input('被中断'))
+    db.finalizeTurn({
+      threadID: interruptedThread.id,
+      turnID: intTurn.turnID,
+      agentID: intTurn.agentID,
+      status: 'interrupted',
+      message: '用户主动中断任务',
+    })
+    const intList = projection.list().find((item) => item.id === interruptedThread.id)!
+    const intSingle = history.getListItem(interruptedThread.id)!
+    expect(intList.latestTurnStatus).toBe('interrupted')
+    expect(intList.latestTurnError).toBeNull()
+    expect(intSingle.latestTurnStatus).toBe('interrupted')
+    expect(intSingle.latestTurnError).toBeNull()
+
+    // 11. 引号包裹的敏感 Unix 路径被安全过滤为 null
+    const quotedPathThread = db.createThread('引号路径测试')
+    const quotedTurn = db.createTurn(quotedPathThread.id, input('读取凭据'))
+    db.finalizeTurn({
+      threadID: quotedPathThread.id,
+      turnID: quotedTurn.turnID,
+      agentID: quotedTurn.agentID,
+      status: 'failed',
+      message: 'Cannot read file: "/etc/shadow" permission denied',
+    })
+    const quotedList = projection.list().find((item) => item.id === quotedPathThread.id)!
+    expect(quotedList.latestTurnStatus).toBe('failed')
+    expect(quotedList.latestTurnError).toBeNull()
+  })
+})

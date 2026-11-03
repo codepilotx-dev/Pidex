@@ -15,6 +15,7 @@ import {
 } from 'react'
 import {
   Archive,
+  CircleAlert,
   Clock3,
   Copy,
   Eye,
@@ -1001,10 +1002,16 @@ function SidebarSessionRowComponent({
             </div>
           ) : indicatorState === 'needs-input' ? (
             <SidebarStatusPill kind={waitingForInput ? 'input' : 'approval'} />
-          ) : indicatorState === 'unread' || indicatorState === 'running' ? (
+          ) : indicatorState === 'unread' || indicatorState === 'running' || indicatorState === 'error' ? (
             <span className="sidebar-indicator tw:inline-flex tw:size-6 tw:flex-none tw:items-center tw:justify-center tw:text-app-text-meta tw:[&>svg]:size-icon-md">
               <span className="sidebar-status-icon tw:inline-flex tw:size-5 tw:shrink-0 tw:items-center tw:justify-center">
-                {indicatorState === 'unread' ? (
+                {indicatorState === 'error' ? (
+                  <CircleAlert
+                    aria-label="任务执行失败"
+                    className="sidebar-session-error tw:text-app-danger"
+                    size={APP_ICON_SIZE}
+                  />
+                ) : indicatorState === 'unread' ? (
                   <span
                     aria-label="未读"
                     className="sidebar-unread-dot tw:size-2 tw:flex-none tw:rounded-full tw:bg-app-accent"

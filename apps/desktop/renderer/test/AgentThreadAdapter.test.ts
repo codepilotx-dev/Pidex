@@ -191,6 +191,91 @@ describe('agent thread adapter', () => {
     expect(agentTurnStatusToDesktopStatus('interrupted')).toBe('interrupted')
   })
 
+  test('maps latestTurnError only when latestTurnStatus is failed', () => {
+    const threadItem: ThreadListItem = {
+      id: 'thread-1',
+      title: 'Failed Task',
+      storageSource: 'local',
+      projectID: null,
+      gitBranch: null,
+      hasScheduledRun: false,
+      isScheduledSession: false,
+      isFork: false,
+      preview: null,
+      firstUserMessage: null,
+      messageCount: 1,
+      latestTurnStatus: 'failed',
+      latestTurnError: 'Context limit exceeded',
+      workspace: { kind: 'projectless', cwd: 'F:\\CodeProject' },
+      archivedAt: null,
+      unreadAt: null,
+      settings: {
+        taskMode: 'chat',
+        permissionConfig: {
+          sandboxMode: 'workspace-write',
+          approvalPolicy: 'never',
+          approvalsReviewer: 'user',
+        },
+      },
+      createdAt: 1_000,
+      updatedAt: 2_000,
+    }
+
+    const failedDesktop = agentThreadListItemToDesktop(threadItem, null)
+    expect(failedDesktop.latestTurnError).toBe('Context limit exceeded')
+
+    const nonFailedDesktop = agentThreadListItemToDesktop(
+      {
+        ...threadItem,
+        latestTurnStatus: 'completed',
+        latestTurnError: 'stale error',
+      },
+      null,
+    )
+    expect(nonFailedDesktop.latestTurnError).toBeNull()
+
+    const snapshotWithError = agentThreadSnapshotToDesktop({
+      thread: {
+        ...threadItem,
+        settings: {
+          taskMode: 'chat',
+          permissionConfig: {
+            sandboxMode: 'workspace-write',
+            approvalPolicy: 'never',
+            approvalsReviewer: 'user',
+          },
+        },
+      },
+      inputs: [],
+      turns: [
+        {
+          id: 'turn-1',
+          threadId: 'thread-1',
+          sourceInputID: 'input-1',
+          status: 'failed',
+          mode: 'chat',
+          model: { providerID: 'anthropic', id: 'claude-3-5-sonnet' },
+          permissionConfig: {
+            sandboxMode: 'workspace-write',
+            approvalPolicy: 'never',
+            approvalsReviewer: 'user',
+          },
+          rootAgentId: 'agent-1',
+          mergedInputIDs: [],
+          startedAt: 10,
+          finishedAt: 20,
+          elapsedSeconds: 10,
+          error: 'Process crashed with SIGKILL',
+        },
+      ],
+      items: [],
+      events: [],
+      interactions: [],
+      approvals: [],
+    })
+    expect(snapshotWithError.item.latestTurnError).toBe('Process crashed with SIGKILL')
+  })
+
   test('maps built-in permission modes without widening the default sandbox', () => {
     expect(desktopPermissionModeToPermissionConfig('default')).toEqual({
       sandboxMode: 'workspace-write',

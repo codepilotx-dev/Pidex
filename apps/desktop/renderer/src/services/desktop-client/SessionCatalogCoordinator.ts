@@ -1,5 +1,6 @@
 import type { EventEnvelope } from '@pidex/agent-protocol'
 import type { Turn } from '@pidex/shared/thread'
+import { safeTurnError } from '@pidex/shared/errors'
 
 /**
  * 书签集合变更通过窗口事件广播给导轨 hook：书签不属于会话目录投影，
@@ -51,6 +52,7 @@ export type SessionLifecycleUpdate = {
   turnId: string
   status: Turn['status']
   sequence: number
+  error?: string | null
 }
 
 /**
@@ -124,7 +126,6 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
     case 'turn/queued':
     case 'turn/started':
     case 'turn/completed':
-    case 'turn/failed':
     case 'turn/interrupted':
       return event.threadId
         ? {
@@ -132,6 +133,17 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
             turnId: event.payload.turn.id,
             status: event.payload.turn.status,
             sequence: event.sequence,
+            error: null,
+          }
+        : null
+    case 'turn/failed':
+      return event.threadId
+        ? {
+            threadId: event.threadId,
+            turnId: event.payload.turn.id,
+            status: event.payload.turn.status,
+            sequence: event.sequence,
+            error: safeTurnError(event.payload.turn.error ?? event.payload.error.message),
           }
         : null
     case 'turn/statusChanged':
@@ -141,6 +153,7 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
             turnId: event.payload.turnId,
             status: event.payload.status,
             sequence: event.sequence,
+            error: event.payload.status === 'failed' ? safeTurnError(event.payload.reason) : null,
           }
         : null
     default:

@@ -3,6 +3,7 @@ import { createCanonicalThreadState, type CanonicalThreadPage } from '@pidex/ses
 
 import {
   selectCanonicalConversationAuxiliaryState,
+  selectCanonicalLatestTurn,
   selectCanonicalLatestTurnStatus,
   selectCanonicalSessionLifecycle,
   selectCanonicalSessionStatus,
@@ -549,6 +550,7 @@ describe('canonical conversation auxiliary selector', () => {
     expect(selectCanonicalSessionLifecycle(waitingState)).toEqual({
       status: 'waiting',
       latestTurnStatus: 'waiting-question',
+      latestTurnError: null,
     })
 
     const completedState = createCanonicalThreadState({
@@ -567,6 +569,7 @@ describe('canonical conversation auxiliary selector', () => {
     expect(selectCanonicalSessionLifecycle(completedState)).toEqual({
       status: 'done',
       latestTurnStatus: 'completed',
+      latestTurnError: null,
     })
 
     // A turn waiting in the queue is never the active turn, but list surfaces
@@ -592,9 +595,52 @@ describe('canonical conversation auxiliary selector', () => {
     expect(selectCanonicalSessionLifecycle(queueOnlyState)).toEqual({
       status: 'queued',
       latestTurnStatus: 'queued',
+      latestTurnError: null,
     })
     // The open conversation keeps its existing queue-only behaviour.
     expect(selectCanonicalSessionStatus(queueOnlyState)).toBe('idle')
+
+    const failedStateWithError = createCanonicalThreadState({
+      ...page,
+      turns: [
+        {
+          ...page.turns[0]!,
+          turn: {
+            ...page.turns[0]!.turn,
+            status: 'failed',
+            finishedAt: 5,
+            error: 'Command failed with exit code 1',
+          },
+        },
+      ],
+    })
+    expect(selectCanonicalLatestTurn(failedStateWithError)?.id).toBe(page.turns[0]!.turn.id)
+    expect(selectCanonicalLatestTurnStatus(failedStateWithError)).toBe('failed')
+    expect(selectCanonicalSessionLifecycle(failedStateWithError)).toEqual({
+      status: 'error',
+      latestTurnStatus: 'failed',
+      latestTurnError: 'Command failed with exit code 1',
+    })
+
+    const failedStateWithoutError = createCanonicalThreadState({
+      ...page,
+      turns: [
+        {
+          ...page.turns[0]!,
+          turn: {
+            ...page.turns[0]!.turn,
+            status: 'failed',
+            finishedAt: 5,
+            error: null,
+          },
+        },
+      ],
+    })
+    expect(selectCanonicalSessionLifecycle(failedStateWithoutError)).toEqual({
+      status: 'error',
+      latestTurnStatus: 'failed',
+      latestTurnError: null,
+    })
 
     const emptyState = createCanonicalThreadState({ ...page, turns: [] })
     expect(selectCanonicalSessionLifecycle(emptyState)).toBeNull()

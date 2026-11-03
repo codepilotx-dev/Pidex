@@ -1,5 +1,5 @@
 import type React from 'react'
-import { Folder, GitBranch, GitFork, Laptop, Unlink } from 'lucide-react'
+import { CircleAlert, Folder, GitBranch, GitFork, Laptop, Unlink } from 'lucide-react'
 import type { ThreadPullRequestSummary } from '@pidex/shared/thread'
 import { SkeletonBlock } from '../../../components/ui/Skeleton.js'
 import {
@@ -104,7 +104,7 @@ export function SidebarSessionHoverCardOverlay({
     <SidebarHoverCardSurface
       {...interactionProps}
       ariaLabel="会话详情"
-      className="sidebar-session-hover-card tw:min-w-[200px] tw:max-w-[280px] tw:px-3 tw:py-2"
+      className="sidebar-session-hover-card tw:min-w-[200px] tw:max-w-[280px] tw:max-h-[min(24rem,calc(100vh-2rem))] tw:overflow-y-auto tw:px-3 tw:py-2"
       focusRef={editing ? inputRef : undefined}
       focusRequest={editing ? focusRequest : 0}
       onFocusRequestHandled={onFocusRequestHandled}
@@ -250,6 +250,19 @@ export function SidebarSessionHoverCardOverlay({
               onUnlink={onUnlinkPullRequest}
             />
           ))}
+          {model.errorMessage ? (
+            <SidebarHoverCardRow className="sidebar-session-hover-card-row sidebar-session-hover-card-error-row tw:grid-cols-[var(--sidebar-hover-leading-width)_minmax(0,1fr)] tw:items-start tw:type-caption">
+              <CircleAlert
+                aria-hidden="true"
+                className="sidebar-session-hover-card-error-icon tw:size-[var(--inline-icon-size,1em)] tw:text-app-danger tw:shrink-0 tw:mt-0.5"
+                size={APP_ICON_SIZE}
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
+              <span className="sidebar-session-hover-card-row-content sidebar-session-hover-card-error-text tw:min-w-0 tw:text-app-text tw:whitespace-pre-wrap tw:break-words tw:[overflow-wrap:anywhere] tw:select-text">
+                {model.errorMessage}
+              </span>
+            </SidebarHoverCardRow>
+          ) : null}
         </div>
       </SidebarHoverCardFrame>
     </SidebarHoverCardSurface>

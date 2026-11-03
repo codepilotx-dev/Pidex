@@ -1279,7 +1279,48 @@ describe('sidebar session hover card projection', () => {
       pullRequests: [],
       unread: false,
       isRunning: false,
+      errorMessage: null,
     })
+  })
+
+  test('悬浮卡在任务失败时展示错误信息并保留多行排版，非失败状态不显示错误', () => {
+    const base = session('thread-err', 'F:\\CodeProject\\Pidex')
+    const multilineError = 'Error: Connection timeout\n  at fetch (retry 3/3)'
+
+    // 失败状态且带错误详情
+    const failedWithDetail = {
+      ...base,
+      status: 'error' as const,
+      latestTurnStatus: 'failed' as const,
+      latestTurnError: multilineError,
+    }
+    expect(buildSidebarSessionHoverCardModel(failedWithDetail).errorMessage).toBe(multilineError)
+
+    // 失败状态但无错误文本回退到标准文案
+    const failedWithoutDetail = {
+      ...base,
+      status: 'error' as const,
+      latestTurnStatus: 'failed' as const,
+      latestTurnError: '   ',
+    }
+    expect(buildSidebarSessionHoverCardModel(failedWithoutDetail).errorMessage).toBe('任务执行失败')
+
+    // 非失败状态不暴露错误
+    const completedWithStaleError = {
+      ...base,
+      status: 'done' as const,
+      latestTurnStatus: 'completed' as const,
+      latestTurnError: multilineError,
+    }
+    expect(buildSidebarSessionHoverCardModel(completedWithStaleError).errorMessage).toBeNull()
+
+    const running = {
+      ...base,
+      status: 'running' as const,
+      latestTurnStatus: 'running' as const,
+      latestTurnError: null,
+    }
+    expect(buildSidebarSessionHoverCardModel(running).errorMessage).toBeNull()
   })
 
   test('悬浮卡携带未读状态并按活动任务统计已开启数量', () => {

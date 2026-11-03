@@ -8,7 +8,7 @@ import type { SessionListItem } from '../../../UiTypes.js'
 import { sortSessionsByRecency } from '../../session/state/SessionSorting.js'
 import { normalizePathForComparison } from '../../../utils/PathUtils.js'
 
-export type SidebarSessionVisualState = 'needs-input' | 'running' | 'unread' | 'idle'
+export type SidebarSessionVisualState = 'needs-input' | 'running' | 'error' | 'unread' | 'idle'
 
 export type SidebarPinnedItem =
   | {
@@ -774,6 +774,7 @@ export function deriveSidebarSessionVisualState(
     return 'needs-input'
   }
   if (session.status === 'running') return 'running'
+  if (session.latestTurnStatus === 'failed') return 'error'
   if (session.unreadAt) return 'unread'
   return 'idle'
 }

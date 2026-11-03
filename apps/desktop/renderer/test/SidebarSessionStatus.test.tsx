@@ -227,3 +227,81 @@ test('status pill progress and snooze are presentation-only opt-ins', () => {
   expect(row).not.toContain('sidebar-status-pill-progress')
   expect(row).not.toContain('停用自动回答')
 })
+
+test('sidebar failed turn renders error icon and respects visual priority over unread', () => {
+  const project = mockWorkspace('C:\\sidebar-error')
+  const base = mockSessionSnapshot('error-session', project, { workspacePath: project.path }).item
+  const failedSession: SessionListItem = {
+    ...base,
+    status: 'error',
+    latestTurnStatus: 'failed',
+    latestTurnError: 'Network connection lost',
+    unreadAt: 1,
+  }
+
+  const failedMarkup = renderSessionRows([failedSession])
+  expect(failedMarkup).toContain('sidebar-session-error')
+  expect(failedMarkup).toContain('tw:text-app-danger')
+  expect(failedMarkup).toContain('aria-label="任务执行失败"')
+  expect(failedMarkup).not.toContain('sidebar-unread-dot')
+  expect(failedMarkup).not.toContain('sidebar-session-spinner')
+
+  // Running overrides failure (e.g. after retry/new turn begins running)
+  const retryingSession: SessionListItem = {
+    ...failedSession,
+    status: 'running',
+    latestTurnStatus: 'running',
+    latestTurnError: null,
+  }
+  const retryingMarkup = renderSessionRows([retryingSession])
+  expect(retryingMarkup).toContain('sidebar-session-spinner')
+  expect(retryingMarkup).not.toContain('sidebar-session-error')
+
+  // Waiting input overrides failure
+  const waitingInputSession: SessionListItem = {
+    ...failedSession,
+    latestTurnStatus: 'waiting-question',
+  }
+  const waitingInputMarkup = renderSessionRows([waitingInputSession])
+  expect(waitingInputMarkup).toContain('需要用户输入')
+  expect(waitingInputMarkup).not.toContain('sidebar-session-error')
+
+  // Pending permission overrides failure
+  const waitingPermMarkup = renderSessionRows([failedSession], new Set([base.id]))
+  expect(waitingPermMarkup).toContain('等待批准')
+  expect(waitingPermMarkup).not.toContain('sidebar-session-error')
+
+  // Marking as read (unreadAt: null) preserves the error icon
+  const readFailedSession: SessionListItem = {
+    ...failedSession,
+    unreadAt: null,
+  }
+  const readFailedMarkup = renderSessionRows([readFailedSession])
+  expect(readFailedMarkup).toContain('sidebar-session-error')
+  expect(readFailedMarkup).toContain('aria-label="任务执行失败"')
+
+  // Non-failed terminal statuses (e.g., done, interrupted, stopped) do not render error icon
+  const doneSession: SessionListItem = {
+    ...base,
+    status: 'done',
+    latestTurnStatus: 'completed',
+    unreadAt: null,
+  }
+  const doneMarkup = renderSessionRows([doneSession])
+  expect(doneMarkup).not.toContain('sidebar-session-error')
+  expect(doneMarkup).not.toContain('任务执行失败')
+
+  const interruptedSession: SessionListItem = {
+    ...base,
+    status: 'interrupted',
+    latestTurnStatus: 'interrupted',
+    unreadAt: null,
+  }
+  const interruptedMarkup = renderSessionRows([interruptedSession])
+  expect(interruptedMarkup).not.toContain('sidebar-session-error')
+  expect(interruptedMarkup).not.toContain('任务执行失败')
+
+  // Row structure is preserved
+  expect(failedMarkup).toContain('data-sidebar-session-id="error-session"')
+  expect(failedMarkup).toContain('sidebar-session-row')
+})

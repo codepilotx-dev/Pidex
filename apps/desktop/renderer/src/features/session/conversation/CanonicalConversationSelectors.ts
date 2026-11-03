@@ -38,13 +38,13 @@ export type CanonicalConversationAuxiliaryState = {
 const completedResultSourceLinks = new WeakMap<object, SourceLink[]>()
 
 /**
- * Raw lifecycle status of the turn the canonical projection currently reports:
+ * Turn the canonical projection currently reports as the display turn:
  * the newest active turn, otherwise the newest turn that is not waiting in the
  * queue. Returns `null` when the projection holds no usable turn yet.
  */
-export function selectCanonicalLatestTurnStatus(
+export function selectCanonicalLatestTurn(
   state: CanonicalThreadState | null,
-): Turn['status'] | null {
+): Turn | null {
   if (!state) return null
   const queueTurnIds = new Set(state.queue.turnIds)
   const activeTurn = [...state.turnsById.values()]
@@ -54,17 +54,29 @@ export function selectCanonicalLatestTurnStatus(
         (turn.status === 'running' || turn.status.startsWith('waiting-')),
     )
     .sort((left, right) => (right.startedAt ?? 0) - (left.startedAt ?? 0))[0]
-  if (activeTurn) return activeTurn.status
+  if (activeTurn) return activeTurn
   const latestTurn = [...state.turnOrder]
     .reverse()
     .map((id) => state.turnsById.get(id))
     .find((turn) => turn && !queueTurnIds.has(turn.id))
-  return latestTurn?.status ?? null
+  return latestTurn ?? null
+}
+
+/**
+ * Raw lifecycle status of the turn the canonical projection currently reports:
+ * the newest active turn, otherwise the newest turn that is not waiting in the
+ * queue. Returns `null` when the projection holds no usable turn yet.
+ */
+export function selectCanonicalLatestTurnStatus(
+  state: CanonicalThreadState | null,
+): Turn['status'] | null {
+  return selectCanonicalLatestTurn(state)?.status ?? null
 }
 
 export type CanonicalSessionLifecycle = {
   status: DesktopSessionStatus
   latestTurnStatus: Turn['status']
+  latestTurnError: string | null
 }
 /**
  * Lifecycle published to list surfaces such as the sidebar, which cannot read
@@ -76,17 +88,19 @@ export type CanonicalSessionLifecycle = {
 export function selectCanonicalSessionLifecycle(
   state: CanonicalThreadState | null,
 ): CanonicalSessionLifecycle | null {
-  const latestTurnStatus = selectCanonicalLatestTurnStatus(state)
-  if (latestTurnStatus) {
+  const latestTurn = selectCanonicalLatestTurn(state)
+  if (latestTurn) {
     return {
-      status: agentTurnStatusToDesktopStatus(latestTurnStatus),
-      latestTurnStatus,
+      status: agentTurnStatusToDesktopStatus(latestTurn.status),
+      latestTurnStatus: latestTurn.status,
+      latestTurnError: latestTurn.status === 'failed' ? (latestTurn.error ?? null) : null,
     }
   }
   if (state && state.queue.turnIds.length > 0) {
     return {
       status: agentTurnStatusToDesktopStatus('queued'),
       latestTurnStatus: 'queued',
+      latestTurnError: null,
     }
   }
   return null

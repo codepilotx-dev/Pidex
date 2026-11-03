@@ -9,6 +9,7 @@ import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
 import { publishAgentEvent } from '../storage/events/EventPublisher'
 import { normalizeThreadTitle } from './ThreadTitleService'
+import { safeTurnError } from '@pidex/shared/errors'
 import { THREAD_ORIGIN_PROJECTION_SQL } from '../storage/repositories/ThreadRepository'
 import { probeThreadContextLimitsStorageCapabilities } from '../storage/database/StorageCapabilities'
 
@@ -26,6 +27,7 @@ type ThreadRow = {
   first_user_message: string | null
   message_count: number
   latest_turn_status: string | null
+  latest_turn_error: string | null
   archived_at: number | null
   unread_at: number | null
   has_scheduled_run: number
@@ -44,6 +46,7 @@ const turnStatus = (status: string | null): ThreadListItem['latestTurnStatus'] =
   if (!status) return null
   if (status === 'waiting_permission') return 'waiting-permission'
   if (status === 'waiting_question') return 'waiting-question'
+  if (status === 'waiting_subagents') return 'waiting-subagents'
   if (
     status === 'queued' ||
     status === 'running' ||
@@ -72,7 +75,15 @@ export class ThreadHistoryService {
       SELECT t.id, t.project_id, t.git_branch, t.title, t.preview, t.first_user_message, t.message_count, t.archived_at,
         t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.created_at, t.updated_at,
         read_state.unread_at, ${THREAD_ORIGIN_PROJECTION_SQL},
-        (SELECT u.status FROM turns AS u WHERE u.thread_id = t.id ORDER BY u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_status,
+        (SELECT u.status FROM turns AS u WHERE u.thread_id = t.id
+          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting-permission', 'waiting_question', 'waiting-question', 'waiting_subagents', 'waiting-subagents') THEN 0 WHEN u.status != 'queued' THEN 1 ELSE 2 END,
+            u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_status,
+        (SELECT CASE WHEN u.status = 'failed' THEN ae.error ELSE NULL END
+          FROM turns AS u
+          LEFT JOIN agent_executions AS ae ON ae.id = u.root_agent_id
+          WHERE u.thread_id = t.id
+          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting-permission', 'waiting_question', 'waiting-question', 'waiting_subagents', 'waiting-subagents') THEN 0 WHEN u.status != 'queued' THEN 1 ELSE 2 END,
+            u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_error,
         ${hasLimits ? 'l.max_context_tokens' : 'NULL AS max_context_tokens'}
       FROM threads AS t
       LEFT JOIN thread_read_state AS read_state ON read_state.thread_id = t.id
@@ -83,6 +94,9 @@ export class ThreadHistoryService {
       .get(threadID) as ThreadRow | null
     if (!row) return null
     const workspace = this.db.threadWorkspace(threadID)
+    const latestTurnStatus = turnStatus(row.latest_turn_status)
+    const latestTurnError =
+      latestTurnStatus === 'failed' ? safeTurnError(row.latest_turn_error) : null
     return {
       id: row.id,
       storageSource: 'local',
@@ -96,7 +110,8 @@ export class ThreadHistoryService {
       preview: row.preview,
       firstUserMessage: row.first_user_message,
       messageCount: row.message_count,
-      latestTurnStatus: turnStatus(row.latest_turn_status),
+      latestTurnStatus,
+      latestTurnError,
       archivedAt: row.archived_at,
       unreadAt: row.unread_at,
       settings: {

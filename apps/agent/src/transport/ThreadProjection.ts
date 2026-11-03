@@ -4,11 +4,8 @@ import {
   contextCompactionItem,
   contextCompactionOperationItem,
 } from '@pidex/session-view/context-compaction'
-import {
-  activeTurnSql,
-  hasThreadEditStorage,
-  ThreadEditRepository,
-} from '../storage/repositories/ThreadEditRepository'
+import { activeTurnSql, hasThreadEditStorage, ThreadEditRepository } from '../storage/repositories/ThreadEditRepository'
+import { safeTurnError } from '@pidex/shared/errors'
 import { AgentError, decodeStoredTaskMode } from '../Domain'
 import type {
   ApprovalRequest,
@@ -615,7 +612,7 @@ export class ThreadProjection {
     const agentRow = this.db.sqlite
       .query('SELECT error FROM agent_executions WHERE id = ?')
       .get(String(rootAgentId)) as { error: string | null } | null
-    return agentRow?.error ?? null
+    return safeTurnError(agentRow?.error)
   }
 
   private lifecyclePayload(
@@ -1299,8 +1296,14 @@ export class ThreadProjection {
         t.archived_at, t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.created_at, t.updated_at,
         read_state.unread_at, ${THREAD_ORIGIN_PROJECTION_SQL},
         (SELECT status FROM turns AS u WHERE u.thread_id = t.id
-          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting_question', 'waiting_subagents') THEN 0 ELSE 1 END,
-            u.created_at DESC LIMIT 1) AS latest_turn_status,
+          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting-permission', 'waiting_question', 'waiting-question', 'waiting_subagents', 'waiting-subagents') THEN 0 WHEN u.status != 'queued' THEN 1 ELSE 2 END,
+            u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_status,
+        (SELECT CASE WHEN u.status = 'failed' THEN ae.error ELSE NULL END
+          FROM turns AS u
+          LEFT JOIN agent_executions AS ae ON ae.id = u.root_agent_id
+          WHERE u.thread_id = t.id
+          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting-permission', 'waiting_question', 'waiting-question', 'waiting_subagents', 'waiting-subagents') THEN 0 WHEN u.status != 'queued' THEN 1 ELSE 2 END,
+            u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_error,
         ${this.db.repositories.planApprovals.available() ? "EXISTS (SELECT 1 FROM plan_approvals WHERE thread_id = t.id AND status = 'pending')" : '0'} AS pending_plan_approval,
         ${hasLimits ? 'l.max_context_tokens' : 'NULL AS max_context_tokens'}
       FROM threads AS t
@@ -1320,6 +1323,10 @@ export class ThreadProjection {
       const workspace = this.db.threadWorkspace(id)
       const sessionGroupId = this.db.repositories.sessionGroups.membership(id)?.group_id ?? null
       const executionEnvironment = this.resolveExecutionEnvironment(bindings, id, workspace)
+      const latestTurnStatus =
+        row.latest_turn_status == null ? null : turnStatus(String(row.latest_turn_status))
+      const latestTurnError =
+        latestTurnStatus === 'failed' ? safeTurnError(row.latest_turn_error) : null
       return {
         id,
         storageSource: 'local',
@@ -1339,8 +1346,8 @@ export class ThreadProjection {
         preview: row.preview == null ? null : String(row.preview),
         firstUserMessage: row.first_user_message == null ? null : String(row.first_user_message),
         messageCount: Number(row.message_count ?? 0),
-        latestTurnStatus:
-          row.latest_turn_status == null ? null : turnStatus(String(row.latest_turn_status)),
+        latestTurnStatus,
+        latestTurnError,
         archivedAt: row.archived_at == null ? null : Number(row.archived_at),
         unreadAt: row.unread_at == null ? null : Number(row.unread_at),
         pendingPlanApproval: Number(row.pending_plan_approval) === 1,

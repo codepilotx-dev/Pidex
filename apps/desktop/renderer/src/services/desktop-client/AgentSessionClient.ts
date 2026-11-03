@@ -945,12 +945,17 @@ export function createAgentSessionDesktopClient(
     // already includes the event, but an older list/read snapshot must not
     // restore the session to running.
     if (!lifecycleIsTerminal && currentEpoch <= requestEpoch) return snapshot
+    const targetError =
+      lifecycle.status === 'failed'
+        ? (lifecycle.error ?? snapshot.item.latestTurnError ?? null)
+        : null
     return {
       ...snapshot,
       item: {
         ...snapshot.item,
         status: agentTurnStatusToDesktopStatus(lifecycle.status),
         latestTurnStatus: lifecycle.status,
+        latestTurnError: targetError,
       },
     }
   }
@@ -965,12 +970,17 @@ export function createAgentSessionDesktopClient(
     )
     const cached = sessionSnapshots.get(update.threadId)
     if (!cached) return
+    const targetError =
+      update.status === 'failed'
+        ? (update.error ?? (cached.item.latestTurnStatus === 'failed' ? cached.item.latestTurnError : null) ?? null)
+        : null
     sessionSnapshots.set(update.threadId, {
       ...cached,
       item: {
         ...cached.item,
         status: agentTurnStatusToDesktopStatus(update.status),
         latestTurnStatus: update.status,
+        latestTurnError: targetError,
       },
     })
     emitSessionStoreChange()
@@ -1194,7 +1204,8 @@ export function createAgentSessionDesktopClient(
       if (
         current &&
         current.status === status.status &&
-        current.latestTurnStatus === status.latestTurnStatus
+        current.latestTurnStatus === status.latestTurnStatus &&
+        (current.latestTurnError ?? null) === (status.latestTurnError ?? null)
       ) {
         return
       }

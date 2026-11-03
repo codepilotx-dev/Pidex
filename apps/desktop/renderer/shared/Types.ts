@@ -1284,6 +1284,7 @@ export type DesktopSessionListItem = {
   threadGoal?: DesktopThreadGoal | null
   unreadAt?: string | null
   latestTurnStatus?: ThreadListItem['latestTurnStatus']
+  latestTurnError?: string | null
   pendingPlanApproval?: boolean
   creationSurface?: ThreadCreationSurface
   lastMessageAt?: string | null
