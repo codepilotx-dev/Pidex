@@ -11,9 +11,16 @@ import { GitReviewService } from '../src/review/GitReviewService'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 
 const roots: string[] = []
+// 断言失败会跳过用例末尾的 dispose/close，Windows 上残留的 SQLite 与 watcher
+// 句柄会让夹具目录持续 EBUSY。这里统一登记并在清理前兜底释放。
+const openFixtures: Array<{ review: GitReviewService; db: AgentDatabase }> = []
 afterEach(async () => {
+  for (const { review, db } of openFixtures.splice(0)) {
+    review.dispose()
+    db.close()
+  }
   await removeFixturePaths(roots.splice(0))
-}, 30_000)
+}, 60_000)
 
 const git = async (cwd: string, ...args: string[]) => {
   const child = Bun.spawn(['git', ...args], {
@@ -72,19 +79,15 @@ const fixture = async (
   const db = new AgentDatabase(join(container, 'agent.sqlite'))
   const project = db.createProject({ rootPath: root })
   const thread = db.createThread('Review fixture', project.id)
-  return {
-    root,
+  const review = new GitReviewService(
     db,
-    project,
-    thread,
-    review: new GitReviewService(
-      db,
-      options.onChanged,
-      options.resolvePullRequest,
-      options.onGitCommand,
-      options.logger,
-    ),
-  }
+    options.onChanged,
+    options.resolvePullRequest,
+    options.onGitCommand,
+    options.logger,
+  )
+  openFixtures.push({ review, db })
+  return { root, db, project, thread, review }
 }
 
 describe('GitReviewService', () => {

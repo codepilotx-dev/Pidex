@@ -740,13 +740,20 @@ export class GitReviewService {
     let bytes = 0
     let lastByte = -1
     let binary = false
-    for await (const chunk of createReadStream(entry.path)) {
-      bytes += chunk.byteLength
-      if (!binary && chunk.includes(0)) binary = true
-      for (const byte of chunk) {
-        if (byte === 0x0a) lines += 1
-        lastByte = byte
+    // 显式关闭：for await 在 decode/中断路径上不保证立即释放句柄，Windows 上
+    // 残留句柄会让测试与真实用户的临时目录删除持续 EBUSY。
+    const stream = createReadStream(entry.path)
+    try {
+      for await (const chunk of stream) {
+        bytes += chunk.byteLength
+        if (!binary && chunk.includes(0)) binary = true
+        for (const byte of chunk) {
+          if (byte === 0x0a) lines += 1
+          lastByte = byte
+        }
       }
+    } finally {
+      stream.close()
     }
     if (binary) return { additions: null, deletions: null, binary: true }
     if (bytes > 0 && lastByte !== 0x0a) lines += 1
