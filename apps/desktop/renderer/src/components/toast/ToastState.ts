@@ -14,6 +14,7 @@ export interface ToastItem {
   appearance?: 'action'
   tone: ToastTone
   message: React.ReactNode
+  description?: React.ReactNode
   textKey: string
   timestamp: number
   duration: number
@@ -33,6 +34,7 @@ export interface ShowToastOptions {
   appearance?: 'action'
   tone?: ToastTone
   message: React.ReactNode
+  description?: React.ReactNode
   duration?: number
   expiresAt?: number
   onDismiss?: () => void
@@ -69,31 +71,51 @@ export interface ToastCardTransform {
 
 /**
  * 计算 Toast 卡片在层叠或展开状态下的视觉定位与缩放
+ *
+ * 布局规则（Bencho 纸片堆叠效果）：
+ * 1. 位于顶部中央，最新通知在最前、最下方（index 0），旧通知向上排列。
+ * 2. 通知框架始终预留完整展开高度；折叠、展开时最新通知保持位置，其他通知向上展开。
+ * 3. 最多保留 5 条，折叠露出最多 3 张（index 0, 1, 2）。
+ * 4. 折叠时后层内容不可点击（pointerEvents none）。
+ *
  * @param index 卡片在队列中的索引（0 为最新一条）
- * @param isExpanded 是否处于展开状态（例如鼠标悬停）
+ * @param isExpanded 是否处于展开状态（例如鼠标悬停或键盘聚焦）
  * @param heights 各卡片的测量高度数组
  * @param gap 展开时的卡片垂直间距，默认 8px
- * @param headerHeight 展开状态下顶部偏移高度，默认 0px
+ * @param peek 折叠状态下各层卡片向上露出的高度，默认 14px
  */
 export function calculateCardTransform(
   index: number,
   isExpanded: boolean,
   heights: number[] = [],
   gap = 8,
-  headerHeight = 0,
+  peek = 14,
 ): ToastCardTransform {
+  const count = Math.max(heights.length, index + 1)
+  const defaultHeight = 44
+
+  // 计算完整展开状态下的总高度
+  let totalHeight = 0
+  for (let i = 0; i < count; i++) {
+    totalHeight += (heights[i] ?? defaultHeight) + (i < count - 1 ? gap : 0)
+  }
+
+  // index 0（最新通知）在容器最底部的 y 坐标（折叠和展开时位置完全相同！）
+  const frontHeight = heights[0] ?? defaultHeight
+  const frontY = totalHeight - frontHeight
+
   if (!isExpanded) {
     if (index === 0) {
-      return { y: 0, scale: 1, zIndex: 50, opacity: 1, pointerEvents: 'auto' }
+      return { y: frontY, scale: 1, zIndex: 50, opacity: 1, pointerEvents: 'auto' }
     }
     if (index === 1) {
-      return { y: 10, scale: 0.95, zIndex: 49, opacity: 0.9, pointerEvents: 'auto' }
+      return { y: frontY - peek, scale: 0.95, zIndex: 49, opacity: 1, pointerEvents: 'none' }
     }
     if (index === 2) {
-      return { y: 20, scale: 0.9, zIndex: 48, opacity: 0.75, pointerEvents: 'auto' }
+      return { y: frontY - 2 * peek, scale: 0.9, zIndex: 48, opacity: 1, pointerEvents: 'none' }
     }
     return {
-      y: 20,
+      y: frontY - 2 * peek,
       scale: 0.85,
       zIndex: Math.max(1, 47 - index),
       opacity: 0,
@@ -101,11 +123,11 @@ export function calculateCardTransform(
     }
   }
 
-  // 展开状态：计算前置卡片高度累加
-  let y = headerHeight
-  for (let i = 0; i < index; i++) {
-    const cardHeight = heights[i] ?? 44
-    y += cardHeight + gap
+  // 展开状态：旧通知向上排列，index 0 在最底部，index (count - 1) 在最顶部 (y = 0)
+  let y = frontY
+  for (let i = 1; i <= index; i++) {
+    const cardHeight = heights[i] ?? defaultHeight
+    y -= cardHeight + gap
   }
 
   return {
@@ -130,34 +152,11 @@ export function createToastStore(options?: {
     toasts: [],
     isHovered: false,
   }))
-  let dismissTimer: ReturnType<typeof setTimeout> | null = null
 
   const getState = (): ToastStoreState => store.getState()
 
   function clearTimer(): void {
-    if (dismissTimer !== null) {
-      clearTimeout(dismissTimer)
-      dismissTimer = null
-    }
-  }
-
-  function syncTimer(): void {
-    clearTimer()
-    const { toasts, isHovered } = getState()
-    // 规则 1：当存活的 Toast 数量 > 1 时，立即取消/冻结自动消失
-    if (toasts.length > 1) {
-      return
-    }
-
-    // 规则 2：当存活的 Toast 仅剩 1 条时，在非悬停状态下启动 5 秒倒计时
-    if (toasts.length === 1 && !isHovered) {
-      const singleToast = toasts[0]
-      if (!singleToast) return
-      const duration = singleToast.duration || defaultDuration
-      dismissTimer = setTimeout(() => {
-        dismiss(singleToast.id)
-      }, duration)
-    }
+    // 自动消失计时器已移除，所有通知改为用户手动逐条关闭；保留空实现以兼容调用方
   }
 
   function show(toastOptions: ShowToastOptions): string {
@@ -170,7 +169,7 @@ export function createToastStore(options?: {
     const now = Date.now()
     const state = getState()
 
-    // 规则 3：相同内容去重（短时间窗口内更新现有条目，不重复入栈）
+    // 规则 1：相同内容去重（短时间窗口内更新现有条目，不重复入栈）
     if (textKey) {
       const existingIndex = state.toasts.findIndex(
         (t) => t.tone === tone && t.textKey === textKey && now - t.timestamp < dedupeWindow,
@@ -182,13 +181,15 @@ export function createToastStore(options?: {
           ...existing,
           timestamp: now,
           message: toastOptions.message,
+          description: toastOptions.description,
           appearance: toastOptions.appearance,
           expiresAt: toastOptions.expiresAt,
           action: toastOptions.action,
           secondaryAction: toastOptions.secondaryAction,
+          onDismiss: toastOptions.onDismiss ?? existing.onDismiss,
+          showCloseButton: toastOptions.showCloseButton ?? existing.showCloseButton,
         }
         store.setState({ toasts: updated })
-        syncTimer()
         return existing.id
       }
     }
@@ -201,6 +202,7 @@ export function createToastStore(options?: {
       appearance: toastOptions.appearance,
       tone,
       message: toastOptions.message,
+      description: toastOptions.description,
       textKey,
       timestamp: now,
       duration: toastOptions.duration ?? defaultDuration,
@@ -212,20 +214,23 @@ export function createToastStore(options?: {
     }
 
     let nextToasts: ToastItem[]
+    const removedList: ToastItem[] = []
     if (existingByIdIndex >= 0) {
       nextToasts = [...state.toasts]
       nextToasts[existingByIdIndex] = newItem
     } else {
       nextToasts = [newItem, ...state.toasts]
-      // 规则 4：最多保留 maxToasts 条（默认 5 条）
-      if (nextToasts.length > maxToasts) {
+      // 规则 2：最多保留 maxToasts 条（默认 5 条），超出上限时淘汰最旧的一条
+      while (nextToasts.length > maxToasts) {
         const removed = nextToasts.pop()
-        removed?.onDismiss?.()
+        if (removed) removedList.push(removed)
       }
     }
 
     store.setState({ toasts: nextToasts })
-    syncTimer()
+    for (const removed of removedList) {
+      removed.onDismiss?.()
+    }
     return id
   }
 
@@ -233,9 +238,8 @@ export function createToastStore(options?: {
     const state = getState()
     const item = state.toasts.find((t) => t.id === id)
     if (!item) return
-    item.onDismiss?.()
     store.setState({ toasts: state.toasts.filter((t) => t.id !== id) })
-    syncTimer()
+    item.onDismiss?.()
   }
 
   function dismissAll(): void {
@@ -245,13 +249,11 @@ export function createToastStore(options?: {
     for (const item of current) {
       item.onDismiss?.()
     }
-    syncTimer()
   }
 
   function setHovered(hovered: boolean): void {
     if (getState().isHovered === hovered) return
     store.setState({ isHovered: hovered })
-    syncTimer()
   }
 
   return {

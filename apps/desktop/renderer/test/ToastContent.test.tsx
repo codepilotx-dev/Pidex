@@ -24,3 +24,13 @@ test('toast keeps technical details collapsed without losing the original error'
   expect(actionMarkup).toContain('<span>已归档的聊天</span>')
   expect(actionMarkup).not.toContain('line-clamp-2')
 })
+
+
+test('toast renders its title and optional secondary description', () => {
+  const markup = renderToStaticMarkup(
+    <ToastContent message="上传完成" description="已保存到工作区" isError={false} />,
+  )
+  expect(markup).toContain('上传完成')
+  expect(markup).toContain('tst-description')
+  expect(markup).toContain('已保存到工作区')
+})

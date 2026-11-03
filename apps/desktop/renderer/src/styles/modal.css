@@ -238,3 +238,117 @@
   /* ConfirmationDialog surface typography lives as Tailwind utilities in
    * components/ui/ConfirmationDialog.tsx. */
 }
+
+/* ══ Toast stack ══════════════════════════════════════════
+   Three toasts stacked, fanning into a list on hover. Tones are the
+   reference's: the front one white, the tucked ones a barely-there
+   2% grey — both the same, so they read as paper behind paper rather
+   than a darkening ramp. Where the reference separates them with a
+   soft shadow, this uses a faint hairline (no drop shadows on the
+   bench). Status icons are their own solid colours, never faded.
+   Pidex maps the paper and ink to the active theme's system tokens. */
+@layer primitives {
+  .tst {
+    font-family: var(--cpx-sys-font-family-sans);
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .tst-toast {
+    width: 100%;
+    min-height: calc(var(--cpx-sys-space-8) * 2);
+    box-sizing: border-box;
+    padding: var(--cpx-sys-space-3) var(--cpx-sys-space-3) var(--cpx-sys-space-3) var(--cpx-sys-space-4);
+    border-radius: var(--cpx-sys-radius-lg);
+    background: var(--cpx-sys-color-surface-panel);
+    transition: background-color var(--cpx-sys-motion-panel) ease, box-shadow var(--cpx-sys-motion-panel) ease;
+  }
+
+  /* tucked: the same near-white for both, and a faint edge so each
+     sliver has a line to read by */
+  .tst:not([data-open]) .tst-toast:not([data-front]) {
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, var(--cpx-sys-color-surface-panel));
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, transparent);
+  }
+
+  .tst-content {
+    display: flex;
+    align-items: center;
+    gap: var(--cpx-sys-space-3);
+    transition: opacity var(--cpx-sys-motion-panel) ease;
+  }
+
+  /* only the front one is read while stacked; the rest are slivers */
+  .tst:not([data-open]) .tst-toast:not([data-front]) > * {
+    opacity: 0;
+  }
+
+  .tst-description {
+    color: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 52%, var(--cpx-sys-color-surface-panel));
+  }
+
+  .tst-icon {
+    flex: none;
+    display: grid;
+    place-items: center;
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
+  .tst-toast[data-kind="success"] .tst-icon {
+    color: var(--cpx-sys-color-success-fg);
+  }
+
+  .tst-toast[data-kind="error"] .tst-icon {
+    color: var(--cpx-sys-color-danger-fg);
+  }
+
+  .tst-x {
+    flex: none;
+    width: var(--cpx-sys-space-7);
+    height: var(--cpx-sys-space-7);
+    display: grid;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-radius: var(--cpx-sys-radius-full);
+    background: none;
+    color: var(--cpx-sys-color-fg-secondary);
+    cursor: pointer;
+    transition: background-color var(--cpx-sys-motion-feedback) ease, color var(--cpx-sys-motion-feedback) ease;
+  }
+
+  .tst-x:hover {
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, var(--cpx-sys-color-surface-panel));
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .tst-x:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 2px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tst-toast,
+    .tst-content,
+    .tst-x {
+      transition: none;
+    }
+  }
+}
+
+@layer overrides {
+  .tst-act {
+    background: color-mix(in srgb, var(--cpx-sys-color-fg-primary) 6%, var(--cpx-sys-color-surface-panel));
+    color: inherit;
+    transition: scale var(--cpx-sys-motion-feedback) cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  .tst-act:active {
+    scale: 0.96;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .tst-act {
+      transition: none;
+    }
+  }
+}

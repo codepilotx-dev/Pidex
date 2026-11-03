@@ -1,36 +1,85 @@
+/**
+ * Toast stack interaction inspired by Bencho (https://bencho.dev)
+ *
+ * MIT License
+ * Copyright (c) 2026 Lorenzo Cabra
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * ── Toast stack ──────────────────────────────────────────
+ * The newest toast in front at the bottom, earlier toasts tucked behind
+ * with a sliver showing above it, a step smaller each and a subtle paper tone.
+ * Point at or focus into the frame and it fans out into a list upwards;
+ * move away and it gathers back down.
+ *
+ * ── ONE SPRING, THREE PLACES ─────────────────────────────
+ * Every toast heads for its place on the same spring, a touch under
+ * critical so it settles with a hint of give.
+ *
+ * ── HOVER & FOCUS THE WHOLE FRAME ────────────────────────
+ * The frame reserves the full expanded list's size. Hovering or focusing
+ * anywhere in the frame keeps the stack open across gaps between cards.
+ */
+
 import type React from 'react'
 import { useStore } from 'zustand/react'
-import { useState, useRef, useLayoutEffect, useEffect } from 'react'
+import { useState, useRef, useLayoutEffect, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'motion/react'
-import { CheckCheck, CircleAlert, X } from 'lucide-react'
-import { toastStore, calculateCardTransform, toastExpiryDelayMs, type ToastItem } from './ToastState.js'
+import { CircleX, CircleCheck, Info, X } from 'lucide-react'
+import {
+  toastStore,
+  calculateCardTransform,
+  toastExpiryDelayMs,
+  type ToastItem,
+  type ToastCardTransform,
+} from './ToastState.js'
 import { usePrefersReducedMotion } from '../../hooks/UsePrefersReducedMotion.js'
 import { Button } from '../ui/Button.js'
-
-import { Toast } from '../ui/Toast.js'
 import { ToastContent } from './ToastContent.js'
+
+/* a touch under critical: it settles with a hint of give, no wobble */
+const SPRING = { type: 'spring', stiffness: 380, damping: 34, mass: 1 } as const
+const GAP = 4
+const PEEK = 10
 
 export function ToastStack(): React.ReactNode {
   const toasts = useStore(toastStore, (state) => state.toasts)
-  const isHovered = useStore(toastStore, (state) => state.isHovered)
   const reducedMotion = usePrefersReducedMotion()
   const [heights, setHeights] = useState<Record<string, number>>({})
-  const [isBtnHovered, setIsBtnHovered] = useState(false)
+  const [isHovered, setIsHovered] = useState(false)
+  const [isFocused, setIsFocused] = useState(false)
+  const [isOverflowing, setIsOverflowing] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
-  const isExpanded = isHovered && toasts.length > 1
-  const heightArray = toasts.map((t) => heights[t.id] ?? 40)
+  const isExpanded = (isHovered || isFocused) && toasts.length > 1
+  const heightArray = toasts.map((t) => heights[t.id] ?? 64)
 
   let totalExpandedHeight = 0
   for (let i = 0; i < toasts.length; i++) {
-    totalExpandedHeight += (heightArray[i] ?? 40) + (i < toasts.length - 1 ? 8 : 0)
+    totalExpandedHeight += (heightArray[i] ?? 64) + (i < toasts.length - 1 ? GAP : 0)
   }
 
-  // 折叠状态下高度：顶部卡片高度 + 24px 露出余量
-  const collapsedHeight = (heightArray[0] ?? 40) + 24
+  const handleHeightChange = useCallback((id: string, h: number) => {
+    setHeights((prev) => (prev[id] === h ? prev : { ...prev, [id]: h }))
+  }, [])
 
-  const topToastId = toasts[0]?.id
-  const topToastHeight = topToastId ? (heights[topToastId] ?? 40) : 40
+  useLayoutEffect(() => {
+    if (!containerRef.current) return
+    const isOver = isExpanded && totalExpandedHeight > containerRef.current.clientHeight
+    setIsOverflowing(isOver)
+    if (isOver && isExpanded) {
+      containerRef.current.scrollTop =
+        containerRef.current.scrollHeight - containerRef.current.clientHeight
+    }
+  }, [isExpanded, totalExpandedHeight])
 
   if (toasts.length === 0) {
     return null
@@ -39,95 +88,55 @@ export function ToastStack(): React.ReactNode {
   return (
     <div
       ref={containerRef}
-      className={`toast-stack-container tw:absolute tw:top-2 tw:left-1/2 tw:z-toast tw:-translate-x-1/2 tw:w-[min(420px,calc(100%-1rem))] tw:transition-all ${
-        isExpanded
-          ? 'tw:pointer-events-auto tw:overflow-visible tw:py-0.5 tw:px-0.5'
-          : 'tw:pointer-events-none tw:overflow-visible'
+      data-open={isExpanded || undefined}
+      className={`tst toast-stack-container tw:absolute tw:top-2 tw:left-1/2 tw:z-toast tw:-translate-x-1/2 tw:w-[min(300px,calc(100%-1rem))] tw:max-h-[min(calc(100vh-2rem),720px)] tw:[-webkit-app-region:no-drag] ${
+        isOverflowing ? 'tw:overflow-y-auto tw:overflow-x-hidden' : 'tw:overflow-visible'
       }`}
-      style={isExpanded ? undefined : { height: collapsedHeight }}
-      onMouseEnter={() => toastStore.setHovered(true)}
-      onMouseLeave={() => {
-        toastStore.setHovered(false)
-        setIsBtnHovered(false)
+      style={{
+        height: totalExpandedHeight,
+      }}
+      role="region"
+      aria-label="通知列表"
+      onPointerOver={() => {
+        setIsHovered(true)
+        toastStore.setHovered(true)
+      }}
+      onPointerOut={(e) => {
+        const to = e.relatedTarget as Node | null
+        if (!to || !containerRef.current?.contains(to)) {
+          setIsHovered(false)
+          toastStore.setHovered(false)
+        }
+      }}
+      onFocus={() => {
+        setIsFocused(true)
+        toastStore.setHovered(true)
+      }}
+      onBlur={(e) => {
+        const to = e.relatedTarget as Node | null
+        if (!to || !containerRef.current?.contains(to)) {
+          setIsFocused(false)
+          toastStore.setHovered(false)
+        }
       }}
     >
-      {/* 始终与最顶层消息垂直居中对齐的 companion 徽章按钮（当存在多条消息时显示） */}
-      <div
-        className="toast-stack-badge-anchor tw:absolute tw:left-[calc(100%+8px)] tw:top-0 tw:flex tw:items-center tw:pointer-events-none tw:z-toast tw:transition-[height] tw:duration-150"
-        style={{ height: topToastHeight }}
-      >
-        <AnimatePresence>
-          {toasts.length > 1 ? (
-            <motion.button
-              type="button"
-              title="全部标记为已读"
-              aria-label="全部标记为已读"
-              initial={reducedMotion ? false : { opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={reducedMotion ? undefined : { opacity: 0, scale: 0.8 }}
-              transition={{ duration: 0.15 }}
-              className="toast-stack-badge-btn tw:pointer-events-auto tw:h-10 tw:min-w-10 tw:px-2.5 tw:rounded-[var(--cpx-sys-radius-xl)] tw:border tw:border-app-border-subtle tw:bg-app-glass tw:backdrop-blur-[18px] tw:shadow-lg tw:flex tw:items-center tw:justify-center tw:cursor-pointer tw:select-none tw:hover:border-app-border tw:hover:bg-app-hover tw:transition-colors tw:[-webkit-app-region:no-drag] tw:before:absolute tw:before:-left-2 tw:before:top-0 tw:before:w-2 tw:before:h-full tw:before:content-['']"
-              onClick={(e) => {
-                e.stopPropagation()
-                toastStore.dismissAll()
-              }}
-              onMouseEnter={() => {
-                setIsBtnHovered(true)
-                toastStore.setHovered(true)
-              }}
-              onMouseLeave={() => {
-                setIsBtnHovered(false)
-              }}
-            >
-              <AnimatePresence mode="wait" initial={false}>
-                {isBtnHovered ? (
-                  <motion.span
-                    key="check"
-                    initial={reducedMotion ? false : { opacity: 0, scale: 0.7 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={reducedMotion ? undefined : { opacity: 0, scale: 0.7 }}
-                    transition={{ duration: 0.12 }}
-                    className="tw:flex tw:items-center tw:justify-center tw:text-app-text"
-                  >
-                    <CheckCheck className="tw:w-4 tw:h-4" />
-                  </motion.span>
-                ) : (
-                  <motion.span
-                    key="count"
-                    initial={reducedMotion ? false : { opacity: 0, scale: 0.7 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    exit={reducedMotion ? undefined : { opacity: 0, scale: 0.7 }}
-                    transition={{ duration: 0.12 }}
-                    className="tw:type-label tw:text-app-text"
-                  >
-                    {toasts.length}
-                  </motion.span>
-                )}
-              </AnimatePresence>
-            </motion.button>
-          ) : null}
-        </AnimatePresence>
-      </div>
-
-      {/* 卡片列表 */}
       <div
         className="toast-stack-body tw:relative tw:w-full"
         style={{ height: totalExpandedHeight }}
       >
         <AnimatePresence initial={false}>
-          {toasts.map((toast, index) => {
-            const transform = calculateCardTransform(index, isExpanded, heightArray, 8, 0)
+          {toasts.map((toastItem, index) => {
+            const transform = calculateCardTransform(index, isExpanded, heightArray, GAP, PEEK)
 
             return (
               <ToastCardWrapper
-                key={toast.id}
-                toast={toast}
+                key={toastItem.id}
+                toast={toastItem}
+                index={index}
                 transform={transform}
                 isExpanded={isExpanded}
                 reducedMotion={reducedMotion}
-                onHeightChange={(h) => {
-                  setHeights((prev) => (prev[toast.id] === h ? prev : { ...prev, [toast.id]: h }))
-                }}
+                onHeightChange={handleHeightChange}
               />
             )
           })}
@@ -139,22 +148,26 @@ export function ToastStack(): React.ReactNode {
 
 function ToastCardWrapper({
   toast,
+  index,
   transform,
   isExpanded,
   reducedMotion,
   onHeightChange,
 }: {
   toast: ToastItem
-  transform: ReturnType<typeof calculateCardTransform>
+  index: number
+  transform: ToastCardTransform
   isExpanded: boolean
   reducedMotion: boolean
-  onHeightChange: (height: number) => void
+  onHeightChange: (id: string, height: number) => void
 }): React.ReactNode {
   const cardRef = useRef<HTMLDivElement>(null)
   const { expiresAt } = toast
+  const front = index === 0
+
   /**
-   * 带动作期限的提示（如项目移除撤销）到点后必须禁用动作：期限是服务端事实，
-   * 不因多条通知冻结倒计时、悬停暂停或退出动画而延长，避免过期后点击才失败。
+   * 带动作期限的提示到点后必须禁用动作：期限是服务端事实，
+   * 不因多条通知或悬停暂停而延长，避免过期后点击才失败。
    */
   const [expired, setExpired] = useState(() => toastExpiryDelayMs(expiresAt) === 0)
 
@@ -172,111 +185,129 @@ function ToastCardWrapper({
 
   useLayoutEffect(() => {
     if (cardRef.current) {
-      onHeightChange(cardRef.current.offsetHeight)
+      onHeightChange(toast.id, cardRef.current.offsetHeight)
     }
-  })
+  }, [toast.id, onHeightChange])
 
   useEffect(() => {
-    if (!cardRef.current) return
+    if (!cardRef.current || typeof ResizeObserver === 'undefined') return
     const ro = new ResizeObserver((entries) => {
       for (const entry of entries) {
         if (entry.target === cardRef.current) {
-          onHeightChange(cardRef.current.offsetHeight)
+          onHeightChange(toast.id, cardRef.current.offsetHeight)
         }
       }
     })
     ro.observe(cardRef.current)
     return () => ro.disconnect()
-  }, [onHeightChange])
+  }, [toast.id, onHeightChange])
 
   const isError = toast.tone === 'error'
+  const isStatus = toast.tone === 'status'
+
+  // 折叠时后层内容对键盘隐藏，避免操作被遮挡的按钮；同时保留整卡可访问播报语义
+  const isInteractive = isExpanded || front
 
   return (
     <motion.div
       ref={cardRef}
-      className="toast-card-wrapper tw:absolute tw:left-0 tw:right-0 tw:w-full tw:flex tw:justify-center"
+      className="toast-card-wrapper tw:absolute tw:top-0 tw:left-0 tw:right-0 tw:w-full"
       style={{
         zIndex: transform.zIndex,
         pointerEvents: transform.pointerEvents,
+        transformOrigin: '50% 0',
       }}
-      onMouseEnter={() => toastStore.setHovered(true)}
       animate={{
         y: transform.y,
         scale: transform.scale,
         opacity: transform.opacity,
+        x: 0,
       }}
       initial={
         reducedMotion
           ? false
           : {
-              y: transform.y - 8,
-              scale: 0.95,
+              y: transform.y + 24,
+              scale: 1,
               opacity: 0,
+              x: 0,
             }
       }
       exit={
         reducedMotion
-          ? undefined
+          ? { opacity: 0 }
           : {
               opacity: 0,
-              scale: 0.9,
-              y: transform.y - 8,
-              transition: { duration: 0.15 },
+              scale: transform.scale,
+              x: 60,
+              y: transform.y,
+              transition: { duration: 0.22, ease: [0.4, 0, 1, 1] },
             }
       }
-      transition={reducedMotion ? { duration: 0 } : { duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+      transition={reducedMotion ? { duration: 0 } : SPRING}
     >
-      <Toast
-        appearance={toast.appearance}
+      <div
+        className="tst-toast"
+        data-front={front || undefined}
+        data-kind={isStatus ? 'success' : toast.tone}
         role={isError ? 'alert' : 'status'}
         aria-live={isError ? 'assertive' : 'polite'}
-        className={`toast-card tw:justify-between tw:max-h-[min(70vh,520px)] ${toast.appearance === 'action' ? 'tw:w-fit tw:max-w-full tw:mx-auto' : 'tw:w-full'}`}
       >
-        {isError ? (
-          <CircleAlert aria-hidden="true" className="tw:mt-1 tw:size-4 tw:shrink-0 tw:self-start tw:text-app-danger-fg" />
-        ) : null}
-        <ToastContent message={toast.message} isError={isError} />
+        <div className="tst-content" inert={!isInteractive}>
+          <span className="tst-icon">
+            {isError ? <CircleX size={18} strokeWidth={2} aria-hidden="true" />
+              : isStatus ? <CircleCheck size={18} strokeWidth={2} aria-hidden="true" />
+                : <Info size={18} strokeWidth={2} aria-hidden="true" />}
+          </span>
 
-        <div className="toast-actions tw:flex tw:items-center tw:gap-1.5 tw:shrink-0 tw:self-start">
-          {toast.action ? (
-            <Button
-              variant={toast.appearance === 'action' ? 'secondary' : 'ghost'}
-              size={toast.appearance === 'action' ? 'sm' : 'compact'}
-              disabled={toast.action.disabled || expired}
-              onClick={toast.action.onClick}
-              type="button"
-            >
-              {toast.action.label}
-            </Button>
-          ) : null}
+          <ToastContent message={toast.message} description={toast.description} isError={isError} />
 
-          {toast.secondaryAction ? (
-            <Button
-              variant={toast.appearance === 'action' ? 'primary' : 'ghost'}
-              size={toast.appearance === 'action' ? 'sm' : 'compact'}
-              disabled={toast.secondaryAction.disabled || expired}
-              onClick={toast.secondaryAction.onClick}
-              type="button"
-            >
-              {toast.secondaryAction.label}
-            </Button>
-          ) : null}
+          <div className="toast-actions tw:flex tw:items-center tw:gap-1 tw:shrink-0">
+            {toast.action ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                shape="pill"
+                className="tst-act"
+                disabled={toast.action.disabled || expired}
+                tabIndex={isInteractive ? 0 : -1}
+                onClick={toast.action.onClick}
+                type="button"
+              >
+                {toast.action.label}
+              </Button>
+            ) : null}
 
-          {toast.showCloseButton !== false ? (
-            <Button
-              isIconOnly
-              color="ghostSecondary"
-              size={toast.appearance === 'action' ? 'sm' : 'compact'}
-              title={isError ? '关闭错误提示' : '关闭'}
-              aria-label={isError ? '关闭错误提示' : '关闭'}
-              onClick={() => toastStore.dismiss(toast.id)}
-              type="button"
-            >
-              <X aria-hidden="true" />
-            </Button>
-          ) : null}
+            {toast.secondaryAction ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                shape="pill"
+                className="tst-act"
+                disabled={toast.secondaryAction.disabled || expired}
+                tabIndex={isInteractive ? 0 : -1}
+                onClick={toast.secondaryAction.onClick}
+                type="button"
+              >
+                {toast.secondaryAction.label}
+              </Button>
+            ) : null}
+
+            {toast.showCloseButton !== false ? (
+              <button
+                className="tst-x"
+                title={isError ? '关闭错误提示' : '关闭'}
+                aria-label={isError ? '关闭错误提示' : '关闭'}
+                tabIndex={isInteractive ? 0 : -1}
+                onClick={() => toastStore.dismiss(toast.id)}
+                type="button"
+              >
+                <X size={16} strokeWidth={2} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
         </div>
-      </Toast>
+      </div>
     </motion.div>
   )
 }
