@@ -2696,13 +2696,6 @@ mod tests {
         ace_size: u16,
     }
 
-    #[repr(C)]
-    struct AccessAllowedAce {
-        header: AceHeader,
-        mask: u32,
-        sid_start: u32,
-    }
-
     fn matching_grants(
         path: &Path,
         sid: *mut c_void,
@@ -2794,19 +2787,21 @@ mod tests {
                     "failed to inspect a perception worker ACL entry in a test",
                 ));
             }
-            // GetAce 成功且返回非空后，内容按 AccessAllowedAce 布局有效。
-            // 这里按值复制，避免在该指针上构造长期引用。
-            let ace = unsafe { std::ptr::read_unaligned(raw.cast::<AccessAllowedAce>()) };
-            if ace.header.ace_type != 0 {
+            // 只按 ACE 头部读取类型：GetAce 保证指针指向一个完整 ACE，头部是定长的。
+            let ace_type = unsafe { *(raw.cast::<u8>()) };
+            if ace_type != 0 {
                 continue;
             }
+            // ACCESS_ALLOWED_ACE 的 SID 紧跟在 4 字节 mask 之后：头部 4 字节 + mask 4 字节。
             let ace_sid = unsafe {
                 raw.cast::<u8>()
-                    .add(std::mem::offset_of!(AccessAllowedAce, sid_start))
+                    .add(std::mem::size_of::<AceHeader>() + std::mem::size_of::<u32>())
                     .cast()
             };
+            let mask = unsafe { std::ptr::read_unaligned(raw.cast::<u8>().add(4).cast::<u32>()) };
+            let ace_flags = unsafe { *(raw.cast::<u8>().add(1)) };
             if unsafe { EqualSid(ace_sid, sid) } != FALSE {
-                grants.push((ace.mask, ace.header.ace_flags));
+                grants.push((mask, ace_flags));
             }
         }
         Ok((control & 0x1000 != 0, grants))
