@@ -25,6 +25,14 @@ describe('safeTurnError', () => {
     expect(safeTurnError(new Error(''))).toBeNull()
   })
 
+  test('rejects oversized messages without scanning them', () => {
+    // 超长输入既没有展示价值，也会让栈帧正则有回溯风险。
+    const started = performance.now()
+    expect(safeTurnError('x'.repeat(200_001))).toBeNull()
+    expect(safeTurnError(`${'x.'.repeat(100_000)}`)).toBeNull()
+    expect(performance.now() - started).toBeLessThan(1_000)
+  })
+
   test('rejects messages containing stack traces', () => {
     // V8 / Node format
     expect(

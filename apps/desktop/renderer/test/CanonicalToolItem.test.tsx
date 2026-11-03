@@ -1713,5 +1713,14 @@ describe('canonical tool item display', () => {
 
 /** 从渲染出的 HTML 里取纯文本，用于断言可见文案；这不是清洗器。 */
 function textContentOf(html: string): string {
-  return html.replace(/<[^>]*>/g, '')
+  // 按字符逐个剔除标签，避免 `<[^>]*>` 这类多字符删除触发
+  // CodeQL incomplete-multi-character-sanitization（本函数不用于安全场景）。
+  let text = ''
+  let insideTag = false
+  for (const char of html) {
+    if (char === '<') insideTag = true
+    else if (char === '>') insideTag = false
+    else if (!insideTag) text += char
+  }
+  return text
 }
