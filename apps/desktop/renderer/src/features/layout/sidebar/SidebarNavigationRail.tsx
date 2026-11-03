@@ -52,9 +52,7 @@ const RAIL_SKELETON_GROUP_COUNTS = [3, 3] as const
 
 export function SidebarNavigationRail(props: Props): ReactNode {
   const settingsLoaded = useDesktopSettingsField((settings) => settings.settingsLoaded)
-  const initiallyReady = useEverOpened(
-    settingsLoaded && props.capabilityState.status !== 'unknown',
-  )
+  const initiallyReady = useEverOpened(settingsLoaded && props.capabilityState.status !== 'unknown')
   const { t } = useLocale()
   return (
     <nav

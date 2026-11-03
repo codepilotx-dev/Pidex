@@ -1,5 +1,4 @@
 import { afterEach, describe, expect, test } from 'bun:test'
-import { afterEach, describe, expect, test } from 'bun:test'
 import type { ThreadPullRequestList, ThreadPullRequestSummary } from '@pidex/shared/thread'
 import {
   THREAD_PULL_REQUEST_REFRESH_INTERVALS_MS,

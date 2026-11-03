@@ -53,7 +53,11 @@ describe('首页发起设置', () => {
       settings: { createWorktree: false, branch: null },
       workspace: GIT_WORKSPACE,
     })
-    expect(plan).toEqual({ execution: { kind: 'local' }, checkoutBranch: null, blockedReason: null })
+    expect(plan).toEqual({
+      execution: { kind: 'local' },
+      checkoutBranch: null,
+      blockedReason: null,
+    })
   })
 
   test('选择分支只写入草稿，计划里保留待检出的分支', () => {
@@ -64,9 +68,7 @@ describe('首页发起设置', () => {
     })
     const settings = readComposerLaunchSettings(drafts.get('home'), 'project-a')
     expect(settings.branch).toBe('feature/launch')
-    expect(
-      planComposerLaunch({ settings, workspace: GIT_WORKSPACE }),
-    ).toEqual({
+    expect(planComposerLaunch({ settings, workspace: GIT_WORKSPACE })).toEqual({
       execution: { kind: 'local' },
       checkoutBranch: 'feature/launch',
       blockedReason: null,
@@ -91,7 +93,11 @@ describe('首页发起设置', () => {
     const afterFailure: string[] = []
     await expect(
       createComposerLaunchSession({
-        plan: { execution: { kind: 'local' }, checkoutBranch: 'feature/launch', blockedReason: null },
+        plan: {
+          execution: { kind: 'local' },
+          checkoutBranch: 'feature/launch',
+          blockedReason: null,
+        },
         operationId: 'op-2',
         checkout: async () => {
           throw new Error('本地修改会被覆盖')
@@ -174,9 +180,9 @@ describe('首页发起设置', () => {
     const restored = withLaunchAttempt(drafts.get('home'), drafts.get('home').launchAttempt)
     expect(restored.launchAttempt?.operationId).toBe(operationId)
     // 回退后再次发送仍得到同一个 operationId。
-    expect(
-      drafts.beginLaunchAttempt('home', { projectKey: 'project-a', signature }),
-    ).toBe(operationId)
+    expect(drafts.beginLaunchAttempt('home', { projectKey: 'project-a', signature })).toBe(
+      operationId,
+    )
   })
 
   test('草稿按项目隔离设置', () => {

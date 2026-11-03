@@ -1,5 +1,10 @@
 import { ModelRecommendationStore } from './ModelRecommendationStore'
-import { ProviderDirectoryStore, directoryBaseUrlKey, directoryProviderConfig, type DirectoryProvider } from './ProviderDirectoryStore'
+import {
+  ProviderDirectoryStore,
+  directoryBaseUrlKey,
+  directoryProviderConfig,
+  type DirectoryProvider,
+} from './ProviderDirectoryStore'
 import { applyRecommendation, type RecommendationInput } from './ModelRecommendations'
 import {
   applyModelOptionMap,
@@ -338,10 +343,16 @@ export class PiModelService {
       .map((provider) => {
         const configured = config.providers[provider.id]
         const entry = directory.get(provider.id)
-        const userCustom = configured?.kind === 'custom' && !configured.directorySource && configuredIDs.has(provider.id)
+        const userCustom =
+          configured?.kind === 'custom' &&
+          !configured.directorySource &&
+          configuredIDs.has(provider.id)
         const kind = userCustom ? 'custom' : 'builtin'
-        const origin: Provider.CatalogOrigin = userCustom ? 'user' :
-          (configured?.kind === 'custom' ? configured.directorySource : undefined) ?? entry?.origin ?? 'pi-bundled'
+        const origin: Provider.CatalogOrigin = userCustom
+          ? 'user'
+          : ((configured?.kind === 'custom' ? configured.directorySource : undefined) ??
+            entry?.origin ??
+            'pi-bundled')
         const info = piProviderToInfo(
           provider,
           kind,
@@ -351,21 +362,36 @@ export class PiModelService {
           origin,
         )
         directory.delete(provider.id)
-        const defaultApi = configured?.kind === 'builtin' && configured.protocol ? configured.protocol :
-          configured?.kind === 'custom' ? Object.keys(configured.endpoints ?? {})[0] ?? Object.values(configured.models)[0]?.api ?? entry?.api :
-          entry?.api ?? info.source.apis[0]
-        return kind === 'builtin' && entry ? {
-          ...info, name: configured?.kind === 'custom' ? configured.name : entry.name,
-          source: {
-            ...info.source,
-            ...(defaultApi ? { defaultApi } : {}),
-            ...(entry.baseUrl ? { endpoints: {
-              ...info.source.endpoints, ...entry.endpoints,
-              ...(defaultApi ? { [defaultApi]: configured?.baseUrl ?? entry.baseUrl } : {}),
-              ...configured?.endpoints,
-            } } : {}),
-          },
-        } : info
+        const defaultApi =
+          configured?.kind === 'builtin' && configured.protocol
+            ? configured.protocol
+            : configured?.kind === 'custom'
+              ? (Object.keys(configured.endpoints ?? {})[0] ??
+                Object.values(configured.models)[0]?.api ??
+                entry?.api)
+              : (entry?.api ?? info.source.apis[0])
+        return kind === 'builtin' && entry
+          ? {
+              ...info,
+              name: configured?.kind === 'custom' ? configured.name : entry.name,
+              source: {
+                ...info.source,
+                ...(defaultApi ? { defaultApi } : {}),
+                ...(entry.baseUrl
+                  ? {
+                      endpoints: {
+                        ...info.source.endpoints,
+                        ...entry.endpoints,
+                        ...(defaultApi
+                          ? { [defaultApi]: configured?.baseUrl ?? entry.baseUrl }
+                          : {}),
+                        ...configured?.endpoints,
+                      },
+                    }
+                  : {}),
+              },
+            }
+          : info
       })
       .map(clone)
     const candidates: Provider.Info[] = [
@@ -375,25 +401,40 @@ export class PiModelService {
         name: entry.name,
         catalogOrigin: entry.origin,
         source: {
-          type: 'pi', kind: 'builtin', apis: [],
+          type: 'pi',
+          kind: 'builtin',
+          apis: [],
           ...(entry.api ? { defaultApi: entry.api } : {}),
           ...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
         },
         auth: { apiKey: true, oauth: false },
-        availability: { status: 'unavailable', reason: entry.api ? 'unresolved-endpoint' : 'missing-api' },
+        availability: {
+          status: 'unavailable',
+          reason: entry.api ? 'unresolved-endpoint' : 'missing-api',
+        },
       })),
     ]
     const keys = new Set<string>()
     return candidates
-      .sort((a, b) => Number(saved.has(String(b.id))) - Number(saved.has(String(a.id))) ||
-        Number(!this.builtinProviderIDs.has(String(a.id))) - Number(!this.builtinProviderIDs.has(String(b.id))) ||
-        Number(a.catalogOrigin === 'models-dev') - Number(b.catalogOrigin === 'models-dev') || String(a.id).localeCompare(String(b.id)))
+      .sort(
+        (a, b) =>
+          Number(saved.has(String(b.id))) - Number(saved.has(String(a.id))) ||
+          Number(!this.builtinProviderIDs.has(String(a.id))) -
+            Number(!this.builtinProviderIDs.has(String(b.id))) ||
+          Number(a.catalogOrigin === 'models-dev') - Number(b.catalogOrigin === 'models-dev') ||
+          String(a.id).localeCompare(String(b.id)),
+      )
       .filter((provider) => {
         if (provider.catalogOrigin === 'user') return true
         const api = provider.source.defaultApi
-        const key = directoryBaseUrlKey((api ? provider.source.endpoints?.[api] : undefined) ?? provider.source.baseUrl)
+        const key = directoryBaseUrlKey(
+          (api ? provider.source.endpoints?.[api] : undefined) ?? provider.source.baseUrl,
+        )
         if (!key) return true
-        if (saved.has(String(provider.id))) { keys.add(key); return true }
+        if (saved.has(String(provider.id))) {
+          keys.add(key)
+          return true
+        }
         if (keys.has(key)) return false
         keys.add(key)
         return true
@@ -510,10 +551,7 @@ export class PiModelService {
         `Model ${providerID}/${modelID} was not found`,
       )
     }
-    if (
-      ref.variant &&
-      !supportedThinkingLevels(model).includes(String(ref.variant))
-    ) {
+    if (ref.variant && !supportedThinkingLevels(model).includes(String(ref.variant))) {
       throw new PiModelServiceError(
         'VARIANT_NOT_FOUND',
         `Variant ${providerID}/${modelID}/${ref.variant} was not found`,
@@ -667,16 +705,16 @@ export class PiModelService {
       providers: this.pi
         .getProviders()
         .filter(
-          (provider) =>
-            provider.id === providerID &&
-            this.providerEnabled(provider.id, config),
+          (provider) => provider.id === providerID && this.providerEnabled(provider.id, config),
         )
         .map((provider) => provider.id),
     })
     if (result.errors.size > 0) {
       const failures = [...result.errors].map(([provider, error]) => {
         const httpStatus = /\bHTTP (\d{3})\b/.exec(error.message)?.[1]
-        const category = providerFailureCategory(httpStatus ? { status: Number(httpStatus) } : error)
+        const category = providerFailureCategory(
+          httpStatus ? { status: Number(httpStatus) } : error,
+        )
         const discoveryReason = new Map([
           ['Model discovery response exceeds 1 MiB', '模型列表响应超过 1 MiB'],
           ['Model discovery returned no body', '模型列表响应为空'],
@@ -711,9 +749,15 @@ export class PiModelService {
     try {
       await this.directory.refresh()
     } catch (cause) {
-      this.options.logger?.warn('provider.directory.refresh.failed', { reason: cause instanceof AgentError ? cause.message : 'DIRECTORY_CACHE_UNAVAILABLE' })
+      this.options.logger?.warn('provider.directory.refresh.failed', {
+        reason: cause instanceof AgentError ? cause.message : 'DIRECTORY_CACHE_UNAVAILABLE',
+      })
       if (cause instanceof AgentError) throw cause
-      throw new AgentError('PROVIDER_UNAVAILABLE', '供应商目录更新失败，已保留现有目录，请稍后重试。', 502)
+      throw new AgentError(
+        'PROVIDER_UNAVAILABLE',
+        '供应商目录更新失败，已保留现有目录，请稍后重试。',
+        502,
+      )
     }
     await this.reload()
   }
@@ -852,7 +896,10 @@ export class PiModelService {
       // ZCode 优先于 models.dev 推荐：逐字段覆盖，缺失继续继承。
       const zcode = resolveZCodeOptionSpecs({ modelId: model.id, api: model.api, baseUrl })
       const recommended = zcode
-        ? { ...baseRecommended, optionSpecs: overlayRecommendedOptionSpecs(baseRecommended.optionSpecs, zcode) }
+        ? {
+            ...baseRecommended,
+            optionSpecs: overlayRecommendedOptionSpecs(baseRecommended.optionSpecs, zcode),
+          }
         : baseRecommended
       const applied = applyRecommendation(model, recommended, model.smartConfig.pinned)
       // 用户显式配置优先于推荐；只有缺失时才从推荐（含 ZCode）继承。
@@ -881,7 +928,10 @@ export class PiModelService {
         const compiled =
           model && typeof model === 'object' ? this.compiledOptionMap(model as object) : null
         if (!compiled) return original(model, context, options)
-        const opts = (options && typeof options === 'object' ? options : {}) as Record<string, unknown>
+        const opts = (options && typeof options === 'object' ? options : {}) as Record<
+          string,
+          unknown
+        >
         const reasoningLevel = typeof opts.reasoning === 'string' ? opts.reasoning : undefined
         const maxOutputTokens =
           typeof opts.maxTokens === 'number'
@@ -930,23 +980,45 @@ export class PiModelService {
       const entries = await this.directory.providers()
       // 推荐目录更新后必须重新合成，否则已保存模型会停在旧推荐值上。
       const fingerprint = JSON.stringify([raw, await this.recommendations.version()])
-      if (!force && fingerprint === this.configFingerprint && entries === this.directoryEntries) return this.parsedConfig
+      if (!force && fingerprint === this.configFingerprint && entries === this.directoryEntries)
+        return this.parsedConfig
       let parsed = parsePiProviderCatalog(raw)
       this.directoryEntries = entries
       const defaults = new Map(entries.map((entry) => [entry.id, directoryProviderConfig(entry)]))
       if (parsed.schemaVersion <= PI_PROVIDER_CONFIG_SCHEMA_VERSION) {
         const providers = { ...parsed.providers }
         for (const [id, config] of defaults) {
-          if (config && !this.builtinProviderIDs.has(id) && !Object.hasOwn(raw.providers ?? {}, id)) {
-            providers[id] = { ...config, models: {}, directorySource: entries.find((entry) => entry.id === id)!.origin }
+          if (
+            config &&
+            !this.builtinProviderIDs.has(id) &&
+            !Object.hasOwn(raw.providers ?? {}, id)
+          ) {
+            providers[id] = {
+              ...config,
+              models: {},
+              directorySource: entries.find((entry) => entry.id === id)!.origin,
+            }
           }
           if (config && this.builtinProviderIDs.has(id)) {
             const existing = providers[id]
-            const bundledModels = new Set(this.baseProviders.get(id)!.getModels().map((model) => model.id))
-            const disabled = Object.fromEntries(Object.keys(config.models).filter((modelID) => !bundledModels.has(modelID)).map((modelID) => [modelID, { enabled: false }]))
+            const bundledModels = new Set(
+              this.baseProviders
+                .get(id)!
+                .getModels()
+                .map((model) => model.id),
+            )
+            const disabled = Object.fromEntries(
+              Object.keys(config.models)
+                .filter((modelID) => !bundledModels.has(modelID))
+                .map((modelID) => [modelID, { enabled: false }]),
+            )
             if (Object.keys(disabled).length && (!existing || existing.kind === 'builtin')) {
               providers[id] = {
-                kind: 'builtin', enabled: true, allowModels: [], denyModels: [], ...existing,
+                kind: 'builtin',
+                enabled: true,
+                allowModels: [],
+                denyModels: [],
+                ...existing,
                 models: { ...disabled, ...existing?.models },
               }
             }
@@ -954,32 +1026,43 @@ export class PiModelService {
         }
         parsed = { ...parsed, providers }
       }
-      this.directoryBaseProviders = new Map([...this.baseProviders].map(([id, base]) => {
-        const config = defaults.get(id)
-        if (!config) return [id, base]
-        const entry = entries.find((candidate) => candidate.id === id)
-        const apis = new Set(base.getModels().map((model) => model.api))
-        const remoteModels = new Map<string, PiModel<Api>>()
-        for (const model of Object.values(config.models)) {
-          if (apis.has(model.api)) remoteModels.set(model.id, {
-            ...toPiModel(id, config, model),
-            baseUrl: entry?.modelBaseUrls?.[model.id] ?? config.endpoints?.[model.api] ?? config.baseUrl,
-          })
-        }
-        const getModels = () => {
-          const models = new Map(base.getModels().map((model) => [model.id, model]))
-          for (const [modelID, model] of remoteModels) models.set(modelID, model)
-          return [...models.values()]
-        }
-        return [id, {
-          ...base,
-          getModels,
-          getAllModels: () => [
-            ...(base.getAllModels?.() ?? []).filter((model) => model.type !== undefined && model.type !== 'chat'),
-            ...getModels(),
-          ],
-        }]
-      }))
+      this.directoryBaseProviders = new Map(
+        [...this.baseProviders].map(([id, base]) => {
+          const config = defaults.get(id)
+          if (!config) return [id, base]
+          const entry = entries.find((candidate) => candidate.id === id)
+          const apis = new Set(base.getModels().map((model) => model.api))
+          const remoteModels = new Map<string, PiModel<Api>>()
+          for (const model of Object.values(config.models)) {
+            if (apis.has(model.api))
+              remoteModels.set(model.id, {
+                ...toPiModel(id, config, model),
+                baseUrl:
+                  entry?.modelBaseUrls?.[model.id] ??
+                  config.endpoints?.[model.api] ??
+                  config.baseUrl,
+              })
+          }
+          const getModels = () => {
+            const models = new Map(base.getModels().map((model) => [model.id, model]))
+            for (const [modelID, model] of remoteModels) models.set(modelID, model)
+            return [...models.values()]
+          }
+          return [
+            id,
+            {
+              ...base,
+              getModels,
+              getAllModels: () => [
+                ...(base.getAllModels?.() ?? []).filter(
+                  (model) => model.type !== undefined && model.type !== 'chat',
+                ),
+                ...getModels(),
+              ],
+            },
+          ]
+        }),
+      )
       const custom = Object.entries(parsed.providers).filter(
         (entry): entry is [string, Extract<(typeof entry)[1], { kind: 'custom' }>] =>
           entry[1].kind === 'custom',
@@ -1028,7 +1111,9 @@ export class PiModelService {
    */
   private applyProviderProtocolOverride(config: ParsedPiProviderCatalog): void {
     if (!this.mutablePi) return
-    const base = this.directoryBaseProviders.get(DEEPSEEK_PROVIDER_ID) ?? this.baseProviders.get(DEEPSEEK_PROVIDER_ID)
+    const base =
+      this.directoryBaseProviders.get(DEEPSEEK_PROVIDER_ID) ??
+      this.baseProviders.get(DEEPSEEK_PROVIDER_ID)
     if (!base) return
     const active = this.deepSeekProtocol
     const current = base

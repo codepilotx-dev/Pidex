@@ -156,9 +156,7 @@ export function initialPlanQuestionState(question?: {
   options: Array<{ id?: string; label: string; recommended?: boolean }>
   multiSelect?: boolean
 }): QuestionState {
-  return question
-    ? initialQuestionState(question)
-    : { selected: [], custom: '', answered: false }
+  return question ? initialQuestionState(question) : { selected: [], custom: '', answered: false }
 }
 
 export function toggleMultiSelectOption(current: QuestionState, label: string): QuestionState {

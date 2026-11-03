@@ -91,14 +91,25 @@ export class ComposerPathGrantService {
       mediaType,
       sizeBytes: info.size,
     }
-    if ((mediaType.startsWith('image/') || mediaType.startsWith('audio/') || mediaType.startsWith('video/')) && !request.range) {
-      if (info.size > (mediaType.startsWith('image/') ? MAX_IMAGE_PREVIEW_BYTES : 20 * 1024 * 1024)) {
+    if (
+      (mediaType.startsWith('image/') ||
+        mediaType.startsWith('audio/') ||
+        mediaType.startsWith('video/')) &&
+      !request.range
+    ) {
+      if (
+        info.size > (mediaType.startsWith('image/') ? MAX_IMAGE_PREVIEW_BYTES : 20 * 1024 * 1024)
+      ) {
         return { ...base, kind: 'binary' }
       }
       const content = await readBytes(target.path, 0, info.size)
       return {
         ...base,
-        kind: mediaType.startsWith('audio/') ? 'audio' : mediaType.startsWith('video/') ? 'video' : 'image',
+        kind: mediaType.startsWith('audio/')
+          ? 'audio'
+          : mediaType.startsWith('video/')
+            ? 'video'
+            : 'image',
         encoding: 'base64',
         data: content.toString('base64'),
         truncated: false,

@@ -123,10 +123,7 @@ export function useTopLayer(ref: RefObject<HTMLElement | null>, open: boolean) {
   return topLayer ? ('manual' as const) : undefined
 }
 
-export function useExitPresence(
-  open: boolean,
-  contentRef: RefObject<HTMLElement | null>,
-): boolean {
+export function useExitPresence(open: boolean, contentRef: RefObject<HTMLElement | null>): boolean {
   const [present, setPresent] = useState(open)
 
   useLayoutEffect(() => {

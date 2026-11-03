@@ -1,11 +1,19 @@
 import { describe, expect, test } from 'bun:test'
-import type { SubagentProjection, SubagentRun, SubagentStatus, SubagentTask } from '@pidex/shared/thread'
+import type {
+  SubagentProjection,
+  SubagentRun,
+  SubagentStatus,
+  SubagentTask,
+} from '@pidex/shared/thread'
 
 import {
   buildSubagentDirectory,
   toSubagentDirectoryRow,
 } from '../src/features/session/subagents/SubagentDirectoryRows.js'
-import { subagentAttentionLabel, subagentStatusLabel } from '../src/features/session/subagents/SubagentStatusLabel.js'
+import {
+  subagentAttentionLabel,
+  subagentStatusLabel,
+} from '../src/features/session/subagents/SubagentStatusLabel.js'
 
 function run(
   overrides: Partial<SubagentRun> & Pick<SubagentRun, 'status'>,
@@ -18,7 +26,11 @@ function run(
     status: overrides.status,
     queueReason: null,
     model: { providerID: 'test', modelID: 'test' },
-    permissionConfig: { sandboxMode: 'workspace-write', approvalPolicy: 'on-request', reviewers: [] },
+    permissionConfig: {
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'on-request',
+      reviewers: [],
+    },
     result: null,
     error: null,
     createdAt: 0,
@@ -41,7 +53,11 @@ function task(
     displayName: overrides.displayName,
     profile: 'explorer',
     task: overrides.task ?? '审阅仓库',
-    permissionCeiling: { sandboxMode: 'workspace-write', approvalPolicy: 'on-request', reviewers: [] },
+    permissionCeiling: {
+      sandboxMode: 'workspace-write',
+      approvalPolicy: 'on-request',
+      reviewers: [],
+    },
     workspace: { mode: 'shared', state: 'ready', rootPath: null, baselineRef: null },
     currentRun: null,
     createdAt: 100,
@@ -54,7 +70,12 @@ function projection(
   id: string,
   name: string,
   status: SubagentStatus,
-  extra: { parentThreadId?: string; finishedAt?: number; summary?: string; createdAt?: number } = {},
+  extra: {
+    parentThreadId?: string
+    finishedAt?: number
+    summary?: string
+    createdAt?: number
+  } = {},
 ): SubagentProjection {
   const currentRun = run({
     status,

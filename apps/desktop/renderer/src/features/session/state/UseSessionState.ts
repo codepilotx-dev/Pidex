@@ -338,14 +338,17 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     sessionStatusRef.current = sessionStatus
   }, [sessionStatus])
 
-  const setScopedInput = useCallback((value: string): void => {
-    const key = activeSessionIdRef.current ?? HOME_INPUT_KEY
-    inputBySessionRef.current = {
-      ...inputBySessionRef.current,
-      [key]: value,
-    }
-    setInput(value)
-  }, [setInput])
+  const setScopedInput = useCallback(
+    (value: string): void => {
+      const key = activeSessionIdRef.current ?? HOME_INPUT_KEY
+      inputBySessionRef.current = {
+        ...inputBySessionRef.current,
+        [key]: value,
+      }
+      setInput(value)
+    },
+    [setInput],
+  )
 
   const inputBinding = useMemo<SessionInputBinding>(
     () => ({
@@ -563,7 +566,20 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     return () => {
       unsubscribe()
     }
-  }, [viewSetters, setSessions, setSessionId, setSessionStatus, setSessionsHydrated, setCatalogStatus, setSessionFallbackTitles, setPendingPermissionSessionIds, setQueuedFollowUps, setQueuePauseReason, setInput, setComposerAttachments])
+  }, [
+    viewSetters,
+    setSessions,
+    setSessionId,
+    setSessionStatus,
+    setSessionsHydrated,
+    setCatalogStatus,
+    setSessionFallbackTitles,
+    setPendingPermissionSessionIds,
+    setQueuedFollowUps,
+    setQueuePauseReason,
+    setInput,
+    setComposerAttachments,
+  ])
 
   useEffect(() => {
     const unsubscribe = desktopClient.onReconciliationError?.((error) => {
@@ -639,7 +655,20 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     return () => {
       disposed = true
     }
-  }, [viewSetters, setSessions, setSessionId, setSessionStatus, setSessionsHydrated, setCatalogStatus, setSessionFallbackTitles, setPendingPermissionSessionIds, setQueuedFollowUps, setQueuePauseReason, setInput, setComposerAttachments])
+  }, [
+    viewSetters,
+    setSessions,
+    setSessionId,
+    setSessionStatus,
+    setSessionsHydrated,
+    setCatalogStatus,
+    setSessionFallbackTitles,
+    setPendingPermissionSessionIds,
+    setQueuedFollowUps,
+    setQueuePauseReason,
+    setInput,
+    setComposerAttachments,
+  ])
 
   const settingsSnapshot = useMemo<SessionSettingsSnapshot>(
     () => ({
@@ -776,7 +805,15 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
         }
       )
     },
-    [actionContext, viewSetters, setSessionStatus, setQueuedFollowUps, setQueuePauseReason, setInput, setComposerAttachments],
+    [
+      actionContext,
+      viewSetters,
+      setSessionStatus,
+      setQueuedFollowUps,
+      setQueuePauseReason,
+      setInput,
+      setComposerAttachments,
+    ],
   )
 
   const submitToSession = useCallback(

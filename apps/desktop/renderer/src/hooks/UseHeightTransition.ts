@@ -2,7 +2,10 @@ import React from 'react'
 
 import { getEffectiveReducedMotion } from './UsePrefersReducedMotion.js'
 
-export function useHeightTransition(dependencies: React.DependencyList, enabled = true): {
+export function useHeightTransition(
+  dependencies: React.DependencyList,
+  enabled = true,
+): {
   ref: React.RefObject<HTMLDivElement | null>
   style: React.CSSProperties
 } {

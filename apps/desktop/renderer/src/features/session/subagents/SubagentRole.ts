@@ -13,9 +13,44 @@ const ROLE_ORDER: readonly SubagentRole[] = [
 
 /** 英文按非 ASCII 字母数字边界匹配；短词单独列出，避免 build 命中 ui、specification 命中 spec。 */
 const KEYWORDS: Readonly<Record<SubagentRole, readonly string[]>> = {
-  frontend: ['frontend', 'front-end', 'react', 'vue', 'css', 'html', 'web', 'ui', '前端', '界面', '页面', '组件'],
-  backend: ['backend', 'back-end', 'api', 'server', 'database', 'sql', '后端', '接口', '服务端', '数据库'],
-  devops: ['devops', 'docker', 'pipeline', 'deploy', 'k8s', '运维', '部署', '流水线', '发布', '构建'],
+  frontend: [
+    'frontend',
+    'front-end',
+    'react',
+    'vue',
+    'css',
+    'html',
+    'web',
+    'ui',
+    '前端',
+    '界面',
+    '页面',
+    '组件',
+  ],
+  backend: [
+    'backend',
+    'back-end',
+    'api',
+    'server',
+    'database',
+    'sql',
+    '后端',
+    '接口',
+    '服务端',
+    '数据库',
+  ],
+  devops: [
+    'devops',
+    'docker',
+    'pipeline',
+    'deploy',
+    'k8s',
+    '运维',
+    '部署',
+    '流水线',
+    '发布',
+    '构建',
+  ],
   qa: ['qa', 'test', 'e2e', 'vitest', 'jest', 'spec', '测试', '质检', '校验', '验证'],
   designer: ['designer', 'design', 'figma', 'ui/ux', 'ux', 'style', '设计', '视觉', '原型'],
   data: ['data', 'analysis', 'analytics', 'etl', '数据', '分析', '统计'],
@@ -68,9 +103,5 @@ export function resolveSubagentRole(input: {
   task?: string | null
 }): SubagentRole {
   if (input.role) return input.role
-  return (
-    matchRole(input.displayName ?? '') ??
-    matchRole(input.task ?? '') ??
-    'general'
-  )
+  return matchRole(input.displayName ?? '') ?? matchRole(input.task ?? '') ?? 'general'
 }

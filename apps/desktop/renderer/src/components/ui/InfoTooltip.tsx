@@ -1,4 +1,1 @@
-export {
-  InfoTooltip,
-  type InfoTooltipProps,
-} from './Tooltip.js'
+export { InfoTooltip, type InfoTooltipProps } from './Tooltip.js'

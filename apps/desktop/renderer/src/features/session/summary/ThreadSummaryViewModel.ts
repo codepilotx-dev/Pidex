@@ -172,9 +172,7 @@ export function deriveThreadSummaryViewModel(
             deletions: input.deletions,
           }
         : null
-  const agents = input.subagents.map((projection) =>
-    threadSummaryAgentFromProjection(projection),
-  )
+  const agents = input.subagents.map((projection) => threadSummaryAgentFromProjection(projection))
   const browserTabs = collectThreadSummaryBrowserTabs(input.browserTabs, input.sessionId)
   const sources = collectThreadSummarySources(input)
   const artifacts = collectThreadSummaryArtifacts(input.tools)

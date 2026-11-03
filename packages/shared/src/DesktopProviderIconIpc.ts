@@ -44,8 +44,12 @@ export type DesktopProviderIconChange = {
 }
 
 export interface DesktopProviderIconIpcBridge {
-  setProviderWebsiteIcon(input: DesktopProviderWebsiteIconInput): Promise<DesktopProviderIconResolution>
-  setProviderUploadedIcon(input: DesktopProviderUploadedIconInput): Promise<DesktopProviderIconResolution>
+  setProviderWebsiteIcon(
+    input: DesktopProviderWebsiteIconInput,
+  ): Promise<DesktopProviderIconResolution>
+  setProviderUploadedIcon(
+    input: DesktopProviderUploadedIconInput,
+  ): Promise<DesktopProviderIconResolution>
   resolveProviderIcon(
     input: DesktopProviderIconResolveInput,
   ): Promise<DesktopProviderIconResolution>

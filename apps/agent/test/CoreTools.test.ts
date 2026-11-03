@@ -949,7 +949,10 @@ describe('核心工具面', () => {
         { operation: 'create', path: 'vendor/repo/.git/hooks/pre-push' },
       ],
     })
-    expect(reviewed.at(-1)?.permissionFacts).toMatchObject({ risk: 'high', ruleRequiresApproval: true })
+    expect(reviewed.at(-1)?.permissionFacts).toMatchObject({
+      risk: 'high',
+      ruleRequiresApproval: true,
+    })
     expect(reviewed.at(-1)?.fileDiffs).toEqual([
       expect.objectContaining({
         path: 'normal.txt',

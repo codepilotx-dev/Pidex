@@ -197,7 +197,9 @@ describe('问题 checkpoint', () => {
         ],
       })
       const restored = new QuestionService(reopened, hub)
-      const answerForModel = JSON.parse(restored.claimResolvedCheckpoint(turn.turnID)!.approval.answer!)
+      const answerForModel = JSON.parse(
+        restored.claimResolvedCheckpoint(turn.turnID)!.approval.answer!,
+      )
       expect(answerForModel).toMatchObject({
         resolution: 'user',
         answers,
@@ -372,14 +374,19 @@ describe('问题 checkpoint', () => {
       { questionId: 'persist', choiceIds: [], text: '需要持久化' },
     ]
     const request = Schema.decodeUnknownSync(RpcMethods['interaction/respond'].params)({
-      interactionId: id, expectedVersion: 2, operationId: crypto.randomUUID(),
+      interactionId: id,
+      expectedVersion: 2,
+      operationId: crypto.randomUUID(),
       response: { kind: 'question', status: 'answered', resolution: 'user', answers },
     })
     if (request.response.kind !== 'question' || request.response.status !== 'answered')
       throw new Error('expected question answer')
-    await expect(questions.reply(id, [
-      answers[0], { questionId: 'persist', choiceIds: ['persist:0', 'persist:1'] },
-    ])).rejects.toMatchObject({ code: 'INVALID_QUESTION_ANSWER' })
+    await expect(
+      questions.reply(id, [
+        answers[0],
+        { questionId: 'persist', choiceIds: ['persist:0', 'persist:1'] },
+      ]),
+    ).rejects.toMatchObject({ code: 'INVALID_QUESTION_ANSWER' })
     await questions.reply(id, request.response.answers)
     const checkpoint = questions.claimResolvedCheckpoint(turn.turnID)
     expect(JSON.parse(checkpoint!.approval.answer!)).toEqual({

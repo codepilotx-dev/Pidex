@@ -151,10 +151,7 @@ function SidebarProjectGroupComponent({
     () => bucket.allSessions.map((session) => `session:${session.id}`),
     [bucket.allSessions],
   )
-  const headerSessionKeySet = useMemo(
-    () => new Set(headerSessionKeys),
-    [headerSessionKeys],
-  )
+  const headerSessionKeySet = useMemo(() => new Set(headerSessionKeys), [headerSessionKeys])
   const isExpanded = useDisclosureExpanded(disclosureStore, disclosureKey)
   const projectSessionsId = useId()
   const projectSessions = bucket.displaySessions

@@ -97,7 +97,6 @@ async function createTemporaryDirectory(): Promise<string> {
   return directory
 }
 
-
 test('音视频快照仍遵守 renderer 文件授权', async () => {
   const root = await createTemporaryDirectory()
   const file = join(root, 'clip.wav')
@@ -105,6 +104,9 @@ test('音视频快照仍遵守 renderer 文件授权', async () => {
   const service = new ComposerPathGrantService()
   const [grant] = await service.grantPaths(7, [file])
   expect(grant!.mediaType).toBe('audio/wav')
-  expect(await service.read(7, { grantId: grant!.grantId })).toMatchObject({ kind: 'audio', encoding: 'base64' })
+  expect(await service.read(7, { grantId: grant!.grantId })).toMatchObject({
+    kind: 'audio',
+    encoding: 'base64',
+  })
   await expect(service.read(8, { grantId: grant!.grantId })).rejects.toThrow('授权无效')
 })

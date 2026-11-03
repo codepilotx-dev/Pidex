@@ -429,7 +429,10 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
     }
   }
 
-  async function refreshWorkspaceGitProjection(target: DesktopWorkspace, refresh = false): Promise<void> {
+  async function refreshWorkspaceGitProjection(
+    target: DesktopWorkspace,
+    refresh = false,
+  ): Promise<void> {
     const identity = workspaceIdentity(target)
     if (appliedWorkspaceIdentityRef.current !== identity) return
     const sequence = ++gitRequestSequenceRef.current
@@ -457,7 +460,8 @@ export function useWorkspaceState(options: UseWorkspaceStateOptions): UseWorkspa
     const projection = await resolveWorkspaceGitProjection(
       target,
       {
-        loadGitStatus: () => desktopClient.getWorkspaceGitStatus(target.path, target.projectId, { refresh }),
+        loadGitStatus: () =>
+          desktopClient.getWorkspaceGitStatus(target.path, target.projectId, { refresh }),
         loadBranches: () => desktopClient.getAgentReviewBranches(target.path, target.projectId),
         loadReviewSummary: (source) =>
           desktopClient.getAgentReviewSummary({

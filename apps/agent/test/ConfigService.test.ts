@@ -66,11 +66,19 @@ describe('ConfigService', () => {
     const service = new ConfigService(join(root, 'config.json'))
     await service.initialize()
     try {
-      await service.batchWrite({ edits: [
-        { keyPath: ['desktop', 'appearance', 'chromeThemes', 'light', 'fonts', 'code'], value: null },
-        { keyPath: ['desktop', 'appearance', 'mode'], value: 'dark' },
-        { keyPath: ['desktop', 'appearance', 'chromeThemes', 'light', 'fonts', 'ui'], value: null },
-      ] })
+      await service.batchWrite({
+        edits: [
+          {
+            keyPath: ['desktop', 'appearance', 'chromeThemes', 'light', 'fonts', 'code'],
+            value: null,
+          },
+          { keyPath: ['desktop', 'appearance', 'mode'], value: 'dark' },
+          {
+            keyPath: ['desktop', 'appearance', 'chromeThemes', 'light', 'fonts', 'ui'],
+            value: null,
+          },
+        ],
+      })
       expect(service.snapshot().desktop).toEqual({ appearance: { mode: 'dark' } })
       await service.writeValue({ keyPath: ['desktop', 'appearance', 'mode'], value: null })
       expect(service.snapshot().desktop).toEqual({ appearance: {} })

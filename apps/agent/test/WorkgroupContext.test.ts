@@ -83,7 +83,9 @@ const seedTurn = (
     markdown: `## ${label}完整计划\n- 唯一标记 ${label}`,
   })
   db.sqlite
-    .query("UPDATE turns SET status = 'completed', created_at = ?, finished_at = ?, updated_at = ? WHERE id = ?")
+    .query(
+      "UPDATE turns SET status = 'completed', created_at = ?, finished_at = ?, updated_at = ? WHERE id = ?",
+    )
     .run(createdAt, createdAt, createdAt, created.turnID)
   return created
 }
@@ -138,7 +140,8 @@ describe('工作组共享上下文', () => {
     expect(prompt).toContain('[当前项目] 实施会话')
     // 引导按需读取完整历史，并声明工作组不扩大权限。
     expect(prompt).toContain('read_thread')
-    expect(prompt).toContain('不会扩大当前会话的文件权限')  })
+    expect(prompt).toContain('不会扩大当前会话的文件权限')
+  })
 
   test('未加入工作组时不注入任何上下文', async () => {
     const fixture = await makeFixture()
@@ -332,9 +335,9 @@ describe('workgroup_read 工具', () => {
     expect(view.members.map((member: { threadId: string }) => member.threadId).sort()).toEqual(
       [sourceThread.id, targetThread.id].sort(),
     )
-    expect(
-      view.members.find((member: { isCurrent: boolean }) => member.isCurrent)?.threadId,
-    ).toBe(targetThread.id)
+    expect(view.members.find((member: { isCurrent: boolean }) => member.isCurrent)?.threadId).toBe(
+      targetThread.id,
+    )
     expect(view.sharedEntries).toContainEqual(
       expect.objectContaining({ section: 'decision', title: '统一错误码' }),
     )

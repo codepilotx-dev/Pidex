@@ -775,9 +775,10 @@ export function contextStateUsage(
   } else {
     const budget = state.budget
     const physicalInput = budget.physicalInputBudgetTokens ?? budget.inputBudgetTokens
-    const effectiveWindow = activeTurn || maxContextTokens === undefined
-      ? budget.inputBudgetTokens
-      : Math.min(maxContextTokens ?? physicalInput, physicalInput)
+    const effectiveWindow =
+      activeTurn || maxContextTokens === undefined
+        ? budget.inputBudgetTokens
+        : Math.min(maxContextTokens ?? physicalInput, physicalInput)
     const usedPercent = Math.max(0, (budget.usedTokens / effectiveWindow) * 100)
     base = {
       ...fallback,

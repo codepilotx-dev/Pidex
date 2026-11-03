@@ -4,10 +4,11 @@
 # 生成产物：由脚本产出且有各自的 --check 守卫，重排会让校验脚本误报漂移。
 packages/material-icon-theme/src/generated
 packages/material-icon-theme/src/icons
+apps/agent/src/provider/pi/data/zcode-model-options.ts
 # material-icons 目录与手写组件共存，只有这三个名字是同步脚本生成的。
 apps/desktop/renderer/src/features/layout/material-icons/Shard*.ts
 apps/desktop/renderer/src/features/layout/material-icons/Loaders.ts
-apps/desktop/renderer/src/features/layout/material-icons/Index.ts
+apps/desktop/renderer/src/features/layout/material-icons/index.ts
 apps/desktop/renderer/shared/codexThemes/themes
 docs/research/codex-webview-style-inventory.md
 docs/research/codex-webview-style-inventory.json

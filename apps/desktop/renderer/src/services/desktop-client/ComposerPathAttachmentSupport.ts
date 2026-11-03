@@ -18,8 +18,15 @@ async function composerAttachmentFromPathGrant(
   grant: DesktopComposerPathGrant,
   bridge: Pick<DesktopAttachmentIpcBridge, 'readComposerPathGrant'>,
 ): Promise<DesktopComposerAttachment> {
-  const mediaKind = grant.mediaType.startsWith('audio/') ? 'audio' : grant.mediaType.startsWith('video/') ? 'video' : 'image'
-  if (grant.pathKind === 'file' && (SNAPSHOT_IMAGE_MEDIA_TYPES.has(grant.mediaType) || mediaKind !== 'image')) {
+  const mediaKind = grant.mediaType.startsWith('audio/')
+    ? 'audio'
+    : grant.mediaType.startsWith('video/')
+      ? 'video'
+      : 'image'
+  if (
+    grant.pathKind === 'file' &&
+    (SNAPSHOT_IMAGE_MEDIA_TYPES.has(grant.mediaType) || mediaKind !== 'image')
+  ) {
     if (grant.sizeBytes > (mediaKind === 'image' ? MAX_IMAGE_BYTES : 20 * 1024 * 1024)) {
       return {
         id: crypto.randomUUID(),
@@ -48,7 +55,9 @@ async function composerAttachmentFromPathGrant(
         status: 'ready',
         storage: 'managed',
         contentBase64: preview.data,
-        ...(mediaKind === 'image' ? { previewDataUrl: `data:${grant.mediaType};base64,${preview.data}` } : {}),
+        ...(mediaKind === 'image'
+          ? { previewDataUrl: `data:${grant.mediaType};base64,${preview.data}` }
+          : {}),
       }
     } catch {
       return {
@@ -60,7 +69,8 @@ async function composerAttachmentFromPathGrant(
         kind: mediaKind,
         status: 'error',
         storage: 'managed',
-        error: mediaKind === 'image' ? '图片读取失败，请重新添加。' : '音视频读取失败，请重新添加。',
+        error:
+          mediaKind === 'image' ? '图片读取失败，请重新添加。' : '音视频读取失败，请重新添加。',
       }
     }
   }

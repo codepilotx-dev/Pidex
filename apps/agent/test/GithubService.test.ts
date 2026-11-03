@@ -779,35 +779,38 @@ describe('GithubService API', () => {
     const calls: Array<{ args: readonly string[]; authenticated: boolean }> = []
     const helpers: string[] = []
     let failNetwork = false
-    const runner = spyOn(GitCommandRunner.prototype, 'run').mockImplementation(
-      async function (this: GitCommandRunner, input) {
-        if (!input.args.some((arg) => ['fetch', 'pull', 'push'].includes(arg)))
-          return originalRun.call(this, input)
-        const authenticated = input.env?.PIDEX_GITHUB_TOKEN === fakeToken
-        calls.push({ args: input.args, authenticated })
-        expect(input.env?.GIT_TERMINAL_PROMPT).toBe('0')
-        expect(input.args.join(' ').includes(fakeToken)).toBe(false)
-        if (authenticated) {
-          expect(input.args).toContain(
-            'remote.origin.url=https://x-access-token@github.com/octocat/private.git',
-          )
-          const operationIndex = input.args.findIndex((arg) => ['fetch', 'pull', 'push'].includes(arg))
-          const effectiveRemote = await originalRun.call(this, {
-            cwd: root,
-            args: [...input.args.slice(0, operationIndex), 'remote', 'get-url', 'origin'],
-          })
-          expect(effectiveRemote.stdout.trim()).toBe(
-            'https://x-access-token@github.com/octocat/private.git',
-          )
-          const helper = input.env!.GIT_ASKPASS!
-          helpers.push(helper)
-          expect((await readFile(helper, 'utf8')).includes(fakeToken)).toBe(false)
-        } else {
-          expect(input.env?.GIT_ASKPASS).toBeUndefined()
-        }
-        return { code: failNetwork ? 128 : 0, stdout: '', stderr: failNetwork ? fakeToken : '' }
-      },
-    )
+    const runner = spyOn(GitCommandRunner.prototype, 'run').mockImplementation(async function (
+      this: GitCommandRunner,
+      input,
+    ) {
+      if (!input.args.some((arg) => ['fetch', 'pull', 'push'].includes(arg)))
+        return originalRun.call(this, input)
+      const authenticated = input.env?.PIDEX_GITHUB_TOKEN === fakeToken
+      calls.push({ args: input.args, authenticated })
+      expect(input.env?.GIT_TERMINAL_PROMPT).toBe('0')
+      expect(input.args.join(' ').includes(fakeToken)).toBe(false)
+      if (authenticated) {
+        expect(input.args).toContain(
+          'remote.origin.url=https://x-access-token@github.com/octocat/private.git',
+        )
+        const operationIndex = input.args.findIndex((arg) =>
+          ['fetch', 'pull', 'push'].includes(arg),
+        )
+        const effectiveRemote = await originalRun.call(this, {
+          cwd: root,
+          args: [...input.args.slice(0, operationIndex), 'remote', 'get-url', 'origin'],
+        })
+        expect(effectiveRemote.stdout.trim()).toBe(
+          'https://x-access-token@github.com/octocat/private.git',
+        )
+        const helper = input.env!.GIT_ASKPASS!
+        helpers.push(helper)
+        expect((await readFile(helper, 'utf8')).includes(fakeToken)).toBe(false)
+      } else {
+        expect(input.env?.GIT_ASKPASS).toBeUndefined()
+      }
+      return { code: failNetwork ? 128 : 0, stdout: '', stderr: failNetwork ? fakeToken : '' }
+    })
     try {
       await service.fetch(project.id)
       expect(calls.map(({ authenticated }) => authenticated)).toEqual([false, true])

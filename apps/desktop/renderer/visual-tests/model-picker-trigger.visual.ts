@@ -29,22 +29,20 @@ test('trigger width follows the selected model with a smooth transition', async 
     requestAnimationFrame(tick)
   })
 
-  await panel
-    .locator('.composer-model-row', { hasText: 'workbuddy/deepseek-v4.1-flash' })
-    .click()
+  await panel.locator('.composer-model-row', { hasText: 'workbuddy/deepseek-v4.1-flash' }).click()
   await expect(panel).toHaveCount(0)
   await page.waitForTimeout(500)
 
-  const widths = await page.evaluate(
-    () => (window as unknown as { __widths: number[] }).__widths,
-  )
+  const widths = await page.evaluate(() => (window as unknown as { __widths: number[] }).__widths)
   console.log('width range', Math.round(Math.min(...widths)), Math.round(Math.max(...widths)))
   expect(Math.max(...widths) - Math.min(...widths)).toBeGreaterThan(40)
 
   const longState = await trigger.evaluate((element) => {
     const name = element.querySelector('.composer-model-trigger-name') as HTMLElement
     const model = element.querySelector('.composer-model-trigger-name-model') as HTMLElement
-    const prefix = element.querySelector('.composer-model-trigger-name-prefix') as HTMLElement | null
+    const prefix = element.querySelector(
+      '.composer-model-trigger-name-prefix',
+    ) as HTMLElement | null
     return {
       width: Math.round(element.getBoundingClientRect().width),
       text: name.textContent?.trim() ?? '',

@@ -216,7 +216,7 @@ fixture.mount = () => {
   });
 };
 fixture.unmount = () => flushSync(() => root.unmount());
-`;
+`
 
 if (process.versions.bun) {
   const build = await Bun.build({
@@ -296,7 +296,10 @@ try {
     }),
   )
   await page.goto('http://127.0.0.1/closed-menu-pruning-test')
-  await page.addStyleTag({ content: '#test-suggestions { max-height: 70px; overflow: auto; } #test-suggestions button { display: block; height: 40px; }' })
+  await page.addStyleTag({
+    content:
+      '#test-suggestions { max-height: 70px; overflow: auto; } #test-suggestions button { display: block; height: 40px; }',
+  })
   await page.addScriptTag({ content: script })
   await page.evaluate(() => (window as any).fixture.mount())
   await settle(page)
@@ -305,7 +308,11 @@ try {
   // 1. SearchablePopoverContent: 0 renderOption calls when closed & re-rendered
   // =========================================================================
   const initialCalls = await page.evaluate(() => (window as any).fixture.renderOptionCalls)
-  assert.equal(initialCalls, 0, 'renderOption must NOT be called when popover is closed on initial render')
+  assert.equal(
+    initialCalls,
+    0,
+    'renderOption must NOT be called when popover is closed on initial render',
+  )
 
   // Force re-renders while closed
   await page.evaluate(() => (window as any).fixture.triggerPopoverRerender())
@@ -314,7 +321,11 @@ try {
   await settle(page)
 
   const callsAfterRerenders = await page.evaluate(() => (window as any).fixture.renderOptionCalls)
-  assert.equal(callsAfterRerenders, 0, 'renderOption must NOT be called during re-renders while closed')
+  assert.equal(
+    callsAfterRerenders,
+    0,
+    'renderOption must NOT be called during re-renders while closed',
+  )
 
   // Open popover via trigger click
   const trigger = page.locator('#popover-trigger')
@@ -351,26 +362,42 @@ try {
 
   await page.keyboard.press('Escape')
   await settle(page)
-  assert.equal(await page.evaluate(() => (window as any).fixture.popoverOpen), false, 'Escape must close popover')
+  assert.equal(
+    await page.evaluate(() => (window as any).fixture.popoverOpen),
+    false,
+    'Escape must close popover',
+  )
 
   const focusedElementId = await page.evaluate(() => document.activeElement?.id)
-  assert.equal(focusedElementId, 'popover-trigger', 'Focus must return to trigger button after Escape')
+  assert.equal(
+    focusedElementId,
+    'popover-trigger',
+    'Focus must return to trigger button after Escape',
+  )
 
   // =========================================================================
   // 2. ModelPickerPopover: zero list construction when closed
   // =========================================================================
   const modelPanelWhenClosed = await page.evaluate(() =>
-    document.querySelector('.composer-model-panel')
+    document.querySelector('.composer-model-panel'),
   )
-  assert.equal(modelPanelWhenClosed, null, 'Model panel DOM must NOT exist when model picker is closed')
+  assert.equal(
+    modelPanelWhenClosed,
+    null,
+    'Model panel DOM must NOT exist when model picker is closed',
+  )
 
   // Re-render while closed
   await page.evaluate(() => (window as any).fixture.triggerModelPickerRerender())
   await settle(page)
   const modelPanelAfterRerender = await page.evaluate(() =>
-    document.querySelector('.composer-model-panel')
+    document.querySelector('.composer-model-panel'),
   )
-  assert.equal(modelPanelAfterRerender, null, 'Model panel DOM must NOT exist after closed re-render')
+  assert.equal(
+    modelPanelAfterRerender,
+    null,
+    'Model panel DOM must NOT exist after closed re-render',
+  )
 
   // Open ModelPickerPopover via trigger click
   const modelTrigger = page.locator('#model-picker-trigger')
@@ -378,7 +405,7 @@ try {
   await settle(page)
 
   const modelPanelWhenOpen = await page.evaluate(() =>
-    Boolean(document.querySelector('.composer-model-panel'))
+    Boolean(document.querySelector('.composer-model-panel')),
   )
   assert.equal(modelPanelWhenOpen, true, 'Model panel DOM must exist when model picker is open')
 
@@ -391,14 +418,16 @@ try {
   await settle(page)
 
   const modelPanelAfterClose = await page.evaluate(() =>
-    document.querySelector('.composer-model-panel')
+    document.querySelector('.composer-model-panel'),
   )
   assert.equal(modelPanelAfterClose, null, 'Model panel DOM must be removed after closing')
 
   // Re-open and verify selected model is restored
   await page.evaluate(() => (window as any).fixture.setModelPickerOpen(true))
   await settle(page)
-  const gpt4oRowSelected = page.locator('.composer-model-row.is-selected').filter({ hasText: 'GPT-4o' })
+  const gpt4oRowSelected = page
+    .locator('.composer-model-row.is-selected')
+    .filter({ hasText: 'GPT-4o' })
   assert.ok(await gpt4oRowSelected.isVisible(), 'Selected model must be restored upon re-open')
 
   await page.evaluate(() => (window as any).fixture.setModelPickerOpen(false))
@@ -408,21 +437,19 @@ try {
   // 3. Composer Suggestion Menu & Direct Submission
   // =========================================================================
   // When closed, useComposerSuggestionMenu items count is 0
-  const closedItemsCount = await page.evaluate(() =>
-    (window as any).fixture.lastSuggestionItems.length
+  const closedItemsCount = await page.evaluate(
+    () => (window as any).fixture.lastSuggestionItems.length,
   )
   assert.equal(closedItemsCount, 0, 'Items must be empty when suggestion menu is closed')
-  const closedActiveKey = await page.evaluate(() =>
-    (window as any).fixture.lastSuggestionActiveKey
-  )
+  const closedActiveKey = await page.evaluate(() => (window as any).fixture.lastSuggestionActiveKey)
   assert.equal(closedActiveKey, null, 'Active key must be null when suggestion menu is closed')
 
   // Open suggestion menu
   await page.evaluate(() => (window as any).fixture.setSuggestionMenuOpen(true))
   await settle(page)
 
-  const openItemsCount = await page.evaluate(() =>
-    (window as any).fixture.lastSuggestionItems.length
+  const openItemsCount = await page.evaluate(
+    () => (window as any).fixture.lastSuggestionItems.length,
   )
   assert.ok(openItemsCount > 0, 'Items must be populated when suggestion menu is open')
 
@@ -431,22 +458,31 @@ try {
     fixture.setSuggestionMenuActiveKey(fixture.lastSuggestionActiveKey)
   })
   await settle(page)
-  const commitsBeforeHover = await page.evaluate(() => (window as any).fixture.suggestionMenuCommits)
+  const commitsBeforeHover = await page.evaluate(
+    () => (window as any).fixture.suggestionMenuCommits,
+  )
   await page.evaluate(() => {
     const fixture = (window as any).fixture
     for (let index = 0; index < 30; index++)
       fixture.setSuggestionMenuActiveKey(fixture.lastSuggestionActiveKey)
   })
   await settle(page)
-  assert.equal(await page.evaluate(() => (window as any).fixture.suggestionMenuCommits),
-    commitsBeforeHover, 'Repeated hover over the same option must not commit another render')
+  assert.equal(
+    await page.evaluate(() => (window as any).fixture.suggestionMenuCommits),
+    commitsBeforeHover,
+    'Repeated hover over the same option must not commit another render',
+  )
 
   const menu = page.locator('#test-suggestions')
   assert.equal(await menu.getAttribute('data-scroll-mask'), 'bottom')
-  await menu.evaluate((element) => { element.scrollTop = 30 })
+  await menu.evaluate((element) => {
+    element.scrollTop = 30
+  })
   await settle(page)
   assert.equal(await menu.getAttribute('data-scroll-mask'), 'both')
-  await menu.evaluate((element) => { element.scrollTop = element.scrollHeight })
+  await menu.evaluate((element) => {
+    element.scrollTop = element.scrollHeight
+  })
   await settle(page)
   assert.equal(await menu.getAttribute('data-scroll-mask'), 'top')
 
@@ -454,16 +490,24 @@ try {
   await page.evaluate(() => (window as any).fixture.setSuggestionMenuOpen(false))
   await settle(page)
 
-  const reclosedItemsCount = await page.evaluate(() =>
-    (window as any).fixture.lastSuggestionItems.length
+  const reclosedItemsCount = await page.evaluate(
+    () => (window as any).fixture.lastSuggestionItems.length,
   )
   assert.equal(reclosedItemsCount, 0, 'Items must be pruned back to 0 when suggestion menu closes')
 
   // Direct slash invocation evaluation:
   const directSlashCheck = await page.evaluate(() => {
     // Normal text does not request suggestion
-    const normalReq = (window as any).fixture.resolveComposerSuggestionRequest('normal text here', 16, false)
-    const slashReq = (window as any).fixture.resolveComposerSuggestionRequest('/plan write tests', 5, false)
+    const normalReq = (window as any).fixture.resolveComposerSuggestionRequest(
+      'normal text here',
+      16,
+      false,
+    )
+    const slashReq = (window as any).fixture.resolveComposerSuggestionRequest(
+      '/plan write tests',
+      5,
+      false,
+    )
 
     const builtinCommands = [
       {
@@ -488,7 +532,10 @@ try {
 
     const parsedPlan = (window as any).fixture.parseSlashInvocation('/plan', builtinCommands)
     const parsedGoal = (window as any).fixture.parseSlashInvocation('/goal', builtinCommands)
-    const parsedUnknown = (window as any).fixture.parseSlashInvocation('/unknown-cmd', builtinCommands)
+    const parsedUnknown = (window as any).fixture.parseSlashInvocation(
+      '/unknown-cmd',
+      builtinCommands,
+    )
 
     return {
       normalReq,
@@ -501,10 +548,22 @@ try {
   })
 
   assert.equal(directSlashCheck.normalReq, null, 'Normal typing must not create suggestion request')
-  assert.equal(directSlashCheck.parsedPlanKind, 'builtin', 'Direct /plan invocation must parse as builtin command')
+  assert.equal(
+    directSlashCheck.parsedPlanKind,
+    'builtin',
+    'Direct /plan invocation must parse as builtin command',
+  )
   assert.equal(directSlashCheck.parsedPlanId, 'plan', 'Parsed command id must be plan')
-  assert.equal(directSlashCheck.parsedGoalKind, 'builtin', 'Direct /goal invocation must parse as builtin command')
-  assert.equal(directSlashCheck.parsedUnknownKind, 'unknown', 'Unknown command must parse as unknown')
+  assert.equal(
+    directSlashCheck.parsedGoalKind,
+    'builtin',
+    'Direct /goal invocation must parse as builtin command',
+  )
+  assert.equal(
+    directSlashCheck.parsedUnknownKind,
+    'unknown',
+    'Unknown command must parse as unknown',
+  )
 
   await page.evaluate(() => (window as any).fixture.unmount())
   console.log('ClosedMenuPruning regression passed')

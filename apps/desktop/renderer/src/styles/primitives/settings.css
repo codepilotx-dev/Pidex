@@ -872,7 +872,6 @@
     border-right: 0;
   }
 
-
   @media (max-width: 760px) {
     .profile-loading-stats {
       display: grid;

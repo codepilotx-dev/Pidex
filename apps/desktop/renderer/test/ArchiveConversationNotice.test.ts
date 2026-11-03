@@ -3,24 +3,36 @@ import { readFileSync } from 'node:fs'
 import { createToastStore } from '../src/components/toast/ToastState.js'
 
 const source = readFileSync(
-  new URL('../src/features/layout/shell/DesktopLayout.tsx', import.meta.url), 'utf8',
+  new URL('../src/features/layout/shell/DesktopLayout.tsx', import.meta.url),
+  'utf8',
 )
 const component = source.slice(source.indexOf('function ArchiveConversationNotice('))
 const script = new Bun.Transpiler({
-  loader: 'tsx', tsconfig: { compilerOptions: { jsx: 'react' } },
+  loader: 'tsx',
+  tsconfig: { compilerOptions: { jsx: 'react' } },
 }).transformSync(component)
 const store = createToastStore()
-afterEach(() => { store.dismissAll(); store._clearTimer() })
+afterEach(() => {
+  store.dismissAll()
+  store._clearTimer()
+})
 
 // 直接执行真实组件的 effect，复现 StrictMode 的 setup/cleanup/setup。
 function mountNotice(onClose: () => void, undoing = false) {
   const effects: Array<() => (() => void) | void> = []
-  const render = new Function('React', 'useRef', 'useEffect', 'toastStore', 'Archive',
-    `${script}; return ArchiveConversationNotice`)(
+  const render = new Function(
+    'React',
+    'useRef',
+    'useEffect',
+    'toastStore',
+    'Archive',
+    `${script}; return ArchiveConversationNotice`,
+  )(
     { createElement: () => null },
     (current: unknown) => ({ current }),
     (effect: () => (() => void) | void) => effects.push(effect),
-    store, null,
+    store,
+    null,
   )
   render({ onClose, onOpenSettings: () => {}, onUndo: () => {}, undoing })
   return () => {

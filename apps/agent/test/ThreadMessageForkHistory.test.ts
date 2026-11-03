@@ -432,7 +432,11 @@ describe('ConversationHistoryForkRepository', () => {
       .query(
         'SELECT target_turn_id, source_thread_id, source_turn_id FROM thread_message_forks WHERE target_thread_id = ?',
       )
-      .get('target-1') as { target_turn_id: string; source_thread_id: string; source_turn_id: string }
+      .get('target-1') as {
+      target_turn_id: string
+      source_thread_id: string
+      source_turn_id: string
+    }
     expect(forkRow.target_turn_id).toBe(targetTurnID)
     expect(forkRow.source_turn_id).toBe('turn-1')
     expect(forkRow.target_turn_id).not.toBe('turn-1')
@@ -742,7 +746,11 @@ describe('ConversationHistoryForkRepository', () => {
       createdAt: 20,
     })
     const boundaries = new TurnPiBoundaryRepository(db)
-    boundaries.upsert({ turnID: 'compact-turn-1', sessionID: 'compact-source', entryID: firstAnswer })
+    boundaries.upsert({
+      turnID: 'compact-turn-1',
+      sessionID: 'compact-source',
+      entryID: firstAnswer,
+    })
     boundaries.upsert({
       turnID: 'compact-turn-2',
       sessionID: 'compact-source',
@@ -915,7 +923,9 @@ describe('ConversationHistoryForkRepository', () => {
       visible: false,
     })
     expect(hiddenFork.targetThreadID).toBe('hidden-target')
-    expect(db.sqlite.query("SELECT id FROM threads WHERE id = 'hidden-target'").get()).not.toBeNull()
+    expect(
+      db.sqlite.query("SELECT id FROM threads WHERE id = 'hidden-target'").get(),
+    ).not.toBeNull()
     expect(history.rollback('fork-op-rollback')).toBe(true)
     expect(db.sqlite.query("SELECT id FROM threads WHERE id = 'hidden-target'").get()).toBeNull()
     expect(

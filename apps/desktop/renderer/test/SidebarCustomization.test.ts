@@ -66,10 +66,14 @@ describe('侧栏自定义分组', () => {
     expect(pinned.hiddenDestinationIds).toEqual(['home', 'future'])
     expect(pinned.sections).toBe(current.sections)
     expect(pinned.destinationOrder).toBe(current.destinationOrder)
-    const restored = normalizeDesktopStoredSettings(JSON.parse(JSON.stringify({
-      ...defaultDesktopStoredSettings(),
-      sidebarCustomization: pinned,
-    }))).sidebarCustomization
+    const restored = normalizeDesktopStoredSettings(
+      JSON.parse(
+        JSON.stringify({
+          ...defaultDesktopStoredSettings(),
+          sidebarCustomization: pinned,
+        }),
+      ),
+    ).sidebarCustomization
     expect(restored.hiddenDestinationIds).toEqual(pinned.hiddenDestinationIds)
     expect(restored.destinationOrder.slice(0, 4)).toEqual(current.destinationOrder)
     const hidden = setSidebarDestinationHidden(restored, 'pets', true)

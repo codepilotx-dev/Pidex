@@ -33,24 +33,32 @@ if (process.versions.bun) {
     target: 'browser',
     format: 'iife',
     define: { 'process.env.NODE_ENV': '"development"' },
-    plugins: [{
-      name: 'floating-portal-harness',
-      setup(builder) {
-        builder.onResolve({ filter: /^react(?:-dom)?(?:\/.*)?$/ }, (args) => ({
-          path: Bun.resolveSync(args.path, rendererRoot), namespace: 'file',
-        }))
-        builder.onResolve({ filter: /^floating-portal-harness$/ }, () => ({
-          path: 'harness', namespace: 'fixture',
-        }))
-        builder.onLoad({ filter: /^harness$/, namespace: 'fixture' }, () => ({
-          contents: harness, loader: 'jsx', resolveDir: rendererRoot,
-        }))
+    plugins: [
+      {
+        name: 'floating-portal-harness',
+        setup(builder) {
+          builder.onResolve({ filter: /^react(?:-dom)?(?:\/.*)?$/ }, (args) => ({
+            path: Bun.resolveSync(args.path, rendererRoot),
+            namespace: 'file',
+          }))
+          builder.onResolve({ filter: /^floating-portal-harness$/ }, () => ({
+            path: 'harness',
+            namespace: 'fixture',
+          }))
+          builder.onLoad({ filter: /^harness$/, namespace: 'fixture' }, () => ({
+            contents: harness,
+            loader: 'jsx',
+            resolveDir: rendererRoot,
+          }))
+        },
       },
-    }],
+    ],
   })
   assert.ok(build.success, build.logs.map(String).join('\n'))
   const child = Bun.spawn(['node', '--experimental-strip-types', fileURLToPath(import.meta.url)], {
-    stdin: new Blob([await build.outputs[0]!.text()]), stdout: 'inherit', stderr: 'inherit',
+    stdin: new Blob([await build.outputs[0]!.text()]),
+    stdout: 'inherit',
+    stderr: 'inherit',
   })
   process.exit(await child.exited)
 }
@@ -62,11 +70,17 @@ try {
   const page = await browser.newPage()
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  await page.setContent('<div id="root"></div><div role="dialog" id="modal"><button id="anchor">Anchor</button></div>')
+  await page.setContent(
+    '<div id="root"></div><div role="dialog" id="modal"><button id="anchor">Anchor</button></div>',
+  )
   await page.addScriptTag({ content: script })
   const result = await page.evaluate(() => {
     const fixture = window as typeof window & {
-      renderSurface: (revision: number, container?: HTMLElement | null, anchor?: HTMLElement | null) => void
+      renderSurface: (
+        revision: number,
+        container?: HTMLElement | null,
+        anchor?: HTMLElement | null,
+      ) => void
       unmountSurface: () => void
     }
     fixture.renderSurface(0)
@@ -80,9 +94,19 @@ try {
     const nestedModalHost = document.getElementById('surface')?.parentElement === modal
     const nativeTopLayer = document.getElementById('surface')?.matches(':popover-open')
     fixture.unmountSurface()
-    return { stableBodyHost, nestedModalHost, nativeTopLayer, removed: !document.getElementById('surface') }
+    return {
+      stableBodyHost,
+      nestedModalHost,
+      nativeTopLayer,
+      removed: !document.getElementById('surface'),
+    }
   })
-  assert.deepEqual(result, { stableBodyHost: true, nestedModalHost: true, nativeTopLayer: true, removed: true })
+  assert.deepEqual(result, {
+    stableBodyHost: true,
+    nestedModalHost: true,
+    nativeTopLayer: true,
+    removed: true,
+  })
   assert.deepEqual(errors, [])
   console.log('Floating Portal: stable host, nested modal top layer and cleanup passed')
 } finally {

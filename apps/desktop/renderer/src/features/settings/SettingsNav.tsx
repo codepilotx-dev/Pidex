@@ -196,7 +196,12 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
                         }
                         key={item.id}
                         layout="grid"
-                        leading={<item.icon size={APP_ICON_SIZE} className="settings-nav-icon tw:size-4 tw:text-current" />}
+                        leading={
+                          <item.icon
+                            size={APP_ICON_SIZE}
+                            className="settings-nav-icon tw:size-4 tw:text-current"
+                          />
+                        }
                       >
                         <button
                           disabled={pending}

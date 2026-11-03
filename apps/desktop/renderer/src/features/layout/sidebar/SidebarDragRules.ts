@@ -115,8 +115,8 @@ export function dropAnchorKey(
   if (index < 0) return null
   if (region !== 'before' && region !== 'after' && region !== 'sort-edge') return null
   return (
-    order.slice(index + (region === 'after' ? 1 : 0))
-      .find((key) => !movingKeys.includes(key)) ?? null
+    order.slice(index + (region === 'after' ? 1 : 0)).find((key) => !movingKeys.includes(key)) ??
+    null
   )
 }
 

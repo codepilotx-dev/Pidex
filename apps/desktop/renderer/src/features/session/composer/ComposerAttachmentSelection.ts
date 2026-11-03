@@ -49,7 +49,11 @@ export function mergeComposerAttachments(
 
 async function readManagedMediaAttachment(file: File): Promise<DesktopComposerAttachment> {
   if (file.size > (file.type.startsWith('image/') ? 10 : 20) * 1024 * 1024) {
-    return errorAttachment('clipboard-image-size', file.type.startsWith('image/') ? '图片超过 10 MiB 限制。' : '音视频超过 20 MiB 限制。', file)
+    return errorAttachment(
+      'clipboard-image-size',
+      file.type.startsWith('image/') ? '图片超过 10 MiB 限制。' : '音视频超过 20 MiB 限制。',
+      file,
+    )
   }
   const dataUrl = await new Promise<string>((resolve, reject) => {
     const reader = new FileReader()
@@ -65,7 +69,11 @@ async function readManagedMediaAttachment(file: File): Promise<DesktopComposerAt
     path: '',
     mediaType: file.type,
     sizeBytes: file.size,
-    kind: file.type.startsWith('audio/') ? 'audio' : file.type.startsWith('video/') ? 'video' : 'image',
+    kind: file.type.startsWith('audio/')
+      ? 'audio'
+      : file.type.startsWith('video/')
+        ? 'video'
+        : 'image',
     status: 'ready',
     storage: 'managed',
     contentBase64: dataUrl.slice(prefix.length),

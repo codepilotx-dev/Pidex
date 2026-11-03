@@ -123,10 +123,14 @@ describe('工作区工具', () => {
         },
       }
       await expect(
-        executor.execute('Edit', {
-          path: 'source.txt',
-          edits: [{ oldText: 'after', newText: 'blocked' }],
-        }, readOnlyContext),
+        executor.execute(
+          'Edit',
+          {
+            path: 'source.txt',
+            edits: [{ oldText: 'after', newText: 'blocked' }],
+          },
+          readOnlyContext,
+        ),
       ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
       expect(await Bun.file(file).text()).toBe('after')
       await expect(
@@ -241,7 +245,9 @@ describe('工作区工具', () => {
     paths.push(root)
     const workspace = await WorkspaceService.open(root)
     const registry = new ToolRegistry()
-    const explorerTools = registry.list('chat', 'workspace-write', 'explorer').map((tool) => tool.sdkName)
+    const explorerTools = registry
+      .list('chat', 'workspace-write', 'explorer')
+      .map((tool) => tool.sdkName)
     expect(explorerTools).toContain('PowerShell')
     expect(explorerTools).toContain('Grep')
     expect(explorerTools).not.toContain('Write')

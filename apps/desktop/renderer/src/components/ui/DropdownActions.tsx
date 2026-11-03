@@ -28,7 +28,9 @@ export function DropdownActions({ actions }: { actions: readonly AppContextMenuA
         <SidebarRow
           asChild
           className="popover-item popover-sub-trigger"
-          leading={action.icon ? <span className="popover-item-icon">{action.icon}</span> : undefined}
+          leading={
+            action.icon ? <span className="popover-item-icon">{action.icon}</span> : undefined
+          }
           leadingMode={action.icon ? 'icon' : 'none'}
           trailing={<ChevronRight size={APP_ICON_SIZE} />}
         >

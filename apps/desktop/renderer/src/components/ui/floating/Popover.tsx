@@ -67,7 +67,15 @@ function PopoverRoot({ children, open, defaultOpen = false, onOpenChange }: Popo
   const contentId = useId()
   return (
     <PopoverContext.Provider
-      value={{ open: activeOpen, present: activeOpen || present, setPresent, setOpen, triggerRef, anchorRef, contentId }}
+      value={{
+        open: activeOpen,
+        present: activeOpen || present,
+        setPresent,
+        setOpen,
+        triggerRef,
+        anchorRef,
+        contentId,
+      }}
     >
       {children}
     </PopoverContext.Provider>
@@ -257,7 +265,11 @@ const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
         data-side={actualSide}
         data-align={actualAlign}
         style={{ ...floatingStyle, ...arrowStyle, ...style }}
-        className={isUnstyled ? className : `popover-surface popover ${asChild ? '' : 'tw:p-3.5'} tw:text-app-text ${className}`}
+        className={
+          isUnstyled
+            ? className
+            : `popover-surface popover ${asChild ? '' : 'tw:p-3.5'} tw:text-app-text ${className}`
+        }
       />
     )
   },

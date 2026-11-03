@@ -115,7 +115,11 @@ export function ExpandableFileMutationRow({
         onClick={() => disclosure.store.setExpanded(disclosure.id, !expanded)}
         type="button"
       >
-        <Pencil size="var(--inline-icon-size, 1em)" className="cpx-agent-activity__icon" aria-hidden="true" />
+        <Pencil
+          size="var(--inline-icon-size, 1em)"
+          className="cpx-agent-activity__icon"
+          aria-hidden="true"
+        />
         <span className="cpx-agent-activity__label" title={fileMutationTitle(file, workspacePath)}>
           {fileMutationLabel(item.state, file.path, file.operation)}
         </span>

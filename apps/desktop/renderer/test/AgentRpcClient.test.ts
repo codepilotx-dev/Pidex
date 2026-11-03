@@ -9,8 +9,12 @@ describe('agent RPC v4 client', () => {
     let initializedConnection: string | null = null
     let releaseHandshake!: () => void
     let handshakeStarted!: () => void
-    const pendingHandshake = new Promise<void>((resolve) => { releaseHandshake = resolve })
-    const recovering = new Promise<void>((resolve) => { handshakeStarted = resolve })
+    const pendingHandshake = new Promise<void>((resolve) => {
+      releaseHandshake = resolve
+    })
+    const recovering = new Promise<void>((resolve) => {
+      handshakeStarted = resolve
+    })
     const prematureRequests: string[] = []
     const client = createAgentRpcClient({
       handshake: automaticHandshake('renderer-concurrent-recovery'),

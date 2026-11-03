@@ -1526,7 +1526,9 @@ test.each(['idle-manual', 'active-manual', 'automatic', 'reactive'] as const)(
         expect(completed).not.toContain('正在压缩上下文')
         expect(completed.indexOf('原有回复')).toBeLessThan(completed.indexOf('上下文已压缩'))
         const nodeTurn = completed.slice(completed.lastIndexOf('<article class="canonical-turn"'))
-        expect(nodeTurn).not.toContain('canonical-turn-activity__summary')
+        expect(nodeTurn).toContain('canonical-turn-activity__summary')
+        // 时长取压缩操作自身耗时（约 11s），而非所在轮次的 1s。
+        expect(nodeTurn).toContain('已处理 11s')
         expect(nodeTurn).not.toContain('aria-expanded')
         expect(nodeTurn).not.toContain('Token ')
       }
@@ -1551,49 +1553,59 @@ test.each(['idle-manual', 'active-manual', 'automatic', 'reactive'] as const)(
   },
 )
 
-test.each(['running', 'completed'] as const)('只有压缩活动时不显示过程折叠入口：%s', (status) => {
-  const item: Extract<Item, { type: 'activity' }> = {
-    id: 'sole-compaction',
-    messageID: 'message',
-    turnId: 'sole-turn',
-    agentId: 'agent',
-    type: 'activity',
-    activity: 'context-compression',
-    title: status === 'running' ? '正在压缩上下文' : '上下文已自动压缩',
-    status,
-    createdAt: Date.now(),
-  }
-  const entry = {
-    id: item.turnId,
-    turn: { id: item.turnId, status: 'completed', startedAt: 1, elapsedSeconds: 1, error: null },
-    items: [item],
-    userItems: [],
-    attachments: [],
-    contextReferences: [],
-    processItems: [item],
-    assistantResultItems: [],
-    patchItems: [],
-    postAssistantItems: [],
-    planItem: null,
-    executionPlanItems: [],
-    blockers: [],
-    contentBlocks: [],
-  } as unknown as RenderTurnEntry
-  const markup = renderToStaticMarkup(
-    <CanonicalTestProviders>
-      <CanonicalConversationTurn
-        entry={entry}
-        disclosureState={disclosureStore()}
-        dockedPlanItemId={null}
-        onOpenPlanInRightDock={() => {}}
-        onOpenSubagent={() => {}}
-      />
-    </CanonicalTestProviders>,
-  )
-  expect(markup).toContain(item.title)
-  expect(markup).not.toContain('canonical-turn-activity__summary')
-  expect(markup).not.toContain('aria-expanded')
-})
+test.each(['running', 'completed'] as const)(
+  '只有压缩活动时显示处理时长但不提供折叠入口：%s',
+  (status) => {
+    const item: Extract<Item, { type: 'activity' }> = {
+      id: 'sole-compaction',
+      messageID: 'message',
+      turnId: 'sole-turn',
+      agentId: 'agent',
+      type: 'activity',
+      activity: 'context-compression',
+      title: status === 'running' ? '正在压缩上下文' : '上下文已自动压缩',
+      status,
+      createdAt: Date.now(),
+    }
+    const entry = {
+      id: item.turnId,
+      turn: {
+        id: item.turnId,
+        status: 'completed',
+        startedAt: Date.now(),
+        elapsedSeconds: 1,
+        error: null,
+      },
+      items: [item],
+      userItems: [],
+      attachments: [],
+      contextReferences: [],
+      processItems: [item],
+      assistantResultItems: [],
+      patchItems: [],
+      postAssistantItems: [],
+      planItem: null,
+      executionPlanItems: [],
+      blockers: [],
+      contentBlocks: [],
+    } as unknown as RenderTurnEntry
+    const markup = renderToStaticMarkup(
+      <CanonicalTestProviders>
+        <CanonicalConversationTurn
+          entry={entry}
+          disclosureState={disclosureStore()}
+          dockedPlanItemId={null}
+          onOpenPlanInRightDock={() => {}}
+          onOpenSubagent={() => {}}
+        />
+      </CanonicalTestProviders>,
+    )
+    expect(markup).toContain(item.title)
+    expect(markup).toContain('canonical-turn-activity__summary')
+    expect(markup).toContain('已处理 1s')
+    expect(markup).not.toContain('aria-expanded')
+  },
+)
 
 test('assistant actions align to the left in Codex order with optional goal status and divider', () => {
   const textItem = {

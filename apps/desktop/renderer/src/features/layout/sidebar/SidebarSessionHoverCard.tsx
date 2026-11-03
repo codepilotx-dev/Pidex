@@ -53,9 +53,7 @@ export function buildSidebarSessionHoverCardModel(
         ? '本地工作区'
         : `工作树 · ${WORKTREE_STATUS_LABEL[environment.status] ?? environment.status}`
   const errorMessage =
-    session.latestTurnStatus === 'failed'
-      ? session.latestTurnError?.trim() || '任务执行失败'
-      : null
+    session.latestTurnStatus === 'failed' ? session.latestTurnError?.trim() || '任务执行失败' : null
   return {
     title: resolved || sessionDisplayTitle(session, fallbackTitle),
     relativeTime: formatSidebarSessionRelativeTime(session.lastMessageAt ?? session.createdAt, now),

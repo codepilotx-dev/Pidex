@@ -91,7 +91,11 @@ async function buildHarness() {
     target: 'browser',
     format: 'esm',
     tsconfig: resolve(rendererRoot, 'tsconfig.app.json'),
-    define: { 'process.env.NODE_ENV': '"development"', 'import.meta.env': '{"DEV":true}', 'import.meta.hot': 'undefined' },
+    define: {
+      'process.env.NODE_ENV': '"development"',
+      'import.meta.env': '{"DEV":true}',
+      'import.meta.hot': 'undefined',
+    },
     plugins: [
       {
         name: 'submission-harness',
@@ -106,7 +110,13 @@ async function buildHarness() {
                   ).replaceAll('\\', '/'),
                   namespace: 'file',
                 }
-              : {path: Bun.resolveSync(args.path, args.resolveDir || rendererRoot).replaceAll('\\', '/'), namespace: 'file'},
+              : {
+                  path: Bun.resolveSync(args.path, args.resolveDir || rendererRoot).replaceAll(
+                    '\\',
+                    '/',
+                  ),
+                  namespace: 'file',
+                },
           )
           builder.onResolve({ filter: /^react(?:\/.*)?$/ }, (args) => ({
             path: Bun.resolveSync(args.path, rendererRoot).replaceAll('\\', '/'),
@@ -155,7 +165,9 @@ try {
   const page = await browser.newPage()
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  page.on('console', message => { if (message.type() === 'error') errors.push(message.text()) })
+  page.on('console', (message) => {
+    if (message.type() === 'error') errors.push(message.text())
+  })
   await page.route('http://session-test.local/**', (route) =>
     route.fulfill({ contentType: 'text/html', body: '<div id="root"></div>' }),
   )
@@ -237,8 +249,13 @@ try {
   assert.equal(await page.evaluate('creation'), 'created')
   await expect(page.locator('#session')).toHaveText('created')
   await expect(page.locator('#sessions li[data-id="created"]')).toHaveCount(1)
-  await expect(page.locator('#sessions li[data-id="created"]')).toHaveText('Canonical created title')
-  await expect(page.locator('#sessions li[data-id="created"]')).toHaveAttribute('data-status', 'running')
+  await expect(page.locator('#sessions li[data-id="created"]')).toHaveText(
+    'Canonical created title',
+  )
+  await expect(page.locator('#sessions li[data-id="created"]')).toHaveAttribute(
+    'data-status',
+    'running',
+  )
   assert.deepEqual(await page.evaluate('store.getSnapshot("created").selection'), {
     providerID: 'home-provider',
     model: 'home-draft',
@@ -257,16 +274,16 @@ try {
     providerBaseURL: undefined,
     localRouterMode: undefined,
   })
-  await page.evaluate(`window.emitCreationEvent = false; window.creationId = 'created-without-event'; window.releaseCreate = undefined; window.creation = api.createSessionForWorkspace({projectId:'project',name:'Test',path:'/test'}); void 0`)
+  await page.evaluate(
+    `window.emitCreationEvent = false; window.creationId = 'created-without-event'; window.releaseCreate = undefined; window.creation = api.createSessionForWorkspace({projectId:'project',name:'Test',path:'/test'}); void 0`,
+  )
   await page.waitForFunction('typeof releaseCreate === "function"')
   await page.evaluate('releaseCreate()')
   assert.equal(await page.evaluate('creation'), 'created-without-event')
   await expect(page.locator('#sessions li[data-id="created-without-event"]')).toHaveCount(1)
   await expect(page.locator('#sessions li')).toHaveCount(4)
   assert.deepEqual(errors, [])
-  console.log(
-    'Target-session model binding and creation event/list reconciliation passed.',
-  )
+  console.log('Target-session model binding and creation event/list reconciliation passed.')
 } finally {
   await browser.close()
 }

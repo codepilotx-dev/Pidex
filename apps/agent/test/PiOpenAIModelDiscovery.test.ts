@@ -63,12 +63,16 @@ test('static OpenAI catalogs discover remote models, preserve metadata and cache
     list: () => [],
     get: () => Effect.succeed(null),
   } as unknown as ProviderCredentialRepository
-  const directory = new ProviderDirectoryStore(undefined, async (url) => Response.json(
-    String(url).startsWith('https://pi.dev/') ? { nvidia: { known: provider().getModels()[0] } } : {
-      models: { known: { name: 'Known model' } },
-      providers: { nvidia: { name: 'NVIDIA', models: {} } },
-    },
-  ))
+  const directory = new ProviderDirectoryStore(undefined, async (url) =>
+    Response.json(
+      String(url).startsWith('https://pi.dev/')
+        ? { nvidia: { known: provider().getModels()[0] } }
+        : {
+            models: { known: { name: 'Known model' } },
+            providers: { nvidia: { name: 'NVIDIA', models: {} } },
+          },
+    ),
+  )
   await directory.refresh()
   const runtime = () => {
     const models = createModels({ modelsStore })
@@ -108,7 +112,9 @@ test('static OpenAI catalogs discover remote models, preserve metadata and cache
     expect(restored.pi.getModel('nvidia', 'remote-only')).toBeDefined()
     expect(requests).toBe(1)
     fail = true
-    await expect(service.refresh(true, 'nvidia')).rejects.toMatchObject({ code: 'CATALOG_REFRESH_FAILED' })
+    await expect(service.refresh(true, 'nvidia')).rejects.toMatchObject({
+      code: 'CATALOG_REFRESH_FAILED',
+    })
     expect(service.pi.getModel('nvidia', 'remote-only')).toBeDefined()
     expect(requests).toBe(2)
     fail = false

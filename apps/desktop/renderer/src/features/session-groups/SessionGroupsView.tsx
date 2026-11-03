@@ -307,7 +307,10 @@ export function SessionGroupsView(): React.ReactNode {
               <header className="session-group-detail__header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:pb-6 tw:@max-[760px]:flex-col tw:@max-[760px]:items-stretch">
                 <div className="session-group-detail__info tw:flex tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:flex-col tw:gap-1 tw:[&>h1]:mt-1 tw:[&>h1]:text-app-text tw:[&>h1]:type-title-xl tw:[&>p]:m-0 tw:[&>p]:text-app-text-soft tw:[&>p]:type-body">
                   <Chip variant="accent" className="session-group-eyebrow tw:self-start">
-                    <Sparkles size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
+                    <Sparkles
+                      size="var(--inline-icon-size, 1em)"
+                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                    />
                     共享上下文
                   </Chip>
                   <h1>{detail.group.name}</h1>
@@ -410,7 +413,10 @@ export function SessionGroupsView(): React.ReactNode {
                         <span className="session-group-member-card__title tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap tw:text-app-text tw:type-row-title">
                           {member.title || member.threadId}
                         </span>
-                        <Chip variant="info" className="session-group-member-card__chip tw:self-start tw:type-caption">
+                        <Chip
+                          variant="info"
+                          className="session-group-member-card__chip tw:self-start tw:type-caption"
+                        >
                           {member.workspaceLabel || '无项目'}
                         </Chip>
                       </Link>
@@ -438,7 +444,10 @@ export function SessionGroupsView(): React.ReactNode {
 
               <section className="session-group-section tw:border-b tw:border-b-app-border-subtle tw:py-6 tw:last:border-b-0">
                 <div className="session-group-section__title-row tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:text-app-text tw:[&>h3]:m-0 tw:[&>h3]:type-title-sm">
-                  <History size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
+                  <History
+                    size="var(--inline-icon-size, 1em)"
+                    strokeWidth={APP_ICON_STROKE_WIDTH}
+                  />
                   <h3>步骤时间线</h3>
                   <span className="session-group-section-count tw:inline-flex tw:h-4.5 tw:min-w-4.5 tw:items-center tw:justify-center tw:rounded-full tw:bg-app-control tw:px-1 tw:text-app-text-soft tw:type-label">
                     {steps.length}
@@ -689,7 +698,10 @@ const SessionGroupStepCard = memo(function SessionGroupStepCard({
               to={`/threads/${encodeURIComponent(step.sourceThreadId)}`}
             >
               <span>打开来源</span>
-              <ArrowUpRight size="var(--inline-icon-size, 1em)" strokeWidth={APP_ICON_STROKE_WIDTH} />
+              <ArrowUpRight
+                size="var(--inline-icon-size, 1em)"
+                strokeWidth={APP_ICON_STROKE_WIDTH}
+              />
             </Link>
           ) : (
             <span className="session-group-step__link session-group-step__link--disabled tw:cursor-default tw:text-app-text-disabled">

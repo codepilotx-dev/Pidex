@@ -87,9 +87,10 @@ export function applyRecommendation<T extends PiModelFields>(
   const outputCost = fixed.has('outputCost') ? undefined : recommended.cost?.output
   const cacheReadCost = fixed.has('cacheReadCost') ? undefined : recommended.cost?.cacheRead
   const cacheWriteCost = fixed.has('cacheWriteCost') ? undefined : recommended.cost?.cacheWrite
-  const input = recommended.input && !fixed.has('imageInput')
-    ? mergeModalities(model.input, recommended.input, fixed)
-    : undefined
+  const input =
+    recommended.input && !fixed.has('imageInput')
+      ? mergeModalities(model.input, recommended.input, fixed)
+      : undefined
   return {
     ...model,
     ...(name !== undefined ? { name } : {}),
@@ -99,7 +100,10 @@ export function applyRecommendation<T extends PiModelFields>(
     ...(reasoning !== undefined ? { reasoning } : {}),
     ...(tools !== undefined ? { tools } : {}),
     ...(input !== undefined ? { input } : {}),
-    ...(inputCost !== undefined || outputCost !== undefined || cacheReadCost !== undefined || cacheWriteCost !== undefined
+    ...(inputCost !== undefined ||
+    outputCost !== undefined ||
+    cacheReadCost !== undefined ||
+    cacheWriteCost !== undefined
       ? {
           cost: {
             ...model.cost,
@@ -280,9 +284,7 @@ export class ModelRecommendationIndex {
     // 剥离档位只在裸名精确匹配时才算数：`gpt-4o-2024-08-06` 剥掉日期后命中原名，
     // `ample` 不剥也永远不命中，避免把模糊相似当成同一个模型。
     const strippedMatch = (candidate: string) =>
-      entries.filter(
-        (entry) => bare(entry.id) === candidate || bare(entry.canonical) === candidate,
-      )
+      entries.filter((entry) => bare(entry.id) === candidate || bare(entry.canonical) === candidate)
     const stages = [
       entries.filter((entry) => entry.id === id),
       entries.filter((entry) => entry.canonical === id || entry.aliases.includes(id)),

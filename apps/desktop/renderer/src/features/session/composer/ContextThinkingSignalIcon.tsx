@@ -121,9 +121,7 @@ export function ContextThinkingSignalIcon({
             rx={0.8}
             fill="currentColor"
             style={
-              !isThinkingOff && !isActive
-                ? { fill: 'var(--cpx-sys-color-fg-tertiary)' }
-                : undefined
+              !isThinkingOff && !isActive ? { fill: 'var(--cpx-sys-color-fg-tertiary)' } : undefined
             }
           />
         )

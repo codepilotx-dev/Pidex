@@ -106,7 +106,9 @@
     gap: var(--cpx-comp-row-gap-y);
   }
 
-  .interactive-row:hover:not(:where(:disabled, [data-disabled], [aria-disabled='true'], [data-menu-item])),
+  .interactive-row:hover:not(
+      :where(:disabled, [data-disabled], [aria-disabled='true'], [data-menu-item])
+    ),
   .settings-dropdown-item:hover:not(:where(:disabled, [data-disabled])),
   .permission-select-item:hover:not(:where([data-disabled])),
   .chat-input__dropdown-item:hover:not(:where(:disabled)),

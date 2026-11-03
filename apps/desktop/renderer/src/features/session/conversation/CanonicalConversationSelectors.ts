@@ -42,9 +42,7 @@ const completedResultSourceLinks = new WeakMap<object, SourceLink[]>()
  * the newest active turn, otherwise the newest turn that is not waiting in the
  * queue. Returns `null` when the projection holds no usable turn yet.
  */
-export function selectCanonicalLatestTurn(
-  state: CanonicalThreadState | null,
-): Turn | null {
+export function selectCanonicalLatestTurn(state: CanonicalThreadState | null): Turn | null {
   if (!state) return null
   const queueTurnIds = new Set(state.queue.turnIds)
   const activeTurn = [...state.turnsById.values()]

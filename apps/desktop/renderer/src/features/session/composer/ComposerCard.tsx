@@ -2089,10 +2089,7 @@ export function ComposerCard({
                     onPointerEnter={() => setContextPreviewOpen(true)}
                     onPointerLeave={(event) => {
                       if (
-                        !containsRelatedTarget(
-                          contextPreviewRef.current,
-                          event.relatedTarget,
-                        ) &&
+                        !containsRelatedTarget(contextPreviewRef.current, event.relatedTarget) &&
                         !contextPreviewRef.current?.contains(
                           event.currentTarget.ownerDocument.activeElement,
                         ) &&

@@ -23,7 +23,9 @@ import { useLocale } from '../i18n/LocaleProvider.js'
 export function QuickChatView(): React.ReactNode {
   const [searchParams, setSearchParams] = useSearchParams()
   const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
-  const setSidebarProductMode = useDesktopSettingsField((settings) => settings.setSidebarProductMode)
+  const setSidebarProductMode = useDesktopSettingsField(
+    (settings) => settings.setSidebarProductMode,
+  )
   const search = searchParams.toString()
   const urlSurface = parseNewSessionSurface(search)
   const surface = urlSurface ?? sidebarProductMode

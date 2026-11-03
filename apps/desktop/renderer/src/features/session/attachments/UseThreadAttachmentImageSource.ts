@@ -3,13 +3,10 @@ import { useEffect, useState, type RefObject } from 'react'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 
 export type ThreadAttachmentImageState =
-  | { status: 'loading' }
-  | { status: 'ready'; source: string }
-  | { status: 'error'; message: string }
+  { status: 'loading' } | { status: 'ready'; source: string } | { status: 'error'; message: string }
 
 type AttachmentImageReadResult =
-  | { kind: 'ready'; source: string }
-  | { kind: 'error'; message: string }
+  { kind: 'ready'; source: string } | { kind: 'error'; message: string }
 
 const pendingReads = new Map<string, Promise<AttachmentImageReadResult>>()
 

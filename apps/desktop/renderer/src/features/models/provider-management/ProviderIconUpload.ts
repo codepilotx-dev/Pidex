@@ -62,7 +62,10 @@ export async function readProviderIconUpload(file: File): Promise<string> {
     context.drawImage(image, 0, 0, width, height)
 
     const dataURL = canvas.toDataURL('image/png')
-    if (!dataURL.startsWith('data:image/png;base64,') || dataURL.length > PROVIDER_ICON_UPLOAD_MAX_DATA_URL_LENGTH) {
+    if (
+      !dataURL.startsWith('data:image/png;base64,') ||
+      dataURL.length > PROVIDER_ICON_UPLOAD_MAX_DATA_URL_LENGTH
+    ) {
       throw new Error('图片处理后仍然过大，请更换更简单的图片。')
     }
     return dataURL

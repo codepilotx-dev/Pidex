@@ -479,7 +479,8 @@ test('controller enforces window/generation, shares device state, and isolates c
     await controller.close(owner, 'tab:1')
     for (const visible of [true, false]) {
       await expect(controller.setVisible(owner, 'tab:1', visible)).resolves.toMatchObject({
-        tabId: 'tab:1', open: false,
+        tabId: 'tab:1',
+        open: false,
       })
     }
   } finally {

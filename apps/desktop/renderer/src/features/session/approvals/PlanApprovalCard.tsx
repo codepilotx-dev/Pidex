@@ -115,7 +115,11 @@ export function PlanApprovalCard({
         {editingFeedback ? null : (
           <div className="plan-approval-actions tw:flex tw:flex-col tw:items-stretch tw:gap-2 tw:px-1 tw:pt-2">
             <div className="tw:flex tw:flex-wrap tw:items-center tw:gap-2">
-              <Button color="secondary" disabled={disabled} onClick={() => setEditingFeedback(true)}>
+              <Button
+                color="secondary"
+                disabled={disabled}
+                onClick={() => setEditingFeedback(true)}
+              >
                 修改计划
               </Button>
               <div className="tw:ml-auto tw:inline-flex tw:items-center">
@@ -195,9 +199,7 @@ export function PlanApprovalCard({
                 disabled={disabled || !feedback.trim()}
                 loading={busy === 'feedback'}
                 loadingText="正在提交修改意见…"
-                onClick={() =>
-                  void act(() => ({ action: 'feedback', feedback: feedback.trim() }))
-                }
+                onClick={() => void act(() => ({ action: 'feedback', feedback: feedback.trim() }))}
               >
                 发送修改意见
               </Button>

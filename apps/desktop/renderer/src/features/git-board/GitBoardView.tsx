@@ -336,7 +336,9 @@ export function RepositoryColumn({
           <GitBoardRepositorySkeleton />
         ) : !result.ok ? (
           <div role="alert" className="tw:p-2">
-            <p className="tw:type-body-sm tw:text-app-danger">{result.ok === false ? result.error : ''}</p>
+            <p className="tw:type-body-sm tw:text-app-danger">
+              {result.ok === false ? result.error : ''}
+            </p>
             <Button variant="text" onClick={refresh}>
               {t('重试')}
             </Button>
@@ -410,13 +412,7 @@ export function RepositoryColumn({
   )
 }
 
-function ProjectBoard({
-  actionBusy,
-  actionError,
-}: {
-  actionBusy?: boolean
-  actionError?: string
-}) {
+function ProjectBoard({ actionBusy, actionError }: { actionBusy?: boolean; actionError?: string }) {
   const { t } = useLocale()
   const {
     view,

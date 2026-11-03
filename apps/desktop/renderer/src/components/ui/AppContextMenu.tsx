@@ -36,9 +36,7 @@ export type AppContextMenuAction =
  * 菜单动作输入：数组立即生效；构建函数仅在菜单请求打开或已打开时调用，
  * 关闭期间不构建动作、不渲染条目，供长列表行避免无谓的重复构建。
  */
-export type AppContextMenuActionsInput =
-  | AppContextMenuAction[]
-  | (() => AppContextMenuAction[])
+export type AppContextMenuActionsInput = AppContextMenuAction[] | (() => AppContextMenuAction[])
 
 export type AppContextMenuProps = {
   trigger: ReactNode
@@ -112,7 +110,10 @@ export function AppContextMenu({
   )
   // 构建函数只在菜单打开期间调用；关闭时不生成动作、不渲染条目。
   const menuActions = resolveAppContextMenuActions(actions, open)
-  const mergedActions = useMemo(() => mergeActions(menuActions, editActions), [menuActions, editActions])
+  const mergedActions = useMemo(
+    () => mergeActions(menuActions, editActions),
+    [menuActions, editActions],
+  )
 
   function handleContextMenu(event: MouseEvent<HTMLSpanElement>): void {
     if (event.defaultPrevented) return

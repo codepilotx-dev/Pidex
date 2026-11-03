@@ -295,9 +295,7 @@ function command(
   return {
     id,
     trigger:
-      id === 'plan' || id === 'grill' || id === 'status'
-        ? SHARED_SLASH_COMMANDS[id].trigger
-        : id,
+      id === 'plan' || id === 'grill' || id === 'status' ? SHARED_SLASH_COMMANDS[id].trigger : id,
     title,
     description,
     source: 'builtin',

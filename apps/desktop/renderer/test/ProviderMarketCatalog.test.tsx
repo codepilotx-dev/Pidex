@@ -1,7 +1,10 @@
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
-import { ProviderCatalog, type ProviderCatalogItem } from '../src/features/models/ProviderCatalog.js'
+import {
+  ProviderCatalog,
+  type ProviderCatalogItem,
+} from '../src/features/models/ProviderCatalog.js'
 import { SidebarProvidersPane } from '../src/features/layout/sidebar/SidebarProvidersPane.js'
 
 function makeItem(id: string, name: string, canAddConnection: boolean): ProviderCatalogItem {

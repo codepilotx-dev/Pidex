@@ -29,7 +29,10 @@ describe('sidebar disclosure store', () => {
       expect(disclosure.store.getSnapshot(sidebarProjectDisclosureKey(project))).toBe(false)
       expect(disclosure.store.getSnapshot(sidebarProjectDisclosureKey(addedProject))).toBe(true)
       expect(snapshots).toEqual([
-        { collapsedSidebarSections: [], collapsedSidebarProjectPaths: [sidebarProjectKey(project)] },
+        {
+          collapsedSidebarSections: [],
+          collapsedSidebarProjectPaths: [sidebarProjectKey(project)],
+        },
       ])
       disclosure.store.destroy()
     })

@@ -12,7 +12,8 @@ import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../../settings/SettingsManageme
 
 /** 产品面可读的错误文本：只保留 message，剥离堆栈帧与内部源码路径，避免泄露实现细节。 */
 function readableError(error: unknown): string {
-  const raw = error instanceof Error ? error.message : typeof error === 'string' ? error : String(error)
+  const raw =
+    error instanceof Error ? error.message : typeof error === 'string' ? error : String(error)
   const cleaned = raw
     .split('\n')
     .filter((line) => !/^\s*at\s/u.test(line))
@@ -105,17 +106,20 @@ export function ProviderModelDialog({
               </Button>
             </header>
             <div className="settings-management-dialog-body tw:min-h-0 tw:overflow-y-auto">
-            <fieldset disabled={busy} className="tw:m-0 tw:grid tw:min-w-0 tw:gap-4 tw:border-0 tw:p-0">
-              <ModelEditor
-                groups={groups}
-                providerId={providerId}
-                baseUrl={baseUrl}
-                model={draft}
-                lockId={!creating}
-                onChange={setDraft}
-                {...(nativeApi ? { nativeApi } : {})}
-              />
-            </fieldset>
+              <fieldset
+                disabled={busy}
+                className="tw:m-0 tw:grid tw:min-w-0 tw:gap-4 tw:border-0 tw:p-0"
+              >
+                <ModelEditor
+                  groups={groups}
+                  providerId={providerId}
+                  baseUrl={baseUrl}
+                  model={draft}
+                  lockId={!creating}
+                  onChange={setDraft}
+                  {...(nativeApi ? { nativeApi } : {})}
+                />
+              </fieldset>
             </div>
             {error ? (
               <div className="tw:shrink-0 tw:px-6 tw:pb-2">

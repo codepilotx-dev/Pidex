@@ -35,7 +35,10 @@ import {
 } from '../src/features/session/timeline/StructuredDeliveryText.js'
 import { CodeBlock } from '../src/features/syntax/CodeBlock.js'
 import { TooltipProvider } from '../src/components/ui/Tooltip.js'
-import { AttachmentFilePill, AttachmentFileRow } from '../src/features/session/attachments/AttachmentRowPrimitives.js'
+import {
+  AttachmentFilePill,
+  AttachmentFileRow,
+} from '../src/features/session/attachments/AttachmentRowPrimitives.js'
 import { threadPatchDiffToDesktopFile } from '../src/features/session/timeline/FileMutationDiffContent.js'
 import {
   createThreadPatchDiffLoader,
@@ -101,7 +104,8 @@ describe('canonical tool item display', () => {
   test('chunks long output without changing whitespace or line height estimates', () => {
     for (const count of [0, 1, 63, 64, 65, 128, 4000]) {
       for (const suffix of ['', '\n']) {
-        const output = Array.from({ length: count }, (_, i) => `  ${i} 中文\tvalue\r`).join('\n') + suffix
+        const output =
+          Array.from({ length: count }, (_, i) => `  ${i} 中文\tvalue\r`).join('\n') + suffix
         const chunks = commandOutputChunks(output)
         expect(chunks.map((chunk) => chunk.text).join('')).toBe(output)
         expect(chunks.every((chunk) => chunk.lineCount <= 64)).toBe(true)
@@ -213,7 +217,11 @@ describe('canonical tool item display', () => {
 
   test('uses the shared tooltip instead of a native title for local attachment paths', () => {
     const markup = renderToStaticMarkup(
-      <AttachmentFilePill name="notes.txt" path="C:/workspace/notes.txt" onOpen={() => undefined} />,
+      <AttachmentFilePill
+        name="notes.txt"
+        path="C:/workspace/notes.txt"
+        onOpen={() => undefined}
+      />,
     )
     expect(markup).toContain('data-state="closed"')
     expect(markup).not.toContain('title="notes.txt"')
@@ -224,21 +232,27 @@ describe('canonical tool item display', () => {
     const files = ['one.txt', 'two.txt', 'three.txt', 'four.txt', 'five.txt'].map((name) => (
       <AttachmentFilePill key={name} name={name} />
     ))
-    const collapsed = renderToStaticMarkup(<AttachmentFileRow ariaLabel="文件">{files}</AttachmentFileRow>)
+    const collapsed = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件">{files}</AttachmentFileRow>,
+    )
     expect(collapsed).toContain('one.txt')
     expect(collapsed).toContain('two.txt')
     expect(collapsed).not.toContain('three.txt')
     expect(collapsed).toContain('展开其余 3 个文件')
     expect(collapsed).not.toContain('title="展开其余')
     const expanded = renderToStaticMarkup(
-      <AttachmentFileRow ariaLabel="文件" defaultExpanded>{files}</AttachmentFileRow>,
+      <AttachmentFileRow ariaLabel="文件" defaultExpanded>
+        {files}
+      </AttachmentFileRow>,
     )
     for (const name of ['one.txt', 'two.txt', 'three.txt', 'four.txt', 'five.txt']) {
       expect(expanded).toContain(name)
     }
     expect(expanded.match(/aria-expanded="true"/g)).toHaveLength(1)
     expect(expanded).toContain('收起文件列表')
-    const pair = renderToStaticMarkup(<AttachmentFileRow ariaLabel="文件">{files.slice(0, 2)}</AttachmentFileRow>)
+    const pair = renderToStaticMarkup(
+      <AttachmentFileRow ariaLabel="文件">{files.slice(0, 2)}</AttachmentFileRow>,
+    )
     expect(pair).not.toContain('展开其余')
     const manyFiles = Array.from({ length: 40 }, (_, index) => (
       <AttachmentFilePill key={index} name={`file-${index}.txt`} />
@@ -298,9 +312,9 @@ describe('canonical tool item display', () => {
     )
     expect(cleanCommandSummary('cd "C:\\Program Files" ; npm test')).toBe('npm test')
     expect(cleanCommandSummary('git status')).toBe('git status')
-    expect(
-      cleanCommandSummary('bun run typecheck 2>&1|grep -E"error TS" Ihead -20'),
-    ).toBe('bun run typecheck')
+    expect(cleanCommandSummary('bun run typecheck 2>&1|grep -E"error TS" Ihead -20')).toBe(
+      'bun run typecheck',
+    )
     expect(cleanCommandSummary('bun run typecheck 2>&1|tail-20')).toBe('bun run typecheck')
     expect(cleanCommandSummary('bun test 2>&1 | Select-String "FAIL"')).toBe('bun test')
   })

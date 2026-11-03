@@ -160,7 +160,9 @@ describe('agent thread adapter', () => {
       snapshot.turns = [{ ...actual, model: { ...actual.model, variant } }, queued]
       const restored = agentThreadSnapshotToDesktop(snapshot)
       expect(restored.settings.maxContextTokens).toBe(100_000)
-      expect(agentThreadListItemToDesktopSnapshot(snapshot.thread).settings.maxContextTokens).toBe(100_000)
+      expect(agentThreadListItemToDesktopSnapshot(snapshot.thread).settings.maxContextTokens).toBe(
+        100_000,
+      )
       const expectedThinkingMode =
         variant === 'enabled' || variant === 'adaptive' || variant === 'disabled'
           ? variant

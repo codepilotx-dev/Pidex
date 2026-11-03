@@ -239,8 +239,8 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           'aria-label': '消息输入框',
           role: 'combobox',
           'aria-autocomplete': 'list',
-          'aria-readonly': readOnly ? 'true' : undefined,
-          'data-composer-readonly': readOnly ? 'true' : undefined,
+          // ProseMirror 会把 undefined 写成字符串 "undefined"，只读属性必须整体省略。
+          ...(readOnly ? { 'aria-readonly': 'true', 'data-composer-readonly': 'true' } : {}),
           spellcheck: 'true',
           class: 'composer-editor-content',
         },

@@ -66,7 +66,12 @@ export function ToastStack(): React.ReactNode {
 
   useLayoutEffect(() => {
     // 删除聚焦的通知按钮不一定触发 blur，不能让旧焦点把后续通知永久展开。
-    if (!containsRelatedTarget(containerRef.current, containerRef.current?.ownerDocument.activeElement ?? null)) {
+    if (
+      !containsRelatedTarget(
+        containerRef.current,
+        containerRef.current?.ownerDocument.activeElement ?? null,
+      )
+    ) {
       setIsFocused(false)
     }
     if (toasts.length === 0) {
@@ -84,8 +89,9 @@ export function ToastStack(): React.ReactNode {
   }
 
   const visibleHeights = heightArray.slice(0, 3)
-  const viewportHeight = visibleHeights.reduce((sum, height) => sum + height, 0)
-    + Math.max(0, visibleHeights.length - 1) * GAP
+  const viewportHeight =
+    visibleHeights.reduce((sum, height) => sum + height, 0) +
+    Math.max(0, visibleHeights.length - 1) * GAP
 
   const updateScrollEdges = useCallback(() => {
     const node = containerRef.current
@@ -109,76 +115,92 @@ export function ToastStack(): React.ReactNode {
       containerRef.current.scrollTop = 0
     }
     updateScrollEdges()
-  }, [isExpanded, isOverflowing, totalExpandedHeight, viewportHeight, toasts[0]?.id, updateScrollEdges])
+  }, [
+    isExpanded,
+    isOverflowing,
+    totalExpandedHeight,
+    viewportHeight,
+    toasts[0]?.id,
+    updateScrollEdges,
+  ])
 
   return (
     <>
-    {toasts.length > 0 ? <div
-      ref={containerRef}
-      data-open={isExpanded || undefined}
-      data-scrollable={isOverflowing || undefined}
-      data-fade-top={(isOverflowing && fadeTop) || undefined}
-      data-fade-bottom={(isOverflowing && fadeBottom) || undefined}
-      onScroll={updateScrollEdges}
-      className={`tst toast-stack-container tw:absolute tw:top-2 tw:left-1/2 tw:-translate-x-1/2 tw:z-toast tw:w-[min(420px,calc(100%-1rem))] tw:max-h-[min(calc(100vh-2rem),720px)] tw:[-webkit-app-region:no-drag] ${
-        isOverflowing ? 'tw:overflow-y-auto tw:overflow-x-hidden' : 'tw:overflow-visible'
-      }`}
-      style={{
-        height: viewportHeight,
-      }}
-      role="region"
-      aria-label="通知列表"
-      onPointerOver={() => {
-        setIsHovered(true)
-        toastStore.setHovered(true)
-      }}
-      onPointerOut={(e) => {
-        if (!containsRelatedTarget(containerRef.current, e.relatedTarget)) {
-          setIsHovered(false)
-          toastStore.setHovered(false)
-        }
-      }}
-      onFocus={() => {
-        setIsFocused(true)
-        toastStore.setHovered(true)
-      }}
-      onBlur={(e) => {
-        if (!containsRelatedTarget(containerRef.current, e.relatedTarget)) {
-          setIsFocused(false)
-          toastStore.setHovered(false)
-        }
-      }}
-    >
-      <div
-        className="toast-stack-body tw:relative tw:w-full"
-        style={{ height: isExpanded ? totalExpandedHeight : viewportHeight }}
-      >
-        <AnimatePresence initial={false}>
-          {toasts.map((toastItem, index) => {
-            const transform = calculateCardTransform(index, isExpanded, heightArray, GAP, PEEK, isExpanded ? undefined : viewportHeight)
+      {toasts.length > 0 ? (
+        <div
+          ref={containerRef}
+          data-open={isExpanded || undefined}
+          data-scrollable={isOverflowing || undefined}
+          data-fade-top={(isOverflowing && fadeTop) || undefined}
+          data-fade-bottom={(isOverflowing && fadeBottom) || undefined}
+          onScroll={updateScrollEdges}
+          className={`tst toast-stack-container tw:absolute tw:top-2 tw:left-1/2 tw:-translate-x-1/2 tw:z-toast tw:w-[min(420px,calc(100%-1rem))] tw:max-h-[min(calc(100vh-2rem),720px)] tw:[-webkit-app-region:no-drag] ${
+            isOverflowing ? 'tw:overflow-y-auto tw:overflow-x-hidden' : 'tw:overflow-visible'
+          }`}
+          style={{
+            height: viewportHeight,
+          }}
+          role="region"
+          aria-label="通知列表"
+          onPointerOver={() => {
+            setIsHovered(true)
+            toastStore.setHovered(true)
+          }}
+          onPointerOut={(e) => {
+            if (!containsRelatedTarget(containerRef.current, e.relatedTarget)) {
+              setIsHovered(false)
+              toastStore.setHovered(false)
+            }
+          }}
+          onFocus={() => {
+            setIsFocused(true)
+            toastStore.setHovered(true)
+          }}
+          onBlur={(e) => {
+            if (!containsRelatedTarget(containerRef.current, e.relatedTarget)) {
+              setIsFocused(false)
+              toastStore.setHovered(false)
+            }
+          }}
+        >
+          <div
+            className="toast-stack-body tw:relative tw:w-full"
+            style={{ height: isExpanded ? totalExpandedHeight : viewportHeight }}
+          >
+            <AnimatePresence initial={false}>
+              {toasts.map((toastItem, index) => {
+                const transform = calculateCardTransform(
+                  index,
+                  isExpanded,
+                  heightArray,
+                  GAP,
+                  PEEK,
+                  isExpanded ? undefined : viewportHeight,
+                )
 
-            return (
-              <ToastCardWrapper
-                key={toastItem.id}
-                toast={toastItem}
-                index={index}
-                transform={transform}
-                isExpanded={isExpanded}
-                reducedMotion={reducedMotion}
-                onHeightChange={handleHeightChange}
-                onDismiss={() => toastStore.dismiss(toastItem.id)}
-                onActivate={() => {
-                  void toastStore.activate(toastItem.id, setDetails).catch((error: unknown) => {
-                    window.dispatchEvent(new CustomEvent('desktop:error', { detail: error }))
-                  })
-                }}
-              />
-            )
-          })}
-        </AnimatePresence>
-      </div>
-    </div> : null}
-    <ToastDetailsDialog notice={details} onClose={() => setDetails(null)} />
+                return (
+                  <ToastCardWrapper
+                    key={toastItem.id}
+                    toast={toastItem}
+                    index={index}
+                    transform={transform}
+                    isExpanded={isExpanded}
+                    reducedMotion={reducedMotion}
+                    onHeightChange={handleHeightChange}
+                    onDismiss={() => toastStore.dismiss(toastItem.id)}
+                    onActivate={() => {
+                      void toastStore.activate(toastItem.id, setDetails).catch((error: unknown) => {
+                        window.dispatchEvent(new CustomEvent('desktop:error', { detail: error }))
+                      })
+                    }}
+                  />
+                )
+              })}
+            </AnimatePresence>
+          </div>
+        </div>
+      ) : null}
+      <ToastDetailsDialog notice={details} onClose={() => setDetails(null)} />
     </>
   )
 }
@@ -245,11 +267,18 @@ function ToastCardWrapper({
 
   const isError = toast.tone === 'error'
   const isStatus = toast.tone === 'status'
-  const icon = toast.icon === undefined
-    ? isError ? <CircleX size={18} strokeWidth={2} aria-hidden="true" />
-      : isStatus ? <CircleCheck size={18} strokeWidth={2} aria-hidden="true" />
-        : <Info size={18} strokeWidth={2} aria-hidden="true" />
-    : toast.icon
+  const icon =
+    toast.icon === undefined ? (
+      isError ? (
+        <CircleX size={18} strokeWidth={2} aria-hidden="true" />
+      ) : isStatus ? (
+        <CircleCheck size={18} strokeWidth={2} aria-hidden="true" />
+      ) : (
+        <Info size={18} strokeWidth={2} aria-hidden="true" />
+      )
+    ) : (
+      toast.icon
+    )
 
   // 折叠时后层内容对键盘隐藏，避免操作被遮挡的按钮；同时保留整卡可访问播报语义
   const isInteractive = isExpanded || front
@@ -301,32 +330,49 @@ function ToastCardWrapper({
       >
         <div className="tst-content" inert={!isInteractive}>
           {icon != null && icon !== false ? (
-            <span className="tst-icon" data-custom={toast.icon !== undefined || undefined} aria-hidden="true">{icon}</span>
+            <span
+              className="tst-icon"
+              data-custom={toast.icon !== undefined || undefined}
+              aria-hidden="true"
+            >
+              {icon}
+            </span>
           ) : null}
 
           {toast.onActivate || toast.details != null ? (
-            <button type="button" className="tst-message" onClick={onActivate} tabIndex={isInteractive ? 0 : -1}>
+            <button
+              type="button"
+              className="tst-message"
+              onClick={onActivate}
+              tabIndex={isInteractive ? 0 : -1}
+            >
               <ToastContent message={toast.message} />
             </button>
-          ) : <ToastContent message={toast.message} />}
+          ) : (
+            <ToastContent message={toast.message} />
+          )}
 
           <div className="toast-actions tw:flex tw:items-center tw:gap-1 tw:shrink-0">
             <div className="tw:flex tw:items-center tw:gap-1" inert={expired}>
-              {toast.actions !== undefined ? toast.actions : [toast.action, toast.secondaryAction].map((action, index) => action ? (
-                <Button
-                  key={index}
-                  variant="ghost"
-                  size="sm"
-                  shape="pill"
-                  className="tst-act"
-                  disabled={action.disabled || expired}
-                  tabIndex={isInteractive ? 0 : -1}
-                  onClick={action.onClick}
-                  type="button"
-                >
-                  {action.label}
-                </Button>
-              ) : null)}
+              {toast.actions !== undefined
+                ? toast.actions
+                : [toast.action, toast.secondaryAction].map((action, index) =>
+                    action ? (
+                      <Button
+                        key={index}
+                        variant="ghost"
+                        size="sm"
+                        shape="pill"
+                        className="tst-act"
+                        disabled={action.disabled || expired}
+                        tabIndex={isInteractive ? 0 : -1}
+                        onClick={action.onClick}
+                        type="button"
+                      >
+                        {action.label}
+                      </Button>
+                    ) : null,
+                  )}
             </div>
 
             {toast.showCloseButton !== false ? (

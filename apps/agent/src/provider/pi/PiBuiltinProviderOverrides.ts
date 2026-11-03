@@ -32,8 +32,10 @@ export function withPiBuiltinProviderOverrides(
           cost: { ...model.cost, ...override.cost },
           ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
         }
-        if (result.api !== model.api && !(override.api === result.api && override.compat)) delete result.compat
-        const endpoint = config.endpoints?.[result.api as keyof NonNullable<typeof config.endpoints>]
+        if (result.api !== model.api && !(override.api === result.api && override.compat))
+          delete result.compat
+        const endpoint =
+          config.endpoints?.[result.api as keyof NonNullable<typeof config.endpoints>]
         if (endpoint) result.baseUrl = endpoint
         mapped.set(model, result)
       }
@@ -66,7 +68,8 @@ export function withPiBuiltinProviderOverrides(
           name: override.name ?? id,
           ...(config.baseUrl ? { baseUrl: config.baseUrl } : {}),
         }
-        if (model.api !== template.api && !(override.api === model.api && override.compat)) delete model.compat
+        if (model.api !== template.api && !(override.api === model.api && override.compat))
+          delete model.compat
         const endpoint = config.endpoints?.[model.api as keyof NonNullable<typeof config.endpoints>]
         if (endpoint) model.baseUrl = endpoint
         models.push(model)
@@ -90,7 +93,8 @@ export function withPiBuiltinProviderOverrides(
     return model.api !== original?.api && model.api in piProviderApiStreams
   }
   const endpointModel = (model: Model<Api>) => {
-    const baseUrl = config.endpoints?.[model.api as keyof NonNullable<typeof config.endpoints>] ?? config.baseUrl
+    const baseUrl =
+      config.endpoints?.[model.api as keyof NonNullable<typeof config.endpoints>] ?? config.baseUrl
     return baseUrl ? { ...model, baseUrl } : model
   }
   return {
@@ -103,27 +107,11 @@ export function withPiBuiltinProviderOverrides(
     ],
     stream: (model, context, options) =>
       changedApi(model)
-        ? adapters.stream(
-            endpointModel(model),
-            context,
-            options,
-          )
-        : source.stream(
-            endpointModel(model),
-            context,
-            options,
-          ),
+        ? adapters.stream(endpointModel(model), context, options)
+        : source.stream(endpointModel(model), context, options),
     streamSimple: (model, context, options) =>
       changedApi(model)
-        ? adapters.streamSimple(
-            endpointModel(model),
-            context,
-            options,
-          )
-        : source.streamSimple(
-            endpointModel(model),
-            context,
-            options,
-          ),
+        ? adapters.streamSimple(endpointModel(model), context, options)
+        : source.streamSimple(endpointModel(model), context, options),
   }
 }

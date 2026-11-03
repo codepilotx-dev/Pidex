@@ -468,7 +468,9 @@ export function resolveFileDocumentConflict(
 }
 
 export async function saveAllFileDocuments(): Promise<boolean> {
-  const dirty = Object.values(fileDocumentStateStore.getState().documents).filter((document) => document.dirty)
+  const dirty = Object.values(fileDocumentStateStore.getState().documents).filter(
+    (document) => document.dirty,
+  )
   const results = await Promise.all(
     dirty.map((document) =>
       saveFileDocument(document.workspacePath, document.path, {
@@ -481,7 +483,9 @@ export async function saveAllFileDocuments(): Promise<boolean> {
 }
 
 export function hasDirtyFileDocuments(): boolean {
-  return Object.values(fileDocumentStateStore.getState().documents).some((document) => document.dirty)
+  return Object.values(fileDocumentStateStore.getState().documents).some(
+    (document) => document.dirty,
+  )
 }
 
 export function isFileDocumentDirty(

@@ -86,9 +86,34 @@ export async function writeJsonAtomically(filePath: string, value: unknown): Pro
       encoding: 'utf8',
       mode: 0o600,
     })
-    await rename(temporaryPath, filePath)
+    await replaceFileWithRetry(temporaryPath, filePath)
   } finally {
     await rm(temporaryPath, { force: true }).catch(() => undefined)
+  }
+}
+
+// Windows 上 rename 覆盖目标时，Defender、索引器或另一个写入方短暂持有句柄
+// 会返回 EPERM/EACCES/EBUSY；这些是可恢复竞争，重试几次即可，不能直接失败。
+const REPLACE_RETRY_CODES = new Set(['EPERM', 'EACCES', 'EBUSY'])
+const REPLACE_RETRY_ATTEMPTS = 20
+const REPLACE_RETRY_DELAY_MS = 25
+
+async function replaceFileWithRetry(source: string, target: string): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await rename(source, target)
+      return
+    } catch (cause) {
+      const code = isRecord(cause) ? cause.code : undefined
+      if (
+        attempt >= REPLACE_RETRY_ATTEMPTS ||
+        typeof code !== 'string' ||
+        !REPLACE_RETRY_CODES.has(code)
+      ) {
+        throw cause
+      }
+      await new Promise((resolve) => setTimeout(resolve, REPLACE_RETRY_DELAY_MS))
+    }
   }
 }
 

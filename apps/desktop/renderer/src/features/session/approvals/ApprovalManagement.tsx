@@ -56,7 +56,11 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function useApprovalReviewState(threadId: string | null | undefined, busy: boolean) {
   const supported = useApprovalCapability(threadId ?? '', !!threadId, 'approval.retry.v1')
-  const [state, setState] = React.useState<ReviewState>({ manualAllows: 0, denials: [], reviews: [] })
+  const [state, setState] = React.useState<ReviewState>({
+    manualAllows: 0,
+    denials: [],
+    reviews: [],
+  })
   React.useEffect(() => {
     let active = true
     setState({ manualAllows: 0, denials: [], reviews: [] })
@@ -165,7 +169,11 @@ export function ApprovalRulesDialog({
   open: boolean
   onClose: () => void
 }) {
-  const supported = useApprovalCapability(threadId, Boolean(threadId) && open, 'permission.rules.v1')
+  const supported = useApprovalCapability(
+    threadId,
+    Boolean(threadId) && open,
+    'permission.rules.v1',
+  )
   const { onCloseAutoFocus } = useDialogFocusRestore(open)
   const [rules, setRules] = React.useState<PermissionRule[]>([])
   const [workspaceRoots, setWorkspaceRoots] = React.useState<string[]>([])
@@ -291,11 +299,7 @@ export function ApprovalRulesDialog({
     setBusy(true)
     setError('')
     try {
-      await desktopClient.revokeApprovalRule(
-        threadId,
-        pendingRevoke.id,
-        pendingRevoke.version,
-      )
+      await desktopClient.revokeApprovalRule(threadId, pendingRevoke.id, pendingRevoke.version)
       setRules((current) => applyApprovalRuleRevoke(current, pendingRevoke.id))
       if (editor?.id === pendingRevoke.id) setEditor(null)
       setPendingRevoke(null)
@@ -366,12 +370,7 @@ export function ApprovalRulesDialog({
                   value={query}
                   variant="outlined"
                 />
-                <Button
-                  color="secondary"
-                  disabled={loading || busy}
-                  size="md"
-                  onClick={openCreate}
-                >
+                <Button color="secondary" disabled={loading || busy} size="md" onClick={openCreate}>
                   添加规则
                 </Button>
               </div>
@@ -419,7 +418,9 @@ export function ApprovalRulesDialog({
                       setVersionConflict(false)
                     }
                   }}
-                  onChange={(values) => setEditor((current) => (current ? { ...current, values } : current))}
+                  onChange={(values) =>
+                    setEditor((current) => (current ? { ...current, values } : current))
+                  }
                   onSave={() => void saveRule()}
                 />
               ) : null}
@@ -475,7 +476,9 @@ export function ApprovalRulesDialog({
                   ))
                 ) : (
                   <p className="tw:m-0 tw:text-app-text-soft tw:type-body-sm">
-                    {query.trim() ? '没有匹配的规则。' : `暂无${tab === 'ask' ? '询问' : tab === 'deny' ? '拒绝' : '允许'}规则。`}
+                    {query.trim()
+                      ? '没有匹配的规则。'
+                      : `暂无${tab === 'ask' ? '询问' : tab === 'deny' ? '拒绝' : '允许'}规则。`}
                   </p>
                 )}
               </div>
@@ -519,7 +522,11 @@ export function ApprovalRetryDialog({
   open: boolean
   onClose: () => void
 }) {
-  const [state, setState] = React.useState<ReviewState>({ manualAllows: 0, denials: [], reviews: [] })
+  const [state, setState] = React.useState<ReviewState>({
+    manualAllows: 0,
+    denials: [],
+    reviews: [],
+  })
   const [selected, setSelected] = React.useState('')
   const [busy, setBusy] = React.useState(false)
   const [error, setError] = React.useState('')
@@ -569,8 +576,8 @@ export function ApprovalRetryDialog({
         <div className="request-card-content">
           <p>选择最近被自动审查拒绝的操作；授权仅匹配原工具、参数和范围，重试仍经过 Guardian。</p>
           <p className="tw:text-app-text-soft tw:type-body-sm">
-            最近 {state.reviews.length} 次自动审查 · 人工允许累计 {state.manualAllows} 次 · 可重试拒绝{' '}
-            {state.denials.length} 次
+            最近 {state.reviews.length} 次自动审查 · 人工允许累计 {state.manualAllows} 次 ·
+            可重试拒绝 {state.denials.length} 次
           </p>
           {error ? <p role="alert">{error}</p> : null}
           {!busy && !state.denials.length ? <p>当前聊天没有可重试的自动审查拒绝。</p> : null}

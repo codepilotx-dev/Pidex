@@ -130,15 +130,15 @@ describe('MenuGeometry 纯几何与安全区测试', () => {
       // 子菜单左边缘为 x=304, top=120, bottom=380
       // 父菜单末端 x 阈值为 214
       const insidePoint: Point = { x: 280, y: 220 }
-      expect(isPointInMenuSafeArea(insidePoint, prevPoint, parentRect, submenuRectRight, 'right')).toBe(
-        true,
-      )
+      expect(
+        isPointInMenuSafeArea(insidePoint, prevPoint, parentRect, submenuRectRight, 'right'),
+      ).toBe(true)
 
       // 处于三角形外（向上跑偏）
       const outsidePoint: Point = { x: 280, y: 50 }
-      expect(isPointInMenuSafeArea(outsidePoint, prevPoint, parentRect, submenuRectRight, 'right')).toBe(
-        false,
-      )
+      expect(
+        isPointInMenuSafeArea(outsidePoint, prevPoint, parentRect, submenuRectRight, 'right'),
+      ).toBe(false)
 
       // 处于三角形内但不在父菜单末端范围（太偏左，x < 214）
       const farLeftPrev: Point = { x: 150, y: 200 }
@@ -153,15 +153,15 @@ describe('MenuGeometry 纯几何与安全区测试', () => {
       // 子菜单右边缘为 x=96, top=120, bottom=380
       // 父菜单左侧末端 x 阈值为 186
       const insidePoint: Point = { x: 120, y: 220 }
-      expect(isPointInMenuSafeArea(insidePoint, prevPoint, parentRect, submenuRectLeft, 'left')).toBe(
-        true,
-      )
+      expect(
+        isPointInMenuSafeArea(insidePoint, prevPoint, parentRect, submenuRectLeft, 'left'),
+      ).toBe(true)
 
       // 处于左开三角形外
       const outsidePoint: Point = { x: 120, y: 50 }
-      expect(isPointInMenuSafeArea(outsidePoint, prevPoint, parentRect, submenuRectLeft, 'left')).toBe(
-        false,
-      )
+      expect(
+        isPointInMenuSafeArea(outsidePoint, prevPoint, parentRect, submenuRectLeft, 'left'),
+      ).toBe(false)
 
       // 偏右超出左侧末端范围 (x > 186)
       const farRightPrev: Point = { x: 250, y: 200 }
@@ -173,7 +173,14 @@ describe('MenuGeometry 纯几何与安全区测试', () => {
 
     test('退化子菜单矩形不提供保护', () => {
       const prevPoint: Point = { x: 250, y: 200 }
-      const degenerateSub: Rect = { left: 304, top: 120, right: 504, bottom: 120, width: 200, height: 0 }
+      const degenerateSub: Rect = {
+        left: 304,
+        top: 120,
+        right: 504,
+        bottom: 120,
+        width: 200,
+        height: 0,
+      }
       expect(
         isPointInMenuSafeArea({ x: 280, y: 120 }, prevPoint, parentRect, degenerateSub, 'right'),
       ).toBe(false)
@@ -275,8 +282,22 @@ describe('LevelCoordinator 协调逻辑与计时器交互测试', () => {
 
     test('安全区内跨过其他行：保留原分支及其高亮，被跨行不高亮不展开', () => {
       const coord = new LevelCoordinator(0)
-      const parentRect: Rect = { left: 100, top: 100, right: 300, bottom: 400, width: 200, height: 300 }
-      const subRect: Rect = { left: 304, top: 100, right: 504, bottom: 400, width: 200, height: 300 }
+      const parentRect: Rect = {
+        left: 100,
+        top: 100,
+        right: 300,
+        bottom: 400,
+        width: 200,
+        height: 300,
+      }
+      const subRect: Rect = {
+        left: 304,
+        top: 100,
+        right: 504,
+        bottom: 400,
+        width: 200,
+        height: 300,
+      }
       mockSurface(coord, parentRect)
 
       // 分支 A 已展开
@@ -306,8 +327,22 @@ describe('LevelCoordinator 协调逻辑与计时器交互测试', () => {
 
     test('安全区 80ms 复查：离开保护区且已满足 220ms 立即执行切换', () => {
       const coord = new LevelCoordinator(0)
-      const parentRect: Rect = { left: 100, top: 100, right: 300, bottom: 400, width: 200, height: 300 }
-      const subRect: Rect = { left: 304, top: 100, right: 504, bottom: 400, width: 200, height: 300 }
+      const parentRect: Rect = {
+        left: 100,
+        top: 100,
+        right: 300,
+        bottom: 400,
+        width: 200,
+        height: 300,
+      }
+      const subRect: Rect = {
+        left: 304,
+        top: 100,
+        right: 504,
+        bottom: 400,
+        width: 200,
+        height: 300,
+      }
       mockSurface(coord, parentRect)
 
       let subAOpen = true
@@ -344,8 +379,22 @@ describe('LevelCoordinator 协调逻辑与计时器交互测试', () => {
 
     test('静止达到 1200ms 上限强制执行切换', () => {
       const coord = new LevelCoordinator(0)
-      const parentRect: Rect = { left: 100, top: 100, right: 300, bottom: 400, width: 200, height: 300 }
-      const subRect: Rect = { left: 304, top: 100, right: 504, bottom: 400, width: 200, height: 300 }
+      const parentRect: Rect = {
+        left: 100,
+        top: 100,
+        right: 300,
+        bottom: 400,
+        width: 200,
+        height: 300,
+      }
+      const subRect: Rect = {
+        left: 304,
+        top: 100,
+        right: 504,
+        bottom: 400,
+        width: 200,
+        height: 300,
+      }
       mockSurface(coord, parentRect)
 
       let subAOpen = true
@@ -421,8 +470,22 @@ describe('LevelCoordinator 协调逻辑与计时器交互测试', () => {
 
     test('离开触发行但在安全区内移动，超过 360ms 持续保护并在 1200ms 上限关闭', () => {
       const coord = new LevelCoordinator(0)
-      const parentRect: Rect = { left: 100, top: 100, right: 300, bottom: 400, width: 200, height: 300 }
-      const subRect: Rect = { left: 304, top: 100, right: 504, bottom: 400, width: 200, height: 300 }
+      const parentRect: Rect = {
+        left: 100,
+        top: 100,
+        right: 300,
+        bottom: 400,
+        width: 200,
+        height: 300,
+      }
+      const subRect: Rect = {
+        left: 304,
+        top: 100,
+        right: 504,
+        bottom: 400,
+        width: 200,
+        height: 300,
+      }
       mockSurface(coord, parentRect)
 
       let subAOpen = true
@@ -603,7 +666,12 @@ describe('LevelCoordinator 协调逻辑与计时器交互测试', () => {
           { open: true, defaultOpen: true },
           React.createElement(
             ContextMenu.Sub,
-            { open: subOpen, onOpenChange: (open) => { subOpen = open } },
+            {
+              open: subOpen,
+              onOpenChange: (open) => {
+                subOpen = open
+              },
+            },
             React.createElement(
               ContextMenu.SubTrigger,
               { ref: { current: mockTrigger } as any, id: 'trigger' },

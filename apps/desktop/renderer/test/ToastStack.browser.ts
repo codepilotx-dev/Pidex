@@ -7,8 +7,12 @@ import { fileURLToPath } from 'node:url'
 import { chromium } from '@playwright/test'
 
 const rendererRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const stackPath = JSON.stringify(resolve(rendererRoot, 'src/components/toast/ToastStack.tsx').replaceAll('\\', '/'))
-const statePath = JSON.stringify(resolve(rendererRoot, 'src/components/toast/ToastState.ts').replaceAll('\\', '/'))
+const stackPath = JSON.stringify(
+  resolve(rendererRoot, 'src/components/toast/ToastStack.tsx').replaceAll('\\', '/'),
+)
+const statePath = JSON.stringify(
+  resolve(rendererRoot, 'src/components/toast/ToastState.ts').replaceAll('\\', '/'),
+)
 const harness = `
 import React from 'react';
 import { createRoot } from 'react-dom/client';
@@ -66,7 +70,9 @@ try {
   const page = await browser.newPage({ viewport: { width: 1000, height: 700 } })
   const errors: string[] = []
   page.on('pageerror', (error) => errors.push(error.message))
-  await page.setContent('<button id="outside" style="position:fixed;bottom:10px">Outside</button><div id="root"></div>')
+  await page.setContent(
+    '<button id="outside" style="position:fixed;bottom:10px">Outside</button><div id="root"></div>',
+  )
   const assets = resolve(rendererRoot, '../../../dist/renderer/assets')
   const cssFiles = (await readdir(assets)).filter((name) => /^(index|App)-.*\.css$/.test(name))
   assert.ok(cssFiles.length > 0, '先运行 bun run build:renderer')
@@ -79,21 +85,35 @@ try {
   await page.locator('#outside').click()
   await page.evaluate(() => (window as any).seed())
   await stack.waitFor()
-  assert.equal(await stack.getAttribute('data-open'), null, '移除最后一条通知后，新队列必须默认折叠')
-  await page.waitForFunction(() => {
-    const cards = [...document.querySelectorAll<HTMLElement>('.toast-card-wrapper')]
-    const back = cards.find((card) => card.querySelector('[data-kind="success"]'))!
-    const front = cards.find((card) => card.querySelector('[data-kind="error"]'))!
-    const matrix = new DOMMatrixReadOnly(getComputedStyle(back).transform)
-    return Math.abs(matrix.a - 0.95) < 0.001
-      && Math.abs(front.getBoundingClientRect().top - back.getBoundingClientRect().top - 10) < 0.1
-      && getComputedStyle(back.querySelector('.tst-content')!).opacity === '0'
-      && back.querySelector('.tst-content')!.hasAttribute('inert')
-  }, null, { timeout: 2000 })
+  assert.equal(
+    await stack.getAttribute('data-open'),
+    null,
+    '移除最后一条通知后，新队列必须默认折叠',
+  )
+  await page.waitForFunction(
+    () => {
+      const cards = [...document.querySelectorAll<HTMLElement>('.toast-card-wrapper')]
+      const back = cards.find((card) => card.querySelector('[data-kind="success"]'))!
+      const front = cards.find((card) => card.querySelector('[data-kind="error"]'))!
+      const matrix = new DOMMatrixReadOnly(getComputedStyle(back).transform)
+      return (
+        Math.abs(matrix.a - 0.95) < 0.001 &&
+        Math.abs(front.getBoundingClientRect().top - back.getBoundingClientRect().top - 10) < 0.1 &&
+        getComputedStyle(back.querySelector('.tst-content')!).opacity === '0' &&
+        back.querySelector('.tst-content')!.hasAttribute('inert')
+      )
+    },
+    null,
+    { timeout: 2000 },
+  )
   await stack.hover()
   assert.equal(await stack.getAttribute('data-open'), 'true')
   await page.locator('#outside').click()
-  await page.waitForFunction(() => !document.querySelector('.tst')?.hasAttribute('data-open'), null, { timeout: 2000 })
+  await page.waitForFunction(
+    () => !document.querySelector('.tst')?.hasAttribute('data-open'),
+    null,
+    { timeout: 2000 },
+  )
   assert.equal(await stack.getAttribute('data-open'), null, '指针和焦点离开后必须折叠')
   await stack.hover()
   await stack.getByRole('button', { name: '关闭错误提示' }).click()

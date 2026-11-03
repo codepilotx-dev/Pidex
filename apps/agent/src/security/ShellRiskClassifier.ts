@@ -477,9 +477,7 @@ export const analyzeShellRisk = (input: ShellReviewInput): ShellRiskAnalysis => 
       (!scopeValid
         ? '申请的额外权限范围无效或过于宽泛'
         : (reviewReasons[0] ??
-          (categories.length > 0
-            ? '命令包含需要审核的风险特征'
-            : '未发现静态灾难级特征'))))
+          (categories.length > 0 ? '命令包含需要审核的风险特征' : '未发现静态灾难级特征'))))
 
   return {
     hardDenied,

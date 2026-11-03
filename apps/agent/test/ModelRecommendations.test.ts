@@ -3,7 +3,10 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import fixture from './fixtures/models-dev-catalog.json'
-import { ModelRecommendationIndex, applyRecommendation } from '../src/provider/pi/ModelRecommendations'
+import {
+  ModelRecommendationIndex,
+  applyRecommendation,
+} from '../src/provider/pi/ModelRecommendations'
 import { ModelRecommendationStore } from '../src/provider/pi/ModelRecommendationStore'
 
 const row = (context: number, extra = {}) => ({
@@ -237,7 +240,10 @@ describe('models.dev recommendations', () => {
     try {
       await writeFile(foreignShared, '{"owner":"someone-else"}', 'utf8')
       await expect(
-        new ModelRecommendationStore(join(fresh, 'model-recommendations.json'), response(catalog())).refresh(),
+        new ModelRecommendationStore(
+          join(fresh, 'model-recommendations.json'),
+          response(catalog()),
+        ).refresh(),
       ).rejects.toThrow()
       expect(await readFile(foreignShared, 'utf8')).toBe('{"owner":"someone-else"}')
     } finally {

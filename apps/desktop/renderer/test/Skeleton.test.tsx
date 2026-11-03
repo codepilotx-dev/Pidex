@@ -28,10 +28,7 @@ describe('骨架屏扫光', () => {
   })
 
   test('扫光只动画 transform 且周期 1.6s，减少动画三态隐藏高光层', () => {
-    const css = readFileSync(
-      new URL('../src/components/ui/Skeleton.css', import.meta.url),
-      'utf8',
-    )
+    const css = readFileSync(new URL('../src/components/ui/Skeleton.css', import.meta.url), 'utf8')
     expectSourceContains(css, 'animation: ui-skeleton-shimmer 1.6s linear infinite')
     expectSourceContains(css, '@keyframes ui-skeleton-shimmer')
     expectSourceContains(css, 'transform: translateX(-100%)')

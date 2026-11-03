@@ -208,12 +208,9 @@ export function RightDockGoalPanel({
 
   const trimmedDraft = draft.trim()
   const isObjectiveDirty = trimmedDraft !== savedObjective.trim()
-  const canSave = Boolean(
-    onSaveGoal && !saving && isObjectiveDirty && trimmedDraft.length > 0,
-  )
+  const canSave = Boolean(onSaveGoal && !saving && isObjectiveDirty && trimmedDraft.length > 0)
   const baseline = goal ? { goalId: goal.id, tokenBudget: savedBudget } : null
-  const append =
-    savedBudget !== null ? resolveGoalBudgetAppend(savedBudget, appendDraft) : null
+  const append = savedBudget !== null ? resolveGoalBudgetAppend(savedBudget, appendDraft) : null
   const nextTotal = append?.status === 'valid' ? append.nextTotal : null
   const canAppend = Boolean(
     onAppendBudget && baseline && append?.status === 'valid' && !budgetPending,
@@ -227,10 +224,7 @@ export function RightDockGoalPanel({
           ? `追加后上限 ${compactTokenCount(append.nextTotal)}，剩余 ${compactTokenCount(Math.max(0, append.nextTotal - goal.tokensUsed))}`
           : ''
   const budgetEditable =
-    goal !== null &&
-    goal.status !== 'complete' &&
-    savedBudget !== null &&
-    Boolean(onAppendBudget)
+    goal !== null && goal.status !== 'complete' && savedBudget !== null && Boolean(onAppendBudget)
 
   async function handleSave(): Promise<void> {
     if (!canSave || !onSaveGoal) return
@@ -389,8 +383,7 @@ export function RightDockPlanPanel({
   const state = conversation.state
   const item = state?.itemsById.get(planItemId)
   const structured = item?.type === 'plan' ? item.structured : undefined
-  const canonicalMarkdown =
-    item?.type === 'plan' && item.markdown.trim() ? item.markdown : null
+  const canonicalMarkdown = item?.type === 'plan' && item.markdown.trim() ? item.markdown : null
   const content = canonicalMarkdown ?? fallbackContent
   const latestItemId = selectCanonicalLatestPlanItemId(state)
   const latestItem = latestItemId ? state?.itemsById.get(latestItemId) : undefined

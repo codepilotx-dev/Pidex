@@ -131,7 +131,10 @@ export function ModelReasoningControl({
   )
 }
 
-export type ModelSelectTriggerProps = Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'children'> & {
+export type ModelSelectTriggerProps = Omit<
+  React.ButtonHTMLAttributes<HTMLButtonElement>,
+  'children'
+> & {
   modelName: string
   tooltipTitle?: string
   loading?: boolean
@@ -242,10 +245,7 @@ export const ModelSelectTrigger = React.forwardRef<HTMLElement, ModelSelectTrigg
       >
         {nameButton}
 
-        <span
-          aria-hidden="true"
-          className={cx(CHEVRON_WRAP_CLASS, CHEVRON_FOOTER_CLASS)}
-        >
+        <span aria-hidden="true" className={cx(CHEVRON_WRAP_CLASS, CHEVRON_FOOTER_CLASS)}>
           <ChevronDown
             size={APP_ICON_SIZES.sm}
             strokeWidth={APP_ICON_STROKE_WIDTH}

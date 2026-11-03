@@ -280,7 +280,10 @@ export class UsageService {
 
   private credentialAdapters(sourceIds?: readonly string[]): readonly ProviderUsageAdapter[] {
     return this.adapters.flatMap((adapter) => {
-      if (adapter.connectionMethod.kind !== 'provider-credential' || adapter.availability !== 'queryable')
+      if (
+        adapter.connectionMethod.kind !== 'provider-credential' ||
+        adapter.availability !== 'queryable'
+      )
         return [adapter]
       const keys = adapter.providerIds.flatMap((providerId) =>
         this.providerCredentials.listApiKeys(providerId),
@@ -288,13 +291,19 @@ export class UsageService {
       if (keys.length < 2 || sourceIds?.includes(adapter.sourceId)) return [adapter]
       return keys.map((key): ProviderUsageAdapter => {
         const connection: ProviderUsageSource['connection'] = {
-          kind: 'provider-key', credentialId: Credential.ID.make(key.id),
-          maskedValue: key.maskedValue, disconnectible: false,
+          kind: 'provider-key',
+          credentialId: Credential.ID.make(key.id),
+          maskedValue: key.maskedValue,
+          disconnectible: false,
         }
         const resolveCredential = async (): Promise<ResolvedUsageCredential | null> => {
-          const stored = await Effect.runPromise(this.providerCredentials.getById<Credential.Value>(key.id))
-          return stored?.integrationID === key.integrationID && Schema.is(Credential.Key)(stored.value)
-            ? { value: stored.value, connection } : null
+          const stored = await Effect.runPromise(
+            this.providerCredentials.getById<Credential.Value>(key.id),
+          )
+          return stored?.integrationID === key.integrationID &&
+            Schema.is(Credential.Key)(stored.value)
+            ? { value: stored.value, connection }
+            : null
         }
         return {
           ...adapter,

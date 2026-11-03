@@ -289,7 +289,9 @@ export class QuestionService {
                   ...item,
                   question: question.prompt,
                   selectedChoices: question.choices
-                    .filter(({ id }) => Array.isArray(item.choiceIds) && item.choiceIds.includes(id))
+                    .filter(
+                      ({ id }) => Array.isArray(item.choiceIds) && item.choiceIds.includes(id),
+                    )
                     .map(({ id, label }) => ({ id, label })),
                 }
               : item
@@ -304,7 +306,9 @@ export class QuestionService {
         answer:
           typeof answerForModel === 'string'
             ? answerForModel
-            : answerForModel == null ? null : JSON.stringify(answerForModel),
+            : answerForModel == null
+              ? null
+              : JSON.stringify(answerForModel),
         checkpointID: row.id,
       },
     }

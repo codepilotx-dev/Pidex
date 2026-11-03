@@ -45,8 +45,13 @@ function providerProtocols(provider: DesktopModelProviderSummary) {
       : Object.keys(provider.endpointDefaults ?? {}).length > 0
         ? Object.keys(provider.endpointDefaults!)
         : (provider.nativeApis ?? provider.providerApis ?? [])
-  const directoryProtocols = provider.catalogOrigin === 'models-dev' || provider.catalogOrigin === 'pi-remote' ? DETECTION_PROTOCOL_ORDER : []
-  return [...new Set([...apis, ...Object.keys(provider.config?.endpoints ?? {}), ...directoryProtocols])].map((value) => ({
+  const directoryProtocols =
+    provider.catalogOrigin === 'models-dev' || provider.catalogOrigin === 'pi-remote'
+      ? DETECTION_PROTOCOL_ORDER
+      : []
+  return [
+    ...new Set([...apis, ...Object.keys(provider.config?.endpoints ?? {}), ...directoryProtocols]),
+  ].map((value) => ({
     value,
     label:
       commonProtocols.find((option) => option.value === value)?.label ??
@@ -201,7 +206,11 @@ export function ProviderRequestSettingsForm({
     void save(nextDraft)
   }
   async function persist(nextDraft: typeof draft): Promise<boolean> {
-    if (JSON.stringify(nextDraft) === JSON.stringify(initial.current) && !(addingEndpoint && endpointAddress.trim())) return true
+    if (
+      JSON.stringify(nextDraft) === JSON.stringify(initial.current) &&
+      !(addingEndpoint && endpointAddress.trim())
+    )
+      return true
     const config = provider.config
     if (!config) return false
     setSaving(true)
@@ -220,16 +229,34 @@ export function ProviderRequestSettingsForm({
       }
       if (nextDraft.address !== initial.current.address || config.baseUrl)
         next = { ...next, baseUrl: nextDraft.address.trim() }
-      if (config.kind === 'builtin' && (provider.catalogOrigin === 'models-dev' || provider.catalogOrigin === 'pi-remote') &&
+      if (
+        config.kind === 'builtin' &&
+        (provider.catalogOrigin === 'models-dev' || provider.catalogOrigin === 'pi-remote') &&
         provider.availability?.status === 'unavailable' &&
-        ['missing-api', 'unresolved-endpoint'].includes(provider.availability.reason)) {
-        if (!DETECTION_PROTOCOL_ORDER.includes(nextDraft.protocol as typeof DETECTION_PROTOCOL_ORDER[number])) throw new Error('请选择已支持的协议')
+        ['missing-api', 'unresolved-endpoint'].includes(provider.availability.reason)
+      ) {
+        if (
+          !DETECTION_PROTOCOL_ORDER.includes(
+            nextDraft.protocol as (typeof DETECTION_PROTOCOL_ORDER)[number],
+          )
+        )
+          throw new Error('请选择已支持的协议')
         next = {
-          kind: 'custom', id: config.id, name: nextDraft.name.trim(), enabled: config.enabled,
+          kind: 'custom',
+          id: config.id,
+          name: nextDraft.name.trim(),
+          enabled: config.enabled,
           directorySource: provider.catalogOrigin as 'pi-remote' | 'models-dev',
-          baseUrl: nextDraft.address.trim(), auth: nextDraft.auth as 'api-key' | 'none',
-          env: nextDraft.env.split(',').map((value) => value.trim()).filter(Boolean),
-          allowInsecureHttp: nextDraft.allowHttp, headers: {}, models: [], endpoints,
+          baseUrl: nextDraft.address.trim(),
+          auth: nextDraft.auth as 'api-key' | 'none',
+          env: nextDraft.env
+            .split(',')
+            .map((value) => value.trim())
+            .filter(Boolean),
+          allowInsecureHttp: nextDraft.allowHttp,
+          headers: {},
+          models: [],
+          endpoints,
         }
       }
       if (config.kind === 'custom') {
@@ -285,8 +312,12 @@ export function ProviderRequestSettingsForm({
         ...next,
         endpoints: Object.fromEntries(
           Object.entries({
-            ...(nextDraft.protocol !== 'mixed' ? { [nextDraft.protocol]: nextDraft.address.trim() } : {}),
-            ...Object.fromEntries(Object.entries(endpoints).filter(([api]) => api !== nextDraft.protocol)),
+            ...(nextDraft.protocol !== 'mixed'
+              ? { [nextDraft.protocol]: nextDraft.address.trim() }
+              : {}),
+            ...Object.fromEntries(
+              Object.entries(endpoints).filter(([api]) => api !== nextDraft.protocol),
+            ),
           }).filter(([, address]) => address.trim()),
         ),
       }

@@ -36,11 +36,7 @@ export function SkeletonRegion({
   )
 }
 
-export function SkeletonBlock({
-  className,
-  label,
-  shimmer,
-}: SkeletonBlockProps): React.ReactNode {
+export function SkeletonBlock({ className, label, shimmer }: SkeletonBlockProps): React.ReactNode {
   return (
     <span
       aria-hidden={label ? undefined : 'true'}

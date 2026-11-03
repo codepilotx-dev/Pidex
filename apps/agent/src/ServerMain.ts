@@ -7,14 +7,15 @@ export async function startAgentServer(): Promise<void> {
   const fallbackLogger = new AgentLogger(resolveAgentLogDirectory())
   // Claim the background instance's port before opening shared storage or starting schedulers.
   let backgroundFetch: ((request: Request) => Response | Promise<Response>) | undefined
-  const backgroundServer = process.env.PIDEX_BACKGROUND_AGENT === '1'
-    ? Bun.serve({
-        hostname: '127.0.0.1',
-        port: Number(process.env.PIDEX_PORT),
-        idleTimeout: 120,
-        fetch: (request) => backgroundFetch?.(request) ?? new Response(null, { status: 503 }),
-      })
-    : undefined
+  const backgroundServer =
+    process.env.PIDEX_BACKGROUND_AGENT === '1'
+      ? Bun.serve({
+          hostname: '127.0.0.1',
+          port: Number(process.env.PIDEX_PORT),
+          idleTimeout: 120,
+          fetch: (request) => backgroundFetch?.(request) ?? new Response(null, { status: 503 }),
+        })
+      : undefined
   const runtime = await Effect.runPromise(bootstrap).catch((cause) => {
     void backgroundServer?.stop(true)
     fallbackLogger.error('agent.startup-failed', {
@@ -23,12 +24,14 @@ export async function startAgentServer(): Promise<void> {
     throw cause
   })
   backgroundFetch = runtime.app.fetch
-  const server = backgroundServer ?? Bun.serve({
-    hostname: runtime.config.host,
-    port: runtime.config.port,
-    fetch: runtime.app.fetch,
-    idleTimeout: 120,
-  })
+  const server =
+    backgroundServer ??
+    Bun.serve({
+      hostname: runtime.config.host,
+      port: runtime.config.port,
+      fetch: runtime.app.fetch,
+      idleTimeout: 120,
+    })
   runtime.config.port = server.port ?? runtime.config.port
 
   const url = `http://${server.hostname}:${server.port}`

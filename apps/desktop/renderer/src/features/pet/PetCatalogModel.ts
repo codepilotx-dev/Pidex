@@ -70,9 +70,7 @@ export function buildPetCatalogCards(
   return cards
 }
 
-export function groupPetsByCategory(
-  pets: readonly PetCatalogCardItem[],
-): PetCategoryGroup[] {
+export function groupPetsByCategory(pets: readonly PetCatalogCardItem[]): PetCategoryGroup[] {
   const map = new Map<string, { label: string; items: PetCatalogCardItem[] }>()
   for (const pet of pets) {
     const key = pet.category || 'other'

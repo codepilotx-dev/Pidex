@@ -196,7 +196,9 @@ describe('资源释放', () => {
 describe('无有效识别结果处理', () => {
   test('准确识别无有效结果错误，且不误判其他错误', () => {
     // 包含 SPEECH_TRANSCRIPTION_FAILED 错误码
-    expect(isNoSpeechResultError({ code: 'SPEECH_TRANSCRIPTION_FAILED', message: 'fail' })).toBe(true)
+    expect(isNoSpeechResultError({ code: 'SPEECH_TRANSCRIPTION_FAILED', message: 'fail' })).toBe(
+      true,
+    )
     // 包含 RpcRemoteError 结构 (error.rpcError.code)
     expect(
       isNoSpeechResultError({

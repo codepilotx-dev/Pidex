@@ -107,8 +107,6 @@
     "literalSpacingExceptions": []
   },
   "interactionContract": {
-    "interactiveRowAllowedFiles": [
-      "src/features/session/summary/ThreadSummaryPanel.tsx"
-    ]
+    "interactiveRowAllowedFiles": ["src/features/session/summary/ThreadSummaryPanel.tsx"]
   }
 }

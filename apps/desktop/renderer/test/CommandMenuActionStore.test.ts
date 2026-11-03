@@ -30,7 +30,11 @@ describe('命令菜单动作注册表', () => {
     const disposeFirst = store.register(action('first', { order: 10 }))
     const disposeSameOrder = store.register(action('same-order', { order: 10 }))
 
-    expect(store.getState().actions.map((item) => item.id)).toEqual(['first', 'same-order', 'second'])
+    expect(store.getState().actions.map((item) => item.id)).toEqual([
+      'first',
+      'same-order',
+      'second',
+    ])
 
     disposeFirst()
     expect(store.getState().actions.map((item) => item.id)).toEqual(['same-order', 'second'])

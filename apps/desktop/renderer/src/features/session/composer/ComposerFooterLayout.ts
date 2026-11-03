@@ -67,10 +67,7 @@ export function resolveComposerFooterFit(
   const modelStages = options.holdModel
     ? FIT_STAGES.map((stage) => ({ ...stage, modelMode: heldModelMode }))
     : FIT_STAGES
-  const stages = modelStages.filter(
-    (stage) =>
-      (!options.hasRing || !options.holdRing || stage.ring),
-  )
+  const stages = modelStages.filter((stage) => !options.hasRing || !options.holdRing || stage.ring)
   const stage =
     stages.find((candidate) => stageFits(metrics, candidate, options.hasRing)) ??
     stages[stages.length - 1]!
@@ -86,10 +83,7 @@ export type ComposerFooterNodeRefs = {
   modelIcon: RefObject<HTMLElement | null>
 }
 
-function sameMetrics(
-  previous: ComposerFooterMetrics | null,
-  next: ComposerFooterMetrics,
-): boolean {
+function sameMetrics(previous: ComposerFooterMetrics | null, next: ComposerFooterMetrics): boolean {
   if (!previous) return false
   return (
     Math.abs(previous.footerWidth - next.footerWidth) < 0.5 &&
@@ -145,8 +139,7 @@ export function useComposerFooterFit(
       if (frame) return
       frame = requestAnimationFrame(measure)
     })
-    for (const ref of Object.values(current))
-      if (ref.current) observer.observe(ref.current)
+    for (const ref of Object.values(current)) if (ref.current) observer.observe(ref.current)
     measure()
     return () => {
       if (frame) cancelAnimationFrame(frame)

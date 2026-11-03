@@ -34,7 +34,6 @@ export const ToggleSwitch = forwardRef<HTMLButtonElement, Props>(function Toggle
         'tw:data-[state=checked]:not-disabled:hover:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_8%,var(--cpx-sys-color-accent))]',
         'tw:aria-checked:not-disabled:hover:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-primary)_8%,var(--cpx-sys-color-accent))]',
 
-
         'tw:disabled:cursor-default tw:disabled:border-app-border-subtle tw:disabled:text-app-text-disabled tw:disabled:opacity-50 tw:disabled:bg-[color-mix(in_srgb,var(--cpx-sys-color-fg-disabled)_12%,var(--cpx-sys-color-surface-panel))]',
         'tw:focus-visible:outline-2 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus',
       )}

@@ -56,9 +56,7 @@ export function CanonicalUserMessageContent({
         <React.Suspense fallback={null}>
           <LazyThreadAttachmentRows
             attachments={attachments}
-            onOpen={
-              onOpenAttachment as ((attachment: Attachment) => void) | undefined
-            }
+            onOpen={onOpenAttachment as ((attachment: Attachment) => void) | undefined}
           />
         </React.Suspense>
       ) : null}

@@ -60,9 +60,20 @@ function dataURL(body: string): string {
   return `data:image/svg+xml;base64,${Buffer.from(body).toString('base64')}`
 }
 
-/** 等待后台刷新链路的微任务与宏任务全部结束。 */
-async function settle(): Promise<void> {
-  for (let tick = 0; tick < 4; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0))
+/**
+ * 等待后台刷新链路结束。共享 runner 并发跑满时，写盘回调可能晚于固定次数的
+ * 微任务/宏任务轮转；不传条件时只轮转若干轮，传条件则轮询到条件成立。
+ */
+async function settle(ready?: () => boolean): Promise<void> {
+  if (!ready) {
+    for (let tick = 0; tick < 4; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0))
+    return
+  }
+  const deadline = Date.now() + 2_000
+  while (!ready()) {
+    if (Date.now() >= deadline) throw new Error('后台刷新未在超时内完成')
+    await new Promise((resolve) => setTimeout(resolve, 1))
+  }
 }
 
 describe('供应商图标缓存服务', () => {
@@ -89,14 +100,18 @@ describe('供应商图标缓存服务', () => {
       override: true,
     })
     fail = true
-    await expect(service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' })).rejects.toThrow()
+    await expect(
+      service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' }),
+    ).rejects.toThrow()
     await expect(service.resolve(input)).resolves.toEqual({
       source: dataURL(UPDATED_SVG_BODY),
       override: true,
     })
     await service.setWebsiteIcon({ providerID: input.providerID })
     await expect(restarted.resolve(input)).resolves.toEqual({ source: null })
-    await expect(service.resolve({ ...input, url: ICON_URL })).resolves.toEqual({ source: dataURL(SVG_BODY) })
+    await expect(service.resolve({ ...input, url: ICON_URL })).resolves.toEqual({
+      source: dataURL(SVG_BODY),
+    })
     expect(changes.map((change) => change.source)).toEqual([dataURL(UPDATED_SVG_BODY), null])
   })
 
@@ -208,10 +223,14 @@ describe('供应商图标缓存服务', () => {
     await expect(service.resolve({ url: ICON_URL, providerID })).resolves.toEqual({
       source: catalogueSource,
     })
-    await settle()
+    await settle(() => changes.some((change) => change.source === dataURL(UPDATED_SVG_BODY)))
     // 恢复默认后重新参与每五小时刷新。
     expect(refreshing.calls).toEqual([ICON_URL])
-    expect(changes.map((change) => change.source)).toEqual([manualSource, null, dataURL(UPDATED_SVG_BODY)])
+    expect(changes.map((change) => change.source)).toEqual([
+      manualSource,
+      null,
+      dataURL(UPDATED_SVG_BODY),
+    ])
     service.dispose()
   })
 
@@ -305,7 +324,7 @@ describe('供应商图标缓存服务', () => {
 
     now += PROVIDER_ICON_CACHE_TTL_MS
     expect((await service.resolve({ url: ICON_URL })).source).toBe(initial)
-    await settle()
+    await settle(() => changes.length > 0)
 
     expect(refreshing.calls).toEqual([ICON_URL])
     expect(changes).toEqual([{ url: ICON_URL, source: dataURL(UPDATED_SVG_BODY) }])

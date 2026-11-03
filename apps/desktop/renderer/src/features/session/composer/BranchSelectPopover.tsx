@@ -156,11 +156,7 @@ export function BranchSelectPopover({
       open={open}
       options={options}
       renderOption={(option, selected) => (
-        <BranchOptionRow
-          branch={option.value}
-          detail={currentBranchDetail}
-          selected={selected}
-        />
+        <BranchOptionRow branch={option.value} detail={currentBranchDetail} selected={selected} />
       )}
       search={branchSearch}
       searchLabel="搜索分支"

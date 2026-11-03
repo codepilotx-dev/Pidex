@@ -7,6 +7,11 @@ const packageWorkflow = readWorkflow('windows-x64-package.yml')
 const ciWorkflow = readWorkflow('ci.yml')
 const prRulesWorkflow = readWorkflow('pr-rules.yml')
 const performanceWorkflow = readWorkflow('windows-desktop-performance.yml')
+const cuaWorkflow = readWorkflow('cua-runtime.yml')
+const projectSetup = readFileSync(
+  resolve(repositoryRoot, '.github/actions/setup-project/action.yml'),
+  'utf8',
+)
 const scripts = JSON.parse(readFileSync(resolve(repositoryRoot, 'package.json'), 'utf8')).scripts
 
 function readWorkflow(name: string): string {
@@ -29,13 +34,26 @@ function job(workflow: string, name: string): string {
 describe('release workflows', () => {
   test('quality uses the local preflight and leaves builds to package smoke', () => {
     const quality = job(ciWorkflow, 'quality')
-    expect(quality).toContain('bun run check:quality')
+    for (const command of [
+      'typecheck',
+      'format:check',
+      'lint',
+      'desktop:css:check',
+      'sync:check',
+    ]) {
+      expect(quality).toContain(command)
+    }
+    expect(prRulesWorkflow).toContain('bun run version:check')
     expect(quality).not.toContain('RunSuite.ts')
     expect(quality).not.toContain('build:agent')
     expect(quality).not.toContain('build:renderer')
     expect(quality).not.toContain('build:desktop')
     expect(job(packageWorkflow, 'unsigned-smoke')).toContain('bun run package:win')
-    expect(job(packageWorkflow, 'release-parity')).toContain('test:a11y')
+    expect(job(packageWorkflow, 'accessibility')).toContain('test:a11y')
+    const parity = job(packageWorkflow, 'release-parity')
+    expect(parity).toContain('needs: [signed-agent-parity, accessibility]')
+    expect(parity).toContain('if: always()')
+    expect(parity).toContain('test "$SIGNED" = success && test "$ACCESSIBILITY" = success')
     for (const command of [
       'version:check',
       'typecheck',
@@ -74,12 +92,12 @@ describe('release workflows', () => {
   test('ordinary pull requests never enter a self-hosted release runner', () => {
     expect(job(packageWorkflow, 'unsigned-smoke')).toContain('runs-on: windows-latest')
     expect(job(packageWorkflow, 'unsigned-smoke')).not.toContain('pidex-release')
-    expect(job(packageWorkflow, 'release-parity')).toContain('runs-on: windows-latest')
-    expect(job(packageWorkflow, 'release-parity')).not.toContain('pidex-release')
+    expect(job(packageWorkflow, 'signed-agent-parity')).toContain('runs-on: windows-latest')
+    expect(job(packageWorkflow, 'signed-agent-parity')).not.toContain('pidex-release')
   })
 
   test('release-parity actually runs synthetic signing, verifier and cleanup', () => {
-    const parity = job(packageWorkflow, 'release-parity')
+    const parity = job(packageWorkflow, 'signed-agent-parity')
     expect(parity).toContain('New-SelfSignedCertificate')
     expect(parity).toContain('scripts/SignWinAgent.ts')
     expect(parity).toContain('scripts/AgentRuntimeVerifier.ts')
@@ -96,23 +114,24 @@ describe('release workflows', () => {
     expect(parity).not.toContain('name: beta-release')
   })
 
-  test('source-release creates v* releases before manual Windows uploads', () => {
+  test('source-release builds and publishes the Windows x64 installer', () => {
     const sourceRelease = job(packageWorkflow, 'source-release')
     expect(sourceRelease).toContain(
       "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')",
     )
-    expect(sourceRelease).toContain('runs-on: ubuntu-latest')
+    expect(sourceRelease).toContain('runs-on: windows-latest')
     expect(sourceRelease).toContain('Verify tag target belongs to main')
     expect(sourceRelease).toContain('bun run version:check -- --tag')
+    expect(sourceRelease).toContain('bun run package:win')
+    expect(sourceRelease).toContain('smoke-installed-win-x64.ps1')
     expect(sourceRelease).toContain('scripts/WriteReleaseNotes.ts')
+    expect(sourceRelease).toContain('SHA256SUMS.txt')
     expect(sourceRelease).toContain('gh release create')
+    expect(sourceRelease).toContain('Pidex-Desktop-*-x64.exe')
     expect(sourceRelease).toContain('--verify-tag')
     expect(sourceRelease).toContain('--prerelease')
     expect(sourceRelease).not.toContain('asset_count')
     expect(sourceRelease).not.toContain('self-hosted')
-    expect(sourceRelease).not.toContain('package:win')
-    expect(sourceRelease).not.toContain('PIDEX_REQUIRE_SIGNING')
-    expect(sourceRelease).not.toContain('Pidex-Desktop-*-x64.exe')
     expect(sourceRelease).not.toContain('upload-artifact')
     expect(sourceRelease).not.toContain('attest-')
   })
@@ -127,7 +146,6 @@ describe('release workflows', () => {
       'verify-release-pr-policy',
       'beta-preflight.allowed_signers',
       'release-pr-policy',
-      'SHA256SUMS.txt',
       'spdx.json',
       'blockmap',
       'beta.yml',
@@ -157,10 +175,35 @@ describe('release workflows', () => {
   })
 
   test('all actions are pinned to full commit SHAs', () => {
-    for (const workflow of [packageWorkflow, ciWorkflow, prRulesWorkflow, performanceWorkflow]) {
+    for (const workflow of [
+      packageWorkflow,
+      ciWorkflow,
+      prRulesWorkflow,
+      performanceWorkflow,
+      cuaWorkflow,
+      projectSetup,
+    ]) {
       for (const reference of actionReferences(workflow)) {
+        if (reference.startsWith('./')) {
+          expect(reference).toBe('./.github/actions/setup-project')
+          continue
+        }
         expect(reference).toMatch(/^[^@\s]+@[0-9a-f]{40}$/)
       }
     }
+  })
+
+  test('only superseded PR runs are cancelled and main commits have unique groups', () => {
+    for (const workflow of [packageWorkflow, ciWorkflow, prRulesWorkflow, performanceWorkflow]) {
+      expect(workflow).toContain('branches: [main]')
+      expect(workflow).toContain("cancel-in-progress: ${{ github.event_name == 'pull_request' }}")
+      expect(workflow).toContain('github.event.pull_request.number || github.run_id')
+      expect(workflow).not.toContain('paths-ignore:')
+    }
+    expect(job(ciWorkflow, 'unit-shards')).toContain('shard: [1, 2, 3, 4]')
+    expect(job(ciWorkflow, 'unit-tests')).toContain('if: always()')
+    expect(job(ciWorkflow, 'unit-tests')).toContain('test "$RESULT" = success')
+    expect(projectSetup).toContain('docs/*|README.md|')
+    expect(projectSetup).toContain('git diff --name-only -z')
   })
 })

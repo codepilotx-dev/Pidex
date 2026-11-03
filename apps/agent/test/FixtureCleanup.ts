@@ -1,15 +1,19 @@
 import { rm } from 'node:fs/promises'
 
 // Windows 上 SQLite、watcher 或目录句柄释放后可能短暂占用路径。
-// 固定可恢复窗口：每 50ms 重试一次，最多 100 次（约 5 秒）。
-const FIXTURE_REMOVE_ATTEMPTS = 100
+// 可恢复窗口按渐退累计最多约 20 秒：共享 runner 并发跑满、Defender 扫描刚写出的
+// 大文件时，句柄释放远慢于本地，固定次数重试会让清理本身变成偶发失败。
+const FIXTURE_REMOVE_BUDGET_MS = 20_000
 const FIXTURE_REMOVE_DELAY_MS = 50
+const FIXTURE_REMOVE_MAX_DELAY_MS = 500
 const RETRYABLE_REMOVE_CODES = new Set(['EBUSY', 'EPERM', 'ENOTEMPTY'])
 
 /** 删除测试夹具路径；路径不存在视为成功，持续句柄占用必须成为真实失败。 */
 export async function removeFixturePath(path: string): Promise<void> {
+  const deadline = Date.now() + FIXTURE_REMOVE_BUDGET_MS
   let lastCause: unknown
-  for (let attempt = 0; attempt < FIXTURE_REMOVE_ATTEMPTS; attempt += 1) {
+  let delay = FIXTURE_REMOVE_DELAY_MS
+  for (;;) {
     try {
       await rm(path, { recursive: true, force: true })
       return
@@ -22,12 +26,12 @@ export async function removeFixturePath(path: string): Promise<void> {
         throw cause
       }
       lastCause = cause
+      if (Date.now() >= deadline) break
       // Windows 上 Bun sqlite 的 -wal/-shm 文件句柄要等对象被 GC 才释放；
       // 每次可恢复失败都强制一次完整 GC，让 finalizer 及时关闭句柄。
       Bun.gc(true)
-      if (attempt < FIXTURE_REMOVE_ATTEMPTS - 1) {
-        await new Promise((resolve) => setTimeout(resolve, FIXTURE_REMOVE_DELAY_MS))
-      }
+      await new Promise((resolve) => setTimeout(resolve, delay))
+      delay = Math.min(delay * 2, FIXTURE_REMOVE_MAX_DELAY_MS)
     }
   }
   throw lastCause

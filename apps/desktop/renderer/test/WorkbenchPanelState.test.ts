@@ -532,7 +532,11 @@ describe('workbench dynamic tab state', () => {
       threadId: 'thread-main',
     })
 
-    expect(state.right.tabIds).toEqual(['plan:event-1', 'plan:event-2', 'subagent-directory:thread-main'])
+    expect(state.right.tabIds).toEqual([
+      'plan:event-1',
+      'plan:event-2',
+      'subagent-directory:thread-main',
+    ])
     expect(state.tabsById['plan:event-1']).toMatchObject({ content: '# 计划 1\n\n正文' })
   })
 
@@ -932,7 +936,13 @@ describe('workbench dynamic tab state', () => {
     expect(state.workbench.tabsById).toEqual({
       review,
       [fileTab.id]: fileTab,
-      [planTab.id]: { id: planTab.id, kind: 'plan', planItemId: 'event-1', threadId: '', title: '实现计划' },
+      [planTab.id]: {
+        id: planTab.id,
+        kind: 'plan',
+        planItemId: 'event-1',
+        threadId: '',
+        title: '实现计划',
+      },
     })
     expect(state.workbench.focusArea).toBe('bottom-panel')
     expect(state.schemaVersion).toBe(4)

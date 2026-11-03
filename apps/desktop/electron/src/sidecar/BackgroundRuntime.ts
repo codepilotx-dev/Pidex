@@ -43,16 +43,24 @@ export class LocalBackgroundRuntime implements BackgroundRuntime {
     return `http://127.0.0.1:${this.record.port}`
   }
 
-  constructor(private readonly directory: string, private readonly encryption: TokenEncryption) {
+  constructor(
+    private readonly directory: string,
+    private readonly encryption: TokenEncryption,
+  ) {
     this.file = join(directory, 'desktop-agent.json')
     this.lock = join(directory, 'desktop-agent.lock')
   }
 
-  async initialize(): Promise<string> {
+  /**
+   * 首次创建后台凭据时可用 `seedToken` 作为认证值（安装与冒烟脚本据此在外部
+   * 验证真实认证链）；已有凭据时忽略它，避免环境变量让已有实例失联。
+   */
+  async initialize(seedToken?: string): Promise<string> {
     await this.exclusive(async () => {
       this.record = await this.read()
       if (!this.record) {
-        const token = randomBytes(32).toString('base64url')
+        const token =
+          seedToken && seedToken.length >= 16 ? seedToken : randomBytes(32).toString('base64url')
         this.record = {
           version: 1,
           encryptedToken: this.encryption.encryptString(token).toString('base64'),
@@ -68,21 +76,30 @@ export class LocalBackgroundRuntime implements BackgroundRuntime {
     return this.token
   }
 
-  async connect(command: SidecarCommand, env: NodeJS.ProcessEnv): Promise<BackgroundRuntimeConnection> {
+  async connect(
+    command: SidecarCommand,
+    env: NodeJS.ProcessEnv,
+  ): Promise<BackgroundRuntimeConnection> {
     return this.exclusive(async () => {
       const record = await this.read()
       if (!record || record.encryptedToken !== this.record?.encryptedToken)
         throw new Error('后台 Agent 连接信息已变化，请重新打开桌面端')
       this.record = record
-      const connection = { origin: `http://127.0.0.1:${record.port}`, instanceToken: record.instanceToken }
+      const connection = {
+        origin: `http://127.0.0.1:${record.port}`,
+        instanceToken: record.instanceToken,
+      }
       try {
         await this.probe(record)
         return connection
       } catch {
-        const free = await availablePort(record.port).then(() => true, (error: NodeJS.ErrnoException) => {
-          if (error.code === 'EADDRINUSE') return false
-          throw error
-        })
+        const free = await availablePort(record.port).then(
+          () => true,
+          (error: NodeJS.ErrnoException) => {
+            if (error.code === 'EADDRINUSE') return false
+            throw error
+          },
+        )
         if (!free) {
           await this.waitReady()
           return connection
@@ -172,9 +189,15 @@ export class LocalBackgroundRuntime implements BackgroundRuntime {
       headers: { Authorization: `Bearer ${this.token}` },
       signal: AbortSignal.timeout(1_500),
     })
-    const body = await response.json() as { ok?: boolean; instanceToken?: string; pid?: number }
-    if (!response.ok || body.ok !== true || !matchesExpectedInstanceToken(body.instanceToken, record.instanceToken) ||
-        !Number.isSafeInteger(body.pid) || Number(body.pid) <= 0) throw new Error('后台 Agent 身份验证失败')
+    const body = (await response.json()) as { ok?: boolean; instanceToken?: string; pid?: number }
+    if (
+      !response.ok ||
+      body.ok !== true ||
+      !matchesExpectedInstanceToken(body.instanceToken, record.instanceToken) ||
+      !Number.isSafeInteger(body.pid) ||
+      Number(body.pid) <= 0
+    )
+      throw new Error('后台 Agent 身份验证失败')
     if (record.starting || body.pid !== record.pid) {
       record.pid = body.pid!
       record.starting = false
@@ -187,11 +210,18 @@ export class LocalBackgroundRuntime implements BackgroundRuntime {
       const info = await lstat(this.file)
       if (!info.isFile() || info.isSymbolicLink() || info.size > 8_192) throw new Error()
       const value = JSON.parse(await readFile(this.file, 'utf8')) as RuntimeRecord
-      if (value.version !== 1 || typeof value.encryptedToken !== 'string' ||
-          typeof value.instanceToken !== 'string' || value.instanceToken.length < 16 ||
-          (value.starting !== undefined && typeof value.starting !== 'boolean') ||
-          !Number.isInteger(value.port) || value.port < 1 || value.port > 65_535 ||
-          (value.pid !== null && (!Number.isSafeInteger(value.pid) || value.pid <= 0))) throw new Error()
+      if (
+        value.version !== 1 ||
+        typeof value.encryptedToken !== 'string' ||
+        typeof value.instanceToken !== 'string' ||
+        value.instanceToken.length < 16 ||
+        (value.starting !== undefined && typeof value.starting !== 'boolean') ||
+        !Number.isInteger(value.port) ||
+        value.port < 1 ||
+        value.port > 65_535 ||
+        (value.pid !== null && (!Number.isSafeInteger(value.pid) || value.pid <= 0))
+      )
+        throw new Error()
       return value
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === 'ENOENT') return undefined
@@ -207,8 +237,16 @@ export class LocalBackgroundRuntime implements BackgroundRuntime {
         handle = await open(this.lock, 'wx', 0o600)
       } catch (error) {
         if ((error as NodeJS.ErrnoException).code !== 'EEXIST') throw error
-        const owner = JSON.parse(await readFile(this.lock, 'utf8')) as { version?: number; pid?: number }
-        if (owner.version !== 1 || !Number.isSafeInteger(owner.pid) || Number(owner.pid) <= 0 || isProcessAlive(owner.pid!))
+        const owner = JSON.parse(await readFile(this.lock, 'utf8')) as {
+          version?: number
+          pid?: number
+        }
+        if (
+          owner.version !== 1 ||
+          !Number.isSafeInteger(owner.pid) ||
+          Number(owner.pid) <= 0 ||
+          isProcessAlive(owner.pid!)
+        )
           throw new Error('另一个桌面端正在管理后台 Agent，请稍后重试')
         await rm(this.lock)
         continue
@@ -226,8 +264,12 @@ export class LocalBackgroundRuntime implements BackgroundRuntime {
 }
 
 function isProcessAlive(pid: number): boolean {
-  try { process.kill(pid, 0); return true }
-  catch (error) { return (error as NodeJS.ErrnoException).code !== 'ESRCH' }
+  try {
+    process.kill(pid, 0)
+    return true
+  } catch (error) {
+    return (error as NodeJS.ErrnoException).code !== 'ESRCH'
+  }
 }
 
 function availablePort(port = 0): Promise<number> {
@@ -236,8 +278,9 @@ function availablePort(port = 0): Promise<number> {
     server.once('error', reject)
     server.listen(port, '127.0.0.1', () => {
       const address = server.address()
-      if (!address || typeof address === 'string') return server.close(() => reject(new Error('无法分配后台端口')))
-      server.close((error) => error ? reject(error) : resolve(address.port))
+      if (!address || typeof address === 'string')
+        return server.close(() => reject(new Error('无法分配后台端口')))
+      server.close((error) => (error ? reject(error) : resolve(address.port)))
     })
   })
 }

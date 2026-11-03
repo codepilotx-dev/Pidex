@@ -1,7 +1,11 @@
 import type React from 'react'
 import { useEffect, useMemo, useState } from 'react'
 import { Check, MessagesSquare, Plus, Unlink } from 'lucide-react'
-import { APP_ICON_SIZE, APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
+import {
+  APP_ICON_SIZE,
+  APP_ICON_SIZES,
+  APP_ICON_STROKE_WIDTH,
+} from '../../components/ui/IconTokens.js'
 import {
   SearchablePopoverAction,
   SearchablePopoverContent,

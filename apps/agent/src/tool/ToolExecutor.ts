@@ -1238,10 +1238,7 @@ export class ToolExecutor {
             : 'skipped'
       if (
         denied &&
-        !(
-          isFullAccessPermissionConfig(permissionConfig) &&
-          !isReadOnlyTaskMode(context.taskMode)
-        )
+        !(isFullAccessPermissionConfig(permissionConfig) && !isReadOnlyTaskMode(context.taskMode))
       )
         throw new AgentError('HOOK_DENIED', denied.result.reason ?? 'PreToolUse Hook 拒绝执行', 403)
       const narrowed = hookResults

@@ -209,8 +209,10 @@ export type ModelRuntimePreferencesStorageCapabilities = {
 }
 
 const threadContextLimitsCache = new WeakMap<Database, ThreadContextLimitsStorageCapabilities>()
-const modelRuntimePreferencesCache =
-  new WeakMap<Database, ModelRuntimePreferencesStorageCapabilities>()
+const modelRuntimePreferencesCache = new WeakMap<
+  Database,
+  ModelRuntimePreferencesStorageCapabilities
+>()
 
 export function probeThreadContextLimitsStorageCapabilities(
   sqlite: Database,
@@ -231,7 +233,9 @@ export function probeModelRuntimePreferencesStorageCapabilities(
   const cached = modelRuntimePreferencesCache.get(sqlite)
   if (cached) return cached
   const row = sqlite
-    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'model_runtime_preferences'")
+    .query(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'model_runtime_preferences'",
+    )
     .get()
   const capabilities = { modelRuntimePreferences: Boolean(row) }
   modelRuntimePreferencesCache.set(sqlite, capabilities)
@@ -249,9 +253,9 @@ export function probeThreadMessageForksStorageCapabilities(
 ): ThreadMessageForksStorageCapabilities {
   const cached = threadMessageForksCache.get(sqlite)
   if (cached) return cached
-  const rows = sqlite
-    .query('PRAGMA table_info(thread_message_forks)')
-    .all() as Array<{ name: string }>
+  const rows = sqlite.query('PRAGMA table_info(thread_message_forks)').all() as Array<{
+    name: string
+  }>
   const capabilities: ThreadMessageForksStorageCapabilities = {
     forkTargetTurnId: rows.some((column) => column.name === 'target_turn_id'),
   }

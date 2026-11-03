@@ -40,7 +40,16 @@ export function useModelProviderController({
   const [modelProviders, setModelProviders] = useState<DesktopModelProviderSummary[]>([])
   const modelCatalogLoading = useModelCatalogLoading()
   const modelPresets = useMemo(
-    () => buildModelPresets((providerState?.models ?? providerState?.provider.defaultModels ?? []).filter((id) => !['embedding', 'rerank'].includes(providerState?.modelMetadata?.[id]?.modelType ?? 'chat')), providerState?.modelMetadata),
+    () =>
+      buildModelPresets(
+        (providerState?.models ?? providerState?.provider.defaultModels ?? []).filter(
+          (id) =>
+            !['embedding', 'rerank'].includes(
+              providerState?.modelMetadata?.[id]?.modelType ?? 'chat',
+            ),
+        ),
+        providerState?.modelMetadata,
+      ),
     [providerState],
   )
   const providerIDRef = useRef(providerID)
@@ -71,7 +80,12 @@ export function useModelProviderController({
         return {
           providerID: provider.providerID,
           displayName: provider.displayName,
-          modelPresets: buildModelPresets(models.filter((id) => !['embedding', 'rerank'].includes(modelMetadata?.[id]?.modelType ?? 'chat')), modelMetadata),
+          modelPresets: buildModelPresets(
+            models.filter(
+              (id) => !['embedding', 'rerank'].includes(modelMetadata?.[id]?.modelType ?? 'chat'),
+            ),
+            modelMetadata,
+          ),
           baseURL: provider.baseURL,
           logoURL: provider.logoURL,
           modelMetadata,
@@ -86,13 +100,7 @@ export function useModelProviderController({
     [providerModelOptions, selectedProviderID],
   )
   const resolvedSelectedModelPreset =
-    resolveModelPresetId(
-      model,
-      undefined,
-      selectedProviderModelPresets,
-    ) ||
-    model ||
-    ''
+    resolveModelPresetId(model, undefined, selectedProviderModelPresets) || model || ''
   const selectedProviderSummary =
     modelProviders.find((provider) => provider.providerID === selectedProviderID) ??
     (providerState && providerState.provider.providerID === selectedProviderID
@@ -244,45 +252,62 @@ export function useModelProviderController({
   const selectionRevision = useRef(0)
   const switchRevision = useRef(0)
 
-  const saveParameters = useCallback((patch: { variant?: string | null; maxContextTokens?: number | null }): void => {
-    const previous = selectionRef.current
-    if (!previous || selectionLoading || !desktopClient.setModelRuntimePreference) return
-    const revision = ++selectionRevision.current
-    const variant = patch.variant !== undefined ? patch.variant ?? undefined : previous.variant
-    const next = {
-      ...previous,
-      ...('maxContextTokens' in patch ? { maxContextTokens: patch.maxContextTokens } : {}),
-      variant,
-      thinkingMode: (variant === 'enabled' || variant === 'adaptive' || variant === 'disabled'
-        ? variant : 'default') as DesktopThinkingMode,
-    }
-    selectionRef.current = next
-    onSelectionChange(next)
-    const requestedSession = sessionId
-    saveQueue.current = saveQueue.current.then(async () => {
-      await desktopClient.setModelRuntimePreference!({
-        providerID: previous.providerID, modelID: previous.model,
-        ...(requestedSession ? { threadId: requestedSession } : {}), ...patch,
-      })
-    }).catch(() => {
-      setNoticeMessage('模型运行时参数保存失败，请重试')
-      if (revision === selectionRevision.current && selectionRef.current === next) {
-        selectionRef.current = previous
-        onSelectionChange(previous)
+  const saveParameters = useCallback(
+    (patch: { variant?: string | null; maxContextTokens?: number | null }): void => {
+      const previous = selectionRef.current
+      if (!previous || selectionLoading || !desktopClient.setModelRuntimePreference) return
+      const revision = ++selectionRevision.current
+      const variant = patch.variant !== undefined ? (patch.variant ?? undefined) : previous.variant
+      const next = {
+        ...previous,
+        ...('maxContextTokens' in patch ? { maxContextTokens: patch.maxContextTokens } : {}),
+        variant,
+        thinkingMode: (variant === 'enabled' || variant === 'adaptive' || variant === 'disabled'
+          ? variant
+          : 'default') as DesktopThinkingMode,
       }
-    })
-  }, [selectionLoading, sessionId, onSelectionChange, setNoticeMessage])
+      selectionRef.current = next
+      onSelectionChange(next)
+      const requestedSession = sessionId
+      saveQueue.current = saveQueue.current
+        .then(async () => {
+          await desktopClient.setModelRuntimePreference!({
+            providerID: previous.providerID,
+            modelID: previous.model,
+            ...(requestedSession ? { threadId: requestedSession } : {}),
+            ...patch,
+          })
+        })
+        .catch(() => {
+          setNoticeMessage('模型运行时参数保存失败，请重试')
+          if (revision === selectionRevision.current && selectionRef.current === next) {
+            selectionRef.current = previous
+            onSelectionChange(previous)
+          }
+        })
+    },
+    [selectionLoading, sessionId, onSelectionChange, setNoticeMessage],
+  )
 
-  const handleVariantChange = useCallback((variant: string): void => {
-    if (variant !== 'default' && !selectedModelMetadata?.variants?.includes(variant)) return
-    saveParameters({ variant: variant === 'default' ? null : variant })
-  }, [selectedModelMetadata, saveParameters])
-  const handleThinkingChange = useCallback((mode: DesktopThinkingMode): void => {
-    handleVariantChange(mode)
-  }, [handleVariantChange])
-  const handleMaxContextTokensChange = useCallback((tokens: number | null): void => {
-    saveParameters({ maxContextTokens: tokens })
-  }, [saveParameters])
+  const handleVariantChange = useCallback(
+    (variant: string): void => {
+      if (variant !== 'default' && !selectedModelMetadata?.variants?.includes(variant)) return
+      saveParameters({ variant: variant === 'default' ? null : variant })
+    },
+    [selectedModelMetadata, saveParameters],
+  )
+  const handleThinkingChange = useCallback(
+    (mode: DesktopThinkingMode): void => {
+      handleVariantChange(mode)
+    },
+    [handleVariantChange],
+  )
+  const handleMaxContextTokensChange = useCallback(
+    (tokens: number | null): void => {
+      saveParameters({ maxContextTokens: tokens })
+    },
+    [saveParameters],
+  )
 
   const handleProviderModelChange = useCallback(
     (providerID: ModelProviderID, nextPresetId: string): void => {

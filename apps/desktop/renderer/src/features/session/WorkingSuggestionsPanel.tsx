@@ -98,7 +98,11 @@ export function WorkingSuggestionsPanel({
             type="button"
             onClick={onShowTemplates}
           >
-            <LayoutTemplate aria-hidden className="tw:shrink-0" size="var(--inline-icon-size, 1em)" />
+            <LayoutTemplate
+              aria-hidden
+              className="tw:shrink-0"
+              size="var(--inline-icon-size, 1em)"
+            />
             <span>查看工作模板</span>
           </button>
         </div>

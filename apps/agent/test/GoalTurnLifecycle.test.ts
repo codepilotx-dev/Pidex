@@ -170,9 +170,7 @@ for (const action of ['pause', 'stop', 'clear'] as const) {
       })
       expect(db.nextQueuedTurn(thread.id)).toBeNull()
       expect(runs).toBe(1)
-      expect(goals.get(thread.id).goal?.status ?? null).toBe(
-        action === 'clear' ? null : 'paused',
-      )
+      expect(goals.get(thread.id).goal?.status ?? null).toBe(action === 'clear' ? null : 'paused')
     } finally {
       release()
       await execution

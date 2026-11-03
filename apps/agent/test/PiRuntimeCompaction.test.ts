@@ -257,27 +257,43 @@ describe('Harness runtime context compaction', () => {
     const setup = await createRuntime({
       history: 'x'.repeat(20_000),
       responses: [
-        () => { requests += 1; return fauxAssistantMessage('completed at 20K') },
-        () => { requests += 1; return fauxAssistantMessage('summary under the original budget') },
+        () => {
+          requests += 1
+          return fauxAssistantMessage('completed at 20K')
+        },
+        () => {
+          requests += 1
+          return fauxAssistantMessage('summary under the original budget')
+        },
       ],
     })
     let status: string | undefined
     const service = new AgentRuntimeService({
-      db: { repositories: { threads: { getThreadSettings: () => ({ maxContextTokens: 1_000 }) } } } as never,
-      hub: {} as never, models: {} as never, toolExecutor: {} as never,
+      db: {
+        repositories: { threads: { getThreadSettings: () => ({ maxContextTokens: 1_000 }) } },
+      } as never,
+      hub: {} as never,
+      models: {} as never,
+      toolExecutor: {} as never,
       contextCompaction: {
         begin: () => {},
-        finish: (_thread: string, next: string) => { status = next },
+        finish: (_thread: string, next: string) => {
+          status = next
+        },
       } as never,
     })
     try {
       await setup.runtime.run({ ...setup.request, maxContextTokens: 20_000 })
       const active = (service as unknown as { active: Map<string, unknown> }).active
       active.set(setup.request.threadID, { harness: setup.runtime.harness() })
-      await expect(service.compact(setup.request.threadID)).rejects.toMatchObject({ code: 'compaction' })
+      await expect(service.compact(setup.request.threadID)).rejects.toMatchObject({
+        code: 'compaction',
+      })
       expect(status).toBe('failed')
       expect(requests).toBe(1)
-      expect((await setup.session.getBranch()).filter(entry => entry.type === 'compaction')).toHaveLength(0)
+      expect(
+        (await setup.session.getBranch()).filter((entry) => entry.type === 'compaction'),
+      ).toHaveLength(0)
       // The idle override must not rewrite the completed turn's frozen configuration.
       await setup.runtime.compact()
       expect(requests).toBe(2)
@@ -289,14 +305,23 @@ describe('Harness runtime context compaction', () => {
   test('explicit budget blocks oversized summary requests before any provider call', async () => {
     let requests = 0
     const setup = await createRuntime({
-      history: 'x'.repeat(100_000), shouldAutoCompact: true,
-      responses: [() => { requests += 1; return fauxAssistantMessage('must not send') }],
+      history: 'x'.repeat(100_000),
+      shouldAutoCompact: true,
+      responses: [
+        () => {
+          requests += 1
+          return fauxAssistantMessage('must not send')
+        },
+      ],
     })
     try {
-      await expect(setup.runtime.run({ ...setup.request, maxContextTokens: 10_000 }))
-        .rejects.toMatchObject({ code: 'CONTEXT_BUDGET_EXCEEDED', status: 413 })
+      await expect(
+        setup.runtime.run({ ...setup.request, maxContextTokens: 10_000 }),
+      ).rejects.toMatchObject({ code: 'CONTEXT_BUDGET_EXCEEDED', status: 413 })
       expect(requests).toBe(0)
-      expect((await setup.session.getBranch()).filter(entry => entry.type === 'compaction')).toHaveLength(0)
+      expect(
+        (await setup.session.getBranch()).filter((entry) => entry.type === 'compaction'),
+      ).toHaveLength(0)
     } finally {
       await setup.runtime.dispose()
     }
@@ -305,15 +330,23 @@ describe('Harness runtime context compaction', () => {
   test('explicit budget compresses early and continues without raising the budget', async () => {
     let requests = 0
     const setup = await createRuntime({
-      history: 'x'.repeat(34_000), shouldAutoCompact: true,
+      history: 'x'.repeat(34_000),
+      shouldAutoCompact: true,
       responses: [
-        () => { requests += 1; return fauxAssistantMessage('compact summary') },
-        () => { requests += 1; return fauxAssistantMessage('within budget') },
+        () => {
+          requests += 1
+          return fauxAssistantMessage('compact summary')
+        },
+        () => {
+          requests += 1
+          return fauxAssistantMessage('within budget')
+        },
       ],
     })
     try {
-      await expect(setup.runtime.run({ ...setup.request, maxContextTokens: 10_000 }))
-        .resolves.toMatchObject({ output: 'within budget' })
+      await expect(
+        setup.runtime.run({ ...setup.request, maxContextTokens: 10_000 }),
+      ).resolves.toMatchObject({ output: 'within budget' })
       expect(setup.compacted).toEqual(['automatic'])
       expect(requests).toBe(2)
     } finally {
@@ -344,7 +377,9 @@ describe('Harness runtime context compaction', () => {
       expect(summaryBudgets).toHaveLength(2)
       expect(summaryBudgets[1]!).toBeLessThan(summaryBudgets[0]!)
       expect(setup.compacted).toEqual(['automatic'])
-      expect((await setup.session.getBranch()).filter((entry) => entry.type === 'compaction')).toHaveLength(1)
+      expect(
+        (await setup.session.getBranch()).filter((entry) => entry.type === 'compaction'),
+      ).toHaveLength(1)
     } finally {
       await setup.runtime.dispose()
     }

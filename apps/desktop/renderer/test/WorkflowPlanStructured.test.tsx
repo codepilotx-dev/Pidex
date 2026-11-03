@@ -93,9 +93,10 @@ describe('WorkflowPlanCard structured plans', () => {
   })
 
   test('计划卡片区分生成中、待审阅与历史计划', () => {
-    expect(
-      planCardPresentation({ streaming: true, isDocked: false }),
-    ).toMatchObject({ label: '正在形成计划', showOpenInRightDock: false })
+    expect(planCardPresentation({ streaming: true, isDocked: false })).toMatchObject({
+      label: '正在形成计划',
+      showOpenInRightDock: false,
+    })
     expect(
       planCardPresentation({ streaming: false, isDocked: false, isPendingReview: true }),
     ).toMatchObject({ label: '计划 · 待审阅', showOpenInRightDock: true })

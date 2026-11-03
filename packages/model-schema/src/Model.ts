@@ -20,7 +20,9 @@ export interface Ref extends Schema.Schema.Type<typeof Ref> {}
 export const Family = Schema.String.pipe(Schema.brand('Model.Family'))
 export type Family = typeof Family.Type
 
-export const ReasoningLevels = Schema.Array(Schema.Literals(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']))
+export const ReasoningLevels = Schema.Array(
+  Schema.Literals(['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max']),
+)
 
 /**
  * 可被推荐值接管、也可被用户固定的模型草稿字段。
@@ -77,21 +79,29 @@ export type OptionSpecs = typeof OptionSpecs.Type
 
 export const Recommendation = Schema.Struct({
   name: Schema.optional(Schema.String),
-  contextWindow: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 }))),
-  maxInputTokens: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 }))),
-  maxTokens: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 }))),
+  contextWindow: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
+  ),
+  maxInputTokens: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
+  ),
+  maxTokens: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 10_000_000 })),
+  ),
   reasoning: Schema.optional(Schema.Boolean),
   tools: Schema.optional(Schema.Boolean),
   input: Schema.optional(Schema.Array(Schema.Literals(['text', 'image', 'audio', 'video']))),
   reasoningLevels: Schema.optional(ReasoningLevels),
   /** 双层参数规格（values/map）；显式存在时优先于 reasoningLevels 固定七档。 */
   optionSpecs: Schema.optional(OptionSpecs),
-  cost: Schema.optional(Schema.Struct({
-    input: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
-    output: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
-    cacheRead: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
-    cacheWrite: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
-  })),
+  cost: Schema.optional(
+    Schema.Struct({
+      input: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+      output: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+      cacheRead: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+      cacheWrite: Schema.optional(Schema.Finite.check(Schema.isGreaterThanOrEqualTo(0))),
+    }),
+  ),
 })
 export type Recommendation = typeof Recommendation.Type
 

@@ -153,11 +153,7 @@ export function PetCatalogCard({
                 size="toolbar"
                 title={`安装 ${pet.displayName}`}
               >
-                <Plus
-                  aria-hidden="true"
-                  size={APP_ICON_SIZE}
-                  strokeWidth={APP_ICON_STROKE_WIDTH}
-                />
+                <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
               </Button>
             </span>
           </Tooltip>

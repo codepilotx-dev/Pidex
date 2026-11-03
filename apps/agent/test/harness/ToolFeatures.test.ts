@@ -175,10 +175,26 @@ describe('AgentHarness turn composition', () => {
     const setup = setupProvider([fauxAssistantMessage('plain answer')])
     const repo = new InMemorySessionRepo()
     const session = await repo.create({ id: crypto.randomUUID() })
-    const harness = new AgentHarness({ session, models: setup.models, model: Object.assign(setup.faux.getModel(), { tools: false }),
-      tools: [{ name: 'forbidden_tool', label: 'Tool', description: 'Must not be exposed', parameters: Type.Object({}), execute: async () => { throw new Error('Must not execute') } }] })
+    const harness = new AgentHarness({
+      session,
+      models: setup.models,
+      model: Object.assign(setup.faux.getModel(), { tools: false }),
+      tools: [
+        {
+          name: 'forbidden_tool',
+          label: 'Tool',
+          description: 'Must not be exposed',
+          parameters: Type.Object({}),
+          execute: async () => {
+            throw new Error('Must not execute')
+          },
+        },
+      ],
+    })
     const exposed: string[][] = []
-    harness.subscribe((event) => { if (event.type === 'turn_composition') exposed.push(event.activeToolNames) })
+    harness.subscribe((event) => {
+      if (event.type === 'turn_composition') exposed.push(event.activeToolNames)
+    })
     const result = await harness.prompt('hello')
     expect(result.stopReason).not.toBe('error')
     expect(exposed).toEqual([[]])
@@ -188,8 +204,11 @@ describe('AgentHarness turn composition', () => {
     const setup = setupProvider([fauxAssistantMessage('should not be requested')])
     const repo = new InMemorySessionRepo()
     const session = await repo.create({ id: crypto.randomUUID() })
-    const harness = new AgentHarness({ session, models: setup.models,
-      model: Object.assign(setup.faux.getModel(), { maxInputTokens: 1 }) })
+    const harness = new AgentHarness({
+      session,
+      models: setup.models,
+      model: Object.assign(setup.faux.getModel(), { maxInputTokens: 1 }),
+    })
     const result = await harness.prompt('a message exceeding the configured one-token input budget')
     expect(result.stopReason).toBe('error')
     expect(result.errorMessage).toContain('已接近上下文预算')

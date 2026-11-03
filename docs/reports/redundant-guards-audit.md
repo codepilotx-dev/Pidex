@@ -78,62 +78,62 @@
 
 ### 关键结论修正
 
-| 原编号 | 候选与复核结论 | 实施前需要的证据或约束 |
-|---|---|---|
-| 2.1 | 工具链重复解析确实存在，但撤回“只留 `ToolCatalog.execute` 最后一关”的建议。`PiToolAdapter.prepareArguments` 也 parse，原“三次”漏计该阶段。 | `ToolExecutor.execute` 在 catalog 执行前已规范化、检查并判权；Hook 改写会重新进入 execute。列清 prepare/execute/授权预览/Shell/catalog 直接调用及各次输入是否变化，保留判权前校验。不能把 catalog 当作所有工具唯一执行收口。 |
-| 1.2 | verifier 外层 catch 把异常归为 `provider_failed`，有诊断分类问题；不能因 `Promise<GoalVerifierOutcome>` 就认定它不会拒绝。 | `runGoalVerifier` 的主要请求在 try 内，准备部分并非全部受其保护，注入的 verifier 也可能拒绝。确认异常来源和安全诊断出口后再决定 catch 的去留；不得用类型断言证明不会抛错。模型查找 `.catch(() => null)` 同样需单独核对错误契约。 |
-| 1.3 | `identity` 判空保留；撤回“生产必然有值”的过强结论。 | `ExecuteHarnessRun` 中 `providerGoal` 明确是可选变量，初始为 undefined。核实每个 context 钩子、目标变化和回调安装时序，再收紧生命周期回调及 `applyModelTerminal` 的相关类型。不能仅删判空，也不能仅把类型改必填掩盖实际缺值。 |
-| 2.3 | `validateAdmission` 中的检查不一定可直接删除。 | `this.get` 与 resolver 之间还有空消息检查。删除后“不存在的 thread + 空消息”会从 404 变为 `EMPTY_MESSAGE`。优先沿用 2.2 的轻量守卫，若调整顺序需明确行为决定；`steerTurn` 单独核对。 |
-| 2.8 | `ThreadRead/Definition.ts` 通用失败缺少内部诊断是候选，但 `AgentError` 第四参数是 `details`，不是 `cause`。 | 核实工具错误、日志及 RPC 的序列化路径，选择已有的安全诊断方式；禁止直接把原始 SQLite/projection 异常塞进 details 或对外返回。 |
-| 2.10 | 撤回“zod 输出必然纯 JSON，因此 stringify 不会抛”的证明。 | Zod 本身不保证无循环引用、BigInt、转换输出或自定义序列化行为。核对可注册 schema、所有输入来源和日志契约，再决定保留、缩小或移除 catch。 |
-| 3.6 | **撤回冗余结论：IPC 的输入校验继续保留。** | `requireWriteInput` 等检查未知输入的对象形状、标识符及字段类型；manager/session 并未完整重复这些检查。静默拒绝仍能阻止非法输入进入业务；catch 同时防止 fire-and-forget 异常击穿主进程。是否增加反馈是独立产品需求。 |
-| 4.1 | **撤回缺陷结论：`decodeReference` 的 kind/value 两个 early return 是独立校验。** | 合并条件仅是风格选择，不纳入整改；无需为了减少 if 改动。 |
-| 4.6（Errors） | **撤回简化建议：保留 `String(error ?? '')`。** | 该分支还接收数字、布尔值、没有字符串 message 的对象等。null/undefined 返回空字符串是 `errorMessageOr` 触发 fallback 的语义，不能改成 `'null'`/`'undefined'`。 |
+| 原编号        | 候选与复核结论                                                                                                                             | 实施前需要的证据或约束                                                                                                                                                                                                           |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.1           | 工具链重复解析确实存在，但撤回“只留 `ToolCatalog.execute` 最后一关”的建议。`PiToolAdapter.prepareArguments` 也 parse，原“三次”漏计该阶段。 | `ToolExecutor.execute` 在 catalog 执行前已规范化、检查并判权；Hook 改写会重新进入 execute。列清 prepare/execute/授权预览/Shell/catalog 直接调用及各次输入是否变化，保留判权前校验。不能把 catalog 当作所有工具唯一执行收口。     |
+| 1.2           | verifier 外层 catch 把异常归为 `provider_failed`，有诊断分类问题；不能因 `Promise<GoalVerifierOutcome>` 就认定它不会拒绝。                 | `runGoalVerifier` 的主要请求在 try 内，准备部分并非全部受其保护，注入的 verifier 也可能拒绝。确认异常来源和安全诊断出口后再决定 catch 的去留；不得用类型断言证明不会抛错。模型查找 `.catch(() => null)` 同样需单独核对错误契约。 |
+| 1.3           | `identity` 判空保留；撤回“生产必然有值”的过强结论。                                                                                        | `ExecuteHarnessRun` 中 `providerGoal` 明确是可选变量，初始为 undefined。核实每个 context 钩子、目标变化和回调安装时序，再收紧生命周期回调及 `applyModelTerminal` 的相关类型。不能仅删判空，也不能仅把类型改必填掩盖实际缺值。    |
+| 2.3           | `validateAdmission` 中的检查不一定可直接删除。                                                                                             | `this.get` 与 resolver 之间还有空消息检查。删除后“不存在的 thread + 空消息”会从 404 变为 `EMPTY_MESSAGE`。优先沿用 2.2 的轻量守卫，若调整顺序需明确行为决定；`steerTurn` 单独核对。                                              |
+| 2.8           | `ThreadRead/Definition.ts` 通用失败缺少内部诊断是候选，但 `AgentError` 第四参数是 `details`，不是 `cause`。                                | 核实工具错误、日志及 RPC 的序列化路径，选择已有的安全诊断方式；禁止直接把原始 SQLite/projection 异常塞进 details 或对外返回。                                                                                                    |
+| 2.10          | 撤回“zod 输出必然纯 JSON，因此 stringify 不会抛”的证明。                                                                                   | Zod 本身不保证无循环引用、BigInt、转换输出或自定义序列化行为。核对可注册 schema、所有输入来源和日志契约，再决定保留、缩小或移除 catch。                                                                                          |
+| 3.6           | **撤回冗余结论：IPC 的输入校验继续保留。**                                                                                                 | `requireWriteInput` 等检查未知输入的对象形状、标识符及字段类型；manager/session 并未完整重复这些检查。静默拒绝仍能阻止非法输入进入业务；catch 同时防止 fire-and-forget 异常击穿主进程。是否增加反馈是独立产品需求。              |
+| 4.1           | **撤回缺陷结论：`decodeReference` 的 kind/value 两个 early return 是独立校验。**                                                           | 合并条件仅是风格选择，不纳入整改；无需为了减少 if 改动。                                                                                                                                                                         |
+| 4.6（Errors） | **撤回简化建议：保留 `String(error ?? '')`。**                                                                                             | 该分支还接收数字、布尔值、没有字符串 message 的对象等。null/undefined 返回空字符串是 `errorMessageOr` 触发 fallback 的语义，不能改成 `'null'`/`'undefined'`。                                                                    |
 
 ### 其余候选：保留定位，不沿用未经充分证明的“应删”指令
 
 下表保留原报告其余候选与各自缺失的证据。表内“待确认”不代表已确定缺陷，也不代表已证明可等价删除。
 
-| 原编号 | 候选位置/行为 | 需要补齐的证据或处理边界 |
-|---|---|---|
-| 1.1（附带） | `TurnRunner` 可选 `goals` 参数 | 核对所有构造和测试入口，再决定是否收紧构造契约；与异步恢复缺陷分开处理。 |
-| 1.4 | `PiToolAdapter` 的 blocker `typeof` | 参数验证不能自动给 execute 回调建立静态窄化；核对参数类型与所有调用入口。领域层对 blocker 的业务约束不能仅因 TypeBox 存在就删除。 |
-| 1.5 | `AgentRuntimeService` 写 notice 后读取并 fallback | 核对 repository 对字段的规范化和事件所需对象。可研究直接使用写入值，但未证明“读不到时 insertEvent 同样必失败”，不能作为确定的数据丢失结论。 |
-| 1.6 | ~~`RightDockPanels` 的 parsedBudget 二次判空~~ | 已关闭：Goal 编辑面板不再解析总数，改为追加量算术 `resolveGoalBudgetAppend`，二次判空随旧输入一并删除。 |
-| 1.7 | `AgentHarness` context 钩子的 cast | 核实泛型事件与返回类型之间的相关性；运行时分支不会自动让泛型 result 变成 ContextResult。在保留多钩子链式结果传递的前提下证明可简化。 |
-| 1.9 | `ExecutionRepository.settleGoalObservation` 返回 hasWaiting | 重新搜索所有调用、测试与返回契约；确认无人消费后可删字段，classification 的类型收紧另行验证。 |
-| 1.10 | `ThreadService` 的 hub.listen 探测 | 核对 EventHub 契约和所有构造路径，若只是测试 null stub 导致，修复最小测试替身后再简化生产判断。 |
-| 2.5 | 设置写入链多层存在性检查 | 检查各 repository 的直接调用、返回 snapshot 用途、事务边界及 404 契约。不能只留一层便假定其他调用受保护。 |
-| 2.7 | 数据目录迁移、ProjectTrustStore、EnvironmentDeltaStore 重新抛错 | 是否丢失可用诊断需追踪日志与最终错误出口；进程拥有文件不代表异常中不含敏感路径。可考虑内部 cause，但必须验证不会对外泄漏。 |
-| 2.9 | 非文件工具 post hook 失败无记录 | 检查 Hook 执行器是否已有统一诊断；如补日志，保留工具已执行成功的结果且不记录敏感参数。 |
-| 2.11 | ToolExecutor permissionConfig 的重复 fallback | 核对所有私有调用路径及上下文类型。运行时已填充不自动改变对象属性的可选类型；先让类型准确表达不变量。 |
-| 2.12 | ToolExecutor 的固定 openai/gpt-5 fallback | 重新搜索直接执行、授权预览、恢复及测试调用，证明 model 必填的边界；避免把可疑 fallback 的潜在风险写成已触发的生产故障。 |
-| 2.13 | Shell 的 parseShellInput 重复校验 | Shell 走独立执行路径，不能假定一定经过 catalog 最后解析。核对规范化前后字段及 Hook 重入，保留信任边界校验和实际字段变换。 |
-| 2.14 | escalationToken 残留输入字段 | 核对冻结工具定义、恢复、共享契约及现有拒绝语义；删除字段会改变输入兼容/错误分类，不是无条件等价精简。 |
-| 2.15 | Bookmark、runtime-composition、PlanApproval 重查 sqlite_master | 确认同一连接是否可能在迁移/初始化前后复用，以及现有 capability 缓存失效规则；无证据时不承诺按 Database 永久缓存安全。 |
-| 2.16 | ThreadRepository 与 RepositoryCore 权限/设置解码重复 | 对照完整实现、导出和依赖方向；确认语义完全相同后复用，不能顺带改变兼容解码。 |
-| 2.18 | repository 的 parse/stringify 本地副本 | 分开确认等价副本；PermissionRuleRepository 对 undefined 的行为不同，不能机械替换。核实真实入参与 SQLite 绑定语义。 |
-| 2.19 | Compaction/CompactionUtils 的 safeJsonStringify | 两处当前为局部函数，需核对完整函数及导出后依赖，才可复用；ContextUsageBreakdown 删除 catch 的建议另需证明输入可序列化。 |
-| 2.20 | ApprovalService.emit、ArtifactService.listByItem、WorkspaceRepository 两个 setter、BrowserBounds、WorkbenchLayoutStorage | 全仓无文本调用只是线索，需区分私有死代码、公开导出、动态接线及有意保留的平台能力。仅测试调用也不能直接证明代码应删除。 |
-| 2.21 | PermissionDecisionEngine 两判断器的公共前缀 | 核实两个判断器的职责和后续语义是否一致；少量重复不是功能缺陷，不为消除重复强行抽象。 |
-| 3.2 | GitBoardActions catch 与客户端错误信封 | 核对 try 范围内除网络客户端外的状态更新、回调及所有实现是否可能抛错；Promise 返回类型不保证不拒绝。 |
-| 3.3 | LocalEnvironmentSettings 子集条件 | 核对当前组件前置 return 与输入是否为同一渲染快照；成立则是局部分支删除，不牵连其他环境状态处理。 |
-| 3.4 | TerminalPanel 可选调用 ackTerminalOutput | 核对 TerminalClient 接口、构造与 mock 的完整性；确认方法恒存在后可去掉外层可选调用，保留内部 capability 判断。 |
-| 3.5 | effectiveThreadId 默认 home 后判空 | 区分局部已默认的变量与 `resolveIntegratedTerminalToggleAction` 原始 threadId 参数；不能连带删除后者的空值行为。 |
-| 3.8 | UseThreadBookmarks 的加载失败与 null | 核对 null 在 UI 和重试中的含义，不能直接写成“没有书签”；先确认是否确有错误展示缺失。 |
-| 3.9 | UseModelProviderController 模型切换失败反馈 | 已有 toast 不能叫“静默”。核对现有文案和诊断链，再判断需要补哪一类上下文，避免暴露 Provider 敏感信息。 |
-| 3.10 | Renderer 六份 errorMessage | 对照各自空值 fallback 和非 Error 值处理，等价者复用 shared helper；不一刀切改变展示文案。 |
-| 3.11 | Browser bounds IPC no-op 链 | 核对 preload/IPC 的公开契约、所有宿主调用与实际 Browser 布局归属；决定接线还是删除需要功能依据，不是任选其一。 |
-| 3.12 | GitBoard projectId filter 后判空/断言 | 证明所有 action 只接收过滤后的集合，再用类型谓词表达有效项；保留 pending 竞态判断。 |
-| 4.2 | ThreadResultCard 局部 record/isRecord | 比较 null、数组和返回对象类型等完整语义，确认可直接复用 Guards，不仅比较函数外形。 |
-| 4.3 | RPC Dispatcher missing handler 分支 | 核对公开 dispatcher 是否只接收经 registry 验证且不会变动的表；模块初始化校验不能自动证明所有公共调用安全。协议错误兜底不因仅测试覆盖就删除。 |
-| 4.4 | Permission preset 的 default fallback | 核对持久化/外部输入入口、运行时校验及 custom 分支；`as const` 是类型约束，不等于运行时冻结。 |
-| 4.5 | 空对象 schema filter 与 exactParams | 检查 schema 是否被直接 decode、导出或复用；dispatcher 的 excess-property 选项并不自动覆盖其他解码入口。 |
-| 4.6（Client） | 动态 import、definition 查空、响应 id 文案 | 分别验证运行时导入图、打包语义和未知输入边界。id 校验保留；是否回显外部值需按错误出口与脱敏规则判断。 |
-| 4.6（Interactions） | createServerRequestMessage 对已类型化输入 decode | 检查公共构造器的运行时契约与实际调用；只有测试调用不能证明验证冗余。 |
-| 4.6（Clipboard） | require 包装 normalize | 内联仅是结构选择，未知输入拒绝仍要保留；无 cause 不自动代表缺陷。 |
-| 4.6（图标） | split('/').at(-1) 的 fallback | 非空 split 数组支持运行时简化，但需确认静态返回类型仍满足函数契约，不为删 fallback 添加无意义断言。 |
-| 4.6（Goal limits） | ThreadGoalWireLimits 与 renderer 硬编码 4000 | 核对两者限制对象和语义是否一致，确认后复用已有常量；不能以暂时无消费者为由先删共享约束。 |
+| 原编号              | 候选位置/行为                                                                                                            | 需要补齐的证据或处理边界                                                                                                                     |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1.1（附带）         | `TurnRunner` 可选 `goals` 参数                                                                                           | 核对所有构造和测试入口，再决定是否收紧构造契约；与异步恢复缺陷分开处理。                                                                     |
+| 1.4                 | `PiToolAdapter` 的 blocker `typeof`                                                                                      | 参数验证不能自动给 execute 回调建立静态窄化；核对参数类型与所有调用入口。领域层对 blocker 的业务约束不能仅因 TypeBox 存在就删除。            |
+| 1.5                 | `AgentRuntimeService` 写 notice 后读取并 fallback                                                                        | 核对 repository 对字段的规范化和事件所需对象。可研究直接使用写入值，但未证明“读不到时 insertEvent 同样必失败”，不能作为确定的数据丢失结论。  |
+| 1.6                 | ~~`RightDockPanels` 的 parsedBudget 二次判空~~                                                                           | 已关闭：Goal 编辑面板不再解析总数，改为追加量算术 `resolveGoalBudgetAppend`，二次判空随旧输入一并删除。                                      |
+| 1.7                 | `AgentHarness` context 钩子的 cast                                                                                       | 核实泛型事件与返回类型之间的相关性；运行时分支不会自动让泛型 result 变成 ContextResult。在保留多钩子链式结果传递的前提下证明可简化。         |
+| 1.9                 | `ExecutionRepository.settleGoalObservation` 返回 hasWaiting                                                              | 重新搜索所有调用、测试与返回契约；确认无人消费后可删字段，classification 的类型收紧另行验证。                                                |
+| 1.10                | `ThreadService` 的 hub.listen 探测                                                                                       | 核对 EventHub 契约和所有构造路径，若只是测试 null stub 导致，修复最小测试替身后再简化生产判断。                                              |
+| 2.5                 | 设置写入链多层存在性检查                                                                                                 | 检查各 repository 的直接调用、返回 snapshot 用途、事务边界及 404 契约。不能只留一层便假定其他调用受保护。                                    |
+| 2.7                 | 数据目录迁移、ProjectTrustStore、EnvironmentDeltaStore 重新抛错                                                          | 是否丢失可用诊断需追踪日志与最终错误出口；进程拥有文件不代表异常中不含敏感路径。可考虑内部 cause，但必须验证不会对外泄漏。                   |
+| 2.9                 | 非文件工具 post hook 失败无记录                                                                                          | 检查 Hook 执行器是否已有统一诊断；如补日志，保留工具已执行成功的结果且不记录敏感参数。                                                       |
+| 2.11                | ToolExecutor permissionConfig 的重复 fallback                                                                            | 核对所有私有调用路径及上下文类型。运行时已填充不自动改变对象属性的可选类型；先让类型准确表达不变量。                                         |
+| 2.12                | ToolExecutor 的固定 openai/gpt-5 fallback                                                                                | 重新搜索直接执行、授权预览、恢复及测试调用，证明 model 必填的边界；避免把可疑 fallback 的潜在风险写成已触发的生产故障。                      |
+| 2.13                | Shell 的 parseShellInput 重复校验                                                                                        | Shell 走独立执行路径，不能假定一定经过 catalog 最后解析。核对规范化前后字段及 Hook 重入，保留信任边界校验和实际字段变换。                    |
+| 2.14                | escalationToken 残留输入字段                                                                                             | 核对冻结工具定义、恢复、共享契约及现有拒绝语义；删除字段会改变输入兼容/错误分类，不是无条件等价精简。                                        |
+| 2.15                | Bookmark、runtime-composition、PlanApproval 重查 sqlite_master                                                           | 确认同一连接是否可能在迁移/初始化前后复用，以及现有 capability 缓存失效规则；无证据时不承诺按 Database 永久缓存安全。                        |
+| 2.16                | ThreadRepository 与 RepositoryCore 权限/设置解码重复                                                                     | 对照完整实现、导出和依赖方向；确认语义完全相同后复用，不能顺带改变兼容解码。                                                                 |
+| 2.18                | repository 的 parse/stringify 本地副本                                                                                   | 分开确认等价副本；PermissionRuleRepository 对 undefined 的行为不同，不能机械替换。核实真实入参与 SQLite 绑定语义。                           |
+| 2.19                | Compaction/CompactionUtils 的 safeJsonStringify                                                                          | 两处当前为局部函数，需核对完整函数及导出后依赖，才可复用；ContextUsageBreakdown 删除 catch 的建议另需证明输入可序列化。                      |
+| 2.20                | ApprovalService.emit、ArtifactService.listByItem、WorkspaceRepository 两个 setter、BrowserBounds、WorkbenchLayoutStorage | 全仓无文本调用只是线索，需区分私有死代码、公开导出、动态接线及有意保留的平台能力。仅测试调用也不能直接证明代码应删除。                       |
+| 2.21                | PermissionDecisionEngine 两判断器的公共前缀                                                                              | 核实两个判断器的职责和后续语义是否一致；少量重复不是功能缺陷，不为消除重复强行抽象。                                                         |
+| 3.2                 | GitBoardActions catch 与客户端错误信封                                                                                   | 核对 try 范围内除网络客户端外的状态更新、回调及所有实现是否可能抛错；Promise 返回类型不保证不拒绝。                                          |
+| 3.3                 | LocalEnvironmentSettings 子集条件                                                                                        | 核对当前组件前置 return 与输入是否为同一渲染快照；成立则是局部分支删除，不牵连其他环境状态处理。                                             |
+| 3.4                 | TerminalPanel 可选调用 ackTerminalOutput                                                                                 | 核对 TerminalClient 接口、构造与 mock 的完整性；确认方法恒存在后可去掉外层可选调用，保留内部 capability 判断。                               |
+| 3.5                 | effectiveThreadId 默认 home 后判空                                                                                       | 区分局部已默认的变量与 `resolveIntegratedTerminalToggleAction` 原始 threadId 参数；不能连带删除后者的空值行为。                              |
+| 3.8                 | UseThreadBookmarks 的加载失败与 null                                                                                     | 核对 null 在 UI 和重试中的含义，不能直接写成“没有书签”；先确认是否确有错误展示缺失。                                                         |
+| 3.9                 | UseModelProviderController 模型切换失败反馈                                                                              | 已有 toast 不能叫“静默”。核对现有文案和诊断链，再判断需要补哪一类上下文，避免暴露 Provider 敏感信息。                                        |
+| 3.10                | Renderer 六份 errorMessage                                                                                               | 对照各自空值 fallback 和非 Error 值处理，等价者复用 shared helper；不一刀切改变展示文案。                                                    |
+| 3.11                | Browser bounds IPC no-op 链                                                                                              | 核对 preload/IPC 的公开契约、所有宿主调用与实际 Browser 布局归属；决定接线还是删除需要功能依据，不是任选其一。                               |
+| 3.12                | GitBoard projectId filter 后判空/断言                                                                                    | 证明所有 action 只接收过滤后的集合，再用类型谓词表达有效项；保留 pending 竞态判断。                                                          |
+| 4.2                 | ThreadResultCard 局部 record/isRecord                                                                                    | 比较 null、数组和返回对象类型等完整语义，确认可直接复用 Guards，不仅比较函数外形。                                                           |
+| 4.3                 | RPC Dispatcher missing handler 分支                                                                                      | 核对公开 dispatcher 是否只接收经 registry 验证且不会变动的表；模块初始化校验不能自动证明所有公共调用安全。协议错误兜底不因仅测试覆盖就删除。 |
+| 4.4                 | Permission preset 的 default fallback                                                                                    | 核对持久化/外部输入入口、运行时校验及 custom 分支；`as const` 是类型约束，不等于运行时冻结。                                                 |
+| 4.5                 | 空对象 schema filter 与 exactParams                                                                                      | 检查 schema 是否被直接 decode、导出或复用；dispatcher 的 excess-property 选项并不自动覆盖其他解码入口。                                      |
+| 4.6（Client）       | 动态 import、definition 查空、响应 id 文案                                                                               | 分别验证运行时导入图、打包语义和未知输入边界。id 校验保留；是否回显外部值需按错误出口与脱敏规则判断。                                        |
+| 4.6（Interactions） | createServerRequestMessage 对已类型化输入 decode                                                                         | 检查公共构造器的运行时契约与实际调用；只有测试调用不能证明验证冗余。                                                                         |
+| 4.6（Clipboard）    | require 包装 normalize                                                                                                   | 内联仅是结构选择，未知输入拒绝仍要保留；无 cause 不自动代表缺陷。                                                                            |
+| 4.6（图标）         | split('/').at(-1) 的 fallback                                                                                            | 非空 split 数组支持运行时简化，但需确认静态返回类型仍满足函数契约，不为删 fallback 添加无意义断言。                                          |
+| 4.6（Goal limits）  | ThreadGoalWireLimits 与 renderer 硬编码 4000                                                                             | 核对两者限制对象和语义是否一致，确认后复用已有常量；不能以暂时无消费者为由先删共享约束。                                                     |
 
 ### 已有保留理由与其他待观察项
 

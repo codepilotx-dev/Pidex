@@ -96,25 +96,33 @@ describe('Codex CPX design system token contract', () => {
   })
 
   test('maps Dropdown states and searchable gutters through shared contracts', async () => {
-    const [tokens, popover, rows, sidebarRow, select, searchablePopover, projectSwitcher, branchSwitcher] =
-      await Promise.all([
-        Bun.file(
-          new URL('../src/styles/design-system/codex-semantic-tokens.css', import.meta.url),
-        ).text(),
-        Bun.file(new URL('../src/styles/popover.css', import.meta.url)).text(),
-        Bun.file(new URL('../src/styles/components/interactive-row.css', import.meta.url)).text(),
-        Bun.file(new URL('../src/components/ui/SidebarRow.css', import.meta.url)).text(),
-        Bun.file(new URL('../src/components/ui/Select.tsx', import.meta.url)).text(),
-        Bun.file(
-          new URL('../src/components/ui/SearchablePopoverContent.tsx', import.meta.url),
-        ).text(),
-        Bun.file(
-          new URL('../src/features/session/composer/ProjectSwitcherPopover.tsx', import.meta.url),
-        ).text(),
-        Bun.file(
-          new URL('../src/features/session/composer/BranchSelectPopover.tsx', import.meta.url),
-        ).text(),
-      ])
+    const [
+      tokens,
+      popover,
+      rows,
+      sidebarRow,
+      select,
+      searchablePopover,
+      projectSwitcher,
+      branchSwitcher,
+    ] = await Promise.all([
+      Bun.file(
+        new URL('../src/styles/design-system/codex-semantic-tokens.css', import.meta.url),
+      ).text(),
+      Bun.file(new URL('../src/styles/popover.css', import.meta.url)).text(),
+      Bun.file(new URL('../src/styles/components/interactive-row.css', import.meta.url)).text(),
+      Bun.file(new URL('../src/components/ui/SidebarRow.css', import.meta.url)).text(),
+      Bun.file(new URL('../src/components/ui/Select.tsx', import.meta.url)).text(),
+      Bun.file(
+        new URL('../src/components/ui/SearchablePopoverContent.tsx', import.meta.url),
+      ).text(),
+      Bun.file(
+        new URL('../src/features/session/composer/ProjectSwitcherPopover.tsx', import.meta.url),
+      ).text(),
+      Bun.file(
+        new URL('../src/features/session/composer/BranchSelectPopover.tsx', import.meta.url),
+      ).text(),
+    ])
 
     expectSourceContains(
       tokens,
@@ -371,10 +379,7 @@ describe('Codex CPX design system token contract', () => {
     ])
 
     expect(systemTokens.match(/--cpx-sys-shadow-prominent:/g)).toHaveLength(1)
-    expectSourceContains(
-      systemTokens,
-      '--cpx-sys-shadow-raised: none;',
-    )
+    expectSourceContains(systemTokens, '--cpx-sys-shadow-raised: none;')
     expectSourceContains(
       componentTokens,
       '--cpx-comp-composer-shadow: var(--cpx-sys-shadow-prominent);',
@@ -522,9 +527,18 @@ describe('Codex CPX design system token contract', () => {
     expectSourceNotContains(composer, 'calc(var(--cpx-sys-radius-xl) * 2)')
     expect(conversation.match(/border-radius: var\(--cpx-sys-radius-2xl\);/g)).toHaveLength(1)
     expectSourceContains(conversation, 'border-radius: var(--user-message-bubble-radius);')
-    expectSourceNotContains(conversation, '.canonical-user-message:hover .canonical-message-actions')
-    expectSourceNotContains(conversation, '.canonical-turn:hover .canonical-message-actions--assistant')
-    expectSourceContains(conversation, '.canonical-user-message:has(.canonical-user-message__bubble:hover)')
+    expectSourceNotContains(
+      conversation,
+      '.canonical-user-message:hover .canonical-message-actions',
+    )
+    expectSourceNotContains(
+      conversation,
+      '.canonical-turn:hover .canonical-message-actions--assistant',
+    )
+    expectSourceContains(
+      conversation,
+      '.canonical-user-message:has(.canonical-user-message__bubble:hover)',
+    )
     expectSourceNotContains(conversation, 'var(--cpx-sys-radius-optical-scale)')
     expectSourceContains(conversation, 'corner-shape: var(--cpx-sys-corner-shape);')
     expectSourceContains(summary, 'border-radius: var(--cpx-sys-radius-prominent);')

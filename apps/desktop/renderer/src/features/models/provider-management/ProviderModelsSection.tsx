@@ -160,20 +160,20 @@ export function ProviderModelsSection({
       nextAdded.add(model.id)
       const isVision = Boolean(
         model.input?.includes('image') ||
-          modelMetadata[model.id]?.vision ||
-          modelMetadata[model.id]?.modalities?.input?.includes('image') ||
-          /vision|vl|-v-|image/i.test(model.id),
+        modelMetadata[model.id]?.vision ||
+        modelMetadata[model.id]?.modalities?.input?.includes('image') ||
+        /vision|vl|-v-|image/i.test(model.id),
       )
       const isReasoning = Boolean(
         model.reasoning ||
-          modelMetadata[model.id]?.reasoning ||
-          /reason|deepseek-r1|qwq|o1|o3|o4|thinking/i.test(model.id),
+        modelMetadata[model.id]?.reasoning ||
+        /reason|deepseek-r1|qwq|o1|o3|o4|thinking/i.test(model.id),
       )
       const contextWindow = resolveModelContextWindow(model, modelMetadata[model.id])
       const enrichedModel: DesktopProviderModelDefinition = {
         ...model,
         reasoning: isReasoning,
-        input: isVision ? ['text', 'image'] : model.input ?? ['text'],
+        input: isVision ? ['text', 'image'] : (model.input ?? ['text']),
         contextWindow,
       }
       nextModels = [...currentConfig.models.filter((m) => m.id !== model.id), enrichedModel]
@@ -548,12 +548,7 @@ export function ProviderModelsSection({
                 </Dialog.Description>
               </div>
               <Dialog.Close asChild>
-                <Button
-                  color="ghostSecondary"
-                  isIconOnly
-                  size="toolbar"
-                  aria-label="关闭模型发现"
-                >
+                <Button color="ghostSecondary" isIconOnly size="toolbar" aria-label="关闭模型发现">
                   <X aria-hidden size={APP_ICON_SIZE} />
                 </Button>
               </Dialog.Close>
@@ -819,7 +814,6 @@ function ModelRowItem({
   )
 }
 
-
 function formatVendorName(prefix: string): string {
   const p = prefix.toLowerCase()
   if (p === 'openai') return 'OpenAI'
@@ -887,8 +881,8 @@ export function resolveModelCapabilities(
 
   const isReasoning = Boolean(
     model.reasoning ||
-      metadata?.reasoning ||
-      /reason|deepseek-r1|qwq|o1|o3|o4|thinking/i.test(text),
+    metadata?.reasoning ||
+    /reason|deepseek-r1|qwq|o1|o3|o4|thinking/i.test(text),
   )
   if (isReasoning) {
     caps.push({
@@ -901,9 +895,9 @@ export function resolveModelCapabilities(
 
   const isVision = Boolean(
     model.input?.includes('image') ||
-      metadata?.vision ||
-      metadata?.modalities?.input?.includes('image') ||
-      /vision|vl|-v-|image/i.test(text),
+    metadata?.vision ||
+    metadata?.modalities?.input?.includes('image') ||
+    /vision|vl|-v-|image/i.test(text),
   )
   if (isVision) {
     caps.push({
@@ -916,8 +910,8 @@ export function resolveModelCapabilities(
 
   const isAudio = Boolean(
     model.input?.includes('audio') ||
-      metadata?.modalities?.input?.includes('audio') ||
-      /audio|voice|speech|tts|whisper/i.test(text),
+    metadata?.modalities?.input?.includes('audio') ||
+    /audio|voice|speech|tts|whisper/i.test(text),
   )
   if (isAudio) {
     caps.push({
@@ -958,9 +952,7 @@ export function resolveModelCapabilities(
     })
   }
 
-  const hasTools = Boolean(
-    model.tools ?? metadata?.toolCall ?? (!isEmbedding && !isRerank),
-  )
+  const hasTools = Boolean(model.tools ?? metadata?.toolCall ?? (!isEmbedding && !isRerank))
   if (hasTools && !isEmbedding && !isRerank) {
     caps.push({
       key: 'tools',
@@ -1056,10 +1048,7 @@ export function DiscoveredModelCard({
               fallback={<Server aria-hidden size={14} />}
             />
           </span>
-          <span
-            className="tw:truncate tw:type-row-title tw:text-app-text"
-            title={modelName}
-          >
+          <span className="tw:truncate tw:type-row-title tw:text-app-text" title={modelName}>
             {modelName}
           </span>
           <span className="tw:shrink-0 tw:rounded tw:bg-app-hover tw:px-1.5 tw:py-0.5 tw:type-caption tw:text-app-text-soft">
@@ -1112,9 +1101,7 @@ export function DiscoveredModelCard({
           <Cpu size="var(--inline-icon-size, 1em)" className="tw:shrink-0 tw:text-app-text-meta" />
           <span>
             上下文长度:{' '}
-            <strong className="tw:text-app-text">
-              {formatCompactNumber(contextWindow)}
-            </strong>
+            <strong className="tw:text-app-text">{formatCompactNumber(contextWindow)}</strong>
           </span>
         </div>
         {model.id !== modelName ? (

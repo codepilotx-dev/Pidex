@@ -1774,7 +1774,9 @@ describe('数据库兼容与迁移', () => {
     expect(probeThreadMessageForksStorageCapabilities(migrated.sqlite).forkTargetTurnId).toBe(true)
 
     const columns = (
-      migrated.sqlite.query('PRAGMA table_info(thread_message_forks)').all() as Array<{ name: string }>
+      migrated.sqlite.query('PRAGMA table_info(thread_message_forks)').all() as Array<{
+        name: string
+      }>
     ).map((col) => col.name)
     expect(columns).toContain('target_turn_id')
     migrated.close()

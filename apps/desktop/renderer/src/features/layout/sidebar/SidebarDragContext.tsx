@@ -65,7 +65,10 @@ export type SidebarDragContextValue = {
   ) => SidebarDropResolution
 }
 
-type SidebarDragController = Pick<SidebarDragContextValue, 'beginDrag' | 'setRejected' | 'finishDrag'> & {
+type SidebarDragController = Pick<
+  SidebarDragContextValue,
+  'beginDrag' | 'setRejected' | 'finishDrag'
+> & {
   getSession: () => SidebarDragSession | null
 }
 const SidebarDragContext = createContext<SidebarDragController | null>(null)
@@ -74,7 +77,9 @@ const SidebarDragRejectedContext = createContext(false)
 
 const REJECTION_MS = 400
 // 源行已有 select-none 和局部光标，避免每次拖动增删全页面的 * 样式。
-const sidebarPlugins = defaultPreset.plugins.filter((plugin) => plugin !== Cursor && plugin !== PreventSelection)
+const sidebarPlugins = defaultPreset.plugins.filter(
+  (plugin) => plugin !== Cursor && plugin !== PreventSelection,
+)
 
 export const SIDEBAR_DRAG_REJECTED_CLASS = 'sidebar-drop-rejected'
 
@@ -155,7 +160,9 @@ export function SidebarDragProvider({ children }: { children: ReactNode }): Reac
     <DragDropProvider plugins={sidebarPlugins}>
       <SidebarDragContext.Provider value={value}>
         <SidebarDragSessionContext.Provider value={session}>
-          <SidebarDragRejectedContext.Provider value={rejected}>{children}</SidebarDragRejectedContext.Provider>
+          <SidebarDragRejectedContext.Provider value={rejected}>
+            {children}
+          </SidebarDragRejectedContext.Provider>
         </SidebarDragSessionContext.Provider>
       </SidebarDragContext.Provider>
     </DragDropProvider>
@@ -288,7 +295,9 @@ export function SidebarDropList({
     },
   })
   const session = drag?.getSession()
-  const receiving = isDropTarget && list.destination.kind === 'project' &&
+  const receiving =
+    isDropTarget &&
+    list.destination.kind === 'project' &&
     Boolean(session && canAcceptSidebarDrop(session.state, list))
   const Component = as
   return (
@@ -299,7 +308,9 @@ export function SidebarDropList({
         data-sidebar-drop-container={list.key}
         data-sidebar-receive-area={receiving ? 'active' : undefined}
         className={`${props.className ?? ''} ${
-          receiving ? 'sidebar-drop-receive-active tw:rounded-md tw:bg-app-accent-subtle tw:ring-2 tw:ring-inset tw:ring-app-accent' : ''
+          receiving
+            ? 'sidebar-drop-receive-active tw:rounded-md tw:bg-app-accent-subtle tw:ring-2 tw:ring-inset tw:ring-app-accent'
+            : ''
         }`}
       >
         {children}
@@ -335,7 +346,9 @@ export function SidebarDragOverlay({
             <span className="tw:flex tw:size-4 tw:shrink-0 tw:items-center tw:justify-center">
               {model.icon}
             </span>
-            <span className="tw:min-w-0 tw:flex-1 tw:truncate tw:whitespace-nowrap">{model.title}</span>
+            <span className="tw:min-w-0 tw:flex-1 tw:truncate tw:whitespace-nowrap">
+              {model.title}
+            </span>
             {model.count > 1 ? (
               <span className="tw:shrink-0 tw:rounded-full tw:bg-app-selected tw:px-1.5 tw:type-caption tw:text-app-text-meta">
                 {model.count}
@@ -348,7 +361,10 @@ export function SidebarDragOverlay({
   )
 }
 
-export function SidebarDragPreview({ getModel, maxWidth }: {
+export function SidebarDragPreview({
+  getModel,
+  maxWidth,
+}: {
   getModel: (session: SidebarDragSession | null) => SidebarDragOverlayModel | null
   maxWidth?: number
 }): ReactNode {

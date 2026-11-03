@@ -4,7 +4,10 @@ import type React from 'react'
 export const Toast = forwardRef<
   HTMLDivElement,
   React.HTMLAttributes<HTMLDivElement> & { appearance?: 'action'; surface?: 'panel' | 'subtle' }
->(function Toast({ className = '', appearance, surface = 'panel', ...props }, ref): React.ReactNode {
+>(function Toast(
+  { className = '', appearance, surface = 'panel', ...props },
+  ref,
+): React.ReactNode {
   const bgClass = surface === 'subtle' ? 'tw:bg-app-control' : 'tw:bg-app-panel'
   const shadowClass = surface === 'subtle' ? 'tw:shadow-sm' : 'tw:shadow-lg'
   return (

@@ -20,8 +20,7 @@ const SENSITIVE_PATH =
   /(^|\/)(\.env(\..*)?|auth\.json|credentials(\.json)?|secrets?\.(json|ya?ml)|id_(rsa|ed25519)|\.ssh|\.git|\.pidex)(\/|$)|\.(pem|key|pfx|p12)$/i
 
 /** Credentials and internal VCS/config state are never reviewer evidence. */
-const isSensitivePath = (path: string): boolean =>
-  SENSITIVE_PATH.test(path.replaceAll('\\', '/'))
+const isSensitivePath = (path: string): boolean => SENSITIVE_PATH.test(path.replaceAll('\\', '/'))
 
 export type GuardianEvidenceWorkspace = Pick<WorkspaceService, 'read' | 'list'>
 

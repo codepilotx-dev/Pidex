@@ -15,7 +15,8 @@ export function groupProviderModels<T extends { id: string; group?: string }>(
 ): { id: string; models: T[] }[] {
   const groups = new Map<string, T[]>()
   for (const model of models) {
-    const id = model.group?.trim() || (model.id.includes('/') ? model.id.split('/')[0]! : providerId)
+    const id =
+      model.group?.trim() || (model.id.includes('/') ? model.id.split('/')[0]! : providerId)
     const group = groups.get(id) ?? []
     group.push(model)
     groups.set(id, group)

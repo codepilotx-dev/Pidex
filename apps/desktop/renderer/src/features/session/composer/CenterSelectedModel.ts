@@ -13,9 +13,7 @@ export type SelectedModelScrollGeometry = {
  */
 export function centeredScrollTop(geometry: SelectedModelScrollGeometry): number {
   const offset =
-    geometry.rowTop -
-    geometry.listTop -
-    (geometry.listClientHeight - geometry.rowHeight) / 2
+    geometry.rowTop - geometry.listTop - (geometry.listClientHeight - geometry.rowHeight) / 2
   const maxScrollTop = Math.max(0, geometry.scrollHeight - geometry.listClientHeight)
   return Math.min(Math.max(geometry.scrollTop + offset, 0), maxScrollTop)
 }

@@ -122,9 +122,7 @@ export function useWorkbenchShellController({
   const setWorkbenchPanelState = useMemo(
     () =>
       (
-        updater:
-          | WorkbenchTabsState
-          | ((current: WorkbenchTabsState) => WorkbenchTabsState),
+        updater: WorkbenchTabsState | ((current: WorkbenchTabsState) => WorkbenchTabsState),
       ): void => {
         workbenchStore.setState((state) => ({
           panelState:
@@ -146,9 +144,9 @@ export function useWorkbenchShellController({
         workbenchStore.setState((state) => ({
           layoutState:
             typeof updater === 'function'
-              ? (updater as (
-                  current: WorkbenchLayoutState | null,
-                ) => WorkbenchLayoutState | null)(state.layoutState)
+              ? (updater as (current: WorkbenchLayoutState | null) => WorkbenchLayoutState | null)(
+                  state.layoutState,
+                )
               : updater,
         }))
       },
@@ -242,40 +240,50 @@ export function useWorkbenchShellController({
     setSidebarCollapsed(true)
   }, [setSidebarCollapsed])
 
-  const dispatchPanelAction = useCallback((action: WorkbenchPanelAction): void => {
-    setWorkbenchPanelState((current) => {
-      const tab = 'tabId' in action ? current.tabsById[action.tabId] : undefined
-      if (
-        tab?.kind === 'browser' &&
-        ((action.type === 'moveTab' && action.target === 'sidebar') || action.type === 'popOutTab')
+  const dispatchPanelAction = useCallback(
+    (action: WorkbenchPanelAction): void => {
+      setWorkbenchPanelState((current) => {
+        const tab = 'tabId' in action ? current.tabsById[action.tabId] : undefined
+        if (
+          tab?.kind === 'browser' &&
+          ((action.type === 'moveTab' && action.target === 'sidebar') ||
+            action.type === 'popOutTab')
+        )
+          return current
+        const next = applyWorkbenchTabsAction(current, action)
+        if (
+          tab?.kind === 'browser' &&
+          (action.type === 'moveTab' || action.type === 'reorderTab' || action.type === 'openTab')
+        ) {
+          const panel = next.bottom.tabIds.includes(tab.id) ? 'bottom' : 'right'
+          void desktopBrowserClient
+            .forTab(tab.tabId)
+            .layout(panel, next[panel].tabIds.indexOf(tab.id))
+            .catch(() => {})
+        }
+        return next
+      })
+    },
+    [setWorkbenchPanelState],
+  )
+
+  const dispatchLayoutAction = useCallback(
+    (action: WorkbenchLayoutAction): void => {
+      setWorkbenchLayoutState((current) =>
+        current != null ? applyWorkbenchLayoutAction(current, action) : current,
       )
-        return current
-      const next = applyWorkbenchTabsAction(current, action)
-      if (
-        tab?.kind === 'browser' &&
-        (action.type === 'moveTab' || action.type === 'reorderTab' || action.type === 'openTab')
-      ) {
-        const panel = next.bottom.tabIds.includes(tab.id) ? 'bottom' : 'right'
-        void desktopBrowserClient
-          .forTab(tab.tabId)
-          .layout(panel, next[panel].tabIds.indexOf(tab.id))
-          .catch(() => {})
-      }
-      return next
-    })
-  }, [setWorkbenchPanelState])
+    },
+    [setWorkbenchLayoutState],
+  )
 
-  const dispatchLayoutAction = useCallback((action: WorkbenchLayoutAction): void => {
-    setWorkbenchLayoutState((current) =>
-      current != null ? applyWorkbenchLayoutAction(current, action) : current,
-    )
-  }, [setWorkbenchLayoutState])
-
-  const setWorkspaceLayout = useCallback((layout: WorkspaceLayout): void => {
-    setWorkbenchPanelState((current) =>
-      applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
-    )
-  }, [setWorkbenchPanelState])
+  const setWorkspaceLayout = useCallback(
+    (layout: WorkspaceLayout): void => {
+      setWorkbenchPanelState((current) =>
+        applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
+      )
+    },
+    [setWorkbenchPanelState],
+  )
 
   const stepWorkspaceLayout = useCallback((): void => {
     setWorkbenchPanelState((current) =>
@@ -327,16 +335,19 @@ export function useWorkbenchShellController({
     [dispatchPanelAction],
   )
 
-  const togglePanel = useCallback((target: WorkbenchPanelTarget): void => {
-    setWorkbenchPanelState((current) => {
-      const opening = target === 'right' ? !current.right.open : !current[target].open
-      const next = applyWorkbenchTabsAction(current, { type: 'togglePanel', target })
-      if (opening) {
-        focusPanelController(target)
-      }
-      return next
-    })
-  }, [setWorkbenchPanelState, workbenchStore])
+  const togglePanel = useCallback(
+    (target: WorkbenchPanelTarget): void => {
+      setWorkbenchPanelState((current) => {
+        const opening = target === 'right' ? !current.right.open : !current[target].open
+        const next = applyWorkbenchTabsAction(current, { type: 'togglePanel', target })
+        if (opening) {
+          focusPanelController(target)
+        }
+        return next
+      })
+    },
+    [setWorkbenchPanelState, workbenchStore],
+  )
 
   const closePanel = useCallback(
     (target: WorkbenchPanelTarget): void => {
@@ -483,14 +494,17 @@ export function useWorkbenchShellController({
    * 松手结算：分屏写回有效尺寸；隐藏内容只提交布局，不覆盖此前的
    * split 尺寸，也不在存储里留下越界值。
    */
-  const resolveRightDockResizeCommit = useCallback((rawSize: number): boolean => {
-    const layout = resolveRightDockDragLayout(rawSize)
-    if (layout === 'split') return true
-    setWorkbenchPanelState((current) =>
-      applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
-    )
-    return false
-  }, [setWorkbenchPanelState])
+  const resolveRightDockResizeCommit = useCallback(
+    (rawSize: number): boolean => {
+      const layout = resolveRightDockDragLayout(rawSize)
+      if (layout === 'split') return true
+      setWorkbenchPanelState((current) =>
+        applyWorkbenchTabsAction(current, { type: 'setWorkspaceLayout', layout }),
+      )
+      return false
+    },
+    [setWorkbenchPanelState],
+  )
 
   const handleResetRightDockWidth = useCallback((): void => {
     const defaultWidth = getResponsiveRightDockDefaultWidth(
@@ -809,7 +823,13 @@ export function useWorkbenchShellController({
         },
       }
     })
-  }, [rightDockVisible, bottomPanelState.open, sidebarCollapsed, workbenchLayoutState, setWorkbenchLayoutState])
+  }, [
+    rightDockVisible,
+    bottomPanelState.open,
+    sidebarCollapsed,
+    workbenchLayoutState,
+    setWorkbenchLayoutState,
+  ])
 
   useEffect(() => {
     const previous = previousWorkspaceLayoutRef.current

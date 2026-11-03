@@ -294,9 +294,7 @@ describe('Tooltip variants and visual styling', () => {
     )
     expect(htmlTooltip).not.toContain('tooltip-arrow')
 
-    const htmlInfo = renderToStaticMarkup(
-      <InfoTooltip content="信息说明" defaultOpen />,
-    )
+    const htmlInfo = renderToStaticMarkup(<InfoTooltip content="信息说明" defaultOpen />)
     expect(htmlInfo).not.toContain('tooltip-arrow')
   })
 
@@ -399,9 +397,7 @@ describe('Tooltip compound components & shortcut API', () => {
 describe('InfoTooltip specifications', () => {
   test('renders 16px Info icon with project unified stroke width and default aria-label', () => {
     const ref = createRef<HTMLButtonElement>()
-    const html = renderToStaticMarkup(
-      <InfoTooltip ref={ref} content="信息说明" />,
-    )
+    const html = renderToStaticMarkup(<InfoTooltip ref={ref} content="信息说明" />)
 
     expect(html).toContain('aria-label="More information"')
     expect(html).toContain('type="button"')
@@ -477,13 +473,17 @@ describe('Controlled state and events contract', () => {
 
 describe('Tooltip interaction & lifecycle regressions', () => {
   test('exit animation retains the native top layer until presence completes', async () => {
-    const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
+    const source = await Bun.file(
+      new URL('../src/components/ui/Tooltip.tsx', import.meta.url),
+    ).text()
     expectSourceContains(source, 'useTopLayer(contentRef, present)')
     expectSourceContains(source, '<AnimatePresence onExitComplete={() => setPresent(false)}>')
   })
 
   test('trigger never mutates the provider warm state; ownership lives in Root', async () => {
-    const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
+    const source = await Bun.file(
+      new URL('../src/components/ui/Tooltip.tsx', import.meta.url),
+    ).text()
     // 触发器只读 isWarm 决定是否走进入延迟，提前置预热会让冷启动首帧被误判成 warm。
     expectSourceNotContains(source, 'provider.notifyWarm()')
     expectSourceNotContains(source, 'provider.resetWarmTimer()')
@@ -493,15 +493,22 @@ describe('Tooltip interaction & lifecycle regressions', () => {
   })
 
   test('warm open skips the entrance animation and is marked for CSS', async () => {
-    const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
+    const source = await Bun.file(
+      new URL('../src/components/ui/Tooltip.tsx', import.meta.url),
+    ).text()
     expectSourceContains(source, "data-warm-handoff={warm ? 'true' : undefined}")
     expectSourceContains(source, 'initial={warm ? false : getInitialAnimation()}')
-    expectSourceContains(source, "warm ? { duration: 0 }")
-    expectSourceContains(source, '...getExitAnimation(), transition: reducedMotion ? { duration: 0.08 } : { duration: 0.13, ease: \'easeIn\' }')
+    expectSourceContains(source, 'warm ? { duration: 0 }')
+    expectSourceContains(
+      source,
+      "...getExitAnimation(), transition: reducedMotion ? { duration: 0.08 } : { duration: 0.13, ease: 'easeIn' }",
+    )
   })
 
   test('forced removal gates content and portal independently of controlled open', async () => {
-    const source = await Bun.file(new URL('../src/components/ui/Tooltip.tsx', import.meta.url)).text()
+    const source = await Bun.file(
+      new URL('../src/components/ui/Tooltip.tsx', import.meta.url),
+    ).text()
     expectSourceContains(source, 'abortExit: () => setPresentState(false)')
     expectSourceContains(source, 'if (context && !context.present) return null')
     expectSourceContains(source, 'if (!present) return null')

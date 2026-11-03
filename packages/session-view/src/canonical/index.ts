@@ -444,6 +444,13 @@ export function selectVisibleTurnEntries(
       { ...entry, items: entry.items.filter((item) => !ids.has(item.id)) },
       ...standalone.map((item) => {
         const id = `compaction-turn:${item.id}`
+        const compaction = item.type === 'activity' ? item.compaction : undefined
+        const startedAt = compaction?.startedAt ?? null
+        const finishedAt = compaction?.finishedAt ?? null
+        const elapsedSeconds =
+          startedAt == null || finishedAt == null
+            ? 0
+            : Math.max(0, Math.floor((finishedAt - startedAt) / 1_000))
         return {
           ...entry,
           id,
@@ -454,9 +461,10 @@ export function selectVisibleTurnEntries(
               item.type === 'activity' && item.status === 'running'
                 ? ('running' as const)
                 : ('completed' as const),
-            startedAt: null,
-            finishedAt: null,
-            elapsedSeconds: 0,
+            // 标题时长按压缩操作自身计时：完成取起止差，进行中由渲染层按起点累加。
+            startedAt,
+            finishedAt,
+            elapsedSeconds,
             error: null,
             mergedInputIDs: [],
           },

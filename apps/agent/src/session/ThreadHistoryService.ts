@@ -240,9 +240,12 @@ export class ThreadHistoryService {
     const result = this.db.transaction(() => {
       if (input.threadId && !this.db.getThread(input.threadId))
         throw new AgentError('INVALID_REQUEST', '会话不存在', 400)
-      const settings = input.threadId && input.maxContextTokens !== undefined
-        ? this.db.updateThreadSettings(input.threadId, { maxContextTokens: input.maxContextTokens })
-        : null
+      const settings =
+        input.threadId && input.maxContextTokens !== undefined
+          ? this.db.updateThreadSettings(input.threadId, {
+              maxContextTokens: input.maxContextTokens,
+            })
+          : null
       const preference = this.db.repositories.modelRuntimePreferences.set(input)
       return { preference, settingsEvent: settings?.event ?? null }
     })

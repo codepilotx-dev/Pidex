@@ -287,7 +287,9 @@ export function useComposerDictation({
     const generation = generationRef.current.begin()
     setState({ phase: 'starting', elapsedMs: 0, error: null, canRetry: false })
     try {
-      const settings = await desktopClient.getDesktopSettings().catch(() => ({} as Record<string, string>))
+      const settings = await desktopClient
+        .getDesktopSettings()
+        .catch(() => ({}) as Record<string, string>)
       const preferredDeviceId = settings['desktop.voice.preferredInputDeviceId'] ?? ''
       const acquired = await acquireDictationStream(navigator.mediaDevices, preferredDeviceId)
       const stream = acquired.stream
@@ -426,10 +428,7 @@ export function useComposerDictation({
   }, [start, state.phase])
 
   const toggle = useCallback(() => {
-    const action = resolveDictationToggleAction(
-      state.phase,
-      Boolean(cachedAudioBlobRef.current),
-    )
+    const action = resolveDictationToggleAction(state.phase, Boolean(cachedAudioBlobRef.current))
     switch (action) {
       case 'stop':
         stop()

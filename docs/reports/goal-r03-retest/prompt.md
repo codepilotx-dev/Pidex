@@ -72,6 +72,7 @@
    用户已提供 <P02绝对路径>\required.txt。本消息只读回输入并报告原文，保持 Goal 暂停；此轮不要创建 delivery.md，不调用 update_goal。稍后由用户明确恢复最终目标。
 
    等该普通 Turn 结束，确认输入已读回、Goal 仍 paused、delivery.md 仍不存在。不要把普通消息当作自动恢复；若模型提前写交付，单列行为，不能声称验证了恢复后生成。
+
 7. 点击一次“恢复目标”。应根据当前 300000 上限、正常工具候选和新输入读回证据判定可以工作，实际启动业务 Turn，生成 delivery.md、读回并确认与输入完全一致，verifier pass → complete、无 queued。不能沿用旧的“required.txt 缺失”或旧工具限制继续阻塞。
 
 ## 必要判定规则

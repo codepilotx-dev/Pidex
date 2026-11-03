@@ -1,7 +1,27 @@
-import { AnimatePresence, LayoutGroup, motion, useIsPresent, type HTMLMotionProps } from 'motion/react'
+import {
+  AnimatePresence,
+  LayoutGroup,
+  motion,
+  useIsPresent,
+  type HTMLMotionProps,
+} from 'motion/react'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 import { ChevronUp, Image, ImageOff, X } from 'lucide-react'
-import { createContext, forwardRef, isValidElement, useCallback, useContext, useId, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactElement, type ReactNode } from 'react'
+import {
+  createContext,
+  forwardRef,
+  isValidElement,
+  useCallback,
+  useContext,
+  useId,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactElement,
+  type ReactNode,
+} from 'react'
 import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
 import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { desktopClient, desktopClipboard } from '../../../services/desktop-client/index.js'
@@ -138,14 +158,25 @@ function useAttachmentMotionActivity() {
   const layoutToken = useRef({})
   const animationToken = useRef({})
   const onLayoutAnimationStart = useCallback(() => report?.(layoutToken.current, true), [report])
-  const onLayoutAnimationComplete = useCallback(() => report?.(layoutToken.current, false), [report])
+  const onLayoutAnimationComplete = useCallback(
+    () => report?.(layoutToken.current, false),
+    [report],
+  )
   const onAnimationStart = useCallback(() => report?.(animationToken.current, true), [report])
   const onAnimationComplete = useCallback(() => report?.(animationToken.current, false), [report])
-  useEffect(() => () => {
-    report?.(layoutToken.current, false)
-    report?.(animationToken.current, false)
-  }, [report])
-  return { onLayoutAnimationStart, onLayoutAnimationComplete, onAnimationStart, onAnimationComplete }
+  useEffect(
+    () => () => {
+      report?.(layoutToken.current, false)
+      report?.(animationToken.current, false)
+    },
+    [report],
+  )
+  return {
+    onLayoutAnimationStart,
+    onLayoutAnimationComplete,
+    onAnimationStart,
+    onAnimationComplete,
+  }
 }
 
 const AttachmentMotionDiv = forwardRef<HTMLDivElement, HTMLMotionProps<'div'>>(
@@ -194,8 +225,7 @@ export function AttachmentFileRow({
     [animating, reducedMotion, report],
   )
   const fileId = (child: ReactNode, index: number) =>
-    `file-${isValidElement(child) ? child.key ?? index : index}`
-
+    `file-${isValidElement(child) ? (child.key ?? index) : index}`
 
   useLayoutEffect(() => {
     const content = contentRef.current
@@ -219,23 +249,23 @@ export function AttachmentFileRow({
           className="tw:relative tw:w-full tw:min-w-0"
           initial={false}
           animate={{
-            height: reducedMotion ? 'auto' : contentHeight ?? 'auto',
+            height: reducedMotion ? 'auto' : (contentHeight ?? 'auto'),
             overflow: 'hidden',
             transitionEnd: { height: 'auto', overflow: 'visible' },
           }}
           transition={transition}
         >
           <div ref={contentRef} className="tw:flex tw:w-full tw:items-start tw:gap-2">
-            <div
-              className="attachment-horizontal-row__content tw:relative tw:flex tw:min-w-0 tw:flex-1 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2"
-            >
+            <div className="attachment-horizontal-row__content tw:relative tw:flex tw:min-w-0 tw:flex-1 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2">
               <AnimatePresence initial={false} mode="popLayout">
                 {childList.slice(0, isExpanded ? childList.length : 2).map((child, index) => (
                   <AttachmentMotionDiv
                     key={fileId(child, index)}
                     className="tw:relative tw:max-w-full tw:flex-none"
                     layout={reducedMotion ? false : index < 2 ? 'position' : true}
-                    layoutId={reducedMotion || index < 2 || index >= 4 ? undefined : fileId(child, index)}
+                    layoutId={
+                      reducedMotion || index < 2 || index >= 4 ? undefined : fileId(child, index)
+                    }
                     initial={reducedMotion || index < 4 ? false : { opacity: 0 }}
                     animate={{ opacity: 1 }}
                     exit={{ opacity: reducedMotion || index >= 4 ? 0 : 1 }}
@@ -250,7 +280,9 @@ export function AttachmentFileRow({
               </AnimatePresence>
             </div>
             {remainingCount > 0 ? (
-              <AttachmentTooltip content={isExpanded ? '收起文件列表' : `展开其余 ${remainingCount} 个文件`}>
+              <AttachmentTooltip
+                content={isExpanded ? '收起文件列表' : `展开其余 ${remainingCount} 个文件`}
+              >
                 <button
                   type="button"
                   aria-expanded={isExpanded}
@@ -512,7 +544,11 @@ export function AttachmentFilePill({
           },
         },
       ]}
-      trigger={<div className="tw:min-w-0 tw:max-w-80 tw:flex-none"><AttachmentTooltip content={path}>{pill}</AttachmentTooltip></div>}
+      trigger={
+        <div className="tw:min-w-0 tw:max-w-80 tw:flex-none">
+          <AttachmentTooltip content={path}>{pill}</AttachmentTooltip>
+        </div>
+      }
     />
   )
 }

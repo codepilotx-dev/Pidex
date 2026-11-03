@@ -18,7 +18,7 @@ describe('startup theme', () => {
         surface: '#ffffff',
         ink: '#1f1f1f',
         accent: '#0169cc',
-        surfaceUnder: '#f6f6f6',
+        surfaceUnder: '#f0f0f0',
       },
     })
     expect(resolveStartupPageTheme(DEFAULT_APPEARANCE_SETTINGS, 'dark')).toEqual({
@@ -27,7 +27,7 @@ describe('startup theme', () => {
         surface: '#111111',
         ink: '#eeeeee',
         accent: '#0169cc',
-        surfaceUnder: '#0f0f0f',
+        surfaceUnder: '#080808',
       },
     })
   })

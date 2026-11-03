@@ -119,11 +119,14 @@ export class ModelSyncService {
     const request = await this.savedRequest(providerId, provider, api, options.fetch)
     const snapshot = this.config.snapshot()
     const savedProviders = isObject(snapshot.model_providers) ? snapshot.model_providers : {}
-    const definition = provider.directorySource && !isObject(savedProviders[providerId])
-      ? (await this.piModels.providerDefinitions()).find((entry) => entry.id === providerId)
-      : undefined
+    const definition =
+      provider.directorySource && !isObject(savedProviders[providerId])
+        ? (await this.piModels.providerDefinitions()).find((entry) => entry.id === providerId)
+        : undefined
     const initial = definition ? serializePiProviderDefinition(definition).value : undefined
-    const raw = initial ? { models: {} as Record<string, unknown> } : await this.rawProvider(providerId)
+    const raw = initial
+      ? { models: {} as Record<string, unknown> }
+      : await this.rawProvider(providerId)
     const listing = await listProviderModels(request)
     const fetchedIDs = new Set(listing.models.map((model) => model.id))
     const baseline = provider.modelSync

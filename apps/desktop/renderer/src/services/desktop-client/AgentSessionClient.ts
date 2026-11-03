@@ -972,7 +972,9 @@ export function createAgentSessionDesktopClient(
     if (!cached) return
     const targetError =
       update.status === 'failed'
-        ? (update.error ?? (cached.item.latestTurnStatus === 'failed' ? cached.item.latestTurnError : null) ?? null)
+        ? (update.error ??
+          (cached.item.latestTurnStatus === 'failed' ? cached.item.latestTurnError : null) ??
+          null)
         : null
     sessionSnapshots.set(update.threadId, {
       ...cached,

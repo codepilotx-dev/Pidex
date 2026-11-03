@@ -106,14 +106,13 @@ export const scheduleDraftParameters = Type.Object(
     }),
     taskPlan: Type.Object(
       {
-        source: Type.Union([
-          Type.Literal('current-plan-item'),
-          Type.Literal('pasted-text'),
-          Type.Literal('file'),
-        ], {
-          description:
-            '任务计划的来源：当前计划项、用户粘贴的正文，或用户指定的文件；用户已给出明确 Plan 时必须沿用该内容',
-        }),
+        source: Type.Union(
+          [Type.Literal('current-plan-item'), Type.Literal('pasted-text'), Type.Literal('file')],
+          {
+            description:
+              '任务计划的来源：当前计划项、用户粘贴的正文，或用户指定的文件；用户已给出明确 Plan 时必须沿用该内容',
+          },
+        ),
         sourceRef: Type.Union([Type.String({ minLength: 1 }), Type.Null()], {
           description: '计划项 ID 或文件路径；粘贴正文时为 null',
         }),

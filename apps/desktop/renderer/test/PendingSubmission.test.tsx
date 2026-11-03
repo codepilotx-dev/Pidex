@@ -13,7 +13,10 @@ import {
   shouldDeferThreadLoading,
 } from '../src/features/session/state/PendingSubmissionStore.js'
 import { PendingSubmissionMessages } from '../src/features/session/conversation/PendingSubmissionView.js'
-import { prepareComposerSubmission, executeComposerSubmitTransaction } from '../src/features/session/composer/ComposerSubmitTransaction.js'
+import {
+  prepareComposerSubmission,
+  executeComposerSubmitTransaction,
+} from '../src/features/session/composer/ComposerSubmitTransaction.js'
 
 function draft(overrides: Partial<ComposerDraft> = {}): ComposerDraft {
   return {
@@ -61,9 +64,7 @@ describe('pending submission snapshot', () => {
     expect(submission.input.attachments?.map((attachment) => attachment.id)).toEqual([
       'attachment-1',
     ])
-    expect(submission.input.skills).toEqual([
-      { name: 'review', path: 'skills/review/SKILL.md' },
-    ])
+    expect(submission.input.skills).toEqual([{ name: 'review', path: 'skills/review/SKILL.md' }])
     expect(submission.workspace?.path).toBe('/repo/pidex')
   })
 
