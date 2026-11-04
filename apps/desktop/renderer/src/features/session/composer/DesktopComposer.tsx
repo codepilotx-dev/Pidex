@@ -1,4 +1,6 @@
-import { useEffect } from 'react'
+import { desktopClient } from '../../../services/desktop-client/index.js'
+import { useEffect, useState, useRef } from 'react'
+import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
 import type React from 'react'
 import type {
   DesktopComposerAttachment,
@@ -8,15 +10,15 @@ import type {
   DesktopPermissionMode,
   DesktopQueuePauseReason,
   DesktopQueuedFollowUp,
+  DesktopSessionExecution,
   DesktopSessionStatus,
   DesktopThinkingMode,
   DesktopThreadGoal,
   DesktopUserMessageInput,
   DesktopGoalSubmission,
   DesktopWorkspace,
-  LocalRouterMode,
   ModelProviderID,
-  SidebarProductMode,
+  ThreadCreationSurface,
 } from '../../../../shared/Types.js'
 import { THINKING_MODE_OPTIONS } from '../../settings/SettingsStorage.js'
 import type { ModelPreset } from '../../../ModelPresets.js'
@@ -40,9 +42,11 @@ import type {
 } from './ComposerTypes.js'
 import { useDesktopComposerController } from './UseDesktopComposerController.js'
 import { resolveAvailableCodingModel } from './CodingModelSelection.js'
+import { hasTaskPlanningInvocation } from './ComposerSkillToken.js'
 
 export { loadCachedRuntimeSkills } from './UseDesktopComposerController.js'
 export { getDesktopComposerBranchName } from './ComposerWorkspacePresentation.js'
+export { SessionBoundComposer, type SessionBoundComposerProps } from './SessionBoundComposer.js'
 export type {
   ComposerCapabilities,
   ComposerCollaborationMode,
@@ -70,8 +74,6 @@ export type DesktopComposerProps = {
   capabilities?: Partial<ComposerCapabilities>
   submitShortcut?: ComposerSubmitShortcut
   surface?: ComposerSurface
-  productMode?: SidebarProductMode
-  onProductModeChange?: (mode: SidebarProductMode) => void
   layout?: ComposerLayout
   radiusVariant?: ComposerRadiusVariant
   utilityBarVariant?: ComposerUtilityBarVariant
@@ -79,14 +81,14 @@ export type DesktopComposerProps = {
   onWorkingPluginChange?: (plugin: WorkingPlugin | null) => void
   onWorkingPluginAvailabilityChange?: (available: boolean) => void
   onSkillTokenActivate?: (skill: { name: string; path: string }) => void
+  /** 首次提交仍在创建会话：冻结输入区并隐藏停止入口。 */
+  creationPending?: boolean
   placeholder?: string
   routedSessionId: string | null
   sessionStatus: DesktopSessionStatus
   permissionMode: DesktopPermissionMode
   planModeActive: boolean
-  localRouterMode: LocalRouterMode
-  enableParetoCodeRouter: boolean
-  enableFusionRouter: boolean
+  grillModeActive?: boolean
   enableAutoReviewPermissionMode: boolean
   enableFullAccessPermissionMode: boolean
   codingModel?: string
@@ -101,9 +103,12 @@ export type DesktopComposerProps = {
   modelConfigured: boolean
   modelCatalogLoading?: boolean
   selectedModelMetadata?: DesktopModelMetadata
+  maxContextTokens?: number | null
+  onMaxContextTokensChange?: (tokens: number | null) => void
   showThinkingOptions: boolean
   deepSeekThinkingControls: boolean
   showContextUsage: boolean
+  contextUsageView?: 'bar' | 'field'
   contextUsage: DesktopContextUsage | null
   modelPresets: ModelPreset[]
   providerOptions: ProviderModelOption[]
@@ -135,6 +140,8 @@ export type DesktopComposerProps = {
   onClearWorkspace: () => void
   onOpenMcpSettings?: () => void
   onOpenModelSettings?: () => void
+  /** 跳转已有项目环境设置页，用于首页发起设置菜单。 */
+  onOpenEnvironmentSettings?: (projectId: string) => void
   onOpenSideChat?: () => void
   onForkConversation?: () => void
   canForkConversation?: boolean
@@ -146,12 +153,14 @@ export type DesktopComposerProps = {
   ) => void
   onPermissionChange: (value: DesktopPermissionMode) => void | Promise<void>
   onPlanModeChange: (active: boolean) => void | Promise<void>
-  onLocalRouterModeChange: (mode: LocalRouterMode) => void
+  onGrillModeChange?: (active: boolean) => void | Promise<void>
   onThinkingChange: (value: DesktopThinkingMode) => void
   createSessionForWorkspace: (
     target?: DesktopWorkspace | null,
     initialSessionName?: string,
     projectlessPrompt?: string,
+    creationSurface?: ThreadCreationSurface,
+    options?: { execution?: DesktopSessionExecution; operationId?: string },
   ) => Promise<string | null>
   submitToSession: (
     targetSessionId: string,
@@ -165,16 +174,19 @@ export type DesktopComposerProps = {
   ) => Promise<'sent' | 'queued' | 'steered' | null>
   queuedFollowUps?: DesktopQueuedFollowUp[]
   queuePauseReason?: DesktopQueuePauseReason | null
-  onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void
-  onFollowUpRemove?: (followUpId: string) => void
+  onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void | Promise<void>
+  onFollowUpRemove?: (followUpId: string) => void | Promise<void>
   onFollowUpResume?: () => void
   threadGoal?: DesktopThreadGoal | null
   /** Global error notification for failures that block sending. */
   onError?: (message: string) => void
-  onGoalPause?: () => void
-  onGoalResume?: () => void
-  onGoalComplete?: () => void
-  onGoalClear?: () => void
+  /** Current route path used to decide whether a failed creation should navigate back. */
+  readPathname?: () => string
+  onOpenGoalPanel?: () => void
+  onGoalPause?: () => void | Promise<void>
+  onGoalResume?: () => void | Promise<void>
+  onGoalComplete?: () => void | Promise<void>
+  onGoalClear?: () => void | Promise<void>
   subagentMode?: boolean
 }
 
@@ -187,8 +199,6 @@ export function DesktopComposer({
   capabilities,
   submitShortcut,
   surface,
-  productMode,
-  onProductModeChange,
   layout,
   radiusVariant,
   utilityBarVariant,
@@ -197,13 +207,12 @@ export function DesktopComposer({
   onWorkingPluginAvailabilityChange,
   onSkillTokenActivate,
   placeholder: placeholderOverride,
+  creationPending = false,
   routedSessionId,
   sessionStatus,
   permissionMode,
   planModeActive,
-  localRouterMode,
-  enableParetoCodeRouter,
-  enableFusionRouter,
+  grillModeActive = false,
   enableAutoReviewPermissionMode,
   enableFullAccessPermissionMode,
   codingModel,
@@ -218,9 +227,12 @@ export function DesktopComposer({
   modelConfigured,
   modelCatalogLoading = false,
   selectedModelMetadata,
+  maxContextTokens,
+  onMaxContextTokensChange,
   showThinkingOptions,
   deepSeekThinkingControls,
   showContextUsage,
+  contextUsageView = 'bar',
   contextUsage,
   modelPresets,
   providerOptions,
@@ -246,6 +258,7 @@ export function DesktopComposer({
   onClearWorkspace,
   onOpenMcpSettings,
   onOpenModelSettings,
+  onOpenEnvironmentSettings,
   onOpenSideChat,
   onForkConversation,
   canForkConversation,
@@ -255,17 +268,19 @@ export function DesktopComposer({
   onStartReview,
   onPermissionChange,
   onPlanModeChange,
-  onLocalRouterModeChange,
+  onGrillModeChange,
   onThinkingChange,
   createSessionForWorkspace,
   submitToSession,
   onError,
+  readPathname,
   queuedFollowUps,
   queuePauseReason,
   onFollowUpEdit,
   onFollowUpRemove,
   onFollowUpResume,
   threadGoal,
+  onOpenGoalPanel,
   onGoalPause,
   onGoalResume,
   onGoalComplete,
@@ -273,12 +288,28 @@ export function DesktopComposer({
   subagentMode = false,
 }: DesktopComposerProps): React.ReactNode {
   const effectiveCapabilities = { ...capabilities, dictation: capabilities?.dictation ?? true }
+  const [goalConfirmation, setGoalConfirmation] = useState<string | null>(null)
+  const goalConfirmationResolver = useRef<((confirmed: boolean) => void) | null>(null)
+  useEffect(
+    () => () => {
+      goalConfirmationResolver.current?.(false)
+      goalConfirmationResolver.current = null
+    },
+    [draftKey],
+  )
+  function settleGoalConfirmation(confirmed: boolean) {
+    goalConfirmationResolver.current?.(confirmed)
+    goalConfirmationResolver.current = null
+    setGoalConfirmation(null)
+  }
   const {
     branchName,
     canSubmit,
     effectivePermissionMode,
     fileAttachmentsAvailable,
     goalModeEnabled,
+    goalTokenBudget,
+    setGoalTokenBudget,
     handleAddFiles,
     handleAddFilePaths,
     handleCommandError,
@@ -294,6 +325,7 @@ export function DesktopComposer({
     isSubmitting,
     lastSubmitOutcome,
     permissionOptions,
+    permissionUnavailableReason,
     activeSkillToken,
     composerDocument,
     setGoalModeEnabled,
@@ -304,6 +336,21 @@ export function DesktopComposer({
     taskPlanningAvailable,
     unsupportedAttachmentReason,
   } = useDesktopComposerController({
+    confirmGoalSubmission: async (objective, hasAttachments) => {
+      const currentGoal = routedSessionId
+        ? await desktopClient.getSessionGoal(routedSessionId)
+        : threadGoal
+      if (
+        !currentGoal ||
+        currentGoal.status === 'complete' ||
+        (currentGoal.objective === objective && !hasAttachments)
+      )
+        return Promise.resolve(true)
+      return new Promise<boolean>((resolve) => {
+        goalConfirmationResolver.current = resolve
+        setGoalConfirmation(objective)
+      })
+    },
     input,
     messages,
     hasConversationMessages: hasConversationMessagesOverride,
@@ -314,6 +361,7 @@ export function DesktopComposer({
     enableAutoReviewPermissionMode,
     enableFullAccessPermissionMode,
     planModeActive,
+    grillModeActive,
     sessionBusy: sessionStatus === 'running' || sessionStatus === 'waiting',
     modelConfigured,
     selectedModelMetadata,
@@ -327,15 +375,32 @@ export function DesktopComposer({
     onAppendAttachmentsForDraft,
     onRemoveAttachmentForDraft,
     onDraftAccepted,
-    onPermissionChange,
     createSessionForWorkspace,
     submitToSession,
     onError,
+    readPathname,
   })
 
   useEffect(() => {
     onWorkingPluginAvailabilityChange?.(taskPlanningAvailable)
   }, [onWorkingPluginAvailabilityChange, taskPlanningAvailable])
+
+  const taskPlanningSelected = hasTaskPlanningInvocation(composerDocument)
+  useEffect(() => {
+    if (!taskPlanningSelected) return
+    if (goalModeEnabled) setGoalModeEnabled(false)
+    if (!planModeActive)
+      void Promise.resolve(onPlanModeChange(true)).catch((error: unknown) =>
+        onError?.(error instanceof Error ? error.message : '计划模式未更新'),
+      )
+  }, [
+    taskPlanningSelected,
+    planModeActive,
+    goalModeEnabled,
+    onPlanModeChange,
+    setGoalModeEnabled,
+    onError,
+  ])
 
   useEffect(() => {
     if (workingPlugin && planModeActive)
@@ -350,8 +415,16 @@ export function DesktopComposer({
 
   async function handlePlanModeChange(active: boolean): Promise<void> {
     await onPlanModeChange(active)
-    if (active) setGoalModeEnabled(false)
-    if (active && workingPlugin) onWorkingPluginChange?.(null)
+    if (!active) return
+    setGoalModeEnabled(false)
+    if (workingPlugin) onWorkingPluginChange?.(null)
+  }
+
+  async function handleGrillModeChange(active: boolean): Promise<void> {
+    await onGrillModeChange?.(active)
+    if (!active) return
+    setGoalModeEnabled(false)
+    if (workingPlugin) onWorkingPluginChange?.(null)
   }
 
   function handleSkillSelectWithWorkingPluginClear(
@@ -377,125 +450,149 @@ export function DesktopComposer({
   }, [modelSelectionError, onError, routedSessionId, draftKey])
 
   return (
-    <ComposerCard
-      draftKey={draftKey}
-      input={input}
-      canSubmit={canSubmit}
-      sessionStatus={sessionStatus}
-      permissionMode={effectivePermissionMode}
-      planModeActive={planModeActive}
-      placement={placement}
-      capabilities={{
-        ...effectiveCapabilities,
-        fileAttachments:
-          fileAttachmentsAvailable && (effectiveCapabilities?.fileAttachments ?? true),
-      }}
-      submitShortcut={submitShortcut}
-      surface={surface}
-      productMode={productMode}
-      onProductModeChange={onProductModeChange}
-      layout={layout}
-      radiusVariant={radiusVariant}
-      utilityBarVariant={utilityBarVariant}
-      workingPlugin={workingPlugin}
-      onWorkingPluginChange={handleWorkingPluginChange}
-      submitting={isSubmitting}
-      submitOutcome={lastSubmitOutcome}
-      goalModeEnabled={goalModeEnabled}
-      onGoalModeChange={setGoalModeEnabled}
-      localRouterMode={localRouterMode}
-      enableParetoCodeRouter={enableParetoCodeRouter}
-      enableFusionRouter={enableFusionRouter}
-      modelVariant={modelVariant}
-      modelVariantOptions={modelVariantOptions}
-      onModelVariantChange={onModelVariantChange}
-      thinkingMode={thinkingMode}
-      selectedProviderID={selectedProviderID ?? 'anthropic'}
-      selectedModelPreset={selectedModelPreset}
-      modelConfigured={modelConfigured}
-      modelCatalogLoading={modelCatalogLoading}
-      submitDisabledReason={unsupportedAttachmentReason ?? modelSelectionError ?? undefined}
-      showThinkingOptions={showThinkingOptions}
-      deepSeekThinkingControls={deepSeekThinkingControls}
-      showContextUsage={showContextUsage}
-      contextUsage={contextUsage}
-      modelPresets={modelPresets}
-      providerOptions={providerOptions}
-      allProviders={allProviders}
-      permissionOptions={permissionOptions}
-      thinkingOptions={THINKING_MODE_OPTIONS}
-      branchName={branchName}
-      branches={workspace?.branches ?? []}
-      recentWorkspaces={recentWorkspaces}
-      contextTasks={contextTasks}
-      browserContext={browserContext}
-      workspace={workspace}
-      attachments={attachments}
-      skillCommands={skillCommands}
-      skillCatalogLoading={skillCatalogLoading}
-      skillCatalogError={skillCatalogError}
-      onReloadSkillCatalog={reloadSkillCatalog}
-      document={composerDocument}
-      selectedSkillToken={activeSkillToken ?? undefined}
-      hasConversationMessages={hasConversationMessages}
-      placeholder={
-        placeholderOverride ??
-        (modelCatalogLoading
-          ? '加载模型列表中……'
-          : hasConversationMessages
-            ? '要求后续变更'
-            : '随心输入')
-      }
-      onChooseWorkspace={() => void onChooseWorkspace()}
-      onInputChange={onInputChange}
-      onDocumentChange={handleComposerDocumentChangeWithInput}
-      onSkillTokenActivate={onSkillTokenActivate}
-      onCompositionStart={handleCompositionStart}
-      onCompositionEnd={handleCompositionEnd}
-      onInterrupt={() =>
-        void onInterrupt().catch((error) =>
-          handleCommandError(error instanceof Error ? error.message : String(error)),
-        )
-      }
-      onProviderModelChange={onProviderModelChange}
-      onProviderOpen={onProviderOpen}
-      onProviderSearch={onProviderSearch}
-      onAddFiles={(files) => void handleAddFiles(files)}
-      onAddFilePaths={handleAddFilePaths}
-      onRemoveAttachment={handleRemoveAttachment}
-      onOpenAttachment={onOpenAttachment}
-      onOpenWorkspace={(workspaceItem) => void onOpenWorkspace(workspaceItem)}
-      onCloneGithub={onCloneGithub}
-      onClearWorkspace={onClearWorkspace}
-      onOpenMcpSettings={onOpenMcpSettings}
-      onOpenModelSettings={onOpenModelSettings}
-      onOpenSideChat={onOpenSideChat}
-      onForkConversation={onForkConversation}
-      canForkConversation={canForkConversation}
-      onArchiveConversation={onArchiveConversation}
-      onBranchSelect={(branch) => void onBranchSelect(branch)}
-      onCreateBranch={onCreateBranch}
-      onStartReview={onStartReview}
-      onPermissionChange={onPermissionChange}
-      onPlanModeChange={handlePlanModeChange}
-      onLocalRouterModeChange={onLocalRouterModeChange}
-      onSubmit={handleSubmit}
-      onCompact={handleCompact}
-      onCommandError={handleCommandError}
-      onThinkingChange={onThinkingChange}
-      onSkillSelect={handleSkillSelectWithWorkingPluginClear}
-      routedSessionId={routedSessionId}
-      contextDropdownSide="top"
-      queuedFollowUps={queuedFollowUps}
-      queuePauseReason={queuePauseReason}
-      onFollowUpEdit={onFollowUpEdit}
-      onFollowUpRemove={onFollowUpRemove}
-      onFollowUpResume={onFollowUpResume}
-      threadGoal={threadGoal}
-      onGoalPause={onGoalPause}
-      onGoalResume={onGoalResume}
-      onGoalComplete={onGoalComplete}
-      onGoalClear={onGoalClear}
-    />
+    <>
+      <ComposerCard
+        draftKey={draftKey}
+        input={input}
+        canSubmit={canSubmit}
+        sessionStatus={sessionStatus}
+        permissionMode={effectivePermissionMode}
+        permissionUnavailableReason={permissionUnavailableReason}
+        planModeActive={planModeActive}
+        grillModeActive={grillModeActive}
+        onGrillModeChange={handleGrillModeChange}
+        placement={placement}
+        capabilities={{
+          ...effectiveCapabilities,
+          fileAttachments:
+            fileAttachmentsAvailable && (effectiveCapabilities?.fileAttachments ?? true),
+        }}
+        submitShortcut={submitShortcut}
+        surface={surface}
+        layout={layout}
+        radiusVariant={radiusVariant}
+        utilityBarVariant={utilityBarVariant}
+        workingPlugin={workingPlugin}
+        onWorkingPluginChange={handleWorkingPluginChange}
+        submitting={isSubmitting}
+        creationPending={creationPending}
+        submitOutcome={lastSubmitOutcome}
+        goalModeEnabled={goalModeEnabled}
+        onGoalModeChange={setGoalModeEnabled}
+        goalTokenBudget={goalTokenBudget}
+        onGoalTokenBudgetChange={setGoalTokenBudget}
+        modelVariant={modelVariant}
+        modelVariantOptions={modelVariantOptions}
+        onModelVariantChange={onModelVariantChange}
+        thinkingMode={thinkingMode}
+        selectedProviderID={selectedProviderID ?? 'anthropic'}
+        selectedModelPreset={selectedModelPreset}
+        modelConfigured={modelConfigured}
+        modelCatalogLoading={modelCatalogLoading}
+        selectedModelMetadata={selectedModelMetadata}
+        maxContextTokens={maxContextTokens}
+        onMaxContextTokensChange={onMaxContextTokensChange}
+        submitDisabledReason={unsupportedAttachmentReason ?? modelSelectionError ?? undefined}
+        showThinkingOptions={showThinkingOptions}
+        deepSeekThinkingControls={deepSeekThinkingControls}
+        showContextUsage={showContextUsage}
+        contextUsageView={contextUsageView}
+        contextUsage={contextUsage}
+        modelPresets={modelPresets}
+        providerOptions={providerOptions}
+        allProviders={allProviders}
+        permissionOptions={permissionOptions}
+        thinkingOptions={THINKING_MODE_OPTIONS}
+        branchName={branchName}
+        branches={workspace?.branches ?? []}
+        recentWorkspaces={recentWorkspaces}
+        contextTasks={contextTasks}
+        browserContext={browserContext}
+        workspace={workspace}
+        attachments={attachments}
+        skillCommands={skillCommands}
+        skillCatalogLoading={skillCatalogLoading}
+        skillCatalogError={skillCatalogError}
+        onReloadSkillCatalog={reloadSkillCatalog}
+        document={composerDocument}
+        selectedSkillToken={activeSkillToken ?? undefined}
+        hasConversationMessages={hasConversationMessages}
+        placeholder={
+          placeholderOverride ??
+          (modelCatalogLoading && !modelConfigured && !selectedModelPreset
+            ? '加载模型列表中……'
+            : hasConversationMessages
+              ? '要求后续变更'
+              : '随心输入')
+        }
+        onChooseWorkspace={() => void onChooseWorkspace()}
+        onInputChange={onInputChange}
+        onDocumentChange={handleComposerDocumentChangeWithInput}
+        onSkillTokenActivate={onSkillTokenActivate}
+        onCompositionStart={handleCompositionStart}
+        onCompositionEnd={handleCompositionEnd}
+        onInterrupt={async () => {
+          try {
+            await onInterrupt()
+          } catch (error) {
+            handleCommandError(error instanceof Error ? error.message : String(error))
+            throw error
+          }
+        }}
+        onProviderModelChange={onProviderModelChange}
+        onProviderOpen={onProviderOpen}
+        onProviderSearch={onProviderSearch}
+        onAddFiles={(files) => void handleAddFiles(files)}
+        onAddFilePaths={handleAddFilePaths}
+        onRemoveAttachment={handleRemoveAttachment}
+        onOpenAttachment={onOpenAttachment}
+        onOpenWorkspace={(workspaceItem) => void onOpenWorkspace(workspaceItem)}
+        onCloneGithub={onCloneGithub}
+        onClearWorkspace={onClearWorkspace}
+        onOpenMcpSettings={onOpenMcpSettings}
+        onOpenModelSettings={onOpenModelSettings}
+        onOpenEnvironmentSettings={onOpenEnvironmentSettings}
+        onOpenSideChat={onOpenSideChat}
+        onForkConversation={onForkConversation}
+        canForkConversation={canForkConversation}
+        onArchiveConversation={onArchiveConversation}
+        onBranchSelect={(branch) => void onBranchSelect(branch)}
+        onCreateBranch={onCreateBranch}
+        onStartReview={onStartReview}
+        onPermissionChange={onPermissionChange}
+        onPlanModeChange={handlePlanModeChange}
+        onSubmit={handleSubmit}
+        onCompact={handleCompact}
+        queuedCompactionSupported={desktopClient.supportsQueuedCompaction()}
+        onCommandError={handleCommandError}
+        onThinkingChange={onThinkingChange}
+        onSkillSelect={handleSkillSelectWithWorkingPluginClear}
+        routedSessionId={routedSessionId}
+        contextDropdownSide="top"
+        queuedFollowUps={queuedFollowUps}
+        queuePauseReason={queuePauseReason}
+        onFollowUpEdit={onFollowUpEdit}
+        onFollowUpRemove={onFollowUpRemove}
+        onFollowUpResume={onFollowUpResume}
+        threadGoal={threadGoal}
+        onOpenGoalPanel={onOpenGoalPanel}
+        onGoalPause={onGoalPause}
+        onGoalResume={onGoalResume}
+        onGoalComplete={onGoalComplete}
+        onGoalClear={onGoalClear}
+      />
+      <ConfirmationDialog
+        open={goalConfirmation !== null}
+        title="替换当前目标吗？"
+        description={
+          <>
+            该输入开始执行时替换当前目标。<p>{goalConfirmation}</p>
+          </>
+        }
+        actionLabel="替换目标"
+        onCancel={() => settleGoalConfirmation(false)}
+        onAction={() => settleGoalConfirmation(true)}
+      />
+    </>
   )
 }

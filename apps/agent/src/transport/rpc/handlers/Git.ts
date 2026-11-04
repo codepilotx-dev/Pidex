@@ -13,7 +13,13 @@ import { secretScrubber } from '../../../security/SecretScrubber'
 
 export const gitHandlers = {
   name: 'git',
-  methods: ['git/branch/create', 'git/branch/checkout', 'git/message/generate'],
+  methods: [
+    'git/branch/create',
+    'git/branch/checkout',
+    'git/fetch',
+    'git/pull',
+    'git/message/generate',
+  ],
   async handle(
     runtime: RpcRouter,
     method: RpcMethod,
@@ -113,6 +119,22 @@ export const gitHandlers = {
           projectId,
           branchName: stringParam(params, 'branchName'),
         })
+        return {
+          ...result,
+          status: await review.status(projectId),
+        }
+      }
+      case 'git/fetch': {
+        const projectId = stringParam(params, 'projectId')
+        const result = await git.fetch(projectId)
+        return {
+          ...result,
+          status: await review.status(projectId),
+        }
+      }
+      case 'git/pull': {
+        const projectId = stringParam(params, 'projectId')
+        const result = await git.pull(projectId)
         return {
           ...result,
           status: await review.status(projectId),

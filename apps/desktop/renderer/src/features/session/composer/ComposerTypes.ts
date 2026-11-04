@@ -6,6 +6,30 @@ import type {
 
 export type ComposerPlacement = 'new-session' | 'thread' | 'side-task'
 
+export function parseGoalTokenBudget(input: string): number | null | undefined {
+  if (!input.trim()) return null
+  const value = Number(input)
+  return Number.isSafeInteger(value) && value >= 0 ? value : undefined
+}
+
+export type GoalBudgetAppend =
+  | { status: 'empty' }
+  | { status: 'invalid' | 'overflow' }
+  | { status: 'valid'; tokens: number; nextTotal: number }
+
+/**
+ * Turns the appended token count typed by the user into the new total budget. The
+ * wire field stays the total, so the addition has to fit a safe integer here.
+ */
+export function resolveGoalBudgetAppend(savedBudget: number, input: string): GoalBudgetAppend {
+  if (!input.trim()) return { status: 'empty' }
+  const tokens = parseGoalTokenBudget(input)
+  if (typeof tokens !== 'number' || tokens <= 0) return { status: 'invalid' }
+  const nextTotal = savedBudget + tokens
+  if (!Number.isSafeInteger(nextTotal)) return { status: 'overflow' }
+  return { status: 'valid', tokens, nextTotal }
+}
+
 export type ComposerLayout = 'single-line' | 'multiline'
 
 export type ComposerRadiusVariant = 'default' | 'single-line' | 'compact'
@@ -20,7 +44,7 @@ export type WorkingPlugin = never
 
 export type ComposerExecutionMode = 'local' | 'worktree' | 'cloud'
 
-export type ComposerCollaborationMode = 'default' | 'plan'
+export type ComposerCollaborationMode = 'default' | 'plan' | 'grill'
 
 export type ComposerSubmitShortcut = 'enter' | 'multiline-ctrl-enter' | 'ctrl-enter'
 
@@ -137,6 +161,20 @@ export type ComposerSkillInvocation = {
   path: string
 }
 
+export type ComposerLaunchSettings = {
+  /** 开启后由 Agent 从选定分支创建托管工作树，不切换源目录分支。 */
+  createWorktree: boolean
+  /** `null` 表示项目当前分支；此处选择只更新草稿，发送时才生效。 */
+  branch: string | null
+}
+
+/** 一次尚未完成的会话创建，用同一个 operationId 让重试复用已创建的工作树。 */
+export type ComposerLaunchAttempt = {
+  projectKey: string
+  signature: string
+  operationId: string
+}
+
 export type ComposerDraft = {
   clientId: string
   document: ComposerDocument
@@ -154,8 +192,12 @@ export type ComposerDraft = {
   skillInvocation?: ComposerSkillInvocation
   skills?: ComposerSkillInvocation[]
   goalModeEnabled?: boolean
+  goalTokenBudget?: number | null
   collaborationMode: ComposerCollaborationMode
   suggestionOrigin?: string
+  /** 发起设置按首页草稿所属项目分别保存，切换项目不串用。 */
+  launchSettingsByProject?: Record<string, ComposerLaunchSettings>
+  launchAttempt?: ComposerLaunchAttempt
 }
 
 export type ComposerDraftContentSnapshot = {

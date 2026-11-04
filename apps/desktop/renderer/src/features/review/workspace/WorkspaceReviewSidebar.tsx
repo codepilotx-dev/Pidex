@@ -137,6 +137,7 @@ import {
 import { filterStatusForFile, type ReviewFilter } from './ReviewFileStatus.js'
 import { hideImportOnlyHunks } from '../diff/ReviewDiffAdapter.js'
 import { cx } from '../../../utils/Cx.js'
+import { containsRelatedTarget } from '../../../utils/DomTargets.js'
 
 const REVIEW_FILE_TREE_RUNTIME_MIN_WIDTH = REVIEW_FILE_TREE_PANEL_MIN_WIDTH + 8 + 260
 
@@ -149,7 +150,7 @@ const REVIEW_FILE_TREE_RUNTIME_MIN_WIDTH = REVIEW_FILE_TREE_PANEL_MIN_WIDTH + 8 
 const REVIEW_SIDEBAR_CLASS =
   'review-sidebar tw:@container tw:flex tw:h-full tw:min-h-0 tw:flex-col tw:overflow-hidden tw:border-l tw:border-app-border-subtle tw:bg-app-panel tw:text-app-text tw:shadow-none tw:in-[.workbench-panel]:flex-auto tw:in-[.workbench-panel]:w-full tw:in-[.workbench-panel]:min-w-0 tw:in-[.workbench-panel]:max-w-none tw:in-[.workbench-panel]:border-l-0'
 const REVIEW_SIDEBAR_TOOLBAR_CLASS =
-  'tw:box-border tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:min-h-12 tw:items-start tw:gap-2 tw:border-b tw:border-app-border-subtle tw:bg-app-dock tw:px-2 tw:py-2 tw:shadow-none'
+  'tw:box-border tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:min-h-12 tw:items-start tw:gap-2 tw:bg-app-dock tw:px-2 tw:py-2 tw:shadow-none'
 const REVIEW_COUNTS_CLASS = 'tw:inline-flex tw:items-center tw:gap-2'
 const REVIEW_FOOTER_CLASS =
   'tw:absolute tw:bottom-2.5 tw:left-1/2 tw:z-local tw:flex tw:-translate-x-1/2 tw:items-center tw:justify-center tw:gap-4 tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-1 tw:shadow-none'
@@ -1302,6 +1303,10 @@ function WorkspaceReviewSidebarImpl({
   }, [activeSessionId, commentIdentity, projectId, source, workspacePath])
 
   React.useEffect(() => {
+    if (reviewRootRef.current === null || reviewRootRef.current.offsetParent === null) {
+      staleGitChangeRef.current = true
+      return
+    }
     void refreshReviewDiff()
   }, [refreshReviewDiff, isRefreshing])
 
@@ -1867,6 +1872,7 @@ function WorkspaceReviewSidebarImpl({
         const statusResult = await desktopClient.getWorkspaceGitStatus(
           workspacePath,
           projectId ?? undefined,
+          { refresh: true },
         )
         if ('error' in statusResult) {
           throw new Error(statusResult.error)
@@ -1977,6 +1983,7 @@ function WorkspaceReviewSidebarImpl({
           ...(projectId ? { projectId } : {}),
           workspacePath,
           setUpstream: !gitStatus?.upstream,
+          ...(activeSessionId ? { threadId: activeSessionId } : {}),
         })
         if (pushed.ok === false) throw new Error(pushed.error)
       }
@@ -1986,6 +1993,7 @@ function WorkspaceReviewSidebarImpl({
         title: title.trim(),
         body: body.trim(),
         draft,
+        ...(activeSessionId ? { threadId: activeSessionId } : {}),
       })
       if (result.ok === false) throw new Error(result.error)
       if (
@@ -2287,13 +2295,13 @@ function WorkspaceReviewSidebarImpl({
                 size="md"
                 trigger={
                   <button
-                    className="review-branch-range__trigger tw:inline-flex tw:min-w-0 tw:max-w-[54%] tw:items-center tw:gap-1 tw:rounded-md tw:px-2 tw:py-1 tw:text-app-text-soft tw:hover:bg-app-hover tw:hover:text-app-text tw:active:bg-app-selected"
+                    className="review-branch-range__trigger tw:inline-flex tw:min-w-0 tw:max-w-[54%] tw:items-center tw:gap-1 tw:rounded-md tw:px-2 tw:py-1 tw:text-app-text-soft tw:hover:bg-app-hover tw:hover:text-app-text"
                     type="button"
                   >
                     <span className="tw:min-w-0 tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
                       {source.baseBranch}
                     </span>
-                    <ChevronDown size={APP_ICON_SIZES.sm} />
+                    <ChevronDown size="var(--inline-icon-size, 1em)" />
                   </button>
                 }
                 onOpenChange={setBranchPickerOpen}
@@ -2391,7 +2399,10 @@ function WorkspaceReviewSidebarImpl({
                 event.target instanceof HTMLElement && event.target.matches(':focus-visible')
             }}
             onBlurCapture={(event) => {
-              if (event.relatedTarget && !event.currentTarget.contains(event.relatedTarget as Node))
+              if (
+                event.relatedTarget &&
+                !containsRelatedTarget(event.currentTarget, event.relatedTarget)
+              )
                 wideActionsFocusRef.current = false
             }}
           >
@@ -2464,7 +2475,7 @@ function WorkspaceReviewSidebarImpl({
           className="tw:mx-2 tw:mb-2 tw:flex tw:@max-[625px]:grid tw:@max-[625px]:grid-cols-[auto_minmax(0,1fr)] tw:min-h-12 tw:shrink-0 tw:items-center tw:gap-3 tw:rounded-2xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:px-4 tw:py-4 tw:type-control"
           role="status"
         >
-          <Info className="tw:shrink-0 tw:text-app-accent" size={APP_ICON_SIZE} />
+          <Info className="tw:shrink-0 tw:text-app-accent" size="var(--inline-icon-size, 1em)" />
           <span className="tw:min-w-0 tw:flex-1">此差异较大，每次仅显示一个文件</span>
           <div className="tw:flex tw:items-center tw:gap-1 tw:@max-[625px]:col-start-2">
             <Tooltip content="上一个文件">

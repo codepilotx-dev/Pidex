@@ -13,6 +13,7 @@ import {
   scrollVirtualizerToThreadBottom,
   scrollOffsetForThreadResizeAnchor,
   scrollOffsetForThreadBottomDistance,
+  THREAD_BOTTOM_GEOMETRIC_TOLERANCE_PX,
   THREAD_BOTTOM_THRESHOLD_PX,
 } from '../src/features/session/conversation/UseThreadScrollController.js'
 
@@ -156,7 +157,7 @@ describe('thread scroll controller', () => {
     ).toBe(true)
   })
 
-  test('scrolls through virtua to the bottom sentinel index', () => {
+  test('scrolls through virtua to the target turn index and protects empty lists', () => {
     const calls: Array<[number, { align?: string; smooth?: boolean }]> = []
     const handle = {
       scrollToIndex: (index: number, options: { align?: string; smooth?: boolean }) =>
@@ -168,6 +169,14 @@ describe('thread scroll controller', () => {
     expect(scrollVirtualizerToThreadBottom(handle as never, 8, false, 142)).toBe(true)
     expect(calls[1]).toEqual([8, { align: 'end', offset: 142, smooth: false }])
     expect(scrollVirtualizerToThreadBottom(null, 7, false)).toBe(false)
+    expect(scrollVirtualizerToThreadBottom(handle as never, -1, true)).toBe(false)
+    expect(calls).toHaveLength(2)
+  })
+
+  test('defines small geometric tolerance distinct from interactive bottom threshold', () => {
+    expect(THREAD_BOTTOM_GEOMETRIC_TOLERANCE_PX).toBe(1.5)
+    expect(THREAD_BOTTOM_THRESHOLD_PX).toBe(24)
+    expect(THREAD_BOTTOM_GEOMETRIC_TOLERANCE_PX).toBeLessThan(THREAD_BOTTOM_THRESHOLD_PX)
   })
 
   test('normalizes missing and invalid footer offsets safely', () => {
@@ -234,5 +243,27 @@ describe('thread scroll controller', () => {
         contentChanged: true,
       }),
     ).toEqual({ mode: 'static', hasNewContent: false })
+  })
+
+  test('does not drop follow mode when content shrinks at the bottom', () => {
+    expect(
+      resolveThreadScrollMode({
+        mode: 'user_follow',
+        active: true,
+        atBottom: true,
+        userScrolledUp: true,
+        contentChanged: true,
+      }),
+    ).toEqual({ mode: 'user_follow', hasNewContent: false })
+
+    expect(
+      resolveThreadScrollMode({
+        mode: 'prework_follow',
+        active: true,
+        atBottom: true,
+        userScrolledUp: true,
+        contentChanged: true,
+      }),
+    ).toEqual({ mode: 'prework_follow', hasNewContent: false })
   })
 })

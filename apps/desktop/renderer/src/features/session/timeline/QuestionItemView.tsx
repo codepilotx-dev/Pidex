@@ -3,10 +3,8 @@ import { Check, ChevronDown, ListChecks, MessageCircleQuestion } from 'lucide-re
 import type { Item, QuestionItem } from '@pidex/shared/thread'
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../../components/ui/IconTokens.js'
 import { DisclosureContent } from '../../../components/ui/DisclosureContent.js'
-import {
-  PROCESS_CARD_SUMMARY_CLASS,
-  type ResolvedCanonicalItemDisclosure,
-} from './CanonicalItemRenderer.js'
+import type { ResolvedCanonicalItemDisclosure } from './CanonicalItemRenderer.js'
+import { PROCESS_CARD_SUMMARY_CLASS } from './ToolActivityPresentation.js'
 import { cx } from '../../../utils/Cx.js'
 
 /** A persisted question owns its tool's presentation, but never hides tool failures. */
@@ -41,11 +39,11 @@ export function QuestionItemView({
     return (
       <div data-question-id={item.id} data-state={item.status}>
         <div className="canonical-lifecycle-tool">
-          <MessageCircleQuestion size={APP_ICON_SIZES.sm} aria-hidden="true" />
+          <MessageCircleQuestion size="var(--inline-icon-size, 1em)" aria-hidden="true" />
           <span>正在询问问题</span>
         </div>
         <div className="canonical-lifecycle-tool" role="status">
-          <ListChecks size={APP_ICON_SIZES.sm} aria-hidden="true" />
+          <ListChecks size="var(--inline-icon-size, 1em)" aria-hidden="true" />
           <span>正在等待你的回答</span>
         </div>
       </div>
@@ -82,10 +80,14 @@ export function QuestionItemView({
         }
         type="button"
       >
-        <Check size={APP_ICON_SIZES.sm} strokeWidth={APP_ICON_STROKE_WIDTH} aria-hidden="true" />
+        <Check
+          size="var(--inline-icon-size, 1em)"
+          strokeWidth={APP_ICON_STROKE_WIDTH}
+          aria-hidden="true"
+        />
         <span>{label}</span>
         <ChevronDown
-          size={APP_ICON_SIZES.sm}
+          size="var(--inline-icon-size, 1em)"
           className={cx(
             'canonical-process-card__chevron tw:transition-transform tw:duration-disclosure tw:ease-disclosure',
             expanded && 'tw:rotate-180',

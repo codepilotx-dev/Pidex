@@ -1,3 +1,4 @@
+import { AgentRpcError } from '../src/services/AgentRpcClient.js'
 import { describe, expect, test } from 'bun:test'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { toUserErrorMessage } from '../src/utils/Errors.js'
@@ -12,6 +13,22 @@ import { Command } from 'cmdk'
 import { CommandMenuTaskGroup } from '../src/features/search/CommandMenuDialog.js'
 
 describe('toUserErrorMessage sanitization and mapping', () => {
+  test('历史不能完整分叉时给出可操作提示，不直出错误码', () => {
+    for (const error of ['HISTORY_UNSUPPORTED', { code: 'HISTORY_UNSUPPORTED' }]) {
+      expect(toUserErrorMessage(error)).toContain('选择较早的已完成回复')
+      expect(toUserErrorMessage(error)).not.toContain('HISTORY_UNSUPPORTED')
+    }
+  })
+  test('桌面 IPC 处理器未加载时提示完整重启，而非展示底层错误', () => {
+    const message = toUserErrorMessage(
+      new Error(
+        "Error invoking remote method 'desktop-provider-icon:website': Error: No handler registered for 'desktop-provider-icon:website'",
+      ),
+    )
+    expect(message).toContain('完全退出并重新启动 Pidex')
+    expect(message).not.toContain('No handler')
+  })
+
   test('maps internal errors and SQLite errors to safe user message without leaking technical details', () => {
     expect(
       toUserErrorMessage({
@@ -33,6 +50,15 @@ describe('toUserErrorMessage sanitization and mapping', () => {
     expect(
       toUserErrorMessage('SqliteError: constraint failed: UNIQUE constraint failed: threads.id'),
     ).toBe('Agent 发生内部错误，请重试。')
+  })
+
+  test('keeps safe conflict messages instead of reporting an internal error', () => {
+    expect(
+      toUserErrorMessage({
+        errorCode: 'CONFLICT',
+        message: '此 Provider 已保存相同的 API Key',
+      }),
+    ).toBe('此 Provider 已保存相同的 API Key')
   })
 
   test('maps agent unavailable and network disconnection errors', () => {
@@ -290,4 +316,25 @@ describe('UI surfaces do not leak technical or catalog errors inline', () => {
     expect(markup).not.toContain('任务目录暂不可用')
     expect(markup).toContain('重构全局错误提示')
   })
+})
+
+test('版本冲突即使使用 RPC 内部错误数值码也显示可操作提示', () => {
+  expect(
+    toUserErrorMessage(
+      new AgentRpcError('队列版本已变化，请刷新后重试', -32603, {
+        code: 'CONFLICT',
+        retryable: false,
+      }),
+    ),
+  ).toBe('队列版本已变化，请刷新后重试')
+  expect(
+    toUserErrorMessage(
+      Object.assign(new Error('目标已被替换，请确认后重试'), { code: 'GOAL_VERSION_CONFLICT' }),
+    ),
+  ).toContain('请确认后重试')
+  expect(
+    toUserErrorMessage(
+      Object.assign(new Error('队列发生冲突'), { code: 'QUEUE_VERSION_CONFLICT' }),
+    ),
+  ).toContain('已刷新最新状态')
 })

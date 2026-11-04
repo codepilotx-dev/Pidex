@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import type {
   FileMenuAction,
   HelpMenuAction,
@@ -23,6 +23,7 @@ type Options = {
           | 'toggleMaximize'
           | 'changePageZoom'
           | 'quitDuringStartup'
+          | 'stopBackendAndExit'
         >
       >
     | undefined
@@ -58,6 +59,7 @@ export function createAppMenuActions(options: Options) {
     openSettings: () => options.navigate('/settings/general'),
     logOut: undefined,
     exit: bridge?.quitDuringStartup ? () => client.exitApp() : undefined,
+    stopBackendAndExit: bridge?.stopBackendAndExit ? () => bridge.stopBackendAndExit!() : undefined,
   }
   const view: Record<ViewMenuAction, Action | undefined> = {
     toggleSidebar: options.toggleSidebar,
@@ -180,7 +182,7 @@ export function createAppMenuActions(options: Options) {
 }
 
 export function useAppMenuActions(options: Options) {
-  const actions = createAppMenuActions(options)
+  const actions = useMemo(() => createAppMenuActions(options), [options])
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent): void => {
       if (document.querySelector('[role="dialog"], [role="alertdialog"], dialog[open]')) return

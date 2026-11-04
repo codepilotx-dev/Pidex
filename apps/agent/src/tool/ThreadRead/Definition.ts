@@ -115,6 +115,7 @@ export const createThreadReadDefinition = (
     process: false,
     externalState: false,
     userInteraction: false,
+    readOnly: true,
   },
   allowedModes: ['chat', 'plan'],
   allowedProfiles: ['main', 'default', 'explorer', 'worker'],

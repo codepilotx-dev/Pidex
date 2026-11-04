@@ -1,15 +1,347 @@
-import { describe, expect, test } from 'bun:test'
-import { Model, type Credential } from '@pidex/model-schema'
+import { describe, expect, spyOn, test } from 'bun:test'
+import { Model, Provider, type Credential } from '@pidex/model-schema'
 import { Effect } from 'effect'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type { EncryptedCredentialRepository } from '../src/auth/EncryptedCredentialRepository'
+import { ProviderDirectoryStore } from '../src/provider/pi/ProviderDirectoryStore'
+import { normalizeContext } from '@earendil-works/pi-ai'
+import { ModelSyncService } from '../src/provider/ModelSyncService'
+import type { ConfigService } from '../src/config/ConfigService'
 import {
   EncryptedCredentialStore,
   PiModelService,
   type PiModelCatalogConfig,
 } from '../src/provider/pi'
+
+test('catalog refresh identifies failed providers without logging upstream secrets', async () => {
+  const logs: unknown[] = []
+  const service = new PiModelService(repository().adapter, {
+    logger: {
+      warn: (event, fields) => {
+        logs.push({ event, ...fields })
+      },
+    },
+  })
+  const refresh = spyOn(service.pi, 'refresh').mockResolvedValue({
+    aborted: false,
+    errors: new Map([
+      ['openai', new Error('Model discovery failed with HTTP 401 private-secret')],
+      ['google', new Error('fetch failed private-secret')],
+      ['custom', new Error('Model discovery returned an invalid OpenAI catalog')],
+    ]),
+  })
+  try {
+    await expect(service.refresh(true, 'google')).rejects.toMatchObject({
+      refreshFailures: [
+        'openai：凭据鉴权失败（HTTP 401）',
+        'google：网络连接失败',
+        'custom：模型列表响应格式无效',
+      ],
+    })
+    expect(logs).toHaveLength(3)
+    expect(JSON.stringify(logs)).not.toContain('private-secret')
+    expect(logs[0]).toMatchObject({ provider: 'openai', category: 'authentication' })
+  } finally {
+    refresh.mockRestore()
+    await service.dispose()
+  }
+})
+
+test('scoped catalog refresh never requests other providers and directory reload stays offline', async () => {
+  const service = new PiModelService(repository().adapter)
+  const refresh = spyOn(service.pi, 'refresh').mockImplementation(async (options) => ({
+    aborted: false,
+    errors: new Map(
+      options?.providers?.includes('xiaomi-token-plan-cn')
+        ? [['xiaomi-token-plan-cn', new Error('Model discovery failed with HTTP 401')]]
+        : [],
+    ),
+  }))
+  try {
+    await service.refresh(true, 'google')
+    expect(refresh).toHaveBeenLastCalledWith({
+      allowNetwork: true,
+      force: true,
+      providers: ['google'],
+    })
+    await service.reload()
+    expect(refresh).toHaveBeenLastCalledWith({ allowNetwork: false })
+    await expect(service.refresh(true, 'missing-provider')).rejects.toMatchObject({
+      code: 'INVALID_REQUEST',
+    })
+    expect(refresh).toHaveBeenCalledTimes(2)
+  } finally {
+    refresh.mockRestore()
+    await service.dispose()
+  }
+})
+
+test('directory refresh downloads both upstreams without requesting provider models and preserves data on failure', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'pidex-provider-directory-'))
+  const path = join(directory, 'catalog.json')
+  let failed = false
+  const requests: string[] = []
+  const directoryStore = new ProviderDirectoryStore(path, async (url, init) => {
+    requests.push(String(url))
+    expect(init?.headers).toBeUndefined()
+    if (failed) return Response.json({ invalid: true })
+    if (String(url).startsWith('https://pi.dev/'))
+      return Response.json({
+        google: {
+          example: {
+            id: 'example',
+            name: 'Example',
+            api: 'google-generative-ai',
+            baseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+            contextWindow: 32768,
+            maxTokens: 8192,
+            input: ['text'],
+            reasoning: false,
+          },
+        },
+      })
+    return Response.json({
+      models: { example: { name: 'Example' } },
+      providers: {
+        google: { name: 'Google updated', models: {} },
+        'directory-only': { name: 'New directory supplier', models: {} },
+        local: { name: 'Upstream local name', models: {} },
+      },
+    })
+  })
+  const config = {
+    schemaVersion: 2,
+    providers: {
+      local: {
+        kind: 'custom',
+        name: 'My supplier',
+        enabled: true,
+        auth: 'none',
+        base_url: 'https://local.example/v1',
+        models: {},
+      },
+    },
+  }
+  const service = new PiModelService(repository().adapter, { config, directory: directoryStore })
+  const refresh = spyOn(service.pi, 'refresh').mockImplementation(async (options) => {
+    expect(options?.allowNetwork).toBe(false)
+    return { aborted: false, errors: new Map() }
+  })
+  try {
+    await service.refreshDirectory()
+    const providers = await service.list()
+    expect(providers.find((p) => p.id === 'google')?.name).toBe('Google updated')
+    expect(
+      (await service.models(Provider.ID.make('google'))).some((model) => model.id === 'example'),
+    ).toBe(false)
+    expect(providers.find((p) => p.id === 'local')?.name).toBe('My supplier')
+    expect(providers.find((p) => p.id === 'directory-only')).toMatchObject({
+      name: 'New directory supplier',
+      availability: { status: 'unavailable', reason: 'missing-api' },
+    })
+    expect(service.pi.getProviders().some((p) => p.id === 'directory-only')).toBe(false)
+    expect(
+      (await new ProviderDirectoryStore(path).providers()).some((p) => p.id === 'directory-only'),
+    ).toBe(true)
+    failed = true
+    const revision = service.catalogRevision()
+    await expect(service.refreshDirectory()).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
+    expect(await service.list()).toEqual(providers)
+    expect(service.catalogRevision()).toBe(revision)
+    expect(
+      requests.every(
+        (url) =>
+          url === 'https://models.dev/catalog.json?type=all' ||
+          url === 'https://pi.dev/api/models?pi-version=0.99.2',
+      ),
+    ).toBe(true)
+  } finally {
+    refresh.mockRestore()
+    await service.dispose()
+    await rm(directory, { recursive: true, force: true })
+  }
+})
+
+test('directory aliases deduplicate without hiding manual providers and compatible suppliers execute through Pi', async () => {
+  const hits: string[] = []
+  const server = Bun.serve({
+    hostname: '127.0.0.1',
+    port: 0,
+    fetch(request) {
+      hits.push(new URL(request.url).pathname)
+      expect(request.headers.get('authorization')).toBe('Bearer directory-test-key')
+      const chunk = (delta: object, finish: string | null) =>
+        `data: ${JSON.stringify({
+          id: 'chat-test',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: 'm',
+          choices: [{ index: 0, delta, finish_reason: finish }],
+        })}\n\n`
+      return new Response(`${chunk({ content: 'OK' }, null)}${chunk({}, 'stop')}data: [DONE]\n\n`, {
+        headers: { 'content-type': 'text/event-stream' },
+      })
+    },
+  })
+  const baseUrl = `${server.url}v1`
+  const directory = new ProviderDirectoryStore(undefined, async (url) =>
+    Response.json(
+      String(url).startsWith('https://pi.dev/')
+        ? {
+            'vendor-a': {
+              m: {
+                id: 'm',
+                name: 'Pi m',
+                api: 'openai-completions',
+                baseUrl,
+                contextWindow: 32768,
+                maxTokens: 8192,
+                input: ['text'],
+                reasoning: false,
+              },
+            },
+          }
+        : {
+            models: { m: { name: 'm' } },
+            providers: {
+              'vendor-a': {
+                name: 'Vendor A',
+                api: baseUrl,
+                npm: '@ai-sdk/openai-compatible',
+                models: { m: {} },
+              },
+              'vendor-b': {
+                name: 'Same vendor with another name',
+                api: `${baseUrl}/`,
+                npm: '@ai-sdk/openai-compatible',
+                models: { m: {} },
+              },
+              separate: {
+                name: 'Different product',
+                api: `${baseUrl}/coding`,
+                npm: '@ai-sdk/openai-compatible',
+                models: { m: {} },
+              },
+              unknown: {
+                name: 'Choose protocol',
+                api: baseUrl,
+                npm: 'unsupported-sdk',
+                models: {},
+              },
+              manual: {
+                name: 'Upstream name',
+                api: baseUrl,
+                npm: '@ai-sdk/openai-compatible',
+                models: {},
+              },
+            },
+          },
+    ),
+  )
+  const fake = repository([
+    {
+      id: 'cred_vendor-a',
+      integrationID: 'vendor-a',
+      methodID: null,
+      label: 'default',
+      value: { type: 'key', key: 'directory-test-key' },
+    },
+  ])
+  const config: { schemaVersion: number; providers: Record<string, unknown> } = {
+    schemaVersion: 2,
+    providers: {
+      manual: {
+        kind: 'custom',
+        name: 'My manual provider',
+        base_url: baseUrl,
+        auth: 'none',
+        models: {},
+      },
+    },
+  }
+  const service = new PiModelService(fake.adapter, { directory, config, env: {} })
+  try {
+    await service.refreshDirectory()
+    expect(hits).toEqual([])
+    const providers = await service.list()
+    expect(providers.some((p) => p.id === 'vendor-a')).toBe(true)
+    expect(providers.some((p) => p.id === 'vendor-b')).toBe(false)
+    expect(providers.some((p) => p.id === 'separate')).toBe(true)
+    expect(providers.find((p) => p.id === 'manual')).toMatchObject({
+      name: 'My manual provider',
+      catalogOrigin: 'user',
+    })
+    expect(service.pi.getModels('vendor-a')).toHaveLength(0)
+    const writes: unknown[] = []
+    const sync = new ModelSyncService(service, {
+      read: async () => ({ layers: [{ kind: 'user', version: 'fixture' }] }),
+      snapshot: () => ({ model_providers: config.providers }),
+      batchWrite: async (input: Parameters<ConfigService['batchWrite']>[0]) => {
+        writes.push(input)
+        for (const edit of input.edits) {
+          const id = edit.keyPath[1]!
+          const value = (config.providers[id] ??= {}) as Record<string, unknown>
+          value[edit.keyPath[2]!] = edit.value
+        }
+        return {} as never
+      },
+    } as unknown as ConfigService)
+    await expect(
+      sync.sync('vendor-a', { fetch: async () => new Response(null, { status: 503 }) }),
+    ).rejects.toMatchObject({ code: 'PROVIDER_UNAVAILABLE' })
+    expect(writes).toEqual([])
+    const synced = await sync.sync('vendor-a', {
+      fetch: async (url) => {
+        expect(String(url)).toBe(`${baseUrl}/models`)
+        return Response.json({ data: [{ id: 'm' }] })
+      },
+    })
+    expect(synced.candidates[0]).toMatchObject({ id: 'm', enabled: false })
+    expect(config.providers['vendor-a']).toMatchObject({
+      kind: 'custom',
+      directory_source: 'pi-remote',
+      models: {},
+    })
+    await service.reload()
+    config.providers['vendor-a'] = {
+      kind: 'custom',
+      directory_source: 'pi-remote',
+      name: 'My saved vendor',
+      base_url: baseUrl,
+      auth: 'api-key',
+      env: [],
+      models: { m: { api: 'openai-completions', enabled: true } },
+    }
+    await service.reload()
+    expect((await service.list()).find((p) => p.id === 'vendor-a')?.catalogOrigin).toBe('pi-remote')
+    const model = await service.getPiModel(
+      Model.Ref.make({ providerID: Provider.ID.make('vendor-a'), id: Model.ID.make('m') }),
+    )
+    expect(model.api).toBe('openai-completions')
+    expect((await service.pi.getAuth('vendor-a'))?.auth.apiKey).toBe('directory-test-key')
+    const response = await service.pi.completeSimple(
+      model,
+      normalizeContext({ messages: [{ role: 'user', content: 'Reply OK', timestamp: 1 }] }),
+      { maxTokens: 8 },
+    )
+    expect(response.stopReason).not.toBe('error')
+    expect(hits).toEqual(['/v1/chat/completions'])
+    // Existing credentials keep both configured aliases visible; no identity is merged.
+    fake.values.set('vendor-b', {
+      id: 'cred_vendor-b',
+      integrationID: 'vendor-b',
+      methodID: null,
+      label: 'default',
+      value: { type: 'key', key: 'another-fixture-key' },
+    })
+    expect((await service.list()).some((p) => p.id === 'vendor-b')).toBe(true)
+  } finally {
+    await service.dispose()
+    server.stop(true)
+  }
+})
 
 type Stored = {
   id: string
@@ -458,6 +790,94 @@ describe('PiModelService', () => {
     ).toBe(piModel!)
   })
 
+  test('missing reasoning selection sends the first advertised level and preserves explicit selections', async () => {
+    const bodies: Record<string, unknown>[] = []
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      async fetch(request) {
+        bodies.push((await request.json()) as Record<string, unknown>)
+        const chunk = {
+          id: 'reasoning-test',
+          object: 'chat.completion.chunk',
+          created: 1,
+          model: 'test',
+          choices: [{ index: 0, delta: { content: 'OK' }, finish_reason: 'stop' }],
+        }
+        return new Response(`data: ${JSON.stringify(chunk)}\n\ndata: [DONE]\n\n`, {
+          headers: { 'content-type': 'text/event-stream' },
+        })
+      },
+    })
+    const service = new PiModelService(repository().adapter, {
+      config: {
+        schemaVersion: 2,
+        providers: {
+          'reasoning-test': {
+            kind: 'custom',
+            name: 'Reasoning test',
+            enabled: true,
+            base_url: `${server.url}v1`,
+            auth: 'none',
+            models: Object.fromEntries(
+              [
+                ['single', ['high']],
+                ['multiple', ['low', 'high']],
+              ].map(([id, values]) => [
+                id,
+                {
+                  api: 'openai-completions',
+                  reasoning: true,
+                  optionSpecs: {
+                    reasoningLevel: { values, map: '{"reasoning_effort": reasoningLevel}' },
+                  },
+                },
+              ]),
+            ),
+          },
+        },
+      },
+      env: {},
+    })
+    try {
+      for (const [id, variant, expected] of [
+        ['single', undefined, 'high'],
+        ['multiple', undefined, 'low'],
+        ['multiple', 'high', 'high'],
+      ] as const) {
+        const info = await service.resolve({
+          providerID: Provider.ID.make('reasoning-test'),
+          id: Model.ID.make(id),
+          ...(variant ? { variant: Model.VariantID.make(variant) } : {}),
+        })
+        expect(info.variant).toBe(expected)
+        const model = await service.getPiModel(
+          Model.Ref.make({
+            providerID: info.providerID,
+            id: info.id,
+            variant: Model.VariantID.make(info.variant!),
+          }),
+        )
+        const result = await service.pi
+          .streamSimple(
+            model,
+            normalizeContext({
+              messages: [{ role: 'user', content: 'test', timestamp: 0 }],
+            }),
+            { apiKey: 'fixture-only', reasoning: info.variant as 'low' | 'high' },
+          )
+          .result()
+        expect(result.errorMessage).toBeUndefined()
+        expect(result.stopReason).toBe('stop')
+        expect(bodies.at(-1)?.reasoning_effort).toBe(expected)
+      }
+      expect(bodies).toHaveLength(3)
+    } finally {
+      await service.dispose()
+      await server.stop(true)
+    }
+  })
+
   test('loads Pi native providers and preserves custom-provider precedence', async () => {
     const fake = repository([
       {
@@ -512,7 +932,7 @@ describe('PiModelService', () => {
       ).toBe(true)
 
       const initialRevision = service.catalogRevision()
-      await service.refresh(false)
+      await service.reload()
       expect(service.catalogRevision()).toBeGreaterThan(initialRevision)
 
       expect(await service.isAuthConfigured('custom-shadow')).toBe(true)

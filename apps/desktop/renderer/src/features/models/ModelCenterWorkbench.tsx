@@ -4,53 +4,50 @@ import {
   APP_ICON_SIZES,
 } from '../../components/ui/IconTokens.js'
 import { desktopClient, desktopClipboard } from '../../services/desktop-client/index.js'
-import {
-  desktopProviderExecutionError,
-  isExecutableDesktopProvider,
-} from '../../services/desktop-client/ProviderAdapters.js'
-import { withModelCatalogLoading } from '../../hooks/UseModelCatalogLoading.js'
+import { isExecutableDesktopProvider } from '../../services/desktop-client/ProviderAdapters.js'
 import React, { useEffect, useMemo, useState } from 'react'
 import type {
   DesktopApiKeySummary,
-  DesktopModelMetadata,
+  DesktopProviderCredential,
   DesktopModelProviderState,
   DesktopModelProviderSummary,
-  DesktopModelRef,
+  DesktopProviderDefinition,
   ModelProviderID,
 } from '../../../shared/Types.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
-import { fullErrorMessage } from '../../utils/Errors.js'
-import { Cable, ChevronRight, Pencil, Plus, RefreshCw, Trash2 } from 'lucide-react'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
+import { fullErrorMessage, toUserErrorMessage } from '../../utils/Errors.js'
+import { ChevronRight, Plus, RefreshCw } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
+import { useDesktopLayoutOutletContext } from '../layout/shell/DesktopLayoutOutletContext.js'
+import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
+import { SearchInput } from '../../components/ui/SearchInput.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
-import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
+import { ModelCenterInitialSkeleton } from './ModelCenterInitialSkeleton.js'
 import { useSearchParams } from 'react-router-dom'
-import { ProviderCatalog, type ProviderCatalogItem } from './ProviderCatalog.js'
+import { ProviderCatalog } from './ProviderCatalog.js'
 import { ProviderDetail } from './ProviderDetail.js'
 import { useModelCenterController } from './UseModelCenterController.js'
 import {
   getApiKeyDeleteConfirmation,
-  parseModelCenterSearchParams,
   projectProviderDirectory,
+  isConfiguredProviderDirectoryItem,
+  parseModelCenterSearchParams,
+  providerDetailStatus,
   updateModelCenterSearchParams,
-  type ProviderCatalogFilter,
 } from './ModelCenterState.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
-import { ProviderConnectionDialog } from './provider-management/ProviderConnectionDialog.js'
-import { ProviderEditorDialog } from './provider-management/ProviderEditorDialog.js'
+import { PrimaryPageLayout } from '../layout/primary-page/index.js'
+import { ProviderEditorForm } from './provider-management/ProviderEditorForm.js'
 import { ProviderConnectionSection } from './provider-management/ProviderConnectionSection.js'
 import { ProviderModelsSection } from './provider-management/ProviderModelsSection.js'
 import {
-  canEditProviderConfig,
   deepSeekManagedProvider,
   deepSeekProtocolOf,
-  deepSeekProtocolOption,
 } from './provider-management/DeepseekProtocol.js'
-import { ApiKeyEditorDialog, type ApiKeyEditorValue } from './ApiKeyEditorDialog.js'
+import { type ApiKeyEditorValue } from './ApiKeyEditorDialog.js'
 import {
   providerManagementStore,
   selectConfiguredProviderGroups,
-  type ConfiguredProviderGroup,
+  selectOrphanProviderCredentials,
 } from '../provider-management/index.js'
 
 const NO_MODEL_OPTION = '__no_models_available__'
@@ -84,54 +81,29 @@ export function getProviderConnectionState({
 }
 
 export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactNode {
-  const settings = useDesktopSettings()
+  const subscribedProviderID = useDesktopSettingsField((state) => state.providerID)
+  const subscribedModel = useDesktopSettingsField((state) => state.model)
+  const settings = useMemo(
+    () => ({ providerID: subscribedProviderID, model: subscribedModel }),
+    [subscribedProviderID, subscribedModel],
+  )
+  const providerPanel = useDesktopLayoutOutletContext()?.providerManagement
   const [searchParams, setSearchParams] = useSearchParams()
   const [providerID, setProviderID] = useState<ModelProviderID>(settings.providerID)
   const [model, setModel] = useState(settings.model)
-  const [variant, setVariant] = useState('')
-  const [, setModelError] = useState<string | null>(null)
-  const [, setStatus] = useState<string | null>(null)
-  const [busy, setBusy] = useState(false)
-  const [refreshingProviderData, setRefreshingProviderData] = useState(false)
   const [busyKeyId, setBusyKeyId] = useState<string | null>(null)
-  const [providerSearch, setProviderSearch] = useState('')
-  const [catalogFilter, setCatalogFilter] = useState<ProviderCatalogFilter>('all')
-  const [connectionDialogProviderId, setConnectionDialogProviderId] =
-    useState<ModelProviderID | null>(null)
-  const [providerEditorOpen, setProviderEditorOpen] = useState(false)
+  const [providerQuery, setProviderQuery] = useState('')
   const [deepSeekProtocolSupported, setDeepSeekProtocolSupported] = useState(false)
-  const [providerEditorProviderId, setProviderEditorProviderId] = useState<ModelProviderID | null>(
-    null,
-  )
-
-  useEffect(() => {
-    let active = true
-    void desktopClient
-      .getRuntimeCapabilities()
-      .then((capabilities) => {
-        if (active) {
-          setDeepSeekProtocolSupported(capabilities.includes('provider.deepseekProtocol.v1'))
-        }
-      })
-      .catch(() => {
-        if (active) setDeepSeekProtocolSupported(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
-
-  // Key editing & deletion state
-  const [editorProviderId, setEditorProviderId] = useState<ModelProviderID | null>(null)
-  const [editingKey, setEditingKey] = useState<DesktopApiKeySummary | null>(null)
+  const [connectionDraftDirty, setConnectionDraftDirty] = useState(false)
   const [deleteKey, setDeleteKey] = useState<DesktopApiKeySummary | null>(null)
+  const [orphanToDelete, setOrphanToDelete] = useState<DesktopProviderCredential | null>(null)
+  const [providerToDelete, setProviderToDelete] = useState<DesktopModelProviderSummary | null>(null)
+  const [deletingProvider, setDeletingProvider] = useState(false)
 
   const controller = useModelCenterController({
     onInitialProviderState: (nextState) => applyProviderState(nextState),
-    onError: (message) => {
-      setModelError(message)
-      onError(message)
-    },
+    onError,
+    onNotice,
   })
 
   const {
@@ -139,19 +111,66 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     providers,
     providerState,
     apiKeys,
-    snapshot,
-    setProviderState,
-    refreshAllProviderData,
+    configuration,
+    usageSources,
+    busyProviderIds,
+    modelTestResults,
+    refreshingProviderData,
+    refreshProviderData,
+    saveProviderDefinition,
+    deleteProvider,
   } = controller
 
-  const configuredGroups = useMemo(() => selectConfiguredProviderGroups(snapshot), [snapshot])
-  const configuredProviderIds = useMemo(
-    () => new Set(configuredGroups.map((group) => group.provider.providerID)),
-    [configuredGroups],
+  const busy = busyProviderIds.includes(providerID)
+
+  const selectorInput = useMemo(
+    () => ({
+      providers: configuration.providers,
+      currentProviderState: configuration.currentProviderState,
+      credentials: configuration.credentials,
+      apiKeys: configuration.apiKeys,
+      usageSources,
+    }),
+    [configuration, usageSources],
   )
-  const configuredGroupByProvider = useMemo(
-    () => new Map(configuredGroups.map((group) => [group.provider.providerID, group])),
-    [configuredGroups],
+  const configuredGroups = useMemo(
+    () => selectConfiguredProviderGroups(selectorInput),
+    [selectorInput],
+  )
+  const orphanCredentials = useMemo(
+    () => selectOrphanProviderCredentials(configuration),
+    [configuration],
+  )
+
+  const marketProviders = useMemo(
+    () =>
+      projectProviderDirectory(providers, {
+        query: providerQuery,
+        currentProviderId: configuration.currentProviderState?.selectedProviderID,
+        currentProviderState: configuration.currentProviderState,
+        apiKeys: configuration.apiKeys,
+        credentials: configuration.credentials,
+      })
+        .filter((item) => item.provider.providerKind !== 'custom')
+        .map((item) => ({
+          id: item.provider.providerID,
+          name: item.provider.displayName,
+          logoURL: item.provider.logoURL,
+          source:
+            item.provider.catalogOrigin === 'models-dev'
+              ? 'models.dev'
+              : item.provider.catalogOrigin === 'pi-remote'
+                ? 'Pi 官方'
+                : '内置',
+          modelCount: item.provider.modelCount ?? item.provider.defaultModels.length,
+          current: item.current,
+          canAddConnection: !isConfiguredProviderDirectoryItem(item),
+          connectionDisabled:
+            item.provider.availability?.status === 'unavailable' &&
+            item.provider.catalogOrigin !== 'models-dev' &&
+            item.provider.catalogOrigin !== 'pi-remote',
+        })),
+    [providers, configuration, providerQuery],
   )
 
   const routeState = useMemo(
@@ -159,6 +178,9 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
       parseModelCenterSearchParams(
         searchParams,
         providers.map((provider) => provider.providerID),
+        providers
+          .filter((provider) => provider.providerKind === 'custom')
+          .map((provider) => provider.providerID),
       ),
     [providers, searchParams],
   )
@@ -173,14 +195,26 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   const selectedProviderState =
     providerState?.selectedProviderID === providerID ? providerState : null
 
+  useEffect(() => {
+    if (
+      routeState.providerId !== selectedProvider?.providerID ||
+      selectedProvider?.providerKind === 'custom'
+    )
+      return
+    if (selectedProvider)
+      void controller.loadProviderModels(selectedProvider.providerID).catch(showOperationError)
+  }, [routeState.providerId, selectedProvider?.providerID, controller.loadProviderModels])
+
   const providerModels = (
-    selectedProviderState?.models ??
     selectedProvider?.defaultModels ??
+    selectedProviderState?.models ??
     []
   ).filter((item) => item && item !== NO_MODEL_OPTION)
 
-  const modelMetadata =
-    selectedProviderState?.modelMetadata ?? selectedProvider?.modelMetadata ?? {}
+  const modelMetadata = {
+    ...selectedProviderState?.modelMetadata,
+    ...selectedProvider?.modelMetadata,
+  }
 
   const providerApiKeys = useMemo(
     () =>
@@ -190,78 +224,10 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     [apiKeys, providerID],
   )
 
-  const providerDirectory = useMemo(
-    () =>
-      projectProviderDirectory(
-        [...providers].sort((left, right) =>
-          left.displayName.localeCompare(right.displayName, 'zh-CN', {
-            numeric: true,
-            sensitivity: 'base',
-          }),
-        ),
-        {
-          query: providerSearch,
-          filter: catalogFilter,
-          currentProviderId: providerState?.selectedProviderID,
-          currentProviderState: providerState,
-          apiKeys,
-          credentials: snapshot.credentials,
-        },
-      ),
-    [apiKeys, catalogFilter, providerSearch, providerState, providers, snapshot.credentials],
-  )
-
-  const providerCatalogItems = useMemo<ProviderCatalogItem[]>(
-    () =>
-      providerDirectory.map((item) => {
-        const { connectionStatus, current, provider, sources, keyCount, hasOAuth, healthTone } =
-          item
-        const effectiveConnectionStatus =
-          connectionStatus === 'unconfigured' && configuredProviderIds.has(provider.providerID)
-            ? 'configured'
-            : connectionStatus
-        const displayedStatus = providerCatalogConnectionStatus(
-          effectiveConnectionStatus,
-          configuredGroupByProvider.get(provider.providerID),
-        )
-        const unavailableReason =
-          provider.availability?.status === 'unavailable'
-            ? providerAvailabilityLabel(provider.availability.reason)
-            : null
-        return {
-          id: provider.providerID,
-          name: provider.displayName,
-          logoURL: provider.logoURL,
-          source: sources
-            .map((source) =>
-              source === 'gateway' ? 'Gateway' : source === 'custom' ? '自定义' : 'Pi 内置',
-            )
-            .join(' + '),
-          modelCount: provider.modelCount ?? provider.defaultModels.length,
-          current,
-          canAddConnection:
-            unavailableReason === null && effectiveConnectionStatus === 'unconfigured',
-          connectionDisabled: unavailableReason !== null,
-          keyCount,
-          hasOAuth,
-          healthTone,
-          status: unavailableReason
-            ? { label: unavailableReason, tone: 'warning' }
-            : provider.unresolvedMigrationIssues?.length
-              ? { label: '需要人工修复', tone: 'danger' }
-              : displayedStatus,
-        }
-      }),
-    [configuredGroupByProvider, configuredProviderIds, providerDirectory],
-  )
-
   useEffect(() => {
     if (providerID === providerState?.selectedProviderID) return
     const nextSelection = getProviderSelectionState(selectedProvider)
     setModel(nextSelection.model)
-    setVariant('')
-    setStatus(null)
-    setModelError(null)
   }, [providerID, providerState, selectedProvider])
 
   useEffect(() => {
@@ -278,6 +244,7 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     patch: {
       provider?: string | null
       section?: 'connection' | 'models' | null
+      editing?: boolean
     },
     replace = false,
   ): void {
@@ -286,20 +253,20 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         return updateModelCenterSearchParams(current, {
           providerId: patch.provider,
           section: patch.section,
+          editing: patch.editing,
         })
       },
       { replace },
     )
   }
 
-  function selectProvider(nextProviderID: ModelProviderID): void {
-    const nextProvider = providers.find((provider) => provider.providerID === nextProviderID)
-    applyProviderSelection(nextProviderID, nextProvider)
-    updateLocation({ provider: nextProviderID, section: 'connection' })
-  }
-
   function showProviderCatalog(): void {
     updateLocation({ provider: null, section: null })
+  }
+
+  function showProviderDetail(): void {
+    if (creatingCustomProvider) showProviderCatalog()
+    else updateLocation({ provider: routeState.providerId, section: providerSection })
   }
 
   function applyProviderSelection(
@@ -309,141 +276,59 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     const nextSelection = getProviderSelectionState(nextProvider)
     setProviderID(nextProviderID)
     setModel(nextSelection.model)
-    setVariant('')
-    setStatus(null)
-    setModelError(null)
   }
 
   function applyProviderState(nextState: DesktopModelProviderState): void {
     const nextModel =
       nextState.model || nextState.models[0] || nextState.provider.defaultModels[0] || ''
-    setProviderState(nextState)
     setProviderID(nextState.selectedProviderID)
     setModel(nextModel)
-    setVariant(nextState.variant ?? '')
-  }
-
-  function applyFetchedModels(
-    models: string[],
-    error?: string,
-    fetchedMetadata?: Record<string, DesktopModelMetadata>,
-  ): void {
-    const cleanModels = models.filter(Boolean)
-    setProviderState((current) => {
-      if (current && current.selectedProviderID === providerID) {
-        return {
-          ...current,
-          models: cleanModels,
-          modelMetadata: { ...current.modelMetadata, ...fetchedMetadata },
-          error,
-        }
-      }
-      if (!selectedProvider) return current
-      return {
-        selectedProviderID: providerID,
-        provider: selectedProvider,
-        model,
-        apiKeyConfigured: false,
-        apiKeySource: null,
-        modelConfigured: false,
-        configurationMessage: '未配置模型，请先在设置中配置模型。',
-        models: cleanModels,
-        modelMetadata: { ...modelMetadata, ...fetchedMetadata },
-        error,
-      }
-    })
-    if (!model && cleanModels[0]) setModel(cleanModels[0])
   }
 
   async function fetchModels(): Promise<void> {
-    if (!selectedProvider || !isExecutableDesktopProvider(selectedProvider)) {
-      onError('此 Provider 当前没有可执行模型，无法刷新目录。')
-      return
-    }
-    setBusy(true)
-    setModelError(null)
-    onNotice('正在从供应商刷新模型目录...')
-    try {
-      const result = await withModelCatalogLoading(() =>
-        desktopClient.fetchProviderModels({
-          providerID,
-        }),
-      )
-      applyFetchedModels(result.models, result.error, result.modelMetadata)
-      if (result.error) {
-        onError(`模型目录刷新异常：${result.error}`)
-      } else {
-        onNotice(`模型目录已同步，共加载 ${result.models.length} 个可用模型。`)
-      }
-    } catch (error) {
-      showOperationError(error)
-    } finally {
-      setBusy(false)
-    }
+    if (selectedProvider) await controller.fetchModels(selectedProvider)
   }
 
-  async function testConnection(): Promise<void> {
-    const executionError = desktopProviderExecutionError(selectedProvider)
-    if (executionError) {
-      onError(executionError)
-      return
-    }
-    setBusy(true)
-    setModelError(null)
-    onNotice('正在测试连接与鉴权有效性...')
-    try {
-      const testRef: DesktopModelRef | undefined = model
-        ? ({
-            providerID,
-            id: model,
-            ...(variant ? { variant } : {}),
-          } as DesktopModelRef)
-        : undefined
-      const testResult = await desktopClient.testModelProvider(providerID, testRef)
-      if (testResult.status === 'reachable') {
-        onNotice(
-          `“${selectedProvider?.displayName ?? providerID}”连接正常（响应延迟 ${testResult.latencyMs} ms）。`,
-        )
-      } else {
-        const msg = testResult.message ?? '连接测试失败。'
-        setModelError(msg)
-        onError(`连接测试失败：${msg}`)
-      }
-    } catch (error) {
-      showOperationError(error)
-    } finally {
-      setBusy(false)
-    }
+  async function testConnection(modelId = model): Promise<void> {
+    if (selectedProvider)
+      await controller.testModels(
+        selectedProvider,
+        modelId ? [modelId] : providerModels.slice(0, 1),
+      )
   }
 
   async function mutateKey(
     id: string,
-    action: () => Promise<unknown>,
+    action: () => Promise<{ syncWarning: string | null }>,
     successMessage: string,
   ): Promise<boolean> {
     setBusyKeyId(id)
     try {
-      await action()
-      onNotice(successMessage)
+      const outcome = await action()
+      // 写入已成功，仅同步失败：提示成功并附带刷新警告，绝不提示保存失败。
+      onNotice(outcome.syncWarning ? `${successMessage}${outcome.syncWarning}` : successMessage)
       window.dispatchEvent(new Event('desktop:model-provider-changed'))
       return true
     } catch (error) {
-      onError(fullErrorMessage(error))
+      onError(toUserErrorMessage(error))
       return false
     } finally {
       setBusyKeyId(null)
     }
   }
 
-  async function saveApiKeyEditor(value: ApiKeyEditorValue): Promise<boolean> {
-    if (editingKey) {
+  async function saveApiKeyEditor(
+    value: ApiKeyEditorValue,
+    keyToEdit: DesktopApiKeySummary | null = null,
+  ): Promise<boolean> {
+    if (keyToEdit) {
       const replacement = value.key?.trim()
       return mutateKey(
-        editingKey.id,
+        keyToEdit.id,
         () =>
           providerManagementStore.updateApiKey({
-            credentialId: editingKey.id,
-            ...(value.label !== editingKey.label ? { label: value.label } : {}),
+            credentialId: keyToEdit.id,
+            ...(value.label !== keyToEdit.label ? { label: value.label } : {}),
             ...(replacement ? { key: replacement } : {}),
           }),
         replacement ? 'API Key 已更换，健康状态已重置。' : 'API Key 名称已更新。',
@@ -498,10 +383,11 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
   async function testSingleApiKey(key: DesktopApiKeySummary): Promise<void> {
     setBusyKeyId(key.id)
     try {
-      const result = await providerManagementStore.testApiKey(key.id)
+      const { value: result, syncWarning } = await providerManagementStore.testApiKey(key.id)
       onNotice(
         result.message ?? (result.ok ? 'API Key 鉴权通过，测试成功。' : 'API Key 测试失败。'),
       )
+      if (syncWarning) onNotice(syncWarning)
       window.dispatchEvent(new Event('desktop:model-provider-changed'))
     } catch (error) {
       onError(error instanceof Error ? error.message : 'API Key 测试失败，请稍后重试。')
@@ -510,388 +396,356 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
     }
   }
 
-  async function createProviderConnection(value: ApiKeyEditorValue): Promise<boolean> {
-    if (!value.key) return false
-    setBusy(true)
-    try {
-      await providerManagementStore.createApiKey({
-        providerId: value.providerId,
-        label: value.label,
-        key: value.key,
-      })
-      onNotice('供应商连接与凭据已保存。')
-      setConnectionDialogProviderId(null)
-      updateLocation({ provider: value.providerId, section: 'connection' })
-      window.dispatchEvent(new Event('desktop:model-provider-changed'))
-      return true
-    } catch (error) {
-      showOperationError(error)
-      return false
-    } finally {
-      setBusy(false)
-    }
-  }
-
   function showOperationError(error: unknown): void {
     const message = fullErrorMessage(error)
-    setModelError(message)
     onError(message)
-  }
-
-  async function refreshProviderData(): Promise<void> {
-    if (refreshingProviderData) return
-    setRefreshingProviderData(true)
-    try {
-      await refreshAllProviderData()
-      onNotice('供应商与模型数据已刷新。')
-    } catch (error) {
-      showOperationError(error)
-    } finally {
-      setRefreshingProviderData(false)
-    }
   }
 
   async function deleteCustomProvider(): Promise<void> {
     if (!selectedProvider || selectedProvider.providerKind !== 'custom') return
-    if (
-      !window.confirm(
-        `确定删除自定义供应商“${selectedProvider.displayName}”？历史会话引用与已保存凭据将保留。`,
-      )
-    )
-      return
-    setBusy(true)
+    setProviderToDelete(selectedProvider)
+  }
+
+  async function confirmDeleteProvider(): Promise<void> {
+    if (!providerToDelete || deletingProvider) return
+    setDeletingProvider(true)
     try {
-      await desktopClient.deleteProvider(selectedProvider.providerID)
-      await providerManagementStore.refresh()
+      await deleteProvider(providerToDelete.providerID)
+      setProviderToDelete(null)
       showProviderCatalog()
       onNotice('自定义供应商已删除。')
     } catch (error) {
       showOperationError(error)
     } finally {
-      setBusy(false)
+      setDeletingProvider(false)
     }
   }
 
-  const showingProviderDetail = routeState.providerId !== null
+  const creatingCustomProvider = searchParams.get('newProvider') === '1'
+  const showingProviderDetail = !creatingCustomProvider && routeState.providerId !== null
+  const showingCustomEditor =
+    creatingCustomProvider || (showingProviderDetail && routeState.editing)
 
   const showInitialSkeleton = initialLoadState === 'loading' && providers.length === 0
+
+  useEffect(() => {
+    providerPanel?.claimProvider(
+      showingProviderDetail && !showingCustomEditor ? (selectedProvider?.providerID ?? null) : null,
+    )
+    return () => providerPanel?.claimProvider(null)
+  }, [
+    providerPanel?.claimProvider,
+    showingProviderDetail,
+    showingCustomEditor,
+    selectedProvider?.providerID,
+  ])
 
   const selectedConfiguredGroup = configuredGroups.find(
     (group) => group.provider.providerID === providerID,
   )
 
-  const connectionDialogProvider = connectionDialogProviderId
-    ? (providers.find((provider) => provider.providerID === connectionDialogProviderId) ?? null)
-    : null
-
-  const connectionDialogSources = snapshot.usageSources.filter((source) =>
-    source.providerIds.some((pId) => String(pId) === String(connectionDialogProviderId)),
-  )
-
-  const editorProvider = editorProviderId
-    ? snapshot.providers.find((p) => p.providerID === editorProviderId)
-    : undefined
-
   const deleteConfirmation = deleteKey
     ? getApiKeyDeleteConfirmation(
         deleteKey,
-        [...snapshot.apiKeys],
-        snapshot.providers.find((p) => p.providerID === deleteKey.providerId)?.displayName,
+        [...configuration.apiKeys],
+        configuration.providers.find((p) => p.providerID === deleteKey.providerId)?.displayName,
       )
     : null
 
+  const connectionSection = selectedProvider ? (
+    <ProviderConnectionSection
+      key={selectedProvider.providerID}
+      apiKeys={providerApiKeys}
+      busy={busy || busyKeyId !== null}
+      group={selectedConfiguredGroup}
+      onCopyKey={copyApiKey}
+      onDeleteKey={setDeleteKey}
+      onError={onError}
+      onMoveKey={moveApiKey}
+      onNotice={onNotice}
+      onSubmitKey={saveApiKeyEditor}
+      onDeleteProvider={
+        selectedProvider.providerKind === 'custom' ? deleteCustomProvider : undefined
+      }
+      onTestConnection={testConnection}
+      onRefresh={async () => {
+        await providerManagementStore.refresh()
+      }}
+      onSetActiveKey={(key) =>
+        mutateKey(
+          key.id,
+          () => providerManagementStore.setActiveCredential(key.providerId, key.id),
+          '当前活动 API Key 已切换。',
+        ).then(() => undefined)
+      }
+      onTestKey={testSingleApiKey}
+      onToggleKeyEnabled={(key) =>
+        mutateKey(
+          key.id,
+          () => providerManagementStore.setCredentialEnabled(key.id, !key.enabled),
+          key.enabled ? 'API Key 已停用。' : 'API Key 已启用。',
+        ).then(() => undefined)
+      }
+      provider={selectedProvider}
+      onDraftChange={setConnectionDraftDirty}
+      onSaveDefinition={(definition) =>
+        saveProviderDefinition(definition, selectedProvider.providerID)
+      }
+    />
+  ) : null
+
+  async function saveCustomProvider(
+    savedProviderId: string,
+    select = true,
+  ): Promise<DesktopModelProviderSummary | undefined> {
+    const savedProvider = await controller.readSavedProvider(savedProviderId)
+    if (select) {
+      applyProviderSelection(savedProvider.providerID, savedProvider)
+      updateLocation({
+        provider: savedProviderId,
+        section: creatingCustomProvider ? 'connection' : providerSection,
+      })
+    }
+    onNotice('自定义供应商配置已保存。')
+    return savedProvider
+  }
+
   const detailActions = selectedProvider ? (
     <>
-      <Button
-        color="secondary"
-        disabled={refreshingProviderData}
-        loading={refreshingProviderData}
-        onClick={() => void refreshProviderData()}
-        title="刷新供应商信息"
-      >
-        {!refreshingProviderData ? <RefreshCw size={APP_ICON_SIZE} aria-hidden /> : null}
-        <span className="model-center-header-action-label tw:max-[479px]:hidden">刷新</span>
-      </Button>
-
-      {canEditProviderConfig(selectedProvider, deepSeekProtocolSupported) ? (
-        <>
-          <Button
-            color="secondary"
-            onClick={() => {
-              setProviderEditorProviderId(selectedProvider.providerID)
-              setProviderEditorOpen(true)
-            }}
-          >
-            <Pencil size={APP_ICON_SIZE} aria-hidden />
-            <span className="model-center-header-action-label tw:max-[479px]:hidden">
-              编辑 Provider
-            </span>
-          </Button>
-          {selectedProvider?.providerKind === 'custom' ? (
-            <Button color="danger" onClick={() => void deleteCustomProvider()}>
-              <Trash2 size={APP_ICON_SIZE} aria-hidden />
-              <span className="model-center-header-action-label tw:max-[479px]:hidden">
-                删除 Provider
-              </span>
-            </Button>
-          ) : null}
-        </>
-      ) : null}
-
-      {providerSection === 'connection' ? (
-        <Button
-          color="secondary"
-          aria-label="测试连接"
-          disabled={busy || !selectedProvider || !isExecutableDesktopProvider(selectedProvider)}
-          onClick={() => void testConnection()}
-          title="测试当前连接"
-        >
-          <Cable size={APP_ICON_SIZE} aria-hidden />
-          <span className="model-center-header-action-label tw:max-[479px]:hidden">测试连接</span>
-        </Button>
-      ) : null}
-
-      {providerSection === 'models' ? (
-        <Button
-          color="secondary"
-          aria-label="刷新目录"
-          disabled={busy || !selectedProvider || !isExecutableDesktopProvider(selectedProvider)}
-          onClick={() => void fetchModels()}
-          title="刷新模型目录"
-        >
-          <RefreshCw
-            size={APP_ICON_SIZE}
-            aria-hidden
-            className={busy ? 'tw:animate-spin' : undefined}
-          />
-          <span className="model-center-header-action-label tw:max-[479px]:hidden">刷新目录</span>
-        </Button>
+      {selectedProvider.config ? (
+        <ToggleSwitch
+          ariaLabel="启用供应商"
+          checked={selectedProvider.config.enabled}
+          disabled={busy}
+          onChange={(enabled) => {
+            void saveProviderDefinition(
+              { ...selectedProvider.config!, enabled },
+              selectedProvider.providerID,
+            ).catch((error) => onError(fullErrorMessage(error)))
+          }}
+        />
       ) : null}
     </>
   ) : null
 
-  return (
-    <div className="model-center-shell tw:@container tw:mx-auto tw:min-w-0 tw:w-[min(calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2),100%)] tw:max-w-[calc(var(--page-content-max-width)_+_var(--cpx-sys-space-5)_*_2)] tw:p-5">
-      {showingProviderDetail && selectedProvider ? (
-        <WorkspaceHeaderItem align="start" id="models.navigation" order={0} slot="left">
-          <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-1 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
-            <Button
-              color="ghostSecondary"
-              onClick={showProviderCatalog}
-              size="toolbar"
-              title="返回供应商列表"
-            >
-              供应商
-            </Button>
-            <ChevronRight
-              aria-hidden="true"
-              className="model-center-breadcrumb-separator tw:shrink-0 tw:text-app-text-meta tw:opacity-60"
-              size={APP_ICON_SIZES.sm}
-              strokeWidth={APP_ICON_STROKE_WIDTH}
-            />
-            <span className="model-center-breadcrumb-current tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap">
-              {selectedProvider.displayName}
-            </span>
-          </div>
-        </WorkspaceHeaderItem>
-      ) : null}
-
-      {!showingProviderDetail ? (
-        <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
-            供应商
-          </h2>
-          <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
-            管理模型服务、账户连接、凭据与可用模型。
-          </p>
-        </div>
-      ) : null}
-
-      {!showingProviderDetail ? (
-        <WorkspaceHeaderItem align="end" id="models.actions" order={100} slot="right">
-          <div className="model-center-header-actions tw:inline-flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-3">
-            {!showInitialSkeleton ? (
-              <>
-                <Button
-                  color="secondary"
-                  disabled={refreshingProviderData}
-                  loading={refreshingProviderData}
-                  onClick={() => void refreshProviderData()}
-                >
-                  {!refreshingProviderData ? <RefreshCw size={APP_ICON_SIZE} aria-hidden /> : null}
-                  <span className="model-center-header-action-label tw:max-[479px]:hidden">
-                    刷新
-                  </span>
-                </Button>
-                <Button
-                  color="primary"
-                  onClick={() => {
-                    setProviderEditorProviderId(null)
-                    setProviderEditorOpen(true)
-                  }}
-                >
-                  <Plus size={APP_ICON_SIZE} aria-hidden />
-                  <span className="model-center-header-action-label tw:max-[479px]:hidden">
-                    新增自定义 Provider
-                  </span>
-                </Button>
-              </>
-            ) : null}
-          </div>
-        </WorkspaceHeaderItem>
-      ) : null}
-
-      {showInitialSkeleton ? (
-        <ModelCenterInitialSkeleton
-          view={showingProviderDetail ? 'detail' : 'catalog'}
-          section={providerSection}
-        />
-      ) : showingProviderDetail && selectedProvider ? (
-        <ProviderDetail
-          actions={detailActions}
-          activeTab={providerSection}
-          onBack={showProviderCatalog}
-          onTabChange={(tab) => updateLocation({ provider: providerID, section: tab })}
-          provider={{
-            id: selectedProvider.providerID,
-            name: selectedProvider.displayName,
-            logoURL: selectedProvider.logoURL,
-            description: providerDescription(selectedProvider),
-            status: providerDetailStatus(
-              selectedProvider,
-              selectedProviderState,
-              selectedConfiguredGroup,
-            ),
-          }}
+  const marketActions =
+    !showInitialSkeleton && !showingProviderDetail && !creatingCustomProvider ? (
+      <div className="model-center-header-actions tw:inline-flex tw:shrink-0 tw:flex-wrap tw:items-center tw:justify-end tw:gap-2">
+        <Button
+          aria-busy={refreshingProviderData}
+          disabled={refreshingProviderData}
+          isIconOnly
+          onClick={() => void refreshProviderData()}
+          shape="pill"
+          size="md"
+          title="刷新供应商目录"
+          variant="ghost"
         >
-          {providerSection === 'connection' ? (
-            <ProviderConnectionSection
-              apiKeys={providerApiKeys}
-              busy={busy || busyKeyId !== null}
-              group={selectedConfiguredGroup}
-              onCopyKey={copyApiKey}
-              onDeleteKey={setDeleteKey}
-              onEditKey={(key) => {
-                setEditingKey(key)
-                setEditorProviderId(key.providerId)
-              }}
-              onError={onError}
-              onMoveKey={moveApiKey}
-              onNotice={onNotice}
-              onOpenNewKey={() => {
-                setEditingKey(null)
-                setEditorProviderId(providerID)
-              }}
-              onRefresh={async () => {
-                await providerManagementStore.refresh()
-              }}
-              onSetActiveKey={(key) =>
-                mutateKey(
-                  key.id,
-                  () => providerManagementStore.setActiveCredential(key.providerId, key.id),
-                  '当前活动 API Key 已切换。',
-                ).then(() => undefined)
-              }
-              onTestConnection={testConnection}
-              onTestKey={testSingleApiKey}
-              onToggleKeyEnabled={(key) =>
-                mutateKey(
-                  key.id,
-                  () => providerManagementStore.setCredentialEnabled(key.id, !key.enabled),
-                  key.enabled ? 'API Key 已停用。' : 'API Key 已启用。',
-                ).then(() => undefined)
-              }
-              provider={selectedProvider}
-              providerState={selectedProviderState}
+          <RefreshCw
+            aria-hidden="true"
+            className={refreshingProviderData ? 'tw:animate-spin' : undefined}
+            size={APP_ICON_SIZE}
+            strokeWidth={APP_ICON_STROKE_WIDTH}
+          />
+        </Button>
+        <Button
+          color="primary"
+          onClick={() => setSearchParams({ newProvider: '1' })}
+          shape="pill"
+          size="md"
+        >
+          <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+          <span>新增自定义 Provider</span>
+        </Button>
+      </div>
+    ) : null
+
+  return (
+    <>
+      {!showingProviderDetail && !creatingCustomProvider ? (
+        <PrimaryPageLayout
+          actions={marketActions}
+          className="model-center-shell model-center-primary-page tw:@container"
+          headerClassName="settings-page-header"
+          title="供应商市场"
+          description="浏览模型供应商，连接后可在左侧管理凭据与模型。"
+          search={
+            <SearchInput
+              variant="outlined"
+              aria-label="搜索供应商"
+              placeholder="搜索供应商"
+              shape="pill"
+              size="md"
+              value={providerQuery}
+              onChange={setProviderQuery}
             />
+          }
+        >
+          {showInitialSkeleton ? (
+            <ModelCenterInitialSkeleton view="catalog" />
+          ) : providerQuery.trim() && marketProviders.length === 0 ? (
+            <p className="tw:py-8 tw:text-center tw:text-app-text-meta tw:type-body-sm">
+              没有匹配的供应商
+            </p>
           ) : (
-            <ProviderModelsSection
-              busy={busy}
-              modelMetadata={modelMetadata}
-              models={providerModels}
-              onError={onError}
-              onFetchModels={fetchModels}
-              onNotice={onNotice}
-              provider={selectedProvider}
+            <ProviderCatalog
+              providers={marketProviders}
+              onSelect={(id) => updateLocation({ provider: id, section: 'connection' })}
+              onManageConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
+              onAddConnection={(id) => updateLocation({ provider: id, section: 'connection' })}
             />
           )}
-        </ProviderDetail>
+          {orphanCredentials.length > 0 ? (
+            <section aria-label="遗留供应商凭据" className="tw:mt-6 tw:grid tw:gap-3">
+              <h2 className="tw:type-title-sm tw:text-app-text">遗留供应商凭据</h2>
+              <p className="tw:type-body-sm tw:text-app-text-meta">
+                这些凭据所属的供应商已不存在，可单独删除，历史聊天仍保留。
+              </p>
+              {orphanCredentials.map((credential) => (
+                <div
+                  key={credential.id}
+                  className="tw:flex tw:items-center tw:justify-between tw:gap-3"
+                >
+                  <span>
+                    {credential.providerId} · {credential.label} ·{' '}
+                    {credential.kind === 'oauth' ? 'OAuth' : 'API Key'} {credential.maskedValue}
+                  </span>
+                  <Button size="sm" onClick={() => setOrphanToDelete(credential)}>
+                    删除凭据
+                  </Button>
+                </div>
+              ))}
+            </section>
+          ) : null}
+        </PrimaryPageLayout>
       ) : (
-        <ProviderCatalog
-          filter={catalogFilter}
-          onAddConnection={(nextProviderID) => setConnectionDialogProviderId(nextProviderID)}
-          onFilterChange={setCatalogFilter}
-          onManageConnection={(nextProviderID) => {
-            selectProvider(nextProviderID)
-          }}
-          onQueryChange={setProviderSearch}
-          onSelect={selectProvider}
-          providers={providerCatalogItems}
-          query={providerSearch}
-        />
+        <div className="model-center-shell tw:@container tw:h-full tw:w-full tw:min-w-0 tw:overflow-x-hidden tw:overflow-y-auto tw:p-5">
+          <div className="tw:mx-auto tw:min-w-0 tw:w-full tw:max-w-[var(--page-content-max-width)] tw:pb-8">
+            {showingCustomEditor ? (
+              <>
+                <div className="plugins-detail-breadcrumb model-center-detail-breadcrumb tw:mb-4 tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:type-caption">
+                  <Button
+                    color="ghostSecondary"
+                    onClick={
+                      showingCustomEditor && !creatingCustomProvider
+                        ? showProviderDetail
+                        : showProviderCatalog
+                    }
+                    size="toolbar"
+                    title={
+                      showingCustomEditor && !creatingCustomProvider
+                        ? '返回供应商详情'
+                        : '返回供应商列表'
+                    }
+                  >
+                    {showingCustomEditor && !creatingCustomProvider
+                      ? selectedProvider?.displayName
+                      : '供应商'}
+                  </Button>
+                  <ChevronRight
+                    aria-hidden="true"
+                    className="model-center-breadcrumb-separator tw:shrink-0 tw:text-app-text-meta tw:opacity-60"
+                    size="var(--inline-icon-size, 1em)"
+                    strokeWidth={APP_ICON_STROKE_WIDTH}
+                  />
+                  <span className="model-center-breadcrumb-current tw:overflow-hidden tw:text-app-text tw:text-ellipsis tw:whitespace-nowrap">
+                    {creatingCustomProvider
+                      ? '新供应商'
+                      : showingCustomEditor
+                        ? '编辑配置'
+                        : selectedProvider?.displayName}
+                  </span>
+                </div>
+              </>
+            ) : null}
+            {showInitialSkeleton ? (
+              <ModelCenterInitialSkeleton view="detail" />
+            ) : showingCustomEditor ? (
+              <ProviderEditorForm
+                key={creatingCustomProvider ? 'new-provider' : selectedProvider?.providerID}
+                embedded
+                open
+                existingProviderIds={providers.map((item) => item.providerID)}
+                provider={creatingCustomProvider ? undefined : selectedProvider}
+                operationBusy={busy || busyKeyId !== null}
+                onTestModel={testConnection}
+                onDelete={deleteCustomProvider}
+                onOpenChange={showProviderDetail}
+                onSaveDefinition={saveProviderDefinition}
+                onSaved={saveCustomProvider}
+              />
+            ) : showingProviderDetail && selectedProvider ? (
+              <ProviderDetail
+                actions={detailActions}
+                section={providerSection}
+                provider={{
+                  id: selectedProvider.providerID,
+                  name: selectedProvider.displayName,
+                  logoURL: selectedProvider.logoURL,
+                  status: providerDetailStatus(
+                    selectedProvider,
+                    selectedProviderState,
+                    selectedConfiguredGroup,
+                  ),
+                }}
+              >
+                <div data-provider-section="connection">{connectionSection}</div>
+                <div data-provider-section="models">
+                  <ProviderModelsSection
+                    editingBlocked={connectionDraftDirty}
+                    key={selectedProvider.providerID}
+                    busy={busy}
+                    modelMetadata={modelMetadata}
+                    models={providerModels}
+                    onError={onError}
+                    onFetchModels={fetchModels}
+                    onNotice={onNotice}
+                    provider={selectedProvider}
+                    testResults={modelTestResults}
+                    onTestModels={(ids) => controller.testModels(selectedProvider, ids)}
+                    onSaveDefinition={saveProviderDefinition}
+                    onRefresh={() => providerManagementStore.refresh().then(() => undefined)}
+                  />
+                </div>
+              </ProviderDetail>
+            ) : null}
+          </div>
+        </div>
       )}
 
-      {/* Dialogs */}
-      <ProviderConnectionDialog
-        busy={busy}
-        open={connectionDialogProviderId !== null}
-        provider={connectionDialogProvider}
-        sources={connectionDialogSources}
-        onKeySubmit={createProviderConnection}
-        onConnected={() => {
-          setConnectionDialogProviderId(null)
-          if (connectionDialogProvider) {
-            updateLocation({
-              provider: connectionDialogProvider.providerID,
-              section: 'connection',
-            })
-          }
-        }}
-        onOpenChange={(open) => {
-          if (!open) setConnectionDialogProviderId(null)
+      <ConfirmationDialog
+        open={providerToDelete !== null}
+        title="删除自定义供应商？"
+        description={`确定删除自定义供应商“${providerToDelete?.displayName ?? ''}”？将同时删除此供应商已保存的 API Key 和 OAuth 凭据，历史会话引用保留。`}
+        actionLabel="删除供应商"
+        tone="danger"
+        actionDisabled={deletingProvider}
+        onAction={() => void confirmDeleteProvider()}
+        onCancel={() => {
+          if (!deletingProvider) setProviderToDelete(null)
         }}
       />
 
-      <ProviderEditorDialog
-        deepSeekProtocolSupported={deepSeekProtocolSupported}
-        open={providerEditorOpen}
-        provider={
-          providerEditorProviderId
-            ? providers.find((item) => item.providerID === providerEditorProviderId)
-            : undefined
-        }
-        onOpenChange={setProviderEditorOpen}
-        onSaved={async (savedProviderId) => {
-          await providerManagementStore.refresh()
-          const nextId = savedProviderId as ModelProviderID
-          setProviderEditorProviderId(null)
-          const savedProvider = providerManagementStore
-            .getSnapshot()
-            .providers.find((item) => item.providerID === nextId)
-          applyProviderSelection(nextId, savedProvider)
-          updateLocation({ provider: nextId, section: 'connection' })
-          onNotice(
-            deepSeekManagedProvider(savedProvider)
-              ? 'DeepSeek API 协议已保存，将从下一次请求开始生效。'
-              : '自定义 Provider 配置已保存。',
-          )
+      <ConfirmationDialog
+        open={orphanToDelete !== null}
+        title="删除遗留凭据？"
+        description={`删除“${orphanToDelete?.label ?? ''}”后无法恢复，历史聊天仍保留。`}
+        actionLabel="删除凭据"
+        tone="danger"
+        actionDisabled={busyKeyId !== null}
+        onAction={() => {
+          if (!orphanToDelete) return
+          const target = orphanToDelete
+          void mutateKey(
+            target.id,
+            () => providerManagementStore.deleteCredential(target.id),
+            '遗留凭据已删除。',
+          ).then((success) => {
+            if (success) setOrphanToDelete(null)
+          })
         }}
+        onCancel={() => setOrphanToDelete(null)}
       />
-
-      <ApiKeyEditorDialog
-        apiKey={editingKey}
-        busy={busyKeyId !== null}
-        initialProviderId={editorProviderId ?? providerID}
-        open={editorProviderId !== null}
-        providers={editorProvider ? [editorProvider] : []}
-        onOpenChange={(open) => {
-          if (open) return
-          setEditorProviderId(null)
-          setEditingKey(null)
-        }}
-        onSubmit={saveApiKeyEditor}
-      />
-
       <ConfirmationDialog
         actionDisabled={busyKeyId !== null}
         actionLabel="删除"
@@ -912,158 +766,6 @@ export function ModelCenterWorkbench({ onError, onNotice }: Props): React.ReactN
         }}
         onCancel={() => setDeleteKey(null)}
       />
-    </div>
+    </>
   )
-}
-
-type ModelCenterInitialSkeletonProps = {
-  view: 'catalog' | 'detail'
-  section: 'connection' | 'models'
-}
-
-function ModelCenterInitialSkeleton({
-  view,
-  section,
-}: ModelCenterInitialSkeletonProps): React.ReactNode {
-  if (view === 'detail') {
-    return (
-      <SkeletonRegion
-        className="model-center-initial-skeleton tw:grid tw:min-w-0 tw:gap-3"
-        label="正在加载 Provider 详情"
-      >
-        <header className="model-center-skeleton-provider-header tw:flex tw:min-h-10 tw:min-w-0 tw:items-center tw:gap-3">
-          <SkeletonBlock className="model-center-skeleton-back tw:size-9 tw:rounded-md" />
-          <SkeletonBlock className="model-center-skeleton-provider-logo tw:size-10 tw:rounded-md" />
-          <div className="tw:grid tw:min-w-0 tw:flex-1 tw:gap-2">
-            <SkeletonBlock className="model-center-skeleton-provider-title tw:h-[18px] tw:w-[min(150px,72%)]" />
-            <SkeletonBlock className="model-center-skeleton-provider-copy tw:h-3.5 tw:w-[min(210px,88%)]" />
-          </div>
-        </header>
-        <div className="model-center-skeleton-tabs tw:flex tw:gap-5 tw:border-b tw:border-b-app-border-subtle tw:px-1">
-          <SkeletonBlock className="model-center-skeleton-tab tw:h-10 tw:w-14 tw:rounded-md" />
-          <SkeletonBlock className="model-center-skeleton-tab tw:h-10 tw:w-14 tw:rounded-md" />
-        </div>
-        {section === 'models' ? (
-          <>
-            <SkeletonBlock className="model-center-skeleton-search tw:h-9 tw:w-[min(360px,100%)] tw:rounded-md" />
-            <div className="model-center-skeleton-model-grid tw:grid tw:min-w-0 tw:grid-cols-2 tw:gap-4 tw:@max-[900px]:grid-cols-1">
-              {Array.from({ length: 6 }, (_, index) => (
-                <SkeletonBlock
-                  className="model-center-skeleton-model-card tw:min-h-[116px] tw:rounded-lg"
-                  key={index}
-                />
-              ))}
-            </div>
-          </>
-        ) : (
-          <div className="model-center-skeleton-detail-sections tw:grid tw:gap-4">
-            <SkeletonBlock className="tw:min-h-[154px] tw:rounded-xl" />
-            <SkeletonBlock className="tw:min-h-[154px] tw:rounded-xl" />
-          </div>
-        )}
-      </SkeletonRegion>
-    )
-  }
-
-  return (
-    <SkeletonRegion
-      className="model-center-initial-skeleton tw:grid tw:min-w-0 tw:gap-3"
-      label="正在加载 Provider 目录"
-    >
-      <div className="model-center-heading model-center-skeleton-heading tw:grid tw:gap-2">
-        <SkeletonBlock className="model-center-skeleton-page-title tw:h-7 tw:w-[min(190px,52%)] tw:rounded-md" />
-        <SkeletonBlock className="model-center-skeleton-page-copy tw:h-[18px] tw:w-[min(460px,78%)] tw:rounded-md" />
-      </div>
-      <div className="model-center-catalog-toolbar tw:flex tw:min-w-0 tw:items-center tw:justify-start tw:gap-3 tw:@max-[900px]:items-stretch">
-        <SkeletonBlock className="model-center-skeleton-search tw:h-9 tw:w-[min(360px,100%)] tw:rounded-md" />
-        <SkeletonBlock className="model-center-skeleton-count tw:h-6 tw:w-[46px] tw:rounded-full" />
-      </div>
-      <div className="model-center-skeleton-provider-grid tw:grid tw:min-w-0 tw:grid-cols-2 tw:gap-4 tw:@max-[900px]:grid-cols-1">
-        {Array.from({ length: 6 }, (_, index) => (
-          <div
-            className="model-center-skeleton-provider-card tw:grid tw:min-h-[78px] tw:min-w-0 tw:grid-cols-[auto_minmax(0,1fr)_auto] tw:items-center tw:gap-3 tw:rounded-lg tw:border tw:border-app-border-subtle tw:p-4"
-            key={index}
-          >
-            <SkeletonBlock className="model-center-skeleton-logo tw:size-9 tw:rounded-md" />
-            <div className="tw:grid tw:min-w-0 tw:gap-2">
-              <SkeletonBlock className="model-center-skeleton-name tw:h-[18px] tw:w-[min(150px,72%)]" />
-              <SkeletonBlock className="model-center-skeleton-meta tw:h-3.5 tw:w-[min(210px,88%)]" />
-            </div>
-            <SkeletonBlock className="model-center-skeleton-status tw:h-3.5 tw:w-16" />
-          </div>
-        ))}
-      </div>
-    </SkeletonRegion>
-  )
-}
-
-function providerDescription(provider: DesktopModelProviderSummary | undefined): string {
-  if (!provider) return '管理供应商凭据与模型目录。'
-  const parts = [provider.providerID]
-  parts.push(provider.providerKind === 'custom' ? '自定义 Provider · Pi 执行' : 'Pi 内置')
-  const managed = deepSeekManagedProvider(provider)
-  if (managed) {
-    const protocol = deepSeekProtocolOption(deepSeekProtocolOf(managed.config))
-    parts.push(`${protocol.label} · ${protocol.endpoint}`)
-  }
-  return parts.join(' · ')
-}
-
-function providerDetailStatus(
-  provider: DesktopModelProviderSummary,
-  providerState: DesktopModelProviderState | null,
-  group: ConfiguredProviderGroup | undefined,
-): { label: string; tone: 'positive' | 'warning' | 'neutral' } {
-  if (provider.availability?.status === 'unavailable') {
-    return {
-      label: providerAvailabilityLabel(provider.availability.reason),
-      tone: 'warning',
-    }
-  }
-  if (group?.activeConnection) {
-    return { label: '已连接', tone: 'positive' }
-  }
-  if (providerState?.apiKeyConfigured) {
-    return { label: '已配置', tone: 'positive' }
-  }
-  return { label: '未配置', tone: 'neutral' }
-}
-
-function providerAvailabilityLabel(
-  reason:
-    | 'unsupported-protocol'
-    | 'missing-api'
-    | 'unsafe-endpoint'
-    | 'unresolved-endpoint'
-    | 'no-compatible-models',
-): string {
-  switch (reason) {
-    case 'missing-api':
-      return '缺少 API 地址'
-    case 'unsafe-endpoint':
-      return 'Endpoint 不安全'
-    case 'unresolved-endpoint':
-      return 'Endpoint 尚未配置'
-    case 'no-compatible-models':
-      return '没有兼容模型'
-    case 'unsupported-protocol':
-      return '协议暂未适配'
-  }
-}
-
-function providerCatalogConnectionStatus(
-  status: 'stored-key' | 'oauth' | 'environment' | 'configured' | 'unconfigured',
-  group: ConfiguredProviderGroup | undefined,
-): { label: string; tone: 'positive' | 'warning' | 'neutral' } {
-  if (group?.activeConnection) {
-    if (group.activeConnection.kind === 'oauth') {
-      return { label: 'OAuth 已连接', tone: 'positive' }
-    }
-    return { label: '已保存 Key', tone: 'positive' }
-  }
-  if (status === 'stored-key') return { label: '已保存 Key', tone: 'positive' }
-  if (status === 'oauth') return { label: 'OAuth 已连接', tone: 'positive' }
-  if (status === 'environment') return { label: '环境变量', tone: 'positive' }
-  if (status === 'configured') return { label: '已配置', tone: 'positive' }
-  return { label: '未配置', tone: 'neutral' }
 }

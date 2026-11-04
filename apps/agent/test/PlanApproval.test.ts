@@ -411,7 +411,14 @@ test('反馈创建 Plan 轮次；关闭不创建轮次且发设置事件；关�
     response: { action: 'feedback', feedback: '先处理 B' },
   })
   expect(first.db.getTurnInput(feedback.approval.nextTurnId!)?.taskMode).toBe('plan')
-  expect(first.db.getTurnInput(feedback.approval.nextTurnId!)?.content).toContain('先处理 B')
+  const feedbackContent = first.db.getTurnInput(feedback.approval.nextTurnId!)?.content ?? ''
+  expect(feedbackContent).toContain('先处理 B')
+  // 反馈轮次的用户消息是原话；源计划改由 next_turn_id 关联注入 prompt context。
+  expect(feedbackContent).not.toContain(first.approval.markdown)
+  const source = first.db.repositories.planApprovals.feedbackSource(feedback.approval.nextTurnId!)
+  expect(source?.markdown).toBe(first.approval.markdown)
+  expect(source?.id).toBe(feedback.approval.id)
+  expect(first.db.repositories.planApprovals.feedbackSource('missing-turn')).toBeNull()
   const second = await fixture()
   const closed = await second.service.respond({ ...second.params, response: { action: 'close' } })
   expect(closed.approval.status).toBe('closed')

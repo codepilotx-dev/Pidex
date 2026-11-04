@@ -2,10 +2,10 @@ import { expect, spyOn, test } from 'bun:test'
 import { desktopClient } from '../src/services/desktop-client/index.js'
 import { chooseSessionGroupForThread } from '../src/features/session-groups/SessionGroupActions.js'
 
-test('工作流归属选择支持加入、移出，取消或无效序号不写入', async () => {
+test('工作组归属选择支持加入、移出，取消或无效序号不写入', async () => {
   const originalPrompt = globalThis.prompt
   const list = spyOn(desktopClient, 'listSessionGroups').mockResolvedValue([
-    { id: 'group-1', name: '工作流一' } as Awaited<
+    { id: 'group-1', name: '工作组一' } as Awaited<
       ReturnType<typeof desktopClient.listSessionGroups>
     >[number],
   ])

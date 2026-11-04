@@ -25,6 +25,8 @@ import type { QuestionService } from '../../session/QuestionService'
 import { PlanApprovalService } from '../../session/plan/PlanApprovalService'
 import type { ApiKeyService } from '../../provider/ApiKeyService'
 import type { ModelHealthService } from '../../provider/ModelHealthService'
+import type { ModelSyncService } from '../../provider/ModelSyncService'
+import type { ProtocolDetectionService } from '../../provider/ProtocolDetectionService'
 import type { ProviderCredentialService } from '../../provider/ProviderCredentialService'
 import type { ProviderCredentialStoreManager } from '../../auth/ProviderCredentialStoreManager'
 import type { PiModelService } from '../../provider/pi'
@@ -46,6 +48,7 @@ import { projectMemoryKey, type MemoryService } from '../../memory/MemoryService
 import type { HookService } from '../../hooks/HookService'
 import type { GitReviewService } from '../../review/GitReviewService'
 import type { GithubService } from '../../github/GithubService'
+import type { ThreadPullRequestService } from '../../github/ThreadPullRequestService'
 import type { PullRequestWatchService } from '../../github/PullRequestWatchService'
 import type { GitWorkspaceService } from '../../git/GitWorkspaceService'
 import type { ToolingManager } from '../../tool/ToolingManager'
@@ -53,7 +56,6 @@ import type { PetService } from '../../pet/PetService'
 import type { ReleaseNotesService } from '../../release-notes/ReleaseNotesService'
 import type { SkillManagementService } from '../../prompt/SkillManagementService'
 import type { PluginManagementService } from '../../plugin/PluginManagementService'
-import type { MiniMaxCliIntegrationService } from '../../integration/minimax-cli/MiniMaxCliIntegrationService'
 import type { McpRuntimeService } from '../../mcp/McpRuntimeService'
 import type { TaskSuggestionService } from '../../suggestion/TaskSuggestionService'
 import type { UsageService } from '../../usage/UsageService'
@@ -74,6 +76,7 @@ import type { ThreadGoalService } from '../../session/ThreadGoalService'
 import type { ThreadBookmarkService } from '../../session/ThreadBookmarkService'
 import type { AutomationService } from '../../automation'
 import type { CalendarService, SchedulePlanService, ScheduledTaskService } from '../../calendar'
+import type { TaskScheduleService } from '../../calendar/TaskScheduleService'
 import type { ThreadMessageForkService } from '../../session/fork/ThreadMessageForkService'
 import type { SideChatService } from '../../session/side-chat/SideChatService'
 import type { MemoryManager } from '../../resource/MemoryManager'
@@ -150,6 +153,8 @@ export type RpcRouterDependencies = {
   piModels: PiModelService
   apiKeys: ApiKeyService
   modelHealth: ModelHealthService
+  modelSync: ModelSyncService
+  protocolDetection: ProtocolDetectionService
   providerCredentials: ProviderCredentialService
   providerCredentialStore: ProviderCredentialStoreManager
   authSessions: PiAuthSessionService
@@ -163,7 +168,6 @@ export type RpcRouterDependencies = {
   releaseNotes: ReleaseNotesService
   skills?: SkillManagementService
   plugins?: PluginManagementService
-  minimaxCli: MiniMaxCliIntegrationService
   mcp?: McpRuntimeService
   suggestions?: TaskSuggestionService
   usage: UsageService
@@ -183,9 +187,11 @@ export type RpcRouterDependencies = {
   sessionGroups: SessionGroupService
   threadGoals: ThreadGoalService
   threadBookmarks: ThreadBookmarkService
+  threadPullRequests: ThreadPullRequestService
   automation: AutomationService
   prWatches?: PullRequestWatchService
   calendar?: CalendarService
+  taskSchedules?: TaskScheduleService
   scheduledTasks?: ScheduledTaskService
   schedulePlans?: SchedulePlanService
   memoryManager?: MemoryManager | undefined
@@ -312,7 +318,7 @@ export const submitMessage = (raw: unknown): SubmitMessage => {
     model: body.model,
     permissionConfig: supportedPermissionConfig(body.permissionConfig),
     strategy: 'start',
-    taskMode: enumValue<TaskMode>(body.taskMode, ['chat', 'plan'], 'taskMode'),
+    taskMode: enumValue<TaskMode>(body.taskMode, ['chat', 'plan', 'grill'], 'taskMode'),
   }
 }
 
@@ -899,7 +905,7 @@ export const githubPullRequestIdentity = (params: Record<string, unknown>) => ({
 
 export const attachmentView = (record: {
   id: string
-  kind: 'text' | 'image'
+  kind: 'text' | 'image' | 'audio' | 'video'
   name: string
   mimeType: string
   size: number

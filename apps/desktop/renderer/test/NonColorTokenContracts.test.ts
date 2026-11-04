@@ -89,7 +89,7 @@ describe('non-color design token contracts', () => {
       ),
     )
     const expected: Record<string, string> = {
-      '--cpx-sys-font-size-code': '13px',
+      '--cpx-sys-font-size-code': '12px',
       '--cpx-sys-font-size-xs': '12px',
       '--cpx-sys-font-size-sm': '13px',
       '--cpx-sys-font-size-md': '14px',
@@ -108,10 +108,10 @@ describe('non-color design token contracts', () => {
       '--cpx-sys-line-height-body': '1.5',
       '--cpx-sys-line-height-body-lg': '1.5',
       '--cpx-sys-line-height-heading-sm': '1.25',
-      '--cpx-sys-line-height-heading-md': '1.25',
+      '--cpx-sys-line-height-heading-md': '1.33',
       '--cpx-sys-line-height-heading-lg': '1.2',
-      '--cpx-sys-line-height-heading-xl': '1.14',
-      '--cpx-sys-line-height-display': '1.14',
+      '--cpx-sys-line-height-heading-xl': '1.2',
+      '--cpx-sys-line-height-display': '1.2',
       '--cpx-sys-line-height-reading': 'var(--cpx-sys-line-height-body)',
       '--cpx-sys-line-height-code': '1.5',
     }
@@ -143,14 +143,16 @@ describe('non-color design token contracts', () => {
         'var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-md) / var(--cpx-sys-line-height-body) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-control':
         'var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-sm) / var(--cpx-sys-line-height-control) var(--cpx-sys-font-family-sans)',
+      '--cpx-sys-type-page-title':
+        'var(--cpx-sys-font-weight-medium) var(--cpx-sys-font-size-2xl) / var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-sm':
-        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-lg) / var(--cpx-sys-line-height-heading-sm) var(--cpx-sys-font-family-sans)',
+        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) / var(--cpx-sys-line-height-heading-sm) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-md':
-        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-xl) / var(--cpx-sys-line-height-heading-md) var(--cpx-sys-font-family-sans)',
+        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) / var(--cpx-sys-line-height-heading-md) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-lg':
-        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) / var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans)',
+        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-3xl) / var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-heading-xl':
-        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-3xl) / var(--cpx-sys-line-height-heading-xl) var(--cpx-sys-font-family-sans)',
+        'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-4xl) / var(--cpx-sys-line-height-heading-xl) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-metric':
         'var(--cpx-sys-font-weight-bold) var(--cpx-sys-font-size-2xl) / var(--cpx-sys-line-height-heading-lg) var(--cpx-sys-font-family-sans)',
       '--cpx-sys-type-code':
@@ -168,7 +170,7 @@ describe('non-color design token contracts', () => {
     }
   })
 
-  test('DesktopThemeProvider applies one UI-size delta to the complete scale including 4xl', async () => {
+  test('DesktopThemeProvider applies proportional scaling to the complete scale including 4xl', async () => {
     const provider = await read('../src/features/theme/DesktopThemeProvider.tsx')
     const scaleBlock = provider.match(/const scale = \{([\s\S]*?)\n  \}/)?.[1]
     expect(scaleBlock, 'DesktopThemeProvider must declare its UI font scale').toBeDefined()
@@ -187,14 +189,18 @@ describe('non-color design token contracts', () => {
       '3xl': 24,
       '4xl': 28,
     })
-    expect(provider).toContain('const delta = uiFontSize - 14')
-    expect(provider).toContain('`${base + delta}px`')
+    expect(provider).toContain('Math.round((base * uiFontSize) / 14)')
     expect(provider).toContain("'--cpx-sys-font-size-4xl'")
 
     for (const uiFontSize of [11, 14, 16]) {
-      const delta = uiFontSize - 14
-      const derived = [...scale.values()].map((base) => base + delta)
-      expect(derived).toEqual([12, 13, 14, 16, 18, 20, 24, 28].map((base) => base + delta))
+      const derived = [...scale.values()].map((base) => Math.round((base * uiFontSize) / 14))
+      expect(derived).toEqual(
+        uiFontSize === 11
+          ? [9, 10, 11, 13, 14, 16, 19, 22]
+          : uiFontSize === 14
+            ? [12, 13, 14, 16, 18, 20, 24, 28]
+            : [14, 15, 16, 18, 21, 23, 27, 32],
+      )
     }
   })
 
@@ -214,6 +220,7 @@ describe('non-color design token contracts', () => {
       'body-lg': 'body-lg',
       reading: 'reading',
       'row-title': 'row-title',
+      'page-title': 'page-title',
       control: 'control',
       metric: 'metric',
       code: 'code',
@@ -257,15 +264,16 @@ describe('non-color design token contracts', () => {
       ])
 
     // 页面/区块标题的排版角色随迁移落到 TSX：语义类名旁挂 `type-*` utility。
-    expect(generalSettings).toMatch(/className="settings-page-title [^"]*tw:type-title-xl/)
-    expect(settingsSection).toMatch(/className="settings-section-title [^"]*tw:type-title-sm/)
+    expect(generalSettings).toMatch(/className="settings-page-title [^"]*tw:type-page-title/)
+    expect(settingsSection).toMatch(/className="settings-section-title [^"]*tw:type-row-title/)
     expect(settings).toMatch(
       /\.settings-management-row-title\s*\{[^}]*font:\s*var\(--cpx-sys-type-row-title\);/s,
     )
     expect(session).toContain('tw:type-display')
     expect(markdown).toMatch(/\.md-body\s*\{[^}]*font:\s*var\(--cpx-sys-type-reading\);/s)
     expect(markdown).toMatch(/h2\s*\{[^}]*font:\s*var\(--cpx-sys-type-heading-lg\);/s)
-    expect(button).toContain('tw:type-control')
+    // Button 的 control 排版角色随通用规则收回静态样式，仍引用同一 role token。
+    expect(button).toMatch(/font:\s*var\(--cpx-sys-type-control\);/)
     // 用量指标卡仍在共享设置样式里，metric 角色 + tabular-nums 不变。
     expect(settings).toMatch(
       /\.usage-metric-card strong\s*\{[^}]*font:\s*var\(--cpx-sys-type-metric\);[^}]*font-variant-numeric:\s*tabular-nums;/s,
@@ -616,7 +624,6 @@ describe('non-color design token contracts', () => {
       '\\.cpx-agent-activity__details',
       '\\.cpx-agent-activity__file-changes',
       '\\.canonical-lifecycle-tool',
-      '\\.canonical-subagent-card',
     ]) {
       expect(conversation).toMatch(new RegExp(`${selector}\\s*\\{[\\s\\S]*?font:\\s*inherit;`))
     }
@@ -627,7 +634,7 @@ describe('non-color design token contracts', () => {
     )
     expect(markdown).toMatch(/\.md-body\s*\{[\s\S]*?font:\s*var\(--cpx-sys-type-reading\);/)
     expect(conversation).toMatch(
-      /\.canonical-turn__process\s*\{\s*gap:\s*var\(--cpx-sys-space-4\);/,
+      /\.canonical-turn__process\s*\{\s*gap:\s*var\(--cpx-sys-space-3\);/,
     )
     expect(markdown).toMatch(
       /\.md-table-block table\s*\{[\s\S]*?font:\s*var\(--cpx-sys-type-body\);/,
@@ -655,25 +662,60 @@ describe('non-color design token contracts', () => {
     )
   })
 
-  test('review diff uses shared code line-height token instead of local formula', async () => {
+  test('review diff preserves shared code rhythm with a 24px floor for line actions', async () => {
     const review = await read('../src/styles/primitives/review.css')
-    expect(review).not.toMatch(/--review-diffs-line-height:\s*max\(/)
+    expect(review).toContain(
+      '--review-diffs-line-height: max(24px, calc(1em * var(--cpx-sys-line-height-code)))',
+    )
     expect(review).toMatch(/line-height:\s*var\(--cpx-sys-line-height-code\)/)
   })
 
-  test('conversation composer inner aligns with canonical turns across conversation and side chat', async () => {
+  test('home and conversation share a continuous reading column with a matching composer', async () => {
     const conversation = await read('../src/styles/primitives/conversation.css')
     const threadComposerDock = await read(
       '../src/features/session/conversation/ThreadComposerDock.tsx',
     )
     const composerSurface = await read('../src/features/session/composer/ComposerSurface.tsx')
+    const timeline = await read('../src/features/session/timeline/SessionTimelineView.tsx')
+    const page = await read('../src/features/session/conversation/ConversationPage.tsx')
 
+    expect(conversation).not.toContain('--conversation-shift-offset')
     expect(conversation).toMatch(
-      /\.conversation-page \.session-timeline-main,\s*\.conversation-page \.workflow-page__composer-inner\s*\{[\s\S]*?transform:\s*translateX\(var\(--conversation-shift-offset,\s*0px\)\);/,
+      /\.conversation-page \.workflow-page__composer-inner\s*\{\s*width: 100%;\s*min-width: 0;\s*max-width: var\(--page-content-max-width\);\s*margin-inline: auto;/,
     )
     expect(conversation).toMatch(
-      /\.conversation-page \.workflow-page__composer-inner\s*\{[\s\S]*?width:\s*min\(var\(--page-content-max-width\),\s*var\(--session-content-w\)\);[\s\S]*?max-width:\s*var\(--page-content-max-width\);[\s\S]*?margin-inline:\s*auto;/,
+      /\.quick-chat-view,\s*\.conversation-page\s*\{\s*--cpx-sys-layout-conversation-max-width: 48rem;\s*--page-content-max-width: var\(--cpx-sys-layout-conversation-max-width\);\s*--session-content-w: 100%;/,
     )
+    expect(conversation).toMatch(
+      /\.quick-chat-view > \.quick-chat-hero-region,\s*\.quick-chat-view > \.quick-chat-composer-region\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
+    )
+    // 消息与吸底输入框共用带最小左右留白的列，窄窗口也不能贴边。
+    expect(conversation).toMatch(
+      /\.conversation-page \.thread-scroll-layout__inner\s*\{\s*width: 100%;\s*max-width: calc\(var\(--page-content-max-width\) \+ 2 \* var\(--cpx-sys-space-4\)\);\s*margin-inline: auto;\s*padding-inline: var\(--cpx-sys-space-4\);/,
+    )
+    expect(conversation).not.toMatch(
+      /\.quick-chat-view,\s*\.conversation-page \.thread-scroll-layout__inner/,
+    )
+    expect(conversation).not.toContain('53.5rem')
+    expect(conversation).not.toContain('--page-content-max-width: 40rem;')
+    expect(conversation).not.toContain('--conversation-composer-overhang')
+    expect(conversation).not.toContain('--conversation-inline-gutter')
+    for (const homeView of ['QuickChatView', 'ChatNewSessionView', 'WorkingNewSessionView']) {
+      const source = await read(`../src/features/session/${homeView}.tsx`)
+      expect(source).not.toContain('tw:px-8')
+      expect(source).not.toContain('tw:max-w-none')
+      expect(source).not.toContain('scrollbar-gutter:stable')
+      expect(source).toContain('tw:w-[var(--quick-chat-surface-width)]')
+    }
+    expect(conversation).toContain('--session-timeline-width: 100%;')
+    expect(timeline).toContain('tw:w-[var(--session-timeline-width,var(--session-content-w,100%))]')
+    expect(conversation).not.toContain('--conversation-content-inline-start')
+    expect(conversation).not.toContain('@media (max-width: 760px)')
+    expect(conversation).toMatch(
+      /\.conversation-page \.workflow-main-scroll-footer \.chat-input__dropdown--suggestion\s*\{\s*width: 100%;\s*max-width: 100%;/,
+    )
+    expect(page).not.toContain('subagent-timeline-summary')
+    expect(conversation).toMatch(/\.right-dock-side-chat\s*\{\s*--session-content-w: 100%;/)
     expect(conversation).toMatch(
       /\.canonical-turn\s*\{[\s\S]*?width:\s*min\(var\(--page-content-max-width\),\s*var\(--session-content-w\)\);[\s\S]*?max-width:\s*var\(--page-content-max-width\);[\s\S]*?margin-inline:\s*auto;/,
     )

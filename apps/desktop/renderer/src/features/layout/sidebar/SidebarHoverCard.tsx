@@ -1,4 +1,5 @@
 import type React from 'react'
+import { useOptionalSidebarDragController, useSidebarDragSession } from './SidebarDragContext.js'
 import {
   cloneElement,
   createContext,
@@ -17,6 +18,8 @@ export type SidebarHoverCardOverlayRenderProps = {
   keepOpen: () => void
   returnFocusToAnchor: () => void
   requestOpenChange: (open: boolean) => void
+  /** 本次打开由预热窗口直开：跳过入场动画，0ms 就位。 */
+  warmHandoff: boolean
 }
 
 type AnchorProps = React.HTMLAttributes<HTMLElement> & React.RefAttributes<HTMLElement>
@@ -32,6 +35,8 @@ type Props = {
 
 const OPEN_DELAY_MS = 300
 const CLOSE_DELAY_MS = 120
+/** 关闭后仍视为预热的时间窗口，与提示浮层的 skipDelayDuration 保持一致。 */
+export const HANDOFF_WINDOW_MS = 300
 
 type HoverCardRegistration = {
   isLocked: () => boolean
@@ -40,6 +45,7 @@ type HoverCardRegistration = {
 
 type SidebarHoverCardCoordinator = {
   closeAfterDelay: (id: string) => void
+  getOpenMode: (id: string) => 'cold' | 'warm'
   keepOpen: (id: string) => void
   openAfterDelay: (id: string) => void
   openImmediately: (id: string) => void
@@ -56,6 +62,10 @@ export function SidebarHoverCardProvider({
   children: React.ReactNode
 }): React.ReactNode {
   const coordinator = useMemo(createSidebarHoverCardCoordinator, [])
+  const session = useSidebarDragSession()
+  useEffect(() => {
+    if (session) coordinator.closeAll()
+  }, [coordinator, session])
 
   useEffect(() => () => coordinator.dispose(), [coordinator])
 
@@ -75,6 +85,7 @@ export function SidebarHoverCard({
   renderOverlay,
 }: Props): React.ReactNode {
   const coordinator = useSidebarHoverCardCoordinator()
+  const drag = useOptionalSidebarDragController()
   const anchorRef = useRef<HTMLElement | null>(null)
   const contentId = useId()
   const lockOpenRef = useRef(lockOpen)
@@ -108,7 +119,8 @@ export function SidebarHoverCard({
   }
 
   function applyOpenChange(nextOpen: boolean): void {
-    if (lockOpenRef.current && !nextOpen) return
+    if (nextOpen && drag?.getSession()) return
+    if (lockOpenRef.current && !nextOpen && !drag?.getSession()) return
     const restoreFocus =
       !nextOpen && document.getElementById(contentId)?.contains(document.activeElement)
     onOpenChangeRef.current(nextOpen)
@@ -120,10 +132,12 @@ export function SidebarHoverCard({
   }
 
   function openImmediately(): void {
+    if (drag?.getSession()) return
     coordinator.openImmediately(contentId)
   }
 
   function openAfterDelay(): void {
+    if (drag?.getSession()) return
     coordinator.openAfterDelay(contentId)
   }
 
@@ -172,7 +186,7 @@ export function SidebarHoverCard({
   return (
     <>
       {anchor}
-      {open
+      {open && !drag?.getSession()
         ? renderOverlay({
             anchorRef,
             closeAfterDelay,
@@ -180,6 +194,7 @@ export function SidebarHoverCard({
             keepOpen,
             returnFocusToAnchor,
             requestOpenChange,
+            warmHandoff: coordinator.getOpenMode(contentId) === 'warm',
           })
         : null}
     </>
@@ -209,14 +224,18 @@ function useSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator {
   return coordinator
 }
 
-function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
+export function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
   dispose: () => void
+  closeAll: () => void
 } {
   const registrations = new Map<string, HoverCardRegistration>()
   let activeId: string | null = null
   let pendingId: string | null = null
   let openTimer: number | null = null
   let closeTimer: number | null = null
+  let warmUntil = Number.NEGATIVE_INFINITY
+  // 每个 id 本次打开的不可变模式；打开期间不随协调器热状态改写。
+  const openModes = new Map<string, 'cold' | 'warm'>()
 
   function clearOpenTimer(): void {
     if (openTimer !== null) window.clearTimeout(openTimer)
@@ -234,6 +253,8 @@ function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
     const registration = registrations.get(id)
     if (registration?.isLocked()) return false
     activeId = null
+    openModes.delete(id)
+    warmUntil = window.performance.now() + HANDOFF_WINDOW_MS
     registration?.setOpen(false)
     return true
   }
@@ -248,11 +269,25 @@ function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
       return
     }
     if (activeId !== null && !close(activeId)) return
+    // 必须在改写热状态前判定，否则本次冷启动会被自己污染成预热。
+    // close() 已把 warmUntil 推到下一个 300ms 窗口，覆盖「切成相邻卡片」的情况。
+    const mode: 'cold' | 'warm' = window.performance.now() <= warmUntil ? 'warm' : 'cold'
     activeId = id
+    openModes.set(id, mode)
     registration.setOpen(true)
   }
 
   return {
+    closeAll() {
+      clearOpenTimer()
+      clearCloseTimer()
+      const id = activeId
+      activeId = null
+      if (id) {
+        openModes.delete(id)
+        registrations.get(id)?.setOpen(false)
+      }
+    },
     closeAfterDelay(id) {
       if (pendingId === id) clearOpenTimer()
       if (activeId !== id || registrations.get(id)?.isLocked()) return
@@ -266,14 +301,19 @@ function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
       clearOpenTimer()
       clearCloseTimer()
       registrations.clear()
+      openModes.clear()
       activeId = null
+    },
+    getOpenMode(id) {
+      return openModes.get(id) ?? 'cold'
     },
     keepOpen(id) {
       if (activeId === id) clearCloseTimer()
     },
     openAfterDelay(id) {
       clearCloseTimer()
-      if (activeId !== null) {
+      // 预热窗口内 0ms 直开，窗口外仍走首次悬停延迟。
+      if (activeId !== null || window.performance.now() <= warmUntil) {
         activate(id)
         return
       }
@@ -287,6 +327,7 @@ function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
       registrations.set(id, registration)
       return () => {
         registrations.delete(id)
+        openModes.delete(id)
         if (pendingId === id) clearOpenTimer()
         if (activeId === id) {
           clearCloseTimer()
@@ -299,6 +340,9 @@ function createSidebarHoverCardCoordinator(): SidebarHoverCardCoordinator & {
       if (activeId !== id) return
       clearCloseTimer()
       activeId = null
+      openModes.delete(id)
+      // 父组件直接关闭（非协调器关闭）同样开启预热窗口；挂载时为 no-op，不会误判首开。
+      warmUntil = window.performance.now() + HANDOFF_WINDOW_MS
     },
     requestOpenChange(id, nextOpen) {
       if (nextOpen) {

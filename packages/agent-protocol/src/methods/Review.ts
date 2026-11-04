@@ -222,6 +222,7 @@ export const ReviewBranchesResultSchema = Schema.Struct({
 
 export const ReviewCommitsParamsSchema = Schema.Struct({
   projectId: OpaqueIDSchema,
+  ref: Schema.optional(NonEmptyStringSchema),
   limit: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: 200 }))),
 })
 export const ReviewCommitsResultSchema = Schema.Struct({

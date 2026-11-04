@@ -1,3 +1,4 @@
+import { isProviderContextOverflow } from '../pi/ContextOverflow'
 /**
  * Agent loop that works with AgentMessage throughout.
  * Transforms to Message[] only at the LLM call boundary.
@@ -201,13 +202,27 @@ async function runLoop(
       }
 
       // Stream assistant response
-      const message = await streamAssistantResponse(
+      let message = await streamAssistantResponse(
         currentContext,
         config,
         signal,
         emit,
         streamFunction,
       )
+      if (
+        message.stopReason === 'error' &&
+        isProviderContextOverflow(message.errorMessage) &&
+        config.recoverContextOverflow
+      ) {
+        currentContext = await config.recoverContextOverflow()
+        message = await streamAssistantResponse(
+          currentContext,
+          config,
+          signal,
+          emit,
+          streamFunction,
+        )
+      }
       newMessages.push(message)
 
       if (message.stopReason === 'error' || message.stopReason === 'aborted') {
@@ -681,8 +696,11 @@ type FinalizedToolCallEntry = FinalizedToolCallOutcome | (() => Promise<Finalize
 
 function shouldTerminateToolBatch(finalizedCalls: FinalizedToolCallOutcome[]): boolean {
   return (
-    finalizedCalls.length > 0 &&
-    finalizedCalls.every((finalized) => finalized.result.terminate === true)
+    finalizedCalls.some(
+      ({ result }) => (result.details as { __piPause?: boolean } | undefined)?.__piPause === true,
+    ) ||
+    (finalizedCalls.length > 0 &&
+      finalizedCalls.every((finalized) => finalized.result.terminate === true))
   )
 }
 
@@ -739,7 +757,10 @@ async function prepareToolCall(
       if (beforeResult?.block) {
         return {
           kind: 'immediate',
-          result: createErrorToolResult(beforeResult.reason || 'Tool execution was blocked'),
+          result: {
+            ...createErrorToolResult(beforeResult.reason || 'Tool execution was blocked'),
+            ...(beforeResult.pause ? { details: { __piPause: true }, terminate: true } : {}),
+          },
           isError: true,
         }
       }

@@ -1,3 +1,4 @@
+import { useShallow } from 'zustand/react/shallow'
 import { useContext, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { Popover as Popover } from '../../components/ui/floating/Popover.js'
@@ -27,17 +28,20 @@ import { Button } from '../../components/ui/Button.js'
 import { PopoverItem } from '../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../components/ui/PopoverMenu.js'
 import { SearchInput } from '../../components/ui/SearchInput.js'
-import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
 import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import { ConfirmationDialog } from '../../components/ui/ConfirmationDialog.js'
-import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../components/ui/IconTokens.js'
+import {
+  APP_ICON_SIZE,
+  APP_ICON_SIZES,
+  APP_ICON_STROKE_WIDTH,
+} from '../../components/ui/IconTokens.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import { composerDraftStore } from '../session/composer/ComposerDraftStore.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { resolveRecentNewThreadModel } from '../models/RecentNewThreadModel.js'
 import { AutomationDetailPanel } from './AutomationDetailPanel.js'
 import { AutomationCalendar } from './AutomationCalendar.js'
+import { TaskSchedulePanel } from './TaskSchedulePanel.js'
 import { ScheduledTaskDetailPanel, taskDefinition } from './ScheduledTaskDetailPanel.js'
 import {
   AUTOMATION_TEMPLATES,
@@ -63,7 +67,7 @@ import { useCalendarController } from './UseCalendarController.js'
 
 export type AutomationTab = 'calendar' | 'runs'
 
-const TAB_OPTIONS = [
+export const TAB_OPTIONS = [
   { value: 'calendar', label: '日历' },
   { value: 'runs', label: '执行记录' },
 ] as const
@@ -95,7 +99,40 @@ function AutomationViewContent(): React.ReactNode {
   const creating = params.get('automationMode') === 'create'
   const scheduledTaskId = params.get('scheduledTaskId')
   const creatingScheduledTask = params.get('scheduledTaskMode') === 'create'
-  const controller = useSharedAutomationController()
+  const controller = useSharedAutomationController(
+    useShallow((state) => ({
+      query: state.query,
+      projects: state.projects,
+      filter: state.filter,
+      automations: state.automations,
+      draft: state.draft,
+      loading: state.loading,
+      beginCreate: state.beginCreate,
+      saveState: state.saveState,
+      draftError: state.draftError,
+      selected: state.selected,
+      cancelDraft: state.cancelDraft,
+      setQuery: state.setQuery,
+      supported: state.supported,
+      runs: state.runs,
+      error: state.error,
+      refresh: state.refresh,
+      runNow: state.runNow,
+      filteredAutomations: state.filteredAutomations,
+      targetLabel: state.targetLabel,
+      setPaused: state.setPaused,
+      setFilter: state.setFilter,
+      sessions: state.sessions,
+      remove: state.remove,
+      setDraft: state.setDraft,
+      scheduleError: state.scheduleError,
+      scheduleSummary: state.scheduleSummary,
+      create: state.create,
+      retrySave: state.retrySave,
+      markAllRunsRead: state.markAllRunsRead,
+      markRunRead: state.markRunRead,
+    })),
+  )
   const calendar = useCalendarController(controller.query, 'all')
   const [scheduledTask, setScheduledTask] = useState<ScheduledTask | null>(null)
   const [scheduledTaskLoading, setScheduledTaskLoading] = useState(false)
@@ -289,22 +326,6 @@ function AutomationViewContent(): React.ReactNode {
       else fallback?.focus()
     })
   }
-  function showTab(nextTab: AutomationTab): void {
-    controller.setQuery('')
-    setParams((current) => {
-      const next = new URLSearchParams(current)
-      if (nextTab === 'calendar') {
-        next.delete('tab')
-      } else {
-        next.set('tab', nextTab)
-        next.delete('automationId')
-        next.delete('automationMode')
-        next.delete('scheduledTaskId')
-        next.delete('scheduledTaskMode')
-      }
-      return next
-    })
-  }
   function openManualCreate(): void {
     openScheduledTask(selectedDate)
   }
@@ -396,8 +417,14 @@ function AutomationViewContent(): React.ReactNode {
       next.delete('scheduledTaskId')
       next.delete('scheduledTaskMode')
       next.set('date', localDateValue(new Date(occurrence.scheduledFor)))
+      next.delete('taskId')
+      next.delete('occurrenceId')
       next.set(
-        occurrence.source.kind === 'automation' ? 'automationId' : 'scheduledTaskId',
+        occurrence.source.kind === 'task-schedule'
+          ? 'taskId'
+          : occurrence.source.kind === 'automation'
+            ? 'automationId'
+            : 'scheduledTaskId',
         occurrence.source.id,
       )
       return next
@@ -446,49 +473,37 @@ function AutomationViewContent(): React.ReactNode {
       ?.focus({ preventScroll: true })
   }
 
+  const createActions = (
+    <PopoverMenu
+      align="end"
+      open={createMenuOpen}
+      size="md"
+      onOpenChange={setCreateMenuOpen}
+      trigger={
+        <Button ref={createButtonRef} color="primary" shape="pill" size="md">
+          <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+          <span>创建</span>
+          <ChevronDown aria-hidden="true" size={APP_ICON_SIZE} />
+        </Button>
+      }
+    >
+      <PopoverItem
+        icon={<MessageCircle size={APP_ICON_SIZE} />}
+        onClick={() => void planThroughChat()}
+      >
+        使用 CPX 创建
+      </PopoverItem>
+      <PopoverItem icon={<Settings size={APP_ICON_SIZE} />} onClick={() => openManualCreate()}>
+        手动设置
+      </PopoverItem>
+    </PopoverMenu>
+  )
+
   return (
     <>
-      <WorkspaceHeaderItem align="start" id="automation.navigation" order={0} slot="left">
-        <SegmentedControl<AutomationTab>
-          ariaLabel="任务视图"
-          className="automation-segmented-tabs"
-          getPanelId={(value) => `automation-${value}-panel`}
-          getTabId={(value) => `automation-${value}-tab`}
-          onChange={showTab}
-          options={TAB_OPTIONS}
-          semantics="tabs"
-          value={tab}
-        />
-      </WorkspaceHeaderItem>
-
-      <WorkspaceHeaderItem align="end" id="automation.actions" order={100} slot="right">
-        <PopoverMenu
-          align="end"
-          open={createMenuOpen}
-          size="md"
-          onOpenChange={setCreateMenuOpen}
-          trigger={
-            <Button ref={createButtonRef} color="primary">
-              <Plus aria-hidden="true" size={APP_ICON_SIZE} />
-              <span>创建</span>
-              <ChevronDown aria-hidden="true" size={APP_ICON_SIZES.sm} />
-            </Button>
-          }
-        >
-          <PopoverItem
-            icon={<MessageCircle size={APP_ICON_SIZE} />}
-            onClick={() => void planThroughChat()}
-          >
-            使用 CPX 创建
-          </PopoverItem>
-          <PopoverItem icon={<Settings size={APP_ICON_SIZE} />} onClick={() => openManualCreate()}>
-            手动设置
-          </PopoverItem>
-        </PopoverMenu>
-      </WorkspaceHeaderItem>
-
       <PrimaryPageLayout
         className="automation-primary-page"
+        actions={createActions}
         title={tab === 'runs' ? '执行记录' : '任务日历'}
         description={
           tab === 'runs'
@@ -498,13 +513,17 @@ function AutomationViewContent(): React.ReactNode {
         bodyClassName="automation-view tw:min-h-120 tw:max-[48rem]:min-h-128 tw:text-app-text"
         search={
           <SearchInput
+            variant="outlined"
             aria-label={tab === 'runs' ? '搜索执行记录' : '搜索已安排任务'}
             placeholder={tab === 'runs' ? '搜索执行记录' : '搜索已安排任务'}
+            shape="pill"
+            size="md"
             value={controller.query}
             onChange={controller.setQuery}
           />
         }
       >
+        <TaskSchedulePanel query={controller.query} />
         {controller.supported === false ? (
           <StatePanel
             title="当前 Agent 不支持自动化"
@@ -530,9 +549,9 @@ function AutomationViewContent(): React.ReactNode {
             }
           />
         ) : calendar.supported !== false ? (
-          <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:grid-cols-[minmax(0,1fr)]">
+          <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:shrink-0 tw:grid-cols-[minmax(0,1fr)]">
             <main
-              className="automation-page-content tw:flex tw:min-h-0 tw:min-w-0 tw:flex-col"
+              className="automation-page-content tw:flex tw:min-w-0 tw:shrink-0 tw:flex-col"
               id="automation-calendar-panel"
               role="tabpanel"
               aria-labelledby="automation-calendar-tab"
@@ -587,9 +606,9 @@ function AutomationViewContent(): React.ReactNode {
             </main>
           </div>
         ) : (
-          <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:grid-cols-[minmax(0,1fr)]">
+          <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:shrink-0 tw:grid-cols-[minmax(0,1fr)]">
             <main
-              className="automation-page-content tw:flex tw:min-h-0 tw:min-w-0 tw:flex-col"
+              className="automation-page-content tw:flex tw:min-w-0 tw:shrink-0 tw:flex-col"
               id={`automation-${controller.filter}-panel`}
               role="tabpanel"
               aria-labelledby={`automation-${controller.filter}-tab`}
@@ -853,9 +872,9 @@ function AutomationRunsList({
   }, [sortedRuns, needle, automationNameMap])
 
   return (
-    <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:grid-cols-[minmax(0,1fr)]">
+    <div className="automation-page-stage tw:grid tw:flex-auto tw:min-w-0 tw:shrink-0 tw:grid-cols-[minmax(0,1fr)]">
       <main
-        className="automation-page-content tw:flex tw:min-h-0 tw:min-w-0 tw:flex-col"
+        className="automation-page-content tw:flex tw:min-w-0 tw:shrink-0 tw:flex-col"
         id="automation-runs-panel"
         role="tabpanel"
         aria-labelledby="automation-runs-tab"
@@ -996,7 +1015,8 @@ function AutomationRow({
         : 'active'
   return (
     <li
-      className="tw:group tw:relative tw:grid tw:grid-cols-[minmax(0,1fr)_var(--cpx-sys-space-8)] tw:items-center tw:rounded-container tw:transition-[background,opacity] tw:duration-feedback tw:ease-standard tw:hover:bg-app-hover tw:focus-within:bg-app-hover tw:data-[selected=true]:bg-app-selected tw:data-[status=paused]:not-data-[selected=true]:opacity-60 tw:data-[status=paused]:hover:opacity-100 tw:data-[status=paused]:focus-within:opacity-100"
+      className="tw:group tw:relative tw:grid tw:grid-cols-[minmax(0,1fr)_var(--cpx-sys-space-8)] tw:items-center tw:rounded-container tw:transition-[background,opacity] tw:duration-feedback tw:ease-standard tw:hover:bg-app-hover tw:has-[:focus-visible]:bg-app-hover tw:data-[selected=true]:bg-app-selected tw:data-[status=paused]:not-data-[selected=true]:opacity-60 tw:data-[status=paused]:hover:opacity-100 tw:data-[status=paused]:has-[:focus-visible]:opacity-100"
+      data-state={menuOpen ? 'open' : undefined}
       data-selected={selected || undefined}
       data-status={rowStatus}
     >
@@ -1035,7 +1055,7 @@ function AutomationRow({
             {targetLabel}
           </span>
         </span>
-        <span className="automation-row-status tw:shrink-0 tw:truncate tw:text-right tw:type-caption tw:text-app-text-meta tw:group-hover:opacity-0 tw:group-focus-within:opacity-0 tw:max-[48rem]:hidden">
+        <span className="automation-row-status tw:shrink-0 tw:truncate tw:text-right tw:type-caption tw:text-app-text-meta tw:group-hover:opacity-0 tw:group-has-[:focus-visible]:opacity-0 tw:group-data-[state=open]:opacity-0 tw:max-[48rem]:hidden">
           {activeRun
             ? '正在运行'
             : automation.status === 'paused'
@@ -1053,7 +1073,7 @@ function AutomationRow({
         trigger={
           <Button
             isIconOnly
-            className="automation-row-menu tw:justify-self-center tw:opacity-0 tw:group-hover:opacity-100 tw:group-focus-within:opacity-100 tw:focus-visible:opacity-100"
+            className="automation-row-menu tw:justify-self-center tw:opacity-0 tw:group-hover:opacity-100 tw:group-has-[:focus-visible]:opacity-100 tw:group-data-[state=open]:opacity-100 tw:focus-visible:opacity-100"
             color="ghostSecondary"
             size="toolbar"
             title={`${automation.name} 操作`}
@@ -1119,7 +1139,7 @@ function AutomationSuggestions({
       >
         {suggestions.map((item) => (
           <li
-            className="tw:group tw:rounded-container tw:p-1.25 tw:hover:bg-app-hover tw:focus-within:bg-app-hover"
+            className="tw:group tw:rounded-container tw:p-1.25 tw:hover:bg-app-hover tw:has-[:focus-visible]:bg-app-hover"
             key={item.id}
             data-tone={item.tone}
           >

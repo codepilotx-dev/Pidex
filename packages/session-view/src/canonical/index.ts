@@ -1,3 +1,5 @@
+import type { ContextCompactionOperation, ThreadContextState } from '@pidex/shared/thread'
+import { contextCompactionItem, contextCompactionOperationItem } from '../ContextCompaction'
 import type {
   AgentExecution,
   ApprovalRequest,
@@ -13,6 +15,7 @@ import type {
   Turn,
 } from '@pidex/shared/thread'
 import type { EventEnvelope, RpcResult } from '@pidex/agent-protocol'
+import { VISUALIZATION_TOOL, visualizationFromBlocks } from '@pidex/shared/visualization'
 
 export type ThreadEventEnvelopeLike = EventEnvelope
 
@@ -55,6 +58,7 @@ export interface CanonicalTurnGroups {
 }
 
 export interface CanonicalThreadState {
+  context: ThreadContextState | null
   thread: Thread
   pendingPlanApproval: PlanApproval | null
   turnOrder: string[]
@@ -75,6 +79,7 @@ export interface CanonicalThreadState {
     hasOlder: boolean
     loadingOlder: boolean
     generation: number
+    revision?: number
   }
   stream: {
     streamId: string
@@ -97,11 +102,13 @@ export interface VisibleTurnEntry {
   approvals: ApprovalRequest[]
   attachments: Attachment[]
   contextReferences: LocalContextReference[]
+  answerAgentIds?: readonly string[]
 }
 
 export type RenderItem = Item
 
 export type RenderContentBlock =
+  | { kind: 'visualization'; id: string; item: Extract<Item, { type: 'tool' }> }
   | { kind: 'assistant'; id: string; items: Array<Extract<Item, { type: 'text' }>> }
   | { kind: 'process'; id: string; items: RenderItem[] }
   | { kind: 'plan'; id: string; item: Extract<Item, { type: 'plan' }> }
@@ -129,6 +136,7 @@ export interface RenderTurnEntry extends VisibleTurnEntry {
   contentBlocks: RenderContentBlock[]
   blockers: RenderBlocker[]
   systemItems: RenderItem[]
+  forceExpandActivity?: boolean
 }
 
 export function pageFromThreadSnapshot(
@@ -137,6 +145,8 @@ export function pageFromThreadSnapshot(
 ): CanonicalThreadPage {
   return {
     thread: snapshot.thread,
+    context: snapshot.context,
+    historyRevision: snapshot.historyRevision,
     pendingPlanApproval: snapshot.pendingPlanApproval,
     subagents: [...snapshot.subagents],
     turns: snapshot.turns.map((turn) => ({
@@ -176,10 +186,34 @@ export function reconcileLatestThreadPage(
   page: CanonicalThreadPage,
 ): CanonicalThreadState {
   const fresh = createCanonicalThreadState(page)
+  if (cached.stream.streamId === fresh.stream.streamId) {
+    for (const item of cached.itemsById.values()) {
+      if (item.type !== 'tool' || !item.visualizationPreview) continue
+      const currentTurn = fresh.turnsById.get(item.turnId)
+      const current = fresh.itemsById.get(item.id)
+      if (
+        currentTurn &&
+        ['running', 'waiting-permission', 'waiting-question', 'waiting-subagents'].includes(
+          currentTurn.status,
+        ) &&
+        (!current ||
+          (current.type === 'tool' &&
+            ['pending', 'running', 'waiting-permission'].includes(current.state)))
+      ) {
+        upsertItem(
+          fresh,
+          current?.type === 'tool'
+            ? { ...current, visualizationPreview: item.visualizationPreview }
+            : item,
+        )
+      }
+    }
+  }
   fresh.history.generation = cached.history.generation + 1
   if (
     cached.thread.id !== page.thread.id ||
-    cached.stream.streamId !== page.streamPosition.streamId
+    cached.stream.streamId !== page.streamPosition.streamId ||
+    (cached.history.revision ?? 0) !== (page.historyRevision ?? 0)
   ) {
     return fresh
   }
@@ -249,6 +283,7 @@ export function hydrateLatestThreadPage(
   page: CanonicalThreadPage,
 ): CanonicalThreadState {
   const next = emptyState(page.thread)
+  next.context = page.context ?? null
   next.pendingPlanApproval = page.pendingPlanApproval ?? null
   mergePageEntities(next, page, 'replace')
   next.subagentsByTaskId = mapBy(page.subagents, (projection) => projection.task.id)
@@ -264,6 +299,7 @@ export function hydrateLatestThreadPage(
     hasOlder: page.hasOlder,
     loadingOlder: false,
     generation: _state.history.generation + 1,
+    revision: page.historyRevision ?? 0,
   }
   next.stream = {
     streamId: page.streamPosition.streamId,
@@ -277,7 +313,11 @@ export function prependOlderThreadPage(
   state: CanonicalThreadState,
   page: CanonicalThreadPage,
 ): CanonicalThreadState {
-  if (page.thread.id !== state.thread.id) return state
+  if (
+    page.thread.id !== state.thread.id ||
+    (page.historyRevision ?? 0) !== (state.history.revision ?? 0)
+  )
+    return state
   const next = cloneState(state)
   mergePageEntities(next, page, 'prepend')
   for (const projection of page.subagents) {
@@ -359,7 +399,12 @@ export function selectVisibleTurnEntries(
       : state.turnOrder
   for (const turnId of visibleTurnOrder) {
     const turn = state.turnsById.get(turnId)
-    if (!turn || queueTurnIds.has(turnId)) continue
+    if (
+      !turn ||
+      (turn.status === 'cancelled' && turn.startedAt === null) ||
+      queueTurnIds.has(turnId)
+    )
+      continue
     const userInputs = inputsByTurnId.get(turnId) ?? []
     const agents = agentsByTurnId.get(turnId) ?? []
     const items = filterItemsByAllowedAgents(itemsByTurnId.get(turnId) ?? [], allowedAgentIds)
@@ -376,6 +421,7 @@ export function selectVisibleTurnEntries(
     entries.push({
       id: turn.id,
       turn,
+      ...(allowedAgentIds ? { answerAgentIds: [...allowedAgentIds] } : {}),
       userInputs,
       agents,
       items,
@@ -388,7 +434,50 @@ export function selectVisibleTurnEntries(
         .filter((reference): reference is LocalContextReference => reference !== undefined),
     })
   }
-  return entries
+  return entries.flatMap((entry) => {
+    const standalone = entry.items.filter(
+      (item) => item.type === 'activity' && item.compaction?.standalone,
+    )
+    if (!standalone.length) return [entry]
+    const ids = new Set(standalone.map((item) => item.id))
+    return [
+      { ...entry, items: entry.items.filter((item) => !ids.has(item.id)) },
+      ...standalone.map((item) => {
+        const id = `compaction-turn:${item.id}`
+        const compaction = item.type === 'activity' ? item.compaction : undefined
+        const startedAt = compaction?.startedAt ?? null
+        const finishedAt = compaction?.finishedAt ?? null
+        const elapsedSeconds =
+          startedAt == null || finishedAt == null
+            ? 0
+            : Math.max(0, Math.floor((finishedAt - startedAt) / 1_000))
+        return {
+          ...entry,
+          id,
+          turn: {
+            ...entry.turn,
+            id,
+            status:
+              item.type === 'activity' && item.status === 'running'
+                ? ('running' as const)
+                : ('completed' as const),
+            // 标题时长按压缩操作自身计时：完成取起止差，进行中由渲染层按起点累加。
+            startedAt,
+            finishedAt,
+            elapsedSeconds,
+            error: null,
+            mergedInputIDs: [],
+          },
+          userInputs: [],
+          agents: [],
+          items: [{ ...item, turnId: id }],
+          approvals: [],
+          attachments: [],
+          contextReferences: [],
+        }
+      }),
+    ]
+  })
 }
 
 function filterItemsByAllowedAgents(
@@ -464,7 +553,7 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
   const contentBlocks: RenderContentBlock[] = []
   let planItem: Extract<Item, { type: 'plan' }> | null = null
   const lastProcessItemIndex = findLastProcessItemIndex(entry.items)
-  const assistantResultIndex = findAssistantResultIndex(entry.items, lastProcessItemIndex)
+  const assistantResultIndex = findAssistantResultIndex(entry, lastProcessItemIndex)
 
   for (const [itemIndex, item] of entry.items.entries()) {
     if (item.type === 'text') {
@@ -478,6 +567,23 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
         processItems.push(item)
         appendProcessBlock(contentBlocks, item)
       }
+    } else if (
+      item.type === 'tool' &&
+      item.tool === VISUALIZATION_TOOL &&
+      ((item.state !== 'completed' && item.visualizationPreview) ||
+        visualizationFromBlocks(item.resultBlocks))
+    ) {
+      contentBlocks.push({ kind: 'visualization', id: `visualization:${item.id}`, item })
+      const activity: typeof item = {
+        ...item,
+        title: '生成交互界面',
+        input: {},
+        output: null,
+        resultBlocks: undefined,
+        visualizationPreview: undefined,
+      }
+      processItems.push(activity)
+      appendProcessBlock(contentBlocks, activity)
     } else if (item.type === 'patch') {
       patchItems.push(item)
       contentBlocks.push({ kind: 'patch', id: `patch:${item.id}`, item })
@@ -487,19 +593,12 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
     } else if (item.type === 'execution-plan') {
       executionPlanItems.push(item)
       contentBlocks.push({ kind: 'execution-plan', id: `execution-plan:${item.id}`, item })
-    } else if (isContextCompressionActivity(item)) {
-      postAssistantItems.push(item)
     } else if (item.type === 'question' && item.status !== 'pending') {
-      postAssistantItems.push(item)
-      contentBlocks.push({ kind: 'post', id: `post:${item.id}`, item })
+      processItems.push(item)
+      appendProcessBlock(contentBlocks, item)
     } else if (item.type !== 'question') {
       processItems.push(item)
       appendProcessBlock(contentBlocks, item)
-    }
-  }
-  for (const item of postAssistantItems) {
-    if (isContextCompressionActivity(item)) {
-      contentBlocks.push({ kind: 'post', id: `post:${item.id}`, item })
     }
   }
 
@@ -537,6 +636,14 @@ export function buildRenderTurnEntry(entry: VisibleTurnEntry): RenderTurnEntry {
     contentBlocks,
     blockers,
     systemItems: [],
+    forceExpandActivity:
+      entry.turn.status === 'interrupted' ||
+      entry.turn.status === 'failed' ||
+      entry.turn.status === 'cancelled' ||
+      entry.turn.status === 'stopped' ||
+      (entry.turn.status !== 'completed' &&
+        assistantResultIndex >= 0 &&
+        entry.items.slice(assistantResultIndex + 1).some(isUnfinishedWork)),
   }
 }
 
@@ -544,9 +651,16 @@ function findLastProcessItemIndex(items: readonly Item[]): number {
   for (let index = items.length - 1; index >= 0; index -= 1) {
     const item = items[index]
     if (!item) continue
+    // 压缩可能发生在回答之后，但不应把已有最终回复重新判为过程文本。
     if (isContextCompressionActivity(item)) continue
     if (item.type === 'text') {
-      if (item.placement === 'process' && item.text.trim()) return index
+      if (
+        (item.phase === 'commentary' ||
+          item.phase === 'partial_answer' ||
+          (!item.phase && item.placement === 'process')) &&
+        item.text.trim()
+      )
+        return index
       continue
     }
     if (
@@ -565,14 +679,55 @@ function isContextCompressionActivity(item: Item): item is Extract<Item, { type:
   return item.type === 'activity' && item.activity === 'context-compression'
 }
 
-function findAssistantResultIndex(items: readonly Item[], lastProcessItemIndex: number): number {
-  for (let index = items.length - 1; index > lastProcessItemIndex; index -= 1) {
-    const item = items[index]
-    if (item?.type === 'text' && item.placement === 'result' && item.text.trim()) {
+function findAssistantResultIndex(entry: VisibleTurnEntry, lastProcessItemIndex: number): number {
+  const eligible = (item: Item): item is Extract<Item, { type: 'text' }> =>
+    item.type === 'text' &&
+    Boolean(item.text.trim()) &&
+    (entry.answerAgentIds
+      ? entry.answerAgentIds.includes(item.agentId)
+      : item.agentId === entry.turn.rootAgentId ||
+        entry.agents.some(
+          (agent) =>
+            agent.id === item.agentId &&
+            agent.parentAgentId === null &&
+            agent.subagentRunId === null,
+        ))
+  for (let index = entry.items.length - 1; index >= 0; index--) {
+    const item = entry.items[index]!
+    if (eligible(item) && item.phase === 'final_answer') return index
+  }
+  for (let index = entry.items.length - 1; index >= 0; index--) {
+    const item = entry.items[index]!
+    if (!eligible(item)) continue
+    if (
+      item.phase === 'partial_answer' &&
+      entry.turn.status === 'completed' &&
+      !entry.items.slice(index + 1).some(isUnfinishedWork)
+    )
       return index
-    }
+    if (index > lastProcessItemIndex && !item.phase && item.placement === 'result') return index
+    break
   }
   return -1
+}
+
+function isUnfinishedWork(item: Item): boolean {
+  switch (item.type) {
+    case 'text':
+      return Boolean(item.text.trim()) && item.phase !== 'final_answer'
+    case 'reasoning':
+      return item.status === 'streaming'
+    case 'tool':
+      return (
+        item.state === 'pending' || item.state === 'running' || item.state === 'waiting-permission'
+      )
+    case 'activity':
+      return item.activity !== 'context-compression' && item.status === 'running'
+    case 'subagent':
+      return ['queued', 'preparing', 'running', 'steering'].includes(item.status)
+    default:
+      return false
+  }
 }
 
 function appendProcessBlock(blocks: RenderContentBlock[], item: RenderItem): void {
@@ -586,13 +741,36 @@ function applyEnvelopePayload(
   envelope: ThreadEventEnvelopeLike,
 ): void {
   switch (envelope.type) {
+    case 'thread/history/edited': {
+      const removed = new Set(envelope.payload.removedTurnIds)
+      state.history.revision = envelope.payload.historyRevision
+      state.turnOrder = state.turnOrder.filter((id) => !removed.has(id))
+      for (const id of removed) state.turnsById.delete(id)
+      for (const map of [
+        state.inputsById,
+        state.messagesById,
+        state.agentsById,
+        state.itemsById,
+        state.approvalsById,
+      ]) {
+        for (const [id, row] of map) if (row.turnId && removed.has(row.turnId)) map.delete(id)
+      }
+      for (const [id, row] of state.subagentsByTaskId)
+        if (removed.has(row.task.parentTurnId)) state.subagentsByTaskId.delete(id)
+      for (const [id, row] of state.hookTrustsById)
+        if (removed.has(row.turnId)) state.hookTrustsById.delete(id)
+      state.pendingPlanApproval = null
+      state.history.generation += 1
+      rebuildTurnGroups(state)
+      return
+    }
     case 'thread/created':
     case 'thread/updated':
       state.thread = envelope.payload.thread
       return
     case 'thread/settings/updated':
       state.thread = { ...state.thread, settings: envelope.payload.settings }
-      if (envelope.payload.settings.taskMode === 'chat') state.pendingPlanApproval = null
+      if (envelope.payload.settings.taskMode !== 'plan') state.pendingPlanApproval = null
       return
     case 'turn/queued':
       state.pendingPlanApproval = null
@@ -605,13 +783,21 @@ function applyEnvelopePayload(
       state.pendingPlanApproval = null
       upsertTurn(state, envelope.payload.turn)
       state.inputsById.set(envelope.payload.input.id, envelope.payload.input)
-      state.queue.turnIds = state.queue.turnIds.filter((id) => id !== envelope.payload.turn.id)
+      removeQueuedTurn(state, envelope.payload.turn.id, envelope.payload.input.id)
       return
     case 'turn/completed':
     case 'turn/failed':
     case 'turn/interrupted':
       upsertTurn(state, envelope.payload.turn)
       for (const item of state.itemsById.values()) {
+        if (
+          item.type === 'tool' &&
+          item.visualizationPreview &&
+          item.turnId === envelope.payload.turn.id &&
+          ['pending', 'running', 'waiting-permission'].includes(item.state)
+        ) {
+          upsertItem(state, { ...item, state: 'interrupted' })
+        }
         if (
           item.type === 'question' &&
           item.turnId === envelope.payload.turn.id &&
@@ -620,7 +806,7 @@ function applyEnvelopePayload(
           upsertItem(state, { ...item, status: 'cancelled' })
         }
       }
-      state.queue.turnIds = state.queue.turnIds.filter((id) => id !== envelope.payload.turn.id)
+      removeQueuedTurn(state, envelope.payload.turn.id, envelope.payload.turn.sourceInputID)
       return
     case 'turn/statusChanged': {
       const turn = state.turnsById.get(envelope.payload.turnId)
@@ -637,6 +823,7 @@ function applyEnvelopePayload(
       reconcileSubagentItems(state)
       return
     case 'item/started':
+    case 'item/agentMessage/phaseChanged':
     case 'item/completed':
       upsertItem(state, envelope.payload.item)
       return
@@ -676,6 +863,48 @@ function applyEnvelopePayload(
     case 'turn/plan/updated':
       upsertItem(state, envelope.payload.item)
       return
+    case 'visualization/preview': {
+      const preview = envelope.payload
+      const turn = state.turnsById.get(preview.turnId)
+      if (
+        !turn ||
+        ['completed', 'failed', 'interrupted', 'cancelled', 'stopped'].includes(turn.status)
+      )
+        return
+      const previous = state.itemsById.get(preview.toolCallId)
+      if (
+        previous &&
+        (previous.type !== 'tool' ||
+          previous.turnId !== preview.turnId ||
+          ['completed', 'error', 'interrupted'].includes(previous.state) ||
+          (previous.visualizationPreview?.revision ?? 0) >= preview.revision)
+      )
+        return
+      const item: Extract<Item, { type: 'tool' }> =
+        previous?.type === 'tool'
+          ? previous
+          : {
+              id: preview.toolCallId,
+              messageID: preview.toolCallId,
+              callID: preview.toolCallId,
+              turnId: preview.turnId,
+              agentId: preview.agentId,
+              type: 'tool',
+              tool: VISUALIZATION_TOOL,
+              title: preview.title || '生成交互界面',
+              state: 'pending',
+              input: {},
+              command: null,
+              output: null,
+              error: null,
+              startedAt: null,
+              finishedAt: null,
+              durationMs: null,
+              createdAt: envelope.occurredAt,
+            }
+      upsertItem(state, { ...item, visualizationPreview: preview })
+      return
+    }
     case 'tool/callStarted':
     case 'tool/callCompleted':
     case 'tool/error':
@@ -797,6 +1026,19 @@ function applyEnvelopePayload(
       upsertApproval(state, { ...approval, status })
       return
     }
+    case 'context/usageUpdated':
+      state.context = {
+        budget: envelope.payload.budget,
+        operation: state.context?.operation ?? null,
+      }
+      return
+    case 'context/compactionUpdated':
+      state.context = {
+        budget: state.context?.budget ?? null,
+        operation: envelope.payload.operation,
+      }
+      projectCompactionOperation(state, envelope.payload.operation)
+      return
     case 'context/compacted':
       projectContextCompaction(state, envelope)
       return
@@ -807,6 +1049,47 @@ function applyEnvelopePayload(
     default:
       return
   }
+}
+
+function projectCompactionOperation(
+  state: CanonicalThreadState,
+  operation: ContextCompactionOperation,
+  result?: Extract<Item, { type: 'activity' }>,
+): void {
+  const id = `activity:context-compression-operation:${operation.operationId}`
+  const previous = state.itemsById.get(id)
+  if (operation.status === 'skipped' && operation.trigger !== 'manual') {
+    if (previous) {
+      state.itemsById.delete(id)
+      state.groups.itemsByTurnId.set(
+        previous.turnId,
+        (state.groups.itemsByTurnId.get(previous.turnId) ?? []).filter((item) => item.id !== id),
+      )
+    }
+    return
+  }
+  const turnId = previous?.turnId ?? operation.turnId ?? result?.turnId ?? state.turnOrder.at(-1)
+  const turn = turnId ? state.turnsById.get(turnId) : undefined
+  if (!turn) return
+  upsertItem(
+    state,
+    contextCompactionOperationItem(
+      operation,
+      {
+        turnId: turn.id,
+        agentId: previous?.agentId ?? result?.agentId ?? operation.agentId ?? turn.rootAgentId,
+        standalone:
+          previous?.type === 'activity' && previous.compaction
+            ? previous.compaction.standalone
+            : operation.turnId === undefined &&
+              operation.trigger === 'manual' &&
+              !['running', 'waiting-permission', 'waiting-question', 'waiting-subagents'].includes(
+                turn.status,
+              ),
+      },
+      result ?? (previous?.type === 'activity' ? previous : undefined),
+    ),
+  )
 }
 
 function projectContextCompaction(
@@ -825,27 +1108,25 @@ function projectContextCompaction(
     .filter((agent) => agent.turnId === turnId)
     .sort(compareCreated)
     .at(-1)
-  const itemId = `activity:context-compression:${envelope.payload.compactionId}`
-  const detailParts = [
-    `消息 ${envelope.payload.beforeCount} → ${envelope.payload.afterCount}`,
-    `Token ${envelope.payload.beforeTokens} → ${envelope.payload.afterTokens}`,
-  ]
-  if (envelope.payload.trigger) detailParts.push(`触发方式：${envelope.payload.trigger}`)
-  if (envelope.payload.afterTokensSource) {
-    detailParts.push(`压缩后用量来源：${envelope.payload.afterTokensSource}`)
-  }
-  upsertItem(state, {
-    id: itemId,
-    messageID: itemId,
+  const item = contextCompactionItem(envelope.payload, {
     turnId,
     agentId: latestAgent?.id ?? turn.rootAgentId,
-    type: 'activity',
-    activity: 'context-compression',
-    title: '上下文已压缩',
-    detail: detailParts.join('；'),
-    status: 'completed',
     createdAt: envelope.occurredAt,
   })
+  const operation = state.context?.operation
+  if (
+    operation &&
+    operation.trigger === envelope.payload.trigger &&
+    (operation.status === 'running' || operation.compactionId === envelope.payload.compactionId)
+  ) {
+    projectCompactionOperation(
+      state,
+      { ...operation, status: 'completed', compactionId: envelope.payload.compactionId },
+      item,
+    )
+  } else {
+    upsertItem(state, item)
+  }
 }
 
 export type ItemDeltaKind = 'text' | 'reasoning' | 'plan' | 'tool'
@@ -1055,6 +1336,14 @@ function questionFromPayload(payload: {
   }
 }
 
+function removeQueuedTurn(state: CanonicalThreadState, turnId?: string, inputId?: string): void {
+  const queuedTurnId = turnId ?? (inputId ? state.inputsById.get(inputId)?.turnId : null)
+  state.queue.turnIds = state.queue.turnIds.filter((id) => id !== queuedTurnId)
+  state.queue.inputIds = state.queue.inputIds.filter(
+    (id) => id !== inputId && (!queuedTurnId || state.inputsById.get(id)?.turnId !== queuedTurnId),
+  )
+}
+
 function applyQueueUpdate(
   state: CanonicalThreadState,
   payload: {
@@ -1062,6 +1351,9 @@ function applyQueueUpdate(
     inputs?: readonly Input[]
     version?: number
     pauseReason?: 'interrupted' | 'turn_failed' | null
+    action?: string
+    inputId?: string
+    turnId?: string
   },
 ): void {
   if (payload.turns) {
@@ -1073,6 +1365,17 @@ function applyQueueUpdate(
     for (const input of payload.inputs) state.inputsById.set(input.id, input)
   }
   if (payload.version !== undefined) state.queue.version = payload.version
+  if (payload.action === 'removed') {
+    const turnId =
+      payload.turnId ?? (payload.inputId ? state.inputsById.get(payload.inputId)?.turnId : null)
+    const turn = turnId ? state.turnsById.get(turnId) : undefined
+    if (turn) state.turnsById.set(turn.id, { ...turn, status: 'cancelled' })
+    for (const [id, input] of state.inputsById) {
+      if (id === payload.inputId || (turnId && input.turnId === turnId))
+        state.inputsById.set(id, { ...input, state: 'cancelled' })
+    }
+    removeQueuedTurn(state, payload.turnId, payload.inputId)
+  }
   if (payload.pauseReason !== undefined) state.queue.pauseReason = payload.pauseReason
 }
 
@@ -1108,6 +1411,7 @@ function reconcileSubagentItems(state: CanonicalThreadState): void {
       childThreadId: projection.task.childThreadId,
       displayName: projection.task.displayName,
       profile: projection.task.profile,
+      ...(projection.task.role ? { role: projection.task.role } : {}),
       task: projection.task.task,
       status: run?.status ?? item.status,
       queueReason: run?.queueReason ?? item.queueReason,
@@ -1158,6 +1462,7 @@ function upsertTurn(state: CanonicalThreadState, turn: Turn): void {
 function emptyState(thread: Thread): CanonicalThreadState {
   return {
     thread,
+    context: null,
     pendingPlanApproval: null,
     turnOrder: [],
     turnsById: new Map(),
@@ -1316,6 +1621,16 @@ function insertSortedGrouped<T>(
 
 function upsertItem(state: CanonicalThreadState, item: Item): void {
   const previous = state.itemsById.get(item.id)
+  if (
+    item.type === 'tool' &&
+    item.tool === VISUALIZATION_TOOL &&
+    item.state !== 'completed' &&
+    previous?.type === 'tool' &&
+    previous.visualizationPreview &&
+    !item.visualizationPreview
+  ) {
+    item = { ...item, visualizationPreview: previous.visualizationPreview }
+  }
   state.itemsById.set(item.id, item)
   upsertGrouped(state.groups.itemsByTurnId, previous, item, compareOrdinal)
 }

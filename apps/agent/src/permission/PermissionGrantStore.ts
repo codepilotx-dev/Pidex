@@ -5,6 +5,7 @@ import type { RequestedPermissions } from './PermissionDecisionEngine'
 export interface PermissionGrant {
   id: string
   threadID: string
+  workspaceRoot?: string
   turnID: string
   agentID: string
   scope: PermissionGrantScope
@@ -14,6 +15,7 @@ export interface PermissionGrant {
 
 export interface PermissionGrantRequest {
   threadID: string
+  workspaceRoot?: string
   turnID: string
   agentID: string
   scope: PermissionGrantScope
@@ -23,6 +25,7 @@ export interface PermissionGrantRequest {
 
 export interface PermissionGrantLookup {
   threadID: string
+  workspaceRoot?: string
   turnID: string
   agentID: string
   requested: RequestedPermissions
@@ -88,6 +91,7 @@ export class PermissionGrantStore {
     const grant: PermissionGrant = {
       id: crypto.randomUUID(),
       threadID: input.threadID,
+      ...(input.workspaceRoot ? { workspaceRoot: input.workspaceRoot } : {}),
       turnID: input.turnID,
       agentID: input.agentID,
       scope: input.scope,
@@ -105,6 +109,7 @@ export class PermissionGrantStore {
     if (!grants || !hasPermissions(input.requested)) return null
     const index = grants.findIndex(
       (grant) =>
+        grant.workspaceRoot === input.workspaceRoot &&
         (grant.scope === 'session' ||
           (grant.turnID === input.turnID &&
             (grant.scope === 'turn' || grant.agentID === input.agentID))) &&

@@ -2,7 +2,17 @@ import { spawn } from 'node:child_process'
 import { randomBytes } from 'node:crypto'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { app, clipboard, ipcMain, nativeTheme, screen, session, shell } from 'electron'
+import {
+  app,
+  clipboard,
+  dialog,
+  ipcMain,
+  nativeTheme,
+  safeStorage,
+  screen,
+  session,
+  shell,
+} from 'electron'
 import electronUpdater from 'electron-updater'
 import {
   DESKTOP_SETTINGS_IPC_CHANNELS,
@@ -27,12 +37,13 @@ import {
   type DesktopLogger,
 } from './logging/DesktopLogger.js'
 import { configureAuthCookie, verifyAuthCookie } from './security/AuthSession.js'
+import { createLocalRendererResourceHandler } from './security/LocalRendererResources.js'
 import { resolveRendererApplicationOrigin } from './security/RendererApplicationOrigin.js'
 import { readStartupAppearanceConfig } from './settings/StartupAppearanceConfig.js'
 import { AppearanceSettingsStore } from './settings/AppearanceSettingsStore.js'
 import { DataLocationStore, type DataLocationLaunch } from './settings/DataLocationStore.js'
-import { formatError } from './sidecar/Readiness.js'
 import { SidecarSupervisor } from './sidecar/Supervisor.js'
+import { LocalBackgroundRuntime } from './sidecar/BackgroundRuntime.js'
 import { DesktopAgentConnectionCoordinator } from './sidecar/ConnectionCoordinator.js'
 import { orchestrateDesktopQuit } from './sidecar/DesktopQuitOrchestrator.js'
 import { WindowAppearanceController } from './windows/Appearance.js'
@@ -109,6 +120,7 @@ let logger: DesktopLogger | undefined
 let windows: WindowManager | undefined
 let petOverlay: PetOverlayWindowController | undefined
 let quitting = false
+let stopBackendOnQuit = false
 let connectionCoordinator: DesktopAgentConnectionCoordinator | undefined
 let dataLocationStore: DataLocationStore | undefined
 let dataLocationLaunch: DataLocationLaunch | undefined
@@ -176,7 +188,12 @@ if (
       .then(startDesktop)
       .catch((error: unknown) => {
         logger?.error('desktop.startup-failed', { error })
-        windows?.showStartupStatus('启动流程异常', formatError(error), 'terminal-error')
+        if (windows?.applicationOrigin)
+          windows.showStartupStatus('启动流程异常，请查看日志', '', 'terminal-error')
+        else {
+          dialog.showErrorBox('Pidex 启动失败', '无法加载应用，请查看启动日志。')
+          app.quit()
+        }
       })
   }
 }
@@ -247,6 +264,12 @@ async function startDesktop(): Promise<void> {
     spawnProcess: (executablePath, args, options) => spawn(executablePath, [...args], options),
   })
   const updater = new DesktopAutoUpdater({
+    beforeInstall: async () => {
+      if (supervisor?.ownsBackend) {
+        await supervisor.shutdown()
+        stopBackendOnQuit = true
+      }
+    },
     packaged: app.isPackaged,
     version: app.getVersion(),
     logger,
@@ -308,6 +331,18 @@ async function startDesktop(): Promise<void> {
     getSupervisor: () => supervisor,
     getLogDirectory: () => logger?.directory ?? logDirectory,
     quitDuringStartup: () => app.quit(),
+    retryStartup: async (generation) => {
+      if (
+        connectionCoordinator?.generation === generation &&
+        connectionCoordinator.status.lifecycle === 'failed'
+      ) {
+        await connectionCoordinator.start()
+      }
+    },
+    stopBackendAndExit: async () => {
+      await supervisor?.shutdown()
+      app.quit()
+    },
     isDesktopRendererSender: (sender) =>
       windows?.isApplicationSender(sender) === true || petOverlay?.isOverlaySender(sender) === true,
     broadcastDesktopSettingsChanged: (settings) => {
@@ -366,10 +401,44 @@ async function startDesktop(): Promise<void> {
     rendererDeepLinkReady.add(event.sender.id)
     return deepLinkController?.consumePendingThreadDeepLink() ?? null
   })
-  windows.createStartupWindow()
 
-  const token = process.env.PIDEX_AUTH_TOKEN ?? randomBytes(32).toString('base64url')
+  let backgroundRuntime: LocalBackgroundRuntime | undefined
+  if (!process.env.PIDEX_AGENT_URL) {
+    if (!safeStorage.isEncryptionAvailable())
+      throw new Error('系统凭据加密不可用，无法启动后台 Agent')
+    backgroundRuntime = new LocalBackgroundRuntime(
+      join(dataLocationLaunch.dataDir, 'runtime'),
+      safeStorage,
+    )
+  }
+  const token = backgroundRuntime
+    ? await backgroundRuntime.initialize(process.env.PIDEX_AUTH_TOKEN)
+    : (process.env.PIDEX_AUTH_TOKEN ?? randomBytes(32).toString('base64url'))
+  const initialAgentOrigin = backgroundRuntime?.origin ?? process.env.PIDEX_AGENT_URL!
+  const applicationOrigin = resolveRendererApplicationOrigin({
+    agentOrigin: initialAgentOrigin,
+    isPackaged: app.isPackaged,
+    managedAgent: Boolean(process.env.PIDEX_AGENT_URL),
+    rendererDevUrl: process.env.PIDEX_RENDERER_DEV_URL,
+  })
+  if (app.isPackaged || applicationOrigin === new URL(initialAgentOrigin).origin) {
+    session.defaultSession.protocol.handle(
+      'http',
+      createLocalRendererResourceHandler({
+        origin: applicationOrigin,
+        directory: app.isPackaged
+          ? join(process.resourcesPath, 'renderer')
+          : resolve(moduleDirectory, '../../../../dist/renderer'),
+        fetch: (request, init) => session.defaultSession.fetch(request, init),
+      }),
+    )
+  }
+  void windows.loadApplication(applicationOrigin).catch(() => {
+    dialog.showErrorBox('Pidex 界面加载失败', '本地界面资源无法加载，请检查安装或开发服务。')
+    app.quit()
+  })
   supervisor = new SidecarSupervisor(token, logger, moduleDirectory, dataLocationLaunch, {
+    backgroundRuntime,
     appRuntime: {
       isPackaged: app.isPackaged,
       resourcesPath: process.resourcesPath,
@@ -383,12 +452,6 @@ async function startDesktop(): Promise<void> {
     logger: activeLogger,
     loadConnection: async (candidate, guard) => {
       guard.assertCurrent()
-      const applicationOrigin = resolveRendererApplicationOrigin({
-        agentOrigin: candidate.origin,
-        isPackaged: app.isPackaged,
-        managedAgent: candidate.managed,
-        rendererDevUrl: process.env.PIDEX_RENDERER_DEV_URL,
-      })
       activeWindows.showStartupStatus('正在验证 Agent 认证', candidate.origin)
       await configureAuthCookie(candidate.origin, token, activeLogger)
       guard.assertCurrent()
@@ -396,10 +459,7 @@ async function startDesktop(): Promise<void> {
       guard.assertCurrent()
       petOverlay?.setApplicationOrigin(applicationOrigin)
       guard.assertCurrent()
-      activeWindows.showStartupStatus('正在加载桌面界面', applicationOrigin)
-      guard.assertCurrent()
-      await activeWindows.loadApplication(applicationOrigin)
-      guard.assertCurrent()
+      activeLogger.info('desktop.agent-authenticated', { generation: candidate.generation })
     },
     onConnected: async (connection, guard) => {
       guard.assertCurrent()
@@ -417,14 +477,16 @@ async function startDesktop(): Promise<void> {
         }
       }
       guard.assertCurrent()
-      activeWindows.showApplication()
+      activeWindows.publishStartupState({
+        generation: connectionCoordinator!.generation,
+        state: 'connected',
+        label: '正在准备桌面界面…',
+      })
       void computerController?.ensure()
     },
     onReconnecting: () => {
-      rendererDeepLinkReady.clear()
       browserController?.suspendAll()
       computerController?.invalidate()
-      windows?.showReconnectWindow()
     },
     onBeforeReconnect: () => {
       terminalHost?.invalidate()
@@ -466,7 +528,7 @@ async function startDesktop(): Promise<void> {
         return
       }
       activeLogger.error('desktop.connection-cycle-failed', { error })
-      activeWindows.showStartupStatus('Agent 连接失败', formatError(error), 'terminal-error')
+      activeWindows.showStartupStatus('Agent 连接失败，请重试或查看日志', '', 'terminal-error')
     },
   })
   connectionCoordinator.onStateChange((status) => {
@@ -484,7 +546,9 @@ async function startDesktop(): Promise<void> {
       return
     windows?.showStartupStatus(
       status.phase === 'reconnecting' ? 'Agent 连接中断，正在重试' : '正在连接 Agent',
-      status.message ?? `第 ${status.attempt} 次尝试`,
+      '',
+      'progress',
+      connectionCoordinator!.generation,
     )
   })
   await connectionCoordinator.start()
@@ -504,6 +568,7 @@ app.on('before-quit', (event) => {
         manager: terminalManager,
         stopSupervisor: async () => {
           terminalHost?.invalidate()
+          if (stopBackendOnQuit && supervisor?.ownsBackend) await supervisor.shutdown()
           if (connectionCoordinator) await connectionCoordinator.stop()
           else await supervisor?.stop()
         },
@@ -519,7 +584,6 @@ app.on('before-quit', (event) => {
       logger?.error('desktop.quit-blocked', {
         code: 'SIDECAR_TERMINATION_UNCONFIRMED',
       })
-      windows?.showReconnectWindow()
       windows?.showStartupStatus(
         '残留 Agent 未退出',
         '请在任务管理器中结束残留 Agent 进程，然后再次退出以重新检查。',
@@ -559,6 +623,7 @@ function trackRendererDeepLinkLifecycle(webContents: Electron.WebContents): void
 app.on('window-all-closed', () => app.quit())
 
 function relaunchApplication(): void {
+  stopBackendOnQuit = true
   app.relaunch()
   app.quit()
 }

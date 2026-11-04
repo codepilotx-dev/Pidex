@@ -1,11 +1,14 @@
 import { describe, expect, test } from 'bun:test'
-import type { DesktopApiKeySummary } from '../shared/Types.js'
+import type { DesktopApiKeySummary, DesktopModelProviderSummary } from '../shared/Types.js'
 import {
   filterApiKeys,
+  groupProviderModels,
   getApiKeyDeleteConfirmation,
-  legacyModelCenterSettingsTarget,
   parseModelCenterSearchParams,
+  providerDetailStatus,
   projectProviderDirectory,
+  isConfiguredProviderDirectoryItem,
+  providerWorkspaceTarget,
   updateModelCenterSearchParams,
 } from '../src/features/models/ModelCenterState.js'
 
@@ -37,15 +40,15 @@ const keys: DesktopApiKeySummary[] = [
 ]
 
 describe('model center URL state', () => {
-  test('redirects legacy routes to settings while dropping only the obsolete view', () => {
+  test('redirects legacy routes to the providers workspace while dropping only the obsolete view', () => {
     expect(
-      legacyModelCenterSettingsTarget('?view=health&provider=anthropic&section=models&debug=1'),
+      providerWorkspaceTarget('?view=health&provider=anthropic&section=models&debug=1'),
     ).toEqual({
-      pathname: '/settings/providers',
+      pathname: '/providers',
       search: '?provider=anthropic&section=models&debug=1',
     })
-    expect(legacyModelCenterSettingsTarget('?view=keys')).toEqual({
-      pathname: '/settings/providers',
+    expect(providerWorkspaceTarget('?view=keys')).toEqual({
+      pathname: '/providers',
       search: '',
     })
   })
@@ -56,7 +59,7 @@ describe('model center URL state', () => {
       ['openai', 'anthropic'],
     )
 
-    expect(state).toEqual({ providerId: 'anthropic', section: 'models' })
+    expect(state).toEqual({ providerId: 'anthropic', section: 'models', editing: false })
   })
 
   test('ignores legacy view while preserving provider details', () => {
@@ -65,7 +68,7 @@ describe('model center URL state', () => {
       ['openai', 'anthropic'],
     )
 
-    expect(state).toEqual({ providerId: 'anthropic', section: 'models' })
+    expect(state).toEqual({ providerId: 'anthropic', section: 'models', editing: false })
   })
 
   test('falls back for invalid parameters and provider', () => {
@@ -74,13 +77,14 @@ describe('model center URL state', () => {
       ['openai', 'anthropic'],
     )
 
-    expect(state).toEqual({ providerId: null, section: 'connection' })
+    expect(state).toEqual({ providerId: null, section: 'connection', editing: false })
   })
 
   test('keeps the provider catalog open when provider is missing', () => {
     expect(parseModelCenterSearchParams(new URLSearchParams(), ['openai'])).toEqual({
       providerId: null,
       section: 'connection',
+      editing: false,
     })
     expect(parseModelCenterSearchParams(new URLSearchParams(), []).providerId).toBeNull()
   })
@@ -94,6 +98,58 @@ describe('model center URL state', () => {
 
     expect(next.toString()).toBe('debug=1&provider=openai')
     expect(current.toString()).toBe('debug=1&section=connection')
+  })
+
+  test('opens editing only for a valid custom provider and retains its detail section', () => {
+    const params = new URLSearchParams('provider=custom&edit=1&section=models')
+    expect(parseModelCenterSearchParams(params, ['custom', 'openai'], ['custom'])).toEqual({
+      providerId: 'custom',
+      section: 'models',
+      editing: true,
+    })
+    expect(parseModelCenterSearchParams(params, ['openai'], ['custom']).editing).toBe(false)
+    params.set('provider', 'openai')
+    expect(parseModelCenterSearchParams(params, ['custom', 'openai'], ['custom']).editing).toBe(
+      false,
+    )
+  })
+
+  test('clears editing when switching provider or returning to details and the catalog', () => {
+    const params = new URLSearchParams('provider=custom&edit=1&section=models&debug=1')
+    expect(updateModelCenterSearchParams(params, { providerId: 'openai' }).toString()).toBe(
+      'provider=openai&section=models&debug=1',
+    )
+    expect(updateModelCenterSearchParams(params, { editing: false }).toString()).toBe(
+      'provider=custom&section=models&debug=1',
+    )
+    expect(
+      updateModelCenterSearchParams(params, { providerId: null, section: null }).toString(),
+    ).toBe('debug=1')
+    expect(
+      updateModelCenterSearchParams(new URLSearchParams('newProvider=1'), {
+        providerId: 'custom',
+        section: 'models',
+        editing: true,
+      }).toString(),
+    ).toBe('edit=1&provider=custom&section=models')
+  })
+})
+
+describe('provider detail configuration status', () => {
+  test('credentials mean configured, not tested; disabled and unavailable states take precedence', () => {
+    const p = provider({ providerID: 'custom', apiKeyConfigured: true })
+    expect(providerDetailStatus(p, null, undefined).label).toBe('已配置')
+    expect(providerDetailStatus({ ...p, enabled: false }, null, undefined).label).toBe('已停用')
+    expect(
+      providerDetailStatus(
+        { ...p, availability: { status: 'unavailable', reason: 'unsupported-protocol' } },
+        null,
+        undefined,
+      ).label,
+    ).toBe('暂不可用')
+    expect(providerDetailStatus({ ...p, apiKeyConfigured: false }, null, undefined).label).toBe(
+      '未配置',
+    )
   })
 })
 
@@ -224,6 +280,46 @@ describe('model center Provider directory', () => {
   })
 })
 
+describe('provider sidebar grouping', () => {
+  test('groups only configured connections; saved custom configuration alone is insufficient', () => {
+    const items = projectProviderDirectory(
+      [
+        provider({ providerID: 'unconfigured' }),
+        provider({ providerID: 'environment', apiKeyConfigured: true }),
+        provider({ providerID: 'stored' }),
+        provider({
+          providerID: 'custom',
+          providerKind: 'custom',
+          config: { kind: 'custom' } as DesktopModelProviderSummary['config'],
+        }),
+      ],
+      { apiKeys: [apiKey({ providerId: 'stored', enabled: false })] },
+    )
+    expect(
+      items.filter(isConfiguredProviderDirectoryItem).map((item) => item.provider.providerID),
+    ).toEqual(['environment', 'stored'])
+  })
+
+  test('downloaded directory defaults stay unconfigured until a provider credential is added', () => {
+    const directoryProviders = ['models-dev', 'pi-remote'].map((directorySource) => ({
+      ...provider({ providerID: directorySource, displayName: directorySource }),
+      config: {
+        kind: 'custom',
+        directorySource,
+        auth: 'api-key',
+        baseUrl: 'https://vendor.example/v1',
+      },
+    })) as DesktopModelProviderSummary[]
+    const before = projectProviderDirectory(directoryProviders)
+    expect(before.map(isConfiguredProviderDirectoryItem)).toEqual([false, false])
+    expect(projectProviderDirectory(directoryProviders, { filter: 'configured' })).toEqual([])
+    const after = projectProviderDirectory(directoryProviders, {
+      apiKeys: [apiKey({ id: 'directory-key', providerId: 'models-dev' })],
+    })
+    expect(after.map(isConfiguredProviderDirectoryItem)).toEqual([true, false])
+  })
+})
+
 describe('model center API Key helpers', () => {
   test('filters by provider, query and health status', () => {
     expect(filterApiKeys(keys, { providerId: 'openai' }).map((key) => key.id)).toEqual([
@@ -285,3 +381,26 @@ function provider(overrides: {
     ...overrides,
   }
 }
+
+test('模型按 ID 前缀分组，不修改模型数据和顺序', () => {
+  const models = [{ id: 'chat' }, { id: 'remote/a' }, { id: 'remote/b' }, { id: 'other/c' }]
+  expect(groupProviderModels(models, 'magpie')).toEqual([
+    { id: 'magpie', models: [models[0]] },
+    { id: 'remote', models: [models[1], models[2]] },
+    { id: 'other', models: [models[3]] },
+  ])
+})
+
+test('自定义分组优先，清空后恢复 ID 分组，品牌与 ID 不受影响', () => {
+  const models = [
+    { id: 'remote/deepseek', group: '常用' },
+    { id: 'remote/claude', group: '常用' },
+    { id: 'chat', group: ' ' },
+  ]
+  expect(groupProviderModels(models, 'magpie')).toEqual([
+    { id: '常用', models: [models[0], models[1]] },
+    { id: 'magpie', models: [models[2]] },
+  ])
+  expect(groupProviderModels([{ ...models[0], group: '' }], 'magpie')[0]?.id).toBe('remote')
+  expect(models[0]?.id).toBe('remote/deepseek')
+})

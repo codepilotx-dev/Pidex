@@ -1,0 +1,58 @@
+@layer primitives {
+  .chip-button {
+    appearance: none;
+    display: inline-flex;
+    width: auto;
+    min-height: var(--cpx-comp-row-height-composer);
+    align-items: center;
+    gap: var(--cpx-comp-row-gap);
+    padding: 0 var(--cpx-comp-row-padding-inline);
+    border: 0;
+    border-radius: var(--cpx-sys-radius-full);
+    background: transparent;
+    box-shadow: none;
+    color: var(--cpx-sys-color-accent-fg);
+    font: var(--cpx-sys-type-control);
+    cursor: pointer;
+    outline: none;
+  }
+
+  .chip-button.subtle {
+    color: var(--cpx-sys-color-fg-primary);
+  }
+
+  .chip-button > svg {
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
+    display: block;
+    flex-shrink: 0;
+  }
+
+  .chip-button:focus-visible {
+    outline: 2px solid var(--cpx-sys-color-border-focus);
+    outline-offset: 1px;
+  }
+
+  .chip-button:disabled {
+    color: var(--cpx-sys-color-fg-disabled);
+    cursor: default;
+    opacity: 0.55;
+  }
+
+  .chip-semantic {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--cpx-sys-space-1);
+    padding: 2px var(--cpx-sys-space-2);
+    border-radius: var(--cpx-sys-radius-full);
+    font: var(--cpx-sys-type-label);
+    border: 1px solid transparent;
+  }
+
+  .chip-semantic > svg {
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
+    display: block;
+    flex-shrink: 0;
+  }
+}

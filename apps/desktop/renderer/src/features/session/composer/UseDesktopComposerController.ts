@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useStore } from 'zustand/react'
+import { shallow } from 'zustand/vanilla/shallow'
 import type {
   DesktopComposerAttachment,
   DesktopInstalledSkill,
   DesktopModelMetadata,
   DesktopPermissionMode,
+  DesktopSessionExecution,
   DesktopUserMessageInput,
   DesktopGoalSubmission,
   DesktopWorkspace,
@@ -13,7 +16,7 @@ import type {
 import { hasBlockingComposerAttachmentErrors } from '../../../../shared/DesktopUserMessage.js'
 import { toUserErrorMessage } from '../../../utils/Errors.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
-import { getVisiblePermissionModeOptions } from '../../settings/SettingsStorage.js'
+import { permissionPresetView } from '../../settings/PermissionPresetView.js'
 import type { Message } from '../../../UiTypes.js'
 import type {
   ComposerDraft,
@@ -30,8 +33,17 @@ import type {
 import { createComposerDocument } from './ComposerTypes.js'
 import { createTaskSession, executeComposerSubmitTransaction } from './ComposerSubmitTransaction.js'
 import { composerDraftStore } from './ComposerDraftStore.js'
+import {
+  createPendingSubmission,
+  isOnPendingSubmissionPage,
+  pendingSubmissionStore,
+  startPendingSubmission,
+  type PendingSubmission,
+} from '../state/PendingSubmissionStore.js'
+import { QUICK_CHAT_PATH } from '../../layout/shell/UseWorkbenchRouteController.js'
 import { annotationAttachments } from '../../browser/BrowserAnnotationDraft.js'
 import {
+  composerDocumentsEqual,
   createComposerDocumentWithSkill,
   skillInvocationsFromComposerDocument,
 } from './ComposerSkillToken.js'
@@ -41,6 +53,16 @@ import {
   type ComposerSkillCommand,
 } from './ComposerSlashCommands.js'
 import { getDesktopComposerBranchName } from './ComposerWorkspacePresentation.js'
+import {
+  DEFAULT_COMPOSER_LAUNCH_SETTINGS,
+  composerLaunchAttemptSignature,
+  composerLaunchProjectKey,
+  createComposerLaunchSession,
+  planComposerLaunch,
+  readComposerLaunchSettings,
+  withLaunchAttempt,
+  type ComposerLaunchPlan,
+} from './ComposerLaunch.js'
 
 type ControllerOptions = {
   input: string
@@ -53,6 +75,8 @@ type ControllerOptions = {
   enableAutoReviewPermissionMode: boolean
   enableFullAccessPermissionMode: boolean
   planModeActive: boolean
+  grillModeActive: boolean
+  confirmGoalSubmission?: (objective: string, hasAttachments: boolean) => Promise<boolean>
   sessionBusy: boolean
   modelConfigured: boolean
   selectedModelMetadata?: DesktopModelMetadata
@@ -72,15 +96,17 @@ type ControllerOptions = {
     draftKey: ComposerDraftKey,
     snapshot: ComposerDraftContentSnapshot,
   ) => boolean | void
-  onPermissionChange: (value: DesktopPermissionMode) => void | Promise<void>
   createSessionForWorkspace: (
     target?: DesktopWorkspace | null,
     initialSessionName?: string,
     projectlessPrompt?: string,
     creationSurface?: ThreadCreationSurface,
+    options?: { execution?: DesktopSessionExecution; operationId?: string },
   ) => Promise<string | null>
   /** Global error notification for failures that block sending. */
   onError?: (message: string) => void
+  /** Current route path; defaults to the window hash so pending checks follow replace navigation. */
+  readPathname?: () => string
   submitToSession: (
     targetSessionId: string,
     value: DesktopUserMessageInput,
@@ -144,6 +170,8 @@ export function useDesktopComposerController({
   enableAutoReviewPermissionMode,
   enableFullAccessPermissionMode,
   planModeActive,
+  grillModeActive,
+  confirmGoalSubmission,
   sessionBusy,
   modelConfigured,
   selectedModelMetadata,
@@ -157,39 +185,47 @@ export function useDesktopComposerController({
   onAppendAttachmentsForDraft,
   onRemoveAttachmentForDraft,
   onDraftAccepted,
-  onPermissionChange,
   createSessionForWorkspace,
   submitToSession,
   onError,
+  readPathname = () =>
+    typeof window === 'undefined' ? '' : window.location.hash.replace(/^#/, ''),
 }: ControllerOptions) {
   const navigate = useNavigate()
-  const [goalModeEnabled, updateGoalModeEnabled] = useState(() =>
-    Boolean(composerDraftStore.get(draftKey).goalModeEnabled),
-  )
   function setGoalModeEnabled(enabled: boolean): void {
     composerDraftStore.update(draftKey, (draft) => ({ ...draft, goalModeEnabled: enabled }))
-    updateGoalModeEnabled(enabled)
+  }
+  function setGoalTokenBudget(budget: number | null): void {
+    composerDraftStore.update(draftKey, (draft) => ({ ...draft, goalTokenBudget: budget }))
   }
   const [isComposing, setIsComposing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lastSubmitOutcome, setLastSubmitOutcome] = useState<ComposerSubmitOutcome | null>(null)
   const [fileAttachmentsAvailable, setFileAttachmentsAvailable] = useState(false)
-  const [, setDraftStoreVersion] = useState(0)
+  const draft = useStore(composerDraftStore.store, (state) => state.drafts[draftKey])
+  const storedSubmitOutcome = useStore(
+    composerDraftStore.store,
+    (state) => state.submitOutcomes[draftKey],
+  )
+  const activeDraft = draft ?? composerDraftStore.get(draftKey)
+  const goalModeEnabled = Boolean(activeDraft.goalModeEnabled)
+  const goalTokenBudget = activeDraft.goalTokenBudget ?? null
   const composingRef = useRef(false)
   const submittingRef = useRef(false)
   const attachmentGenerationRef = useRef(new Map<ComposerDraftKey, number>())
-  const initialDraftRef = useRef(composerDraftStore.get(draftKey))
-  const draftClientIdRef = useRef(initialDraftRef.current.clientId)
+  const draftClientIdRef = useRef(activeDraft.clientId)
   const activeDraftKeyRef = useRef<ComposerDraftKey>(draftKey)
   const [skillCommands, setSkillCommands] = useState<ComposerSkillCommand[]>([])
   const [runtimeSkillsLoaded, setRuntimeSkillsLoaded] = useState(false)
   const [runtimeSkillsError, setRuntimeSkillsError] = useState<string | null>(null)
   const [skillsReloadVersion, setSkillsReloadVersion] = useState(0)
-  const [selectedSkillTokens, setSelectedSkillTokens] = useState<ComposerSkillCommand[]>(() =>
-    restoreSkillTokens(draftSkills(initialDraftRef.current), []),
+  const selectedSkillTokens = useMemo(
+    () => restoreSkillTokens(draftSkills(activeDraft), skillCommands),
+    [activeDraft, skillCommands],
   )
-  const [contextTokens, setContextTokens] = useState<ComposerDocumentToken[]>(() =>
-    contextTokensFromDocument(initialDraftRef.current.document.tokens),
+  const contextTokens = useMemo(
+    () => contextTokensFromDocument(activeDraft.document.tokens),
+    [activeDraft.document.tokens],
   )
 
   const activeSkillToken = selectedSkillTokens[0] ?? null
@@ -208,7 +244,7 @@ export function useDesktopComposerController({
   const workingPluginSkillUnavailable = false
 
   const submissionAttachments = annotationAttachments({
-    ...composerDraftStore.get(draftKey),
+    ...activeDraft,
     attachments,
   })
   const hasAttachmentErrors = hasBlockingComposerAttachmentErrors(submissionAttachments)
@@ -218,16 +254,11 @@ export function useDesktopComposerController({
   )
   const hasComposerContent =
     Boolean(input.trim()) ||
-    Boolean(composerDraftStore.get(draftKey).browserAnnotations?.length) ||
+    Boolean(activeDraft.browserAnnotations?.length) ||
     attachments.length > 0 ||
     activeSkillToken !== null ||
     contextTokens.length > 0
-  const goalSubmitDisabledReason =
-    goalModeEnabled && sessionBusy
-      ? '当前任务正在执行，请等待本轮结束后提交目标'
-      : goalModeEnabled && !input.trim()
-        ? '请输入目标内容'
-        : null
+  const goalSubmitDisabledReason = goalModeEnabled && !input.trim() ? '请输入目标内容' : null
   const canSubmit =
     !goalSubmitDisabledReason &&
     resolveComposerCanSubmit({
@@ -245,25 +276,20 @@ export function useDesktopComposerController({
     [attachments],
   )
   const branchName = getDesktopComposerBranchName(workspace)
-  const permissionOptions = useMemo(
+  const permissionView = useMemo(
     () =>
-      getVisiblePermissionModeOptions({
+      permissionPresetView(permissionMode, {
         enableAutoReviewPermissionMode,
         enableFullAccessPermissionMode,
       }),
-    [enableAutoReviewPermissionMode, enableFullAccessPermissionMode],
+    [permissionMode, enableAutoReviewPermissionMode, enableFullAccessPermissionMode],
   )
-  const permissionModeVisible = permissionOptions.some((option) => option.value === permissionMode)
-  const effectivePermissionMode = permissionModeVisible ? permissionMode : 'default'
+  // The configured preset is always shown as-is. A preset hidden by a feature
+  // toggle is surfaced with its unavailable reason and never rewritten here.
+  const permissionOptions = permissionView.options
+  const effectivePermissionMode = permissionView.selection
   const hasConversationMessages =
     hasConversationMessagesOverride ?? messages.some((message) => message.role !== 'system')
-
-  useEffect(() => {
-    if (permissionModeVisible) return
-    void Promise.resolve(onPermissionChange('default')).catch((error: unknown) =>
-      onError?.(error instanceof Error ? error.message : '权限模式未更新'),
-    )
-  }, [onPermissionChange, permissionModeVisible, onError])
 
   useEffect(() => {
     let cancelled = false
@@ -280,47 +306,40 @@ export function useDesktopComposerController({
     }
   }, [])
 
-  // Execution location is only offered when creating a task in a project. A failed
-  useEffect(
-    () =>
-      composerDraftStore.subscribe(() => {
-        setDraftStoreVersion((value) => value + 1)
-        const currentDraft = composerDraftStore.get(draftKey)
-        draftClientIdRef.current = currentDraft.clientId
-        updateGoalModeEnabled(Boolean(currentDraft.goalModeEnabled))
-        setSelectedSkillTokens(restoreSkillTokens(draftSkills(currentDraft), skillCommands))
-        setContextTokens((current) =>
-          sameContextTokens(current, contextTokensFromDocument(currentDraft.document.tokens)),
-        )
-      }),
-    [draftKey, skillCommands],
-  )
+  // 只同步提交身份；Skill、上下文和 Goal 直接从草稿派生，避免双向 effect 回写。
+  useEffect(() => {
+    if (activeDraftKeyRef.current !== draftKey) {
+      activeDraftKeyRef.current = draftKey
+      setLastSubmitOutcome(null)
+    }
+    draftClientIdRef.current = activeDraft.clientId
+  }, [activeDraft.clientId, draftKey])
 
   useEffect(() => {
-    if (activeDraftKeyRef.current === draftKey) return
-    activeDraftKeyRef.current = draftKey
-    const nextDraft = composerDraftStore.get(draftKey)
-    updateGoalModeEnabled(Boolean(nextDraft.goalModeEnabled))
-    setSelectedSkillTokens(restoreSkillTokens(draftSkills(nextDraft), skillCommands))
-    setContextTokens(contextTokensFromDocument(nextDraft.document.tokens))
-    setLastSubmitOutcome(null)
-    draftClientIdRef.current = nextDraft.clientId
-  }, [draftKey, skillCommands])
-
-  useEffect(() => {
+    const current = composerDraftStore.get(draftKey)
+    const collaborationMode = grillModeActive ? 'grill' : planModeActive ? 'plan' : 'default'
+    // Store 写入会通知当前 Composer，派生内容未变时不能再次写回。
+    if (
+      current.clientId === draftClientIdRef.current &&
+      current.collaborationMode === collaborationMode &&
+      composerDocumentsEqual(current.document, composerDocument) &&
+      current.attachments.length === attachments.length &&
+      current.attachments.every((attachment, index) => shallow(attachment, attachments[index]))
+    ) {
+      return
+    }
     composerDraftStore.update(draftKey, (current) => ({
       ...current,
       clientId: draftClientIdRef.current,
       document: composerDocument,
       attachments,
-      collaborationMode: planModeActive ? 'plan' : 'default',
+      collaborationMode,
     }))
-  }, [activeSkills, attachments, composerDocument, draftKey, planModeActive])
+  }, [activeSkills, attachments, composerDocument, draftKey, grillModeActive, planModeActive])
 
   useEffect(() => {
     if (subagentMode) {
       setSkillCommands([])
-      setSelectedSkillTokens([])
       setRuntimeSkillsLoaded(true)
       return
     }
@@ -337,9 +356,6 @@ export function useDesktopComposerController({
           if (!cancelled && request === generation) {
             setSkillCommands(commands)
             setRuntimeSkillsLoaded(true)
-            setSelectedSkillTokens(
-              restoreSkillTokens(draftSkills(composerDraftStore.get(draftKey)), commands),
-            )
           }
         })
         .catch((error) => {
@@ -395,40 +411,105 @@ export function useDesktopComposerController({
       attachments,
       skills: draftSkills(composerDraftStore.get(sourceDraftKey)),
       skillInvocation: undefined,
-      collaborationMode: planModeActive ? 'plan' : 'default',
+      collaborationMode: grillModeActive ? 'grill' : planModeActive ? 'plan' : 'default',
       goalModeEnabled,
     }
     composerDraftStore.set(sourceDraftKey, draft)
     const isNewSession = placement === 'new-session'
+    // 发起设置只对本次发送生效：在此快照，后续菜单修改不会改变已开始创建的位置。
+    const launchSettings = readComposerLaunchSettings(draft, composerLaunchProjectKey(workspace))
+    const launchPlan: ComposerLaunchPlan | null = isNewSession
+      ? planComposerLaunch({ settings: launchSettings, workspace })
+      : null
+    // 与 thread/create 的请求指纹相关：设置变化后不能再复用旧 operationId。
+    const launchSettingsKey = `${effectivePermissionMode}:${planModeActive}:${grillModeActive}:${surface ?? ''}`
+    let pendingSubmission: PendingSubmission | null = null
+    let pendingSessionId: string | null = null
     const outcome = await executeComposerSubmitTransaction({
       draft,
       targetSessionId: isNewSession ? null : routedSessionId,
+      // 校验通过后立即登记 pending 并进入临时会话页；创建不再阻塞首屏。
+      onPrepared: isNewSession
+        ? (prepared) => {
+            const submission = createPendingSubmission({
+              prepared,
+              sourceDraftKey,
+              workspace,
+            })
+            pendingSubmission = submission
+            startPendingSubmission({
+              submission,
+              navigate: (path) => navigate(path, { replace: true }),
+            })
+          }
+        : undefined,
       createSession: isNewSession
         ? (initialSessionName, projectlessPrompt) =>
             createTaskSession({
               onError,
-              create: () =>
-                createSessionForWorkspace(
-                  workspace,
-                  initialSessionName,
-                  projectlessPrompt,
-                  surface === 'working' || surface === 'chat' || surface === 'coding'
-                    ? surface
-                    : undefined,
-                ),
+              create: () => {
+                const plan =
+                  launchPlan ??
+                  planComposerLaunch({ settings: DEFAULT_COMPOSER_LAUNCH_SETTINGS, workspace })
+                // 同一草稿、同一执行位置与创建请求的重试复用已创建的 Worktree。
+                const operationId = composerDraftStore.beginLaunchAttempt(sourceDraftKey, {
+                  projectKey: composerLaunchProjectKey(workspace) ?? '__projectless__',
+                  signature: composerLaunchAttemptSignature(
+                    plan.execution,
+                    initialSessionName,
+                    launchSettingsKey,
+                  ),
+                })
+                return createComposerLaunchSession({
+                  plan,
+                  operationId,
+                  checkout: (branch) => checkoutLaunchBranch(workspace, branch),
+                  create: ({ execution, operationId: createOperationId }) =>
+                    createSessionForWorkspace(
+                      workspace,
+                      initialSessionName,
+                      projectlessPrompt,
+                      surface === 'working' || surface === 'chat' || surface === 'coding'
+                        ? surface
+                        : undefined,
+                      { execution, operationId: createOperationId },
+                    ),
+                })
+              },
             })
+        : undefined,
+      // 创建成功后先交接草稿，再用真实会话页替换临时路由。
+      onSessionCreated: isNewSession
+        ? (nextSessionId) => {
+            pendingSessionId = nextSessionId
+            const handoff = composerDraftStore.handoff(
+              sourceDraftKey,
+              draftTargetKey(nextSessionId),
+            )
+            if (handoff) draftClientIdRef.current = handoff.submitted.clientId
+            if (pendingSubmission) {
+              pendingSubmissionStore.update(pendingSubmission.submissionId, {
+                sessionId: nextSessionId,
+                stage: 'sending',
+              })
+            }
+          }
         : undefined,
       // Keep navigation before submission so the routed page owns all
       // streaming state from the first response event onward.
-      navigateToSession: (nextSessionId) => {
-        const targetDraftKey: ComposerDraftKey = `session:${nextSessionId}`
-        const handoff = composerDraftStore.handoff(sourceDraftKey, targetDraftKey)
-        if (handoff && activeDraftKeyRef.current === sourceDraftKey) {
-          draftClientIdRef.current = handoff.replacement.clientId
-        }
-        navigate(sessionPath(nextSessionId))
-      },
+      navigateToSession: isNewSession
+        ? (nextSessionId) => navigate(sessionPath(nextSessionId), { replace: true })
+        : undefined,
       submitToSession: async (targetSessionId, value, metadata) => {
+        if (
+          metadata.goal &&
+          confirmGoalSubmission &&
+          !(await confirmGoalSubmission(
+            metadata.goal.objective,
+            Boolean(value.attachments?.length),
+          ))
+        )
+          throw new Error('已取消目标提交，草稿已保留')
         const result = await submitToSession(targetSessionId, value, {
           delivery,
           inputId: metadata.inputId,
@@ -441,9 +522,13 @@ export function useDesktopComposerController({
     })
     setLastSubmitOutcome(outcome)
 
+    if (pendingSubmission) settlePendingSubmission(pendingSubmission, outcome)
+
     if (outcome.status === 'failed') {
-      const failureDraftKey: ComposerDraftKey = outcome.sessionId
-        ? `session:${outcome.sessionId}`
+      // 创建失败且用户仍停留该 pending 页时，草稿回到来源页而不是发往不存在的会话。
+      const failedSessionId = outcome.sessionId ?? pendingSessionId
+      const failureDraftKey: ComposerDraftKey = failedSessionId
+        ? draftTargetKey(failedSessionId)
         : sourceDraftKey
       composerDraftStore.setSubmitOutcome(failureDraftKey, outcome)
       if (outcome.phase === 'send') {
@@ -453,7 +538,7 @@ export function useDesktopComposerController({
     }
 
     const acceptedDraftKey: ComposerDraftKey = isNewSession
-      ? `session:${outcome.sessionId}`
+      ? draftTargetKey(outcome.sessionId)
       : sourceDraftKey
     const clearContent = onDraftAccepted
       ? onDraftAccepted(acceptedDraftKey, snapshot) !== false
@@ -465,7 +550,6 @@ export function useDesktopComposerController({
     composerDraftStore.clearSubmitOutcome(acceptedDraftKey)
     if (activeDraftKeyRef.current === acceptedDraftKey) {
       if (clearContent) {
-        setSelectedSkillTokens([])
         setGoalModeEnabled(false)
       }
       draftClientIdRef.current = nextDraft.clientId
@@ -473,13 +557,48 @@ export function useDesktopComposerController({
     if (workingPlugin) onWorkingPluginChange?.(null)
   }
 
+  /**
+   * pending 页只负责首屏展示：创建失败时退回来源页并保留原稿，
+   * 发送失败时真实会话页已经接上，这里只移除启动提示。
+   */
+  function settlePendingSubmission(
+    submission: PendingSubmission,
+    outcome: ComposerSubmitOutcome,
+  ): void {
+    const stillOnPendingPage = isOnPendingSubmissionPage(readPathname(), submission.submissionId)
+    if (outcome.status !== 'failed') {
+      pendingSubmissionStore.remove(submission.submissionId)
+      return
+    }
+    if (outcome.sessionId) {
+      // 发送失败：草稿已在真实会话页，保持可重试并移除启动提示。
+      pendingSubmissionStore.remove(submission.submissionId)
+      return
+    }
+    if (stillOnPendingPage) {
+      // 创建失败：退回来源页，原稿写入来源草稿键后再清理临时目标。
+      // 本次尝试已记录的 operationId 必须随草稿带回，重试才能复用已创建的工作树。
+      const attempt = composerDraftStore.peek(submission.sourceDraftKey)?.launchAttempt
+      composerDraftStore.revertHandoff(
+        submission.sourceDraftKey,
+        draftTargetKey(submission.submissionId),
+        withLaunchAttempt(draft, attempt),
+      )
+      composerDraftStore.setSubmitOutcome(submission.sourceDraftKey, outcome)
+      navigate(sourceDraftPath(submission.sourceDraftKey), { replace: true })
+    }
+    pendingSubmissionStore.remove(submission.submissionId)
+  }
+
   async function handleAddFiles(files: FileList): Promise<void> {
     if (files.length === 0) return
+    // The picker clears its live FileList as soon as this callback returns.
+    const selectedFiles = Array.from(files)
     const targetDraftKey = draftKey
     const generation = nextAttachmentGeneration(attachmentGenerationRef.current, targetDraftKey)
     const { selectDroppedComposerAttachments } = await import('./ComposerAttachmentSelection.js')
     const selected = await selectDroppedComposerAttachments(
-      files,
+      selectedFiles,
       (file) => desktopClient.getComposerFilePath(file),
       (paths) => desktopClient.grantComposerFilePaths(paths),
     )
@@ -532,13 +651,15 @@ export function useDesktopComposerController({
 
   async function handleCompact(): Promise<void> {
     if (!routedSessionId) throw new Error('请先创建任务后再压缩上下文')
+    setLastSubmitOutcome(null)
+    composerDraftStore.clearSubmitOutcome(draftKey)
     await desktopClient.compactSession(routedSessionId)
   }
 
   function handleCommandError(message: string): void {
     const outcome: ComposerSubmitOutcome = {
       status: 'failed',
-      phase: 'send',
+      phase: 'prepare',
       message,
       sessionId: routedSessionId ?? undefined,
     }
@@ -560,7 +681,6 @@ export function useDesktopComposerController({
     handleRemoveAttachment,
     handleComposerDocumentChange: (document: ComposerDraft['document']) => {
       composerDraftStore.update(draftKey, (current) => ({ ...current, document }))
-      setContextTokens(contextTokensFromDocument(document.tokens))
       const skills = skillInvocationsFromComposerDocument(document)
       const currentSkills = draftSkills(composerDraftStore.get(draftKey))
       if (
@@ -569,19 +689,16 @@ export function useDesktopComposerController({
       )
         return
       composerDraftStore.setSkills(draftKey, skills)
-      setSelectedSkillTokens(restoreSkillTokens(skills, skillCommands))
       if (!skills.length && workingPlugin) onWorkingPluginChange?.(null)
     },
     handleSkillDeselect: () => {
       composerDraftStore.setSkills(draftKey, [])
-      setSelectedSkillTokens([])
     },
     handleSkillSelect: (skill: ComposerSkillCommand) => {
-      const nextDraft = composerDraftStore.addSkill(draftKey, {
+      composerDraftStore.addSkill(draftKey, {
         name: skill.skill.name,
         path: skill.skill.path,
       })
-      setSelectedSkillTokens(restoreSkillTokens(draftSkills(nextDraft), skillCommands))
     },
     handleSubmit,
     handleCompositionEnd: () => {
@@ -595,12 +712,15 @@ export function useDesktopComposerController({
     hasConversationMessages,
     isComposing,
     isSubmitting,
-    lastSubmitOutcome: composerDraftStore.getSubmitOutcome(draftKey) ?? lastSubmitOutcome,
+    lastSubmitOutcome: storedSubmitOutcome ?? lastSubmitOutcome,
     permissionOptions,
+    permissionUnavailableReason: permissionView.unavailableReason,
     selectedSkillToken,
     activeSkillToken,
     composerDocument,
+    goalTokenBudget,
     setGoalModeEnabled,
+    setGoalTokenBudget,
     skillCommands,
     skillCatalogLoading: !runtimeSkillsLoaded,
     skillCatalogError: runtimeSkillsError,
@@ -620,27 +740,6 @@ export function contextTokensFromDocument(
       token.kind === 'browser' ||
       token.kind === 'plugin',
   )
-}
-
-function sameContextTokens(
-  current: ComposerDocumentToken[],
-  next: ComposerDocumentToken[],
-): ComposerDocumentToken[] {
-  return current.length === next.length &&
-    current.every((token, index) => {
-      const candidate = next[index]
-      return (
-        candidate &&
-        token.id === candidate.id &&
-        token.kind === candidate.kind &&
-        token.label === candidate.label &&
-        token.value === candidate.value &&
-        token.from === candidate.from &&
-        token.to === candidate.to
-      )
-    })
-    ? current
-    : next
 }
 
 const runtimeSkillCache = new Map<string, DesktopInstalledSkill[]>()
@@ -721,6 +820,23 @@ function attachmentKindLabel(kind: DesktopComposerAttachment['kind']): string {
 
 function sessionPath(sessionId: string): string {
   return `/threads/${encodeURIComponent(sessionId)}`
+}
+
+/** 本地模式：发送前通过现有 Git client 检出待使用分支；失败时直接阻止创建。 */
+async function checkoutLaunchBranch(
+  workspace: DesktopWorkspace | null,
+  branch: string,
+): Promise<void> {
+  if (!workspace?.path) throw new Error('请先选择项目')
+  await desktopClient.checkoutWorkspaceBranch(workspace.path, branch, workspace.projectId)
+}
+
+function draftTargetKey(sessionId: string): ComposerDraftKey {
+  return `session:${sessionId}`
+}
+
+function sourceDraftPath(sourceDraftKey: ComposerDraftKey): string {
+  return sourceDraftKey === 'home' ? QUICK_CHAT_PATH : sessionPath(sourceDraftKey.slice(8))
 }
 
 function draftSkills(draft: ComposerDraft): ComposerSkillInvocation[] {

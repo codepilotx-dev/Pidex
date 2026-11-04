@@ -1,6 +1,7 @@
+import { useStore } from 'zustand/react'
 import type { FileEditorViewState } from '../../editor/FileEditor.js'
 import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
-import React, { Suspense, useEffect, useState, useCallback, type ReactNode } from 'react'
+import React, { Suspense, useEffect, useCallback, type ReactNode } from 'react'
 import {
   Bot,
   Folder,
@@ -13,6 +14,8 @@ import {
   Paperclip,
   SquarePlus,
   SquareTerminal,
+  Settings2,
+  Target,
 } from 'lucide-react'
 import type {
   DesktopBrowserState,
@@ -20,10 +23,12 @@ import type {
   DesktopFileEntry,
   DesktopFilePreview,
   DesktopGitStatus,
+  DesktopGoalBudgetBaseline,
   DesktopPermissionMode,
   DesktopModelSelection,
   DesktopReviewView,
   DesktopSessionStatus,
+  DesktopThreadGoal,
   DesktopWorkspace,
 } from '../../../../shared/Types.js'
 import type { ReviewTabUiState } from './ConversationUiState.js'
@@ -48,10 +53,12 @@ import { WorkspaceReviewSidebar } from '../../review/workspace/WorkspaceReviewSi
 import {
   RightDockFilePreviewPanel,
   RightDockFilesPanel,
+  RightDockGoalPanel,
   RightDockPlanPanel,
   RightDockSkillPreviewPanel,
 } from '../dock/RightDockPanels.js'
 import { SideChatThreadPanel } from '../../session/conversation/SideChatThreadPanel.js'
+import { SubagentDirectoryPanel } from '../../session/subagents/SubagentDirectoryPanel.js'
 import { UserAttachmentPreviewPanel } from '../../session/attachments/UserAttachmentPreviewPanel.js'
 
 const DesktopBrowserPanel = React.lazy(() =>
@@ -75,10 +82,9 @@ function BrowserTabContent({
   context: WorkbenchTabRenderContext['browser']
 }): React.ReactNode {
   const client = desktopBrowserClient.forTab(tab.tabId)
-  const [state, setState] = useState<DesktopBrowserState | null>(() => client.getTab(tab.tabId))
+  const state = useStore(client.tabsStore, (state) => state.tabs.get(tab.tabId) ?? null)
   const onStateChange = useCallback(
     (next: DesktopBrowserState) => {
-      setState(next)
       context.onStateChange(next)
     },
     [context.onStateChange],
@@ -116,6 +122,7 @@ function BrowserTabContent({
 }
 
 export type WorkbenchTabRenderContext = {
+  providerManagement?: ReactNode
   review: {
     activeSessionId: string | null
     projectId: string | null
@@ -172,7 +179,17 @@ export type WorkbenchTabRenderContext = {
       phase: FileDocumentLoadErrorPhase,
     ) => void
   }
+  goal?: {
+    goal: DesktopThreadGoal | null
+    onSaveGoal?: (objective: string) => Promise<void>
+    onAppendBudget?: (nextTotal: number, baseline: DesktopGoalBudgetBaseline) => Promise<void>
+    onRemoveBudgetLimit?: (baseline: DesktopGoalBudgetBaseline) => Promise<void>
+  }
   planContentByEventId: Readonly<Record<string, string>>
+  plan: {
+    /** 打开该聊天最新的计划；计划面板据此提供“有新版计划”入口。 */
+    onOpenPlan?: (request: OpenPlanInDockRequest) => void
+  }
   sideChat: {
     activeTabId: WorkbenchTabDescriptor['id'] | null
     available: boolean
@@ -198,10 +215,15 @@ export type WorkbenchTabRenderContext = {
       context: SideChatComposerRenderContext,
     ) => ReactNode
   }
-  sideTask: {
-    activeTaskId: string | null
+  subagentDirectory: {
     availability: WorkbenchTabAvailability
-    content?: ReactNode
+    /** 选中同一父 thread 内的任务，无需额外读取。 */
+    onSelectTask: (threadId: string, taskId: string | null) => void
+    /** 跨父 thread 导航（嵌套/父任务），宿主按 taskId 查出所属父 thread。 */
+    onOpenTask: (taskId: string) => void
+    onError: (message: string) => void
+    onOpenPatchReview: (path?: string) => void
+    onRefreshDiff: () => void
   }
   terminal: {
     availability: WorkbenchTabAvailability
@@ -260,6 +282,15 @@ export function getWorkbenchLauncherPresentation(definition: WorkbenchTabDefinit
 }
 
 const definitions: readonly WorkbenchTabDefinition[] = [
+  {
+    kind: 'provider-management',
+    label: '供应商设置',
+    icon: <Settings2 size={iconSize} />,
+    launcher: false,
+    lifecycle: 'unmount-when-hidden',
+    getTitle: () => '供应商设置',
+    render: (_tab, context) => context.providerManagement ?? null,
+  },
   {
     kind: 'review',
     label: '变更',
@@ -355,21 +386,40 @@ const definitions: readonly WorkbenchTabDefinition[] = [
       ) : null,
   },
   {
+    kind: 'goal',
+    label: '编辑目标',
+    icon: <Target size={iconSize} />,
+    launcher: false,
+    lifecycle: 'unmount-when-hidden',
+    getTitle: () => '编辑目标',
+    render: (tab, context) =>
+      tab.kind === 'goal' ? (
+        <RightDockGoalPanel
+          goal={context.goal?.goal ?? null}
+          onSaveGoal={context.goal?.onSaveGoal}
+          onAppendBudget={context.goal?.onAppendBudget}
+          onRemoveBudgetLimit={context.goal?.onRemoveBudgetLimit}
+        />
+      ) : null,
+  },
+  {
     kind: 'plan',
     label: '计划',
     icon: <ListChecks size={iconSize} />,
     launcher: false,
     lifecycle: 'unmount-when-hidden',
     getTitle: (tab) => (tab.kind === 'plan' ? tab.title : '计划'),
-    render: (tab, context) => (
-      <RightDockPlanPanel
-        content={
-          tab.kind === 'plan'
-            ? tab.content?.trim() || context.planContentByEventId[tab.eventId] || null
-            : null
-        }
-      />
-    ),
+    render: (tab, context) =>
+      tab.kind === 'plan' ? (
+        <RightDockPlanPanel
+          planItemId={tab.planItemId}
+          threadId={tab.threadId}
+          fallbackContent={
+            tab.content?.trim() || context.planContentByEventId[tab.planItemId] || null
+          }
+          onOpenPlan={context.plan?.onOpenPlan}
+        />
+      ) : null,
   },
   {
     kind: 'skill-preview',
@@ -459,24 +509,25 @@ const definitions: readonly WorkbenchTabDefinition[] = [
     },
   },
   {
-    kind: 'side-task',
+    kind: 'subagent-directory',
     label: '子智能体',
     icon: <Bot size={iconSize} />,
     launcher: false,
     lifecycle: 'unmount-when-hidden',
-    getAvailability: (context) => context.sideTask.availability,
+    getAvailability: (context) => context.subagentDirectory.availability,
     getTitle: () => '子智能体',
     render: (tab, context) =>
-      tab.kind === 'side-task' && context.sideTask.activeTaskId === tab.taskId ? (
-        (context.sideTask.content ?? (
-          <div className="right-dock-empty-state">正在加载子智能体…</div>
-        ))
-      ) : (
-        <div className="right-dock-empty-state">
-          <strong>子智能体已在其他标签切换</strong>
-          <span>选择此标签以恢复对应任务。</span>
-        </div>
-      ),
+      tab.kind === 'subagent-directory' ? (
+        <SubagentDirectoryPanel
+          onError={context.subagentDirectory.onError}
+          onOpenPatchReview={context.subagentDirectory.onOpenPatchReview}
+          onOpenTask={context.subagentDirectory.onOpenTask}
+          onRefreshDiff={context.subagentDirectory.onRefreshDiff}
+          onSelectTask={(taskId) => context.subagentDirectory.onSelectTask(tab.threadId, taskId)}
+          selectedTaskId={tab.selectedTaskId}
+          threadId={tab.threadId}
+        />
+      ) : null,
   },
 ]
 

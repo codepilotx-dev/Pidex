@@ -17,13 +17,16 @@ import {
   type ProviderQuotaWindow,
   type ProviderUsageSource,
 } from '../../../utils/UsageFormatters.js'
+import { ProviderBalanceCards } from './ProviderBalanceCards.js'
+import type { ProviderUsageQueryPartition } from '../../provider-management/Types.js'
 
 type ProviderRange = RpcParams<'usage/provider/query'>['range']
-type ProviderUsageResult = RpcResult<'usage/provider/query'>
 type UsageSourceDescriptor = RpcResult<'usage/source/list'>['sources'][number]
+type ProviderUsagePartition = ProviderUsageQueryPartition
 
 type Props = {
-  data: ProviderUsageResult | null
+  /** 按查询范围分区的真实结果；每个范围独立保留结果、错误与刷新状态。 */
+  partitions: Partial<Record<ProviderRange, ProviderUsagePartition>>
   descriptors: readonly UsageSourceDescriptor[]
   error: string | null
   loading: boolean
@@ -41,8 +44,11 @@ const RANGE_OPTIONS = [
   { value: '30d', label: '30 天' },
 ] as const
 
+/** 汇总按页面默认范围展示，避免把不同范围的结果相加。 */
+const SUMMARY_RANGE: ProviderRange = '7d'
+
 export function ProviderUsagePanel({
-  data,
+  partitions,
   descriptors,
   error,
   loading,
@@ -58,9 +64,13 @@ export function ProviderUsagePanel({
     () => new Map(descriptors.map((source) => [source.sourceId, source])),
     [descriptors],
   )
+  const summaryResults = useMemo(
+    () => Object.values(partitions[SUMMARY_RANGE]?.results ?? {}),
+    [partitions],
+  )
   const sourceById = useMemo(
-    () => new Map((data?.sources ?? []).map((source) => [source.sourceId, source])),
-    [data],
+    () => new Map(summaryResults.map((source) => [source.sourceId, source])),
+    [summaryResults],
   )
   const analyticsDescriptors = useMemo(
     () =>
@@ -150,13 +160,13 @@ export function ProviderUsagePanel({
           {error}
         </div>
       ) : null}
-      {loading && !data ? <ProviderUsageSkeleton /> : null}
+      {loading && summaryResults.length === 0 ? <ProviderUsageSkeleton /> : null}
 
       {!loading && descriptors.length === 0 ? (
         <div className="usage-empty-state" role="status">
           <h3>还没有已配置的厂商</h3>
           <p>请先从供应商目录完成连接，这里只展示已配置账户的用量与成本。</p>
-          <Link className="usage-text-link" to="/settings/providers">
+          <Link className="usage-text-link" to="/providers">
             前往供应商
           </Link>
         </div>
@@ -176,6 +186,7 @@ export function ProviderUsagePanel({
 
       <div className="provider-usage-list">
         {visibleAnalytics.map((descriptor) => {
+          const range = sourceRanges[descriptor.sourceId] ?? '7d'
           const isSourceLoading =
             loading &&
             (refreshingSourceIds.length === 0 || refreshingSourceIds.includes(descriptor.sourceId))
@@ -184,16 +195,14 @@ export function ProviderUsagePanel({
               descriptor={descriptor}
               key={descriptor.sourceId}
               loading={isSourceLoading}
-              onRangeChange={(range) => handleSourceRangeChange(descriptor.sourceId, range)}
-              onRefresh={() =>
-                onRefresh([descriptor.sourceId], true, sourceRanges[descriptor.sourceId] ?? '7d')
-              }
+              onRangeChange={(nextRange) => handleSourceRangeChange(descriptor.sourceId, nextRange)}
+              onRefresh={() => onRefresh([descriptor.sourceId], true, range)}
               providerName={
                 providerNames[String(descriptor.canonicalProviderId)] ??
                 String(descriptor.canonicalProviderId)
               }
-              range={sourceRanges[descriptor.sourceId] ?? '7d'}
-              source={sourceById.get(descriptor.sourceId)}
+              range={range}
+              source={partitions[range]?.results[descriptor.sourceId]}
             />
           )
         })}
@@ -276,7 +285,7 @@ function ProviderUsageCard({
             <h3>
               <Link
                 title="前往账户连接"
-                to={`/settings/providers?provider=${encodeURIComponent(providerId)}`}
+                to={`/providers?provider=${encodeURIComponent(providerId)}`}
               >
                 {descriptor.displayName}
               </Link>
@@ -292,7 +301,7 @@ function ProviderUsageCard({
           <p>
             <Link
               className="usage-text-link"
-              to={`/settings/providers?provider=${encodeURIComponent(providerId)}`}
+              to={`/providers?provider=${encodeURIComponent(providerId)}`}
             >
               {providerName}
             </Link>
@@ -335,7 +344,7 @@ function ProviderUsageCard({
           </span>
           <Link
             className="usage-text-link"
-            to={`/settings/providers?provider=${encodeURIComponent(providerId)}`}
+            to={`/providers?provider=${encodeURIComponent(providerId)}`}
           >
             修复账户连接
           </Link>
@@ -366,30 +375,7 @@ function ProviderUsageGroupCard({
     <section className="provider-usage-group">
       <h4>{group.label}</h4>
       {group.balances && group.balances.length > 0 ? (
-        <div aria-label="账户余额" className="provider-balances" role="group">
-          {group.balances.map((balance) => (
-            <div className="provider-balance-card" key={balance.currency}>
-              <div className="provider-balance-header">
-                <span className="provider-balance-label">{balance.currency} 账户余额</span>
-                <span className="provider-balance-total">
-                  {formatAmount(balance.currency, balance.total)}
-                </span>
-              </div>
-              {balance.components && balance.components.length > 0 ? (
-                <div className="provider-balance-components">
-                  {balance.components.map((component) => (
-                    <span className="provider-balance-component" key={component.label}>
-                      <span className="provider-balance-component-label">{component.label}</span>
-                      <span className="provider-balance-component-amount">
-                        {formatAmount(balance.currency, component.amount)}
-                      </span>
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-            </div>
-          ))}
-        </div>
+        <ProviderBalanceCards balances={group.balances} />
       ) : null}
       {group.quotaWindows && group.quotaWindows.length > 0 ? (
         <div aria-label="额度与重置" className="provider-quotas" role="group">

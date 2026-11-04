@@ -1,4 +1,17 @@
-import { AgentError } from '../Domain'
+import { QueuedGoalRepository } from '../storage/repositories/QueuedGoalRepository'
+import { createPromptCacheKey } from '../prompt/PromptCache'
+import {
+  contextCompactionItem,
+  contextCompactionOperationItem,
+} from '@pidex/session-view/context-compaction'
+import {
+  activeTurnSql,
+  hasThreadEditStorage,
+  ThreadEditRepository,
+} from '../storage/repositories/ThreadEditRepository'
+import { safeTurnError } from '@pidex/shared/errors'
+import { SubagentRoleSchema } from '@pidex/shared/thread'
+import { AgentError, decodeStoredTaskMode } from '../Domain'
 import type {
   ApprovalRequest,
   AgentExecution as WireAgentExecution,
@@ -21,6 +34,7 @@ import { realpathSync } from 'node:fs'
 import { resolve } from 'node:path'
 import {
   ContextUsageBreakdownSourceSchema,
+  readMessagePhase,
   decodeApprovalPolicy,
   decodeStructuredPlan,
   InteractionQuestionSchema,
@@ -30,13 +44,17 @@ import {
 import { Schema } from 'effect'
 import type { AgentExecution, EventEnvelope, Item as StoredItem } from '../Domain'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
-import { probeThreadsStorageCapabilities } from '../storage/database/StorageCapabilities'
+import {
+  probeThreadContextLimitsStorageCapabilities,
+  probeThreadsStorageCapabilities,
+} from '../storage/database/StorageCapabilities'
 import { THREAD_ORIGIN_PROJECTION_SQL } from '../storage/repositories/ThreadRepository'
 import { SubagentRepository } from '../subagent/SubagentRepository'
 import { classifyToolActivity, storedToolActivity } from '../tool/ToolActivityClassifier'
 
 const parse = <T>(value: string): T => JSON.parse(value) as T
 const isQuestionGroup = Schema.is(Schema.Array(InteractionQuestionSchema))
+const isSubagentRoleValue = Schema.is(SubagentRoleSchema)
 const isQuestionAnswers = Schema.is(Schema.Array(InteractionQuestionAnswerSchema))
 const localContextStatus = (path: string): LocalContextReference['status'] => {
   try {
@@ -260,6 +278,8 @@ export class InvalidThreadHistoryCursorError extends Error {
 }
 
 export type ThreadHistoryPage = {
+  context?: import('@pidex/shared/thread').ThreadContextState
+  historyRevision?: number
   pendingPlanApproval?: PlanApproval | null
   thread: Thread
   subagents: SubagentProjection[]
@@ -436,12 +456,18 @@ export class ThreadProjection {
   private projectThreadRow(
     row: Record<string, string | number | null>,
     workspace: Thread['workspace'] | undefined,
+    /**
+     * 派生线程（子 Agent）没有自己的执行绑定，按工作区归属线程投影运行环境；
+     * 否则会退回描述符里的项目根目录，把父线程的托管 worktree 显示成主检出。
+     */
+    ownerThreadID = String(row.id),
+    forkedFrom?: Thread['forkedFrom'],
   ): Thread {
     const threadId = String(row.id)
     const sessionGroupId = this.db.repositories.sessionGroups.membership(threadId)?.group_id ?? null
     const executionEnvironment = this.resolveExecutionEnvironment(
-      this.executionEnvironments([threadId]),
-      threadId,
+      this.executionEnvironments([ownerThreadID]),
+      ownerThreadID,
       workspace,
     )
     return {
@@ -455,12 +481,13 @@ export class ThreadProjection {
       hasScheduledRun: Boolean(row.has_scheduled_run),
       isScheduledSession: Boolean(row.is_scheduled_session),
       isFork: Boolean(row.is_fork),
+      ...(forkedFrom ? { forkedFrom } : {}),
       ...(row.creation_surface
         ? { creationSurface: row.creation_surface as Thread['creationSurface'] }
         : {}),
       ...(workspace ? { workspace } : {}),
       settings: {
-        taskMode: String(row.task_mode) as Thread['settings']['taskMode'],
+        taskMode: decodeStoredTaskMode(row.task_mode),
         permissionConfig: {
           sandboxMode: String(
             row.sandbox_mode,
@@ -470,6 +497,9 @@ export class ThreadProjection {
             row.approvals_reviewer,
           ) as Thread['settings']['permissionConfig']['approvalsReviewer'],
         },
+        ...(row.max_context_tokens != null
+          ? { maxContextTokens: Number(row.max_context_tokens) }
+          : {}),
       },
       archivedAt: row.archived_at == null ? null : Number(row.archived_at),
       createdAt: Number(row.created_at),
@@ -479,17 +509,32 @@ export class ThreadProjection {
 
   private projectThread(threadId: string): Thread | null {
     const { creationSurface: columnExists } = probeThreadsStorageCapabilities(this.db.sqlite)
+    const { threadContextLimits: hasLimits } = probeThreadContextLimitsStorageCapabilities(
+      this.db.sqlite,
+    )
     const sql = `SELECT t.id, t.title, ${this.db.projectMembershipSql()} AS project_id, t.git_branch,
       ${columnExists ? 't.creation_surface' : 'NULL AS creation_surface'},
-      t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer,
-      t.archived_at, t.created_at, t.updated_at, ${THREAD_ORIGIN_PROJECTION_SQL}
-      FROM threads AS t WHERE t.id = ?`
+      t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.parent_thread_id,
+      t.archived_at, t.created_at, t.updated_at, ${THREAD_ORIGIN_PROJECTION_SQL},
+      ${hasLimits ? 'l.max_context_tokens' : 'NULL AS max_context_tokens'}
+      FROM threads AS t
+      ${hasLimits ? 'LEFT JOIN thread_context_limits AS l ON l.thread_id = t.id' : ''}
+      WHERE t.id = ?`
     const threadRow = this.db.sqlite.query(sql).get(threadId) as Record<
       string,
       string | number | null
     > | null
     if (!threadRow) return null
-    return this.projectThreadRow(threadRow, this.db.threadWorkspace(threadId) ?? undefined)
+    const forkedFrom = this.db.repositories.threads.getThreadForkOrigin(threadId) ?? undefined
+    return this.projectThreadRow(
+      threadRow,
+      this.db.threadWorkspace(threadId) ?? undefined,
+      // 只有派生线程需要多一次上溯查询，主线程沿用自身 id。
+      threadRow.parent_thread_id == null
+        ? threadId
+        : (this.db.threadWorkspaceOwner(threadId) ?? threadId),
+      forkedFrom,
+    )
   }
 
   private projectInput(row: Record<string, string | number | null>): Input {
@@ -511,9 +556,12 @@ export class ThreadProjection {
       turnId: row.turn_id == null ? null : String(row.turn_id),
       content: String(row.content),
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
+      ...(new QueuedGoalRepository(this.db).get(String(row.id))
+        ? { goal: new QueuedGoalRepository(this.db).get(String(row.id))! }
+        : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
-      mode: String(row.task_mode) as Input['mode'],
+      mode: decodeStoredTaskMode(row.task_mode),
       model: parse(String(row.model_ref)),
       permissionConfig: {
         sandboxMode: String(row.sandbox_mode) as Input['permissionConfig']['sandboxMode'],
@@ -542,7 +590,7 @@ export class ThreadProjection {
       threadId: String(row.thread_id),
       sourceInputID: inputs[0]?.id ?? '',
       status: turnStatus(status),
-      mode: String(row.mode) as Turn['mode'],
+      mode: decodeStoredTaskMode(row.mode),
       model: parse(String(row.model_ref)),
       permissionConfig: {
         sandboxMode: String(row.sandbox_mode) as Turn['permissionConfig']['sandboxMode'],
@@ -570,7 +618,7 @@ export class ThreadProjection {
     const agentRow = this.db.sqlite
       .query('SELECT error FROM agent_executions WHERE id = ?')
       .get(String(rootAgentId)) as { error: string | null } | null
-    return agentRow?.error ?? null
+    return safeTurnError(agentRow?.error)
   }
 
   private lifecyclePayload(
@@ -657,6 +705,51 @@ export class ThreadProjection {
     return { turn }
   }
 
+  private appendContextCompactions(
+    threadId: string,
+    turns: readonly Pick<Turn, 'id' | 'rootAgentId'>[],
+    agents: readonly WireAgentExecution[],
+    items: Item[],
+  ): void {
+    const turnIDs = turns.map((turn) => turn.id)
+    const operations = this.db.repositories.context
+      .compactionOperationsForTurns(threadId, turnIDs)
+      .filter(
+        (record) => record.operation.status !== 'skipped' || record.operation.trigger === 'manual',
+      )
+    const records = this.db.repositories.context.compactionsForTurns(threadId, turnIDs)
+    const projected: Item[] = []
+    for (const record of records) {
+      const turn = turns.find((turn) => turn.id === record.turnID)!
+      const agent = agents
+        .filter((agent) => agent.turnId === turn.id && agent.createdAt <= record.createdAt)
+        .at(-1)
+      const anchor = { turnId: turn.id, agentId: agent?.id ?? turn.rootAgentId }
+      const result = contextCompactionItem(record.payload, {
+        ...anchor,
+        createdAt: record.createdAt,
+      })
+      const operation = operations.find(
+        (entry) => entry.operation.compactionId === record.payload.compactionId,
+      )?.operation
+      projected.push(operation ? contextCompactionOperationItem(operation, anchor, result) : result)
+    }
+    for (const { turnID, operation } of operations) {
+      if (records.some((record) => record.payload.compactionId === operation.compactionId)) continue
+      const turn = turns.find((turn) => turn.id === turnID)!
+      projected.push(
+        contextCompactionOperationItem(operation, {
+          turnId: turnID,
+          agentId: operation.agentId ?? turn.rootAgentId,
+        }),
+      )
+    }
+    for (const item of projected.sort((a, b) => a.createdAt - b.createdAt)) {
+      const index = items.findIndex((existing) => existing.createdAt > item.createdAt)
+      items.splice(index < 0 ? items.length : index, 0, item)
+    }
+  }
+
   snapshot(threadId: string): ThreadSnapshot | null {
     const thread = this.projectThread(threadId)
     if (!thread) return null
@@ -705,9 +798,12 @@ export class ThreadProjection {
       turnId: row.turn_id ? String(row.turn_id) : null,
       content: String(row.content),
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
+      ...(new QueuedGoalRepository(this.db).get(String(row.id))
+        ? { goal: new QueuedGoalRepository(this.db).get(String(row.id))! }
+        : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
-      mode: String(row.task_mode) as Input['mode'],
+      mode: decodeStoredTaskMode(row.task_mode),
       model: parse(String(row.model_ref)),
       permissionConfig: {
         sandboxMode: String(row.sandbox_mode) as Input['permissionConfig']['sandboxMode'],
@@ -738,7 +834,7 @@ export class ThreadProjection {
         threadId: String(row.thread_id),
         sourceInputID: turnInputs[0]?.id ?? '',
         status: turnStatus(turnStatusStr),
-        mode: String(row.mode) as Turn['mode'],
+        mode: decodeStoredTaskMode(row.mode),
         model: parse(String(row.model_ref)),
         permissionConfig: {
           sandboxMode: String(row.sandbox_mode) as Turn['permissionConfig']['sandboxMode'],
@@ -800,6 +896,7 @@ export class ThreadProjection {
         }),
       )
       .filter((item): item is Item => item !== null)
+    this.appendContextCompactions(threadId, turns, agents, items)
     const approvals = (
       this.db.sqlite
         .query(
@@ -828,15 +925,29 @@ export class ThreadProjection {
         toolIdentity: { server: String(payload.server), tool: String(payload.tool) },
       })
     }
+    const inactive = new Set(
+      (hasThreadEditStorage(this.db)
+        ? (this.db.sqlite
+            .query(
+              'SELECT turn_id FROM thread_inactive_turns JOIN turns ON turns.id = turn_id WHERE turns.thread_id = ?',
+            )
+            .all(threadId) as { turn_id: string }[])
+        : []
+      ).map((row) => row.turn_id),
+    )
     return {
       thread,
-      turns,
-      agents,
-      subagents: this.subagents.projectionForThread(threadId, true),
-      inputs,
-      messages,
-      items,
-      approvals,
+      context: this.db.repositories.context.runtimeState(threadId),
+      historyRevision: new ThreadEditRepository(this.db).revision(threadId),
+      turns: turns.filter((row) => !inactive.has(row.id)),
+      agents: agents.filter((row) => !inactive.has(row.turnId)),
+      subagents: this.subagents
+        .projectionForThread(threadId, true)
+        .filter((row) => !inactive.has(row.task.parentTurnId)),
+      inputs: inputs.filter((row) => !row.turnId || !inactive.has(row.turnId)),
+      messages: messages.filter((row) => !row.turnId || !inactive.has(row.turnId)),
+      items: items.filter((row) => !row.turnId || !inactive.has(row.turnId)),
+      approvals: approvals.filter((row) => !row.turnId || !inactive.has(row.turnId)),
       goal: this.db.repositories.threadGoals.get(threadId),
       pendingPlanApproval: this.db.repositories.planApprovals.pending(threadId),
       contextReferences: contextRows.map((row) => ({
@@ -865,7 +976,7 @@ export class ThreadProjection {
       SELECT id, thread_id, root_agent_id, status, mode, sandbox_mode, approval_policy,
         approvals_reviewer, model_ref, queue_position, started_at, finished_at, created_at
       FROM turns
-      WHERE thread_id = ? AND status <> 'queued'
+      WHERE thread_id = ? AND status <> 'queued' AND ${activeTurnSql('turns', this.db)}
         ${cursor ? 'AND (created_at < ? OR (created_at = ? AND id < ?))' : ''}
       ORDER BY created_at DESC, id DESC
       LIMIT ?
@@ -968,9 +1079,12 @@ export class ThreadProjection {
       turnId: row.turn_id == null ? null : String(row.turn_id),
       content: String(row.content),
       ...(row.skills ? { skills: parse(String(row.skills)) } : {}),
+      ...(new QueuedGoalRepository(this.db).get(String(row.id))
+        ? { goal: new QueuedGoalRepository(this.db).get(String(row.id))! }
+        : {}),
       delivery: inputDelivery(row.strategy),
       ...(row.origin ? { origin: String(row.origin) as Input['origin'] } : {}),
-      mode: String(row.task_mode) as Input['mode'],
+      mode: decodeStoredTaskMode(row.task_mode),
       model: parse(String(row.model_ref)),
       permissionConfig: {
         sandboxMode: String(row.sandbox_mode) as Input['permissionConfig']['sandboxMode'],
@@ -1000,7 +1114,7 @@ export class ThreadProjection {
         threadId: String(row.thread_id),
         sourceInputID: turnInputs[0]?.id ?? '',
         status: turnStatus(turnStatusStr),
-        mode: String(row.mode) as Turn['mode'],
+        mode: decodeStoredTaskMode(row.mode),
         model: parse(String(row.model_ref)),
         permissionConfig: {
           sandboxMode: String(row.sandbox_mode) as Turn['permissionConfig']['sandboxMode'],
@@ -1076,14 +1190,16 @@ export class ThreadProjection {
       : []
     const approvals = approvalRows.map((row) => this.approval(row))
 
-    const bundles = selectedTurnRows
+    const turns = selectedTurnRows.map(mapTurn)
+    this.appendContextCompactions(threadId, turns, agents, items)
+    const bundles = turns
       .slice()
       .reverse()
-      .map((row): ThreadTurnBundle => {
-        const turnId = String(row.id)
+      .map((turn): ThreadTurnBundle => {
+        const turnId = turn.id
         const turnInputs = inputsByTurn.get(turnId) ?? []
         return {
-          turn: mapTurn(row),
+          turn,
           inputs: turnInputs,
           messages: messages.filter((message) => message.turnId === turnId),
           agents: agents.filter((agent) => agent.turnId === turnId),
@@ -1099,6 +1215,8 @@ export class ThreadProjection {
       thread,
       subagents: this.subagents.projectionForThread(threadId, true),
       turns: bundles,
+      context: this.db.repositories.context.runtimeState(threadId),
+      historyRevision: new ThreadEditRepository(this.db).revision(threadId),
       pendingPlanApproval: this.db.repositories.planApprovals.pending(threadId),
       queue: {
         ...queueMetadata,
@@ -1177,17 +1295,28 @@ export class ThreadProjection {
       where.push(params.archived ? 't.archived_at IS NOT NULL' : 't.archived_at IS NULL')
     }
     const { creationSurface: columnExists } = probeThreadsStorageCapabilities(this.db.sqlite)
+    const { threadContextLimits: hasLimits } = probeThreadContextLimitsStorageCapabilities(
+      this.db.sqlite,
+    )
     const creationSurfaceExpr = columnExists ? 't.creation_surface' : 'NULL AS creation_surface'
     const sql = `
       SELECT t.id, ${this.db.projectMembershipSql()} AS project_id, t.git_branch, ${creationSurfaceExpr}, t.title, t.preview, t.first_user_message, t.message_count,
         t.archived_at, t.task_mode, t.sandbox_mode, t.approval_policy, t.approvals_reviewer, t.created_at, t.updated_at,
         read_state.unread_at, ${THREAD_ORIGIN_PROJECTION_SQL},
         (SELECT status FROM turns AS u WHERE u.thread_id = t.id
-          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting_question', 'waiting_subagents') THEN 0 ELSE 1 END,
-            u.created_at DESC LIMIT 1) AS latest_turn_status,
-        ${this.db.repositories.planApprovals.available() ? "EXISTS (SELECT 1 FROM plan_approvals WHERE thread_id = t.id AND status = 'pending')" : '0'} AS pending_plan_approval
+          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting-permission', 'waiting_question', 'waiting-question', 'waiting_subagents', 'waiting-subagents') THEN 0 WHEN u.status != 'queued' THEN 1 ELSE 2 END,
+            u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_status,
+        (SELECT CASE WHEN u.status = 'failed' THEN ae.error ELSE NULL END
+          FROM turns AS u
+          LEFT JOIN agent_executions AS ae ON ae.id = u.root_agent_id
+          WHERE u.thread_id = t.id
+          ORDER BY CASE WHEN u.status IN ('running', 'waiting_permission', 'waiting-permission', 'waiting_question', 'waiting-question', 'waiting_subagents', 'waiting-subagents') THEN 0 WHEN u.status != 'queued' THEN 1 ELSE 2 END,
+            u.created_at DESC, u.id DESC LIMIT 1) AS latest_turn_error,
+        ${this.db.repositories.planApprovals.available() ? "EXISTS (SELECT 1 FROM plan_approvals WHERE thread_id = t.id AND status = 'pending')" : '0'} AS pending_plan_approval,
+        ${hasLimits ? 'l.max_context_tokens' : 'NULL AS max_context_tokens'}
       FROM threads AS t
       LEFT JOIN thread_read_state AS read_state ON read_state.thread_id = t.id
+      ${hasLimits ? 'LEFT JOIN thread_context_limits AS l ON l.thread_id = t.id' : ''}
       ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
       ORDER BY t.updated_at DESC, t.id DESC
       LIMIT ?
@@ -1202,6 +1331,10 @@ export class ThreadProjection {
       const workspace = this.db.threadWorkspace(id)
       const sessionGroupId = this.db.repositories.sessionGroups.membership(id)?.group_id ?? null
       const executionEnvironment = this.resolveExecutionEnvironment(bindings, id, workspace)
+      const latestTurnStatus =
+        row.latest_turn_status == null ? null : turnStatus(String(row.latest_turn_status))
+      const latestTurnError =
+        latestTurnStatus === 'failed' ? safeTurnError(row.latest_turn_error) : null
       return {
         id,
         storageSource: 'local',
@@ -1221,13 +1354,14 @@ export class ThreadProjection {
         preview: row.preview == null ? null : String(row.preview),
         firstUserMessage: row.first_user_message == null ? null : String(row.first_user_message),
         messageCount: Number(row.message_count ?? 0),
-        latestTurnStatus:
-          row.latest_turn_status == null ? null : turnStatus(String(row.latest_turn_status)),
+        latestTurnStatus,
+        latestTurnError,
         archivedAt: row.archived_at == null ? null : Number(row.archived_at),
         unreadAt: row.unread_at == null ? null : Number(row.unread_at),
         pendingPlanApproval: Number(row.pending_plan_approval) === 1,
+        goal: this.db.repositories.threadGoals.get(id),
         settings: {
-          taskMode: String(row.task_mode) as ThreadListItem['settings']['taskMode'],
+          taskMode: decodeStoredTaskMode(row.task_mode),
           permissionConfig: {
             sandboxMode: String(
               row.sandbox_mode,
@@ -1237,6 +1371,9 @@ export class ThreadProjection {
               row.approvals_reviewer,
             ) as ThreadListItem['settings']['permissionConfig']['approvalsReviewer'],
           },
+          ...(row.max_context_tokens != null
+            ? { maxContextTokens: Number(row.max_context_tokens) }
+            : {}),
         },
         createdAt: Number(row.created_at),
         updatedAt: Number(row.updated_at),
@@ -1276,6 +1413,7 @@ export class ThreadProjection {
         agentId,
         type: 'text',
         placement: item.data.placement === 'process' ? 'process' : 'result',
+        ...(readMessagePhase(item.data.phase) ? { phase: readMessagePhase(item.data.phase) } : {}),
         text: asText(item.data.text) ?? '',
         status,
         ...(usage ? { usage } : {}),
@@ -1539,6 +1677,7 @@ export class ThreadProjection {
         childThreadId: String(item.data.childThreadId),
         displayName: String(item.data.displayName),
         profile: String(item.data.profile) as Extract<Item, { type: 'subagent' }>['profile'],
+        ...(isSubagentRoleValue(item.data.role) ? { role: item.data.role } : {}),
         task: String(item.data.task),
         status: subagentStatus,
         queueReason,
@@ -1557,11 +1696,18 @@ export class ThreadProjection {
     const tool = this.db.sqlite
       .query('SELECT tool_name, input FROM tool_calls WHERE id = ?')
       .get(String(row.tool_call_id)) as { tool_name: string; input: string } | null
-    const input = tool ? parse<Record<string, unknown>>(tool.input) : {}
     const request =
       typeof row.request_payload === 'string'
         ? parse<Record<string, unknown>>(row.request_payload)
         : {}
+    const invocation = this.db.getApprovalCheckpoint(String(row.id))?.payload.invocation
+    const input = invocation?.input ?? (tool ? parse<Record<string, unknown>>(tool.input) : {})
+    // The approved display survives before execution and takes precedence over tool records.
+    const command = Object.hasOwn(request, 'command') ? request.command : input.command
+    const cwd = Object.hasOwn(request, 'cwd') ? request.cwd : input.cwd
+    const affectedPaths = Array.isArray(request.affectedPaths)
+      ? (request.affectedPaths as NonNullable<ApprovalRequest['affectedPaths']>)
+      : undefined
     const rawComputerApp = request.computerApp as Record<string, unknown> | undefined
     const computerApp =
       rawComputerApp &&
@@ -1582,12 +1728,13 @@ export class ThreadProjection {
       Array.isArray(permissions[name])
         ? permissions[name].filter((value): value is string => typeof value === 'string')
         : []
-    // 动态权限请求把读路径、写路径和网络域名纳入可展示范围；普通审批保持原状。
+    // Match the live-event projection for permission scopes and affected paths.
     const paths =
       requestKind === 'permission'
         ? [...list('readPaths'), ...list('writePaths'), ...list('networkDomains')]
-        : [input.path, input.cwd].filter((value): value is string => typeof value === 'string')
-    const command = typeof input.command === 'string' ? input.command : null
+        : affectedPaths
+          ? affectedPaths.map(({ path }) => path)
+          : [...list('writePaths'), ...list('readPaths')]
     const rawRequestedScope = request.requestedScope
     const rawAllowedScopes = request.allowedScopes
     const permissionGrant =
@@ -1615,9 +1762,12 @@ export class ThreadProjection {
       turnId: String(row.turn_id),
       agentId: String(row.agent_id),
       toolCallID: String(row.tool_call_id),
-      tool: tool?.tool_name ?? 'tool',
-      command,
-      cwd: typeof input.cwd === 'string' ? input.cwd : null,
+      tool:
+        typeof request.tool === 'string'
+          ? request.tool
+          : (invocation?.name ?? tool?.tool_name ?? 'tool'),
+      command: typeof command === 'string' ? command : null,
+      cwd: typeof cwd === 'string' ? cwd : null,
       paths,
       requestedPermissions: {
         readPaths: list('readPaths'),
@@ -1627,6 +1777,10 @@ export class ThreadProjection {
       review,
       risk: String(row.risk) as ApprovalRequest['risk'],
       reason: String(row.reason),
+      ...(request.guardian ? { guardian: request.guardian as ApprovalRequest['guardian'] } : {}),
+      ...(typeof request.autoReviewFallbackReason === 'string'
+        ? { autoReviewFallbackReason: request.autoReviewFallbackReason }
+        : {}),
       status:
         row.status === 'pending'
           ? 'pending'
@@ -1645,9 +1799,7 @@ export class ThreadProjection {
         ? { toolIdentity: request.toolIdentity as ApprovalRequest['toolIdentity'] }
         : {}),
       ...(request.input ? { input: request.input as ApprovalRequest['input'] } : {}),
-      ...(request.affectedPaths
-        ? { affectedPaths: request.affectedPaths as ApprovalRequest['affectedPaths'] }
-        : {}),
+      ...(affectedPaths ? { affectedPaths } : {}),
       ...(request.reviewSummary
         ? { reviewSummary: request.reviewSummary as ApprovalRequest['reviewSummary'] }
         : {}),
@@ -1660,6 +1812,16 @@ export class ThreadProjection {
   ): Record<string, unknown> | null {
     const threadId =
       event.threadId ?? (typeof source.threadId === 'string' ? source.threadId : null)
+    if (event.method === 'thread/prompt-settings/updated' && threadId) {
+      const state = this.db.repositories.context.state(threadId)
+      // Settings are saved before first composition, whose baseline starts at 1.
+      return {
+        threadId,
+        cacheKey: state?.cacheKey ?? createPromptCacheKey(threadId),
+        promptVersion: state?.promptVersion ?? 'prompt-engine-v2',
+        baselineVersion: state?.baselineVersion ?? 1,
+      }
+    }
     if (event.method === 'thread/updated') {
       const thread = threadId ? this.projectThread(threadId) : null
       return thread ? { thread, version: thread.updatedAt } : null

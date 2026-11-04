@@ -186,7 +186,7 @@ describe('临时权限授权', () => {
   })
 })
 
-test('文件授权预览不消费，并发执行只消费一次且不扩散到其他调用', async () => {
+test('外部低风险读取无需消费临时授权，调用不会改写共享工作区', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'pidex-file-grant-'))
   temporary.push(parent)
   const root = join(parent, 'workspace')
@@ -211,6 +211,7 @@ test('文件授权预览不消费，并发执行只消费一次且不扩散到�
   }
   store.grant({
     ...context,
+    workspaceRoot: root,
     scope: 'tool-call',
     requested: { readPaths: [target] },
     granted: { readPaths: [target] },
@@ -221,10 +222,12 @@ test('文件授权预览不消费，并发执行只消费一次且不扩散到�
     executor.execute('Read', { file_path: target }, context),
     executor.execute('Read', { file_path: target }, context),
   ])
-  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(1)
-  expect(store.list('thread')).toHaveLength(0)
+  expect(results.filter((result) => result.status === 'fulfilled')).toHaveLength(2)
+  expect(store.list('thread')).toHaveLength(1)
   await expect(workspace.resolveExistingPath(target)).rejects.toThrow()
-  await expect(executor.execute('Read', { file_path: target }, context)).rejects.toThrow()
+  await expect(executor.execute('Read', { file_path: target }, context)).resolves.toMatchObject({
+    content: 'fixture',
+  })
 })
 
 test('读取授权不能写入；写入授权只覆盖全部获批补丁目标且不绕过 Plan 或只读根', async () => {
@@ -238,7 +241,7 @@ test('读取授权不能写入；写入授权只覆盖全部获批补丁目标�
   const executor = new ToolExecutor(new ToolRegistry(), {
     dataDir: join(parent, 'data'),
     permissionGrants: store,
-    authorizeShell: async () => ({ decision: 'allow', risk: 'low', reason: 'test' }),
+    authorizeShell: async () => ({ decision: 'deny', risk: 'low', reason: '未批准外部写入' }),
   })
   const context = {
     threadID: 'thread',
@@ -250,6 +253,7 @@ test('读取授权不能写入；写入授权只覆盖全部获批补丁目标�
   }
   store.grant({
     ...context,
+    workspaceRoot: root,
     scope: 'turn',
     requested: { readPaths: [outside] },
     granted: { readPaths: [outside] },
@@ -259,6 +263,7 @@ test('读取授权不能写入；写入授权只覆盖全部获批补丁目标�
   ).rejects.toThrow()
   store.grant({
     ...context,
+    workspaceRoot: root,
     scope: 'session',
     requested: { writePaths: [target] },
     granted: { writePaths: [target] },
@@ -296,7 +301,7 @@ test('读取授权不能写入；写入授权只覆盖全部获批补丁目标�
   ).rejects.toThrow()
 })
 
-test('Hook 改写外部目标重新匹配授权，不消费原目标授权', async () => {
+test('Hook 改写外部低风险读取后使用新目标，不消费原目标授权', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'pidex-hook-grant-'))
   temporary.push(parent)
   const root = join(parent, 'workspace')
@@ -316,6 +321,7 @@ test('Hook 改写外部目标重新匹配授权，不消费原目标授权', asy
   }
   store.grant({
     ...context,
+    workspaceRoot: root,
     scope: 'tool-call',
     requested: { readPaths: [target] },
     granted: { readPaths: [target] },
@@ -331,11 +337,13 @@ test('Hook 改写外部目标重新匹配授权，不消费原目标授权', asy
           : [],
     },
   })
-  await expect(executor.execute('Read', { file_path: target }, context)).rejects.toThrow()
+  await expect(executor.execute('Read', { file_path: target }, context)).resolves.toMatchObject({
+    content: 'denied',
+  })
   expect(store.list('thread')).toHaveLength(1)
 })
 
-test('路径授权用于外部目录搜索和多文件补丁，目录内链接不能扩大范围', async () => {
+test('写入授权覆盖多文件补丁，外部搜索和低风险链接读取无需额外授权', async () => {
   const parent = await mkdtemp(join(tmpdir(), 'pidex-search-grant-'))
   temporary.push(parent)
   const root = join(parent, 'workspace')
@@ -352,6 +360,7 @@ test('路径授权用于外部目录搜索和多文件补丁，目录内链接�
   }
   store.grant({
     ...context,
+    workspaceRoot: root,
     scope: 'session',
     requested: { writePaths: [outside] },
     granted: { writePaths: [outside] },
@@ -402,5 +411,21 @@ test('路径授权用于外部目录搜索和多文件补丁，目录内链接�
   await symlink(secret, join(outside, 'escape'), process.platform === 'win32' ? 'junction' : 'dir')
   await expect(
     executor.execute('Read', { file_path: join(outside, 'escape', 'secret.txt') }, context),
-  ).rejects.toThrow()
+  ).resolves.toMatchObject({ content: 'secret' })
+})
+
+test('临时权限即使聊天不变也不能跨工作区复用', () => {
+  const store = new PermissionGrantStore()
+  const identity = { threadID: 'thread', turnID: 'turn', agentID: 'agent' }
+  store.grant({
+    ...identity,
+    workspaceRoot: 'C:/project-a',
+    scope: 'session',
+    requested: { networkDomains: ['example.test'] },
+    granted: { networkDomains: ['example.test'] },
+  })
+  const requested = { readPaths: [], writePaths: [], networkDomains: ['example.test'] }
+  expect(store.authorize({ ...identity, workspaceRoot: 'C:/project-a', requested })).not.toBeNull()
+  expect(store.authorize({ ...identity, workspaceRoot: 'C:/project-b', requested })).toBeNull()
+  expect(store.authorize({ ...identity, workspaceRoot: 'C:/project-a', requested })).not.toBeNull()
 })

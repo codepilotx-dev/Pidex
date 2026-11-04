@@ -15,6 +15,7 @@ import {
   skillScopeLabel,
 } from '../../plugins/BuiltinSkillPresentation.js'
 import { errorMessageOr as errorMessageOf } from '@pidex/shared/errors'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../SettingsManagementDialogSizing.js'
 
 type Props = {
   workspacePath: string | null
@@ -82,8 +83,7 @@ export function SkillDetailsDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="ui-dialog-backdrop permission-modal-backdrop" />
         <Dialog.Content
-          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:max-h-[min(42rem,calc(100vh-3rem))] tw:w-[min(48rem,calc(100vw-3rem))] tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text"
-          data-dialog-size="detail"
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog tw:flex tw:flex-col tw:overflow-hidden tw:p-0 tw:text-app-text ${SETTINGS_MANAGEMENT_DIALOG_SIZE.skillDetails}`}
           onCloseAutoFocus={(event) => {
             if (!restoreFocusElement?.isConnected) return
             event.preventDefault()
@@ -151,7 +151,7 @@ export function SkillDetailsDialog({
 
           <footer className="settings-management-dialog-footer tw:flex tw:flex-wrap tw:items-center tw:justify-end tw:gap-2">
             {!builtin ? (
-              <Button color="secondary" onClick={() => onOpenSkill(skill)}>
+              <Button size="md" color="secondary" onClick={() => onOpenSkill(skill)}>
                 <FolderOpen
                   aria-hidden="true"
                   size={APP_ICON_SIZE}
@@ -160,7 +160,12 @@ export function SkillDetailsDialog({
                 打开
               </Button>
             ) : null}
-            <Button color="primary" disabled={!skill.enabled} onClick={() => onUseSkill(skill)}>
+            <Button
+              size="md"
+              color="primary"
+              disabled={!skill.enabled}
+              onClick={() => onUseSkill(skill)}
+            >
               <Play aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
               立即使用
             </Button>

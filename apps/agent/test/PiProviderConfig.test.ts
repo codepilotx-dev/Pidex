@@ -3,10 +3,13 @@ import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { Effect } from 'effect'
+import { normalizeContext } from '@earendil-works/pi-ai'
 import { removeFixturePaths } from './FixtureCleanup'
 import type { EncryptedCredentialRepository } from '../src/auth/EncryptedCredentialRepository'
+import { withPiBuiltinProviderOverrides } from '../src/provider/pi/PiBuiltinProviderOverrides'
 import {
   discoverOpenAIModels,
+  createPiCustomProvider,
   parsePiProviderCatalog,
   PiModelService,
   PiModelsFileStore,
@@ -29,6 +32,409 @@ const repository = {
 } as unknown as EncryptedCredentialRepository
 
 describe('Pi provider v2 config', () => {
+  test('内置与自定义模型保存分组名称，支持清空且不改变请求 ID', () => {
+    const custom = serializePiProviderDefinition({
+      kind: 'custom',
+      id: 'grouped',
+      name: 'Grouped',
+      enabled: true,
+      baseUrl: 'https://example.com/v1',
+      auth: 'none',
+      env: [],
+      allowInsecureHttp: false,
+      headers: {},
+      models: [{ id: 'remote/model', api: 'openai-completions', group: ' 常用 ' }],
+    })
+    const builtin = serializePiProviderDefinition({
+      kind: 'builtin',
+      id: 'google',
+      enabled: true,
+      allowModels: [],
+      denyModels: [],
+      models: [
+        { id: 'native', enabled: true, group: '常用' },
+        { id: 'cleared', enabled: true, group: '' },
+      ],
+    })
+    const parsed = parsePiProviderCatalog({
+      providers: { grouped: custom.value, google: builtin.value },
+    })
+    expect(parsed.issues).toEqual([])
+    expect(parsed.providers.grouped?.models['remote/model']?.group).toBe('常用')
+    expect(parsed.providers.google?.models.native?.group).toBe('常用')
+    expect(parsed.providers.google?.models.cleared?.group).toBe('')
+    expect(Object.keys(parsed.providers.grouped?.models ?? {})).toEqual(['remote/model'])
+    expect(() =>
+      serializePiProviderDefinition({
+        kind: 'builtin',
+        id: 'google',
+        enabled: true,
+        allowModels: [],
+        denyModels: [],
+        models: [{ id: 'native', enabled: true, group: 'x'.repeat(129) }],
+      }),
+    ).toThrow()
+  })
+
+  test('智能配置固定清单往返，未知字段名被丢弃', () => {
+    const custom = serializePiProviderDefinition({
+      kind: 'custom',
+      id: 'smart',
+      name: 'Smart',
+      enabled: true,
+      baseUrl: 'https://example.com/v1',
+      auth: 'none',
+      env: [],
+      allowInsecureHttp: false,
+      headers: {},
+      models: [
+        {
+          id: 'gpt-4o',
+          api: 'openai-completions',
+          smartConfig: { pinned: ['contextWindow', 'imageInput'] },
+        },
+        { id: 'plain', api: 'openai-completions' },
+      ],
+    })
+    const models = custom.value.models as Record<string, Record<string, unknown>>
+    expect(models['gpt-4o']).toMatchObject({
+      smart_config: { pinned: ['contextWindow', 'imageInput'] },
+    })
+    const parsed = parsePiProviderCatalog({ providers: { smart: custom.value } })
+    expect(parsed.issues).toEqual([])
+    expect(parsed.providers.smart?.models['gpt-4o']?.smartConfig).toEqual({
+      pinned: ['contextWindow', 'imageInput'],
+    })
+    // 没有智能配置的模型保持原样，不因为推荐存在就整体接管。
+    expect(parsed.providers.smart?.models.plain?.smartConfig).toBeUndefined()
+    // 空清单合法：表示跟随推荐但当前没有固定项。
+    const following = parsePiProviderCatalog({
+      providers: {
+        smart: {
+          ...custom.value,
+          models: {
+            'gpt-4o': { ...models['gpt-4o'], smart_config: { pinned: [] } },
+          },
+        },
+      },
+    })
+    expect(following.providers.smart?.models['gpt-4o']?.smartConfig).toEqual({ pinned: [] })
+    // 未知字段名丢弃而不是拒绝整份配置。
+    const unknown = parsePiProviderCatalog({
+      providers: {
+        smart: {
+          ...custom.value,
+          models: {
+            'gpt-4o': {
+              ...models['gpt-4o'],
+              smart_config: { pinned: ['nope', 'maxTokens'] },
+            },
+          },
+        },
+      },
+    })
+    expect(unknown.providers.smart?.models['gpt-4o']?.smartConfig).toEqual({
+      pinned: ['maxTokens'],
+    })
+  })
+
+  test('optionSpecs 往返保留 values/map/max，非法 map 被拒绝', () => {
+    const custom = serializePiProviderDefinition({
+      kind: 'custom',
+      id: 'opts',
+      name: 'Opts',
+      enabled: true,
+      baseUrl: 'https://example.com/v1',
+      auth: 'none',
+      env: [],
+      allowInsecureHttp: false,
+      headers: {},
+      models: [
+        {
+          id: 'm',
+          api: 'openai-completions',
+          optionSpecs: {
+            reasoningLevel: {
+              values: ['none', 'low', 'high', 'max'],
+              map: '{"reasoning_effort": reasoningLevel}',
+            },
+            maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
+          },
+        },
+      ],
+    })
+    const models = custom.value.models as Record<string, Record<string, unknown>>
+    expect(models.m!.option_specs).toMatchObject({
+      reasoningLevel: {
+        values: ['none', 'low', 'high', 'max'],
+        map: '{"reasoning_effort": reasoningLevel}',
+      },
+      maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
+    })
+    const parsed = parsePiProviderCatalog({ providers: { opts: custom.value } })
+    expect(parsed.issues).toEqual([])
+    expect(parsed.providers.opts?.models.m?.optionSpecs).toEqual({
+      reasoningLevel: {
+        values: ['none', 'low', 'high', 'max'],
+        map: '{"reasoning_effort": reasoningLevel}',
+      },
+      maxOutputTokens: { max: 8192, map: '{"max_tokens": maxOutputTokens}' },
+    })
+    // 无法编译的表达式在解析/保存边界被拒绝，且整份 provider 不生效。
+    const invalid = parsePiProviderCatalog({
+      providers: {
+        opts: {
+          ...custom.value,
+          models: {
+            m: {
+              ...models.m!,
+              option_specs: { reasoningLevel: { map: 'reasoningLevel.badMember' } },
+            },
+          },
+        },
+      },
+    })
+    expect(invalid.issues.length).toBeGreaterThan(0)
+    expect(invalid.issues[0]?.message).toContain('Reasoning Level Map (CEL) 校验失败')
+    expect(invalid.providers.opts).toBeUndefined()
+  })
+
+  test('最大输入 Token 在配置与运行时模型中保留，旧模型不添加限制', () => {
+    const saved = serializePiProviderDefinition({
+      kind: 'custom',
+      id: 'input-limit',
+      name: 'Input limit',
+      enabled: true,
+      baseUrl: 'https://example.com/v1',
+      auth: 'none',
+      env: [],
+      allowInsecureHttp: false,
+      headers: {},
+      models: [
+        { id: 'limited', api: 'openai-completions', maxInputTokens: 128000 },
+        { id: 'unlimited', api: 'openai-completions' },
+      ],
+    })
+    const parsed = parsePiProviderCatalog({ providers: { 'input-limit': saved.value } })
+    expect(parsed.issues).toEqual([])
+    const config = parsed.providers['input-limit']!
+    if (config.kind !== 'custom') throw new Error('Missing fixture provider')
+    expect(config.models.limited?.maxInputTokens).toBe(128000)
+    const runtime = createPiCustomProvider('input-limit', config).getModels() as readonly {
+      id: string
+      maxInputTokens?: number
+    }[]
+    expect(runtime[0]?.maxInputTokens).toBe(128000)
+    expect(runtime[1]?.maxInputTokens).toBeUndefined()
+    expect(() =>
+      serializePiProviderDefinition({
+        kind: 'builtin',
+        id: 'google',
+        enabled: true,
+        allowModels: [],
+        denyModels: [],
+        models: [{ id: 'native', enabled: true, maxInputTokens: -1 }],
+      }),
+    ).toThrow()
+  })
+
+  test('内置提供商切换已支持协议，目录保留完整端点列表与原生认证', async () => {
+    const saved = serializePiProviderDefinition({
+      kind: 'builtin',
+      id: 'google',
+      enabled: true,
+      allowModels: [],
+      denyModels: [],
+      models: [],
+      protocol: 'openai-completions',
+      baseUrl: 'https://compatible.example/v1',
+      endpoints: { 'openai-completions': 'https://compatible.example/v1' },
+    })
+    const service = new PiModelService(repository, {
+      config: { providers: { google: saved.value } },
+    })
+    const provider = (await service.list()).find((item) => item.id === 'google')!
+    expect(Object.keys(provider.source.endpoints ?? {})).toEqual([
+      'google-generative-ai',
+      'openai-completions',
+    ])
+    expect(provider.source.defaultApi).toBe('openai-completions')
+    expect(provider.auth.apiKey).toBe(true)
+    const model = service.pi.getProvider('google')!.getModels()[0]!
+    expect(model.api).toBe('openai-completions')
+    expect(model.baseUrl).toBe('https://compatible.example/v1')
+    expect(model.compat).toBeUndefined()
+    expect(() =>
+      serializePiProviderDefinition({
+        kind: 'builtin',
+        id: 'google',
+        enabled: true,
+        allowModels: [],
+        denyModels: [],
+        models: [],
+        protocol: 'anthropic-messages',
+      }),
+    ).toThrow()
+    service.dispose()
+  })
+
+  test('混合协议模型使用各自的端点地址', () => {
+    const parsed = parsePiProviderCatalog({
+      providers: {
+        relay: {
+          kind: 'custom',
+          base_url: 'https://fallback.example/v1',
+          endpoints: {
+            'openai-responses': 'https://responses.example/v1',
+            'anthropic-messages': 'https://messages.example',
+          },
+          models: { chat: { api: 'openai-responses' }, claude: { api: 'anthropic-messages' } },
+        },
+      },
+    })
+    const config = parsed.providers.relay
+    if (!config || config.kind !== 'custom') throw new Error('Missing fixture provider')
+    expect(
+      createPiCustomProvider('relay', config)
+        .getModels()
+        .map((model) => model.baseUrl),
+    ).toEqual(['https://responses.example/v1', 'https://messages.example'])
+  })
+  test('协议端点保留各自地址且拒绝不安全地址', () => {
+    const config = {
+      kind: 'builtin' as const,
+      id: 'deepseek',
+      enabled: true,
+      allowModels: [],
+      denyModels: [],
+      models: [],
+      endpoints: {
+        'anthropic-messages': 'https://gateway.example/anthropic',
+        'openai-responses': 'https://gateway.example/v1',
+      },
+    }
+    const saved = serializePiProviderDefinition(config)
+    expect(saved.value.endpoints).toEqual(config.endpoints)
+    expect(
+      parsePiProviderCatalog({ providers: { deepseek: saved.value } }).providers.deepseek
+        ?.endpoints,
+    ).toEqual(config.endpoints)
+    expect(() =>
+      serializePiProviderDefinition({
+        ...config,
+        endpoints: { 'openai-responses': 'http://remote.example/v1' },
+      }),
+    ).toThrow()
+  })
+
+  test('round-trips builtin endpoint and partial model overrides without replacing native defaults', async () => {
+    const serialized = serializePiProviderDefinition({
+      kind: 'builtin',
+      id: 'google',
+      enabled: true,
+      allowModels: [],
+      denyModels: [],
+      baseUrl: 'https://gateway.example/v1',
+      models: [
+        {
+          id: 'gemini-2.5-pro',
+          enabled: true,
+          name: 'Renamed',
+          maxTokens: 12345,
+          maxInputTokens: 100000,
+        },
+        { id: 'private-model', enabled: true, contextWindow: 65536 },
+      ],
+    })
+    const parsed = parsePiProviderCatalog({ providers: { google: serialized.value } })
+    expect(parsed.issues).toEqual([])
+    expect(parsed.providers.google).toMatchObject({
+      kind: 'builtin',
+      baseUrl: 'https://gateway.example/v1',
+    })
+    const service = new PiModelService(repository, {
+      env: { GEMINI_API_KEY: 'fixture-key' },
+      config: { providers: { google: serialized.value } },
+    })
+    const known = await service.getPiModel({
+      providerID: 'google' as never,
+      id: 'gemini-2.5-pro' as never,
+    })
+    expect(known.api).toBe('google-generative-ai')
+    expect(known.baseUrl).toBe('https://gateway.example/v1')
+    expect(known.name).toBe('Renamed')
+    expect(known.maxTokens).toBe(12345)
+    expect(known.reasoning).toBe(true)
+    const source = service.pi.getProvider('google')!
+    let sent: typeof known | undefined
+    const overrides = withPiBuiltinProviderOverrides(
+      {
+        ...source,
+        streamSimple: (model) => {
+          sent = model
+          return {} as ReturnType<typeof source.streamSimple>
+        },
+      },
+      {
+        kind: 'builtin',
+        enabled: true,
+        allowModels: [],
+        denyModels: [],
+        baseUrl: 'https://override.example/v1',
+        models: { 'gemini-2.5-pro': { enabled: true, cost: { input: 99 } } },
+      },
+    )
+    const costOverride = overrides.getModels().find((model) => model.id === known.id)!
+    expect(costOverride.cost).toEqual({ ...known.cost, input: 99 })
+    overrides.streamSimple(
+      { ...costOverride, baseUrl: 'https://oauth.example/v1' },
+      normalizeContext({ messages: [] }),
+    )
+    expect(sent?.baseUrl).toBe('https://override.example/v1')
+    const added = await service.getPiModel({
+      providerID: 'google' as never,
+      id: 'private-model' as never,
+    })
+    expect(added.api).toBe('google-generative-ai')
+    expect(added.contextWindow).toBe(65536)
+    expect(
+      (await service.providerDefinitions()).find((provider) => provider.id === 'google'),
+    ).toMatchObject({
+      baseUrl: 'https://gateway.example/v1',
+      models: [
+        {
+          id: 'gemini-2.5-pro',
+          enabled: true,
+          name: 'Renamed',
+          maxTokens: 12345,
+          maxInputTokens: 100000,
+        },
+        { id: 'private-model', enabled: true, contextWindow: 65536 },
+      ],
+    })
+    expect(() =>
+      serializePiProviderDefinition({
+        kind: 'builtin',
+        id: 'google',
+        enabled: true,
+        allowModels: [],
+        denyModels: [],
+        baseUrl: 'http://remote.example',
+        models: [],
+      }),
+    ).toThrow(PiProviderConfigValidationError)
+    expect(
+      parsePiProviderCatalog({
+        providers: {
+          google: {
+            kind: 'builtin',
+            models: { private: { headers: { Authorization: 'fixture' } } },
+          },
+        },
+      }).issues[0]?.code,
+    ).toBe('SENSITIVE_HEADER')
+    await service.dispose()
+  })
   test('serializes camelCase RPC definitions into canonical TOML fields', () => {
     const serialized = serializePiProviderDefinition({
       kind: 'custom',
@@ -64,6 +470,132 @@ describe('Pi provider v2 config', () => {
         },
       },
     })
+  })
+
+  test('自定义 Provider 允许零模型，模型同步基线可解析序列化且非法基线被忽略', async () => {
+    const zeroModels = serializePiProviderDefinition({
+      kind: 'custom',
+      id: 'empty',
+      name: 'Empty',
+      enabled: true,
+      baseUrl: 'https://example.com/v1',
+      auth: 'none',
+      env: [],
+      allowInsecureHttp: false,
+      headers: {},
+      models: [],
+    })
+    expect(zeroModels.value.models).toEqual({})
+    const zeroParsed = parsePiProviderCatalog({ providers: { empty: zeroModels.value } })
+    expect(zeroParsed.issues).toEqual([])
+    expect(zeroParsed.providers.empty).toMatchObject({ kind: 'custom', models: {} })
+
+    const synced = serializePiProviderDefinition({
+      kind: 'custom',
+      id: 'synced',
+      name: 'Synced',
+      enabled: true,
+      baseUrl: 'https://example.com/v1',
+      auth: 'none',
+      env: [],
+      allowInsecureHttp: false,
+      headers: {},
+      models: [{ id: 'kept', api: 'openai-completions', name: 'Kept' }],
+      modelSync: { fetchedAt: 123, api: 'anthropic-messages', models: ['kept', 'removed'] },
+    })
+    expect(synced.value.model_sync).toEqual({
+      fetched_at: 123,
+      api: 'anthropic-messages',
+      models: ['kept', 'removed'],
+    })
+    const syncedParsed = parsePiProviderCatalog({ providers: { synced: synced.value } })
+    expect(syncedParsed.issues).toEqual([])
+    expect(syncedParsed.providers.synced).toMatchObject({
+      modelSync: { fetchedAt: 123, api: 'anthropic-messages', models: ['kept', 'removed'] },
+    })
+
+    const camelCase = parsePiProviderCatalog({
+      providers: {
+        camel: {
+          kind: 'custom',
+          base_url: 'https://example.com/v1',
+          auth: 'none',
+          models: { kept: { api: 'openai-completions' } },
+          modelSync: { fetchedAt: 7, api: 'openai-responses', models: ['kept'] },
+        },
+      },
+    })
+    expect(camelCase.providers.camel).toMatchObject({
+      modelSync: { fetchedAt: 7, api: 'openai-responses', models: ['kept'] },
+    })
+
+    const invalidBaselines: unknown[] = [
+      { fetched_at: -1, api: 'openai-completions', models: ['a'] },
+      { fetched_at: 'yesterday', api: 'openai-completions', models: ['a'] },
+      { fetched_at: 1, api: 'unsupported-api', models: ['a'] },
+      { fetched_at: 1, api: 'openai-completions', models: [] },
+      { fetched_at: 1, api: 'openai-completions', models: 'a' },
+      { fetched_at: 1, api: 'openai-completions', models: [1] },
+      {
+        fetched_at: 1,
+        api: 'openai-completions',
+        models: Array.from({ length: 1001 }, (_, index) => `model-${index}`),
+      },
+    ]
+    for (const invalid of invalidBaselines) {
+      const parsed = parsePiProviderCatalog({
+        providers: {
+          broken: {
+            kind: 'custom',
+            base_url: 'https://example.com/v1',
+            auth: 'none',
+            models: { kept: { api: 'openai-completions' } },
+            model_sync: invalid,
+          },
+        },
+      })
+      expect(parsed.issues).toEqual([])
+      const provider = parsed.providers.broken
+      if (provider?.kind !== 'custom') throw new Error('Missing fixture provider')
+      expect(provider.modelSync).toBeUndefined()
+      expect(provider.models.kept?.api).toBe('openai-completions')
+    }
+
+    expect(() =>
+      serializePiProviderDefinition({
+        kind: 'custom',
+        id: 'broken',
+        name: 'Broken',
+        enabled: true,
+        baseUrl: 'https://example.com/v1',
+        auth: 'none',
+        env: [],
+        allowInsecureHttp: false,
+        headers: {},
+        models: [],
+        modelSync: { fetchedAt: 1, api: 'openai-completions', models: [] },
+      }),
+    ).toThrow(PiProviderConfigValidationError)
+
+    const service = new PiModelService(repository, {
+      config: { providers: { synced: synced.value, empty: zeroModels.value } },
+    })
+    try {
+      const definitions = await service.providerDefinitions()
+      expect(definitions.find((provider) => provider.id === 'synced')).not.toHaveProperty(
+        'modelSync',
+      )
+      expect(definitions.find((provider) => provider.id === 'empty')?.models).toEqual([])
+      expect((await service.list()).some((provider) => String(provider.id) === 'empty')).toBe(true)
+      expect(await service.modelSyncSummary('synced')).toEqual({
+        fetchedAt: 123,
+        api: 'anthropic-messages',
+        modelCount: 2,
+      })
+      expect(await service.modelSyncSummary('empty')).toBeUndefined()
+    } finally {
+      await service.dispose()
+    }
   })
 
   test('registers mixed-API custom providers with safe defaults', async () => {
@@ -130,6 +662,32 @@ describe('Pi provider v2 config', () => {
       'BUILTIN_OVERRIDE',
       'SENSITIVE_HEADER',
     ])
+  })
+
+  test('discovers Codex catalogs without accepting invalid response envelopes', async () => {
+    const models = await discoverOpenAIModels({
+      baseUrl: 'https://example.com/v1',
+      fetch: async () =>
+        Response.json({
+          models: [
+            { slug: 'codex-model', display_name: 'Codex model' },
+            { slug: 'fallback-name' },
+            { slug: '' },
+            { slug: 123 },
+            null,
+          ],
+        }),
+    })
+    expect(models).toEqual([
+      { id: 'codex-model', name: 'Codex model' },
+      { id: 'fallback-name', name: 'fallback-name' },
+    ])
+    await expect(
+      discoverOpenAIModels({
+        baseUrl: 'https://example.com/v1',
+        fetch: async () => Response.json({ error: 'invalid credentials' }),
+      }),
+    ).rejects.toThrow('invalid OpenAI catalog')
   })
 
   test('discovers a bounded OpenAI model list without following redirects', async () => {
@@ -218,7 +776,7 @@ describe('DeepSeek protocol config', () => {
     }
   })
 
-  test('rejects unknown protocols and protocol overrides on other builtin providers', () => {
+  test('accepts supported builtin protocols and rejects unsupported protocols', () => {
     const parsed = parsePiProviderCatalog({
       schemaVersion: 2,
       providers: {
@@ -231,17 +789,12 @@ describe('DeepSeek protocol config', () => {
       },
     })
 
-    expect(parsed.providers).toEqual({})
+    expect(parsed.providers.anthropic).toMatchObject({ protocol: 'anthropic-messages' })
     expect(parsed.issues).toEqual([
       {
         providerID: 'deepseek',
         path: 'model_providers.deepseek',
         code: 'INVALID_PROVIDER',
-      },
-      {
-        providerID: 'anthropic',
-        path: 'model_providers.anthropic',
-        code: 'BUILTIN_OVERRIDE',
       },
     ])
     // 被拒绝的 DeepSeek 配置不改变正在运行的协议。

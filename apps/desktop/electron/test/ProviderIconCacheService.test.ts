@@ -14,6 +14,9 @@ const ICON_URL = 'https://models.dev/logos/openai.svg'
 const OTHER_ICON_URL = 'https://models.dev/logos/anthropic.svg'
 const SVG_BODY = '<svg xmlns="http://www.w3.org/2000/svg"></svg>'
 const UPDATED_SVG_BODY = '<svg xmlns="http://www.w3.org/2000/svg"><circle r="1" /></svg>'
+// 1×1 透明 PNG，仅用于验证上传图标的真实文件头校验。
+const PNG_1X1_BASE64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
 
 const temporaryDirectories: string[] = []
 
@@ -57,12 +60,180 @@ function dataURL(body: string): string {
   return `data:image/svg+xml;base64,${Buffer.from(body).toString('base64')}`
 }
 
-/** 等待后台刷新链路的微任务与宏任务全部结束。 */
-async function settle(): Promise<void> {
-  for (let tick = 0; tick < 4; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0))
+/**
+ * 等待后台刷新链路结束。共享 runner 并发跑满时，写盘回调可能晚于固定次数的
+ * 微任务/宏任务轮转；不传条件时只轮转若干轮，传条件则轮询到条件成立。
+ */
+async function settle(ready?: () => boolean): Promise<void> {
+  if (!ready) {
+    for (let tick = 0; tick < 4; tick += 1) await new Promise((resolve) => setTimeout(resolve, 0))
+    return
+  }
+  const deadline = Date.now() + 2_000
+  while (!ready()) {
+    if (Date.now() >= deadline) throw new Error('后台刷新未在超时内完成')
+    await new Promise((resolve) => setTimeout(resolve, 1))
+  }
 }
 
 describe('供应商图标缓存服务', () => {
+  test('网站图标跨重启保留，失败不覆盖，恢复默认不影响目录缓存', async () => {
+    const root = await createCacheRoot()
+    const changes: DesktopProviderIconChange[] = []
+    let fail = false
+    const dependencies = {
+      rootDirectory: root,
+      publish: (change: DesktopProviderIconChange) => changes.push(change),
+      fetch: createFetchStub([SVG_BODY]).fetch,
+      discoverWebsiteIcon: async () => {
+        if (fail) throw new Error('unavailable')
+        return dataURL(UPDATED_SVG_BODY)
+      },
+    }
+    const service = new ProviderIconCacheService(dependencies)
+    const input = { providerID: 'custom-relay', url: '' }
+    await expect(service.resolve(input)).resolves.toEqual({ source: null })
+    await service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' })
+    const restarted = new ProviderIconCacheService(dependencies)
+    await expect(restarted.resolve(input)).resolves.toEqual({
+      source: dataURL(UPDATED_SVG_BODY),
+      override: true,
+    })
+    fail = true
+    await expect(
+      service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' }),
+    ).rejects.toThrow()
+    await expect(service.resolve(input)).resolves.toEqual({
+      source: dataURL(UPDATED_SVG_BODY),
+      override: true,
+    })
+    await service.setWebsiteIcon({ providerID: input.providerID })
+    await expect(restarted.resolve(input)).resolves.toEqual({ source: null })
+    await expect(service.resolve({ ...input, url: ICON_URL })).resolves.toEqual({
+      source: dataURL(SVG_BODY),
+    })
+    expect(changes.map((change) => change.source)).toEqual([dataURL(UPDATED_SVG_BODY), null])
+  })
+
+  test('上传图标跨重启保留，网站图标与恢复默认都会覆盖它', async () => {
+    const root = await createCacheRoot()
+    const changes: DesktopProviderIconChange[] = []
+    const dependencies = {
+      rootDirectory: root,
+      publish: (change: DesktopProviderIconChange) => changes.push(change),
+      discoverWebsiteIcon: async () => dataURL(UPDATED_SVG_BODY),
+    }
+    const source = `data:image/png;base64,${PNG_1X1_BASE64}`
+    const service = new ProviderIconCacheService(dependencies)
+    const input = { providerID: 'custom-upload', url: '' }
+
+    await expect(
+      service.setUploadedIcon({ providerID: input.providerID, dataURL: source }),
+    ).resolves.toEqual({ source })
+    await expect(service.resolve(input)).resolves.toEqual({ source, override: true })
+    const restarted = new ProviderIconCacheService(dependencies)
+    await expect(restarted.resolve(input)).resolves.toEqual({ source, override: true })
+
+    await service.setWebsiteIcon({ providerID: input.providerID, website: 'https://example.com' })
+    await expect(restarted.resolve(input)).resolves.toEqual({
+      source: dataURL(UPDATED_SVG_BODY),
+      override: true,
+    })
+
+    await service.setWebsiteIcon({ providerID: input.providerID })
+    await expect(restarted.resolve(input)).resolves.toEqual({ source: null })
+    expect(changes).toEqual([
+      { url: '', providerID: input.providerID, source },
+      { url: '', providerID: input.providerID, source: dataURL(UPDATED_SVG_BODY) },
+      { url: '', providerID: input.providerID, source: null },
+    ])
+  })
+
+  test('上传图标按文件头校验真实类型与大小', async () => {
+    const root = await createCacheRoot()
+    const service = new ProviderIconCacheService({
+      rootDirectory: root,
+      publish: () => undefined,
+    })
+    const providerID = 'custom-upload'
+    const png = `data:image/png;base64,${PNG_1X1_BASE64}`
+    const oversized = `data:image/png;base64,${Buffer.alloc(600 * 1024, 1).toString('base64')}`
+
+    await expect(service.setUploadedIcon({ providerID, dataURL: png })).resolves.toEqual({
+      source: png,
+    })
+    // 声明类型、真实文件头与大小任一不匹配都拒绝，且保留原图标。
+    await expect(
+      service.setUploadedIcon({ providerID, dataURL: `data:image/jpeg;base64,${PNG_1X1_BASE64}` }),
+    ).rejects.toThrow('格式不受支持')
+    await expect(
+      service.setUploadedIcon({ providerID, dataURL: 'data:image/png;base64,AAAA' }),
+    ).rejects.toThrow('格式不受支持')
+    await expect(
+      service.setUploadedIcon({
+        providerID,
+        dataURL: `data:image/svg+xml;base64,${Buffer.from(SVG_BODY).toString('base64')}`,
+      }),
+    ).rejects.toThrow('格式不受支持')
+    await expect(service.setUploadedIcon({ providerID, dataURL: oversized })).rejects.toThrow(
+      '内容过大',
+    )
+    await expect(service.resolve({ providerID, url: '' })).resolves.toEqual({
+      source: png,
+      override: true,
+    })
+  })
+
+  test('手动图标生效期间目录图标不刷新，恢复默认后继续每五小时刷新', async () => {
+    const root = await createCacheRoot()
+    let now = 1_700_000_000_000
+    const initial = createFetchStub([SVG_BODY])
+    const seeded = new ProviderIconCacheService({
+      rootDirectory: root,
+      publish: () => undefined,
+      fetch: initial.fetch,
+      now: () => now,
+    })
+    const catalogueSource = (await seeded.resolve({ url: ICON_URL })).source
+    seeded.dispose()
+
+    const changes: DesktopProviderIconChange[] = []
+    const refreshing = createFetchStub([UPDATED_SVG_BODY])
+    const service = new ProviderIconCacheService({
+      rootDirectory: root,
+      publish: (change) => changes.push(change),
+      fetch: refreshing.fetch,
+      now: () => now,
+    })
+    const providerID = 'custom-manual'
+    const manualSource = `data:image/png;base64,${PNG_1X1_BASE64}`
+    await service.setUploadedIcon({ providerID, dataURL: manualSource })
+
+    now += PROVIDER_ICON_CACHE_TTL_MS
+    await expect(service.resolve({ url: ICON_URL, providerID })).resolves.toEqual({
+      source: manualSource,
+      override: true,
+    })
+    await settle()
+    // 手动图标期间不读取、也不后台刷新目录地址。
+    expect(catalogueSource).not.toBeNull()
+    expect(refreshing.calls).toEqual([])
+
+    await service.setWebsiteIcon({ providerID })
+    await expect(service.resolve({ url: ICON_URL, providerID })).resolves.toEqual({
+      source: catalogueSource,
+    })
+    await settle(() => changes.some((change) => change.source === dataURL(UPDATED_SVG_BODY)))
+    // 恢复默认后重新参与每五小时刷新。
+    expect(refreshing.calls).toEqual([ICON_URL])
+    expect(changes.map((change) => change.source)).toEqual([
+      manualSource,
+      null,
+      dataURL(UPDATED_SVG_BODY),
+    ])
+    service.dispose()
+  })
+
   test('首次加载下载图标并写入独立缓存文件', async () => {
     const root = await createCacheRoot()
     const { fetch, calls } = createFetchStub([SVG_BODY])
@@ -153,7 +324,7 @@ describe('供应商图标缓存服务', () => {
 
     now += PROVIDER_ICON_CACHE_TTL_MS
     expect((await service.resolve({ url: ICON_URL })).source).toBe(initial)
-    await settle()
+    await settle(() => changes.length > 0)
 
     expect(refreshing.calls).toEqual([ICON_URL])
     expect(changes).toEqual([{ url: ICON_URL, source: dataURL(UPDATED_SVG_BODY) }])

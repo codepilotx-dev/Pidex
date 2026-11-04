@@ -130,6 +130,24 @@ export class WorktreeRepository {
       .get(worktreeId) as { root_path: string } | null
     return row?.root_path ?? null
   }
+
+  hasFailedDeletion(worktreeId: string): boolean {
+    const latest = this.sqlite
+      .query(
+        `
+      SELECT kind, status, error_code FROM worktree_operations
+      WHERE worktree_id = ? AND kind IN ('create', 'restore', 'delete', 'auto-cleanup')
+        AND (status = 'completed' OR (status = 'failed' AND error_code = 'WORKTREE_GIT_FAILED'))
+      ORDER BY rowid DESC LIMIT 1
+    `,
+      )
+      .get(worktreeId) as { kind: string; status: string; error_code: string | null } | null
+    return (
+      latest?.status === 'failed' &&
+      (latest.kind === 'delete' || latest.kind === 'auto-cleanup') &&
+      latest.error_code === 'WORKTREE_GIT_FAILED'
+    )
+  }
   settingsAvailable() {
     return Boolean(
       this.sqlite

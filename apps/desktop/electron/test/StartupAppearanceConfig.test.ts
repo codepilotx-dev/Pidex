@@ -63,7 +63,7 @@ describe('startup appearance config', () => {
     expect(
       await readStartupAppearanceConfig(configPath, legacyConfigPath, legacyPath),
     ).toMatchObject({
-      version: 7,
+      version: 8,
       mode: 'dark',
     })
   })
@@ -131,7 +131,7 @@ describe('startup appearance config', () => {
     const source = JSON.stringify({
       desktop: {
         appearance: {
-          version: 8,
+          version: 9,
           mode: 'light',
           futureField: 'must-survive',
         },

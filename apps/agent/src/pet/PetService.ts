@@ -44,6 +44,14 @@ export class PetService {
     this.catalogService = new PetCatalogService(rootDirectory)
   }
 
+  start() {
+    this.catalogService.start()
+  }
+
+  dispose() {
+    this.catalogService.dispose()
+  }
+
   async list(): Promise<PetDescriptor[]> {
     let entries
     try {
@@ -87,7 +95,7 @@ export class PetService {
 
   async previewAsset(slug: string): Promise<{
     bytes: Uint8Array
-    contentType: 'image/gif'
+    contentType: 'image/webp'
     etag: string
   }> {
     return this.catalogService.previewAsset(slug)

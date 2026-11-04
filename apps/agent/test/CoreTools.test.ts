@@ -1,3 +1,4 @@
+import { ContextCompactionService } from '../src/context/ContextCompactionService'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -492,7 +493,7 @@ describe('核心工具面', () => {
       models,
       toolExecutor: executor,
       hub: { publish: () => Effect.succeed(undefined) } as never,
-      contextCompaction: { shouldAutoCompact: async () => false } as never,
+      contextCompaction: new ContextCompactionService(db),
     })
     const request = {
       threadID: thread.id,
@@ -948,7 +949,10 @@ describe('核心工具面', () => {
         { operation: 'create', path: 'vendor/repo/.git/hooks/pre-push' },
       ],
     })
-    expect(reviewed.at(-1)?.grantsForbidden).toBe(true)
+    expect(reviewed.at(-1)?.permissionFacts).toMatchObject({
+      risk: 'high',
+      ruleRequiresApproval: true,
+    })
     expect(reviewed.at(-1)?.fileDiffs).toEqual([
       expect.objectContaining({
         path: 'normal.txt',
@@ -1121,7 +1125,7 @@ describe('核心工具面', () => {
     ).rejects.toMatchObject({ code: 'INVALID_TOOL_INPUT' })
   })
 
-  test('Glob/Grep 接受工作区内绝对路径并拒绝越界', async () => {
+  test('Glob/Grep 接受绝对读取路径并拒绝未规范化的相对越界', async () => {
     const { root, executor, context, toolingCalls } = await fixture()
     await Bun.write(join(root, 'alpha.ts'), 'export const needle = true')
     await executor.execute('Glob', { pattern: '*.ts', path: root }, context)
@@ -1131,7 +1135,7 @@ describe('核心工具面', () => {
     temporary.push(outside)
     await expect(
       executor.execute('Glob', { pattern: '*.ts', path: outside }, context),
-    ).rejects.toMatchObject({ code: 'WORKSPACE_PATH_DENIED' })
+    ).resolves.toHaveProperty('matches')
     await expect(
       executor.execute('Glob', { pattern: '*.ts', path: '../outside' }, context),
     ).rejects.toMatchObject({ code: 'WORKSPACE_PATH_DENIED' })

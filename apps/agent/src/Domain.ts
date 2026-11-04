@@ -1,10 +1,19 @@
-import type { PermissionConfig, ShellReview, ThreadSettings } from '@pidex/shared/thread'
+import type {
+  PermissionConfig,
+  ShellReview,
+  TaskMode as SharedTaskMode,
+  ThreadSettings,
+} from '@pidex/shared/thread'
 import type { Model } from '@pidex/model-schema'
 
 export type { PermissionConfig } from '@pidex/shared/thread'
 /** SQLite-private delivery encoding; public RPC/view models expose InputDelivery. */
 export type StoredInputDelivery = 'start' | 'queue' | 'guide'
-export type TaskMode = 'chat' | 'plan'
+export type TaskMode = SharedTaskMode
+
+/** Decode stored modes without rewriting historical or newer-client values. */
+export const decodeStoredTaskMode = (value: unknown): TaskMode =>
+  value === 'plan' || value === 'grill' ? value : 'chat'
 export type TurnStatus =
   | 'queued'
   | 'running'
@@ -199,7 +208,26 @@ export interface EventEnvelope<T = unknown> {
   createdAt: number
 }
 
+/** Host-resolved subjects used only by permission-rule matching. */
+export interface ToolRuleTargets {
+  /** Canonical absolute read targets, after symlink resolution and validation. */
+  readPaths?: readonly string[]
+  /** Canonical absolute write targets; multi-file patches list every path. */
+  writePaths?: readonly string[]
+  /** Exact raw shell command value. */
+  command?: string
+  /** Safe literal argv from the host parser; null when the command is complex. */
+  argv?: readonly string[] | null
+  /** Requested exact network hostnames. */
+  networkDomains?: readonly string[]
+}
+
 export interface ToolPermissionFacts {
+  workspaceRoot?: string
+  riskCategories?: readonly import('@pidex/shared/thread').RiskCategory[]
+  networkAccess?: boolean
+  externalWrite?: boolean
+  externalCommand?: boolean
   ruleRequiresApproval?: boolean
   hookRequiresApproval?: boolean
   skillScript?: boolean
@@ -207,6 +235,21 @@ export interface ToolPermissionFacts {
   denyReason?: string
   approvalReason?: string
   approvalCategories?: readonly (keyof import('@pidex/shared/thread').GranularApprovalConfig)[]
+  /** Host rule facts loaded immediately before final permission evaluation. */
+  ruleEffect?: import('@pidex/shared/thread').PermissionRuleEffect
+  ruleIDs?: readonly string[]
+  /** Host-resolved rule match subjects; never derived from model arguments alone. */
+  ruleTargets?: ToolRuleTargets
+  /** True once the host evaluated the current rule catalog for this invocation. */
+  ruleFactsLoaded?: boolean
+  /** Host-detected approval requirement; a matching user grant can satisfy it. */
+  forcedApproval?: boolean
+  /**
+   * Host-derived: the action can destroy state that no local checkout can
+   * restore (remote repositories, branches, releases, workspace-external
+   * targets). Requires approval unless the user has already authorized the matching operation.
+   */
+  destructive?: boolean
 }
 
 export interface ToolInvocation {
@@ -262,6 +305,10 @@ export interface PermissionDecision {
   risk: 'low' | 'medium' | 'high' | 'critical'
   reason: string
   review?: ShellReview
+  /** Structured Guardian Beta verdict; absent for deterministic decisions. */
+  guardian?: import('./permission/Guardian').GuardianReview
+  /** Set when an auto-review request was downgraded to a human decision. */
+  fallbackReason?: string
   /** Returned only by authorization previews for scope-bound execution. */
   authorizationFingerprint?: string
 }

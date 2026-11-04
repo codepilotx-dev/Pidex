@@ -1,3 +1,4 @@
+import type { ConfiguredProviderGroup } from '../provider-management/Types.js'
 import type {
   DesktopApiKeyHealthStatus,
   DesktopApiKeySummary,
@@ -7,27 +8,48 @@ import type {
 } from '../../../shared/Types.js'
 
 export const MODEL_CENTER_PROVIDER_SECTIONS = ['connection', 'models'] as const
+
+export function groupProviderModels<T extends { id: string; group?: string }>(
+  models: readonly T[],
+  providerId: string,
+): { id: string; models: T[] }[] {
+  const groups = new Map<string, T[]>()
+  for (const model of models) {
+    const id =
+      model.group?.trim() || (model.id.includes('/') ? model.id.split('/')[0]! : providerId)
+    const group = groups.get(id) ?? []
+    group.push(model)
+    groups.set(id, group)
+  }
+  return [...groups].map(([id, models]) => ({ id, models }))
+}
 export type ModelCenterProviderSection = (typeof MODEL_CENTER_PROVIDER_SECTIONS)[number]
 
 export type ModelCenterRouteState = {
   providerId: string | null
   section: ModelCenterProviderSection
+  editing: boolean
 }
 
 export type ModelCenterRoutePatch = {
   providerId?: string | null
   section?: ModelCenterProviderSection | 'router' | null
+  editing?: boolean
 }
 
-export function legacyModelCenterSettingsTarget(search: string): {
-  pathname: '/settings/providers'
+/**
+ * 旧入口（/models、/settings/providers）统一收敛到一级供应商页；
+ * 只丢弃废弃的 `view` 参数，保留供应商、详情分区及其他查询参数。
+ */
+export function providerWorkspaceTarget(search: string): {
+  pathname: '/providers'
   search: string
 } {
   const params = new URLSearchParams(search)
   params.delete('view')
   const nextSearch = params.toString()
   return {
-    pathname: '/settings/providers',
+    pathname: '/providers',
     search: nextSearch ? `?${nextSearch}` : '',
   }
 }
@@ -60,6 +82,11 @@ export type ProviderDirectoryItem = {
   healthTone: 'healthy' | 'warning' | 'neutral'
 }
 
+/** 目录默认值或保存的配置不代表已配置凭据。 */
+export function isConfiguredProviderDirectoryItem(item: ProviderDirectoryItem): boolean {
+  return item.connectionStatus !== 'unconfigured'
+}
+
 export type ProviderDirectoryOptions = {
   query?: string
   filter?: ProviderCatalogFilter
@@ -75,6 +102,7 @@ const isProviderSection = (value: string | null): value is ModelCenterProviderSe
 export function parseModelCenterSearchParams(
   params: URLSearchParams,
   allowedProviderIds: readonly string[],
+  customProviderIds: readonly string[] = [],
 ): ModelCenterRouteState {
   const allowed = new Set(allowedProviderIds)
   const requestedProvider = params.get('provider')
@@ -86,6 +114,11 @@ export function parseModelCenterSearchParams(
   return {
     providerId: requestedProvider && allowed.has(requestedProvider) ? requestedProvider : null,
     section: resolvedSection,
+    editing:
+      params.get('edit') === '1' &&
+      requestedProvider !== null &&
+      allowed.has(requestedProvider) &&
+      customProviderIds.includes(requestedProvider),
   }
 }
 
@@ -144,6 +177,11 @@ export function updateModelCenterSearchParams(
   patch: ModelCenterRoutePatch,
 ): URLSearchParams {
   const next = new URLSearchParams(current)
+  if (patch.providerId !== undefined) {
+    next.delete('newProvider')
+    next.delete('edit')
+  }
+  if (patch.editing !== undefined) updateParam(next, 'edit', patch.editing ? '1' : null)
   updateParam(next, 'provider', patch.providerId)
   if (patch.section === 'router') {
     updateParam(next, 'section', 'connection')
@@ -255,4 +293,28 @@ function providerConnectionStatus(
     return 'configured'
 
   return 'unconfigured'
+}
+
+export function providerDetailStatus(
+  provider: DesktopModelProviderSummary,
+  state: DesktopModelProviderState | null,
+  group: ConfiguredProviderGroup | undefined,
+): { label: string; tone: 'positive' | 'warning' | 'neutral' } {
+  if (provider.availability?.status === 'unavailable') return { label: '暂不可用', tone: 'warning' }
+  if (provider.enabled === false) return { label: '已停用', tone: 'neutral' }
+  const connection = group?.connections.some(
+    (item) =>
+      item.origin === 'credential' &&
+      item.active &&
+      item.enabled !== false &&
+      ['inference-key', 'oauth', 'env'].includes(item.kind),
+  )
+  if (
+    connection ||
+    provider.apiKeyConfigured ||
+    state?.apiKeyConfigured ||
+    (provider.config?.kind === 'custom' && provider.config.auth === 'none')
+  )
+    return { label: '已配置', tone: 'positive' }
+  return { label: '未配置', tone: 'neutral' }
 }

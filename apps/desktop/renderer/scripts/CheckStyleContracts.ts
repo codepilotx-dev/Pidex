@@ -57,6 +57,7 @@ type StyleContractManifest = {
   cascadeLayerOrder: string[]
   directStyleImportAllowlist: string[]
   lazyStyleEntrypoints: Record<string, 'vendor' | 'features'>
+  componentStyleEntrypoints?: Record<string, string | string[]>
   customPropertyReferenceAllowlist: string[]
   forbiddenCustomPropertyPatterns: string[]
   importantDeclarationAllowlist: Record<string, number>
@@ -153,6 +154,10 @@ async function collectEntryGraph(entrypoint: string): Promise<Set<string>> {
   return visited
 }
 
+/*
+ * Static styles authored in TSX (`String.raw` blocks) are read with the style
+ * patterns; the script patterns still apply to the surrounding component code.
+ */
 function collectCustomPropertyDefinitions(source: string, isStyle: boolean): Set<string> {
   const definitions = new Set<string>()
   const patterns = isStyle
@@ -161,6 +166,7 @@ function collectCustomPropertyDefinitions(source: string, isStyle: boolean): Set
         /setProperty\(\s*['"](--[\w-]+)['"]/g,
         /['"](--[\w-]+)['"]\s*\??\s*:/g,
         /\[\s*['"](--[\w-]+)['"]\s*\]\s*=/g,
+        /(--[\w-]+)\s*:/g,
       ]
   for (const pattern of patterns) {
     for (const match of source.matchAll(pattern)) definitions.add(match[1])
@@ -420,6 +426,14 @@ for (const file of featureTokenStyleFiles) {
   const path = workspacePath(file)
   if (/\.ui-button\b/.test(source)) {
     errors.push(`feature styles must not target .ui-button: ${path}`)
+  }
+  if (/\.icon-button\b/.test(source)) {
+    errors.push(`feature styles must not target .icon-button: ${path}`)
+  }
+  if (/\[data-position=['"]?sidebar/.test(source)) {
+    errors.push(
+      `feature styles must not restyle the shared sidebar button preset; use data-position="sidebar": ${path}`,
+    )
   }
 }
 for (const file of featureTokenScriptFiles) {
@@ -1383,6 +1397,10 @@ for (const lazyPath of Object.keys(manifest.lazyStyleEntrypoints)) {
   const lazyFile = resolve(workspaceRoot, lazyPath)
   if (await isFile(lazyFile)) layerSources.add(lazyFile)
 }
+for (const componentPath of Object.keys(manifest.componentStyleEntrypoints ?? {})) {
+  const componentFile = resolve(workspaceRoot, componentPath)
+  if (await isFile(componentFile)) layerSources.add(componentFile)
+}
 for (const styleFile of layerSources) {
   const source = await readFile(styleFile, 'utf8')
   for (const match of source.matchAll(/@layer\s+([\w-]+)\s*\{/g)) loadedLayers.add(match[1])
@@ -1465,16 +1483,52 @@ for (const [lazyEntrypoint, expectedLayer] of lazyStyleEntrypoints) {
     )
   }
 }
+const componentStyleEntrypoints = new Map(
+  Object.entries(manifest.componentStyleEntrypoints ?? {}).map(([path, layer]) => [
+    resolve(workspaceRoot, path),
+    Array.isArray(layer) ? layer : [layer],
+  ]),
+)
+for (const [componentEntrypoint, expectedLayers] of componentStyleEntrypoints) {
+  if (!directStyleTargets.has(componentEntrypoint)) {
+    errors.push(
+      `component style entrypoint must be directly imported: ${workspacePath(componentEntrypoint)}`,
+    )
+    continue
+  }
+  const source = await readFile(componentEntrypoint, 'utf8')
+  const layers = [
+    ...new Set(
+      [
+        ...source.matchAll(/@layer\s+([\w-]+)\s*\{/g),
+        ...source.matchAll(/@import\s+[^;]*\blayer\(\s*([\w-]+)\s*\)/g),
+      ].map((match) => match[1]),
+    ),
+  ]
+  for (const layer of layers) {
+    if (!expectedLayers.includes(layer)) {
+      errors.push(
+        `component style entrypoint ${workspacePath(componentEntrypoint)} declares unexpected @layer ${layer}; allowed: ${expectedLayers.join(', ')}`,
+      )
+    }
+  }
+  if (layers.length === 0) {
+    errors.push(
+      `component style entrypoint ${workspacePath(componentEntrypoint)} must declare at least one @layer (${expectedLayers.join(', ')})`,
+    )
+  }
+}
 for (const directStyleTarget of directStyleTargets) {
   if (
     directStyleTarget === entrypoint ||
     lazyStyleEntrypoints.has(directStyleTarget) ||
-    legacyEntrypointSet.has(directStyleTarget)
+    legacyEntrypointSet.has(directStyleTarget) ||
+    componentStyleEntrypoints.has(directStyleTarget)
   ) {
     continue
   }
   errors.push(
-    `direct style target must be a declared lazy or legacy entrypoint: ${workspacePath(directStyleTarget)}`,
+    `direct style target must be a declared lazy, component or legacy entrypoint: ${workspacePath(directStyleTarget)}`,
   )
 }
 for (const legacyEntrypoint of legacyScssEntrypoints) {
@@ -1493,6 +1547,11 @@ for (const lazyEntrypoint of lazyStyleEntrypoints.keys()) {
 }
 for (const legacyEntrypoint of legacyScssEntrypoints) {
   for (const styleFile of await collectEntryGraph(legacyEntrypoint)) {
+    completeStyleGraph.add(styleFile)
+  }
+}
+for (const componentEntrypoint of componentStyleEntrypoints.keys()) {
+  for (const styleFile of await collectEntryGraph(componentEntrypoint)) {
     completeStyleGraph.add(styleFile)
   }
 }
@@ -1525,12 +1584,23 @@ for (const definition of customPropertyDefinitions) {
     errors.push(`forbidden legacy custom property definition: ${definition}`)
   }
 }
+const customPropertyReferenceSources = new Map<string, string[]>()
+for (const file of [...styleFiles, ...scriptFiles]) {
+  const source = await readFile(file, 'utf8')
+  for (const match of source.matchAll(/var\(\s*(--[\w-]+)/g)) {
+    const sources = customPropertyReferenceSources.get(match[1]) ?? []
+    sources.push(workspacePath(file))
+    customPropertyReferenceSources.set(match[1], sources)
+  }
+}
 for (const reference of customPropertyReferences) {
   if (
     !customPropertyDefinitions.has(reference) &&
     !allowedCustomPropertyReferences.has(reference)
   ) {
-    errors.push(`undefined custom property reference: ${reference}`)
+    errors.push(
+      `undefined custom property reference: ${reference} (${[...new Set(customPropertyReferenceSources.get(reference) ?? [])].join(', ')})`,
+    )
   }
 }
 for (const reference of allowedCustomPropertyReferences) {

@@ -17,5 +17,5 @@ export function resolveThinkingOptions(
 }
 
 export function resolveThinkingLabel(options: ThinkingOption[], thinkingMode: string): string {
-  return options.find((option) => option.value === thinkingMode)?.label ?? '默认'
+  return (options.find((option) => option.value === thinkingMode) ?? options[0])?.label ?? '默认'
 }

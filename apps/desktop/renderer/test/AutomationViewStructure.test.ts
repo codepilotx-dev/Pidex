@@ -20,6 +20,10 @@ const calendarSource = readFileSync(
   new URL('../src/features/automation/AutomationCalendar.tsx', import.meta.url),
   'utf8',
 )
+const sidebarSource = readFileSync(
+  new URL('../src/features/layout/sidebar/SidebarScheduledPane.tsx', import.meta.url),
+  'utf8',
+)
 
 describe('AutomationView primary page hierarchy', () => {
   test('uses the shared primary page with Codex status navigation', () => {
@@ -154,10 +158,10 @@ describe('AutomationView primary page hierarchy', () => {
     expectSourceNotContains(viewSource, 'setQuickDraft')
   })
 
-  test('mounts top-level header navigation for calendar and execution records and dedicated runs list', () => {
-    expectSourceContains(viewSource, 'id="automation.navigation"')
-    expectSourceContains(viewSource, "{ value: 'calendar', label: '日历' }")
-    expectSourceContains(viewSource, "{ value: 'runs', label: '执行记录' }")
+  test('mounts sidebar route navigation for calendar and execution records and dedicated runs list', () => {
+    expectSourceNotContains(viewSource, 'id="automation.navigation"')
+    expectSourceContains(sidebarSource, 'TAB_OPTIONS')
+    expectSourceContains(sidebarSource, 'browse(option.value)')
     expectSourceContains(viewSource, '<AutomationRunsList')
     expectSourceContains(viewSource, 'automation-runs-page-list')
     expectSourceContains(viewSource, 'automation-runs-page-item')

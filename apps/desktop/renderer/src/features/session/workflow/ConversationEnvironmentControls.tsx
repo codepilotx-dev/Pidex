@@ -520,6 +520,7 @@ export function ConversationEnvironmentControls({
                   <p className="tw:m-0 tw:type-body-sm tw:text-app-text-soft">仅 Git 项目可用。</p>
                 ) : null}
                 <Button
+                  size="md"
                   color="secondary"
                   disabled={busy || !gitAvailable}
                   onClick={() => void start({ kind: 'local' })}
@@ -528,6 +529,7 @@ export function ConversationEnvironmentControls({
                 </Button>
                 {readyWorktrees.map((worktree) => (
                   <Button
+                    size="md"
                     color="secondary"
                     disabled={busy}
                     key={worktree.id}
@@ -537,6 +539,7 @@ export function ConversationEnvironmentControls({
                   </Button>
                 ))}
                 <Button
+                  size="md"
                   color="secondary"
                   disabled={!projectId || busy || !gitAvailable}
                   onClick={() => void createWorktree()}
@@ -548,6 +551,7 @@ export function ConversationEnvironmentControls({
 
             <div className="tw:flex tw:flex-wrap tw:justify-end tw:gap-2">
               <Button
+                size="md"
                 color="ghostSecondary"
                 onClick={() => {
                   setHandoffOpen(false)
@@ -557,6 +561,7 @@ export function ConversationEnvironmentControls({
                 配置 Local environment…
               </Button>
               <Button
+                size="md"
                 color="ghostSecondary"
                 disabled={!projectId || !gitAvailable}
                 onClick={() => {
@@ -567,7 +572,12 @@ export function ConversationEnvironmentControls({
               >
                 管理 Worktrees…
               </Button>
-              <Button color="ghostSecondary" disabled={busy} onClick={() => void refresh()}>
+              <Button
+                size="md"
+                color="ghostSecondary"
+                disabled={busy}
+                onClick={() => void refresh()}
+              >
                 <RefreshCw aria-hidden="true" size={APP_ICON_SIZE} />
                 刷新
               </Button>

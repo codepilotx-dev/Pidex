@@ -29,7 +29,7 @@ test('appearance mode changes from cards and keyboard and persists', async ({ pa
       await expect
         .poll(() =>
           page.evaluate(
-            () => JSON.parse(localStorage.getItem('pidex.desktop.appearance.v6') ?? '{}').mode,
+            () => JSON.parse(localStorage.getItem('pidex.desktop.appearance.v8') ?? '{}').mode,
           ),
         )
         .toBe(mode)

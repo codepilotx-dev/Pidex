@@ -4,6 +4,8 @@ import {
   DEFAULT_SIDEBAR_CUSTOMIZATION,
   DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS,
   normalizeSidebarCustomization,
+  defaultDesktopStoredSettings,
+  normalizeDesktopStoredSettings,
 } from '../shared/SettingsSchema.js'
 import {
   addSidebarSection,
@@ -20,6 +22,7 @@ import {
   setSidebarSectionCollapsed,
   setSidebarSectionItems,
   setSidebarSectionSort,
+  setSidebarDestinationHidden,
 } from '../src/features/layout/sidebar/SidebarCustomization.js'
 import {
   buildSidebarCustomSections,
@@ -53,6 +56,31 @@ const sections: SidebarCustomization = {
 }
 
 describe('侧栏自定义分组', () => {
+  test('入口固定与收纳保留分组、顺序和未知入口，并在设置往返后恢复', () => {
+    const current = {
+      ...sections,
+      destinationOrder: ['sessionGroups', 'pets', 'future', 'automations'],
+      hiddenDestinationIds: ['pets', 'home', 'future'],
+    }
+    const pinned = setSidebarDestinationHidden(current, 'pets', false)
+    expect(pinned.hiddenDestinationIds).toEqual(['home', 'future'])
+    expect(pinned.sections).toBe(current.sections)
+    expect(pinned.destinationOrder).toBe(current.destinationOrder)
+    const restored = normalizeDesktopStoredSettings(
+      JSON.parse(
+        JSON.stringify({
+          ...defaultDesktopStoredSettings(),
+          sidebarCustomization: pinned,
+        }),
+      ),
+    ).sidebarCustomization
+    expect(restored.hiddenDestinationIds).toEqual(pinned.hiddenDestinationIds)
+    expect(restored.destinationOrder.slice(0, 4)).toEqual(current.destinationOrder)
+    const hidden = setSidebarDestinationHidden(restored, 'pets', true)
+    expect(hidden.hiddenDestinationIds).toEqual(['home', 'future', 'pets'])
+    expect(setSidebarDestinationHidden(hidden, 'pets', true)).toEqual(hidden)
+  })
+
   test('创建分组补默认值并保持在 order 末尾', () => {
     const created = addSidebarSection(DEFAULT_SIDEBAR_CUSTOMIZATION, 'section-1')
     expect(created.sections).toHaveLength(1)
@@ -309,8 +337,15 @@ describe('自定义信息保留式迁移', () => {
     })
     expect(normalized.sectionOrder).toEqual(['work'])
     expect(normalized.pinnedSort).toBe('manual')
-    expect(normalized.destinationOrder).toEqual(['automations', 'plugins', 'sessionGroups'])
-    expect(normalized.hiddenDestinationIds).toEqual(['sessionGroups'])
+    expect(normalized.destinationOrder).toEqual([
+      'automations',
+      'git',
+      'plugins',
+      'providers',
+      'pets',
+      'sessionGroups',
+    ])
+    expect(normalized.hiddenDestinationIds).toEqual(['pets', 'sessionGroups'])
   })
 
   test('非法输入回退到默认值而不是清空', () => {
@@ -323,15 +358,27 @@ describe('自定义信息保留式迁移', () => {
     })
     expect(duplicated.sections).toHaveLength(1)
     expect(duplicated.sectionOrder).toEqual(['work'])
-    expect(DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS).toEqual(['sessionGroups'])
+    expect(DEFAULT_SIDEBAR_HIDDEN_DESTINATION_IDS).toEqual(['pets', 'sessionGroups'])
     // 未知目的地键保留原值，仅在缺失时补齐默认项。
     expect(duplicated.destinationOrder).toEqual([
       'plugins',
       'unknown',
       'automations',
+      'git',
+      'providers',
+      'pets',
       'sessionGroups',
     ])
   })
+})
+
+test('旧导航配置补齐 Git 看板与宠物市场并保留已有排序和隐藏设置', () => {
+  const destinationOrder = ['providers', 'plugins', 'automations', 'sessionGroups']
+  const hiddenDestinationIds = ['plugins', 'sessionGroups']
+  const normalized = normalizeSidebarCustomization({ destinationOrder, hiddenDestinationIds })
+  expect(normalized.destinationOrder).toEqual([...destinationOrder, 'git', 'pets'])
+  expect(normalized.hiddenDestinationIds).toEqual(hiddenDestinationIds)
+  expect(normalized.version).toBe(1)
 })
 
 test('最近区显示项目聊天开关保留置顶和分区归属', () => {

@@ -1,8 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import type { MiniMaxCliStatus, PluginSummary } from '@pidex/agent-protocol'
+import type { PluginSummary } from '@pidex/agent-protocol'
 import {
-  PLUGIN_CATALOG_DESCRIPTORS,
   filterPluginCatalog,
+  groupMarketplacePlugins,
   groupPluginCatalogBySource,
   mergePluginCatalog,
   pluginPrimaryAction,
@@ -12,163 +12,68 @@ import {
 import { groupSkillsForDisplay } from '../src/features/plugins/SkillCatalog.js'
 import type { DesktopSkillCatalogItem } from '../shared/Types.js'
 
-function taskPlanning(enabled: boolean): PluginSummary {
-  return {
-    id: 'task-planning',
-    name: '任务规划',
-    version: '1.0.0',
-    description: '澄清目标并生成可执行的任务规划。',
-    developerName: 'Pidex',
-    category: 'Productivity',
-    source: 'bundled',
-    installationPolicy: 'INSTALLED_BY_DEFAULT',
-    installed: true,
-    enabled,
-    status: 'ready',
-    capabilities: ['task-planning'],
-    skills: ['task-planning'],
-  }
+const builtin: PluginSummary = {
+  id: 'task-planning',
+  name: '任务规划',
+  version: '1.0.0',
+  description: '规划复杂工作',
+  developerName: 'Pidex',
+  category: 'Productivity',
+  source: 'bundled',
+  installationPolicy: 'INSTALLED_BY_DEFAULT',
+  installed: true,
+  enabled: true,
+  status: 'ready',
+  capabilities: [],
+  skills: ['task-planning'],
 }
-
-function catalog(
-  plugins: PluginSummary[] | undefined = [taskPlanning(true)],
-  error: unknown = null,
-) {
-  return mergePluginCatalog(PLUGIN_CATALOG_DESCRIPTORS, plugins, error)
+const demo: PluginSummary = {
+  ...builtin,
+  id: 'pidex-demo',
+  name: 'Pidex Demo',
+  source: 'installed',
+  installationPolicy: 'AVAILABLE',
+  installed: false,
+  enabled: false,
+  canInstall: true,
+  canUninstall: false,
 }
+const catalog = (plugins: PluginSummary[] = [builtin, demo]) => mergePluginCatalog(plugins)
 
-test('computer control replaces its placeholder with one manageable plugin', () => {
-  const computer = { ...taskPlanning(false), id: 'computer-use', name: 'Computer Use' }
-  const entries = catalog([computer]).filter((item) => item.id === 'computer-use')
-  expect(entries).toHaveLength(1)
-  expect(entries[0]).toMatchObject({
-    status: 'disabled',
-    iconName: 'computer-use',
-    installed: true,
-    actionKind: 'toggle-plugin',
-  })
+test('catalog contains only discovered plugins and retains them on remote errors', () => {
+  expect(catalog().map((item) => item.id)).toEqual(['task-planning', 'pidex-demo'])
+  expect(catalog([builtin])).toHaveLength(1)
+  expect(catalog([])).toEqual([])
 })
-
-const miniMaxInstalled: MiniMaxCliStatus = {
-  installationStatus: 'installed',
-  installedVersion: '1.2.3',
-  latestVersion: '1.2.3',
-  updateAvailable: false,
-  nodeVersion: 'v22.0.0',
-  npmVersion: '10.0.0',
-  authStatus: 'coding-plan-synced',
-  credentialSource: {
-    providerId: 'minimax-cn-coding-plan',
-    credentialId: 'credential:cn',
-    label: 'MiniMax CN Coding Plan',
-    maskedValue: 'sk-****plan',
-    region: 'cn',
-  },
-  generation: 2,
-  updatedAt: 2,
-}
-
-describe('plugin catalog state', () => {
-  test('maps the real task planning plugin to enabled and disabled states', () => {
-    expect(catalog([taskPlanning(true)]).find((item) => item.id === 'task-planning')?.status).toBe(
-      'enabled',
-    )
-    expect(catalog([taskPlanning(false)]).find((item) => item.id === 'task-planning')?.status).toBe(
-      'disabled',
-    )
+test('remote plugin offers installation, installed plugin offers toggle and removal', () => {
+  const item = catalog()[1]!
+  expect(pluginStatusLabel(item)).toBe('未安装')
+  expect(pluginPrimaryAction(item)).toEqual({ kind: 'install', label: '安装', disabled: false })
+  const installed = catalog([
+    { ...demo, installed: true, enabled: false, canInstall: false, canUninstall: true },
+  ])[0]!
+  expect(pluginPrimaryAction(installed)).toEqual({
+    kind: 'toggle-plugin',
+    label: '启用',
+    disabled: false,
+    checked: false,
   })
-
-  test('keeps all six Featured plugins unavailable with disabled install actions', () => {
-    const featured = catalog().filter((item) => item.category === 'included')
-    expect(featured.map((item) => item.id)).toEqual([
-      'computer-use',
-      'browser',
-      'chrome',
-      'spreadsheets',
-      'presentations',
-      'github',
-    ])
-    for (const item of featured) {
-      expect(item.status).toBe('unavailable')
-      expect(pluginStatusLabel(item)).toBe('即将推出')
-      expect(pluginPrimaryAction(item)).toEqual({ kind: 'install', label: '安装', disabled: true })
-    }
-  })
-
-  test('keeps static entries visible when the real plugin request fails', () => {
-    const items = catalog([], new Error('RPC failed'))
-    expect(items).toHaveLength(7)
-    expect(items.some((item) => item.id === 'task-planning')).toBe(false)
-    expect(items.find((item) => item.id === 'browser')?.status).toBe('unavailable')
-  })
+  expect(installed.canUninstall).toBe(true)
+  expect(catalog()[0]?.canUninstall).toBe(false)
+  expect(pluginPrimaryAction(catalog([{ ...demo, canInstall: false }])[0]!).disabled).toBe(true)
 })
-
-describe('plugin catalog filtering and actions', () => {
-  const items = catalog()
-
-  test('matches trimmed, case-insensitive name and description queries', () => {
-    expect(filterPluginCatalog(items, ' GITHUB ', 'all', 'all').map((item) => item.id)).toEqual([
-      'github',
-    ])
-    expect(filterPluginCatalog(items, '任务规划', 'all', 'all').map((item) => item.id)).toEqual([
-      'task-planning',
-    ])
-  })
-
-  test('combines category and status filters', () => {
-    expect(filterPluginCatalog(items, '', 'manageable', 'enabled').map((item) => item.id)).toEqual([
-      'task-planning',
-    ])
-    expect(filterPluginCatalog(items, '', 'included', 'disabled')).toEqual([])
-  })
-
-  test('keeps the official link fallback when the connected Agent lacks MiniMax CLI support', () => {
-    const minimax = items.find((item) => item.id === 'minimax')!
-    expect(pluginPrimaryAction(minimax)).toEqual({
-      kind: 'open-external',
-      label: '查看安装说明',
-      disabled: false,
-    })
-    expect(pluginStatusLabel(minimax)).toBe('外部工具')
-  })
-
-  test('maps MiniMax CLI installation, update, and Coding Plan authentication state', () => {
-    const installed = mergePluginCatalog(PLUGIN_CATALOG_DESCRIPTORS, [], null, {
-      status: miniMaxInstalled,
-    }).find((item) => item.id === 'minimax')!
-    expect(pluginPrimaryAction(installed)).toEqual({
-      kind: 'install-minimax',
-      label: '已安装',
-      disabled: true,
-    })
-    expect(pluginStatusLabel(installed)).toBe('已安装 · 已连接 Coding Plan')
-
-    const update = mergePluginCatalog(PLUGIN_CATALOG_DESCRIPTORS, [], null, {
-      status: { ...miniMaxInstalled, latestVersion: '1.3.0', updateAvailable: true },
-    }).find((item) => item.id === 'minimax')!
-    expect(pluginPrimaryAction(update)).toEqual({
-      kind: 'update-minimax',
-      label: '更新',
-      disabled: false,
-    })
-  })
-})
-
-describe('plugin catalog presentation selectors', () => {
-  test('groups categories in their fixed order', () => {
-    expect(groupPluginCatalogBySource(catalog()).map((group) => group.category)).toEqual([
-      'included',
-      'manageable',
-      'external',
-    ])
-  })
-
-  test('puts only installed and enabled real plugins on the shelf', () => {
-    expect(
-      selectInstalledPluginOverview(catalog([taskPlanning(true)])).map((item) => item.id),
-    ).toEqual(['task-planning'])
-    expect(selectInstalledPluginOverview(catalog([taskPlanning(false)]))).toEqual([])
-  })
+test('filters actual names, categories and enabled state', () => {
+  expect(
+    filterPluginCatalog(catalog(), ' DEMO ', 'manageable', 'all').map((item) => item.id),
+  ).toEqual(['pidex-demo'])
+  expect(filterPluginCatalog(catalog(), '', 'included', 'enabled').map((item) => item.id)).toEqual([
+    'task-planning',
+  ])
+  expect(groupPluginCatalogBySource(catalog()).map((group) => group.category)).toEqual([
+    'included',
+    'manageable',
+  ])
+  expect(selectInstalledPluginOverview(catalog()).map((item) => item.id)).toEqual(['task-planning'])
 })
 
 describe('skill catalog presentation selectors', () => {
@@ -182,4 +87,19 @@ describe('skill catalog presentation selectors', () => {
     expect(groups.installed.map((skill) => skill.id)).toEqual(['two'])
     expect(groups.recommended.map((skill) => skill.id)).toEqual(['one'])
   })
+})
+
+test('market sections retain repository ordering, merge installed state and include uncategorized entries', () => {
+  const items = mergePluginCatalog([
+    { ...demo, installed: true, enabled: false, inMarketplace: true },
+    { ...demo, id: 'other', name: 'Other', developerName: 'Acme' },
+  ])
+  const groups = groupMarketplacePlugins(items, [
+    { id: 'featured', title: '推荐', pluginIds: ['pidex-demo', 'pidex-demo', 'missing'] },
+  ])
+  expect(groups.map((group) => group.id)).toEqual(['featured', '!other'])
+  expect(groups[0]?.items).toHaveLength(1)
+  expect(groups[0]?.items[0]).toMatchObject({ installed: true, enabled: false })
+  expect(filterPluginCatalog(items, 'Acme', 'all', 'all').map((item) => item.id)).toEqual(['other'])
+  expect(filterPluginCatalog(items, 'Productivity', 'all', 'all')).toHaveLength(2)
 })

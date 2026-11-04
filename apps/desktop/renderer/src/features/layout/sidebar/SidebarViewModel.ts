@@ -8,7 +8,7 @@ import type { SessionListItem } from '../../../UiTypes.js'
 import { sortSessionsByRecency } from '../../session/state/SessionSorting.js'
 import { normalizePathForComparison } from '../../../utils/PathUtils.js'
 
-export type SidebarSessionVisualState = 'needs-input' | 'running' | 'unread' | 'idle'
+export type SidebarSessionVisualState = 'needs-input' | 'running' | 'error' | 'unread' | 'idle'
 
 export type SidebarPinnedItem =
   | {
@@ -698,6 +698,30 @@ export function sidebarPinnedProjectKey(project: DesktopWorkspace): string {
   return `project:${sidebarProjectKey(project)}`
 }
 
+/**
+ * 项目的全部源目录都不存在时才算不可用：只要有一个目录还在，项目就仍可新建会话。
+ * `folders` 缺失是旧数据，不能当成“全部不存在”，交由调用方的运行时集合兜底。
+ */
+export function isProjectWorkspaceUnavailable(project: DesktopWorkspace): boolean {
+  const folders = project.folders
+  if (!folders || folders.length === 0) return false
+  return folders.every((folder) => folder.availability === 'missing')
+}
+
+/**
+ * 侧边栏项目的不可用判定：运行时探测到的不可用优先，其次看目录聚合状态。
+ * `unavailablePaths` 需已按 `normalizeSidebarPath` 归一化。
+ */
+export function isSidebarProjectUnavailable(
+  project: DesktopWorkspace,
+  unavailablePaths: ReadonlySet<string>,
+): boolean {
+  return (
+    unavailablePaths.has(normalizeSidebarPath(project.path)) ||
+    isProjectWorkspaceUnavailable(project)
+  )
+}
+
 export function sortProjectsForSidebar(
   projects: readonly DesktopWorkspace[],
   {
@@ -750,6 +774,7 @@ export function deriveSidebarSessionVisualState(
     return 'needs-input'
   }
   if (session.status === 'running') return 'running'
+  if (session.latestTurnStatus === 'failed') return 'error'
   if (session.unreadAt) return 'unread'
   return 'idle'
 }

@@ -196,6 +196,46 @@ describe('AskUserQuestion pure model', () => {
     ).toBeNull()
   })
 
+  test('accepts five questions with five options and preselects every recommendation', () => {
+    const five = parseAskUserQuestions({
+      questions: Array.from({ length: 5 }, (_, questionIndex) => ({
+        id: `q${questionIndex}`,
+        question: `问题 ${questionIndex}`,
+        options: Array.from({ length: 5 }, (_, optionIndex) => ({
+          label: `选项 ${optionIndex}`,
+          description: '说明',
+          ...(optionIndex < 2 ? { recommended: true } : {}),
+        })),
+        ...(questionIndex === 0 ? { multiSelect: true } : {}),
+      })),
+    })!
+    expect(five).toHaveLength(5)
+    expect(initialQuestionState(five[0]!).selected).toEqual(['选项 0', '选项 1'])
+    expect(initialQuestionState(five[1]!).selected).toEqual(['选项 0'])
+    expect(
+      parseAskUserQuestions({
+        questions: [
+          {
+            question: '过多',
+            options: Array.from({ length: 11 }, (_, index) => ({
+              label: `选项 ${index}`,
+              description: '说明',
+            })),
+          },
+        ],
+      }),
+    ).toBeNull()
+    expect(
+      parseAskUserQuestions({
+        questions: Array.from({ length: 6 }, (_, index) => ({
+          id: `q${index}`,
+          question: `问题 ${index}`,
+          options: [],
+        })),
+      }),
+    ).toBeNull()
+  })
+
   test('builds stable answer maps for multiple questions and custom text', () => {
     const questions = parseAskUserQuestions(input)!
     const states: Record<string, QuestionState> = {

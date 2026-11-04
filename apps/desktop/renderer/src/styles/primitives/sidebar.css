@@ -8,10 +8,11 @@
  * - the sidebar density contract (`--sidebar-*`), i.e. runtime geometry that
  *   TSX utilities consume through `var()` and that
  *   `test/SidebarOriginLayout.browser.ts` reads back with getComputedStyle;
- * - subtree overrides that must reach every descendant regardless of the
- *   component class each child carries: the icon-button size override and the
+ * - subtree overrides that must reach every descendant: the
  *   "grabbing" cursor while a reorder item is being dragged;
  * - one `color-mix()` surface (sidebar session approval chip);
+ * - the one-off 16px font size of the sidebar product-mode selector, which has
+ *   to outrank its `type-control` role from the utilities layer;
  * - rules whose consumers are owned by another migration group:
  *   `.sidebar-panel-content` (layout/shell/DesktopLayout.tsx),
  *   `.sidebar-layout` (settings/SettingsSidebarContent.tsx),
@@ -48,6 +49,13 @@
     );
   }
 
+  /* The measured overflow distance and duration are published by `OverflowTitle`. */
+  .sidebar-session-title-track[data-scrolling='true'] {
+    transform: translateX(calc(-1 * var(--sidebar-title-scroll-distance)));
+    transition: transform var(--sidebar-title-scroll-duration) var(--cpx-sys-ease-linear)
+      var(--cpx-sys-motion-micro);
+  }
+
   @media (forced-colors: active) {
     .sidebar-session-title[data-overflowing='true'],
     .sidebar-session-title[data-overflowing='true'][data-scrolling='true'] {
@@ -67,23 +75,18 @@
     --sidebar-icon-size: var(--cpx-sys-icon-size-md);
     --sidebar-icon-button-size: var(--cpx-sys-space-6);
     --sidebar-item-gap: var(--cpx-sys-space-2);
-    --sidebar-row-gap: calc(var(--cpx-sys-space-1) / 2);
+    --sidebar-row-gap: 1px;
     --sidebar-padding-x: var(--sidebar-inline-gutter);
     --sidebar-row-pad-y: var(--cpx-sys-space-1);
     --sidebar-row-height: 30px;
     --sidebar-row-radius: var(--cpx-sys-radius-md);
     --sidebar-indent-step: var(--cpx-sys-space-4);
     --sidebar-section-gap: var(--cpx-sys-space-4);
-    --sidebar-trailing-width: 4.286em;
+    --sidebar-trailing-width: 60px;
     --sidebar-row-columns: var(--sidebar-leading-width) minmax(0, 1fr) auto;
     --sidebar-session-content-indent: calc(
       var(--sidebar-inline-gutter) + var(--sidebar-indent-step)
     );
-  }
-
-  /* Every icon button inside the sidebar uses the 24px sidebar icon box. */
-  .desktop-sidebar .icon-button {
-    --button-size: var(--sidebar-icon-button-size);
   }
 
   .sidebar-hover-card-surface {
@@ -93,16 +96,18 @@
     --sidebar-hover-column-gap: var(--cpx-sys-space-2);
   }
 
-  .sidebar-hover-card-surface .icon-button {
-    --button-size: var(--sidebar-icon-button-size);
-  }
-
   /* While a reorder item is dragged the whole sidebar shows the grabbing cursor. */
   .desktop-sidebar:has(.sidebar-reorder-item[data-dragging='true']) {
     cursor: grabbing;
   }
 
-  .desktop-sidebar:has(.sidebar-reorder-item[data-dragging='true']) * {
+  .desktop-sidebar:has(.sidebar-reorder-item[data-dragging='true'])
+    :is(
+      .sidebar-reorder-item,
+      .sidebar-session-button,
+      .sidebar-project-button,
+      .sidebar-section-toggle
+    ) {
     cursor: grabbing;
   }
 
@@ -199,7 +204,7 @@
    * utility and several of these are plain `div`/`a` elements.
    */
   .sidebar-row,
-  .sidebar-product-mode-trigger,
+  .sidebar-product-mode-select,
   .sidebar-footer-trigger,
   .sidebar-hover-card-surface,
   .popover-usage-action {
@@ -276,9 +281,9 @@
   }
 
   .settings-nav-icon {
-    width: var(--sidebar-icon-size);
-    height: var(--sidebar-icon-size);
-    flex: 0 0 var(--sidebar-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
+    flex: 0 0 auto;
   }
 
   /*
@@ -288,5 +293,31 @@
    */
   .sidebar-session-list-extra {
     overflow: hidden;
+  }
+
+  .desktop-sidebar.is-floating {
+    border: 0;
+    border-radius: var(--cpx-sys-radius-container);
+    background: var(--cpx-comp-glass-bg, var(--cpx-comp-surface-floating));
+    backdrop-filter: var(--cpx-comp-glass-filter, blur(16px));
+    box-shadow: var(--cpx-sys-shadow-floating);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .desktop-sidebar.is-floating {
+      backdrop-filter: none;
+      background: var(--cpx-comp-surface-floating);
+    }
+  }
+}
+
+/*
+ * 侧栏顶部「产品模式」选择器只出现在这一处，不为此新增系统排版角色：沿用
+ * `type-control` 的字重与行高，仅把字号提到 16px 刻度。字号必须压过 utilities
+ * 层中 `type-control` 的 `font` 简写，因此放在 overrides 层并消费字号 token。
+ */
+@layer overrides {
+  .sidebar-product-mode-select {
+    font-size: var(--cpx-sys-font-size-lg);
   }
 }

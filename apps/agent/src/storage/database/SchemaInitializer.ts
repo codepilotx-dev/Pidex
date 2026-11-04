@@ -1,15 +1,22 @@
+import { CONTEXT_LIFECYCLE_SCHEMA } from '../repositories/ContextRepository'
+import { THREAD_EDIT_SCHEMA } from '../repositories/ThreadEditRepository'
 import { Database } from 'bun:sqlite'
 import { createHash } from 'node:crypto'
 import { resolve } from 'node:path'
 import { PLAN_APPROVAL_SCHEMA } from '../repositories/PlanApprovalRepository'
+import { SCHEDULE_DRAFT_SCHEMA } from '../repositories/ScheduleDraftRepository'
+import { TASK_SCHEDULE_SCHEMA } from '../repositories/TaskScheduleRepository'
 import {
   THREAD_GOAL_SCHEMA,
   THREAD_GOAL_SCHEMA_V45,
   migrateThreadGoals45To46,
 } from '../repositories/ThreadGoalRepository'
 import { THREAD_GOAL_LEDGER_SCHEMA } from '../repositories/ThreadGoalLedgerRepository'
+import { QUEUED_GOAL_SCHEMA } from '../repositories/QueuedGoalRepository'
 import { THREAD_GOAL_CONTINUATION_SCHEMA } from '../repositories/ThreadGoalContinuationRepository'
+import { THREAD_GOAL_CONTROL_SCHEMA } from '../repositories/ThreadGoalControlRepository'
 import { THREAD_BOOKMARK_SCHEMA } from '../repositories/ThreadBookmarkRepository'
+import { THREAD_PULL_REQUEST_SCHEMA } from '../repositories/ThreadPullRequestRepository'
 import { BROWSER_SCHEMA } from '../repositories/BrowserRepository'
 import { BROWSER_DATA_SCHEMA } from '../repositories/BrowserDataRepository'
 import { THREAD_WORKTREE_OPERATION_SCHEMA } from '../repositories/ThreadWorktreeOperationRepository'
@@ -18,8 +25,14 @@ import { LOCAL_ENVIRONMENT_SELECTION_SCHEMA } from '../../local-environment/Loca
 import { PR_WATCH_SCHEMA } from '../../github/PullRequestWatchService'
 import { SUBAGENT_COLLABORATION_SCHEMA } from '../../subagent/SubagentCollaborationRepository'
 import { AUTOMATION_HOST_AUDIT_SCHEMA } from '../../automation/AutomationHostAuditRepository'
+import { PERMISSION_RULES_SCHEMA } from '../repositories/PermissionRuleRepository'
+import { MODEL_RUNTIME_PREFERENCE_SCHEMA } from '../repositories/ModelRuntimePreferenceRepository'
 
 import { PROFILE_APPLICATION_ID, PROFILE_SCHEMA_VERSION, SCHEMA_VERSION } from './Schema'
+
+const THREAD_CONTEXT_LIMITS_SCHEMA = [
+  'CREATE TABLE thread_context_limits (thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE, max_context_tokens INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
+] as const
 
 const TASK_CONTEXT_SCHEMA = [
   'CREATE TABLE task_context_state (task_id TEXT PRIMARY KEY REFERENCES taskboard_tasks(id) ON DELETE CASCADE, evidence_revision INTEGER NOT NULL DEFAULT 0, context_revision INTEGER NOT NULL DEFAULT 1, summarized_through_evidence_revision INTEGER NOT NULL DEFAULT 0, frozen_at INTEGER, promoted_context_revision INTEGER, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL)',
@@ -78,7 +91,8 @@ const SCHEDULE_CALENDAR_SCHEMA = [
 
 export const FINAL_SCHEMA = [
   'CREATE TABLE thread_project_memberships (thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE, project_id TEXT, removal_operation_id TEXT, updated_at INTEGER NOT NULL)',
-  'CREATE TABLE approval_reviews (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE, tool_call_id TEXT NOT NULL, invocation TEXT NOT NULL, fingerprint TEXT NOT NULL, decision TEXT NOT NULL, risk TEXT NOT NULL, reason TEXT NOT NULL, retry_operation_id TEXT, retry_consumed_at INTEGER, created_at INTEGER NOT NULL)',
+  'CREATE TABLE approval_reviews (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE, tool_call_id TEXT NOT NULL, invocation TEXT NOT NULL, fingerprint TEXT NOT NULL, decision TEXT NOT NULL, risk TEXT NOT NULL, reason TEXT NOT NULL, retry_operation_id TEXT, retry_consumed_at INTEGER, created_at INTEGER NOT NULL, confidence TEXT, categories TEXT, user_authorization TEXT, fallback_reason TEXT, review_source TEXT, review_status TEXT, score_lag INTEGER, reviewed_at INTEGER, action_hash TEXT, authorization_version TEXT)',
+  'CREATE INDEX IF NOT EXISTS idx_approval_reviews_thread_created ON approval_reviews(thread_id, created_at DESC)',
   "CREATE TABLE mcp_elicitations (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE, turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE, agent_id TEXT NOT NULL, tool_call_id TEXT NOT NULL, connection_id TEXT NOT NULL, payload TEXT NOT NULL, version INTEGER NOT NULL DEFAULT 1, status TEXT NOT NULL DEFAULT 'pending', response TEXT, created_at INTEGER NOT NULL)",
   'CREATE TABLE agent_checkpoints (\n        agent_id TEXT PRIMARY KEY REFERENCES agent_executions(id) ON DELETE CASCADE,\n        turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,\n        thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n        state TEXT NOT NULL,\n        payload TEXT NOT NULL,\n        version INTEGER NOT NULL,\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      )',
   'CREATE TABLE agent_compactions (\n          id TEXT PRIMARY KEY,\n          thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL,\n          baseline_version INTEGER NOT NULL,\n          before_count INTEGER NOT NULL,\n          after_count INTEGER NOT NULL,\n          summary TEXT NOT NULL,\n          replacement_history TEXT NOT NULL,\n          created_at INTEGER NOT NULL\n        , before_tokens INTEGER NOT NULL DEFAULT 0, after_tokens INTEGER NOT NULL DEFAULT 0, target_tokens INTEGER NOT NULL DEFAULT 0, usage_sample_id TEXT)',
@@ -129,12 +143,12 @@ export const FINAL_SCHEMA = [
   "CREATE TABLE sandbox_escalations (\n      token TEXT PRIMARY KEY,\n      thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n      turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,\n      agent_id TEXT NOT NULL REFERENCES agent_executions(id) ON DELETE CASCADE,\n      tool_call_id TEXT NOT NULL,\n      invocation TEXT NOT NULL,\n      invocation_hash TEXT NOT NULL DEFAULT '',\n      failure TEXT NOT NULL,\n      status TEXT NOT NULL,\n      output TEXT,\n      created_at INTEGER NOT NULL,\n      claimed_at INTEGER,\n      completed_at INTEGER\n    )",
   'CREATE TABLE subagent_controls (\n          id TEXT PRIMARY KEY,\n          task_id TEXT NOT NULL REFERENCES subagent_tasks(id) ON DELETE CASCADE,\n          run_id TEXT REFERENCES subagent_runs(id) ON DELETE CASCADE,\n          action TEXT NOT NULL,\n          payload TEXT NOT NULL,\n          status TEXT NOT NULL,\n          result TEXT,\n          error TEXT,\n          created_at INTEGER NOT NULL,\n          applied_at INTEGER\n        )',
   'CREATE TABLE subagent_runs (\n          id TEXT PRIMARY KEY,\n          task_id TEXT NOT NULL REFERENCES subagent_tasks(id) ON DELETE CASCADE,\n          generation INTEGER NOT NULL,\n          status TEXT NOT NULL,\n          queue_reason TEXT,\n          model_ref TEXT NOT NULL,\n          permission_config TEXT NOT NULL,\n          result TEXT,\n          error TEXT,\n          created_at INTEGER NOT NULL,\n          started_at INTEGER,\n          finished_at INTEGER,\n          updated_at INTEGER NOT NULL,\n          UNIQUE(task_id, generation)\n        )',
-  "CREATE TABLE subagent_tasks (\n          id TEXT PRIMARY KEY,\n          parent_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          parent_turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,\n          parent_agent_id TEXT NOT NULL REFERENCES agent_executions(id) ON DELETE CASCADE,\n          child_thread_id TEXT NOT NULL UNIQUE REFERENCES threads(id) ON DELETE CASCADE,\n          display_name TEXT NOT NULL,\n          profile TEXT NOT NULL,\n          task TEXT NOT NULL,\n          permission_ceiling TEXT NOT NULL,\n          workspace_mode TEXT NOT NULL,\n          workspace_state TEXT NOT NULL DEFAULT '{}',\n          current_run_id TEXT,\n          status TEXT NOT NULL,\n          created_at INTEGER NOT NULL,\n          updated_at INTEGER NOT NULL\n        )",
+  "CREATE TABLE subagent_tasks (\n          id TEXT PRIMARY KEY,\n          parent_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          parent_turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,\n          parent_agent_id TEXT NOT NULL REFERENCES agent_executions(id) ON DELETE CASCADE,\n          child_thread_id TEXT NOT NULL UNIQUE REFERENCES threads(id) ON DELETE CASCADE,\n          display_name TEXT NOT NULL,\n          profile TEXT NOT NULL,\n          role TEXT,\n          task TEXT NOT NULL,\n          permission_ceiling TEXT NOT NULL,\n          workspace_mode TEXT NOT NULL,\n          workspace_state TEXT NOT NULL DEFAULT '{}',\n          current_run_id TEXT,\n          status TEXT NOT NULL,\n          created_at INTEGER NOT NULL,\n          updated_at INTEGER NOT NULL\n        )",
   "CREATE TABLE threads (\n        id TEXT PRIMARY KEY,\n        title TEXT NOT NULL,\n        kind TEXT NOT NULL DEFAULT 'main',\n        parent_thread_id TEXT REFERENCES threads(id) ON DELETE CASCADE,\n        creation_surface TEXT CHECK(creation_surface IS NULL OR creation_surface IN ('coding','working','chat')),\n        task_mode TEXT NOT NULL DEFAULT 'chat',\n        sandbox_mode TEXT NOT NULL DEFAULT 'workspace-write',\n        approval_policy TEXT NOT NULL DEFAULT 'on-request',\n        approvals_reviewer TEXT NOT NULL DEFAULT 'user',\n        created_at INTEGER NOT NULL,\n        updated_at INTEGER NOT NULL\n      , project_id TEXT REFERENCES projects(id) ON DELETE SET NULL, workspace_kind TEXT NOT NULL DEFAULT 'legacy', workspace_root TEXT, workspace_cwd TEXT, workspace_roots TEXT, instruction_sources TEXT, output_directory TEXT, create_operation_id TEXT, create_request_hash TEXT, archived_at INTEGER, preview TEXT, first_user_message TEXT, message_count INTEGER NOT NULL DEFAULT 0, prompt_settings TEXT NOT NULL DEFAULT '{}', queue_version INTEGER NOT NULL DEFAULT 0, queue_pause_reason TEXT, git_branch TEXT, workspace_owner_thread_id TEXT)",
   "CREATE TABLE thread_execution_bindings (\n          thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,\n          binding_id TEXT NOT NULL UNIQUE,\n          kind TEXT NOT NULL CHECK(kind IN ('local','worktree')),\n          project_id TEXT,\n          cwd TEXT NOT NULL,\n          worktree_id TEXT REFERENCES managed_worktrees(id) ON DELETE RESTRICT,\n          revision INTEGER NOT NULL DEFAULT 1,\n          environment_revision INTEGER NOT NULL DEFAULT 0,\n          created_at INTEGER NOT NULL,\n          updated_at INTEGER NOT NULL,\n          CHECK((kind = 'local' AND worktree_id IS NULL) OR (kind = 'worktree' AND project_id IS NOT NULL AND worktree_id IS NOT NULL))\n        )",
   "CREATE TABLE thread_handoff_operations (\n          operation_id TEXT PRIMARY KEY,\n          source_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          target_thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,\n          source_binding_id TEXT,\n          target_binding_id TEXT,\n          destination_kind TEXT CHECK(destination_kind IN ('local','worktree')),\n          destination_worktree_id TEXT REFERENCES managed_worktrees(id) ON DELETE SET NULL,\n          direction TEXT NOT NULL CHECK(direction IN ('local-to-worktree','worktree-to-local')),\n          request_hash TEXT NOT NULL,\n          status TEXT NOT NULL CHECK(status IN ('running','await-client-transfer','completed','failed','rollback-failed')),\n          step TEXT NOT NULL,\n          revision INTEGER NOT NULL DEFAULT 1,\n          error_code TEXT,\n          warnings TEXT NOT NULL DEFAULT '[]',\n          rollback_journal TEXT NOT NULL DEFAULT '{}',\n          created_at INTEGER NOT NULL,\n          updated_at INTEGER NOT NULL,\n          completed_at INTEGER\n        )",
   "CREATE TABLE thread_message_fork_operations (\n          operation_id TEXT PRIMARY KEY,\n          source_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          source_turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,\n          source_item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,\n          target_thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL,\n          target_worktree_id TEXT REFERENCES managed_worktrees(id) ON DELETE SET NULL,\n          worktree_operation_id TEXT REFERENCES worktree_operations(operation_id) ON DELETE SET NULL,\n          destination_kind TEXT NOT NULL CHECK(destination_kind IN ('same-worktree','new-worktree')),\n          snapshot_mode TEXT CHECK(snapshot_mode IN ('shared','head','working-tree')),\n          request_hash TEXT NOT NULL,\n          status TEXT NOT NULL CHECK(status IN ('running','awaiting-setup-decision','completed','failed','abandoned')),\n          step TEXT NOT NULL CHECK(step IN ('preflight','prepare-worktree','setup','fork-history','bind-target','complete')),\n          revision INTEGER NOT NULL DEFAULT 1,\n          error_code TEXT,\n          warnings TEXT NOT NULL DEFAULT '[]',\n          created_at INTEGER NOT NULL,\n          updated_at INTEGER NOT NULL,\n          completed_at INTEGER\n        )",
-  'CREATE TABLE thread_message_forks (\n          target_thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,\n          source_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          source_turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,\n          source_item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,\n          operation_id TEXT NOT NULL UNIQUE REFERENCES thread_message_fork_operations(operation_id) ON DELETE CASCADE,\n          created_at INTEGER NOT NULL\n        )',
+  'CREATE TABLE thread_message_forks (\n          target_thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,\n          source_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          source_turn_id TEXT NOT NULL REFERENCES turns(id) ON DELETE CASCADE,\n          source_item_id TEXT NOT NULL REFERENCES items(id) ON DELETE CASCADE,\n          operation_id TEXT NOT NULL UNIQUE REFERENCES thread_message_fork_operations(operation_id) ON DELETE CASCADE,\n          created_at INTEGER NOT NULL,\n          target_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL\n        )',
   'CREATE TABLE thread_side_chats (\n          thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,\n          source_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE,\n          inherited_through_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL,\n          reference_text TEXT,\n          operation_id TEXT NOT NULL UNIQUE,\n          created_at INTEGER NOT NULL\n        )',
   'CREATE TABLE thread_forks (\n          target_thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,\n          source_thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE RESTRICT,\n          operation_id TEXT NOT NULL UNIQUE REFERENCES thread_handoff_operations(operation_id) ON DELETE RESTRICT,\n          created_at INTEGER NOT NULL\n        )',
   'CREATE TABLE thread_read_state (\n        thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE,\n        read_at INTEGER NOT NULL DEFAULT 0,\n        unread_at INTEGER,\n        updated_at INTEGER NOT NULL\n      )',
@@ -160,11 +174,18 @@ export const FINAL_SCHEMA = [
   ...SESSION_GROUP_SCHEMA,
   ...AUTOMATION_SCHEMA,
   ...SCHEDULE_CALENDAR_SCHEMA,
+  ...SCHEDULE_DRAFT_SCHEMA,
+  ...TASK_SCHEDULE_SCHEMA,
   ...PLAN_APPROVAL_SCHEMA,
   ...THREAD_GOAL_SCHEMA,
   ...THREAD_GOAL_LEDGER_SCHEMA,
   ...THREAD_GOAL_CONTINUATION_SCHEMA,
+  ...THREAD_GOAL_CONTROL_SCHEMA,
+  ...QUEUED_GOAL_SCHEMA,
   ...THREAD_BOOKMARK_SCHEMA,
+  ...CONTEXT_LIFECYCLE_SCHEMA,
+  ...THREAD_EDIT_SCHEMA,
+  ...THREAD_PULL_REQUEST_SCHEMA,
   ...THREAD_WORKTREE_OPERATION_SCHEMA,
   ...WORKTREE_SETTINGS_SCHEMA,
   ...LOCAL_ENVIRONMENT_SELECTION_SCHEMA,
@@ -173,6 +194,9 @@ export const FINAL_SCHEMA = [
   ...SUBAGENT_COLLABORATION_SCHEMA,
   ...BROWSER_SCHEMA,
   ...BROWSER_DATA_SCHEMA,
+  ...PERMISSION_RULES_SCHEMA,
+  ...MODEL_RUNTIME_PREFERENCE_SCHEMA,
+  ...THREAD_CONTEXT_LIMITS_SCHEMA,
   'CREATE INDEX agent_checkpoints_thread ON agent_checkpoints(thread_id, updated_at DESC)',
   'CREATE INDEX agent_compactions_thread ON agent_compactions(thread_id, created_at DESC)',
   'CREATE UNIQUE INDEX agent_executions_run_sequence_unique ON agent_executions(subagent_run_id, run_sequence) WHERE subagent_run_id IS NOT NULL',
@@ -1420,7 +1444,7 @@ export const HISTORY_SCHEMA = [
   SEMANTIC_VIEW_SQL,
 ]
 
-class SchemaInitializer {
+export class SchemaInitializer {
   constructor(
     readonly sqlite: Database,
     readonly kind: 'history' | 'profile',
@@ -1463,8 +1487,81 @@ class SchemaInitializer {
     const migrations: Record<number, () => void> =
       this.kind === 'history'
         ? {
+            // 子智能体展示职能：nullable 列，旧写入方无需提供，不回填历史推断结果。
+            71: () => {
+              // 极老的库还没建过 subagent_tasks；这类库由后续建表语句补全，不需要 ALTER。
+              const columns = new Set(
+                (
+                  this.sqlite.query('PRAGMA table_info(subagent_tasks)').all() as Array<{
+                    name: string
+                  }>
+                ).map((column) => column.name),
+              )
+              if (columns.size > 0 && !columns.has('role'))
+                this.sqlite.exec('ALTER TABLE subagent_tasks ADD COLUMN role TEXT')
+            },
+            70: () => {
+              for (const [table, columns] of Object.entries({
+                thread_goal_controls: {
+                  budget_revision: 'INTEGER NOT NULL DEFAULT 0',
+                  budget_ack_revision: 'INTEGER NOT NULL DEFAULT 0',
+                  previous_budget: 'INTEGER',
+                },
+                thread_goal_verifications: { continuation: 'TEXT' },
+              })) {
+                const existing = new Set(
+                  (
+                    this.sqlite.query(`PRAGMA table_info(${table})`).all() as Array<{
+                      name: string
+                    }>
+                  ).map((row) => row.name),
+                )
+                for (const [column, declaration] of Object.entries(columns)) {
+                  if (!existing.has(column))
+                    this.sqlite.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${declaration}`)
+                }
+              }
+            },
+            // 69 adds the Goal control revision, per-turn observation and
+            // verification audit tables. They stay out of `thread_goals` so the
+            // schema-46 required-columns gate in ThreadGoalRepository keeps
+            // recognising this store instead of downgrading it.
+            69: () =>
+              this.sqlite.exec(
+                THREAD_GOAL_CONTROL_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
             // prepareStorage rebuilds former mixed v17 databases. Keep the
             // sequential registry entry for already-split prerelease stores.
+            68: () => {
+              const columns = new Set(
+                (
+                  this.sqlite.query('PRAGMA table_info(thread_message_forks)').all() as Array<{
+                    name: string
+                  }>
+                ).map((column) => column.name),
+              )
+              if (columns.size > 0 && !columns.has('target_turn_id')) {
+                this.sqlite.exec(
+                  'ALTER TABLE thread_message_forks ADD COLUMN target_turn_id TEXT REFERENCES turns(id) ON DELETE SET NULL',
+                )
+              }
+            },
+            67: () =>
+              this.sqlite.exec(
+                [...MODEL_RUNTIME_PREFERENCE_SCHEMA, ...THREAD_CONTEXT_LIMITS_SCHEMA]
+                  .map((sql) => sql.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '))
+                  .join(';'),
+              ),
+            66: () =>
+              this.sqlite.exec(
+                QUEUED_GOAL_SCHEMA.map((sql) =>
+                  sql.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '),
+                ).join(';'),
+              ),
             17: () => undefined,
             18: () => migrateHistory18To19(this.sqlite),
             19: () => migrateHistory19To20(this.sqlite),
@@ -1568,6 +1665,90 @@ class SchemaInitializer {
                 this.sqlite.exec('ALTER TABLE threads ADD COLUMN workspace_owner_thread_id TEXT')
             },
             57: () => this.sqlite.exec(SUBAGENT_COLLABORATION_SCHEMA.join(';')),
+            58: () =>
+              this.sqlite.exec(
+                THREAD_PULL_REQUEST_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS ')
+                    .replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
+            63: () => {
+              const columns = new Set(
+                (
+                  this.sqlite.query('PRAGMA table_info(approval_reviews)').all() as Array<{
+                    name: string
+                  }>
+                ).map((column) => column.name),
+              )
+              const add = (name: string, type: string) => {
+                if (columns.has(name)) return
+                this.sqlite.exec(`ALTER TABLE approval_reviews ADD COLUMN ${name} ${type}`)
+                columns.add(name)
+              }
+              add('confidence', 'TEXT')
+              add('categories', 'TEXT')
+              add('user_authorization', 'TEXT')
+              add('fallback_reason', 'TEXT')
+              add('review_source', 'TEXT')
+              add('review_status', 'TEXT')
+              add('score_lag', 'INTEGER')
+              add('reviewed_at', 'INTEGER')
+              add('action_hash', 'TEXT')
+              add('authorization_version', 'TEXT')
+              this.sqlite.exec(
+                'CREATE INDEX IF NOT EXISTS idx_approval_reviews_thread_created ON approval_reviews(thread_id, created_at DESC)',
+              )
+            },
+            // 权限规则独立表：聊天规则与旧聊天授权撤销记录。
+            // 只新增表与索引；旧 approval_rules 与审批历史保持原样。
+            65: () => {
+              const columns = this.sqlite
+                .query('PRAGMA table_info(permission_chat_rules)')
+                .all() as { name: string }[]
+              if (!columns.some((column) => column.name === 'workspace'))
+                this.sqlite.exec('ALTER TABLE permission_chat_rules ADD COLUMN workspace TEXT')
+            },
+            64: () =>
+              this.sqlite.exec(
+                PERMISSION_RULES_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
+            // 任务规划扩展表：计划快照与执行规则、触发去重记录、验收记录。
+            // 只新增独立表，不触碰 automations/scheduled_tasks 的既有列与状态。
+            62: () =>
+              this.sqlite.exec(
+                CONTEXT_LIFECYCLE_SCHEMA.map((sql) =>
+                  sql.replace(/^CREATE (TABLE|UNIQUE INDEX|INDEX) /, 'CREATE $1 IF NOT EXISTS '),
+                ).join(';'),
+              ),
+            61: () =>
+              this.sqlite.exec(
+                THREAD_EDIT_SCHEMA.map((statement) =>
+                  statement.replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS '),
+                ).join(';'),
+              ),
+            60: () =>
+              this.sqlite.exec(
+                TASK_SCHEDULE_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
+            59: () =>
+              this.sqlite.exec(
+                SCHEDULE_DRAFT_SCHEMA.map((statement) =>
+                  statement
+                    .replace('CREATE TABLE ', 'CREATE TABLE IF NOT EXISTS ')
+                    .replace('CREATE UNIQUE INDEX ', 'CREATE UNIQUE INDEX IF NOT EXISTS ')
+                    .replace('CREATE INDEX ', 'CREATE INDEX IF NOT EXISTS '),
+                ).join(';'),
+              ),
             56: () =>
               this.sqlite.exec(
                 [

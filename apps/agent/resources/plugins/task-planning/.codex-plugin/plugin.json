@@ -1,22 +1,22 @@
 {
   "name": "task-planning",
   "version": "1.0.0",
-  "description": "澄清目标、拆解工作并生成可执行的任务规划。",
+  "description": "先排时间、后补方案，关联会话并按规则执行和验收任务。",
   "author": {
     "name": "Pidex"
   },
   "skills": "./skills/",
   "interface": {
     "displayName": "任务规划",
-    "shortDescription": "拆解和规划复杂工作",
-    "longDescription": "澄清目标与约束，将复杂工作拆分为里程碑和可执行任务，并梳理依赖、风险与验收标准。",
+    "shortDescription": "排时间、补方案、执行与验收",
+    "longDescription": "人工与 AI 任务一起安排时间，名称即可创建任务，之后补充方案或关联规划会话。排程草案统一确认，自动执行使用固定方案和现有权限；需要人工验收的结果持续提醒，验收通过后才完成。",
     "developerName": "Pidex",
     "category": "Productivity",
     "capabilities": ["Planning"],
     "defaultPrompt": [
-      "帮我把这个目标拆解成可执行的任务计划。",
-      "梳理这个项目的里程碑、依赖和主要风险。",
-      "为这项工作补充清晰的验收标准。"
+      "先帮我安排这些任务的时间，执行方案之后再补。",
+      "为已有任务补充方案，并关联这个规划会话。",
+      "补全方案和执行规则，安排自动执行并开启人工验收。"
     ]
   }
 }

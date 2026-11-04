@@ -1,3 +1,4 @@
+import { useMemo } from 'react'
 import { desktopClient, loadDesktopTerminalClient } from '../../services/desktop-client/index.js'
 import React, { useCallback, useEffect, useState } from 'react'
 import { OpenTargetIcon } from '../../components/ui/OpenTargetIcon.js'
@@ -7,9 +8,14 @@ import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SegmentedControl } from '../../components/ui/SegmentedControl.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsDraftDirty,
+  useDesktopSettingsDraftSaving,
+} from './UseDesktopSettings.js'
 import { SettingsContentArea } from './SettingsContentArea.js'
-import { permissionConfigForMode, permissionModeForConfig } from './SettingsStorage.js'
+import { permissionPresetViewForConfig } from './PermissionPresetView.js'
 import type {
   DesktopOpenTarget,
   DesktopReviewDelivery,
@@ -67,7 +73,76 @@ type GeneralSettingsProps = {
 
 export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
   const { t } = useLocale()
-  const { draft } = useDesktopSettings()
+  const subscribedDraftActions = useDesktopSettingsDraftActions()
+  const subscribedLanguage = useDesktopSettingsDraftValue('language')
+  const subscribedNotifications = useDesktopSettingsDraftValue('notifications')
+  const subscribedPermissionConfig = useDesktopSettingsDraftValue('permissionConfig')
+  const subscribedEnableAutoReviewPermissionMode = useDesktopSettingsDraftValue(
+    'enableAutoReviewPermissionMode',
+  )
+  const subscribedEnableFullAccessPermissionMode = useDesktopSettingsDraftValue(
+    'enableFullAccessPermissionMode',
+  )
+  const contextUsageView = useDesktopSettingsDraftValue('contextUsageView')
+  const subscribedShowContextUsage = useDesktopSettingsDraftValue('showContextUsage')
+  const subscribedDefaultOpenTargetId = useDesktopSettingsDraftValue('defaultOpenTargetId')
+  const subscribedTerminalProfileId = useDesktopSettingsDraftValue('terminalProfileId')
+  const subscribedReviewView = useDesktopSettingsDraftValue('reviewView')
+  const subscribedReviewDelivery = useDesktopSettingsDraftValue('reviewDelivery')
+  const subscribedRustSearchAndDiffKernels = useDesktopSettingsDraftValue(
+    'rustSearchAndDiffKernels',
+  )
+  const subscribedEnableParetoCodeRouter = useDesktopSettingsDraftValue('enableParetoCodeRouter')
+  const subscribedEnableFusionRouter = useDesktopSettingsDraftValue('enableFusionRouter')
+  const subscribedDefaultModeRequestUserInput = useDesktopSettingsDraftValue(
+    'defaultModeRequestUserInput',
+  )
+  const subscribedDraftDirty = useDesktopSettingsDraftDirty()
+  const subscribedDraftSaving = useDesktopSettingsDraftSaving()
+  const { draft } = useMemo(
+    () => ({
+      draft: {
+        ...subscribedDraftActions,
+        values: {
+          language: subscribedLanguage,
+          notifications: subscribedNotifications,
+          permissionConfig: subscribedPermissionConfig,
+          enableAutoReviewPermissionMode: subscribedEnableAutoReviewPermissionMode,
+          enableFullAccessPermissionMode: subscribedEnableFullAccessPermissionMode,
+          showContextUsage: subscribedShowContextUsage,
+          defaultOpenTargetId: subscribedDefaultOpenTargetId,
+          terminalProfileId: subscribedTerminalProfileId,
+          reviewView: subscribedReviewView,
+          reviewDelivery: subscribedReviewDelivery,
+          rustSearchAndDiffKernels: subscribedRustSearchAndDiffKernels,
+          enableParetoCodeRouter: subscribedEnableParetoCodeRouter,
+          enableFusionRouter: subscribedEnableFusionRouter,
+          defaultModeRequestUserInput: subscribedDefaultModeRequestUserInput,
+        },
+        dirty: subscribedDraftDirty,
+        saving: subscribedDraftSaving,
+      },
+    }),
+    [
+      subscribedDraftActions,
+      subscribedLanguage,
+      subscribedNotifications,
+      subscribedPermissionConfig,
+      subscribedEnableAutoReviewPermissionMode,
+      subscribedEnableFullAccessPermissionMode,
+      subscribedShowContextUsage,
+      subscribedDefaultOpenTargetId,
+      subscribedTerminalProfileId,
+      subscribedReviewView,
+      subscribedReviewDelivery,
+      subscribedRustSearchAndDiffKernels,
+      subscribedEnableParetoCodeRouter,
+      subscribedEnableFusionRouter,
+      subscribedDefaultModeRequestUserInput,
+      subscribedDraftDirty,
+      subscribedDraftSaving,
+    ],
+  )
   const {
     permissionConfig,
     enableAutoReviewPermissionMode,
@@ -83,7 +158,10 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
     defaultModeRequestUserInput,
     notifications,
   } = draft.values
-  const permissionMode = permissionModeForConfig(permissionConfig)
+  const permissionView = permissionPresetViewForConfig(permissionConfig, {
+    enableAutoReviewPermissionMode,
+    enableFullAccessPermissionMode,
+  })
 
   const [openTargets, setOpenTargets] = useState<DesktopOpenTarget[]>(FALLBACK_OPEN_TARGETS)
   const [openTargetsLoaded, setOpenTargetsLoaded] = useState(false)
@@ -208,17 +286,13 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
   )
 
   const handleAutoApprove = (checked: boolean) => {
+    // Availability is a feature flag only; the stored permission config is never rewritten.
     draft.setValue('enableAutoReviewPermissionMode', checked)
-    if (!checked && permissionMode === 'auto-review') {
-      draft.setValue('permissionConfig', permissionConfigForMode('default'))
-    }
     draft.autoSave()
   }
   const handleFullAccess = (checked: boolean) => {
+    // Availability is a feature flag only; the stored permission config is never rewritten.
     draft.setValue('enableFullAccessPermissionMode', checked)
-    if (!checked && permissionMode === 'full-access') {
-      draft.setValue('permissionConfig', permissionConfigForMode('default'))
-    }
     draft.autoSave()
   }
 
@@ -302,35 +376,34 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
     <SettingsContentArea className="">
       <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
-            常规
-          </h2>
+          <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">常规</h2>
         </div>
 
         <SettingsSection title="权限">
           <SettingsRow
-            title="默认权限"
-            description="默认情况下，Pidex 可以自动读取工作区内容；写入文件、运行命令、联网和 MCP 请求需要你授权。"
-            autoSave
-            control={(aria) => (
-              <ToggleSwitch
-                checked
-                disabled
-                onChange={() => {}}
-                ariaLabelledby={aria.labelledby}
-                ariaDescribedby={aria.describedby}
-              />
-            )}
-          />
-          <SettingsRow
-            title="自动审核"
-            autoSave
+            title="当前权限"
             description={
               <>
-                Pidex 可以读取和编辑其工作区中的文件。Pidex
-                会自动审核额外访问权限请求。自动审核可能会出错。
+                当前为「{permissionView.label}」：{permissionView.detail}
+                {permissionView.unavailableReason ? (
+                  <>
+                    <br />
+                    {permissionView.unavailableReason}
+                    请在「配置」页重新选择权限预设，或重新开启该模式。
+                  </>
+                ) : null}
               </>
             }
+            control={
+              <span className="settings-row-status">
+                {permissionView.hidden ? '已隐藏' : '可用'}
+              </span>
+            }
+          />
+          <SettingsRow
+            title="允许「帮我批准」预设"
+            autoSave
+            description="启用后可在权限菜单与「配置」页选择「帮我批准」：内建文件访问范围限当前工作区；宿主 Shell 经安全规则和项目 Hook 执行；工作区外访问、破坏性动作和命中规则时由 Guardian 审查。关闭只隐藏该预设，不会改写已保存的权限配置。"
             control={(aria) => (
               <ToggleSwitch
                 checked={enableAutoReviewPermissionMode ?? false}
@@ -341,14 +414,9 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
             )}
           />
           <SettingsRow
-            title="完全访问权限"
+            title="允许「完全访问」预设"
             autoSave
-            description={
-              <>
-                当 Pidex
-                以完全访问权限运行时，无需你批准，即可自动放行所有权限工具，编辑你的电脑上的任何文件并运行联网命令。这会显著增加数据丢失、泄露或意外行为的风险。
-              </>
-            }
+            description="启用后可在权限菜单与「配置」页选择「完全访问」：允许访问本机文件、互联网、执行命令及调用工具和 MCP，无需权限审批；Plan 模式独立生效。关闭只隐藏该预设，不会改写已保存的权限配置。"
             control={(aria) => (
               <ToggleSwitch
                 checked={enableFullAccessPermissionMode ?? false}
@@ -357,6 +425,10 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
                 ariaDescribedby={aria.describedby}
               />
             )}
+          />
+          <SettingsRow
+            title="权限说明"
+            description="内建文件访问范围与审批策略在「配置」页调整。宿主 Shell 始终在本机执行；工作区外访问、破坏性动作（如删除远程仓库或分支）和命中规则时由你确认或由 Guardian 审查。Pidex 不承诺 OS 沙箱或网络隔离。"
           />
         </SettingsSection>
 
@@ -613,6 +685,25 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
                 onChange={setShowContextUsage}
                 ariaLabelledby={aria.labelledby}
                 ariaDescribedby={aria.describedby}
+              />
+            )}
+          />
+          <SettingsRow
+            title="上下文用量展示方式"
+            description="选择用量浮层中的图形样式"
+            autoSave
+            control={() => (
+              <SegmentedControl
+                value={contextUsageView}
+                ariaLabel="上下文用量展示方式"
+                options={[
+                  { value: 'bar', label: '分段条' },
+                  { value: 'field', label: '点阵' },
+                ]}
+                onChange={(value) => {
+                  draft.setValue('contextUsageView', value)
+                  draft.autoSave()
+                }}
               />
             )}
           />

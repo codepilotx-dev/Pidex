@@ -10,9 +10,10 @@ import type { SessionListItem } from '../../UiTypes.js'
 import { AnchoredPopover } from '../../components/ui/AnchoredPopover.js'
 import { Button } from '../../components/ui/Button.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import {
   buildProjectSessionBuckets,
+  isSidebarProjectUnavailable,
   normalizeSidebarPath,
   sidebarProjectKey,
 } from '../layout/sidebar/SidebarViewModel.js'
@@ -69,7 +70,7 @@ function ProjectDetailsTrigger({
   const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false)
   const triggerRef = useRef<HTMLButtonElement | null>(null)
   const editFrameRef = useRef<number | null>(null)
-  const { projectAppearances } = useDesktopSettings()
+  const projectAppearances = useDesktopSettingsField((settings) => settings.projectAppearances)
   useEffect(() => setManagedProject(project), [project])
   useEffect(
     () => () => {
@@ -89,8 +90,9 @@ function ProjectDetailsTrigger({
     ? (projectAppearances[managedProject.projectId] ?? DEFAULT_PROJECT_APPEARANCE)
     : DEFAULT_PROJECT_APPEARANCE
   const isPinned = Boolean(managedProject.pinnedAt)
-  const isUnavailable = [...unavailableWorkspacePaths].some(
-    (path) => normalizeSidebarPath(path) === normalizeSidebarPath(managedProject.path),
+  const isUnavailable = isSidebarProjectUnavailable(
+    managedProject,
+    new Set([...unavailableWorkspacePaths].map((path) => normalizeSidebarPath(path))),
   )
 
   return (
@@ -113,7 +115,7 @@ function ProjectDetailsTrigger({
           <Button
             isIconOnly
             ref={triggerRef}
-            className="chat-session-project-details tw:inline-flex tw:shrink-0 tw:items-center tw:justify-center"
+            className="chat-session-project-details tw:shrink-0"
             color="ghostSecondary"
             size="toolbar"
             title={`项目详情：${managedProject.name}`}

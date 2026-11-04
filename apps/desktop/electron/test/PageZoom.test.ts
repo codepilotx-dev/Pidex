@@ -36,7 +36,8 @@ describe('page zoom', () => {
   test('keeps zoom on ten-percent steps and inside the supported range', () => {
     expect(normalizePageZoomPercent(157)).toBe(160)
     expect(nextPageZoomPercent(50, 'out')).toBe(50)
-    expect(nextPageZoomPercent(200, 'in')).toBe(200)
+    expect(nextPageZoomPercent(200, 'in')).toBe(210)
+    expect(nextPageZoomPercent(300, 'in')).toBe(300)
     expect(nextPageZoomPercent(170, 'reset')).toBe(100)
   })
 

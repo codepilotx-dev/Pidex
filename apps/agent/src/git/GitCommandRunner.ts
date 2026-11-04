@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process'
 import { AgentError } from '../Domain'
 
 export type GitCommandResult = {
@@ -30,10 +31,28 @@ const decodeUtf8 = (value: Uint8Array) => {
   }
 }
 
+/**
+ * 终止 git 及它的子进程。Windows 上 `child.kill()` 只结束直接子进程，
+ * git 派生的进程仍会占着仓库目录，让后续删除/重建持续 EBUSY。
+ */
+const killGitTree = (child: {
+  pid?: number | undefined
+  kill(signal?: number | NodeJS.Signals): void
+}) => {
+  if (process.platform === 'win32' && child.pid !== undefined) {
+    spawnSync('taskkill.exe', ['/PID', String(child.pid), '/T', '/F'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    })
+    return
+  }
+  child.kill()
+}
+
 const readLimited = async (
   stream: ReadableStream<Uint8Array>,
   limit: number,
-  child: { kill(signal?: number | NodeJS.Signals): void },
+  child: { pid?: number | undefined; kill(signal?: number | NodeJS.Signals): void },
 ) => {
   const reader = stream.getReader()
   const chunks: Uint8Array[] = []
@@ -44,7 +63,7 @@ const readLimited = async (
       if (done) break
       size += value.byteLength
       if (size > limit) {
-        child.kill()
+        killGitTree(child)
         throw new AgentError('GIT_OUTPUT_TOO_LARGE', 'Git 输出超过安全上限', 413)
       }
       chunks.push(value)
@@ -79,6 +98,7 @@ export class GitCommandRunner {
       ['git', '-c', 'core.quotepath=false', '-c', 'core.fsmonitor=false', ...args],
       {
         cwd,
+        windowsHide: true,
         env: {
           ...process.env,
           GIT_OPTIONAL_LOCKS: '0',
@@ -93,7 +113,7 @@ export class GitCommandRunner {
     let timedOut = false
     const timer = setTimeout(() => {
       timedOut = true
-      child.kill()
+      killGitTree(child)
     }, this.options.timeoutMs)
     try {
       const [stdoutBytes, stderrBytes, code] = await Promise.all([
@@ -114,7 +134,7 @@ export class GitCommandRunner {
       }
       return result
     } catch (cause) {
-      child.kill()
+      killGitTree(child)
       await child.exited.catch(() => undefined)
       throw cause
     } finally {

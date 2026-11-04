@@ -1,12 +1,16 @@
 import type { Project } from '@pidex/shared'
 import { AgentRpcError } from '../AgentRpcClient.js'
 import type { ProtocolCapability } from '@pidex/agent-protocol'
+import type { ThreadPullRequestList } from '@pidex/shared/thread'
 import type {
   DesktopGithubAuthStatus,
   DesktopGithubProfileOverviewResult,
   DesktopGithubRepositoryListResult,
   DesktopGitOperationResult,
+  DesktopGitStatusResult,
   DesktopPullRequestResult,
+  DesktopThreadPullRequestMutationResult,
+  DesktopThreadPullRequestsResult,
 } from '../../../shared/Types.js'
 import { projectToDesktopWorkspace } from '../AgentThreadAdapter.js'
 import type { createAgentRpcClient } from '../AgentRpcClient.js'
@@ -26,7 +30,12 @@ type GitApiMethod =
   | 'clearGithubUserStatus'
   | 'pushWorkspaceBranch'
   | 'createPullRequest'
+  | 'listThreadPullRequests'
+  | 'linkThreadPullRequest'
+  | 'unlinkThreadPullRequest'
   | 'getWorkspaceGitStatus'
+  | 'fetchWorkspaceRepository'
+  | 'pullWorkspaceRepository'
   | 'checkoutWorkspaceBranch'
   | 'createWorkspaceBranch'
   | 'commitWorkspaceChanges'
@@ -43,7 +52,12 @@ type Dependencies = {
   requireAgentCapability: (
     name: Extract<
       ProtocolCapability,
-      'github.oauth.v1' | 'github.pullRequests.v1' | 'git.review.v1' | 'git.workspace.v1'
+      | 'github.oauth.v1'
+      | 'github.pullRequests.v1'
+      | 'github.threadPullRequests.v1'
+      | 'git.review.v1'
+      | 'git.workspace.v1'
+      | 'git.sync.v1'
     >,
   ) => void
   rpc: Pick<ReturnType<typeof createAgentRpcClient>, 'call'>
@@ -64,8 +78,42 @@ export function createAgentGitApi({
   const loadProject = (workspacePath: string, projectId?: string) =>
     projectId ? loadProjectById(projectId) : loadProjectForPath(workspacePath)
 
+  // 非仓库项目只自动探测一次 / 五小时；手动刷新可绕过，进行中的自动探测共用请求。
+  const gitStatusRequests = new Map<
+    string,
+    {
+      expiresAt: number
+      promise: Promise<DesktopGitStatusResult>
+    }
+  >()
+
   let activeGithubLoginId: string | null = null
   let activeGithubLoginMode: Parameters<GitApi['startGithubLogin']>[0]['mode'] = 'browser'
+
+  const syncWorkspaceRepository = async (
+    method: 'git/fetch' | 'git/pull',
+    workspacePath: string,
+    projectId?: string,
+  ): Promise<DesktopGitStatusResult> => {
+    try {
+      return await withRequiredAgent(async () => {
+        requireAgentCapability('git.sync.v1')
+        const project = await loadProject(workspacePath, projectId)
+        const result = await rpc.call<{ status: ReviewAgentGitStatus }>(method, {
+          projectId: project.id,
+        })
+        return { ok: true as const, status: desktopGitStatus(result.status) }
+      })
+    } catch (error) {
+      return {
+        ok: false,
+        error: operationError(error),
+        ...(error instanceof AgentRpcError && error.errorCode
+          ? { errorCode: error.errorCode }
+          : {}),
+      }
+    }
+  }
 
   return {
     getGithubAuthStatus: async (): Promise<DesktopGithubAuthStatus> => {
@@ -220,6 +268,7 @@ export function createAgentGitApi({
             projectId: project.id,
             setUpstream: input.setUpstream === true,
             forceWithLease: input.forceWithLease === true,
+            ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
           })
           return {
             ok: true,
@@ -243,6 +292,7 @@ export function createAgentGitApi({
             title: input.title,
             ...(input.body === undefined ? {} : { body: input.body }),
             ...(input.draft === undefined ? {} : { draft: input.draft }),
+            ...(input.threadId === undefined ? {} : { threadId: input.threadId }),
           })
           return {
             ok: true,
@@ -254,15 +304,22 @@ export function createAgentGitApi({
         return { ok: false, error: operationError(error) }
       }
     },
-    getWorkspaceGitStatus: async (workspacePath, projectId) => {
+    listThreadPullRequests: async (
+      threadIds,
+      options,
+    ): Promise<DesktopThreadPullRequestsResult> => {
       try {
         return await withRequiredAgent(async () => {
-          requireAgentCapability('git.review.v1')
-          const project = await loadProject(workspacePath, projectId)
-          const result = await rpc.call<{ status: ReviewAgentGitStatus }>('review/status', {
-            projectId: project.id,
-          })
-          return { ok: true as const, status: desktopGitStatus(result.status) }
+          requireAgentCapability('github.threadPullRequests.v1')
+          if (threadIds.length === 0) return { ok: true as const, threads: [] }
+          const result = await rpc.call<{ threads: ThreadPullRequestList[] }>(
+            'github/thread/pullRequests',
+            {
+              threadIds,
+              ...(options?.refreshEnvironment === false ? { refreshEnvironment: false } : {}),
+            },
+          )
+          return { ok: true as const, threads: result.threads }
         })
       } catch (error) {
         return {
@@ -274,6 +331,79 @@ export function createAgentGitApi({
         }
       }
     },
+    linkThreadPullRequest: async (input): Promise<DesktopThreadPullRequestMutationResult> => {
+      try {
+        return await withRequiredAgent(async () => {
+          requireAgentCapability('github.threadPullRequests.v1')
+          const result = await rpc.call<{ thread: ThreadPullRequestList }>(
+            'github/thread/pullRequest/link',
+            { threadId: input.threadId, url: input.url },
+          )
+          return { ok: true as const, thread: result.thread }
+        })
+      } catch (error) {
+        return { ok: false as const, error: operationError(error) }
+      }
+    },
+    unlinkThreadPullRequest: async (input): Promise<DesktopThreadPullRequestMutationResult> => {
+      try {
+        return await withRequiredAgent(async () => {
+          requireAgentCapability('github.threadPullRequests.v1')
+          const result = await rpc.call<{ thread: ThreadPullRequestList }>(
+            'github/thread/pullRequest/unlink',
+            {
+              threadId: input.threadId,
+              owner: input.owner,
+              repository: input.repository,
+              number: input.number,
+            },
+          )
+          return { ok: true as const, thread: result.thread }
+        })
+      } catch (error) {
+        return { ok: false as const, error: operationError(error) }
+      }
+    },
+    getWorkspaceGitStatus: async (workspacePath, projectId, options) => {
+      const key = JSON.stringify([projectId ?? null, workspacePath])
+      const cached = gitStatusRequests.get(key)
+      if (!options?.refresh && cached && Date.now() < cached.expiresAt) return cached.promise
+      const promise = (async (): Promise<DesktopGitStatusResult> => {
+        try {
+          return await withRequiredAgent(async () => {
+            requireAgentCapability('git.review.v1')
+            const project = await loadProject(workspacePath, projectId)
+            const result = await rpc.call<{ status: ReviewAgentGitStatus }>('review/status', {
+              projectId: project.id,
+            })
+            return { ok: true as const, status: desktopGitStatus(result.status) }
+          })
+        } catch (error) {
+          return {
+            ok: false as const,
+            error: operationError(error),
+            ...(error instanceof AgentRpcError && error.errorCode
+              ? { errorCode: error.errorCode }
+              : {}),
+          }
+        }
+      })()
+      const entry = { expiresAt: Infinity, promise }
+      gitStatusRequests.set(key, entry)
+      const result = await promise
+      if (gitStatusRequests.get(key) === entry) {
+        if (result.ok === false && result.errorCode === 'REPOSITORY_NOT_FOUND') {
+          entry.expiresAt = Date.now() + 5 * 60 * 60 * 1_000
+        } else {
+          gitStatusRequests.delete(key)
+        }
+      }
+      return result
+    },
+    fetchWorkspaceRepository: (workspacePath, projectId) =>
+      syncWorkspaceRepository('git/fetch', workspacePath, projectId),
+    pullWorkspaceRepository: (workspacePath, projectId) =>
+      syncWorkspaceRepository('git/pull', workspacePath, projectId),
     checkoutWorkspaceBranch: async (workspacePath, branchName, projectId) =>
       withRequiredAgent(async () => {
         requireAgentCapability('git.workspace.v1')

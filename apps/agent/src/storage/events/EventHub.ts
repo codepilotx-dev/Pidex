@@ -9,6 +9,11 @@ export type EventHubSignal =
 export class EventHub {
   private readonly pubsub: PubSub.PubSub<EventHubSignal>
   private readonly listeners = new Set<(signal: EventHubSignal) => void>()
+  private readonly visualizationPreviews = new Map<string, EventEnvelope>()
+
+  visualizationSnapshots(afterSequence: number): EventEnvelope[] {
+    return [...this.visualizationPreviews.values()].map((event) => ({ ...event, afterSequence }))
+  }
 
   private constructor(pubsub: PubSub.PubSub<EventHubSignal>) {
     this.pubsub = pubsub
@@ -19,6 +24,23 @@ export class EventHub {
   })
 
   publish(event: EventEnvelope) {
+    const params = event.params as {
+      toolCallId?: string
+      item?: { id: string }
+      turn?: { id: string }
+    }
+    if (event.method === 'visualization/preview' && params.toolCallId) {
+      this.visualizationPreviews.set(params.toolCallId, event)
+      while (this.visualizationPreviews.size > 64)
+        this.visualizationPreviews.delete(this.visualizationPreviews.keys().next().value!)
+    } else if (['tool/callCompleted', 'tool/error'].includes(event.method) && params.item) {
+      this.visualizationPreviews.delete(params.item.id)
+    } else if (['turn/completed', 'turn/failed', 'turn/interrupted'].includes(event.method)) {
+      for (const [id, preview] of this.visualizationPreviews) {
+        if (preview.turnId === (params.turn?.id ?? event.turnId))
+          this.visualizationPreviews.delete(id)
+      }
+    }
     const definition =
       event.method in EventManifest ? EventManifest[event.method as EventType] : null
     if (definition?.durability === 'live' && typeof event.afterSequence !== 'number') {

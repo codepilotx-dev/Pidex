@@ -62,7 +62,7 @@ test('GitHub cache reuses fresh reads, merges requests, expires, forces refresh 
     },
     () => now,
   )
-  const unsubscribe = cache.onGithubAccountChange(() => {
+  const unsubscribe = cache.githubAccountStore.subscribe(() => {
     notifications += 1
   })
   let notifications = 0

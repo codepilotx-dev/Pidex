@@ -1,12 +1,26 @@
 import React from 'react'
-import { Check, CircleAlert, CircleStop, LoaderCircle, WrapText } from 'lucide-react'
+import { Check, ChevronDown, CircleAlert, CircleStop, LoaderCircle, WrapText } from 'lucide-react'
 import type { Item } from '@pidex/shared/thread'
-import { APP_ICON_SIZES, APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { useScrollEdgeState } from '../../../hooks/UseScrollEdgeState.js'
 import { useCodeWrapPreference } from '../../syntax/WrapPreference.js'
 import { CopyButton } from './CopyButton.js'
 
 type ToolItem = Extract<Item, { type: 'tool' }>
+
+export function commandOutputChunks(output: string): Array<{ text: string; lineCount: number }> {
+  const lines = output.split('\n')
+  const chunks: Array<{ text: string; lineCount: number }> = []
+  for (let start = 0; start < lines.length; start += 64) {
+    const chunk = lines.slice(start, start + 64)
+    const last = start + 64 >= lines.length
+    chunks.push({
+      text: chunk.join('\n') + (last ? '' : '\n'),
+      lineCount: chunk.length - (last && chunk.at(-1) === '' ? 1 : 0),
+    })
+  }
+  return chunks
+}
 
 export function isShellTool(tool: string | null | undefined): boolean {
   if (!tool) return false
@@ -99,10 +113,20 @@ export function ToolCommandCard({
   const [wrapped, setWrapped] = useCodeWrapPreference()
   const scrollerRef = React.useRef<HTMLDivElement | null>(null)
   const contentRef = React.useRef<HTMLPreElement | null>(null)
+  const commandRef = React.useRef<HTMLPreElement | null>(null)
+  const commandContentId = React.useId()
+  const [commandExpanded, setCommandExpanded] = React.useState(false)
+  const [commandOverflowing, setCommandOverflowing] = React.useState(false)
   const followingRef = React.useRef(active)
+  const pinRef = React.useRef<HTMLDivElement | null>(null)
   const wasExpandedRef = React.useRef(false)
+  const prevWrappedRef = React.useRef(wrapped)
   const edge = useScrollEdgeState(scrollerRef, { contentRef, version: output })
   const exitCode = readCommandExitCode(item.output)
+  const outputChunks = React.useMemo(
+    () => commandOutputChunks(output ?? (active ? '等待输出' : '无输出')),
+    [output, active],
+  )
   const StatusIcon =
     item.state === 'interrupted'
       ? CircleStop
@@ -113,6 +137,19 @@ export function ToolCommandCard({
           : Check
 
   React.useLayoutEffect(() => {
+    // 收起态先限高再实测换行结果；窗口变窄或字号变化会改写换行，所以用 ResizeObserver 持续重测。
+    // 只有真实溢出才给出折叠入口，避免短命令也长出一个无意义的按钮和悬停态。
+    const element = commandRef.current
+    if (!element || commandExpanded) return
+    const measure = (): void =>
+      setCommandOverflowing(element.scrollHeight > element.clientHeight + 1)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [command, commandExpanded])
+
+  React.useLayoutEffect(() => {
     // 手动上滚只停止吸底，不冻结数据；重新展开运行中的工具恢复跟随。
     followingRef.current = commandOutputFollowing(
       active,
@@ -120,10 +157,22 @@ export function ToolCommandCard({
       wasExpandedRef.current,
       followingRef.current,
     )
+    const following = active && followingRef.current
+    if (pinRef.current) {
+      pinRef.current.dataset.following = String(following)
+    }
+    const justExpanded = expanded && !wasExpandedRef.current
+    const wrappedChanged = prevWrappedRef.current !== wrapped
+    prevWrappedRef.current = wrapped
     wasExpandedRef.current = expanded
+
     const scroller = scrollerRef.current
     if (!expanded || !scroller) return
-    scroller.scrollTop = commandOutputScrollTop(scroller, active, followingRef.current)
+    const needsBreakZero =
+      following && scroller.scrollTop === 0 && scroller.scrollHeight > scroller.clientHeight
+    if (justExpanded || wrappedChanged || needsBreakZero) {
+      scroller.scrollTop = commandOutputScrollTop(scroller, active, followingRef.current)
+    }
   }, [active, expanded, output, wrapped])
 
   return (
@@ -132,16 +181,46 @@ export function ToolCommandCard({
       data-state={item.state}
     >
       <div className="canonical-command-card__command">
-        <span className="canonical-command-shell__prompt" aria-hidden="true">
-          $
-        </span>
-        <pre aria-label="执行内容">{command}</pre>
+        <div className="canonical-command-card__command-viewport">
+          <pre
+            ref={commandRef}
+            id={commandContentId}
+            aria-label="执行内容"
+            aria-expanded={commandExpanded}
+            data-expanded={commandExpanded}
+          >
+            <span className="canonical-command-shell__prompt" aria-hidden="true">
+              $
+            </span>{' '}
+            {command}
+          </pre>
+        </div>
         <CopyButton
           ariaLabel="复制执行内容"
           text={command}
           className="canonical-command-card__copy"
         />
       </div>
+      {commandOverflowing || commandExpanded ? (
+        <button
+          aria-controls={commandContentId}
+          aria-expanded={commandExpanded}
+          className="canonical-command-card__command-toggle"
+          type="button"
+          onClick={() => {
+            // 展开后从头开始读，而不是停在收起态的旧滚动位置。
+            if (commandRef.current) commandRef.current.scrollTop = 0
+            setCommandExpanded((current) => !current)
+          }}
+        >
+          {commandExpanded ? '收起命令' : '展开命令'}
+          <ChevronDown
+            aria-hidden="true"
+            className={`canonical-command-card__chevron${commandExpanded ? ' is-expanded' : ''}`}
+            size={APP_ICON_SIZES.sm}
+          />
+        </button>
+      ) : null}
       <div className="canonical-command-card__output">
         <div
           className="canonical-command-shell__edge-fade"
@@ -155,7 +234,11 @@ export function ToolCommandCard({
             tabIndex={0}
             aria-label="返回结果"
             onScroll={(event) => {
-              followingRef.current = isCommandOutputAtBottom(event.currentTarget)
+              const atBottom = isCommandOutputAtBottom(event.currentTarget)
+              followingRef.current = atBottom
+              if (pinRef.current) {
+                pinRef.current.dataset.following = String(active && atBottom)
+              }
             }}
           >
             <pre
@@ -163,20 +246,33 @@ export function ToolCommandCard({
               className="canonical-command-card__output-text"
               data-wrapped={wrapped}
             >
-              {output ?? (active ? '等待输出' : '无输出')}
+              {outputChunks.map((chunk, index) => (
+                <span
+                  key={index}
+                  className="canonical-command-card__output-chunk"
+                  style={{ containIntrinsicBlockSize: `auto ${chunk.lineCount}lh` }}
+                >
+                  {chunk.text}
+                </span>
+              ))}
             </pre>
+            <div
+              ref={pinRef}
+              className="canonical-command-card__output-pin"
+              data-following={active && followingRef.current}
+            />
           </div>
         </div>
         <div className="canonical-command-card__actions">
           <button
-            className="md-code-wrap tw:inline-flex tw:size-7 tw:items-center tw:justify-center tw:rounded-control tw:border-0 tw:text-app-text-soft tw:cursor-pointer tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent"
+            className="md-code-wrap tw:inline-flex tw:size-6 tw:items-center tw:justify-center tw:rounded-control tw:border-0 tw:text-app-text-soft tw:cursor-pointer tw:focus-visible:ring-1 tw:focus-visible:ring-app-accent"
             type="button"
             aria-label="输出自动换行"
             title="输出自动换行"
             aria-pressed={wrapped}
             onClick={() => setWrapped(!wrapped)}
           >
-            <WrapText size={APP_ICON_SIZE} aria-hidden="true" />
+            <WrapText size={APP_ICON_SIZES.sm} aria-hidden="true" />
           </button>
           {output !== null ? <CopyButton ariaLabel="复制返回结果" text={output} /> : null}
         </div>

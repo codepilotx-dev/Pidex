@@ -86,10 +86,11 @@ import {
 } from '../AgentThreadAdapter.js'
 import { createAgentRpcClient, type AgentRpcSubscription } from '../AgentRpcClient.js'
 
-const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v6'
+const BROWSER_APPEARANCE_SETTINGS_STORAGE_KEY = 'pidex.desktop.appearance.v8'
 const LEGACY_BROWSER_APPEARANCE_SETTINGS_STORAGE_KEYS = [
   'pidex.desktop.appearance.v3',
   'pidex.desktop.appearance.v5',
+  'pidex.desktop.appearance.v6',
 ] as const
 
 export function emptyBrowserState(): DesktopBrowserState {
@@ -289,6 +290,7 @@ export function mockSessionSnapshot(
     planModeActive: options.planModeActive,
   })
   const planModeActive = planModeActiveFromCollaborationMode(collaborationMode)
+  const grillModeActive = options.grillModeActive === true && !planModeActive
   const permissionConfig =
     options.permissionConfig ?? desktopPermissionModeToPermissionConfig('default')
   const permissionMode = permissionModeFromDesktopConfig(permissionConfig)
@@ -304,6 +306,7 @@ export function mockSessionSnapshot(
       permissionMode,
       collaborationMode,
       planModeActive,
+      grillModeActive,
       model: options.model ?? null,
       thinkingMode: options.thinkingMode ?? 'default',
       hasSystemPrompt: Boolean(options.systemPrompt),
@@ -318,6 +321,7 @@ export function mockSessionSnapshot(
       permissionConfig,
       collaborationMode,
       planModeActive,
+      grillModeActive,
       model: options.model,
       sessionName: options.sessionName,
       thinkingMode: options.thinkingMode ?? 'default',
@@ -339,11 +343,12 @@ export function mockSessionSnapshot(
 }
 
 const PERFORMANCE_TURN_COUNTS = new Set([10, 100, 250, 500])
-const PERFORMANCE_SESSION_COUNTS = new Set([10, 30, 50, 100])
+const PERFORMANCE_SESSION_COUNTS = new Set([10, 30, 50, 100, 500, 1000])
 
 export type BrowserPerformanceFixture = {
   activeSessionId: string
   sessions: DesktopSessionSnapshot[]
+  projects: DesktopWorkspace[]
 }
 
 export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | null {
@@ -353,7 +358,11 @@ export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | n
 
   const search = new URLSearchParams(window.location.search)
   const performanceCase = search.get('performanceCase')
-  if (performanceCase !== 'desktop-ux' && performanceCase !== 'nested-scroll-edge-fade') {
+  if (
+    performanceCase !== 'desktop-ux' &&
+    performanceCase !== 'nested-scroll-edge-fade' &&
+    performanceCase !== 'sidebar-dnd'
+  ) {
     return null
   }
 
@@ -406,8 +415,8 @@ export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | n
       )
     }
 
-    // 首个会话的末轮插入一批工具项，为嵌套滚动边界渐隐场景提供
-    // 可滚动的 process group（12 个 Bash 工具项超出 14rem 折叠高度）。
+    // 首个会话的末轮插入一批工具项：为嵌套滚动场景提供限高滚动的
+    // process group（12 个 Bash 工具项超出 14rem 折叠高度）。
     if (includeNestedScrollFixture && sessionIndex === 0 && sessionTurns > 0) {
       const lastTurnIndex = sessionTurns - 1
       const lastUser = messages[lastTurnIndex * 2]!
@@ -462,6 +471,14 @@ export function createBrowserPerformanceFixture(): BrowserPerformanceFixture | n
   return {
     activeSessionId: sessions[0]!.item.id,
     sessions,
+    projects:
+      performanceCase === 'sidebar-dnd'
+        ? [
+            ...new Map(
+              sessions.map((snapshot) => [snapshot.workspace.path, snapshot.workspace]),
+            ).values(),
+          ]
+        : [],
   }
 }
 
@@ -692,8 +709,8 @@ export function createBrowserVisualFixture(): DesktopSessionSnapshot | null {
   }
 
   if (visualCase === 'scroll-edge') {
-    // 14 个 Bash 工具项组成可滚动的 process group；执行计划提供
-    // 16 步可滚动的 steps。两者都用于验证滚动边界渐隐状态。
+    // 14 个 Bash 工具项组成限高滚动的 process group（滚动条隐藏）；执行计划
+    // 提供 16 步可滚动的 steps，用于验证滚动边界渐隐状态。
     for (let toolIndex = 0; toolIndex < 14; toolIndex += 1) {
       const toolId = `${sessionId}-tool-${toolIndex}`
       events.push(

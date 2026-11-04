@@ -12,6 +12,10 @@ const EnvironmentReferenceMapSchema = Schema.Record(NonEmptyStringSchema, NonEmp
 const TimeoutSchema = Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 600_000 }))
 
 export const McpScopeSchema = Schema.Literals(['user', 'local'])
+/** Runtime status may also describe a host-managed server that is never user-editable. */
+export const McpRuntimeScopeSchema = Schema.Literals(['user', 'local', 'host'])
+/** Host-managed MCP servers are injected by the host and belong to a plugin. */
+export const McpManagedBySchema = Schema.Literals(['user', 'host'])
 export const McpTransportTypeSchema = Schema.Literals(['stdio', 'http'])
 export const McpHttpAuthSchema = Schema.Literals(['oauth', 'none'])
 export const McpToolApprovalModeSchema = Schema.Literals(['auto', 'prompt', 'writes', 'approve'])
@@ -99,7 +103,7 @@ export const McpRuntimeServerAuthSchema = McpRuntimeAuthSummarySchema
 
 export const McpRuntimeServerStatusSchema = Schema.Struct({
   name: NonEmptyStringSchema,
-  scope: McpScopeSchema,
+  scope: McpRuntimeScopeSchema,
   type: McpTransportTypeSchema,
   state: McpRuntimeStateSchema,
   auth: McpRuntimeAuthSummarySchema,
@@ -107,6 +111,10 @@ export const McpRuntimeServerStatusSchema = Schema.Struct({
   toolCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   resourceCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   promptCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  /** Optional host-managed marker; older clients can ignore it. */
+  managedBy: Schema.optional(McpManagedBySchema),
+  /** Plugin that owns a host-managed server, for example `computer-use`. */
+  pluginId: Schema.optional(NonEmptyStringSchema),
 })
 
 export const McpStatusParamsSchema = McpListParamsSchema
@@ -280,6 +288,8 @@ export const McpRpcMethods = {
 } as const satisfies MethodMap
 
 export type McpScope = typeof McpScopeSchema.Type
+export type McpRuntimeScope = typeof McpRuntimeScopeSchema.Type
+export type McpManagedBy = typeof McpManagedBySchema.Type
 export type McpTransportType = typeof McpTransportTypeSchema.Type
 export type McpHttpAuth = typeof McpHttpAuthSchema.Type
 export type McpToolApprovalMode = typeof McpToolApprovalModeSchema.Type

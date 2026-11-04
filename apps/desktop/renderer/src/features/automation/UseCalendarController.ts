@@ -35,6 +35,9 @@ export function useCalendarController(query: string, filter: CalendarFilter) {
       const result = await desktopClient.listCalendarOccurrences({
         ...range,
         timeZone,
+        ...(capabilities.includes('task.schedule.v1')
+          ? { sourceKinds: ['scheduled-task', 'automation', 'task-schedule'] as const }
+          : {}),
       })
       if (current !== sequence.current) return
       setRawOccurrences(result.occurrences)
@@ -60,7 +63,8 @@ export function useCalendarController(query: string, filter: CalendarFilter) {
               event.type === 'automation/changed' ||
               event.type === 'automation/runChanged' ||
               event.type === 'scheduled-task/changed' ||
-              event.type === 'schedule-plan/changed',
+              event.type === 'schedule-plan/changed' ||
+              event.type === 'task-schedule/changed',
           )
         )
           void refresh()

@@ -1,10 +1,12 @@
 import { afterEach, describe, expect, test } from 'bun:test'
 import { Database } from 'bun:sqlite'
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, toNamespacedPath } from 'node:path'
 import { removeFixturePaths } from './FixtureCleanup'
 import { AgentDatabase, SCHEMA_VERSION } from '../src/storage/database/AgentDatabase'
+import { AgentError } from '../src/Domain'
+import type { ManagedWorktree } from '../src/worktree/Types'
 import { ThreadService } from '../src/session/ThreadService'
 import { EnvironmentDeltaStore } from '../src/local-environment/EnvironmentDeltaStore'
 import { HISTORY_SCHEMA, initializeSchema } from '../src/storage/database/SchemaInitializer'
@@ -18,6 +20,25 @@ import { ThreadWorkspaceResolver } from '../src/workspace/ThreadWorkspaceResolve
 
 const roots: string[] = []
 afterEach(async () => removeFixturePaths(roots.splice(0)))
+
+const writeDeviceFile = async (path: string) => {
+  const writer = Bun.spawn(
+    [
+      'powershell.exe',
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      '[IO.File]::WriteAllText($env:PIDEX_TEST_RESERVED_FILE, "reserved-file-content")',
+    ],
+    {
+      env: { ...process.env, PIDEX_TEST_RESERVED_FILE: toNamespacedPath(path) },
+      stdout: 'ignore',
+      stderr: 'ignore',
+      windowsHide: true,
+    },
+  )
+  expect(await writer.exited).toBe(0)
+}
 
 const git = async (cwd: string, args: readonly string[]) => {
   const child = Bun.spawn(['git', ...args], {
@@ -129,6 +150,176 @@ const fixture = async (
 }
 
 describe('ManagedWorktreeService', () => {
+  test('Git 尚未取消登记时保留目录并返回脱敏提示，重试不重拍快照', async () => {
+    const value = await fixture()
+    try {
+      const created = await value.service.create({
+        projectId: 'project-1',
+        operationId: 'locked-create',
+        startingState: { type: 'working-tree' },
+        snapshotMode: 'head',
+      })
+      const tree = value.worktrees.readWorktree(created.worktree.id)!
+      const service = value.service as unknown as {
+        git: (
+          cwd: string,
+          args: readonly string[],
+        ) => Promise<{ code: number; stdout: string; stderr: string }>
+      }
+      const runGit = service.git.bind(value.service)
+      service.git = (cwd, args) =>
+        args[0] === 'worktree' && args[1] === 'remove'
+          ? Promise.resolve({ code: 1, stdout: '', stderr: 'private-path-and-secret' })
+          : runGit(cwd, args)
+      await expect(
+        value.service.delete({ worktreeId: tree.id, operationId: 'locked-delete' }),
+      ).rejects.toMatchObject({
+        code: 'WORKTREE_GIT_FAILED',
+        message:
+          'Git 无法移除工作树，可能被锁定或占用；请关闭相关终端或程序后重试，恢复快照已保留。',
+      })
+      const failed = value.worktrees.readWorktree(tree.id)!
+      expect(failed.status).toBe('deleting')
+      expect((await lstat(join(tree.path, '.git'))).isFile()).toBe(true)
+      service.git = runGit
+      expect(
+        (await value.service.delete({ worktreeId: tree.id, operationId: 'locked-retry' })).worktree
+          .status,
+      ).toBe('cleaned')
+      expect(value.worktrees.readWorktree(tree.id)!.restoreSnapshotPath).toBe(
+        failed.restoreSnapshotPath,
+      )
+    } finally {
+      value.db.close()
+    }
+  }, 60_000)
+
+  test('残留清理拒绝托管根目录和根外目录', async () => {
+    const value = await fixture()
+    try {
+      const created = await value.service.create({
+        projectId: 'project-1',
+        operationId: 'boundary-create',
+        startingState: { type: 'working-tree' },
+        snapshotMode: 'head',
+      })
+      const tree = value.worktrees.readWorktree(created.worktree.id)!
+      const service = value.service as unknown as {
+        removeManagedPath: (tree: ManagedWorktree) => Promise<void>
+      }
+      for (const path of [value.managedRoot, value.repositoryRoot]) {
+        await expect(service.removeManagedPath({ ...tree, path })).rejects.toMatchObject({
+          code: 'WORKTREE_PATH_DENIED',
+        })
+        expect((await lstat(path)).isDirectory()).toBe(true)
+      }
+      if (value.symlinkCreated) {
+        const link = join(value.managedRoot, 'managed-link')
+        await symlink(tree.path, link, 'junction')
+        await expect(service.removeManagedPath({ ...tree, path: link })).rejects.toMatchObject({
+          code: 'WORKTREE_PATH_UNSAFE',
+        })
+        expect((await lstat(tree.path)).isDirectory()).toBe(true)
+      }
+    } finally {
+      value.db.close()
+    }
+  }, 60_000)
+
+  test.each([false, true])(
+    '部分移除失败保留删除状态与原快照，重试兼容旧版 ready 状态：%s',
+    async (legacy) => {
+      const value = await fixture()
+      try {
+        const created = await value.service.create({
+          projectId: 'project-1',
+          operationId: 'partial-create',
+          startingState: { type: 'working-tree' },
+          snapshotMode: 'head',
+        })
+        const tree = value.worktrees.readWorktree(created.worktree.id)!
+        await writeFile(join(tree.path, 'draft.txt'), 'must survive retry', 'utf8')
+        const service = value.service as unknown as {
+          removeManagedPath: (tree: ManagedWorktree) => Promise<void>
+        }
+        const remove = service.removeManagedPath.bind(value.service)
+        service.removeManagedPath = async (worktree) => {
+          expect(
+            (await git(value.repositoryRoot, ['worktree', 'remove', '--force', worktree.path]))
+              .code,
+          ).toBe(0)
+          await mkdir(worktree.path)
+          if (process.platform === 'win32') await writeDeviceFile(join(worktree.path, 'nul'))
+          throw new AgentError('WORKTREE_GIT_FAILED', 'simulated partial removal', 409)
+        }
+        await expect(
+          value.service.delete({ worktreeId: tree.id, operationId: 'partial-fail' }),
+        ).rejects.toThrow('simulated partial removal')
+        const failed = value.worktrees.readWorktree(tree.id)!
+        expect(failed.status).toBe('deleting')
+        expect(failed.restoreSnapshotPath).toBeTruthy()
+        if (legacy) value.worktrees.updateWorktree(tree.id, { status: 'ready' })
+        service.removeManagedPath = remove
+        const deleted = await value.service.delete({
+          worktreeId: tree.id,
+          operationId: 'partial-retry',
+        })
+        expect(deleted.worktree.status).toBe('cleaned')
+        expect(value.worktrees.readWorktree(tree.id)!.restoreSnapshotPath).toBe(
+          failed.restoreSnapshotPath,
+        )
+        await value.service.restore({ worktreeId: tree.id, operationId: 'partial-restore' })
+        const restored = value.worktrees.readWorktree(tree.id)!
+        expect(await readFile(join(restored.path, 'draft.txt'), 'utf8')).toBe('must survive retry')
+        if (process.platform === 'win32') {
+          expect(await readFile(toNamespacedPath(join(restored.path, 'nul')), 'utf8')).toBe(
+            'reserved-file-content',
+          )
+        }
+      } finally {
+        value.db.close()
+      }
+    },
+    60_000,
+  )
+
+  test.skipIf(process.platform !== 'win32')(
+    'Windows 保留文件名可删除且恢复快照保留内容',
+    async () => {
+      const value = await fixture()
+      try {
+        const created = await value.service.create({
+          projectId: 'project-1',
+          operationId: 'reserved-create',
+          startingState: { type: 'working-tree' },
+          snapshotMode: 'head',
+        })
+        const worktree = value.worktrees.readWorktree(created.worktree.id)!
+        const relativeFile = join('中文目录', 'nul')
+        await mkdir(join(worktree.path, '中文目录'))
+        await writeDeviceFile(join(worktree.path, relativeFile))
+        const deleted = await value.service.delete({
+          worktreeId: worktree.id,
+          operationId: 'reserved-delete',
+        })
+        expect(deleted.worktree.status).toBe('cleaned')
+        await expect(lstat(worktree.path)).rejects.toMatchObject({ code: 'ENOENT' })
+        const snapshot = value.worktrees.readWorktree(worktree.id)!.restoreSnapshotPath!
+        expect(
+          await readFile(toNamespacedPath(join(snapshot, 'files', relativeFile)), 'utf8'),
+        ).toBe('reserved-file-content')
+        await value.service.restore({ worktreeId: worktree.id, operationId: 'reserved-restore' })
+        const restored = value.worktrees.readWorktree(worktree.id)!
+        expect(await readFile(toNamespacedPath(join(restored.path, relativeFile)), 'utf8')).toBe(
+          'reserved-file-content',
+        )
+      } finally {
+        value.db.close()
+      }
+    },
+    60_000,
+  )
+
   test('根目录偏好变化后，已有工作树仍从创建时的根删除与恢复', async () => {
     let customRoot = ''
     const { service, worktrees, root, repositoryRoot, db } = await fixture({

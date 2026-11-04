@@ -2,6 +2,7 @@ import type { LiveEventType } from '@pidex/agent-protocol'
 
 export const AGENT_LIVE_EVENT_FILTERS = {
   canonical: [
+    'visualization/preview',
     'item/agentMessage/delta',
     'reasoning/textDelta',
     'reasoning/summaryPartAdded',
@@ -15,7 +16,6 @@ export const AGENT_LIVE_EVENT_FILTERS = {
   modelHealth: ['model/health/updated', 'catalog/updated', 'provider/credential/updated'],
   skills: ['skill/updated'],
   plugins: ['plugins/updated'],
-  minimaxCli: ['minimaxCli/updated'],
   // computer/changed is durable, so it arrives outside the live-only filter and
   // is reconciled by reading computer/state.
   computer: [],
@@ -37,7 +37,6 @@ export const AGENT_LIVE_EVENT_FILTERS = {
     | 'modelHealth'
     | 'skills'
     | 'plugins'
-    | 'minimaxCli'
     | 'computer'
     | 'tooling'
     | 'mcp'

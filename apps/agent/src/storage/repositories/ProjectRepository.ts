@@ -1,4 +1,4 @@
-import { existsSync, statSync } from 'node:fs'
+import { statSync } from 'node:fs'
 import { basename, isAbsolute, relative, resolve } from 'node:path'
 import type { ProjectExecutionEnvironment } from '@pidex/shared/thread'
 import type { ModelRef } from '../../Domain'
@@ -57,6 +57,14 @@ type FolderRow = {
   updated_at: number
 }
 
+type SettingsRow = {
+  project_id: string
+  default_model: string | null
+  instructions: string
+  execution_environment: string | null
+  version: number
+}
+
 const canonicalPath = (value: string) => resolve(value)
 export const projectPathKey = (value: string) => {
   const normalized = canonicalPath(value).replaceAll('\\', '/').replace(/\/+$/, '')
@@ -65,6 +73,15 @@ export const projectPathKey = (value: string) => {
 const pathContains = (parent: string, candidate: string) => {
   const nested = relative(parent, candidate)
   return nested === '' || (!nested.startsWith('..') && !isAbsolute(nested))
+}
+/** Project content revisions never repeat or move backwards under same-millisecond edits or clock skew. */
+const nextProjectVersion = (previous: number) => Math.max(now(), previous + 1)
+const directoryAvailable = (path: string) => {
+  try {
+    return statSync(path).isDirectory()
+  } catch {
+    return false
+  }
 }
 
 export abstract class ProjectRepositoryDatabase extends CredentialRepositoryDatabase {
@@ -163,7 +180,8 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
           throw new AgentError('INVALID_REQUEST', '项目目录不能互相包含', 400)
       }
       const keys = new Set(input.paths.map(projectPathKey))
-      const timestamp = now()
+      // An edit always rewrites the folder set, so it always advances the revision.
+      const timestamp = nextProjectVersion(project.updatedAt)
       // Keep folder identities (and their file references) for paths that remain.
       for (const folder of project.folders) {
         if (keys.has(projectPathKey(folder.path))) continue
@@ -205,11 +223,16 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
               timestamp,
             )
       })
-      return this.updateProject({
-        projectID: input.projectID,
-        name: input.name,
-        expectedVersion: input.expectedVersion,
-      })
+      const edited = this.profileSqlite
+        .query(
+          `
+      UPDATE projects SET name = ?, updated_at = ?
+      WHERE id = ? AND updated_at = ? AND removed_at IS NULL
+    `,
+        )
+        .run(input.name.trim(), timestamp, input.projectID, input.expectedVersion).changes
+      if (edited === 0) throw new AgentError('CONFLICT', '项目已被其他操作更新', 409)
+      return this.getProject(input.projectID)!
     })()
   }
 
@@ -221,31 +244,40 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
 
   restoreProjectRecord(projectID: string) {
     this.profileSqlite
-      .query('UPDATE projects SET removed_at = NULL, updated_at = ? WHERE id = ?')
+      .query(
+        'UPDATE projects SET removed_at = NULL, updated_at = MAX(?, updated_at + 1) WHERE id = ?',
+      )
       .run(now(), projectID)
     return this.requireProject(projectID)
   }
 
-  private folders(projectID: string) {
-    return (
-      this.profileSqlite
-        .query(
-          `
+  private mapProjects(rows: ProjectRow[]): StoredProject[] {
+    if (rows.length === 0) return []
+    // ponytail: one IN(...) per table, bounded by SQLite's parameter limit
+    // (~32k). Page the id list here if a single call ever maps more projects.
+    const placeholders = rows.map(() => '?').join(', ')
+    const ids = rows.map((row) => row.id)
+    const foldersByProject = new Map<string, StoredProjectFolder[]>()
+    // One probe per normalized path: the same directory can belong to several projects.
+    const availability = new Map<string, boolean>()
+    for (const row of this.profileSqlite
+      .query(
+        `
       SELECT id, project_id, path, role, sort_order, created_at, updated_at
       FROM project_folders
-      WHERE project_id = ?
+      WHERE project_id IN (${placeholders})
       ORDER BY CASE role WHEN 'primary' THEN 0 ELSE 1 END, sort_order, created_at, id
     `,
-        )
-        .all(projectID) as FolderRow[]
-    ).map((row): StoredProjectFolder => {
-      let available = false
-      try {
-        available = existsSync(row.path) && statSync(row.path).isDirectory()
-      } catch {
-        available = false
+      )
+      .all(...ids) as FolderRow[]) {
+      const key = projectPathKey(row.path)
+      let available = availability.get(key)
+      if (available === undefined) {
+        available = directoryAvailable(row.path)
+        availability.set(key, available)
       }
-      return {
+      const folders = foldersByProject.get(row.project_id) ?? []
+      folders.push({
         id: row.id,
         name: basename(row.path) || row.path,
         path: row.path,
@@ -254,25 +286,37 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
         order: row.sort_order,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
+      })
+      foldersByProject.set(row.project_id, folders)
+    }
+    const settingsByProject = new Map<string, ProjectModelSettings>()
+    for (const row of this.profileSqlite
+      .query(
+        `
+      SELECT project_id, default_model, instructions, execution_environment, version
+      FROM project_settings
+      WHERE project_id IN (${placeholders})
+    `,
+      )
+      .all(...ids) as SettingsRow[]) {
+      settingsByProject.set(row.project_id, this.mapSettings(row))
+    }
+    return rows.map((row): StoredProject => {
+      const folders = foldersByProject.get(row.id) ?? []
+      const primary = folders.find((folder) => folder.role === 'primary')
+      return {
+        id: row.id,
+        name: row.name,
+        primaryFolderId: primary?.id ?? '',
+        folders,
+        removedAt: row.removed_at,
+        rootPath: primary?.path ?? '',
+        lastOpenedAt: row.last_opened_at,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+        settings: settingsByProject.get(row.id) ?? this.mapSettings(null),
       }
     })
-  }
-
-  private mapProject(row: ProjectRow): StoredProject {
-    const folders = this.folders(row.id)
-    const primary = folders.find((folder) => folder.role === 'primary')
-    return {
-      id: row.id,
-      name: row.name,
-      primaryFolderId: primary?.id ?? '',
-      folders,
-      removedAt: row.removed_at,
-      rootPath: primary?.path ?? '',
-      lastOpenedAt: row.last_opened_at,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      settings: this.getProjectSettings(row.id),
-    }
   }
 
   protected requireProject(projectID: string) {
@@ -324,22 +368,26 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
   }
 
   listProjects(input: { folderPath?: string; includeRemoved?: boolean } = {}) {
+    const conditions: string[] = []
+    const params: string[] = []
+    if (!input.includeRemoved) conditions.push('p.removed_at IS NULL')
+    if (input.folderPath) {
+      conditions.push(
+        'EXISTS (SELECT 1 FROM project_folders f WHERE f.project_id = p.id AND f.path_key = ?)',
+      )
+      params.push(projectPathKey(input.folderPath))
+    }
     const rows = this.profileSqlite
       .query(
         `
-      SELECT id, name, removed_at, last_opened_at, created_at, updated_at
-      FROM projects
-      ${input.includeRemoved ? '' : 'WHERE removed_at IS NULL'}
-      ORDER BY last_opened_at DESC, created_at DESC, id
+      SELECT p.id, p.name, p.removed_at, p.last_opened_at, p.created_at, p.updated_at
+      FROM projects p
+      ${conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : ''}
+      ORDER BY p.last_opened_at DESC, p.created_at DESC, p.id
     `,
       )
-      .all() as ProjectRow[]
-    const projects = rows.map((row) => this.mapProject(row))
-    if (!input.folderPath) return projects
-    const key = projectPathKey(input.folderPath)
-    return projects.filter((project) =>
-      project.folders.some((folder) => projectPathKey(folder.path) === key),
-    )
+      .all(...params) as ProjectRow[]
+    return this.mapProjects(rows)
   }
 
   getProject(projectID: string) {
@@ -351,7 +399,7 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
     `,
       )
       .get(projectID) as ProjectRow | null
-    return row ? this.mapProject(row) : null
+    return row ? (this.mapProjects([row])[0] ?? null) : null
   }
 
   getProjectFolder(projectID: string, folderID: string) {
@@ -360,10 +408,10 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
 
   touchProject(projectID: string) {
     this.requireProject(projectID)
-    const timestamp = now()
+    // Opening a project only records recency; it must not invalidate pending edit versions.
     this.profileSqlite
-      .query('UPDATE projects SET last_opened_at = ?, updated_at = ? WHERE id = ?')
-      .run(timestamp, timestamp, projectID)
+      .query('UPDATE projects SET last_opened_at = ? WHERE id = ?')
+      .run(now(), projectID)
     return this.getProject(projectID)!
   }
 
@@ -372,7 +420,9 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
     if (project.updatedAt !== input.expectedVersion) {
       throw new AgentError('CONFLICT', '项目已被其他操作更新', 409)
     }
-    const timestamp = now()
+    const name = input.name.trim()
+    if (name === project.name) return project
+    const timestamp = nextProjectVersion(project.updatedAt)
     const changed = this.profileSqlite
       .query(
         `
@@ -380,25 +430,12 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
       WHERE id = ? AND updated_at = ? AND removed_at IS NULL
     `,
       )
-      .run(input.name.trim(), timestamp, input.projectID, input.expectedVersion).changes
+      .run(name, timestamp, input.projectID, input.expectedVersion).changes
     if (changed === 0) throw new AgentError('CONFLICT', '项目已被其他操作更新', 409)
     return this.getProject(input.projectID)!
   }
 
-  getProjectSettings(projectID: string): ProjectModelSettings {
-    const row = this.profileSqlite
-      .query(
-        `
-      SELECT default_model, instructions, execution_environment, version
-      FROM project_settings WHERE project_id = ?
-    `,
-      )
-      .get(projectID) as {
-      default_model: string | null
-      instructions: string
-      execution_environment: string | null
-      version: number
-    } | null
+  private mapSettings(row: SettingsRow | null): ProjectModelSettings {
     return {
       defaultModel: row?.default_model ? parse<ModelRef>(row.default_model) : null,
       instructions: row?.instructions ?? '',
@@ -406,6 +443,18 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
       executionEnvironment: row?.execution_environment === 'local' ? 'local' : 'auto',
       version: row?.version ?? 1,
     }
+  }
+
+  getProjectSettings(projectID: string): ProjectModelSettings {
+    const row = this.profileSqlite
+      .query(
+        `
+      SELECT project_id, default_model, instructions, execution_environment, version
+      FROM project_settings WHERE project_id = ?
+    `,
+      )
+      .get(projectID) as SettingsRow | null
+    return this.mapSettings(row)
   }
 
   saveProjectSettings(
@@ -460,7 +509,7 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
     )
     if (overlaps)
       throw new AgentError('PROJECT_FOLDER_OVERLAP', '同一项目中的目录不能互相包含', 409)
-    const timestamp = now()
+    const timestamp = nextProjectVersion(project.updatedAt)
     const sortOrder =
       project.folders.reduce((maximum, folder) => Math.max(maximum, folder.order), 0) + 1
     const result = this.profileSqlite
@@ -500,7 +549,7 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
     ).some(({ workspace_cwd }) => pathContains(folder.path, workspace_cwd))
     if (inUse)
       throw new AgentError('PROJECT_FOLDER_IN_USE', '仍有未归档任务使用此目录或其子目录', 409)
-    const timestamp = now()
+    const timestamp = nextProjectVersion(project.updatedAt)
     const changes = this.profileSqlite
       .query("DELETE FROM project_folders WHERE project_id = ? AND id = ? AND role = 'secondary'")
       .run(projectID, folderID).changes
@@ -517,7 +566,7 @@ export abstract class ProjectRepositoryDatabase extends CredentialRepositoryData
     const folder = project.folders.find((entry) => entry.id === folderID)
     if (!folder) throw new AgentError('PROJECT_FOLDER_NOT_FOUND', '项目目录不存在', 404)
     if (folder.role === 'primary') return { project, changed: false }
-    const timestamp = now()
+    const timestamp = nextProjectVersion(project.updatedAt)
     this.profileSqlite.transaction(() => {
       this.profileSqlite
         .query(

@@ -24,6 +24,22 @@ export type ThreadGoalStatus = typeof ThreadGoalStatusSchema.Type
 export const ThreadGoalUserStatusSchema = Schema.Literals(['active', 'paused', 'complete'])
 export type ThreadGoalUserStatus = typeof ThreadGoalUserStatusSchema.Type
 
+export type ThreadGoalBudgetViolation = 'narrowed' | 'capped'
+
+/**
+ * A goal's budget may only widen once the goal exists: a finite cap can be raised
+ * or removed, an unlimited goal cannot become finite, and nothing can be lowered.
+ * Callers only apply this to an existing goal; creating one is unconstrained.
+ */
+export function threadGoalBudgetViolation(
+  current: number | null,
+  next: number | null,
+): ThreadGoalBudgetViolation | null {
+  if (current === null) return next === null ? null : 'capped'
+  if (next === null || next >= current) return null
+  return 'narrowed'
+}
+
 export const ThreadGoalSchema = Schema.Struct({
   /** Identity of this goal instance; a cleared-then-recreated goal gets a new id. */
   id: NonEmptyStringSchema,

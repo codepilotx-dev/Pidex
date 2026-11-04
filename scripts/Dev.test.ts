@@ -4,9 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
   allocateLoopbackPort,
+  allocateDevAgentPort,
   configuredRendererPort,
   createWorktreeInstance,
   parseDevAgentRuntime,
+  parseDevDesktopArgs,
   parseLegacyDevAgentRuntime,
   resolveDevAgentLaunchConnection,
   verifyDevAgent,
@@ -201,10 +203,11 @@ describe('开发 Agent runtime 描述', () => {
         await rm(dataDir, { recursive: true, force: true })
       }
     },
-    15_000,
+    // 子进程要冷启动 Bun 并做多次加锁/清理，共享 runner 上并发时 15 秒会偶发超时。
+    60_000,
   )
 
-  test('历史端口被占用时安全失败并保留原连接描述', async () => {
+  test('显式指定的历史端口被占用时安全失败并保留原连接描述', async () => {
     const dataDir = await mkdtemp(join(tmpdir(), 'pidex-runtime-port-busy-'))
     const server = Bun.serve({
       hostname: '127.0.0.1',
@@ -222,7 +225,7 @@ describe('开发 Agent runtime 描述', () => {
       await writeFile(descriptorPath, JSON.stringify(descriptor), 'utf8')
       const child = Bun.spawn([process.execPath, 'run', 'scripts/DevAgent.ts'], {
         cwd: new URL('..', import.meta.url).pathname.slice(1),
-        env: { ...process.env, PIDEX_DATA_DIR: dataDir },
+        env: { ...process.env, PIDEX_DATA_DIR: dataDir, PIDEX_DEV_AGENT_PORT: String(server.port) },
         stdout: 'pipe',
         stderr: 'pipe',
       })
@@ -245,6 +248,42 @@ describe('开发 Agent runtime 描述', () => {
 })
 
 describe('worktree Desktop 实例', () => {
+  test('旧 Agent 和启动器已退出时允许避开占用端口，存活实例或显式端口仍拒绝', async () => {
+    const retired = Bun.spawn([process.execPath, '-e', 'process.exit(0)'], {
+      stdout: 'ignore',
+      stderr: 'ignore',
+    })
+    await retired.exited
+    const server = Bun.serve({
+      hostname: '127.0.0.1',
+      port: 0,
+      fetch: () => new Response('occupied'),
+    })
+    const previous = {
+      ...validRuntime,
+      ownerPid: retired.pid,
+      agentPid: retired.pid,
+      origin: `http://127.0.0.1:${server.port}`,
+    }
+    const connection = resolveDevAgentLaunchConnection(previous, undefined, () => 'unused-token')
+    try {
+      const port = await allocateDevAgentPort(connection, previous, undefined)
+      expect(port).toBeGreaterThan(0)
+      expect(port).not.toBe(server.port)
+      expect(connection.authToken).toBe(previous.authToken)
+      await expect(
+        allocateDevAgentPort(connection, { ...previous, agentPid: process.pid }, undefined),
+      ).rejects.toThrow('AGENT_RECONNECT_PORT_UNAVAILABLE')
+      await expect(
+        allocateDevAgentPort(connection, { ...previous, ownerPid: process.pid }, undefined),
+      ).rejects.toThrow('AGENT_RECONNECT_PORT_UNAVAILABLE')
+      await expect(allocateDevAgentPort(connection, previous, server.port)).rejects.toThrow(
+        'AGENT_RECONNECT_PORT_UNAVAILABLE',
+      )
+    } finally {
+      await server.stop(true)
+    }
+  })
   test('规范路径生成稳定且相互隔离的实例目录', () => {
     const first = createWorktreeInstance('C:/project/main', 'C:/data')
     const repeated = createWorktreeInstance('C:/project/main/', 'C:/data')
@@ -287,6 +326,94 @@ describe('独立开发启动命令', () => {
     expect(desktop).toContain('PIDEX_USER_DATA_DIR: instance.userDataDir')
     expect(desktop).not.toContain('/api/shutdown')
     expect(desktop).not.toContain('apps/agent/src/index.ts')
+  })
+
+  test('开发启动只接受文档化的 --no-build', () => {
+    expect(parseDevDesktopArgs()).toEqual({ noBuild: false })
+    expect(parseDevDesktopArgs(['--no-build'])).toEqual({ noBuild: true })
+    expect(() => parseDevDesktopArgs(['--no-build', '--fast'])).toThrow(
+      'invalid dev desktop argument',
+    )
+  })
+
+  test('原生运行时构建复用当前 Bun 可执行文件，不依赖 PATH 中的裸名', async () => {
+    const desktop = await readFile(new URL('./DevDesktop.ts', import.meta.url), 'utf8')
+    expect(desktop).toContain("[process.execPath, 'run', 'build:cua']")
+    expect(desktop).not.toContain("spawn(['bun'")
+  })
+
+  test('电脑控制产物缺失时 --no-build 继续启动，普通模式保留构建及失败处理', async () => {
+    const desktop = await readFile(new URL('./DevDesktop.ts', import.meta.url), 'utf8')
+    // 只执行启动前置函数，避免测试拉起 Vite、Electron 或真实 Cargo 构建。
+    const source = desktop.slice(
+      desktop.indexOf('async function ensureCuaRuntime('),
+      desktop.indexOf('/** 启动失败'),
+    )
+    const compiled = new Bun.Transpiler({ loader: 'ts' }).transformSync(source)
+    for (const scenario of [
+      { exists: false, noBuild: true, exitCode: 0, builds: 0 },
+      { exists: true, noBuild: true, exitCode: 0, builds: 0 },
+      { exists: true, noBuild: false, exitCode: 0, builds: 0 },
+      { exists: false, noBuild: false, exitCode: 0, builds: 1 },
+      { exists: false, noBuild: false, exitCode: 7, builds: 1 },
+    ]) {
+      const commands: string[][] = []
+      const messages: string[] = []
+      const ensure = new Function(
+        'existsSync',
+        'resolve',
+        'root',
+        'spawn',
+        'console',
+        'process',
+        'cuaBuildFailedCode',
+        `${compiled}; return ensureCuaRuntime`,
+      )(
+        () => scenario.exists,
+        join,
+        '.',
+        (command: string[]) => {
+          commands.push(command)
+          return { exited: Promise.resolve(scenario.exitCode) }
+        },
+        { log: (message: string) => messages.push(message) },
+        process,
+        'CUA_BUILD_FAILED:',
+      ) as (noBuild: boolean) => Promise<void>
+      if (scenario.exitCode)
+        await expect(ensure(scenario.noBuild)).rejects.toThrow('CUA_BUILD_FAILED:7')
+      else await ensure(scenario.noBuild)
+      expect(commands).toHaveLength(scenario.builds)
+      if (scenario.builds) expect(commands[0]).toEqual([process.execPath, 'run', 'build:cua'])
+      if (!scenario.exists && scenario.noBuild) {
+        expect(messages.join('')).toContain('bun run build:cua')
+        expect(messages.join('')).toContain('电脑控制暂不可用')
+      }
+    }
+    expect(desktop).not.toContain('CUA_MISSING')
+  })
+
+  test('未知启动参数立即失败并保留可用参数提示', async () => {
+    const dataDir = await mkdtemp(join(tmpdir(), 'pidex-unknown-argument-'))
+    try {
+      const child = Bun.spawn([process.execPath, 'run', 'scripts/DevDesktop.ts', '--fast'], {
+        cwd: new URL('..', import.meta.url).pathname.slice(1),
+        env: { ...process.env, PIDEX_DATA_DIR: dataDir },
+        stdout: 'pipe',
+        stderr: 'pipe',
+      })
+      const [code, stdout, stderr] = await Promise.all([
+        child.exited,
+        new Response(child.stdout).text(),
+        new Response(child.stderr).text(),
+      ])
+      expect(code).toBe(1)
+      expect(stdout).toBe('')
+      expect(stderr.trim()).toBe('开发启动参数不受支持。当前仅支持：--no-build')
+      expect(stderr).not.toContain(dataDir)
+    } finally {
+      await rm(dataDir, { recursive: true, force: true })
+    }
   })
 
   test('没有 Agent 时 Desktop 只输出安全启动提示', async () => {

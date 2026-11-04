@@ -1,13 +1,13 @@
 import { chooseSessionGroupForThread } from '../../session-groups/SessionGroupActions.js'
 import React from 'react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useParams } from 'react-router-dom'
+import { useStore } from 'zustand/react'
 import { Dropdown as DropdownMenu } from '../../../components/ui/floating/Dropdown.js'
 import { commandMenuActionStore } from '../../search/CommandMenuActionStore.js'
 import {
   AppWindow,
   Archive,
-  Bot,
   ChevronRight,
   Copy,
   Split,
@@ -26,9 +26,14 @@ import {
   APP_ICON_SIZES,
 } from '../../../components/ui/IconTokens.js'
 import { Button } from '../../../components/ui/Button.js'
+import { SidebarRow } from '../../../components/ui/SidebarRow.js'
 import type { DesktopPermissionRequest, DesktopSessionStatus } from '../../../../shared/Types.js'
 import { useQuickChatContext } from '../QuickChatContext.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+  useDesktopSettingsField,
+} from '../../settings/UseDesktopSettings.js'
 import { WorkspaceHeaderItem } from '../../layout/workspace-header/index.js'
 import { useHeightTransition } from '../../../hooks/UseHeightTransition.js'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
@@ -63,13 +68,19 @@ import {
 } from '../../layout/tabs/ConversationUiState.js'
 import { CanonicalThreadView } from '../timeline/CanonicalThreadView.js'
 import { normalizePatchActionError } from '../timeline/PatchActionError.js'
-import { subagentStatusLabel } from '../subagents/SubagentStatusLabel.js'
 import { ConversationItemContext } from '../timeline/ConversationItemContext.js'
 import type { ThreadTimelineNavigationHandle } from '../timeline/SessionTimelineView.js'
 import { ThreadComposerDock } from './ThreadComposerDock.js'
 import { ThreadScrollLayout } from './ThreadScrollLayout.js'
 import { ConversationTurnNavRail, type TurnNavigationReason } from './ConversationTurnNavRail.js'
 import { useConversationTurnRowVisibility } from './UseConversationTurnRowVisibility.js'
+import { PendingSubmissionMessages } from './PendingSubmissionView.js'
+import {
+  hasPendingInput,
+  pendingSubmissionStore,
+  shouldDeferThreadLoading,
+  type PendingSubmission,
+} from '../state/PendingSubmissionStore.js'
 import { useThreadBookmarks } from './UseThreadBookmarks.js'
 import {
   ThreadSummaryErrorBoundary,
@@ -94,6 +105,7 @@ import { PlanApprovalCard } from '../approvals/PlanApprovalCard.js'
 import { usePlanApprovalResponse } from '../approvals/UsePlanApprovalResponse.js'
 import {
   selectCanonicalConversationAuxiliaryState,
+  selectCanonicalLatestPlanItemId,
   selectCanonicalSessionLifecycle,
 } from './CanonicalConversationSelectors.js'
 import {
@@ -114,7 +126,7 @@ import {
 } from './SessionReferenceActions.js'
 export { deriveConversationTurnNavItems } from './TurnNavigationModel.js'
 export type { ConversationTurnNavItem } from './TurnNavigationModel.js'
-import { DesktopComposer } from '../composer/DesktopComposer.js'
+import { SessionBoundComposer } from '../composer/DesktopComposer.js'
 
 const ConversationEnvironmentControls = React.lazy(() =>
   import('../workflow/ConversationEnvironmentControls.js').then((module) => ({
@@ -190,20 +202,17 @@ export function ConversationPage(): React.ReactNode {
     permissionMode,
     composerProps,
     layoutResizeActive,
-    rightDockPlanEventId,
+    dockedPlanItemId,
   } = useQuickChatContext()
-  const {
-    diffMarkerStyle,
-    reviewView,
-    draft: settingsDraft,
-    setSidebarSessionPins,
-  } = useDesktopSettings()
-  const canonicalConversation = useCanonicalThreadConversation(activeSessionId)
-  const environmentActions = React.useSyncExternalStore(
-    commandMenuActionStore.subscribe,
-    commandMenuActionStore.getSnapshot,
-    commandMenuActionStore.getServerSnapshot,
+  const diffMarkerStyle = useDesktopSettingsField((settings) => settings.diffMarkerStyle)
+  const reviewView = useDesktopSettingsField((settings) => settings.reviewView)
+  const setSidebarSessionPins = useDesktopSettingsField(
+    (settings) => settings.setSidebarSessionPins,
   )
+  const settingsDraft = useDesktopSettingsDraftActions()
+  const terminalProfileId = useDesktopSettingsDraftValue('terminalProfileId')
+  const canonicalConversation = useCanonicalThreadConversation(activeSessionId)
+  const environmentActions = useStore(commandMenuActionStore, (state) => state.actions)
   const [selectedLaunchActionId, setSelectedLaunchActionId] = React.useState('')
   const launchActions = environmentActions.filter(
     (action) =>
@@ -218,11 +227,7 @@ export function ConversationPage(): React.ReactNode {
       action.id === `environment.handoff.${activeSessionId}` && action.availability === 'available',
   )
   const pendingPlanApproval = canonicalConversation.state?.pendingPlanApproval
-  const [dismissedPlan, setDismissedPlan] = React.useState<string | null>(null)
-  const planKey = pendingPlanApproval
-    ? `${pendingPlanApproval.id}:${pendingPlanApproval.version}`
-    : null
-  const showPlanApproval = Boolean(pendingPlanApproval && dismissedPlan !== planKey)
+  const taskMode = canonicalConversation.state?.thread.settings.taskMode
   const planModel =
     composerProps?.selectedModelMetadata?.id ??
     composerProps?.modelPresets.find((preset) => preset.id === composerProps.selectedModelPreset)
@@ -266,9 +271,61 @@ export function ConversationPage(): React.ReactNode {
     if (!activeSessionId) return
     return () => desktopClient.publishCanonicalSessionStatus(activeSessionId, null)
   }, [activeSessionId])
+  const { submissionId: routeSubmissionId } = useParams()
+  const pendingSubmissions = useStore(pendingSubmissionStore.store, (state) => state.submissions)
+  const pendingSubmission = routeSubmissionId
+    ? (pendingSubmissions[routeSubmissionId] ?? null)
+    : null
+  // 记录本次首条消息：canonical projection 出现同一 inputId 前后都引用该提交。
+  const handedOffSubmissionRef = React.useRef<{
+    threadId: string
+    inputId: string
+    submission: PendingSubmission
+  } | null>(null)
+  if (handedOffSubmissionRef.current?.threadId !== activeSessionId) {
+    handedOffSubmissionRef.current = null
+  }
+  if (pendingSubmission && activeSessionId) {
+    handedOffSubmissionRef.current = {
+      threadId: activeSessionId,
+      inputId: pendingSubmission.submissionId,
+      submission: pendingSubmission,
+    }
+  }
+  const handoff =
+    handedOffSubmissionRef.current?.threadId === activeSessionId
+      ? handedOffSubmissionRef.current
+      : null
+  const deferThreadLoading = shouldDeferThreadLoading({
+    firstInputId: pendingSubmission?.submissionId ?? handoff?.inputId,
+    isCurrentFirstSubmit: Boolean(pendingSubmission || handoff),
+    loading: isConversationLoading || canonicalConversation.loading,
+    turnCount: canonicalConversation.turns.length,
+    error: canonicalConversation.error,
+  })
   const isThreadLoading =
-    isConversationLoading ||
-    (canonicalConversation.loading && canonicalConversation.turns.length === 0)
+    !deferThreadLoading &&
+    (isConversationLoading ||
+      (canonicalConversation.loading && canonicalConversation.turns.length === 0))
+  // 同一批历史里已经包含首条消息时直接展示 canonical 投影，避免消息重复。
+  const firstInputInProjection = handoff
+    ? hasPendingInput(canonicalConversation.state?.inputsById.keys() ?? [], handoff.inputId)
+    : true
+  if (handoff && firstInputInProjection) handedOffSubmissionRef.current = null
+  /**
+   * 首次提交在两个阶段只显示一份用户消息：尚未建立会话时展示 pending 快照，
+   * 真实页面在 canonical 投影出现同一 inputId 前继续展示它。
+   */
+  const firstSubmittedMessage = isThreadLoading ? null : pendingSubmission ? (
+    <PendingSubmissionMessages submission={pendingSubmission} />
+  ) : handoff && !firstInputInProjection ? (
+    <PendingSubmissionMessages submission={handoff.submission} />
+  ) : null
+  // pending 路由刷新后记录已不存在：回到新聊天页，不自动重发。
+  const isUnknownPendingRoute = Boolean(routeSubmissionId) && !pendingSubmission
+  React.useEffect(() => {
+    if (isUnknownPendingRoute) navigate('/new', { replace: true })
+  }, [isUnknownPendingRoute, navigate])
   const effectiveSessionStatus = canonicalAuxiliary.sessionStatus ?? sessionStatus
   const navigateToForkTarget = React.useCallback(
     (targetThreadId: string) => {
@@ -310,7 +367,26 @@ export function ConversationPage(): React.ReactNode {
   const inlineInputRef = React.useRef<HTMLInputElement | null>(null)
   const activeSessionIdRef = React.useRef(activeSessionId)
   activeSessionIdRef.current = activeSessionId
-
+  // 从 pending 路由接管后继续展示提交快照，直到 canonical 投影出现同一 inputId。
+  const recordHandedOffSubmission = React.useCallback(
+    (submission: PendingSubmission, threadId: string) => {
+      handedOffSubmissionRef.current = {
+        threadId,
+        inputId: submission.submissionId,
+        submission,
+      }
+    },
+    [],
+  )
+  React.useEffect(() => {
+    if (!pendingSubmission || !activeSessionId) return
+    recordHandedOffSubmission(pendingSubmission, activeSessionId)
+  }, [activeSessionId, pendingSubmission, recordHandedOffSubmission])
+  // 创建阶段暂停编辑与发送，但不显示可用的停止按钮；成功后按正常会话解锁。
+  const pendingCreationLocked = Boolean(pendingSubmission) && !pendingSubmission?.sessionId
+  const composerPropsForPage = composerProps
+    ? { ...composerProps, creationPending: pendingCreationLocked }
+    : null
   React.useEffect(() => {
     setIsInlineEditing(false)
     skipNextBlurSaveRef.current = false
@@ -411,7 +487,6 @@ export function ConversationPage(): React.ReactNode {
     [activeSessionId],
   )
   const mainScrollTopRef = React.useRef(0)
-  const scrollRestoredRef = React.useRef<string | null>(null)
 
   const handleTimelineScroll = React.useCallback((scrollTop: number) => {
     mainScrollTopRef.current = scrollTop
@@ -429,6 +504,9 @@ export function ConversationPage(): React.ReactNode {
 
   React.useEffect(() => {
     const sessionId = activeSessionId
+    mainScrollTopRef.current = sessionId
+      ? (loadConversationUiState(sessionId)?.mainScrollTop ?? 0)
+      : 0
 
     return () => {
       if (!sessionId) return
@@ -437,36 +515,6 @@ export function ConversationPage(): React.ReactNode {
       })
     }
   }, [activeSessionId])
-
-  React.useEffect(() => {
-    if (
-      isConversationLoading ||
-      canonicalConversation.loading ||
-      canonicalConversation.state?.thread.id !== activeSessionId ||
-      !activeSessionId
-    ) {
-      return
-    }
-    if (scrollRestoredRef.current === activeSessionId) return
-    const saved = loadConversationUiState(activeSessionId)
-    if (saved?.mainScrollTop && !timelineListRef.current) return
-    scrollRestoredRef.current = activeSessionId
-    mainScrollTopRef.current = saved?.mainScrollTop ?? 0
-    if (saved?.mainScrollTop && timelineListRef.current) {
-      requestAnimationFrame(() => {
-        try {
-          timelineListRef.current?.scrollTo(saved.mainScrollTop)
-        } catch {
-          // VList may not be ready yet; silently ignore
-        }
-      })
-    }
-  }, [
-    activeSessionId,
-    canonicalConversation.loading,
-    canonicalConversation.state,
-    isConversationLoading,
-  ])
 
   const handleRefreshDiff = React.useCallback(() => {
     if (isRefreshingDiff) return
@@ -486,6 +534,7 @@ export function ConversationPage(): React.ReactNode {
   const showComposerStatusSummary = shouldShowComposerStatusSummary({
     hasPlan: composerExecutionPlan !== null,
     changedFileCount: conversationChangeSummary.files.length,
+    canReturnToBottom: canReturnTimelineToBottom,
   })
   const branchReviewState = useBranchReviewSummary(
     workspacePath,
@@ -563,9 +612,8 @@ export function ConversationPage(): React.ReactNode {
       workspacePath,
     ],
   )
-  const workflowMainRef = React.useRef<HTMLElement>(null)
-  const threadSummary = useThreadSummaryController(workflowMainRef)
-  // 切换会话时关闭浮层，保留置顶偏好；分区折叠状态按会话保留在内存里。
+  const threadSummary = useThreadSummaryController()
+  // 切换会话时关闭浮层，分区折叠状态按会话保留在内存里。
   const closeSummaryPopover = threadSummary.setPopoverOpen
   const EMPTY_COLLAPSED_SECTIONS = React.useMemo<ReadonlySet<ThreadSummarySectionId>>(
     () => new Set(),
@@ -1144,7 +1192,7 @@ export function ConversationPage(): React.ReactNode {
             effectiveSessionStatus === 'waiting' ||
             effectiveSessionStatus === 'queued'
               ? '当前 Turn 结束后可切换'
-              : '加入或切换工作流'}
+              : '加入或切换工作组'}
           </PopoverItem>
           <PopoverSeparator />
           <PopoverItem
@@ -1297,31 +1345,10 @@ export function ConversationPage(): React.ReactNode {
     const summaryToggle = (
       <Button
         isIconOnly
-        color={
-          threadSummary.displayMode === 'overlay'
-            ? threadSummary.isPopoverOpen
-              ? 'ghostActive'
-              : 'ghostSecondary'
-            : threadSummary.isPinned
-              ? 'ghostActive'
-              : 'ghostSecondary'
-        }
-        title={
-          threadSummary.displayMode === 'overlay'
-            ? threadSummary.isPopoverOpen
-              ? '关闭置顶摘要'
-              : '打开置顶摘要'
-            : threadSummary.isPinned
-              ? '取消置顶摘要'
-              : '置顶摘要'
-        }
-        aria-pressed={
-          threadSummary.displayMode === 'overlay'
-            ? threadSummary.isPopoverOpen
-            : threadSummary.isPinned
-        }
+        color={threadSummary.isPopoverOpen ? 'ghostActive' : 'ghostSecondary'}
+        title={threadSummary.isPopoverOpen ? '关闭概览' : '打开概览'}
+        aria-pressed={threadSummary.isPopoverOpen}
         size="toolbar"
-        onClick={threadSummary.displayMode === 'overlay' ? undefined : threadSummary.toggle}
       >
         <LayoutList size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
       </Button>
@@ -1329,20 +1356,16 @@ export function ConversationPage(): React.ReactNode {
 
     return (
       <div className="chat-session-actions tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:whitespace-nowrap">
-        {threadSummary.displayMode === 'overlay' ? (
-          summaryAvailable ? (
-            <ThreadSummaryPopover
-              open={threadSummary.isPopoverOpen}
-              panel={summaryPanel}
-              onOpenChange={threadSummary.setPopoverOpen}
-            >
-              {summaryToggle}
-            </ThreadSummaryPopover>
-          ) : (
-            <Tooltip content="当前对话暂无可展示的摘要">{summaryToggle}</Tooltip>
-          )
+        {summaryAvailable ? (
+          <ThreadSummaryPopover
+            open={threadSummary.isPopoverOpen}
+            panel={summaryPanel}
+            onOpenChange={threadSummary.setPopoverOpen}
+          >
+            {summaryToggle}
+          </ThreadSummaryPopover>
         ) : (
-          <Tooltip content="置顶摘要">{summaryToggle}</Tooltip>
+          <Tooltip content="当前对话暂无可展示的摘要">{summaryToggle}</Tooltip>
         )}
       </div>
     )
@@ -1379,7 +1402,7 @@ export function ConversationPage(): React.ReactNode {
     onOpenWorkspacePath,
     navigate,
     settingsDraft.setValue,
-    settingsDraft.values.terminalProfileId,
+    terminalProfileId,
     setSidebarSessionPins,
     threadSummary,
     threadSummaryModel,
@@ -1390,7 +1413,7 @@ export function ConversationPage(): React.ReactNode {
   ])
 
   const composerFooter =
-    !isThreadLoading && composerProps ? (
+    !isThreadLoading && composerPropsForPage ? (
       <ThreadComposerDock ref={composerTransition.ref} style={composerTransition.style}>
         <AnimatePresence initial={false}>
           {showComposerStatusSummary ? (
@@ -1421,42 +1444,38 @@ export function ConversationPage(): React.ReactNode {
               <InlineApprovalCard
                 request={activePermissionRequest}
                 currentPermissionMode={permissionMode}
+                taskMode={taskMode}
                 onDecide={onDecidePermission}
                 onInterrupt={composerProps.onInterrupt}
               />
             </ComposerFooterPresence>
-          ) : pendingPlanApproval && showPlanApproval ? (
+          ) : pendingPlanApproval ? (
             <ComposerFooterPresence key={pendingPlanApproval.id} reducedMotion={reduceMotion}>
               <PlanApprovalCard
                 approval={pendingPlanApproval}
                 disabledReason={planApproval.disabledReason}
                 onRespond={planApproval.respond}
+                onOpenPlan={onOpenPlanInRightDock}
                 freshAvailable={planApproval.freshAvailable}
-                onContinue={() => setDismissedPlan(planKey)}
               />
             </ComposerFooterPresence>
           ) : null}
         </AnimatePresence>
-        {!activePermissionRequest && (!pendingPlanApproval || !showPlanApproval) ? (
-          <>
-            {pendingPlanApproval ? (
-              <Button onClick={() => setDismissedPlan(null)}>查看计划批准操作</Button>
-            ) : null}
-            <DesktopComposer
-              {...composerProps}
-              canForkConversation={Boolean(
-                conversationFork.onForkFromMessage && latestConversationForkPoint,
-              )}
-              onArchiveConversation={archiveCurrentSession}
-              onForkConversation={continueInNewConversation}
-              sessionStatus={effectiveSessionStatus}
-              contextUsage={canonicalAuxiliary.contextUsage}
-              queuedFollowUps={canonicalAuxiliary.queuedFollowUps}
-              queuePauseReason={canonicalAuxiliary.queuePauseReason}
-              hasConversationMessages={canonicalAuxiliary.hasConversationMessages}
-              messages={[]}
-            />
-          </>
+        {!activePermissionRequest && !pendingPlanApproval ? (
+          <SessionBoundComposer
+            {...composerPropsForPage}
+            canForkConversation={Boolean(
+              conversationFork.onForkFromMessage && latestConversationForkPoint,
+            )}
+            onArchiveConversation={archiveCurrentSession}
+            onForkConversation={continueInNewConversation}
+            sessionStatus={effectiveSessionStatus}
+            contextUsage={canonicalAuxiliary.contextUsage}
+            queuedFollowUps={canonicalAuxiliary.queuedFollowUps}
+            queuePauseReason={canonicalAuxiliary.queuePauseReason}
+            hasConversationMessages={canonicalAuxiliary.hasConversationMessages}
+            messages={[]}
+          />
         ) : null}
       </ThreadComposerDock>
     ) : null
@@ -1473,6 +1492,7 @@ export function ConversationPage(): React.ReactNode {
       onOpenFileReference,
       onOpenAttachment,
       onForkFromMessage: conversationFork.onForkFromMessage,
+      canEditUserMessage: desktopClient.supportsMessageEditing?.() ?? false,
       onSubmitEditedUserMessage,
       sessionStatus: effectiveSessionStatus,
       workspacePath,
@@ -1490,39 +1510,41 @@ export function ConversationPage(): React.ReactNode {
     ],
   )
   const canonicalThreadView = activeSessionId ? (
-    <ConversationItemContext.Provider value={conversationItemContextValue}>
-      <CanonicalThreadView
-        active={effectiveSessionStatus === 'running' || effectiveSessionStatus === 'waiting'}
-        diffMarkerStyle={diffMarkerStyle}
-        error={canonicalConversation.error}
-        hasOlder={canonicalConversation.hasOlder}
-        initialScrollOffset={initialTimelineScrollTop}
-        layoutResizeActive={layoutResizeActive}
-        listRef={timelineListRef}
-        navigationRef={timelineNavigationRef}
-        loading={canonicalConversation.loading}
-        loadingOlder={canonicalConversation.loadingOlder || canonicalConversation.loadingDirectory}
-        historyError={canonicalConversation.directoryError}
-        onCanReturnToBottomChange={handleCanReturnToBottomChange}
-        onApplyPatch={applyThreadPatch}
-        onLoadOlder={
-          canonicalConversation.directoryError
-            ? loadDirectoryPreservingAnchor
-            : loadOlderPreservingAnchor
-        }
-        onOpenPatchReview={onOpenPatchReview}
-        onOpenPlanInRightDock={onOpenPlanInRightDock}
-        onOpenSubagent={onOpenSubagent}
-        onReload={canonicalConversation.reload}
-        onScroll={handleTimelineScroll}
-        registerTurnRow={registerTurnRow}
-        rightDockPlanEventId={rightDockPlanEventId}
-        readThreadPatchDiff={desktopClient.readThreadPatchDiff}
-        scrollRef={threadScrollRef}
-        threadId={activeSessionId}
-        turns={canonicalConversation.turns}
-      />
-    </ConversationItemContext.Provider>
+    <CanonicalThreadView
+      active={effectiveSessionStatus === 'running' || effectiveSessionStatus === 'waiting'}
+      deferInitialLoading={deferThreadLoading}
+      diffMarkerStyle={diffMarkerStyle}
+      error={canonicalConversation.error}
+      forkedFrom={canonicalConversation.state?.thread.forkedFrom}
+      hasOlder={canonicalConversation.hasOlder}
+      initialScrollOffset={initialTimelineScrollTop}
+      layoutResizeActive={layoutResizeActive}
+      listRef={timelineListRef}
+      navigationRef={timelineNavigationRef}
+      loading={canonicalConversation.loading}
+      loadingOlder={canonicalConversation.loadingOlder || canonicalConversation.loadingDirectory}
+      historyError={canonicalConversation.directoryError}
+      onCanReturnToBottomChange={handleCanReturnToBottomChange}
+      onApplyPatch={applyThreadPatch}
+      onLoadOlder={
+        canonicalConversation.directoryError
+          ? loadDirectoryPreservingAnchor
+          : loadOlderPreservingAnchor
+      }
+      onOpenPatchReview={onOpenPatchReview}
+      onOpenPlanInRightDock={onOpenPlanInRightDock}
+      onOpenSubagent={onOpenSubagent}
+      onReload={canonicalConversation.reload}
+      onScroll={handleTimelineScroll}
+      registerTurnRow={registerTurnRow}
+      dockedPlanItemId={dockedPlanItemId}
+      latestPlanItemId={selectCanonicalLatestPlanItemId(canonicalConversation.state)}
+      pendingPlanItemId={pendingPlanApproval?.planItemId ?? null}
+      readThreadPatchDiff={desktopClient.readThreadPatchDiff}
+      scrollRef={threadScrollRef}
+      threadId={activeSessionId}
+      turns={canonicalConversation.turns}
+    />
   ) : null
   return (
     <section
@@ -1561,7 +1583,7 @@ export function ConversationPage(): React.ReactNode {
         <React.Suspense fallback={null}>
           <ConversationEnvironmentControls
             gitAvailable={Boolean(gitStatus)}
-            terminalProfileId={settingsDraft.values.terminalProfileId}
+            terminalProfileId={terminalProfileId}
             threadId={activeSessionId}
             workspacePath={workspacePath}
             onOpenEnvironmentSettings={() => {
@@ -1585,15 +1607,7 @@ export function ConversationPage(): React.ReactNode {
         </React.Suspense>
       ) : null}
       <div className="workflow-page__body tw:flex tw:w-full tw:min-h-0 tw:flex-1 tw:overflow-hidden">
-        <main
-          ref={workflowMainRef}
-          className="workflow-page__main tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:flex-1 tw:flex-col tw:bg-transparent"
-          data-thread-summary-inline={
-            (!isThreadLoading && threadSummary.shouldShowInline && threadSummaryModel.hasContent) ||
-            undefined
-          }
-          data-thread-summary-mode={threadSummary.displayMode}
-        >
+        <main className="workflow-page__main tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:flex-1 tw:flex-col tw:bg-transparent">
           <div className="workflow-main-scroll-frame tw:relative tw:flex tw:min-w-0 tw:min-h-0 tw:flex-1 tw:overflow-hidden">
             <ConversationTurnNavRail
               key={activeSessionId}
@@ -1605,9 +1619,9 @@ export function ConversationPage(): React.ReactNode {
               onToggleBookmark={toggleThreadBookmark}
             />
             <ThreadScrollLayout
-              className="workflow-main-scroll-area tw:flex tw:min-h-0 tw:flex-1 tw:flex-col tw:overflow-hidden"
+              className="workflow-main-scroll-area tw:flex tw:min-h-0 tw:flex-1 tw:flex-col"
               footer={composerFooter}
-              footerClassName="workflow-main-scroll-footer tw:px-0 tw:pb-3"
+              footerClassName="workflow-main-scroll-footer tw:px-0 tw:pb-4"
               footerRef={threadFooterRef}
               scrollRef={threadScrollRef}
             >
@@ -1640,35 +1654,15 @@ export function ConversationPage(): React.ReactNode {
                     className="session-timeline-wrapper tw:relative tw:mx-auto tw:flex tw:h-auto tw:w-full tw:min-h-0 tw:flex-[1_0_auto] tw:flex-col tw:[container-type:inline-size]"
                     onContextMenu={handleConversationContextMenu}
                   >
-                    <div className="session-timeline-main tw:flex tw:min-w-0 tw:min-h-0 tw:flex-[1_0_auto] tw:flex-col tw:overflow-visible">
+                    <div className="session-timeline-main tw:flex tw:flex-auto tw:min-w-0 tw:min-h-0 tw:flex-col tw:overflow-visible">
                       {isThreadLoading ? (
                         <FullScreenWhaleLoading label="正在加载会话内容…" variant="contained" />
                       ) : (
                         <div className="session-timeline-loaded-presence tw:flex tw:w-full tw:min-h-0 tw:flex-[1_0_auto] tw:flex-col tw:animate-[session-timeline-fade-in_var(--cpx-sys-motion-panel)_var(--cpx-sys-ease-out)_both]">
-                          {subagents.length ? (
-                            <div
-                              className="subagent-timeline-summary tw:mx-auto tw:my-2 tw:flex tw:w-[min(760px,calc(100%-32px))] tw:flex-col tw:gap-1"
-                              aria-label="子智能体任务"
-                            >
-                              {subagents.map(({ task, currentRun }) => (
-                                <button
-                                  key={task.id}
-                                  type="button"
-                                  onClick={() => onOpenSubagent(task.id)}
-                                  className="tw:grid tw:min-h-[34px] tw:grid-cols-[18px_minmax(0,1fr)_auto] tw:items-center tw:gap-2 tw:rounded-md tw:border-0 tw:bg-app-editor tw:px-3 tw:py-2 tw:text-left tw:text-app-text tw:cursor-pointer tw:hover:bg-app-hover"
-                                >
-                                  <Bot size={APP_ICON_SIZE} />
-                                  <span className="tw:overflow-hidden tw:text-ellipsis tw:whitespace-nowrap">
-                                    {task.displayName}
-                                  </span>
-                                  <small className="tw:whitespace-nowrap tw:text-app-text-soft">
-                                    {subagentStatusLabel(currentRun?.status ?? 'interrupted')}
-                                  </small>
-                                </button>
-                              ))}
-                            </div>
-                          ) : null}
-                          {canonicalThreadView}
+                          <ConversationItemContext.Provider value={conversationItemContextValue}>
+                            {firstSubmittedMessage}
+                            {canonicalThreadView}
+                          </ConversationItemContext.Provider>
                         </div>
                       )}
                     </div>
@@ -1678,64 +1672,6 @@ export function ConversationPage(): React.ReactNode {
               />
             </ThreadScrollLayout>
           </div>
-          <AnimatePresence initial={false}>
-            {!isThreadLoading && threadSummary.shouldShowInline && threadSummaryModel.hasContent ? (
-              <ThreadSummaryInlinePresence key="thread-summary-inline" reducedMotion={reduceMotion}>
-                <ThreadSummaryErrorBoundary>
-                  <ThreadSummaryPanel
-                    key={activeSessionId ?? 'thread-summary'}
-                    branches={branches}
-                    collapsedSections={collapsedSections}
-                    model={threadSummaryModel}
-                    workspaceActions={launchActions}
-                    environmentChoices={environmentChoices}
-                    selectedActionId={selectedLaunchActionId}
-                    onSelectAction={setSelectedLaunchActionId}
-                    onActivateBrowserTab={onActivateBrowserTab}
-                    onBranchSelect={onBranchSelect}
-                    onCommitOrPush={onCommitOrPush}
-                    onCreateBranch={onCreateBranch}
-                    onCreatePullRequest={onCreatePullRequest}
-                    onCreateOutput={() => onAppendComposerText('请帮我创建文件或站点：')}
-                    onGitOperation={onGitOperation}
-                    onAddEnvironmentAction={() =>
-                      navigate(
-                        `/settings/worktrees?tab=environments&threadId=${encodeURIComponent(activeSessionId ?? '')}&mode=edit`,
-                      )
-                    }
-                    onOpenEnvironmentSettings={() =>
-                      navigate(
-                        `/settings/worktrees?tab=environments&threadId=${encodeURIComponent(activeSessionId ?? '')}`,
-                      )
-                    }
-                    onOpenTerminal={onOpenTerminal}
-                    pushEnabled={Boolean(
-                      gitStatus?.branchName && (!gitStatus.upstream || gitStatus.ahead > 0),
-                    )}
-                    onMoveToWorktree={
-                      handoffAction
-                        ? () => {
-                            void handoffAction.execute()
-                          }
-                        : undefined
-                    }
-                    onGoalPause={onGoalPause}
-                    onGoalResume={onGoalResume}
-                    onOpenArtifact={onOpenArtifact}
-                    onOpenAttachment={onOpenAttachment}
-                    onOpenLocalContext={onOpenLocalContext}
-                    onOpenReview={openBranchReview}
-                    onRetryGitDetection={onRefreshDiff}
-                    changesLoading={branchReviewState.loading}
-                    onOpenSubagent={onOpenSubagent}
-                    onOpenWorkspacePath={onOpenWorkspacePath}
-                    onStopSubagent={handleStopSubagent}
-                    onToggleSection={toggleSummarySection}
-                  />
-                </ThreadSummaryErrorBoundary>
-              </ThreadSummaryInlinePresence>
-            ) : null}
-          </AnimatePresence>
         </main>
       </div>
     </section>
@@ -1773,37 +1709,6 @@ function ComposerFooterPresence({
   )
 }
 
-function ThreadSummaryInlinePresence({
-  children,
-  reducedMotion,
-}: {
-  children: React.ReactNode
-  reducedMotion: boolean
-}): React.ReactNode {
-  const isPresent = useIsPresent()
-
-  return (
-    <motion.div
-      animate={{ opacity: 1, x: 0 }}
-      aria-hidden={!isPresent ? true : undefined}
-      className="thread-summary-inline tw:absolute tw:top-4 tw:bottom-4 tw:end-[var(--thread-summary-inline-edge)] tw:z-sticky tw:w-[var(--thread-summary-inline-width)] tw:min-h-0 tw:origin-right"
-      data-presence={isPresent ? 'present' : 'exiting'}
-      data-testid="thread-summary-inline"
-      exit={{
-        opacity: 0,
-        x: 6,
-        transition: motionTransition(reducedMotion, exitTween),
-      }}
-      inert={!isPresent ? true : undefined}
-      initial={reducedMotion ? false : { opacity: 0, x: 6 }}
-      style={{ pointerEvents: isPresent ? undefined : 'none' }}
-      transition={motionTransition(reducedMotion, enterTween)}
-    >
-      {children}
-    </motion.div>
-  )
-}
-
 function SessionSubmenu({
   children,
   disabled,
@@ -1817,19 +1722,16 @@ function SessionSubmenu({
 }): React.ReactNode {
   return (
     <DropdownMenu.Sub>
-      <DropdownMenu.SubTrigger
+      <SidebarRow
+        asChild
         className="popover-item popover-sub-trigger"
-        disabled={disabled}
-        tabIndex={-1}
+        leading={<span className="popover-item-icon">{icon}</span>}
+        trailing={<ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />}
       >
-        <span className="popover-item-leading">
-          <span className="popover-item-icon">{icon}</span>
-        </span>
-        <span className="popover-item-label">{label}</span>
-        <span className="popover-item-trailing">
-          <ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />
-        </span>
-      </DropdownMenu.SubTrigger>
+        <DropdownMenu.SubTrigger disabled={disabled} tabIndex={-1}>
+          <span className="popover-item-label">{label}</span>
+        </DropdownMenu.SubTrigger>
+      </SidebarRow>
       <DropdownMenu.Portal>
         <DropdownMenu.SubContent
           size="sm"
@@ -1857,9 +1759,11 @@ function workflowComposerMode(request: DesktopPermissionRequest | null): Workflo
 export function shouldShowComposerStatusSummary({
   hasPlan,
   changedFileCount,
+  canReturnToBottom,
 }: {
   hasPlan: boolean
   changedFileCount: number
+  canReturnToBottom: boolean
 }): boolean {
-  return hasPlan || changedFileCount > 0
+  return hasPlan || changedFileCount > 0 || canReturnToBottom
 }

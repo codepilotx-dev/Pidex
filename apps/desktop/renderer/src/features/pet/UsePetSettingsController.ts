@@ -1,8 +1,13 @@
+import { createStore } from 'zustand/vanilla'
+import { useFieldState } from '../../hooks/UseFieldState.js'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { PetDescriptor } from '@pidex/agent-protocol'
 import type { DesktopPetSettings } from '../../../shared/Types.js'
 import { desktopClient } from '../../services/desktop-client/index.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsDraftActions,
+  useDesktopSettingsDraftValue,
+} from '../settings/UseDesktopSettings.js'
 import {
   getPetPresentationBridge,
   presentationFromPetSettings,
@@ -13,9 +18,10 @@ const PET_SIZE_SAVE_DEBOUNCE_MS = 100
 
 type Options = {
   onError: (message: string) => void
+  enabled?: boolean
 }
 
-export function usePetSettingsController({ onError }: Options): {
+export function usePetSettingsController({ onError, enabled = true }: Options): {
   busy: boolean
   flushPendingSize: () => void
   pets: readonly PetDescriptor[]
@@ -26,10 +32,16 @@ export function usePetSettingsController({ onError }: Options): {
   settings: DesktopPetSettings
   updatePet: (patch: Partial<DesktopPetSettings>, autoSave?: boolean) => void
 } {
-  const { draft } = useDesktopSettings()
-  const [pets, setPets] = useState<readonly PetDescriptor[]>([])
-  const [busy, setBusy] = useState(false)
-  const settings = draft.values.pet
+  const draft = useDesktopSettingsDraftActions()
+  const [stateStore] = useState(() =>
+    createStore(() => ({
+      pets: [] as readonly PetDescriptor[],
+      busy: false,
+    })),
+  )
+  const [pets, setPets] = useFieldState(stateStore, 'pets')
+  const [busy, setBusy] = useFieldState(stateStore, 'busy')
+  const settings = useDesktopSettingsDraftValue('pet')
   const settingsRef = useRef(settings)
   settingsRef.current = settings
   const committedPresentationRef = useRef(presentationFromPetSettings(settings))
@@ -160,8 +172,8 @@ export function usePetSettingsController({ onError }: Options): {
   )
 
   useEffect(() => {
-    void refreshPets()
-  }, [refreshPets])
+    if (enabled) void refreshPets()
+  }, [enabled, refreshPets])
 
   useEffect(() => {
     return desktopClient.onDesktopSettingsChange((change) => {

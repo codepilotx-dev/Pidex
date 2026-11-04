@@ -1,3 +1,25 @@
+import { ModelRecommendationStore } from './ModelRecommendationStore'
+import {
+  ProviderDirectoryStore,
+  directoryBaseUrlKey,
+  directoryProviderConfig,
+  type DirectoryProvider,
+} from './ProviderDirectoryStore'
+import { applyRecommendation, type RecommendationInput } from './ModelRecommendations'
+import {
+  applyModelOptionMap,
+  compileOptionSpecs,
+  type CompiledOptionSpecs,
+} from './PiModelOptionMapping'
+import { resolveZCodeOptionSpecs } from './ZCodeModelOptions'
+import { AgentError } from '../../Domain'
+import type { AgentLogger } from '../../observability/AgentLogger'
+import { providerFailureCategory, providerFailureMessage } from '../ModelHealthService'
+import {
+  requestModelOperation,
+  operationInputTokens,
+  type ModelOperationOptions,
+} from './PiModelOperations'
 import type {
   Api,
   Model as PiModel,
@@ -19,21 +41,29 @@ import {
   DEEPSEEK_PROVIDER_ID,
   DEFAULT_DEEPSEEK_PROTOCOL,
   resolveDeepSeekProtocol,
+  type CustomProviderApi,
   type DeepSeekProtocol,
   type ParsedPiProviderCatalog,
+  type PiCustomModelConfig,
   type PiModelCatalogConfig,
   type PiProviderConfig,
   type PiProviderConfigIssue,
   type PiProviderDefinitionInput,
 } from './PiProviderConfig'
 import { createPiDeepSeekProvider } from './PiDeepSeekProvider'
+import { withPiOpenAIModelDiscovery } from './PiOpenAIModelDiscovery'
+import { withPiBuiltinProviderOverrides } from './PiBuiltinProviderOverrides'
 import {
   createPiCustomProvider,
+  toPiModel,
   discoverOpenAIModels,
   type DiscoveredOpenAIModel,
 } from './PiCustomProvider'
 
 export interface PiModelServiceOptions extends EncryptedCredentialStoreOptions {
+  readonly logger?: Pick<AgentLogger, 'warn'>
+  readonly recommendations?: ModelRecommendationStore
+  readonly directory?: ProviderDirectoryStore
   readonly models?: Models
   readonly modelsStore?: ModelsStore
   readonly config?:
@@ -52,11 +82,14 @@ export class PiModelServiceError extends Error {
       | 'DISPOSED',
     message: string,
     options?: ErrorOptions,
+    readonly refreshFailures: readonly string[] = [],
   ) {
     super(message, options)
     this.name = 'PiModelServiceError'
   }
 }
+
+import { builtinProviderEndpoints } from './PiProviderConfig'
 
 const clone = <T>(value: T): T => structuredClone(value)
 
@@ -75,6 +108,13 @@ const piProviderToInfo = (
     type: 'pi',
     kind,
     apis: [...new Set(apis)],
+    ...(kind === 'builtin'
+      ? {
+          endpoints: builtinProviderEndpoints(provider.id),
+          defaultApi:
+            configured?.kind === 'builtin' && configured.protocol ? configured.protocol : apis[0],
+        }
+      : {}),
     ...(provider.baseUrl ? { baseUrl: provider.baseUrl } : {}),
   },
   catalogOrigin,
@@ -104,13 +144,75 @@ const cost = (model: PiModel<Api>): Model.Cost[] => [
 
 const thinkingLevels = ['off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const
 
-const supportedThinkingLevels = (model: PiModel<Api>) =>
-  model.reasoning ? thinkingLevels.filter((level) => model.thinkingLevelMap?.[level] !== null) : []
+type ConfiguredPiModel = PiModel<Api> & {
+  maxInputTokens?: number
+  inputExplicit?: boolean
+  modelType?: 'chat' | 'embedding' | 'rerank'
+  tools?: boolean
+  /** 双层参数规格（仅 Pidex 内存模型携带，不进入 Pi 上游类型）。 */
+  optionSpecs?: Model.OptionSpecs
+}
+
+const isChatModel = (model: PiModel<Api>) => {
+  const kind = (model as ConfiguredPiModel).modelType
+  return !kind || kind === 'chat'
+}
+
+/** 显式 values 优先；存在时严格使用该值域，不再回退固定七档。 */
+const explicitReasoningValues = (model: PiModel<Api>): readonly string[] | undefined => {
+  const values = (model as ConfiguredPiModel).optionSpecs?.reasoningLevel?.values
+  return values && values.length ? values : undefined
+}
+
+const supportedThinkingLevels = (model: PiModel<Api>): readonly string[] => {
+  if (!isChatModel(model)) return []
+  const explicit = explicitReasoningValues(model)
+  if (explicit) return explicit
+  return model.reasoning
+    ? thinkingLevels.filter((level) => model.thinkingLevelMap?.[level] !== null)
+    : []
+}
+
+/** 逐字段叠加：next（更高优先级，如 ZCode）覆盖 base，缺失字段继续继承。 */
+const overlayRecommendedOptionSpecs = (
+  base: Model.OptionSpecs | undefined,
+  next: Model.OptionSpecs | undefined,
+): Model.OptionSpecs | undefined => {
+  if (!base && !next) return undefined
+  const reasoningLevel =
+    base?.reasoningLevel || next?.reasoningLevel
+      ? { ...(base?.reasoningLevel ?? {}), ...(next?.reasoningLevel ?? {}) }
+      : undefined
+  const maxOutputTokens =
+    base?.maxOutputTokens || next?.maxOutputTokens
+      ? { ...(base?.maxOutputTokens ?? {}), ...(next?.maxOutputTokens ?? {}) }
+      : undefined
+  return {
+    ...(reasoningLevel ? { reasoningLevel } : {}),
+    ...(maxOutputTokens ? { maxOutputTokens } : {}),
+  }
+}
+
+const effectiveInput = (model: PiModel<Api>): string[] => {
+  const kind = (model as ConfiguredPiModel).modelType
+  if (kind === 'embedding' || kind === 'rerank') return ['text']
+  const gemini = model.api === 'google-generative-ai' || model.api === 'google-vertex'
+  const nativeMedia =
+    gemini && !(model as ConfiguredPiModel).inputExplicit && model.id.includes('gemini')
+  return [...new Set<string>([...model.input, ...(nativeMedia ? ['audio', 'video'] : [])])].filter(
+    (input) =>
+      (input !== 'audio' || gemini || model.api === 'openai-completions') &&
+      (input !== 'video' || gemini),
+  )
+}
 
 const piModelToInfo = (model: PiModel<Api>, enabled: boolean, variant?: string): Model.Info => ({
   id: Model.ID.make(model.id),
   providerID: Provider.ID.make(model.provider),
   name: model.name,
+  ...((model as ConfiguredPiModel).modelType && (model as ConfiguredPiModel).modelType !== 'chat'
+    ? { modelType: (model as ConfiguredPiModel).modelType! }
+    : {}),
   api: {
     id: Model.ID.make(model.id),
     type: 'pi',
@@ -119,9 +221,18 @@ const piModelToInfo = (model: PiModel<Api>, enabled: boolean, variant?: string):
   },
   ...(variant ? { variant } : {}),
   capabilities: {
-    tools: true,
-    input: [...model.input],
-    output: ['text'],
+    tools:
+      (!(model as ConfiguredPiModel).modelType ||
+        (model as ConfiguredPiModel).modelType === 'chat') &&
+      (model as ConfiguredPiModel).tools !== false,
+    input: effectiveInput(model),
+    output: [
+      (model as ConfiguredPiModel).modelType === 'embedding'
+        ? 'embedding'
+        : (model as ConfiguredPiModel).modelType === 'rerank'
+          ? 'rerank'
+          : 'text',
+    ],
   },
   variants: supportedThinkingLevels(model).map((level) => ({
     id: Model.VariantID.make(level),
@@ -132,19 +243,34 @@ const piModelToInfo = (model: PiModel<Api>, enabled: boolean, variant?: string):
   enabled,
   limit: {
     context: model.contextWindow,
+    ...((model as ConfiguredPiModel).maxInputTokens !== undefined
+      ? { input: (model as ConfiguredPiModel).maxInputTokens! }
+      : {}),
     output: model.maxTokens,
   },
 })
 
 export type ProviderDefinition = PiProviderDefinitionInput
 
+/** provider/list baseline summary; the full baseline stays internal. */
+export interface PiProviderModelSyncSummary {
+  readonly fetchedAt: number
+  readonly api: CustomProviderApi
+  readonly modelCount: number
+}
+
 /** Pi-backed model catalog with the existing Pidex catalog shape. */
 export class PiModelService {
+  readonly recommendations: ModelRecommendationStore
+  readonly directory: ProviderDirectoryStore
   readonly pi: Models
+  private readonly mediaModels = new WeakMap<PiModel<Api>, PiModel<Api>>()
   readonly credentials: EncryptedCredentialStore
   private readonly mutablePi: MutableModels | undefined
   private readonly configSource: PiModelServiceOptions['config']
   private readonly baseProviders: ReadonlyMap<string, PiProvider>
+  private directoryBaseProviders: ReadonlyMap<string, PiProvider> = new Map()
+  private directoryEntries: readonly DirectoryProvider[] = []
   private readonly builtinProviderIDs: ReadonlySet<string>
   private configuredCustomProviderIDs = new Set<string>()
   private catalogVersion = 0
@@ -163,8 +289,15 @@ export class PiModelService {
       }
     | undefined
   private disposed = false
+  /** 按 Pi 模型对象缓存编译后的 option map；配置同步重建模型对象时自动失效。 */
+  private readonly optionMapCompiled = new WeakMap<object, CompiledOptionSpecs | null>()
 
-  constructor(repository: ProviderCredentialRepository, options: PiModelServiceOptions = {}) {
+  constructor(
+    repository: ProviderCredentialRepository,
+    private readonly options: PiModelServiceOptions = {},
+  ) {
+    this.recommendations = options.recommendations ?? new ModelRecommendationStore()
+    this.directory = options.directory ?? new ProviderDirectoryStore()
     this.credentials = new EncryptedCredentialStore(repository, options)
     this.pi =
       options.models ??
@@ -178,21 +311,49 @@ export class PiModelService {
         },
       })
     this.mutablePi = isMutableModels(this.pi) ? this.pi : undefined
+    for (const provider of this.pi.getProviders()) {
+      const discovered = withPiOpenAIModelDiscovery(
+        provider,
+        (signal) => this.pi.getAuth(provider.id, { signal }),
+        () => {
+          const config = this.parsedConfig.providers[provider.id]
+          return config?.kind === 'builtin'
+            ? (config.baseUrl ?? provider.baseUrl)
+            : provider.baseUrl
+        },
+      )
+      if (discovered !== provider) this.mutablePi?.setProvider(discovered)
+    }
     this.baseProviders = new Map(this.pi.getProviders().map((provider) => [provider.id, provider]))
     this.builtinProviderIDs = new Set(this.pi.getProviders().map((provider) => provider.id))
+    this.installOptionMapBoundary()
     this.configSource = options.config
+    options.recommendations?.startAutoRefresh()
   }
 
   async list(): Promise<readonly Provider.Info[]> {
     this.assertActive()
     const config = await this.syncProviders()
-    return this.pi
+    const directory = new Map(this.directoryEntries.map((entry) => [entry.id, entry]))
+    const configuredIDs = new Set(Object.keys((await this.rawConfig()).providers ?? {}))
+    const saved = new Set(configuredIDs)
+    for (const credential of await this.credentials.list()) saved.add(credential.providerId)
+    const providers = this.pi
       .getProviders()
       .map((provider) => {
         const configured = config.providers[provider.id]
-        const kind = configured?.kind === 'custom' ? 'custom' : 'builtin'
-        const origin: Provider.CatalogOrigin = configured?.kind === 'custom' ? 'user' : 'pi-bundled'
-        return piProviderToInfo(
+        const entry = directory.get(provider.id)
+        const userCustom =
+          configured?.kind === 'custom' &&
+          !configured.directorySource &&
+          configuredIDs.has(provider.id)
+        const kind = userCustom ? 'custom' : 'builtin'
+        const origin: Provider.CatalogOrigin = userCustom
+          ? 'user'
+          : ((configured?.kind === 'custom' ? configured.directorySource : undefined) ??
+            entry?.origin ??
+            'pi-bundled')
+        const info = piProviderToInfo(
           provider,
           kind,
           this.pi.getModels(provider.id).map((model) => model.api),
@@ -200,8 +361,84 @@ export class PiModelService {
           configured,
           origin,
         )
+        directory.delete(provider.id)
+        const defaultApi =
+          configured?.kind === 'builtin' && configured.protocol
+            ? configured.protocol
+            : configured?.kind === 'custom'
+              ? (Object.keys(configured.endpoints ?? {})[0] ??
+                Object.values(configured.models)[0]?.api ??
+                entry?.api)
+              : (entry?.api ?? info.source.apis[0])
+        return kind === 'builtin' && entry
+          ? {
+              ...info,
+              name: configured?.kind === 'custom' ? configured.name : entry.name,
+              source: {
+                ...info.source,
+                ...(defaultApi ? { defaultApi } : {}),
+                ...(entry.baseUrl
+                  ? {
+                      endpoints: {
+                        ...info.source.endpoints,
+                        ...entry.endpoints,
+                        ...(defaultApi
+                          ? { [defaultApi]: configured?.baseUrl ?? entry.baseUrl }
+                          : {}),
+                        ...configured?.endpoints,
+                      },
+                    }
+                  : {}),
+              },
+            }
+          : info
       })
       .map(clone)
+    const candidates: Provider.Info[] = [
+      ...providers,
+      ...[...directory.values()].map((entry): Provider.Info => ({
+        ...Provider.Info.empty(Provider.ID.make(entry.id)),
+        name: entry.name,
+        catalogOrigin: entry.origin,
+        source: {
+          type: 'pi',
+          kind: 'builtin',
+          apis: [],
+          ...(entry.api ? { defaultApi: entry.api } : {}),
+          ...(entry.baseUrl ? { baseUrl: entry.baseUrl } : {}),
+        },
+        auth: { apiKey: true, oauth: false },
+        availability: {
+          status: 'unavailable',
+          reason: entry.api ? 'unresolved-endpoint' : 'missing-api',
+        },
+      })),
+    ]
+    const keys = new Set<string>()
+    return candidates
+      .sort(
+        (a, b) =>
+          Number(saved.has(String(b.id))) - Number(saved.has(String(a.id))) ||
+          Number(!this.builtinProviderIDs.has(String(a.id))) -
+            Number(!this.builtinProviderIDs.has(String(b.id))) ||
+          Number(a.catalogOrigin === 'models-dev') - Number(b.catalogOrigin === 'models-dev') ||
+          String(a.id).localeCompare(String(b.id)),
+      )
+      .filter((provider) => {
+        if (provider.catalogOrigin === 'user') return true
+        const api = provider.source.defaultApi
+        const key = directoryBaseUrlKey(
+          (api ? provider.source.endpoints?.[api] : undefined) ?? provider.source.baseUrl,
+        )
+        if (!key) return true
+        if (saved.has(String(provider.id))) {
+          keys.add(key)
+          return true
+        }
+        if (keys.has(key)) return false
+        keys.add(key)
+        return true
+      })
   }
 
   async isAuthConfigured(providerID: string): Promise<boolean> {
@@ -223,8 +460,10 @@ export class PiModelService {
           kind: 'custom',
           id: provider.id,
           name: configured.name,
+          ...(configured.directorySource ? { directorySource: configured.directorySource } : {}),
           enabled: configured.enabled,
           baseUrl: configured.baseUrl,
+          ...(configured.endpoints ? { endpoints: configured.endpoints } : {}),
           auth: configured.auth,
           env: [...configured.env],
           allowInsecureHttp: configured.allowInsecureHttp,
@@ -233,15 +472,23 @@ export class PiModelService {
             id: model.id,
             api: model.api,
             name: model.name,
+            ...(model.group !== undefined ? { group: model.group } : {}),
             enabled: model.enabled,
             contextWindow: model.contextWindow,
+            ...(model.maxInputTokens !== undefined ? { maxInputTokens: model.maxInputTokens } : {}),
             maxTokens: model.maxTokens,
+            ...(model.modelType ? { modelType: model.modelType } : {}),
+            ...(model.tools !== undefined ? { tools: model.tools } : {}),
             reasoning: model.reasoning,
             input: [...model.input],
             cost: { ...model.cost },
             ...(Object.keys(model.headers).length ? { headers: { ...model.headers } } : {}),
             ...(model.thinkingLevelMap ? { thinkingLevelMap: { ...model.thinkingLevelMap } } : {}),
             ...(model.compat ? { compat: structuredClone(model.compat) } : {}),
+            ...(model.smartConfig
+              ? { smartConfig: { pinned: [...model.smartConfig.pinned] } }
+              : {}),
+            ...(model.optionSpecs ? { optionSpecs: structuredClone(model.optionSpecs) } : {}),
           })),
         }
       }
@@ -254,8 +501,13 @@ export class PiModelService {
         denyModels: [...(builtin?.denyModels ?? [])],
         models: Object.entries(builtin?.models ?? {}).map(([id, model]) => ({
           id,
-          enabled: model.enabled,
+          ...model,
         })),
+        ...(builtin?.endpoints ? { endpoints: builtin.endpoints } : {}),
+        ...(builtin?.baseUrl ? { baseUrl: builtin.baseUrl } : {}),
+        ...(builtin?.allowInsecureHttp !== undefined
+          ? { allowInsecureHttp: builtin.allowInsecureHttp }
+          : {}),
         ...(builtin?.protocol ? { protocol: builtin.protocol } : {}),
       }
     })
@@ -280,9 +532,8 @@ export class PiModelService {
   async resolve(ref: Model.Ref): Promise<Model.Info> {
     const model = await this.getPiModel(ref)
     const auth = await this.pi.checkAuth(model.provider)
-    return clone(
-      piModelToInfo(model, auth !== undefined, ref.variant ? String(ref.variant) : undefined),
-    )
+    const variant = ref.variant ? String(ref.variant) : supportedThinkingLevels(model)[0]
+    return clone(piModelToInfo(model, auth !== undefined, variant))
   }
 
   async getPiModel(ref: Model.Ref): Promise<PiModel<Api>> {
@@ -300,12 +551,7 @@ export class PiModelService {
         `Model ${providerID}/${modelID} was not found`,
       )
     }
-    if (
-      ref.variant &&
-      !supportedThinkingLevels(model).includes(
-        String(ref.variant) as (typeof thinkingLevels)[number],
-      )
-    ) {
+    if (ref.variant && !supportedThinkingLevels(model).includes(String(ref.variant))) {
       throw new PiModelServiceError(
         'VARIANT_NOT_FOUND',
         `Variant ${providerID}/${modelID}/${ref.variant} was not found`,
@@ -317,20 +563,175 @@ export class PiModelService {
         'PROVIDER_NOT_CONFIGURED',
         `Provider ${providerID} is not configured`,
       )
-    return model
+    const input = effectiveInput(model)
+    if (
+      input.length === model.input.length &&
+      input.every((kind, index) => kind === model.input[index])
+    )
+      return model
+    let extended = this.mediaModels.get(model)
+    if (!extended) {
+      extended = { ...model, input: input as PiModel<Api>['input'] }
+      this.mediaModels.set(model, extended)
+    }
+    return extended
   }
 
-  async refresh(force = false): Promise<void> {
+  private async operationRequest(
+    ref: Model.Ref,
+    kind: 'embedding' | 'rerank',
+    body: Record<string, unknown>,
+    options: ModelOperationOptions,
+  ) {
+    const model = (await this.getPiModel(ref)) as ConfiguredPiModel & { maxInputTokens?: number }
+    if (model.modelType !== kind)
+      throw new AgentError('INVALID_REQUEST', '模型类型与请求操作不匹配', 400)
+    const texts =
+      kind === 'embedding'
+        ? (body.input as string[])
+        : [String(body.query), ...(body.documents as string[])]
+    if (
+      texts.some(
+        (text) =>
+          new TextEncoder().encode(text).length / 4 > (model.maxInputTokens ?? model.contextWindow),
+      )
+    )
+      throw new AgentError('INVALID_REQUEST', '输入超过模型最大输入 Token 预算', 400)
+    const config = (await this.syncProviders()).providers[model.provider]
+    const endpointKey = kind === 'embedding' ? 'openai-embeddings' : 'jina-rerank'
+    const explicitEndpoint = config?.endpoints?.[endpointKey]
+    if (!explicitEndpoint && !['openai-completions', 'openai-responses'].includes(model.api))
+      throw new AgentError('INVALID_REQUEST', '请先为该模型类型添加对应端点', 400)
+    const base = explicitEndpoint ?? model.baseUrl
+    const suffix = kind === 'embedding' ? '/embeddings' : '/rerank'
+    const endpoint = base.replace(/\/$/, '').endsWith(suffix)
+      ? base
+      : `${base.replace(/\/$/, '')}${suffix}`
+    const auth = await this.pi.getAuth(model.provider)
+    const headers = new Headers({
+      ...(config?.kind === 'custom' ? config.headers : {}),
+      ...model.headers,
+    })
+    for (const [key, value] of Object.entries(auth?.auth.headers ?? {}))
+      if (typeof value === 'string') headers.set(key, value)
+    const apiKey = options.apiKey ?? auth?.auth.apiKey
+    if (apiKey) headers.set('Authorization', `Bearer ${apiKey}`)
+    headers.set('Content-Type', 'application/json')
+    return requestModelOperation(endpoint, headers, { ...body, model: model.id }, options)
+  }
+
+  async embed(
+    ref: Model.Ref,
+    input: readonly string[],
+    dimensions?: number,
+    options: ModelOperationOptions = {},
+  ) {
+    const result = await this.operationRequest(
+      ref,
+      'embedding',
+      { input, ...(dimensions ? { dimensions } : {}) },
+      options,
+    )
+    const data = result.data
+    if (!Array.isArray(data) || data.length !== input.length)
+      throw new AgentError('PROVIDER_UNAVAILABLE', '嵌入响应数量无效', 502)
+    const vectors: number[][] = new Array(input.length)
+    for (const item of data) {
+      if (
+        !item ||
+        !Number.isInteger(item.index) ||
+        item.index < 0 ||
+        item.index >= input.length ||
+        vectors[item.index] ||
+        !Array.isArray(item.embedding) ||
+        !item.embedding.length ||
+        !item.embedding.every(
+          (value: unknown) => typeof value === 'number' && Number.isFinite(value),
+        )
+      )
+        throw new AgentError('PROVIDER_UNAVAILABLE', '嵌入响应格式无效', 502)
+      vectors[item.index] = item.embedding
+    }
+    const dimension = dimensions ?? vectors[0]!.length
+    if (vectors.some((vector) => vector.length !== dimension))
+      throw new AgentError('PROVIDER_UNAVAILABLE', '嵌入向量维度不一致', 502)
+    return { vectors, inputTokens: operationInputTokens(result) }
+  }
+
+  async rerank(
+    ref: Model.Ref,
+    query: string,
+    documents: readonly string[],
+    topN?: number,
+    options: ModelOperationOptions = {},
+  ) {
+    if (topN !== undefined && topN > documents.length)
+      throw new AgentError('INVALID_REQUEST', '重排数量不能超过文档数量', 400)
+    const result = await this.operationRequest(
+      ref,
+      'rerank',
+      { query, documents, ...(topN ? { top_n: topN } : {}) },
+      options,
+    )
+    if (!Array.isArray(result.results) || result.results.length > (topN ?? documents.length))
+      throw new AgentError('PROVIDER_UNAVAILABLE', '重排响应数量无效', 502)
+    const indices = new Set<number>()
+    const results = result.results.map((item) => {
+      if (
+        !item ||
+        !Number.isInteger(item.index) ||
+        item.index < 0 ||
+        item.index >= documents.length ||
+        indices.has(item.index) ||
+        typeof item.relevance_score !== 'number' ||
+        !Number.isFinite(item.relevance_score)
+      )
+        throw new AgentError('PROVIDER_UNAVAILABLE', '重排响应格式无效', 502)
+      indices.add(item.index)
+      return { index: item.index as number, score: item.relevance_score as number }
+    })
+    return { results, inputTokens: operationInputTokens(result) }
+  }
+
+  async refresh(force: boolean, providerID: string): Promise<void> {
     this.assertActive()
-    await this.syncProviders()
-    const result = await this.pi.refresh({ allowNetwork: true, force })
+    const config = await this.syncProviders()
+    if (!this.pi.getProviders().some((provider) => provider.id === providerID)) {
+      throw new AgentError('INVALID_REQUEST', '供应商不存在', 400)
+    }
+    const result = await this.pi.refresh({
+      allowNetwork: true,
+      force,
+      providers: this.pi
+        .getProviders()
+        .filter(
+          (provider) => provider.id === providerID && this.providerEnabled(provider.id, config),
+        )
+        .map((provider) => provider.id),
+    })
     if (result.errors.size > 0) {
+      const failures = [...result.errors].map(([provider, error]) => {
+        const httpStatus = /\bHTTP (\d{3})\b/.exec(error.message)?.[1]
+        const category = providerFailureCategory(
+          httpStatus ? { status: Number(httpStatus) } : error,
+        )
+        const discoveryReason = new Map([
+          ['Model discovery response exceeds 1 MiB', '模型列表响应超过 1 MiB'],
+          ['Model discovery returned no body', '模型列表响应为空'],
+          ['Model discovery returned an invalid OpenAI catalog', '模型列表响应格式无效'],
+          ['Provider credentials are unavailable for model discovery', '模型发现凭据不可用'],
+        ]).get(error.message)
+        const reason = `${discoveryReason ?? providerFailureMessage(category, 'request')}${httpStatus ? `（HTTP ${httpStatus}）` : ''}`
+        this.options.logger?.warn('provider.catalog.refresh.failed', { provider, category, reason })
+        return `${provider}：${reason}`
+      })
       throw new PiModelServiceError(
         'CATALOG_REFRESH_FAILED',
         'Failed to refresh one or more Pi providers',
         {
           cause: new AggregateError(result.errors.values()),
         },
+        failures,
       )
     }
     this.catalogVersion += 1
@@ -341,6 +742,24 @@ export class PiModelService {
     await this.syncProviders()
     await this.pi.refresh({ allowNetwork: false })
     this.catalogVersion += 1
+  }
+
+  async refreshDirectory(): Promise<void> {
+    this.assertActive()
+    try {
+      await this.directory.refresh()
+    } catch (cause) {
+      this.options.logger?.warn('provider.directory.refresh.failed', {
+        reason: cause instanceof AgentError ? cause.message : 'DIRECTORY_CACHE_UNAVAILABLE',
+      })
+      if (cause instanceof AgentError) throw cause
+      throw new AgentError(
+        'PROVIDER_UNAVAILABLE',
+        '供应商目录更新失败，已保留现有目录，请稍后重试。',
+        502,
+      )
+    }
+    await this.reload()
   }
 
   getModel(ref: Model.Ref): Promise<PiModel<Api>> {
@@ -407,8 +826,42 @@ export class PiModelService {
     return structuredClone(await this.syncProviders())
   }
 
+  /** Bounded provider/list summary of the saved upstream baseline. */
+  async modelSyncSummary(providerID: string): Promise<PiProviderModelSyncSummary | undefined> {
+    const provider = (await this.syncProviders()).providers[providerID]
+    if (provider?.kind !== 'custom' || !provider.modelSync) return undefined
+    return {
+      fetchedAt: provider.modelSync.fetchedAt,
+      api: provider.modelSync.api,
+      modelCount: provider.modelSync.models.length,
+    }
+  }
+
   async dispose(): Promise<void> {
     this.disposed = true
+    this.recommendations.dispose()
+  }
+
+  async previewRecommendation(input: RecommendationInput) {
+    const resolved = await this.recommendations.resolve(input)
+    // 预览阶段通常没有协议的精确 api，仅用通用层规则贡献思考 values/map。
+    const zcode = resolveZCodeOptionSpecs({
+      modelId: input.modelId,
+      api: '',
+      baseUrl: input.baseUrl,
+    })
+    if (!zcode) return resolved
+    return {
+      ...resolved,
+      recommended: {
+        ...resolved.recommended,
+        optionSpecs: overlayRecommendedOptionSpecs(resolved.recommended.optionSpecs, zcode),
+      },
+    }
+  }
+
+  refreshRecommendations() {
+    return this.recommendations.refresh()
   }
 
   private async rawConfig(): Promise<PiModelCatalogConfig> {
@@ -417,12 +870,199 @@ export class PiModelService {
       : (this.configSource ?? {})
   }
 
+  /**
+   * 运行时合成：已启用智能配置的模型，用当前推荐值覆盖 `pinned` 之外的字段。
+   * 只作用于交给 Pi 的运行时配置；`parsedConfig` 仍保存用户原始值，
+   * 否则 UI 读到的推荐值会被当成用户值回写并永久固定。
+   */
+  private async applyRecommendations(
+    providerID: string,
+    provider: Extract<PiProviderConfig, { kind: 'custom' }>,
+  ): Promise<Extract<PiProviderConfig, { kind: 'custom' }>> {
+    if (!Object.values(provider.models).some((model) => model.smartConfig)) return provider
+    const models: Record<string, PiCustomModelConfig> = {}
+    for (const [id, model] of Object.entries(provider.models)) {
+      if (!model.smartConfig) {
+        models[id] = model
+        continue
+      }
+      const baseUrl = (model.api && provider.endpoints?.[model.api]) || provider.baseUrl
+      const { recommended: baseRecommended } = await this.recommendations.resolve({
+        providerId: providerID,
+        baseUrl,
+        modelId: model.id,
+        modelType: model.modelType ?? 'chat',
+      })
+      // ZCode 优先于 models.dev 推荐：逐字段覆盖，缺失继续继承。
+      const zcode = resolveZCodeOptionSpecs({ modelId: model.id, api: model.api, baseUrl })
+      const recommended = zcode
+        ? {
+            ...baseRecommended,
+            optionSpecs: overlayRecommendedOptionSpecs(baseRecommended.optionSpecs, zcode),
+          }
+        : baseRecommended
+      const applied = applyRecommendation(model, recommended, model.smartConfig.pinned)
+      // 用户显式配置优先于推荐；只有缺失时才从推荐（含 ZCode）继承。
+      models[id] =
+        !model.optionSpecs && recommended.optionSpecs
+          ? { ...applied, optionSpecs: recommended.optionSpecs }
+          : applied
+    }
+    return { ...provider, models }
+  }
+
+  /**
+   * 在 `Models` 单一出口处组合协议 map：聊天、非流式（completeSimple 走 streamSimple）、
+   * 模型测试都消费同一个 pi 实例，因此这一处接线覆盖所有请求路径。
+   * 显式 reasoningLevel map 存在时，抑制 pi 固定 reasoning 枚举，避免把任意 values
+   * 塞进 Pi 的 ThinkingLevel；由 map 成为请求字段的唯一权威。
+   */
+  private installOptionMapBoundary(): void {
+    const pi = this.pi as unknown as {
+      streamSimple?: (model: unknown, context: unknown, options?: unknown) => unknown
+    }
+    if (typeof pi.streamSimple !== 'function') return
+    const original = pi.streamSimple.bind(this.pi)
+    try {
+      pi.streamSimple = (model: unknown, context: unknown, options?: unknown) => {
+        const compiled =
+          model && typeof model === 'object' ? this.compiledOptionMap(model as object) : null
+        if (!compiled) return original(model, context, options)
+        const opts = (options && typeof options === 'object' ? options : {}) as Record<
+          string,
+          unknown
+        >
+        const reasoningLevel = typeof opts.reasoning === 'string' ? opts.reasoning : undefined
+        const maxOutputTokens =
+          typeof opts.maxTokens === 'number'
+            ? opts.maxTokens
+            : (model as { maxTokens?: number }).maxTokens
+        const previous =
+          typeof opts.onPayload === 'function'
+            ? (opts.onPayload as (p: unknown, m: unknown) => unknown)
+            : undefined
+        const next: Record<string, unknown> = { ...opts }
+        // 显式 reasoning values 不再交给 Pi 的固定枚举处理。
+        if (compiled.reasoningLevel) delete next.reasoning
+        next.onPayload = async (payload: unknown, target: unknown) => {
+          const resolved = previous ? ((await previous(payload, target)) ?? payload) : payload
+          try {
+            return applyModelOptionMap(resolved, compiled, { reasoningLevel, maxOutputTokens })
+          } catch {
+            return resolved
+          }
+        }
+        return original(model, context, next)
+      }
+    } catch {
+      /* 只读或冻结的 Models 实例保持原样；不影响其余行为 */
+    }
+  }
+
+  private compiledOptionMap(model: object): CompiledOptionSpecs | null {
+    if (this.optionMapCompiled.has(model)) return this.optionMapCompiled.get(model) ?? null
+    const specs = (model as { optionSpecs?: Model.OptionSpecs }).optionSpecs
+    let compiled: CompiledOptionSpecs | null = null
+    if (specs) {
+      try {
+        compiled = compileOptionSpecs(specs) ?? null
+      } catch {
+        compiled = null
+      }
+    }
+    this.optionMapCompiled.set(model, compiled)
+    return compiled
+  }
+
   private syncProviders(force = false): Promise<ParsedPiProviderCatalog> {
     const operation = async () => {
       const raw = await this.rawConfig()
-      const fingerprint = JSON.stringify(raw)
-      if (!force && fingerprint === this.configFingerprint) return this.parsedConfig
-      const parsed = parsePiProviderCatalog(raw)
+      const entries = await this.directory.providers()
+      // 推荐目录更新后必须重新合成，否则已保存模型会停在旧推荐值上。
+      const fingerprint = JSON.stringify([raw, await this.recommendations.version()])
+      if (!force && fingerprint === this.configFingerprint && entries === this.directoryEntries)
+        return this.parsedConfig
+      let parsed = parsePiProviderCatalog(raw)
+      this.directoryEntries = entries
+      const defaults = new Map(entries.map((entry) => [entry.id, directoryProviderConfig(entry)]))
+      if (parsed.schemaVersion <= PI_PROVIDER_CONFIG_SCHEMA_VERSION) {
+        const providers = { ...parsed.providers }
+        for (const [id, config] of defaults) {
+          if (
+            config &&
+            !this.builtinProviderIDs.has(id) &&
+            !Object.hasOwn(raw.providers ?? {}, id)
+          ) {
+            providers[id] = {
+              ...config,
+              models: {},
+              directorySource: entries.find((entry) => entry.id === id)!.origin,
+            }
+          }
+          if (config && this.builtinProviderIDs.has(id)) {
+            const existing = providers[id]
+            const bundledModels = new Set(
+              this.baseProviders
+                .get(id)!
+                .getModels()
+                .map((model) => model.id),
+            )
+            const disabled = Object.fromEntries(
+              Object.keys(config.models)
+                .filter((modelID) => !bundledModels.has(modelID))
+                .map((modelID) => [modelID, { enabled: false }]),
+            )
+            if (Object.keys(disabled).length && (!existing || existing.kind === 'builtin')) {
+              providers[id] = {
+                kind: 'builtin',
+                enabled: true,
+                allowModels: [],
+                denyModels: [],
+                ...existing,
+                models: { ...disabled, ...existing?.models },
+              }
+            }
+          }
+        }
+        parsed = { ...parsed, providers }
+      }
+      this.directoryBaseProviders = new Map(
+        [...this.baseProviders].map(([id, base]) => {
+          const config = defaults.get(id)
+          if (!config) return [id, base]
+          const entry = entries.find((candidate) => candidate.id === id)
+          const apis = new Set(base.getModels().map((model) => model.api))
+          const remoteModels = new Map<string, PiModel<Api>>()
+          for (const model of Object.values(config.models)) {
+            if (apis.has(model.api))
+              remoteModels.set(model.id, {
+                ...toPiModel(id, config, model),
+                baseUrl:
+                  entry?.modelBaseUrls?.[model.id] ??
+                  config.endpoints?.[model.api] ??
+                  config.baseUrl,
+              })
+          }
+          const getModels = () => {
+            const models = new Map(base.getModels().map((model) => [model.id, model]))
+            for (const [modelID, model] of remoteModels) models.set(modelID, model)
+            return [...models.values()]
+          }
+          return [
+            id,
+            {
+              ...base,
+              getModels,
+              getAllModels: () => [
+                ...(base.getAllModels?.() ?? []).filter(
+                  (model) => model.type !== undefined && model.type !== 'chat',
+                ),
+                ...getModels(),
+              ],
+            },
+          ]
+        }),
+      )
       const custom = Object.entries(parsed.providers).filter(
         (entry): entry is [string, Extract<(typeof entry)[1], { kind: 'custom' }>] =>
           entry[1].kind === 'custom',
@@ -438,11 +1078,25 @@ export class PiModelService {
       }
       const nextCustomProviderIDs = new Set<string>()
       for (const [providerID, provider] of custom) {
-        this.mutablePi?.setProvider(createPiCustomProvider(providerID, provider))
+        this.mutablePi?.setProvider(
+          createPiCustomProvider(providerID, await this.applyRecommendations(providerID, provider)),
+        )
         nextCustomProviderIDs.add(providerID)
       }
       this.configuredCustomProviderIDs = nextCustomProviderIDs
       this.applyProviderProtocolOverride(parsed)
+      for (const [id, base] of this.directoryBaseProviders) {
+        const configured = parsed.providers[id]
+        if (id === DEEPSEEK_PROVIDER_ID && parsed.issues.some((issue) => issue.providerID === id))
+          continue
+        const source =
+          id === DEEPSEEK_PROVIDER_ID ? (this.deepSeekProtocol?.provider ?? base) : base
+        this.mutablePi?.setProvider(
+          configured?.kind === 'builtin'
+            ? withPiBuiltinProviderOverrides(source, configured)
+            : source,
+        )
+      }
       this.parsedConfig = parsed
       this.configFingerprint = fingerprint
       return parsed
@@ -457,10 +1111,12 @@ export class PiModelService {
    */
   private applyProviderProtocolOverride(config: ParsedPiProviderCatalog): void {
     if (!this.mutablePi) return
-    const base = this.baseProviders.get(DEEPSEEK_PROVIDER_ID)
+    const base =
+      this.directoryBaseProviders.get(DEEPSEEK_PROVIDER_ID) ??
+      this.baseProviders.get(DEEPSEEK_PROVIDER_ID)
     if (!base) return
     const active = this.deepSeekProtocol
-    const current = this.pi.getProvider(DEEPSEEK_PROVIDER_ID) ?? base
+    const current = base
     const protocol = resolveDeepSeekProtocol(config)
     // A rejected DeepSeek block keeps the provider that is already running.
     if (!protocol) return

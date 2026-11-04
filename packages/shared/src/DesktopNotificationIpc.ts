@@ -4,7 +4,14 @@ export const DESKTOP_NOTIFICATION_IPC_CHANNELS = {
   activated: 'desktop-notification:activated',
 } as const
 
-export const DESKTOP_NOTIFICATION_KINDS = ['permission', 'question', 'completed', 'failed'] as const
+export const DESKTOP_NOTIFICATION_KINDS = [
+  'permission',
+  'question',
+  'completed',
+  'failed',
+  'task-due',
+  'task-acceptance',
+] as const
 
 export const DESKTOP_NOTIFICATION_VISIBILITIES = ['always', 'unfocused'] as const
 
@@ -14,7 +21,9 @@ export type DesktopNotificationVisibility = (typeof DESKTOP_NOTIFICATION_VISIBIL
 
 export type DesktopNotificationRequest = {
   notificationId: string
-  threadId: string
+  threadId?: string
+  taskId?: string
+  occurrenceId?: string
   kind: DesktopNotificationKind
   body: string
   visibility: DesktopNotificationVisibility
@@ -26,7 +35,9 @@ export type DesktopNotificationResult = {
 
 export type DesktopNotificationActivation = {
   notificationId: string
-  threadId: string
+  threadId?: string
+  taskId?: string
+  occurrenceId?: string
 }
 
 export interface DesktopNotificationIpcBridge {
@@ -43,6 +54,8 @@ export const DESKTOP_NOTIFICATION_TITLES: Record<DesktopNotificationKind, string
   question: '需要你的回答',
   completed: '任务已完成',
   failed: '任务执行失败',
+  'task-due': '任务到时间了，需要处理',
+  'task-acceptance': '任务等待你的验收',
 }
 
 export function desktopNotificationTitleFor(kind: DesktopNotificationKind): string {
@@ -57,7 +70,10 @@ export function normalizeDesktopNotificationRequest(
 ): DesktopNotificationRequest | null {
   if (!isRecord(value)) return null
   if (!isOpaqueIdentifier(value.notificationId)) return null
-  if (!isOpaqueIdentifier(value.threadId)) return null
+  if (value.threadId !== undefined && !isOpaqueIdentifier(value.threadId)) return null
+  if (value.taskId !== undefined && !isOpaqueIdentifier(value.taskId)) return null
+  if (value.occurrenceId !== undefined && !isOpaqueIdentifier(value.occurrenceId)) return null
+  if (!value.threadId && !value.taskId) return null
   if (!DESKTOP_NOTIFICATION_KINDS.includes(value.kind as DesktopNotificationKind)) {
     return null
   }
@@ -71,7 +87,9 @@ export function normalizeDesktopNotificationRequest(
   if (body.length < 1 || body.length > 200) return null
   return {
     notificationId: value.notificationId,
-    threadId: value.threadId,
+    ...(typeof value.threadId === 'string' ? { threadId: value.threadId } : {}),
+    ...(typeof value.taskId === 'string' ? { taskId: value.taskId } : {}),
+    ...(typeof value.occurrenceId === 'string' ? { occurrenceId: value.occurrenceId } : {}),
     kind: value.kind as DesktopNotificationKind,
     body,
     visibility: value.visibility as DesktopNotificationVisibility,
@@ -84,7 +102,10 @@ export function isDesktopNotificationActivation(
   return (
     isRecord(value) &&
     isOpaqueIdentifier(value.notificationId) &&
-    isOpaqueIdentifier(value.threadId)
+    (value.threadId === undefined || isOpaqueIdentifier(value.threadId)) &&
+    (value.taskId === undefined || isOpaqueIdentifier(value.taskId)) &&
+    (value.occurrenceId === undefined || isOpaqueIdentifier(value.occurrenceId)) &&
+    (isOpaqueIdentifier(value.threadId) || isOpaqueIdentifier(value.taskId))
   )
 }
 

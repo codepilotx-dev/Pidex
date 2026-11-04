@@ -1,7 +1,12 @@
+import { ModelRecommendationStore } from './provider/pi/ModelRecommendationStore'
+import { ProviderDirectoryStore } from './provider/pi/ProviderDirectoryStore'
 import { ComputerUseService } from './computer/ComputerUseService'
 import { LocalEnvironmentRepository } from './local-environment/LocalEnvironmentRepository'
 import { LocalEnvironmentCatalog } from './local-environment/LocalEnvironmentCatalog'
 import { computerToolDefinitions } from './tool/Computer/Definition'
+import { NodeReplService } from './nodeRepl/NodeReplService'
+import { nodeReplToolDefinition } from './nodeRepl/Definition'
+import { NODE_REPL_PLUGIN_ID, NODE_REPL_SERVER_NAME } from './nodeRepl/Association'
 import { Effect } from 'effect'
 import { loadConfig } from './config/Config'
 import { ConfigService } from './config/ConfigService'
@@ -23,6 +28,8 @@ import { ToolExecutor } from './tool/ToolExecutor'
 import { getToolingManager } from './tool/ToolingManager'
 import { ApprovalService } from './permission/ApprovalService'
 import { ReviewerService } from './permission/ReviewerService'
+import { GuardianScoreService } from './permission/GuardianScoreService'
+import { GuardianEvidenceService } from './permission/GuardianEvidenceService'
 import { QuestionService } from './session/QuestionService'
 import { ResumeCheckpointResolver } from './interaction/ResumeCheckpointResolver'
 import { ThreadService } from './session/ThreadService'
@@ -39,11 +46,14 @@ import { ExecutionLogObserver, HarnessLogObserver } from './observability/Execut
 import { normalizeShellSecurityLevel } from './security/ShellRiskClassifier'
 import { ApiKeyService } from './provider/ApiKeyService'
 import { ModelHealthService } from './provider/ModelHealthService'
+import { ModelSyncService } from './provider/ModelSyncService'
+import { ProtocolDetectionService } from './provider/ProtocolDetectionService'
 import { ProviderCredentialService } from './provider/ProviderCredentialService'
 import { SubagentService } from './subagent/SubagentService'
 import { SubagentWorkspaceCoordinator } from './subagent/SubagentWorkspaceCoordinator'
 import { AttachmentService } from './subagent/AttachmentService'
 import { ArtifactService } from './storage/ArtifactService'
+import { intelligentUiDefinition } from './tool/IntelligentUi/Definition'
 import { SpeechTranscriptionService } from './speech/SpeechTranscriptionService'
 import { SqliteAttachmentCatalog } from './subagent/SqliteAttachmentCatalog'
 import { LocalContextPathRepository } from './storage/repositories/LocalContextPathRepository'
@@ -56,16 +66,21 @@ import { HookService } from './hooks/HookService'
 import { z } from 'zod'
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { homedir, tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { BrowserService } from './browser/BrowserService'
 import { browserToolDefinitions } from './tool/Browser/Definition'
 import { MemoryManager } from './resource/MemoryManager'
 import { GitReviewService } from './review/GitReviewService'
 import { GithubService } from './github/GithubService'
+import { ThreadPullRequestService } from './github/ThreadPullRequestService'
 import { PullRequestWatchService } from './github/PullRequestWatchService'
 import { AutomationHostAuditRepository } from './automation/AutomationHostAuditRepository'
 import { GitWorkspaceService } from './git/GitWorkspaceService'
 import type { Models } from '@earendil-works/pi-ai'
+import type { Automation } from '@pidex/shared/automation'
+import type { ScheduledTask } from '@pidex/shared/scheduled-task'
+import type { SchedulePlanProposal } from '@pidex/shared/schedule-plan'
+import type { ScheduleDraft } from '@pidex/shared/schedule-draft'
 import { registerBunOAuthFlows } from '@earendil-works/pi-ai/bun-oauth'
 import { builtinModels } from '@earendil-works/pi-ai/providers/all'
 import { ManagedProjectlessWorkspaceService } from './workspace/ManagedProjectlessWorkspaceService'
@@ -77,8 +92,6 @@ import { SkillManagementService } from './prompt/SkillManagementService'
 import { SkillSettingsRepository } from './storage/repositories/SkillSettingsRepository'
 import { PluginSettingsRepository } from './storage/repositories/PluginSettingsRepository'
 import { PluginManagementService } from './plugin/PluginManagementService'
-import { MiniMaxCliSettingsRepository } from './storage/repositories/MinimaxCliSettingsRepository'
-import { MiniMaxCliIntegrationService } from './integration/minimax-cli/MiniMaxCliIntegrationService'
 import { McpSettingsRepository } from './storage/repositories/McpSettingsRepository'
 import { McpConfigService } from './mcp/McpConfigService'
 import { McpElicitationService } from './mcp/McpElicitationService'
@@ -115,6 +128,13 @@ import { SessionGroupService } from './session-group/SessionGroupService'
 import { DEFAULT_GOAL_TOKEN_BUDGET, ThreadGoalService } from './session/ThreadGoalService'
 import { ThreadBookmarkService } from './session/ThreadBookmarkService'
 import { createAutomationDefinitions } from './tool/Automation/Definitions'
+import { TaskScheduleService } from './calendar/TaskScheduleService'
+import { AgentError } from './Domain'
+import {
+  taskScheduleDefinitions,
+  taskScheduleCheckDefinition,
+} from './tool/TaskSchedule/Definitions'
+import { normalizeScheduledPermission } from './automation/AutomationService'
 import { createSchedulePlanDefinition } from './tool/SchedulePlan/Definition'
 import {
   AutomationRunCoordinator,
@@ -133,6 +153,7 @@ import {
   probeScheduleCalendarStorageCapabilities,
 } from './storage/database/StorageCapabilities'
 import { createThreadReadDefinition } from './tool/ThreadRead/Definition'
+import { createWorkgroupReadDefinition } from './tool/WorkgroupRead/Definition'
 import { ThreadReadViewRepository } from './session/ThreadReadViewRepository'
 import {
   BindingHandoffWorkspace,
@@ -380,6 +401,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const pets = new PetService(config.petsDir)
     const plugins = new PluginManagementService(new PluginSettingsRepository(db), {
       builtinPluginsRoot: config.builtinPluginsRoot,
+      dataRoot: config.dataDir,
       userHome: homedir(),
     })
     plugins.initializeComputerUse(
@@ -388,13 +410,12 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
           Record<string, unknown> | undefined
       )?.computerUseEnabled === true,
     )
-    yield* Effect.promise(() => plugins.list())
+    yield* Effect.promise(() => plugins.listLocal())
     const unsubscribePlugins = plugins.subscribe((_pluginId, generation) => {
       void publishAgentEvent(db, hub, null, null, 'plugins/updated', { generation }).catch(() =>
         logger.warn('plugins.status.publish.failed', { error: 'PLUGIN_STATUS_PUBLISH_FAILED' }),
       )
     })
-    let minimaxCli: MiniMaxCliIntegrationService
     const skills = new SkillManagementService(
       new SkillSettingsRepository(db),
       {
@@ -403,10 +424,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         builtinSkillsRoot: config.builtinSkillsRoot,
       },
       configService,
-      async (workspace?: string) => [
-        ...(await plugins.enabledSkillRoots(workspace)),
-        ...((await minimaxCli?.enabledSkillRoots()) ?? []),
-      ],
+      (workspace?: string) => plugins.enabledSkillRoots(workspace),
     )
     const unsubscribeTooling = tooling.subscribe((status) => {
       void publishAgentEvent(db, hub, null, null, 'tooling/updated', { status }).catch((cause) =>
@@ -448,26 +466,6 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       },
     )
     yield* providerCredentialStore.initialize()
-    minimaxCli = new MiniMaxCliIntegrationService(
-      new MiniMaxCliSettingsRepository(db),
-      providerCredentialStore,
-      {
-        userHome: homedir(),
-        integrationRoot: join(config.builtinIntegrationsRoot, 'minimax-cli'),
-      },
-    )
-    const unsubscribeMiniMaxCli = minimaxCli.subscribe((status) => {
-      void publishAgentEvent(db, hub, null, null, 'minimaxCli/updated', { status }).catch(() =>
-        logger.warn('minimax-cli.status.publish.failed', {
-          error: 'MINIMAX_CLI_STATUS_PUBLISH_FAILED',
-        }),
-      )
-    })
-    void minimaxCli.status().catch(() =>
-      logger.warn('minimax-cli.status.warmup.failed', {
-        error: 'MINIMAX_CLI_STATUS_WARMUP_FAILED',
-      }),
-    )
     const github = new GithubService(credentials, {
       getConfiguredClientId: () => config.githubOAuthClientId,
       getBrokerURL: () => config.githubAuthBrokerURL,
@@ -477,6 +475,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const releaseNotes = new ReleaseNotesService({
       getAccessToken: () => github.optionalAccessToken(),
     })
+    const threadPullRequests = new ThreadPullRequestService(db, github, hub)
     const review = new GitReviewService(
       db,
       async (projectId) => {
@@ -492,10 +491,17 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const memoryManager = new MemoryManager({ logger })
     memoryManager.registerHook('sqlite', () => db.shrinkMemory())
     memoryManager.registerHook('git_review', () => review.shrink())
-    const git = new GitWorkspaceService(db)
+    const git = new GitWorkspaceService(db, undefined, github)
     const piModels = new PiModelService(providerCredentialStore, {
+      logger,
+      directory: new ProviderDirectoryStore(
+        join(dirname(config.piModelCachePath), 'provider-directory.json'),
+      ),
       ...(options.models ? { models: options.models } : {}),
       modelsStore: new PiModelsFileStore(config.piModelCachePath),
+      recommendations: new ModelRecommendationStore(
+        join(dirname(config.piModelCachePath), 'model-recommendations.json'),
+      ),
       config: () => {
         const snapshot = configService.snapshot()
         const modelCatalog = snapshot.model_catalog as Record<string, unknown> | undefined
@@ -511,6 +517,8 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const modelHealth = new ModelHealthService(piModels, async (payload) => {
       await publishAgentEvent(db, hub, null, null, 'model/health/updated', payload)
     })
+    const modelSync = new ModelSyncService(piModels, configService)
+    const protocolDetection = new ProtocolDetectionService(piModels)
     const apiKeys = new ApiKeyService(piModels, providerCredentialStore, modelHealth)
     const providerCredentials = new ProviderCredentialService(piModels, providerCredentialStore)
     const anthropicUsageModels = builtinModels({
@@ -569,6 +577,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       for (const definition of browserToolDefinitions(browser)) tools.register(definition)
     tools.register(createTerminalReadDefinition(terminalOutput))
     tools.register(createThreadReadDefinition(new ThreadReadViewRepository(db)))
+    tools.register(createWorkgroupReadDefinition(sessionGroups))
     const mcpConfigs = new McpConfigService(new McpSettingsRepository(db), configService)
     const usage = new UsageService(new UsageRepository(db), providers, piModels, credentials, {
       subscriptionModels: anthropicUsageModels,
@@ -597,8 +606,33 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       mcpOAuthCoordinator,
     )
     const mcpOAuth = new McpOAuthService(mcpConfigs, mcpConnections, mcpOAuthCoordinator)
-    const mcp = new McpRuntimeService(mcpConfigs, mcpConnections, mcpOAuth)
-    const reviewer = new ReviewerService(db, piModels, configService)
+    const mcp = new McpRuntimeService(mcpConfigs, mcpConnections, mcpOAuth, () => {
+      if (!plugins.isEnabled(NODE_REPL_PLUGIN_ID)) return []
+      const connected = computer.available()
+      return [
+        {
+          name: NODE_REPL_SERVER_NAME,
+          scope: 'host',
+          type: 'stdio',
+          state: connected ? 'connected' : 'starting',
+          auth: { source: 'none', canLogin: false, canLogout: false },
+          toolCount: connected ? 1 : 0,
+          resourceCount: 0,
+          promptCount: 0,
+          managedBy: 'host',
+          pluginId: NODE_REPL_PLUGIN_ID,
+        },
+      ]
+    })
+    const guardianEvidence = new GuardianEvidenceService(async (threadID) => {
+      try {
+        return (await workspaceResolver.resolve(threadID)).workspace
+      } catch {
+        return null
+      }
+    })
+    const reviewer = new ReviewerService(db, piModels, configService, guardianEvidence, logger)
+    const guardianScores = new GuardianScoreService(db, reviewer)
     const approvals = new ApprovalService(
       db,
       hub,
@@ -606,6 +640,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       (invocation, signal) => reviewer.review(invocation, signal),
       configService,
       browser,
+      guardianScores,
     )
     let toolExecutor!: ToolExecutor
     const hostToolAudit = new AutomationHostAuditRepository(db.sqlite)
@@ -675,10 +710,13 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       resolveTooling: (id, resolveOptions) => tooling.resolve(id, resolveOptions),
       resolveToolingEnvironment: (required, resolveOptions) =>
         tooling.resolveEnvironment(required, resolveOptions),
-      resolveMiniMaxCliPathEntries: () => minimaxCli.shellPathEntries(),
       resolveShellSecurityLevel: () =>
         normalizeShellSecurityLevel(configService.snapshot().shell_security_level),
       authorizeShell: (invocation, signal) => approvals.authorize(invocation, signal),
+      resolvePermissionRules: (invocation) => approvals.rules.evaluate(invocation),
+      settleTurn: (threadID, turnID) => guardianScores.endTurn(threadID, turnID),
+      onPermissionDenied: (invocation) => guardianScores.invalidateAction(invocation),
+      observeToolStart: (invocation) => guardianScores.observe(invocation),
       recordToolCall: (invocation, status, output, error, startedAt) =>
         hostTurnInputs.has(invocation.turnID)
           ? hostToolAudit.record(invocation, status, output, error, startedAt)
@@ -704,16 +742,28 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         for (const event of events) await Effect.runPromise(hub.publish(event))
       },
     })
+    // Host-managed node_repl entry. Registered after the executor exists; it is
+    // never written to user MCP config and only the bundled computer-use plugin
+    // makes it available.
+    const nodeRepl = new NodeReplService()
+    tools.register(
+      nodeReplToolDefinition({ plugins, computer, service: nodeRepl, executor: toolExecutor }),
+    )
     const questions = new QuestionService(db, hub, false)
     const artifacts = yield* Effect.promise(() => ArtifactService.open(config.dataDir, db))
+    tools.register(intelligentUiDefinition(artifacts))
+    const contextCompaction = new ContextCompactionService(db)
     const orchestrator = new AgentRuntimeService({
       db,
       hub,
       models: piModels.pi,
       toolExecutor,
-      contextCompaction: new ContextCompactionService(db),
+      contextCompaction,
       artifacts,
       memoryManager,
+      scheduleDrafts: () => schedulePlans,
+      taskSchedules: (): TaskScheduleService | undefined =>
+        taskSchedules.available() ? taskSchedules : undefined,
       observeHarnessEvent: (context, event) =>
         harnessLogs.observe(
           {
@@ -724,6 +774,12 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
           event,
         ),
     })
+    contextCompaction.configure(
+      async (event) => {
+        await Effect.runPromise(hub.publish(event))
+      },
+      (threadID, signal) => orchestrator.compact(threadID, undefined, undefined, signal),
+    )
     const attachments = yield* Effect.promise(() =>
       AttachmentService.open(config.dataDir, {
         catalog: new SqliteAttachmentCatalog(db),
@@ -843,6 +899,15 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       computer,
       plugins,
     )
+    approvals.setTurnInterruptHandler((threadID, turnID) => {
+      // Never await the stop from inside approval evaluation: the turn is still
+      // unwinding the denied tool. Let it return first, then interrupt.
+      queueMicrotask(() => {
+        approvals.cancelTurn(turnID)
+        questions.cancelTurn(turnID)
+        void threads.stop(threadID, turnID).catch(() => undefined)
+      })
+    })
     const automationStorage = probeAutomationStorageCapabilities(db.sqlite)
     const planApprovals = new PlanApprovalService(
       db,
@@ -866,6 +931,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       threads,
       worktrees,
       threadExecutions,
+      db.repositories.modelRuntimePreferences,
     )
     let prWatches!: PullRequestWatchService
     const automationRuns = new AutomationRunCoordinator(
@@ -911,6 +977,84 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       },
     )
     let automationScheduler: AutomationScheduler | null = null
+    // 草案服务在后置构造（依赖调度器与日历存储）；运行时通过惰性取值器使用它，
+    // 因此 submit_schedule_plan 只在扩展表真实可用时才暴露。
+    let schedulePlans: SchedulePlanService | undefined
+    const taskSchedules: TaskScheduleService = new TaskScheduleService(db, scheduledTaskRuns, {
+      wake: () => automationScheduler?.wake(),
+      prepareExecution: async (task) => {
+        if (!task.execution) throw new AgentError('INVALID_REQUEST', '执行设置不完整', 400)
+        await providers.getModel(task.execution.model)
+        if (task.execution.targetThreadId)
+          await workspaceResolver.resolve(task.execution.targetThreadId)
+      },
+      check: async (check, occurrence, run) => {
+        const threadId = run?.threadId ?? occurrence.snapshot.execution?.targetThreadId
+        const turnId =
+          run?.turnId ?? (threadId ? db.repositories.taskSchedules.latestTurnId(threadId) : null)
+        const execution = run ?? occurrence.snapshot.execution
+        if (!threadId || !turnId || !execution) return false
+        const runtime = await workspaceResolver.resolve(threadId)
+        const context = {
+          threadID: threadId,
+          turnID: turnId,
+          toolCallID: `task-check:${occurrence.id}:${occurrence.resultVersion}:${occurrence.snapshot.checks.indexOf(check)}`,
+          taskMode: 'chat' as const,
+          signal: AbortSignal.timeout(120_000),
+          workspace: runtime.workspace,
+          defaultCwd: runtime.cwd,
+          permissionConfig: normalizeScheduledPermission(execution.permissionConfig),
+          model: execution.model,
+          taskSummary: '任务自动验收',
+        }
+        if (check.kind === 'command-exit-code') {
+          const result = await toolExecutor.execute<{ exitCode: number }>(
+            'PowerShell',
+            { command: check.command, timeout: 120_000, description: '任务自动验收' },
+            context,
+          )
+          return result.exitCode === check.expectedExitCode
+        }
+        return await toolExecutor.execute<boolean>(
+          'task_schedule_check',
+          {
+            file_path: check.path,
+            ...(check.kind === 'document-section' ? { section: check.section } : {}),
+          },
+          context,
+        )
+      },
+      feedback: async (occurrence, feedback) => {
+        const run = occurrence.scheduledTaskId
+          ? scheduledTaskRepository.read(occurrence.scheduledTaskId, true)
+          : null
+        const threadId =
+          run?.threadId ??
+          occurrence.snapshot.execution?.targetThreadId ??
+          occurrence.snapshot.plan?.threadId
+        const execution = occurrence.snapshot.execution
+        if (!threadId || !execution)
+          throw new AgentError('THREAD_NOT_FOUND', '没有可接收反馈的执行会话', 404)
+        await threads.enqueueFollowUp(
+          threadId,
+          {
+            content: `人工验收退回，需要修改：\n${feedback}`,
+            model: execution.model,
+            taskMode: 'plan',
+            permissionConfig: execution.permissionConfig,
+            strategy: 'queue',
+          },
+          `task-feedback:${occurrence.id}:${occurrence.resultVersion}`,
+        )
+      },
+    })
+    db.repositories.taskSchedules.publish = (event) => {
+      void Effect.runPromise(hub.publish(event))
+    }
+    if (taskSchedules.available()) {
+      tools.register(taskScheduleCheckDefinition)
+      for (const definition of taskScheduleDefinitions(taskSchedules)) tools.register(definition)
+    }
     const automation = new AutomationService(automationRepository, {
       changed: (value) =>
         publishAgentEvent(db, hub, null, null, 'automation/changed', {
@@ -978,38 +1122,58 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
           changedAt: Date.now(),
         }).then(() => undefined),
     })
-    const calendar = new CalendarService(automationRepository, scheduledTaskRepository)
-    const schedulePlans = new SchedulePlanService(
+    const calendar = new CalendarService(
+      automationRepository,
+      scheduledTaskRepository,
+      Date.now,
+      taskSchedules,
+    )
+    schedulePlans = new SchedulePlanService(
       db,
       db.repositories.schedulePlanProposals,
+      db.repositories.scheduleDrafts,
       scheduledTaskRepository,
       automationRepository,
       {
+        taskSchedules,
         wakeScheduler: () => automationScheduler?.wake(),
-        automationChanged: (value) =>
+        automationChanged: (value: Automation) =>
           publishAgentEvent(db, hub, null, null, 'automation/changed', {
             automationId: value.id,
             revision: value.revision,
             status: value.status,
             changedAt: Date.now(),
           }).then(() => undefined),
-        scheduledTaskChanged: (task) =>
+        scheduledTaskChanged: (task: ScheduledTask) =>
           publishAgentEvent(db, hub, null, task.turnId, 'scheduled-task/changed', {
             scheduledTaskId: task.id,
             revision: task.revision,
             status: task.status,
             changedAt: Date.now(),
           }).then(() => undefined),
-        proposalChanged: (proposal) =>
+        proposalChanged: (proposal: SchedulePlanProposal) =>
           publishAgentEvent(db, hub, null, proposal.turnId, 'schedule-plan/changed', {
             proposalId: proposal.id,
             revision: proposal.revision,
             status: proposal.status,
             changedAt: Date.now(),
           }).then(() => undefined),
+        threads: threads as never,
+        threadSettings: (threadId) => {
+          const settings = db.getThreadSettings(threadId)
+          return settings ? { permissionConfig: settings.permissionConfig } : null
+        },
+        draftChanged: (draft: ScheduleDraft) =>
+          publishAgentEvent(db, hub, null, draft.turnId, 'schedule-draft/changed', {
+            draftId: draft.id,
+            revision: draft.revision,
+            status: draft.status,
+            changedAt: Date.now(),
+          }).then(() => undefined),
       },
     )
     automationScheduler = new AutomationScheduler(automationRepository, {
+      taskSchedules,
       onClaimed: (runs) => automationRuns.startRuns(runs),
       ...(calendarEnabled
         ? {
@@ -1033,6 +1197,12 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       )
     }
     const unsubscribeAutomationEvents = hub.listen((signal) => {
+      if (
+        signal.kind === 'durable' &&
+        (signal.event.method === 'task-schedule/changed' ||
+          signal.event.method === 'scheduled-task/changed')
+      )
+        void automationScheduler?.wake()
       if (!automationEnabled || signal.kind !== 'durable' || !signal.event.turnId) return
       if (signal.event.method === 'turn/started')
         void automationRuns.handleTurnRunning(signal.event.turnId)
@@ -1105,7 +1275,10 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       (threadID) => review.prepareThreadSnapshotCleanup(threadID),
     )
     const startupRecovery = new StartupRecoveryCoordinator({
-      recoverInterruptedRuns: () => new InterruptedRunRecoveryCoordinator(db).run(),
+      recoverInterruptedRuns: () => {
+        new InterruptedRunRecoveryCoordinator(db).run()
+        contextCompaction.recover()
+      },
       discardRecoveredSideChats: () => sideChats.discardAll(),
       recoverResumeLeases: () => {
         resumeCheckpoints.recoverInterruptedLeases()
@@ -1137,6 +1310,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       startQueues: () => {
         threads.startRecoveredQueues()
         if (automationEnabled) automationScheduler?.start()
+        pets.start()
       },
     })
     yield* Effect.promise(() => startupRecovery.run())
@@ -1161,6 +1335,8 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       piModels,
       apiKeys,
       modelHealth,
+      modelSync,
+      protocolDetection,
       providerCredentials,
       providerCredentialStore,
       authSessions,
@@ -1170,13 +1346,13 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       review,
       github,
       prWatches,
+      threadPullRequests,
       git,
       tooling,
       pets,
       releaseNotes,
       skills,
       plugins,
-      minimaxCli,
       mcp,
       suggestions,
       usage,
@@ -1200,13 +1376,14 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       threadBookmarks,
       automation,
       calendar,
+      taskSchedules,
       scheduledTasks,
       schedulePlans,
       memoryManager,
     })
     const initialCatalogRevision = providers.catalogRevision?.() ?? 0
     void providers
-      .refresh(false)
+      .reload()
       .catch(() => undefined)
       .then(async () => {
         const nextCatalogRevision = providers.catalogRevision?.() ?? 0
@@ -1219,6 +1396,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     const dispose = async () => {
       if (disposed) return
       disposed = true
+      pets.dispose()
       computer.dispose()
       unsubscribePlugins()
       browser.dispose()
@@ -1227,7 +1405,6 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       unsubscribeAutomationEvents()
       unsubscribeExecutionLogs()
       unsubscribeTooling()
-      unsubscribeMiniMaxCli()
       unsubscribeConfig()
       await sideChats.discardAll(true)
       await orchestrator.dispose()

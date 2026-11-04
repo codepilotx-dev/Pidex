@@ -18,6 +18,17 @@ export interface CompositeViewDefinition {
  * 内置视图注册清单（按 VS Code PaneComposite 规范抽象）
  */
 export const BUILTIN_COMPOSITE_VIEWS: Record<WorkbenchTabKind, CompositeViewDefinition> = {
+  'provider-management': {
+    id: 'workbench.view.providerManagement',
+    kind: 'provider-management',
+    title: '供应商设置',
+    defaultLocation: 'right',
+    allowedLocations: ['right'],
+    canMove: false,
+    canClose: true,
+    isSingleton: true,
+    canFloat: false,
+  },
   'file-browser': {
     id: 'workbench.view.fileBrowser',
     kind: 'file-browser',
@@ -73,6 +84,17 @@ export const BUILTIN_COMPOSITE_VIEWS: Record<WorkbenchTabKind, CompositeViewDefi
     isSingleton: false,
     canFloat: true,
   },
+  goal: {
+    id: 'workbench.view.goal',
+    kind: 'goal',
+    title: '目标',
+    defaultLocation: 'right',
+    allowedLocations: ['sidebar', 'right', 'floating'],
+    canMove: true,
+    canClose: true,
+    isSingleton: true,
+    canFloat: true,
+  },
   plan: {
     id: 'workbench.view.plan',
     kind: 'plan',
@@ -95,10 +117,10 @@ export const BUILTIN_COMPOSITE_VIEWS: Record<WorkbenchTabKind, CompositeViewDefi
     isSingleton: false,
     canFloat: true,
   },
-  'side-task': {
-    id: 'workbench.view.sideTask',
-    kind: 'side-task',
-    title: '后台任务',
+  'subagent-directory': {
+    id: 'workbench.view.subagentDirectory',
+    kind: 'subagent-directory',
+    title: '子智能体',
     defaultLocation: 'right',
     allowedLocations: ['sidebar', 'right', 'floating'],
     canMove: true,

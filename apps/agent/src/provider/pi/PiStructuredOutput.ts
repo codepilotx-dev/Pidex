@@ -4,6 +4,8 @@ import {
   type Api,
   type Model as PiModel,
   type Models,
+  type Context,
+  type AssistantMessage,
 } from '@earendil-works/pi-ai'
 import { z } from 'zod'
 
@@ -117,6 +119,10 @@ export async function generatePiObject<TSchema extends z.ZodType>(input: {
   system: string
   prompt: string
   signal?: AbortSignal
+  maxTokens?: number
+  maxRetries?: number
+  beforeRequest?: (context: Context) => void | Promise<void>
+  onResponse?: (response: AssistantMessage) => void | Promise<void>
   onFailure?: (diagnostic: PiGenerationDiagnostic) => void
 }): Promise<z.output<TSchema>> {
   let stage: PiGenerationDiagnostic['stage'] = 'schema'
@@ -127,39 +133,40 @@ export async function generatePiObject<TSchema extends z.ZodType>(input: {
     const toolName = `submit_${input.schemaName}`
     const strictToolCall = isOfficialOpenAIResponses(input.model)
     stage = 'request'
-    const response = await input.models.completeSimple(
-      input.model,
-      {
-        systemPrompt: [
-          input.system,
-          `必须调用 ${toolName} 提交符合 ${input.schemaName} 的结果，不要返回说明文字。`,
-        ].join('\n'),
-        messages: [{ role: 'user', content: input.prompt, timestamp: Date.now() }],
-        tools: [
-          {
-            name: toolName,
-            description: `提交符合 ${input.schemaName} schema 的结构化结果`,
-            parameters,
-            constrainedSampling: {
-              type: 'json_schema',
-              strict: strictToolCall ? 'require' : 'prefer',
-            },
+    const context: Context = {
+      systemPrompt: [
+        input.system,
+        `必须调用 ${toolName} 提交符合 ${input.schemaName} 的结果，不要返回说明文字。`,
+      ].join('\n'),
+      messages: [{ role: 'user', content: input.prompt, timestamp: Date.now() }],
+      tools: [
+        {
+          name: toolName,
+          description: `提交符合 ${input.schemaName} schema 的结构化结果`,
+          parameters,
+          constrainedSampling: {
+            type: 'json_schema',
+            strict: strictToolCall ? 'require' : 'prefer',
           },
-        ],
-      },
-      {
-        ...(input.signal ? { signal: input.signal } : {}),
-        maxRetries: 1,
-        ...(strictToolCall
-          ? {
-              onPayload: (payload: unknown) => ({
-                ...(payload as Record<string, unknown>),
-                tool_choice: { type: 'function', name: toolName },
-              }),
-            }
-          : {}),
-      },
-    )
+        },
+      ],
+    }
+    await input.beforeRequest?.(context)
+    input.signal?.throwIfAborted()
+    const response = await input.models.completeSimple(input.model, context, {
+      ...(input.signal ? { signal: input.signal } : {}),
+      maxRetries: input.maxRetries ?? 1,
+      ...(input.maxTokens === undefined ? {} : { maxTokens: input.maxTokens }),
+      ...(strictToolCall
+        ? {
+            onPayload: (payload: unknown) => ({
+              ...(payload as Record<string, unknown>),
+              tool_choice: { type: 'function', name: toolName },
+            }),
+          }
+        : {}),
+    })
+    await input.onResponse?.(response)
     if (response.stopReason === 'error')
       throw new Error(response.errorMessage ?? 'Pi 结构化模型调用失败')
     stage = 'tool-result'

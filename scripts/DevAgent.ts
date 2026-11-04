@@ -3,7 +3,7 @@ import { fileURLToPath } from 'node:url'
 import {
   acquireDevAgentLock,
   agentDataDir,
-  allocateLoopbackPort,
+  allocateDevAgentPort,
   cleanupDevAgentRuntime,
   localNoProxy,
   publishDevAgentRuntime,
@@ -54,12 +54,10 @@ async function run() {
   const connection = resolveDevAgentLaunchConnection(previousRuntime, configuredPort, () =>
     crypto.randomUUID(),
   )
-  let port: number
-  try {
-    port = await allocateLoopbackPort(connection.port)
-  } catch {
-    throw new Error(
-      connection.reused ? 'AGENT_RECONNECT_PORT_UNAVAILABLE' : 'AGENT_PORT_UNAVAILABLE',
+  const port = await allocateDevAgentPort(connection, previousRuntime, configuredPort)
+  if (connection.reused && port !== connection.port) {
+    console.warn(
+      '上次的开发 Agent 已退出，但旧端口仍不可用；已分配新端口，请重启正在运行的 Desktop。',
     )
   }
   if (previousRuntime && configuredPort !== undefined && !connection.reused) {
@@ -85,7 +83,6 @@ async function run() {
       PIDEX_TOOLING_HOME: join(agentDataDir, 'tooling'),
       PIDEX_BUILTIN_SKILLS_DIR: join(root, 'apps', 'agent', 'resources', 'skills'),
       PIDEX_BUILTIN_PLUGINS_DIR: join(root, 'apps', 'agent', 'resources', 'plugins'),
-      PIDEX_BUILTIN_INTEGRATIONS_DIR: join(root, 'apps', 'agent', 'resources', 'integrations'),
       PIDEX_LEGACY_DATA_DIR: join(root, '.pidex'),
       PIDEX_LOG_DIR: agentLogDir,
       PIDEX_CONSOLE_LOG: process.env.PIDEX_CONSOLE_LOG ?? 'info',

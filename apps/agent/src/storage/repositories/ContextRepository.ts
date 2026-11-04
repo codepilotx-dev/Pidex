@@ -6,6 +6,20 @@ import type {
   PromptSessionState,
 } from '../../context/ContextManager'
 import type { AgentDatabase } from '../database/AgentDatabase'
+import type {
+  ContextBudget,
+  ContextCompactionOperation,
+  ThreadContextState,
+} from '@pidex/shared/thread'
+import type { ContextUsageAnchor } from '../../context/ContextBudget'
+
+export const CONTEXT_LIFECYCLE_SCHEMA = [
+  'CREATE TABLE context_runtime_state (thread_id TEXT PRIMARY KEY REFERENCES threads(id) ON DELETE CASCADE, budget TEXT, anchor TEXT)',
+  'CREATE TABLE context_compaction_operations (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE, payload TEXT NOT NULL, status TEXT NOT NULL, created_at INTEGER NOT NULL)',
+  'CREATE TABLE context_compaction_requests (id TEXT PRIMARY KEY, thread_id TEXT NOT NULL REFERENCES threads(id) ON DELETE CASCADE, operation_id TEXT NOT NULL REFERENCES context_compaction_operations(id) ON DELETE CASCADE)',
+  'CREATE INDEX context_operations_thread ON context_compaction_operations(thread_id, created_at)',
+  "CREATE UNIQUE INDEX context_operations_active ON context_compaction_operations(thread_id) WHERE status IN ('queued','running')",
+]
 
 type ContextStateRow = {
   thread_id: string
@@ -139,6 +153,114 @@ const usageFromRow = (row: ContextUsageRow): ContextUsageSample => ({
 /** SQL boundary for prompt state, usage samples and compaction records. */
 export class ContextRepository {
   constructor(private readonly db: AgentDatabase) {}
+
+  supportsLifecycle() {
+    return (
+      (
+        this.db.sqlite
+          .query(
+            "SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('context_runtime_state','context_compaction_operations','context_compaction_requests')",
+          )
+          .get() as { count: number }
+      ).count === 3
+    )
+  }
+
+  runtimeState(threadID: string): ThreadContextState {
+    if (!this.supportsLifecycle()) return { budget: null, operation: null }
+    const row = this.db.sqlite
+      .query('SELECT budget FROM context_runtime_state WHERE thread_id = ?')
+      .get(threadID) as { budget: string | null } | null
+    return {
+      budget: row?.budget ? JSON.parse(row.budget) : null,
+      operation: this.latestOperation(threadID),
+    }
+  }
+
+  anchor(threadID: string): ContextUsageAnchor | null {
+    if (!this.supportsLifecycle()) return null
+    const row = this.db.sqlite
+      .query('SELECT anchor FROM context_runtime_state WHERE thread_id = ?')
+      .get(threadID) as { anchor: string | null } | null
+    return row?.anchor ? JSON.parse(row.anchor) : null
+  }
+
+  saveRuntimeState(threadID: string, budget: ContextBudget, anchor?: ContextUsageAnchor | null) {
+    this.db.sqlite
+      .query(
+        'INSERT INTO context_runtime_state(thread_id, budget) VALUES (?, ?) ON CONFLICT(thread_id) DO UPDATE SET budget = excluded.budget',
+      )
+      .run(threadID, JSON.stringify(budget))
+    if (anchor !== undefined)
+      this.db.sqlite
+        .query('UPDATE context_runtime_state SET anchor = ? WHERE thread_id = ?')
+        .run(anchor ? JSON.stringify(anchor) : null, threadID)
+  }
+
+  requestedOperation(id: string): ContextCompactionOperation | null {
+    const row = this.db.sqlite
+      .query('SELECT operation_id FROM context_compaction_requests WHERE id = ?')
+      .get(id) as { operation_id: string } | null
+    return row ? this.operation(row.operation_id) : null
+  }
+
+  bindRequest(id: string, operation: ContextCompactionOperation) {
+    this.db.sqlite
+      .query(
+        'INSERT INTO context_compaction_requests(id, thread_id, operation_id) VALUES (?, ?, ?)',
+      )
+      .run(id, operation.threadId, operation.operationId)
+  }
+
+  latestSession(threadID: string) {
+    return this.db.sqlite
+      .query(
+        "SELECT session_id, model_ref, turn_id FROM agent_executions WHERE thread_id = ? AND profile = 'main' ORDER BY created_at DESC LIMIT 1",
+      )
+      .get(threadID) as { session_id: string; model_ref: string; turn_id: string } | null
+  }
+
+  operation(id: string): ContextCompactionOperation | null {
+    const row = this.db.sqlite
+      .query('SELECT payload FROM context_compaction_operations WHERE id = ?')
+      .get(id) as { payload: string } | null
+    return row ? JSON.parse(row.payload) : null
+  }
+
+  latestOperation(threadID: string, active = false): ContextCompactionOperation | null {
+    if (!this.supportsLifecycle()) return null
+    const row = this.db.sqlite
+      .query(
+        `SELECT payload FROM context_compaction_operations WHERE thread_id = ? ${active ? "AND status IN ('queued','running')" : ''} ORDER BY created_at DESC, rowid DESC LIMIT 1`,
+      )
+      .get(threadID) as { payload: string } | null
+    return row ? JSON.parse(row.payload) : null
+  }
+
+  saveOperation(operation: ContextCompactionOperation) {
+    this.db.sqlite
+      .query(
+        'INSERT INTO context_compaction_operations(id, thread_id, payload, status, created_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, status = excluded.status',
+      )
+      .run(
+        operation.operationId,
+        operation.threadId,
+        JSON.stringify(operation),
+        operation.status,
+        operation.createdAt,
+      )
+  }
+
+  unfinishedOperations(): ContextCompactionOperation[] {
+    if (!this.supportsLifecycle()) return []
+    return (
+      this.db.sqlite
+        .query(
+          "SELECT payload FROM context_compaction_operations WHERE status IN ('queued','running')",
+        )
+        .all() as { payload: string }[]
+    ).map((row) => JSON.parse(row.payload))
+  }
 
   state(threadID: string): PromptSessionState | null {
     const row = this.db.sqlite
@@ -431,6 +553,101 @@ export class ContextRepository {
       )
       .get(threadID) as { id: string } | null
     return row ? this.compactionByID(row.id) : null
+  }
+
+  compactionOperationsForTurns(threadID: string, turnIDs: readonly string[]) {
+    if (!turnIDs.length || !this.supportsLifecycle()) return []
+    const rows = this.db.sqlite
+      .query(
+        `
+      SELECT o.payload, t.id AS turn_id, t.started_at, t.finished_at, o.created_at FROM context_compaction_operations o
+      JOIN turns t ON t.id = COALESCE(json_extract(o.payload, '$.turnId'), (
+        SELECT id FROM turns WHERE thread_id = o.thread_id AND created_at <= o.created_at
+        ORDER BY created_at DESC, id DESC LIMIT 1
+      ))
+      WHERE o.thread_id = ? AND t.id IN (${turnIDs.map(() => '?').join(',')})
+      ORDER BY o.created_at, o.id
+    `,
+      )
+      .all(threadID, ...turnIDs) as Array<{
+      payload: string
+      turn_id: string
+      started_at: number | null
+      finished_at: number | null
+      created_at: number
+    }>
+    return rows.map((row) => {
+      const operation = JSON.parse(row.payload) as ContextCompactionOperation
+      return {
+        turnID: row.turn_id,
+        operation: {
+          ...operation,
+          // Older operations lack an anchor; infer it without rewriting stored data.
+          turnId:
+            operation.turnId !== undefined
+              ? operation.turnId
+              : row.started_at !== null &&
+                  row.started_at <= row.created_at &&
+                  (row.finished_at === null || row.finished_at >= row.created_at)
+                ? row.turn_id
+                : null,
+        },
+      }
+    })
+  }
+
+  compactionsForTurns(threadID: string, turnIDs: readonly string[]) {
+    if (!turnIDs.length) return []
+    const rows = this.db.sqlite
+      .query(
+        `
+      SELECT c.id, t.id AS turn_id, c.before_count, c.after_count,
+        c.before_tokens, c.after_tokens, c.target_tokens, c.baseline_version,
+        c.usage_sample_id, c.replacement_history, c.created_at
+      FROM agent_compactions AS c
+      JOIN turns AS t ON t.id = COALESCE(c.turn_id, (
+        SELECT id FROM turns WHERE thread_id = c.thread_id AND created_at <= c.created_at
+        ORDER BY created_at DESC, id DESC LIMIT 1
+      ))
+      WHERE c.thread_id = ? AND t.id IN (${turnIDs.map(() => '?').join(',')})
+      ORDER BY c.created_at, c.id
+    `,
+      )
+      .all(threadID, ...turnIDs) as Array<{
+      id: string
+      turn_id: string
+      before_count: number
+      after_count: number
+      before_tokens: number
+      after_tokens: number
+      target_tokens: number
+      baseline_version: number
+      usage_sample_id: string | null
+      replacement_history: string
+      created_at: number
+    }>
+    return rows.flatMap((row) => {
+      const reference = parsePiCompactionReference(row.replacement_history)
+      if (!reference || !row.usage_sample_id) return []
+      return [
+        {
+          turnID: row.turn_id,
+          createdAt: row.created_at,
+          payload: {
+            compactionId: row.id,
+            trigger: reference.trigger,
+            beforeCount: row.before_count,
+            afterCount: row.after_count,
+            beforeTokens: row.before_tokens,
+            afterTokens: row.after_tokens,
+            afterTokensSource: reference.afterTokensSource,
+            targetTokens: row.target_tokens,
+            baselineVersion: row.baseline_version,
+            usageSampleId: row.usage_sample_id,
+          },
+        },
+      ]
+    })
   }
 
   insertCompactedEvent(

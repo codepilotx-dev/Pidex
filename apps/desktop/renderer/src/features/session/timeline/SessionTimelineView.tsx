@@ -14,8 +14,7 @@ import { Virtualizer, type VirtualizerHandle } from 'virtua'
 
 import { useThreadScrollController } from '../conversation/UseThreadScrollController.js'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
-
-const TIMELINE_BOTTOM_SENTINEL = Symbol('timeline-bottom-sentinel')
+import { cx } from '../../../utils/Cx.js'
 
 /* ── Props ──────────────────────────────────────────────── */
 
@@ -104,7 +103,6 @@ export function SessionTimelineView<T>({
       root?.removeEventListener('keydown', cancelKeyboardNavigation)
     }
   }, [cancelNavigation, scrollRef, sessionKey])
-  const virtualItems = React.useMemo(() => [...items, TIMELINE_BOTTOM_SENTINEL], [items])
   const scrollController = useThreadScrollController({
     active: Boolean(scrollToBottom),
     contentRevision: items.at(-1),
@@ -226,36 +224,35 @@ export function SessionTimelineView<T>({
 
   return (
     <div
-      className="session-timeline-container tw:relative tw:mx-auto tw:min-w-0 tw:max-w-none tw:w-[var(--session-content-w,100%)]"
+      className="session-timeline-container tw:relative tw:flex-auto tw:mx-auto tw:min-w-0 tw:max-w-none tw:w-[var(--session-timeline-width,var(--session-content-w,100%))]"
       data-component="session-timeline"
       data-session-key={sessionKey}
       data-scroll-mode={scrollController.mode}
     >
-      <div className="session-timeline-virtualizer tw:relative tw:z-0 tw:w-full tw:outline-none tw:[&>:first-child]:w-full tw:[&>:first-child]:min-w-0">
+      <div className="session-timeline-virtualizer tw:relative tw:z-0 tw:w-full tw:outline-none tw:[overflow-anchor:none] tw:[&>:first-child]:w-full tw:[&>:first-child]:min-w-0">
         <Virtualizer
-          data={virtualItems}
+          data={items}
           key={sessionKey}
           ref={listHandle}
           scrollRef={scrollRef}
           onScroll={scrollController.handleScroll}
         >
-          {(item, index) =>
-            item === TIMELINE_BOTTOM_SENTINEL ? (
-              <div
-                aria-hidden="true"
-                className="session-timeline-bottom-sentinel tw:relative tw:w-full tw:h-[calc(var(--thread-scroll-footer-fade-height)+var(--thread-scroll-content-bottom-gap))] tw:pointer-events-none"
-                key="timeline-bottom-sentinel"
-              >
-                <div
-                  ref={scrollController.bottomSentinelRef}
-                  className="session-timeline-bottom-observer tw:absolute tw:inset-x-0 tw:bottom-0 tw:h-px tw:pointer-events-none"
-                />
-              </div>
-            ) : (
-              renderItem(item as T, index)
-            )
-          }
+          {(item, index) => renderItem(item, index)}
         </Virtualizer>
+      </div>
+      <div
+        aria-hidden="true"
+        className={cx(
+          'session-timeline-bottom-sentinel tw:relative tw:w-full tw:flex-none tw:h-[calc(var(--thread-scroll-footer-height)+var(--thread-scroll-footer-fade-height)+var(--thread-scroll-content-bottom-gap))] tw:pointer-events-none',
+          scrollController.mode === 'static'
+            ? 'tw:[overflow-anchor:none]'
+            : 'tw:[overflow-anchor:auto]',
+        )}
+      >
+        <div
+          ref={scrollController.bottomSentinelRef}
+          className="session-timeline-bottom-observer tw:absolute tw:inset-x-0 tw:bottom-0 tw:h-px tw:pointer-events-none"
+        />
       </div>
     </div>
   )

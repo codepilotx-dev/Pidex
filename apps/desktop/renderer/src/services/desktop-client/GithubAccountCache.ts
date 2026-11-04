@@ -1,3 +1,4 @@
+import { createStore } from 'zustand/vanilla'
 import type {
   DesktopApi,
   DesktopGithubAuthStatus,
@@ -23,11 +24,12 @@ type GithubClient = Pick<
 >
 
 export function createGithubAccountCache(client: GithubClient, now = Date.now) {
-  let snapshot: GithubAccountSnapshot = { auth: null, overview: null }
-  const listeners = new Set<() => void>()
+  const githubAccountStore = createStore<GithubAccountSnapshot>(() => ({
+    auth: null,
+    overview: null,
+  }))
   const publish = (change: Partial<GithubAccountSnapshot>): void => {
-    snapshot = { ...snapshot, ...change }
-    for (const listener of listeners) listener()
+    githubAccountStore.setState(change)
   }
 
   function cachedRead<T>(
@@ -91,7 +93,9 @@ export function createGithubAccountCache(client: GithubClient, now = Date.now) {
     (result) => {
       if (
         !result.authenticated ||
-        (result.user && snapshot.overview && result.user.id !== snapshot.overview.user.id)
+        (result.user &&
+          githubAccountStore.getState().overview &&
+          result.user.id !== githubAccountStore.getState().overview.user.id)
       )
         clearOverview()
       publish({ auth: result })
@@ -110,13 +114,8 @@ export function createGithubAccountCache(client: GithubClient, now = Date.now) {
   }
 
   return {
-    getGithubAccountSnapshot: (): GithubAccountSnapshot => snapshot,
-    onGithubAccountChange(listener: () => void): () => void {
-      listeners.add(listener)
-      return () => {
-        listeners.delete(listener)
-      }
-    },
+    githubAccountStore,
+    getGithubAccountSnapshot: githubAccountStore.getState,
     getGithubAuthStatus: auth.read,
     getGithubProfileOverview: overview.read,
     async startGithubLogin(input: Parameters<GithubClient['startGithubLogin']>[0]) {

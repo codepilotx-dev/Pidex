@@ -32,6 +32,15 @@ export type ScheduleCalendarStorageCapabilities = {
   schedulePlanProposals: boolean
 }
 
+export type ScheduleDraftStorageCapabilities = {
+  scheduleDrafts: boolean
+}
+
+export type PermissionRuleStorageCapabilities = {
+  chatRules: boolean
+  legacyGrantRevocations: boolean
+}
+
 const cache = new WeakMap<Database, ThreadsStorageCapabilities>()
 
 const artifactsCache = new WeakMap<Database, ArtifactsStorageCapabilities>()
@@ -41,6 +50,8 @@ const runtimeCompositionCache = new WeakMap<Database, RuntimeCompositionStorageC
 const automationCache = new WeakMap<Database, AutomationStorageCapabilities>()
 
 const scheduleCalendarCache = new WeakMap<Database, ScheduleCalendarStorageCapabilities>()
+
+const scheduleDraftCache = new WeakMap<Database, ScheduleDraftStorageCapabilities>()
 
 export function probeThreadsStorageCapabilities(sqlite: Database): ThreadsStorageCapabilities {
   const cached = cache.get(sqlite)
@@ -139,5 +150,115 @@ export function probeScheduleCalendarStorageCapabilities(
     schedulePlanProposals: names.has('schedule_plan_proposals'),
   }
   scheduleCalendarCache.set(sqlite, capabilities)
+  return capabilities
+}
+
+/** Read-only probe for the additive schema 60 task-planning draft tables. */
+export function probeScheduleDraftStorageCapabilities(
+  sqlite: Database,
+): ScheduleDraftStorageCapabilities {
+  const cached = scheduleDraftCache.get(sqlite)
+  if (cached) return cached
+  const row = sqlite
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'schedule_drafts'")
+    .get()
+  const capabilities = { scheduleDrafts: Boolean(row) }
+  scheduleDraftCache.set(sqlite, capabilities)
+  return capabilities
+}
+
+const permissionRuleCache = new WeakMap<Database, PermissionRuleStorageCapabilities>()
+
+/**
+ * Read-only probe for the additive schema 65 permission-rule tables. A newer
+ * unknown store may lack them; callers must hide the corresponding write
+ * capability instead of altering storage.
+ */
+export function probePermissionRuleStorageCapabilities(
+  sqlite: Database,
+): PermissionRuleStorageCapabilities {
+  const cached = permissionRuleCache.get(sqlite)
+  if (cached) return cached
+  const names = new Set(
+    (
+      sqlite
+        .query(
+          "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('permission_chat_rules','permission_grant_revocations')",
+        )
+        .all() as Array<{ name: string }>
+    ).map((row) => row.name),
+  )
+  const capabilities = {
+    chatRules:
+      names.has('permission_chat_rules') &&
+      (sqlite.query('PRAGMA table_info(permission_chat_rules)').all() as { name: string }[]).some(
+        (column) => column.name === 'workspace',
+      ),
+    legacyGrantRevocations: names.has('permission_grant_revocations'),
+  }
+  permissionRuleCache.set(sqlite, capabilities)
+  return capabilities
+}
+
+export type ThreadContextLimitsStorageCapabilities = {
+  threadContextLimits: boolean
+}
+
+export type ModelRuntimePreferencesStorageCapabilities = {
+  modelRuntimePreferences: boolean
+}
+
+const threadContextLimitsCache = new WeakMap<Database, ThreadContextLimitsStorageCapabilities>()
+const modelRuntimePreferencesCache = new WeakMap<
+  Database,
+  ModelRuntimePreferencesStorageCapabilities
+>()
+
+export function probeThreadContextLimitsStorageCapabilities(
+  sqlite: Database,
+): ThreadContextLimitsStorageCapabilities {
+  const cached = threadContextLimitsCache.get(sqlite)
+  if (cached) return cached
+  const row = sqlite
+    .query("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'thread_context_limits'")
+    .get()
+  const capabilities = { threadContextLimits: Boolean(row) }
+  threadContextLimitsCache.set(sqlite, capabilities)
+  return capabilities
+}
+
+export function probeModelRuntimePreferencesStorageCapabilities(
+  sqlite: Database,
+): ModelRuntimePreferencesStorageCapabilities {
+  const cached = modelRuntimePreferencesCache.get(sqlite)
+  if (cached) return cached
+  const row = sqlite
+    .query(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'model_runtime_preferences'",
+    )
+    .get()
+  const capabilities = { modelRuntimePreferences: Boolean(row) }
+  modelRuntimePreferencesCache.set(sqlite, capabilities)
+  return capabilities
+}
+
+export type ThreadMessageForksStorageCapabilities = {
+  forkTargetTurnId: boolean
+}
+
+const threadMessageForksCache = new WeakMap<Database, ThreadMessageForksStorageCapabilities>()
+
+export function probeThreadMessageForksStorageCapabilities(
+  sqlite: Database,
+): ThreadMessageForksStorageCapabilities {
+  const cached = threadMessageForksCache.get(sqlite)
+  if (cached) return cached
+  const rows = sqlite.query('PRAGMA table_info(thread_message_forks)').all() as Array<{
+    name: string
+  }>
+  const capabilities: ThreadMessageForksStorageCapabilities = {
+    forkTargetTurnId: rows.some((column) => column.name === 'target_turn_id'),
+  }
+  threadMessageForksCache.set(sqlite, capabilities)
   return capabilities
 }

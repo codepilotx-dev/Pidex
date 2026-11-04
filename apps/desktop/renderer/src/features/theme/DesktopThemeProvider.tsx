@@ -357,7 +357,6 @@ function applyDesktopTheme(
 
   const uiFontSize = clamp(settings.fontSizes.ui, 11, 16)
   const codeFontSize = clamp(settings.fontSizes.code, 8, 24)
-  const delta = uiFontSize - 14
   const scale = {
     xs: 12,
     sm: 13,
@@ -372,7 +371,10 @@ function applyDesktopTheme(
   root.style.setProperty('--cpx-sys-font-size-ui', `${uiFontSize}px`)
   root.style.setProperty('--cpx-sys-font-size-code', `${codeFontSize}px`)
   for (const [name, base] of Object.entries(scale)) {
-    root.style.setProperty(`--cpx-sys-font-size-${name}`, `${base + delta}px`)
+    root.style.setProperty(
+      `--cpx-sys-font-size-${name}`,
+      `${Math.round((base * uiFontSize) / 14)}px`,
+    )
   }
 }
 

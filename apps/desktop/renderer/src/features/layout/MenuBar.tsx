@@ -35,6 +35,7 @@ export type FileMenuAction =
   | 'openSettings'
   | 'logOut'
   | 'exit'
+  | 'stopBackendAndExit'
 
 export type EditMenuAction = DesktopEditAction
 
@@ -172,8 +173,7 @@ function AppMenu({
   return (
     <Menubar.Menu value={value}>
       <Menubar.Trigger
-        data-theme-component="dropdown-trigger"
-        className="menubar-trigger tw:rounded-md tw:border-0 tw:bg-transparent tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-control tw:whitespace-nowrap tw:outline-none"
+        asChild
         {...focusModality.triggerInteractionProps}
         onPointerDown={(event) => {
           focusModality.triggerInteractionProps.onPointerDown()
@@ -188,7 +188,9 @@ function AppMenu({
         }}
         ref={triggerRef}
       >
-        {label}
+        <Button className="menubar-trigger" color="ghost" size="toolbar">
+          {label}
+        </Button>
       </Menubar.Trigger>
       <Menubar.Portal>
         <Menubar.Content
@@ -333,7 +335,7 @@ export function MenuBar({
       onBlur={handleMenuBarBlur}
       onKeyDown={handleMenuBarKeyDown}
     >
-      <div className="menubar-titlebar tw:flex tw:h-chrome tw:w-full tw:items-center tw:justify-between tw:gap-2 tw:pl-2">
+      <div className="menubar-titlebar tw:flex tw:h-chrome tw:w-full tw:items-center tw:justify-between tw:gap-2 tw:pl-3">
         <div className="menubar-left tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:gap-1 tw:overflow-visible">
           <Button
             isIconOnly
@@ -434,7 +436,13 @@ export function MenuBar({
                 disabled={!isFileActionEnabled('exit')}
                 onSelect={() => onFileMenuAction('exit')}
               >
-                退出应用
+                退出桌面端（后台继续运行）
+              </MenuItem>
+              <MenuItem
+                disabled={!isFileActionEnabled('stopBackendAndExit')}
+                onSelect={() => onFileMenuAction('stopBackendAndExit')}
+              >
+                停止后端并退出
               </MenuItem>
             </AppMenu>
 

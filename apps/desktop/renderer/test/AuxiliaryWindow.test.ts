@@ -21,7 +21,7 @@ describe('Auxiliary Window (Phase 3) - View Floating Capabilities', () => {
       'file-preview',
       'plan',
       'side-chat',
-      'side-task',
+      'subagent-directory',
     ]
 
     for (const kind of floatableKinds) {

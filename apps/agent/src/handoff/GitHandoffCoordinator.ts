@@ -50,6 +50,7 @@ export class BunHandoffGitRunner implements HandoffGitRunner {
     const hooksPath = process.platform === 'win32' ? 'NUL' : '/dev/null'
     const child = Bun.spawn(['git', '-c', `core.hooksPath=${hooksPath}`, ...args], {
       cwd,
+      windowsHide: true,
       stdin: 'ignore',
       stdout: 'pipe',
       stderr: 'pipe',

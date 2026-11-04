@@ -73,6 +73,27 @@ async function imageAttachment(attachments: AttachmentService) {
 }
 
 describe('ThreadService 附件 admission', () => {
+  test('没有正文、Skill 或附件的消息仍被拒绝', async () => {
+    const { db, service } = await fixture()
+    try {
+      const thread = db.createThread()
+      await expect(
+        service.startTurn(
+          thread.id,
+          {
+            content: '',
+            model,
+            permissionConfig: DEFAULT_PERMISSION_CONFIG,
+            strategy: 'start',
+            taskMode: 'chat',
+          },
+          'input:empty',
+        ),
+      ).rejects.toMatchObject({ code: 'EMPTY_MESSAGE' })
+    } finally {
+      db.close()
+    }
+  })
   test('Turn 模型不可用时返回清晰配置错误且不回退到目录其它模型', async () => {
     const otherModel = Model.Info.empty(
       Provider.ID.make('other-provider'),
@@ -123,7 +144,7 @@ describe('ThreadService 附件 admission', () => {
     const result = await service.enqueueFollowUp(
       thread.id,
       {
-        content: '看看这张图',
+        content: '',
         model,
         permissionConfig: DEFAULT_PERMISSION_CONFIG,
         strategy: 'queue',
@@ -134,6 +155,15 @@ describe('ThreadService 附件 admission', () => {
     )
 
     expect(result.disposition).toBe('queued')
+    expect(db.getTurnInput(result.turnID)?.content).toBe('')
+    await service.updateQueue(thread.id, result.inputID, '', undefined, undefined, {
+      operationID: 'queue:keep-image',
+    })
+    await expect(
+      service.updateQueue(thread.id, result.inputID, '', [], [], {
+        operationID: 'queue:remove-image',
+      }),
+    ).rejects.toMatchObject({ code: 'EMPTY_MESSAGE' })
     expect(await attachments.listByBinding({ type: 'input', id: result.inputID })).toMatchObject([
       {
         id: attachment.id,
@@ -163,7 +193,7 @@ describe('ThreadService 附件 admission', () => {
       thread.id,
       active.turnID,
       {
-        content: '补充这张图',
+        content: '',
         model,
         permissionConfig: DEFAULT_PERMISSION_CONFIG,
         strategy: 'guide',

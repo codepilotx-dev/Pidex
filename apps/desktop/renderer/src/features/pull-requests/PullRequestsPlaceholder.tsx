@@ -13,7 +13,7 @@ import { PrimaryPageLayout } from '../layout/primary-page/index.js'
 export function PullRequestsPlaceholder(): React.ReactNode {
   return (
     <PrimaryPageLayout
-      bodyClassName="pull-requests-placeholder__body tw:mt-0 tw:grid tw:min-h-0 tw:flex-auto tw:content-center tw:justify-items-center tw:gap-3"
+      bodyClassName="pull-requests-placeholder__body tw:mt-0 tw:pb-0 tw:grid tw:min-h-0 tw:flex-auto tw:content-center tw:justify-items-center tw:gap-3"
       className="pull-requests-placeholder"
       description="集中查看和处理当前工作区的拉取请求。"
       title="拉取请求"

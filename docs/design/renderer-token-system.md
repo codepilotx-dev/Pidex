@@ -55,7 +55,7 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 
 | 角色         | 默认字号 / 行高 / 字重 / 字距                 | 内容职责                                 | 默认前景色                         |
 | ------------ | --------------------------------------------- | ---------------------------------------- | ---------------------------------- |
-| `display`    | `28 / 1.14 / 600 / -0.70px`                   | Coding、Working 与 Chat 首页 Hero        | `fg-primary`                       |
+| `display`    | `28 / 1.20 / 600 / -0.70px`                   | Coding、Working 与 Chat 首页 Hero        | `fg-primary`                       |
 | `caption`    | `12 / 1.40 / 400 / 0px`                       | 时间、路径、计数和辅助状态               | `fg-tertiary`                      |
 | `label`      | `12 / 1.30 / 500 / 0.45px`                    | 分组名、字段标签和短状态标签             | 按上下文选择 secondary 或 tertiary |
 | `body-sm`    | `13 / 1.45 / 400 / 0px`                       | 次级说明、工具活动和侧栏辅助文字         | `fg-secondary`                     |
@@ -64,38 +64,44 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 | `row-title`  | `14 / 1.50 / 500 / -0.05px`                   | 设置行、卡片行和普通对象名称             | `fg-primary`                       |
 | `reading`    | `14 / 1.50 / 400 / -0.05px`                   | 用户消息、Agent 最终回答和 Markdown 长文 | `fg-primary`                       |
 | `body-lg`    | `16 / 1.50 / 400 / -0.12px`                   | 首页 Prompt 和短引导正文                 | `fg-primary`                       |
-| `heading-sm` | `16 / 1.25 / 600 / -0.25px`                   | Section、Dialog、Popover 和 Markdown H3  | `fg-primary`                       |
-| `heading-md` | `18 / 1.25 / 600 / -0.25px`                   | 重点卡片和详情页局部主标题               | `fg-primary`                       |
-| `heading-lg` | `20 / 1.20 / 600 / -0.45px`                   | Markdown H2 和强信息分区                 | `fg-primary`                       |
-| `heading-xl` | `24 / 1.14 / 600 / -0.70px`                   | 一级页面、Setup 主标题和 Markdown H1     | `fg-primary`                       |
+| `page-title` | `20 / 1.20 / 500 / -0.45px`                   | 设置页面主标题和对应加载占位             | `fg-primary`                       |
+| `heading-sm` | `18 / 1.25 / 600 / -0.25px`                   | Section、Dialog、Popover 和 Markdown H3  | `fg-primary`                       |
+| `heading-md` | `20 / 1.33 / 600 / -0.25px`                   | 重点卡片和详情页局部主标题               | `fg-primary`                       |
+| `heading-lg` | `24 / 1.20 / 600 / -0.45px`                   | Markdown H2 和强信息分区                 | `fg-primary`                       |
+| `heading-xl` | `28 / 1.20 / 600 / -0.70px`                   | 一级页面、Setup 主标题和 Markdown H1     | `fg-primary`                       |
 | `metric`     | `20 / 1.20 / 600 / -0.45px`                   | 金额、用量和统计值；使用 tabular figures | `fg-primary`                       |
 | `code`       | `13 / 1.50 / 400 / 0px`（随代码字号动态更新） | 代码、命令、Diff 和终端                  | 按语法或上下文选择                 |
+
+设置页主标题使用 `page-title`（Tailwind：`tw:type-page-title`），分组标题与行标题使用 `row-title`，说明使用 `body-sm`，辅助元信息保留 `caption`；通过分组间距与对齐区分层级。
 
 普通正文使用 `400`，控件、标签和行标题使用 `500`，结构标题、指标和真正的强调使用 `600`。选中态通过背景和前景色表达，不得为了选中而改变普通列表项字重。UI 文本不得借用 `reading` 获取额外行距，工具活动也不得借用 `body` 与最终回答争夺层级。
 
 会话 Markdown 使用 `--cpx-sys-line-height-prose`（1.625）和正常字距；全局 `reading` 默认值保持不变。会话标题按正文字号的 1.5 / 1.25 / 1.125 倍显示，行内代码使用 `--cpx-sys-radius-inline-code`（6px），不改变其他 UI 宿主的排版。
 
-界面字号与代码字号设置仍是两个独立主题输入。UI 默认字号是 `14px`，运行时先计算 `delta = uiFontSize - 14`，再将同一差值应用到 `12 / 13 / 14 / 16 / 18 / 20 / 24 / 28px` 完整刻度，因此所有语义角色在 UI 字号 `11–16px` 范围内保持相对层级。代码字号在 `8–24px` 范围独立更新 `--cpx-sys-font-size-code`，不参与 UI delta；新设置默认使用 `13px`，已有用户设置原样保留。
+界面字号与代码字号设置仍是两个独立主题输入。UI 默认字号是 `14px`，运行时按 `Math.round(base * uiFontSize / 14)` 对 `12 / 13 / 14 / 16 / 18 / 20 / 24 / 28px` 完整刻度进行比例缩放，因此所有语义角色在 UI 字号 `11–16px` 范围内保持相对层级。代码字号在 `8–24px` 范围独立更新 `--cpx-sys-font-size-code`，不参与 UI 比例缩放；新设置默认使用 `13px`，已有用户设置原样保留。
 
 颜色与排版角色互相独立：正文和关键值使用 `--cpx-sys-color-fg-primary`，说明使用 `fg-secondary`，时间、路径和其他辅助元信息使用 `fg-tertiary`，`fg-disabled` 只用于真实禁用态。业务成功、警告和错误继续使用对应 tone，不以异常字号或额外粗体代替状态语义。
 
 ### 图标
 
-功能图标固定使用 `12 / 16 / 20 CSS px`，按位置职责选择，默认 `16px`。尺寸不跟随 UI 字号设置；应用整体缩放仍正常生效。
+功能图标按是否与文字同行选择尺寸，不按页面或按钮颜色选择：
 
-| 档位        | 系统 Token / React 常量                        | 使用场景                                                                                                           |
-| ----------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| 辅助 · 12px | `--cpx-sys-icon-size-sm` / `APP_ICON_SIZES.sm` | 展开与下拉箭头、选中勾、标签关闭、清除、行尾更多/置顶/归档、时间线状态、元信息                                     |
-| 常规 · 16px | `--cpx-sys-icon-size-md` / `APP_ICON_SIZE`     | 侧栏导航与项目、侧栏行尾状态与操作、菜单前置图标、搜索、工具栏、普通按钮、文件/文件夹、附件、Composer 添加与麦克风 |
-| 突出 · 20px | `--cpx-sys-icon-size-lg` / `APP_ICON_SIZES.lg` | Composer 发送/停止、大尺寸动作按钮、独立空状态与结果提示符号                                                       |
+| 用途         | 尺寸                                                                                  | 适用范围                                                                                                   |
+| ------------ | ------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| 同行功能图标 | 固定尺寸：小型功能标记 12px、普通前置图标 16px、主要操作图标 20px；不随字号或语言变化 | 图文按钮、设置及其他导航、菜单、选择器、标签、文件行、面包屑、折叠标题、状态文字；箭头和加载替换态保持一致 |
+| 纯图标操作   | 现有 `12 / 16 / 20 CSS px` 档位                                                       | 独立工具按钮、关闭、清除、发送与停止；`iconSize` 只用于此类按钮                                            |
+| 控件结构     | 各组件自身几何                                                                        | Checkbox 勾选、Radio 圆点、Switch 旋钮、Slider 手柄                                                        |
+| 品牌和内容   | 原有槽位                                                                              | 头像、鲸鱼、Provider／插件／Skill Logo、宠物、插图、内容图片、图表及原生窗口按钮                           |
 
-`--cpx-sys-icon-size` 是默认 `md` 的别名；组件 `sm/md/lg` 分别映射三档。`Button` 与 `IconButton` 的 `iconSize="sm|md|lg"` 只控制图标，不改变点击区域、行高或按钮颜色。未指定时，`compact / composerSm / iconSm / iconMd` 使用 12px，`large / iconLarge` 使用 20px，其余使用 16px；组合按钮的尾部箭头使用 12px，显式 `iconSize` 优先。按钮加载指示器与所在按钮的图标同尺寸；独立 `Spinner` 的 `small/medium/large` 使用 12/16/20px。文件/文件夹默认 16px，异步加载前后保持一致。
+功能图标尺寸采用固定像素 Token 与已有 `APP_ICON_SIZES`：小型功能标记（折叠箭头、菜单勾选）为 12px，普通前置图标为 16px，主要操作图标为 20px，不随字号、语言或字体改变。明确图形与槽位分离（如侧栏 24px 图标列居中容纳 16px 图标）。样式只作用于组件拥有的图标槽位，不得全局覆盖 SVG／图片。普通 Lucide 图标继续使用描边 1.6；品牌占位 Lucide 标记 `data-icon-kind="artwork"` 并保留描边 2。
 
-同组同级操作保持一致，菜单前置图标为 16px、尾部勾选与箭头为 12px。`primary`、危险、选中、hover、禁用或加载状态不决定尺寸；状态替换必须保持原尺寸，例如发送、停止、发送中均为 20px。20px 不用于紧凑行尾操作。图标盒子必须正方形、居中且不收缩；普通图文间距沿用 4px，列表与菜单沿用现有间距 Token。普通 Lucide 图标统一使用 `--cpx-sys-icon-stroke-width` / `APP_ICON_STROKE_WIDTH`（1.6），样式同样覆盖未指定 `strokeWidth` 时的默认值；1.6 是 24×24 viewBox 内的线宽，随显示尺寸缩放，功能图标不使用 `absoluteStrokeWidth`。彩色文件与填充图标保留原始绘制方式，不测量图形边界或添加逐图标偏移。
+### 指针目标
 
-头像、鲸鱼、品牌形象、Provider/插件/Skill Logo、宠物、内容图片、插图、图表、安装包图标和系统原生窗口按钮不属于功能图标。它们及其占位图形由各自槽位管理，保留原有几何，不随功能图标 Token 变化。其中的 Lucide 占位图标必须标记 `data-icon-kind="artwork"`，保留原始描边属性和局部样式，并将其自身的描边 Token 保持为 2，避免组件局部样式受到功能图标轻轮廓的影响。禁止新增其他功能图标尺寸，也禁止使用全局或整个区域的 `svg` / `img` 选择器强制覆盖尺寸；样式只能作用于组件拥有的图标槽位。
+桌面控件以 WCAG 2.2 SC 2.5.8 为基线。按钮、菜单项、选项和标签页的有效目标至少为 24×24 CSS px；小图标不代表小热区。透明区域必须实际接收指针，不能被相邻目标覆盖或父容器裁切。Checkbox／Radio 的关联标签属于同一操作目标。
 
-侧栏导航、项目前置图标、行尾时钟/分叉状态及置顶/归档/更多/新建操作统一使用 16px。行尾按钮显式指定 `iconSize="md"`，覆盖紧凑按钮默认的 12px；运行状态 Spinner 使用 `medium`，点击区域保持原有大小。
+嵌套关闭操作必须留出独立区域；虚拟列表应同步更新行尺寸。Review 行内操作、回合导航、分隔拖柄和自定义滚动条也纳入尺寸检查。正文内联链接按 Inline 例外判断；小目标如依赖间距例外，必须验证以包围盒中心绘制的直径 24px 圆不与其他目标或其他小目标的圆相交。键盘可操作本身不构成例外。
+
+具体影响面、对照入口和人工验收见 [桌面交互验收](./desktop-interaction-acceptance.md)。
 
 ### 间距
 
@@ -137,9 +143,10 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 
 分级轻量投影与边缘高光（Dark 模式下自动反转透明度并增强对比度）：
 
-- 边缘高光与常驻表面：`--cpx-sys-shadow-resting` / `--cpx-sys-shadow-raised`（浅色 `inset 0 1px 0 rgba(255, 255, 255, 0.7)` / 深色 `inset 0 1px 0 rgba(238, 238, 238, 0.04)`）。
+- 常驻表面与凸起：`--cpx-sys-shadow-resting` / `--cpx-sys-shadow-raised`（设为 `none`，平直沉稳，不添加内阴影）。
+- 浮层与模态弹窗：`--cpx-sys-shadow-floating`（浅色 `0 16px 48px rgb(0 0 0 / 14%)`，深色 `0 16px 48px rgb(0 0 0 / 48%)`，暗色模式叠加 `inset 0 1px 0 rgba(255, 255, 255, 0.08)` 顶部微光高光）。
+- 悬浮 Composer 与高层级浮层：`--cpx-sys-shadow-prominent`（浅色 `0 24px 64px rgb(0 0 0 / 18%)`，深色 `0 24px 64px rgb(0 0 0 / 64%)`，暗色模式叠加 `inset 0 1px 0 rgba(255, 255, 255, 0.1)` 顶部微光高光）。
 - 悬浮控件与分段激活钮：`--cpx-sys-shadow-control`（默认使用 `none`，平直沉稳）。
-- 浮层与模态弹窗：`--cpx-sys-shadow-floating`（`0 16px 48px rgb(0 0 0 / 24%)`，纯黑半透明阴影杜绝光晕）。
 - 毛玻璃背景模糊：`--cpx-sys-blur-sm` (8px)、`--cpx-sys-blur-md` (16px)、`--cpx-sys-blur-lg` (24px)。
 
 全局层级固定为 `local < sticky < dock < composer < modal < popover < tooltip < toast`。`-1..5` 只允许在明确 stacking context 内表达局部兄弟顺序；其他值必须使用系统层级 Token。

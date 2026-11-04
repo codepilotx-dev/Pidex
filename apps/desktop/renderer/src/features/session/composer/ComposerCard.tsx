@@ -34,10 +34,10 @@ import {
   MessageSquarePlus,
   MessagesSquare,
   Paperclip,
+  Plug,
   Plus,
   ShieldAlert,
   ShieldCheck,
-  Sparkles,
   Square,
   Target,
   Wrench,
@@ -61,28 +61,32 @@ import type {
   DesktopContextUsage,
   DesktopComposerAttachment,
   DesktopModelProviderSummary,
-  LocalRouterMode,
+  DesktopModelMetadata,
   ModelProviderID,
-  SidebarProductMode,
 } from '../../../../shared/Types.js'
-import type { ModelPreset } from '../../../ModelPresets.js'
+import { getModelDisplayLabel, type ModelPreset } from '../../../ModelPresets.js'
 import { Button } from '../../../components/ui/Button.js'
+import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { MetaChip } from '../../../components/ui/MetaChip.js'
+import { Spinner } from '../../../components/ui/Spinner.js'
 import { SessionFollowUpDock } from '../SessionFollowUpDock.js'
-import { PopoverItem } from '../../../components/ui/PopoverItem.js'
-import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
-import { SearchablePopoverContent } from '../../../components/ui/SearchablePopoverContent.js'
 import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
-import { ComposerModeSwitcher } from './ComposerModeSwitcher.js'
 import { ProjectSwitcherPopover } from './ProjectSwitcherPopover.js'
 import { ChatInputDropdown } from './ChatInputDropdown.js'
 import { BranchSelectPopover } from './BranchSelectPopover.js'
+import { ComposerLaunchSettingsPopover } from './ComposerLaunchSettingsPopover.js'
 import { ModelPickerPopover } from './ModelPickerPopover.js'
-import { ModelSelectTrigger } from './ModelSelectTrigger.js'
+import {
+  ModelRuntimeParametersPopover,
+  ModelRuntimeParametersSummary,
+} from './ModelRuntimeParametersPopover.js'
+import { ModelReasoningControl, ModelSelectTrigger } from './ModelSelectTrigger.js'
 import { resolveThinkingLabel, resolveThinkingOptions } from './ThinkingLevelPopover.js'
+import { MotionConfig } from 'motion/react'
+import { resolveComposerFooterFit, useComposerFooterFit } from './ComposerFooterLayout.js'
 import { ComposerStatusOverlay } from './ComposerStatusOverlay.js'
+import { ComposerGoalRow } from './ComposerGoalRow.js'
 import { ContextUsagePanel } from './ContextUsagePanel.js'
-import { ComputerControlChip } from './ComputerControlChip.js'
 import { usePluginCatalog } from '../../plugins/UsePluginCatalog.js'
 import type { ComposerEditorHandle, ComposerEditorProps } from './ComposerEditor.js'
 import {
@@ -116,7 +120,8 @@ import {
   type ComposerSlashCommandId,
 } from './ComposerSlashCommands.js'
 import { useComposerSlashCommands } from './UseComposerSlashCommands.js'
-import { isComposerInputEmpty } from './ComposerTypes.js'
+import { isDictationShortcut } from './UseComposerDictation.js'
+import { isComposerInputEmpty, parseGoalTokenBudget } from './ComposerTypes.js'
 import {
   ApprovalRulesDialog,
   ApprovalRetryDialog,
@@ -124,6 +129,7 @@ import {
   useApprovalReviewState,
 } from '../approvals/ApprovalManagement.js'
 import { BuiltinSkillIcon, skillScopeLabel } from '../../plugins/BuiltinSkillPresentation.js'
+import { SHARED_SLASH_COMMANDS } from '@pidex/shared/slash-commands'
 import { buildThreadDeepLink } from '@pidex/shared/thread-reference'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
@@ -147,11 +153,13 @@ import {
 import type { DesktopSessionGroup } from '../../../services/desktop-client/Types.js'
 import { formatCompactNumber } from '../../../utils/UsageFormatters.js'
 import { cx } from '../../../utils/Cx.js'
+import { containsRelatedTarget } from '../../../utils/DomTargets.js'
 
 type Option<T extends string> = {
   value: T
   label: string
   detail?: string
+  disabled?: boolean
 }
 
 type ProviderModelOption = {
@@ -166,11 +174,9 @@ type ComposerDropdown =
   | 'model'
   | 'project'
   | 'session-group'
-  | 'mode'
   | 'branch'
-  | 'status'
-  | 'goal'
   | 'plugin'
+  | 'runtimeParams'
 
 /*
  * Permission chips are plain `chip-button` triggers whose colors come from
@@ -186,22 +192,21 @@ const PERMISSION_CHIP_CLASS_NAMES: Record<DesktopPermissionMode, string> = {
 }
 
 /*
- * Geometry shared by the permission trigger: the chip keeps the row height and
- * pill radius from `chip-button`, loses its own border/background, animates the
- * permission state on the feedback duration, and reports the open menu as the
- * selected surface. `icon-size`/block/shrink keep the leading permission glyph
- * on the shared icon slot even though the trigger is a Radix Select trigger
- * rather than the shared Button.
+ * The permission trigger reuses the borderless chip silhouette so toolbar
+ * triggers render identically; `permission-select-trigger` stays as the query
+ * hook for the permission menu and its tests.
  */
-const PERMISSION_TRIGGER_CLASS = cx(
-  'permission-select-trigger tw:min-w-0 tw:border tw:border-transparent tw:bg-transparent',
+const COMPOSER_CHIP_TRIGGER_CLASS = cx(
+  'tw:min-w-0 tw:border tw:border-transparent tw:bg-transparent',
   'tw:transition-[background,border-color,color] tw:duration-feedback tw:ease-standard',
-  'tw:hover:bg-app-hover tw:data-[state=open]:bg-app-selected',
-  'tw:[&>svg:first-child]:block tw:[&>svg:first-child]:size-icon tw:[&>svg:first-child]:shrink-0',
+  'tw:hover:bg-app-hover tw:hover:border-transparent',
+  'tw:data-[state=open]:bg-app-selected tw:data-[state=open]:border-transparent',
+  'tw:[&>svg:first-child]:block tw:[&>svg:first-child]:size-[var(--inline-icon-size,1em)] tw:[&>svg:first-child]:shrink-0',
 )
+const PERMISSION_TRIGGER_CLASS = cx('permission-select-trigger', COMPOSER_CHIP_TRIGGER_CLASS)
 const PERMISSION_TRIGGER_OPEN_CLASS = 'tw:bg-app-selected'
 const PERMISSION_TRIGGER_LABEL_CLASS =
-  'permission-select-trigger-label tw:min-w-0 tw:truncate tw:@max-[480px]:hidden'
+  'permission-select-trigger-label composer-footer-label tw:min-w-0 tw:truncate'
 const PERMISSION_ITEM_ICON_CLASS =
   'permission-select-item-icon tw:mt-0 tw:inline-flex tw:shrink-0 tw:items-center tw:justify-center tw:text-app-text tw:[&>svg]:block tw:[&>svg]:size-icon tw:[&>svg]:[stroke-width:var(--cpx-sys-icon-stroke-width)]'
 const PERMISSION_ITEM_BODY_CLASS =
@@ -228,75 +233,72 @@ const COMPOSER_TOP_BASE_CLASS = cx(
   'composer composer-input-surface composer-top',
   'tw:relative tw:z-2 tw:flex tw:min-h-0 tw:flex-col tw:justify-between tw:[container-type:inline-size]',
   'tw:px-3 tw:pt-3 tw:pb-1',
+  'tw:border-0 tw:bg-app-raised tw:[backdrop-filter:none]',
   'tw:shadow-prominent tw:transition-[min-height] tw:duration-panel tw:ease-standard',
-  'tw:focus-within:border-app-border-strong',
   'tw:forced-colors:outline-1 tw:forced-colors:outline-solid tw:forced-colors:shadow-none',
 )
-const COMPOSER_TOP_DEFAULT_CLASS = cx(
-  COMPOSER_TOP_BASE_CLASS,
-  'tw:order-2 tw:border tw:border-app-border-subtle tw:bg-app-panel',
-)
-/*
- * Both home surfaces drop the shared `.composer` glass backdrop that
- * `styles/components/card.scss` still declares for the resting composer.
- */
-const COMPOSER_TOP_WORKING_CLASS = cx(
-  COMPOSER_TOP_BASE_CLASS,
-  'tw:order-1 tw:border-0 tw:bg-app-control tw:[backdrop-filter:none]',
-)
-const COMPOSER_TOP_CODING_CLASS = cx(
-  COMPOSER_TOP_BASE_CLASS,
-  'tw:order-2 tw:border-0 tw:bg-app-control tw:[backdrop-filter:none]',
-)
+const COMPOSER_TOP_DEFAULT_CLASS = cx(COMPOSER_TOP_BASE_CLASS, 'tw:order-2')
+const COMPOSER_TOP_WORKING_CLASS = cx(COMPOSER_TOP_BASE_CLASS, 'tw:order-1')
 const UTILITY_BAR_BASE_CLASS = cx(
   'composer-bottom composer-utility-bar',
   'tw:z-1 tw:flex tw:min-w-0 tw:max-w-none tw:items-center tw:gap-2 tw:overflow-x-auto tw:overflow-y-hidden',
   'tw:border-0 tw:whitespace-nowrap',
   'tw:forced-colors:outline-1 tw:forced-colors:outline-solid tw:forced-colors:shadow-none',
   'tw:[&_.meta-chip]:h-7 tw:[&_.meta-chip]:flex-none tw:[&_.meta-chip]:rounded-full tw:[&_.meta-chip]:px-2 tw:[&_.meta-chip]:transition-all',
-  'tw:@max-[475px]:[&_.meta-chip_span]:hidden',
+  // 首页托盘是独立命名容器；折叠规则放在其内容包装层（容器不能查询自身）。
+  'tw:@container/composer-tray',
 )
-const UTILITY_BAR_DEFAULT_CLASS = cx(
+const UTILITY_BAR_TOP_CLASS = cx(
   UTILITY_BAR_BASE_CLASS,
-  'tw:order-1 tw:min-h-11.5 tw:mx-3 tw:mt-0 tw:-mb-px tw:px-2 tw:pt-1 tw:pb-2',
-  'tw:bg-[color-mix(in_srgb,var(--cpx-sys-color-surface-recessed)_92%,transparent)]',
+  'tw:order-1 tw:min-h-0 tw:mx-3 tw:mt-0 tw:-mb-px tw:px-1 tw:py-1',
+  'tw:bg-app-panel',
   'tw:animate-[composer-utility-enter_var(--cpx-sys-motion-enter)_var(--cpx-sys-ease-out)_both]',
 )
 const UTILITY_BAR_HOME_WORKING_CLASS = cx(
   UTILITY_BAR_BASE_CLASS,
   'tw:order-2 tw:min-h-0 tw:mx-3 tw:-mt-px tw:mb-0 tw:p-2 tw:bg-app-underlay',
 )
-const UTILITY_BAR_HOME_CODING_CLASS = cx(
-  UTILITY_BAR_BASE_CLASS,
-  'tw:order-1 tw:min-h-0 tw:mx-3 tw:mt-0 tw:-mb-5 tw:px-2 tw:pt-2 tw:pb-6 tw:bg-app-underlay',
-)
 const UTILITY_BAR_SIDE_TASK_CLASS = 'tw:[&_.meta-chip]:pointer-events-none'
+const UTILITY_BAR_DEFAULT_CONTENT_CLASS = cx(
+  'tw:flex tw:w-full tw:min-w-0 tw:items-center tw:gap-2 tw:overflow-x-auto',
+  // 折叠规则在容器（utility bar）的后代上生效；只隐藏明确标记的标签与箭头。
+)
+const UTILITY_BAR_DYNAMIC_CONTENT_CLASS =
+  'tw:flex tw:w-full tw:min-w-0 tw:flex-col tw:divide-y tw:divide-app-border-subtle'
+/*
+ * The footer is the single container every toolbar breakpoint reads (`composer-footer`);
+ * label/chevron collapse are CSS there, while the model region and context ring are
+ * allocated by `ComposerFooterLayout` from real measurements.
+ */
 const TOOLBAR_CLASS =
-  'composer-toolbar tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:pt-2 tw:@max-[420px]:gap-1'
+  'composer-toolbar tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:pt-2 tw:@container/composer-footer'
 const TOOLBAR_LEFT_CLASS =
-  'toolbar-left tw:flex tw:min-w-0 tw:items-center tw:gap-1.5 tw:@max-[420px]:gap-1'
+  'toolbar-left tw:flex tw:shrink-0 tw:items-center tw:gap-1.5 tw:@max-[420px]/composer-footer:gap-1'
 const TOOLBAR_RIGHT_CLASS =
-  'toolbar-right tw:flex tw:min-w-0 tw:flex-1 tw:items-center tw:justify-end tw:gap-1.5 tw:@max-[420px]:gap-1'
+  'toolbar-right tw:ml-auto tw:flex tw:shrink-0 tw:items-center tw:justify-end tw:gap-1.5 tw:@max-[420px]/composer-footer:gap-1'
 const TOOLBAR_DIVIDER_CLASS =
-  'toolbar-divider tw:inline-block tw:h-3.5 tw:w-px tw:shrink-0 tw:bg-app-border-subtle'
-const COMPOSER_META_CHIP_HIDE_LABEL_CLASS = 'tw:@max-[475px]:[&_.meta-chip_span]:hidden'
-const COMPOSER_HIDE_DIVIDER_CLASS = 'tw:@max-[300px]:[&_.toolbar-divider]:hidden'
-const COMPOSER_HIDE_USAGE_CHIP_CLASS = 'tw:@max-[300px]:[&_.context-usage-chip]:hidden'
-const COMPOSER_HIDE_PLAN_CHIP_LABEL_CLASS =
-  'tw:@max-[475px]:[&_.composer-plan-mode-chip>span:last-child]:hidden'
+  'toolbar-divider tw:inline-block tw:h-3.5 tw:w-px tw:shrink-0 tw:bg-app-border-subtle tw:@max-[300px]/composer-footer:hidden'
+const COMPOSER_MODE_CHIP_LABEL_CLASS = 'composer-footer-label'
+
+/** 上下文用量圆环按 12px 槽位绘制；进度由描边虚线长度表达，避免低分辨率下的圆孔失真。 */
+const CONTEXT_RING_VIEWBOX = 12
+const CONTEXT_RING_RADIUS = 5
+const CONTEXT_RING_CIRCUMFERENCE = 2 * Math.PI * CONTEXT_RING_RADIUS
 
 type Props = {
   draftKey: ComposerDraftKey
   input: string
   canSubmit: boolean
+  /** 首次提交仍在创建会话：冻结输入区并隐藏停止入口。 */
+  creationPending?: boolean
   sessionStatus: DesktopSessionStatus
   permissionMode: DesktopPermissionMode
   planModeActive?: boolean
+  grillModeActive?: boolean
   goalModeEnabled?: boolean
+  goalTokenBudget?: number | null
   onGoalModeChange?: (enabled: boolean) => void
-  localRouterMode?: LocalRouterMode
-  enableParetoCodeRouter?: boolean
-  enableFusionRouter?: boolean
+  onGoalTokenBudgetChange?: (budget: number | null) => void
   thinkingMode: DesktopThinkingMode
   modelVariant?: string
   modelVariantOptions?: Option<string>[]
@@ -305,15 +307,21 @@ type Props = {
   selectedModelPreset: string
   modelConfigured?: boolean
   modelCatalogLoading?: boolean
+  selectedModelMetadata?: DesktopModelMetadata
+  maxContextTokens?: number | null
+  onMaxContextTokensChange?: (tokens: number | null) => void
   submitDisabledReason?: string
   showThinkingOptions: boolean
   deepSeekThinkingControls: boolean
   showContextUsage: boolean
+  contextUsageView?: 'bar' | 'field'
   contextUsage: DesktopContextUsage | null
   modelPresets: ModelPreset[]
   providerOptions: ProviderModelOption[]
   allProviders?: readonly DesktopModelProviderSummary[]
   permissionOptions: Option<DesktopPermissionMode>[]
+  /** Why the configured preset is not offered by the current feature flags. */
+  permissionUnavailableReason?: string | null
   thinkingOptions: Option<DesktopThinkingMode>[]
   branchName: string
   branches: string[]
@@ -333,7 +341,7 @@ type Props = {
   onInputChange: (value: string) => void
   onDocumentChange?: (document: ComposerDocument) => void
   onSkillTokenActivate?: (skill: { name: string; path: string }) => void
-  onInterrupt: () => void
+  onInterrupt: () => void | Promise<void>
   onProviderModelChange: (providerID: ModelProviderID, modelPresetID: string) => void
   onProviderOpen?: (providerID: ModelProviderID) => void
   onProviderSearch?: (providerID: ModelProviderID, query: string) => void
@@ -346,6 +354,8 @@ type Props = {
   onClearWorkspace: () => void
   onOpenMcpSettings?: () => void
   onOpenModelSettings?: () => void
+  /** 跳转已有项目环境设置页，用于发起设置菜单的“管理环境…”。 */
+  onOpenEnvironmentSettings?: (projectId: string) => void
   onOpenSideChat?: () => void
   onForkConversation?: () => void
   canForkConversation?: boolean
@@ -357,8 +367,9 @@ type Props = {
   ) => void
   onPermissionChange: (value: DesktopPermissionMode) => void | Promise<void>
   onPlanModeChange?: (active: boolean) => void | Promise<void>
-  onLocalRouterModeChange?: (mode: LocalRouterMode) => void
+  onGrillModeChange?: (active: boolean) => void | Promise<void>
   onSubmit: (delivery?: ComposerDeliveryIntent) => void
+  queuedCompactionSupported?: boolean
   onCompact?: () => Promise<void>
   onCommandError?: (message: string) => void
   onThinkingChange: (value: DesktopThinkingMode) => void
@@ -368,14 +379,15 @@ type Props = {
   contextDropdownSide?: 'top' | 'bottom'
   queuedFollowUps?: DesktopQueuedFollowUp[]
   queuePauseReason?: DesktopQueuePauseReason | null
-  onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void
-  onFollowUpRemove?: (followUpId: string) => void
+  onFollowUpEdit?: (followUpId: string, input: DesktopUserMessageInput) => void | Promise<void>
+  onFollowUpRemove?: (followUpId: string) => void | Promise<void>
   onFollowUpResume?: () => void
+  onOpenGoalPanel?: () => void
   threadGoal?: DesktopThreadGoal | null
-  onGoalPause?: () => void
-  onGoalResume?: () => void
-  onGoalComplete?: () => void
-  onGoalClear?: () => void
+  onGoalPause?: () => void | Promise<void>
+  onGoalResume?: () => void | Promise<void>
+  onGoalComplete?: () => void | Promise<void>
+  onGoalClear?: () => void | Promise<void>
   placement?: ComposerPlacement
   capabilities?: Partial<ComposerCapabilities>
   submitting?: boolean
@@ -384,8 +396,6 @@ type Props = {
   onCompositionEnd?: () => void
   submitShortcut?: ComposerSubmitShortcut
   surface?: ComposerSurface
-  productMode?: SidebarProductMode
-  onProductModeChange?: (mode: SidebarProductMode) => void
   layout?: ComposerLayout
   radiusVariant?: ComposerRadiusVariant
   utilityBarVariant?: ComposerUtilityBarVariant
@@ -415,18 +425,21 @@ const ComposerDictationControl = lazy(async () => {
   return { default: module.ComposerDictationControl }
 })
 
+const EMPTY_MENU_ITEMS: ComposerMenuItem[] = []
+
 export function ComposerCard({
   draftKey,
   input,
   canSubmit,
+  creationPending = false,
   sessionStatus,
   permissionMode,
   planModeActive = false,
+  grillModeActive = false,
   goalModeEnabled = false,
+  goalTokenBudget,
   onGoalModeChange,
-  localRouterMode = 'off',
-  enableParetoCodeRouter = false,
-  enableFusionRouter = false,
+  onGoalTokenBudgetChange,
   thinkingMode,
   modelVariant,
   modelVariantOptions,
@@ -435,15 +448,20 @@ export function ComposerCard({
   selectedModelPreset,
   modelConfigured = true,
   modelCatalogLoading = false,
+  selectedModelMetadata,
+  maxContextTokens,
+  onMaxContextTokensChange,
   submitDisabledReason,
   showThinkingOptions,
   deepSeekThinkingControls,
   showContextUsage,
+  contextUsageView = 'bar',
   contextUsage,
   modelPresets,
   providerOptions,
   allProviders,
   permissionOptions,
+  permissionUnavailableReason,
   thinkingOptions,
   branchName,
   branches,
@@ -476,6 +494,7 @@ export function ComposerCard({
   onClearWorkspace,
   onOpenMcpSettings,
   onOpenModelSettings,
+  onOpenEnvironmentSettings,
   onOpenSideChat,
   onForkConversation,
   canForkConversation = false,
@@ -485,9 +504,10 @@ export function ComposerCard({
   onStartReview,
   onPermissionChange,
   onPlanModeChange,
-  onLocalRouterModeChange,
+  onGrillModeChange,
   onSubmit,
   onCompact,
+  queuedCompactionSupported = false,
   onCommandError,
   onThinkingChange,
   onSkillSelect,
@@ -500,6 +520,7 @@ export function ComposerCard({
   onFollowUpRemove,
   onFollowUpResume,
   threadGoal,
+  onOpenGoalPanel,
   onGoalPause,
   onGoalResume,
   onGoalComplete,
@@ -512,22 +533,29 @@ export function ComposerCard({
   onCompositionEnd,
   submitShortcut = 'enter',
   surface,
-  productMode,
-  onProductModeChange,
   layout = 'multiline',
   radiusVariant = 'default',
   utilityBarVariant = 'default',
   workingPlugin,
   onWorkingPluginChange,
 }: Props): React.ReactNode {
-  const effectiveProductMode =
-    productMode ?? (surface === 'chat' ? 'chat' : surface === 'working' ? 'working' : 'coding')
   const editorRef = useRef<ComposerEditorHandle | null>(null)
   const menuId = useId()
   const menuItemId = (key: string): string => `${menuId}-item-${encodeURIComponent(key)}`
   const capabilities = useMemo(
     () => ({ ...DEFAULT_COMPOSER_CAPABILITIES, ...capabilityOverrides }),
     [capabilityOverrides],
+  )
+  const dictationControlRef = useRef<{
+    toggle: () => void
+    cancel: () => void
+    isActive: boolean
+  } | null>(null)
+  const registerDictationControl = useCallback(
+    (control: { toggle: () => void; cancel: () => void; isActive: boolean } | null) => {
+      dictationControlRef.current = control
+    },
+    [],
   )
   const dictationToggleRef = useRef<(() => void) | null>(null)
   const registerDictationToggle = useCallback((toggle: (() => void) | null) => {
@@ -538,8 +566,16 @@ export function ComposerCard({
   const subagentMode = placement === 'side-task'
   const contextDropdownSide = contextDropdownSideOverride ?? 'top'
   const [openDropdown, setOpenDropdown] = useState<ComposerDropdown | null>(null)
+  const [statusPanelOpen, setStatusPanelOpen] = useState(false)
   const [contextPreviewOpen, setContextPreviewOpen] = useState(false)
   const contextPreviewRef = useRef<HTMLDivElement>(null)
+  const contextPreviewTriggerRef = useRef<HTMLButtonElement>(null)
+  const [isStopping, setIsStopping] = useState(false)
+  const stoppingRef = useRef(false)
+  // 圆环在无统计或关闭展示时会卸载，同时丢弃预览状态，避免数据回来后浮层无故弹出。
+  useEffect(() => {
+    if (!showContextUsage || !contextUsage) setContextPreviewOpen(false)
+  }, [contextUsage, showContextUsage])
   const [fullAccessConfirmationOpen, setFullAccessConfirmationOpen] = useState(false)
   const [fullAccessSaving, setFullAccessSaving] = useState(false)
   const [fullAccessError, setFullAccessError] = useState('')
@@ -574,7 +610,7 @@ export function ComposerCard({
       setSessionGroupEditorOpen(false)
     } catch (cause) {
       setSessionGroupCreateError(
-        cause instanceof Error ? cause.message : '工作流创建失败，请重试。',
+        cause instanceof Error ? cause.message : '工作组创建失败，请重试。',
       )
     } finally {
       setSessionGroupSaving(false)
@@ -598,16 +634,33 @@ export function ComposerCard({
       active = false
     }
   }, [])
-  const [thinkingPreviewMode, setThinkingPreviewMode] = useState<string | null>(null)
   useEffect(() => {
-    setThinkingPreviewMode(null)
     setOpenDropdown(null)
-  }, [draftKey])
+    setStatusPanelOpen(false)
+    stoppingRef.current = false
+    setIsStopping(false)
+  }, [draftKey, routedSessionId])
   const [branchSearch, setBranchSearch] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const [fileDragActive, setFileDragActive] = useState(false)
   const fileDragDepthRef = useRef(0)
   const filePickerRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const picker = filePickerRef.current
+    let frame = 0
+    const restoreFocus = (): void => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(() => editorRef.current?.focusIfAvailable())
+    }
+    picker?.addEventListener('cancel', restoreFocus)
+    picker?.addEventListener('change', restoreFocus)
+    return () => {
+      cancelAnimationFrame(frame)
+      picker?.removeEventListener('cancel', restoreFocus)
+      picker?.removeEventListener('change', restoreFocus)
+    }
+  }, [])
 
   useEffect(() => {
     const clearFileDrag = (): void => {
@@ -622,9 +675,6 @@ export function ComposerCard({
     }
   }, [])
 
-  useEffect(() => {
-    if (submitOutcome?.status === 'failed') editorRef.current?.focus()
-  }, [submitOutcome])
   const [selectionStart, setSelectionStart] = useState<number | null>(null)
   const suggestions = useComposerSuggestions(input, selectionStart, isComposing, draftKey ?? '')
   const suggestionRequest = suggestions.request
@@ -653,36 +703,42 @@ export function ComposerCard({
     reloadContext,
   } = useComposerWorkspaceContext(workspace, Boolean(activeContextRequest))
   const selectedPermission = permissionOptions.find((option) => option.value === permissionMode)
-  const composerPlaceholder = modelCatalogLoading
-    ? '加载模型列表中……'
-    : goalModeEnabled
-      ? '粘贴你的计划或目标…'
-      : planModeActive
-        ? 'Describe your task to generate a plan...'
-        : placeholder
   const selectedProvider = providerOptions.find(
     (provider) => provider.providerID === selectedProviderID,
   )
   const selectedModel =
     modelPresets.find((preset) => preset.id === selectedModelPreset) ??
     selectedProvider?.modelPresets.find((preset) => preset.id === selectedModelPreset)
-  const selectedModelLabel = modelCatalogLoading
-    ? '加载模型列表中……'
-    : !modelConfigured
-      ? '配置模型'
-      : (selectedModel?.label ?? '未选择模型')
-  const selectedModelTitle = modelCatalogLoading
-    ? '加载模型列表中……'
-    : !modelConfigured
-      ? '打开模型配置'
-      : (selectedModel?.label ?? '未选择模型')
+  const resolvedModelLabel =
+    selectedModel?.label ??
+    (selectedModelPreset &&
+    selectedModelPreset !== 'default' &&
+    selectedModelPreset !== '__custom__'
+      ? getModelDisplayLabel(selectedModelPreset)
+      : undefined)
+  const selectedModelLabel =
+    resolvedModelLabel ??
+    (modelCatalogLoading ? '加载模型列表中……' : !modelConfigured ? '配置模型' : '未选择模型')
+  const selectedModelTitle =
+    resolvedModelLabel ??
+    (modelCatalogLoading ? '加载模型列表中……' : !modelConfigured ? '打开模型配置' : '未选择模型')
+  const composerPlaceholder =
+    modelCatalogLoading && !modelConfigured && !resolvedModelLabel
+      ? '加载模型列表中……'
+      : goalModeEnabled
+        ? '粘贴你的计划或目标…'
+        : grillModeActive
+          ? '描述你的想法，通过深度提问厘清需求…'
+          : planModeActive
+            ? 'Describe your task to generate a plan...'
+            : placeholder
   const effectiveThinkingOptions = resolveThinkingOptions(
     modelVariantOptions ? false : deepSeekThinkingControls,
     modelVariantOptions ?? thinkingOptions,
   )
   const selectedThinkingLabel = resolveThinkingLabel(
     effectiveThinkingOptions,
-    thinkingPreviewMode ?? modelVariant ?? thinkingMode,
+    modelVariant ?? thinkingMode,
   )
   const composerDocument = useMemo(
     () =>
@@ -698,10 +754,10 @@ export function ComposerCard({
 
   const sessionBusy = sessionStatus === 'running' || sessionStatus === 'waiting'
   const approvalReview = useApprovalReviewState(routedSessionId, sessionBusy)
-  const scopedGrantsSupported = useApprovalCapability(
+  const approvalRulesSupported = useApprovalCapability(
     routedSessionId ?? '',
     Boolean(routedSessionId),
-    'interaction.scopedGrants.v1',
+    'permission.rules.v1',
   )
   const {
     commands: builtinSlashCommands,
@@ -710,19 +766,25 @@ export function ComposerCard({
   } = useComposerSlashCommands({
     capabilities,
     planModeActive,
+    grillModeActive,
     goalModeEnabled,
     hasConversationMessages,
     hasThread: Boolean(routedSessionId),
     canReview: Boolean(onStartReview && workspace),
     subagentMode,
     sessionBusy,
+    queuedCompactionSupported,
     reasoningAvailable: showThinkingOptions,
     onOpenModel: () => setOpenDropdown('model'),
     onOpenReasoning: () => setOpenDropdown('model'),
-    onOpenStatus: () => setOpenDropdown('status'),
+    onOpenStatus: () => {
+      setOpenDropdown(null)
+      setStatusPanelOpen(true)
+    },
     onOpenMcp: onOpenMcpSettings,
     onApprove: approvalReview.supported ? () => setApprovalRetryOpen(true) : undefined,
     onPlanModeChange,
+    onGrillModeChange,
     onGoalModeChange,
     onOpenReview: suggestions.openReview,
     onCompact,
@@ -738,27 +800,40 @@ export function ComposerCard({
     onError: onCommandError,
   })
 
-  const slashMenuItems = useMemo(
-    () =>
-      mergeSlashCommands(
-        builtinSlashCommands,
-        capabilities.skills && !subagentMode ? skillCommands : [],
-      ).map((command) => composerCommandMenuItem(command, executeCommand, onSkillSelect)),
-    [
+  useEffect(() => {
+    if (subagentMode || submitting || executingCommandId) return
+    const frame = requestAnimationFrame(() => editorRef.current?.focusIfAvailable())
+    return () => cancelAnimationFrame(frame)
+  }, [subagentMode, submitting, executingCommandId, submitOutcome, draftKey])
+
+  const slashMenuItems = useMemo(() => {
+    if (!activeSlashQuery) return []
+    return mergeSlashCommands(
       builtinSlashCommands,
-      executeCommand,
-      onSkillSelect,
-      skillCommands,
-      capabilities.skills,
-      subagentMode,
-    ],
-  )
+      capabilities.skills && !subagentMode ? skillCommands : [],
+    ).map((command) => composerCommandMenuItem(command, executeCommand, onSkillSelect))
+  }, [
+    activeSlashQuery,
+    builtinSlashCommands,
+    capabilities.skills,
+    executeCommand,
+    onSkillSelect,
+    skillCommands,
+    subagentMode,
+  ])
   const skillMenuItems = useMemo((): ComposerMenuItem[] => {
     if (!capabilities.skills || subagentMode) return []
-    const items = skillCommands.map((command) =>
-      composerCommandMenuItem(command, executeCommand, onSkillSelect),
-    )
-    if (skillCatalogLoading || skillCatalogError || !items.length) {
+    if (!activeSkillQuery && !activeSlashQuery) return []
+    const items = activeSkillQuery
+      ? skillCommands.map((command) =>
+          composerCommandMenuItem(command, executeCommand, onSkillSelect),
+        )
+      : []
+    if (
+      skillCatalogLoading ||
+      skillCatalogError ||
+      (!skillCommands.length && (activeSkillQuery || activeSlashQuery))
+    ) {
       items.push({
         key: 'skills:status',
         section: '技能',
@@ -786,17 +861,20 @@ export function ComposerCard({
     }
     return items
   }, [
-    executeCommand,
-    onSkillSelect,
-    skillCommands,
-    skillCatalogLoading,
-    skillCatalogError,
-    onReloadSkillCatalog,
+    activeSkillQuery,
+    activeSlashQuery,
     capabilities.skills,
+    executeCommand,
+    onReloadSkillCatalog,
+    onSkillSelect,
+    skillCatalogError,
+    skillCatalogLoading,
+    skillCommands,
     subagentMode,
   ])
-  const reviewMenuItems = useMemo(
-    (): ComposerMenuItem[] => [
+  const reviewMenuItems = useMemo((): ComposerMenuItem[] => {
+    if (!reviewMenuRequested) return []
+    return [
       {
         key: 'code-review-uncommitted',
         label: '审阅未提交的更改',
@@ -816,9 +894,8 @@ export function ComposerCard({
           matchText: `代码审查 branch review ${branch}`,
           onSelect: () => onStartReview?.({ type: 'baseBranch', branch }),
         })),
-    ],
-    [branchName, branches, onStartReview],
-  )
+    ]
+  }, [reviewMenuRequested, branchName, branches, onStartReview])
 
   const { plugins } = usePluginCatalog(workspace?.path)
   const mentionMenuItems = useMemo((): ComposerMenuItem[] => {
@@ -843,8 +920,18 @@ export function ComposerCard({
       closeDropdown()
     }
     const contextActions = builtinSlashCommands
-      .filter((command) => command.availability.visible && ['goal', 'plan'].includes(command.id))
-      .sort((a, b) => ['goal', 'plan'].indexOf(a.id) - ['goal', 'plan'].indexOf(b.id))
+      .filter(
+        (command) =>
+          command.availability.visible &&
+          ['goal', SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id].includes(
+            command.id,
+          ),
+      )
+      .sort(
+        (a, b) =>
+          ['goal', SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id].indexOf(a.id) -
+          ['goal', SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id].indexOf(b.id),
+      )
       .map((command) => ({
         ...composerCommandMenuItem(command, executeCommand, onSkillSelect),
         section: '添加',
@@ -864,10 +951,21 @@ export function ComposerCard({
             },
           ]
         : []
+    /* 底栏空间不足时模型快捷入口会隐藏；加号菜单保留模型/推理命令作为进入模型弹层的入口。 */
+    const modelActions = builtinSlashCommands
+      .filter(
+        (command) => command.availability.visible && ['model', 'reasoning'].includes(command.id),
+      )
+      .map((command) => ({
+        ...composerCommandMenuItem(command, executeCommand, onSkillSelect),
+        section: '添加',
+      }))
     const items: ComposerMenuItem[] = [
       ...contextActions.filter((item) => item.command?.id === 'goal'),
       ...attachmentActions,
-      ...contextActions.filter((item) => item.command?.id === 'plan'),
+      ...contextActions.filter((item) => item.command?.id === SHARED_SLASH_COMMANDS.plan.id),
+      ...contextActions.filter((item) => item.command?.id === SHARED_SLASH_COMMANDS.grill.id),
+      ...modelActions,
     ]
     if (!subagentMode)
       items.push(
@@ -882,7 +980,7 @@ export function ComposerCard({
               plugin.id === 'computer-use' ? (
                 <MonitorSmartphone size={APP_ICON_SIZE} />
               ) : (
-                <Box size={APP_ICON_SIZE} />
+                <Plug size={APP_ICON_SIZE} />
               ),
             matchText: `${plugin.name} ${plugin.id} ${plugin.description}`,
             onSelect: () => insertReference('plugin', plugin.name, `plugin://${plugin.id}`),
@@ -1046,16 +1144,18 @@ export function ComposerCard({
     workspace,
   ])
   const activeMenuKeyword = suggestionRequest?.query ?? ''
-  const sourceMenuItems = reviewMenuRequested
-    ? reviewMenuItems
-    : activeSkillQuery
-      ? skillMenuItems
-      : activeContextRequest
-        ? mentionMenuItems
-        : [
-            ...slashMenuItems,
-            ...skillMenuItems.filter((item) => item.status || item.key === 'skills:retry'),
-          ]
+  const sourceMenuItems = !suggestionRequest
+    ? EMPTY_MENU_ITEMS
+    : reviewMenuRequested
+      ? reviewMenuItems
+      : activeSkillQuery
+        ? skillMenuItems
+        : activeContextRequest
+          ? mentionMenuItems
+          : [
+              ...slashMenuItems,
+              ...skillMenuItems.filter((item) => item.status || item.key === 'skills:retry'),
+            ]
   const unifiedMenuOpen = Boolean(suggestionRequest)
   const menuScope = `${draftKey}:${suggestionRequest?.kind}:${suggestionRequest?.start}`
   const {
@@ -1069,7 +1169,12 @@ export function ComposerCard({
   function closeDropdown(reason?: 'outside' | 'escape'): void {
     setOpenDropdown(null)
     suggestions.dismiss()
-    if (reason !== 'outside') editorRef.current?.focus()
+    if (reason !== 'outside') editorRef.current?.focusIfAvailable()
+  }
+
+  function closeStatusPanel(): void {
+    setStatusPanelOpen(false)
+    editorRef.current?.focus()
   }
 
   function handleSuggestionSelect(item: ComposerMenuItem): void {
@@ -1098,7 +1203,12 @@ export function ComposerCard({
       item.onSelect()
       return
     }
-    if (item.command?.source === 'builtin' && ['plan', 'goal'].includes(item.command.id)) {
+    if (
+      item.command?.source === 'builtin' &&
+      [SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id, 'goal'].includes(
+        item.command.id,
+      )
+    ) {
       const request = suggestionRequest
       const originalInput = input
       closeDropdown()
@@ -1144,7 +1254,11 @@ export function ComposerCard({
       onCommandError?.(parsed.reason)
       return true
     }
-    if (['plan', 'goal'].includes(parsed.command.id)) {
+    if (
+      [SHARED_SLASH_COMMANDS.plan.id, SHARED_SLASH_COMMANDS.grill.id, 'goal'].includes(
+        parsed.command.id,
+      )
+    ) {
       const originalInput = input
       void executeCommand(parsed.command).then((succeeded) => {
         if (
@@ -1168,6 +1282,7 @@ export function ComposerCard({
     if (event.dataTransfer.files.length === 0) return
     event.preventDefault()
     onAddFiles(event.dataTransfer.files)
+    editorRef.current?.focusIfAvailable()
   }
 
   function getPermissionIcon(value: DesktopPermissionMode): React.ReactNode {
@@ -1185,7 +1300,72 @@ export function ComposerCard({
   }
 
   const isRunning = sessionStatus === 'running' || sessionStatus === 'waiting'
-  const usedPercent = contextUsage ? Math.min(100, Math.max(0, contextUsage.usedPercent)) : 0
+  const showStopAction = isRunning && !canSubmit && !creationPending
+  const stopping = showStopAction && isStopping
+  useEffect(() => {
+    if (isRunning) return
+    stoppingRef.current = false
+    setIsStopping(false)
+  }, [isRunning])
+
+  function handleInterrupt(): void {
+    if (stoppingRef.current) return
+    stoppingRef.current = true
+    setIsStopping(true)
+    void Promise.resolve(onInterrupt()).catch(() => {
+      stoppingRef.current = false
+      setIsStopping(false)
+    })
+  }
+
+  const usedPercent = contextUsage ? Math.max(0, contextUsage.usedPercent ?? 0) : 0
+  const activeThreadGoal = threadGoal?.status === 'complete' ? null : threadGoal
+  const hasQueuedFollowUps = (queuedFollowUps?.length ?? 0) > 0
+  const utilityBarOverridden = statusPanelOpen || activeThreadGoal != null || hasQueuedFollowUps
+  const showUtilityBar = utilityBarOverridden || placement !== 'thread'
+
+  // 底栏空间分配：测量节点不参与交互与无障碍树，模型区文字/图标/隐藏由实际宽度决定。
+  const footerRef = useRef<HTMLDivElement | null>(null)
+  const toolbarLeftRef = useRef<HTMLDivElement | null>(null)
+  const toolbarRightRef = useRef<HTMLDivElement | null>(null)
+  const sendButtonRef = useRef<HTMLButtonElement | null>(null)
+  const modelTextProbeRef = useRef<HTMLDivElement | null>(null)
+  const modelIconProbeRef = useRef<HTMLDivElement | null>(null)
+  const [modelHeld, setModelHeld] = useState(false)
+  const [ringHeld, setRingHeld] = useState(false)
+  const heldModelModeRef = useRef<'text' | 'icon'>('text')
+  const showRing = showContextUsage && contextUsage != null
+  const footerMetrics = useComposerFooterFit(
+    {
+      footer: footerRef,
+      left: toolbarLeftRef,
+      right: toolbarRightRef,
+      send: sendButtonRef,
+      modelText: modelTextProbeRef,
+      modelIcon: modelIconProbeRef,
+    },
+    `${selectedModelLabel}|${selectedThinkingLabel}|${showThinkingOptions}|${showRing}|${planModeActive}|${grillModeActive}|${goalModeEnabled}|${capabilities.dictation}`,
+  )
+  const footerFit = resolveComposerFooterFit(footerMetrics, {
+    hasRing: showRing,
+    holdModel: modelHeld || openDropdown === 'model',
+    holdRing: ringHeld || contextPreviewOpen,
+    heldModelMode: heldModelModeRef.current,
+  })
+  if (footerFit.modelMode !== 'hidden') heldModelModeRef.current = footerFit.modelMode
+  const handleThinkingSelect = useCallback(
+    (value: string): void => {
+      if (onModelVariantChange) onModelVariantChange(value)
+      else if (
+        value === 'default' ||
+        value === 'enabled' ||
+        value === 'adaptive' ||
+        value === 'disabled'
+      )
+        onThinkingChange(value)
+    },
+    [onModelVariantChange, onThinkingChange],
+  )
   return (
     <div
       className={COMPOSER_STACK_CLASS}
@@ -1237,21 +1417,157 @@ export function ComposerCard({
           onEnable={() => onPermissionChange('auto-review')}
         />
       ) : null}
+      {showUtilityBar ? (
+        <div
+          aria-label="Composer 顶部托盘"
+          className={cx(
+            utilityBarVariant === 'home' && surface === 'working'
+              ? UTILITY_BAR_HOME_WORKING_CLASS
+              : UTILITY_BAR_TOP_CLASS,
+            placement === 'side-task' && UTILITY_BAR_SIDE_TASK_CLASS,
+          )}
+          data-composer-utility-bar="true"
+        >
+          {utilityBarOverridden ? (
+            <div className={UTILITY_BAR_DYNAMIC_CONTENT_CLASS}>
+              {statusPanelOpen ? (
+                <ComposerStatusOverlay
+                  contextUsage={contextUsage}
+                  routedSessionId={routedSessionId ?? null}
+                  selectedProviderID={selectedProviderID}
+                  onClose={closeStatusPanel}
+                />
+              ) : null}
+              {activeThreadGoal ? (
+                <ComposerGoalRow
+                  goal={activeThreadGoal}
+                  onOpenGoalPanel={onOpenGoalPanel}
+                  sessionBusy={sessionStatus === 'running'}
+                  onPause={onGoalPause}
+                  onResume={onGoalResume}
+                  onComplete={onGoalComplete}
+                  onClear={onGoalClear}
+                />
+              ) : null}
+              <SessionFollowUpDock
+                items={queuedFollowUps ?? []}
+                pauseReason={queuePauseReason}
+                onEdit={onFollowUpEdit ?? (() => {})}
+                onRemove={onFollowUpRemove ?? (() => {})}
+                onResume={onFollowUpResume ?? (() => {})}
+              />
+            </div>
+          ) : (
+            <div className={UTILITY_BAR_DEFAULT_CONTENT_CLASS}>
+              {surface === 'chat' ? null : subagentMode ? (
+                <MetaChip
+                  icon={<Folder size={APP_ICON_SIZE} />}
+                  label={workspace?.name ?? '项目'}
+                  title="子 Agent 工作区固定"
+                />
+              ) : (
+                <ProjectSwitcherPopover
+                  side="top"
+                  open={openDropdown === 'project'}
+                  size="sm"
+                  onOpenChange={(open) => setOpenDropdown(open ? 'project' : null)}
+                  recentWorkspaces={recentWorkspaces}
+                  workspace={workspace}
+                  onOpenWorkspace={onOpenWorkspace}
+                  onChooseWorkspace={() => {
+                    onChooseWorkspace()
+                    closeDropdown()
+                  }}
+                  onCloneGithub={() => {
+                    onCloneGithub?.()
+                    closeDropdown()
+                  }}
+                  onClearWorkspace={() => {
+                    onClearWorkspace()
+                    closeDropdown()
+                  }}
+                  trigger={
+                    <MetaChip
+                      active={openDropdown === 'project'}
+                      icon={<Folder size={APP_ICON_SIZE} />}
+                      label={
+                        workspace?.name ?? (surface === 'working' ? '选择文件夹' : '进入项目工作')
+                      }
+                      title="选择项目"
+                    />
+                  }
+                />
+              )}
+
+              <SessionGroupSwitcherPopover
+                open={openDropdown === 'session-group'}
+                side="top"
+                value={selectedSessionGroup?.id ?? null}
+                onOpenChange={(open) => setOpenDropdown(open ? 'session-group' : null)}
+                onCreate={openSessionGroupEditor}
+                onChange={(group) => {
+                  setSelectedSessionGroup(group)
+                  writePreferredSessionGroupId(group?.id ?? null)
+                }}
+                trigger={
+                  <MetaChip
+                    active={openDropdown === 'session-group'}
+                    icon={<MessagesSquare size={APP_ICON_SIZE} />}
+                    label={selectedSessionGroup?.name ?? '工作组'}
+                    title={
+                      selectedSessionGroup
+                        ? `使用工作组：${selectedSessionGroup.name}`
+                        : '选择工作组（可不使用）'
+                    }
+                  />
+                }
+              />
+
+              {workspace && surface !== 'working' ? (
+                <BranchSelectPopover
+                  align="end"
+                  branchSearch={branchSearch}
+                  branches={branches}
+                  className="popover-branch"
+                  currentBranchName={branchName}
+                  open={openDropdown === 'branch'}
+                  side="top"
+                  size="md"
+                  onBranchSearchChange={setBranchSearch}
+                  onBranchSelect={onBranchSelect}
+                  onCreateBranch={onCreateBranch}
+                  onOpenChange={(open) => setOpenDropdown(open ? 'branch' : null)}
+                  trigger={
+                    <MetaChip
+                      active={openDropdown === 'branch'}
+                      icon={<GitBranch size={APP_ICON_SIZE} />}
+                      label={branchName}
+                      title="选择分支"
+                    />
+                  }
+                />
+              ) : null}
+
+              {placement === 'new-session' && !subagentMode ? (
+                <div className="tw:ml-auto tw:flex tw:shrink-0 tw:items-center tw:ps-1">
+                  <ComposerLaunchSettingsPopover
+                    currentBranchName={branchName}
+                    draftKey={draftKey}
+                    workspace={workspace}
+                    onOpenEnvironmentSettings={onOpenEnvironmentSettings}
+                  />
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
+      ) : null}
       <div
         className={cx(
           utilityBarVariant === 'home' && surface === 'working'
             ? COMPOSER_TOP_WORKING_CLASS
-            : utilityBarVariant === 'home'
-              ? COMPOSER_TOP_CODING_CLASS
-              : COMPOSER_TOP_DEFAULT_CLASS,
-          COMPOSER_META_CHIP_HIDE_LABEL_CLASS,
-          COMPOSER_HIDE_DIVIDER_CLASS,
-          COMPOSER_HIDE_USAGE_CHIP_CLASS,
-          COMPOSER_HIDE_PLAN_CHIP_LABEL_CLASS,
+            : COMPOSER_TOP_DEFAULT_CLASS,
         )}
-        inert={
-          submitting || executingCommandId === 'plan' || executingCommandId === 'goal' || undefined
-        }
       >
         {inlineSubmitFailure ? (
           <div
@@ -1299,7 +1615,9 @@ export function ComposerCard({
               ariaControls={unifiedMenuOpen ? menuId : undefined}
               ariaDescribedBy={inlineSubmitFailure ? submitErrorId : undefined}
               ariaExpanded={unifiedMenuOpen}
+              readOnly={creationPending}
               ref={editorRef}
+              focusKey={subagentMode ? undefined : (draftKey ?? placement)}
               document={composerDocument}
               value={input}
               onChange={onInputChange}
@@ -1320,14 +1638,13 @@ export function ComposerCard({
               }}
               onKeyDown={(event) => {
                 if (event.isComposing || event.keyCode === 229) return false
-                if (
-                  event.ctrlKey &&
-                  event.shiftKey &&
-                  !event.altKey &&
-                  event.key.toLowerCase() === 'd'
-                ) {
+                if (capabilities.dictation && isDictationShortcut(event)) {
                   event.preventDefault()
-                  dictationToggleRef.current?.()
+                  if (dictationControlRef.current) {
+                    dictationControlRef.current.toggle()
+                  } else {
+                    dictationToggleRef.current?.()
+                  }
                   return true
                 }
                 if (unifiedMenuOpen) {
@@ -1362,8 +1679,13 @@ export function ComposerCard({
                   }
                 }
 
-                // Escape: dismiss dropdowns or interrupt session
+                // Escape: cancel active dictation, dismiss dropdowns, or interrupt session
                 if (event.key === 'Escape') {
+                  if (capabilities.dictation && dictationControlRef.current?.isActive) {
+                    event.preventDefault()
+                    dictationControlRef.current.cancel()
+                    return true
+                  }
                   if (unifiedMenuOpen) {
                     event.preventDefault()
                     closeDropdown()
@@ -1371,7 +1693,7 @@ export function ComposerCard({
                   }
                   if (sessionStatus === 'running' || sessionStatus === 'waiting') {
                     event.preventDefault()
-                    onInterrupt()
+                    handleInterrupt()
                     return true
                   }
                 }
@@ -1389,6 +1711,15 @@ export function ComposerCard({
                     event.preventDefault()
                     void Promise.resolve(onPlanModeChange?.(false)).catch((error: unknown) =>
                       onCommandError?.(error instanceof Error ? error.message : '计划模式未更新'),
+                    )
+                    return true
+                  }
+                  if (grillModeActive) {
+                    event.preventDefault()
+                    void Promise.resolve(onGrillModeChange?.(false)).catch((error: unknown) =>
+                      onCommandError?.(
+                        error instanceof Error ? error.message : '深度访谈模式未更新',
+                      ),
                     )
                     return true
                   }
@@ -1440,31 +1771,33 @@ export function ComposerCard({
           />
         </ChatInputDropdown>
 
-        <div className={TOOLBAR_CLASS}>
-          <div className={TOOLBAR_LEFT_CLASS}>
-            <ComposerModeSwitcher mode={effectiveProductMode} onModeChange={onProductModeChange} />
-            <Button
-              isIconOnly
-              active={buttonContextOpen}
-              aria-expanded={buttonContextOpen}
-              color={buttonContextOpen ? 'ghostActive' : 'ghostSecondary'}
-              size="composer"
-              title="添加文件等内容"
-              onMouseDown={(event) => event.preventDefault()}
-              onClick={() => {
-                if (buttonContextOpen) closeDropdown()
-                else suggestions.openPlus()
-                editorRef.current?.focus()
-              }}
-            >
-              <Plus size={APP_ICON_SIZE} />
-            </Button>
+        <div ref={footerRef} className={TOOLBAR_CLASS}>
+          <div ref={toolbarLeftRef} className={TOOLBAR_LEFT_CLASS}>
+            <Tooltip content="添加文件等内容" shortcut="@" side="top" disabled={buttonContextOpen}>
+              <Button
+                isIconOnly
+                active={buttonContextOpen}
+                aria-expanded={buttonContextOpen}
+                color={buttonContextOpen ? 'ghostActive' : 'ghostSecondary'}
+                size="composer"
+                aria-label="添加文件等内容"
+                onMouseDown={(event) => event.preventDefault()}
+                onClick={() => {
+                  if (buttonContextOpen) closeDropdown()
+                  else suggestions.openPlus()
+                  editorRef.current?.focus()
+                }}
+              >
+                <Plus size={APP_ICON_SIZE} />
+              </Button>
+            </Tooltip>
             <Select.Root
               open={openDropdown === 'permission'}
               value={permissionMode as string}
               onOpenChange={(open) => setOpenDropdown(open ? 'permission' : null)}
               onValueChange={(value) => {
                 if (value === 'approval-rules') setApprovalRulesOpen(true)
+                else if (value === 'recent-denials') setApprovalRetryOpen(true)
                 else if (value === 'full-access' && permissionMode !== 'full-access') {
                   setFullAccessError('')
                   setFullAccessConfirmationOpen(true)
@@ -1476,44 +1809,64 @@ export function ComposerCard({
                 closeDropdown()
               }}
             >
-              <Select.Trigger
-                aria-label="选择权限模式"
-                data-theme-component="dropdown-trigger"
-                className={cx(
-                  'chip-button',
-                  getPermissionClassName(permissionMode),
-                  PERMISSION_TRIGGER_CLASS,
-                  openDropdown === 'permission' && PERMISSION_TRIGGER_OPEN_CLASS,
-                )}
-                title="选择权限模式"
+              <Tooltip
+                content={permissionUnavailableReason ?? '更改权限'}
+                side="top"
+                disabled={openDropdown === 'permission'}
               >
-                {getPermissionIcon(permissionMode)}
-                <span className={PERMISSION_TRIGGER_LABEL_CLASS}>
-                  {selectedPermission?.label ?? '默认权限'}
-                </span>
-              </Select.Trigger>
+                <Select.Trigger
+                  aria-label="更改权限"
+                  aria-description={permissionUnavailableReason}
+                  data-theme-component="dropdown-trigger"
+                  className={cx(
+                    'chip-button',
+                    getPermissionClassName(permissionMode),
+                    PERMISSION_TRIGGER_CLASS,
+                    openDropdown === 'permission' && PERMISSION_TRIGGER_OPEN_CLASS,
+                  )}
+                >
+                  {getPermissionIcon(permissionMode)}
+                  <span className={PERMISSION_TRIGGER_LABEL_CLASS}>
+                    {selectedPermission?.label ?? '请求批准'}
+                  </span>
+                </Select.Trigger>
+              </Tooltip>
               <Select.Portal>
                 <Select.Content
-                  size="lg"
+                  size="auto"
                   align="start"
-                  className="popover-surface permission-select-content tw:max-h-[min(320px,calc(100vh_-_96px))] tw:overflow-hidden"
+                  className="popover-surface permission-select-content tw:max-h-[min(440px,calc(100vh_-_96px))] tw:overflow-hidden"
                   data-theme-component="dropdown-surface"
                   collisionPadding={6}
 
-                  side="bottom"
+                  side="top"
                   sideOffset={4}
-                  style={buildPopoverSizingStyle({ size: 'lg' })}
+                  style={buildPopoverSizingStyle({ size: 'auto' })}
                 >
-                  <div className="permission-select-scroll-area tw:grid tw:max-h-[max(80px,calc(min(320px,calc(100vh-96px))-12px))] tw:overflow-x-hidden tw:overflow-y-auto">
+                  <div className="permission-select-scroll-area tw:grid tw:max-h-[max(80px,calc(min(440px,calc(100vh-96px))-12px))] tw:overflow-x-hidden tw:overflow-y-auto">
                     <div className="permission-select-scroll-content tw:grid tw:min-w-0">
-                      {routedSessionId && workspace?.projectId && scopedGrantsSupported ? (
+                      {permissionUnavailableReason ? (
+                        <p
+                          className="permission-select-note tw:m-0 tw:px-2 tw:py-1 tw:text-app-text-soft tw:type-caption tw:whitespace-normal"
+                          role="status"
+                        >
+                          {permissionUnavailableReason}
+                        </p>
+                      ) : null}
+                      {routedSessionId && approvalRulesSupported ? (
                         <Select.Item className="permission-select-item" value="approval-rules">
-                          <span>管理项目授权</span>
+                          <span>审批规则</span>
+                        </Select.Item>
+                      ) : null}
+                      {routedSessionId && approvalReview.supported ? (
+                        <Select.Item className="permission-select-item" value="recent-denials">
+                          <span>最近拒绝</span>
                         </Select.Item>
                       ) : null}
                       {permissionOptions.map((option) => (
                         <Select.Item
                           asChild
+                          disabled={option.disabled}
                           key={option.value}
                           value={option.value}
                           textValue={option.label}
@@ -1578,9 +1931,9 @@ export function ComposerCard({
                   >
                     <Target
                       className={cx(
-                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-0 tw:group-focus-visible:opacity-0',
+                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-0 tw:group-focus-visible:opacity-0',
                       )}
-                      size={APP_ICON_SIZE}
+                      size={APP_ICON_SIZES.sm}
                       strokeWidth={APP_ICON_STROKE_WIDTH}
                     />
                     <X
@@ -1591,7 +1944,66 @@ export function ComposerCard({
                       strokeWidth={APP_ICON_STROKE_WIDTH}
                     />
                   </span>
-                  <span>目标</span>
+                  <span className={COMPOSER_MODE_CHIP_LABEL_CLASS}>目标</span>
+                </button>
+                <input
+                  type="number"
+                  min={0}
+                  placeholder="预算(可选)"
+                  aria-label="目标 Token 预算"
+                  title="目标 Token 预算（留空表示无限制）"
+                  value={goalTokenBudget ?? ''}
+                  onChange={(e) => {
+                    const val = e.target.value.trim()
+                    const budget = parseGoalTokenBudget(val)
+                    if (budget !== undefined) onGoalTokenBudgetChange?.(budget)
+                  }}
+                  className="tw:h-6 tw:w-20 tw:rounded tw:border tw:border-app-border-subtle tw:bg-transparent tw:px-1.5 tw:py-0 tw:text-app-text tw:type-caption tw:tabular-nums tw:outline-none tw:focus:border-app-focus"
+                />
+              </>
+            ) : null}
+            {!subagentMode && grillModeActive && onGrillModeChange ? (
+              <>
+                <span className={TOOLBAR_DIVIDER_CLASS} />
+                <button
+                  aria-pressed="true"
+                  aria-label="退出深度访谈"
+                  className={cx(
+                    'chip-button composer-plan-mode-chip tw:group tw:relative tw:gap-1 tw:px-1 tw:text-app-text-meta tw:hover:text-app-text-meta tw:type-secondary',
+                  )}
+                  onClick={() => {
+                    void Promise.resolve(onGrillModeChange(false)).catch((error: unknown) =>
+                      onCommandError?.(
+                        error instanceof Error ? error.message : '深度访谈模式未更新',
+                      ),
+                    )
+                  }}
+                  title="退出深度访谈"
+                  type="button"
+                >
+                  <span
+                    aria-hidden="true"
+                    className={cx(
+                      'composer-plan-mode-chip-icon tw:relative tw:inline-flex tw:size-icon-sm tw:shrink-0 tw:items-center tw:justify-center',
+                    )}
+                  >
+                    <MessagesSquare
+                      className={cx(
+                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:transition-opacity tw:duration-state tw:ease-out',
+                        'tw:group-hover:opacity-0 tw:group-focus-visible:opacity-0',
+                      )}
+                      size={APP_ICON_SIZES.sm}
+                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                    />
+                    <X
+                      className={cx(
+                        'composer-plan-mode-chip-icon-exit tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:p-0 tw:opacity-0 tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-100 tw:group-focus-visible:opacity-100',
+                      )}
+                      size={APP_ICON_SIZES.sm}
+                      strokeWidth={APP_ICON_STROKE_WIDTH}
+                    />
+                  </span>
+                  <span className={COMPOSER_MODE_CHIP_LABEL_CLASS}>访谈</span>
                 </button>
               </>
             ) : null}
@@ -1620,10 +2032,10 @@ export function ComposerCard({
                   >
                     <ListChecks
                       className={cx(
-                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:transition-opacity tw:duration-state tw:ease-out',
+                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:transition-opacity tw:duration-state tw:ease-out',
                         'tw:group-hover:opacity-0 tw:group-focus-visible:opacity-0',
                       )}
-                      size={APP_ICON_SIZE}
+                      size={APP_ICON_SIZES.sm}
                       strokeWidth={APP_ICON_STROKE_WIDTH}
                     />
                     {planModeActive ? (
@@ -1636,49 +2048,268 @@ export function ComposerCard({
                       />
                     ) : null}
                   </span>
-                  <span>计划</span>
+                  <span className={COMPOSER_MODE_CHIP_LABEL_CLASS}>计划</span>
                 </button>
               </>
             ) : null}
-            {localRouterMode !== 'off' ? (
-              <>
-                <span className={TOOLBAR_DIVIDER_CLASS} />
-                <button
-                  aria-pressed="true"
-                  className={cx(
-                    'chip-button composer-plan-mode-chip active tw:group tw:relative tw:bg-app-selected tw:text-app-accent-fg tw:type-secondary tw:hover:bg-app-selected',
-                  )}
-                  onClick={() => {
-                    onLocalRouterModeChange?.('off')
-                  }}
-                  title={localRouterMode === 'pareto-code' ? 'Pareto Code Router' : 'Fusion Router'}
-                  type="button"
-                >
+          </div>
+
+          <div ref={toolbarRightRef} className={TOOLBAR_RIGHT_CLASS}>
+            {showRing && footerFit.showRing ? (
+              <Popover.Root open={contextPreviewOpen} onOpenChange={setContextPreviewOpen}>
+                <Popover.Trigger asChild>
+                  <button
+                    ref={contextPreviewTriggerRef}
+                    type="button"
+                    aria-label={`上下文窗口使用量：已用 ${usedPercent}%，剩余 ${Math.max(0, 100 - usedPercent)}%`}
+                    className="context-usage-chip tw:group tw:relative tw:inline-flex tw:size-3 tw:shrink-0 tw:cursor-pointer tw:items-center tw:justify-center tw:border-0 tw:bg-transparent tw:p-0 tw:text-app-text-soft tw:focus-visible:outline-2 tw:focus-visible:outline-app-focus"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      setContextPreviewOpen(true)
+                      requestAnimationFrame(() =>
+                        contextPreviewRef.current
+                          ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+                          ?.focus(),
+                      )
+                    }}
+                    onKeyDown={(event) => {
+                      if (
+                        event.key === 'ArrowDown' ||
+                        (event.key === 'Tab' && !event.shiftKey && contextPreviewOpen)
+                      ) {
+                        event.preventDefault()
+                        setContextPreviewOpen(true)
+                        requestAnimationFrame(() =>
+                          contextPreviewRef.current
+                            ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+                            ?.focus(),
+                        )
+                      }
+                    }}
+                    onPointerEnter={() => setContextPreviewOpen(true)}
+                    onPointerLeave={(event) => {
+                      if (
+                        !containsRelatedTarget(contextPreviewRef.current, event.relatedTarget) &&
+                        !contextPreviewRef.current?.contains(
+                          event.currentTarget.ownerDocument.activeElement,
+                        ) &&
+                        event.currentTarget.ownerDocument.activeElement !== event.currentTarget
+                      )
+                        setContextPreviewOpen(false)
+                    }}
+                    onFocus={() => {
+                      setRingHeld(true)
+                    }}
+                    onBlur={(event) => {
+                      setRingHeld(false)
+                      if (!containsRelatedTarget(contextPreviewRef.current, event.relatedTarget))
+                        setContextPreviewOpen(false)
+                    }}
+                  >
+                    <svg
+                      aria-hidden="true"
+                      className="chip-dot tw:size-3"
+                      viewBox={`0 0 ${CONTEXT_RING_VIEWBOX} ${CONTEXT_RING_VIEWBOX}`}
+                    >
+                      <circle
+                        className="chip-dot-track"
+                        cx={CONTEXT_RING_VIEWBOX / 2}
+                        cy={CONTEXT_RING_VIEWBOX / 2}
+                        r={CONTEXT_RING_RADIUS}
+                      />
+                      <circle
+                        className="chip-dot-progress"
+                        cx={CONTEXT_RING_VIEWBOX / 2}
+                        cy={CONTEXT_RING_VIEWBOX / 2}
+                        r={CONTEXT_RING_RADIUS}
+                        strokeDasharray={`${(CONTEXT_RING_CIRCUMFERENCE * usedPercent) / 100} ${CONTEXT_RING_CIRCUMFERENCE}`}
+                        transform={`rotate(-90 ${CONTEXT_RING_VIEWBOX / 2} ${CONTEXT_RING_VIEWBOX / 2})`}
+                      />
+                    </svg>
+                  </button>
+                </Popover.Trigger>
+                <Popover.Portal>
+                  <Popover.Content
+                    ref={contextPreviewRef}
+                    size="auto"
+                    side="top"
+                    align="end"
+                    sideOffset={4}
+                    aria-label="上下文窗口使用量"
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                    onPointerEnter={() => setContextPreviewOpen(true)}
+                    onPointerLeave={(event) => {
+                      if (
+                        !contextPreviewRef.current?.contains(
+                          event.currentTarget.ownerDocument.activeElement,
+                        )
+                      )
+                        setContextPreviewOpen(false)
+                    }}
+                    onBlur={(event) => {
+                      if (
+                        !containsRelatedTarget(event.currentTarget, event.relatedTarget) &&
+                        event.relatedTarget !== contextPreviewTriggerRef.current
+                      )
+                        setContextPreviewOpen(false)
+                    }}
+                    className="context-usage-popover tw:z-tooltip tw:overflow-visible tw:text-left tw:whitespace-normal tw:before:absolute tw:before:inset-x-0 tw:before:h-2 tw:before:content-[''] tw:data-[side=top]:before:top-full tw:data-[side=bottom]:before:bottom-full"
+                    role="dialog"
+                  >
+                    <ContextUsagePanel
+                      contextUsage={contextUsage}
+                      view={contextUsageView}
+                      maxContextTokens={maxContextTokens}
+                      modelContextWindow={selectedModelMetadata?.contextWindow}
+                    />
+                  </Popover.Content>
+                </Popover.Portal>
+              </Popover.Root>
+            ) : null}
+            <ModelPickerPopover
+              align="end"
+              open={openDropdown === 'model'}
+              providerOptions={providerOptions}
+              allProviders={allProviders}
+              selectedModelPreset={selectedModelPreset}
+              selectedProviderID={selectedProviderID}
+              side="top"
+              sideOffset={4}
+              /*
+               * 空间不足时模型快捷入口让位；弹层保持挂载并锚定到零尺寸锚点，
+               * 加号菜单里的「模型/推理」命令仍可打开模型设置。紧凑状态同时把
+               * 推理控件挪进弹层，隐藏推理标签后仍能修改等级。
+               */
+              trigger={
+                footerFit.modelMode === 'hidden' ? (
                   <span
                     aria-hidden="true"
-                    className={cx(
-                      'composer-plan-mode-chip-icon tw:relative tw:inline-flex tw:size-icon-sm tw:shrink-0 tw:items-center tw:justify-center',
-                    )}
-                  >
-                    <Sparkles
-                      className={cx(
-                        'composer-plan-mode-chip-icon-plan tw:absolute tw:inset-0 tw:m-auto tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-0',
-                      )}
-                      size={APP_ICON_SIZE}
-                      strokeWidth={APP_ICON_STROKE_WIDTH}
-                    />
-                    <X
-                      className={cx(
-                        'composer-plan-mode-chip-icon-exit tw:absolute tw:inset-0 tw:m-auto tw:size-icon-sm tw:rounded-full tw:bg-[color-mix(in_srgb,currentColor_18%,transparent)] tw:p-0 tw:opacity-0 tw:transition-opacity tw:duration-state tw:ease-out tw:group-hover:opacity-100',
-                      )}
-                      size={APP_ICON_SIZES.sm}
-                      strokeWidth={APP_ICON_STROKE_WIDTH}
-                    />
-                  </span>
-                  <span>{localRouterMode === 'pareto-code' ? 'Pareto' : 'Fusion'}</span>
-                </button>
-              </>
+                    className="composer-model-anchor tw:pointer-events-none tw:inline-block tw:size-0 tw:shrink-0"
+                    data-composer-model-anchor="true"
+                  />
+                ) : (
+                  <ModelSelectTrigger
+                    isOpen={openDropdown === 'model'}
+                    loading={modelCatalogLoading}
+                    modelName={selectedModelLabel}
+                    compact={footerFit.modelMode === 'icon'}
+                    onHeldChange={setModelHeld}
+                    onThinkingChange={handleThinkingSelect}
+                    showThinkingOptions={showThinkingOptions}
+                    thinkingLabel={selectedThinkingLabel}
+                    thinkingMode={modelVariant ?? thinkingMode}
+                    thinkingOptions={effectiveThinkingOptions}
+                    tooltipTitle={
+                      showThinkingOptions
+                        ? `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle} · 推理强度：${selectedThinkingLabel}`
+                        : `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle}`
+                    }
+                  />
+                )
+              }
+              reasoningControl={
+                footerFit.modelMode !== 'text' &&
+                showThinkingOptions &&
+                effectiveThinkingOptions.length > 0 &&
+                selectedThinkingLabel ? (
+                  <ModelReasoningControl
+                    thinkingLabel={selectedThinkingLabel}
+                    thinkingMode={modelVariant ?? thinkingMode}
+                    thinkingOptions={effectiveThinkingOptions}
+                    onThinkingChange={handleThinkingSelect}
+                    side="bottom"
+                    align="start"
+                    sideOffset={4}
+                  />
+                ) : undefined
+              }
+              onOpenChange={(open) => {
+                setOpenDropdown(open ? 'model' : null)
+              }}
+              onProviderModelChange={onProviderModelChange}
+              onProviderOpen={onProviderOpen}
+              onProviderSearch={onProviderSearch}
+              onOpenModelSettings={onOpenModelSettings}
+            />
+
+            {footerFit.modelMode !== 'hidden' ? (
+              <ModelRuntimeParametersPopover
+                modelName={selectedModelTitle}
+                physicalWindow={
+                  selectedModelMetadata?.contextWindow ?? contextUsage?.contextWindow ?? 128_000
+                }
+                physicalInputLimit={contextUsage?.budget?.physicalInputBudgetTokens}
+                minimumContextTokens={
+                  contextUsage &&
+                  selectedModel &&
+                  contextUsage.provider === selectedProviderID &&
+                  contextUsage.model === selectedModel.value &&
+                  contextUsage.budget?.fixedTokens !== undefined
+                    ? Math.ceil((contextUsage.budget.fixedTokens + 1) / 0.8)
+                    : undefined
+                }
+                maxContextTokens={maxContextTokens}
+                onMaxContextTokensChange={(tokens) => {
+                  onMaxContextTokensChange?.(tokens)
+                }}
+                showThinkingOptions={showThinkingOptions}
+                thinkingMode={modelVariant ?? thinkingMode}
+                thinkingOptions={effectiveThinkingOptions}
+                onThinkingChange={handleThinkingSelect}
+                open={openDropdown === 'runtimeParams'}
+                onOpenChange={(open) => {
+                  setOpenDropdown(open ? 'runtimeParams' : null)
+                }}
+                onHeldChange={(held) => {
+                  if (held) setModelHeld(true)
+                  else if (openDropdown !== 'model') setModelHeld(false)
+                }}
+                side="top"
+                align="end"
+                sideOffset={4}
+              />
             ) : null}
+
+            {/* 隐藏测量节点：渲染模型区完整/图标两种状态的实际宽度，不参与交互与无障碍树；
+                放在真实触发器之后，保证选择器首个命中仍是可见入口。 */}
+            <MotionConfig reducedMotion="always">
+              <div
+                aria-hidden="true"
+                className="tw:pointer-events-none tw:invisible tw:absolute tw:left-0 tw:top-0"
+              >
+                <div
+                  ref={modelTextProbeRef}
+                  className="tw:inline-flex tw:items-center tw:gap-1.5 tw:w-max"
+                >
+                  <ModelSelectTrigger
+                    id="model-select-trigger-probe-text"
+                    modelName={selectedModelLabel}
+                  />
+                  <ModelRuntimeParametersSummary
+                    maxContextTokens={maxContextTokens}
+                    showThinkingOptions={showThinkingOptions}
+                    thinkingMode={modelVariant ?? thinkingMode}
+                    thinkingOptions={effectiveThinkingOptions}
+                  />
+                </div>
+                <div
+                  ref={modelIconProbeRef}
+                  className="tw:inline-flex tw:items-center tw:gap-1.5 tw:w-max"
+                >
+                  <ModelSelectTrigger
+                    id="model-select-trigger-probe-icon"
+                    compact
+                    modelName={selectedModelLabel}
+                  />
+                  <ModelRuntimeParametersSummary
+                    maxContextTokens={maxContextTokens}
+                    showThinkingOptions={showThinkingOptions}
+                    thinkingMode={modelVariant ?? thinkingMode}
+                    thinkingOptions={effectiveThinkingOptions}
+                  />
+                </div>
+              </div>
+            </MotionConfig>
 
             {capabilities.dictation ? (
               <Suspense fallback={null}>
@@ -1686,377 +2317,52 @@ export function ComposerCard({
                   draftKey={draftKey}
                   editorRef={editorRef}
                   enabled
+                  registerControl={registerDictationControl}
                   registerToggle={registerDictationToggle}
                 />
               </Suspense>
             ) : null}
 
-            <ComputerControlChip threadId={routedSessionId ?? null} />
-          </div>
-
-          <div className={TOOLBAR_RIGHT_CLASS}>
-            {showContextUsage ? (
-              <Popover.Root open={contextPreviewOpen} onOpenChange={setContextPreviewOpen}>
-                <Popover.Anchor asChild>
-                  <span
-                    aria-label={`上下文窗口使用量：${contextUsage ? `已用 ${usedPercent}%，剩余 ${100 - usedPercent}%` : '暂无数据'}`}
-                    className="context-usage-chip tw:group tw:relative tw:inline-flex tw:size-3 tw:shrink-0 tw:cursor-pointer tw:items-center tw:justify-center tw:text-app-text-soft"
-                    role="button"
-                    tabIndex={0}
-                    onPointerEnter={() => setContextPreviewOpen(true)}
-                    onPointerLeave={(event) => {
-                      if (!contextPreviewRef.current?.contains(event.relatedTarget as Node | null))
-                        setContextPreviewOpen(false)
-                    }}
-                    onFocus={() => setContextPreviewOpen(true)}
-                    onBlur={(event) => {
-                      if (!contextPreviewRef.current?.contains(event.relatedTarget))
-                        setContextPreviewOpen(false)
-                    }}
-                    onClick={() => {
-                      setContextPreviewOpen(false)
-                      setOpenDropdown('status')
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key !== 'Enter' && event.key !== ' ') return
-                      event.preventDefault()
-                      setContextPreviewOpen(false)
-                      setOpenDropdown('status')
-                    }}
-                    style={
-                      {
-                        '--context-usage-progress': usedPercent,
-                      } as React.CSSProperties
-                    }
-                  >
-                    <span className="chip-dot" />
-                  </span>
-                </Popover.Anchor>
-                <Popover.Portal>
-                  <Popover.Content
-                    ref={contextPreviewRef}
-                    size="md"
-                    side="top"
-                    align="end"
-                    aria-label="上下文窗口使用量"
-                    onOpenAutoFocus={(event) => event.preventDefault()}
-                    onCloseAutoFocus={(event) => event.preventDefault()}
-                    onPointerEnter={() => setContextPreviewOpen(true)}
-                    onPointerLeave={() => setContextPreviewOpen(false)}
-                    className="context-usage-popover tw:z-tooltip tw:overflow-visible tw:text-left tw:whitespace-normal tw:before:absolute tw:before:inset-x-0 tw:before:h-2 tw:before:content-[''] tw:data-[side=top]:before:top-full tw:data-[side=bottom]:before:bottom-full"
-                    role="tooltip"
-                  >
-                    <ContextUsagePanel contextUsage={contextUsage} />
-                  </Popover.Content>
-                </Popover.Portal>
-              </Popover.Root>
-            ) : null}
-            <ModelPickerPopover
-              align="end"
-              deepSeekThinkingControls={modelVariantOptions ? false : deepSeekThinkingControls}
-              open={openDropdown === 'model'}
-              providerOptions={providerOptions}
-              allProviders={allProviders}
-              selectedModelPreset={selectedModelPreset}
-              selectedProviderID={selectedProviderID}
-              showThinkingOptions={showThinkingOptions}
-              side="top"
-              sideOffset={4}
-              thinkingMode={modelVariant ?? thinkingMode}
-              thinkingPreviewMode={thinkingPreviewMode}
-              thinkingOptions={modelVariantOptions ?? thinkingOptions}
-              trigger={
-                <ModelSelectTrigger
-                  isOpen={openDropdown === 'model'}
-                  loading={modelCatalogLoading}
-                  modelName={selectedModelLabel}
-                  onThinkingChange={(value) => {
-                    if (onModelVariantChange) onModelVariantChange(value)
-                    else if (
-                      value === 'default' ||
-                      value === 'enabled' ||
-                      value === 'adaptive' ||
-                      value === 'disabled'
-                    )
-                      onThinkingChange(value)
-                  }}
-                  onThinkingPreviewChange={setThinkingPreviewMode}
-                  onToggleOpen={() => {
-                    setOpenDropdown(openDropdown === 'model' ? null : 'model')
-                  }}
-                  showThinkingOptions={showThinkingOptions}
-                  thinkingLabel={selectedThinkingLabel}
-                  thinkingMode={modelVariant ?? thinkingMode}
-                  thinkingOptions={modelVariantOptions ?? thinkingOptions}
-                  thinkingPreviewMode={thinkingPreviewMode}
-                  tooltipTitle={
-                    showThinkingOptions
-                      ? `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle} · 推理强度：${selectedThinkingLabel}`
-                      : `${selectedProvider?.displayName ?? '模型'} · ${selectedModelTitle}`
-                  }
-                />
-              }
-              onOpenChange={(open) => {
-                if (!open) setThinkingPreviewMode(null)
-                setOpenDropdown(open ? 'model' : null)
-              }}
-              onProviderModelChange={onProviderModelChange}
-              onProviderOpen={onProviderOpen}
-              onProviderSearch={onProviderSearch}
-              onOpenModelSettings={onOpenModelSettings}
-              onThinkingChange={(value) => {
-                if (onModelVariantChange) onModelVariantChange(value)
-                else if (
-                  value === 'default' ||
-                  value === 'enabled' ||
-                  value === 'adaptive' ||
-                  value === 'disabled'
-                )
-                  onThinkingChange(value)
-              }}
-              onThinkingPreviewChange={setThinkingPreviewMode}
-            />
-
             <Button
               isIconOnly
-              aria-label={submitting ? '正在发送' : isRunning && !canSubmit ? '停止' : '发送'}
+              ref={sendButtonRef}
+              aria-label={
+                stopping ? '正在停止' : submitting ? '正在发送' : showStopAction ? '停止' : '发送'
+              }
               className={cx('send-button', submitting && 'is-submitting')}
               color="primary"
               size="composer"
-              iconSize="lg"
-              disabled={!isRunning && !canSubmit}
+              iconSize="md"
+              disabled={stopping || (!isRunning && !canSubmit)}
               onClick={
-                isRunning && !canSubmit
-                  ? onInterrupt
-                  : () => {
+                showStopAction
+                  ? handleInterrupt
+                  : (event) => {
+                      editorRef.current?.focusIfAvailable(event.currentTarget)
                       if (!handleDirectSlashSubmission()) onSubmit('default')
                     }
               }
-              title={isRunning && !canSubmit ? '停止 Esc' : (submitDisabledReason ?? '发送')}
+              title={
+                stopping
+                  ? '正在停止'
+                  : showStopAction
+                    ? '停止 Esc'
+                    : (submitDisabledReason ?? '发送')
+              }
               type="button"
             >
-              {submitting ? (
-                <Activity aria-hidden="true" className="tw:animate-spin" size={APP_ICON_SIZES.lg} />
-              ) : isRunning && !canSubmit ? (
-                <Square size={APP_ICON_SIZES.lg} fill="currentColor" />
+              {stopping || submitting ? (
+                <Spinner className="send-button-session-spinner" size="medium" />
+              ) : showStopAction ? (
+                <Square size={APP_ICON_SIZES.md} fill="currentColor" />
               ) : (
-                <ArrowUp size={APP_ICON_SIZES.lg} strokeWidth={APP_ICON_STROKE_WIDTH} />
+                <ArrowUp size={APP_ICON_SIZES.md} strokeWidth={APP_ICON_STROKE_WIDTH} />
               )}
             </Button>
           </div>
         </div>
-        <ComposerStatusOverlay
-          open={openDropdown === 'status'}
-          onClose={closeDropdown}
-          routedSessionId={routedSessionId}
-          contextUsage={contextUsage}
-          selectedProviderID={selectedProviderID}
-          side={contextDropdownSide}
-        />
       </div>
 
-      {placement !== 'thread' ? (
-        <div
-          className={cx(
-            utilityBarVariant === 'home' && surface === 'working'
-              ? UTILITY_BAR_HOME_WORKING_CLASS
-              : utilityBarVariant === 'home'
-                ? UTILITY_BAR_HOME_CODING_CLASS
-                : UTILITY_BAR_DEFAULT_CLASS,
-            placement === 'side-task' && UTILITY_BAR_SIDE_TASK_CLASS,
-          )}
-        >
-          {surface === 'chat' ? null : subagentMode ? (
-            <MetaChip
-              icon={<Folder size={APP_ICON_SIZE} />}
-              label={workspace?.name ?? '项目'}
-              title="子 Agent 工作区固定"
-            />
-          ) : (
-            <ProjectSwitcherPopover
-              side="top"
-              open={openDropdown === 'project'}
-              size="sm"
-              onOpenChange={(open) => setOpenDropdown(open ? 'project' : null)}
-              recentWorkspaces={recentWorkspaces}
-              workspace={workspace}
-              onOpenWorkspace={onOpenWorkspace}
-              onChooseWorkspace={() => {
-                onChooseWorkspace()
-                closeDropdown()
-              }}
-              onCloneGithub={() => {
-                onCloneGithub?.()
-                closeDropdown()
-              }}
-              onClearWorkspace={() => {
-                onClearWorkspace()
-                closeDropdown()
-              }}
-              trigger={
-                <MetaChip
-                  active={openDropdown === 'project'}
-                  icon={<Folder size={APP_ICON_SIZE} />}
-                  label={workspace?.name ?? (surface === 'working' ? '选择文件夹' : '进入项目工作')}
-                  title="选择项目"
-                />
-              }
-            />
-          )}
-
-          <SessionGroupSwitcherPopover
-            open={openDropdown === 'session-group'}
-            side="top"
-            value={selectedSessionGroup?.id ?? null}
-            onOpenChange={(open) => setOpenDropdown(open ? 'session-group' : null)}
-            onCreate={openSessionGroupEditor}
-            onChange={(group) => {
-              setSelectedSessionGroup(group)
-              writePreferredSessionGroupId(group?.id ?? null)
-            }}
-            trigger={
-              <MetaChip
-                active={openDropdown === 'session-group'}
-                icon={<MessagesSquare size={APP_ICON_SIZE} />}
-                label={selectedSessionGroup?.name ?? '工作流'}
-                title={
-                  selectedSessionGroup
-                    ? `使用工作流：${selectedSessionGroup.name}`
-                    : '选择工作流（可不使用）'
-                }
-              />
-            }
-          />
-
-          {workspace ? (
-            <>
-              {threadGoal ? (
-                <PopoverMenu
-                  className="popover-goal popover-menu--grid"
-                  open={openDropdown === 'goal'}
-                  side="top"
-                  size="sm"
-                  onOpenChange={(open) => setOpenDropdown(open ? 'goal' : null)}
-                  trigger={
-                    <MetaChip
-                      active={openDropdown === 'goal'}
-                      icon={<Target size={APP_ICON_SIZE} />}
-                      label={
-                        threadGoal.status === 'active'
-                          ? '目标运行中'
-                          : threadGoal.status === 'paused'
-                            ? '目标已暂停'
-                            : threadGoal.status === 'complete'
-                              ? '目标已完成'
-                              : threadGoal.status === 'blocked'
-                                ? '目标受阻'
-                                : threadGoal.status === 'usage-limited'
-                                  ? '用量受限'
-                                  : '预算已用完'
-                      }
-                      title={threadGoal.objective}
-                    />
-                  }
-                >
-                  <div className="popover-header">目标</div>
-                  <div className="popover-section">
-                    <div className="popover-item-text">{threadGoal.objective}</div>
-                    <div className="popover-item-meta">
-                      已用 Tokens: {threadGoal.tokensUsed}
-                      {threadGoal.tokenBudget === null
-                        ? ' / 不限额'
-                        : ` / ${threadGoal.tokenBudget}`}
-                      {threadGoal.timeUsedSeconds > 0
-                        ? ` | 用时: ${Math.round(threadGoal.timeUsedSeconds / 60)}分`
-                        : ''}
-                    </div>
-                  </div>
-                  <div className="popover-section">
-                    {threadGoal.status === 'active' ? (
-                      <PopoverItem
-                        icon={<Target size={APP_ICON_SIZE} />}
-                        onClick={() => {
-                          closeDropdown()
-                          onGoalPause?.()
-                        }}
-                      >
-                        暂停
-                      </PopoverItem>
-                    ) : null}
-                    {['paused', 'blocked', 'usage-limited', 'budget-limited'].includes(
-                      threadGoal.status,
-                    ) ? (
-                      <PopoverItem
-                        icon={<Target size={APP_ICON_SIZE} />}
-                        onClick={() => {
-                          closeDropdown()
-                          onGoalResume?.()
-                        }}
-                      >
-                        继续
-                      </PopoverItem>
-                    ) : null}
-                    {threadGoal.status !== 'complete' ? (
-                      <PopoverItem
-                        icon={<Check size={APP_ICON_SIZE} />}
-                        onClick={() => {
-                          closeDropdown()
-                          onGoalComplete?.()
-                        }}
-                      >
-                        标记完成
-                      </PopoverItem>
-                    ) : null}
-                    <PopoverItem
-                      icon={<X size={APP_ICON_SIZE} />}
-                      disabled={threadGoal.status === 'active'}
-                      onClick={() => {
-                        closeDropdown()
-                        onGoalClear?.()
-                      }}
-                    >
-                      清除目标
-                    </PopoverItem>
-                  </div>
-                </PopoverMenu>
-              ) : null}
-
-              {surface !== 'working' ? (
-                <BranchSelectPopover
-                  align="end"
-                  branchSearch={branchSearch}
-                  branches={branches}
-                  className="popover-branch"
-                  currentBranchName={branchName}
-                  open={openDropdown === 'branch'}
-                  side="top"
-                  size="lg"
-                  onBranchSearchChange={setBranchSearch}
-                  onBranchSelect={onBranchSelect}
-                  onCreateBranch={onCreateBranch}
-                  onOpenChange={(open) => setOpenDropdown(open ? 'branch' : null)}
-                  trigger={
-                    <MetaChip
-                      active={openDropdown === 'branch'}
-                      icon={<GitBranch size={APP_ICON_SIZE} />}
-                      label={branchName}
-                      title="选择分支"
-                    />
-                  }
-                />
-              ) : null}
-            </>
-          ) : null}
-        </div>
-      ) : null}
-
-      <SessionFollowUpDock
-        items={queuedFollowUps ?? []}
-        pauseReason={queuePauseReason}
-        onEdit={onFollowUpEdit ?? (() => {})}
-        onRemove={onFollowUpRemove ?? (() => {})}
-        onResume={onFollowUpResume ?? (() => {})}
-      />
       <SessionGroupEditorDialog
         description={sessionGroupDraftDescription}
         error={sessionGroupCreateError}
@@ -2088,7 +2394,10 @@ export function ComposerCard({
         title="启用 Full Access？"
         description={
           <>
-            <p>允许 Agent 使用完整文件访问范围并取消常规人工审批。请仅在信任当前任务时启用。</p>
+            <p>
+              允许 Agent 访问本机文件、互联网、执行命令及调用工具和 MCP，无需权限审批。Plan
+              独立生效，不提供 OS 沙箱或网络隔离。
+            </p>
             {fullAccessError ? <p role="alert">{fullAccessError}</p> : null}
           </>
         }
@@ -2152,8 +2461,7 @@ function composerCommandMenuItem(
     section: command.source === 'skill' ? '技能' : '命令',
     searchPath: command.source === 'skill' ? command.skill.path : undefined,
     completion:
-      command.source === 'builtin' &&
-      ['model', 'reasoning', 'status', 'review'].includes(command.id)
+      command.source === 'builtin' && ['model', 'reasoning', 'review'].includes(command.id)
         ? 'submenu'
         : undefined,
     label: command.title,
@@ -2188,8 +2496,10 @@ function composerSlashCommandIcon(id: ComposerSlashCommandId): React.ReactNode {
       return <Box size={APP_ICON_SIZE} />
     case 'reasoning':
       return <Brain size={APP_ICON_SIZE} />
-    case 'plan':
+    case SHARED_SLASH_COMMANDS.plan.id:
       return <ListChecks size={APP_ICON_SIZE} />
+    case SHARED_SLASH_COMMANDS.grill.id:
+      return <MessagesSquare size={APP_ICON_SIZE} />
     case 'goal':
       return <Target size={APP_ICON_SIZE} />
     case 'review':
@@ -2198,7 +2508,7 @@ function composerSlashCommandIcon(id: ComposerSlashCommandId): React.ReactNode {
       return <Zap size={APP_ICON_SIZE} />
     case 'mcp':
       return <Paperclip size={APP_ICON_SIZE} />
-    case 'status':
+    case SHARED_SLASH_COMMANDS.status.id:
       return <Activity size={APP_ICON_SIZE} />
     case 'side':
       return <MessageSquarePlus size={APP_ICON_SIZE} />

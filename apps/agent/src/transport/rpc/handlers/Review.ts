@@ -92,7 +92,7 @@ export const reviewHandlers = {
       }
       case 'review/commits': {
         const input = decodeParams(decodeReviewCommits, rawParams, method)
-        return review.commits(input.projectId, input.limit)
+        return review.commits(input.projectId, input.limit, input.ref)
       }
       case 'review/status': {
         const input = decodeParams(decodeReviewStatus, rawParams, method)

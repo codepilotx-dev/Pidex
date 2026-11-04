@@ -5,10 +5,8 @@ import type { ThinkingOption } from './ThinkingLevelPopover.js'
 export type ReasoningMenuProps = {
   trigger: React.ReactElement
   thinkingMode: string
-  thinkingPreviewMode?: string | null
   thinkingOptions: ThinkingOption[]
   onThinkingChange: (mode: string) => void
-  onThinkingPreviewChange?: (mode: string | null) => void
   align?: 'start' | 'center' | 'end'
   side?: 'top' | 'right' | 'bottom' | 'left'
   sideOffset?: number
@@ -19,10 +17,8 @@ export type ReasoningMenuProps = {
 export function ReasoningMenu({
   trigger,
   thinkingMode,
-  thinkingPreviewMode,
   thinkingOptions,
   onThinkingChange,
-  onThinkingPreviewChange,
   align = 'end',
   side = 'top',
   sideOffset = 6,
@@ -34,9 +30,6 @@ export function ReasoningMenu({
   const open = isControlled ? controlledOpen : internalOpen
 
   const handleOpenChange = (nextOpen: boolean): void => {
-    if (!nextOpen) {
-      onThinkingPreviewChange?.(null)
-    }
     if (isControlled) {
       controlledOnOpenChange?.(nextOpen)
     } else {
@@ -44,10 +37,8 @@ export function ReasoningMenu({
     }
   }
 
-  const effectiveCurrentMode = thinkingPreviewMode ?? thinkingMode
-
   return (
-    <Dropdown.Root value={effectiveCurrentMode} open={open} onOpenChange={handleOpenChange}>
+    <Dropdown.Root value={thinkingMode} open={open} onOpenChange={handleOpenChange}>
       <Dropdown.Trigger asChild>{trigger}</Dropdown.Trigger>
       <Dropdown.Portal>
         <Dropdown.Content
@@ -64,8 +55,6 @@ export function ReasoningMenu({
               key={option.value}
               value={option.value}
               onSelect={() => onThinkingChange(option.value)}
-              onPointerEnter={() => onThinkingPreviewChange?.(option.value)}
-              onPointerLeave={() => onThinkingPreviewChange?.(null)}
             >
               {option.label}
             </Dropdown.Item>

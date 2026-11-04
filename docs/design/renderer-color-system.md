@@ -47,12 +47,12 @@
 
 Workbench 大区域使用独立的公共区域 token，布局 Feature 不直接绑定基础 surface：
 
-| 区域                  | 语义 token                              | 默认来源                                                                                 |
-| --------------------- | --------------------------------------- | ---------------------------------------------------------------------------------------- |
-| 窗口标题/菜单栏       | `--cpx-sys-color-workbench-titlebar-bg` | 跟随侧栏背景（`--cpx-sys-color-workbench-sidebar-bg`）                                   |
-| 左侧栏                | `--cpx-sys-color-workbench-sidebar-bg`  | 浅色为 `gray-2`（`--cpx-ref-gray-2`），深色为 Deep（`--cpx-sys-color-surface-recessed`） |
-| 主工作区              | `--cpx-sys-color-workbench-main-bg`     | `--cpx-sys-color-surface-canvas`                                                         |
-| 右侧 Dock、底部 Panel | `--cpx-sys-color-workbench-panel-bg`    | `--cpx-sys-color-workbench-main-bg`                                                      |
+| 区域                  | 语义 token                              | 默认来源                                                                                                                         |
+| --------------------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 窗口标题/菜单栏       | `--cpx-sys-color-workbench-titlebar-bg` | 浅色为 `--cpx-ref-gray-1`，深色为 Tier 1 外部基底（`--cpx-sys-color-surface-recessed`，默认 `#080808`）                          |
+| 左侧栏                | `--cpx-sys-color-workbench-sidebar-bg`  | 展开常驻时与主工作区融合为同一画板；浅色为 `--cpx-ref-gray-3`，深色为 Tier 2（`--cpx-sys-color-surface-canvas`，默认 `#111111`） |
+| 主工作区              | `--cpx-sys-color-workbench-main-bg`     | Tier 2 主画板（`--cpx-sys-color-surface-canvas`，默认 `#111111`）                                                                |
+| 右侧 Dock、底部 Panel | `--cpx-sys-color-workbench-panel-bg`    | Tier 2 辅助画板（`--cpx-sys-color-surface-canvas`，默认 `#111111`）                                                              |
 
 `surface-panel` 仍用于工作区内部的常驻卡片、摘要和审批容器，不代表右侧 Dock 或底部 Panel 的外层底色。Feature 只消费公开区域 token，不消费颜色类 `--cpx-comp-*`，也不直接选择基础 surface。默认值相同的区域仍保持独立 token，以允许主题覆盖并避免组件耦合；工作区 toolbar/header 保持透明并继承 `workbench-main-bg`，不使用 titlebar token。
 
@@ -70,6 +70,17 @@ Workbench 大区域之间的持久结构边界使用 `border-default`；toolbar�
 | `skill`   | Agent、Skill、Plugin、工具能力身份 | 能力标签、工具身份           |
 
 每个彩色 tone 使用一致的角色族：基础色用于小图标或状态点，`*-fg` 用于短文字，`*-subtle-bg` 与 `*-subtle-border` 成对用于状态容器。大面积实色背景、仅靠红绿区分状态、用 `success` 表示“当前选中”都不允许。
+
+### 上下文容量分档（Context Capacity Tiers）
+
+用于会话 Composer 中的上下文与思考信号指示器（`ContextThinkingSignalIcon`），根据当前会话有效上下文容量上限提供直观的容量层级视觉反馈：
+
+| 容量档位 | 上限阈值                   | 语义色 Token                          | 浅色值    | 深色值    |
+| -------- | -------------------------- | ------------------------------------- | --------- | --------- |
+| `cyan`   | `<= 128K` tokens           | `--cpx-sys-color-context-tier-cyan`   | `#00a2c7` | `#12b7de` |
+| `jade`   | `<= 256K` tokens (含 200K) | `--cpx-sys-color-context-tier-jade`   | `#29a383` | `#3dd68c` |
+| `amber`  | `<= 500K` tokens           | `--cpx-sys-color-context-tier-amber`  | `#ffc53d` | `#ffe629` |
+| `violet` | `> 500K` tokens (如 1M+)   | `--cpx-sys-color-context-tier-violet` | `#6e56cf` | `#8e4ec6` |
 
 Hover、selected、active 是交互阶段，不是业务状态；使用统一的 `hover`、`selected`、`active`，不得在 feature 中临时混合强调色。
 

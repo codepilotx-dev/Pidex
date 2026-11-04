@@ -1,7 +1,7 @@
 import { sortSessionsByRecency } from '../session/state/SessionSorting.js'
 import { mergeCatalogProjects } from './sidebar/UseSidebarProjectCatalog.js'
 import type React from 'react'
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import type {
   DesktopRemovedWorkspace,
   DesktopSessionCatalogStatus,
@@ -12,7 +12,7 @@ import { SidebarBody } from './sidebar/SidebarBody.js'
 import { useSidebarActivity } from './sidebar/UseSidebarActivity.js'
 import { archiveSidebarActivity, sessionNeedsStop } from './sidebar/SidebarActivityActions.js'
 import { SidebarDockedPanes } from './sidebar/SidebarDockedPanes.js'
-import { SidebarEmptyRow } from './sidebar/SidebarRow.js'
+import { SkeletonBlock, SkeletonRegion } from '../../components/ui/Skeleton.js'
 import type { DesktopFileEntry } from '../../../shared/Types.js'
 import type {
   WorkbenchPanelSnapshot,
@@ -33,7 +33,11 @@ import {
   sidebarPinnedProjectKey,
   sidebarPinnedSessionKey,
 } from './sidebar/SidebarViewModel.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import {
+  useDesktopSettingsField,
+  type UseDesktopSettingsResult,
+} from '../settings/UseDesktopSettings.js'
+import { useShallow } from 'zustand/react/shallow'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { useEverOpened } from '../../hooks/UsePresenceRetention.js'
 import {
@@ -41,6 +45,7 @@ import {
   type SidebarScrollModeKey,
 } from './sidebar/UseSidebarScrollController.js'
 import { useSidebarProjectCatalog } from './sidebar/UseSidebarProjectCatalog.js'
+import { useSidebarFolderDrop } from './sidebar/UseSidebarFolderDrop.js'
 import {
   createSidebarDisclosureStore,
   sidebarSectionDisclosureKey,
@@ -63,12 +68,6 @@ import {
 } from './sidebar/SidebarCustomization.js'
 import type { SidebarCustomization } from '../../../shared/Types.js'
 
-import {
-  notifyProjectRestored,
-  subscribeProjectRemovals,
-} from '../projects/ProjectCatalogEvents.js'
-import { Toast, ToastDivider } from '../../components/ui/Toast.js'
-import { Button } from '../../components/ui/Button.js'
 import { InputDialog } from '../../components/ui/ConfirmationDialog.js'
 import type { SidebarPane } from './sidebar/SidebarNavigation.js'
 
@@ -150,10 +149,12 @@ export function DesktopSidebar({
   onOpenFile,
   onAddComposerFiles,
 }: Props): React.ReactNode {
+  const { isDragActive, dropHandlers } = useSidebarFolderDrop(active, onError ?? onReport)
   const [relativeNow, setRelativeNow] = useState(() => Date.now())
   const [sidebarScrollOverlapping, setSidebarScrollOverlapping] = useState(false)
   const sidebarScrollPositionsRef = useRef<Map<SidebarScrollModeKey, number>>(new Map())
   const {
+    settingsLoaded,
     collapsedSidebarSections,
     collapsedSidebarProjectPaths,
     setSidebarManualOrder,
@@ -184,7 +185,7 @@ export function DesktopSidebar({
     sidebarActivityShowPinned,
     setSidebarActivityShowPinned,
     syncExternalSettingsPatch,
-  } = useDesktopSettings()
+  } = useDesktopSettingsField(useShallow(sidebarSettingsSelector))
   const sidebarCustomizationRef = useRef(sidebarCustomization)
   sidebarCustomizationRef.current = sidebarCustomization
   const persistSidebarDisclosuresRef = useRef(syncExternalSettingsPatch)
@@ -215,11 +216,11 @@ export function DesktopSidebar({
     [projectCatalogState.projects, recentWorkspaces],
   )
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     sidebarDisclosureState.registerProjects(mergedProjects)
   }, [mergedProjects, sidebarDisclosureState])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const signature = sidebarDisclosureSignature(
       collapsedSidebarSections,
       collapsedSidebarProjectPaths,
@@ -545,64 +546,6 @@ export function DesktopSidebar({
     setSidebarProjectSort(sort)
   }
 
-  const [projectUndo, setProjectUndo] = useState<{
-    expiresAt: number
-    restore: () => Promise<void>
-  } | null>(null)
-  const [restoringProject, setRestoringProject] = useState(false)
-  useEffect(
-    () =>
-      subscribeProjectRemovals(({ project, removalOperationId, undoExpiresAt }) => {
-        const key = sidebarPinnedProjectKey(project)
-        const assignments = captureSidebarAssignments(sidebarCustomizationRef.current, [key])
-        const orders = Object.entries(sidebarManualOrder).flatMap(([scope, keys]) => {
-          const index = keys.indexOf(scope === 'projects' ? sidebarProjectKey(project) : key)
-          return index < 0
-            ? []
-            : [{ scope, index, key: scope === 'projects' ? sidebarProjectKey(project) : key }]
-        })
-        const selected = Boolean(
-          workspace &&
-          (project.projectId
-            ? workspace.projectId === project.projectId
-            : workspace.path === project.path),
-        )
-        setProjectUndo({
-          expiresAt: undoExpiresAt,
-          restore: async () => {
-            const restored = await desktopClient.restoreProject(
-              project.projectId!,
-              removalOperationId,
-            )
-            const workspaceToRestore = { ...restored, pinnedAt: project.pinnedAt }
-            updateSidebarCustomization((current) =>
-              restoreFailedArchiveAssignments(current, [key], assignments),
-            )
-            setSidebarManualOrder((current) => {
-              const next = { ...current }
-              for (const entry of orders) {
-                const keys = [...(next[entry.scope] ?? [])]
-                if (!keys.includes(entry.key))
-                  keys.splice(Math.min(entry.index, keys.length), 0, entry.key)
-                next[entry.scope] = keys
-              }
-              return next
-            })
-            notifyProjectRestored(workspaceToRestore, selected)
-          },
-        })
-      }),
-    [sidebarManualOrder, workspace, setSidebarManualOrder, updateSidebarCustomization],
-  )
-  useEffect(() => {
-    if (!projectUndo) return
-    const timer = setTimeout(
-      () => setProjectUndo(null),
-      Math.max(0, projectUndo.expiresAt - Date.now()),
-    )
-    return () => clearTimeout(timer)
-  }, [projectUndo])
-
   const [pendingSectionKeys, setPendingSectionKeys] = useState<string[] | null>(null)
   const [sectionTitle, setSectionTitle] = useState('')
   const createCustomSection = useCallback((itemKeys: string[] = []): void => {
@@ -731,33 +674,22 @@ export function DesktopSidebar({
     [setSidebarManualOrder],
   )
 
+  const initiallyReady = useEverOpened(
+    settingsLoaded && catalogStatus.state !== 'loading' && projectCatalogState.status !== 'loading',
+  )
+
+  if (!initiallyReady) {
+    return <SidebarLoadingSkeleton />
+  }
+
   return (
-    <div className="sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2">
-      {projectUndo ? (
-        <div className="tw:fixed tw:bottom-4 tw:left-1/2 tw:z-50 tw:-translate-x-1/2">
-          <Toast role="status" aria-live="polite">
-            项目已移除
-            <ToastDivider />
-            <Button
-              color="ghostSecondary"
-              size="compact"
-              disabled={restoringProject}
-              onClick={() => {
-                setRestoringProject(true)
-                void projectUndo
-                  .restore()
-                  .then(() => setProjectUndo(null))
-                  .catch((error) =>
-                    onReport(error instanceof Error ? error.message : String(error)),
-                  )
-                  .finally(() => setRestoringProject(false))
-              }}
-            >
-              撤销
-            </Button>
-          </Toast>
-        </div>
-      ) : null}
+    <div
+      {...dropHandlers}
+      data-sidebar-file-drop-active={isDragActive || undefined}
+      className={`sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2 ${
+        isDragActive ? 'tw:ring-2 tw:ring-inset tw:ring-app-accent' : ''
+      }`}
+    >
       <InputDialog
         open={pendingSectionKeys !== null}
         title="新建分区"
@@ -784,13 +716,6 @@ export function DesktopSidebar({
       />
       <SidebarBody
         onScrollOverlapChange={setSidebarScrollOverlapping}
-        scrollHeader={
-          <>
-            {catalogStatus.state === 'loading' ? (
-              <SidebarEmptyRow role="status">正在加载任务目录…</SidebarEmptyRow>
-            ) : null}
-          </>
-        }
         projectCatalogState={projectCatalogState}
         scrollModeKey={sidebarScrollModeKey}
         scrollPositions={sidebarScrollPositionsRef.current}
@@ -883,8 +808,18 @@ export function DesktopSidebar({
         onSetSectionSort={(sectionId, sort) =>
           updateSidebarCustomization((current) => setSidebarSectionSort(current, sectionId, sort))
         }
+        onReorderSections={(order) =>
+          updateSidebarCustomization((current) => orderSidebarSections(current, order))
+        }
         onReorderSectionItems={(sectionId, keys) =>
-          updateSidebarCustomization((current) => setSidebarSectionItems(current, sectionId, keys))
+          updateSidebarCustomization((current) =>
+            setSidebarSectionItems(current, sectionId, [
+              ...keys,
+              ...(
+                current.sections.find((section) => section.id === sectionId)?.itemKeys ?? []
+              ).filter((key) => !keys.includes(key)),
+            ]),
+          )
         }
         onMoveItemsToSection={(itemKeys, sectionId, index) => {
           moveItemsToDestination(itemKeys, sectionId, index)
@@ -956,6 +891,82 @@ export function DesktopSidebar({
       ) : null}
     </div>
   )
+}
+
+/** 侧栏首载骨架：沿用真实容器的宽度、间距与主题占位，不预留滚动条空槽。 */
+function SidebarLoadingSkeleton(): React.ReactNode {
+  return (
+    <SkeletonRegion
+      className="sidebar-layout tw:flex tw:h-full tw:min-h-0 tw:w-full tw:flex-1 tw:flex-col tw:overflow-hidden tw:py-2"
+      label="正在加载侧栏"
+      shimmer
+    >
+      <div className="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:h-9 tw:min-h-9 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2">
+        <SkeletonBlock className="tw:h-4 tw:w-20 tw:rounded-sm" />
+        <div className="tw:flex tw:shrink-0 tw:items-center tw:gap-1">
+          <SkeletonBlock className="tw:size-7 tw:rounded-md" />
+          <SkeletonBlock className="tw:size-7 tw:rounded-md" />
+        </div>
+      </div>
+      <div className="tw:mx-2 tw:mt-4 tw:flex tw:min-w-0 tw:flex-1 tw:flex-col tw:gap-6">
+        <SidebarSkeletonListGroup />
+        <SidebarSkeletonListGroup />
+      </div>
+    </SkeletonRegion>
+  )
+}
+
+const SIDEBAR_SKELETON_ROW_WIDTHS = ['tw:w-[88%]', 'tw:w-[64%]', 'tw:w-[76%]'] as const
+
+function SidebarSkeletonListGroup(): React.ReactNode {
+  return (
+    <div className="tw:flex tw:min-w-0 tw:flex-col tw:gap-px">
+      <SkeletonBlock className="tw:mx-1 tw:mb-1.5 tw:h-3 tw:w-16 tw:flex-none tw:rounded-sm" />
+      {SIDEBAR_SKELETON_ROW_WIDTHS.map((widthClassName) => (
+        <SkeletonBlock
+          className={`tw:h-[var(--sidebar-row-height)] tw:rounded-md ${widthClassName}`}
+          key={widthClassName}
+        />
+      ))}
+    </div>
+  )
+}
+
+/** 侧栏只依赖这些设置字段；用 `useShallow` 组合一次订阅，避免无关设置触发重渲染。 */
+function sidebarSettingsSelector(settings: UseDesktopSettingsResult) {
+  return {
+    settingsLoaded: settings.settingsLoaded,
+    collapsedSidebarSections: settings.collapsedSidebarSections,
+    collapsedSidebarProjectPaths: settings.collapsedSidebarProjectPaths,
+    setSidebarManualOrder: settings.setSidebarManualOrder,
+    setRecentWorkspaces: settings.setRecentWorkspaces,
+    setSidebarOrganization: settings.setSidebarOrganization,
+    setSidebarProjectSort: settings.setSidebarProjectSort,
+    sidebarCustomization: settings.sidebarCustomization,
+    setSidebarCustomization: settings.setSidebarCustomization,
+    sidebarSessionPins: settings.sidebarSessionPins,
+    setSidebarSessionPins: settings.setSidebarSessionPins,
+    sidebarManualOrder: settings.sidebarManualOrder,
+    sidebarOrganization: settings.sidebarOrganization,
+    sidebarShowScheduledSessions: settings.sidebarShowScheduledSessions,
+    setSidebarShowScheduledSessions: settings.setSidebarShowScheduledSessions,
+    sidebarProjectSort: settings.sidebarProjectSort,
+    sidebarSort: settings.sidebarSort,
+    setSidebarSort: settings.setSidebarSort,
+    sidebarTimelineEnabled: settings.sidebarTimelineEnabled,
+    sidebarProductMode: settings.sidebarProductMode,
+    sidebarTimelinePriorityEnabled: settings.sidebarTimelinePriorityEnabled,
+    setSidebarTimelinePriorityEnabled: settings.setSidebarTimelinePriorityEnabled,
+    sidebarActivityShowScheduled: settings.sidebarActivityShowScheduled,
+    setSidebarActivityShowScheduled: settings.setSidebarActivityShowScheduled,
+    sidebarActivityShowWork: settings.sidebarActivityShowWork,
+    setSidebarActivityShowWork: settings.setSidebarActivityShowWork,
+    sidebarActivityShowChat: settings.sidebarActivityShowChat,
+    setSidebarActivityShowChat: settings.setSidebarActivityShowChat,
+    sidebarActivityShowPinned: settings.sidebarActivityShowPinned,
+    setSidebarActivityShowPinned: settings.setSidebarActivityShowPinned,
+    syncExternalSettingsPatch: settings.syncExternalSettingsPatch,
+  }
 }
 
 function sidebarDisclosureSignature(

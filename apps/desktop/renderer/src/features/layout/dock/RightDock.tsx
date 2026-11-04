@@ -1,20 +1,8 @@
-import type { FileEditorViewState } from '../../editor/FileEditor.js'
 import type React from 'react'
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import type {
-  DesktopBrowserState,
-  DesktopDiffMarkerStyle,
-  DesktopFileEntry,
-  DesktopFilePreview,
-  DesktopGitStatus,
-  DesktopReviewView,
-  DesktopSessionStatus,
-  DesktopWorkspace,
-} from '../../../../shared/Types.js'
-import type { ReviewTabUiState } from '../tabs/ConversationUiState.js'
+import type { DesktopFileEntry } from '../../../../shared/Types.js'
 import { TabStripButtonProvider } from '../../../components/ui/TabStripButtonContext.js'
 import type {
-  MarkdownFileViewMode,
   WorkbenchPanelSnapshot,
   WorkbenchPanelTarget,
   WorkbenchTabDescriptor,
@@ -26,7 +14,6 @@ import {
   getWorkbenchLauncherDefinitions,
   getWorkbenchLauncherPresentation,
   getWorkbenchTabDefinition,
-  type WorkbenchTabAvailability,
   type WorkbenchTabRenderContext,
 } from '../tabs/WorkbenchTabRegistry.js'
 import { WorkbenchTabStrip, workbenchTabDomId } from '../tabs/WorkbenchTabStrip.js'
@@ -47,52 +34,27 @@ import {
 import { useWorkbenchPanelLiveResize } from '../panels/WorkbenchPanelPresence.js'
 
 type Props = {
+  panelContext: WorkbenchTabRenderContext
   target: WorkbenchPanelTarget
   state: WorkbenchPanelSnapshot
   tabsById: WorkbenchTabsState['tabsById']
-  browserAvailability: WorkbenchTabAvailability
-  browserState: DesktopBrowserState | null
-  defaultBranch: string | null
-  files: DesktopFileEntry[]
-  gitStatus: DesktopGitStatus | null
-  isRefreshingReview: boolean
-  diffMarkerStyle: DesktopDiffMarkerStyle
   maxWidth: number
   minWidth: number
   maxHeight?: number
   minHeight?: number
-  reviewView: DesktopReviewView
-  onReviewSummaryChange?: WorkbenchTabRenderContext['review']['onReviewSummaryChange']
   onOpenReviewFile?: (path: string) => void
-  reviewTabState: ReviewTabUiState
-  selectedFile: DesktopFilePreview | null
   sessionId: string | null
-  sessionStatus: DesktopSessionStatus
-  terminalAvailable: boolean
-  planContentByEventId: Readonly<Record<string, string>>
+  providerManagement?: React.ReactNode
   width: number
   height?: number
-  workspace: DesktopWorkspace | null
-  browserDraftKey: import('../../session/composer/ComposerTypes.js').ComposerDraftKey
-  onBrowserStateChange: (state: DesktopBrowserState) => void
   onClose: () => void
   onCloseTab: (tabId: WorkbenchTabId) => void
   onCloseOtherTabs: (tabId: WorkbenchTabId) => void
   onCloseTabsToRight: (tabId: WorkbenchTabId) => void
-  onCreateBranch: () => void
   onFileLoadError: (event: WorkbenchFileLoadErrorEvent) => void
   onOpenTab: (tab: WorkbenchTabDescriptor) => void
-  onOpenWorkspacePath: () => void
   onOpenFileFromBrowser: (file: DesktopFileEntry) => void
   onPreviewFile: (file: DesktopFileEntry) => void
-  onAskInSideChat?: (text: string) => void
-  onSetFileViewState?: (tabId: WorkbenchTabId, viewState: FileEditorViewState) => void
-  onAppendComposerText: (text: string) => void
-  onAddComposerFiles: (filePaths: string[]) => void
-  onRefreshReview: () => void
-  onReviewTabStateChange: (
-    value: ReviewTabUiState | ((current: ReviewTabUiState) => ReviewTabUiState),
-  ) => void
   onResetWidth: () => void
   onResetHeight?: () => void
   onSelectTab: (tabId: WorkbenchTabId) => void
@@ -107,17 +69,12 @@ type Props = {
   onReorderTab: (target: WorkbenchPanelTarget, tabId: WorkbenchTabId, index: number) => void
   onPinTab: (tabId: WorkbenchTabId) => void
   onPopOutTab?: (source: WorkbenchPanelTarget, tabId: WorkbenchTabId) => void
-  onSetFileMarkdownViewMode: (tabId: WorkbenchTabId, mode: MarkdownFileViewMode) => void
   onResizeRawSize?: (rawSize: number | null) => void
   onResizePreview?: (nextSize: number | null) => void
   shouldCommitResizeSize?: (rawSize: number) => boolean
-  onToggleReviewView: () => void
-  sideChat: Omit<WorkbenchTabRenderContext['sideChat'], 'activeTabId'>
+  onRecreateSideChat: WorkbenchTabRenderContext['sideChat']['onRecreate']
   onCreateSideChat: () => void
   onCreateTerminal?: () => void
-  activeSideTaskId: string | null
-  subagentAvailability: WorkbenchTabAvailability
-  sideTaskContent?: React.ReactNode
 }
 
 type FilePreviewTab = Extract<WorkbenchTabDescriptor, { kind: 'file-preview' }>
@@ -233,8 +190,8 @@ function WorkbenchPanelResizeController({
       aria-valuenow={size}
       className={
         isBottom
-          ? 'bottom-panel-resize-handle tw:absolute tw:z-local tw:-top-1.25 tw:right-0 tw:left-0 tw:h-3 tw:cursor-row-resize tw:touch-none tw:select-none'
-          : 'right-dock-resize-handle tw:absolute tw:z-local tw:top-0 tw:bottom-0 tw:left-0 tw:w-4 tw:cursor-col-resize tw:touch-none tw:select-none tw:focus-visible:outline-app-accent/72'
+          ? 'bottom-panel-resize-handle tw:absolute tw:z-local tw:top-0 tw:right-0 tw:left-0 tw:h-1.5 tw:cursor-row-resize tw:touch-none tw:select-none'
+          : 'right-dock-resize-handle tw:absolute tw:z-local tw:top-0 tw:bottom-0 tw:left-0 tw:w-1.5 tw:cursor-col-resize tw:touch-none tw:select-none tw:focus-visible:outline-app-accent/72'
       }
       role="separator"
       tabIndex={0}
@@ -251,50 +208,27 @@ function WorkbenchPanelResizeController({
 }
 
 export function WorkbenchPanel({
+  panelContext: sharedPanelContext,
   target,
   state,
   tabsById,
-  browserAvailability,
-  browserState,
-  defaultBranch,
-  files,
-  gitStatus,
-  isRefreshingReview,
-  diffMarkerStyle,
   maxWidth,
   minWidth,
   maxHeight,
   minHeight,
-  reviewView,
-  reviewTabState,
-  onReviewSummaryChange,
   onOpenReviewFile,
-  selectedFile,
   sessionId,
-  sessionStatus,
-  terminalAvailable,
-  planContentByEventId,
+  providerManagement,
   width,
   height,
-  workspace,
-  browserDraftKey,
-  onBrowserStateChange,
   onClose,
   onCloseTab,
   onCloseOtherTabs,
   onCloseTabsToRight,
-  onCreateBranch,
   onFileLoadError,
   onOpenTab,
-  onOpenWorkspacePath,
   onOpenFileFromBrowser,
   onPreviewFile,
-  onAppendComposerText,
-  onAskInSideChat,
-  onSetFileViewState,
-  onAddComposerFiles,
-  onRefreshReview,
-  onReviewTabStateChange,
   onResetWidth,
   onResetHeight,
   onSelectTab,
@@ -304,17 +238,12 @@ export function WorkbenchPanel({
   onPopOutTab,
   onReorderTab,
   onPinTab,
-  onSetFileMarkdownViewMode,
   onResizeRawSize,
   onResizePreview,
   shouldCommitResizeSize,
-  onToggleReviewView,
-  sideChat,
+  onRecreateSideChat,
   onCreateSideChat,
   onCreateTerminal,
-  activeSideTaskId,
-  subagentAvailability,
-  sideTaskContent,
 }: Props): React.ReactNode {
   const panelRef = useRef<HTMLElement>(null)
   const liveResize = useWorkbenchPanelLiveResize(target)
@@ -336,136 +265,57 @@ export function WorkbenchPanel({
       current.sessionId === sessionId ? current : { sessionId, displayPath: null },
     )
   }, [sessionId])
-  const stableOnBrowserStateChange = useStableEvent(onBrowserStateChange)
+  const stableOnToggleReviewView = useStableEvent(sharedPanelContext.review.onToggleReviewView)
+  const stableOnRecreateSideChat = useStableEvent(onRecreateSideChat)
   const stableOnClose = useStableEvent(onClose)
-  const stableOnCreateBranch = useStableEvent(onCreateBranch)
   const stableOnFileLoadError = useStableEvent(onFileLoadError)
-  const stableOnOpenWorkspacePath = useStableEvent(onOpenWorkspacePath)
+  const stableOnOpenReviewFile = useStableEvent((path: string) => onOpenReviewFile?.(path))
   const stableOnOpenFileFromBrowser = useStableEvent(onOpenFileFromBrowser)
   const stableOnPreviewFile = useStableEvent(onPreviewFile)
-  const stableOnAskInSideChat = useStableEvent((text: string) => onAskInSideChat?.(text))
-  const stableOnSetFileViewState = useStableEvent(
-    (tabId: WorkbenchTabId, state: FileEditorViewState) => onSetFileViewState?.(tabId, state),
-  )
-  const stableOnAppendComposerText = useStableEvent(onAppendComposerText)
-  const stableOnAddComposerFiles = useStableEvent(onAddComposerFiles)
-  const stableOnRefreshReview = useStableEvent(onRefreshReview)
-  const stableOnReviewTabStateChange = useStableEvent(onReviewTabStateChange)
   const stableOnOpenTab = useStableEvent(onOpenTab)
   const stableOnPinTab = useStableEvent(onPinTab)
-  const stableOnSetFileMarkdownViewMode = useStableEvent(onSetFileMarkdownViewMode)
-  const stableOnToggleReviewView = useStableEvent(onToggleReviewView)
 
   const panelContext = useMemo<WorkbenchTabRenderContext>(
     () => ({
+      ...sharedPanelContext,
       review: {
-        activeSessionId: sessionId,
-        defaultBranch,
-        gitStatus,
-        isRefreshing: isRefreshingReview,
-        projectId: workspace?.projectId ?? null,
-        diffMarkerStyle,
-        reviewView,
-        reviewTabState,
-        onReviewSummaryChange,
-        onOpenReviewFile,
-        sessionStatus,
-        workspacePath: workspace?.path ?? null,
-        onAppendComposerText: stableOnAppendComposerText,
+        ...sharedPanelContext.review,
         onClose: stableOnClose,
-        onCreateBranch: stableOnCreateBranch,
-        onOpenWorkspacePath: stableOnOpenWorkspacePath,
-        onRefreshDiff: stableOnRefreshReview,
-        onReviewTabStateChange: stableOnReviewTabStateChange,
         onToggleReviewView: stableOnToggleReviewView,
-      },
-      browser: {
-        availability: browserAvailability,
-        state: browserState,
-        draftKey: browserDraftKey,
-        onAppendComposerText: stableOnAppendComposerText,
-        onStateChange: stableOnBrowserStateChange,
+        onOpenReviewFile: stableOnOpenReviewFile,
       },
       files: {
-        files,
-        selectedFile,
-        workspace,
+        ...sharedPanelContext.files,
         onOpenFileFromBrowser: stableOnOpenFileFromBrowser,
         onPreviewFile: stableOnPreviewFile,
-        onAskInSideChat: onAskInSideChat ? stableOnAskInSideChat : undefined,
-        onSetFileViewState: stableOnSetFileViewState,
-        onAppendComposerText: stableOnAppendComposerText,
-        onAddComposerFiles: stableOnAddComposerFiles,
         onPinFileTab: stableOnPinTab,
-        onSetFileMarkdownViewMode: stableOnSetFileMarkdownViewMode,
         onLoadError: (tab, error, phase) => stableOnFileLoadError({ error, phase, tab, target }),
       },
-      planContentByEventId,
       sideChat: {
-        ...sideChat,
+        ...sharedPanelContext.sideChat,
         activeTabId: state.activeTabId,
-      },
-      sideTask: {
-        activeTaskId: activeSideTaskId,
-        availability: subagentAvailability,
-        content: sideTaskContent,
+        onRecreate: stableOnRecreateSideChat,
       },
       terminal: {
-        availability: terminalAvailable
-          ? { status: 'available' }
-          : sessionId
-            ? {
-                status: 'unavailable',
-                reason: '当前桌面运行环境没有提供集成终端桥接。',
-              }
-            : { status: 'available' },
-        threadId: sessionId,
-        cwd: workspace?.path ?? null,
+        ...sharedPanelContext.terminal,
         onDisplayPathChange: handleTerminalDisplayPathChange,
       },
+      providerManagement,
     }),
     [
-      browserState,
-      browserAvailability,
-      defaultBranch,
-      diffMarkerStyle,
-      files,
-      gitStatus,
-      handleTerminalDisplayPathChange,
-      isRefreshingReview,
-      planContentByEventId,
-      reviewView,
-      reviewTabState,
-      onReviewSummaryChange,
-      onOpenReviewFile,
-      selectedFile,
-      sessionId,
-      sessionStatus,
-      terminalAvailable,
-      sideChat,
-      onAskInSideChat,
-      stableOnAskInSideChat,
-      stableOnSetFileViewState,
-      activeSideTaskId,
-      sideTaskContent,
-      subagentAvailability,
-      stableOnAddComposerFiles,
-      browserDraftKey,
-      stableOnAppendComposerText,
-      stableOnBrowserStateChange,
-      stableOnClose,
-      stableOnCreateBranch,
-      stableOnFileLoadError,
-      stableOnOpenFileFromBrowser,
-      stableOnOpenWorkspacePath,
-      stableOnPinTab,
-      stableOnPreviewFile,
-      stableOnRefreshReview,
-      stableOnReviewTabStateChange,
-      stableOnSetFileMarkdownViewMode,
+      sharedPanelContext,
       stableOnToggleReviewView,
+      stableOnRecreateSideChat,
+      stableOnClose,
+      stableOnOpenReviewFile,
+      stableOnOpenFileFromBrowser,
+      stableOnPreviewFile,
+      stableOnPinTab,
+      stableOnFileLoadError,
       target,
-      workspace,
+      state.activeTabId,
+      handleTerminalDisplayPathChange,
+      providerManagement,
     ],
   )
 
@@ -516,7 +366,7 @@ export function WorkbenchPanel({
               onOpenTab={stableOnOpenTab}
               onCreateSideChat={onCreateSideChat}
               onCreateTerminal={onCreateTerminal}
-              sideChatAvailable={sideChat.available}
+              sideChatAvailable={panelContext.sideChat.available}
               onPinTab={onPinTab}
               onReorderTab={onReorderTab}
               onSelectTab={onSelectTab}
@@ -532,7 +382,7 @@ export function WorkbenchPanel({
           target={target}
           onCreateSideChat={onCreateSideChat}
           onOpenTab={stableOnOpenTab}
-          sideChatAvailable={sideChat.available}
+          sideChatAvailable={panelContext.sideChat.available}
         />
       </WorkbenchPanelSurface>
     </WorkbenchDockFrame>

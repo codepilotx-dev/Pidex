@@ -1,6 +1,7 @@
+import { QueuedGoalRepository } from './QueuedGoalRepository'
 import { Effect } from 'effect'
 import { encodeApprovalPolicy } from '@pidex/shared/thread'
-import { AgentError } from '../../Domain'
+import { AgentError, decodeStoredTaskMode } from '../../Domain'
 import type {
   AgentExecution,
   EventEnvelope,
@@ -9,7 +10,6 @@ import type {
   PermissionConfig,
   StoredInputDelivery,
   SubmitMessage,
-  TaskMode,
   ToolInvocation,
   TurnStatus,
 } from '../../Domain'
@@ -26,7 +26,8 @@ import { ThreadRepositoryDatabase } from './ThreadRepository'
 import { PlanApprovalRepository } from './PlanApprovalRepository'
 import { ThreadGoalLedgerRepository } from './ThreadGoalLedgerRepository'
 import { ThreadGoalRepository } from './ThreadGoalRepository'
-import { ThreadGoalContinuationRepository } from './ThreadGoalContinuationRepository'
+import { ThreadGoalControlRepository } from './ThreadGoalControlRepository'
+import { GoalTurnClassifier } from '../../session/GoalTurnClassifier'
 
 export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDatabase {
   bindInputAttachments(inputID: string, attachmentIDs: readonly string[]) {
@@ -55,6 +56,32 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
   }
 
   recoverInterruptedExecutions(timestamp: number) {
+    // A resumable approval has not finished its tool; keep its item waiting for the real result.
+    const resumableApprovalItem = `type = 'tool' AND EXISTS (
+      SELECT 1 FROM approval_requests AS r
+      JOIN approval_checkpoints AS c ON c.approval_id = r.id
+      JOIN turns AS t ON t.id = r.turn_id
+      WHERE r.tool_call_id = items.id AND r.turn_id = items.turn_id
+        AND r.thread_id = items.thread_id AND r.agent_id = items.agent_id
+        AND r.status IN ('pending', 'resolved', 'claimed')
+        AND t.status IN ('waiting_permission', 'queued') AND c.version = 1
+        AND json_type(c.payload, '$.runState') = 'text'
+        AND json_type(c.payload, '$.interruption') IS NOT NULL
+    )`
+    // The question and its paused tool share one continuation, including a persisted reply.
+    const resumableQuestionToolItem = `type = 'tool' AND EXISTS (
+      SELECT 1 FROM question_requests AS q JOIN turns AS t ON t.id = q.turn_id
+      WHERE q.tool_call_id = items.id AND q.turn_id = items.turn_id
+        AND q.thread_id = items.thread_id AND q.agent_id = items.agent_id
+        AND ((q.status = 'pending' AND t.status = 'waiting_question')
+          OR (q.status IN ('resolved', 'resuming') AND t.status = 'queued'))
+        AND ((json_type(q.payload, '$.checkpoint.state') = 'text'
+          AND length(json_extract(q.payload, '$.checkpoint.state')) > 0
+          AND json_type(q.payload, '$.checkpoint.interruption') IS NOT NULL)
+          OR (json_type(q.payload, '$.checkpoint.payload.state') = 'text'
+          AND length(json_extract(q.payload, '$.checkpoint.payload.state')) > 0
+          AND json_type(q.payload, '$.checkpoint.payload.interruption') IS NOT NULL))
+    )`
     const interruptedTurns = this.sqlite
       .query(
         `
@@ -82,6 +109,8 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         `
       SELECT id FROM items
       WHERE status IN ('pending', 'running') AND type <> 'subagent'
+        AND NOT (${resumableApprovalItem})
+        AND NOT (${resumableQuestionToolItem})
         AND NOT (type = 'question' AND id IN (
           SELECT id FROM question_requests WHERE status = 'pending'
             AND (json_extract(payload, '$.checkpoint.state') IS NOT NULL
@@ -125,6 +154,8 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       .query(
         `UPDATE items SET status = 'interrupted', updated_at = ?
       WHERE status IN ('pending', 'running') AND type <> 'subagent'
+        AND NOT (${resumableApprovalItem})
+        AND NOT (${resumableQuestionToolItem})
         AND NOT (type = 'question' AND id IN (
           SELECT id FROM question_requests WHERE status = 'pending'
             AND (json_extract(payload, '$.checkpoint.state') IS NOT NULL
@@ -133,6 +164,19 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
     `,
       )
       .run(timestamp)
+    // Requeue first so even a mailbox-only thread is paused before startup can run it.
+    for (const turn of interruptedTurns) {
+      for (const queued of this.requeueInterruptedMailbox(turn.thread_id, turn.id, timestamp)) {
+        this.insertEvent(turn.thread_id, queued.turnID, 'turn/queued', {
+          turnId: queued.turnID,
+          inputId: queued.inputID,
+          createdAt: timestamp,
+        })
+        this.insertEvent(turn.thread_id, queued.turnID, 'agent/upserted', {
+          agent: this.getAgentExecution(queued.agentID),
+        })
+      }
+    }
     this.sqlite
       .query(
         `UPDATE threads SET queue_pause_reason = 'interrupted', queue_version = queue_version + 1, updated_at = ?
@@ -403,7 +447,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         id: string
         content: string
         model_ref: string
-        task_mode: TaskMode
+        task_mode: string
         skills: string | null
       } & PermissionColumns
     >
@@ -412,7 +456,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       content: row.content,
       model: parse<ModelRef>(row.model_ref),
       permissionConfig: permissionConfigFromRow(row),
-      taskMode: row.task_mode,
+      taskMode: decodeStoredTaskMode(row.task_mode),
       ...(row.skills ? { skills: parse<NonNullable<SubmitMessage['skills']>>(row.skills) } : {}),
     }))
   }
@@ -476,7 +520,11 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
     })
   }
 
-  startTurnExecution(turnID: string, input: SubmitMessage & { id: string }) {
+  startTurnExecution(
+    turnID: string,
+    input: SubmitMessage & { id: string },
+    beforeStart?: () => EventEnvelope | undefined,
+  ) {
     const timestamp = now()
     return this.transaction(() => {
       const row = this.sqlite
@@ -489,6 +537,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
         )
         .run(timestamp, row.root_agent_id)
       if (claimed.changes === 0) return null
+      const goalEvent = beforeStart?.()
       const started = this.sqlite
         .query(
           "UPDATE turns SET status = 'running', started_at = COALESCE(started_at, ?), finished_at = NULL, updated_at = ? WHERE id = ? AND status = 'queued'",
@@ -504,6 +553,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       const agent = this.getAgentExecution(row.root_agent_id)!
       this.goalLedger().openInterval({ threadId: row.thread_id, agentId: agent.id })
       const events = [
+        ...(goalEvent ? [goalEvent] : []),
         this.insertEvent(row.thread_id, turnID, 'agent/upserted', { agent }),
         this.insertEvent(row.thread_id, turnID, 'turn/started', {
           turnId: turnID,
@@ -516,102 +566,165 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
     })
   }
 
+  recordQueuedStartFailure(turnID: string) {
+    return this.transaction(() => {
+      const row = this.sqlite
+        .query("SELECT thread_id, root_agent_id FROM turns WHERE id = ? AND status = 'queued'")
+        .get(turnID) as { thread_id: string; root_agent_id: string } | null
+      if (!row) return []
+      const agent = this.updateAgentStatus(
+        row.root_agent_id,
+        'queued',
+        '目标或模式设置失败，请刷新后重试队列',
+      )
+      const pause = this.pauseQueue(row.thread_id, 'turn_failed')
+      return [
+        this.insertEvent(row.thread_id, turnID, 'agent/upserted', { agent }),
+        ...(pause ? [pause] : []),
+      ]
+    })
+  }
+
+  private requeueInterruptedMailbox(threadID: string, turnID: string, timestamp: number) {
+    const interruptedMailbox = this.sqlite
+      .query(
+        `
+              SELECT id, content, model_ref, sandbox_mode, approval_policy, approvals_reviewer, task_mode, created_at
+              FROM inputs
+              WHERE thread_id = ? AND turn_id = ? AND status = 'mailbox'
+              ORDER BY created_at, id
+            `,
+      )
+      .all(threadID, turnID) as Array<{
+      id: string
+      content: string
+      model_ref: string
+      sandbox_mode: PermissionConfig['sandboxMode']
+      approval_policy: string
+      approvals_reviewer: PermissionConfig['approvalsReviewer']
+      task_mode: string
+      created_at: number
+    }>
+    const requeuedSteers: Array<{ turnID: string; agentID: string; inputID: string }> = []
+    if (interruptedMailbox.length > 0) {
+      this.sqlite
+        .query(
+          "UPDATE turns SET queue_position = queue_position + ?, updated_at = ? WHERE thread_id = ? AND status = 'queued'",
+        )
+        .run(interruptedMailbox.length, timestamp, threadID)
+      interruptedMailbox.forEach((mailbox, index) => {
+        const nextTurnID = crypto.randomUUID()
+        const nextAgentID = crypto.randomUUID()
+        this.sqlite
+          .query(
+            `INSERT INTO turns (
+              id, thread_id, root_agent_id, status, mode, sandbox_mode, approval_policy,
+              approvals_reviewer, model_ref, strategy, queue_position, started_at, finished_at,
+              created_at, updated_at
+            ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, 'queue', ?, NULL, NULL, ?, ?)`,
+          )
+          .run(
+            nextTurnID,
+            threadID,
+            nextAgentID,
+            decodeStoredTaskMode(mailbox.task_mode),
+            mailbox.sandbox_mode,
+            mailbox.approval_policy,
+            mailbox.approvals_reviewer,
+            mailbox.model_ref,
+            index + 1,
+            mailbox.created_at,
+            timestamp,
+          )
+        this.sqlite
+          .query(
+            `INSERT INTO agent_executions (
+              id, thread_id, turn_id, parent_agent_id, profile, task, model_ref, session_id,
+              depth, status, error, created_at, updated_at
+            ) VALUES (?, ?, ?, NULL, 'main', ?, ?, ?, 0, 'queued', NULL, ?, ?)`,
+          )
+          .run(
+            nextAgentID,
+            threadID,
+            nextTurnID,
+            mailbox.content,
+            mailbox.model_ref,
+            `${threadID}:main`,
+            mailbox.created_at,
+            timestamp,
+          )
+        this.sqlite
+          .query(
+            "UPDATE inputs SET turn_id = ?, strategy = 'queue', status = 'queued' WHERE id = ? AND status = 'mailbox'",
+          )
+          .run(nextTurnID, mailbox.id)
+        this.sqlite
+          .query('UPDATE messages SET turn_id = ? WHERE id = ?')
+          .run(nextTurnID, mailbox.id)
+        requeuedSteers.push({ turnID: nextTurnID, agentID: nextAgentID, inputID: mailbox.id })
+      })
+      this.sqlite
+        .query('UPDATE threads SET queue_version = queue_version + ?, updated_at = ? WHERE id = ?')
+        .run(interruptedMailbox.length, timestamp, threadID)
+    }
+    return requeuedSteers
+  }
+
+  /**
+   * Classifies a completed goal round from host facts only and persists it. The
+   * blocker candidate, if any, was recorded by the model's `update_goal` call;
+   * everything else is read from approvals, questions, child tasks and tool
+   * results, so a plausible reply cannot fake progress or a wait.
+   */
+  private settleGoalObservation(input: {
+    threadId: string
+    turnId: string
+    goalId: string
+  }): { classification: string; hasWaiting: boolean } | null {
+    const controls = new ThreadGoalControlRepository(this)
+    const classifier = new GoalTurnClassifier(this)
+    const facts = classifier.facts(input.turnId)
+    // Settle onto the row this turn already opened, if any: a blocker candidate is
+    // recorded before the blocked transition bumps the revision, and a settlement
+    // under the newer revision would leave the candidate pending forever.
+    const existing = controls.observationForTurn(input.goalId, input.turnId)
+    const control = controls.ensure(input.goalId, input.threadId)
+    const active = new ThreadGoalRepository(this).get(input.threadId)?.status === 'active'
+    if (active && existing && existing.revision !== control.revision)
+      controls.markProcessing(input.goalId, existing.revision, input.turnId, 'settled')
+    const revision = active ? control.revision : (existing?.revision ?? control.revision)
+    const hasBlockerCandidate =
+      existing?.revision === revision && existing.classification === 'blocker-candidate'
+    const classification = classifier.classify({ turnId: input.turnId, hasBlockerCandidate })
+    controls.settleTurn({
+      goalId: input.goalId,
+      revision,
+      threadId: input.threadId,
+      turnId: input.turnId,
+      classification,
+      processing:
+        new ThreadGoalRepository(this).get(input.threadId)?.status === 'active'
+          ? 'pending'
+          : 'settled',
+    })
+    return { classification, hasWaiting: facts.hasWaiting }
+  }
+
   finalizeTurn(input: {
     threadID: string
     turnID: string
     agentID: string
     status: 'completed' | 'failed' | 'interrupted'
     message?: string
+    goalBudget?: { goalId: string; revision: number }
     pauseReason?: Exclude<QueuePauseReason, null>
   }) {
     const timestamp = now()
     return this.transaction(() => {
-      const interruptedMailbox =
+      const requeuedSteers =
         input.status === 'interrupted'
-          ? (this.sqlite
-              .query(
-                `
-              SELECT id, content, model_ref, sandbox_mode, approval_policy, approvals_reviewer, task_mode, created_at
-              FROM inputs
-              WHERE thread_id = ? AND turn_id = ? AND status = 'mailbox'
-              ORDER BY created_at, id
-            `,
-              )
-              .all(input.threadID, input.turnID) as Array<{
-              id: string
-              content: string
-              model_ref: string
-              sandbox_mode: PermissionConfig['sandboxMode']
-              approval_policy: string
-              approvals_reviewer: PermissionConfig['approvalsReviewer']
-              task_mode: TaskMode
-              created_at: number
-            }>)
+          ? this.requeueInterruptedMailbox(input.threadID, input.turnID, timestamp)
           : []
-      const requeuedSteers: Array<{ turnID: string; agentID: string; inputID: string }> = []
-      if (interruptedMailbox.length > 0) {
-        this.sqlite
-          .query(
-            "UPDATE turns SET queue_position = queue_position + ?, updated_at = ? WHERE thread_id = ? AND status = 'queued'",
-          )
-          .run(interruptedMailbox.length, timestamp, input.threadID)
-        interruptedMailbox.forEach((mailbox, index) => {
-          const nextTurnID = crypto.randomUUID()
-          const nextAgentID = crypto.randomUUID()
-          this.sqlite
-            .query(
-              `INSERT INTO turns (
-              id, thread_id, root_agent_id, status, mode, sandbox_mode, approval_policy,
-              approvals_reviewer, model_ref, strategy, queue_position, started_at, finished_at,
-              created_at, updated_at
-            ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?, ?, 'queue', ?, NULL, NULL, ?, ?)`,
-            )
-            .run(
-              nextTurnID,
-              input.threadID,
-              nextAgentID,
-              mailbox.task_mode,
-              mailbox.sandbox_mode,
-              mailbox.approval_policy,
-              mailbox.approvals_reviewer,
-              mailbox.model_ref,
-              index + 1,
-              mailbox.created_at,
-              timestamp,
-            )
-          this.sqlite
-            .query(
-              `INSERT INTO agent_executions (
-              id, thread_id, turn_id, parent_agent_id, profile, task, model_ref, session_id,
-              depth, status, error, created_at, updated_at
-            ) VALUES (?, ?, ?, NULL, 'main', ?, ?, ?, 0, 'queued', NULL, ?, ?)`,
-            )
-            .run(
-              nextAgentID,
-              input.threadID,
-              nextTurnID,
-              mailbox.content,
-              mailbox.model_ref,
-              `${input.threadID}:main`,
-              mailbox.created_at,
-              timestamp,
-            )
-          this.sqlite
-            .query(
-              "UPDATE inputs SET turn_id = ?, strategy = 'queue', status = 'queued' WHERE id = ? AND status = 'mailbox'",
-            )
-            .run(nextTurnID, mailbox.id)
-          this.sqlite
-            .query('UPDATE messages SET turn_id = ? WHERE id = ?')
-            .run(nextTurnID, mailbox.id)
-          requeuedSteers.push({ turnID: nextTurnID, agentID: nextAgentID, inputID: mailbox.id })
-        })
-        this.sqlite
-          .query(
-            'UPDATE threads SET queue_version = queue_version + ?, updated_at = ? WHERE id = ?',
-          )
-          .run(interruptedMailbox.length, timestamp, input.threadID)
-      }
       this.deleteAgentTurnCheckpoint(input.turnID)
       this.updateTurnStatus(input.turnID, input.status)
       const agent = this.updateAgentStatus(input.agentID, input.status, input.message ?? null)
@@ -660,52 +773,73 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
             goal: { id: visibleGoal.id, createdAt: visibleGoal.createdAt },
           })
         : null
-      const continuationRepository = new ThreadGoalContinuationRepository(this)
-      const settledGoal = new ThreadGoalRepository(this).get(input.threadID)
-      let continuation: ReturnType<ExecutionRepositoryDatabase['createTurn']> | null = null
-      if (
-        input.status === 'completed' &&
-        settledGoal?.status === 'active' &&
-        continuationRepository.available() &&
-        !continuationRepository.hasSourceTurn(input.turnID) &&
-        !this.sqlite
-          .query("SELECT 1 FROM turns WHERE thread_id = ? AND status = 'queued' LIMIT 1")
-          .get(input.threadID) &&
-        Boolean(
-          this.sqlite
-            .query(
-              'SELECT 1 FROM threads WHERE id = ? AND archived_at IS NULL AND queue_pause_reason IS NULL',
-            )
-            .get(input.threadID),
-        )
-      ) {
-        const previous = this.getTurnInput(input.turnID)
-        if (previous) {
-          const continuationInputId = crypto.randomUUID()
-          continuation = this.createTurn(
-            input.threadID,
-            {
-              content: `继续推进当前 Goal，基于已有任务上下文自主完成下一步。不要重复已完成的工作。\n\nGoal：${settledGoal.objective}`,
-              model: previous.model,
-              permissionConfig: previous.permissionConfig,
-              strategy: 'queue',
-              taskMode: previous.taskMode,
-              origin: 'goal-continuation',
-            },
-            'queued',
-            { inputID: continuationInputId },
-          )
-          continuationRepository.record({
-            sourceTurnId: input.turnID,
+      const controls = new ThreadGoalControlRepository(this)
+      let settledGoal = new ThreadGoalRepository(this).get(input.threadID)
+      // Settle this turn's host-fact classification before any continuation
+      // decision, so "real wait" and "real progress" are never mistaken for the
+      // no-progress spin that the two-round protection targets. A stopped or
+      // failed turn is not a goal round: user Stop and non-active goals win.
+      const observation =
+        visibleGoal && controls.available() && input.status === 'completed'
+          ? this.settleGoalObservation({
+              threadId: input.threadID,
+              turnId: input.turnID,
+              goalId: visibleGoal.id,
+            })
+          : null
+      let interruptedGoalEvent: EventEnvelope | null = null
+      if (input.message === 'budget-limited') {
+        if (
+          settledGoal?.status === 'active' &&
+          input.goalBudget?.goalId === settledGoal.id &&
+          input.goalBudget.revision === controls.revision(settledGoal.id)
+        ) {
+          const limitedGoal = new ThreadGoalRepository(this).write({
             threadId: input.threadID,
-            goalId: settledGoal.id,
-            continuationTurnId: continuation.turnID,
-            continuationInputId,
-            triggerReason: 'turn-completed-goal-active',
-            timestamp,
+            objective: settledGoal.objective,
+            status: 'budget-limited',
+            tokenBudget: settledGoal.tokenBudget,
+            expectedVersion: settledGoal.version,
+          })
+          if (limitedGoal) {
+            settledGoal = limitedGoal
+            // A terminal internal transition ends the generation: work already in
+            // flight for the previous revision must not resume this goal.
+            controls.bump(limitedGoal.id, input.threadID)
+            interruptedGoalEvent = this.insertEvent(input.threadID, null, 'thread/goal/updated', {
+              threadId: input.threadID,
+              goal: limitedGoal,
+              version: limitedGoal.version,
+            })
+          }
+        }
+      } else if (settledGoal?.status === 'active' && input.status === 'interrupted') {
+        const pausedGoal = new ThreadGoalRepository(this).write({
+          threadId: input.threadID,
+          objective: settledGoal.objective,
+          status: 'paused',
+          tokenBudget: settledGoal.tokenBudget,
+          expectedVersion: settledGoal.version,
+        })
+        if (pausedGoal) {
+          settledGoal = pausedGoal
+          controls.bump(pausedGoal.id, input.threadID)
+          interruptedGoalEvent = this.insertEvent(input.threadID, null, 'thread/goal/updated', {
+            threadId: input.threadID,
+            goal: pausedGoal,
+            version: pausedGoal.version,
           })
         }
       }
+      // Whether a goal continued after this turn is decided *after* commit by
+      // GoalContinuationCoordinator: verification is a network call, and a user
+      // reply must not wait on it. This only reports that the goal is still live.
+      const settleGoal =
+        input.status === 'completed' &&
+        settledGoal?.status === 'active' &&
+        observation?.classification !== 'waiting'
+          ? { threadId: input.threadID, turnId: input.turnID }
+          : null
       const events: EventEnvelope[] = [
         this.insertEvent(input.threadID, input.turnID, 'agent/upserted', { agent }),
         ...requeuedSteers.flatMap((queued) => [
@@ -731,11 +865,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           finishedAt: timestamp,
         }),
         ...(goalMeasurement ? [goalMeasurement.event] : []),
-        ...(continuation
-          ? [continuation.event, continuation.queueEvent, continuation.agentEvent].filter(
-              (event): event is EventEnvelope => event !== null,
-            )
-          : []),
+        ...(interruptedGoalEvent ? [interruptedGoalEvent] : []),
       ]
       if (
         input.pauseReason &&
@@ -761,7 +891,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           )
         }
       }
-      return { agent, events }
+      return { agent, events, settleGoal }
     })
   }
 
@@ -925,6 +1055,12 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           AND json_extract(entry.payload, '$.type') = 'message'
           AND json_extract(entry.payload, '$.message.role') = 'toolResult'
           AND json_extract(entry.payload, '$.message.toolCallId') = ?
+          AND COALESCE(json_extract(entry.payload, '$.message.details.__piPause'), 0) != 1
+          -- Older approval pauses were persisted as ordinary tool errors.
+          AND NOT (
+            COALESCE(json_extract(entry.payload, '$.message.isError'), 0) = 1
+            AND COALESCE(json_extract(entry.payload, '$.message.content[0].text'), '') = '等待用户审批'
+          )
         LIMIT 1
       `,
         )
@@ -958,7 +1094,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
   }
 
   queuedInput(inputID: string) {
-    return this.sqlite
+    const row = this.sqlite
       .query(
         `
         SELECT i.id, i.thread_id, i.turn_id, i.content, i.model_ref, i.sandbox_mode, i.approval_policy,
@@ -975,10 +1111,11 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           content: string
           model_ref: string
           strategy: StoredInputDelivery
-          task_mode: TaskMode
+          task_mode: string
           queue_position: number | null
         } & PermissionColumns)
       | null
+    return row ? { ...row, task_mode: decodeStoredTaskMode(row.task_mode) } : null
   }
 
   private eventByID(id: number): EventEnvelope | null {
@@ -1085,6 +1222,12 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       if (!input || input.thread_id !== threadID)
         throw new AgentError('QUEUED_INPUT_NOT_FOUND', '排队消息不存在或已开始执行', 409)
       const timestamp = now()
+      const pendingGoal = new QueuedGoalRepository(this).get(inputID)
+      if (pendingGoal) {
+        if (!content.trim() || content.trim().length > 4000)
+          throw new AgentError('INVALID_REQUEST', 'Goal 目标为 1–4000 字符', 400)
+        new QueuedGoalRepository(this).put(inputID, { ...pendingGoal, objective: content.trim() })
+      }
       this.sqlite.query('UPDATE inputs SET content = ? WHERE id = ?').run(content, inputID)
       if (skills !== undefined)
         this.sqlite
@@ -1112,6 +1255,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       if (!input || input.thread_id !== threadID)
         throw new AgentError('QUEUED_INPUT_NOT_FOUND', '排队消息不存在或已开始执行', 409)
       const timestamp = now()
+      new QueuedGoalRepository(this).remove(inputID)
       this.sqlite.query("UPDATE inputs SET status = 'cancelled' WHERE id = ?").run(inputID)
       this.sqlite
         .query(
@@ -1185,7 +1329,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
           content: string
           model_ref: string
           strategy: StoredInputDelivery
-          task_mode: TaskMode
+          task_mode: string
           skills: string | null
         } & PermissionColumns)
       | null
@@ -1196,7 +1340,7 @@ export abstract class ExecutionRepositoryDatabase extends ThreadRepositoryDataba
       model: parse(row.model_ref),
       permissionConfig: permissionConfigFromRow(row),
       strategy: row.strategy,
-      taskMode: row.task_mode,
+      taskMode: decodeStoredTaskMode(row.task_mode),
       ...(row.skills ? { skills: parse(row.skills) } : {}),
     } as SubmitMessage & { id: string }
   }

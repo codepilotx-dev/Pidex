@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isFullAccessPermissionConfig, isReadOnlyTaskMode } from '@pidex/shared/thread'
 import type { BrowserOperation, BrowserResult } from '@pidex/agent-protocol'
 import type { BrowserService } from '../../browser/BrowserService'
 import { AgentError } from '../../Domain'
@@ -93,10 +94,26 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
     allowedModes: read ? ['chat', 'plan'] : ['chat'],
     inspectInput: (value, context) => {
       const i = value as z.infer<typeof input>
-      const scope = browser.inspect(identity(context), i.tabId, i.operation)
-      if (context.taskMode === 'plan' && scope.ruleRequiresApproval)
-        throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式只能读取已授权的浏览器站点', 403)
-      return { authorizationScope: scope }
+      const scope = browser.inspect(
+        identity(context),
+        i.tabId,
+        i.operation,
+        !isReadOnlyTaskMode(context.taskMode) &&
+          isFullAccessPermissionConfig(context.permissionConfig),
+      )
+      if (isReadOnlyTaskMode(context.taskMode) && scope.ruleRequiresApproval)
+        throw new AgentError(
+          'TOOL_NOT_ALLOWED_IN_MODE',
+          'Plan 与 Grill 模式只能读取已授权的浏览器站点',
+          403,
+        )
+      return {
+        authorizationScope: scope,
+        permissionFacts: {
+          risk: read ? 'low' : 'medium',
+          networkAccess: Boolean(scope.browserOrigin),
+        },
+      }
     },
     execute: (value, context) => {
       const i = value as z.infer<typeof input>
@@ -105,6 +122,8 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
         i.tabId,
         i.operation as BrowserOperation,
         context.signal,
+        !isReadOnlyTaskMode(context.taskMode) &&
+          isFullAccessPermissionConfig(context.permissionConfig),
       )
     },
     auditResult: (value) => {
@@ -142,13 +161,21 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
       ),
       inspectInput: (value, context) => {
         const v = value as { action: string; tabId?: string }
-        if (context.taskMode === 'plan' && v.action !== 'list')
-          throw new AgentError('TOOL_NOT_ALLOWED_IN_MODE', 'Plan 模式只能查询浏览器标签', 403)
+        if (isReadOnlyTaskMode(context.taskMode) && v.action !== 'list')
+          throw new AgentError(
+            'TOOL_NOT_ALLOWED_IN_MODE',
+            'Plan 与 Grill 模式只能查询浏览器标签',
+            403,
+          )
         if (['takeover', 'release', 'close'].includes(v.action) && !v.tabId)
           throw new AgentError('INVALID_REQUEST', '缺少标签 ID', 400)
         if (v.action === 'takeover' || v.action === 'release')
-          return { authorizationScope: browser.inspectTakeover(identity(context), v.tabId!) }
+          return {
+            authorizationScope: browser.inspectTakeover(identity(context), v.tabId!),
+            permissionFacts: { risk: 'low', networkAccess: false },
+          }
         return {
+          permissionFacts: { risk: 'low', networkAccess: false },
           authorizationScope: browser.inspect(
             identity(context),
             v.action === 'close' ? v.tabId : undefined,
@@ -170,7 +197,13 @@ export function browserToolDefinitions(browser: BrowserService): ToolDefinition<
         }
         if (v.action === 'close') {
           if (!v.tabId) throw new AgentError('INVALID_REQUEST', '缺少标签 ID', 400)
-          browser.inspect(threadId, v.tabId)
+          browser.inspect(
+            threadId,
+            v.tabId,
+            undefined,
+            !isReadOnlyTaskMode(context.taskMode) &&
+              isFullAccessPermissionConfig(context.permissionConfig),
+          )
           await browser.close(v.tabId)
           return { closed: true }
         }

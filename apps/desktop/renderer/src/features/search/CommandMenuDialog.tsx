@@ -1,5 +1,6 @@
 import type React from 'react'
-import { useCallback, useMemo, useRef, useSyncExternalStore } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
+import { useStore } from 'zustand/react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { Command } from 'cmdk'
 import { FileSearch, FolderOpen, Search, SquarePen } from 'lucide-react'
@@ -68,11 +69,7 @@ export function CommandMenuDialog({
     pendingPermissionSessionIds,
     onSelectTask,
   })
-  const registeredActions = useSyncExternalStore(
-    commandMenuActionStore.subscribe,
-    commandMenuActionStore.getSnapshot,
-    commandMenuActionStore.getServerSnapshot,
-  )
+  const registeredActions = useStore(commandMenuActionStore, (state) => state.actions)
   const actions = useMemo(
     () => filterCommandMenuActions(registeredActions, query),
     [query, registeredActions],

@@ -1,3 +1,4 @@
+import { startupSurfaceReadyRef } from '../../../startup/StartupSplashHandoff.js'
 import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { Check, ChevronLeft, Server } from 'lucide-react'
 import type React from 'react'
@@ -11,15 +12,19 @@ import type {
 } from '../../../../shared/Types.js'
 import { AgentRpcError } from '../../../services/AgentRpcClient.js'
 import { Button } from '../../../components/ui/Button.js'
-import { RemoteImage } from '../../../components/ui/RemoteImage.js'
+import { ProviderIcon } from '../ProviderIcon.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import { isExecutableDesktopProvider } from '../../../services/desktop-client/ProviderAdapters.js'
 import { persistRecentNewThreadModel } from '../RecentNewThreadModel.js'
 import { WindowControls } from '../../layout/MenuBar.js'
 import { providerManagementStore } from '../../provider-management/ProviderManagementStore.js'
-import { useProviderManagementSnapshot } from '../../provider-management/UseProviderManagementSnapshot.js'
-import { useDesktopSettings } from '../../settings/UseDesktopSettings.js'
+import {
+  useProviderManagementStore,
+  useShallow,
+} from '../../provider-management/UseProviderManagementStore.js'
+import type { ProviderConfigurationState } from '../../provider-management/Types.js'
+import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import { ApiKeyEditorForm, type ApiKeyEditorValue } from '../ApiKeyEditorDialog.js'
 import { OAuthConnection } from '../provider-management/OAuthConnection.js'
 import { ProviderEditorDialog } from '../provider-management/ProviderEditorDialog.js'
@@ -35,8 +40,40 @@ export type ModelSetupStatus = 'loading' | 'ready' | 'saving' | 'error'
 
 export function ModelSetupPage(): React.ReactNode {
   const navigate = useNavigate()
-  const settings = useDesktopSettings()
-  const snapshot = useProviderManagementSnapshot()
+  const subscribedSettingsLoaded = useDesktopSettingsField((state) => state.settingsLoaded)
+  const subscribedFirstUseSetupCompleted = useDesktopSettingsField(
+    (state) => state.firstUseSetupCompleted,
+  )
+  const subscribedSaveFirstUseSetupCompleted = useDesktopSettingsField(
+    (state) => state.saveFirstUseSetupCompleted,
+  )
+  const subscribedSyncExternalSettingsPatch = useDesktopSettingsField(
+    (state) => state.syncExternalSettingsPatch,
+  )
+  const settings = useMemo(
+    () => ({
+      settingsLoaded: subscribedSettingsLoaded,
+      firstUseSetupCompleted: subscribedFirstUseSetupCompleted,
+      saveFirstUseSetupCompleted: subscribedSaveFirstUseSetupCompleted,
+      syncExternalSettingsPatch: subscribedSyncExternalSettingsPatch,
+    }),
+    [
+      subscribedSettingsLoaded,
+      subscribedFirstUseSetupCompleted,
+      subscribedSaveFirstUseSetupCompleted,
+      subscribedSyncExternalSettingsPatch,
+    ],
+  )
+  const configuration = useProviderManagementStore(
+    useShallow((state) => ({
+      loaded: state.configuration.loaded,
+      error: state.configuration.error,
+      configurationError: state.configuration.configurationError,
+      providers: state.configuration.providers,
+      currentProviderState: state.configuration.currentProviderState,
+      credentials: state.configuration.credentials,
+    })),
+  )
   const [step, setStep] = useState<ModelSetupStep>('provider')
   const [status, setStatus] = useState<ModelSetupStatus>('loading')
   const [providerQuery, setProviderQuery] = useState('')
@@ -59,13 +96,13 @@ export function ModelSetupPage(): React.ReactNode {
 
   const providers = useMemo(
     () =>
-      snapshot.providers.filter(isExecutableDesktopProvider).sort((left, right) =>
+      configuration.providers.filter(isExecutableDesktopProvider).sort((left, right) =>
         left.displayName.localeCompare(right.displayName, 'zh-CN', {
           numeric: true,
           sensitivity: 'base',
         }),
       ),
-    [snapshot.providers],
+    [configuration.providers],
   )
   const selectedProvider = providers.find((provider) => provider.providerID === providerId) ?? null
   const filteredProviders = useMemo(() => {
@@ -85,7 +122,7 @@ export function ModelSetupPage(): React.ReactNode {
   }, [modelMetadata, modelQuery, models])
   const selectedVariants = modelMetadata[modelId]?.variants ?? []
   const providerConnected = selectedProvider
-    ? isProviderConnected(selectedProvider, snapshot)
+    ? isProviderConnected(selectedProvider, configuration)
     : false
   const supportsApiKey = selectedProvider?.authMethods?.includes('api-key') !== false
   const keyFormProviders = useMemo(
@@ -122,31 +159,34 @@ export function ModelSetupPage(): React.ReactNode {
   useEffect(() => {
     if (
       !settings.settingsLoaded ||
-      !snapshot.loaded ||
-      snapshot.configurationError ||
-      !snapshot.currentProviderState ||
+      !configuration.loaded ||
+      configuration.configurationError ||
+      !configuration.currentProviderState ||
       settings.firstUseSetupCompleted !== undefined
     )
       return
-    const inferred = hasUsableTaskModel(snapshot.currentProviderState, snapshot.providers) ? 1 : 0
+    const inferred = hasUsableTaskModel(configuration.currentProviderState, configuration.providers)
+      ? 1
+      : 0
     void settings.saveFirstUseSetupCompleted(inferred).catch(() => undefined)
   }, [
     settings.firstUseSetupCompleted,
     settings.saveFirstUseSetupCompleted,
     settings.settingsLoaded,
-    snapshot.configurationError,
-    snapshot.currentProviderState,
-    snapshot.providers,
-    snapshot.loaded,
+    configuration.configurationError,
+    configuration.currentProviderState,
+    configuration.providers,
+    configuration.loaded,
   ])
 
   useEffect(() => {
-    if (!snapshot.loaded || providerId || providers.length === 0) return
+    if (!configuration.loaded || providerId || providers.length === 0) return
     const preferred =
       providers.find(
-        (provider) => provider.providerID === snapshot.currentProviderState?.selectedProviderID,
+        (provider) =>
+          provider.providerID === configuration.currentProviderState?.selectedProviderID,
       ) ??
-      providers.find((provider) => isProviderConnected(provider, snapshot)) ??
+      providers.find((provider) => isProviderConnected(provider, configuration)) ??
       providers[0]
     setProviderId(preferred?.providerID ?? null)
     // 显式重置为 0，或旧配置尚未完成首次引导时，始终从第 1 步开始；
@@ -154,12 +194,14 @@ export function ModelSetupPage(): React.ReactNode {
     const fullGuideRequested =
       settings.firstUseSetupCompleted === 0 ||
       (settings.firstUseSetupCompleted === undefined &&
-        (snapshot.currentProviderState === null ||
-          snapshot.currentProviderState === undefined ||
-          !hasUsableTaskModel(snapshot.currentProviderState, snapshot.providers)))
-    setStep(!fullGuideRequested && isProviderConnected(preferred, snapshot) ? 'model' : 'provider')
+        (configuration.currentProviderState === null ||
+          configuration.currentProviderState === undefined ||
+          !hasUsableTaskModel(configuration.currentProviderState, configuration.providers)))
+    setStep(
+      !fullGuideRequested && isProviderConnected(preferred, configuration) ? 'model' : 'provider',
+    )
     setStatus('ready')
-  }, [providerId, providers, settings.firstUseSetupCompleted, snapshot])
+  }, [providerId, providers, settings.firstUseSetupCompleted, configuration])
 
   useEffect(() => {
     if (step !== 'model' || !selectedProvider) return
@@ -184,9 +226,10 @@ export function ModelSetupPage(): React.ReactNode {
         setModelId((current) =>
           nextModels.includes(current)
             ? current
-            : snapshot.currentProviderState?.selectedProviderID === selectedProvider.providerID &&
-                nextModels.includes(snapshot.currentProviderState.model)
-              ? snapshot.currentProviderState.model
+            : configuration.currentProviderState?.selectedProviderID ===
+                  selectedProvider.providerID &&
+                nextModels.includes(configuration.currentProviderState.model)
+              ? configuration.currentProviderState.model
               : (nextModels[0] ?? ''),
         )
         setNotice(
@@ -209,26 +252,26 @@ export function ModelSetupPage(): React.ReactNode {
     return () => {
       cancelled = true
     }
-  }, [modelReloadToken, selectedProvider, snapshot.currentProviderState, step])
+  }, [modelReloadToken, selectedProvider, configuration.currentProviderState, step])
 
-  if (!snapshot.loaded || !settings.settingsLoaded) {
+  if (!configuration.loaded || !settings.settingsLoaded) {
     return (
       <SetupBootState
-        label={resolveModelSetupLoadingLabel(snapshot.loaded, settings.settingsLoaded)}
+        label={resolveModelSetupLoadingLabel(configuration.loaded, settings.settingsLoaded)}
       />
     )
   }
-  if (snapshot.configurationError || !snapshot.currentProviderState) {
+  if (configuration.configurationError || !configuration.currentProviderState) {
     return (
       <SetupRecoveryState
-        message={snapshot.configurationError}
+        message={configuration.configurationError}
         onRetry={() => void providerManagementStore.refresh()}
       />
     )
   }
   const effectiveFirstUseSetupCompleted =
     settings.firstUseSetupCompleted ??
-    (hasUsableTaskModel(snapshot.currentProviderState, snapshot.providers) ? 1 : 0)
+    (hasUsableTaskModel(configuration.currentProviderState, configuration.providers) ? 1 : 0)
   if (effectiveFirstUseSetupCompleted === 1) {
     return <Navigate replace to="/new" />
   }
@@ -255,13 +298,15 @@ export function ModelSetupPage(): React.ReactNode {
     setError(null)
     setNotice(null)
     try {
-      const credential = await providerManagementStore.createApiKey({
+      const { value: credential, syncWarning } = await providerManagementStore.createApiKey({
         providerId: value.providerId,
         label: value.label,
         key: value.key,
       })
       setCreatedCredentialId(credential.id)
-      setNotice('凭据已安全保存，尚未验证。')
+      setNotice(
+        syncWarning ? `凭据已安全保存，尚未验证。${syncWarning}` : '凭据已安全保存，尚未验证。',
+      )
       setStatus('ready')
       setStep('model')
       window.dispatchEvent(new Event('desktop:model-provider-changed'))
@@ -280,7 +325,7 @@ export function ModelSetupPage(): React.ReactNode {
     setNotice('正在测试连接…')
     try {
       const result = createdCredentialId
-        ? await providerManagementStore.testApiKey(createdCredentialId)
+        ? await providerManagementStore.testApiKey(createdCredentialId).then(({ value }) => value)
         : await desktopClient.testModelProvider(
             selectedProvider.providerID,
             modelId
@@ -347,7 +392,7 @@ export function ModelSetupPage(): React.ReactNode {
   return (
     <div
       className="model-setup-page tw:grid tw:h-screen tw:w-full tw:min-w-0 tw:grid-rows-[36px_minmax(0,1fr)] tw:overflow-hidden tw:bg-app-canvas tw:text-app-text"
-      data-startup-surface-ready="true"
+      ref={startupSurfaceReadyRef}
     >
       <header className="model-setup-titlebar tw:flex tw:h-9 tw:[-webkit-app-region:drag] tw:min-w-0 tw:items-center tw:justify-between tw:border-b-[0.5px] tw:border-b-app-border-subtle">
         <span className="model-setup-brand tw:ps-4 tw:text-app-text-soft tw:type-control tw:tracking-[0.01em]">
@@ -436,7 +481,7 @@ export function ModelSetupPage(): React.ReactNode {
                 role="listbox"
               >
                 {filteredProviders.map((provider, index) => {
-                  const connected = isProviderConnected(provider, snapshot)
+                  const connected = isProviderConnected(provider, configuration)
                   const selected = provider.providerID === providerId
                   return (
                     <button
@@ -452,18 +497,12 @@ export function ModelSetupPage(): React.ReactNode {
                       onClick={() => chooseProvider(provider)}
                       onMouseEnter={() => providerNav.setActive(index)}
                     >
-                      {provider.logoURL ? (
-                        <RemoteImage
-                          alt=""
-                          className="model-setup-provider-logo tw:grid tw:size-3.5 tw:shrink-0 tw:place-items-center tw:rounded-md tw:object-contain tw:[&_svg]:size-3.5 tw:[&_svg]:text-app-text-meta"
-                          fallback={<Server data-icon-kind="artwork" size={14} aria-hidden />}
-                          src={provider.logoURL}
-                        />
-                      ) : (
-                        <span className="model-setup-provider-logo tw:grid tw:size-3.5 tw:shrink-0 tw:place-items-center tw:rounded-md tw:object-contain tw:[&_svg]:size-3.5 tw:[&_svg]:text-app-text-meta">
-                          <Server data-icon-kind="artwork" size={14} aria-hidden />
-                        </span>
-                      )}
+                      <ProviderIcon
+                        className="model-setup-provider-logo tw:grid tw:size-3.5 tw:shrink-0 tw:place-items-center tw:rounded-md tw:object-contain tw:[&_svg]:size-3.5 tw:[&_svg]:text-app-text-meta"
+                        fallback={<Server data-icon-kind="artwork" size={14} aria-hidden />}
+                        logoURL={provider.logoURL}
+                        providerID={provider.providerID}
+                      />
                       <span className="model-setup-provider-copy tw:grid tw:min-w-0 tw:flex-1 tw:gap-1">
                         <strong className="tw:overflow-hidden tw:type-weight-label tw:text-ellipsis tw:whitespace-nowrap">
                           {provider.displayName}
@@ -473,7 +512,7 @@ export function ModelSetupPage(): React.ReactNode {
                         </small>
                       </span>
                       <span
-                        className="model-setup-provider-status tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:[font-size:var(--cpx-sys-font-size-xs)] tw:[&_svg]:size-icon-sm tw:data-[connected=true]:text-app-success"
+                        className="model-setup-provider-status tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-text-meta tw:[font-size:var(--cpx-sys-font-size-xs)] tw:[&_svg]:size-[var(--inline-icon-size,1em)] tw:data-[connected=true]:text-app-success"
                         data-connected={connected || undefined}
                       >
                         {connected ? (
@@ -509,8 +548,8 @@ export function ModelSetupPage(): React.ReactNode {
                       </p>
                     </div>
                     {providerConnected ? (
-                      <span className="model-setup-connected tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-success tw:[font-size:var(--cpx-sys-font-size-xs)] tw:[&_svg]:size-icon-sm">
-                        <Check size={APP_ICON_SIZES.sm} aria-hidden />
+                      <span className="model-setup-connected tw:inline-flex tw:shrink-0 tw:items-center tw:gap-1 tw:text-app-success tw:[font-size:var(--cpx-sys-font-size-xs)] tw:[&_svg]:size-[var(--inline-icon-size,1em)]">
+                        <Check size="var(--inline-icon-size, 1em)" aria-hidden />
                         已连接
                       </span>
                     ) : null}
@@ -640,7 +679,11 @@ export function ModelSetupPage(): React.ReactNode {
                         {metadata?.vision ? '图片' : null}
                       </span>
                       {modelId === id ? (
-                        <Check className="tw:size-icon-sm" size={APP_ICON_SIZES.sm} aria-hidden />
+                        <Check
+                          className="tw:size-[var(--inline-icon-size,1em)]"
+                          size={APP_ICON_SIZES.sm}
+                          aria-hidden
+                        />
                       ) : null}
                     </button>
                   )
@@ -714,6 +757,7 @@ export function ModelSetupPage(): React.ReactNode {
       </main>
 
       <ProviderEditorDialog
+        existingProviderIds={configuration.providers.map((provider) => provider.providerID)}
         open={providerEditorOpen}
         onOpenChange={setProviderEditorOpen}
         onSaved={async (savedProviderId) => {
@@ -772,21 +816,21 @@ function useListboxNavigation({
 
 function isProviderConnected(
   provider: DesktopModelProviderSummary,
-  snapshot: ReturnType<typeof providerManagementStore.getSnapshot>,
+  configuration: Pick<ProviderConfigurationState, 'credentials' | 'currentProviderState'>,
 ): boolean {
   // 只认可：Agent authConfigured 状态、enabled 且 active 的安全凭据，
   // 或当前 Provider state 明确返回已配置凭据；enabled 但未激活的凭据不算连接。
   if (provider.apiKeyConfigured) return true
   if (
-    snapshot.credentials.some(
+    configuration.credentials.some(
       (credential) =>
         credential.providerId === provider.providerID && credential.enabled && credential.active,
     )
   )
     return true
   return (
-    snapshot.currentProviderState?.selectedProviderID === provider.providerID &&
-    snapshot.currentProviderState.apiKeyConfigured
+    configuration.currentProviderState?.selectedProviderID === provider.providerID &&
+    configuration.currentProviderState.apiKeyConfigured
   )
 }
 

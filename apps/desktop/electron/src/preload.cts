@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { DesktopThemeSettingsV7 } from './settings/AppearanceSettingsStore.js'
+import type { DesktopThemeSettingsV8 } from './settings/AppearanceSettingsStore.js'
 import type { DesktopSystemFontFace, DesktopSystemFontsResult } from '@pidex/shared/desktop-theme'
 import type {
   DesktopPetOverlayBridge,
@@ -73,7 +73,10 @@ import type {
   DesktopExternalOpenTarget,
   DesktopShellIpcBridge,
 } from '@pidex/shared/desktop-shell-ipc'
-import type { DesktopStartupIpcBridge } from '@pidex/shared/desktop-startup-ipc'
+import type {
+  DesktopStartupIpcBridge,
+  DesktopStartupSnapshot,
+} from '@pidex/shared/desktop-startup-ipc'
 import type {
   DesktopAppearanceIpcBridge,
   DesktopStartupThemeSeed,
@@ -184,6 +187,8 @@ const DESKTOP_MICROPHONE_IPC_CHANNELS = {
 
 const DESKTOP_PROVIDER_ICON_IPC_CHANNELS = {
   resolve: 'desktop-provider-icon:resolve',
+  website: 'desktop-provider-icon:website',
+  upload: 'desktop-provider-icon:upload',
   changed: 'desktop-provider-icon:changed',
 } as const satisfies typeof import('@pidex/shared/desktop-provider-icon-ipc').DESKTOP_PROVIDER_ICON_IPC_CHANNELS
 
@@ -219,8 +224,12 @@ const DESKTOP_CLIPBOARD_IPC_CHANNELS = {
 } as const satisfies typeof import('@pidex/shared/desktop-clipboard-ipc').DESKTOP_CLIPBOARD_IPC_CHANNELS
 
 const DESKTOP_STARTUP_IPC_CHANNELS = {
+  snapshot: 'startup:snapshot',
+  changed: 'startup:changed',
+  retry: 'startup:retry',
   openLogs: 'startup:open-logs',
   quit: 'startup:quit',
+  stopBackendAndExit: 'startup:stop-backend-and-exit',
 } as const satisfies typeof import('@pidex/shared/desktop-startup-ipc').DESKTOP_STARTUP_IPC_CHANNELS
 
 const DESKTOP_APPEARANCE_IPC_CHANNELS = {
@@ -387,6 +396,14 @@ const desktop = {
   },
   openMicrophonePrivacySettings: (): Promise<void> =>
     ipcRenderer.invoke(DESKTOP_MICROPHONE_IPC_CHANNELS.openPrivacySettings),
+  setProviderWebsiteIcon: (
+    input: import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderWebsiteIconInput,
+  ): Promise<import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderIconResolution> =>
+    ipcRenderer.invoke(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.website, input),
+  setProviderUploadedIcon: (
+    input: import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderUploadedIconInput,
+  ): Promise<import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderIconResolution> =>
+    ipcRenderer.invoke(DESKTOP_PROVIDER_ICON_IPC_CHANNELS.upload, input),
   resolveProviderIcon: (
     input: import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderIconResolveInput,
   ): Promise<import('@pidex/shared/desktop-provider-icon-ipc').DesktopProviderIconResolution> =>
@@ -540,18 +557,34 @@ const desktop = {
     ipcRenderer.invoke(DESKTOP_SHELL_IPC_CHANNELS.openPathWithTarget, targetPath, targetId),
   revealPathInFolder: (targetPath: string): Promise<void> =>
     ipcRenderer.invoke(DESKTOP_SHELL_IPC_CHANNELS.revealPathInFolder, targetPath),
+  getStartupSnapshot: async (): Promise<DesktopStartupSnapshot> => {
+    const snapshot: unknown = await ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.snapshot)
+    if (!isDesktopStartupSnapshot(snapshot)) throw new Error('启动状态无效')
+    return snapshot
+  },
+  retryStartup: (generation: number): Promise<void> =>
+    ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.retry, generation),
+  onStartupChanged: (listener: (snapshot: DesktopStartupSnapshot) => void): (() => void) => {
+    const handle = (_event: unknown, value: unknown) => {
+      if (isDesktopStartupSnapshot(value)) listener(value)
+    }
+    ipcRenderer.on(DESKTOP_STARTUP_IPC_CHANNELS.changed, handle)
+    return () => ipcRenderer.removeListener(DESKTOP_STARTUP_IPC_CHANNELS.changed, handle)
+  },
   openLogDirectory: (): Promise<string> =>
     ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.openLogs),
   quitDuringStartup: (): Promise<void> => ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.quit),
-  getAppearanceSettings: (): Promise<DesktopThemeSettingsV7> =>
+  stopBackendAndExit: (): Promise<void> =>
+    ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.stopBackendAndExit),
+  getAppearanceSettings: (): Promise<DesktopThemeSettingsV8> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.getSettings),
-  saveAppearanceSettings: (settings: DesktopThemeSettingsV7): Promise<void> =>
+  saveAppearanceSettings: (settings: DesktopThemeSettingsV8): Promise<void> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.saveSettings, settings),
   canRestorePreviousAppearance: (): Promise<boolean> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.canRestorePreviousAppearance),
-  restorePreviousAppearance: (): Promise<DesktopThemeSettingsV7> =>
+  restorePreviousAppearance: (): Promise<DesktopThemeSettingsV8> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.restorePreviousAppearance),
-  applyNewDesignTheme: (): Promise<DesktopThemeSettingsV7> =>
+  applyNewDesignTheme: (): Promise<DesktopThemeSettingsV8> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.applyNewDesignTheme),
   getSystemTheme: (): Promise<SystemThemeVariant> =>
     ipcRenderer.invoke(DESKTOP_APPEARANCE_IPC_CHANNELS.getSystemTheme),
@@ -886,3 +919,38 @@ function isTerminalExitReason(value: unknown): boolean {
     ].includes(String(value))
   )
 }
+
+function isDesktopStartupSnapshot(value: unknown): value is DesktopStartupSnapshot {
+  return (
+    isRecord(value) &&
+    Number.isSafeInteger(value.generation) &&
+    Number(value.generation) >= 0 &&
+    Number.isSafeInteger(value.revision) &&
+    Number(value.revision) >= 0 &&
+    ['loading', 'connected', 'failed'].includes(String(value.state)) &&
+    typeof value.label === 'string' &&
+    value.label.length <= 200
+  )
+}
+
+// 入口 JS 或 CSS 加载失败时，仍在原文档提供恢复入口，不自动撤掉遮罩。
+window.addEventListener(
+  'DOMContentLoaded',
+  () => {
+    const timer = window.setTimeout(() => {
+      if (document.documentElement.dataset.startupEntry === 'loaded') return
+      const splash = document.getElementById('startup-splash')
+      if (!splash) return
+      const label = splash.querySelector('.full-screen-whale-loader__status')
+      if (label) label.textContent = '界面入口未加载完成，请重新加载或检查安装。'
+      const actions = document.getElementById('startup-actions')
+      if (actions) actions.hidden = false
+      document.getElementById('startup-logs')?.addEventListener('click', (event) => {
+        event.preventDefault()
+        void ipcRenderer.invoke(DESKTOP_STARTUP_IPC_CHANNELS.openLogs)
+      })
+    }, 20_000)
+    window.addEventListener('pagehide', () => window.clearTimeout(timer), { once: true })
+  },
+  { once: true },
+)

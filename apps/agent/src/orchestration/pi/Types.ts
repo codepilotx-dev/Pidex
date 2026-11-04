@@ -1,3 +1,5 @@
+import type { ContextBudget } from '@pidex/shared/thread'
+import type { ContextCompactionService } from '../../context/ContextCompactionService'
 import type { AgentHarness } from '../harness/AgentHarness'
 import type {
   AgentHarnessEvent,
@@ -21,6 +23,7 @@ import type { ToolCatalog } from '../../tool/ToolRegistry'
 import type { WorkspaceService } from '../../workspace/WorkspaceService'
 import type { ExecutionPlanInput } from '../plan/ExecutionPlanInput'
 import type { StructuredPlan } from '@pidex/shared/thread'
+import type { ScheduleDraftSubmission } from '../plan/ScheduleDraft'
 import type { RequestUserInput } from '../../session/QuestionInput'
 
 export type HarnessRunResult =
@@ -44,6 +47,7 @@ export interface HarnessRuntimeRequest {
   model: Model<any>
   policyModel: ModelRef
   thinkingLevel?: ThinkingLevel
+  maxContextTokens?: number | null
   collaborationMessages?: () => Array<{
     id: string
     kind: string
@@ -56,7 +60,7 @@ export interface HarnessRuntimeRequest {
   bundle?: PromptBundle
   attachments?: Array<
     | { kind: 'text'; name: string; text: string }
-    | { kind: 'image'; name: string; mediaType: string; base64: string }
+    | { kind: 'image' | 'audio' | 'video'; name: string; mediaType: string; base64: string }
   >
   allowedTools?: readonly string[]
   toolCatalog?: ToolCatalog
@@ -113,6 +117,10 @@ export type PiToolCompletionMetadata = {
  * after the transaction commits.
  */
 export interface PiRuntimeEventSink {
+  visualizationPreview?(
+    context: PiRuntimeEventContext,
+    preview: import('@pidex/shared/visualization').VisualizationPreview,
+  ): void | Promise<void>
   event?(context: PiRuntimeEventContext, event: AgentHarnessEvent): void | Promise<void>
   assistantMessageStarted?(
     context: PiRuntimeEventContext,
@@ -120,6 +128,7 @@ export interface PiRuntimeEventSink {
       textItemID: string
       reasoningItemID: string
       placement: PiAssistantMessagePlacement
+      phase?: import('@pidex/shared/thread').MessagePhase
     },
   ): void | Promise<void>
   assistantMessageCompleted?(
@@ -129,6 +138,7 @@ export interface PiRuntimeEventSink {
       reasoningItemID: string
       planItemID: string
       placement: PiAssistantMessagePlacement
+      phase?: import('@pidex/shared/thread').MessagePhase
       content: unknown
       text?: string
       plan?: string | null
@@ -147,6 +157,10 @@ export interface PiRuntimeEventSink {
       /** Safe completion metadata projected from the provider response. */
       completion?: PiToolCompletionMetadata
     },
+  ): void | Promise<void>
+  assistantMessagePhaseChanged?(
+    context: PiRuntimeEventContext,
+    input: { itemID: string; phase: import('@pidex/shared/thread').MessagePhase; text: string },
   ): void | Promise<void>
   textDelta?(
     context: PiRuntimeEventContext,
@@ -199,6 +213,7 @@ export interface PiRuntimeEventSink {
       beforeCount: number
       trigger: RuntimeCompactionTrigger
       promptText: string
+      budget?: ContextBudget
     },
   ): void | Promise<void>
   savePoint?(
@@ -252,11 +267,24 @@ export interface PiLifecycleCallbacks {
   ): Promise<unknown>
   updatePlan?(input: ExecutionPlanInput, toolCallID: string, signal?: AbortSignal): Promise<unknown>
   updateGoal?(
-    input: { status: 'complete' | 'blocked' },
+    input: { status: 'complete' | 'blocked'; blocker?: string | undefined },
+    toolCallID: string,
+    signal?: AbortSignal,
+    identity?: { goalId: string; revision: number },
+  ): Promise<unknown>
+  submitPlan?(input: StructuredPlan, toolCallID: string, signal?: AbortSignal): Promise<unknown>
+  submitSchedulePlan?(
+    input: ScheduleDraftSubmission,
     toolCallID: string,
     signal?: AbortSignal,
   ): Promise<unknown>
-  submitPlan?(input: StructuredPlan, toolCallID: string, signal?: AbortSignal): Promise<unknown>
+  submitTaskSchedule?(
+    input: import('zod').infer<
+      typeof import('../../tool/TaskSchedule/Definitions').taskArrangementInput
+    >,
+    toolCallID: string,
+    signal?: AbortSignal,
+  ): Promise<unknown>
   spawnAgents?(
     input: Record<string, unknown>,
     toolCallID: string,
@@ -300,6 +328,7 @@ export interface HarnessRuntimeOptions {
   toolExecutor: ToolExecutor
   eventSink?: PiRuntimeEventSink
   activated?(threadID: string, active: ActiveHarness): void
+  onRuntimeReady?(): void | Promise<void>
   lifecycle?: PiLifecycleCallbacks
   beforeToolCall?: (
     request: HarnessRuntimeRequest,
@@ -311,9 +340,79 @@ export interface HarnessRuntimeOptions {
     },
   ) => Promise<{ block?: boolean; reason?: string; pause?: boolean } | undefined>
   compaction?: {
+    lifecycle?: ContextCompactionService
     shouldAutoCompact(threadID: string): boolean | Promise<boolean>
     recordFailure(threadID: string, trigger: RuntimeCompactionTrigger): void | Promise<void>
   }
+  goalBudget?: GoalBudgetLifecycle
+}
+
+export type GoalBudgetStatus = {
+  revision?: number
+  goal: import('@pidex/shared/thread').ThreadGoal
+  tokensUsed: number
+  remaining: number | null
+  reserve: number
+  isConvergence: boolean
+}
+
+export type GoalAdmissionDecision =
+  | { allowed: true; budgetStatus?: GoalBudgetStatus; wrapup?: boolean; maxTokens?: number }
+  | {
+      allowed: false
+      reason: 'budget_exhausted' | 'estimated_exceeds_budget'
+      budgetStatus: GoalBudgetStatus
+    }
+
+export type GoalObjectiveRevision = {
+  goal: import('@pidex/shared/thread').ThreadGoal
+  /** Control generation this objective belongs to. */
+  revision: number
+  /** Objective revision the model has already consumed. */
+  acknowledged: number
+  objectiveRevision?: number
+}
+
+export type GoalBudgetChange = {
+  goalId: string
+  revision: number
+  budgetRevision: number
+  acknowledged: number
+  previousBudget: number | null
+  budget: number | null
+  tokensUsed: number
+}
+
+export interface GoalBudgetLifecycle {
+  getBudgetStatus(threadID: string): GoalBudgetStatus | null
+  budgetChange?(threadID: string): GoalBudgetChange | null
+  acknowledgeBudget?(request: HarnessRuntimeRequest, change: GoalBudgetChange): void | Promise<void>
+  checkAdmission(
+    threadID: string,
+    estimatedInputTokens: number,
+    profile?: SubagentProfile,
+    estimatedOutputTokens?: number,
+    wrapupInputTokens?: number,
+  ): GoalAdmissionDecision
+  handleAdmissionDenied(
+    request: HarnessRuntimeRequest,
+    decision: Extract<GoalAdmissionDecision, { allowed: false }>,
+    estimatedInputTokens: number,
+  ): Promise<void>
+  /**
+   * Pending objective change to inject, or null when the model already consumed
+   * the current revision. Read before every model request so an edit made
+   * mid-turn reaches the next request.
+   */
+  pendingObjectiveUpdate?(threadID: string): GoalObjectiveRevision | null
+  /** Confirms consumption only after the request succeeded and was accepted. */
+  acknowledgeObjective?(
+    threadID: string,
+    revision: number,
+    objectiveRevision: number,
+    goalId?: string,
+  ): void
+  finishWrapup?(threadID: string, status: GoalBudgetStatus): Promise<void>
 }
 
 export interface ActiveHarness {

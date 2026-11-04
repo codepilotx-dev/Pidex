@@ -156,7 +156,12 @@ export const parsePorcelainStatus = (value: string) => {
     if (!field || field.length < 4) continue
     const stagedStatus = field[0] ?? ' '
     const unstagedStatus = field[1] ?? ' '
-    const path = validateRelativePath(field.slice(3))
+    const rawPath = field.slice(3)
+    const untracked = stagedStatus === '?' && unstagedStatus === '?'
+    const directory = untracked && rawPath.endsWith('/')
+    const path = validateRelativePath(directory ? rawPath.slice(0, -1) : rawPath)
+    // -uall 仍会把独立嵌套仓库作为目录返回，不是父仓库的可审阅文件。
+    if (directory) continue
     const renamedOrCopied =
       stagedStatus === 'R' ||
       stagedStatus === 'C' ||
@@ -168,7 +173,7 @@ export const parsePorcelainStatus = (value: string) => {
       previousPath,
       stagedStatus,
       unstagedStatus,
-      untracked: stagedStatus === '?' && unstagedStatus === '?',
+      untracked,
     })
   }
   return files

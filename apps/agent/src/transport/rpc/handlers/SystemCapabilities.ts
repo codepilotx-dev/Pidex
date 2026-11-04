@@ -1,3 +1,4 @@
+import { QueuedGoalRepository } from '../../../storage/repositories/QueuedGoalRepository'
 import { BrowserRepository } from '../../../storage/repositories/BrowserRepository'
 import { BrowserDataRepository } from '../../../storage/repositories/BrowserDataRepository'
 import { Capabilities, type ProtocolCapability } from '@pidex/agent-protocol'
@@ -5,7 +6,9 @@ import type { AgentDatabase } from '../../../storage/database/AgentDatabase'
 import {
   probeAutomationStorageCapabilities,
   probeArtifactsStorageCapabilities,
+  probePermissionRuleStorageCapabilities,
   probeScheduleCalendarStorageCapabilities,
+  probeScheduleDraftStorageCapabilities,
   probeThreadsStorageCapabilities,
 } from '../../../storage/database/StorageCapabilities'
 
@@ -36,11 +39,18 @@ export function filterAdvertisedCapabilities(
       }>
     ).map((row) => row.name),
   )
+  const { scheduleDrafts } = probeScheduleDraftStorageCapabilities(db.sqlite)
   const { scheduledTasks, schedulePlanProposals } = probeScheduleCalendarStorageCapabilities(
     db.sqlite,
   )
+  const permissionRules = probePermissionRuleStorageCapabilities(db.sqlite)
   return Capabilities.filter(
     (capability): capability is ProtocolCapability =>
+      capability !== 'integrations.minimax-cli.v1' &&
+      (capability !== 'thread.editUserMessage.v1' ||
+        ['thread_edits', 'thread_inactive_turns', 'turn_pi_starts'].every((table) =>
+          tables.has(table),
+        )) &&
       ((capability !== 'subagents.recursive.v1' && capability !== 'subagents.followup.v1') ||
         (tables.has('subagent_messages') &&
           tables.has('subagent_completions') &&
@@ -58,13 +68,20 @@ export function filterAdvertisedCapabilities(
       (capability !== 'thread.creation-surface.v1' || creationSurface) &&
       ((capability !== 'plan.approval.v1' && capability !== 'plan.approval.fresh.v1') ||
         db.repositories.planApprovals.available()) &&
+      (capability !== 'queue.goal.v1' ||
+        (new QueuedGoalRepository(db).available() &&
+          db.repositories.threadGoals.available() &&
+          db.repositories.threadGoals.visibleGoalsValid())) &&
       (capability !== 'thread.goal.v1' ||
         (db.repositories.threadGoals.available() &&
           db.repositories.threadGoalLedger.available() &&
           db.repositories.threadGoalContinuations.available() &&
           db.repositories.threadGoals.visibleGoalsValid())) &&
       (capability !== 'thread.bookmarks.v1' || db.repositories.threadBookmarks.available()) &&
-      (capability !== 'artifacts.read.v1' || itemArtifactsTable) &&
+      (capability !== 'github.threadPullRequests.v1' ||
+        db.repositories.threadPullRequests.available()) &&
+      ((capability !== 'artifacts.read.v1' && capability !== 'visualizations.v1') ||
+        itemArtifactsTable) &&
       (capability !== 'automation.manage.v1' || (automations && automationRuns)) &&
       (capability !== 'worktree.settings.v1' || tables.has('worktree_owned_roots')) &&
       (capability !== 'local-environment.multiple.v1' ||
@@ -76,7 +93,19 @@ export function filterAdvertisedCapabilities(
           tables.has('pr_watches') &&
           tables.has('automation_host_tool_calls'))) &&
       (capability !== 'calendar.manage.v1' ||
-        (automations && automationRuns && scheduledTasks && schedulePlanProposals)),
+        (automations && automationRuns && scheduledTasks && schedulePlanProposals)) &&
+      (capability !== 'task.schedule.v1' ||
+        (automations &&
+          automationRuns &&
+          scheduledTasks &&
+          db.repositories.taskSchedules.available())) &&
+      // 任务规划草案确认依赖独立扩展表；缺失时不得退回创建普通自动化。
+      (capability !== 'schedule.draft.v1' ||
+        (scheduleDrafts && automations && automationRuns && scheduledTasks)) &&
+      // 规则管理写入依赖独立表；高版本未知库缺少表时只隐藏能力，不擅自修库。
+      (capability !== 'permission.rules.v1' ||
+        (permissionRules.chatRules && permissionRules.legacyGrantRevocations)) &&
+      (capability !== 'model.preferences.v1' || tables.has('model_runtime_preferences')),
   )
 }
 

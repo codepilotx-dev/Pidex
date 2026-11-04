@@ -3,16 +3,24 @@ import { mkdtemp, mkdir, symlink, writeFile } from 'node:fs/promises'
 import { writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { removeFixturePaths } from './FixtureCleanup'
+import { removeFixturePath, removeFixturePaths } from './FixtureCleanup'
 import { GitCommandRunner } from '../src/git/GitCommandRunner'
 import type { AgentLogger } from '../src/observability/AgentLogger'
+import { parsePorcelainStatus } from '../src/review/diff/Parsers'
 import { GitReviewService } from '../src/review/GitReviewService'
 import { AgentDatabase } from '../src/storage/database/AgentDatabase'
 
 const roots: string[] = []
+// 断言失败会跳过用例末尾的 dispose/close，Windows 上残留的 SQLite 与 watcher
+// 句柄会让夹具目录持续 EBUSY。这里统一登记并在清理前兜底释放。
+const openFixtures: Array<{ review: GitReviewService; db: AgentDatabase }> = []
 afterEach(async () => {
+  for (const { review, db } of openFixtures.splice(0)) {
+    review.dispose()
+    db.close()
+  }
   await removeFixturePaths(roots.splice(0))
-}, 30_000)
+}, 60_000)
 
 const git = async (cwd: string, ...args: string[]) => {
   const child = Bun.spawn(['git', ...args], {
@@ -71,19 +79,15 @@ const fixture = async (
   const db = new AgentDatabase(join(container, 'agent.sqlite'))
   const project = db.createProject({ rootPath: root })
   const thread = db.createThread('Review fixture', project.id)
-  return {
-    root,
+  const review = new GitReviewService(
     db,
-    project,
-    thread,
-    review: new GitReviewService(
-      db,
-      options.onChanged,
-      options.resolvePullRequest,
-      options.onGitCommand,
-      options.logger,
-    ),
-  }
+    options.onChanged,
+    options.resolvePullRequest,
+    options.onGitCommand,
+    options.logger,
+  )
+  openFixtures.push({ review, db })
+  return { root, db, project, thread, review }
 }
 
 describe('GitReviewService', () => {
@@ -112,8 +116,51 @@ describe('GitReviewService', () => {
         args: ['rev-parse', 'HEAD'],
       }),
     ).rejects.toMatchObject({ code: 'GIT_OUTPUT_TOO_LARGE', details: undefined })
+    // 超限终止必须结束整个 git 进程树：只 kill 直接子进程时，Windows 上残留的
+    // 子进程会一直占着仓库目录，随后清理夹具就会 EBUSY。
     review.dispose()
     db.close()
+    await removeFixturePath(roots.pop()!)
+  }, 30_000)
+
+  test('未跟踪目录标记不被当作文件，仍拒绝越界路径', () => {
+    expect(parsePorcelainStatus('?? nested/\0 M src/index.ts\0').map((file) => file.path)).toEqual([
+      'src/index.ts',
+    ])
+    expect(() => parsePorcelainStatus('?? ../outside/\0')).toThrow('仓库内相对路径')
+    expect(() => parsePorcelainStatus('?? /absolute/\0')).toThrow('仓库内相对路径')
+  })
+
+  test('父仓库包含独立嵌套仓库时状态和摘要仍可用', async () => {
+    const { root, db, project, review } = await fixture()
+    try {
+      const nested = join(root, 'nested')
+      await mkdir(nested)
+      await git(nested, 'init', '-b', 'main')
+      await git(
+        nested,
+        '-c',
+        'user.name=Pidex Test',
+        '-c',
+        'user.email=test@pidex.local',
+        'commit',
+        '--allow-empty',
+        '-m',
+        'nested',
+      )
+      const nestedOnly = await review.status(project.id)
+      expect(nestedOnly.files).toEqual([])
+      expect(nestedOnly.clean).toBe(false)
+      await writeFile(join(root, 'src', 'index.ts'), 'export const value = 2\n', 'utf8')
+      const status = await review.status(project.id)
+      expect(status.files.map((file) => file.path)).toEqual(['src/index.ts'])
+      const snapshot = await review.summary(project.id, { kind: 'uncommitted' })
+      expect(snapshot.files.map((file) => file.path)).toContain('src/index.ts')
+      expect(snapshot.files.some((file) => file.path.startsWith('nested/'))).toBe(false)
+    } finally {
+      review.dispose()
+      db.close()
+    }
   }, 30_000)
 
   test('读取项目当前工作分支', async () => {
@@ -412,6 +459,27 @@ describe('GitReviewService', () => {
       }),
     ).rejects.toMatchObject({ code: 'REVIEW_SOURCE_UNAVAILABLE' })
     db.close()
+  }, 30_000)
+
+  test('提交历史按引用只读查询并拒绝无效引用', async () => {
+    const { root, db, project, review } = await fixture()
+    try {
+      await git(root, 'branch', 'other')
+      await git(root, 'commit', '--allow-empty', '-m', 'main only')
+      expect((await review.commits(project.id)).commits[0]?.subject).toBe('main only')
+      expect((await review.commits(project.id, 20, 'other')).commits[0]?.subject).toBe('initial')
+      expect(await git(root, 'branch', '--show-current')).toBe('main')
+      for (const ref of ['missing-branch', '--all', 'main --all', 'main\0']) {
+        await expect(review.commits(project.id, 20, ref)).rejects.toBeDefined()
+      }
+      await git(root, 'checkout', '--orphan', 'empty')
+      expect((await review.commits(project.id)).commits).toEqual([])
+      await expect(review.commits(project.id, 20, 'empty')).rejects.toMatchObject({
+        code: 'REVIEW_SOURCE_UNAVAILABLE',
+      })
+    } finally {
+      db.close()
+    }
   }, 30_000)
 
   test('Git 暂态不会生成相互矛盾的 Review generation', async () => {

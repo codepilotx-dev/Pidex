@@ -163,7 +163,7 @@ export const REVIEW_FILE_ACTION_ICON_SIZE = APP_ICON_SIZE
  * stay in the DOM, and the reveal is driven by the file header row group.
  */
 const FILE_ACTIONS_CLASS =
-  'tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:opacity-0 tw:pointer-events-none tw:transition-opacity tw:duration-feedback tw:ease-standard tw:group-hover/file-header:opacity-100 tw:group-hover/file-header:pointer-events-auto tw:group-focus-within/file-header:opacity-100 tw:group-focus-within/file-header:pointer-events-auto'
+  'tw:inline-flex tw:flex-none tw:items-center tw:gap-1 tw:opacity-0 tw:pointer-events-none tw:transition-opacity tw:duration-feedback tw:ease-standard tw:group-hover/file-header:opacity-100 tw:group-hover/file-header:pointer-events-auto tw:group-has-[:focus-visible]/file-header:opacity-100 tw:group-has-[:focus-visible]/file-header:pointer-events-auto'
 export const ListChevronsDownUp = createLucideIcon('list-chevrons-down-up', [
   ['path', { d: 'M3 5h8', key: '18g2rq' }],
   ['path', { d: 'M3 12h8', key: '1xfjp6' }],
@@ -778,7 +778,7 @@ export const ReviewDiffFilePreview = React.memo(function ReviewDiffFilePreview({
           <FileTypeIcon
             associationMode="extension-only"
             aria-hidden="true"
-            className="review-file-icon tw:size-icon tw:min-w-4 tw:mr-2 tw:shrink-0"
+            className="review-file-icon tw:size-[var(--inline-icon-size,1em)] tw:mr-2 tw:shrink-0"
             path={file.path}
             size={APP_ICON_SIZE}
           />
@@ -1033,7 +1033,7 @@ export function ReviewVirtualDiffRows({
         bufferSize={64}
         className="review-diff-vlist tw:flex-1 tw:min-h-0 tw:overflow-x-hidden"
         data={flattenedRows}
-        itemSize={20}
+        itemSize={24}
         style={{ width: '100%', height: '100%' }}
       >
         {(row) =>

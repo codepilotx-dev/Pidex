@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { isReadOnlyTaskMode } from '@pidex/shared/thread'
 import type { ComputerAction, ComputerResult } from '@pidex/agent-protocol'
 import { AgentError } from '../../Domain'
 import type { ComputerUseService } from '../../computer/ComputerUseService'
@@ -71,7 +72,9 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
     available: computer.available,
     allowedProfiles: ['main'],
     approvalStrategy: 'policy',
-    visibility: 'deferred',
+    // Internal: reachable only through the host node_repl bridge, never exposed
+    // to the model. Registration, audit and the permission chain are unchanged.
+    visibility: 'internal',
     executionMode: 'sequential',
     auditResult: (result: ComputerResult) => ({ isError: result.isError, code: result.code }),
     formatResult: (result: ComputerResult) => ({
@@ -86,7 +89,7 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
     {
       ...base,
       sdkName: 'ComputerApps',
-      capabilities: observational,
+      capabilities: { ...observational, readOnly: true },
       schema: z.object({}).strict(),
       inputSchema: { type: 'object', properties: {}, additionalProperties: false },
       allowedModes: ['chat', 'plan'],
@@ -98,7 +101,7 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
     {
       ...base,
       sdkName: 'ComputerRead',
-      capabilities: observational,
+      capabilities: { ...observational, readOnly: true },
       schema: read,
       inputSchema: z.toJSONSchema(read),
       allowedModes: ['chat', 'plan'],
@@ -108,7 +111,7 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
         authorizationScope: computer.inspect(
           identity(context),
           value.windowRef,
-          context.taskMode === 'plan',
+          isReadOnlyTaskMode(context.taskMode),
           undefined,
           context.permissionConfig,
         ),
@@ -118,7 +121,7 @@ export function computerToolDefinitions(computer: ComputerUseService): ToolDefin
           identity(context),
           value.windowRef,
           context.signal,
-          context.taskMode === 'plan',
+          isReadOnlyTaskMode(context.taskMode),
           context.permissionConfig,
           context.computerGrant,
         ),

@@ -3,6 +3,7 @@ import { describe, expect, test } from 'bun:test'
 import {
   DEFAULT_DARK_THEME,
   DEFAULT_DESKTOP_THEME_SETTINGS,
+  getDesktopThemeForSelection,
   normalizeDesktopThemeSettings,
 } from '../shared/Theme.js'
 import { mergeChromeThemeSeed } from '../src/features/theme/CodeThemeSeed.js'
@@ -622,7 +623,29 @@ describe('theme font picker model', () => {
   })
 })
 
-describe('renderer V6 → V7 normalization', () => {
+const V7_FONTS = {
+  light: { ui: 'Inter', uiFace: null, code: 'JetBrains Mono', codeFace: null },
+  dark: { ui: 'PrettySans', uiFace: null, code: 'Cascadia Code', codeFace: null },
+}
+
+/** A V7 document: fonts still live on each variant, none at the top level. */
+function v7Document(mode: 'system' | 'light' | 'dark') {
+  return {
+    version: 7,
+    mode,
+    chromeThemes: {
+      light: { ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.light, fonts: { ...V7_FONTS.light } },
+      dark: { ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.dark, fonts: { ...V7_FONTS.dark } },
+    },
+    codeThemeIds: { light: 'codex-new-light', dark: 'codex-new-dark' },
+    pointerCursorEnabled: false,
+    reduceMotion: 'system',
+    fontSmoothingEnabled: true,
+    fontSizes: { ui: 14, code: 13 },
+  }
+}
+
+describe('renderer V6 → V8 normalization', () => {
   test('preserves every V6 value and adds null faces', () => {
     const migrated = normalizeDesktopThemeSettings({
       version: 6,
@@ -661,7 +684,7 @@ describe('renderer V6 → V7 normalization', () => {
     })
 
     expect(migrated).toMatchObject({
-      version: 7,
+      version: 8,
       mode: 'dark',
       codeThemeIds: { light: 'github-light-default', dark: 'dracula' },
       pointerCursorEnabled: true,
@@ -675,17 +698,23 @@ describe('renderer V6 → V7 normalization', () => {
       ink: '#111111',
       contrast: 42,
     })
-    expect(migrated.chromeThemes.light.fonts).toEqual({
+    // V7 stored fonts per variant; the mode's variant owns the shared value
+    // and both variants keep mirroring it for variant-shaped readers.
+    expect(migrated.fonts).toEqual({
       ui: 'Inter',
       uiFace: null,
       code: 'JetBrains Mono',
       codeFace: null,
     })
+    for (const variant of ['light', 'dark'] as const) {
+      expect(migrated.chromeThemes[variant].fonts).toEqual(migrated.fonts)
+    }
   })
 
   test('keeps valid faces and drops invalid or oversized ones', () => {
     const normalized = normalizeDesktopThemeSettings({
-      ...DEFAULT_DESKTOP_THEME_SETTINGS,
+      ...v7Document('light'),
+      version: 7,
       chromeThemes: {
         light: {
           ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes.light,
@@ -707,23 +736,21 @@ describe('renderer V6 → V7 normalization', () => {
       },
     })
 
-    expect(normalized.chromeThemes.light.fonts.uiFace).toEqual({
+    expect(normalized.fonts.uiFace).toEqual({
       family: 'Inter',
       fullName: 'Inter Bold',
       postscriptName: 'Inter-Bold',
     })
-    expect(normalized.chromeThemes.light.fonts.codeFace).toBeNull()
-    expect(normalized.chromeThemes.dark.fonts).toEqual({
-      ui: null,
-      uiFace: null,
-      code: null,
-      codeFace: null,
-    })
+    expect(normalized.fonts.codeFace).toBeNull()
+    // The configured light variant wins over the untouched default variant.
+    expect(normalized.fonts.ui).toBe('Inter')
+    expect(normalized.chromeThemes.dark.fonts).toEqual(normalized.fonts)
   })
 
   test('drops a face when it does not match the selected family', () => {
     const normalized = normalizeDesktopThemeSettings({
-      ...DEFAULT_DESKTOP_THEME_SETTINGS,
+      ...v7Document('light'),
+      version: 7,
       chromeThemes: {
         ...DEFAULT_DESKTOP_THEME_SETTINGS.chromeThemes,
         dark: {
@@ -740,7 +767,43 @@ describe('renderer V6 → V7 normalization', () => {
       },
     })
 
-    expect(normalized.chromeThemes.dark.fonts.ui).toBe('Inter')
-    expect(normalized.chromeThemes.dark.fonts.uiFace).toBeNull()
+    expect(normalized.fonts.ui).toBe('Inter')
+    expect(normalized.fonts.uiFace).toBeNull()
+  })
+})
+
+describe('renderer V7 → V8 shared fonts', () => {
+  test('the mode variant owns the shared fonts and both variants keep mirroring them', () => {
+    expect(normalizeDesktopThemeSettings(v7Document('light')).fonts).toEqual(V7_FONTS.light)
+    expect(normalizeDesktopThemeSettings(v7Document('dark')).fonts).toEqual(V7_FONTS.dark)
+  })
+
+  test('system mode keeps one font set for both variants instead of the default variant', () => {
+    const settings = normalizeDesktopThemeSettings(v7Document('system'))
+
+    expect(settings.fonts).toEqual(V7_FONTS.light)
+    expect(settings.chromeThemes.light.fonts).toEqual(settings.fonts)
+    expect(settings.chromeThemes.dark.fonts).toEqual(settings.fonts)
+  })
+
+  test('system mode ignores the untouched default variant', () => {
+    const document = v7Document('system')
+    document.chromeThemes.light.fonts = { ui: null, uiFace: null, code: null, codeFace: null }
+
+    expect(normalizeDesktopThemeSettings(document).fonts).toEqual(V7_FONTS.dark)
+  })
+
+  test('both variants resolve the same fonts while colors stay variant-specific', () => {
+    const settings = normalizeDesktopThemeSettings({
+      ...DEFAULT_DESKTOP_THEME_SETTINGS,
+      fonts: { ui: 'Inter', uiFace: null, code: 'CodeMono', codeFace: null },
+    })
+
+    for (const variant of ['light', 'dark'] as const) {
+      expect(getDesktopThemeForSelection(settings, variant).theme.fonts).toEqual(settings.fonts)
+    }
+    expect(getDesktopThemeForSelection(settings, 'light').theme.surface).not.toBe(
+      getDesktopThemeForSelection(settings, 'dark').theme.surface,
+    )
   })
 })

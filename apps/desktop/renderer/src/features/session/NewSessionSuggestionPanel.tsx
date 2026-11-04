@@ -48,12 +48,12 @@ export const SUGGESTION_PANEL_CLASS =
   'new-session-suggestions tw:w-[var(--quick-chat-surface-width)] tw:max-w-full tw:[container-type:inline-size]'
 
 const SUGGESTION_ICON_CLASS =
-  'new-session-suggestion-icon tw:grid tw:size-icon tw:place-items-center tw:[color:var(--new-session-suggestion-tone)]'
+  'new-session-suggestion-icon tw:grid tw:size-[var(--inline-icon-size,1em)] tw:place-items-center tw:[color:var(--new-session-suggestion-tone)]'
 
 const SUGGESTION_FOCUS_CLASS =
   'tw:border-0 tw:cursor-pointer tw:[font:inherit] tw:focus-visible:outline-1 tw:focus-visible:outline-offset-2 tw:focus-visible:outline-app-focus'
 
-const SUGGESTION_CARD_CLASS = `new-session-suggestion-card tw:flex tw:min-h-26 tw:min-w-0 tw:flex-col tw:items-start tw:justify-between tw:gap-3 tw:rounded-container tw:border tw:border-app-border tw:bg-transparent tw:px-4 tw:py-3 tw:text-left tw:text-app-text tw:shadow-none tw:[transition:background_var(--cpx-sys-motion-instant)_var(--cpx-sys-ease-standard),color_var(--cpx-sys-motion-feedback)_var(--cpx-sys-ease-standard)] tw:hover:bg-app-hover tw:active:bg-app-selected ${SUGGESTION_FOCUS_CLASS}`
+const SUGGESTION_CARD_CLASS = `new-session-suggestion-card tw:flex tw:min-h-26 tw:min-w-0 tw:flex-col tw:items-start tw:justify-between tw:gap-3 tw:rounded-container tw:border tw:border-app-border tw:bg-transparent tw:px-4 tw:py-3 tw:text-left tw:text-app-text tw:shadow-none tw:[transition:background_var(--cpx-sys-motion-instant)_var(--cpx-sys-ease-standard),color_var(--cpx-sys-motion-feedback)_var(--cpx-sys-ease-standard)] tw:hover:bg-app-hover ${SUGGESTION_FOCUS_CLASS}`
 
 export const SUGGESTION_HEADING_CLASS =
   'new-session-suggestion-list-heading tw:flex tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:px-2 tw:py-1 tw:text-app-text-meta tw:type-label'
@@ -123,7 +123,7 @@ export function NewSessionSuggestions({
             className={SUGGESTION_HEADING_ACTION_CLASS}
             onClick={onShowSuggestions}
           >
-            <ArrowLeft aria-hidden size={APP_ICON_SIZE} />
+            <ArrowLeft aria-hidden size="var(--inline-icon-size, 1em)" />
             返回建议
           </button>
         </div>
@@ -175,7 +175,7 @@ export function NewSessionSuggestions({
           className={SUGGESTION_HEADING_ACTION_CLASS}
           onClick={() => onShowAll(category)}
         >
-          <ArrowLeft aria-hidden size={APP_ICON_SIZE} />
+          <ArrowLeft aria-hidden size="var(--inline-icon-size, 1em)" />
           显示全部
         </button>
       </div>

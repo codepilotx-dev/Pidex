@@ -29,7 +29,6 @@ import { arrayBufferToBase64 } from '../../utils/BinaryEncoding.js'
 import { cx } from '../../utils/Cx.js'
 import { WorkspaceFileTree } from '../layout/WorkspaceFileTree.js'
 import { PrimaryPageLayout } from '../layout/primary-page/index.js'
-import { WorkspaceHeaderItem } from '../layout/workspace-header/index.js'
 import {
   DEFAULT_PROJECT_APPEARANCE,
   PROJECT_APPEARANCE_COLOR_CLASS,
@@ -41,7 +40,7 @@ import { LocalEnvironmentProjectSettings } from './local-environment/LocalEnviro
 import { SettingsContentArea } from './SettingsContentArea.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsSection } from './SettingsSection.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import { useDesktopSettingsField } from './UseDesktopSettings.js'
 import {
   filterEnvironmentProjects,
   isProjectSettingsConflict,
@@ -76,7 +75,7 @@ function EnvironmentList({
   embedded,
 }: Props & { routeBase: string }): React.ReactNode {
   const navigate = useNavigate()
-  const { projectAppearances } = useDesktopSettings()
+  const projectAppearances = useDesktopSettingsField((settings) => settings.projectAppearances)
   const [projects, setProjects] = useState<DesktopWorkspace[]>([])
   const [loading, setLoading] = useState(true)
   const [adding, setAdding] = useState(false)
@@ -158,7 +157,7 @@ function EnvironmentList({
         </span>
         <ChevronRight
           aria-hidden="true"
-          size={APP_ICON_SIZES.sm}
+          size="var(--inline-icon-size, 1em)"
           strokeWidth={APP_ICON_STROKE_WIDTH}
         />
       </button>
@@ -188,62 +187,69 @@ function EnvironmentList({
 
   if (routeBase === '/projects') {
     return (
-      <>
-        <WorkspaceHeaderItem align="end" id="projects.add" order={100} slot="right">
-          <Button color="primary" loading={adding} onClick={() => void addProject()}>
-            <Plus size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
-            添加项目
+      <PrimaryPageLayout
+        actions={
+          <Button
+            color="primary"
+            loading={adding}
+            onClick={() => void addProject()}
+            shape="pill"
+            size="md"
+          >
+            <Plus aria-hidden="true" size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />
+            <span>添加项目</span>
           </Button>
-        </WorkspaceHeaderItem>
-        <PrimaryPageLayout
-          className="projects-primary-page"
-          description="管理项目环境、项目指令和共享来源。"
-          search={
-            <SearchInput
-              aria-label="搜索项目"
-              onChange={setQuery}
-              placeholder="搜索项目名称或路径…"
-              value={query}
-            />
-          }
-          title="项目"
-        >
-          <div className="environment-settings environment-primary-content tw:min-h-0 tw:min-w-0">
-            {loading ? (
-              <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
-                正在载入项目…
+        }
+        className="projects-primary-page"
+        description="管理项目环境、项目指令和共享来源。"
+        search={
+          <SearchInput
+            aria-label="搜索项目"
+            onChange={setQuery}
+            placeholder="搜索项目名称或路径…"
+            shape="pill"
+            size="md"
+            value={query}
+            variant="outlined"
+          />
+        }
+        title="项目"
+      >
+        <div className="environment-settings environment-primary-content tw:min-h-0 tw:min-w-0">
+          {loading ? (
+            <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
+              正在载入项目…
+            </div>
+          ) : projects.length === 0 ? (
+            <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
+              <h2>暂无项目</h2>
+              <p>添加一个本地目录，开始管理项目环境与默认设置。</p>
+              <Button color="secondary" onClick={() => void addProject()}>
+                添加项目
+              </Button>
+            </div>
+          ) : visibleProjects.length === 0 ? (
+            <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
+              <h2>未找到项目</h2>
+              <p>没有与“{query}”匹配的项目。</p>
+              <Button color="secondary" size="compact" onClick={() => setQuery('')}>
+                清除搜索
+              </Button>
+            </div>
+          ) : (
+            <div className="environment-primary-projects tw:@container">
+              <div
+                className="environment-primary-projects__header tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:px-3 tw:py-2 tw:text-app-text-meta tw:type-caption"
+                aria-hidden="true"
+              >
+                <span>项目</span>
+                <span>目录</span>
               </div>
-            ) : projects.length === 0 ? (
-              <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
-                <h2>暂无项目</h2>
-                <p>添加一个本地目录，开始管理项目环境与默认设置。</p>
-                <Button color="secondary" onClick={() => void addProject()}>
-                  添加项目
-                </Button>
-              </div>
-            ) : visibleProjects.length === 0 ? (
-              <div className="environment-primary-empty tw:flex tw:min-h-64 tw:flex-col tw:items-center tw:justify-center tw:gap-2 tw:text-center tw:text-app-text-soft tw:[&>h2]:m-0 tw:[&>h2]:text-app-text tw:[&>h2]:type-title-sm tw:[&>p]:m-0 tw:[&>p]:type-body">
-                <h2>未找到项目</h2>
-                <p>没有与“{query}”匹配的项目。</p>
-                <Button color="secondary" size="compact" onClick={() => setQuery('')}>
-                  清除搜索
-                </Button>
-              </div>
-            ) : (
-              <div className="environment-primary-projects tw:@container">
-                <div
-                  className="environment-primary-projects__header tw:grid tw:grid-cols-[minmax(0,1fr)_auto] tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:px-3 tw:py-2 tw:text-app-text-meta tw:type-caption"
-                  aria-hidden="true"
-                >
-                  <span>项目</span>
-                  <span>目录</span>
-                </div>
-                <div className="environment-project-list tw:grid">{projectRows}</div>
-              </div>
-            )}
-          </div>
-        </PrimaryPageLayout>
-      </>
+              <div className="environment-project-list tw:grid">{projectRows}</div>
+            </div>
+          )}
+        </div>
+      </PrimaryPageLayout>
     )
   }
 
@@ -255,7 +261,7 @@ function EnvironmentList({
         {!embedded ? (
           <header className="settings-page-header environment-page-heading tw:mt-0 tw:mx-0 tw:mb-8 tw:flex tw:items-start tw:justify-between tw:gap-5 tw:[&>div]:min-w-0 tw:@max-[720px]:flex-col">
             <div>
-              <h1 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+              <h1 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
                 环境
               </h1>
               <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
@@ -483,7 +489,7 @@ function EnvironmentDetail({
             type="button"
             onClick={() => navigate(routeBase)}
           >
-            <ArrowLeft size={APP_ICON_SIZE} />
+            <ArrowLeft size="var(--inline-icon-size, 1em)" />
             返回环境
           </button>
           <EnvironmentEmpty>项目不存在、已移除或当前不可用。</EnvironmentEmpty>
@@ -522,17 +528,17 @@ function EnvironmentDetail({
           type="button"
           onClick={() => navigate(routeBase)}
         >
-          <ArrowLeft size={APP_ICON_SIZE} />
+          <ArrowLeft size="var(--inline-icon-size, 1em)" />
           环境
-          <ChevronRight aria-hidden="true" size={APP_ICON_SIZES.sm} />
+          <ChevronRight aria-hidden="true" size="var(--inline-icon-size, 1em)" />
           <span>{project.name}</span>
-          <ChevronRight aria-hidden="true" size={APP_ICON_SIZES.sm} />
+          <ChevronRight aria-hidden="true" size="var(--inline-icon-size, 1em)" />
           <span>编辑</span>
         </button>
 
         <header className="settings-page-header environment-page-heading tw:mt-0 tw:mx-0 tw:mb-8 tw:flex tw:items-start tw:justify-between tw:gap-5 tw:[&>div]:min-w-0 tw:@max-[720px]:flex-col">
           <div>
-            <h1 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
+            <h1 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">
               项目环境
             </h1>
             <p

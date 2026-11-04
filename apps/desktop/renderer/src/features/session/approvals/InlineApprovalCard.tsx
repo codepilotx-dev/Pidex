@@ -12,7 +12,7 @@ import type {
 } from '../../../../shared/Types.js'
 import { Button } from '../../../components/ui/Button.js'
 import { Dropdown } from '../../../components/ui/Dropdown.js'
-import { PopoverRadioItem } from '../../../components/ui/PopoverItem.js'
+import { PopoverItem, PopoverRadioItem } from '../../../components/ui/PopoverItem.js'
 import { AskUserQuestionApproval } from './AskUserQuestionApproval.js'
 import { useQuestionSkipCapability } from './UseQuestionSkipCapability.js'
 import { ASK_USER_QUESTION_NAV_BUTTON_CLASS, RequestCard } from './RequestCard.js'
@@ -23,6 +23,7 @@ import {
   McpElicitationUnsupported,
 } from '../mcpElicitation/McpElicitationForm.js'
 import { getSchemaMode, parseMcpElicitationSchema } from '../mcpElicitation/McpElicitationUtils.js'
+import { GuardianReviewSummary } from './GuardianReviewSummary.js'
 import { useHeightTransition } from '../../../hooks/UseHeightTransition.js'
 import { cx } from '../../../utils/Cx.js'
 
@@ -89,6 +90,8 @@ export type InlineApprovalCardProps = {
   onInterrupt?: () => void | Promise<void>
   request: DesktopPermissionRequest
   currentPermissionMode?: DesktopPermissionMode
+  /** 所属 Turn 的 canonical 模式：Chat、Plan、Grill 共用逐题显式确认。 */
+  taskMode?: 'chat' | 'plan' | 'grill'
   onDecide: (
     request: DesktopPermissionRequest,
     behavior: 'allow' | 'deny',
@@ -106,6 +109,7 @@ const COMMAND_HINT_MAX_LENGTH = 56
 export function InlineApprovalCard({
   request,
   currentPermissionMode,
+  taskMode,
   onDecide,
   onInterrupt,
   identity,
@@ -171,6 +175,18 @@ export function InlineApprovalCard({
           }
         })
       : []
+  const guardianSummary = request.guardian ? (
+    <GuardianReviewSummary
+      review={request.guardian}
+      {...(request.autoReviewFallbackReason
+        ? { fallbackReason: request.autoReviewFallbackReason }
+        : {})}
+    />
+  ) : request.autoReviewFallbackReason ? (
+    <p className="inline-approval-target tw:m-0 tw:px-2 tw:text-app-text-soft tw:type-body-sm tw:wrap-anywhere">
+      自动审查无法完成，已转为人工审批：{request.autoReviewFallbackReason}
+    </p>
+  ) : null
   async function act(action: () => void | Promise<void>): Promise<void> {
     if (busyRef.current || disabledReason) return
     busyRef.current = true
@@ -313,18 +329,17 @@ export function InlineApprovalCard({
           {grantOptions
             .filter((option) => option.scope === 'session')
             .map((option) => (
-              <DropdownMenu.Item
+              <PopoverItem
                 key={option.id}
-                className="popover-item"
                 disabled={disabled}
-                onSelect={() =>
+                onClick={() =>
                   void act(() =>
                     onDecide(request, 'allow', false, undefined, { grantOptionId: option.id }),
                   )
                 }
               >
                 {option.label}
-              </DropdownMenu.Item>
+              </PopoverItem>
             ))}
         </Dropdown>
       ) : null}
@@ -369,6 +384,7 @@ export function InlineApprovalCard({
     return (
       <AskUserQuestionApproval
         supportsQuestionSkip={supportsQuestionSkip}
+        taskMode={taskMode}
         identity={identity}
         disabledReason={disabledReason}
         onInterrupt={onInterrupt}
@@ -448,11 +464,7 @@ export function InlineApprovalCard({
             {request.description}
           </p>
         ) : null}
-        {request.autoReviewFallbackReason ? (
-          <p className="inline-approval-target tw:m-0 tw:px-2 tw:text-app-text-soft tw:type-body-sm tw:wrap-anywhere">
-            自动审查无法完成，已转为人工审批：{request.autoReviewFallbackReason}
-          </p>
-        ) : null}
+        {guardianSummary}
         {reviewSummary ? (
           <p className="inline-approval-target tw:m-0 tw:px-2 tw:text-app-text-soft tw:type-body-sm tw:wrap-anywhere">
             {reviewSummary}
@@ -495,11 +507,7 @@ export function InlineApprovalCard({
           {request.description}
         </p>
       ) : null}
-      {request.autoReviewFallbackReason ? (
-        <p className="inline-approval-target">
-          自动审查无法完成，已转为人工审批：{request.autoReviewFallbackReason}
-        </p>
-      ) : null}
+      {guardianSummary}
       {reviewSummary ? (
         <p className="inline-approval-target tw:m-0 tw:px-2 tw:text-app-text-soft tw:type-body-sm tw:wrap-anywhere">
           {reviewSummary}

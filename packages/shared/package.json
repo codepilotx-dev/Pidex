@@ -9,6 +9,7 @@
     "./errors": "./src/Errors.ts",
     "./automation": "./src/Automation.ts",
     "./calendar": "./src/Calendar.ts",
+    "./task-schedule": "./src/TaskSchedule.ts",
     "./events": "./src/LlmEvent.ts",
     "./desktop-theme": "./src/DesktopTheme.ts",
     "./desktop-pet-overlay": "./src/DesktopPetOverlay.ts",
@@ -32,11 +33,14 @@
     "./desktop-update-ipc": "./src/DesktopUpdateIpc.ts",
     "./model": "./src/Model.ts",
     "./schedule-plan": "./src/SchedulePlan.ts",
+    "./schedule-draft": "./src/ScheduleDraft.ts",
     "./scheduled-task": "./src/ScheduledTask.ts",
     "./session-group": "./src/SessionGroup.ts",
+    "./slash-commands": "./src/SlashCommands.ts",
     "./thread": "./src/thread/index.ts",
     "./thread-reference": "./src/ThreadReference.ts",
     "./thread-result-card": "./src/ThreadResultCard.ts",
+    "./visualization": "./src/Visualization.ts",
     "./guards": "./src/Guards.ts"
   },
   "scripts": {

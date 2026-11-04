@@ -12,6 +12,20 @@ export function toUserErrorMessage(error: unknown, context?: ErrorContext): stri
   const numericCode = extractNumericCode(error)
   const message = rawErrorMessage(error).trim()
 
+  if (errorCode === 'HISTORY_UNSUPPORTED' || message === 'HISTORY_UNSUPPORTED') {
+    return '当前聊天历史无法完整复制，请选择较早的已完成回复重试，或新建聊天并复制需求摘要。'
+  }
+
+  if (/No handler registered for ['"]desktop-[^'"]+['"]/u.test(message)) {
+    return '桌面主进程尚未加载此功能，请完全退出并重新启动 Pidex；刷新页面不会更新主进程。'
+  }
+
+  if (errorCode === 'QUEUE_VERSION_CONFLICT') return '队列已变化，已刷新最新状态，请重试。'
+  if (errorCode === 'GOAL_VERSION_CONFLICT') return message || '目标已变化，请刷新后重试。'
+
+  // Safe domain conflicts carry actionable messages; do not collapse them into internal errors.
+  if (errorCode === 'CONFLICT' && message && message !== 'CONFLICT') return message
+
   // 1. Internal Error (Highest priority for server-side exceptions)
   if (
     numericCode === -32603 ||

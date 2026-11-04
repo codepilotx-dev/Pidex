@@ -23,13 +23,14 @@ export type FileTypeIconProps = LucideProps & {
 export function FileTypeIcon({
   size = APP_ICON_SIZE,
   path,
+  associationMode,
   strokeWidth: _strokeWidth,
   absoluteStrokeWidth: _absoluteStrokeWidth,
   ...iconProps
 }: FileTypeIconProps): React.ReactNode {
   return (
     <Suspense fallback={<File size={size} {...iconProps} />}>
-      <MaterialFileIcon size={size} {...iconProps} path={path} />
+      <MaterialFileIcon size={size} associationMode={associationMode} {...iconProps} path={path} />
     </Suspense>
   )
 }

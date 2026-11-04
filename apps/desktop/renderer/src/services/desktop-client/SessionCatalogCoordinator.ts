@@ -1,5 +1,6 @@
 import type { EventEnvelope } from '@pidex/agent-protocol'
 import type { Turn } from '@pidex/shared/thread'
+import { safeTurnError } from '@pidex/shared/errors'
 
 /**
  * 书签集合变更通过窗口事件广播给导轨 hook：书签不属于会话目录投影，
@@ -10,6 +11,10 @@ export const THREAD_BOOKMARKS_UPDATED_EVENT = 'pidex-thread-bookmarks-updated'
 const THREAD_CATALOG_EVENT_TYPES: ReadonlySet<EventEnvelope['type']> = new Set([
   'thread/created',
   'thread/updated',
+  // 分叉完成会把目标会话从隐藏状态发布到目录，必须立即刷新，否则前端跳到
+  // 新会话时还可能拿到旧目录并报“找不到对话”。
+  'thread/forked',
+  'thread/history/edited',
   'thread/settings/updated',
   // Goal state is part of the canonical thread projection, so a goal change must
   // refresh the catalog on its own rather than waiting for an unrelated event.
@@ -47,6 +52,7 @@ export type SessionLifecycleUpdate = {
   turnId: string
   status: Turn['status']
   sequence: number
+  error?: string | null
 }
 
 /**
@@ -120,7 +126,6 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
     case 'turn/queued':
     case 'turn/started':
     case 'turn/completed':
-    case 'turn/failed':
     case 'turn/interrupted':
       return event.threadId
         ? {
@@ -128,6 +133,17 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
             turnId: event.payload.turn.id,
             status: event.payload.turn.status,
             sequence: event.sequence,
+            error: null,
+          }
+        : null
+    case 'turn/failed':
+      return event.threadId
+        ? {
+            threadId: event.threadId,
+            turnId: event.payload.turn.id,
+            status: event.payload.turn.status,
+            sequence: event.sequence,
+            error: safeTurnError(event.payload.turn.error ?? event.payload.error.message),
           }
         : null
     case 'turn/statusChanged':
@@ -137,6 +153,7 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
             turnId: event.payload.turnId,
             status: event.payload.status,
             sequence: event.sequence,
+            error: event.payload.status === 'failed' ? safeTurnError(event.payload.reason) : null,
           }
         : null
     default:
@@ -148,10 +165,24 @@ function catalogThreadId(event: EventEnvelope): string | null {
   switch (event.type) {
     case 'thread/created':
     case 'thread/updated':
-      return event.payload.thread.id
+      // Writers on the agent side emit a lightweight `{threadId, patch, updatedAt}`
+      // shape while the wire schema documents `{thread, version}`. Reading only the
+      // schema shape crashed reconciliation (and silently dropped the refresh) for
+      // every goal-driven `thread/updated`. Accept both, and fall back to the
+      // envelope thread id.
+      return readThreadId(event.payload) ?? event.threadId ?? null
     case 'thread/settings/updated':
       return event.payload.threadId
     default:
       return event.threadId ?? null
   }
+}
+
+function readThreadId(payload: unknown): string | null {
+  if (!payload || typeof payload !== 'object') return null
+  const record = payload as { thread?: { id?: unknown }; threadId?: unknown }
+  if (record.thread && typeof record.thread.id === 'string' && record.thread.id) {
+    return record.thread.id
+  }
+  return typeof record.threadId === 'string' && record.threadId ? record.threadId : null
 }

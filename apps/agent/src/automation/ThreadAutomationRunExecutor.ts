@@ -19,6 +19,9 @@ export class ThreadAutomationRunExecutor implements AutomationRunExecutor {
     private readonly threads: ThreadService,
     private readonly worktrees: ManagedWorktreeService,
     private readonly threadExecutions: ThreadExecutionPreparationService,
+    private readonly modelPreferences?: {
+      get(providerId: string, modelId: string): { maxContextTokens?: number | null } | null
+    },
   ) {}
 
   async start(
@@ -58,11 +61,23 @@ export class ThreadAutomationRunExecutor implements AutomationRunExecutor {
       prepared = await this.threadExecutions.prepare(automation.projectId, execution)
       let created
       try {
+        const automationModel = this.model(automation)
+        const pref = automationModel
+          ? this.modelPreferences?.get(
+              String(automationModel.providerID),
+              String(automationModel.id),
+            )
+          : null
+        const maxContextTokens = pref?.maxContextTokens ?? undefined
         created = await this.threads.create({
           title: automation.name,
           operationID: `automation-run:${run.id}:thread`,
           workspace: { kind: 'project', projectID: automation.projectId },
-          settings: { taskMode: 'chat', permissionConfig: automation.permissionConfig },
+          settings: {
+            taskMode: 'chat',
+            permissionConfig: automation.permissionConfig,
+            ...(maxContextTokens ? { maxContextTokens } : {}),
+          },
           bindExecution: prepared.bind,
           creationSurface: 'working',
         })

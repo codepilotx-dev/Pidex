@@ -13,6 +13,7 @@ import { OAuthConnection } from './OAuthConnection.js'
 import { useDialogFocusRestore } from '../../../components/ui/UseDialogFocusRestore.js'
 import { useLastNonNull } from '../../../hooks/UsePresenceRetention.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
+import { SETTINGS_MANAGEMENT_DIALOG_SIZE } from '../../settings/SettingsManagementDialogSizing.js'
 
 export type ConnectionChoice =
   | { id: 'inference-key'; kind: 'inference-key' }
@@ -77,7 +78,7 @@ export function ProviderConnectionDialog({
     selected?.kind === 'billing' || selected?.kind === 'usage-oauth' ? selected.source : null
 
   async function connected(): Promise<void> {
-    await providerManagementStore.refreshConnections()
+    await Promise.all([providerManagementStore.refreshSources(), providerManagementStore.refresh()])
     await onConnected()
     setSelectedId(null)
     onOpenChange(false)
@@ -90,8 +91,7 @@ export function ProviderConnectionDialog({
         <Dialog.Content
           aria-describedby={descriptionId}
           aria-labelledby={titleId}
-          className="ui-dialog-surface ui-dialog-surface--centered settings-management-dialog model-center-key-dialog model-center-connection-dialog tw:w-[min(600px,calc(100vw_-_48px))] tw:max-h-[min(720px,calc(100vh_-_48px))] tw:overflow-x-hidden tw:[&>section]:p-5"
-          data-dialog-size="detail"
+          className={`ui-dialog-surface ui-dialog-surface--centered settings-management-dialog model-center-key-dialog model-center-connection-dialog tw:overflow-x-hidden tw:[&>section]:p-5 ${SETTINGS_MANAGEMENT_DIALOG_SIZE.connection}`}
           onCloseAutoFocus={focusRestore.onCloseAutoFocus}
         >
           <header className="settings-management-dialog-header model-center-key-dialog-header tw:flex tw:items-start tw:justify-between tw:gap-4 tw:border-b tw:border-b-app-border-subtle tw:p-5">
@@ -217,9 +217,13 @@ export function ProviderConnectionDialog({
                 connectionMethod: selectedSource.connectionMethod,
               }}
               onChanged={connected}
-              onConnect={(input) => providerManagementStore.connectUsageCredential(input)}
+              onConnect={(input) =>
+                providerManagementStore.connectUsageCredential(input).then(() => undefined)
+              }
               onDisconnect={(sourceId) =>
-                providerManagementStore.disconnectUsageCredential({ sourceId })
+                providerManagementStore
+                  .disconnectUsageCredential({ sourceId })
+                  .then(() => undefined)
               }
             />
           ) : null}

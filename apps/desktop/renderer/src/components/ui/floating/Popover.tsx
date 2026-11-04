@@ -8,6 +8,7 @@ import React, {
   useId,
   useLayoutEffect,
   useRef,
+  useState,
   type ReactNode,
   type HTMLAttributes,
   type ButtonHTMLAttributes,
@@ -25,6 +26,7 @@ import {
   Slot,
   useControllableState,
   useDismissableLayer,
+  useExitPresence,
   useFocusReturn,
   usePortal,
   useTopLayer,
@@ -34,9 +36,12 @@ import {
 
 export type PopoverSide = 'top' | 'bottom' | 'left' | 'right'
 export type PopoverAlign = 'start' | 'center' | 'end'
+export type PopoverVariant = 'default' | 'unstyled'
 
 interface PopoverContextValue {
   open: boolean
+  present: boolean
+  setPresent: (present: boolean) => void
   setOpen: (open: boolean) => void
   triggerRef: React.MutableRefObject<HTMLElement | null>
   anchorRef: React.MutableRefObject<FloatingAnchor | null>
@@ -56,12 +61,21 @@ export interface PopoverRootProps {
 }
 function PopoverRoot({ children, open, defaultOpen = false, onOpenChange }: PopoverRootProps) {
   const [activeOpen, setOpen] = useControllableState(open, defaultOpen, onOpenChange)
+  const [present, setPresent] = useState(activeOpen)
   const triggerRef = useRef<HTMLElement | null>(null)
   const anchorRef = useRef<FloatingAnchor | null>(null)
   const contentId = useId()
   return (
     <PopoverContext.Provider
-      value={{ open: activeOpen, setOpen, triggerRef, anchorRef, contentId }}
+      value={{
+        open: activeOpen,
+        present: activeOpen || present,
+        setPresent,
+        setOpen,
+        triggerRef,
+        anchorRef,
+        contentId,
+      }}
     >
       {children}
     </PopoverContext.Provider>
@@ -125,14 +139,16 @@ const PopoverAnchor = forwardRef<HTMLElement, PopoverAnchorProps>(
 PopoverAnchor.displayName = 'Popover.Anchor'
 function PopoverPortal(props: PortalProps) {
   const context = usePopoverContext()
-  return context.open ? <Portal {...props} anchor={context.triggerRef.current} /> : null
+  return context.present ? <Portal {...props} anchor={context.triggerRef.current} /> : null
 }
 export interface PopoverContentProps extends HTMLAttributes<HTMLDivElement>, DismissEvents {
   side?: PopoverSide
   align?: PopoverAlign
   sideOffset?: number
-  /** UI-Design 的三档浮层尺寸。 */
+  /** UI-Design 的三档浮层尺寸。仅在 variant 为 default 时生效。 */
   size?: PopoverSize
+  /** 浮层外观变体：default（标准 popover 卡片外壳）或 unstyled（纯净定位外壳，完全由子组件自行绘制卡片与阴影）。 */
+  variant?: PopoverVariant
   asChild?: boolean
   anchor?: HTMLElement | null | React.RefObject<HTMLElement | null>
   collisionPadding?: FloatingCollisionPadding
@@ -147,6 +163,7 @@ const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
       align = 'start',
       sideOffset = 8,
       size = 'md',
+      variant = 'default',
       asChild = false,
       anchor,
       collisionPadding = 8,
@@ -165,7 +182,11 @@ const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
   ) => {
     const context = usePopoverContext()
     const contentRef = useRef<HTMLDivElement>(null)
-    const popover = useTopLayer(contentRef, context.open)
+    const present = useExitPresence(context.open, contentRef)
+    useLayoutEffect(() => {
+      context.setPresent(present)
+    }, [present, context])
+    const popover = useTopLayer(contentRef, present)
     const positionRef = useRef<FloatingAnchor | null>(null)
     positionRef.current = context.anchorRef.current ?? context.triggerRef.current
     useLayoutEffect(() => {
@@ -215,9 +236,12 @@ const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
       })
       return () => cancelAnimationFrame(timer)
     }, [context.open])
-    if (!context.open) return null
+    if (!present) return null
     const Component = asChild ? Slot : 'div'
-    const [actualSide, actualAlign = 'center'] = (coords?.actualPlacement ?? side).split('-')
+    const isUnstyled = variant === 'unstyled'
+    const [actualSide, actualAlign = align] = (coords?.actualPlacement ?? `${side}-${align}`).split(
+      '-',
+    )
     const anchorRect = anchorElement?.getBoundingClientRect()
     const arrowStyle =
       coords && anchorRect
@@ -235,12 +259,17 @@ const PopoverContent = forwardRef<HTMLDivElement, PopoverContentProps>(
         role={props.role ?? 'dialog'}
         aria-label={props['aria-label'] ?? 'Popover'}
         tabIndex={-1}
-        data-state="open"
-        data-popover-size={size}
+        data-state={context.open ? 'open' : 'closed'}
+        data-popover-size={isUnstyled ? undefined : size}
+        data-variant={variant}
         data-side={actualSide}
         data-align={actualAlign}
         style={{ ...floatingStyle, ...arrowStyle, ...style }}
-        className={`popover-surface popover ${asChild ? '' : 'tw:p-3.5'} tw:text-app-text ${className}`}
+        className={
+          isUnstyled
+            ? className
+            : `popover-surface popover ${asChild ? '' : 'tw:p-3.5'} tw:text-app-text ${className}`
+        }
       />
     )
   },
@@ -327,7 +356,7 @@ const PopoverClose = forwardRef<HTMLElement, PopoverCloseProps>(
         type="button"
         ref={ref as React.Ref<HTMLButtonElement>}
         aria-label={props['aria-label'] ?? t('Close popover')}
-        className={`tw:flex tw:items-center tw:justify-center ${children ? '' : 'tw:w-5 tw:h-5 -mr-1 -mt-0.5 tw:rounded-control'} tw:text-[var(--cpx-sys-color-fg-tertiary)] tw:hover:text-[var(--cpx-sys-color-fg-primary)] tw:hover:bg-[var(--cpx-sys-color-hover)] tw:active:scale-95 tw:transition-colors tw:duration-150 tw:cursor-pointer ${className}`}
+        className={`tw:flex tw:items-center tw:justify-center ${children ? '' : 'tw:w-6 tw:h-6 -mr-1 -mt-0.5 tw:rounded-control'} tw:text-[var(--cpx-sys-color-fg-tertiary)] tw:hover:text-[var(--cpx-sys-color-fg-primary)] tw:hover:bg-[var(--cpx-sys-color-hover)] tw:transition-colors tw:duration-150 tw:cursor-pointer ${className}`}
         onClick={(event) => {
           onClick?.(event as React.MouseEvent<HTMLButtonElement>)
           if (!event.defaultPrevented) context.setOpen(false)

@@ -170,7 +170,7 @@ export function LocalEnvironmentSettings({
     return (
       <SettingsContentArea>
         <div className="settings-content-inner tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
-          <h2 className="tw:type-title-xl">本地环境</h2>
+          <h2 className="tw:type-page-title">本地环境</h2>
           <React.Suspense fallback={<p>正在加载项目…</p>}>
             <ProjectEnvironments onError={onError} onNotice={onNotice} />
           </React.Suspense>
@@ -204,7 +204,7 @@ export function LocalEnvironmentSettings({
     <Frame>
       <div className="tw:grid tw:gap-6">
         <header className="tw:flex tw:items-center tw:justify-between tw:gap-3">
-          <h1 className="tw:m-0 tw:type-title-xl tw:text-app-text">
+          <h1 className="tw:m-0 tw:type-page-title tw:text-app-text">
             {readOnly ? projectName || name : '编辑本地环境'}
           </h1>
           <div className="tw:flex tw:items-center tw:gap-2">

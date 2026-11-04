@@ -4,8 +4,7 @@ import type { ConfigEdit, ConfigService } from '../src/config/ConfigService'
 import type { AgentLogger } from '../src/observability/AgentLogger'
 import { createApp, type TransportDependencies } from '../src/transport/Server'
 
-const createSettingsApp = () => {
-  const runtimeSettings = new Map<string, unknown>()
+const createSettingsApp = (runtimeSettings = new Map<string, unknown>()) => {
   let writtenEdits: ConfigEdit[] = []
   let sidebarLayout = 'classic'
   const configService = {
@@ -209,4 +208,40 @@ describe('桌面侧栏运行时设置', () => {
       terminalProfileId: 'powershell',
     })
   })
+})
+
+test('Git 看板独立持久保存，重启读取且旧客户端保存其他设置不清除看板', async () => {
+  const first = createSettingsApp()
+  const gitBoardState = JSON.stringify({
+    quickProjectIds: ['repo'],
+    quickCollapsed: true,
+    groups: [{ id: 'dev', name: '开发', projectIds: ['repo', 'ui'], collapsed: true }],
+  })
+  const saved = await first.app.request('/api/config/desktop-projection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gitBoardState }),
+  })
+  expect(saved.status).toBe(200)
+  expect(first.runtimeSettings.get('desktop.git-board.v1')).toBe(gitBoardState)
+  expect(first.writtenEdits()).toEqual([])
+  const restarted = createSettingsApp(first.runtimeSettings)
+  expect(
+    await (await restarted.app.request('/api/config/desktop-projection')).json(),
+  ).toMatchObject({ gitBoardState })
+  await restarted.app.request('/api/config/desktop-projection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sidebarManualOrder: {} }),
+  })
+  expect(
+    await (await restarted.app.request('/api/config/desktop-projection')).json(),
+  ).toMatchObject({ gitBoardState })
+  const invalid = await restarted.app.request('/api/config/desktop-projection', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ gitBoardState: [] }),
+  })
+  expect(invalid.status).toBe(400)
+  expect(first.runtimeSettings.get('desktop.git-board.v1')).toBe(gitBoardState)
 })

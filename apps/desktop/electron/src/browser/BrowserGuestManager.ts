@@ -349,6 +349,8 @@ export class DesktopBrowserController {
     return this.getState(owner, tabId)
   }
   async setVisible(owner: BrowserWindow, tabId: string, visible: boolean) {
+    // A panel's visibility notification may arrive after the tab was closed.
+    if (!this.#entries.has(tabId)) return this.#empty(tabId, owner)
     const entry = this.#require(owner, tabId)
     entry.visible = visible
     if (visible) {

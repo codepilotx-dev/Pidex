@@ -1,5 +1,6 @@
 {
   "schemaVersion": 1,
   "installation": "INSTALLED_BY_DEFAULT",
-  "capabilities": ["computer-use"]
+  "capabilities": ["computer-use"],
+  "hostMcpServers": ["node_repl"]
 }

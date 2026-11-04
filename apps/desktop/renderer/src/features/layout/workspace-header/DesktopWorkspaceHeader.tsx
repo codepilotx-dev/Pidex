@@ -1,5 +1,6 @@
 import type React from 'react'
-import { useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useStore } from 'zustand/react'
 import { cx } from '../../../utils/Cx.js'
 import { useWorkspaceHeaderContext } from './WorkspaceHeaderProvider.js'
 import {
@@ -30,7 +31,7 @@ export function DesktopWorkspaceHeader({
   shellControls,
 }: DesktopWorkspaceHeaderProps): React.ReactNode {
   const { routeScope, store } = useWorkspaceHeaderContext()
-  const snapshot = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot)
+  const snapshot = useStore(store, (state) => state.items)
   const leftRef = useRef<HTMLDivElement>(null)
   const rightRouteRef = useRef<HTMLDivElement>(null)
   const shellControlsRef = useRef<HTMLDivElement>(null)

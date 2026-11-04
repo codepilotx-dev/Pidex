@@ -68,6 +68,7 @@ describe('desktop renderer application origin', () => {
     expect(mainSource).toContain('await configureAuthCookie(candidate.origin, token, activeLogger)')
     expect(mainSource).toContain('await verifyAuthCookie(candidate.origin, activeLogger)')
     expect(mainSource).toContain('petOverlay?.setApplicationOrigin(applicationOrigin)')
-    expect(mainSource).toContain('await activeWindows.loadApplication(applicationOrigin)')
+    expect(mainSource).toContain('void windows.loadApplication(applicationOrigin)')
+    expect(mainSource).not.toContain('await activeWindows.loadApplication(applicationOrigin)')
   })
 })

@@ -1,4 +1,4 @@
-import type { Item, TurnStatus } from '@pidex/shared/thread'
+import type { Item, SubagentStatus, TurnStatus } from '@pidex/shared/thread'
 
 import { buildToolSemanticSummary, type ToolSemanticKind } from './ToolActivityPresentation.js'
 
@@ -22,6 +22,7 @@ type AggregateKind =
   | 'integration'
   | 'loaded-tool'
   | 'tool'
+  | 'subagent'
   | 'file-change'
   | 'stopped-file-creation'
   | 'exploration'
@@ -34,12 +35,15 @@ type Aggregate = {
   kind: AggregateKind
   label: string
   semanticKind: ToolSemanticKind
+  /** subagent 组按各任务自身投影状态取名与计数，不沿用父 turn 的 active。 */
+  subagents?: { name: string; status: SubagentStatus }[]
 }
 
 const AGGREGATE_ORDER: readonly AggregateKind[] = [
   'integration',
   'loaded-tool',
   'tool',
+  'subagent',
   'file-change',
   'stopped-file-creation',
   'exploration',
@@ -133,7 +137,7 @@ const aggregateForTool = (item: Extract<Item, { type: 'tool' }>): Aggregate => {
           label: '停止创建文件',
           semanticKind: 'file-change',
         }
-      : { key: 'file-change', kind: 'file-change', label: '编辑文件', semanticKind: 'file-change' }
+      : { key: 'file-change', kind: 'file-change', label: '修改代码', semanticKind: 'file-change' }
   }
   if (descriptor?.type === 'tool') {
     const unnamed = descriptor.mode === 'call' && !descriptor.name
@@ -147,7 +151,7 @@ const aggregateForTool = (item: Extract<Item, { type: 'tool' }>): Aggregate => {
       return {
         key: 'exploration',
         kind: 'exploration',
-        label: '读取文件',
+        label: '查阅文件',
         semanticKind: 'exploration',
       }
     case 'command':
@@ -156,14 +160,14 @@ const aggregateForTool = (item: Extract<Item, { type: 'tool' }>): Aggregate => {
       return {
         key: 'web-search',
         kind: 'web-search',
-        label: '搜索网页',
+        label: '检索网络资料',
         semanticKind: 'web-search',
       }
     case 'file-change':
       return {
         key: 'file-change',
         kind: 'file-change',
-        label: '编辑文件',
+        label: '修改代码',
         semanticKind: 'file-change',
       }
     case 'integration':
@@ -197,7 +201,7 @@ function completedAggregates(items: readonly Item[]): Aggregate[] {
       values.set('file-change', {
         key: 'file-change',
         kind: 'file-change',
-        label: '编辑文件',
+        label: '修改代码',
         semanticKind: 'file-change',
       })
     }
@@ -210,7 +214,15 @@ function completedAggregates(items: readonly Item[]): Aggregate[] {
       })
     }
     if (item.type === 'subagent') {
-      values.set('tool', { key: 'tool', kind: 'tool', label: '调用工具', semanticKind: 'tool' })
+      // 组内可能有多个子智能体；名字与状态按时间线顺序累积。
+      const previous = values.get('subagent')?.subagents ?? []
+      values.set('subagent', {
+        key: 'subagent',
+        kind: 'subagent',
+        label: '子智能体',
+        semanticKind: 'tool',
+        subagents: [...previous, { name: item.displayName, status: item.status }],
+      })
     }
   }
   return [...values.values()].sort(
@@ -218,14 +230,183 @@ function completedAggregates(items: readonly Item[]): Aggregate[] {
   )
 }
 
+const ACTIVE_SUBAGENT_STATUSES: ReadonlySet<SubagentStatus> = new Set([
+  'queued',
+  'preparing',
+  'running',
+  'steering',
+  'waiting-question',
+  'waiting-permission',
+])
+
+function countStatus(
+  agents: readonly { status: SubagentStatus }[],
+  status: SubagentStatus,
+): number {
+  return agents.filter((agent) => agent.status === status).length
+}
+
+function joinSubagentNames(names: readonly string[]): string {
+  if (names.length <= 1) return names[0] ?? ''
+  if (names.length === 2) return `${names[0]}和${names[1]}`
+  if (names.length === 3) return `${names[0]}、${names[1]}和${names[2]}`
+  return `${names[0]}、${names[1]}和另外 ${names.length - 2} 个`
+}
+
+function abnormalCounts(agents: readonly { status: SubagentStatus }[]): string[] {
+  return [
+    ['failed', '失败'],
+    ['stopped', '停止'],
+    ['interrupted', '中断'],
+  ]
+    .map(([status, label]) => {
+      const count = countStatus(agents, status as SubagentStatus)
+      return count > 0 ? `${count} 个${label}` : null
+    })
+    .filter((value): value is string => value !== null)
+}
+
+/** 组内各任务按自身状态成句；父 turn 是否活跃不参与判断。 */
+export function formatSubagentGroupLabel(
+  agents: readonly { name: string; status: SubagentStatus }[],
+): string {
+  const activeCount = agents.filter((agent) => ACTIVE_SUBAGENT_STATUSES.has(agent.status)).length
+  const abnormal = abnormalCounts(agents)
+
+  // 仍有任务在跑：先报运行数，再补异常计数，避免被运行中文案掩盖。
+  if (activeCount > 0) {
+    return abnormal.length
+      ? `${activeCount} 个子智能体正在工作…（${abnormal.join('、')}）`
+      : `${activeCount} 个子智能体正在工作…`
+  }
+  const names = joinSubagentNames(agents.map((agent) => agent.name))
+  return abnormal.length ? `${names} 已结束（${abnormal.join('、')}）` : `${names} 已完成`
+}
+
+/** 组内是否存在仍在运行的任务；用于决定组头的 active 表现。 */
+export function hasActiveSubagent(
+  agents: readonly { status: SubagentStatus }[] | undefined,
+): boolean {
+  return Boolean(agents?.some((agent) => ACTIVE_SUBAGENT_STATUSES.has(agent.status)))
+}
+
+/** 组内是否存在失败/停止/中断的任务。 */
+export function hasAbnormalSubagent(
+  agents: readonly { status: SubagentStatus }[] | undefined,
+): boolean {
+  return Boolean(
+    agents?.some(
+      (agent) =>
+        agent.status === 'failed' || agent.status === 'stopped' || agent.status === 'interrupted',
+    ),
+  )
+}
+
+export function formatProcessSummaryLabel(parts: readonly Aggregate[], active: boolean): string {
+  if (parts.length === 0) return '处理过程'
+
+  // 子智能体组自成一句，不与其他工具短语拼接；状态取自各任务自身投影。
+  const subagentPart = parts.find((part) => part.kind === 'subagent')
+  if (subagentPart?.subagents?.length) {
+    return formatSubagentGroupLabel(subagentPart.subagents)
+  }
+  if (active) {
+    const kinds = new Set(parts.map((p) => p.kind))
+    if (kinds.has('exploration') && kinds.has('command')) {
+      return '正在查阅代码并执行命令…'
+    }
+    if (kinds.has('exploration') && kinds.has('file-change')) {
+      return '正在查阅并修改代码…'
+    }
+    if (kinds.has('file-change') && kinds.has('command')) {
+      return '正在修改代码并运行验证…'
+    }
+    if (parts.length === 1) {
+      const single = parts[0]
+      switch (single.kind) {
+        case 'exploration':
+          return '正在查阅相关文件…'
+        case 'command':
+          return '正在运行命令…'
+        case 'file-change':
+          return '正在修改代码…'
+        case 'web-search':
+          return '正在检索网络资料…'
+        case 'loaded-tool':
+          return '正在加载工具…'
+        default:
+          return `正在${single.label}…`
+      }
+    }
+    return `正在${parts.map((p) => p.label).join('与')}…`
+  }
+
+  // completed
+  const kinds = new Set(parts.map((p) => p.kind))
+  if (kinds.has('exploration') && kinds.has('command') && parts.length === 2) {
+    return '查阅了文件，并运行了命令'
+  }
+  if (kinds.has('exploration') && kinds.has('file-change') && parts.length === 2) {
+    return '查阅并修改了相关代码'
+  }
+  if (kinds.has('file-change') && kinds.has('command') && parts.length === 2) {
+    return '修改了代码，并完成了运行验证'
+  }
+  if (parts.length === 1) {
+    const single = parts[0]
+    switch (single.kind) {
+      case 'exploration':
+        return '查阅了文件'
+      case 'command':
+        return '运行了命令'
+      case 'file-change':
+        return '修改了代码'
+      case 'web-search':
+        return '检索了网络资料'
+      case 'stopped-file-creation':
+        return '停止了创建文件'
+      case 'loaded-tool':
+        return '加载了工具'
+      case 'tool':
+      case 'dynamic-tool':
+        return '调用了工具'
+      default:
+        return single.label
+    }
+  }
+
+  const labels = parts.map((p) => p.label)
+  if (labels.length === 2) {
+    return `${labels[0]}，并${labels[1]}`
+  }
+  return `${labels.slice(0, -1).join('、')}，并${labels.at(-1)}`
+}
+
 export function summarizeTurnProcessItems(
   items: readonly Item[],
   turnStatus: TurnStatus,
 ): ProcessSummary {
-  const active = isActiveTurn(turnStatus)
   const parts = completedAggregates(items)
+  const subagentPart = parts.find((part) => part.kind === 'subagent')
+  if (subagentPart?.subagents?.length) {
+    const agents = subagentPart.subagents
+    const label = formatSubagentGroupLabel(agents)
+    const active = hasActiveSubagent(agents)
+    const failed = hasAbnormalSubagent(agents)
+    return {
+      active,
+      failed: !active && failed,
+      kind: 'tool',
+      label,
+      summaryKey: `${active ? 'active' : 'completed'}:subagents:${items
+        .map((item) => `${item.id}:${item.type === 'subagent' ? item.status : ''}`)
+        .join('|')}`,
+    }
+  }
+
+  const active = isActiveTurn(turnStatus)
   const failed = items.some((item) => itemActivity(item) === 'failed')
-  const label = parts.length > 0 ? parts.map((part) => part.label).join('、') : '处理过程'
+  const label = formatProcessSummaryLabel(parts, active)
 
   if (active) {
     return {

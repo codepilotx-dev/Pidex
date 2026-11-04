@@ -816,7 +816,7 @@ export function LineCommentButton({
   return (
     <button
       aria-label="添加行内评论"
-      className="review-line-comment-button tw:absolute tw:top-0 tw:right-0 tw:z-4 tw:inline-flex tw:size-5 tw:min-w-5 tw:items-center tw:justify-center tw:rounded-md tw:bg-app-accent tw:text-app-canvas tw:opacity-0 tw:group-hover/line-number:opacity-100 tw:group-focus-within/line-number:opacity-100"
+      className="review-line-comment-button tw:absolute tw:top-0 tw:right-0 tw:z-4 tw:inline-flex tw:size-5 tw:min-w-5 tw:items-center tw:justify-center tw:rounded-md tw:bg-app-accent tw:text-app-canvas tw:opacity-0 tw:group-hover/line-number:opacity-100 tw:group-has-[:focus-visible]/line-number:opacity-100"
       disabled={disabled || !anchor}
       type="button"
       onClick={() => {

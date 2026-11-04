@@ -244,8 +244,9 @@ describe('统一 Shell 宿主执行门', () => {
         { command: 'winget uninstall fixture' },
         await executionContext(root),
       ),
-    ).rejects.toMatchObject({ code: 'SHELL_HARD_DENY' })
-    expect(runs).toBe(1)
+    ).resolves.toBeDefined()
+    expect(receivedRuleApproval).toBe(true)
+    expect(runs).toBe(2)
   })
 
   test('Pi 预审批恢复后不重复执行项目 Hook', async () => {
@@ -284,34 +285,116 @@ describe('统一 Shell 宿主执行门', () => {
     expect(runs).toBe(1)
   })
 
-  test('计划模式不暴露也不能直接执行 Shell', async () => {
+  test('计划与 Grill 模式通过统一权限链执行安全调查命令', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-host-shell-'))
+    tempPaths.push(root)
+    const executed: string[] = []
+    const executor = new ToolExecutor(new ToolRegistry(), {
+      dataDir: join(root, '.agent-data'),
+      authorizeShell: async () => ({ decision: 'allow', risk: 'low', reason: '允许' }),
+      runHost: async (command) => {
+        executed.push(command)
+        return success()
+      },
+    })
+    for (const [index, taskMode] of (['plan', 'grill'] as const).entries()) {
+      const plan = executor.exposurePlan({
+        taskMode,
+        sandboxMode: 'danger-full-access',
+        approvalPolicy: 'never',
+        profile: 'main',
+      })
+      expect(plan.exposed).toContain('Bash')
+      expect(plan.exposed).toContain('PowerShell')
+      expect(plan.exposed).toContain('Read')
+      expect(plan.exposed).toContain('Grep')
+      // 测试与构建命令作为调查进入同一执行链，不实际运行项目脚本。
+      await executor.execute(
+        'PowerShell',
+        { command: index === 0 ? 'bun run typecheck' : 'bun test' },
+        {
+          ...(await executionContext(root, FULL_ACCESS_PERMISSION_CONFIG)),
+          taskMode,
+        },
+      )
+    }
+    expect(executed).toHaveLength(2)
+  })
+
+  test('计划模式的完全访问仍不能跳过 Hook 拒绝或 never 策略', async () => {
     const root = await mkdtemp(join(tmpdir(), 'pidex-host-shell-'))
     tempPaths.push(root)
     let runs = 0
-    const executor = new ToolExecutor(new ToolRegistry(), {
+    const denied = new ToolExecutor(new ToolRegistry(), {
       dataDir: join(root, '.agent-data'),
-      authorizeShell: async () => ({ decision: 'allow', risk: 'critical', reason: '允许' }),
+      authorizeShell: async () => ({ decision: 'allow', risk: 'low', reason: '允许' }),
+      hooks: {
+        run: async (event) =>
+          event === 'pre_tool_use' ? [{ result: { decision: 'deny', reason: 'blocked' } }] : [],
+      },
       runHost: async () => {
         runs += 1
         return success()
       },
     })
-    const plan = executor.exposurePlan({
-      taskMode: 'plan',
-      sandboxMode: 'read-only',
-      approvalPolicy: 'on-request',
+    await expect(
+      denied.execute(
+        'PowerShell',
+        { command: 'Get-ChildItem' },
+        await executionContext(root, FULL_ACCESS_PERMISSION_CONFIG, { taskMode: 'plan' }),
+      ),
+    ).rejects.toMatchObject({ code: 'HOOK_DENIED' })
+    expect(runs).toBe(0)
 
-      profile: 'main',
+    const asked = new ToolExecutor(new ToolRegistry(), {
+      dataDir: join(root, '.agent-data'),
+      authorizeShell: async () => ({ decision: 'allow', risk: 'low', reason: '允许' }),
+      hooks: {
+        run: async (event) =>
+          event === 'pre_tool_use' ? [{ result: { decision: 'ask', reason: 'review' } }] : [],
+      },
+      runHost: async () => {
+        runs += 1
+        return success()
+      },
     })
-    expect(plan.exposed).not.toContain('Bash')
-    expect(plan.exposed).not.toContain('PowerShell')
+    await expect(
+      asked.execute(
+        'PowerShell',
+        { command: 'Get-ChildItem' },
+        await executionContext(root, FULL_ACCESS_PERMISSION_CONFIG, { taskMode: 'grill' }),
+      ),
+    ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
+    expect(runs).toBe(0)
+  })
+
+  test('计划模式的 Hook 改写会重新判权，不能借完全访问执行危险命令', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-shell-rewrite-'))
+    tempPaths.push(root)
+    let runs = 0
+    let rewrite: Record<string, unknown> | undefined
+    const executor = new ToolExecutor(new ToolRegistry(), {
+      dataDir: join(root, '.agent-data'),
+      authorizeShell: async () => ({ decision: 'allow', risk: 'low', reason: 'test' }),
+      hooks: {
+        run: async (event) =>
+          event === 'pre_tool_use' && rewrite
+            ? [{ result: { decision: 'continue', narrowedInput: rewrite } }]
+            : [],
+      },
+      runHost: async () => {
+        runs += 1
+        return success()
+      },
+    })
+    rewrite = { command: 'winget uninstall fixture' }
     await expect(
       executor.execute(
         'PowerShell',
-        { command: 'Write-Output blocked' },
-        { ...(await executionContext(root)), taskMode: 'plan' },
+        { command: 'bun test' },
+        await executionContext(root, FULL_ACCESS_PERMISSION_CONFIG, { taskMode: 'plan' }),
       ),
-    ).rejects.toMatchObject({ code: 'PLAN_SHELL_DISABLED' })
+    ).rejects.toMatchObject({ code: 'TOOL_PERMISSION_DENIED' })
     expect(runs).toBe(0)
   })
 
@@ -367,7 +450,7 @@ describe('统一 Shell 宿主执行门', () => {
   })
 })
 
-test('Shell 恢复审批核对精确指纹；Hook 改写后重新验证 schema 和硬拒绝', async () => {
+test('Shell 恢复审批核对精确指纹；Hook 改写后重新验证 schema 并重新审批风险', async () => {
   const root = await mkdtemp(join(tmpdir(), 'pidex-shell-recheck-'))
   tempPaths.push(root)
   const context = await executionContext(root)
@@ -412,6 +495,6 @@ test('Shell 恢复审批核对精确指纹；Hook 改写后重新验证 schema �
   rewrite = { command: 'Remove-Item -Recurse -Force C:\\Windows' }
   await expect(
     executor.execute('PowerShell', { command: 'Write-Output ok' }, context),
-  ).rejects.toThrow()
-  expect(runs).toBe(0)
+  ).resolves.toBeDefined()
+  expect(runs).toBe(1)
 })

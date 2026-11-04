@@ -1,5 +1,8 @@
 import { describe, expect, test } from 'bun:test'
-import { resolveTaskExecution } from '../src/features/session/TaskExecutionMode.js'
+import {
+  resolveSessionCreationExecution,
+  resolveTaskExecution,
+} from '../src/features/session/TaskExecutionMode.js'
 
 const WORKTREE = { kind: 'worktree', startingState: { type: 'working-tree' } }
 const LOCAL = { kind: 'local' }
@@ -63,5 +66,61 @@ describe('automatic task execution selection', () => {
         eligibility: { isGitRepository: true },
       }),
     ).toBeUndefined()
+  })
+})
+
+describe('explicit session creation execution', () => {
+  test('首页显式选择优先于项目设置与自动选择', () => {
+    expect(
+      resolveSessionCreationExecution({
+        execution: { kind: 'local' },
+        supportsExplicitExecution: true,
+        projectExecutionEnvironment: 'auto',
+        eligibility: { isGitRepository: true },
+      }),
+    ).toEqual(LOCAL)
+    const branchExecution = {
+      kind: 'worktree' as const,
+      startingState: { type: 'branch' as const, branchName: 'feature/launch' },
+    }
+    expect(
+      resolveSessionCreationExecution({
+        execution: branchExecution,
+        supportsExplicitExecution: true,
+        projectExecutionEnvironment: 'local',
+        eligibility: { isGitRepository: false },
+      }),
+    ).toEqual(branchExecution)
+  })
+
+  test('旧调用不传执行选择时维持自动选择', () => {
+    expect(
+      resolveSessionCreationExecution({
+        supportsExplicitExecution: true,
+        projectExecutionEnvironment: 'auto',
+        eligibility: { isGitRepository: true },
+      }),
+    ).toEqual(WORKTREE)
+    expect(
+      resolveSessionCreationExecution({
+        supportsExplicitExecution: false,
+        projectExecutionEnvironment: 'auto',
+        eligibility: { isGitRepository: true },
+      }),
+    ).toBeUndefined()
+  })
+
+  test('不支持显式执行选择的 Agent 不会把工作树静默变成其他位置', () => {
+    expect(() =>
+      resolveSessionCreationExecution({
+        execution: {
+          kind: 'worktree',
+          startingState: { type: 'branch', branchName: 'feature/launch' },
+        },
+        supportsExplicitExecution: false,
+        projectExecutionEnvironment: 'auto',
+        eligibility: { isGitRepository: true },
+      }),
+    ).toThrow('当前 Agent 不支持从指定分支创建工作树')
   })
 })

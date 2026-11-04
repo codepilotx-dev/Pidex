@@ -1,5 +1,5 @@
 import type { SubagentProfile, TaskMode } from '../Domain'
-import { MAX_SUBAGENT_DEPTH, type SandboxMode } from '@pidex/shared/thread'
+import { MAX_SUBAGENT_DEPTH, isReadOnlyTaskMode, type SandboxMode } from '@pidex/shared/thread'
 import { isGranularApprovalPolicy, type PermissionConfig } from '@pidex/shared/thread'
 import type { ToolCatalog } from './ToolRegistry'
 
@@ -13,6 +13,8 @@ export const PI_LIFECYCLE_TOOLS = [
   'request_permissions',
   'update_plan',
   'submit_plan',
+  'submit_schedule_plan',
+  'submit_task_schedule',
   'spawn_agents',
   'wait_agents',
   'send_agent',
@@ -43,6 +45,9 @@ export interface ToolExposureInput {
   allowedTools?: readonly string[]
   activeDeferredTools?: readonly string[]
   hasActiveGoal?: boolean
+  /** 任务规划扩展表可用时，Plan 主 Agent 可以提交「任务计划 + 执行安排」草案。 */
+  hasScheduleDrafts?: boolean
+  hasTaskSchedules?: boolean
 }
 
 /**
@@ -66,8 +71,10 @@ export function createToolExposurePlan(
   input: ToolExposureInput,
 ): ToolExposurePlan {
   const profile = input.profile ?? 'main'
-  const sandboxMode = input.taskMode === 'plan' ? 'read-only' : input.sandboxMode
-  const definitions = catalog.list(input.taskMode, sandboxMode, profile)
+  // Collaboration modes gate tools, not the user's file-access scope. Passing
+  // the stored sandbox mode through keeps exposure, preview and execution on
+  // the same policy; mutating tools are filtered by the mode rule instead.
+  const definitions = catalog.list(input.taskMode, input.sandboxMode, profile)
   const eager = definitions
     .filter((tool) => tool.visibility === 'eager')
     .map((tool) => tool.sdkName)
@@ -78,16 +85,19 @@ export function createToolExposurePlan(
   if (input.hasProjectSources) lifecycle.push('project_source_list', 'project_source_read')
   if (profile !== 'main') lifecycle.push('finalize_result')
   else {
-    if (input.taskMode === 'plan' || input.defaultModeRequestUserInput)
+    if (isReadOnlyTaskMode(input.taskMode) || input.defaultModeRequestUserInput)
       lifecycle.push('request_user_input')
     // Plan 主 Agent 以结构化 submit_plan 交付最终方案；<proposed_plan> 仅作兼容回退。
     if (input.taskMode === 'plan') lifecycle.push('submit_plan')
+    // 需要按时间或上游事件安排的请求改用 submit_schedule_plan；两者都是独占单次调用。
+    if (input.taskMode === 'plan' && input.hasScheduleDrafts) lifecycle.push('submit_schedule_plan')
+    if (input.taskMode === 'plan' && input.hasTaskSchedules) lifecycle.push('submit_task_schedule')
     if (input.taskMode === 'chat') {
-      // Chat 主 Agent 可选用结构化交付收尾；Plan 的最终方案由 submit_plan 负责。
+      // Chat 主 Agent 以普通文本收尾；Plan 的最终方案由 submit_plan 负责。
       // 权限申请工具只在审批策略真的能应答时暴露。
       if (approvalAllowsPermissionRequests(input.approvalPolicy))
         lifecycle.push('request_permissions')
-      lifecycle.push('update_plan', 'finalize_result')
+      lifecycle.push('update_plan')
       if (input.hasActiveGoal) lifecycle.push('update_goal')
     }
   }
@@ -111,8 +121,7 @@ export function createToolExposurePlan(
   const explicitlyAllowedDeferred = allowlist
     ? deferredCandidates.filter((name) => allowlist.has(name))
     : []
-  // 子 Agent 无论 allowlist 收紧都必须能够收尾提交；主 Agent 的 finalize_result
-  // 与其他生命周期工具一样服从 Skill allowlist。
+  // 子 Agent 无论 allowlist 收紧都必须能够收尾提交。
   const finalizers = new Set(['finalize_result'])
   const lifecycleExemption =
     profile !== 'main' ? (name: string) => finalizers.has(name) : () => false

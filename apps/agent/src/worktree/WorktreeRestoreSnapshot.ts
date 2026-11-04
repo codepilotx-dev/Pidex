@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { AgentError } from '../Domain'
 import { WorkspaceIsolationService } from '../subagent/WorkspaceIsolationService'
 import { WorktreeIncludeService } from './WorktreeIncludeService'
+import { hasWindowsDeviceName, windowsWorktreeFiles } from './WindowsWorktreeFiles'
 
 type SnapshotManifest = {
   version: 1
@@ -55,11 +56,7 @@ export class WorktreeRestoreSnapshotStore {
         encoding: 'utf8',
         mode: 0o600,
       })
-      const regular = await this.include.copyRegularFiles(
-        workspacePath,
-        filesRoot,
-        layers.untrackedFiles,
-      )
+      const regular = await this.include.copyUntracked(workspacePath, filesRoot)
       const included = await this.include.copy(workspacePath, filesRoot)
       const files = [...new Set([...regular.paths, ...included.paths])].sort()
       const manifest: SnapshotManifest = { version: 1, headCommit: layers.headCommit, files }
@@ -74,6 +71,39 @@ export class WorktreeRestoreSnapshotStore {
     } finally {
       await rm(temporary, { recursive: true, force: true })
     }
+  }
+
+  async preserveWindowsDeviceFiles(snapshotRoot: string, workspacePath: string) {
+    if (process.platform !== 'win32') return
+    const snapshot = await this.read(snapshotRoot)
+    const pending = [workspacePath]
+    const files: string[] = []
+    while (pending.length) {
+      const directory = pending.pop()!
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        if (entry.isSymbolicLink()) continue
+        const path = join(directory, entry.name)
+        if (entry.isDirectory()) pending.push(path)
+        else if (entry.isFile() && hasWindowsDeviceName(path))
+          files.push(relative(workspacePath, path).replaceAll('\\', '/'))
+      }
+    }
+    for (const path of files) {
+      await windowsWorktreeFiles({
+        operation: 'preserve',
+        source: resolve(workspacePath, path),
+        target: resolve(snapshot.filesRoot, path),
+      })
+    }
+    await writeFile(
+      resolve(snapshot.root, 'manifest.json'),
+      JSON.stringify({
+        version: 1,
+        headCommit: snapshot.headCommit,
+        files: [...new Set([...snapshot.files, ...files])].sort(),
+      }),
+      { encoding: 'utf8', mode: 0o600 },
+    )
   }
 
   async read(snapshotRootInput: string): Promise<WorktreeRestoreSnapshot> {

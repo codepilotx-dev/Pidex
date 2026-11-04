@@ -3,9 +3,11 @@ import { createCanonicalThreadState, type CanonicalThreadPage } from '@pidex/ses
 
 import {
   selectCanonicalConversationAuxiliaryState,
+  selectCanonicalLatestTurn,
   selectCanonicalLatestTurnStatus,
   selectCanonicalSessionLifecycle,
   selectCanonicalSessionStatus,
+  selectCanonicalLatestPlanItemId,
 } from '../src/features/session/conversation/CanonicalConversationSelectors.js'
 import { canRegenerateConversationTitle } from '../src/features/session/conversation/ConversationTitleActions.js'
 
@@ -548,6 +550,7 @@ describe('canonical conversation auxiliary selector', () => {
     expect(selectCanonicalSessionLifecycle(waitingState)).toEqual({
       status: 'waiting',
       latestTurnStatus: 'waiting-question',
+      latestTurnError: null,
     })
 
     const completedState = createCanonicalThreadState({
@@ -566,6 +569,7 @@ describe('canonical conversation auxiliary selector', () => {
     expect(selectCanonicalSessionLifecycle(completedState)).toEqual({
       status: 'done',
       latestTurnStatus: 'completed',
+      latestTurnError: null,
     })
 
     // A turn waiting in the queue is never the active turn, but list surfaces
@@ -591,11 +595,200 @@ describe('canonical conversation auxiliary selector', () => {
     expect(selectCanonicalSessionLifecycle(queueOnlyState)).toEqual({
       status: 'queued',
       latestTurnStatus: 'queued',
+      latestTurnError: null,
     })
     // The open conversation keeps its existing queue-only behaviour.
     expect(selectCanonicalSessionStatus(queueOnlyState)).toBe('idle')
 
+    const failedStateWithError = createCanonicalThreadState({
+      ...page,
+      turns: [
+        {
+          ...page.turns[0]!,
+          turn: {
+            ...page.turns[0]!.turn,
+            status: 'failed',
+            finishedAt: 5,
+            error: 'Command failed with exit code 1',
+          },
+        },
+      ],
+    })
+    expect(selectCanonicalLatestTurn(failedStateWithError)?.id).toBe(page.turns[0]!.turn.id)
+    expect(selectCanonicalLatestTurnStatus(failedStateWithError)).toBe('failed')
+    expect(selectCanonicalSessionLifecycle(failedStateWithError)).toEqual({
+      status: 'error',
+      latestTurnStatus: 'failed',
+      latestTurnError: 'Command failed with exit code 1',
+    })
+
+    const failedStateWithoutError = createCanonicalThreadState({
+      ...page,
+      turns: [
+        {
+          ...page.turns[0]!,
+          turn: {
+            ...page.turns[0]!.turn,
+            status: 'failed',
+            finishedAt: 5,
+            error: null,
+          },
+        },
+      ],
+    })
+    expect(selectCanonicalSessionLifecycle(failedStateWithoutError)).toEqual({
+      status: 'error',
+      latestTurnStatus: 'failed',
+      latestTurnError: null,
+    })
+
     const emptyState = createCanonicalThreadState({ ...page, turns: [] })
     expect(selectCanonicalSessionLifecycle(emptyState)).toBeNull()
   })
+})
+
+describe('canonical latest plan identity', () => {
+  const planItem = (
+    id: string,
+    status: 'streaming' | 'completed' | 'interrupted',
+    createdAt: number,
+  ) => ({
+    id,
+    messageID: `message-${id}`,
+    turnId: `turn-${id}`,
+    agentId: 'agent-1',
+    type: 'plan' as const,
+    title: `计划 ${id}`,
+    markdown: `# 计划 ${id}`,
+    status,
+    createdAt,
+  })
+
+  const pageWith = (items: ReturnType<typeof planItem>[]): CanonicalThreadPage => ({
+    thread: {
+      id: 'thread-plan',
+      projectID: null,
+      title: null,
+      gitBranch: null,
+      workspace: {
+        kind: 'projectless',
+        projectID: null,
+        workspaceRoot: 'C:\workspace',
+        cwd: 'C:\workspace',
+        outputDirectory: null,
+      },
+      settings: { taskMode: 'plan', permissionConfig },
+      createdAt: 1,
+      updatedAt: 12,
+    },
+    subagents: [],
+    turns: [
+      {
+        turn: {
+          id: 'turn-plan',
+          threadId: 'thread-plan',
+          sourceInputID: 'input-1',
+          status: 'completed',
+          mode: 'plan',
+          model,
+          permissionConfig,
+          rootAgentId: 'agent-1',
+          mergedInputIDs: [],
+          startedAt: 2,
+          finishedAt: 3,
+          elapsedSeconds: 1,
+          error: null,
+        },
+        inputs: [],
+        messages: [],
+        agents: [],
+        items: items as never,
+        approvals: [],
+        attachments: [],
+      },
+    ],
+    olderCursor: null,
+    hasOlder: false,
+    streamPosition: { streamId: 'thread:thread-plan', sequence: 1 },
+  })
+
+  test('only the newest completed plan item is the current review identity', () => {
+    const items = [
+      planItem('older', 'completed', 2),
+      planItem('newer', 'completed', 5),
+      planItem('draft', 'streaming', 9),
+    ]
+    const state = createCanonicalThreadState(pageWith(items))
+    expect(selectCanonicalLatestPlanItemId(state)).toBe('newer')
+    expect(selectCanonicalLatestPlanItemId(null)).toBeNull()
+    expect(selectCanonicalLatestPlanItemId(createCanonicalThreadState(pageWith([])))).toBeNull()
+  })
+})
+
+test('canonical 实际队列保留模式与 Goal 意图，供显示和编辑使用', () => {
+  const threadId = 'queue-thread'
+  const inputs = (['plan', 'grill', 'chat'] as const).map((mode, index) => ({
+    id: `input-${index}`,
+    threadId,
+    turnId: `turn-${index}`,
+    content: '任务正文',
+    delivery: 'queue' as const,
+    mode,
+    model,
+    permissionConfig,
+    state: 'queued' as const,
+    createdAt: index,
+    ...(mode === 'chat' ? { goal: { objective: '持续目标' } } : {}),
+  }))
+  const state = createCanonicalThreadState({
+    thread: {
+      id: threadId,
+      projectID: null,
+      title: null,
+      gitBranch: null,
+      workspace: {
+        kind: 'projectless',
+        projectID: null,
+        folderID: null,
+        cwd: 'F:\\CodeProject\\guardian-lab',
+        outputDirectory: null,
+      },
+      settings: { taskMode: 'chat', permissionConfig },
+      createdAt: 0,
+      updatedAt: 0,
+    },
+    subagents: [],
+    turns: [],
+    queue: { version: 1, pauseReason: null, turns: [], inputs },
+    olderCursor: null,
+    hasOlder: false,
+    streamPosition: { streamId: threadId, sequence: 1 },
+  })
+  const queue = selectCanonicalConversationAuxiliaryState(state).queuedFollowUps
+  expect(queue.map((item) => item.previewText)).toEqual([
+    '计划 任务正文',
+    '访谈 任务正文',
+    '目标 任务正文',
+  ])
+  expect(queue.map((item) => item.input.taskMode)).toEqual(['plan', 'grill', 'chat'])
+  expect(queue[2]?.input.goal).toEqual({ objective: '持续目标' })
+  state.inputsById.set(inputs[0]!.id, { ...inputs[0]!, state: 'active' })
+  state.turnsById.set('turn-1', {
+    id: 'turn-1',
+    threadId,
+    sourceInputID: 'input-1',
+    status: 'running',
+    mode: 'grill',
+    model,
+    permissionConfig,
+    rootAgentId: 'agent',
+    mergedInputIDs: [],
+    startedAt: 1,
+    finishedAt: null,
+    elapsedSeconds: 0,
+    error: null,
+  })
+  expect(
+    selectCanonicalConversationAuxiliaryState(state).queuedFollowUps.map((item) => item.id),
+  ).toEqual(['input-2'])
 })

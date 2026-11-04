@@ -11,8 +11,6 @@ const builtinSkillsSource = resolve(agentRoot, 'resources/skills')
 const builtinSkillsOutput = resolve(outputDirectory, 'skills')
 const builtinPluginsSource = resolve(agentRoot, 'resources/plugins')
 const builtinPluginsOutput = resolve(outputDirectory, 'plugins')
-const builtinIntegrationsSource = resolve(agentRoot, 'resources/integrations')
-const builtinIntegrationsOutput = resolve(outputDirectory, 'integrations')
 
 await mkdir(outputDirectory, { recursive: true })
 await rm(temporaryOutput, { force: true })
@@ -45,8 +43,6 @@ try {
   await cp(builtinSkillsSource, builtinSkillsOutput, { recursive: true })
   await rm(builtinPluginsOutput, { recursive: true, force: true })
   await cp(builtinPluginsSource, builtinPluginsOutput, { recursive: true })
-  await rm(builtinIntegrationsOutput, { recursive: true, force: true })
-  await cp(builtinIntegrationsSource, builtinIntegrationsOutput, { recursive: true })
   console.log(`[Pidex] Agent x64 PE verified: ${output}`)
 } catch (error) {
   await rm(temporaryOutput, { force: true })

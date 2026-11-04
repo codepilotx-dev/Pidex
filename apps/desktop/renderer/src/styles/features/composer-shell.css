@@ -3,6 +3,29 @@
  * flattening its nesting: the renderer no longer compiles Sass.
  */
 @layer features {
+  @container composer-footer (width <= 475px) {
+    .composer-footer-label {
+      display: none;
+    }
+  }
+
+  @container composer-footer (width <= 420px) {
+    .composer-footer-secondary-chevron {
+      display: none;
+    }
+  }
+
+  @container composer-tray (width <= 475px) {
+    .meta-chip-label {
+      display: none;
+    }
+  }
+
+  @container composer-tray (width <= 420px) {
+    .meta-chip-chevron {
+      display: none;
+    }
+  }
   @charset "UTF-8";
 
   /*
@@ -43,7 +66,7 @@
   }
 
   .composer-utility-bar {
-    border-radius: var(--composer-radius) var(--composer-radius) 0 0;
+    border-radius: var(--cpx-sys-radius-lg) var(--cpx-sys-radius-lg) 0 0;
   }
 
   /* The home (Working / Coding new-session) bars pin their own corner silhouette:
@@ -55,12 +78,11 @@
 
   .composer-stack[data-composer-utility-bar-variant='home'][data-surface='coding']
     .composer-utility-bar {
-    border-radius: var(--cpx-sys-radius-control) var(--cpx-sys-radius-control) 0 0;
+    border-radius: var(--cpx-sys-radius-lg) var(--cpx-sys-radius-lg) 0 0;
   }
 
-  /* The editor content is mounted by ProseMirror, so the home surfaces clamp its
-     resting height through a descendant rule. */
-  .composer-stack[data-composer-utility-bar-variant='home'][data-surface] .composer-editor-content {
+  /* ProseMirror mounts the editor content; all placements share its resting height. */
+  .composer-stack .composer-editor-content {
     min-height: 44px;
     font: var(--cpx-sys-type-reading);
   }

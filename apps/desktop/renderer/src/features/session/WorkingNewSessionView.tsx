@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type React from 'react'
 import type { WorkingPlugin } from './composer/ComposerTypes.js'
-import { DesktopComposer } from './composer/DesktopComposer.js'
+import {
+  createSessionDisplayStore,
+  useSessionDisplayField,
+  type SessionDisplayStore,
+} from './state/SessionDisplayStore.js'
+import { SessionBoundComposer } from './composer/DesktopComposer.js'
 import { useQuickChatContext } from './QuickChatContext.js'
 import { WorkingSuggestionsPanel } from './WorkingSuggestionsPanel.js'
 import { useContextualTaskSuggestions } from './UseContextualTaskSuggestions.js'
@@ -23,6 +28,7 @@ import {
 } from './WorkingSuggestions.js'
 
 const WORKING_COMPOSER_PLACEHOLDER = '使用 Pidex Working'
+const FALLBACK_STORE: SessionDisplayStore = createSessionDisplayStore()
 
 export function WorkingNewSessionView(): React.ReactNode {
   const {
@@ -37,13 +43,14 @@ export function WorkingNewSessionView(): React.ReactNode {
   } = useQuickChatContext()
   const [workingPlugin, setWorkingPlugin] = useState<WorkingPlugin | null>(null)
   const [taskPlanningAvailable, setTaskPlanningAvailable] = useState(false)
-  const [observedComposerValue, setObservedComposerValue] = useState(composerDraft?.value ?? '')
+  const targetStore = composerDraft?.store ?? FALLBACK_STORE
+  const composerDraftValue = useSessionDisplayField(targetStore, (state) => state.input)
+  const [observedComposerValue, setObservedComposerValue] = useState(composerDraftValue)
   const [suggestionState, setSuggestionState] = useState<WorkingSuggestionState>(() =>
-    createWorkingSuggestionState(composerDraft?.value ?? ''),
+    createWorkingSuggestionState(composerDraftValue),
   )
   const pageRef = useRef<HTMLDivElement | null>(null)
   const programmaticValueRef = useRef<string | null>(null)
-  const composerDraftValue = composerDraft?.value
   const { suggestions, markInteracted } = useContextualTaskSuggestions({
     surface: 'working',
     buildWorkingSuggestions: buildWorkingContextualTaskSuggestions,
@@ -168,7 +175,7 @@ export function WorkingNewSessionView(): React.ReactNode {
       className="quick-chat-workspace working-chat-workspace tw:flex tw:h-full tw:w-full tw:min-h-0 tw:overflow-hidden"
     >
       <main
-        className="quick-chat-view working-chat-view tw:flex tw:h-full tw:max-w-none tw:w-full tw:min-h-full tw:flex-col tw:items-stretch tw:justify-center tw:overflow-x-hidden tw:overflow-y-auto tw:px-8 tw:pb-4 tw:text-app-text tw:[scrollbar-gutter:stable]"
+        className="quick-chat-view working-chat-view tw:flex tw:h-full tw:w-full tw:min-h-full tw:flex-col tw:items-stretch tw:justify-center tw:overflow-x-hidden tw:overflow-y-auto tw:pb-4 tw:text-app-text"
         onInputCapture={handleComposerInputCapture}
       >
         <section className="quick-chat-composer-region tw:flex tw:m-auto tw:w-full tw:min-w-0 tw:flex-[0_1_auto] tw:flex-col tw:items-center tw:justify-start tw:gap-8">
@@ -180,7 +187,7 @@ export function WorkingNewSessionView(): React.ReactNode {
           <div className="working-composer-interaction tw:flex tw:w-full tw:flex-col tw:items-center tw:gap-3">
             {composerProps ? (
               <div className="chat-composer tw:static tw:m-0 tw:flex tw:w-[var(--quick-chat-surface-width)] tw:max-w-full tw:flex-col tw:items-center tw:gap-3 tw:pointer-events-auto">
-                <DesktopComposer
+                <SessionBoundComposer
                   {...composerProps}
                   surface="working"
                   workingPlugin={workingPlugin}

@@ -65,11 +65,12 @@ export function useBranchReviewSummary(
             setResult(null)
             return
           }
-          const { snapshot } = await reviewAgentClient.summary(
-            workspacePath,
-            { kind: 'branch', baseBranch },
-            true,
-          )
+          // 不强制 refresh：命中缓存立即返回，stale 由服务端后台重建；
+          // 焦点/Git 变化会再次触发本 effect，届时拿到重建后的新缓存。
+          const { snapshot } = await reviewAgentClient.summary(workspacePath, {
+            kind: 'branch',
+            baseBranch,
+          })
           if (active) setResult({ workspacePath, snapshot })
         })
         .catch(() => {

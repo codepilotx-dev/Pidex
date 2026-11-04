@@ -24,7 +24,8 @@ export type ID = typeof ID.Type
 export const SourceKind = Schema.Literals(['builtin', 'custom'])
 export type SourceKind = typeof SourceKind.Type
 
-export const CatalogOrigin = Schema.Literals(['user', 'pi-bundled'])
+/** Where a catalog entry came from: user config, bundled Pi data, or one of the two upstream directory sources. */
+export const CatalogOrigin = Schema.Literals(['user', 'pi-bundled', 'pi-remote', 'models-dev'])
 export type CatalogOrigin = typeof CatalogOrigin.Type
 
 export const UnavailableReason = Schema.Literals([
@@ -52,6 +53,8 @@ export const Source = Schema.Struct({
   type: Schema.Literal('pi'),
   kind: SourceKind,
   apis: Schema.Array(Schema.String),
+  endpoints: optional(Schema.Record(Schema.String, Schema.String)),
+  defaultApi: optional(Schema.String),
   baseUrl: optional(Schema.String),
 }).annotate({ identifier: 'Provider.Source' })
 

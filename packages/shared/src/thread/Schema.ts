@@ -1,6 +1,7 @@
 import { Model } from '@pidex/model-schema'
 import { Schema } from 'effect'
 import { ThreadExecutionEnvironmentSchema } from './Execution'
+import { ThreadGoalSchema } from './Goal'
 import { PermissionConfigSchema } from './Permission'
 import { TaskModeSchema, ThreadSettingsSchema } from './Settings'
 
@@ -119,6 +120,12 @@ export type ThreadWorkspace = typeof ThreadWorkspaceSchema.Type
 export const ThreadCreationSurfaceSchema = Schema.Literals(['coding', 'working', 'chat'])
 export type ThreadCreationSurface = typeof ThreadCreationSurfaceSchema.Type
 
+export const ThreadForkOriginSchema = Schema.Struct({
+  threadId: Schema.String,
+  inheritedThroughTurnId: Schema.String,
+})
+export type ThreadForkOrigin = typeof ThreadForkOriginSchema.Type
+
 export const ThreadSchema = Schema.Struct({
   id: Schema.String,
   title: Schema.String,
@@ -133,6 +140,7 @@ export const ThreadSchema = Schema.Struct({
   hasScheduledRun: Schema.optional(Schema.Boolean),
   isScheduledSession: Schema.optional(Schema.Boolean),
   isFork: Schema.optional(Schema.Boolean),
+  forkedFrom: Schema.optional(ThreadForkOriginSchema),
   workspace: Schema.optional(ThreadWorkspaceSchema),
   settings: ThreadSettingsSchema,
   archivedAt: Schema.optional(Schema.NullOr(Schema.Number)),
@@ -161,9 +169,11 @@ export const ThreadListItemSchema = Schema.Struct({
   firstUserMessage: Schema.NullOr(Schema.String),
   messageCount: Schema.Number,
   latestTurnStatus: Schema.NullOr(TurnStatusSchema),
+  latestTurnError: Schema.optional(Schema.NullOr(Schema.String)),
   archivedAt: Schema.NullOr(Schema.Number),
   unreadAt: Schema.optional(Schema.NullOr(Schema.Number)),
   pendingPlanApproval: Schema.optional(Schema.Boolean),
+  goal: Schema.optional(Schema.NullOr(ThreadGoalSchema)),
   settings: ThreadSettingsSchema,
   createdAt: Schema.Number,
   updatedAt: Schema.Number,

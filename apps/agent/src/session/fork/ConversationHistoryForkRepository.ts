@@ -1,3 +1,4 @@
+import { activeTurnSql } from '../../storage/repositories/ThreadEditRepository'
 import { randomUUID } from 'node:crypto'
 import type { SessionTreeEntry } from '../../orchestration/harness/Types'
 import { AgentError } from '../../Domain'
@@ -8,6 +9,10 @@ import {
 import type { AgentDatabase } from '../../storage/database/AgentDatabase'
 import { parsePiSessionEntry } from '../../storage/pi-session/PiSessionEntry'
 import { TurnPiBoundaryRepository } from '../../storage/repositories/TurnPiBoundaryRepository'
+import {
+  probeThreadContextLimitsStorageCapabilities,
+  probeThreadMessageForksStorageCapabilities,
+} from '../../storage/database/StorageCapabilities'
 import type {
   SideChatRepository,
   StoredSideChat,
@@ -297,9 +302,7 @@ export class ConversationHistoryForkRepository {
           agentID: entry.targetAgentID,
         })
       }
-      this.db.transaction(() => {
-        for (const boundary of copiedBoundaries) this.boundaries.upsert(boundary)
-      })
+      this.upsertCopiedBoundaries(copiedBoundaries)
     } catch (cause) {
       this.rollbackHandoff(options.operationID)
       if (cause instanceof AgentError) throw cause
@@ -438,23 +441,45 @@ export class ConversationHistoryForkRepository {
           sessionID: targetSelectedSession,
           entryID: piBoundary,
         })
-        this.db.sqlite
-          .query(
-            `
-          INSERT INTO thread_message_forks (
-            target_thread_id, source_thread_id, source_turn_id,
-            source_item_id, operation_id, created_at
-          ) VALUES (?, ?, ?, ?, ?, ?)
-        `,
-          )
-          .run(
-            targetRootID,
-            sourceThreadID,
-            options.throughTurnID,
-            options.sourceItemID,
-            options.operationID,
-            Date.now(),
-          )
+        const capabilities = probeThreadMessageForksStorageCapabilities(this.db.sqlite)
+        if (capabilities.forkTargetTurnId) {
+          this.db.sqlite
+            .query(
+              `
+            INSERT INTO thread_message_forks (
+              target_thread_id, source_thread_id, source_turn_id,
+              source_item_id, operation_id, created_at, target_turn_id
+            ) VALUES (?, ?, ?, ?, ?, ?, ?)
+          `,
+            )
+            .run(
+              targetRootID,
+              sourceThreadID,
+              options.throughTurnID,
+              options.sourceItemID,
+              options.operationID,
+              Date.now(),
+              targetSelectedTurn,
+            )
+        } else {
+          this.db.sqlite
+            .query(
+              `
+            INSERT INTO thread_message_forks (
+              target_thread_id, source_thread_id, source_turn_id,
+              source_item_id, operation_id, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?)
+          `,
+            )
+            .run(
+              targetRootID,
+              sourceThreadID,
+              options.throughTurnID,
+              options.sourceItemID,
+              options.operationID,
+              Date.now(),
+            )
+        }
       })
 
       for (const entry of piForks.values()) {
@@ -465,9 +490,7 @@ export class ConversationHistoryForkRepository {
           ...(entry.entryID ? { entryId: entry.entryID, position: 'at' as const } : {}),
         })
       }
-      this.db.transaction(() => {
-        for (const boundary of copiedBoundaries) this.boundaries.upsert(boundary)
-      })
+      this.upsertCopiedBoundaries(copiedBoundaries)
       if (options.visible) this.publishTarget(options.operationID, targetRootID)
     } catch (cause) {
       this.rollbackHiddenTarget(targetRootID)
@@ -503,7 +526,7 @@ export class ConversationHistoryForkRepository {
         `
       SELECT id
       FROM turns
-      WHERE thread_id = ? AND status = 'completed'
+      WHERE thread_id = ? AND ${activeTurnSql('turns', this.db)} AND status = 'completed'
       ORDER BY created_at DESC, id DESC
       LIMIT 1
     `,
@@ -693,7 +716,7 @@ export class ConversationHistoryForkRepository {
       SELECT turns.status, turns.root_agent_id, agent_executions.session_id
       FROM turns
       JOIN agent_executions ON agent_executions.id = turns.root_agent_id
-      WHERE turns.id = ? AND turns.thread_id = ?
+      WHERE turns.id = ? AND turns.thread_id = ? AND ${activeTurnSql('turns', this.db)}
     `,
       )
       .get(throughTurnID, sourceThreadID) as {
@@ -773,7 +796,7 @@ export class ConversationHistoryForkRepository {
         WHERE candidate.turn_id = turns.id
         ORDER BY candidate.created_at, candidate.id LIMIT 1
       )
-      WHERE turns.thread_id = (SELECT thread_id FROM turns WHERE id = ?)
+      WHERE turns.thread_id = (SELECT thread_id FROM turns WHERE id = ?) AND ${activeTurnSql('turns', this.db)}
         AND agent_executions.session_id = ?
       ORDER BY turns.created_at, turns.id
     `,
@@ -864,7 +887,7 @@ export class ConversationHistoryForkRepository {
     const rootTurns = this.db.sqlite
       .query(
         `
-      SELECT id, status, created_at FROM turns WHERE thread_id = ? ORDER BY created_at, id
+      SELECT id, status, created_at FROM turns WHERE thread_id = ? AND ${activeTurnSql('turns', this.db)} ORDER BY created_at, id
     `,
       )
       .all(sourceRootID) as Array<{ id: string; status: string; created_at: number }>
@@ -896,7 +919,9 @@ export class ConversationHistoryForkRepository {
       for (const child of children) {
         if (throughTurnID === undefined) this.assertFullyForkable(child.child_thread_id)
         const childTurns = this.db.sqlite
-          .query('SELECT id, status FROM turns WHERE thread_id = ? ORDER BY created_at, id')
+          .query(
+            `SELECT id, status FROM turns WHERE thread_id = ? AND ${activeTurnSql('turns', this.db)} ORDER BY created_at, id`,
+          )
           .all(child.child_thread_id) as Array<{ id: string; status: string }>
         if (childTurns.some((turn) => !TERMINAL_TURN_STATES.has(turn.status)))
           throw new AgentError('HISTORY_UNSUPPORTED', '已完成子任务包含未终结 Turn', 409)
@@ -1004,6 +1029,22 @@ export class ConversationHistoryForkRepository {
       row.queue_pause_reason = null
       row.updated_at = Date.now()
       this.insert('threads', row)
+      if (probeThreadContextLimitsStorageCapabilities(this.db.sqlite).threadContextLimits) {
+        const limitRow = this.db.sqlite
+          .query('SELECT max_context_tokens FROM thread_context_limits WHERE thread_id = ?')
+          .get(sourceID) as { max_context_tokens: number } | null
+        if (limitRow) {
+          this.db.sqlite
+            .query(
+              `INSERT INTO thread_context_limits (thread_id, max_context_tokens, updated_at)
+               VALUES (?, ?, ?)
+               ON CONFLICT(thread_id) DO UPDATE SET
+                 max_context_tokens = excluded.max_context_tokens,
+                 updated_at = excluded.updated_at`,
+            )
+            .run(targetID, limitRow.max_context_tokens, Date.now())
+        }
+      }
     }
   }
 
@@ -1228,6 +1269,26 @@ export class ConversationHistoryForkRepository {
       if (targetSessionID)
         output.push({ turnID: targetTurnID, sessionID: targetSessionID, entryID: boundary.entryID })
     }
+  }
+
+  /**
+   * 目标 Pi 会话从最近一次压缩边界开始复制，压缩前的 entry 不在目标会话里，
+   * 这些 turn 的边界无法满足 (session_id, entry_id) 外键。只写回目标会话真实存在的边界，
+   * 避免整笔分叉因为历史边界被回滚成“当前聊天历史无法完整复制”。
+   */
+  private upsertCopiedBoundaries(
+    boundaries: ReadonlyArray<{ turnID: string; sessionID: string; entryID: string }>,
+  ) {
+    const exists = this.db.sqlite.query(
+      'SELECT 1 FROM pi_session_entries WHERE session_id = ? AND id = ?',
+    )
+    const applied: Array<{ turnID: string; sessionID: string; entryID: string }> = []
+    for (const boundary of boundaries) {
+      if (exists.get(boundary.sessionID, boundary.entryID)) applied.push(boundary)
+    }
+    this.db.transaction(() => {
+      for (const boundary of applied) this.boundaries.upsert(boundary)
+    })
   }
 
   private recomputeThreadSummary(threadID: string) {

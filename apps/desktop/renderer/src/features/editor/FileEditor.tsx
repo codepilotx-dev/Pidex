@@ -3,7 +3,7 @@ import { EditorView } from '@codemirror/view'
 import { redo, redoDepth, selectAll, undo, undoDepth } from '@codemirror/commands'
 import { useEffect, useRef } from 'react'
 import type React from 'react'
-import { useEditCommands } from '../../components/ui/EditCommandProvider.js'
+import { useEditCommandActions } from '../../components/ui/EditCommandProvider.js'
 import { cx } from '../../utils/Cx.js'
 import { useDesktopTheme } from '../theme/ThemeContext.js'
 import {
@@ -67,7 +67,7 @@ export function FileEditor({
   saving = false,
   value,
 }: FileEditorProps): React.ReactNode {
-  const { registerTarget } = useEditCommands()
+  const { registerTarget } = useEditCommandActions()
   const { activeTheme, codeThemeId, draft, resolvedVariant } = useDesktopTheme()
   const configuredCodeFont = activeTheme.theme.fonts.code?.trim()
   const codeFontFamily = configuredCodeFont

@@ -7,8 +7,15 @@ import type {
   PreparedComposerSubmission,
 } from './ComposerTypes.js'
 import { cloneDraft } from './ComposerDraftStore.js'
-import { skillInvocationsFromComposerDocument } from './ComposerSkillToken.js'
-import { planTaskFromInput } from './ComposerSlashCommands.js'
+import {
+  hasTaskPlanningInvocation,
+  skillInvocationsFromComposerDocument,
+} from './ComposerSkillToken.js'
+import {
+  goalTaskFromInput,
+  grillTaskFromInput,
+  planTaskFromInput,
+} from './ComposerSlashCommands.js'
 import {
   annotationAttachments,
   validateAnnotationCapacity,
@@ -19,11 +26,14 @@ export type ComposerDeliveryStatus = 'sent' | 'queued'
 type SubmitTransactionOptions = {
   draft: ComposerDraft
   targetSessionId?: string | null
+  /** 校验通过、开始创建前调用；用于在校验失败前不登记任何临时状态。 */
+  onPrepared?: (prepared: PreparedComposerSubmission) => void
   createSession?: (
     initialSessionName?: string,
     projectlessPrompt?: string,
   ) => Promise<string | null>
   navigateToSession?: (sessionId: string) => void
+  onSessionCreated?: (sessionId: string) => void
   submitToSession: (
     sessionId: string,
     input: DesktopUserMessageInput,
@@ -35,18 +45,23 @@ export function prepareComposerSubmission(
   draft: ComposerDraft,
 ): PreparedComposerSubmission | ComposerSubmitOutcome {
   const snapshot = cloneDraft(draft)
+  const goalTask = goalTaskFromInput(snapshot.document.text)
   const planTask = planTaskFromInput(snapshot.document.text)
-  if (planTask !== null) {
-    const prefixLength = snapshot.document.text.indexOf(planTask)
+  const grillTask = grillTaskFromInput(snapshot.document.text)
+  if (planTask !== null || grillTask !== null || goalTask !== null) {
+    const directTask = planTask ?? grillTask ?? goalTask!
+    const prefixLength = snapshot.document.text.indexOf(directTask)
     snapshot.document = {
-      text: planTask,
+      text: directTask,
       tokens: snapshot.document.tokens.map((token) => ({
         ...token,
-        from: Math.max(0, Math.min(planTask.length, token.from - prefixLength)),
-        to: Math.max(0, Math.min(planTask.length, token.to - prefixLength)),
+        from: Math.max(0, Math.min(directTask.length, token.from - prefixLength)),
+        to: Math.max(0, Math.min(directTask.length, token.to - prefixLength)),
       })),
     }
-    snapshot.goalModeEnabled = false
+    snapshot.goalModeEnabled = goalTask !== null
+    snapshot.collaborationMode =
+      goalTask !== null ? 'default' : planTask !== null ? 'plan' : 'grill'
   }
   if (Object.keys(snapshot.browserAnnotationFeedback ?? {}).length)
     return failed('prepare', '请先保存或取消正在编辑的批注反馈')
@@ -60,12 +75,17 @@ export function prepareComposerSubmission(
   if (snapshot.goalModeEnabled && !snapshot.document.text.trim()) {
     return failed('prepare', '请输入目标内容')
   }
+  if (snapshot.goalModeEnabled && snapshot.document.text.trim().length > 4000)
+    return failed('prepare', '目标内容不能超过 4000 字符')
   const skills =
     snapshot.skills ??
     (snapshot.skillInvocation
       ? [snapshot.skillInvocation]
       : skillInvocationsFromComposerDocument(snapshot.document))
   const hasContent = Boolean(text.trim()) || attachments.length > 0 || skills.length > 0
+  const planning = hasTaskPlanningInvocation(snapshot.document, skills)
+  const grilling = grillTask !== null || snapshot.collaborationMode === 'grill'
+  if (goalTask === null && (planning || grilling)) snapshot.goalModeEnabled = false
 
   if (!hasContent) {
     return failed('prepare', '请输入消息或添加附件')
@@ -78,14 +98,30 @@ export function prepareComposerSubmission(
     clientId: snapshot.clientId,
     input: {
       text,
-      taskMode: planTask !== null || snapshot.collaborationMode === 'plan' ? 'plan' : 'chat',
+      taskMode:
+        !snapshot.goalModeEnabled &&
+        grillTask === null &&
+        (planning || planTask !== null || snapshot.collaborationMode === 'plan')
+          ? 'plan'
+          : !snapshot.goalModeEnabled && grilling
+            ? 'grill'
+            : 'chat',
       attachments,
       ...(skills.length ? { skills } : {}),
     },
     sessionName: skills.length
       ? `${skills.map((skill) => `$${skill.name}`).join(' ')} ${text}`.trim()
       : undefined,
-    ...(snapshot.goalModeEnabled ? { goal: { objective: snapshot.document.text.trim() } } : {}),
+    ...(snapshot.goalModeEnabled
+      ? {
+          goal: {
+            objective: snapshot.document.text.trim(),
+            ...(typeof snapshot.goalTokenBudget === 'number'
+              ? { tokenBudget: snapshot.goalTokenBudget }
+              : {}),
+          },
+        }
+      : {}),
   }
 }
 
@@ -116,12 +152,15 @@ function escapeMarkdownLabel(value: string): string {
 export async function executeComposerSubmitTransaction({
   draft,
   targetSessionId,
+  onPrepared,
   createSession,
   navigateToSession,
+  onSessionCreated,
   submitToSession,
 }: SubmitTransactionOptions): Promise<ComposerSubmitOutcome> {
   const prepared = prepareComposerSubmission(draft)
   if ('status' in prepared) return prepared
+  onPrepared?.(prepared)
 
   let sessionId = targetSessionId ?? null
   if (!sessionId) {
@@ -136,6 +175,7 @@ export async function executeComposerSubmitTransaction({
     if (!sessionId) {
       return failed('create', '无法创建新会话')
     }
+    onSessionCreated?.(sessionId)
     navigateToSession?.(sessionId)
   }
 

@@ -1,16 +1,19 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
+import { SHARED_SLASH_COMMANDS } from '@pidex/shared/slash-commands'
 import type { ComposerCapabilities } from './ComposerTypes.js'
 import type { ComposerSlashCommand, ComposerSlashCommandId } from './ComposerSlashCommands.js'
 
 type UseComposerSlashCommandsOptions = {
   capabilities: ComposerCapabilities
   planModeActive: boolean
+  grillModeActive?: boolean
   goalModeEnabled: boolean
   hasConversationMessages: boolean
   hasThread: boolean
   canReview: boolean
   subagentMode: boolean
   sessionBusy: boolean
+  queuedCompactionSupported?: boolean
   reasoningAvailable: boolean
   onOpenModel: () => void
   onOpenReasoning: () => void
@@ -18,6 +21,7 @@ type UseComposerSlashCommandsOptions = {
   onOpenMcp?: () => void
   onApprove?: () => void | Promise<void>
   onPlanModeChange?: (active: boolean) => void | Promise<void>
+  onGrillModeChange?: (active: boolean) => void | Promise<void>
   onGoalModeChange?: (active: boolean) => void
   onOpenReview: () => void
   onCompact?: () => Promise<void>
@@ -36,12 +40,14 @@ type UseComposerSlashCommandsOptions = {
 export function useComposerSlashCommands({
   capabilities,
   planModeActive,
+  grillModeActive = false,
   goalModeEnabled,
   hasConversationMessages,
   hasThread,
   canReview,
   subagentMode,
   sessionBusy,
+  queuedCompactionSupported = false,
   reasoningAvailable,
   onOpenModel,
   onOpenReasoning,
@@ -49,6 +55,7 @@ export function useComposerSlashCommands({
   onOpenMcp,
   onApprove,
   onPlanModeChange,
+  onGrillModeChange,
   onGoalModeChange,
   onOpenReview,
   onCompact,
@@ -71,14 +78,18 @@ export function useComposerSlashCommands({
   const [executingCommandId, setExecutingCommandId] = useState<ComposerSlashCommandId | null>(null)
 
   const compactEnabled =
-    hasThread && hasConversationMessages && !subagentMode && !sessionBusy && Boolean(onCompact)
+    hasThread &&
+    hasConversationMessages &&
+    !subagentMode &&
+    (!sessionBusy || queuedCompactionSupported) &&
+    Boolean(onCompact)
 
   const commands = useMemo<ComposerSlashCommand[]>(
     () => [
       command(
         'approve',
-        '重试被拒绝的操作',
-        '为最近的自动审查拒绝授权一次重试，仍经过 Guardian',
+        '最近拒绝',
+        '查看最近的自动审查拒绝并授权一次重试，仍经过 Guardian',
         Boolean(onApprove),
         hasThread && !sessionBusy,
         () => onApprove?.(),
@@ -93,14 +104,29 @@ export function useComposerSlashCommands({
         onOpenReasoning,
       ),
       command(
-        'plan',
+        SHARED_SLASH_COMMANDS.plan.id,
         '计划模式',
         planModeActive ? '关闭计划模式' : '开启计划模式',
         !subagentMode,
         Boolean(onPlanModeChange),
         async () => {
           await onPlanModeChange?.(!planModeActive)
-          if (!planModeActive) onGoalModeChange?.(false)
+          if (!planModeActive) {
+            onGoalModeChange?.(false)
+          }
+        },
+      ),
+      command(
+        SHARED_SLASH_COMMANDS.grill.id,
+        '深度访谈',
+        grillModeActive ? '关闭深度访谈' : '通过深度提问厘清需求',
+        !subagentMode,
+        Boolean(onGrillModeChange),
+        async () => {
+          await onGrillModeChange?.(!grillModeActive)
+          if (!grillModeActive) {
+            onGoalModeChange?.(false)
+          }
         },
       ),
       command(
@@ -111,6 +137,7 @@ export function useComposerSlashCommands({
         Boolean(onGoalModeChange),
         async () => {
           if (planModeActive) await onPlanModeChange?.(false)
+          if (grillModeActive) await onGrillModeChange?.(false)
           if (!goalModeEnabled) onGoalModeChange?.(true)
         },
       ),
@@ -148,7 +175,7 @@ export function useComposerSlashCommands({
         '当前界面无法打开 MCP 设置',
       ),
       command(
-        'status',
+        SHARED_SLASH_COMMANDS.status.id,
         '状态',
         '显示任务 ID、上下文用量和速率限制',
         capabilities.status,
@@ -205,6 +232,7 @@ export function useComposerSlashCommands({
       canReview,
       compactEnabled,
       goalModeEnabled,
+      grillModeActive,
       hasConversationMessages,
       hasThread,
       onCompact,
@@ -214,6 +242,7 @@ export function useComposerSlashCommands({
       onChooseProject,
       onClearProject,
       onGoalModeChange,
+      onGrillModeChange,
       onOpenMcp,
       onApprove,
       onOpenModel,
@@ -265,7 +294,8 @@ function command(
 ): ComposerSlashCommand {
   return {
     id,
-    trigger: id,
+    trigger:
+      id === 'plan' || id === 'grill' || id === 'status' ? SHARED_SLASH_COMMANDS[id].trigger : id,
     title,
     description,
     source: 'builtin',

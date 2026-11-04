@@ -9,6 +9,7 @@ import type { DesktopSessionStatus } from '../../../shared/Types.js'
 export type SessionStatusOverride = {
   status: DesktopSessionStatus
   latestTurnStatus: TurnStatus | null
+  latestTurnError: string | null
 }
 
 /** Shape shared by session list items and session store snapshots' items. */
@@ -16,6 +17,7 @@ export type SessionStatusCarrier = {
   id: string
   status: DesktopSessionStatus
   latestTurnStatus?: TurnStatus | null
+  latestTurnError?: string | null
 }
 
 const ACTIVE_SESSION_STATUSES: ReadonlySet<DesktopSessionStatus> = new Set([
@@ -40,9 +42,14 @@ export function withSessionStatusOverride<T extends SessionStatusCarrier>(
   override: SessionStatusOverride | undefined,
 ): T {
   if (!override) return session
+  const targetError =
+    override.status === 'error' || override.latestTurnStatus === 'failed'
+      ? (override.latestTurnError ?? null)
+      : null
   if (
     session.status === override.status &&
-    (session.latestTurnStatus ?? null) === override.latestTurnStatus
+    (session.latestTurnStatus ?? null) === override.latestTurnStatus &&
+    (session.latestTurnError ?? null) === targetError
   ) {
     return session
   }
@@ -50,5 +57,6 @@ export function withSessionStatusOverride<T extends SessionStatusCarrier>(
     ...session,
     status: override.status,
     latestTurnStatus: override.latestTurnStatus,
+    latestTurnError: targetError,
   }
 }

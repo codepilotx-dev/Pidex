@@ -1,7 +1,8 @@
+import { useShallow } from 'zustand/react/shallow'
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { PetInstallPreview } from '@pidex/agent-protocol'
-import { PawPrint, RefreshCw, Trash2 } from 'lucide-react'
+import { Egg, RefreshCw, Trash2 } from 'lucide-react'
 import { desktopClient } from '../../services/desktop-client/index.js'
 import { Button } from '../../components/ui/Button.js'
 
@@ -12,7 +13,8 @@ import { SettingsContentArea } from './SettingsContentArea.js'
 import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
-import { usePetSettingsController } from '../pet/UsePetSettingsController.js'
+import { usePetCatalogController } from '../pet/PetCatalogProvider.js'
+import { useLocale } from '../i18n/LocaleProvider.js'
 
 type Props = {
   onError: (message: string) => void
@@ -21,6 +23,7 @@ type Props = {
 
 export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
   const navigate = useNavigate()
+  const { t } = useLocale()
   const [sourceUrl, setSourceUrl] = useState('')
   const [preview, setPreview] = useState<PetInstallPreview | null>(null)
   const [operationBusy, setOperationBusy] = useState(false)
@@ -34,7 +37,19 @@ export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
     setEnabled,
     settings,
     updatePet,
-  } = usePetSettingsController({ onError })
+  } = usePetCatalogController(
+    useShallow((state) => ({
+      busy: state.busy,
+      flushPendingSize: state.flushPendingSize,
+      pets: state.pets,
+      previewSize: state.previewSize,
+      refreshPets: state.refreshPets,
+      selectPet: state.selectPet,
+      setEnabled: state.setEnabled,
+      settings: state.settings,
+      updatePet: state.updatePet,
+    })),
+  )
   const busy = petsBusy || operationBusy
 
   const loadPreview = async (): Promise<void> => {
@@ -90,9 +105,7 @@ export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
     <SettingsContentArea className="pet-settings-page">
       <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
-            宠物
-          </h2>
+          <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">宠物</h2>
           <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
             桌面伙伴会跟随任务状态，并把需要你处理的事项带到最前面。
           </p>
@@ -215,13 +228,13 @@ export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
           />
         </SettingsSection>
 
-        <SettingsSection title="社区宠物商店">
+        <SettingsSection title={t('宠物市场')}>
           <SettingsRow
             title="浏览社区宠物"
             description="搜索并一键安装社区提供的桌面伙伴"
             control={
               <Button color="secondary" onClick={() => navigate('/pets')} type="button">
-                打开宠物商店
+                {t('打开宠物市场')}
               </Button>
             }
           />
@@ -252,7 +265,7 @@ export function PetSettings({ onError, onNotice }: Props): React.ReactNode {
           </div>
           {preview ? (
             <div className="pet-settings-preview tw:mx-4 tw:mt-0 tw:mb-4 tw:flex tw:items-center tw:gap-2 tw:rounded-lg tw:border tw:border-app-border-subtle tw:bg-app-panel tw:p-3">
-              <PawPrint size={APP_ICON_SIZE} />
+              <Egg size={APP_ICON_SIZE} />
               <div className="tw:flex-1">
                 <strong>{preview.pet.displayName}</strong>
                 <p className="tw:mt-1 tw:mb-0 tw:text-app-text-meta tw:type-body-sm">

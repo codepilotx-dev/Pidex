@@ -1,9 +1,14 @@
+import { useStore } from 'zustand/react'
+import type { StoreApi } from 'zustand/vanilla'
+import { useControllerStore } from '../../hooks/UseControllerStore.js'
 import { createContext, useContext, useEffect, type ReactNode } from 'react'
 import { useLocation } from 'react-router-dom'
 import { useEverOpened } from '../../hooks/UsePresenceRetention.js'
 import { useAutomationController, type AutomationController } from './UseAutomationController.js'
 
-export const AutomationControllerContext = createContext<AutomationController | null>(null)
+export const AutomationControllerContext = createContext<StoreApi<AutomationController> | null>(
+  null,
+)
 
 export function AutomationControllerProvider({
   enabled,
@@ -22,15 +27,16 @@ export function AutomationControllerProvider({
   useEffect(() => {
     if (location.pathname !== '/automations') controller.cancelDraft()
   }, [location.pathname, controller.cancelDraft])
+  const store = useControllerStore(controller)
   return (
-    <AutomationControllerContext.Provider value={controller}>
+    <AutomationControllerContext.Provider value={store}>
       {children}
     </AutomationControllerContext.Provider>
   )
 }
 
-export function useSharedAutomationController(): AutomationController {
+export function useSharedAutomationController<T>(selector: (state: AutomationController) => T): T {
   const controller = useContext(AutomationControllerContext)
   if (!controller) throw new Error('已安排面板需要共享自动化控制器')
-  return controller
+  return useStore(controller, selector)
 }

@@ -2,18 +2,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type React from 'react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
 import { useSearchParams } from 'react-router-dom'
-import type { DesktopWorkspace, SidebarProductMode } from '../../../shared/Types.js'
+import type { DesktopWorkspace } from '../../../shared/Types.js'
 import {
   getEffectiveReducedMotion,
   usePrefersReducedMotion,
 } from '../../hooks/UsePrefersReducedMotion.js'
-import { useDesktopSettings } from '../settings/UseDesktopSettings.js'
+import { useDesktopSettingsField } from '../settings/UseDesktopSettings.js'
 import {
   normalizeNewSessionSurfaceSearch,
   parseNewSessionSurface,
   type NewSessionSurface,
 } from './NewSessionSurface.js'
-import { DesktopComposer } from './composer/DesktopComposer.js'
+import { SessionBoundComposer } from './composer/DesktopComposer.js'
 import { useQuickChatContext } from './QuickChatContext.js'
 import { enterTween, exitTween, motionTransition } from '../motion/MotionTransitions.js'
 import { CodingHeadingTransition } from './CodingHeadingTransition.js'
@@ -22,7 +22,10 @@ import { useLocale } from '../i18n/LocaleProvider.js'
 
 export function QuickChatView(): React.ReactNode {
   const [searchParams, setSearchParams] = useSearchParams()
-  const { sidebarProductMode, setSidebarProductMode } = useDesktopSettings()
+  const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
+  const setSidebarProductMode = useDesktopSettingsField(
+    (settings) => settings.setSidebarProductMode,
+  )
   const search = searchParams.toString()
   const urlSurface = parseNewSessionSurface(search)
   const surface = urlSurface ?? sidebarProductMode
@@ -40,30 +43,16 @@ export function QuickChatView(): React.ReactNode {
     setSidebarProductMode(urlSurface)
   }, [setSidebarProductMode, sidebarProductMode, urlSurface])
 
-  const handleModeChange = useCallback(
-    (mode: SidebarProductMode) => {
-      setSidebarProductMode(mode)
-      setSearchParams(normalizeNewSessionSurfaceSearch(search, mode), { replace: true })
-    },
-    [search, setSearchParams, setSidebarProductMode],
-  )
-
   return (
     <AnimatePresence initial={false} mode="wait">
       <NewSessionPresence key="unified-home" kind="surface" reducedMotion={reducedMotion}>
-        <CodingQuickChatView onModeChange={handleModeChange} surface={surface} />
+        <CodingQuickChatView surface={surface} />
       </NewSessionPresence>
     </AnimatePresence>
   )
 }
 
-function CodingQuickChatView({
-  surface,
-  onModeChange,
-}: {
-  surface: NewSessionSurface
-  onModeChange?: (mode: SidebarProductMode) => void
-}): React.ReactNode {
+function CodingQuickChatView({ surface }: { surface: NewSessionSurface }): React.ReactNode {
   const { t } = useLocale()
   const {
     branchName,
@@ -191,7 +180,7 @@ function CodingQuickChatView({
       ref={pageRef}
       className="quick-chat-workspace tw:flex tw:h-full tw:w-full tw:min-h-0 tw:overflow-hidden"
     >
-      <main className="quick-chat-view coding-chat-view tw:flex tw:h-full tw:max-w-none tw:w-full tw:min-h-full tw:flex-col tw:items-stretch tw:justify-end tw:overflow-x-hidden tw:overflow-y-auto tw:px-8 tw:pb-4 tw:text-app-text tw:[scrollbar-gutter:stable]">
+      <main className="quick-chat-view coding-chat-view tw:flex tw:h-full tw:w-full tw:min-h-full tw:flex-col tw:items-stretch tw:justify-end tw:overflow-x-hidden tw:overflow-y-auto tw:pb-4 tw:text-app-text">
         <section className="quick-chat-hero-region tw:m-auto tw:flex tw:w-full tw:min-w-0 tw:flex-col tw:items-center tw:justify-center tw:gap-5">
           <div className="quick-chat-hero tw:flex tw:w-[var(--quick-chat-surface-width)] tw:max-w-full tw:flex-col tw:items-center tw:gap-6 tw:text-center tw:text-app-text tw:type-display">
             <button
@@ -211,11 +200,9 @@ function CodingQuickChatView({
         <section className="quick-chat-composer-region tw:flex tw:w-full tw:min-w-0 tw:flex-col tw:items-center tw:justify-end tw:gap-3">
           {composerProps ? (
             <div className="chat-composer tw:static tw:m-0 tw:flex tw:w-[var(--quick-chat-surface-width)] tw:max-w-full tw:flex-col tw:items-center tw:gap-3 tw:pointer-events-auto">
-              <DesktopComposer
+              <SessionBoundComposer
                 {...composerProps}
                 placeholder={composerPlaceholder}
-                productMode={surface}
-                onProductModeChange={onModeChange}
                 surface={surface}
               />
             </div>

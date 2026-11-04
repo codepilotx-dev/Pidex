@@ -1,9 +1,17 @@
+import { useStore } from 'zustand/react'
+import { useShallow } from 'zustand/react/shallow'
+import { startupSurfaceReadyRef } from '../../../startup/StartupSplashHandoff.js'
+import { GitBoardSidebar } from '../../git-board/GitBoardSidebar.js'
+import { useGitBoard } from '../../git-board/GitBoardContext.js'
 import {
   captureSidebarAssignments,
   restoreFailedArchiveAssignments,
 } from '../sidebar/SidebarCustomization.js'
 import { DEFAULT_SIDEBAR_CUSTOMIZATION } from '../../../../shared/SettingsSchema.js'
-import { subscribeProjectRestores } from '../../projects/ProjectCatalogEvents.js'
+import {
+  notifyProjectCatalogChanged,
+  subscribeProjectRestores,
+} from '../../projects/ProjectCatalogEvents.js'
 import { mergeBrowserWorkbench } from '../../browser/BrowserWorkbenchState.js'
 import { mergeComposerAttachments } from '../../session/composer/ComposerAttachmentSelection.js'
 import { ConversationProjectDetails } from '../../projects/ConversationProjectDetails.js'
@@ -19,7 +27,7 @@ import {
 import type React from 'react'
 import { Outlet, useLocation } from 'react-router-dom'
 import { normalizePathForComparison } from '../../../utils/PathUtils.js'
-import type { DesktopComposerProps } from '../../session/composer/DesktopComposer.js'
+import type { SessionBoundComposerProps } from '../../session/composer/SessionBoundComposer.js'
 import { getDesktopComposerBranchName } from '../../session/composer/ComposerWorkspacePresentation.js'
 import { composerDraftStore } from '../../session/composer/ComposerDraftStore.js'
 import { isBuiltinSkill } from '../../plugins/BuiltinSkillPresentation.js'
@@ -27,7 +35,7 @@ import { listRuntimeSkills } from '../../settings/plugins/SkillClientAdapter.js'
 import type { ComposerDraftKey } from '../../session/composer/ComposerTypes.js'
 import { deriveWorkflowSessionState } from '../../../../shared/WorkflowReducer.js'
 import type { WorkbenchFileLoadErrorEvent } from '../dock/RightDock.js'
-import { WorkspaceShellControls } from '../dock/WorkspaceShellControls.js'
+import { WorkspaceShellControls, RightPanelToggleIcon } from '../dock/WorkspaceShellControls.js'
 import { DesktopWorkspaceHeader, WorkspaceHeaderProvider } from '../workspace-header/index.js'
 import {
   applyWorkbenchPanelAction,
@@ -55,6 +63,8 @@ import { SidebarFrame } from '../SidebarFrame.js'
 import { SidebarNavigationRail } from '../sidebar/SidebarNavigationRail.js'
 import { SidebarScheduledPane } from '../sidebar/SidebarScheduledPane.js'
 import { SidebarPluginsPane } from '../sidebar/SidebarPluginsPane.js'
+import { SidebarProvidersPane } from '../sidebar/SidebarProvidersPane.js'
+import { SidebarPetsPane } from '../sidebar/SidebarPetsPane.js'
 import { SIDEBAR_RAIL_WIDTH, sidebarPaneForRoute } from '../sidebar/SidebarNavigation.js'
 import { useSidebarCapabilities } from '../sidebar/SidebarTopNav.js'
 import { AutomationControllerProvider } from '../../automation/AutomationControllerProvider.js'
@@ -68,8 +78,10 @@ import {
   type SessionListItem,
 } from '../../../UiTypes.js'
 import { resolveModelPresetId } from '../../../ModelPresets.js'
-import { useDesktopRuntimeSettings } from '../../settings/UseDesktopSettings.js'
+import { useDesktopRuntimeSettingsField } from '../../settings/UseDesktopSettings.js'
 import { useSystemNotifications } from '../../notifications/UseSystemNotifications.js'
+import { Button } from '../../../components/ui/Button.js'
+import { TaskConversationLinks } from '../../automation/TaskConversationLinks.js'
 import { NO_WORKSPACE_DIFF } from '../../workspace/UseWorkspaceState.js'
 import { shouldRestoreLastWorkspace } from '../../workspace/LastWorkspaceRestore.js'
 import { useSessionState } from '../../session/state/UseSessionState.js'
@@ -80,11 +92,11 @@ import type {
   DesktopComposerAttachment,
   DesktopBrowserState,
   DesktopFileEntry,
+  DesktopGoalBudgetBaseline,
   DesktopInstalledSkill,
   DesktopPermissionMode,
   DesktopUserMessageInput,
   DesktopWorkspace,
-  LocalRouterMode,
 } from '../../../../shared/Types.js'
 import type { Attachment, LocalContextReference } from '@pidex/shared/thread'
 import {
@@ -94,6 +106,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  memo,
   useRef,
   useState,
 } from 'react'
@@ -103,6 +116,11 @@ import {
   useWorkbenchRouteController,
 } from './UseWorkbenchRouteController.js'
 import type { DesktopLayoutOutletContextValue } from './DesktopLayoutOutletContext.js'
+import type { ProviderManagementTab, ProviderManagementSection } from '../dock/RightDockState.js'
+import {
+  providerManagementRouteId,
+  scopedProviderManagementTab,
+} from '../../models/provider-management/ProviderManagementPanelState.js'
 import { useWorkbenchShellController } from './UseWorkbenchShellController.js'
 import {
   isTerminalKeyboardTarget,
@@ -114,7 +132,7 @@ import {
   useModelProviderController,
 } from '../UseModelProviderController.js'
 import { buildVariantOptions } from '../../models/ReasoningVariantLabels.js'
-import { useSubagentDockController } from '../dock/UseSubagentDockController.js'
+import { useSubagentsAvailability } from '../../session/subagents/UseSubagentsAvailability.js'
 import { useSideChatController } from '../dock/UseSideChatController.js'
 import { WorkbenchShellView } from './WorkbenchShellView.js'
 import { WorkbenchPanelPresence } from '../panels/WorkbenchPanelPresence.js'
@@ -130,7 +148,6 @@ import {
   saveFileDocument,
 } from '../../workspace/FileDocumentStore.js'
 import { SettingsSidebarContent } from '../../settings/SettingsSidebarContent.js'
-import { SubagentDockContent } from '../../session/subagents/SubagentDockContent.js'
 import { WorkbenchPanel } from '../dock/RightDock.js'
 import { AuxiliaryWindowsHost } from '../auxiliary/AuxiliaryWindowsHost.js'
 import type { WorkbenchTabRenderContext } from '../tabs/WorkbenchTabRegistry.js'
@@ -250,7 +267,9 @@ function routeAccessibilityLabel(pathname: string): string {
   if (pathname === '/new') return '新对话'
   if (pathname.startsWith('/threads/')) return '会话'
   if (pathname.startsWith('/projects')) return '项目'
+  if (pathname === '/git') return 'Git 看板'
   if (pathname === '/plugins') return '插件与技能'
+  if (pathname === '/providers') return '供应商'
   if (pathname === '/pull-requests') return '拉取请求'
   if (pathname === '/automations') return '已安排'
   if (pathname === '/pets') return '宠物'
@@ -265,10 +284,224 @@ function normalizePathForCompare(path: string): string {
 /** Incrementing counter to sequence directory probe requests */
 let directoryProbeRequestId = 0
 
+const MemoGitBoardSidebar = memo(GitBoardSidebar)
+const MemoSidebarScheduledPane = memo(SidebarScheduledPane)
+const MemoSidebarPluginsPane = memo(SidebarPluginsPane)
+const MemoSidebarProvidersPane = memo(SidebarProvidersPane)
+const MemoSidebarPetsPane = memo(SidebarPetsPane)
+
 export function DesktopLayout(): React.ReactNode {
   const location = useLocation()
+  const [providerManagementTab, setProviderManagementTab] = useState<ProviderManagementTab | null>(
+    null,
+  )
+  const [providerManagementHost, setProviderManagementHost] = useState<HTMLElement | null>(null)
+  const [providerManagementOwner, setProviderManagementOwner] = useState<string | null>(null)
+  const providerBeforeChange = useRef<(() => Promise<boolean>) | null>(null)
+  const providerRouteId = providerManagementRouteId(location.pathname, location.search)
+  const isProviderDetailRoute =
+    providerRouteId !== null && providerManagementOwner === providerRouteId
+  const visibleProviderTab =
+    providerManagementOwner === providerRouteId
+      ? scopedProviderManagementTab(providerManagementTab, location.pathname, location.search)
+      : null
+  useEffect(() => {
+    if (!providerRouteId || !providerManagementOwner) setProviderManagementTab(null)
+  }, [providerRouteId, providerManagementOwner])
+  const openProviderManagement = useCallback(
+    (providerId: string, section: ProviderManagementSection) => {
+      if (providerRouteId !== providerId || providerManagementOwner !== providerId) return
+      void (providerBeforeChange.current?.() ?? Promise.resolve(true)).then((allowed) => {
+        if (allowed)
+          setProviderManagementTab({
+            id: 'provider-management',
+            kind: 'provider-management',
+            providerId,
+            section,
+          })
+      })
+    },
+    [providerRouteId, providerManagementOwner, providerManagementTab],
+  )
+  const closeProviderManagement = useCallback(() => {
+    void (providerBeforeChange.current?.() ?? Promise.resolve(true)).then((allowed) => {
+      if (allowed) setProviderManagementTab(null)
+    })
+  }, [])
   const routeLabel = routeAccessibilityLabel(location.pathname)
-  const settings = useDesktopRuntimeSettings()
+  const subscribedSidebarTimelineEnabled = useDesktopRuntimeSettingsField(
+    (s) => s.values.sidebarTimelineEnabled,
+  )
+  const subscribedNotifications = useDesktopRuntimeSettingsField((s) => s.values.notifications)
+  const subscribedLastActiveWorkspacePath = useDesktopRuntimeSettingsField(
+    (s) => s.values.lastActiveWorkspacePath,
+  )
+  const subscribedRemovedWorkspaces = useDesktopRuntimeSettingsField(
+    (s) => s.values.removedWorkspaces,
+  )
+  const subscribedPermissionConfig = useDesktopRuntimeSettingsField(
+    (s) => s.values.permissionConfig,
+  )
+  const subscribedPet = useDesktopRuntimeSettingsField((s) => s.values.pet)
+  const subscribedSidebarCustomization = useDesktopRuntimeSettingsField(
+    (s) => s.values.sidebarCustomization,
+  )
+  const subscribedModel = useDesktopRuntimeSettingsField((s) => s.values.model)
+  const subscribedCodingModel = useDesktopRuntimeSettingsField((s) => s.values.codingModel)
+  const subscribedSessionName = useDesktopRuntimeSettingsField((s) => s.values.sessionName)
+  const subscribedThinkingMode = useDesktopRuntimeSettingsField((s) => s.values.thinkingMode)
+  const subscribedSystemPrompt = useDesktopRuntimeSettingsField((s) => s.values.systemPrompt)
+  const subscribedAppendSystemPrompt = useDesktopRuntimeSettingsField(
+    (s) => s.values.appendSystemPrompt,
+  )
+  const subscribedAdditionalDirectories = useDesktopRuntimeSettingsField(
+    (s) => s.values.additionalDirectories,
+  )
+  const subscribedInstallPidexDependencies = useDesktopRuntimeSettingsField(
+    (s) => s.values.installPidexDependencies,
+  )
+  const subscribedEnableMemory = useDesktopRuntimeSettingsField((s) => s.values.enableMemory)
+  const subscribedRustSearchAndDiffKernels = useDesktopRuntimeSettingsField(
+    (s) => s.values.rustSearchAndDiffKernels,
+  )
+  const subscribedEnableAutoReviewPermissionMode = useDesktopRuntimeSettingsField(
+    (s) => s.values.enableAutoReviewPermissionMode,
+  )
+  const subscribedEnableFullAccessPermissionMode = useDesktopRuntimeSettingsField(
+    (s) => s.values.enableFullAccessPermissionMode,
+  )
+  const subscribedRecentWorkspaces = useDesktopRuntimeSettingsField(
+    (s) => s.values.recentWorkspaces,
+  )
+  const subscribedProviderID = useDesktopRuntimeSettingsField((s) => s.values.providerID)
+  const subscribedProviderBaseURL = useDesktopRuntimeSettingsField((s) => s.values.providerBaseURL)
+  const subscribedShowContextUsage = useDesktopRuntimeSettingsField(
+    (s) => s.values.showContextUsage,
+  )
+  const subscribedContextUsageView = useDesktopRuntimeSettingsField(
+    (s) => s.values.contextUsageView,
+  )
+  const subscribedDiffMarkerStyle = useDesktopRuntimeSettingsField((s) => s.values.diffMarkerStyle)
+  const subscribedReviewView = useDesktopRuntimeSettingsField((s) => s.values.reviewView)
+  const subscribedGitBranchPrefix = useDesktopRuntimeSettingsField((s) => s.values.gitBranchPrefix)
+  const subscribedAllowForcePush = useDesktopRuntimeSettingsField((s) => s.values.allowForcePush)
+  const subscribedCommitMessagePrompt = useDesktopRuntimeSettingsField(
+    (s) => s.values.commitMessagePrompt,
+  )
+  const subscribedPullRequestPrompt = useDesktopRuntimeSettingsField(
+    (s) => s.values.pullRequestPrompt,
+  )
+  const subscribedSidebarSessionPins = useDesktopRuntimeSettingsField(
+    (s) => s.values.sidebarSessionPins,
+  )
+  const subscribedSyncExternalSettingsPatch = useDesktopRuntimeSettingsField(
+    (s) => s.syncExternalSettingsPatch,
+  )
+  const subscribedSetSidebarCustomization = useDesktopRuntimeSettingsField(
+    (s) => s.setSidebarCustomization,
+  )
+  const subscribedPermissionMode = useDesktopRuntimeSettingsField((s) => s.permissionMode)
+  const subscribedSettingsLoaded = useDesktopRuntimeSettingsField((s) => s.settingsLoaded)
+  const subscribedSetPermissionMode = useDesktopRuntimeSettingsField((s) => s.setPermissionMode)
+  const subscribedSetRecentWorkspaces = useDesktopRuntimeSettingsField((s) => s.setRecentWorkspaces)
+  const subscribedSetDrawerTab = useDesktopRuntimeSettingsField((s) => s.setDrawerTab)
+  const subscribedSetReviewView = useDesktopRuntimeSettingsField((s) => s.setReviewView)
+  const subscribedSetSidebarSessionPins = useDesktopRuntimeSettingsField(
+    (s) => s.setSidebarSessionPins,
+  )
+  const subscribedSetSidebarTimelineEnabled = useDesktopRuntimeSettingsField(
+    (s) => s.setSidebarTimelineEnabled,
+  )
+  const settings = useMemo(
+    () => ({
+      values: {
+        sidebarTimelineEnabled: subscribedSidebarTimelineEnabled,
+        notifications: subscribedNotifications,
+        lastActiveWorkspacePath: subscribedLastActiveWorkspacePath,
+        removedWorkspaces: subscribedRemovedWorkspaces,
+        permissionConfig: subscribedPermissionConfig,
+        pet: subscribedPet,
+        sidebarCustomization: subscribedSidebarCustomization,
+        model: subscribedModel,
+        codingModel: subscribedCodingModel,
+        sessionName: subscribedSessionName,
+        thinkingMode: subscribedThinkingMode,
+        systemPrompt: subscribedSystemPrompt,
+        appendSystemPrompt: subscribedAppendSystemPrompt,
+        additionalDirectories: subscribedAdditionalDirectories,
+        installPidexDependencies: subscribedInstallPidexDependencies,
+        enableMemory: subscribedEnableMemory,
+        rustSearchAndDiffKernels: subscribedRustSearchAndDiffKernels,
+        enableAutoReviewPermissionMode: subscribedEnableAutoReviewPermissionMode,
+        enableFullAccessPermissionMode: subscribedEnableFullAccessPermissionMode,
+        recentWorkspaces: subscribedRecentWorkspaces,
+        providerID: subscribedProviderID,
+        providerBaseURL: subscribedProviderBaseURL,
+        showContextUsage: subscribedShowContextUsage,
+        contextUsageView: subscribedContextUsageView,
+        diffMarkerStyle: subscribedDiffMarkerStyle,
+        reviewView: subscribedReviewView,
+        gitBranchPrefix: subscribedGitBranchPrefix,
+        allowForcePush: subscribedAllowForcePush,
+        commitMessagePrompt: subscribedCommitMessagePrompt,
+        pullRequestPrompt: subscribedPullRequestPrompt,
+        sidebarSessionPins: subscribedSidebarSessionPins,
+      },
+      syncExternalSettingsPatch: subscribedSyncExternalSettingsPatch,
+      setSidebarCustomization: subscribedSetSidebarCustomization,
+      permissionMode: subscribedPermissionMode,
+      settingsLoaded: subscribedSettingsLoaded,
+      setPermissionMode: subscribedSetPermissionMode,
+      setRecentWorkspaces: subscribedSetRecentWorkspaces,
+      setDrawerTab: subscribedSetDrawerTab,
+      setReviewView: subscribedSetReviewView,
+      setSidebarSessionPins: subscribedSetSidebarSessionPins,
+      setSidebarTimelineEnabled: subscribedSetSidebarTimelineEnabled,
+    }),
+    [
+      subscribedSidebarTimelineEnabled,
+      subscribedNotifications,
+      subscribedLastActiveWorkspacePath,
+      subscribedRemovedWorkspaces,
+      subscribedPermissionConfig,
+      subscribedPet,
+      subscribedSidebarCustomization,
+      subscribedModel,
+      subscribedCodingModel,
+      subscribedSessionName,
+      subscribedThinkingMode,
+      subscribedSystemPrompt,
+      subscribedAppendSystemPrompt,
+      subscribedAdditionalDirectories,
+      subscribedInstallPidexDependencies,
+      subscribedEnableMemory,
+      subscribedRustSearchAndDiffKernels,
+      subscribedEnableAutoReviewPermissionMode,
+      subscribedEnableFullAccessPermissionMode,
+      subscribedRecentWorkspaces,
+      subscribedProviderID,
+      subscribedProviderBaseURL,
+      subscribedShowContextUsage,
+      subscribedContextUsageView,
+      subscribedDiffMarkerStyle,
+      subscribedReviewView,
+      subscribedGitBranchPrefix,
+      subscribedAllowForcePush,
+      subscribedCommitMessagePrompt,
+      subscribedPullRequestPrompt,
+      subscribedSidebarSessionPins,
+      subscribedSyncExternalSettingsPatch,
+      subscribedSetSidebarCustomization,
+      subscribedPermissionMode,
+      subscribedSettingsLoaded,
+      subscribedSetPermissionMode,
+      subscribedSetRecentWorkspaces,
+      subscribedSetDrawerTab,
+      subscribedSetReviewView,
+      subscribedSetSidebarSessionPins,
+      subscribedSetSidebarTimelineEnabled,
+    ],
+  )
   const activeSidebarPane = sidebarPaneForRoute(
     location.pathname,
     settings.values.sidebarTimelineEnabled,
@@ -286,14 +519,13 @@ export function DesktopLayout(): React.ReactNode {
       installPidexDependencies,
       enableMemory,
       rustSearchAndDiffKernels,
-      enableParetoCodeRouter,
-      enableFusionRouter,
       enableAutoReviewPermissionMode,
       enableFullAccessPermissionMode,
       recentWorkspaces,
       providerID: defaultProviderID,
       providerBaseURL,
       showContextUsage,
+      contextUsageView,
       diffMarkerStyle,
       reviewView,
       gitBranchPrefix,
@@ -301,7 +533,6 @@ export function DesktopLayout(): React.ReactNode {
       commitMessagePrompt,
       pullRequestPrompt,
       sidebarSessionPins,
-      sidebarProductMode,
     },
     permissionMode,
     settingsLoaded,
@@ -311,9 +542,10 @@ export function DesktopLayout(): React.ReactNode {
     setReviewView,
     setSidebarSessionPins,
     setSidebarTimelineEnabled,
-    setSidebarProductMode,
   } = settings
-  useSystemNotifications(settingsLoaded ? settings.values.notifications : undefined)
+  const taskNotificationState = useSystemNotifications(
+    settingsLoaded ? settings.values.notifications : undefined,
+  )
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [noticeMessage, setNoticeMessage] = useState<string | null>(null)
   const [archiveNoticeVisible, setArchiveNoticeVisible] = useState(false)
@@ -326,8 +558,14 @@ export function DesktopLayout(): React.ReactNode {
   const [whatsNewDialogOpen, setWhatsNewDialogOpen] = useState(false)
   const [whatsNewRestoreFocusElement, setWhatsNewRestoreFocusElement] =
     useState<HTMLElement | null>(null)
-  const [browserState, setBrowserState] = useState<DesktopBrowserState | null>(null)
-  const [browserTabs, setBrowserTabs] = useState<DesktopBrowserState[]>([])
+  const browserState = useStore(desktopBrowserClient.tabsStore, (state) =>
+    state.displayTabId ? (state.tabs.get(state.displayTabId) ?? null) : null,
+  )
+  const setBrowserState = useCallback((state: DesktopBrowserState) => {
+    if (state.tabId) desktopBrowserClient.tabsStore.setState({ displayTabId: state.tabId })
+  }, [])
+  const browserTabMap = useStore(desktopBrowserClient.tabsStore, (state) => state.tabs)
+  const browserTabs = useMemo(() => [...browserTabMap.values()], [browserTabMap])
   const browserAvailable =
     typeof window !== 'undefined' &&
     typeof window.DesktopBridge?.createOrRestoreDesktopBrowser === 'function'
@@ -337,6 +575,21 @@ export function DesktopLayout(): React.ReactNode {
   const whatsNewDialogMounted = useEverOpened(whatsNewDialogOpen)
   const commandMenuDialogMounted = useEverOpened(commandMenuOpen)
   const globalMessageModalMounted = useEverOpened(errorMessage !== null || noticeMessage !== null)
+  const {
+    navigate,
+    canNavigateBack,
+    canNavigateForward,
+    navigateBack,
+    navigateForward,
+    routedSessionId,
+    isQuickChatPage,
+    isConversationRoute,
+    isSettingsRoute,
+    settingsActiveTab,
+    handleSettingsTabChange,
+    handleSettingsBack,
+  } = useWorkbenchRouteController()
+  const isHomeOrConversationRoute = isQuickChatPage || isConversationRoute
   const {
     sidebarCollapsed,
     sidebarWidth,
@@ -393,7 +646,11 @@ export function DesktopLayout(): React.ReactNode {
     pinTab,
     setFileMarkdownViewMode,
     setFileViewState,
-  } = useWorkbenchShellController({ activePane: activeSidebarPane })
+  } = useWorkbenchShellController({
+    activePane: activeSidebarPane,
+    panelRouteActive: isHomeOrConversationRoute,
+    temporaryRightPanelOpen: visibleProviderTab !== null,
+  })
   const [rightResizePhase, setRightResizePhase] = useState<ResizePhase>('idle')
   const mainRouteRef = useRef<HTMLDivElement>(null)
   const commandMenuInputRef = useRef<HTMLInputElement>(null)
@@ -465,12 +722,14 @@ export function DesktopLayout(): React.ReactNode {
     return lastSlash >= 0 ? upstream.slice(lastSlash + 1) : upstream
   }, [gitStatus?.upstream])
   const [homePlanModeActive, setHomePlanModeActive] = useState(false)
+  const [homeGrillModeActive, setHomeGrillModeActive] = useState(false)
   const [homeLocalRouterMode, setHomeLocalRouterMode] = useState<'off'>('off')
 
   const session = useSessionState({
     permissionMode,
     permissionConfig: settings.values.permissionConfig,
     planModeActive: homePlanModeActive,
+    grillModeActive: homeGrillModeActive,
     localRouterMode: homeLocalRouterMode,
     providerID: defaultProviderID,
     providerBaseURL,
@@ -510,8 +769,7 @@ export function DesktopLayout(): React.ReactNode {
     queuedFollowUps,
     queuePauseReason,
     pendingPermissionSessionIds,
-    input,
-    setInput,
+    inputBinding,
     composerAttachments,
     setComposerAttachments,
     appendComposerAttachmentsForDraft,
@@ -526,31 +784,22 @@ export function DesktopLayout(): React.ReactNode {
     renameSession,
     setSessionPermissionMode,
     setSessionPlanModeActive,
-    setSessionLocalRouterMode,
+    setSessionGrillModeActive,
     activeSessionItem,
     permissionMode: effectivePermissionMode,
     planModeActive,
-    localRouterMode: effectiveLocalRouterMode,
+    grillModeActive,
   } = session
-  const isBrowserMockSession = sessionId?.startsWith('browser-mock-') === true
-  const localRouterAvailable = !sessionId || isBrowserMockSession
+  // 侧栏聊天列表只用于 Git 看板的项目活跃度排序，看板不额外请求聊天历史。
+  const { registerActivitySessions } = useGitBoard(
+    useShallow((state) => ({ registerActivitySessions: state.registerActivitySessions })),
+  )
+  useEffect(() => {
+    registerActivitySessions(sessions)
+  }, [registerActivitySessions, sessions])
 
-  const {
-    navigate,
-    canNavigateBack,
-    canNavigateForward,
-    navigateBack,
-    navigateForward,
-    routedSessionId,
-    isQuickChatPage,
-    isConversationRoute,
-    isSettingsRoute,
-    settingsActiveTab,
-    handleSettingsTabChange,
-    handleSettingsBack,
-  } = useWorkbenchRouteController()
-  const isHomeOrConversationRoute = isQuickChatPage || isConversationRoute
-  const effectiveRightDockVisible = isHomeOrConversationRoute && rightDockVisible
+  const effectiveRightDockVisible =
+    (isHomeOrConversationRoute && rightDockVisible) || visibleProviderTab !== null
   const effectiveBottomPanelVisible = isHomeOrConversationRoute && bottomPanelVisible
 
   const { terminalAvailable, terminalVisible, toggleIntegratedTerminal } =
@@ -591,7 +840,11 @@ export function DesktopLayout(): React.ReactNode {
     return bridge.onDesktopNotificationActivated((activation) => {
       // 点击已解决的权限通知只打开任务，不直接执行授权；页面会重新读取
       // pending interaction，避免对失效请求提交响应。
-      navigate(sessionPath(activation.threadId))
+      if (activation.taskId)
+        navigate(
+          `/automations?taskId=${encodeURIComponent(activation.taskId)}${activation.occurrenceId ? `&occurrenceId=${encodeURIComponent(activation.occurrenceId)}` : ''}`,
+        )
+      else if (activation.threadId) navigate(sessionPath(activation.threadId))
     })
   }, [navigate])
   useEffect(() => {
@@ -638,6 +891,20 @@ export function DesktopLayout(): React.ReactNode {
     ? `session:${routedSessionId}`
     : 'home'
   const lastWorkspaceRestoreAttemptedRef = useRef(false)
+  /** 路由先于会话目录到达时（分叉、刚刚新建）先等待目录刷新，再判断是否真的不存在。 */
+  const unknownRoutedSessionRef = useRef<{
+    id: string
+    timer: ReturnType<typeof setTimeout>
+  } | null>(null)
+  useEffect(
+    () => () => {
+      const pending = unknownRoutedSessionRef.current
+      if (!pending) return
+      clearTimeout(pending.timer)
+      unknownRoutedSessionRef.current = null
+    },
+    [],
+  )
   const conversationSwitchTargetRef = useRef<string | null>(null)
   const beginConversationSwitch = useCallback((targetSessionId: string) => {
     if (conversationSwitchTargetRef.current === targetSessionId) return
@@ -656,6 +923,14 @@ export function DesktopLayout(): React.ReactNode {
 
   useLayoutEffect(() => {
     if (!sessionsHydrated) return
+    // 兜底只针对“当前路由指向的那一次未知会话”。归档会先把会话从目录里移除，
+    // 路由短暂仍停在归档会话上再回首页；旧计时器必须立即失效，否则会在 1.5 秒
+    // 后补弹一次“找不到对话”。
+    const staleUnknownRouted = unknownRoutedSessionRef.current
+    if (staleUnknownRouted && staleUnknownRouted.id !== routedSessionId) {
+      clearTimeout(staleUnknownRouted.timer)
+      unknownRoutedSessionRef.current = null
+    }
     if (!routedSessionId) {
       activateSessionById(null)
       return
@@ -667,9 +942,24 @@ export function DesktopLayout(): React.ReactNode {
       setWorkspaceState(null)
       setDiffState('未选择项目。')
       setSelectedFile(null)
-      setErrorMessage(`找不到对话：${routedSessionId}`)
-      navigate(QUICK_CHAT_PATH, { replace: true })
+      // 分叉/新建的会话可能先于目录刷新被路由到：先等待一次目录刷新，
+      // 只有确认目录里仍不存在时才报错并退回首页。
+      if (unknownRoutedSessionRef.current?.id !== routedSessionId) {
+        unknownRoutedSessionRef.current = {
+          id: routedSessionId,
+          timer: setTimeout(() => {
+            unknownRoutedSessionRef.current = null
+            setErrorMessage(`找不到对话：${routedSessionId}`)
+            navigate(QUICK_CHAT_PATH, { replace: true })
+          }, 1500),
+        }
+      }
       return
+    }
+    const pendingUnknownRouted = unknownRoutedSessionRef.current
+    if (pendingUnknownRouted) {
+      clearTimeout(pendingUnknownRouted.timer)
+      unknownRoutedSessionRef.current = null
     }
 
     if (routedSession.archivedAt) {
@@ -765,12 +1055,20 @@ export function DesktopLayout(): React.ReactNode {
     setWorkspaceState(null)
     setDiffState(NO_WORKSPACE_DIFF)
     setSelectedFile(null)
-    setInput('')
+    inputBinding.replace('')
     setComposerAttachments([])
-  }, [activateSessionById, navigate, setDiffState, setInput, setSelectedFile, setWorkspaceState])
+  }, [
+    activateSessionById,
+    inputBinding,
+    navigate,
+    setDiffState,
+    setSelectedFile,
+    setWorkspaceState,
+  ])
 
   const handleGithubWorkspaceCloned = useCallback(
     (selected: DesktopWorkspace): void => {
+      notifyProjectCatalogChanged()
       navigate(QUICK_CHAT_PATH)
       setWorkspaceState(selected)
       setLastActiveWorkspacePath(selected.path)
@@ -814,7 +1112,7 @@ export function DesktopLayout(): React.ReactNode {
         setWorkspaceState(null)
         setDiffState('未选择项目。')
         setSelectedFile(null)
-        setInput('')
+        inputBinding.replace('')
         setComposerAttachments([])
         return
       }
@@ -826,16 +1124,16 @@ export function DesktopLayout(): React.ReactNode {
         navigate(QUICK_CHAT_PATH)
       }
       activateSessionById(null)
-      setInput('')
+      inputBinding.replace('')
       setComposerAttachments([])
     },
     [
       activateSessionById,
       currentWorkspace,
       handleOpenRecentWorkspace,
+      inputBinding,
       navigate,
       setDiffState,
-      setInput,
       setSelectedFile,
       setWorkspaceState,
     ],
@@ -887,6 +1185,7 @@ export function DesktopLayout(): React.ReactNode {
     void refreshWorkspace(currentWorkspace, {
       clearSelectedFile: false,
       force: true,
+      refreshGitStatus: true,
     })
   }, [currentWorkspace, refreshWorkspace])
 
@@ -950,22 +1249,86 @@ export function DesktopLayout(): React.ReactNode {
   )
 
   const handleSetGoalStatus = useCallback(
-    (status: 'active' | 'paused'): void => {
+    async (status: 'active' | 'paused' | 'complete'): Promise<void> => {
       if (!sessionId) return
-      desktopClient
-        .setSessionGoal(sessionId, { status })
-        .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)))
+      try {
+        await desktopClient.setSessionGoal(sessionId, { status })
+      } catch (cause) {
+        setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      }
     },
     [sessionId],
   )
-
-  const handleGoalPause = useCallback((): void => {
-    handleSetGoalStatus('paused')
-  }, [handleSetGoalStatus])
-
-  const handleGoalResume = useCallback((): void => {
-    handleSetGoalStatus('active')
-  }, [handleSetGoalStatus])
+  const handleGoalPause = useCallback(() => handleSetGoalStatus('paused'), [handleSetGoalStatus])
+  const handleGoalResume = useCallback(() => handleSetGoalStatus('active'), [handleSetGoalStatus])
+  const handleGoalComplete = useCallback(
+    () => handleSetGoalStatus('complete'),
+    [handleSetGoalStatus],
+  )
+  const handleGoalEdit = useCallback(
+    async (objective: string): Promise<void> => {
+      if (!sessionId) throw new Error('当前任务不可用')
+      try {
+        await desktopClient.setSessionGoal(sessionId, { objective })
+      } catch (cause) {
+        setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      }
+    },
+    [sessionId],
+  )
+  const handleGoalAppendBudget = useCallback(
+    async (nextTotal: number, baseline: DesktopGoalBudgetBaseline): Promise<void> => {
+      if (!sessionId) throw new Error('当前任务不可用')
+      try {
+        await desktopClient.setSessionGoal(sessionId, {
+          tokenBudget: nextTotal,
+          budgetBaseline: baseline,
+        })
+      } catch (cause) {
+        setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      }
+    },
+    [sessionId],
+  )
+  const handleGoalRemoveBudgetLimit = useCallback(
+    async (baseline: DesktopGoalBudgetBaseline): Promise<void> => {
+      if (!sessionId) throw new Error('当前任务不可用')
+      try {
+        await desktopClient.setSessionGoal(sessionId, {
+          tokenBudget: null,
+          budgetBaseline: baseline,
+        })
+      } catch (cause) {
+        setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+        throw cause
+      }
+    },
+    [sessionId],
+  )
+  const handleOpenGoalDock = useCallback((): void => {
+    openRightDockTab({ id: 'goal', kind: 'goal', ...(sessionId ? { threadId: sessionId } : {}) })
+  }, [openRightDockTab, sessionId])
+  useEffect(() => {
+    const currentGoal = activeSessionItem?.threadGoal ?? null
+    if (
+      (!currentGoal || currentGoal.status === 'complete') &&
+      rightDockState.tabIds.includes('goal')
+    ) {
+      closePanelTab('right', 'goal')
+    }
+  }, [activeSessionItem?.threadGoal, closePanelTab, rightDockState.tabIds])
+  const handleGoalClear = useCallback(async (): Promise<void> => {
+    if (!sessionId) return
+    try {
+      await desktopClient.clearSessionGoal(sessionId)
+    } catch (cause) {
+      setErrorMessage(cause instanceof Error ? cause.message : String(cause))
+      throw cause
+    }
+  }, [sessionId])
 
   const handleOpenThreadAttachment = useCallback(
     (attachment: Attachment): void => {
@@ -1071,23 +1434,12 @@ export function DesktopLayout(): React.ReactNode {
     (text: string): void => {
       const trimmed = text.trim()
       if (!trimmed) return
-      const separator = input.trim() ? '\n\n' : ''
-      setInput(`${input}${separator}${trimmed}`)
+      const current = inputBinding.store.getState().input
+      const separator = current.trim() ? '\n\n' : ''
+      inputBinding.replace(`${current}${separator}${trimmed}`)
     },
-    [input, setInput],
+    [inputBinding],
   )
-
-  const activeSideTaskId = useMemo(() => {
-    const preferredTarget = workbenchPanelState.focusArea === 'bottom-panel' ? 'bottom' : 'right'
-    const fallbackTarget = preferredTarget === 'right' ? 'bottom' : 'right'
-    for (const target of [preferredTarget, fallbackTarget] as const) {
-      const panel = workbenchPanelState[target]
-      if (!panel.open || !panel.activeTabId) continue
-      const tab = workbenchPanelState.tabsById[panel.activeTabId]
-      if (tab?.kind === 'side-task') return tab.taskId
-    }
-    return null
-  }, [workbenchPanelState])
 
   const activeSideChatTab = useMemo(() => {
     const preferredTarget = workbenchPanelState.focusArea === 'bottom-panel' ? 'bottom' : 'right'
@@ -1206,40 +1558,56 @@ export function DesktopLayout(): React.ReactNode {
   const handleOpenSideChat = useCallback((): void => {
     void createSideChat()
   }, [createSideChat])
-  const {
-    selectedSubagentTaskId,
-    selectedSubagent,
-    selectedSubagentError,
-    subagentAvailability,
-    refreshSelectedSubagent,
-    handleOpenSubagent,
-  } = useSubagentDockController({
-    activeSideTaskId,
-    openRightDockTab,
-    onError: handleErrorMessage,
-  })
+  const subagentsAvailability = useSubagentsAvailability()
 
-  const handleCloseSubagentTab = useCallback(
-    (taskId: string): void => {
-      const tabId = `side-task:${taskId}` as const
-      const target: WorkbenchPanelTarget = workbenchPanelState.right.tabIds.includes(tabId)
-        ? 'right'
-        : workbenchPanelState.bottom.tabIds.includes(tabId)
-          ? 'bottom'
-          : null
-      if (!target) return
-      closePanelTab(target, tabId)
-      closePanel(target)
+  /**
+   * 打开（或复用）某个父会话的子智能体目录，并选中目标任务。
+   * 嵌套任务落在其直接父 thread 的目录里，不塞进当前列表。
+   * `openTab` 对已存在 id 会更新 descriptor 并激活，正是这里需要的语义。
+   */
+  const openSubagentDirectory = useCallback(
+    (parentThreadId: string, taskId: string | null): void => {
+      openRightDockTab({
+        id: `subagent-directory:${parentThreadId}`,
+        kind: 'subagent-directory',
+        threadId: parentThreadId,
+        ...(taskId ? { selectedTaskId: taskId } : {}),
+      })
     },
-    [closePanel, closePanelTab, workbenchPanelState],
+    [openRightDockTab],
+  )
+
+  const handleSelectSubagentTask = useCallback(
+    (parentThreadId: string, taskId: string | null): void => {
+      openSubagentDirectory(parentThreadId, taskId)
+    },
+    [openSubagentDirectory],
+  )
+
+  const handleOpenSubagent = useCallback(
+    (taskId: string): void => {
+      if (!desktopClient.readSubagent) {
+        handleErrorMessage('当前桌面桥接不支持读取子智能体')
+        return
+      }
+      void desktopClient
+        .readSubagent(taskId)
+        .then((read) => openSubagentDirectory(read.task.parentThreadId, taskId))
+        .catch((error) => handleErrorMessage(error))
+    },
+    [handleErrorMessage, openSubagentDirectory],
   )
 
   const handleSubmitEditedUserMessage = useCallback(
-    async (input: DesktopUserMessageInput): Promise<void> => {
-      if (!activeSessionItem) return
-      await submitToSession(activeSessionItem.id, input)
+    async (
+      input: DesktopUserMessageInput,
+      target: { turnId: string; inputId: string; operationId: string },
+    ): Promise<void> => {
+      if (!activeSessionItem || !desktopClient.editUserMessage)
+        throw new Error('当前会话不支持修改消息')
+      await desktopClient.editUserMessage(activeSessionItem.id, target, input)
     },
-    [activeSessionItem, submitToSession],
+    [activeSessionItem],
   )
 
   const handleAddComposerFiles = useCallback((filePaths: string[]): void => {
@@ -1256,15 +1624,15 @@ export function DesktopLayout(): React.ReactNode {
 
   const handleNewConversation = useCallback(async (): Promise<void> => {
     activateSessionById(null)
-    setInput('')
+    inputBinding.replace('')
     setComposerAttachments([])
     navigate(QUICK_CHAT_PATH)
-  }, [activateSessionById, navigate, setComposerAttachments, setInput])
+  }, [activateSessionById, inputBinding, navigate, setComposerAttachments])
 
   const handleUseSkill = useCallback(
     (skill: DesktopInstalledSkill): void => {
       activateSessionById(null)
-      setInput('')
+      inputBinding.replace('')
       setComposerAttachments([])
       composerDraftStore.setSkillInvocation('home', {
         name: skill.name,
@@ -1272,7 +1640,7 @@ export function DesktopLayout(): React.ReactNode {
       })
       navigate(QUICK_CHAT_PATH)
     },
-    [activateSessionById, navigate, setComposerAttachments, setInput],
+    [activateSessionById, inputBinding, navigate, setComposerAttachments],
   )
 
   const handleOpenSkillPreview = useCallback(
@@ -1329,8 +1697,25 @@ export function DesktopLayout(): React.ReactNode {
       workspacePath: currentWorkspace?.path ?? null,
       useSkill: handleUseSkill,
       openSkillPreview: handleOpenSkillPreview,
+      providerManagement: {
+        tab: visibleProviderTab,
+        host: providerManagementHost,
+        open: openProviderManagement,
+        close: closeProviderManagement,
+        beforeChange: providerBeforeChange,
+        claimProvider: setProviderManagementOwner,
+      },
     }),
-    [currentWorkspace?.path, handleOpenSkillPreview, handleUseSkill],
+    [
+      currentWorkspace?.path,
+      handleOpenSkillPreview,
+      handleUseSkill,
+      visibleProviderTab?.providerId,
+      visibleProviderTab?.section,
+      providerManagementHost,
+      openProviderManagement,
+      closeProviderManagement,
+    ],
   )
 
   useDesktopCommands({
@@ -1341,7 +1726,7 @@ export function DesktopLayout(): React.ReactNode {
       void handleChooseWorkspace()
     },
     onRefreshWorkspace: () => {
-      void refreshWorkspace(undefined, { force: true })
+      void refreshWorkspace(undefined, { force: true, refreshGitStatus: true })
     },
     onOpenSettings: () => {
       navigate('/settings/general')
@@ -1486,13 +1871,6 @@ export function DesktopLayout(): React.ReactNode {
     desktopBrowserClient.setContext(sessionId)
     if (!desktopBrowserClient.available) return
     const synchronize = (tabs: DesktopBrowserState[]) => {
-      // 标签快照每次都会产生新数组；按 revision 去重，避免无关快照触发重渲染。
-      const signature = tabs.map((tab) => `${tab.tabId ?? ''}:${tab.revision ?? 0}`).join('|')
-      setBrowserTabs((current) =>
-        current.map((tab) => `${tab.tabId ?? ''}:${tab.revision ?? 0}`).join('|') === signature
-          ? current
-          : tabs,
-      )
       setWorkbenchPanelState((current) => mergeBrowserWorkbench(current, tabs))
     }
     const unsubscribe = desktopBrowserClient.onTabsChange(synchronize)
@@ -1667,28 +2045,53 @@ export function DesktopLayout(): React.ReactNode {
     setWhatsNewDialogOpen(true)
   }, [])
 
-  const menuActions = useAppMenuActions({
-    client: desktopClient,
-    bridge: window.DesktopBridge,
-    browserAvailable,
-    browserOpen: Boolean(browserState?.open),
-    canNavigateBack,
-    canNavigateForward,
-    navigate,
-    newChat: handleCreateSession,
-    openFolder: handleChooseWorkspace,
-    toggleSidebar: toggleSidebarCollapsed,
-    togglePanel: isHomeOrConversationRoute ? togglePanel : () => undefined,
-    stepWorkspaceLayout: isHomeOrConversationRoute ? stepWorkspaceLayout : () => undefined,
-    openFiles: isHomeOrConversationRoute ? handleOpenFilesDock : () => undefined,
-    openBrowser: isHomeOrConversationRoute ? handleOpenBrowser : () => undefined,
-    reloadBrowser: handleReloadBrowser,
-    navigateBack,
-    navigateForward,
-    setMaximized: setIsWindowMaximized,
-    openWhatsNew: openWhatsNewDialog,
-    onError: setErrorMessage,
-  })
+  const menuActions = useAppMenuActions(
+    useMemo(
+      () => ({
+        client: desktopClient,
+        bridge: window.DesktopBridge,
+        browserAvailable,
+        browserOpen: Boolean(browserState?.open),
+        canNavigateBack,
+        canNavigateForward,
+        navigate,
+        newChat: handleCreateSession,
+        openFolder: handleChooseWorkspace,
+        toggleSidebar: toggleSidebarCollapsed,
+        togglePanel: isHomeOrConversationRoute ? togglePanel : () => undefined,
+        stepWorkspaceLayout: isHomeOrConversationRoute ? stepWorkspaceLayout : () => undefined,
+        openFiles: isHomeOrConversationRoute ? handleOpenFilesDock : () => undefined,
+        openBrowser: isHomeOrConversationRoute ? handleOpenBrowser : () => undefined,
+        reloadBrowser: handleReloadBrowser,
+        navigateBack,
+        navigateForward,
+        setMaximized: setIsWindowMaximized,
+        openWhatsNew: openWhatsNewDialog,
+        onError: setErrorMessage,
+      }),
+      [
+        browserAvailable,
+        browserState?.open,
+        canNavigateBack,
+        canNavigateForward,
+        navigate,
+        handleCreateSession,
+        handleChooseWorkspace,
+        toggleSidebarCollapsed,
+        isHomeOrConversationRoute,
+        togglePanel,
+        stepWorkspaceLayout,
+        handleOpenFilesDock,
+        handleOpenBrowser,
+        handleReloadBrowser,
+        navigateBack,
+        navigateForward,
+        setIsWindowMaximized,
+        openWhatsNewDialog,
+        setErrorMessage,
+      ],
+    ),
+  )
 
   const {
     providerState,
@@ -1710,6 +2113,8 @@ export function DesktopLayout(): React.ReactNode {
     selectedVariant,
     variantOptions,
     handleVariantChange,
+    maxContextTokens,
+    handleMaxContextTokensChange,
     selectedModelUnavailableMessage,
     refreshProviderState,
   } = useModelProviderController({
@@ -1736,6 +2141,7 @@ export function DesktopLayout(): React.ReactNode {
   const handlePlanModeChange = useCallback(
     async (active: boolean): Promise<void> => {
       if (!sessionId) {
+        if (active) setHomeGrillModeActive(false)
         setHomePlanModeActive(active)
         return
       }
@@ -1744,13 +2150,17 @@ export function DesktopLayout(): React.ReactNode {
     [sessionId, setSessionPlanModeActive],
   )
 
-  const handleLocalRouterModeChange = useCallback(
-    (mode: LocalRouterMode): void => {
-      // Pareto/Fusion 仍是 Browser Mock 的本地能力；真实 Agent Thread 暂不提交该设置。
-      if (!sessionId?.startsWith('browser-mock-')) return
-      void setSessionLocalRouterMode(sessionId, mode)
+  const handleGrillModeChange = useCallback(
+    async (active: boolean): Promise<void> => {
+      if (!sessionId) {
+        if (active) setHomePlanModeActive(false)
+        setHomeGrillModeActive(active)
+        return
+      }
+      if (!(await setSessionGrillModeActive(sessionId, active)))
+        throw new Error('深度访谈模式未更新')
     },
-    [sessionId, setSessionLocalRouterMode],
+    [sessionId, setSessionGrillModeActive],
   )
 
   const handleSelectSession = useCallback(
@@ -1769,16 +2179,15 @@ export function DesktopLayout(): React.ReactNode {
       const capturedPins = { ...sidebarSessionPins }
       const result = await archiveSessions(targetSessionIds)
       if (result.succeededSessionIds.length > 0) {
-        try {
-          const terminalClient = await loadDesktopTerminalClient()
-          await Promise.all(
-            result.succeededSessionIds.map((targetSessionId) =>
-              terminalClient.closeThreadTerminal(targetSessionId, 'task-close'),
+        void loadDesktopTerminalClient()
+          .then((terminalClient) =>
+            Promise.all(
+              result.succeededSessionIds.map((targetSessionId) =>
+                terminalClient.closeThreadTerminal(targetSessionId, 'task-close'),
+              ),
             ),
           )
-        } catch (error) {
-          setErrorMessage(error instanceof Error ? error.message : String(error))
-        }
+          .catch((error) => setErrorMessage(error instanceof Error ? error.message : String(error)))
         setArchiveNoticeVisible(true)
         const archivedIdsForUndo = [...result.succeededSessionIds]
         setArchiveUndo(() => async () => {
@@ -1857,6 +2266,8 @@ export function DesktopLayout(): React.ReactNode {
   const isConversationLoading =
     isConversationRoute &&
     (!sessionsHydrated || sessionId !== routedSessionId || gitDetection === 'loading')
+  // pending 页没有真实会话：不等工作区就绪就直接显示已提交消息与启动状态。
+  const isPendingSubmissionRoute = location.pathname.startsWith('/pending/')
   const branchName = getDesktopComposerBranchName(currentWorkspace)
   const quickChatRecentTasks = useMemo(() => {
     const workspaceKey = currentWorkspace?.path.replace(/\\/g, '/').toLowerCase() ?? null
@@ -2052,24 +2463,35 @@ export function DesktopLayout(): React.ReactNode {
     }
   }, [])
 
-  const menuBar = (
-    <MenuBar
-      sidebarCollapsed={sidebarShell.mode !== 'docked'}
-      isMaximized={isWindowMaximized}
-      canNavigateBack={canNavigateBack}
-      canNavigateForward={canNavigateForward}
-      onToggleSidebar={toggleSidebarCollapsed}
-      onClose={() => {
-        void desktopClient.closeWindow()
-      }}
-      onMinimize={() => {
-        void desktopClient.minimizeWindow()
-      }}
-      onToggleMaximize={() => {
-        void desktopClient.toggleWindowMaximized().then((next) => setIsWindowMaximized(next))
-      }}
-      {...menuActions}
-    />
+  const menuBar = useMemo(
+    () => (
+      <MenuBar
+        sidebarCollapsed={sidebarShell.mode !== 'docked'}
+        isMaximized={isWindowMaximized}
+        canNavigateBack={canNavigateBack}
+        canNavigateForward={canNavigateForward}
+        onToggleSidebar={toggleSidebarCollapsed}
+        onClose={() => {
+          void desktopClient.closeWindow()
+        }}
+        onMinimize={() => {
+          void desktopClient.minimizeWindow()
+        }}
+        onToggleMaximize={() => {
+          void desktopClient.toggleWindowMaximized().then((next) => setIsWindowMaximized(next))
+        }}
+        {...menuActions}
+      />
+    ),
+    [
+      sidebarShell.mode,
+      isWindowMaximized,
+      canNavigateBack,
+      canNavigateForward,
+      toggleSidebarCollapsed,
+      setIsWindowMaximized,
+      menuActions,
+    ],
   )
 
   const displayedSidebarPane = sidebarShell.pane
@@ -2081,63 +2503,28 @@ export function DesktopLayout(): React.ReactNode {
     ) ?? 'chats'
   const scheduledSidebarMounted = useEverOpened(displayedSidebarPane === 'scheduled')
   const pluginsSidebarMounted = useEverOpened(displayedSidebarPane === 'plugins')
+  const providersSidebarMounted = useEverOpened(displayedSidebarPane === 'providers')
+  const petsSidebarMounted = useEverOpened(displayedSidebarPane === 'pets')
 
-  const appSidebarContent = (
-    <DesktopSidebar
-      active={displayedSidebarPane === 'chats' || displayedSidebarPane === 'activity'}
-      pane={retainedTaskPane}
-      activeSessionId={sessionId}
-      catalogStatus={catalogStatus}
-      pendingPermissionSessionIds={pendingPermissionSessionIds}
-      titleLoadingIds={titleLoadingIds}
-      recentWorkspaces={recentWorkspaces}
-      removedWorkspaces={removedWorkspaces}
-      sessionFallbackTitles={sidebarSessionFallbackTitles}
-      sessions={sessions}
-      unavailableWorkspacePaths={unavailableWorkspacePaths}
-      workspace={currentWorkspace}
-      onChooseWorkspace={() => void handleChooseWorkspace()}
-      onCreateSession={(workspaceItem) => {
-        sidebarShell.pin()
-        void handleCreateSession(workspaceItem)
-      }}
-      onOpenCommandMenu={() => setCommandMenuOpen(true)}
-      onOpenWhatsNew={openWhatsNewDialog}
-      onPinWorkspace={handlePinWorkspace}
-      onRemoveWorkspace={handleRemoveWorkspace}
-      onUnpinWorkspace={handleUnpinWorkspace}
-      onSelectSession={(session) => {
-        sidebarShell.pin()
-        handleSelectSession(session)
-      }}
-      onArchiveSessions={handleArchiveSessions}
-      onRenameSession={async (targetSessionId, title) =>
-        Boolean(await renameSession(targetSessionId, title))
-      }
-      onError={handleErrorMessage}
-      onReport={setNoticeMessage}
-      dockedPanesState={workbenchPanelState.sidebar}
-      dockedTabsById={workbenchPanelState.tabsById}
-      workspaceFiles={workspaceFiles}
-      onSelectDockedTab={(tabId) => handleSelectPanelTab('sidebar', tabId)}
-      onCloseDockedTab={(tabId) => closePanelTab('sidebar', tabId)}
-      onMoveDockedTab={movePanelTab}
-      onPopOutDockedTab={popOutPanelTab}
-      onOpenFile={(file) => handleOpenFilePreview('sidebar', file)}
-      onAddComposerFiles={handleAddComposerFiles}
-    />
-  )
-
-  const settingsSidebarContent = (
-    <SettingsSidebarContent
-      activeTab={settingsActiveTab}
-      workspacePath={currentWorkspace?.path ?? null}
-      onBack={handleSettingsBack}
-      onTabChange={(tab) => {
-        sidebarShell.pin()
-        handleSettingsTabChange(tab)
-      }}
-    />
+  const settingsSidebarContent = useMemo(
+    () => (
+      <SettingsSidebarContent
+        activeTab={settingsActiveTab}
+        workspacePath={currentWorkspace?.path ?? null}
+        onBack={handleSettingsBack}
+        onTabChange={(tab) => {
+          sidebarShell.closePreview()
+          handleSettingsTabChange(tab)
+        }}
+      />
+    ),
+    [
+      settingsActiveTab,
+      currentWorkspace?.path,
+      sidebarShell.closePreview,
+      handleSettingsTabChange,
+      handleSettingsBack,
+    ],
   )
 
   const handleFollowUpEdit = useCallback(
@@ -2147,6 +2534,7 @@ export function DesktopLayout(): React.ReactNode {
         await desktopClient.updateQueuedFollowUp(sessionId, followUpId, value)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : String(error))
+        throw error
       }
     },
     [sessionId],
@@ -2159,6 +2547,7 @@ export function DesktopLayout(): React.ReactNode {
         await desktopClient.removeQueuedFollowUp(sessionId, followUpId)
       } catch (error) {
         setErrorMessage(error instanceof Error ? error.message : String(error))
+        throw error
       }
     },
     [sessionId],
@@ -2173,141 +2562,6 @@ export function DesktopLayout(): React.ReactNode {
     }
   }, [sessionId])
 
-  const sidebar = (
-    <SidebarFrame
-      rail={
-        <SidebarNavigationRail
-          shell={sidebarShell}
-          activePane={activeSidebarPane}
-          capabilityState={sidebarCapabilities}
-          onOpenWhatsNew={openWhatsNewDialog}
-          onReport={setNoticeMessage}
-          onPinPanel={sidebarShell.pin}
-        />
-      }
-      collapsed={sidebarCollapsed}
-      contentKind={isSettingsRoute ? 'settings' : 'tasks'}
-      defaultWidth={340}
-      maxWidth={sidebarMaxWidth}
-      minWidth={sidebarMinWidth}
-      width={sidebarWidth}
-      onCollapse={collapseSidebar}
-      onSetWidth={setSidebarWidth}
-      shell={sidebarShell}
-    >
-      <div
-        className="sidebar-panel-content"
-        hidden={
-          displayedSidebarPane === 'settings' ||
-          displayedSidebarPane === 'scheduled' ||
-          displayedSidebarPane === 'plugins' ||
-          displayedSidebarPane === null
-        }
-      >
-        {appSidebarContent}
-      </div>
-      <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'settings'}>
-        {settingsSidebarContent}
-      </div>
-      {scheduledSidebarMounted ? (
-        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'scheduled'}>
-          <SidebarScheduledPane />
-        </div>
-      ) : null}
-      {pluginsSidebarMounted ? (
-        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'plugins'}>
-          <SidebarPluginsPane workspacePath={currentWorkspace?.path ?? null} />
-        </div>
-      ) : null}
-    </SidebarFrame>
-  )
-
-  const composerProps: DesktopComposerProps | null =
-    isQuickChatPage || isConversationRoute
-      ? {
-          input,
-          messages: isConversationRoute ? [] : messages,
-          placement: isQuickChatPage ? 'new-session' : 'thread',
-          productMode: sidebarProductMode,
-          onProductModeChange: setSidebarProductMode,
-          layout: 'multiline',
-          radiusVariant: 'default',
-          utilityBarVariant: isQuickChatPage ? 'home' : 'default',
-          draftKey: mainComposerDraftKey,
-          routedSessionId,
-          sessionStatus,
-          permissionMode: effectivePermissionMode,
-          planModeActive,
-          localRouterMode: effectiveLocalRouterMode,
-          enableParetoCodeRouter: localRouterAvailable && (enableParetoCodeRouter ?? false),
-          enableFusionRouter: localRouterAvailable && (enableFusionRouter ?? false),
-          enableAutoReviewPermissionMode: enableAutoReviewPermissionMode ?? false,
-          enableFullAccessPermissionMode: enableFullAccessPermissionMode ?? false,
-          codingModel,
-          thinkingMode: session.modelSelection?.thinkingMode ?? 'default',
-          modelVariant: selectedVariant,
-          modelVariantOptions: variantOptions,
-          onModelVariantChange: handleVariantChange,
-          modelSelectionError: session.modelSelectionError ?? selectedModelUnavailableMessage,
-          threadGoal: activeSessionItem?.threadGoal ?? null,
-          onRetryModelSelection: () => {
-            session.reloadModelSelection()
-            void refreshProviderState()
-          },
-          selectedProviderID,
-          selectedModelPreset: resolvedSelectedModelPreset,
-          modelConfigured: modelConfigured && (!routedSessionId || routedSessionId === sessionId),
-          modelCatalogLoading: modelCatalogLoading || session.modelSelectionLoading,
-          selectedModelMetadata,
-          showThinkingOptions,
-          deepSeekThinkingControls,
-          showContextUsage,
-          contextUsage: isConversationRoute ? null : contextUsage,
-          modelPresets: selectedProviderModelPresets,
-          providerOptions: providerModelOptions,
-          allProviders: modelProviders,
-          recentWorkspaces,
-          contextTasks: composerContextTasks,
-          browserContext: composerBrowserContext,
-          workspace: currentWorkspace,
-          attachments: composerAttachments,
-          onAttachmentsChange: setComposerAttachments,
-          onAppendAttachmentsForDraft: appendComposerAttachmentsForDraft,
-          onRemoveAttachmentForDraft: removeComposerAttachmentForDraft,
-          onOpenAttachment: handleOpenDraftAttachment,
-          onDraftAccepted: clearComposerDraftIfUnchanged,
-          onChooseWorkspace: handleChooseWorkspace,
-          onInputChange: setInput,
-          onInterrupt: interrupt,
-          onProviderModelChange: handleProviderModelChange,
-          onProviderOpen: handleProviderOpen,
-          onProviderSearch: handleProviderSearch,
-          onOpenWorkspace: handleOpenRecentWorkspace,
-          onCloneGithub: () => setGithubRepositoryModalOpen(true),
-          onClearWorkspace: handleClearWorkspace,
-          onOpenMcpSettings: () => navigate('/settings/plugins?tab=mcps'),
-          onOpenModelSettings: () => navigate('/settings/providers'),
-          onOpenSideChat: sideChatSupported ? handleOpenSideChat : undefined,
-          onSkillTokenActivate: (invocation) => {
-            void handleActivateComposerSkill(invocation)
-          },
-          onBranchSelect: handleBranchSelect,
-          onCreateBranch: handleCreateBranch,
-          onStartReview: handleStartAiReview,
-          onPermissionChange: handlePermissionChange,
-          onPlanModeChange: handlePlanModeChange,
-          onLocalRouterModeChange: handleLocalRouterModeChange,
-          onThinkingChange: handleThinkingChange,
-          createSessionForWorkspace,
-          submitToSession,
-          onError: handleErrorMessage,
-          queuedFollowUps,
-          queuePauseReason,
-          onFollowUpEdit: (followUpId, value) => void handleFollowUpEdit(followUpId, value),
-          onFollowUpRemove: (followUpId) => void handleFollowUpRemove(followUpId),
-          onFollowUpResume: () => void handleFollowUpResume(),
-        }
-      : null
   const renderSideChatComposer = (
     tab: Extract<import('../dock/RightDockState.js').WorkbenchTabDescriptor, { kind: 'side-chat' }>,
     sideChatContext: import('../../session/conversation/SideChatThreadPanel.js').SideChatComposerRenderContext,
@@ -2318,11 +2572,15 @@ export function DesktopLayout(): React.ReactNode {
       (option) => option.providerID === sideSettings.providerID,
     )
     const sideModelPresets = sideProviderOption?.modelPresets ?? modelPresets
-    const sideSelectedModelPreset = resolveModelPresetId(
-      sideSettings.model,
-      sideSettings.selectedModelPreset,
-      sideModelPresets,
-    )
+    const sideSelectedModelPreset =
+      resolveModelPresetId(
+        sideSettings.model,
+        sideSettings.selectedModelPreset,
+        sideModelPresets,
+      ) ||
+      sideSettings.model ||
+      sideSettings.selectedModelPreset ||
+      ''
     const sideProviderSummary =
       modelProviders.find((provider) => provider.providerID === sideSettings.providerID) ??
       (providerState?.provider.providerID === sideSettings.providerID
@@ -2355,7 +2613,8 @@ export function DesktopLayout(): React.ReactNode {
       sideDeepSeekThinkingControls ||
       sideProviderSummary?.kind === 'anthropic' ||
       sideModelMetadata?.reasoning === true ||
-      Boolean(sideModelMetadata?.variants?.length)
+      Boolean(sideModelMetadata?.variants?.length) ||
+      (Boolean(sideSettings.thinkingMode) && sideSettings.thinkingMode !== 'default')
     return (
       <DesktopComposer
         input={sideChatInput}
@@ -2367,9 +2626,6 @@ export function DesktopLayout(): React.ReactNode {
         sessionStatus={sideChatContext.status}
         permissionMode={sideSettings.permissionMode}
         planModeActive={sideChatContext.planModeActive ?? sideSettings.planModeActive}
-        localRouterMode={effectiveLocalRouterMode}
-        enableParetoCodeRouter={localRouterAvailable && (enableParetoCodeRouter ?? false)}
-        enableFusionRouter={localRouterAvailable && (enableFusionRouter ?? false)}
         enableAutoReviewPermissionMode={enableAutoReviewPermissionMode ?? false}
         enableFullAccessPermissionMode={enableFullAccessPermissionMode ?? false}
         codingModel={codingModel}
@@ -2450,7 +2706,7 @@ export function DesktopLayout(): React.ReactNode {
         onCloneGithub={() => setGithubRepositoryModalOpen(true)}
         onClearWorkspace={handleClearWorkspace}
         onOpenMcpSettings={() => navigate('/settings/plugins?tab=mcps')}
-        onOpenModelSettings={() => navigate('/settings/providers')}
+        onOpenModelSettings={() => navigate('/providers')}
         onSkillTokenActivate={(invocation) => {
           void handleActivateComposerSkill(invocation)
         }}
@@ -2470,7 +2726,6 @@ export function DesktopLayout(): React.ReactNode {
           await desktopClient.setSessionPlanModeActive(tab.threadId, active)
           updateSideChatSettings(tab.id, { planModeActive: active })
         }}
-        onLocalRouterModeChange={() => undefined}
         onThinkingChange={(value) => {
           updateSideChatSettings(tab.id, {
             thinkingMode: value,
@@ -2482,23 +2737,6 @@ export function DesktopLayout(): React.ReactNode {
       />
     )
   }
-  const subagentThreadContent = selectedSubagentTaskId ? (
-    <SubagentDockContent
-      availability={subagentAvailability}
-      error={selectedSubagentError}
-      read={selectedSubagent}
-      taskId={selectedSubagentTaskId}
-      onBack={() => {
-        if (selectedSubagentTaskId) handleCloseSubagentTab(selectedSubagentTaskId)
-      }}
-      onError={setErrorMessage}
-      onOpenPatchReview={handleOpenPatchReview}
-      onOpenSubagent={(item) => handleOpenSubagent(item.subagentTaskId)}
-      onOpenParentSubagent={handleOpenSubagent}
-      onPatchApplied={handleRefreshDiff}
-      onRefresh={refreshSelectedSubagent}
-    />
-  ) : undefined
   const planContentByEventId = useMemo(() => {
     const result: Record<string, string> = {}
     for (const event of events) {
@@ -2508,13 +2746,13 @@ export function DesktopLayout(): React.ReactNode {
     }
     return result
   }, [events])
-  const rightDockPlanEventId = useMemo(() => {
+  const dockedPlanItemId = useMemo(() => {
     for (const target of ['right', 'bottom'] as const) {
       const panel = workbenchPanelState[target]
       if (target === 'right' && !effectiveRightDockVisible) continue
       if (!panel.open || !panel.activeTabId) continue
       const tab = workbenchPanelState.tabsById[panel.activeTabId]
-      if (tab?.kind === 'plan') return tab.eventId
+      if (tab?.kind === 'plan') return tab.planItemId
     }
     return null
   }, [effectiveRightDockVisible, workbenchPanelState])
@@ -2565,7 +2803,14 @@ export function DesktopLayout(): React.ReactNode {
         }),
       )
     },
-    [handleFileLoadError, workbenchPanelState],
+    [
+      activeSessionItem?.threadGoal,
+      handleGoalEdit,
+      handleFileLoadError,
+      workbenchPanelState.tabsById,
+      workbenchPanelState.right.tabIds,
+      workbenchPanelState.bottom.tabIds,
+    ],
   )
 
   const handleOpenFilePreview = useCallback(
@@ -2845,37 +3090,43 @@ export function DesktopLayout(): React.ReactNode {
   }, [openPanelTab, workbenchPanelState.bottom.tabIds, workbenchPanelState.tabsById])
 
   const renderWorkbenchPanel = (target: WorkbenchPanelTarget): React.ReactNode => {
-    const state = target === 'right' ? rightDockState : bottomPanelState
+    const providerMode = target === 'right' && visibleProviderTab !== null
+    const state = providerMode
+      ? {
+          ...rightDockState,
+          open: true,
+          activeTabId: 'provider-management' as const,
+          tabIds: ['provider-management' as const],
+        }
+      : target === 'right'
+        ? rightDockState
+        : bottomPanelState
     if (target === 'bottom' && !state.open) {
       return null
     }
     return (
       <WorkbenchPanel
+        panelContext={auxiliaryPanelContext}
         target={target}
         state={state}
-        tabsById={workbenchPanelState.tabsById}
+        tabsById={
+          providerMode
+            ? { 'provider-management': visibleProviderTab! }
+            : workbenchPanelState.tabsById
+        }
+        providerManagement={
+          providerMode ? (
+            <div
+              ref={setProviderManagementHost}
+              className="tw:flex tw:h-full tw:w-full tw:min-h-0 tw:min-w-0 tw:flex-1 tw:flex-col tw:overflow-hidden"
+            />
+          ) : undefined
+        }
         onCreateTerminal={target === 'bottom' ? handleCreateTerminal : undefined}
-        browserAvailability={{
-          status: browserAvailability,
-          ...(browserAvailability === 'unavailable'
-            ? {
-                reason: '当前环境未连接桌面浏览器宿主。',
-              }
-            : {}),
-        }}
-        browserState={browserState}
-        defaultBranch={derivedDefaultBranch}
-        files={workspaceFiles}
-        gitStatus={gitStatus}
-        isRefreshingReview={false}
-        diffMarkerStyle={diffMarkerStyle}
         maxWidth={rightDockMaxWidth}
         minWidth={rightDockMinWidth}
         maxHeight={bottomPanelMaxHeight}
         minHeight={bottomPanelMinHeight}
-        reviewView={reviewView}
-        reviewTabState={reviewTabState}
-        onReviewSummaryChange={handleReviewSummaryChange}
         onOpenReviewFile={(path) =>
           handleOpenFileFromBrowser(target, {
             path,
@@ -2884,19 +3135,14 @@ export function DesktopLayout(): React.ReactNode {
             depth: 0,
           })
         }
-        planContentByEventId={planContentByEventId}
-        selectedFile={selectedFile}
         sessionId={sessionId}
-        sessionStatus={sessionStatus}
-        terminalAvailable={terminalAvailable}
         width={rightDockWidth}
         height={bottomPanelHeight}
-        workspace={currentWorkspace}
-        browserDraftKey={mainComposerDraftKey}
-        onAppendComposerText={handleAppendComposerText}
-        onAddComposerFiles={handleAddComposerFiles}
-        onBrowserStateChange={setBrowserState}
         onClose={() => {
+          if (providerMode) {
+            closeProviderManagement()
+            return
+          }
           void saveTabsBeforeClose(state.tabIds, {
             discardSideChats: false,
           }).then((saved) => {
@@ -2904,13 +3150,13 @@ export function DesktopLayout(): React.ReactNode {
           })
         }}
         onCloseTab={(tabId) => {
+          if (providerMode) {
+            closeProviderManagement()
+            return
+          }
           void saveTabsBeforeClose([tabId]).then(async (saved) => {
             if (!saved) return
             const tab = workbenchPanelState.tabsById[tabId]
-            if (tab?.kind === 'side-task') {
-              handleCloseSubagentTab(tab.taskId)
-              return
-            }
             await closeBrowserIfIncluded([tabId])
             if (tab?.kind === 'terminal') {
               const termId =
@@ -2926,6 +3172,7 @@ export function DesktopLayout(): React.ReactNode {
           })
         }}
         onCloseOtherTabs={(tabId) => {
+          if (providerMode) return
           const closing = state.tabIds.filter((id) => id !== tabId)
           void saveTabsBeforeClose(closing).then(async (saved) => {
             if (!saved) return
@@ -2947,6 +3194,7 @@ export function DesktopLayout(): React.ReactNode {
           })
         }}
         onCloseTabsToRight={(tabId) => {
+          if (providerMode) return
           const index = state.tabIds.indexOf(tabId)
           const closing = index < 0 ? [] : state.tabIds.slice(index + 1)
           void saveTabsBeforeClose(closing).then(async (saved) => {
@@ -2968,9 +3216,9 @@ export function DesktopLayout(): React.ReactNode {
             closeTabsToRight(target, tabId)
           })
         }}
-        onCreateBranch={handleCreateBranch}
         onFileLoadError={handleFileLoadError}
         onOpenTab={(tab) => {
+          if (providerMode) return
           if (tab.kind === 'browser') {
             if (browserAvailability !== 'available') {
               setErrorMessage('当前桌面运行环境没有提供内置浏览器能力。')
@@ -2986,72 +3234,40 @@ export function DesktopLayout(): React.ReactNode {
           }
           openPanelTab(target, tab)
         }}
-        onOpenWorkspacePath={handleOpenWorkspacePath}
         onOpenFileFromBrowser={(file) => handleOpenFileFromBrowser(target, file)}
         onPreviewFile={(file) => handleOpenFilePreview(target, file)}
-        onRefreshReview={handleRefreshDiff}
-        onReviewTabStateChange={setReviewTabState}
         onResetHeight={handleResetBottomPanelHeight}
         onResetWidth={handleResetRightDockWidth}
-        onSelectTab={(tabId) => handleSelectPanelTab(target, tabId)}
-        onMoveTab={movePanelTab}
-        onPopOutTab={popOutPanelTab}
-        onReorderTab={reorderPanelTab}
-        onPinTab={pinTab}
-        onSetFileMarkdownViewMode={setFileMarkdownViewMode}
-        onSetFileViewState={setFileViewState}
-        onAskInSideChat={sideChatSupported ? handleAppendSideChatText : undefined}
+        onSelectTab={(tabId) => {
+          if (!providerMode) handleSelectPanelTab(target, tabId)
+        }}
+        onMoveTab={providerMode ? () => {} : movePanelTab}
+        onPopOutTab={providerMode ? undefined : popOutPanelTab}
+        onReorderTab={providerMode ? () => {} : reorderPanelTab}
+        onPinTab={providerMode ? () => {} : pinTab}
         onSetHeight={handleSetBottomPanelHeight}
         onSetWidth={handleSetRightDockWidth}
-        onResizeRawSize={target === 'right' ? handleRightDockResizeRaw : undefined}
-        onResizePreview={target === 'right' ? handleRightDockResizePreview : undefined}
-        shouldCommitResizeSize={target === 'right' ? shouldCommitRightDockResize : undefined}
-        onToggleReviewView={() => setReviewView(reviewView === 'inline' ? 'split' : 'inline')}
+        onResizeRawSize={target === 'right' && !providerMode ? handleRightDockResizeRaw : undefined}
+        onResizePreview={
+          target === 'right'
+            ? providerMode
+              ? rightPanelLiveResize.previewSize
+              : handleRightDockResizePreview
+            : undefined
+        }
+        shouldCommitResizeSize={
+          target === 'right' ? (providerMode ? () => true : shouldCommitRightDockResize) : undefined
+        }
         onCreateSideChat={() => void createSideChat()}
-        sideChat={{
-          available: sideChatSupported,
-          focusVersion: sideChatFocusVersion,
-          isCreating: isCreatingSideChat,
-          getPermissionMode: (tab) => getSideChatSettings(tab.id).permissionMode,
-          getModelSelection: (tab) => getSideChatSettings(tab.id),
-          onInteractionError: (message) => setErrorMessage(message),
-          itemContext: (tab, status) => ({
-            modelProviderNames: Object.fromEntries(
-              modelProviders.map((provider) => [provider.providerID, provider.displayName]),
-            ),
-            canCopyFileReferenceContents: canCopyMarkdownFileReferenceContents,
-            onCopyFileReferenceContents: handleCopyMarkdownFileReferenceContents,
-            onOpenFileReference: handleOpenMarkdownFileReference,
-            onOpenAttachment: handleOpenThreadAttachment,
-            onOpenLocalContext: handleOpenThreadLocalContext,
-            onSubmitEditedUserMessage: async (input) => {
-              await sideChatSubmitToSession(tab.threadId, input)
-            },
-            sessionStatus: status,
-            workspacePath: currentWorkspace?.path ?? null,
-          }),
-          onOpenPatchReview: handleOpenPatchReview,
-          onOpenPlan: handleOpenPlanDock,
-          onRecreate: (tab) => {
-            void createSideChat().then((created) => {
-              if (!created) return
-              const target = workbenchPanelState.right.tabIds.includes(tab.id) ? 'right' : 'bottom'
-              void requestCloseSideChatTabs([tab]).then((closed) => {
-                if (closed) closePanelTab(target, tab.id)
-              })
+        onRecreateSideChat={(tab) => {
+          void createSideChat().then((created) => {
+            if (!created) return
+            const target = workbenchPanelState.right.tabIds.includes(tab.id) ? 'right' : 'bottom'
+            void requestCloseSideChatTabs([tab]).then((closed) => {
+              if (closed) closePanelTab(target, tab.id)
             })
-          },
-          onStateChange: reportSideChatState,
-          renderComposer: renderSideChatComposer,
+          })
         }}
-        activeSideTaskId={activeSideTaskId}
-        subagentAvailability={{
-          status: subagentAvailability,
-          ...(subagentAvailability === 'unavailable'
-            ? { reason: '当前 Agent 不支持子智能体工作台。' }
-            : {}),
-        }}
-        sideTaskContent={subagentThreadContent}
       />
     )
   }
@@ -3120,6 +3336,13 @@ export function DesktopLayout(): React.ReactNode {
           handleFileLoadError({ error, phase, tab, target: 'right' }),
       },
       planContentByEventId,
+      goal: {
+        goal: activeSessionItem?.threadGoal ?? null,
+        onSaveGoal: handleGoalEdit,
+        onAppendBudget: handleGoalAppendBudget,
+        onRemoveBudgetLimit: handleGoalRemoveBudgetLimit,
+      },
+      plan: { onOpenPlan: handleOpenPlanDock },
       sideChat: {
         activeTabId: null,
         available: sideChatSupported,
@@ -3137,8 +3360,10 @@ export function DesktopLayout(): React.ReactNode {
           onOpenFileReference: handleOpenMarkdownFileReference,
           onOpenAttachment: handleOpenThreadAttachment,
           onOpenLocalContext: handleOpenThreadLocalContext,
-          onSubmitEditedUserMessage: async (input) => {
-            await sideChatSubmitToSession(tab.threadId, input)
+          canEditUserMessage: desktopClient.supportsMessageEditing?.() ?? false,
+          onSubmitEditedUserMessage: async (input, target) => {
+            if (!desktopClient.editUserMessage) throw new Error('当前会话不支持修改消息')
+            await desktopClient.editUserMessage(tab.threadId, target, input)
           },
           sessionStatus: status,
           workspacePath: currentWorkspace?.path ?? null,
@@ -3149,15 +3374,18 @@ export function DesktopLayout(): React.ReactNode {
         renderComposer: renderSideChatComposer,
         onRecreate: () => void createSideChat(),
       },
-      sideTask: {
-        activeTaskId: activeSideTaskId,
+      subagentDirectory: {
         availability: {
-          status: subagentAvailability,
-          ...(subagentAvailability === 'unavailable'
+          status: subagentsAvailability,
+          ...(subagentsAvailability === 'unavailable'
             ? { reason: '当前 Agent 不支持子智能体工作台。' }
             : {}),
         },
-        content: subagentThreadContent,
+        onSelectTask: handleSelectSubagentTask,
+        onOpenTask: handleOpenSubagent,
+        onError: handleErrorMessage,
+        onOpenPatchReview: handleOpenPatchReview,
+        onRefreshDiff: handleRefreshDiff,
       },
       terminal: {
         availability: terminalAvailable
@@ -3174,7 +3402,6 @@ export function DesktopLayout(): React.ReactNode {
       },
     }),
     [
-      activeSideTaskId,
       browserAvailability,
       browserState,
       canCopyMarkdownFileReferenceContents,
@@ -3191,6 +3418,10 @@ export function DesktopLayout(): React.ReactNode {
       handleOpenBrowser,
       handleCopyMarkdownFileReferenceContents,
       handleCreateBranch,
+      activeSessionItem?.threadGoal,
+      handleGoalAppendBudget,
+      handleGoalEdit,
+      handleGoalRemoveBudgetLimit,
       handleFileLoadError,
       handleOpenFileFromBrowser,
       handleOpenFilePreview,
@@ -3221,10 +3452,560 @@ export function DesktopLayout(): React.ReactNode {
       sideChatFocusVersion,
       sideChatSubmitToSession,
       sideChatSupported,
-      subagentAvailability,
-      subagentThreadContent,
+      subagentsAvailability,
+      handleSelectSubagentTask,
+      handleOpenSubagent,
+      handleErrorMessage,
       terminalAvailable,
       workspaceFiles,
+    ],
+  )
+
+  const closeSidebarPreview = sidebarShell.closePreview
+  // 保持元素身份，工作区布局更新无需重新遍历侧栏；侧栏自身订阅仍正常更新。
+  const appSidebarContent = useMemo(
+    () => (
+      <DesktopSidebar
+        active={displayedSidebarPane === 'chats' || displayedSidebarPane === 'activity'}
+        pane={retainedTaskPane}
+        activeSessionId={sessionId}
+        catalogStatus={catalogStatus}
+        pendingPermissionSessionIds={pendingPermissionSessionIds}
+        titleLoadingIds={titleLoadingIds}
+        recentWorkspaces={recentWorkspaces}
+        removedWorkspaces={removedWorkspaces}
+        sessionFallbackTitles={sidebarSessionFallbackTitles}
+        sessions={sessions}
+        unavailableWorkspacePaths={unavailableWorkspacePaths}
+        workspace={currentWorkspace}
+        onChooseWorkspace={() => void handleChooseWorkspace()}
+        onCreateSession={(workspaceItem) => {
+          closeSidebarPreview()
+          void handleCreateSession(workspaceItem)
+        }}
+        onOpenCommandMenu={() => setCommandMenuOpen(true)}
+        onOpenWhatsNew={openWhatsNewDialog}
+        onPinWorkspace={handlePinWorkspace}
+        onRemoveWorkspace={handleRemoveWorkspace}
+        onUnpinWorkspace={handleUnpinWorkspace}
+        onSelectSession={(session) => {
+          closeSidebarPreview()
+          handleSelectSession(session)
+        }}
+        onArchiveSessions={handleArchiveSessions}
+        onRenameSession={async (targetSessionId, title) =>
+          Boolean(await renameSession(targetSessionId, title))
+        }
+        onError={handleErrorMessage}
+        onReport={setNoticeMessage}
+        dockedPanesState={workbenchPanelState.sidebar}
+        dockedTabsById={workbenchPanelState.tabsById}
+        workspaceFiles={workspaceFiles}
+        onSelectDockedTab={(tabId) => handleSelectPanelTab('sidebar', tabId)}
+        onCloseDockedTab={(tabId) => closePanelTab('sidebar', tabId)}
+        onMoveDockedTab={movePanelTab}
+        onPopOutDockedTab={popOutPanelTab}
+        onOpenFile={(file) => handleOpenFilePreview('sidebar', file)}
+        onAddComposerFiles={handleAddComposerFiles}
+      />
+    ),
+    [
+      displayedSidebarPane,
+      retainedTaskPane,
+      sessionId,
+      catalogStatus,
+      pendingPermissionSessionIds,
+      titleLoadingIds,
+      recentWorkspaces,
+      removedWorkspaces,
+      sidebarSessionFallbackTitles,
+      sessions,
+      unavailableWorkspacePaths,
+      currentWorkspace,
+      handleChooseWorkspace,
+      closeSidebarPreview,
+      handleCreateSession,
+      setCommandMenuOpen,
+      openWhatsNewDialog,
+      handlePinWorkspace,
+      handleRemoveWorkspace,
+      handleUnpinWorkspace,
+      handleSelectSession,
+      handleArchiveSessions,
+      renameSession,
+      handleErrorMessage,
+      setNoticeMessage,
+      workbenchPanelState.sidebar,
+      workbenchPanelState.tabsById,
+      workspaceFiles,
+      handleSelectPanelTab,
+      closePanelTab,
+      movePanelTab,
+      popOutPanelTab,
+      handleOpenFilePreview,
+      handleAddComposerFiles,
+    ],
+  )
+
+  const rail = (
+    <SidebarNavigationRail
+      shell={sidebarShell}
+      activePane={activeSidebarPane}
+      capabilityState={sidebarCapabilities}
+      onOpenWhatsNew={openWhatsNewDialog}
+      onReport={setNoticeMessage}
+    />
+  )
+
+  const sidebar = (
+    <SidebarFrame
+      collapsed={sidebarCollapsed}
+      contentKind={isSettingsRoute ? 'settings' : 'tasks'}
+      defaultWidth={340}
+      maxWidth={sidebarMaxWidth}
+      minWidth={sidebarMinWidth}
+      width={sidebarWidth}
+      onCollapse={collapseSidebar}
+      onSetWidth={setSidebarWidth}
+      shell={sidebarShell}
+    >
+      <div
+        className="sidebar-panel-content"
+        hidden={
+          displayedSidebarPane === 'git' ||
+          displayedSidebarPane === 'settings' ||
+          displayedSidebarPane === 'scheduled' ||
+          displayedSidebarPane === 'plugins' ||
+          displayedSidebarPane === 'providers' ||
+          displayedSidebarPane === 'pets' ||
+          displayedSidebarPane === null
+        }
+      >
+        {appSidebarContent}
+      </div>
+      <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'settings'}>
+        {settingsSidebarContent}
+      </div>
+      {displayedSidebarPane === 'git' ? (
+        <div className="sidebar-panel-content">
+          <MemoGitBoardSidebar
+            sessions={sessions}
+            onArchiveSessions={handleArchiveSessions}
+            onRemoveWorkspace={handleRemoveWorkspace}
+            onReport={setNoticeMessage}
+          />
+        </div>
+      ) : null}
+      {scheduledSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'scheduled'}>
+          <MemoSidebarScheduledPane />
+        </div>
+      ) : null}
+      {pluginsSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'plugins'}>
+          <MemoSidebarPluginsPane workspacePath={currentWorkspace?.path ?? null} />
+        </div>
+      ) : null}
+      {providersSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'providers'}>
+          <MemoSidebarProvidersPane />
+        </div>
+      ) : null}
+      {petsSidebarMounted ? (
+        <div className="sidebar-panel-content" hidden={displayedSidebarPane !== 'pets'}>
+          <MemoSidebarPetsPane />
+        </div>
+      ) : null}
+    </SidebarFrame>
+  )
+
+  const composerProps = useMemo<SessionBoundComposerProps | null>(
+    () =>
+      isQuickChatPage || isConversationRoute
+        ? {
+            inputBinding,
+            messages: isConversationRoute ? [] : messages,
+            placement: isQuickChatPage ? 'new-session' : 'thread',
+            layout: 'multiline',
+            radiusVariant: 'default',
+            utilityBarVariant: isQuickChatPage ? 'home' : 'default',
+            draftKey: mainComposerDraftKey,
+            routedSessionId,
+            sessionStatus,
+            permissionMode: effectivePermissionMode,
+            planModeActive,
+            grillModeActive,
+            enableAutoReviewPermissionMode: enableAutoReviewPermissionMode ?? false,
+            enableFullAccessPermissionMode: enableFullAccessPermissionMode ?? false,
+            codingModel,
+            thinkingMode: session.modelSelection?.thinkingMode ?? 'default',
+            modelVariant: selectedVariant,
+            modelVariantOptions: variantOptions,
+            onModelVariantChange: handleVariantChange,
+            maxContextTokens,
+            onMaxContextTokensChange: handleMaxContextTokensChange,
+            modelSelectionError: session.modelSelectionError ?? selectedModelUnavailableMessage,
+            threadGoal: activeSessionItem?.threadGoal ?? null,
+            onOpenGoalPanel: handleOpenGoalDock,
+            onGoalPause: handleGoalPause,
+            onGoalResume: handleGoalResume,
+            onGoalComplete: handleGoalComplete,
+            onGoalClear: handleGoalClear,
+            onRetryModelSelection: () => {
+              session.reloadModelSelection()
+              void refreshProviderState()
+            },
+            selectedProviderID,
+            selectedModelPreset: resolvedSelectedModelPreset,
+            modelConfigured: modelConfigured && (!routedSessionId || routedSessionId === sessionId),
+            modelCatalogLoading: modelCatalogLoading || session.modelSelectionLoading,
+            selectedModelMetadata,
+            showThinkingOptions,
+            deepSeekThinkingControls,
+            showContextUsage,
+            contextUsageView,
+            contextUsage: isConversationRoute ? null : contextUsage,
+            modelPresets: selectedProviderModelPresets,
+            providerOptions: providerModelOptions,
+            allProviders: modelProviders,
+            recentWorkspaces,
+            contextTasks: composerContextTasks,
+            browserContext: composerBrowserContext,
+            workspace: currentWorkspace,
+            attachments: composerAttachments,
+            onAttachmentsChange: setComposerAttachments,
+            onAppendAttachmentsForDraft: appendComposerAttachmentsForDraft,
+            onRemoveAttachmentForDraft: removeComposerAttachmentForDraft,
+            onOpenAttachment: handleOpenDraftAttachment,
+            onDraftAccepted: clearComposerDraftIfUnchanged,
+            onChooseWorkspace: handleChooseWorkspace,
+            onInputChange: inputBinding.replace,
+            onInterrupt: interrupt,
+            readPathname: () => location.pathname,
+            onProviderModelChange: handleProviderModelChange,
+            onProviderOpen: handleProviderOpen,
+            onProviderSearch: handleProviderSearch,
+            onOpenWorkspace: handleOpenRecentWorkspace,
+            onCloneGithub: () => setGithubRepositoryModalOpen(true),
+            onClearWorkspace: handleClearWorkspace,
+            onOpenMcpSettings: () => navigate('/settings/plugins?tab=mcps'),
+            onOpenModelSettings: () => navigate('/providers'),
+            onOpenEnvironmentSettings: (projectId) =>
+              navigate(
+                `/settings/worktrees?tab=environments&projectId=${encodeURIComponent(projectId)}`,
+              ),
+            onOpenSideChat: sideChatSupported ? handleOpenSideChat : undefined,
+            onSkillTokenActivate: (invocation) => {
+              void handleActivateComposerSkill(invocation)
+            },
+            onBranchSelect: handleBranchSelect,
+            onCreateBranch: handleCreateBranch,
+            onStartReview: handleStartAiReview,
+            onPermissionChange: handlePermissionChange,
+            onPlanModeChange: handlePlanModeChange,
+            onGrillModeChange: handleGrillModeChange,
+            onThinkingChange: handleThinkingChange,
+            createSessionForWorkspace,
+            submitToSession,
+            onError: handleErrorMessage,
+            queuedFollowUps,
+            queuePauseReason,
+            onFollowUpEdit: handleFollowUpEdit,
+            onFollowUpRemove: handleFollowUpRemove,
+            onFollowUpResume: handleFollowUpResume,
+          }
+        : null,
+    [
+      isQuickChatPage,
+      isConversationRoute,
+      inputBinding,
+      messages,
+      mainComposerDraftKey,
+      routedSessionId,
+      sessionStatus,
+      effectivePermissionMode,
+      planModeActive,
+      grillModeActive,
+      enableAutoReviewPermissionMode,
+      enableFullAccessPermissionMode,
+      codingModel,
+      session.modelSelection?.thinkingMode,
+      selectedVariant,
+      variantOptions,
+      handleVariantChange,
+      session.modelSelectionError,
+      selectedModelUnavailableMessage,
+      activeSessionItem,
+      handleGoalPause,
+      handleGoalResume,
+      handleGoalComplete,
+      handleGoalClear,
+      handleOpenGoalDock,
+      session.reloadModelSelection,
+      refreshProviderState,
+      selectedProviderID,
+      resolvedSelectedModelPreset,
+      modelConfigured,
+      sessionId,
+      modelCatalogLoading,
+      session.modelSelectionLoading,
+      selectedModelMetadata,
+      showThinkingOptions,
+      deepSeekThinkingControls,
+      showContextUsage,
+      contextUsageView,
+      contextUsage,
+      selectedProviderModelPresets,
+      providerModelOptions,
+      modelProviders,
+      recentWorkspaces,
+      composerContextTasks,
+      composerBrowserContext,
+      currentWorkspace,
+      composerAttachments,
+      setComposerAttachments,
+      appendComposerAttachmentsForDraft,
+      removeComposerAttachmentForDraft,
+      handleOpenDraftAttachment,
+      clearComposerDraftIfUnchanged,
+      handleChooseWorkspace,
+      interrupt,
+      location,
+      handleProviderModelChange,
+      handleProviderOpen,
+      handleProviderSearch,
+      handleOpenRecentWorkspace,
+      setGithubRepositoryModalOpen,
+      handleClearWorkspace,
+      navigate,
+      sideChatSupported,
+      handleOpenSideChat,
+      handleActivateComposerSkill,
+      handleBranchSelect,
+      handleCreateBranch,
+      handleStartAiReview,
+      handlePermissionChange,
+      handlePlanModeChange,
+      handleGrillModeChange,
+      handleThinkingChange,
+      createSessionForWorkspace,
+      submitToSession,
+      handleErrorMessage,
+      queuedFollowUps,
+      queuePauseReason,
+      handleFollowUpEdit,
+      handleFollowUpRemove,
+      handleFollowUpResume,
+    ],
+  )
+
+  const quickChatContextValue = useMemo<React.ContextType<typeof QuickChatContext>>(
+    () => ({
+      isConversationRoute,
+      isConversationLoading,
+      activeSessionId: activeSessionItem?.id ?? null,
+      activeSessionPinnedAt: activeSessionItem
+        ? (sidebarSessionPins[activeSessionItem.id] ?? null)
+        : null,
+      sessionTitle: quickChatSessionTitle,
+      editableSessionTitle: quickChatEditableSessionTitle,
+      titleRegenerating: regeneratingActiveSessionTitle,
+      projectDetailsTrigger:
+        isConversationRoute && !isConversationLoading && activeSessionItem?.id === sessionId ? (
+          <ConversationProjectDetails
+            session={activeSessionItem}
+            currentWorkspace={currentWorkspace}
+            projects={recentWorkspaces}
+            sessions={sessions}
+            unavailableWorkspacePaths={unavailableWorkspacePaths}
+            onPinWorkspace={handlePinWorkspace}
+            onUnpinWorkspace={handleUnpinWorkspace}
+            onRemoveWorkspace={handleRemoveWorkspace}
+            onArchiveSessions={handleArchiveSessions}
+            onReport={setNoticeMessage}
+          />
+        ) : null,
+      workspaceName: currentWorkspace?.name ?? null,
+      workspacePath: currentWorkspace?.path ?? null,
+      activeProjectId: currentWorkspace?.projectId ?? null,
+      branchName,
+      branches: currentWorkspace?.branches ?? EMPTY_BRANCHES,
+      diff: workspace.diff,
+      gitStatus,
+      gitDetection,
+      reviewSource: reviewTabState.source,
+      reviewSummary:
+        publishedReviewSummary?.workspacePath === currentWorkspace?.path
+          ? publishedReviewSummary?.snapshot
+          : null,
+      recentWorkspaces,
+      recentTasks: quickChatRecentTasks,
+      onArchiveSession: () => {
+        if (!activeSessionItem) return
+        void handleArchiveSessions([activeSessionItem.id])
+      },
+      onCreateBranch: handleCreateBranch,
+      onOpenAutomation: () => navigate('/automations'),
+      onOpenWorkspacePath: handleOpenWorkspacePath,
+      onOpenRightDock: (_tool, source) => {
+        if (source)
+          setReviewTabState((current) => ({
+            ...current,
+            source,
+            selectedFile: null,
+            selectedCommentId: null,
+            scrollTop: 0,
+            diffExpansion: { mode: 'all' },
+          }))
+        handleOpenReview()
+      },
+      onOpenPatchReview: handleOpenPatchReview,
+      onOpenPlanInRightDock: handleOpenPlanDock,
+      canCopyFileReferenceContents: canCopyMarkdownFileReferenceContents,
+      onCopyFileReferenceContents: handleCopyMarkdownFileReferenceContents,
+      onOpenFileReference: handleOpenMarkdownFileReference,
+      onOpenAttachment: handleOpenThreadAttachment,
+      onOpenLocalContext: handleOpenThreadLocalContext,
+      onOpenArtifact: handleOpenArtifact,
+      onActivateBrowserTab: handleActivateBrowserTab,
+      browserTabs,
+      threadGoal: activeSessionItem?.threadGoal ?? null,
+      onGoalPause: handleGoalPause,
+      onGoalResume: handleGoalResume,
+      onSubmitEditedUserMessage: handleSubmitEditedUserMessage,
+      onAppendComposerText: handleAppendComposerText,
+      onAppendSideChatText: handleAppendSideChatText,
+      onOpenSideChat: handleOpenSideChat,
+      sideChatAvailable: sideChatSupported,
+      onOpenSubagent: handleOpenSubagent,
+      onAddComposerFiles: handleAddComposerFiles,
+      onRefreshDiff: handleRefreshDiff,
+      onRenameSession: async (title) => {
+        const targetSessionId = activeSessionItem?.id
+        if (!targetSessionId) return false
+        return Boolean(await renameSession(targetSessionId, title))
+      },
+      onRefreshSessionTitle: async () =>
+        activeSessionItem ? regenerateSessionTitle(activeSessionItem.id) : false,
+      onToggleSidebar: toggleSidebarCollapsed,
+      onToggleSessionPinned: () => {
+        if (!activeSessionItem) return
+        setSidebarSessionPins((current) => {
+          if (current[activeSessionItem.id]) {
+            const { [activeSessionItem.id]: _removed, ...next } = current
+            return next
+          }
+          return {
+            ...current,
+            [activeSessionItem.id]: new Date().toISOString(),
+          }
+        })
+      },
+      onCommitOrPush: handleCommitOrPush,
+      onGitOperation: (operation) => setGitWorkflowMode(operation),
+      onOpenTerminal: () => {
+        if (!terminalVisible) toggleIntegratedTerminal()
+      },
+      onCreatePullRequest: handleCreatePullRequest,
+      onChooseWorkspace: handleChooseWorkspace,
+      onCloneGithub: () => setGithubRepositoryModalOpen(true),
+      onOpenWorkspace: handleOpenRecentWorkspace,
+      onBranchSelect: handleBranchSelect,
+      onClearWorkspace: handleClearWorkspace,
+      onDecidePermission: (request, behavior, alwaysAllow, updatedInput, decisionExtras) => {
+        return decidePermission(request, behavior, alwaysAllow, updatedInput, decisionExtras)
+      },
+      permissionMode: effectivePermissionMode,
+      planModeActive,
+      providerModelOptions,
+      sessionStatus,
+      composerProps: isConversationLoading && !isPendingSubmissionRoute ? null : composerProps,
+      composerDraft: {
+        store: inputBinding.store,
+        replace: inputBinding.replace,
+      },
+      bottomPanelVisible: effectiveBottomPanelVisible,
+      layoutResizeActive: rightResizePhase !== 'idle',
+      onToggleBottomPanel: isHomeOrConversationRoute ? toggleBottomPanelVisible : () => undefined,
+      dockedPlanItemId,
+    }),
+    [
+      isConversationRoute,
+      isConversationLoading,
+      activeSessionItem,
+      sidebarSessionPins,
+      quickChatSessionTitle,
+      quickChatEditableSessionTitle,
+      regeneratingActiveSessionTitle,
+      sessionId,
+      currentWorkspace,
+      recentWorkspaces,
+      sessions,
+      unavailableWorkspacePaths,
+      handlePinWorkspace,
+      handleUnpinWorkspace,
+      handleRemoveWorkspace,
+      handleArchiveSessions,
+      setNoticeMessage,
+      branchName,
+      workspace.diff,
+      gitStatus,
+      gitDetection,
+      reviewTabState.source,
+      publishedReviewSummary,
+      quickChatRecentTasks,
+      handleCreateBranch,
+      navigate,
+      handleOpenWorkspacePath,
+      setReviewTabState,
+      handleOpenReview,
+      handleOpenPatchReview,
+      handleOpenPlanDock,
+      canCopyMarkdownFileReferenceContents,
+      handleCopyMarkdownFileReferenceContents,
+      handleOpenMarkdownFileReference,
+      handleOpenThreadAttachment,
+      handleOpenThreadLocalContext,
+      handleOpenArtifact,
+      handleActivateBrowserTab,
+      browserTabs,
+      handleGoalPause,
+      handleGoalResume,
+      handleSubmitEditedUserMessage,
+      handleAppendComposerText,
+      handleAppendSideChatText,
+      handleOpenSideChat,
+      sideChatSupported,
+      handleOpenSubagent,
+      handleAddComposerFiles,
+      handleRefreshDiff,
+      renameSession,
+      regenerateSessionTitle,
+      toggleSidebarCollapsed,
+      setSidebarSessionPins,
+      handleCommitOrPush,
+      setGitWorkflowMode,
+      terminalVisible,
+      toggleIntegratedTerminal,
+      handleCreatePullRequest,
+      handleChooseWorkspace,
+      setGithubRepositoryModalOpen,
+      handleOpenRecentWorkspace,
+      handleBranchSelect,
+      handleClearWorkspace,
+      decidePermission,
+      effectivePermissionMode,
+      planModeActive,
+      providerModelOptions,
+      sessionStatus,
+      isPendingSubmissionRoute,
+      composerProps,
+      inputBinding,
+      effectiveBottomPanelVisible,
+      rightResizePhase,
+      isHomeOrConversationRoute,
+      toggleBottomPanelVisible,
+      dockedPlanItemId,
     ],
   )
 
@@ -3237,7 +4018,11 @@ export function DesktopLayout(): React.ReactNode {
     >
       <div
         className="desktop-frame tw:flex tw:h-screen tw:min-h-0 tw:w-full tw:flex-col tw:overflow-hidden tw:bg-app-canvas tw:text-app-text"
-        data-startup-surface-ready={location.pathname !== '/new' ? 'true' : undefined}
+        ref={
+          location.pathname !== '/new' && location.pathname !== '/'
+            ? startupSurfaceReadyRef
+            : undefined
+        }
       >
         <a
           className="skip-to-main"
@@ -3281,6 +4066,7 @@ export function DesktopLayout(): React.ReactNode {
                   await refreshWorkspace(currentWorkspace, {
                     clearSelectedFile: false,
                     force: true,
+                    refreshGitStatus: true,
                   })
                 }
               }}
@@ -3376,145 +4162,11 @@ export function DesktopLayout(): React.ReactNode {
           </Suspense>
         ) : null}
 
-        <QuickChatContext.Provider
-          value={{
-            isConversationRoute,
-            isConversationLoading,
-            sidebarCollapsed: sidebarShell.mode === 'collapsed',
-            activeSessionId: activeSessionItem?.id ?? null,
-            activeSessionPinnedAt: activeSessionItem
-              ? (sidebarSessionPins[activeSessionItem.id] ?? null)
-              : null,
-            sessionTitle: quickChatSessionTitle,
-            editableSessionTitle: quickChatEditableSessionTitle,
-            titleRegenerating: regeneratingActiveSessionTitle,
-            projectDetailsTrigger:
-              isConversationRoute &&
-              !isConversationLoading &&
-              activeSessionItem?.id === sessionId ? (
-                <ConversationProjectDetails
-                  session={activeSessionItem}
-                  currentWorkspace={currentWorkspace}
-                  projects={recentWorkspaces}
-                  sessions={sessions}
-                  unavailableWorkspacePaths={unavailableWorkspacePaths}
-                  onPinWorkspace={handlePinWorkspace}
-                  onUnpinWorkspace={handleUnpinWorkspace}
-                  onRemoveWorkspace={handleRemoveWorkspace}
-                  onArchiveSessions={handleArchiveSessions}
-                  onReport={setNoticeMessage}
-                />
-              ) : null,
-            workspaceName: currentWorkspace?.name ?? null,
-            workspacePath: currentWorkspace?.path ?? null,
-            activeProjectId: currentWorkspace?.projectId ?? null,
-            branchName,
-            branches: currentWorkspace?.branches ?? EMPTY_BRANCHES,
-            diff: workspace.diff,
-            gitStatus,
-            gitDetection,
-            reviewSource: reviewTabState.source,
-            reviewSummary:
-              publishedReviewSummary?.workspacePath === currentWorkspace?.path
-                ? publishedReviewSummary?.snapshot
-                : null,
-            recentWorkspaces,
-            recentTasks: quickChatRecentTasks,
-            onArchiveSession: () => {
-              if (!activeSessionItem) return
-              void handleArchiveSessions([activeSessionItem.id])
-            },
-            onCreateBranch: handleCreateBranch,
-            onOpenAutomation: () => navigate('/automations'),
-            onOpenWorkspacePath: handleOpenWorkspacePath,
-            onOpenRightDock: (_tool, source) => {
-              if (source)
-                setReviewTabState((current) => ({
-                  ...current,
-                  source,
-                  selectedFile: null,
-                  selectedCommentId: null,
-                  scrollTop: 0,
-                  diffExpansion: { mode: 'all' },
-                }))
-              handleOpenReview()
-            },
-            onOpenPatchReview: handleOpenPatchReview,
-            onOpenPlanInRightDock: handleOpenPlanDock,
-            canCopyFileReferenceContents: canCopyMarkdownFileReferenceContents,
-            onCopyFileReferenceContents: handleCopyMarkdownFileReferenceContents,
-            onOpenFileReference: handleOpenMarkdownFileReference,
-            onOpenAttachment: handleOpenThreadAttachment,
-            onOpenLocalContext: handleOpenThreadLocalContext,
-            onOpenArtifact: handleOpenArtifact,
-            onActivateBrowserTab: handleActivateBrowserTab,
-            browserTabs,
-            threadGoal: activeSessionItem?.threadGoal ?? null,
-            onGoalPause: handleGoalPause,
-            onGoalResume: handleGoalResume,
-            onSubmitEditedUserMessage: handleSubmitEditedUserMessage,
-            onAppendComposerText: handleAppendComposerText,
-            onAppendSideChatText: handleAppendSideChatText,
-            onOpenSideChat: handleOpenSideChat,
-            sideChatAvailable: sideChatSupported,
-            onOpenSubagent: handleOpenSubagent,
-            onAddComposerFiles: handleAddComposerFiles,
-            onRefreshDiff: handleRefreshDiff,
-            onRenameSession: async (title) => {
-              const targetSessionId = activeSessionItem?.id
-              if (!targetSessionId) return false
-              return Boolean(await renameSession(targetSessionId, title))
-            },
-            onRefreshSessionTitle: async () =>
-              activeSessionItem ? regenerateSessionTitle(activeSessionItem.id) : false,
-            onToggleSidebar: toggleSidebarCollapsed,
-            onToggleSessionPinned: () => {
-              if (!activeSessionItem) return
-              setSidebarSessionPins((current) => {
-                if (current[activeSessionItem.id]) {
-                  const { [activeSessionItem.id]: _removed, ...next } = current
-                  return next
-                }
-                return {
-                  ...current,
-                  [activeSessionItem.id]: new Date().toISOString(),
-                }
-              })
-            },
-            onCommitOrPush: handleCommitOrPush,
-            onGitOperation: (operation) => setGitWorkflowMode(operation),
-            onOpenTerminal: () => {
-              if (!terminalVisible) toggleIntegratedTerminal()
-            },
-            onCreatePullRequest: handleCreatePullRequest,
-            onChooseWorkspace: handleChooseWorkspace,
-            onCloneGithub: () => setGithubRepositoryModalOpen(true),
-            onOpenWorkspace: handleOpenRecentWorkspace,
-            onBranchSelect: handleBranchSelect,
-            onClearWorkspace: handleClearWorkspace,
-            onDecidePermission: (request, behavior, alwaysAllow, updatedInput, decisionExtras) => {
-              return decidePermission(request, behavior, alwaysAllow, updatedInput, decisionExtras)
-            },
-            permissionMode: effectivePermissionMode,
-            planModeActive,
-            providerModelOptions,
-            sessionStatus,
-            composerProps: isConversationLoading ? null : composerProps,
-            composerDraft: {
-              value: input,
-              replace: setInput,
-            },
-            bottomPanelVisible: effectiveBottomPanelVisible,
-            layoutResizeActive: rightResizePhase !== 'idle',
-            onToggleBottomPanel: isHomeOrConversationRoute
-              ? toggleBottomPanelVisible
-              : () => undefined,
-            rightDockPlanEventId,
-          }}
-        >
+        <QuickChatContext.Provider value={quickChatContextValue}>
           <WorkspaceHeaderProvider routeScope={location.pathname}>
             <WorkbenchShellView
               menuBar={menuBar}
+              rail={rail}
               primarySidebar={sidebar}
               appBodyRef={sidebarShell.appBodyRef}
               workspaceRef={workspaceRef}
@@ -3526,21 +4178,43 @@ export function DesktopLayout(): React.ReactNode {
                 } as React.CSSProperties
               }
               workspaceHeader={
-                <DesktopWorkspaceHeader
-                  divider={isConversationRoute}
-                  rightDockOpen={effectiveRightDockVisible}
-                  shellControls={
-                    <WorkspaceShellControls
-                      terminalAvailable={terminalAvailable}
-                      terminalVisible={terminalVisible}
-                      workspaceLayout={workspaceLayout}
-                      showBottomPanel={isHomeOrConversationRoute}
-                      showRightPanel={isHomeOrConversationRoute}
-                      onStepWorkspaceLayout={stepWorkspaceLayout}
-                      onToggleTerminal={toggleIntegratedTerminal}
-                    />
-                  }
-                />
+                isHomeOrConversationRoute || isProviderDetailRoute ? (
+                  <DesktopWorkspaceHeader
+                    divider={false}
+                    rightDockOpen={effectiveRightDockVisible}
+                    shellControls={
+                      isHomeOrConversationRoute ? (
+                        <WorkspaceShellControls
+                          terminalAvailable={terminalAvailable}
+                          terminalVisible={terminalVisible}
+                          workspaceLayout={workspaceLayout}
+                          showBottomPanel={isHomeOrConversationRoute}
+                          showRightPanel={isHomeOrConversationRoute}
+                          onStepWorkspaceLayout={stepWorkspaceLayout}
+                          onToggleTerminal={toggleIntegratedTerminal}
+                        />
+                      ) : (
+                        <div className="workspace-shell-controls">
+                          <Button
+                            isIconOnly
+                            aria-pressed={visibleProviderTab !== null}
+                            className="workspace-shell-control-button"
+                            color="ghostSecondary"
+                            size="toolbar"
+                            title={visibleProviderTab ? '隐藏右侧边栏' : '显示右侧边栏'}
+                            onClick={() => {
+                              if (visibleProviderTab) closeProviderManagement()
+                              else if (providerRouteId)
+                                openProviderManagement(providerRouteId, 'credentials')
+                            }}
+                          >
+                            <RightPanelToggleIcon open={visibleProviderTab !== null} />
+                          </Button>
+                        </div>
+                      )
+                    }
+                  />
+                ) : null
               }
               mainContent={
                 <div
@@ -3551,11 +4225,48 @@ export function DesktopLayout(): React.ReactNode {
                   tabIndex={-1}
                   role="region"
                 >
-                  <div
-                    aria-hidden="true"
-                    className="desktop-main-route__header-spacer tw:h-[var(--workspace-header-height)] tw:min-h-[var(--workspace-header-height)] tw:w-full tw:shrink-0 tw:grow-0 tw:basis-[var(--workspace-header-height)] tw:pointer-events-none"
-                  />
+                  {isHomeOrConversationRoute || isProviderDetailRoute ? (
+                    <div
+                      aria-hidden="true"
+                      className="desktop-main-route__header-spacer tw:h-[var(--workspace-header-height)] tw:min-h-[var(--workspace-header-height)] tw:w-full tw:shrink-0 tw:grow-0 tw:basis-[var(--workspace-header-height)] tw:pointer-events-none"
+                    />
+                  ) : null}
                   <div className="desktop-main-route__body tw:flex tw:w-full tw:min-w-0 tw:min-h-0 tw:flex-auto tw:justify-center tw:overflow-hidden">
+                    {taskNotificationState.attention.length ? (
+                      <div
+                        role="status"
+                        aria-label="任务强提醒"
+                        className="tw:flex tw:flex-wrap tw:gap-2 tw:border-b tw:border-app-border-subtle tw:p-2"
+                      >
+                        <Button color="secondary" onClick={() => navigate('/automations')}>
+                          需要你处理 · {taskNotificationState.attention.length}
+                        </Button>
+                        {taskNotificationState.attention.slice(0, 3).map((occurrence) => (
+                          <Button
+                            key={occurrence.id}
+                            color="secondary"
+                            onClick={() =>
+                              navigate(
+                                `/automations?taskId=${encodeURIComponent(occurrence.taskId)}&occurrenceId=${encodeURIComponent(occurrence.id)}`,
+                              )
+                            }
+                          >
+                            {occurrence.snapshot.name} ·{' '}
+                            {occurrence.attention === 'awaiting-acceptance'
+                              ? '待验收'
+                              : '到期待处理'}
+                          </Button>
+                        ))}
+                      </div>
+                    ) : null}
+                    <TaskConversationLinks
+                      threadId={
+                        location.pathname.startsWith('/threads/')
+                          ? (activeSessionItem?.appServerThreadId ?? activeSessionItem?.id ?? null)
+                          : null
+                      }
+                      state={taskNotificationState}
+                    />
                     <Outlet context={outletContext} />
                   </div>
                 </div>
@@ -3631,17 +4342,15 @@ function ArchiveConversationNotice({
   }, [onClose, onUndo, onOpenSettings])
 
   useEffect(() => {
+    let active = true
     const id = toastStore.show({
       id: 'archive-conversation-notice',
       tone: 'status',
       appearance: 'action',
       dedupeKey: 'archive-conversation-notice',
-      message: (
-        <span className="tw:inline-flex tw:items-center tw:gap-3 tw:px-1.5 tw:type-heading-sm tw:whitespace-nowrap">
-          <Archive aria-hidden="true" className="tw:size-4 tw:shrink-0" />
-          已归档的聊天
-        </span>
-      ),
+      icon: <Archive aria-hidden="true" size={18} />,
+      message: '已归档的聊天',
+      onActivate: () => onOpenSettingsRef.current(),
       action: {
         label: '查看',
         onClick: () => {
@@ -3658,10 +4367,12 @@ function ArchiveConversationNotice({
           }
         : undefined,
       onDismiss: () => {
-        onCloseRef.current()
+        if (active) onCloseRef.current()
       },
     })
     return () => {
+      // StrictMode 重挂及撤销状态更新的清理不代表用户关闭。
+      active = false
       toastStore.dismiss(id)
     }
   }, [onUndo !== undefined, undoing])

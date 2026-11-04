@@ -7,6 +7,7 @@ import {
   PROJECT_APPEARANCE_COLORS,
   PROJECT_APPEARANCE_ICONS,
   SIDEBAR_STATE_VERSION,
+  upsertRecentWorkspace,
 } from '../shared/SettingsSchema'
 
 describe('侧边栏布局设置', () => {
@@ -594,6 +595,39 @@ test('不再持久化 GitHub OAuth 客户端与认证服务地址', () => {
   expect('authBaseUrl' in settings).toBe(false)
 })
 
+test('新增最近项目不会把置顶项目挤出最近工作区列表', () => {
+  const project = (name: string, pinnedAt: string | null = null) => ({
+    name,
+    path: `F:\\CodeProject\\${name}`,
+    pinnedAt,
+  })
+  const workspaces = [
+    project('pinned-a', '2026-10-01T00:00:00.000Z'),
+    project('pinned-b', '2026-10-02T00:00:00.000Z'),
+    project('a'),
+    project('b'),
+    project('c'),
+    project('d'),
+    project('e'),
+  ]
+
+  const next = upsertRecentWorkspace(workspaces, project('new'))
+
+  expect(next.map((workspace) => workspace.name)).toEqual([
+    'pinned-a',
+    'pinned-b',
+    'b',
+    'c',
+    'd',
+    'e',
+    'new',
+  ])
+  expect(next.flatMap((workspace) => (workspace.pinnedAt ? [workspace.name] : []))).toEqual([
+    'pinned-a',
+    'pinned-b',
+  ])
+})
+
 describe('聊天宽度', () => {
   test('保留三个档位，旧设置及非法值回落默认宽度', () => {
     expect(defaultDesktopStoredSettings().conversationWidth).toBe('default')
@@ -636,4 +670,15 @@ test('活动日程筛选默认关闭，独立于普通侧栏并保留显式偏�
   expect(saved.sidebarActivityShowScheduled).toBe(true)
   expect(saved.sidebarShowScheduledSessions).toBe(false)
   expect(createSidebarStateResetPatch(saved).sidebarActivityShowScheduled).toBe(false)
+})
+
+test('上下文展示方式默认分段条，点阵往返保留，无效值回退默认', () => {
+  expect(defaultDesktopStoredSettings().contextUsageView).toBe('bar')
+  expect(normalizeDesktopStoredSettings({}).contextUsageView).toBe('bar')
+  expect(normalizeDesktopStoredSettings({ contextUsageView: 'field' }).contextUsageView).toBe(
+    'field',
+  )
+  expect(
+    normalizeDesktopStoredSettings({ contextUsageView: 'invalid' as never }).contextUsageView,
+  ).toBe('bar')
 })

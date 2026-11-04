@@ -3,6 +3,11 @@ import { renderToStaticMarkup } from 'react-dom/server'
 import { MemoryRouter } from 'react-router-dom'
 import type { Item } from '@pidex/shared/thread'
 import { SchedulePlanCard } from '../src/features/session/timeline/SchedulePlanCard.js'
+import {
+  ScheduleDraftCard,
+  scheduleDraftFromTool,
+} from '../src/features/session/timeline/ScheduleDraftCard.js'
+import type { ScheduleDraft } from '@pidex/shared/schedule-draft'
 
 type ToolItem = Extract<Item, { type: 'tool' }>
 
@@ -77,6 +82,72 @@ function item(): ToolItem {
 }
 
 describe('SchedulePlanCard', () => {
+  test('新草案展示计划与安排确认入口，已确认展示已安排链接', () => {
+    const draft: ScheduleDraft = {
+      id: 'draft-1',
+      revision: 1,
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      toolCallId: 'call-1',
+      status: 'pending',
+      name: '发布版本',
+      prompt: '执行发布检查',
+      taskPlan: {
+        source: 'current-plan-item',
+        sourceRef: null,
+        contentHash: 'hash',
+        structured: {
+          title: '发布版本',
+          summary: '完成发布检查',
+          changes: [{ area: '发布', items: ['检查版本'] }],
+          interfaceChanges: [],
+          tests: [],
+          assumptions: [],
+        },
+      },
+      trigger: { kind: 'once', at: 1_000_000, timeZone: 'Asia/Shanghai' },
+      conditions: { dependsOn: [], requireEnvironment: false, notBefore: null, deadline: null },
+      conditionFallback: 'skip',
+      acceptance: { kind: 'manual' },
+      notificationPolicy: 'failures',
+      missedRuns: 'catch-up',
+      execution: { ...proposal.defaults, environment: { kind: 'local' } },
+      createdRefs: [],
+      createdAt: 1,
+      updatedAt: 1,
+      committedAt: null,
+    }
+    const tool = { ...item(), tool: 'submit_schedule_plan', output: JSON.stringify({ draft }) }
+    expect(scheduleDraftFromTool(tool)?.id).toBe(draft.id)
+    expect(scheduleDraftFromTool({ ...tool, state: 'failed' })).toBeNull()
+    const html = renderToStaticMarkup(
+      <MemoryRouter>
+        <ScheduleDraftCard initial={draft} />
+      </MemoryRouter>,
+    )
+    for (const text of [
+      '任务计划',
+      '执行安排',
+      '修改任务计划',
+      '修改执行安排',
+      '确认安排',
+      '已安排',
+    ])
+      expect(html).toContain(text)
+    const committed = renderToStaticMarkup(
+      <MemoryRouter>
+        <ScheduleDraftCard
+          initial={{
+            ...draft,
+            status: 'committed',
+            createdRefs: [{ kind: 'scheduled-task', id: 'task-1' }],
+          }}
+        />
+      </MemoryRouter>,
+    )
+    expect(committed).toContain('查看已安排')
+    expect(committed).not.toContain('确认安排')
+  })
   test('renders editable proposal items and shared unattended settings before commit', () => {
     const html = renderToStaticMarkup(
       <MemoryRouter>

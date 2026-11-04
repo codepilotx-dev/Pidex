@@ -562,6 +562,7 @@ export function BrowserManagementControls({
                           </time>
                         </button>
                         <Button
+                          size="md"
                           color="secondary"
                           disabled={busy}
                           onClick={() => void dataAction({ action: 'removeHistory', id: visit.id })}
@@ -577,6 +578,7 @@ export function BrowserManagementControls({
                 </div>
                 {cursor ? (
                   <Button
+                    size="md"
                     color="secondary"
                     disabled={loading}
                     onClick={() => void load(true, cursor)}
@@ -585,6 +587,7 @@ export function BrowserManagementControls({
                   </Button>
                 ) : null}
                 <Button
+                  size="md"
                   color="secondary"
                   onClick={() => {
                     openView('clear')
@@ -618,6 +621,7 @@ export function BrowserManagementControls({
                         <>
                           {download.state === 'progressing' ? (
                             <Button
+                              size="md"
                               color="secondary"
                               disabled={busy}
                               onClick={() =>
@@ -632,6 +636,7 @@ export function BrowserManagementControls({
                             </Button>
                           ) : (
                             <Button
+                              size="md"
                               color="secondary"
                               disabled={busy || !download.resumable}
                               onClick={() =>
@@ -646,6 +651,7 @@ export function BrowserManagementControls({
                             </Button>
                           )}
                           <Button
+                            size="md"
                             color="secondary"
                             disabled={busy}
                             onClick={() =>
@@ -663,6 +669,7 @@ export function BrowserManagementControls({
                       {download.state === 'completed' ? (
                         <>
                           <Button
+                            size="md"
                             color="secondary"
                             disabled={busy}
                             onClick={() =>
@@ -676,6 +683,7 @@ export function BrowserManagementControls({
                             打开文件
                           </Button>
                           <Button
+                            size="md"
                             color="secondary"
                             disabled={busy}
                             onClick={() =>
@@ -693,6 +701,7 @@ export function BrowserManagementControls({
                       {!download.controllable &&
                       ['completed', 'cancelled', 'interrupted'].includes(download.state) ? (
                         <Button
+                          size="md"
                           color="secondary"
                           disabled={busy}
                           onClick={() =>
@@ -713,6 +722,7 @@ export function BrowserManagementControls({
                   <p className="tw:m-0 tw:type-body-sm tw:text-app-text-soft">暂无下载记录</p>
                 ) : null}
                 <Button
+                  size="md"
                   color="secondary"
                   onClick={() => {
                     openView('clear')
@@ -759,10 +769,11 @@ export function BrowserManagementControls({
                   </p>
                 ))}
                 <footer>
-                  <Button color="secondary" disabled={busy} onClick={() => setView(null)}>
+                  <Button size="md" color="secondary" disabled={busy} onClick={() => setView(null)}>
                     关闭
                   </Button>
                   <Button
+                    size="md"
                     color="danger"
                     disabled={busy || selected.length === 0}
                     onClick={() =>

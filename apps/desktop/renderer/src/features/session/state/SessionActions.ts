@@ -11,7 +11,9 @@ import type {
   DesktopPermissionMode,
   DesktopPermissionConfig,
   DesktopPermissionRequest,
+  DesktopSessionExecution,
   DesktopSessionMetadataPatch,
+  DesktopSessionSnapshot,
   DesktopSessionStatus,
   DesktopThinkingMode,
   DesktopUserMessageInput,
@@ -40,6 +42,7 @@ export type SessionSettingsSnapshot = {
   permissionMode: DesktopPermissionMode
   permissionConfig: DesktopPermissionConfig
   planModeActive: boolean
+  grillModeActive: boolean
   localRouterMode: LocalRouterMode
   providerID: ModelProviderID
   providerBaseURL: string
@@ -135,7 +138,13 @@ export async function createSessionForWorkspaceAction(
   target: DesktopWorkspace | null,
   initialSessionName?: string,
   projectlessPrompt?: string,
-  options?: { propagateError?: boolean },
+  options?: {
+    propagateError?: boolean
+    /** 首页发起设置的一次性执行位置；不传时沿用自动选择。 */
+    execution?: DesktopSessionExecution
+    /** 重试时复用已创建的 Worktree；不传时新建一个操作。 */
+    operationId?: string
+  },
 ): Promise<string | null> {
   try {
     const preferredSessionGroupId = readPreferredSessionGroupId()
@@ -155,6 +164,9 @@ export async function createSessionForWorkspaceAction(
       localRouterMode: settings.localRouterMode,
       permissionConfig: settings.permissionConfig,
       planModeActive: settings.planModeActive,
+      grillModeActive: settings.grillModeActive,
+      ...(options?.execution ? { execution: options.execution } : {}),
+      ...(options?.operationId ? { operationId: options.operationId } : {}),
       providerID: settings.providerID,
       providerBaseURL: normalizeOptionalText(settings.providerBaseURL),
       model: normalizeOptionalText(settings.model),
@@ -181,8 +193,10 @@ export async function createSessionForWorkspaceAction(
     context.setSessionStatus('idle')
     applySessionView(nextView, context.viewSetters)
     const now = new Date()
-    context.setSessions((current) =>
-      sortSessionsByRecency([
+    context.setSessions((current) => {
+      // createSession 已先发布目录事件；只在事件尚未到达时补位，保留服务端状态。
+      if (current.some((item) => item.id === session.sessionId)) return current
+      return sortSessionsByRecency([
         {
           id: session.sessionId,
           sessionName: initialSessionName ?? normalizeOptionalText(settings.sessionName) ?? null,
@@ -192,6 +206,7 @@ export async function createSessionForWorkspaceAction(
           standalone: session.standalone,
           permissionMode: settings.permissionMode,
           planModeActive: settings.planModeActive,
+          grillModeActive: settings.grillModeActive,
           localRouterMode: settings.localRouterMode,
           model: normalizeOptionalText(settings.model) ?? null,
           thinkingMode: settings.thinkingMode,
@@ -204,8 +219,8 @@ export async function createSessionForWorkspaceAction(
           createdAt: now.toISOString(),
         },
         ...current,
-      ]),
-    )
+      ])
+    })
     return session.sessionId
   } catch (error) {
     context.onErrorRef.current(errorMessageOf(error, 'thread-create'))
@@ -229,9 +244,10 @@ export async function submitSessionMessageAction(
   },
 ): Promise<'sent' | 'queued' | 'steered' | null> {
   if (!canSubmit || !sessionId) return null
-  const delivery = options?.goal
-    ? 'start'
-    : resolveSessionMessageDelivery(options?.sessionStatus, options?.delivery)
+  const delivery =
+    options?.goal || input.goal || input.taskMode === 'plan' || input.taskMode === 'grill'
+      ? 'follow-up'
+      : resolveSessionMessageDelivery(options?.sessionStatus, options?.delivery)
   const modelSelection: DesktopModelSelection = {
     variant: settings.variant,
     providerID: settings.providerID,
@@ -243,7 +259,7 @@ export async function submitSessionMessageAction(
     if (delivery === 'follow-up') {
       return await desktopClient.submitSessionFollowUp(
         sessionId,
-        input,
+        { ...input, ...(options?.goal ? { goal: options.goal } : {}) },
         'follow-up',
         options?.inputId,
         modelSelection,
@@ -563,8 +579,30 @@ export async function setSessionPlanModeActiveAction(
   targetSessionId: string,
   active: boolean,
 ): Promise<SessionListItem | null> {
+  return applySessionModeAction(context, sessions, targetSessionId, () =>
+    desktopClient.setSessionPlanModeActive(targetSessionId, active),
+  )
+}
+
+export async function setSessionGrillModeActiveAction(
+  context: SessionActionContext,
+  sessions: SessionListItem[],
+  targetSessionId: string,
+  active: boolean,
+): Promise<SessionListItem | null> {
+  return applySessionModeAction(context, sessions, targetSessionId, () =>
+    desktopClient.setSessionGrillModeActive(targetSessionId, active),
+  )
+}
+
+async function applySessionModeAction(
+  context: SessionActionContext,
+  sessions: SessionListItem[],
+  targetSessionId: string,
+  apply: () => Promise<DesktopSessionSnapshot>,
+): Promise<SessionListItem | null> {
   try {
-    const snapshot = await desktopClient.setSessionPlanModeActive(targetSessionId, active)
+    const snapshot = await apply()
     const updatedItem = snapshot.item
     context.setSessions(
       sortSessionsByRecency(

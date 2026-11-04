@@ -2,9 +2,12 @@ import { Server } from 'lucide-react'
 import type React from 'react'
 import { RemoteImage } from '../../components/ui/RemoteImage.js'
 import { useProviderIconSource } from '../../services/desktop-client/ProviderIconClient.js'
+import { cx } from '../../utils/Cx.js'
 
 export type ProviderIconProps = {
+  foreground?: boolean
   logoURL?: string
+  providerID?: string
   /**
    * 图标槽容器类。宿主缓存未命中时用同一个类渲染占位图标，保证尺寸、圆角和
    * 背景与已加载状态一致。
@@ -21,26 +24,41 @@ export type ProviderIconProps = {
  */
 export function ProviderIcon({
   logoURL,
+  providerID,
+  foreground = false,
   className,
   imageClassName,
   fallback,
 }: ProviderIconProps): React.ReactNode {
-  const source = useProviderIconSource(logoURL)
+  const { source, override } = useProviderIconSource(logoURL, providerID)
   const placeholder = fallback ?? (
     <Server aria-hidden="true" size={14} data-icon-kind="artwork" strokeWidth={2} />
   )
 
+  const slot = cx(
+    'tw:inline-flex tw:min-w-0 tw:overflow-hidden tw:items-center tw:justify-center',
+    className,
+  )
+
   if (!source) {
-    return className ? <span className={className}>{placeholder}</span> : placeholder
+    return className ? <span className={slot}>{placeholder}</span> : placeholder
   }
 
-  return (
+  const image = (
     <RemoteImage
       alt=""
-      className={className}
+      foreground={foreground && !override}
       fallback={placeholder}
-      imageClassName={imageClassName}
+      imageClassName={
+        override
+          ? imageClassName?.replace(/tw:\[\.dark-theme_&\]:(?:invert|hue-rotate-180)/g, '')
+          : imageClassName
+      }
       src={source}
     />
   )
+
+  // `RemoteImage` always occupies its container, so the caller-provided class must
+  // size this wrapping slot instead of competing with `size-full` on the image.
+  return className ? <span className={slot}>{image}</span> : image
 }

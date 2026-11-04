@@ -1,4 +1,9 @@
-import type { McpReloadResultSchema, McpScope, McpServerDeclaration } from '@pidex/agent-protocol'
+import type {
+  McpReloadResultSchema,
+  McpRuntimeServerStatus,
+  McpScope,
+  McpServerDeclaration,
+} from '@pidex/agent-protocol'
 import { McpConfigError, McpConfigService, isMcpSettingsConflict } from './McpConfigService'
 import { McpConnectionManager } from './McpConnectionManager'
 import { McpOAuthError, McpOAuthService } from './McpOAuthService'
@@ -31,14 +36,28 @@ export class McpRuntimeService {
     private readonly configs: McpConfigService,
     readonly connections: McpConnectionManager,
     readonly oauth?: McpOAuthService,
+    /**
+     * Host-managed servers (for example node_repl). They are never part of the
+     * user MCP config and are therefore reported only as runtime status so
+     * clients can show ownership, plugin toggle and connection state.
+     */
+    private readonly hostManaged?: () => McpRuntimeServerStatus[],
   ) {}
 
   list(input: { workspace?: string }) {
     return this.wrap(() => this.configs.list(input.workspace))
   }
 
-  status(input: { workspace?: string }) {
-    return this.wrap(() => this.connections.status(input.workspace))
+  async status(input: { workspace?: string }) {
+    const result = await this.wrap(() => this.connections.status(input.workspace))
+    const hostServers = this.hostManaged?.() ?? []
+    if (hostServers.length === 0) return result
+    return {
+      ...result,
+      servers: [...hostServers, ...result.servers],
+      totalTools:
+        result.totalTools + hostServers.reduce((total, item) => total + item.toolCount, 0),
+    }
   }
 
   async save(input: {

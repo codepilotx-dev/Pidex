@@ -12,6 +12,7 @@ export const SCROLL_EDGE_EPSILON = 1
 export type ScrollEdgeOptions = {
   contentRef?: React.RefObject<HTMLElement | null>
   version?: unknown
+  axis?: 'x' | 'y'
 }
 
 /**
@@ -19,14 +20,23 @@ export type ScrollEdgeOptions = {
  * 可滚动时以 epsilon 容差吸收浮点取整差异，避免边界状态闪烁。
  */
 export function resolveScrollEdgeState(
-  metrics: { scrollTop: number; scrollHeight: number; clientHeight: number },
+  metrics:
+    | { scrollTop: number; scrollHeight: number; clientHeight: number }
+    | { scrollLeft: number; scrollWidth: number; clientWidth: number },
   epsilon = SCROLL_EDGE_EPSILON,
 ): ScrollEdgeState {
-  const maxScroll = Math.max(0, metrics.scrollHeight - metrics.clientHeight)
+  const horizontal = 'scrollLeft' in metrics
+  const position = horizontal ? metrics.scrollLeft : metrics.scrollTop
+  const maxScroll = Math.max(
+    0,
+    horizontal
+      ? metrics.scrollWidth - metrics.clientWidth
+      : metrics.scrollHeight - metrics.clientHeight,
+  )
   const scrollable = maxScroll > epsilon
   return {
-    atStart: !scrollable || metrics.scrollTop <= epsilon,
-    atEnd: !scrollable || metrics.scrollTop >= maxScroll - epsilon,
+    atStart: !scrollable || position <= epsilon,
+    atEnd: !scrollable || position >= maxScroll - epsilon,
     scrollable,
   }
 }
@@ -41,7 +51,7 @@ export function useScrollEdgeState(
   containerRef: React.RefObject<HTMLElement | null>,
   options: ScrollEdgeOptions = {},
 ): ScrollEdgeState {
-  const { contentRef, version } = options
+  const { contentRef, version, axis = 'y' } = options
   const [state, setState] = useState<ScrollEdgeState>({
     atStart: true,
     atEnd: true,
@@ -55,11 +65,19 @@ export function useScrollEdgeState(
     let disposed = false
 
     const measure = (): void => {
-      const next = resolveScrollEdgeState({
-        scrollTop: container.scrollTop,
-        scrollHeight: container.scrollHeight,
-        clientHeight: container.clientHeight,
-      })
+      const next = resolveScrollEdgeState(
+        axis === 'x'
+          ? {
+              scrollLeft: container.scrollLeft,
+              scrollWidth: container.scrollWidth,
+              clientWidth: container.clientWidth,
+            }
+          : {
+              scrollTop: container.scrollTop,
+              scrollHeight: container.scrollHeight,
+              clientHeight: container.clientHeight,
+            },
+      )
       setState((current) =>
         current.atStart === next.atStart &&
         current.atEnd === next.atEnd &&
@@ -88,7 +106,7 @@ export function useScrollEdgeState(
       observer.disconnect()
       container.removeEventListener('scroll', scheduleMeasure)
     }
-  }, [containerRef, contentRef, version])
+  }, [containerRef, contentRef, version, axis])
 
   return state
 }

@@ -206,6 +206,18 @@ export class PlanApprovalRepository {
     this.db.sqlite.query('UPDATE plan_approvals SET next_turn_id = ? WHERE id = ?').run(turnId, id)
   }
 
+  /**
+   * 反馈轮次的源计划：仅当该 turn 由计划审批的 feedback 动作创建时才返回。
+   * 反馈文本本身是该 turn 的用户消息，源计划只作为 prompt context 重建。
+   */
+  feedbackSource(turnId: string): PlanApproval | null {
+    if (!this.available()) return null
+    const row = this.db.sqlite
+      .query("SELECT * FROM plan_approvals WHERE next_turn_id = ? AND status = 'feedback'")
+      .get(turnId) as Row | null
+    return row ? this.project(row) : null
+  }
+
   implementationTarget(approval: PlanApproval) {
     const row = approval.nextTurnId
       ? (this.db.sqlite

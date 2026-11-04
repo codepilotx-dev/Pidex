@@ -196,6 +196,9 @@
     font-weight: var(--cpx-sys-font-weight-medium);
     text-decoration: none;
     cursor: pointer;
+
+    /* 按钮内容默认居中，会让换行后的续行居中漂移；文件引用应跟随正文对齐。 */
+    text-align: inherit;
     overflow-wrap: anywhere;
   }
 
@@ -223,16 +226,16 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: var(--cpx-sys-icon-size);
-    height: var(--cpx-sys-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     margin-right: 2px;
     vertical-align: -0.125em;
   }
 
   .md-file-reference__icon > svg {
     display: block;
-    width: var(--cpx-sys-icon-size);
-    height: var(--cpx-sys-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 
   .md-file-reference__label {
@@ -249,8 +252,8 @@
 
   .md-file-reference__target-icon {
     display: block;
-    width: var(--cpx-sys-icon-size);
-    height: var(--cpx-sys-icon-size);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
   }
 
   .md-wide-block {
@@ -326,19 +329,9 @@
   }
 
   .md-code-block:hover > .md-code-actions,
-  .md-code-block:focus-within > .md-code-actions {
+  .md-code-block:has(:focus-visible) > .md-code-actions {
     opacity: 1;
     pointer-events: auto;
-  }
-
-  .md-code-action {
-    border: 0;
-    background: transparent;
-    cursor: pointer;
-  }
-
-  .md-code-copy.is-copied {
-    color: var(--cpx-sys-color-success);
   }
 
   .md-code-pre {
@@ -449,37 +442,15 @@
   }
 
   .md-table-copy {
-    display: inline-grid;
-    width: 28px;
-    height: 28px;
-    padding: 0;
-    place-items: center;
-    border: 1px solid var(--cpx-sys-color-border-subtle);
-    border-radius: 0;
-    color: var(--cpx-sys-color-fg-tertiary);
     opacity: 0;
     pointer-events: none;
-    cursor: pointer;
-    transition:
-      opacity var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
-      background var(--cpx-sys-motion-state) var(--cpx-sys-ease-out),
-      color var(--cpx-sys-motion-state) var(--cpx-sys-ease-out);
   }
 
   .md-table-block:hover .md-table-copy,
-  .md-table-block:focus-within .md-table-copy,
+  .md-table-block:has(:focus-visible) .md-table-copy,
   .md-table-copy.is-copied {
     opacity: 1;
     pointer-events: auto;
-  }
-
-  .md-table-copy:focus-visible {
-    outline: 2px solid var(--cpx-sys-color-border-focus);
-    outline-offset: 1px;
-  }
-
-  .md-table-copy.is-copied {
-    color: var(--cpx-sys-color-success);
   }
 
   .md-table-scroll {
@@ -635,8 +606,8 @@
     cursor: pointer;
   }
   .md-directive-details__summary svg {
-    width: var(--cpx-sys-icon-size-sm);
-    height: var(--cpx-sys-icon-size-sm);
+    width: var(--inline-icon-size, 1em);
+    height: var(--inline-icon-size, 1em);
     transition: transform var(--cpx-sys-motion-disclosure) var(--cpx-sys-ease-disclosure);
   }
   .md-directive-details__summary:focus-visible {
@@ -788,13 +759,12 @@
     opacity: 0;
     pointer-events: none;
   }
-  .md-body--conversation .md-table-block:is(:hover, :focus-within) .md-table-actions > button {
+  .md-body--conversation
+    .md-table-block:is(:hover, :has(:focus-visible))
+    .md-table-actions
+    > button {
     opacity: 1;
     pointer-events: auto;
-  }
-  .md-body--conversation .md-table-copy {
-    border-color: transparent;
-    border-radius: var(--cpx-sys-radius-control);
   }
   .md-body--conversation .md-table-copy.is-copied {
     opacity: 1;

@@ -1,12 +1,15 @@
+import { ThreadGoalControlRepository } from '../storage/repositories/ThreadGoalControlRepository'
 import type { Model } from '@pidex/model-schema'
 import {
   MAX_SUBAGENT_DEPTH,
+  isReadOnlyTaskMode,
   type PermissionConfig,
   type SubagentProfile,
+  type SubagentRole,
 } from '@pidex/shared/thread'
 import { Effect } from 'effect'
 import type { AgentModelCatalog } from '../provider/AgentModelCatalog'
-import { AgentError } from '../Domain'
+import { AgentError, type TaskMode } from '../Domain'
 import {
   SafeBoundaryInterrupt,
   type AgentRuntime,
@@ -25,6 +28,7 @@ import { globalEventSequence } from '../storage/events/EventPublisher'
 import { WorkspaceService } from '../workspace/WorkspaceService'
 import { SubagentCollaborationRepository } from './SubagentCollaborationRepository'
 import { SubagentRepository, type SpawnSubagentInput } from './SubagentRepository'
+import { probeThreadContextLimitsStorageCapabilities } from '../storage/database/StorageCapabilities'
 import type { AttachmentService } from './AttachmentService'
 import type { LocalContextPathService } from '../local-context/LocalContextPathService'
 import {
@@ -40,6 +44,7 @@ import type { McpConnectionManager, McpTurnLease } from '../mcp/McpConnectionMan
 import { createMcpInstructionSections } from '../mcp/McpPromptSections'
 import type { ProjectSourceService } from '../project/ProjectSourceService'
 import { secretScrubber } from '../security/SecretScrubber'
+import { getRootThreadId } from '../session/GoalDirectiveService'
 
 const terminal = new Set(['completed', 'failed', 'stopped', 'interrupted'])
 export const pausedSubagentStatus = (kind: PendingApproval['kind'] | null) =>
@@ -63,7 +68,7 @@ type RootContext = {
   threadID: string
   turnID: string
   agentID: string
-  taskMode: 'chat' | 'plan'
+  taskMode: TaskMode
   model: Model.Ref
   permissionConfig: PermissionConfig
   allowedTools?: readonly string[]
@@ -378,19 +383,28 @@ export class SubagentService {
       name?: string
       profile: 'default' | 'explorer' | 'worker'
       task: string
+      role?: SubagentRole
       workspaceMode?: 'shared' | 'worktree'
       model?: Model.Ref
     }>,
   ) {
     if (!agents.length || agents.length > 4)
       throw new AgentError('SUBAGENT_BATCH_LIMIT', '每批只能创建 1 到 4 个子 Agent', 409)
-    if (root.taskMode === 'plan' && agents.some((agent) => agent.profile !== 'explorer')) {
-      throw new AgentError('PLAN_SUBAGENT_RESTRICTED', 'Plan 模式只能创建 Explorer', 409)
+    if (isReadOnlyTaskMode(root.taskMode) && agents.some((agent) => agent.profile !== 'explorer')) {
+      throw new AgentError('PLAN_SUBAGENT_RESTRICTED', 'Plan 与 Grill 模式只能创建 Explorer', 409)
     }
     const parent = this.db.getAgentExecution(root.agentID)
     if (!parent || parent.depth >= MAX_SUBAGENT_DEPTH)
       throw new AgentError('SUBAGENT_DEPTH_EXCEEDED', '子 Agent 已达到最大深度', 409)
     this.assertAdmission(root.threadID)
+    const rootThreadId = getRootThreadId(this.db, root.threadID)
+    const goal = this.db.repositories.threadGoalLedger.visibleGoal(rootThreadId)
+    if (goal && goal.token_budget !== null) {
+      const tokensUsed = this.db.repositories.threadGoalLedger.tokensUsed(goal.id)
+      if (goal.token_budget - tokensUsed <= 0) {
+        throw new AgentError('GOAL_BUDGET_EXHAUSTED', '目标预算已耗尽，无法创建新子 Agent', 409)
+      }
+    }
     if (!this.collaboration.available && parent.depth > 0) this.collaboration.assertAvailable()
     if (agents.some((agent) => !agent.task.trim()))
       throw new AgentError('SUBAGENT_TASK_REQUIRED', '子 Agent 任务不能为空', 400)
@@ -429,6 +443,7 @@ export class SubagentService {
         parentAgentID: root.agentID,
         displayName,
         profile,
+        ...(requested.role ? { role: requested.role } : {}),
         task: requested.task.trim(),
         model,
         ...(allowedTools ? { allowedTools } : {}),
@@ -440,7 +455,9 @@ export class SubagentService {
         // persisted worktree mode remains readable for legacy tasks only.
         workspaceMode: 'shared',
         workspaceRoot: root.workspaceRoot,
-        taskMode: root.taskMode,
+        // Grill interviews delegate read-only research; the child runs as a Plan
+        // explorer so it never inherits the interview protocol as its own mode.
+        taskMode: root.taskMode === 'grill' ? 'plan' : root.taskMode,
       }
     })
     // Repository creation is synchronous; wrapping the complete batch ensures
@@ -523,7 +540,10 @@ export class SubagentService {
       ? checkpoint.payload.runIDs.filter((value): value is string => typeof value === 'string')
       : []
     const mode = checkpoint.payload.mode === 'any' ? 'any' : 'all'
-    if (!this.isWaitSatisfied(runIDs, mode)) return null
+    const budgetChanged =
+      typeof checkpoint.payload.budgetRevision === 'number' &&
+      new ThreadGoalControlRepository(this.db).pendingBudgetForThread(checkpoint.threadID) !== null
+    if (!budgetChanged && !this.isWaitSatisfied(runIDs, mode)) return null
     if (
       typeof checkpoint.payload.state !== 'string' ||
       checkpoint.payload.interruption === undefined
@@ -532,7 +552,9 @@ export class SubagentService {
     return {
       state: checkpoint.payload.state,
       interruption: checkpoint.payload.interruption,
-      answer: null,
+      answer: budgetChanged
+        ? '预算已调整，等待已被打断以便主 Agent 重审分工。子任务尚未被视为完成；请读取最新预算通知，检查运行中的子任务并决定继续、调整或停止。'
+        : null,
     }
   }
 
@@ -847,12 +869,45 @@ export class SubagentService {
               }),
             }
           : null
-      const parentMode =
-        (
-          this.db.sqlite.query('SELECT mode FROM turns WHERE id = ?').get(task.parentTurnId) as {
-            mode: 'chat' | 'plan'
-          } | null
-        )?.mode ?? 'chat'
+      const parentTurn = this.db.sqlite
+        .query('SELECT mode, model_ref FROM turns WHERE id = ?')
+        .get(task.parentTurnId) as { mode: TaskMode; model_ref: string | null } | null
+      const parentMode = parentTurn?.mode === 'grill' ? 'plan' : (parentTurn?.mode ?? 'chat')
+      let inheritedLimit: number | null = null
+      let parentModel: { providerID: string; id: string } | null = null
+      if (parentTurn?.model_ref) {
+        try {
+          parentModel = JSON.parse(parentTurn.model_ref)
+        } catch {}
+      }
+      const parentSettings = this.db.repositories.threads.getThreadSettings(task.parentThreadId)
+      if (
+        parentModel &&
+        parentModel.providerID === run.model.providerID &&
+        parentModel.id === run.model.id
+      ) {
+        inheritedLimit = parentSettings?.maxContextTokens ?? null
+      } else if (this.db.repositories.modelRuntimePreferences.available()) {
+        const pref = this.db.repositories.modelRuntimePreferences.get(
+          String(run.model.providerID),
+          String(run.model.id),
+        )
+        inheritedLimit = pref?.maxContextTokens ?? null
+      }
+      if (
+        inheritedLimit != null &&
+        probeThreadContextLimitsStorageCapabilities(this.db.sqlite).threadContextLimits
+      ) {
+        this.db.sqlite
+          .query(
+            `INSERT INTO thread_context_limits (thread_id, max_context_tokens, updated_at)
+             VALUES (?, ?, ?)
+             ON CONFLICT(thread_id) DO UPDATE SET
+               max_context_tokens = excluded.max_context_tokens,
+               updated_at = excluded.updated_at`,
+          )
+          .run(task.childThreadId, inheritedLimit, Date.now())
+      }
       const instructionSources = await new InstructionDiscoveryService().discover(
         workspace.rootPath,
       )
@@ -954,6 +1009,7 @@ export class SubagentService {
         content: input.content,
         taskMode: parentMode,
         fallbackModel: run.model,
+        maxContextTokens: inheritedLimit,
         permissionConfig,
         signal: controller.signal,
         workspace,

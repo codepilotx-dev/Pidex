@@ -355,7 +355,7 @@ describe('desktop thread settings client', () => {
       operationId: expect.any(String),
     })
     expect(calls.find((call) => call.method === 'turn/start')?.params).toMatchObject({
-      content: '读取目录 [docs]',
+      content: '读取目录',
       skills: selectedSkills,
       contextReferenceIds: ['context-docs'],
     })
@@ -592,7 +592,6 @@ describe('desktop thread settings client', () => {
         'model/health/updated',
         'skill/updated',
         'plugins/updated',
-        'minimaxCli/updated',
         'tooling/updated',
         'mcp/updated',
         'speech/statusChanged',
@@ -630,7 +629,7 @@ describe('desktop thread settings client', () => {
       taskMode: 'plan',
       permissionConfig: {
         sandboxMode: 'workspace-write',
-        approvalPolicy: 'on-request',
+        approvalPolicy: 'untrusted',
         approvalsReviewer: 'auto_review',
       },
     }
@@ -731,6 +730,20 @@ describe('desktop thread settings client', () => {
     })
     expect(permissionSnapshot.item.permissionMode).toBe('full-access')
     expect(permissionSnapshot.item.planModeActive).toBe(false)
+
+    const grillUpdate = client.setSessionGrillModeActive('session-1', true)
+    await client.sendUserMessage('session-1', { text: '访谈首轮' })
+    const grillSnapshot = await grillUpdate
+    expect(grillSnapshot.item.grillModeActive).toBe(true)
+    expect(grillSnapshot.item.planModeActive).toBe(false)
+    await client.sendUserMessage('session-1', { text: '访谈后续轮次' })
+    expect(turnStarts.slice(-2)).toEqual([
+      expect.objectContaining({ taskMode: 'grill' }),
+      expect.objectContaining({ taskMode: 'grill' }),
+    ])
+    const planSnapshot = await client.setSessionPlanModeActive('session-1', true)
+    expect(planSnapshot.item.grillModeActive).toBe(false)
+    expect(planSnapshot.item.planModeActive).toBe(true)
   })
 
   test('returns explicit unsupported errors instead of entering the mock map', async () => {
@@ -1091,6 +1104,7 @@ describe('desktop thread settings client', () => {
   })
 
   test('uses turn steer for an active follow-up without legacy strategy params', async () => {
+    let queuedParams: Record<string, unknown> | null = null
     let steerParams: Record<string, unknown> | null = null
     const activeSnapshot = (): ThreadSnapshot => ({
       ...snapshot('thread-active', defaultSettings),
@@ -1121,6 +1135,16 @@ describe('desktop thread settings client', () => {
           return rpc(body.id, { projects: [project], nextCursor: null })
         if (body?.method === 'thread/read') {
           return rpc(body.id, snapshotResult(activeSnapshot()))
+        }
+        if (body?.method === 'queue/add') {
+          queuedParams = body.params
+          return rpc(body.id, {
+            inputId: body.params.inputId,
+            turnId: 'next',
+            disposition: 'accepted',
+            admission: 'queued',
+            streamPosition: { streamId: 'thread-active', sequence: 2 },
+          })
         }
         if (body?.method === 'turn/steer') {
           steerParams = body.params
@@ -1155,6 +1179,18 @@ describe('desktop thread settings client', () => {
     })
     expect(steerParams).not.toHaveProperty('strategy')
     expect(steerParams).not.toHaveProperty('model')
+    for (const taskMode of ['plan', 'grill'] as const) {
+      steerParams = null
+      await client.submitSessionFollowUp(
+        'thread-active',
+        { text: '改为只读调查', taskMode },
+        'steer',
+        undefined,
+        { providerID: 'openai', model: 'gpt-5' },
+      )
+      expect(steerParams).toBeNull()
+      expect(queuedParams).toMatchObject({ taskMode, content: '改为只读调查' })
+    }
   })
 
   test('reports unavailable without mock fallback and preserves browser mock behavior', async () => {
@@ -1324,6 +1360,110 @@ describe('desktop thread settings client', () => {
     expect(pendingInteractionThreadIds).toEqual(['session-2', 'session-1'])
   })
 
+  test('会话专用订阅在内容错误且无可恢复游标时停止并回调 onSubscriptionError', async () => {
+    const sources: Array<{
+      onmessage: ((event: MessageEvent) => void) | null
+      onerror: (() => void) | null
+      close: () => void
+    }> = []
+    let subscriptionCount = 0
+    const fetcher = subscriptionFetcher(() => {
+      subscriptionCount += 1
+      return { subscriptionId: `subscription-${subscriptionCount}` }
+    })
+    const client = createDesktopClient({
+      fetch: fetcher,
+      eventSourceFactory: () => {
+        const source = { onmessage: null, onerror: null, close: () => {} }
+        sources.push(source)
+        return source as unknown as EventSource
+      },
+    })
+    const errors: unknown[] = []
+    const unsubscribe = client.subscribeAgentEventEnvelopes(
+      {
+        threadId: 'session-1',
+        after: 12,
+        liveEventTypes: [],
+        onDeliveryError: () => undefined,
+        onSubscriptionError: (error) => errors.push(error),
+      },
+      () => {},
+    )
+    for (let index = 0; index < 40 && !sources[0]?.onmessage; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    expect(subscriptionCount).toBe(1)
+
+    sources[0]?.onmessage?.(malformedEventMessage('subscription-1') as MessageEvent)
+    for (let index = 0; index < 40 && errors.length === 0; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    for (let index = 0; index < 10; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toBeInstanceOf(Error)
+    // No usable snapshot cursor means no resubscribe for this thread stream.
+    expect(subscriptionCount).toBe(1)
+    unsubscribe()
+  })
+
+  test('共享全局订阅停止恢复时向各监听器分发 onSubscriptionError', async () => {
+    const sources: Array<{
+      onmessage: ((event: MessageEvent) => void) | null
+      onerror: (() => void) | null
+      close: () => void
+    }> = []
+    let subscriptionCount = 0
+    const fetcher = subscriptionFetcher(() => {
+      subscriptionCount += 1
+      return { subscriptionId: `subscription-${subscriptionCount}` }
+    })
+    const client = createDesktopClient({
+      fetch: fetcher,
+      eventSourceFactory: () => {
+        const source = { onmessage: null, onerror: null, close: () => {} }
+        sources.push(source)
+        return source as unknown as EventSource
+      },
+    })
+    const errors: unknown[] = []
+    const unsubscribeShared = client.subscribeAgentEventEnvelopes({ liveEventTypes: [] }, () => {})
+    const unsubscribeReporting = client.subscribeAgentEventEnvelopes(
+      { liveEventTypes: [], onSubscriptionError: (error) => errors.push(error) },
+      () => {},
+    )
+    for (let index = 0; index < 40 && !sources[0]?.onmessage; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    // Listeners stay on the single shared global subscription.
+    expect(subscriptionCount).toBe(1)
+    expect(sources[1]).toBeUndefined()
+
+    sources[0]?.onmessage?.(malformedEventMessage('subscription-1') as MessageEvent)
+    for (let index = 0; index < 60 && subscriptionCount < 2; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+    }
+    expect(subscriptionCount).toBe(2)
+
+    sources[1]?.onmessage?.(malformedEventMessage('subscription-2') as MessageEvent)
+    for (let index = 0; index < 40 && errors.length === 0; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+    for (let index = 0; index < 10; index += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+    }
+
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toBeInstanceOf(Error)
+    // Recovery stopped: the shared subscription is not resubscribed again.
+    expect(subscriptionCount).toBe(2)
+    unsubscribeReporting()
+    unsubscribeShared()
+  })
+
   test('reconciles the active thread after event replay completes', async () => {
     let completed = false
     const readThreadIds: string[] = []
@@ -1372,7 +1512,6 @@ describe('desktop thread settings client', () => {
             'model/health/updated',
             'skill/updated',
             'plugins/updated',
-            'minimaxCli/updated',
             'tooling/updated',
             'mcp/updated',
             'speech/statusChanged',
@@ -2008,6 +2147,60 @@ function rpc(id: string | number, result: unknown): Response {
   })
 }
 
+/** Minimal event-stream RPC fetcher: handshake, subscribe, ack and unsubscribe. */
+function subscriptionFetcher(subscribe: () => { subscriptionId: string }) {
+  return async (path: string, init?: RequestInit): Promise<Response> => {
+    const body = init?.body ? JSON.parse(String(init.body)) : null
+    const params = body?.params ?? {}
+    if (path !== '/rpc') throw new Error(`Unhandled request: ${path}`)
+    if (body?.method === 'initialize') return rpc(body.id, initializedResult())
+    if (body?.method === 'initialized') return new Response(null, { status: 204 })
+    if (body?.method === 'event/subscribe') {
+      return rpc(body.id, {
+        ...subscribe(),
+        highWatermarks: [{ streamId: 'global', sequence: 12 }],
+      })
+    }
+    if (body?.method === 'event/unsubscribe') return rpc(body.id, { ok: true })
+    if (body?.method === 'event/ack') {
+      return rpc(body.id, {
+        subscriptionId: params.subscriptionId,
+        acknowledged: params.positions,
+      })
+    }
+    if (body?.method === 'project/list') return rpc(body.id, { projects: [], nextCursor: null })
+    if (body?.method === 'thread/list') return rpc(body.id, { threads: [], nextCursor: null })
+    if (body?.method === 'interaction/listPending') {
+      return rpc(body.id, { interactions: [], nextCursor: null })
+    }
+    throw new Error(`Unhandled RPC method: ${body?.method}`)
+  }
+}
+
+/** A frame the client can never project: unsupported envelope version. */
+function malformedEventMessage(subscriptionId: string) {
+  return {
+    data: JSON.stringify({
+      jsonrpc: '2.0',
+      method: 'event/next',
+      params: {
+        subscriptionId,
+        event: {
+          eventId: 'event-malformed',
+          streamId: 'global',
+          type: 'catalog/updated',
+          version: 2,
+          occurredAt: now,
+          durability: 'live',
+          sequence: null,
+          afterSequence: 12,
+          payload: {},
+        },
+      },
+    }),
+  }
+}
+
 function initializedResult() {
   return {
     protocol: 'thread-rpc-v4',
@@ -2073,6 +2266,28 @@ test('聊天宽度经过桌面 bridge 保存并在新 client 中读取', async (
   }
 })
 
+test('上下文展示方式经过桌面 bridge 保存并在新 client 中读取', async () => {
+  const { defaultDesktopStoredSettings } = await import('../shared/SettingsSchema.js')
+  let stored = defaultDesktopStoredSettings()
+  const environment = {
+    window: {
+      DesktopBridge: {
+        getDesktopSettings: async () => stored,
+        saveDesktopSettings: async (settings: typeof stored) => {
+          stored = settings
+          return stored
+        },
+      },
+    },
+  }
+  const client = createDesktopClient(environment)
+  for (const contextUsageView of ['field', 'bar'] as const) {
+    await client.saveDesktopSettings({ ...stored, contextUsageView })
+    const reopened = createDesktopClient(environment)
+    expect((await reopened.getDesktopSettings()).contextUsageView).toBe(contextUsageView)
+  }
+})
+
 test('日程会话显示过滤经过桌面 bridge 保存并在新 client 中读取', async () => {
   const { defaultDesktopStoredSettings, normalizeDesktopStoredSettings } =
     await import('../shared/SettingsSchema.js')
@@ -2104,4 +2319,399 @@ test('日程会话显示过滤经过桌面 bridge 保存并在新 client 中读�
       sidebarShowScheduledSessions,
     )
   }
+})
+
+test('真实能力交集协商保留 Goal 管理与排队能力', async () => {
+  const requested: string[] = []
+  const methods: string[] = []
+  const goal = {
+    id: 'goal-1',
+    threadId: 'goal-thread',
+    objective: '测试目标',
+    status: 'active',
+    tokenBudget: 200000,
+    tokensUsed: 0,
+    timeUsedSeconds: 0,
+    version: 1,
+    completedAt: null,
+    createdAt: now,
+    updatedAt: now,
+  }
+  const client = createDesktopClient({
+    fetch: async (_path, init) => {
+      const body = JSON.parse(String(init?.body))
+      methods.push(body.method)
+      if (body.method === 'initialized') return new Response(null, { status: 204 })
+      if (body.method === 'initialize') {
+        requested.push(...body.params.capabilities)
+        return rpc(body.id, {
+          ...initializedResult(),
+          capabilities: [
+            ...initializedResult().capabilities,
+            'thread.goal.v1',
+            'queue.goal.v1',
+          ].filter((capability) => requested.includes(capability)),
+        })
+      }
+      if (body.method === 'thread/goal/get') return rpc(body.id, { goal })
+      if (body.method === 'thread/read')
+        return rpc(body.id, snapshotResult(snapshot('goal-thread', defaultSettings)))
+      if (body.method === 'queue/add')
+        return rpc(body.id, {
+          inputId: body.params.inputId,
+          turnId: 'queued-goal',
+          disposition: 'accepted',
+          admission: 'queued',
+          streamPosition: { streamId: 'goal-thread', sequence: 1 },
+        })
+      throw new Error(`Unexpected RPC: ${body.method}`)
+    },
+  })
+  expect(await client.getSessionGoal('goal-thread')).toMatchObject({ id: 'goal-1' })
+  expect(requested).toContain('thread.goal.v1')
+  expect(requested).toContain('queue.goal.v1')
+  expect(
+    await client.submitSessionFollowUp(
+      'goal-thread',
+      { text: '后续目标', taskMode: 'chat', goal: { objective: '后续目标' } },
+      'follow-up',
+      'goal-input',
+      { providerID: 'openai', model: 'gpt-5' },
+    ),
+  ).toBe('queued')
+  expect(methods).toContain('queue/add')
+})
+
+test.each(['paused', 'complete', 'clear'] as const)(
+  'Goal %s 成功后发布目标会话的新状态，不依赖事件或列表携带 Goal',
+  async (action) => {
+    let goal: import('../shared/Types.js').DesktopThreadGoal | null = {
+      id: 'goal',
+      threadId: 'goal-thread',
+      objective: '持续目标',
+      status: 'active',
+      tokenBudget: 200000,
+      tokensUsed: 0,
+      timeUsedSeconds: 0,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
+    }
+    let published: typeof goal | undefined
+    const client = createDesktopClient({
+      fetch: async (_path, init) => {
+        const body = JSON.parse(String(init?.body))
+        if (body.method === 'initialized') return new Response(null, { status: 204 })
+        if (body.method === 'initialize')
+          return rpc(body.id, {
+            ...initializedResult(),
+            capabilities: [...initializedResult().capabilities, 'thread.goal.v1'],
+          })
+        if (body.method === 'project/list')
+          return rpc(body.id, { projects: [project], nextCursor: null })
+        if (body.method === 'thread/list')
+          return rpc(body.id, {
+            threads: [listItem('goal-thread', defaultSettings)],
+            nextCursor: null,
+          })
+        if (body.method === 'thread/read')
+          return rpc(body.id, snapshotResult({ ...snapshot('goal-thread', defaultSettings), goal }))
+        if (body.method === 'thread/goal/get') return rpc(body.id, { goal })
+        if (body.method === 'thread/goal/set') {
+          goal = { ...goal!, status: body.params.status, version: 2 }
+          return rpc(body.id, { goal })
+        }
+        if (body.method === 'thread/goal/clear') {
+          goal = null
+          return rpc(body.id, { threadId: 'goal-thread', goalId: 'goal', clearedAt: now })
+        }
+        throw new Error(`Unexpected RPC: ${body.method}`)
+      },
+    })
+    await client.getSession('goal-thread')
+    const unsubscribe = client.onSessionStoreChange((change) => {
+      published = change.sessions.find((session) => session.item.id === 'goal-thread')?.item
+        .threadGoal
+    })
+    try {
+      if (action === 'clear') await client.clearSessionGoal('goal-thread')
+      else await client.setSessionGoal('goal-thread', { status: action })
+      if (action === 'clear') expect(published).toBeNull()
+      else expect(published?.status).toBe(action)
+    } finally {
+      unsubscribe()
+    }
+  },
+)
+
+test.each(['paused', 'complete', 'clear', 'replaced'] as const)(
+  'Goal 操作 %s 在计量更新冲突后刷新，且不误改替换后的目标',
+  async (action) => {
+    const requests: Array<{ expectedVersion: number; operationId: string }> = []
+    let version = 11
+    let objective = '原目标'
+    let threadReads = 0
+    const goal = () => ({
+      id: 'same-goal-id',
+      threadId: 'goal-thread',
+      objective,
+      status: 'active',
+      tokenBudget: 200000,
+      tokensUsed: 100,
+      timeUsedSeconds: 1,
+      version,
+      completedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    const client = createDesktopClient({
+      fetch: async (_path, init) => {
+        const body = JSON.parse(String(init?.body))
+        if (body.method === 'initialized') return new Response(null, { status: 204 })
+        if (body.method === 'initialize')
+          return rpc(body.id, {
+            ...initializedResult(),
+            capabilities: [...initializedResult().capabilities, 'thread.goal.v1'],
+          })
+        if (body.method === 'project/list')
+          return rpc(body.id, { projects: [project], nextCursor: null })
+        if (body.method === 'thread/list')
+          return rpc(body.id, {
+            threads: [listItem('goal-thread', defaultSettings)],
+            nextCursor: null,
+          })
+        if (body.method === 'thread/goal/get') return rpc(body.id, { goal: goal() })
+        if (body.method === 'thread/read') {
+          threadReads++
+          return rpc(
+            body.id,
+            snapshotResult({ ...snapshot('goal-thread', defaultSettings), goal: goal() as never }),
+          )
+        }
+        if (body.method === 'thread/goal/set' || body.method === 'thread/goal/clear') {
+          requests.push(body.params)
+          if (requests.length === 1) {
+            version = 13
+            if (action === 'replaced') objective = '另一个用户的新目标'
+            return new Response(
+              JSON.stringify({
+                jsonrpc: '2.0',
+                id: body.id,
+                error: {
+                  code: -32603,
+                  message: 'Goal 已被更新，请刷新后重试',
+                  data: { code: 'CONFLICT', retryable: false },
+                },
+              }),
+              { headers: { 'content-type': 'application/json' } },
+            )
+          }
+          if (body.method === 'thread/goal/clear')
+            return rpc(body.id, { threadId: 'goal-thread', goalId: 'same-goal-id', clearedAt: now })
+          return rpc(body.id, { goal: { ...goal(), status: body.params.status } })
+        }
+        throw new Error(`Unexpected RPC: ${body.method}`)
+      },
+    })
+    if (action === 'replaced') {
+      await expect(
+        client.setSessionGoal('goal-thread', { status: 'paused' }),
+      ).rejects.toMatchObject({ code: 'GOAL_VERSION_CONFLICT' })
+      expect(requests).toHaveLength(1)
+    } else {
+      if (action === 'clear') expect(await client.clearSessionGoal('goal-thread')).toBe(true)
+      else
+        expect(await client.setSessionGoal('goal-thread', { status: action })).toMatchObject({
+          status: action,
+        })
+      expect(requests.map((request) => request.expectedVersion)).toEqual([11, 13])
+    }
+    expect(threadReads).toBe(action === 'replaced' ? 1 : 2)
+  },
+)
+
+test.each(['paused', 'complete'] as const)(
+  '取消 %s Goal 的预算上限只更新设置，不发起 Turn 或恢复目标',
+  async (status) => {
+    let goal = {
+      id: 'goal-edit',
+      threadId: 'goal-thread',
+      objective: '保留目标状态',
+      status,
+      tokenBudget: 50000 as number | null,
+      tokensUsed: 1234,
+      timeUsedSeconds: 3,
+      version: 1,
+      createdAt: now,
+      updatedAt: now,
+      completedAt: null,
+    }
+    const writes: Record<string, unknown>[] = []
+    const client = createDesktopClient({
+      fetch: async (_path, init) => {
+        const body = JSON.parse(String(init?.body))
+        if (body.method === 'initialize')
+          return rpc(body.id, {
+            ...initializedResult(),
+            capabilities: [...initializedResult().capabilities, 'thread.goal.v1'],
+          })
+        if (body.method === 'initialized') return new Response(null, { status: 204 })
+        if (body.method === 'thread/goal/get') return rpc(body.id, { goal })
+        if (body.method === 'thread/goal/set') {
+          writes.push(body.params)
+          goal = { ...goal, tokenBudget: body.params.tokenBudget, version: goal.version + 1 }
+          return rpc(body.id, { goal })
+        }
+        if (body.method === 'thread/read')
+          return rpc(
+            body.id,
+            snapshotResult({
+              ...snapshot('goal-thread', defaultSettings),
+              goal,
+            }),
+          )
+        if (body.method === 'project/list')
+          return rpc(body.id, { projects: [project], nextCursor: null })
+        throw new Error(`不应在编辑预算时调用 ${body.method}`)
+      },
+    })
+    const result = await client.setSessionGoal('goal-thread', {
+      tokenBudget: null,
+      budgetBaseline: { goalId: goal.id, tokenBudget: 50000 },
+    })
+    expect(result).toMatchObject({ status, tokenBudget: null, tokensUsed: 1234 })
+    expect(writes).toHaveLength(1)
+    expect(writes[0]).not.toHaveProperty('status')
+  },
+)
+
+function goalBudgetHarness(
+  initialBudget: number | null,
+  onWrite?: (params: Record<string, unknown>) => void,
+) {
+  let goal = {
+    id: 'goal-append',
+    threadId: 'goal-thread',
+    objective: '追加预算',
+    status: 'active',
+    tokenBudget: initialBudget as number | null,
+    tokensUsed: 40,
+    timeUsedSeconds: 1,
+    version: 1,
+    createdAt: now,
+    updatedAt: now,
+    completedAt: null,
+  }
+  const writes: Record<string, unknown>[] = []
+  let reads = 0
+  const client = createDesktopClient({
+    fetch: async (_path, init) => {
+      const body = JSON.parse(String(init?.body))
+      if (body.method === 'initialize')
+        return rpc(body.id, {
+          ...initializedResult(),
+          capabilities: [...initializedResult().capabilities, 'thread.goal.v1'],
+        })
+      if (body.method === 'initialized') return new Response(null, { status: 204 })
+      if (body.method === 'project/list')
+        return rpc(body.id, { projects: [project], nextCursor: null })
+      if (body.method === 'thread/goal/get') {
+        reads += 1
+        return rpc(body.id, { goal })
+      }
+      if (body.method === 'thread/goal/set') {
+        writes.push(body.params)
+        onWrite?.(body.params)
+        goal = {
+          ...goal,
+          tokenBudget: body.params.tokenBudget,
+          version: goal.version + 1,
+          updatedAt: now,
+        }
+        return rpc(body.id, { goal })
+      }
+      if (body.method === 'thread/read') {
+        reads += 1
+        return rpc(body.id, snapshotResult({ ...snapshot('goal-thread', defaultSettings), goal }))
+      }
+      throw new Error(`Unexpected RPC: ${body.method}`)
+    },
+  })
+  return {
+    client,
+    writes,
+    reads: () => reads,
+    goal: () => goal,
+    replace: (next: Partial<typeof goal>) => (goal = { ...goal, ...next }),
+  }
+}
+
+describe('Goal 追加预算', () => {
+  test('修改已有预算必须提供基准，缺失时不发写入', async () => {
+    const harness = goalBudgetHarness(200)
+    await expect(
+      harness.client.setSessionGoal('goal-thread', { tokenBudget: 250 }),
+    ).rejects.toThrow('预算基准')
+    expect(harness.writes).toHaveLength(0)
+  })
+
+  test('200 追加 50 提交总上限 250，而不是追加量', async () => {
+    const harness = goalBudgetHarness(200)
+    const baseline = { goalId: 'goal-append', tokenBudget: 200 }
+    const nextTotal = 250
+    const result = await harness.client.setSessionGoal('goal-thread', {
+      tokenBudget: nextTotal,
+      budgetBaseline: baseline,
+    })
+    expect(result.tokenBudget).toBe(250)
+    expect(harness.writes).toHaveLength(1)
+    expect(harness.writes[0]).toMatchObject({ tokenBudget: 250, expectedVersion: 1 })
+  })
+
+  test('目标替换或上限已变化时以基准冲突拒绝，不发写入', async () => {
+    const replaced = goalBudgetHarness(200)
+    replaced.replace({ id: 'other-goal' })
+    await expect(
+      replaced.client.setSessionGoal('goal-thread', {
+        tokenBudget: 250,
+        budgetBaseline: { goalId: 'goal-append', tokenBudget: 200 },
+      }),
+    ).rejects.toMatchObject({ code: 'GOAL_VERSION_CONFLICT' })
+    expect(replaced.writes).toHaveLength(0)
+    // The client re-reads the goal so the panel's baseline can be repaired.
+    expect(replaced.reads()).toBeGreaterThan(1)
+
+    const changed = goalBudgetHarness(200)
+    changed.replace({ tokenBudget: 300 })
+    await expect(
+      changed.client.setSessionGoal('goal-thread', {
+        tokenBudget: 250,
+        budgetBaseline: { goalId: 'goal-append', tokenBudget: 200 },
+      }),
+    ).rejects.toMatchObject({ code: 'GOAL_VERSION_CONFLICT' })
+    expect(changed.writes).toHaveLength(0)
+    expect(changed.reads()).toBeGreaterThan(1)
+  })
+
+  test('版本冲突刷新后不自动重试追加，重复点击不重复加', async () => {
+    let calls = 0
+    const harness = goalBudgetHarness(200, () => {
+      calls += 1
+    })
+    const first = await harness.client.setSessionGoal('goal-thread', {
+      tokenBudget: 250,
+      budgetBaseline: { goalId: 'goal-append', tokenBudget: 200 },
+    })
+    expect(first.tokenBudget).toBe(250)
+    // A second click computed against the stale 200 baseline must not add again.
+    await expect(
+      harness.client.setSessionGoal('goal-thread', {
+        tokenBudget: 250,
+        budgetBaseline: { goalId: 'goal-append', tokenBudget: 200 },
+      }),
+    ).rejects.toMatchObject({ code: 'GOAL_VERSION_CONFLICT' })
+    expect(calls).toBe(1)
+    expect(harness.goal().tokenBudget).toBe(250)
+  })
 })

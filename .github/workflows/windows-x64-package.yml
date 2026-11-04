@@ -4,6 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
   push:
+    branches: [main]
     tags:
       - 'v*'
 
@@ -11,12 +12,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: windows-x64-package-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   unsigned-smoke:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -24,39 +25,37 @@ jobs:
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.14
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Prepare project
+        id: project
+        uses: ./.github/actions/setup-project
       - name: Build unsigned package
+        if: steps.project.outputs.run == 'true'
         run: bun run package:win
       - name: Silent install and installed-layout smoke
+        if: steps.project.outputs.run == 'true'
         shell: pwsh
         run: pwsh -NoProfile -File scripts/smoke-installed-win-x64.ps1
 
-  release-parity:
-    if: github.event_name == 'pull_request'
+  signed-agent-parity:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 0
           persist-credentials: false
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+      - name: Prepare project
+        id: project
+        uses: ./.github/actions/setup-project
         with:
-          bun-version: 1.3.14
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-      - name: Renderer final-state accessibility
-        run: bun run --cwd apps/desktop/renderer test:a11y
+          ignore-scripts: 'true'
+          workspace: '@pidex/agent'
       - name: Build Windows x64 agent
+        if: steps.project.outputs.run == 'true'
         run: bun run build:agent
       - name: Create isolated release run context
+        if: steps.project.outputs.run == 'true'
         id: run-context
         shell: pwsh
         run: |
@@ -64,6 +63,7 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw "Failed to create the isolated release run context" }
           "created=true" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Create synthetic signing certificate
+        if: steps.project.outputs.run == 'true'
         id: parity-cert
         shell: pwsh
         timeout-minutes: 10
@@ -83,6 +83,7 @@ jobs:
           "pfx=$pfxPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
           "password=$password" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - name: Sign agent with synthetic certificate
+        if: steps.project.outputs.run == 'true'
         shell: pwsh
         env:
           PIDEX_WINDOWS_CERTIFICATE_PATH: ${{ steps.parity-cert.outputs.pfx }}
@@ -91,6 +92,7 @@ jobs:
           bun scripts/SignWinAgent.ts
           if ($LASTEXITCODE -ne 0) { throw "Synthetic Authenticode signing failed" }
       - name: Verify signed agent runtime parity
+        if: steps.project.outputs.run == 'true'
         shell: pwsh
         env:
           PARITY_THUMBPRINT: ${{ steps.parity-cert.outputs.thumbprint }}
@@ -101,7 +103,7 @@ jobs:
             --authenticode-trust-anchor $env:PARITY_THUMBPRINT
           if ($LASTEXITCODE -ne 0) { throw "Signed agent runtime parity failed" }
       - name: Remove synthetic certificate and context
-        if: always()
+        if: always() && steps.run-context.outputs.created == 'true'
         shell: pwsh
         env:
           CERT_THUMBPRINT: ${{ steps.parity-cert.outputs.thumbprint }}
@@ -118,10 +120,44 @@ jobs:
           bun scripts/ReleaseRunContext.ts dispose
           if ($LASTEXITCODE -ne 0) { throw "Failed to remove the synthetic signing context" }
 
+  accessibility:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Prepare project
+        id: project
+        uses: ./.github/actions/setup-project
+        with:
+          ignore-scripts: 'true'
+          workspace: '@pidex/renderer'
+      - name: Renderer final-state accessibility
+        if: steps.project.outputs.run == 'true'
+        run: bun run --cwd apps/desktop/renderer test:a11y --shard=${{ matrix.shard }}/2
+
+  release-parity:
+    if: always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/main')
+    needs: [signed-agent-parity, accessibility]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require signed runtime and accessibility checks
+        env:
+          SIGNED: ${{ needs.signed-agent-parity.result }}
+          ACCESSIBILITY: ${{ needs.accessibility.result }}
+        run: test "$SIGNED" = success && test "$ACCESSIBILITY" = success
+
   source-release:
     if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    runs-on: windows-latest
+    timeout-minutes: 60
     environment:
       name: ${{ contains(github.ref_name, '-') && 'beta-release' || 'release' }}
     permissions:
@@ -130,7 +166,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          fetch-depth: 0
           persist-credentials: false
       - name: Verify tag target belongs to main
         shell: bash
@@ -142,27 +177,36 @@ jobs:
           checked_out_commit="$(git rev-parse HEAD)"
           test "$tag_commit" = "$checked_out_commit"
           git merge-base --is-ancestor "$tag_commit" refs/remotes/origin/main
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
-        with:
-          bun-version: 1.3.14
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
+      - name: Prepare project
+        id: project
+        uses: ./.github/actions/setup-project
       - name: Version policy check
         shell: bash
         run: |
           set -euo pipefail
           test "$GITHUB_REPOSITORY" = "codepilotx-dev/Pidex"
           bun run version:check -- --tag "$GITHUB_REF_NAME"
-      - name: Generate release notes
+      - name: Build Windows x64 installer
         shell: bash
+        run: bun run package:win
+      - name: Silent install and installed-layout smoke
+        shell: pwsh
+        run: pwsh -NoProfile -File scripts/smoke-installed-win-x64.ps1
+      - name: Generate release notes and SHA-256 checksum
+        shell: pwsh
         run: |
-          set -euo pipefail
-          mkdir -p release
-          bun scripts/WriteReleaseNotes.ts \
-            --tag "$GITHUB_REF_NAME" \
-            --output release/RELEASE_NOTES.md
-      - name: Create GitHub Release
+          $ErrorActionPreference = "Stop"
+          $installers = @(Get-ChildItem -LiteralPath release -Filter "Pidex-Desktop-*-x64.exe" -File)
+          if ($installers.Count -ne 1) {
+            throw "Expected exactly one Windows x64 installer, found $($installers.Count)"
+          }
+          bun scripts/WriteReleaseNotes.ts --tag "$env:GITHUB_REF_NAME" --output release/RELEASE_NOTES.md
+          if ($LASTEXITCODE -ne 0) { throw "Failed to generate release notes" }
+          $installer = $installers[0]
+          $digest = (Get-FileHash -Algorithm SHA256 -LiteralPath $installer.FullName).Hash.ToLowerInvariant()
+          "$digest *$($installer.Name)" |
+            Set-Content -LiteralPath release/SHA256SUMS.txt -Encoding utf8NoBOM
+      - name: Create GitHub Release with installer
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
@@ -180,6 +224,8 @@ jobs:
             --verify-tag
             --title "Pidex $tag"
             --notes-file release/RELEASE_NOTES.md
+            release/Pidex-Desktop-*-x64.exe
+            release/SHA256SUMS.txt
           )
           if [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-(alpha|beta|rc)\.[0-9]+$ ]]; then
             release_args+=(--prerelease)

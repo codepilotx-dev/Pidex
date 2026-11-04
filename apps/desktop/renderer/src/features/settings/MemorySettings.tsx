@@ -13,7 +13,7 @@ import { SettingsDropdown } from './SettingsDropdown.js'
 import { SettingsRow } from './SettingsRow.js'
 import { SettingsSection } from './SettingsSection.js'
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch.js'
-import { useDesktopSettings } from './UseDesktopSettings.js'
+import { useDesktopSettingsField } from './UseDesktopSettings.js'
 import { Button } from '../../components/ui/Button.js'
 import { Input } from '../../components/ui/Input.js'
 
@@ -31,7 +31,19 @@ type Props = {
 }
 
 export function MemorySettings({ workspacePath }: Props): React.ReactNode {
-  const { draft } = useDesktopSettings()
+  const subscribedEnableMemory = useDesktopSettingsField((state) => state.draft.values.enableMemory)
+  const subscribedSetValue = useDesktopSettingsField((state) => state.draft.setValue)
+  const subscribedAutoSave = useDesktopSettingsField((state) => state.draft.autoSave)
+  const { draft } = useMemo(
+    () => ({
+      draft: {
+        values: { enableMemory: subscribedEnableMemory },
+        setValue: subscribedSetValue,
+        autoSave: subscribedAutoSave,
+      },
+    }),
+    [subscribedEnableMemory, subscribedSetValue, subscribedAutoSave],
+  )
   const normalizedWorkspacePath = workspacePath?.trim() ?? ''
   const hasWorkspace = normalizedWorkspacePath.length > 0
   const [memories, setMemories] = useState<DesktopProjectMemory[]>([])
@@ -173,9 +185,7 @@ export function MemorySettings({ workspacePath }: Props): React.ReactNode {
     <SettingsContentArea className="memory-settings-page">
       <div className="settings-content-inner tw:@container tw:w-full tw:min-w-0 tw:mx-auto tw:p-5 tw:max-w-[calc(var(--page-content-max-width)+var(--cpx-sys-space-5)*2)]">
         <div className="settings-page-header tw:mt-0 tw:mx-0 tw:mb-8 tw:grid tw:gap-2">
-          <h2 className="settings-page-title tw:m-0 tw:type-title-xl tw:text-app-text tw:tracking-[-0.01em]">
-            记忆
-          </h2>
+          <h2 className="settings-page-title tw:m-0 tw:type-page-title tw:text-app-text">记忆</h2>
           <p className="settings-page-desc tw:m-0 tw:max-w-[68ch] tw:text-app-text-soft tw:type-body-sm">
             管理当前工作区的自动长期记忆和召回时间线。
           </p>

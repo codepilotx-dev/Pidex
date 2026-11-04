@@ -99,16 +99,17 @@ export function ConfirmationDialog({
           ) : null}
           <div className="permission-modal-actions confirmation-dialog-actions tw:mt-2 tw:flex tw:items-center tw:justify-between tw:gap-3">
             <AlertDialog.Cancel asChild>
-              <Button className="tw:min-w-19" color="secondary">
+              <Button className="tw:min-w-19" color="secondary" size="md">
                 {cancelLabel}
               </Button>
             </AlertDialog.Cancel>
             <AlertDialog.Action asChild>
               <Button
                 className="tw:min-w-19"
+                color={tone === 'danger' ? 'dangerSolid' : 'primary'}
                 disabled={actionDisabled}
                 onClick={handleActionClick}
-                color={tone === 'danger' ? 'dangerSolid' : 'primary'}
+                size="md"
               >
                 {actionLabel}
               </Button>
@@ -202,7 +203,7 @@ export function InputDialog({
             />
             <div className="permission-modal-actions confirmation-dialog-actions tw:mt-2 tw:flex tw:items-center tw:justify-between tw:gap-3">
               <Dialog.Close asChild>
-                <Button className="tw:min-w-19" color="secondary">
+                <Button className="tw:min-w-19" color="secondary" size="md">
                   {cancelLabel}
                 </Button>
               </Dialog.Close>
@@ -210,6 +211,7 @@ export function InputDialog({
                 className="tw:min-w-19"
                 color="primary"
                 disabled={submitDisabled}
+                size="md"
                 type="submit"
               >
                 {actionLabel}

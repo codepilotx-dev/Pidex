@@ -27,14 +27,24 @@ const toProtocolModel = (model: Model<Api>, protocol: DeepSeekProtocol): Model<A
 export const createPiDeepSeekProvider = (
   source: Provider<Api>,
   protocol: DeepSeekProtocol,
-): Provider<Api> =>
-  createProvider({
+): Provider<Api> => {
+  const mappedModels = new WeakMap<Model<Api>, Model<Api>>()
+  const getModels = () =>
+    source.getModels().map((model) => {
+      let mapped = mappedModels.get(model)
+      if (!mapped) {
+        mapped = toProtocolModel(model, protocol)
+        mappedModels.set(model, mapped)
+      }
+      return mapped
+    })
+  const provider = createProvider({
     id: source.id,
     name: source.name,
     baseUrl: DEEPSEEK_PROTOCOL_ENDPOINTS[protocol],
     ...(source.headers ? { headers: source.headers } : {}),
     auth: source.auth,
-    models: source.getModels().map((model) => toProtocolModel(model, protocol)),
+    models: getModels(),
     api: piProviderApiStreams[protocol](),
     ...(source.refreshModels
       ? {
@@ -49,3 +59,10 @@ export const createPiDeepSeekProvider = (
         }
       : {}),
   })
+
+  return {
+    ...provider,
+    getModels,
+    getAllModels: getModels,
+  }
+}

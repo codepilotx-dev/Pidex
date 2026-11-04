@@ -23,3 +23,73 @@ export function errorMessageOf(error: unknown): string {
 export function errorMessageOr(error: unknown, fallback: string): string {
   return errorMessageOf(error) || fallback
 }
+
+const STACK_LINE_REGEX = /(?:^|\r?\n)\s*(?:at\s+|Traceback\b|Error:\s*\n)/i
+const AT_OBJECT_REGEX = /\bat Object\./
+const STACK_CALL_SITE_REGEX = /\b[A-Za-z0-9_$.]+@[A-Za-z0-9_./:-]+/
+const STACK_LOCATION_REGEX = /\b\w+\.[jt]sx?:\d+:\d+\b/
+// 上面的正则对超长点号串有回溯风险；先按行长度快速排除，绝大多数错误消息远小于此。
+const MAX_ERROR_MESSAGE_SCAN_LENGTH = 20_000
+
+const SENSITIVE_TOKEN_REGEX =
+  /\b(?:sk-[A-Za-z0-9_-]{16,}|gh[pousr]_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16})\b/
+const BEARER_TOKEN_REGEX = /\bBearer\s+[^\s,;"']+/i
+const CREDENTIAL_ASSIGNMENT_REGEX =
+  /\b(?:token|api[_-]?key|api[_-]?secret|access[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|credential|private[_-]?key|secret[_-]?key)\s*[:=]\s*[^\s,;"']+/i
+const CREDENTIAL_JSON_REGEX =
+  /(?:api[_-]?key|api[_-]?secret|access[_-]?key|access[_-]?token|auth[_-]?token|client[_-]?secret|password|credential|private[_-]?key|secret[_-]?key)["']?\s*:\s*["'][^"']+["']/i
+
+const WINDOWS_PATH_REGEX = /\b[A-Za-z]:[\\/][^\s,;)"']+/
+const UNC_PATH_REGEX = /\\\\[^\\\s]+\\[^\s,;)"']+/
+const SENSITIVE_UNIX_PATH_REGEX =
+  /(?:^|[^\w.-])(?:\/(?:Users|home|root|etc|var|tmp|private|opt|Windows|System32)\b[^\s,;)"']*)/i
+
+const INTERNAL_RPC_METHOD_REGEX =
+  /\b(?:thread|project|turn|interaction|worktree|automation|config|model|provider)\/[a-zA-Z0-9_-]+/
+const INTERNAL_RPC_CLASS_REGEX = /\b(?:AgentRpcError|RpcError)\b/
+const DATABASE_ERROR_REGEX =
+  /(?:\bsqlite[0-9_]*|\bno such table|\bno such column|\bconstraint failed|\bdatabase (?:is )?locked|\bsyntax error\b)/i
+
+/**
+ * 校验并提取可安全向用户展示的轮次错误详情：
+ * 排除原始堆栈、凭据、内部绝对路径、数据库底层异常及命令环境。
+ * 无法证明安全的错误返回 null，由 UI 显示通用失败提示。
+ */
+export function safeTurnError(error: unknown): string | null {
+  if (error == null) return null
+  const message = errorMessageOf(error).trim()
+  if (!message) return null
+  // 超长消息直接拒绝：既能挡住回溯风险，也避免把大段内容当成可展示错误。
+  if (message.length > MAX_ERROR_MESSAGE_SCAN_LENGTH) return null
+
+  if (
+    STACK_LINE_REGEX.test(message) ||
+    AT_OBJECT_REGEX.test(message) ||
+    STACK_CALL_SITE_REGEX.test(message) ||
+    STACK_LOCATION_REGEX.test(message)
+  ) {
+    return null
+  }
+
+  if (
+    SENSITIVE_TOKEN_REGEX.test(message) ||
+    BEARER_TOKEN_REGEX.test(message) ||
+    CREDENTIAL_ASSIGNMENT_REGEX.test(message) ||
+    CREDENTIAL_JSON_REGEX.test(message)
+  ) {
+    return null
+  }
+
+  if (
+    WINDOWS_PATH_REGEX.test(message) ||
+    UNC_PATH_REGEX.test(message) ||
+    SENSITIVE_UNIX_PATH_REGEX.test(message) ||
+    INTERNAL_RPC_METHOD_REGEX.test(message) ||
+    INTERNAL_RPC_CLASS_REGEX.test(message) ||
+    DATABASE_ERROR_REGEX.test(message)
+  ) {
+    return null
+  }
+
+  return message
+}

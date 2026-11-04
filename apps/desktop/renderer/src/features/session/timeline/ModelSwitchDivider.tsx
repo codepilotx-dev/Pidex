@@ -27,7 +27,7 @@ export function ModelSwitchDivider({
     <div className="canonical-model-switch-divider">
       <span className="canonical-model-switch-divider__content">
         <ArrowRightLeft
-          size={APP_ICON_SIZES.sm}
+          size="var(--inline-icon-size, 1em)"
           strokeWidth={APP_ICON_STROKE_WIDTH}
           aria-hidden="true"
         />

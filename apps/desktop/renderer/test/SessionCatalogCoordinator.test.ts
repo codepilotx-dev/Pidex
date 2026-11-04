@@ -116,6 +116,63 @@ describe('SessionCatalogCoordinator', () => {
 
     expect(calls).toEqual(['lifecycle:completed:5', 'refresh:thread-1'])
   })
+
+  test('delivers sanitized error details for failed turn events and null for clean ones', async () => {
+    let capturedError: string | null | undefined
+    let capturedStatus: string | undefined
+    const coordinator = new SessionCatalogCoordinator({
+      onCatalogUpdated: () => {},
+      onProviderCredentialUpdated: () => {},
+      onConfigUpdated: () => {},
+      onWorkspaceFileChanged: () => {},
+      onWorkspaceGitChanged: () => {},
+      onLifecycleUpdated: (update) => {
+        capturedStatus = update.status
+        capturedError = update.error
+      },
+      refreshThreads: async () => {},
+    })
+
+    const turn = {
+      id: 'turn-1',
+      threadId: 'thread-1',
+      sourceInputID: 'input-1',
+      status: 'failed' as const,
+      mode: 'chat' as const,
+      model: { providerID: 'openai', id: 'gpt-5' },
+      permissionConfig: {
+        sandboxMode: 'workspace-write' as const,
+        approvalPolicy: 'on-request' as const,
+        approvalsReviewer: 'user' as const,
+      },
+      rootAgentId: 'agent-1',
+      mergedInputIDs: [],
+      startedAt: 1,
+      finishedAt: 2,
+      elapsedSeconds: 1,
+      error: '网络请求超时，请重试',
+    }
+
+    const failedEvent: EventEnvelope = {
+      eventId: 'ev-failed-1',
+      streamId: 'thread-1',
+      type: 'turn/failed',
+      version: 2,
+      occurredAt: 2,
+      threadId: 'thread-1',
+      turnId: 'turn-1',
+      durability: 'durable',
+      sequence: 10,
+      payload: {
+        turn,
+        error: { code: 'NETWORK_TIMEOUT', message: '网络请求超时，请重试', retryable: true },
+      },
+    }
+
+    await coordinator.deliverBatch([failedEvent])
+    expect(capturedStatus).toBe('failed')
+    expect(capturedError).toBe('网络请求超时，请重试')
+  })
 })
 
 function lifecycleEvent(
@@ -225,3 +282,36 @@ function providerCredentialEvent(): EventEnvelope {
     payload: { providerId: 'openai' },
   }
 }
+
+describe('SessionCatalogCoordinator goal reconciliation', () => {
+  test('agent-side lightweight thread/updated payload still refreshes the thread', async () => {
+    // 预算准入把目标写成 budget-limited 时，agent 会附加一条
+    // {threadId, patch, updatedAt} 形状的 thread/updated。旧实现只读
+    // payload.thread.id，取不到 id 就静默跳过，目标行于是永远停在“进行中的目标”。
+    const refreshed: string[][] = []
+    const coordinator = new SessionCatalogCoordinator({
+      onCatalogUpdated: () => {},
+      onProviderCredentialUpdated: () => {},
+      onConfigUpdated: () => {},
+      onWorkspaceFileChanged: () => {},
+      onWorkspaceGitChanged: () => {},
+      onLifecycleUpdated: () => {},
+      refreshThreads: async (threadIds) => {
+        refreshed.push([...threadIds])
+      },
+    })
+
+    await coordinator.deliverBatch([
+      {
+        id: 1,
+        type: 'thread/updated',
+        threadId: 'thread-1',
+        sequence: 1,
+        createdAt: Date.now(),
+        payload: { threadId: 'thread-1', patch: {}, updatedAt: Date.now() },
+      } as unknown as EventEnvelope,
+    ])
+
+    expect(refreshed).toEqual([['thread-1']])
+  })
+})
