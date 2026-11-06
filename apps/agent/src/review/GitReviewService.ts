@@ -41,6 +41,7 @@ const LARGE_FILE_COUNT = 128
 const LARGE_CHANGED_LINES = 9_000
 const MAX_BATCH_DIFF_BYTES = 12 * 1024 * 1024
 const MAX_BATCH_DIFF_PATHS = 128
+const SUMMARY_FILE_BATCH_SIZE = 16
 const REVIEW_SLOW_MS = 3_000
 const REVIEW_STALLED_MS = 15_000
 const EMPTY_TREE_SHA = '4b825dc642cb6eb9a060e54bf8d69288fbee4904'
@@ -705,22 +706,26 @@ export class GitReviewService {
     // ponytail: 用 stat 指纹代替逐文件内容哈希。万级变更集上 hash-object 需要整树读文件，
     // 是刷新慢的主因；size+mtimeNs+ctimeNs 的变化是内容变化的超集，只会多失效不会漏。
     const hashes = new Map<string, string>()
-    for (const path of paths) {
-      const metadata = await lstat(resolve(rootPath, path), { bigint: true }).catch((cause) => {
-        if (cause && typeof cause === 'object' && 'code' in cause && cause.code === 'ENOENT')
-          return null
-        throw cause
-      })
-      if (!metadata || !(metadata.isFile() || metadata.isSymbolicLink())) continue
-      if (metadata.isSymbolicLink()) {
-        const target = await readlink(resolve(rootPath, path), 'utf8').catch(() => '')
-        hashes.set(
-          path,
-          `symlink:${metadata.size}:${metadata.mtimeNs}:${metadata.ctimeNs}:${target}`,
-        )
-        continue
-      }
-      hashes.set(path, `${metadata.size}:${metadata.mtimeNs}:${metadata.ctimeNs}`)
+    for (let offset = 0; offset < paths.length; offset += SUMMARY_FILE_BATCH_SIZE) {
+      await Promise.all(
+        paths.slice(offset, offset + SUMMARY_FILE_BATCH_SIZE).map(async (path) => {
+          const metadata = await lstat(resolve(rootPath, path), { bigint: true }).catch((cause) => {
+            if (cause && typeof cause === 'object' && 'code' in cause && cause.code === 'ENOENT')
+              return null
+            throw cause
+          })
+          if (!metadata || !(metadata.isFile() || metadata.isSymbolicLink())) return
+          if (metadata.isSymbolicLink()) {
+            const target = await readlink(resolve(rootPath, path), 'utf8').catch(() => '')
+            hashes.set(
+              path,
+              `symlink:${metadata.size}:${metadata.mtimeNs}:${metadata.ctimeNs}:${target}`,
+            )
+            return
+          }
+          hashes.set(path, `${metadata.size}:${metadata.mtimeNs}:${metadata.ctimeNs}`)
+        }),
+      )
     }
     return hashes
   }
@@ -739,14 +744,13 @@ export class GitReviewService {
     let lines = 0
     let bytes = 0
     let lastByte = -1
-    let binary = false
     // 显式关闭：for await 在 decode/中断路径上不保证立即释放句柄，Windows 上
     // 残留句柄会让测试与真实用户的临时目录删除持续 EBUSY。
     const stream = createReadStream(entry.path)
     try {
       for await (const chunk of stream) {
         bytes += chunk.byteLength
-        if (!binary && chunk.includes(0)) binary = true
+        if (chunk.includes(0)) return { additions: null, deletions: null, binary: true }
         for (const byte of chunk) {
           if (byte === 0x0a) lines += 1
           lastByte = byte
@@ -755,7 +759,6 @@ export class GitReviewService {
     } finally {
       stream.close()
     }
-    if (binary) return { additions: null, deletions: null, binary: true }
     if (bytes > 0 && lastByte !== 0x0a) lines += 1
     return { additions: lines, deletions: 0, binary: false }
   }
@@ -816,41 +819,46 @@ export class GitReviewService {
           )
         : new Map<string, string>()
     const files: ReviewFileSummary[] = []
-    for (const entry of rawEntries) {
-      let stats: { additions: number | null; deletions: number | null; binary: boolean }
-      if (entry.status === 'untracked') {
-        stats = await this.untrackedSummaryStats(rootPath, entry.path)
-      } else {
-        stats = numstats.get(entry.path) ?? parseNumstat('')
-      }
-      const additions = stats.additions
-      const deletions = stats.deletions
-      const revision = sha256(
-        [
-          reviewSourceKey(resolved.source),
-          resolved.headSha ?? '',
-          resolved.baseSha ?? '',
-          entry.path,
-          entry.previousPath ?? '',
-          entry.status,
-          entry.oldMode,
-          entry.newMode,
-          entry.oldOid,
-          entry.newOid,
-          worktreeHashes.get(entry.path) ?? '',
-        ].join('\0'),
+    for (let offset = 0; offset < rawEntries.length; offset += SUMMARY_FILE_BATCH_SIZE) {
+      const batch = await Promise.all(
+        rawEntries.slice(offset, offset + SUMMARY_FILE_BATCH_SIZE).map(async (entry) => {
+          let stats: { additions: number | null; deletions: number | null; binary: boolean }
+          if (entry.status === 'untracked') {
+            stats = await this.untrackedSummaryStats(rootPath, entry.path)
+          } else {
+            stats = numstats.get(entry.path) ?? parseNumstat('')
+          }
+          const additions = stats.additions
+          const deletions = stats.deletions
+          const revision = sha256(
+            [
+              reviewSourceKey(resolved.source),
+              resolved.headSha ?? '',
+              resolved.baseSha ?? '',
+              entry.path,
+              entry.previousPath ?? '',
+              entry.status,
+              entry.oldMode,
+              entry.newMode,
+              entry.oldOid,
+              entry.newOid,
+              worktreeHashes.get(entry.path) ?? '',
+            ].join('\0'),
+          )
+          return {
+            path: entry.path,
+            previousPath: entry.previousPath,
+            status: entry.status,
+            additions,
+            deletions,
+            changedLines: (additions ?? 0) + (deletions ?? 0),
+            changedBytes: 0,
+            binary: stats.binary,
+            revision,
+          }
+        }),
       )
-      files.push({
-        path: entry.path,
-        previousPath: entry.previousPath,
-        status: entry.status,
-        additions,
-        deletions,
-        changedLines: (additions ?? 0) + (deletions ?? 0),
-        changedBytes: 0,
-        binary: stats.binary,
-        revision,
-      })
+      files.push(...batch)
     }
     return { files, worktreeHashes }
   }
