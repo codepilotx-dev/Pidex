@@ -9,7 +9,6 @@ import {
 } from '../../../components/ui/PopoverItem.js'
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
 import { SidebarRow } from '../../../components/ui/SidebarRow.js'
-import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
 import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import {
   pickDefaultReviewBaseBranch,
@@ -173,7 +172,6 @@ function ReviewCommitSourceSubmenu({ children }: { children: React.ReactNode }):
           className="popover-surface popover popover-sub-content popover-review-commits popover-menu--flex tw:max-h-[min(320px,calc(100vh-96px))] tw:overflow-hidden"
           collisionPadding={6}
           sideOffset={4}
-          style={buildPopoverSizingStyle({ size: 'lg' })}
         >
           {children}
         </DropdownMenu.SubContent>

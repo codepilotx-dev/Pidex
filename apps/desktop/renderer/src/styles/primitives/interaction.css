@@ -60,7 +60,7 @@
       .menubar-item,
       .segmented-control-item
     )
-    > :where(svg:not([data-icon-kind='artwork']), .ui-spinner),
+    > :where(svg:not([data-icon-kind='artwork']), .ui-spinner:not(.sidebar-session-spinner)),
   :where(
     .settings-nav-icon,
     .attachment-file-pill__icon,
@@ -91,8 +91,8 @@
     .composer-model-trigger-chevron,
     .canonical-turn-activity__chevron
   ) {
-    width: var(--cpx-sys-icon-size-sm, 12px);
-    height: var(--cpx-sys-icon-size-sm, 12px);
+    width: var(--cpx-sys-icon-size-sm, 14px);
+    height: var(--cpx-sys-icon-size-sm, 14px);
     flex-shrink: 0;
   }
 

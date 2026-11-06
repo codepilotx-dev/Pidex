@@ -16,8 +16,7 @@ import {
   Settings,
   Sparkles,
 } from 'lucide-react'
-import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
-import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { Button } from '../../../components/ui/Button.js'
 import { RemoteImage } from '../../../components/ui/RemoteImage.js'
 import { ConfirmationDialog } from '../../../components/ui/ConfirmationDialog.js'
@@ -252,6 +251,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
       {compact && updateIndicator.visible ? (
         <Button
           isIconOnly
+          iconSize={compact ? 'md' : 'sm'}
           variant="ghost"
           size="md"
           aria-label={t(updateIndicator.ariaLabel)}
@@ -266,13 +266,14 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
             })
           }}
         >
-          <Download size={APP_ICON_SIZE} />
+          <Download size={APP_ICON_SIZES.sm} />
         </Button>
       ) : null}
       <PopoverMenu
-        className="popover-menu--grid"
+        className="popover-menu--grid sidebar-account-menu"
         open={menuOpen}
         side={compact ? 'right' : 'top'}
+        sideOffset={compact ? 10 : 4}
         align="end"
         size="sm"
 
@@ -280,6 +281,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
           compact ? (
             <Button
               isIconOnly
+              iconSize="md"
               variant="ghost"
               size="md"
               active={settingsActive || menuOpen}
@@ -321,6 +323,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
       >
         <div className="popover-section">
           <PopoverItem
+            className="tw:px-1"
             icon={
               <span
                 className="popover-account-avatar tw:relative tw:inline-flex tw:size-full tw:items-center tw:justify-center tw:overflow-hidden tw:rounded-full tw:bg-app-hover tw:text-app-text tw:[&_.ui-remote-image-content]:object-cover"
@@ -340,7 +343,7 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
             description={
               githubAuthenticated
                 ? githubUser?.name && githubUser.name !== githubUser.login
-                  ? `@${githubUser.login}`
+                  ? undefined
                   : t('GitHub 账户')
                 : t('未登录')
             }
@@ -357,10 +360,10 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
             <DropdownMenu.Sub>
               <SidebarRow
                 asChild
-                className="popover-item popover-sub-trigger"
+                className="popover-item popover-sub-trigger tw:px-1"
                 leading={
                   <span className="popover-item-icon">
-                    <Gauge size={APP_ICON_SIZE} />
+                    <Gauge size={APP_ICON_SIZES.sm} />
                   </span>
                 }
                 trailing={<ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />}
@@ -374,10 +377,9 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
                   size="sm"
                   data-theme-component="dropdown-surface"
                   aria-label={t('剩余用量详情')}
-                  className="popover-surface popover popover-sub-content popover-usage-submenu tw:p-1 tw:[--popover-overflow-y:hidden]"
+                  className="popover-surface popover popover-sub-content popover-usage-submenu tw:py-1 tw:[--popover-overflow-y:hidden]"
                   collisionPadding={6}
                   sideOffset={4}
-                  style={buildPopoverSizingStyle({ size: 'sm' })}
                 >
                   <div className="popover-usage-content tw:flex tw:min-w-0 tw:flex-col tw:gap-1">
                     {usage.loading ? (
@@ -453,8 +455,9 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
             </DropdownMenu.Sub>
           ) : null}
           <PopoverItem
+            className="tw:px-1"
             disabled={petToggleBusy}
-            icon={<Egg size={APP_ICON_SIZE} />}
+            icon={<Egg size={APP_ICON_SIZES.sm} />}
             onClick={() => {
               void togglePet()
             }}
@@ -462,8 +465,9 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
             {t(petEnabled ? '隐藏宠物' : '显示宠物')}
           </PopoverItem>
           <PopoverItem
+            className="tw:px-1"
             active={settingsActive}
-            icon={<Settings size={APP_ICON_SIZE} />}
+            icon={<Settings size={APP_ICON_SIZES.sm} />}
             shortcut="Ctrl+,"
             onClick={() => openSettings('/settings/general')}
           >
@@ -475,10 +479,10 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
           <DropdownMenu.Sub>
             <SidebarRow
               asChild
-              className="popover-item popover-sub-trigger"
+              className="popover-item popover-sub-trigger tw:px-1"
               leading={
                 <span className="popover-item-icon">
-                  <HelpCircle size={APP_ICON_SIZE} />
+                  <HelpCircle size={APP_ICON_SIZES.sm} />
                 </span>
               }
               trailing={<ChevronRight className="popover-item-arrow" size={APP_ICON_SIZES.sm} />}
@@ -492,13 +496,13 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
                 size="sm"
                 data-theme-component="dropdown-surface"
                 aria-label={t('帮助')}
-                className="popover-surface popover popover-sub-content popover-menu--grid"
+                className="popover-surface popover popover-sub-content popover-menu--grid sidebar-account-menu"
                 collisionPadding={6}
                 sideOffset={4}
-                style={buildPopoverSizingStyle({ size: 'sm' })}
               >
                 <PopoverItem
-                  icon={<Sparkles size={APP_ICON_SIZE} />}
+                  className="tw:px-1"
+                  icon={<Sparkles size={APP_ICON_SIZES.sm} />}
                   onClick={() => {
                     setMenuOpen(false)
                     onOpenWhatsNew(accountMenuTriggerRef.current)
@@ -507,13 +511,15 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
                   {t('新特性')}
                 </PopoverItem>
                 <PopoverItem
-                  icon={<Keyboard size={APP_ICON_SIZE} />}
+                  className="tw:px-1"
+                  icon={<Keyboard size={APP_ICON_SIZES.sm} />}
                   onClick={() => openSettings('/settings/shortcuts')}
                 >
                   {t('键盘快捷键')}
                 </PopoverItem>
                 <PopoverItem
-                  icon={<Download size={APP_ICON_SIZE} />}
+                  className="tw:px-1"
+                  icon={<Download size={APP_ICON_SIZES.sm} />}
                   description={updateIndicator.visible ? t(updateIndicator.ariaLabel) : undefined}
                   disabled={updateIndicator.disabled}
                   onClick={() => {
@@ -532,7 +538,8 @@ export const SidebarFooter = forwardRef<HTMLElement, SidebarFooterProps>(functio
           </DropdownMenu.Sub>
           {githubAuthenticated ? (
             <PopoverItem
-              icon={<LogOut size={APP_ICON_SIZE} />}
+              className="tw:px-1"
+              icon={<LogOut size={APP_ICON_SIZES.sm} />}
               onClick={() => {
                 setMenuOpen(false)
                 setLogoutConfirmOpen(true)

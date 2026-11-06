@@ -159,9 +159,12 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
   const syntax = dark ? DARK_SYNTAX : LIGHT_SYNTAX
   const shadowResting = 'none'
   const shadowRaised = 'none'
-  const shadowFloating = dark
-    ? 'inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 20px 52px -8px rgb(0 0 0 / 58%), 0 6px 16px -4px rgb(0 0 0 / 40%)'
+  const shadowFloatingOuter = dark
+    ? '0 20px 52px -8px rgb(0 0 0 / 58%), 0 6px 16px -4px rgb(0 0 0 / 40%)'
     : '0 16px 40px -6px rgb(0 0 0 / 14%), 0 4px 12px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 10%)'
+  const shadowFloating = dark
+    ? `inset 0 1px 0 rgba(255, 255, 255, 0.06), ${shadowFloatingOuter}`
+    : shadowFloatingOuter
   const shadowControl = 'none'
 
   return {
@@ -307,6 +310,7 @@ export function deriveThemeVariables(config: DesktopThemeConfigV1): ThemeVariabl
     '--cpx-sys-shadow-resting': 'none',
     '--cpx-sys-shadow-raised': 'none',
     '--cpx-sys-shadow-prominent': shadowFloating,
+    '--cpx-sys-shadow-floating-outer': shadowFloatingOuter,
     '--cpx-sys-shadow-floating': shadowFloating,
     '--cpx-sys-shadow-control': 'none',
 

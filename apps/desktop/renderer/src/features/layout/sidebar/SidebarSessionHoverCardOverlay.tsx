@@ -3,7 +3,6 @@ import { CircleAlert, Folder, GitBranch, GitFork, Laptop, Unlink } from 'lucide-
 import type { ThreadPullRequestSummary } from '@pidex/shared/thread'
 import { SkeletonBlock } from '../../../components/ui/Skeleton.js'
 import {
-  APP_ICON_SIZE,
   APP_ICON_STROKE_WIDTH,
   APP_ICON_SIZES,
 } from '../../../components/ui/IconTokens.js'
@@ -53,7 +52,7 @@ function PullRequestRow({
       <Icon
         aria-hidden="true"
         className={cx('tw:size-[var(--inline-icon-size,1em)]', visual.className)}
-        size={APP_ICON_SIZE}
+        size={APP_ICON_SIZES.sm}
         strokeWidth={APP_ICON_STROKE_WIDTH}
       />
       <span className="sidebar-session-hover-card-row-content tw:inline-flex tw:min-w-0 tw:items-center tw:gap-1">
@@ -227,14 +226,14 @@ export function SidebarSessionHoverCardOverlay({
                 <GitFork
                   aria-hidden="true"
                   className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
-                  size={APP_ICON_SIZE}
+                  size={APP_ICON_SIZES.sm}
                   strokeWidth={APP_ICON_STROKE_WIDTH}
                 />
               ) : (
                 <Laptop
                   aria-hidden="true"
                   className="tw:size-[var(--inline-icon-size,1em)] tw:text-app-text-meta"
-                  size={APP_ICON_SIZE}
+                  size={APP_ICON_SIZES.sm}
                   strokeWidth={APP_ICON_STROKE_WIDTH}
                 />
               )}
@@ -255,7 +254,7 @@ export function SidebarSessionHoverCardOverlay({
               <CircleAlert
                 aria-hidden="true"
                 className="sidebar-session-hover-card-error-icon tw:size-[var(--inline-icon-size,1em)] tw:text-app-danger tw:shrink-0 tw:mt-0.5"
-                size={APP_ICON_SIZE}
+                size={APP_ICON_SIZES.sm}
                 strokeWidth={APP_ICON_STROKE_WIDTH}
               />
               <span className="sidebar-session-hover-card-row-content sidebar-session-hover-card-error-text tw:min-w-0 tw:text-app-text tw:whitespace-pre-wrap tw:break-words tw:[overflow-wrap:anywhere] tw:select-text">

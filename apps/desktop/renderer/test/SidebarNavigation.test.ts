@@ -304,7 +304,6 @@ describe('Codex 侧栏导航', () => {
       createElement(SidebarNewTaskNav, {
         label: '新聊天',
         isActiveView: () => false,
-        scrollOverlapping: false,
       }),
     )
     expect(newChat).toContain('新聊天')

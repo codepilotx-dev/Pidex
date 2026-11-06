@@ -2,7 +2,7 @@ import type React from 'react'
 import { useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Box, Plug } from 'lucide-react'
-import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
@@ -113,9 +113,9 @@ export function SidebarPluginsPane({
             layout="flex"
             leading={
               option.value === 'plugins' ? (
-                <Plug size={APP_ICON_SIZE} />
+                <Plug size={APP_ICON_SIZES.sm} />
               ) : (
-                <Box size={APP_ICON_SIZE} />
+                <Box size={APP_ICON_SIZES.sm} />
               )
             }
           >

@@ -4,6 +4,7 @@ import { APP_ICON_SIZES } from './IconTokens.js'
 import { cx } from '../../utils/Cx.js'
 import { useFloatingFocusModality } from '../../utils/FloatingFocus.js'
 import { Dropdown } from './floating/Dropdown.js'
+import { OverflowTitle } from './OverflowTitle.js'
 import type { PopoverSize } from './PopoverSizing.js'
 import { useLocale } from '../../features/i18n/LocaleProvider.js'
 export type SelectOption<T extends string = string> = {
@@ -49,12 +50,12 @@ function OptionContent({
     <div className="ui-select-item-inner settings-dropdown-item-inner tw:type-row-title tw:flex tw:w-full tw:min-w-0 tw:items-center tw:gap-2">
       {option.icon}
       <div className="ui-select-item-copy settings-dropdown-item-copy tw:grid tw:min-w-0 tw:grow tw:shrink tw:basis-auto tw:gap-1">
-        <span
-          className="ui-select-item-label settings-dropdown-item-label tw:truncate tw:type-row-title"
-          title={typeof option.label === 'string' ? option.label : undefined}
+        <OverflowTitle
+          className="ui-select-item-label settings-dropdown-item-label tw:min-w-0 tw:type-row-title"
+          variant="menu"
         >
           {option.label}
-        </span>
+        </OverflowTitle>
         {option.detail ? (
           <span className="ui-select-item-detail settings-dropdown-item-detail tw:truncate tw:text-app-text-meta tw:type-caption">
             {option.detail}

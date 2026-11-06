@@ -3,6 +3,11 @@ import type React from 'react'
 export type PopoverSize = 'sm' | 'md' | 'lg' | 'auto'
 export type PopoverSizingProps = { size?: PopoverSize }
 
+/**
+ * Preset widths for independent popovers (model picker, thread summary, hover
+ * cards, date picker). Menus and selectors ignore them and size themselves from
+ * their widest option; see the menu sizing contract in `styles/popover.css`.
+ */
 export const POPOVER_PRESET_WIDTHS = { sm: 220, md: 280, lg: 360 } as const
 
 export function formatPopoverSize(size: PopoverSize): string {

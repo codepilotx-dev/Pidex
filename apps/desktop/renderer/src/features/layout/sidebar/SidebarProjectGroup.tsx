@@ -14,7 +14,7 @@ import {
   SquarePen,
   X,
 } from 'lucide-react'
-import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import type { DesktopSidebarSort, DesktopWorkspace } from '../../../../shared/Types.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
 import type { SessionListItem } from '../../../UiTypes.js'
@@ -198,20 +198,20 @@ function SidebarProjectGroupComponent({
       {
         kind: 'item',
         label: isPinned ? '取消置顶' : '置顶',
-        icon: isPinned ? <PinOff size={APP_ICON_SIZE} /> : <Pin size={APP_ICON_SIZE} />,
+        icon: isPinned ? <PinOff size={APP_ICON_SIZES.sm} /> : <Pin size={APP_ICON_SIZES.sm} />,
         onSelect: togglePinned,
       },
       {
         kind: 'item',
         label: '编辑',
-        icon: <Settings2 size={APP_ICON_SIZE} />,
+        icon: <Settings2 size={APP_ICON_SIZES.sm} />,
         onSelect: () => setManagerOpen(true),
       },
       { kind: 'separator' },
       {
         kind: 'sub',
         label: '分区',
-        icon: <List size={APP_ICON_SIZE} />,
+        icon: <List size={APP_ICON_SIZES.sm} />,
         layout: 'grid',
         children: [
           ...customSections.map((section): ContextMenuAction => ({
@@ -227,7 +227,7 @@ function SidebarProjectGroupComponent({
           {
             kind: 'item',
             label: '新建分区…',
-            icon: <Plus size={APP_ICON_SIZE} />,
+            icon: <Plus size={APP_ICON_SIZES.sm} />,
             onSelect: () => onCreateSection?.([`project:${projectKey}`]),
           },
         ],
@@ -237,7 +237,7 @@ function SidebarProjectGroupComponent({
             {
               kind: 'item' as const,
               label: '在资源管理器中打开',
-              icon: <FolderOpen size={APP_ICON_SIZE} />,
+              icon: <FolderOpen size={APP_ICON_SIZES.sm} />,
               disabled: isUnavailable,
               onSelect: () => {
                 void desktopClient.openPathWithDefaultTarget(folders[0]!.path)
@@ -249,7 +249,7 @@ function SidebarProjectGroupComponent({
       {
         kind: 'item',
         label: '归档聊天',
-        icon: <Archive size={APP_ICON_SIZE} />,
+        icon: <Archive size={APP_ICON_SIZES.sm} />,
         disabled: countedProjectSessions.length === 0 || processingAction !== null,
         onSelect: () => setConfirmArchiveOpen(true),
       },
@@ -257,7 +257,7 @@ function SidebarProjectGroupComponent({
       {
         kind: 'item',
         label: '移除项目',
-        icon: <X size={APP_ICON_SIZE} />,
+        icon: <X size={APP_ICON_SIZES.sm} />,
         onSelect: () => setConfirmRemoveOpen(true),
       },
     ]
@@ -302,7 +302,7 @@ function SidebarProjectGroupComponent({
             layout="grid"
             leading={
               <ProjectAppearanceGlyph
-                size={APP_ICON_SIZE}
+                size={APP_ICON_SIZES.sm}
                 appearance={appearance}
                 className={cx(
                   PROJECT_APPEARANCE_MARKER_CLASS,
@@ -314,7 +314,7 @@ function SidebarProjectGroupComponent({
               <>
                 <div
                   className={cx(
-                    'sidebar-project-actions tw:relative tw:min-h-6 tw:items-center tw:justify-end tw:gap-1 tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
+                    'sidebar-project-actions tw:relative tw:min-h-6 tw:items-center tw:justify-end tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto',
                     menuOpen
                       ? 'is-visible tw:flex tw:opacity-100 tw:pointer-events-auto'
                       : 'tw:hidden tw:group-hover:flex tw:group-has-[:focus-visible]:flex tw:opacity-100 tw:pointer-events-auto',
@@ -331,11 +331,11 @@ function SidebarProjectGroupComponent({
                         isIconOnly
                         className="sidebar-project-action-button"
                         variant="text"
-                        iconSize="md"
+                        iconSize="sm"
                         size="compact"
                         title="更多"
                       >
-                        <MoreHorizontal size={APP_ICON_SIZE} />
+                        <MoreHorizontal size={APP_ICON_SIZES.sm} />
                       </Button>
                     }
                     onOpenChange={setMenuOpen}
@@ -348,12 +348,12 @@ function SidebarProjectGroupComponent({
                       aria-label="新建对话"
                       className="sidebar-project-action-button"
                       variant="text"
-                      iconSize="md"
+                      iconSize="sm"
                       size="compact"
                       title="新建对话"
                       onClick={() => onCreateSession(managedProject)}
                     >
-                      <SquarePen size={APP_ICON_SIZE} />
+                      <SquarePen size={APP_ICON_SIZES.sm} />
                     </Button>
                   )}
                 </div>
@@ -364,7 +364,7 @@ function SidebarProjectGroupComponent({
                     aria-label="项目内有未读会话"
                   >
                     <span className="sidebar-status-icon tw:inline-flex tw:size-5 tw:shrink-0 tw:items-center tw:justify-center">
-                      <span className="sidebar-unread-dot tw:size-2 tw:flex-none tw:rounded-full tw:bg-app-accent" />
+                      <span className="sidebar-unread-dot tw:size-1.5 tw:flex-none tw:rounded-full tw:bg-app-accent" />
                     </span>
                   </span>
                 ) : null}

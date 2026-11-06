@@ -693,10 +693,10 @@ describe('Codex CPX design system token contract', () => {
     expectSourceContains(modal, '--cpx-comp-modal-bg')
     expectSourceContains(modal, '--cpx-comp-modal-shadow')
     expectSourceContains(popover, '--cpx-comp-dropdown-menu-bg')
-    // Tooltip 表面迁到组件 utility，仍消费 `--cpx-comp-tooltip-*` 对应的
-    // raised 表面与 floating 阴影。
+    // Tooltip 表面迁到组件 utility，仍消费 `--cpx-comp-tooltip-*`；外投影通过
+    // `--shadow-tooltip` 映射，不叠加暗色顶部内微光。
     expectSourceContains(tooltip, 'tw:bg-app-raised')
-    expectSourceContains(tooltip, 'tw:shadow-lg')
+    expectSourceContains(tooltip, 'tw:shadow-tooltip')
   })
 })
 

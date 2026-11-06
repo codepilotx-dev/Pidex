@@ -51,9 +51,15 @@ test('pull request status maps to the documented color and Chinese copy', () => 
   expect(visual('closed').className).toBe('tw:text-app-danger')
   expect(visual('draft').className).toBe('tw:text-app-text-meta')
   expect(visual('conflicts').className).toBe('tw:text-app-danger')
-  expect(visual('checks-failed').label).toBe('检查失败')
+  expect(visual('checks-failed')).toEqual({
+    className: 'tw:text-app-danger',
+    label: '检查失败',
+  })
   expect(visual('mergeable').className).toBe('tw:text-app-success')
-  expect(visual('checks-passing').label).toBe('检查通过，尚不可合并')
+  expect(visual('checks-passing')).toEqual({
+    className: 'tw:text-app-success',
+    label: '检查通过，尚不可合并',
+  })
   expect(visual('waiting', 'checks-running')).toEqual({
     className: 'tw:text-app-warning',
     label: '等待中：检查进行中',
@@ -115,6 +121,9 @@ test('sidebar marks the worktree environment and colors the primary pull request
   const multiple = renderSessionRows([session])
   expect(multiple).toContain('aria-label="Pull Request #42, Pull Request #68"')
   expect(multiple).toContain('#68 Second PR · 可合并')
+  const indicator = multiple.match(/<button[^>]*sidebar-pull-request[^>]*>[\s\S]*?<\/button>/)?.[0] ?? ''
+  expect(indicator).toContain('tw:text-app-success')
+  expect(indicator).not.toMatch(/>\s*\d+\s*</)
 })
 
 test('a local session without links shows neither the worktree nor the pull request marker', () => {

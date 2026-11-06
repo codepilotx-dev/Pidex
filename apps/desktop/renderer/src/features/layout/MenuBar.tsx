@@ -18,10 +18,8 @@ import {
   APP_ICON_SIZES,
 } from '../../components/ui/IconTokens.js'
 import { Button } from '../../components/ui/Button.js'
-import {
-  buildPopoverSizingStyle,
-  type PopoverSizingProps,
-} from '../../components/ui/PopoverSizing.js'
+import { OverflowTitle } from '../../components/ui/OverflowTitle.js'
+import { type PopoverSizingProps } from '../../components/ui/PopoverSizing.js'
 import { cx } from '../../utils/Cx.js'
 import { useFloatingFocusModality } from '../../utils/FloatingFocus.js'
 import { useEditCommands } from '../../components/ui/EditCommandProvider.js'
@@ -118,8 +116,10 @@ function MenuItem({ children, disabled, shortcut, onSelect }: MenuItemProps): Re
         onSelect()
       }}
     >
-      <span className={cx('menubar-item-label', 'tw:min-w-0', 'tw:truncate')}>{children}</span>
-      <span className="menubar-item-trailing tw:min-w-0 tw:justify-self-end tw:text-app-text-meta tw:type-caption">
+      <OverflowTitle className={cx('menubar-item-label', 'tw:min-w-0')} variant="menu">
+        {children}
+      </OverflowTitle>
+      <span className="menubar-item-trailing tw:min-w-0 tw:justify-self-end">
         {shortcut ? (
           <span
             className={cx(
@@ -128,6 +128,7 @@ function MenuItem({ children, disabled, shortcut, onSelect }: MenuItemProps): Re
               'tw:type-caption',
               'tw:whitespace-nowrap',
             )}
+            data-menu-shortcut
           >
             {shortcut}
           </span>
@@ -198,7 +199,7 @@ function AppMenu({
           data-theme-component="dropdown-surface"
           align="start"
           className={cx(
-            'popover-surface menubar-content tw:flex tw:flex-col tw:gap-1 tw:p-1',
+            'popover-surface menubar-content tw:flex tw:flex-col tw:gap-1 tw:py-1',
             // Radix 浮动层用 CSS 变量下发可用高度与变换原点，回退链无法用刻度表达。
             'tw:origin-[var(--radix-menubar-content-transform-origin,top_left)]',
             'tw:max-h-[min(calc(100vh_-_96px),var(--radix-menubar-content-available-height,calc(100vh_-_96px)))]',
@@ -208,7 +209,6 @@ function AppMenu({
           data-edit-command-preserve-target
           onCloseAutoFocus={focusModality.suppressFocusRingOnClose}
           sideOffset={4}
-          style={buildPopoverSizingStyle({ size })}
         >
           {children}
         </Menubar.Content>

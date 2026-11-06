@@ -5,7 +5,6 @@ import { Dropdown } from '../../components/ui/Dropdown.js'
 import { PopoverItem } from '../../components/ui/PopoverItem.js'
 import { SidebarRow } from '../../components/ui/SidebarRow.js'
 import { APP_ICON_SIZES, APP_ICON_STROKE_WIDTH } from '../../components/ui/IconTokens.js'
-import { buildPopoverSizingStyle } from '../../components/ui/PopoverSizing.js'
 import { cx } from '../../utils/Cx.js'
 import { ensureThemePreviewContrast } from '../theme/ThemeVariables.js'
 import { useLocale } from '../i18n/LocaleProvider.js'
@@ -119,7 +118,6 @@ export function ThemePickerDropdown({
       side="bottom"
       sideOffset={4}
       size="auto"
-      className="tw:min-w-40"
       trigger={triggerButton}
     >
       {/* 1. 顶层项：Pidex */}
@@ -158,12 +156,11 @@ export function ThemePickerDropdown({
         <DropdownMenu.Portal>
           <DropdownMenu.SubContent
             aria-label={t('Codex 主题列表')}
-            className="popover-surface popover popover-sub-content tw:p-1 tw:max-h-80 tw:overflow-y-auto"
+            className="popover-surface popover popover-sub-content tw:py-1 tw:max-h-80 tw:overflow-y-auto"
             collisionPadding={6}
             data-theme-component="dropdown-surface"
             sideOffset={4}
             size="sm"
-            style={buildPopoverSizingStyle({ size: 'sm' })}
           >
             <div className="tw:flex tw:min-w-0 tw:flex-col tw:gap-0.5">
               {otherThemes.map((theme) => (

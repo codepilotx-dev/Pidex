@@ -71,8 +71,8 @@
    */
   .desktop-sidebar {
     --sidebar-inline-gutter: var(--cpx-sys-space-2);
-    --sidebar-leading-width: var(--cpx-sys-space-6);
-    --sidebar-icon-size: var(--cpx-sys-icon-size-md);
+    --sidebar-leading-width: var(--cpx-sys-icon-size-sm);
+    --sidebar-icon-size: var(--cpx-sys-icon-size-sm);
     --sidebar-icon-button-size: var(--cpx-sys-space-6);
     --sidebar-item-gap: var(--cpx-sys-space-2);
     --sidebar-row-gap: 1px;
@@ -82,11 +82,22 @@
     --sidebar-row-radius: var(--cpx-sys-radius-md);
     --sidebar-indent-step: var(--cpx-sys-space-4);
     --sidebar-section-gap: var(--cpx-sys-space-4);
-    --sidebar-trailing-width: 60px;
+    --sidebar-trailing-gap: calc(var(--cpx-sys-space-1) / 2);
+    --sidebar-trailing-width: calc(2 * var(--sidebar-icon-button-size) + var(--sidebar-trailing-gap));
     --sidebar-row-columns: var(--sidebar-leading-width) minmax(0, 1fr) auto;
     --sidebar-session-content-indent: calc(
       var(--sidebar-inline-gutter) + var(--sidebar-indent-step)
     );
+  }
+
+  :where(
+    .sidebar-header-actions,
+    .sidebar-section-actions,
+    .sidebar-project-actions,
+    .sidebar-session-actions,
+    .sidebar-session-meta
+  ) {
+    column-gap: var(--sidebar-trailing-gap);
   }
 
   .sidebar-hover-card-surface {
@@ -317,6 +328,19 @@
  * 层中 `type-control` 的 `font` 简写，因此放在 overrides 层并消费字号 token。
  */
 @layer overrides {
+  .sidebar-account-menu {
+    --sidebar-leading-width: var(--cpx-sys-icon-size-sm);
+  }
+
+  .desktop-sidebar :is(.sidebar-row, .sidebar-show-more-actions),
+  .sidebar-account-menu .sidebar-row {
+    column-gap: calc(var(--cpx-sys-space-2) + var(--cpx-sys-space-1) / 2);
+  }
+
+  :is(.desktop-sidebar, .sidebar-hover-card-surface) {
+    --inline-icon-size: var(--cpx-sys-icon-size-sm);
+  }
+
   .sidebar-product-mode-select {
     font-size: var(--cpx-sys-font-size-lg);
   }

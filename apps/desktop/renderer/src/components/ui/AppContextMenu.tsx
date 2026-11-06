@@ -5,7 +5,8 @@ import type { DesktopEditAction } from '@pidex/shared/desktop-edit-ipc'
 import { cx } from '../../utils/Cx.js'
 import { useFloatingFocusModality } from '../../utils/FloatingFocus.js'
 import { APP_ICON_STROKE_WIDTH, APP_ICON_SIZES } from './IconTokens.js'
-import { buildPopoverSizingStyle, type PopoverSizingProps } from './PopoverSizing.js'
+import { OverflowTitle } from './OverflowTitle.js'
+import { type PopoverSizingProps } from './PopoverSizing.js'
 import { type CapturedEditCommandContext, useEditCommandActions } from './EditCommandProvider.js'
 
 export type AppContextMenuItemColor = 'red' | 'gray' | 'amber'
@@ -67,7 +68,7 @@ export function resolveAppContextMenuActions(
  */
 const CONTEXT_ITEM_LAYOUT_CLASSNAMES: Record<AppContextMenuLayout, string> = {
   flex: 'tw:flex tw:items-center tw:gap-row-gap',
-  grid: 'tw:grid tw:grid-cols-[var(--cpx-comp-menu-icon-size)_minmax(min-content,1fr)_max-content] tw:items-center tw:gap-x-row-gap',
+  grid: 'tw:grid tw:grid-cols-[var(--cpx-comp-menu-icon-size)_minmax(0,1fr)_max-content] tw:items-center tw:gap-x-row-gap',
 }
 
 const CONTEXT_LEADING_LAYOUT_CLASSNAMES: Record<AppContextMenuLayout, string> = {
@@ -156,7 +157,6 @@ export function AppContextMenu({
               setEditContext(null)
               focusModality.suppressFocusRingOnClose(event)
             }}
-            style={buildPopoverSizingStyle({ size })}
           >
             {mergedActions.map((action, index) => renderAction(action, index, layout))}
           </ContextMenu.Content>
@@ -198,15 +198,16 @@ function renderAction(
             >
               {action.icon}
             </span>
-            <span
+            <OverflowTitle
               className={cx(
                 'app-context-menu-label',
                 'sidebar-context-menu-label',
                 CONTEXT_LABEL_LAYOUT_CLASSNAMES[layout],
               )}
+              variant="menu"
             >
               {action.label}
-            </span>
+            </OverflowTitle>
             <span
               className={cx(
                 'app-context-menu-trailing',
@@ -224,11 +225,9 @@ function renderAction(
           <ContextMenu.Portal>
             <ContextMenu.SubContent
               size="sm"
-
               className={`app-context-menu-content app-context-menu-sub-content sidebar-context-menu-content app-context-menu--${action.layout}`}
               collisionPadding={6}
               sideOffset={4}
-              style={buildPopoverSizingStyle({ size: 'sm' })}
             >
               {action.children.map((child, childKey) =>
                 renderAction(child, childKey, action.layout),
@@ -259,15 +258,16 @@ function renderAction(
           >
             {action.icon}
           </span>
-          <span
+          <OverflowTitle
             className={cx(
               'app-context-menu-label',
               'sidebar-context-menu-label',
               CONTEXT_LABEL_LAYOUT_CLASSNAMES[layout],
             )}
+            variant="menu"
           >
             {action.label}
-          </span>
+          </OverflowTitle>
           <span
             className={cx(
               'app-context-menu-trailing',
@@ -277,7 +277,10 @@ function renderAction(
           >
             {action.checked ? <Check size={APP_ICON_SIZES.sm} /> : null}
             {action.shortcut ? (
-              <span className="app-context-menu-shortcut sidebar-context-menu-shortcut">
+              <span
+                className="app-context-menu-shortcut sidebar-context-menu-shortcut"
+                data-menu-shortcut
+              >
                 {action.shortcut}
               </span>
             ) : null}

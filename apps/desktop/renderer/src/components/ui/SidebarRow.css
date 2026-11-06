@@ -1,7 +1,7 @@
 @layer primitives {
   .sidebar-row {
-    --sidebar-leading-width: var(--cpx-sys-space-6, 24px);
-    --sidebar-row-columns: var(--sidebar-leading-width) minmax(0, 1fr) auto;
+    --inline-icon-size: var(--cpx-sys-icon-size-sm);
+    --sidebar-row-columns: var(--sidebar-leading-width, var(--cpx-sys-space-6, 24px)) minmax(0, 1fr) auto;
     --sidebar-row-height: 30px;
     --sidebar-row-radius: var(--cpx-sys-radius-md);
     background: var(--cpx-comp-row-bg, transparent);

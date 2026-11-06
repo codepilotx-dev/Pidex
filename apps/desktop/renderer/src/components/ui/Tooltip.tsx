@@ -719,12 +719,13 @@ export interface TooltipContentProps extends HTMLAttributes<HTMLDivElement> {
 
 const VARIANT_STYLES: Record<TooltipVariant, string> = {
   default:
-    'tw:bg-app-raised tw:text-app-text tw:border tw:border-app-border-subtle tw:shadow-lg tw:backdrop-blur-md',
+    'tw:bg-app-raised tw:text-app-text tw:border tw:border-app-border-subtle tw:shadow-tooltip tw:backdrop-blur-md',
   contrast:
-    'tw:bg-[#18181b] [data-theme=dark]_&:tw:bg-[#27272a] tw:text-white tw:border tw:border-white/10 tw:shadow-lg',
+    'tw:bg-[#18181b] [data-theme=dark]_&:tw:bg-[#27272a] tw:text-white tw:border tw:border-white/10 tw:shadow-tooltip',
   glass:
-    'tw:bg-app-glass tw:text-app-text tw:border tw:border-app-border-subtle tw:backdrop-blur-xl tw:shadow-lg',
-  accent: 'tw:bg-app-accent tw:text-app-on-accent tw:border tw:border-transparent tw:shadow-lg',
+    'tw:bg-app-glass tw:text-app-text tw:border tw:border-app-border-subtle tw:backdrop-blur-xl tw:shadow-tooltip',
+  accent:
+    'tw:bg-app-accent tw:text-app-on-accent tw:border tw:border-transparent tw:shadow-tooltip',
   unstyled: '',
 }
 

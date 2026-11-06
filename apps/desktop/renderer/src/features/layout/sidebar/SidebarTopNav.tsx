@@ -16,7 +16,7 @@ import {
   SquarePen,
   X,
 } from 'lucide-react'
-import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { Button } from '../../../components/ui/Button.js'
 import { Select } from '../../../components/ui/Select.js'
 import type { SidebarProductMode } from '../../../../shared/Types.js'
@@ -79,14 +79,14 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
   {
     view: 'new',
     label: '新建任务',
-    icon: <SquarePen size={APP_ICON_SIZE} />,
+    icon: <SquarePen size={APP_ICON_SIZES.sm} />,
     path: '/new',
     availability: { kind: 'always' },
   },
   {
     view: 'sessionGroups',
     label: '工作组',
-    icon: <MessagesSquare size={APP_ICON_SIZE} />,
+    icon: <MessagesSquare size={APP_ICON_SIZES.sm} />,
     path: '/workflows',
     availability: {
       kind: 'any-capability',
@@ -96,21 +96,21 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
   {
     view: 'automations',
     label: '已安排',
-    icon: <Clock3 size={APP_ICON_SIZE} />,
+    icon: <Clock3 size={APP_ICON_SIZES.sm} />,
     path: '/automations',
     availability: { kind: 'always' },
   },
   {
     view: 'git',
     label: 'Git 看板',
-    icon: <GitBranch size={APP_ICON_SIZE} />,
+    icon: <GitBranch size={APP_ICON_SIZES.sm} />,
     path: '/git',
     availability: { kind: 'any-capability', capabilities: ['git.review.v1'] },
   },
   {
     view: 'plugins',
     label: '插件',
-    icon: <Plug size={APP_ICON_SIZE} />,
+    icon: <Plug size={APP_ICON_SIZES.sm} />,
     path: '/plugins',
     availability: {
       kind: 'any-capability',
@@ -120,14 +120,14 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
   {
     view: 'providers',
     label: '供应商',
-    icon: <BrainCircuit size={APP_ICON_SIZE} />,
+    icon: <BrainCircuit size={APP_ICON_SIZES.sm} />,
     path: '/providers',
     availability: { kind: 'always' },
   },
   {
     view: 'pets',
     label: '宠物市场',
-    icon: <Egg size={APP_ICON_SIZE} />,
+    icon: <Egg size={APP_ICON_SIZES.sm} />,
     path: '/pets',
     availability: {
       kind: 'any-capability',
@@ -139,7 +139,7 @@ export const TOP_NAV_ITEMS: SidebarNavItem[] = [
 export const PROJECTS_NAV_ITEM: SidebarNavItem = {
   view: 'projects',
   label: '项目',
-  icon: <FolderKanban size={APP_ICON_SIZE} />,
+  icon: <FolderKanban size={APP_ICON_SIZES.sm} />,
   path: '/projects',
   availability: { kind: 'always' },
 }
@@ -283,14 +283,12 @@ export function SidebarHeader({
   showActions = true,
   hasUnread = false,
   unreadActivityCount = 0,
-  scrollOverlapping = false,
   onOpenCommandMenu,
   onNewChat,
 }: {
   showActions?: boolean
   hasUnread?: boolean
   unreadActivityCount?: number
-  scrollOverlapping?: boolean
   onOpenCommandMenu: () => void
   onNewChat?: () => void
 }): React.ReactNode {
@@ -318,10 +316,7 @@ export function SidebarHeader({
 
   return (
     <>
-      <header
-        className="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:h-9 tw:min-h-9 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2 tw:border-b tw:border-b-transparent tw:data-[scroll-overlap=true]:border-b-app-border-subtle"
-        data-scroll-overlap={scrollOverlapping ? 'true' : 'false'}
-      >
+      <header className="sidebar-header tw:mx-2 tw:my-0 tw:flex tw:h-9 tw:min-h-9 tw:shrink-0 tw:min-w-0 tw:items-center tw:justify-between tw:gap-2">
         <div className="sidebar-header-left tw:flex tw:min-w-0 tw:flex-1 tw:items-center">
           <Select<SidebarProductMode>
             ariaLabel={t('产品模式')}
@@ -339,7 +334,7 @@ export function SidebarHeader({
           />
         </div>
         {showActions ? (
-          <div className="sidebar-header-actions tw:flex tw:min-w-0 tw:shrink-0 tw:items-center tw:gap-1">
+          <div className="sidebar-header-actions tw:flex tw:min-w-0 tw:shrink-0 tw:items-center tw:gap-row-gap">
             <Popover.Root
               open={
                 !sidebarActivityCoachmarkDismissed &&
@@ -361,8 +356,8 @@ export function SidebarHeader({
                       active={sidebarTimelineEnabled}
                       className="sidebar-timeline-toggle-button"
                       color="ghost"
-                      iconSize="md"
-                      size="sm"
+                      iconSize="sm"
+                      size="compact"
                       onClick={() => {
                         if (!sidebarActivityCoachmarkDismissed) {
                           setSidebarActivityCoachmarkDismissed(true)
@@ -371,7 +366,7 @@ export function SidebarHeader({
                       }}
                       title={timelineToggleTitle}
                     >
-                      <Bell aria-hidden="true" size={APP_ICON_SIZE}>
+                      <Bell aria-hidden="true" size={APP_ICON_SIZES.sm}>
                         {hasUnread && (
                           <circle
                             cx="18"
@@ -399,6 +394,7 @@ export function SidebarHeader({
                       <span className="tw:type-row-title tw:text-app-text">{t('查看活动')}</span>
                       <Button
                         isIconOnly
+                        iconSize="sm"
                         aria-label={t('关闭')}
                         title={t('关闭')}
                         color="ghost"
@@ -421,12 +417,12 @@ export function SidebarHeader({
               aria-haspopup="dialog"
               className="sidebar-search-button"
               color="ghost"
-              iconSize="md"
-              size="sm"
+              iconSize="sm"
+              size="compact"
               onClick={onOpenCommandMenu}
               title={t('搜索任务')}
             >
-              <Search size={APP_ICON_SIZE} />
+              <Search size={APP_ICON_SIZES.sm} />
             </Button>
           </div>
         ) : null}
@@ -435,7 +431,6 @@ export function SidebarHeader({
         label="新聊天"
         onNewChat={onNewChat}
         isActiveView={(view) => view === 'new' && location.pathname === '/new'}
-        scrollOverlapping={scrollOverlapping}
       />
     </>
   )
@@ -468,19 +463,15 @@ export function SidebarTopNav({
 /**
  * 固定在侧栏顶部的“新建对话”入口；与可滚动导航共用相同的
  * active、键盘焦点、图标、路由和无障碍属性。
- * `scrollOverlapping` 由滚动视口的实际 scrollTop 驱动：
- * 内容滚过固定入口时显示边界分隔线，滚回顶部立即隐藏。
  */
 export function SidebarNewTaskNav({
   label,
   onNewChat,
   isActiveView,
-  scrollOverlapping,
 }: {
   label?: string
   onNewChat?: () => void
   isActiveView: (view: AppView) => boolean
-  scrollOverlapping: boolean
 }): React.ReactNode {
   const { t } = useLocale()
   const sidebarProductMode = useDesktopSettingsField((settings) => settings.sidebarProductMode)
@@ -494,8 +485,7 @@ export function SidebarNewTaskNav({
   return (
     <nav
       aria-label={t('新建对话')}
-      className="sidebar-new-task-nav sidebar-top-nav tw:flex tw:flex-col tw:flex-none tw:gap-0.5 tw:border-b tw:border-b-transparent tw:p-2 tw:data-[scroll-overlap=true]:border-b-app-border-subtle"
-      data-scroll-overlap={scrollOverlapping ? 'true' : 'false'}
+      className="sidebar-new-task-nav sidebar-top-nav tw:flex tw:flex-col tw:flex-none tw:gap-0.5 tw:p-2"
     >
       <SidebarNavItems
         items={label ? fixedItems.map((item) => ({ ...item, label })) : fixedItems}

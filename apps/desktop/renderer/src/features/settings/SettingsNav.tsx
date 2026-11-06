@@ -127,12 +127,12 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
     <ScrollArea
       aria-label={t('设置分类')}
       className="settings-nav-scroll-area tw:min-h-0 tw:flex-1 tw:overflow-x-hidden"
-      contentClassName="settings-nav-scroll-content tw:flex tw:min-w-0 tw:flex-col tw:gap-4 tw:px-2"
+      contentClassName="settings-nav-scroll-content tw:[--sidebar-leading-width:var(--cpx-sys-icon-size-sm)] tw:flex tw:min-w-0 tw:flex-col tw:gap-4 tw:px-2"
     >
       <div className="settings-nav-header tw:grid tw:shrink-0 tw:gap-3">
         <SidebarRow
           asChild
-          className="settings-back-btn tw:mb-2 tw:type-row-title"
+          className="settings-back-btn tw:gap-x-2.5 tw:mb-2 tw:px-1 tw:type-row-title"
           layout="grid"
           leading={<ArrowLeft size={APP_ICON_SIZE} />}
         >
@@ -194,8 +194,8 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
                         asChild
                         className={
                           pending
-                            ? 'settings-nav-item tw:type-row-title tw:whitespace-nowrap tw:opacity-50'
-                            : 'settings-nav-item tw:type-row-title tw:whitespace-nowrap'
+                            ? 'settings-nav-item tw:gap-x-2.5 tw:px-1 tw:type-row-title tw:whitespace-nowrap tw:opacity-50'
+                            : 'settings-nav-item tw:gap-x-2.5 tw:px-1 tw:type-row-title tw:whitespace-nowrap'
                         }
                         key={item.id}
                         layout="grid"

@@ -290,7 +290,7 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
         data-theme-component="dropdown-surface"
         tabIndex={-1}
         style={{ ...floatingStyle, ...style }}
-        className={`popover-surface popover tw:p-1.5  tw:select-none tw:text-[var(--cpx-sys-color-fg-primary)] ${className}`}
+        className={`popover-surface popover tw:py-1.5 tw:select-none tw:text-[var(--cpx-sys-color-fg-primary)] ${className}`}
         onKeyDown={(event) => {
           onKeyDown?.(event)
           if (
@@ -331,7 +331,7 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
         }}
       >
         {title && !showSearch && (
-          <div className="tw:px-2.5 tw:py-1 tw:type-label tw:text-[var(--cpx-sys-color-fg-tertiary)] tw:uppercase tw:tracking-[0.8px]">
+          <div className="popover-title-region tw:px-2.5 tw:py-1 tw:type-label tw:text-[var(--cpx-sys-color-fg-tertiary)] tw:uppercase tw:tracking-[0.8px]">
             {title}
           </div>
         )}
@@ -362,10 +362,10 @@ const DropdownContent = forwardRef<HTMLDivElement, DropdownContentProps>(
             {children}
           </SearchContext.Provider>
         </div>
-        {footer}
+        {footer ? <div className="popover-footer-region">{footer}</div> : null}
         {empty && (
           <div
-            className="tw:px-2.5 tw:py-3 tw:text-center tw:text-[var(--cpx-sys-color-fg-tertiary)] tw:type-caption"
+            className="popover-empty-region tw:px-2.5 tw:py-3 tw:text-center tw:text-[var(--cpx-sys-color-fg-tertiary)] tw:type-caption"
             role="status"
           >
             {emptyText}

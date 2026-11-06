@@ -124,6 +124,8 @@
   --shadow-md: var(--cpx-sys-shadow-raised);
   --shadow-lg: var(--cpx-sys-shadow-floating);
   --shadow-prominent: var(--cpx-sys-shadow-prominent);
+  --shadow-floating-outer: var(--cpx-sys-shadow-floating-outer);
+  --shadow-tooltip: var(--cpx-comp-tooltip-shadow);
 
   --blur-sm: var(--cpx-sys-blur-sm);
   --blur-md: var(--cpx-sys-blur-md);

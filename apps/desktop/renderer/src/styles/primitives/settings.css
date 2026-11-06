@@ -370,11 +370,11 @@
    * Dropdown panel variables. The live values are set from `Select.tsx` as
    * arbitrary Tailwind properties (`tw:[--popover-max-height:…]`), which the
    * custom-property scan cannot see, so the declared defaults stay here next to
-   * the shared popover rules that read them.
+   * the shared popover rules that read them. Menu width is owned by the menu
+   * sizing contract in `styles/popover.css`.
    */
   .settings-dropdown-content {
     --popover-max-height: min(320px, calc(100vh - 96px));
-    --popover-max-width: min(360px, calc(100vw - 16px));
     --popover-overflow-y: hidden;
   }
 

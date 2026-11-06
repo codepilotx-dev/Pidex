@@ -109,7 +109,9 @@
     --cpx-comp-tooltip-backdrop-filter: none;
     --cpx-comp-tooltip-fg: var(--cpx-sys-color-fg-primary);
     --cpx-comp-tooltip-border: 1px solid var(--cpx-sys-color-border-subtle);
-    --cpx-comp-tooltip-shadow: var(--cpx-sys-shadow-floating);
+
+    /* Tooltip 只保留外投影；暗色模式顶部微光只属于通用浮层表面。 */
+    --cpx-comp-tooltip-shadow: var(--cpx-sys-shadow-floating-outer);
     --cpx-comp-tooltip-radius: var(--cpx-sys-radius-sm);
     --cpx-comp-scrollbar-slider-bg: var(--cpx-sys-color-border-default);
     --cpx-comp-scrollbar-slider-hover-bg: var(--cpx-sys-color-border-strong);

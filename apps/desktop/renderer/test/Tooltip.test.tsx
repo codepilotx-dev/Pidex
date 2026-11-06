@@ -270,7 +270,7 @@ describe('Tooltip variants and visual styling', () => {
     expect(html).toContain('position:fixed')
   })
 
-  test('default variant includes CPX raised surface, subtle border and floating shadow', () => {
+  test('default variant includes CPX raised surface, subtle border and outer-only tooltip shadow', () => {
     const html = renderToStaticMarkup(
       <Tooltip content="帮助文本" defaultOpen variant="default">
         <button>触发器</button>
@@ -279,7 +279,8 @@ describe('Tooltip variants and visual styling', () => {
     expect(html).toContain('tw:bg-app-raised')
     expect(html).toContain('tw:text-app-text')
     expect(html).toContain('tw:border-app-border-subtle')
-    expect(html).toContain('tw:shadow-lg')
+    expect(html).toContain('tw:shadow-tooltip')
+    expect(html).not.toContain('tw:shadow-lg')
     expect(html).toContain('tw:type-caption')
     expect(html).toContain('tooltip-presence')
     expect(html).toContain('tooltip-content')

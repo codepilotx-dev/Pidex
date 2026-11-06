@@ -102,6 +102,16 @@
     --interactive-row-current-gap: 8px;
   }
 
+  /*
+   * Permission selector scroll areas: bound the single grid track so long rows
+   * ellipsize inside the menu clamp instead of sizing the track to their
+   * max-content width and overflowing it.
+   */
+  .permission-select-scroll-area,
+  .permission-select-scroll-content {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .permission-select-scroll-content {
     gap: var(--cpx-comp-row-gap-y);
   }

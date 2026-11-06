@@ -31,13 +31,11 @@ export function useSidebarScrollController({
   modeKey,
   positions,
   viewportRef,
-  onScrollOverlapChange,
 }: {
   activeSessionId: string | null
   modeKey: SidebarScrollModeKey
   positions: Map<SidebarScrollModeKey, number>
   viewportRef: React.RefObject<HTMLDivElement | null>
-  onScrollOverlapChange: (overlapping: boolean) => void
 }): {
   onScroll: (event: React.UIEvent<HTMLDivElement>) => void
 } {
@@ -63,12 +61,11 @@ export function useSidebarScrollController({
 
     programmaticScrollRef.current = true
     viewport.scrollTop = positions.get(modeKey) ?? 0
-    onScrollOverlapChange(viewport.scrollTop > 0)
     const frame = window.requestAnimationFrame(() => {
       programmaticScrollRef.current = false
     })
     return () => window.cancelAnimationFrame(frame)
-  }, [modeKey, onScrollOverlapChange, positions, viewportRef])
+  }, [modeKey, positions, viewportRef])
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current
@@ -107,7 +104,6 @@ export function useSidebarScrollController({
   const onScroll = useCallback(
     (event: React.UIEvent<HTMLDivElement>): void => {
       const viewport = event.currentTarget
-      onScrollOverlapChange(viewport.scrollTop > 0)
       if (saveTimerRef.current !== null) {
         window.clearTimeout(saveTimerRef.current)
       }
@@ -116,7 +112,7 @@ export function useSidebarScrollController({
         saveTimerRef.current = null
       }, 100)
     },
-    [onScrollOverlapChange, positions],
+    [positions],
   )
 
   useLayoutEffect(

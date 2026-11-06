@@ -4,7 +4,7 @@ import { SearchInput } from '../../../components/ui/SearchInput.js'
 import { SearchHeading } from '../../../components/ui/SearchHeading.js'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import { BrainCircuit, Plus, Store } from 'lucide-react'
-import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import {
@@ -87,7 +87,7 @@ export function SidebarProvidersPane(): React.ReactNode {
           active={onMarketRoute}
           asChild
           layout="grid"
-          leading={<Store aria-hidden size={APP_ICON_SIZE} />}
+          leading={<Store aria-hidden size={APP_ICON_SIZES.sm} />}
         >
           <button
             type="button"
@@ -101,7 +101,7 @@ export function SidebarProvidersPane(): React.ReactNode {
           active={creatingProvider}
           asChild
           layout="grid"
-          leading={<Plus aria-hidden size={APP_ICON_SIZE} />}
+          leading={<Plus aria-hidden size={APP_ICON_SIZES.sm} />}
         >
           <button
             type="button"
@@ -149,7 +149,7 @@ export function SidebarProvidersPane(): React.ReactNode {
                         <span className="tw:flex tw:size-4 tw:shrink-0 tw:items-center tw:justify-center">
                           <ProviderIcon
                             className="tw:size-4 tw:shrink-0"
-                            fallback={<BrainCircuit aria-hidden size={APP_ICON_SIZE} />}
+                            fallback={<BrainCircuit aria-hidden size={APP_ICON_SIZES.sm} />}
                             imageClassName="tw:object-contain tw:[.dark-theme_&]:invert tw:[.dark-theme_&]:hue-rotate-180"
                             logoURL={provider.logoURL}
                             providerID={provider.providerID}

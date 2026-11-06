@@ -201,6 +201,9 @@ describe('fixed Codex UI themes', () => {
     expect(light['--cpx-sys-shadow-raised']).toBe('none')
     expect(dark['--cpx-sys-shadow-resting']).toBe('none')
     expect(dark['--cpx-sys-shadow-raised']).toBe('none')
+    expect(light['--cpx-sys-shadow-floating-outer']).not.toContain('inset')
+    expect(dark['--cpx-sys-shadow-floating-outer']).not.toContain('inset')
+    expect(dark['--cpx-sys-shadow-floating-outer']).toContain('rgb(0 0 0 /')
 
     const stylesheet = await Bun.file(
       new URL('../src/styles/design-system/tokens.css', import.meta.url),
@@ -209,7 +212,15 @@ describe('fixed Codex UI themes', () => {
 
     expect(normalizedStylesheet).toContain('--cpx-sys-shadow-raised: none;')
     expect(normalizedStylesheet).toContain('--cpx-sys-shadow-resting: none;')
+    expect(normalizedStylesheet).toContain('--cpx-sys-shadow-floating-outer')
     expect(normalizedStylesheet).toContain('--cpx-sys-shadow-floating')
+
+    const tailwind = await Bun.file(new URL('../src/styles/tailwind.css', import.meta.url)).text()
+    const normalizedTailwind = tailwind.replace(/\s+/g, ' ')
+    expect(normalizedTailwind).toContain(
+      '--shadow-floating-outer: var(--cpx-sys-shadow-floating-outer);',
+    )
+    expect(normalizedTailwind).toContain('--shadow-tooltip: var(--cpx-comp-tooltip-shadow);')
   })
 
   test('uses the recovered Codex runtime formulas for Dracula', () => {

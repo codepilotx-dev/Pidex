@@ -174,7 +174,7 @@ test('running takes precedence over unread and waiting transitions preserve unre
   expect(render('running', 'waiting-question')).toContain('需要用户输入')
   expect(render('running', 'waiting-permission')).toContain('等待批准')
   const complete = render('done', 'completed')
-  expect(complete).toContain('sidebar-unread-dot tw:size-2')
+  expect(complete).toContain('sidebar-unread-dot tw:size-1.5')
   expect(complete).not.toContain('sidebar-session-spinner')
 })
 

@@ -11,7 +11,7 @@ import { SegmentedControl } from '../../../components/ui/SegmentedControl.js'
 
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { Button } from '../../../components/ui/Button.js'
-import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { SidebarEmptyRow, SidebarRow } from '../../../components/ui/SidebarRow.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 
@@ -99,7 +99,7 @@ export function SidebarScheduledPane(): ReactNode {
           title={t('新建任务')}
         >
           <Link onClick={controller.cancelDraft} to="/automations?automationMode=create">
-            <Plus aria-hidden size={APP_ICON_SIZE} />
+            <Plus aria-hidden size={APP_ICON_SIZES.sm} />
           </Link>
         </Button>
       </header>
@@ -113,7 +113,7 @@ export function SidebarScheduledPane(): ReactNode {
               asChild
               key={option.value}
               layout="flex"
-              leading={<Icon aria-hidden size={APP_ICON_SIZE} />}
+              leading={<Icon aria-hidden size={APP_ICON_SIZES.sm} />}
             >
               <button
                 type="button"
@@ -186,9 +186,9 @@ export function SidebarScheduledPane(): ReactNode {
                     }
                   >
                     {open ? (
-                      <ChevronDown size={APP_ICON_SIZE} />
+                      <ChevronDown size={APP_ICON_SIZES.sm} />
                     ) : (
-                      <ChevronRight size={APP_ICON_SIZE} />
+                      <ChevronRight size={APP_ICON_SIZES.sm} />
                     )}
                   </Button>
                   <SidebarRow

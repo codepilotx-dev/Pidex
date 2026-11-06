@@ -12,7 +12,7 @@ import {
   X,
 } from 'lucide-react'
 import { AnimatePresence, motion, useIsPresent } from 'motion/react'
-import { APP_ICON_SIZE, APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import type {
   DesktopSidebarOrganization,
   DesktopSidebarSort,
@@ -102,7 +102,7 @@ const SECTION_TITLE_CLASS =
 const SECTION_TOGGLE_CLASS =
   'sidebar-section-toggle tw:grid tw:w-full tw:min-w-0 tw:grid-cols-[auto_minmax(0,1fr)] tw:items-center tw:gap-x-2 tw:cursor-pointer tw:border-0 tw:bg-transparent tw:p-0 tw:text-left tw:text-inherit'
 const SECTION_ACTIONS_CLASS =
-  'sidebar-section-actions tw:flex tw:w-full tw:items-center tw:justify-end tw:gap-1 tw:opacity-0 tw:pointer-events-none tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto'
+  'sidebar-section-actions tw:flex tw:w-full tw:items-center tw:justify-end tw:opacity-0 tw:pointer-events-none tw:transition-opacity tw:duration-feedback tw:ease-out tw:group-hover:opacity-100 tw:group-hover:pointer-events-auto tw:group-has-[:focus-visible]:opacity-100 tw:group-has-[:focus-visible]:pointer-events-auto tw:has-[[data-state=open]]:opacity-100 tw:has-[[data-state=open]]:pointer-events-auto'
 /* 展开/折叠箭头：随 aria-expanded 旋转，hover 时显现。 */
 const SECTION_CHEVRON_CLASS =
   'sidebar-section-chevron tw:inline-flex tw:flex-none tw:items-center tw:text-app-text-meta tw:opacity-0 tw:pointer-events-none tw:group-hover:opacity-100 tw:[transition:opacity_var(--cpx-sys-motion-feedback)_var(--cpx-sys-ease-out),color_var(--cpx-sys-motion-feedback)_var(--cpx-sys-ease-out),transform_var(--cpx-sys-motion-disclosure)_var(--cpx-sys-ease-disclosure)]'
@@ -115,7 +115,7 @@ const SECTION_CONTENT_CLASS =
   'sidebar-section-content tw:grid tw:min-w-0 tw:sidebar-row-gap tw:overflow-hidden tw:pt-0'
 /* 更多/收起操作行：与分组行同一 gutter，1px 行间距。 */
 const SHOW_MORE_ACTIONS_CLASS =
-  'sidebar-show-more-actions tw:grid tw:w-full tw:box-border tw:min-h-7 tw:items-center tw:gap-x-2 tw:grid-cols-[var(--sidebar-row-columns)] tw:rounded-md tw:px-2 tw:py-1 tw:text-left tw:text-app-text-meta tw:type-control tw:no-underline tw:transition-[background-color,box-shadow,color] tw:duration-feedback tw:ease-standard'
+  'sidebar-show-more-actions tw:grid tw:w-full tw:box-border tw:min-h-7 tw:items-center tw:gap-x-0.5 tw:grid-cols-[var(--sidebar-row-columns)] tw:rounded-md tw:px-2 tw:py-1 tw:text-left tw:text-app-text-meta tw:type-control tw:no-underline tw:transition-[background-color,box-shadow,color] tw:duration-feedback tw:ease-standard'
 const SHOW_MORE_ROW_CLASS = 'sidebar-row-main tw:min-w-0 tw:flex tw:items-center tw:gap-4'
 const SHOW_MORE_BUTTON_CLASS =
   'tw:w-auto sidebar-show-more-button tw:first:-ml-2 tw:min-w-0 tw:border-0 tw:[font:inherit]'
@@ -157,8 +157,6 @@ type Props = {
   manualOrderByScope: Record<string, string[]>
   unavailableWorkspacePaths: Set<string>
   workspace: DesktopWorkspace | null
-  /** 滚动视口是否已滚过固定入口（scrollTop > 0），驱动动态分隔线。 */
-  onScrollOverlapChange: (overlapping: boolean) => void
   projectCatalogState: SidebarProjectCatalogState
   scrollModeKey: SidebarScrollModeKey
   scrollPositions: Map<SidebarScrollModeKey, number>
@@ -268,7 +266,6 @@ function SidebarBodyContent({
   manualOrderByScope,
   unavailableWorkspacePaths,
   workspace,
-  onScrollOverlapChange,
   projectCatalogState,
   scrollModeKey,
   scrollPositions,
@@ -320,7 +317,6 @@ function SidebarBodyContent({
     modeKey: scrollModeKey,
     positions: scrollPositions,
     viewportRef: scrollViewportRef,
-    onScrollOverlapChange,
   })
   const unavailablePaths = useMemo(
     () => new Set([...unavailableWorkspacePaths].map((path) => normalizeSidebarPath(path))),
@@ -496,11 +492,11 @@ function SidebarBodyContent({
             )?.name ?? '项目')
           : (customSections.find((item) => `section:${item.id}` === firstKey)?.title ?? '分组')
       const icon = sessionId ? (
-        <MessageSquare size={APP_ICON_SIZE} />
+        <MessageSquare size={APP_ICON_SIZES.sm} />
       ) : projectKey ? (
-        <Folder size={APP_ICON_SIZE} />
+        <Folder size={APP_ICON_SIZES.sm} />
       ) : (
-        <List size={APP_ICON_SIZE} />
+        <List size={APP_ICON_SIZES.sm} />
       )
       return { title, icon, count: items.length }
     },
@@ -968,11 +964,11 @@ function SidebarBodyContent({
                             isIconOnly
                             variant="text"
                             onClick={onChooseWorkspace}
-                            iconSize="md"
+                            iconSize="sm"
                             size="compact"
                             title="添加项目"
                           >
-                            <Plus size={APP_ICON_SIZE} />
+                            <Plus size={APP_ICON_SIZES.sm} />
                           </Button>
                         </SidebarSectionActions>
                       }
@@ -1043,11 +1039,11 @@ function SidebarBodyContent({
                       isIconOnly
                       variant="text"
                       onClick={() => onCreateSession(null)}
-                      iconSize="md"
+                      iconSize="sm"
                       size="compact"
                       title="新建无项目任务"
                     >
-                      <SquarePen size={APP_ICON_SIZE} />
+                      <SquarePen size={APP_ICON_SIZES.sm} />
                     </Button>
                   </SidebarSectionActions>
                 }
@@ -1211,13 +1207,14 @@ function Timeline({
       {showPriority && options.hasReadActivity ? (
         <Button
           isIconOnly
+          iconSize="sm"
           aria-label="清除已读聊天"
           title="清除已读聊天"
           color="ghostSecondary"
           size="compact"
           onClick={options.onClearReadActivity}
         >
-          <RefreshCw size={APP_ICON_SIZE} />
+          <RefreshCw size={APP_ICON_SIZES.sm} />
         </Button>
       ) : null}
     </div>
@@ -1288,12 +1285,13 @@ function TimelinePriorityMenu(options: ActivityMenuProps): React.ReactNode {
       trigger={
         <Button
           isIconOnly
+          iconSize="sm"
           aria-label="活动视图选项"
           title="活动视图选项"
           color="ghostSecondary"
           size="compact"
         >
-          <Ellipsis size={APP_ICON_SIZE} />
+          <Ellipsis size={APP_ICON_SIZES.sm} />
         </Button>
       }
     >
@@ -1455,8 +1453,8 @@ function SidebarOrganizeMenu({
       side="bottom"
       sideOffset={4}
       trigger={
-        <Button isIconOnly variant="text" iconSize="md" size="compact" title="整理侧栏">
-          <Ellipsis size={APP_ICON_SIZE} />
+        <Button isIconOnly variant="text" iconSize="sm" size="compact" title="整理侧栏">
+          <Ellipsis size={APP_ICON_SIZES.sm} />
         </Button>
       }
       size="sm"
@@ -1519,7 +1517,7 @@ function SidebarOrganizeMenu({
         <>
           <PopoverSeparator />
           <PopoverItem
-            icon={<Plus size={APP_ICON_SIZE} />}
+            icon={<Plus size={APP_ICON_SIZES.sm} />}
             onClick={() => {
               setOpen(false)
               onCreateSection()
@@ -1549,8 +1547,8 @@ function SidebarPinnedSortMenu({
       side="bottom"
       sideOffset={4}
       trigger={
-        <Button isIconOnly variant="text" iconSize="md" size="compact" title="置顶排序">
-          <Ellipsis size={APP_ICON_SIZE} />
+        <Button isIconOnly variant="text" iconSize="sm" size="compact" title="置顶排序">
+          <Ellipsis size={APP_ICON_SIZES.sm} />
         </Button>
       }
       size="sm"
@@ -1586,7 +1584,7 @@ function SidebarShowMoreActions({
     <div className={SHOW_MORE_ACTIONS_CLASS}>
       <span
         aria-hidden="true"
-        className="sidebar-row-leading sidebar-row-leading-spacer tw:flex tw:size-6 tw:w-6 tw:min-w-6 tw:shrink-0 tw:grow-0 tw:basis-6 tw:items-center tw:justify-center"
+        className="sidebar-row-leading sidebar-row-leading-spacer tw:flex tw:h-6 tw:w-full tw:items-center tw:justify-center"
       />
       <div className={SHOW_MORE_ROW_CLASS}>
         {canShowMore ? (
@@ -1856,8 +1854,8 @@ function SidebarCustomSection({
               side="bottom"
               sideOffset={4}
               trigger={
-                <Button isIconOnly variant="text" iconSize="md" size="compact" title="分组操作">
-                  <Ellipsis size={APP_ICON_SIZE} />
+                <Button isIconOnly variant="text" iconSize="sm" size="compact" title="分组操作">
+                  <Ellipsis size={APP_ICON_SIZES.sm} />
                 </Button>
               }
               size="sm"
@@ -1875,7 +1873,7 @@ function SidebarCustomSection({
               </PopoverRadioGroup>
               <PopoverSeparator />
               <PopoverItem
-                icon={<SquarePen size={APP_ICON_SIZE} />}
+                icon={<SquarePen size={APP_ICON_SIZES.sm} />}
                 onClick={() => {
                   setRenameValue(section.title)
                   setRenaming(true)
@@ -1883,7 +1881,7 @@ function SidebarCustomSection({
               >
                 重命名分组
               </PopoverItem>
-              <PopoverItem icon={<X size={APP_ICON_SIZE} />} onClick={() => onDelete(section.id)}>
+              <PopoverItem icon={<X size={APP_ICON_SIZES.sm} />} onClick={() => onDelete(section.id)}>
                 删除分组
               </PopoverItem>
             </PopoverMenu>

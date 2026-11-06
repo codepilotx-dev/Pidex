@@ -6,7 +6,7 @@ import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { Popover } from '../../../components/ui/floating/Popover.js'
 import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
-import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { SkeletonBlock, SkeletonRegion } from '../../../components/ui/Skeleton.js'
 import { useDesktopSettingsField } from '../../settings/UseDesktopSettings.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
@@ -160,9 +160,9 @@ export function SidebarNavigationRailBody({
       kind: 'item' as const,
       label: t(hiddenDestinationIds.has(id) ? '固定到侧栏' : '取消固定，收进更多'),
       icon: hiddenDestinationIds.has(id) ? (
-        <Pin size={APP_ICON_SIZE} />
+        <Pin size={APP_ICON_SIZES.md} />
       ) : (
-        <PinOff size={APP_ICON_SIZE} />
+        <PinOff size={APP_ICON_SIZES.md} />
       ),
       onSelect: () => toggleDestination(id, fromRail),
     },
@@ -191,6 +191,7 @@ export function SidebarNavigationRailBody({
     >
       <Button
         isIconOnly
+        iconSize="md"
         title={t(label)}
         nativeTitle={false}
         aria-label={t(label)}
@@ -256,7 +257,7 @@ export function SidebarNavigationRailBody({
           {button(
             'home',
             '首页',
-            <Home size={APP_ICON_SIZE} />,
+            <Home size={APP_ICON_SIZES.md} />,
             () => {
               navigate(lastChatPath.current)
             },
@@ -269,6 +270,7 @@ export function SidebarNavigationRailBody({
               <Popover.Trigger asChild>
                 <Button
                   isIconOnly
+                  iconSize="md"
                   ref={moreTriggerRef}
                   title={t('更多')}
                   nativeTitle={false}
@@ -279,7 +281,7 @@ export function SidebarNavigationRailBody({
                   variant="ghost"
                   size="md"
                 >
-                  <Ellipsis size={APP_ICON_SIZE} />
+                  <Ellipsis size={APP_ICON_SIZES.md} />
                 </Button>
               </Popover.Trigger>
               <Popover.Portal>
@@ -334,7 +336,7 @@ export function SidebarNavigationRailBody({
                                   >
                                     <Pin
                                       className="tw:rotate-45"
-                                      size={APP_ICON_SIZE}
+                                      size={APP_ICON_SIZES.md}
                                       fill={pinned ? 'currentColor' : 'none'}
                                     />
                                   </Button>

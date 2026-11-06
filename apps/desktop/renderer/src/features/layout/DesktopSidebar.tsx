@@ -153,7 +153,6 @@ export function DesktopSidebar({
 }: Props): React.ReactNode {
   const { isDragActive, dropHandlers } = useSidebarFolderDrop(active, onError ?? onReport)
   const [relativeNow, setRelativeNow] = useState(() => Date.now())
-  const [sidebarScrollOverlapping, setSidebarScrollOverlapping] = useState(false)
   const sidebarScrollPositionsRef = useRef<Map<SidebarScrollModeKey, number>>(new Map())
   const {
     settingsLoaded,
@@ -715,10 +714,8 @@ export function DesktopSidebar({
         hasUnread={hasUnread}
         unreadActivityCount={unreadActivityCount}
         onOpenCommandMenu={onOpenCommandMenu}
-        scrollOverlapping={sidebarScrollOverlapping}
       />
       <SidebarBody
-        onScrollOverlapChange={setSidebarScrollOverlapping}
         projectCatalogState={projectCatalogState}
         scrollModeKey={sidebarScrollModeKey}
         scrollPositions={sidebarScrollPositionsRef.current}

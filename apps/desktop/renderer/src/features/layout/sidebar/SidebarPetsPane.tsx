@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Check, Settings } from 'lucide-react'
 import { Button } from '../../../components/ui/Button.js'
-import { APP_ICON_SIZE } from '../../../components/ui/IconTokens.js'
+import { APP_ICON_SIZES } from '../../../components/ui/IconTokens.js'
 import { ScrollArea } from '../../../components/ui/ScrollArea.js'
 import { useLocale } from '../../i18n/LocaleProvider.js'
 import { usePetCatalogController } from '../../pet/PetCatalogProvider.js'
@@ -32,7 +32,7 @@ export function SidebarPetsPane(): ReactNode {
           title={t('宠物设置')}
           onClick={() => navigate('/settings/pets')}
         >
-          <Settings aria-hidden size={APP_ICON_SIZE} />
+          <Settings aria-hidden size={APP_ICON_SIZES.sm} />
         </Button>
       </header>
       <h3 className="tw:m-0 tw:flex tw:min-h-[var(--sidebar-row-height)] tw:shrink-0 tw:items-center tw:px-4 tw:text-app-text-meta tw:type-body">
@@ -59,7 +59,7 @@ export function SidebarPetsPane(): ReactNode {
                 labelClassName="tw:min-w-0 tw:gap-3"
                 leadingMode="none"
                 trailing={
-                  selected ? <Check aria-label={t('使用中')} size={APP_ICON_SIZE} /> : undefined
+                  selected ? <Check aria-label={t('使用中')} size={APP_ICON_SIZES.sm} /> : undefined
                 }
               >
                 <button

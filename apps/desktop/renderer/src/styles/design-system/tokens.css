@@ -543,6 +543,8 @@
     --cpx-sys-shadow-raised: none;
     --cpx-sys-shadow-prominent:
       0 16px 40px -6px rgb(0 0 0 / 14%), 0 4px 12px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 10%);
+    --cpx-sys-shadow-floating-outer:
+      0 16px 40px -6px rgb(0 0 0 / 14%), 0 4px 12px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 10%);
     --cpx-sys-shadow-floating:
       0 16px 40px -6px rgb(0 0 0 / 14%), 0 4px 12px -2px rgb(0 0 0 / 8%), 0 0 1px 0 rgb(0 0 0 / 10%);
     --cpx-sys-shadow-control: none;
@@ -597,7 +599,7 @@
     --cpx-sys-focus-ring-inset: inset 0 0 0 1px var(--cpx-sys-color-border-focus);
 
     /* Button icon and action sizing */
-    --cpx-sys-icon-size-sm: 12px;
+    --cpx-sys-icon-size-sm: 14px;
     --cpx-sys-icon-size-md: 16px;
     --cpx-sys-icon-size-lg: 20px;
     --cpx-sys-icon-stroke-width: 1.6;
