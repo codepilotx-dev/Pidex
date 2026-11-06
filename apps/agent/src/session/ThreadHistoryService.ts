@@ -63,6 +63,8 @@ export class ThreadHistoryService {
     private readonly db: AgentDatabase,
     private readonly hub: EventHub,
     private readonly prepareThreadCleanup?: (threadID: string) => () => Promise<void>,
+    /** 归档同样释放该聊天持有的进程内运行时资源。 */
+    private readonly onArchived?: (threadID: string) => Promise<void>,
   ) {}
 
   getListItem(threadID: string): ThreadListItem | null {
@@ -196,6 +198,7 @@ export class ThreadHistoryService {
       updatedAt: next.updatedAt,
     })
     await Effect.runPromise(this.hub.publish(event))
+    if (patch.archived === true) await this.onArchived?.(threadID).catch(() => undefined)
     return next
   }
 
