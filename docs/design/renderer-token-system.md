@@ -146,6 +146,7 @@ Pidex 全面采用 UI-Design 视觉体系（基于 `F:\CodeProject\UI-Design`）
 - 常驻表面与凸起：`--cpx-sys-shadow-resting` / `--cpx-sys-shadow-raised`（设为 `none`，平直沉稳，不添加内阴影）。
 - 浮层与模态弹窗：`--cpx-sys-shadow-floating`（浅色 `0 16px 48px rgb(0 0 0 / 14%)`，深色 `0 16px 48px rgb(0 0 0 / 48%)`，暗色模式叠加 `inset 0 1px 0 rgba(255, 255, 255, 0.08)` 顶部微光高光）。
 - 悬浮 Composer 与高层级浮层：`--cpx-sys-shadow-prominent`（浅色 `0 24px 64px rgb(0 0 0 / 18%)`，深色 `0 24px 64px rgb(0 0 0 / 64%)`，暗色模式叠加 `inset 0 1px 0 rgba(255, 255, 255, 0.1)` 顶部微光高光）。
+- 交互浮层（Tooltip、Composer 变更摘要胶囊及返回按钮）：`--cpx-sys-shadow-floating-outer` 只保留外投影，不叠加暗色模式的顶部微光高光。
 - 悬浮控件与分段激活钮：`--cpx-sys-shadow-control`（默认使用 `none`，平直沉稳）。
 - 毛玻璃背景模糊：`--cpx-sys-blur-sm` (8px)、`--cpx-sys-blur-md` (16px)、`--cpx-sys-blur-lg` (24px)。
 
