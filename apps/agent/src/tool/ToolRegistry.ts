@@ -572,7 +572,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
     sdkName: 'Read',
     name: 'workspace.read',
     description:
-      '读取工作区内的 UTF-8 文本文件，并保存完整快照供后续写入使用；完全访问模式下也直接读取工作区外的绝对路径。',
+      '读取 UTF-8 文本文件，并保存完整快照供后续写入使用。读取工作区外文件时，直接用绝对路径调用本工具，由宿主判定是否允许或需要审批。',
     schema: z
       .object({
         file_path: z.string().min(1),
@@ -620,7 +620,7 @@ const builtinTools = (): ToolDefinition<any, any>[] => [
     sdkName: 'Write',
     name: 'workspace.write',
     description:
-      '创建或完整覆写工作区文件。已有文件必须先 Read，快照由执行器自动维护。完全访问模式下也可创建或覆写工作区外的绝对路径。',
+      '创建或完整覆写文件。已有文件必须先 Read，快照由执行器自动维护。写入工作区外文件时，直接用绝对路径调用本工具，由宿主判定是否允许或需要审批。',
     schema: z.object({ file_path: z.string().min(1), content: z.string() }).strict(),
     inputSchema: jsonObject(
       {
