@@ -113,7 +113,10 @@ export const desktopClient={
 }
 
 let script = ''
-for await (const chunk of process.stdin) script += chunk.toString('utf8')
+// 逐块解码会在多字节 UTF-8 字符跨块边界时产生替换字符，使注入的脚本语法错误。
+const chunks: Buffer[] = []
+for await (const chunk of process.stdin) chunks.push(Buffer.from(chunk))
+script = Buffer.concat(chunks).toString('utf8')
 const browser = await chromium.launch({ channel: 'chrome', headless: true })
 try {
   // 断言使用中文标签，必须与 playwright.config 一样固定 zh-CN；否则 runner 的
