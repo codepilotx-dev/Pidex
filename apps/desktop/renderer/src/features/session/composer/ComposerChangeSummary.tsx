@@ -112,7 +112,7 @@ export function ComposerChangeSummary({
         >
           <div
             aria-label="任务变更摘要"
-            className="composer-change-summary__bar tw:relative tw:inline-flex tw:z-1 tw:h-8 tw:min-h-8 tw:w-auto tw:min-w-0 tw:max-w-full tw:flex-[1_1_auto] tw:items-center tw:justify-center tw:gap-0 tw:box-border tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-0 tw:text-app-text tw:type-body-sm tw:shadow-lg tw:backdrop-blur-md"
+            className="composer-change-summary__bar tw:relative tw:inline-flex tw:z-1 tw:h-8 tw:min-h-8 tw:w-auto tw:min-w-0 tw:max-w-full tw:flex-[1_1_auto] tw:items-center tw:justify-center tw:gap-0 tw:box-border tw:overflow-hidden tw:rounded-xl tw:border tw:border-app-border-subtle tw:bg-app-raised tw:p-0 tw:text-app-text tw:type-body-sm tw:shadow-floating-outer tw:backdrop-blur-md"
             role="group"
           >
             {hasPlan ? (

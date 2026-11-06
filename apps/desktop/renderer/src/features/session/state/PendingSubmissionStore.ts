@@ -8,13 +8,13 @@ const PENDING_STATE_CHANNEL = 'pidex:pending-submission'
 export type PendingSubmissionStage = 'creating' | 'sending'
 
 /**
- * 首次发送在正式会话建立前的内存提交。只服务 pending 路由展示，
- * 不参与会话查询、订阅或 RPC；`submissionId` 就是草稿的 `clientId`。
+ * 首次发送在会话真正建立前的内存提交。`submissionId` 就是发送时预分配的
+ * 会话 ID（也等于草稿 `clientId`），因此路由、提交快照与首条消息的 `inputId`
+ * 从头到尾是同一个值，不需要在临时路由和真实路由之间搬运状态。
  */
 export type PendingSubmission = {
   submissionId: string
   sourceDraftKey: ComposerDraftKey
-  sessionId: string | null
   stage: PendingSubmissionStage
   input: DesktopUserMessageInput
   workspace: DesktopWorkspace | null
@@ -26,9 +26,9 @@ type PendingSubmissionState = {
 }
 
 /**
- * 当前窗口可见的 pending 页面与草稿交接都在 Renderer 内存里完成。
- * Electron 的多个 Renderer 进程（新窗口/宠物窗）不共享模块状态，因此
- * 需要只读广播作为旁路；接收端不加载草稿，只渲染广播的提交快照。
+ * 当前窗口可见的提交快照都在 Renderer 内存里完成。Electron 的多个 Renderer
+ * 进程（新窗口/宠物窗）不共享模块状态，因此需要只读广播作为旁路；接收端
+ * 不加载草稿，只渲染广播的提交快照。
  */
 type PendingSubmissionBroadcast = {
   source: string
@@ -64,10 +64,7 @@ class PendingSubmissionStore {
     this.#post({ submissionId: submission.submissionId, submission })
   }
 
-  update(
-    submissionId: string,
-    patch: Partial<Pick<PendingSubmission, 'sessionId' | 'stage'>>,
-  ): void {
+  update(submissionId: string, patch: Partial<Pick<PendingSubmission, 'stage'>>): void {
     const current = this.#store.getState().submissions[submissionId]
     if (!current) return
     const next = { ...current, ...patch }
@@ -124,7 +121,6 @@ export function createPendingSubmission(input: {
   return {
     submissionId: input.prepared.clientId,
     sourceDraftKey: input.sourceDraftKey,
-    sessionId: null,
     stage: 'creating',
     input: input.prepared.input,
     workspace: input.workspace,
@@ -133,20 +129,18 @@ export function createPendingSubmission(input: {
 }
 
 /**
- * 只有本次新建会话的首条消息（已提交且尚未进入 canonical projection）才允许
- * 推迟整块加载画面。历史会话、子代理和侧边聊天保持原有的加载行为。
+ * 本次新建会话的首条消息在等待期间不展示整块加载画面：消息区从提交快照
+ * 直接过渡到思考态与正式投影。历史会话、子代理和侧边聊天保持原有加载行为。
  */
 export function shouldDeferThreadLoading(input: {
   firstInputId: string | null | undefined
   isCurrentFirstSubmit: boolean
   loading: boolean
-  turnCount: number
   error: string | null
 }): boolean {
   return (
     input.isCurrentFirstSubmit &&
     input.loading &&
-    input.turnCount === 0 &&
     input.error === null &&
     Boolean(input.firstInputId)
   )
@@ -158,35 +152,4 @@ export function hasPendingInput(inputIds: Iterable<string>, inputId: string): bo
     if (candidate === inputId) return true
   }
   return false
-}
-
-export type PendingSubmissionRoute = {
-  submissionId: string
-  submission: PendingSubmission | null
-}
-
-export function readPendingSubmissionRoute(pathname: string): PendingSubmissionRoute | null {
-  const match = /^\/pending\/([^/]+)$/.exec(pathname)
-  if (!match) return null
-  const submissionId = decodeURIComponent(match[1]!)
-  return { submissionId, submission: pendingSubmissionStore.get(submissionId) }
-}
-
-/** 表单提交后同步登记 pending 并导航，不等待创建完成。 */
-export function startPendingSubmission(input: {
-  submission: PendingSubmission
-  navigate: (path: string) => void
-}): PendingSubmission {
-  pendingSubmissionStore.register(input.submission)
-  input.navigate(pendingSubmissionPath(input.submission.submissionId))
-  return input.submission
-}
-
-export function pendingSubmissionPath(submissionId: string): string {
-  return `/pending/${encodeURIComponent(submissionId)}`
-}
-
-/** 用户当前是否仍停留在该 pending 页面。 */
-export function isOnPendingSubmissionPage(pathname: string, submissionId: string): boolean {
-  return readPendingSubmissionRoute(pathname)?.submissionId === submissionId
 }

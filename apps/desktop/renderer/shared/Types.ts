@@ -1042,6 +1042,8 @@ export type DesktopStoredSettings = {
   workspaceDependenciesMigrated: boolean
   firstUseSetupCompleted?: 0 | 1
   'desktop.voice.preferredInputDeviceId': string
+  /** 输入框灰字预测；默认关闭，开启后会调用模型产生额外费用。 */
+  'desktop.composer_predictions': boolean
   personality: DesktopPersonality
   customInstructions: string
   enableMemory: boolean
@@ -1415,6 +1417,11 @@ export type CreateDesktopSessionOptions = {
   execution?: DesktopSessionExecution
   /** 失败后重试时复用同一个创建操作，避免重复创建工作树。 */
   operationId?: string
+  /**
+   * 客户端预分配的会话 ID。首条消息需要在发送时就确定路由身份，避免创建前后
+   * 走两条路由；省略时由 Agent 生成。
+   */
+  threadId?: string
   projectId?: string
   workspacePath?: string
   /** Optional workflow the new thread joins. */
@@ -1671,6 +1678,9 @@ export type GenerateDesktopTaskSuggestionsInput = {
   context: RpcParams<'task-suggestion/generate'>['context']
 }
 
+/** 输入预测只传线程与轮次身份，对话上下文由 Agent 侧读取。 */
+export type GenerateDesktopComposerPredictionInput = RpcParams<'composer-prediction/generate'>
+
 export type SaveProjectMemoryInput = {
   workspacePath: string
   relativePath: string
@@ -1796,6 +1806,9 @@ export type DesktopApi = {
   generateTaskSuggestions(
     input: GenerateDesktopTaskSuggestionsInput,
   ): Promise<RpcResult<'task-suggestion/generate'>>
+  generateComposerPrediction(
+    input: GenerateDesktopComposerPredictionInput,
+  ): Promise<RpcResult<'composer-prediction/generate'>>
   exportUserMemory(): Promise<ExportUserMemoryResult>
   importUserMemory(input: ImportUserMemoryInput): Promise<ExportUserMemoryResult>
   getBrowserState(): Promise<DesktopBrowserState>

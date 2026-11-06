@@ -904,6 +904,7 @@ function useDesktopSettingsState(
       ...(firstUseSetupCompleted === undefined ? {} : { firstUseSetupCompleted }),
       'desktop.voice.preferredInputDeviceId':
         committedDraftValues['desktop.voice.preferredInputDeviceId'],
+      'desktop.composer_predictions': committedDraftValues['desktop.composer_predictions'],
       personality,
       customInstructions,
       enableMemory,
@@ -991,6 +992,7 @@ function useDesktopSettingsState(
       workspaceDependenciesMigrated,
       firstUseSetupCompleted,
       committedDraftValues['desktop.voice.preferredInputDeviceId'],
+      committedDraftValues['desktop.composer_predictions'],
       personality,
       customInstructions,
       enableMemory,

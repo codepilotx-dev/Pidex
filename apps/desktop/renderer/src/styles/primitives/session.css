@@ -307,7 +307,7 @@
     border: 1px solid var(--cpx-sys-color-border-subtle);
     border-radius: var(--cpx-sys-radius-full);
     background: var(--cpx-sys-color-surface-raised);
-    box-shadow: var(--cpx-sys-shadow-floating);
+    box-shadow: var(--cpx-sys-shadow-floating-outer);
     backdrop-filter: var(--cpx-sys-blur-md);
     color: var(--cpx-sys-color-fg-primary);
     cursor: pointer;

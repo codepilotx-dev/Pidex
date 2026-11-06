@@ -144,6 +144,64 @@ describe('ManagedProjectlessWorkspaceService', () => {
     }
   })
 
+  test('客户端预分配的会话 ID 被采纳，重试与冲突按各自规则处理', async () => {
+    const root = await mkdtemp(join(tmpdir(), 'pidex-preassigned-thread-id-'))
+    roots.push(root)
+    const documents = join(root, 'Documents')
+    await mkdir(documents)
+    const db = new AgentDatabase(join(root, 'agent.sqlite'))
+    const managed = new ManagedProjectlessWorkspaceService(documents)
+    const resolver = new ThreadWorkspaceResolver(db, managed)
+    const threads = new ThreadService(
+      db,
+      null as never,
+      null as never,
+      null as never,
+      { setResumeHandler: () => undefined } as never,
+      null as never,
+      { setParentResumeHandler: () => undefined } as never,
+      null as never,
+      { dataRoot: root, userHome: root },
+      null as never,
+      null as never,
+      resolver,
+    )
+    try {
+      const threadID = crypto.randomUUID()
+      const operationID = crypto.randomUUID()
+      const created = await threads.create({
+        operationID,
+        threadID,
+        workspace: { kind: 'projectless', prompt: 'Preset id' },
+      })
+      // 发送时就确定的 ID 必须原样落库，路由才能一直是这条会话。
+      expect(created.id).toBe(threadID)
+      expect(db.getThread(threadID)).not.toBeNull()
+
+      // 同一 operationId 重试仍走幂等分支，返回同一个会话。
+      expect(
+        (
+          await threads.create({
+            operationID,
+            threadID,
+            workspace: { kind: 'projectless', prompt: 'Preset id' },
+          })
+        ).id,
+      ).toBe(threadID)
+
+      // 换一个 operationId 复用已有 ID 属于请求冲突，不能覆盖既有会话。
+      await expect(
+        threads.create({
+          operationID: crypto.randomUUID(),
+          threadID,
+          workspace: { kind: 'projectless', prompt: 'Another' },
+        }),
+      ).rejects.toThrow('threadId')
+    } finally {
+      db.close()
+    }
+  })
+
   test('项目 resolver 以持久 roots 为执行范围，显式空 roots 不扩大项目目录', async () => {
     const root = await mkdtemp(join(tmpdir(), 'pidex-project-workspace-test-'))
     roots.push(root)

@@ -187,6 +187,9 @@ export const threadHandlers = {
             ...(typeof params.title === 'string' ? { title: params.title } : {}),
             ...(settings ? { settings } : {}),
             workspace,
+            ...(typeof params.threadId === 'string' && params.threadId
+              ? { threadID: params.threadId }
+              : {}),
             operationID: stringParam(params, 'operationId'),
             ...(typeof params.workflowId === 'string'
               ? { sessionGroupID: params.workflowId }

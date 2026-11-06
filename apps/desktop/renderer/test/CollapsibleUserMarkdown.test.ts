@@ -9,6 +9,19 @@ import {
 } from '../src/features/session/conversation/CollapsibleUserMarkdown.js'
 
 describe('collapsible user Markdown', () => {
+  test('renders user links with reference icons and retains navigable targets', () => {
+    const html = renderToStaticMarkup(
+      React.createElement(CollapsibleUserMarkdown, {
+        text: '[会话](pidex://threads/abc) [网页](https://example.com/) [@插件](plugin://review)',
+      }),
+    )
+    expect(html).toContain('href="pidex://threads/abc"')
+    expect(html).toContain('href="https://example.com/"')
+    expect(html).toContain('data-link-kind="thread"')
+    expect(html).toContain('data-link-kind="browser"')
+    expect(html).toContain('data-link-kind="plugin"')
+  })
+
   test('renders the user message through the shared Markdown renderer', () => {
     const html = renderToStaticMarkup(
       React.createElement(CollapsibleUserMarkdown, {

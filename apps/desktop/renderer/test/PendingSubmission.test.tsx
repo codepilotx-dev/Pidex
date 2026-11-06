@@ -58,7 +58,6 @@ describe('pending submission snapshot', () => {
     })
 
     expect(submission.submissionId).toBe('draft-1')
-    expect(submission.sessionId).toBeNull()
     expect(submission.stage).toBe('creating')
     expect(submission.input.text).toBe('首次发送的消息')
     expect(submission.input.attachments?.map((attachment) => attachment.id)).toEqual([
@@ -68,15 +67,12 @@ describe('pending submission snapshot', () => {
     expect(submission.workspace?.path).toBe('/repo/pidex')
   })
 
-  test('待发送目标仍然是真实链路之外的临时记录', () => {
+  test('提交快照按草稿 clientId 登记，创建完成后只推进阶段', () => {
     const submission = pendingFrom()
     pendingSubmissionStore.register(submission)
     expect(pendingSubmissionStore.get('draft-1')?.submissionId).toBe('draft-1')
-    pendingSubmissionStore.update('draft-1', { sessionId: 'session-1', stage: 'sending' })
-    expect(pendingSubmissionStore.get('draft-1')).toMatchObject({
-      sessionId: 'session-1',
-      stage: 'sending',
-    })
+    pendingSubmissionStore.update('draft-1', { stage: 'sending' })
+    expect(pendingSubmissionStore.get('draft-1')).toMatchObject({ stage: 'sending' })
     pendingSubmissionStore.remove('draft-1')
     expect(pendingSubmissionStore.get('draft-1')).toBeNull()
   })
@@ -84,18 +80,16 @@ describe('pending submission snapshot', () => {
     expect(hasPendingInput(['other-input'], 'draft-1')).toBe(false)
     expect(hasPendingInput(['draft-1'], 'draft-1')).toBe(true)
   })
-  test('仅首次提交且尚无首屏轮次时推迟整块加载画面', () => {
+  test('首条提交尚未进入投影时推迟整块加载画面', () => {
     const base = {
       firstInputId: 'draft-1',
       isCurrentFirstSubmit: true,
       loading: true,
-      turnCount: 0,
       error: null,
     }
     expect(shouldDeferThreadLoading(base)).toBe(true)
     expect(shouldDeferThreadLoading({ ...base, isCurrentFirstSubmit: false })).toBe(false)
     expect(shouldDeferThreadLoading({ ...base, firstInputId: null })).toBe(false)
-    expect(shouldDeferThreadLoading({ ...base, turnCount: 1 })).toBe(false)
     expect(shouldDeferThreadLoading({ ...base, error: '加载失败' })).toBe(false)
     expect(shouldDeferThreadLoading({ ...base, loading: false })).toBe(false)
   })
@@ -119,6 +113,13 @@ describe('pending message rendering', () => {
     expect(markup).toContain('canonical-user-message__bubble')
     expect(markup).not.toContain('正在加载会话内容')
     expect(markup).not.toContain('停止')
+  })
+
+  test('会话建立后状态文案直接变成正在思考，不再回到准备阶段', () => {
+    const markup = render({ ...pendingFrom(), sessionId: 'session-1', stage: 'sending' })
+    expect(markup).toContain('正在思考')
+    expect(markup).not.toContain('正在开启会话…')
+    expect(markup).not.toContain('正在加载会话内容')
   })
 
   test('Skill 提交快照沿用已落盘消息的展示约定', () => {
@@ -174,11 +175,61 @@ describe('pending draft handoff', () => {
     })
     expect(store.peek('session:unused')).toBeUndefined()
   })
+
+  test('交接后移走已提交内容，但保留同一草稿身份', () => {
+    const store = new ComposerDraftStore(() => 'draft-next')
+    store.set(
+      'home',
+      draft({
+        attachments: [
+          {
+            id: 'attachment-1',
+            name: 'notes.txt',
+            path: 'notes.txt',
+            mediaType: 'text/plain',
+            sizeBytes: 5,
+            kind: 'text',
+            status: 'ready',
+          },
+        ],
+        skills: [{ name: 'review', path: 'skills/review/SKILL.md' }],
+        goalModeEnabled: true,
+      }),
+    )
+    const handoff = store.handoff('home', 'session:session-1')
+    store.clearSubmittedContent('session:session-1', handoff!.submitted.clientId)
+    const cleared = store.get('session:session-1')
+    expect(cleared.clientId).toBe('draft-1')
+    expect(cleared.document.text).toBe('')
+    expect(cleared.attachments).toEqual([])
+    expect(cleared.skills).toEqual([])
+    expect(cleared.goalModeEnabled).toBeUndefined()
+    // 身份不符时不覆盖：并发的其他提交不能清掉别人的草稿。
+    store.set('session:session-1', draft({ clientId: 'draft-later' }))
+    store.clearSubmittedContent('session:session-1', 'draft-1')
+    expect(store.get('session:session-1').clientId).toBe('draft-later')
+    expect(store.get('session:session-1').document.text).toBe('首次发送的消息')
+  })
+
+  test('提交完成时保留等待期间新输入的内容，只轮换身份', () => {
+    const store = new ComposerDraftStore(() => 'draft-next')
+    store.set('session:session-1', draft())
+    store.clearSubmittedContent('session:session-1', 'draft-1')
+    store.update('session:session-1', (current) => ({
+      ...current,
+      document: createComposerDocument('等待期间补写的内容'),
+    }))
+    const completed = store.completeSubmission('session:session-1', 'draft-1', {
+      clearContent: false,
+    })
+    expect(completed.document.text).toBe('等待期间补写的内容')
+    expect(completed.clientId).toBe('draft-next')
+  })
 })
 
 describe('composer submit transaction with pending route', () => {
-  test('创建 Promise 未完成时已登记并导航到 pending 路由', async () => {
-    const navigations: Array<{ path: string; replace?: boolean }> = []
+  test('会话 ID 在登记时就确定，创建完成后不再切换路由', async () => {
+    const navigations: string[] = []
     let releaseCreate: (sessionId: string) => void = () => undefined
     const creating = new Promise<string>((resolve) => {
       releaseCreate = resolve
@@ -186,32 +237,28 @@ describe('composer submit transaction with pending route', () => {
     const outcome = (async () =>
       executeComposerSubmitTransaction({
         draft: draft(),
-        onPrepared: () => {
-          navigations.push({ path: '/pending/draft-1', replace: true })
+        onPrepared: (prepared) => {
+          // 预分配的会话 ID 就是草稿 clientId：路由、快照与 inputId 同一个值。
+          navigations.push(`/threads/${prepared.clientId}`)
         },
         createSession: () => creating,
         onSessionCreated: () => undefined,
-        navigateToSession: (sessionId) =>
-          navigations.push({ path: `/threads/${sessionId}`, replace: true }),
         submitToSession: async () => 'sent',
       }))()
 
-    expect(navigations).toEqual([{ path: '/pending/draft-1', replace: true }])
-    releaseCreate('session-1')
-    expect(await outcome).toEqual({ status: 'sent', sessionId: 'session-1' })
-    expect(navigations).toEqual([
-      { path: '/pending/draft-1', replace: true },
-      { path: '/threads/session-1', replace: true },
-    ])
+    expect(navigations).toEqual(['/threads/draft-1'])
+    releaseCreate('draft-1')
+    expect(await outcome).toEqual({ status: 'sent', sessionId: 'draft-1' })
+    // 创建完成不产生第二次导航：这条路由从一开始就是最终会话。
+    expect(navigations).toEqual(['/threads/draft-1'])
   })
 
-  test('无效输入不登记 pending，也不触发任何导航', async () => {
+  test('无效输入不登记提交，也不触发任何导航', async () => {
     const navigations: string[] = []
     const outcome = await executeComposerSubmitTransaction({
       draft: draft({ document: createComposerDocument('   ') }),
-      onPrepared: () => navigations.push('/pending/draft-1'),
+      onPrepared: () => navigations.push('/threads/draft-1'),
       createSession: async () => 'session-1',
-      navigateToSession: (sessionId) => navigations.push(`/threads/${sessionId}`),
       submitToSession: async () => 'sent',
     })
     expect(outcome.status).toBe('failed')

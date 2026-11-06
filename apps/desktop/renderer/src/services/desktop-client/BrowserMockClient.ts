@@ -738,6 +738,7 @@ export function createBrowserMockDesktopClient(
     generateTaskSuggestions: async () => {
       throw new Error('TASK_SUGGESTIONS_UNAVAILABLE')
     },
+    generateComposerPrediction: async () => ({ prediction: null }),
     exportUserMemory: async () => ({
       memoryDir: 'mock/user-memory/',
       files: [],

@@ -34,6 +34,7 @@ import { sessionViewFallbackTitle } from '../../../UiTypes.js'
 import {
   activateSession,
   archiveSessionsAction,
+  markActiveSessionRead as markActiveSessionReadAction,
   createSessionForWorkspaceAction,
   decidePermissionAction,
   interruptSessionAction,
@@ -140,13 +141,18 @@ export type UseSessionStateResult = {
     draftKey: ComposerDraftKey,
     snapshot: ComposerDraftContentSnapshot,
   ) => boolean
+  restoreComposerDraftIfEmpty: (
+    draftKey: ComposerDraftKey,
+    snapshot: ComposerDraftContentSnapshot,
+  ) => boolean
   activateSessionById: (targetSessionId: string | null) => DesktopWorkspace | null
+  markActiveSessionRead: () => void
   createSessionForWorkspace: (
     target?: DesktopWorkspace | null,
     initialSessionName?: string,
     projectlessPrompt?: string,
     creationSurface?: ThreadCreationSurface,
-    options?: { execution?: DesktopSessionExecution; operationId?: string },
+    options?: { execution?: DesktopSessionExecution; operationId?: string; threadId?: string },
   ) => Promise<string | null>
   submitToSession: (
     targetSessionId: string,
@@ -441,6 +447,31 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     [setInput, setComposerAttachments],
   )
 
+  /**
+   * 发送失败时把原稿放回输入框。只回填仍为空的输入，等待期间输入的新内容
+   * 优先于这次恢复；草稿记录本身由 `ComposerDraftStore` 侧负责回滚。
+   */
+  const restoreComposerDraftIfEmpty = useCallback(
+    (draftKey: ComposerDraftKey, snapshot: ComposerDraftContentSnapshot): boolean => {
+      const key = composerDraftStorageKey(draftKey)
+      const currentInput = inputBySessionRef.current[key] ?? ''
+      const currentAttachments = attachmentsBySessionRef.current[key] ?? []
+      if (currentInput.trim() || currentAttachments.length > 0) return false
+      const restoredAttachments = [...snapshot.attachments]
+      inputBySessionRef.current = { ...inputBySessionRef.current, [key]: snapshot.text }
+      attachmentsBySessionRef.current = {
+        ...attachmentsBySessionRef.current,
+        [key]: restoredAttachments,
+      }
+      if (isActiveComposerDraftKey(draftKey, activeSessionIdRef.current)) {
+        setInput(snapshot.text)
+        setComposerAttachments(restoredAttachments)
+      }
+      return true
+    },
+    [setInput, setComposerAttachments],
+  )
+
   const syncPendingPermissionSessionIds = useCallback((): void => {
     const next = buildPendingPermissionSessionIds(sessionViewsRef.current)
     setPendingPermissionSessionIds((current) => (sameSessionIdSet(current, next) ? current : next))
@@ -714,7 +745,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       initialSessionName?: string,
       projectlessPrompt?: string,
       creationSurface?: ThreadCreationSurface,
-      options?: { execution?: DesktopSessionExecution; operationId?: string },
+      options?: { execution?: DesktopSessionExecution; operationId?: string; threadId?: string },
     ): Promise<string | null> => {
       const selection = await sessionModelSelections.load(null)
       const nextSessionId = await createSessionForWorkspaceAction(
@@ -732,6 +763,7 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
           propagateError: true,
           ...(options?.execution ? { execution: options.execution } : {}),
           ...(options?.operationId ? { operationId: options.operationId } : {}),
+          ...(options?.threadId ? { threadId: options.threadId } : {}),
         },
       )
       if (!nextSessionId) return null
@@ -815,6 +847,10 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
       setComposerAttachments,
     ],
   )
+
+  const markActiveSessionRead = useCallback((): void => {
+    markActiveSessionReadAction(actionContext)
+  }, [actionContext])
 
   const submitToSession = useCallback(
     async (
@@ -967,7 +1003,9 @@ export function useSessionState(options: UseSessionStateOptions): UseSessionStat
     appendComposerAttachmentsForDraft,
     removeComposerAttachmentForDraft,
     clearComposerDraftIfUnchanged,
+    restoreComposerDraftIfEmpty,
     activateSessionById,
+    markActiveSessionRead,
     createSessionForWorkspace,
     submitToSession,
     interrupt,

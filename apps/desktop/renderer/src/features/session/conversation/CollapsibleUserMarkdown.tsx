@@ -131,6 +131,7 @@ export function CollapsibleUserMarkdown({
             <ConversationMarkdownErrorBoundary contentKey={text}>
               <MarkdownMessage
                 presentation="conversation"
+                inlineLinkTokens
                 canCopyFileReferenceContents={canCopyFileReferenceContents}
                 cwd={cwd}
                 onCopyFileReferenceContents={onCopyFileReferenceContents}

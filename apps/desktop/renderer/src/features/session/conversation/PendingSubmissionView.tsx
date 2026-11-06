@@ -69,7 +69,8 @@ export function PendingSubmissionMessages({
           </article>
           <p className={PENDING_STATUS_CLASS} role="status" aria-live="polite">
             <Spinner />
-            <span>正在开启会话…</span>
+            {/* 会话已建立、只等首条消息进入投影：这时 Agent 已经在思考。 */}
+            <span>{submission.stage === 'sending' ? '正在思考' : '正在开启会话…'}</span>
           </p>
         </div>
       </div>

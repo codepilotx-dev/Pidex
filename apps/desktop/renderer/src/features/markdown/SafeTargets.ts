@@ -47,6 +47,10 @@ export function classifyMarkdownTarget(target: string): SafeMarkdownTarget {
   return { kind: 'unsafe' }
 }
 
+export function isInlinePluginLink(value: string): boolean {
+  return /^plugin:\/\/[\w.@-]+$/u.test(value)
+}
+
 export function isSafeHttpsMediaSource(source: string): boolean {
   try {
     return new URL(source).protocol === 'https:'

@@ -670,6 +670,11 @@ export const ThreadCreateWorkspaceSchema = Schema.Union([
 ])
 
 const ThreadCreateFields = {
+  /**
+   * 客户端预分配的会话 ID。首条消息需要发送时就确定路由身份，否则创建前后
+   * 要走两条路由并重新挂载。缺省时仍由 Agent 生成，旧客户端不受影响。
+   */
+  threadId: Schema.optional(OpaqueIDSchema),
   sessionGroupId: Schema.optional(OpaqueIDSchema),
   workflowId: Schema.optional(OpaqueIDSchema),
   creationSurface: Schema.optional(AgentThread.ThreadCreationSurfaceSchema),

@@ -70,10 +70,8 @@ import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { MetaChip } from '../../../components/ui/MetaChip.js'
 import { Spinner } from '../../../components/ui/Spinner.js'
 import { SessionFollowUpDock } from '../SessionFollowUpDock.js'
-import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
 import { ProjectSwitcherPopover } from './ProjectSwitcherPopover.js'
 import { ChatInputDropdown } from './ChatInputDropdown.js'
-import { BranchSelectPopover } from './BranchSelectPopover.js'
 import { ComposerLaunchSettingsPopover } from './ComposerLaunchSettingsPopover.js'
 import { ModelPickerPopover } from './ModelPickerPopover.js'
 import {
@@ -109,6 +107,7 @@ import {
 } from './ComposerTypes.js'
 import {
   createComposerDocumentWithSkill,
+  composerTokenFromPastedLink,
   skillInvocationFromComposerToken,
 } from './ComposerSkillToken.js'
 import {
@@ -143,6 +142,10 @@ import { useComposerWorkspaceContext } from './UseComposerWorkspaceContext.js'
 import { useComposerSuggestions } from './UseComposerSuggestions.js'
 import { useComposerSuggestionMenu } from './UseComposerSuggestionMenu.js'
 import { nextEnabledMenuIndex } from './ComposerSuggestionMenu.js'
+import {
+  ComposerPredictionController,
+  resolveComposerPredictionKeyAction,
+} from './ComposerPrediction.js'
 export { getActiveComposerMention } from './ComposerSuggestionState.js'
 import { SessionGroupEditorDialog } from '../../session-groups/SessionGroupEditorDialog.js'
 import { SessionGroupSwitcherPopover } from '../../session-groups/SessionGroupSwitcherPopover.js'
@@ -174,7 +177,6 @@ type ComposerDropdown =
   | 'model'
   | 'project'
   | 'session-group'
-  | 'branch'
   | 'plugin'
   | 'runtimeParams'
 
@@ -360,8 +362,6 @@ type Props = {
   onForkConversation?: () => void
   canForkConversation?: boolean
   onArchiveConversation?: () => void
-  onBranchSelect: (branch: string) => void
-  onCreateBranch: () => void
   onStartReview?: (
     target: { type: 'uncommittedChanges' } | { type: 'baseBranch'; branch: string },
   ) => void
@@ -376,6 +376,10 @@ type Props = {
   onSkillSelect?: (skill: ComposerSkillCommand) => void
   hasConversationMessages?: boolean
   routedSessionId?: string | null
+  /** 输入预测开关（设置里默认关闭）。 */
+  composerPredictionsEnabled?: boolean
+  /** 最近一轮已完成时携带其轮次 ID；否则为 null，不发起预测请求。 */
+  predictionTurnId?: string | null
   contextDropdownSide?: 'top' | 'bottom'
   queuedFollowUps?: DesktopQueuedFollowUp[]
   queuePauseReason?: DesktopQueuePauseReason | null
@@ -499,8 +503,6 @@ export function ComposerCard({
   onForkConversation,
   canForkConversation = false,
   onArchiveConversation,
-  onBranchSelect,
-  onCreateBranch,
   onStartReview,
   onPermissionChange,
   onPlanModeChange,
@@ -513,6 +515,8 @@ export function ComposerCard({
   onSkillSelect,
   hasConversationMessages = false,
   routedSessionId,
+  composerPredictionsEnabled = false,
+  predictionTurnId = null,
   contextDropdownSide: contextDropdownSideOverride,
   queuedFollowUps,
   queuePauseReason,
@@ -640,7 +644,6 @@ export function ComposerCard({
     stoppingRef.current = false
     setIsStopping(false)
   }, [draftKey, routedSessionId])
-  const [branchSearch, setBranchSearch] = useState('')
   const [isComposing, setIsComposing] = useState(false)
   const [fileDragActive, setFileDragActive] = useState(false)
   const fileDragDepthRef = useRef(0)
@@ -752,6 +755,71 @@ export function ComposerCard({
   )
 
   const sessionBusy = sessionStatus === 'running' || sessionStatus === 'waiting'
+  /*
+   * 输入预测：只在开关打开、输入为空、无待处理交互且最近一轮已完成时请求一次。
+   * 请求序号由控制器维护，迟到的响应不会覆盖已经开始编辑的草稿。
+   */
+  const inputEmptyForPrediction = isComposerInputEmpty(
+    input,
+    composerDocument?.tokens ?? [],
+    attachments,
+  )
+  const predictionControllerRef = useRef<ComposerPredictionController | null>(null)
+  const [composerPrediction, setComposerPrediction] = useState<string | null>(null)
+  const predictionGateEnabled =
+    composerPredictionsEnabled &&
+    !creationPending &&
+    !sessionBusy &&
+    Boolean(routedSessionId) &&
+    Boolean(predictionTurnId)
+  useEffect(() => {
+    predictionControllerRef.current ??= new ComposerPredictionController()
+    const controller = predictionControllerRef.current
+    const request = controller.sync({
+      enabled: predictionGateEnabled,
+      threadId: routedSessionId ?? null,
+      turnId: predictionTurnId,
+      inputEmpty: inputEmptyForPrediction,
+    })
+    setComposerPrediction(controller.prediction)
+    if (!request) return
+    let cancelled = false
+    void desktopClient
+      .generateComposerPrediction({ threadId: request.threadId, turnId: request.turnId })
+      .then((result) => {
+        if (cancelled) return
+        if (controller.accept(request.sequence, result.prediction, inputEmptyForPrediction)) {
+          setComposerPrediction(controller.prediction)
+        }
+      })
+      .catch(() => {
+        if (cancelled) return
+        controller.accept(request.sequence, null, false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [
+    composerPredictionsEnabled,
+    creationPending,
+    inputEmptyForPrediction,
+    predictionGateEnabled,
+    predictionTurnId,
+    routedSessionId,
+    sessionBusy,
+  ])
+  const acceptComposerPrediction = (): void => {
+    const prediction = predictionControllerRef.current?.prediction
+    if (!prediction) return
+    predictionControllerRef.current?.consume()
+    setComposerPrediction(null)
+    // 必须走事务：更新 document prop 会重建 EditorState 并丢失撤销历史。
+    editorRef.current?.insertText(prediction)
+  }
+  const dismissComposerPrediction = (): void => {
+    predictionControllerRef.current?.dismiss()
+    setComposerPrediction(null)
+  }
   const approvalReview = useApprovalReviewState(routedSessionId, sessionBusy)
   const approvalRulesSupported = useApprovalCapability(
     routedSessionId ?? '',
@@ -985,7 +1053,7 @@ export function ComposerCard({
             onSelect: () => insertReference('plugin', plugin.name, `plugin://${plugin.id}`),
           })),
       )
-    const threadItems: ComposerMenuItem[] = contextTasks.slice(0, 5).map((task) => ({
+    const threadItems: ComposerMenuItem[] = contextTasks.filter((task) => task.id !== routedSessionId).slice(0, 5).map((task) => ({
       key: `thread:${task.id}`,
       section: '引用会话',
       label: task.title,
@@ -1138,6 +1206,7 @@ export function ComposerCard({
     contextEntriesError,
     contextEntriesLoading,
     contextTasks,
+    routedSessionId,
     reloadContext,
     onAddFilePaths,
     workspace,
@@ -1522,31 +1591,6 @@ export function ComposerCard({
                 }
               />
 
-              {workspace && surface !== 'working' ? (
-                <BranchSelectPopover
-                  align="end"
-                  branchSearch={branchSearch}
-                  branches={branches}
-                  className="popover-branch"
-                  currentBranchName={branchName}
-                  open={openDropdown === 'branch'}
-                  side="top"
-                  size="md"
-                  onBranchSearchChange={setBranchSearch}
-                  onBranchSelect={onBranchSelect}
-                  onCreateBranch={onCreateBranch}
-                  onOpenChange={(open) => setOpenDropdown(open ? 'branch' : null)}
-                  trigger={
-                    <MetaChip
-                      active={openDropdown === 'branch'}
-                      icon={<GitBranch size={APP_ICON_SIZE} />}
-                      label={branchName}
-                      title="选择分支"
-                    />
-                  }
-                />
-              ) : null}
-
               {placement === 'new-session' && !subagentMode ? (
                 <div className="tw:ml-auto tw:flex tw:shrink-0 tw:items-center tw:ps-1">
                   <ComposerLaunchSettingsPopover
@@ -1615,6 +1659,7 @@ export function ComposerCard({
               ariaDescribedBy={inlineSubmitFailure ? submitErrorId : undefined}
               ariaExpanded={unifiedMenuOpen}
               readOnly={creationPending}
+              prediction={composerPrediction}
               ref={editorRef}
               focusKey={subagentMode ? undefined : (draftKey ?? placement)}
               document={composerDocument}
@@ -1697,6 +1742,25 @@ export function ComposerCard({
                   }
                 }
 
+                /*
+                 * 输入预测必须排在菜单与 IME 之后：命令菜单的 Tab/Enter 和输入法
+                 * 组合键优先。接受只把灰字写入草稿（可撤销），绝不触发发送。
+                 */
+                const predictionAction = resolveComposerPredictionKeyAction({
+                  key: event.key,
+                  shiftKey: event.shiftKey,
+                  composing: event.isComposing,
+                  menuOpen: unifiedMenuOpen,
+                  prediction: composerPrediction,
+                  inputEmpty: inputEmptyForPrediction,
+                })
+                if (predictionAction) {
+                  event.preventDefault()
+                  if (predictionAction.type === 'accept') acceptComposerPrediction()
+                  else dismissComposerPrediction()
+                  return true
+                }
+
                 if (
                   event.key === 'Backspace' &&
                   isComposerInputEmpty(input, composerDocument?.tokens ?? [], attachments)
@@ -1731,6 +1795,13 @@ export function ComposerCard({
                 if (canSubmit) onSubmit(delivery)
                 return true
               }}
+              resolvePastedToken={(text) =>
+                composerTokenFromPastedLink(
+                  text,
+                  capabilities.skills && !subagentMode ? skillCommands : [],
+                  contextTasks,
+                )
+              }
               onPasteFiles={(files) => {
                 if (!onAddFiles) return false
                 if (files.length === 0) return false
@@ -1837,10 +1908,8 @@ export function ComposerCard({
                   className="popover-surface permission-select-content tw:max-h-[min(440px,calc(100vh_-_96px))] tw:overflow-hidden"
                   data-theme-component="dropdown-surface"
                   collisionPadding={6}
-
                   side="top"
                   sideOffset={4}
-                  style={buildPopoverSizingStyle({ size: 'auto' })}
                 >
                   <div className="permission-select-scroll-area tw:grid tw:max-h-[max(80px,calc(min(440px,calc(100vh-96px))-12px))] tw:overflow-x-hidden tw:overflow-y-auto">
                     <div className="permission-select-scroll-content tw:grid tw:min-w-0">

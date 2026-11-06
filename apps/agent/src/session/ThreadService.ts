@@ -347,6 +347,8 @@ export class ThreadService {
     title?: string
     settings?: ThreadSettings
     operationID: string
+    /** 客户端预分配的会话 ID；缺省时由 Agent 生成。 */
+    threadID?: string
     sessionGroupID?: string
     bindExecution?: (threadID: string) => void
     workspace:
@@ -374,6 +376,11 @@ export class ThreadService {
         throw new AgentError('OPERATION_ID_CONFLICT', 'operationId 已用于其他会话创建请求', 409)
       return { id: duplicate.threadID }
     }
+    // 客户端预分配的 ID 必须是全新的：重试走上面的 operationId 幂等分支，
+    // 不会到这里，因此撞上已有会话只能视为客户端的请求冲突。
+    if (input.threadID && this.db.getThread(input.threadID)) {
+      throw new AgentError('CONFLICT', 'threadId 已被其他会话使用', 409)
+    }
     const emptyProjectID =
       input.workspace.kind === 'project' &&
       this.db.getProject(input.workspace.projectID)?.folders.length === 0
@@ -396,6 +403,7 @@ export class ThreadService {
           throw new AgentError('SESSION_GROUP_NOT_FOUND', '工作组不存在', 404)
         }
         const record = this.db.createThread({
+          ...(input.threadID ? { id: input.threadID } : {}),
           creationSurface: input.creationSurface,
           title: input.title,
           settings: input.settings,
@@ -421,7 +429,7 @@ export class ThreadService {
       return created
     }
 
-    const threadID = crypto.randomUUID()
+    const threadID = input.threadID ?? crypto.randomUUID()
     const allocation = await this.workspaceResolver.allocateProjectless({
       workspaceID: crypto.randomUUID(),
       threadID,

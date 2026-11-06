@@ -42,6 +42,7 @@ import { renderSafeHtml } from './SafeHtml.js'
 import {
   classifyMarkdownTarget,
   isLikelyFileReference,
+  isInlinePluginLink,
   isSafeHttpsMediaSource,
   mediaKindForUrl,
   parseMarkdownFileReference,
@@ -74,6 +75,7 @@ export function handleMarkdownThreadLinkClick(
 }
 
 export type MarkdownMessageProps = {
+  inlineLinkTokens?: boolean
   presentation?: 'default' | 'conversation'
   allowBasicHtml?: boolean
   allowWideBlocks?: boolean
@@ -90,6 +92,7 @@ export type MarkdownMessageProps = {
 }
 
 type RenderContext = {
+  inlineLinkTokens: boolean
   presentation: 'default' | 'conversation'
   allowBasicHtml: boolean
   allowWideBlocks: boolean
@@ -110,6 +113,7 @@ type RenderContext = {
 }
 
 export function MarkdownMessage({
+  inlineLinkTokens = false,
   presentation = 'default',
   allowBasicHtml = false,
   allowWideBlocks = true,
@@ -141,6 +145,7 @@ export function MarkdownMessage({
   }, [sourceText, streaming])
   const context = useMemo<RenderContext>(
     () => ({
+      inlineLinkTokens,
       presentation,
       allowBasicHtml,
       allowWideBlocks,
@@ -158,6 +163,7 @@ export function MarkdownMessage({
       streamingFragment: '',
     }),
     [
+      inlineLinkTokens,
       presentation,
       allowWideBlocks,
       allowBasicHtml,
@@ -840,17 +846,29 @@ function renderTableCell(
 function renderLink(link: Tokens.Link, context: RenderContext, key: string): React.ReactNode {
   const children = renderTokens(link.tokens, context, `${key}-label`)
   const target = classifyMarkdownTarget(link.href)
+  const tokenClass = context.inlineLinkTokens ? 'composer-inline-skill-token' : undefined
+  const label = (kind: 'thread' | 'browser' | 'plugin') =>
+    tokenClass ? (
+      <>
+        <span aria-hidden="true" className="composer-inline-link-icon" data-link-kind={kind} />
+        <span className="composer-inline-skill-token-label">{children}</span>
+      </>
+    ) : children
+  if (tokenClass && isInlinePluginLink(link.href)) {
+    return <span className={tokenClass} key={key}>{label('plugin')}</span>
+  }
   if (target.kind === 'thread') {
     return (
       <a
         href={link.href}
+        className={tokenClass}
         key={key}
         onClick={(event) => {
           handleMarkdownThreadLinkClick(event, target.threadId)
         }}
         title={link.title ?? undefined}
       >
-        {children}
+        {label('thread')}
       </a>
     )
   }
@@ -864,6 +882,7 @@ function renderLink(link: Tokens.Link, context: RenderContext, key: string): Rea
     return (
       <a
         href={target.url}
+        className={tokenClass}
         key={key}
         onClick={(event) => {
           event.preventDefault()
@@ -872,7 +891,7 @@ function renderLink(link: Tokens.Link, context: RenderContext, key: string): Rea
         rel="noopener noreferrer"
         title={link.title ?? undefined}
       >
-        {children}
+        {label('browser')}
       </a>
     )
   }

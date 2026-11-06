@@ -242,6 +242,25 @@ export class ComposerDraftStore {
     return this.set(key, next)
   }
 
+  /**
+   * 移走已提交的内容，但保留 `clientId`：正式会话的输入框从这一刻起只显示
+   * 可编辑草稿，后续 `completeSubmission` 仍按同一身份收尾。
+   */
+  clearSubmittedContent(key: ComposerDraftKey, consumedClientId: string): ComposerDraft {
+    const current = this.#read(key)
+    if (!current) return this.get(key)
+    if (current.clientId !== consumedClientId) return cloneDraft(current)
+    return this.set(key, {
+      ...current,
+      document: createComposerDocument(),
+      attachments: [],
+      skills: [],
+      skillInvocation: undefined,
+      goalModeEnabled: undefined,
+      goalTokenBudget: undefined,
+    })
+  }
+
   completeSubmission(
     key: ComposerDraftKey,
     consumedClientId: string,

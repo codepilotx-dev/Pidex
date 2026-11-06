@@ -98,6 +98,23 @@ export function activateSession(context: SessionActionContext, nextSessionId: st
   })
 }
 
+/**
+ * 用户在右侧工作区进行任何操作时清除当前会话的未读标记。
+ *
+ * 只作用于用户当前正在查看的会话，且仅在该会话确实未读时触发；未读清除后
+ * 后续操作自然成为空操作。语义上等价于“一看/一操作就算已读”，与切换会话时的
+ * 自动已读保持一致。
+ */
+export function markActiveSessionRead(context: SessionActionContext): void {
+  const sessionId = context.activeSessionIdRef.current
+  if (!sessionId) return
+  const unreadAt = context.sessionsRef.current.find(
+    (session) => session.id === sessionId,
+  )?.unreadAt
+  if (!unreadAt) return
+  markSessionReadThrough(context, sessionId, unreadAt)
+}
+
 export function markSessionReadThrough(
   context: SessionActionContext,
   sessionId: string,
@@ -144,6 +161,8 @@ export async function createSessionForWorkspaceAction(
     execution?: DesktopSessionExecution
     /** 重试时复用已创建的 Worktree；不传时新建一个操作。 */
     operationId?: string
+    /** 客户端预分配的会话 ID；不传时由 Agent 生成。 */
+    threadId?: string
   },
 ): Promise<string | null> {
   try {
@@ -167,6 +186,7 @@ export async function createSessionForWorkspaceAction(
       grillModeActive: settings.grillModeActive,
       ...(options?.execution ? { execution: options.execution } : {}),
       ...(options?.operationId ? { operationId: options.operationId } : {}),
+      ...(options?.threadId ? { threadId: options.threadId } : {}),
       providerID: settings.providerID,
       providerBaseURL: normalizeOptionalText(settings.providerBaseURL),
       model: normalizeOptionalText(settings.model),

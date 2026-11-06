@@ -4,6 +4,8 @@ import type {
   ComposerSkillInvocation,
 } from './ComposerTypes.js'
 import { BUILTIN_SKILL_PRESENTATIONS } from '../../plugins/BuiltinSkillPresentation.js'
+import { Lexer } from 'marked'
+import { classifyMarkdownTarget, isInlinePluginLink } from '../../markdown/SafeTargets.js'
 
 export function hasTaskPlanningInvocation(
   document: ComposerDocument,
@@ -54,6 +56,57 @@ export function createComposerSkillToken(skill: ComposerSkillInvocation): Compos
     name: skill.name,
     label: BUILTIN_SKILL_PRESENTATIONS[skill.name]?.label ?? skill.name,
     value: skill.path,
+    from: 0,
+    to: 0,
+  }
+}
+
+export function skillTokenFromPastedLink(
+  text: string,
+  skills: readonly { skill: ComposerSkillInvocation }[],
+): ComposerDocumentToken | undefined {
+  const path = /^\[(?:\\.|[^\]\\\r\n])+\]\(<([^<>\r\n]+)>\)$/u.exec(text.trim())?.[1]
+  if (!path || !/(?:^|[/\\])SKILL\.md$/iu.test(path)) return
+  const normalize = (value: string): string =>
+    /^[a-z]:[/\\]/iu.test(value) ? value.replaceAll('\\', '/').toLowerCase() : value
+  const target = normalize(path)
+  const match = skills.find(({ skill }) => normalize(skill.path) === target)
+  return match && createComposerSkillToken(match.skill)
+}
+
+export function composerTokenFromPastedLink(
+  text: string,
+  skills: readonly { skill: ComposerSkillInvocation }[],
+  sessions: readonly { id: string; title: string }[] = [],
+): ComposerDocumentToken | undefined {
+  const skill = skillTokenFromPastedLink(text, skills)
+  if (skill) return skill
+
+  const source = text.trim()
+  if (!source || /[\r\n]/u.test(source)) return
+  const [link, ...rest] = Lexer.lexInline(source)
+  const singleLink = link?.type === 'link' && rest.length === 0 ? link : undefined
+  if (!singleLink && /\s/u.test(source)) return
+  const href = singleLink?.href ?? source
+  const target = classifyMarkdownTarget(href)
+  const kind =
+    target.kind === 'external' ? 'browser'
+      : target.kind === 'thread' ? 'thread'
+      : isInlinePluginLink(href) ? 'plugin'
+      : undefined
+  if (!kind) return
+
+  const value = target.kind === 'external' ? target.url : href
+  const title =
+    target.kind === 'thread'
+      ? sessions.find((session) => session.id === target.threadId)?.title
+      : undefined
+  const label = singleLink?.text ?? (title || href)
+  return {
+    id: crypto.randomUUID(),
+    kind,
+    label: kind === 'plugin' ? label.replace(/^@|^plugin:\/\//u, '') : label,
+    value,
     from: 0,
     to: 0,
   }

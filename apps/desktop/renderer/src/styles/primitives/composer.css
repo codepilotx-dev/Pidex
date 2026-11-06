@@ -73,9 +73,24 @@
     color: var(--cpx-sys-color-fg-tertiary);
   }
 
+  /* --- 输入预测灰字 --------------------------------------------------- */
+  .composer-prediction-ghost {
+    color: var(--cpx-sys-color-fg-tertiary);
+    opacity: 0.75;
+    pointer-events: none;
+    user-select: none;
+    white-space: pre-wrap;
+  }
+
+  /* 灰字就绪时让位占位符，避免两段提示叠在同一行。 */
+  .composer-editor-content.is-empty:has(.composer-prediction-ghost)::before {
+    content: none;
+  }
+
   /* --- Inline tokens (ProseMirror node views) -------------------------- */
   .composer-inline-skill-token {
-    display: inline;
+    display: inline-flex;
+    align-items: center;
     padding-inline: var(--cpx-sys-space-1);
     border: 0;
     border-radius: 0;
@@ -88,6 +103,10 @@
     vertical-align: baseline;
     white-space: nowrap;
     user-select: none;
+  }
+
+  .composer-inline-skill-token-label {
+    align-self: baseline;
   }
 
   .composer-inline-skill-token:hover .composer-inline-skill-token-label {
@@ -103,7 +122,6 @@
     margin-inline-end: var(--cpx-sys-space-1);
     border-radius: var(--cpx-sys-radius-indicator);
     object-fit: contain;
-    vertical-align: text-bottom;
   }
 
   .composer-inline-skill-token-fallback-icon {
@@ -119,29 +137,25 @@
     box-shadow: var(--cpx-sys-focus-ring-inset);
   }
 
-  .composer-inline-context-token {
-    display: inline-flex;
-    align-items: baseline;
-    gap: var(--cpx-sys-space-1);
-    margin-inline: var(--cpx-sys-space-1);
-    padding-inline: var(--cpx-sys-space-1);
-    border-radius: var(--cpx-sys-radius-sm);
-    background: var(--cpx-sys-color-accent-subtle-bg);
-    color: var(--cpx-sys-color-accent-fg);
-    font-size: inherit;
-    font-weight: var(--cpx-sys-font-weight-medium);
-    line-height: inherit;
-    white-space: nowrap;
-    user-select: none;
+  .composer-inline-link-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    margin-inline-end: var(--cpx-sys-space-1);
+    background: currentColor;
+    mask-size: contain;
   }
 
-  .composer-inline-context-token-icon {
-    color: var(--cpx-sys-color-fg-tertiary);
+  .composer-inline-link-icon[data-link-kind='thread'] {
+    mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22M7.9%2020A9%209%200%201%200%204%2016.1L2%2022Z%22%2F%3E%3C%2Fsvg%3E");
   }
 
-  .composer-inline-context-token.ProseMirror-selectednode {
-    outline: none;
-    box-shadow: var(--cpx-sys-focus-ring-inset);
+  .composer-inline-link-icon[data-link-kind='browser'] {
+    mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Ccircle%20cx%3D%2212%22%20cy%3D%2212%22%20r%3D%2210%22%2F%3E%3Cpath%20d%3D%22M2%2012h20%22%2F%3E%3Cellipse%20cx%3D%2212%22%20cy%3D%2212%22%20rx%3D%224%22%20ry%3D%2210%22%2F%3E%3C%2Fsvg%3E");
+  }
+
+  .composer-inline-link-icon[data-link-kind='plugin'] {
+    mask-image: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20viewBox%3D%220%200%2024%2024%22%20fill%3D%22none%22%20stroke%3D%22black%22%20stroke-width%3D%222%22%20stroke-linecap%3D%22round%22%20stroke-linejoin%3D%22round%22%3E%3Cpath%20d%3D%22m19%205%203-3M2%2022l3-3m1-8%207%207m-3-11%207%207m-2-5%203-3a2%202%200%200%200%200-3%202%202%200%200%200-3%200l-3%203M7%2012l-2%202a3%203%200%200%200%200%204l1%201a3%203%200%200%200%204%200l2-2%22%2F%3E%3C%2Fsvg%3E");
   }
 
   /* --- Role + weight pairs -------------------------------------------- */

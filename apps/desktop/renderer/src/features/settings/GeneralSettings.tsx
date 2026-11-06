@@ -92,6 +92,9 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
   const subscribedRustSearchAndDiffKernels = useDesktopSettingsDraftValue(
     'rustSearchAndDiffKernels',
   )
+  const subscribedComposerPredictions = useDesktopSettingsDraftValue(
+    'desktop.composer_predictions',
+  )
   const subscribedEnableParetoCodeRouter = useDesktopSettingsDraftValue('enableParetoCodeRouter')
   const subscribedEnableFusionRouter = useDesktopSettingsDraftValue('enableFusionRouter')
   const subscribedDefaultModeRequestUserInput = useDesktopSettingsDraftValue(
@@ -115,6 +118,7 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
           reviewView: subscribedReviewView,
           reviewDelivery: subscribedReviewDelivery,
           rustSearchAndDiffKernels: subscribedRustSearchAndDiffKernels,
+          'desktop.composer_predictions': subscribedComposerPredictions,
           enableParetoCodeRouter: subscribedEnableParetoCodeRouter,
           enableFusionRouter: subscribedEnableFusionRouter,
           defaultModeRequestUserInput: subscribedDefaultModeRequestUserInput,
@@ -136,6 +140,7 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
       subscribedReviewView,
       subscribedReviewDelivery,
       subscribedRustSearchAndDiffKernels,
+      subscribedComposerPredictions,
       subscribedEnableParetoCodeRouter,
       subscribedEnableFusionRouter,
       subscribedDefaultModeRequestUserInput,
@@ -153,6 +158,7 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
     reviewView,
     reviewDelivery,
     rustSearchAndDiffKernels,
+    'desktop.composer_predictions': composerPredictions,
     enableParetoCodeRouter,
     enableFusionRouter,
     defaultModeRequestUserInput,
@@ -259,6 +265,13 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
   const setRustSearchAndDiffKernels = useCallback(
     (value: boolean) => {
       draft.setValue('rustSearchAndDiffKernels', value)
+      draft.autoSave()
+    },
+    [draft],
+  )
+  const setComposerPredictions = useCallback(
+    (value: boolean) => {
+      draft.setValue('desktop.composer_predictions', value)
       draft.autoSave()
     },
     [draft],
@@ -581,6 +594,27 @@ export function GeneralSettings({ onNotice }: GeneralSettingsProps = {}) {
                 checked={rustSearchAndDiffKernels}
                 onChange={(checked) => {
                   setRustSearchAndDiffKernels(checked)
+                }}
+                ariaLabelledby={aria.labelledby}
+                ariaDescribedby={aria.describedby}
+              />
+            )}
+          />
+        </SettingsSection>
+
+        <SettingsSection
+          title="输入预测"
+          description="根据当前对话预测下一条消息，以灰色文字显示在输入框内。"
+        >
+          <SettingsRow
+            title="消息输入预测"
+            description="启用后，每次回复完成后会调用模型生成一条灰字建议，按 Tab 接受、Esc 忽略。该功能会产生额外的模型调用和费用。"
+            autoSave
+            control={(aria) => (
+              <ToggleSwitch
+                checked={composerPredictions}
+                onChange={(checked) => {
+                  setComposerPredictions(checked)
                 }}
                 ariaLabelledby={aria.labelledby}
                 ariaDescribedby={aria.describedby}

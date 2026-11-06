@@ -150,11 +150,11 @@
     border: 0;
     border-top: 1px solid var(--cpx-sys-color-border-subtle);
   }
-  .md-body a {
+  .md-body a:not(.composer-inline-skill-token) {
     color: var(--cpx-sys-color-accent-fg);
     text-decoration: none;
   }
-  .md-body a:hover {
+  .md-body a:not(.composer-inline-skill-token):hover {
     text-decoration: underline;
     text-underline-offset: 2px;
   }

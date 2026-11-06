@@ -6,13 +6,50 @@ import {
 } from '../src/features/session/composer/ComposerEditor.js'
 import {
   createComposerDocumentWithSkill,
+  composerTokenFromPastedLink,
   skillInvocationFromComposerDocument,
   skillInvocationsFromComposerDocument,
+  skillTokenFromPastedLink,
 } from '../src/features/session/composer/ComposerSkillToken.js'
 import { contextTokensFromDocument } from '../src/features/session/composer/UseDesktopComposerController.js'
 import { isComposerInputEmpty } from '../src/features/session/composer/ComposerTypes.js'
 
 describe('composer skill inline token', () => {
+  test('粘贴单独的会话、网页或插件链接会生成对应引用', () => {
+    expect(composerTokenFromPastedLink('pidex://threads/abc', [])).toMatchObject({
+      kind: 'thread',
+      label: 'pidex://threads/abc',
+      value: 'pidex://threads/abc',
+    })
+    expect(
+      composerTokenFromPastedLink('pidex://threads/abc', [], [{ id: 'abc', title: '会话标题' }]),
+    ).toMatchObject({ label: '会话标题', value: 'pidex://threads/abc' })
+    expect(composerTokenFromPastedLink('[文档](https://example.com/docs)', [])).toMatchObject({
+      kind: 'browser',
+      label: '文档',
+      value: 'https://example.com/docs',
+    })
+    expect(composerTokenFromPastedLink('[@Review](plugin://review)', [])).toMatchObject({
+      kind: 'plugin',
+      label: 'Review',
+      value: 'plugin://review',
+    })
+    expect(composerTokenFromPastedLink('https://example.com/docs 请看', [])).toBeUndefined()
+    expect(composerTokenFromPastedLink('[不安全](javascript:alert(1))', [])).toBeUndefined()
+  })
+
+  test('粘贴技能链接时仅使用目录中匹配路径的技能', () => {
+    const skill = { name: 'cpx-code-review', path: 'F:/Project Folder/cpx-code-review/SKILL.md' }
+    const link = '[Cpx Code Review](<f:\\Project Folder\\cpx-code-review\\SKILL.md>)'
+    expect(skillTokenFromPastedLink(link, [{ skill }])).toMatchObject({
+      kind: 'skill',
+      name: skill.name,
+      value: skill.path,
+    })
+    expect(skillTokenFromPastedLink(link, [])).toBeUndefined()
+    expect(skillTokenFromPastedLink(`请看 ${link}`, [{ skill }])).toBeUndefined()
+  })
+
   test('Skill 光标位置在草稿派生和编辑器往返后保留，引用非空不退出模式', () => {
     const skill = { name: 'review', path: 'skills/review' }
     const existing = createComposerDocumentWithSkill('前后', skill).tokens.map((token) => ({

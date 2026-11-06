@@ -32,7 +32,6 @@ type SubmitTransactionOptions = {
     initialSessionName?: string,
     projectlessPrompt?: string,
   ) => Promise<string | null>
-  navigateToSession?: (sessionId: string) => void
   onSessionCreated?: (sessionId: string) => void
   submitToSession: (
     sessionId: string,
@@ -154,7 +153,6 @@ export async function executeComposerSubmitTransaction({
   targetSessionId,
   onPrepared,
   createSession,
-  navigateToSession,
   onSessionCreated,
   submitToSession,
 }: SubmitTransactionOptions): Promise<ComposerSubmitOutcome> {
@@ -176,7 +174,6 @@ export async function executeComposerSubmitTransaction({
       return failed('create', '无法创建新会话')
     }
     onSessionCreated?.(sessionId)
-    navigateToSession?.(sessionId)
   }
 
   try {

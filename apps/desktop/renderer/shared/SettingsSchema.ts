@@ -210,6 +210,7 @@ export function defaultDesktopStoredSettings(): DesktopStoredSettings {
     installPidexDependencies: true,
     workspaceDependenciesMigrated: false,
     'desktop.voice.preferredInputDeviceId': '',
+    'desktop.composer_predictions': false,
     personality: 'pragmatic',
     customInstructions: '',
     enableMemory: false,
@@ -443,6 +444,10 @@ export function normalizeDesktopStoredSettings(value: unknown): DesktopStoredSet
       parsed['desktop.voice.preferredInputDeviceId'],
       defaults['desktop.voice.preferredInputDeviceId'],
     ),
+    'desktop.composer_predictions':
+      typeof parsed['desktop.composer_predictions'] === 'boolean'
+        ? parsed['desktop.composer_predictions']
+        : defaults['desktop.composer_predictions'],
     personality: isDesktopPersonality(parsed.personality)
       ? parsed.personality
       : defaults.personality,

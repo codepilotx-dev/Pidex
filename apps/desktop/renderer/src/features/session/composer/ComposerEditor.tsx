@@ -3,9 +3,16 @@ import { history, redo, redoDepth, undo, undoDepth } from 'prosemirror-history'
 import { baseKeymap, splitBlock } from 'prosemirror-commands'
 import { keymap } from 'prosemirror-keymap'
 import { Schema, type Node as ProseMirrorNode } from 'prosemirror-model'
-import { AllSelection, EditorState, NodeSelection, Plugin, TextSelection } from 'prosemirror-state'
+import {
+  AllSelection,
+  EditorState,
+  NodeSelection,
+  Plugin,
+  PluginKey,
+  TextSelection,
+} from 'prosemirror-state'
 import type { Transaction } from 'prosemirror-state'
-import { EditorView } from 'prosemirror-view'
+import { Decoration, DecorationSet, EditorView } from 'prosemirror-view'
 import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef } from 'react'
 import { useEditCommandActions } from '../../../components/ui/EditCommandProvider.js'
 import type { ComposerDocument, ComposerDocumentToken } from './ComposerTypes.js'
@@ -16,6 +23,58 @@ import { focusComposerIfAvailable } from './ComposerFocus.js'
 const readOnlyPlugin = new Plugin({
   filterTransaction: (transaction) => transaction.docChanged === false,
 })
+
+export const composerPredictionPluginKey = new PluginKey<{ prediction: string | null }>(
+  'composerPrediction',
+)
+
+/**
+ * 灰字预测是纯装饰：在空文档末尾挂一个 inline widget，不写入文档内容，
+ * 因此不会触发 onChange，也不会被当成草稿提交。
+ */
+const composerPredictionPlugin = new Plugin<{ prediction: string | null }>({
+  key: composerPredictionPluginKey,
+  state: {
+    init: () => ({ prediction: null }),
+    apply(transaction, value) {
+      const next = transaction.getMeta(composerPredictionPluginKey) as
+        | { prediction: string | null }
+        | undefined
+      return next === undefined ? value : { prediction: next.prediction }
+    },
+  },
+  props: {
+    decorations(state) {
+      const value = composerPredictionPluginKey.getState(state)
+      if (!value?.prediction) return null
+      const paragraph = state.doc.firstChild
+      if (
+        state.doc.childCount !== 1 ||
+        !paragraph ||
+        paragraph.childCount !== 0 ||
+        state.doc.textContent.length > 0
+      ) {
+        return null
+      }
+      if (typeof window === 'undefined') return null
+      const ghost = window.document.createElement('span')
+      ghost.className = 'composer-prediction-ghost'
+      ghost.setAttribute('aria-hidden', 'true')
+      ghost.setAttribute('contenteditable', 'false')
+      ghost.textContent = value.prediction
+      return DecorationSet.create(state.doc, [
+        Decoration.widget(1, ghost, { side: 1, ignoreSelection: true }),
+      ])
+    },
+  },
+})
+
+/** 通过 meta 更新灰字；文档内容不变，因此不会进入撤销栈。 */
+export function applyComposerPrediction(view: EditorView, prediction: string | null): void {
+  const current = composerPredictionPluginKey.getState(view.state)?.prediction ?? null
+  if (current === prediction) return
+  view.dispatch(view.state.tr.setMeta(composerPredictionPluginKey, { prediction }))
+}
 
 export const composerSchema = new Schema({
   nodes: {
@@ -77,17 +136,17 @@ export const composerSchema = new Schema({
           'data-composer-token': node.attrs.kind,
           'data-token-id': node.attrs.id,
           contenteditable: 'false',
-          class: 'composer-inline-context-token',
+          class: 'composer-inline-skill-token',
         },
         [
           'span',
           {
             'aria-hidden': 'true',
-            class: 'composer-inline-context-token-icon',
+            class: 'composer-inline-link-icon',
+            'data-link-kind': node.attrs.kind,
           },
-          node.attrs.kind === 'browser' ? '◎' : '@',
         ],
-        ['span', { class: 'composer-inline-context-token-label' }, String(node.attrs.label)],
+        ['span', { class: 'composer-inline-skill-token-label' }, String(node.attrs.label)],
       ],
     },
   },
@@ -112,6 +171,8 @@ export type ComposerEditorProps = {
   ariaExpanded: boolean
   /** 只读模式：保留内容与焦点，但不接受编辑、粘贴或快捷键提交。 */
   readOnly?: boolean
+  /** 空输入框末尾的灰字预测；null 表示无预测。 */
+  prediction?: string | null
   onChange: (value: string) => void
   onDocumentChange?: (document: ComposerDocument) => void
   onTokenActivate?: (token: ComposerDocumentToken) => void
@@ -119,6 +180,7 @@ export type ComposerEditorProps = {
   onCompositionChange: (composing: boolean) => void
   onKeyDown: (event: KeyboardEvent) => boolean
   onPasteFiles?: (files: FileList) => boolean
+  resolvePastedToken?: (text: string) => ComposerDocumentToken | undefined
   onBlur?: () => void
 }
 
@@ -134,6 +196,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       ariaActiveDescendant,
       ariaExpanded,
       readOnly = false,
+      prediction = null,
       onChange,
       onDocumentChange,
       onTokenActivate,
@@ -141,6 +204,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       onCompositionChange,
       onKeyDown,
       onPasteFiles,
+      resolvePastedToken,
       onBlur,
     },
     forwardedRef,
@@ -156,6 +220,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       onCompositionChange,
       onKeyDown,
       onPasteFiles,
+      resolvePastedToken,
       onBlur,
     })
 
@@ -167,6 +232,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       onCompositionChange,
       onKeyDown,
       onPasteFiles,
+      resolvePastedToken,
       onBlur,
     }
 
@@ -230,6 +296,7 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           }),
           keymap(baseKeymap),
           ...(readOnly ? [readOnlyPlugin] : []),
+          composerPredictionPlugin,
         ],
       })
 
@@ -282,11 +349,15 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
           callbacksRef.current.onTokenActivate(token)
           return true
         },
-        handlePaste: (_view, event) => {
+        handlePaste: (view, event) => {
           const files = event.clipboardData?.files
-          return files && files.length > 0
-            ? (callbacksRef.current.onPasteFiles?.(files) ?? false)
-            : false
+          if (files?.length) return callbacksRef.current.onPasteFiles?.(files) ?? false
+          const token = callbacksRef.current.resolvePastedToken?.(
+            event.clipboardData?.getData('text/plain') ?? '',
+          )
+          if (!token) return false
+          view.dispatch(view.state.tr.replaceSelectionWith(composerTokenNode(token)).scrollIntoView())
+          return true
         },
         handleDOMEvents: {
           blur: () => {
@@ -387,6 +458,12 @@ export const ComposerEditor = forwardRef<ComposerEditorHandle, ComposerEditorPro
       })
       view.updateState(nextState)
     }, [document, value])
+
+    useEffect(() => {
+      const view = viewRef.current
+      if (!view) return
+      applyComposerPrediction(view, readOnly ? null : prediction)
+    }, [prediction, readOnly])
 
     useEffect(() => {
       const dom = viewRef.current?.dom

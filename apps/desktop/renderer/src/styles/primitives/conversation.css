@@ -844,10 +844,16 @@
     .cpx-agent-activity__item-header,
   .cpx-agent-activity__path-step[data-state='running']
     > .canonical-process-card
-    > .canonical-process-card__summary,
+    > .canonical-process-card__summary {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
   .cpx-agent-activity__path-step[data-state='completed']
     > .canonical-process-card
-    > .canonical-process-card__summary,
+    > .canonical-process-card__summary {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
+
   .cpx-agent-activity__path-step[data-state='failed']::before {
     border-color: var(--cpx-sys-color-danger);
   }
@@ -857,7 +863,9 @@
     .cpx-agent-activity__item-header,
   .cpx-agent-activity__path-step[data-state='failed']
     > .canonical-process-card
-    > .canonical-process-card__summary,
+    > .canonical-process-card__summary {
+    color: var(--cpx-sys-color-fg-secondary);
+  }
 
   /*
    * Activity item rows: the row colour and the reveal states are driven by the
@@ -1685,7 +1693,7 @@
     align-items: center;
     gap: var(--cpx-sys-space-2);
     width: 100%;
-    min-height: 36px;
+    min-height: 30px;
     padding: var(--cpx-sys-space-1) var(--cpx-sys-space-3);
     border: 0;
     border-radius: var(--cpx-sys-radius-md);

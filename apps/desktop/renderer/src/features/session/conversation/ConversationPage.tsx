@@ -27,7 +27,7 @@ import {
 } from '../../../components/ui/IconTokens.js'
 import { Button } from '../../../components/ui/Button.js'
 import { SidebarRow } from '../../../components/ui/SidebarRow.js'
-import type { DesktopPermissionRequest, DesktopSessionStatus } from '../../../../shared/Types.js'
+import type { DesktopSessionStatus } from '../../../../shared/Types.js'
 import { useQuickChatContext } from '../QuickChatContext.js'
 import {
   useDesktopSettingsDraftActions,
@@ -35,7 +35,6 @@ import {
   useDesktopSettingsField,
 } from '../../settings/UseDesktopSettings.js'
 import { WorkspaceHeaderItem } from '../../layout/workspace-header/index.js'
-import { useHeightTransition } from '../../../hooks/UseHeightTransition.js'
 import { usePrefersReducedMotion } from '../../../hooks/UsePrefersReducedMotion.js'
 import { enterTween, exitTween, motionTransition } from '../../motion/MotionTransitions.js'
 import { desktopClient } from '../../../services/desktop-client/index.js'
@@ -58,7 +57,6 @@ import {
 import { PopoverMenu } from '../../../components/ui/PopoverMenu.js'
 import { AppContextMenu } from '../../../components/ui/AppContextMenu.js'
 import { FullScreenWhaleLoading } from '../../../components/ui/FullScreenWhaleLoading.js'
-import { buildPopoverSizingStyle } from '../../../components/ui/PopoverSizing.js'
 import { Tooltip } from '../../../components/ui/Tooltip.js'
 import { InputDialog } from '../../../components/ui/ConfirmationDialog.js'
 import { SkeletonBlock } from '../../../components/ui/Skeleton.js'
@@ -67,7 +65,7 @@ import {
   patchConversationUiState,
 } from '../../layout/tabs/ConversationUiState.js'
 import { CanonicalThreadView } from '../timeline/CanonicalThreadView.js'
-import { normalizePatchActionError } from '../timeline/PatchActionError.js'
+import { useThreadPatchApplier } from './UseThreadPatchApplier.js'
 import { ConversationItemContext } from '../timeline/ConversationItemContext.js'
 import type { ThreadTimelineNavigationHandle } from '../timeline/SessionTimelineView.js'
 import { ThreadComposerDock } from './ThreadComposerDock.js'
@@ -79,7 +77,6 @@ import {
   hasPendingInput,
   pendingSubmissionStore,
   shouldDeferThreadLoading,
-  type PendingSubmission,
 } from '../state/PendingSubmissionStore.js'
 import { useThreadBookmarks } from './UseThreadBookmarks.js'
 import {
@@ -212,6 +209,9 @@ export function ConversationPage(): React.ReactNode {
   const settingsDraft = useDesktopSettingsDraftActions()
   const terminalProfileId = useDesktopSettingsDraftValue('terminalProfileId')
   const canonicalConversation = useCanonicalThreadConversation(activeSessionId)
+  // 只取出稳定的 reload 回调；canonicalConversation 每次渲染都是新对象，
+  // 整对象进入依赖会让补丁回调在流式输出时反复失效。
+  const reloadCanonicalConversation = canonicalConversation.reload
   const environmentActions = useStore(commandMenuActionStore, (state) => state.actions)
   const [selectedLaunchActionId, setSelectedLaunchActionId] = React.useState('')
   const launchActions = environmentActions.filter(
@@ -234,7 +234,7 @@ export function ConversationPage(): React.ReactNode {
       ?.value
   const planApproval = usePlanApprovalResponse(
     pendingPlanApproval,
-    canonicalConversation.reload,
+    reloadCanonicalConversation,
     composerProps?.selectedProviderID && planModel
       ? {
           providerID: composerProps.selectedProviderID,
@@ -271,61 +271,49 @@ export function ConversationPage(): React.ReactNode {
     if (!activeSessionId) return
     return () => desktopClient.publishCanonicalSessionStatus(activeSessionId, null)
   }, [activeSessionId])
-  const { submissionId: routeSubmissionId } = useParams()
+  const { threadId: routeThreadId } = useParams()
   const pendingSubmissions = useStore(pendingSubmissionStore.store, (state) => state.submissions)
-  const pendingSubmission = routeSubmissionId
-    ? (pendingSubmissions[routeSubmissionId] ?? null)
+  // 发送时就拿到会话 ID，路由、提交快照与首条消息的 inputId 全程是同一个值。
+  const pendingSubmission = routeThreadId
+    ? (pendingSubmissions[routeThreadId] ?? null)
     : null
-  // 记录本次首条消息：canonical projection 出现同一 inputId 前后都引用该提交。
-  const handedOffSubmissionRef = React.useRef<{
-    threadId: string
-    inputId: string
-    submission: PendingSubmission
-  } | null>(null)
-  if (handedOffSubmissionRef.current?.threadId !== activeSessionId) {
-    handedOffSubmissionRef.current = null
-  }
-  if (pendingSubmission && activeSessionId) {
-    handedOffSubmissionRef.current = {
-      threadId: activeSessionId,
-      inputId: pendingSubmission.submissionId,
-      submission: pendingSubmission,
-    }
-  }
-  const handoff =
-    handedOffSubmissionRef.current?.threadId === activeSessionId
-      ? handedOffSubmissionRef.current
-      : null
+  const firstInputId = pendingSubmission?.submissionId ?? null
   const deferThreadLoading = shouldDeferThreadLoading({
-    firstInputId: pendingSubmission?.submissionId ?? handoff?.inputId,
-    isCurrentFirstSubmit: Boolean(pendingSubmission || handoff),
+    firstInputId,
+    isCurrentFirstSubmit: Boolean(firstInputId),
     loading: isConversationLoading || canonicalConversation.loading,
-    turnCount: canonicalConversation.turns.length,
     error: canonicalConversation.error,
   })
+  // 整块加载只在切换会话、消息区还没有任何内容时出现；本次首条提交一旦进入
+  // 交接流程，就由快照或思考态接管，不再退回加载画面。
   const isThreadLoading =
     !deferThreadLoading &&
-    (isConversationLoading ||
-      (canonicalConversation.loading && canonicalConversation.turns.length === 0))
-  // 同一批历史里已经包含首条消息时直接展示 canonical 投影，避免消息重复。
-  const firstInputInProjection = handoff
-    ? hasPendingInput(canonicalConversation.state?.inputsById.keys() ?? [], handoff.inputId)
+    canonicalConversation.turns.length === 0 &&
+    firstInputId === null &&
+    (isConversationLoading || canonicalConversation.loading)
+  // 正式投影出现同一 inputId 才算接管；但 turn 还没渲染出来时继续用快照兜底，
+  // 避免消息区在交接瞬间整块空白。
+  const firstInputInProjection = firstInputId
+    ? hasPendingInput(canonicalConversation.state?.inputsById.keys() ?? [], firstInputId)
     : true
-  if (handoff && firstInputInProjection) handedOffSubmissionRef.current = null
-  /**
-   * 首次提交在两个阶段只显示一份用户消息：尚未建立会话时展示 pending 快照，
-   * 真实页面在 canonical 投影出现同一 inputId 前继续展示它。
-   */
-  const firstSubmittedMessage = isThreadLoading ? null : pendingSubmission ? (
-    <PendingSubmissionMessages submission={pendingSubmission} />
-  ) : handoff && !firstInputInProjection ? (
-    <PendingSubmissionMessages submission={handoff.submission} />
-  ) : null
-  // pending 路由刷新后记录已不存在：回到新聊天页，不自动重发。
-  const isUnknownPendingRoute = Boolean(routeSubmissionId) && !pendingSubmission
+  const projectedTurnReady = canonicalConversation.turns.length > 0
+  // 接管条件之外，投影加载失败时也放弃快照，避免启动状态永远盖在错误页上。
+  const snapshotSettled =
+    (firstInputInProjection && projectedTurnReady) || canonicalConversation.error !== null
+  const showSubmittedSnapshot = Boolean(pendingSubmission) && !snapshotSettled
   React.useEffect(() => {
-    if (isUnknownPendingRoute) navigate('/new', { replace: true })
-  }, [isUnknownPendingRoute, navigate])
+    if (!pendingSubmission || !snapshotSettled) return
+    pendingSubmissionStore.remove(pendingSubmission.submissionId)
+  }, [pendingSubmission, snapshotSettled])
+  /**
+   * 首次提交在两个阶段只显示一份用户消息：尚未建立会话时展示提交快照，
+   * 会话建立后在 canonical 投影渲染出这条消息前继续展示它。只要 turn 已经渲染，
+   * 快照就不再出现在消息区，避免同一条消息同时出现两次。
+   */
+  const firstSubmittedMessage =
+    isThreadLoading || !showSubmittedSnapshot ? null : (
+      <PendingSubmissionMessages submission={pendingSubmission!} />
+    )
   const effectiveSessionStatus = canonicalAuxiliary.sessionStatus ?? sessionStatus
   const navigateToForkTarget = React.useCallback(
     (targetThreadId: string) => {
@@ -367,23 +355,8 @@ export function ConversationPage(): React.ReactNode {
   const inlineInputRef = React.useRef<HTMLInputElement | null>(null)
   const activeSessionIdRef = React.useRef(activeSessionId)
   activeSessionIdRef.current = activeSessionId
-  // 从 pending 路由接管后继续展示提交快照，直到 canonical 投影出现同一 inputId。
-  const recordHandedOffSubmission = React.useCallback(
-    (submission: PendingSubmission, threadId: string) => {
-      handedOffSubmissionRef.current = {
-        threadId,
-        inputId: submission.submissionId,
-        submission,
-      }
-    },
-    [],
-  )
-  React.useEffect(() => {
-    if (!pendingSubmission || !activeSessionId) return
-    recordHandedOffSubmission(pendingSubmission, activeSessionId)
-  }, [activeSessionId, pendingSubmission, recordHandedOffSubmission])
   // 创建阶段暂停编辑与发送，但不显示可用的停止按钮；成功后按正常会话解锁。
-  const pendingCreationLocked = Boolean(pendingSubmission) && !pendingSubmission?.sessionId
+  const pendingCreationLocked = pendingSubmission?.stage === 'creating'
   const composerPropsForPage = composerProps
     ? { ...composerProps, creationPending: pendingCreationLocked }
     : null
@@ -720,14 +693,7 @@ export function ConversationPage(): React.ReactNode {
   }, [canInlineEdit, isInlineEditing, renamingSession])
 
   const activePermissionRequest = pendingPermissions[0] ?? null
-  const composerMode = workflowComposerMode(activePermissionRequest)
-  const composerTransition = useHeightTransition([
-    composerMode,
-    activePermissionRequest?.requestId ?? '',
-    showComposerStatusSummary,
-    composerExecutionPlan,
-    composerProps ? 'mounted' : 'unmounted',
-  ])
+  const approvalVisible = Boolean(activePermissionRequest || pendingPlanApproval)
 
   const workflowPageRef = React.useRef<HTMLElement>(null)
   React.useEffect(() => {
@@ -1030,23 +996,10 @@ export function ConversationPage(): React.ReactNode {
     onOpenRightDock('review')
   }, [onOpenRightDock, onRefreshDiff])
 
-  const applyThreadPatch = React.useCallback(
-    async (itemId: string, action: 'undo' | 'reapply', expectedVersion: number): Promise<void> => {
-      if (!activeSessionId) return
-      try {
-        await desktopClient.applyThreadPatch({
-          threadId: activeSessionId,
-          itemId,
-          action,
-          expectedVersion,
-        })
-        await canonicalConversation.reload()
-        onRefreshDiff()
-      } catch (error) {
-        throw normalizePatchActionError(error, action)
-      }
-    },
-    [activeSessionId, canonicalConversation, onRefreshDiff],
+  const applyThreadPatch = useThreadPatchApplier(
+    activeSessionId,
+    reloadCanonicalConversation,
+    onRefreshDiff,
   )
 
   function handleConversationContextMenu(): void {
@@ -1414,7 +1367,7 @@ export function ConversationPage(): React.ReactNode {
 
   const composerFooter =
     !isThreadLoading && composerPropsForPage ? (
-      <ThreadComposerDock ref={composerTransition.ref} style={composerTransition.style}>
+      <div className="tw:relative tw:flex tw:w-full tw:flex-col tw:gap-2.5">
         <AnimatePresence initial={false}>
           {showComposerStatusSummary ? (
             <ComposerFooterPresence key="composer-change-summary" reducedMotion={reduceMotion}>
@@ -1435,49 +1388,56 @@ export function ConversationPage(): React.ReactNode {
             </ComposerFooterPresence>
           ) : null}
         </AnimatePresence>
-        <AnimatePresence initial={false}>
-          {activePermissionRequest ? (
-            <ComposerFooterPresence
-              key={activePermissionRequest.requestId}
-              reducedMotion={reduceMotion}
-            >
-              <InlineApprovalCard
-                request={activePermissionRequest}
-                currentPermissionMode={permissionMode}
-                taskMode={taskMode}
-                onDecide={onDecidePermission}
-                onInterrupt={composerProps.onInterrupt}
-              />
-            </ComposerFooterPresence>
-          ) : pendingPlanApproval ? (
-            <ComposerFooterPresence key={pendingPlanApproval.id} reducedMotion={reduceMotion}>
-              <PlanApprovalCard
-                approval={pendingPlanApproval}
-                disabledReason={planApproval.disabledReason}
-                onRespond={planApproval.respond}
-                onOpenPlan={onOpenPlanInRightDock}
-                freshAvailable={planApproval.freshAvailable}
-              />
-            </ComposerFooterPresence>
-          ) : null}
-        </AnimatePresence>
-        {!activePermissionRequest && !pendingPlanApproval ? (
-          <SessionBoundComposer
-            {...composerPropsForPage}
-            canForkConversation={Boolean(
-              conversationFork.onForkFromMessage && latestConversationForkPoint,
-            )}
-            onArchiveConversation={archiveCurrentSession}
-            onForkConversation={continueInNewConversation}
-            sessionStatus={effectiveSessionStatus}
-            contextUsage={canonicalAuxiliary.contextUsage}
-            queuedFollowUps={canonicalAuxiliary.queuedFollowUps}
-            queuePauseReason={canonicalAuxiliary.queuePauseReason}
-            hasConversationMessages={canonicalAuxiliary.hasConversationMessages}
-            messages={[]}
-          />
-        ) : null}
-      </ThreadComposerDock>
+        <div
+          className={approvalVisible ? 'tw:opacity-0' : undefined}
+          inert={approvalVisible}
+        >
+          <ThreadComposerDock>
+            <SessionBoundComposer
+              {...composerPropsForPage}
+              canForkConversation={Boolean(
+                conversationFork.onForkFromMessage && latestConversationForkPoint,
+              )}
+              onArchiveConversation={archiveCurrentSession}
+              onForkConversation={continueInNewConversation}
+              sessionStatus={effectiveSessionStatus}
+              contextUsage={canonicalAuxiliary.contextUsage}
+              queuedFollowUps={canonicalAuxiliary.queuedFollowUps}
+              queuePauseReason={canonicalAuxiliary.queuePauseReason}
+              hasConversationMessages={canonicalAuxiliary.hasConversationMessages}
+              messages={[]}
+            />
+          </ThreadComposerDock>
+        </div>
+        <div className="workflow-page__composer-inner tw:pointer-events-none tw:absolute tw:inset-x-0 tw:bottom-0 tw:z-composer tw:[container-type:inline-size] tw:[&_.inline-approval-card]:w-full tw:[&_.inline-approval-card]:max-w-none">
+          <AnimatePresence initial={false}>
+            {activePermissionRequest ? (
+              <ComposerFooterPresence
+                key={activePermissionRequest.requestId}
+                reducedMotion={reduceMotion}
+              >
+                <InlineApprovalCard
+                  request={activePermissionRequest}
+                  currentPermissionMode={permissionMode}
+                  taskMode={taskMode}
+                  onDecide={onDecidePermission}
+                  onInterrupt={composerProps.onInterrupt}
+                />
+              </ComposerFooterPresence>
+            ) : pendingPlanApproval ? (
+              <ComposerFooterPresence key={pendingPlanApproval.id} reducedMotion={reduceMotion}>
+                <PlanApprovalCard
+                  approval={pendingPlanApproval}
+                  disabledReason={planApproval.disabledReason}
+                  onRespond={planApproval.respond}
+                  onOpenPlan={onOpenPlanInRightDock}
+                  freshAvailable={planApproval.freshAvailable}
+                />
+              </ComposerFooterPresence>
+            ) : null}
+          </AnimatePresence>
+        </div>
+      </div>
     ) : null
   const conversationItemContextValue = React.useMemo(
     () => ({
@@ -1534,7 +1494,7 @@ export function ConversationPage(): React.ReactNode {
       onOpenPatchReview={onOpenPatchReview}
       onOpenPlanInRightDock={onOpenPlanInRightDock}
       onOpenSubagent={onOpenSubagent}
-      onReload={canonicalConversation.reload}
+      onReload={reloadCanonicalConversation}
       onScroll={handleTimelineScroll}
       registerTurnRow={registerTurnRow}
       dockedPlanItemId={dockedPlanItemId}
@@ -1701,7 +1661,7 @@ function ComposerFooterPresence({
       }}
       inert={!isPresent ? true : undefined}
       initial={reducedMotion ? false : { opacity: 0, scale: 0.985, y: 4 }}
-      style={{ pointerEvents: isPresent ? undefined : 'none' }}
+      style={{ pointerEvents: isPresent ? 'auto' : 'none' }}
       transition={motionTransition(reducedMotion, enterTween)}
     >
       {children}
@@ -1739,21 +1699,12 @@ function SessionSubmenu({
           className="popover-surface popover popover-sub-content popover-menu--grid"
           collisionPadding={6}
           sideOffset={4}
-          style={buildPopoverSizingStyle({ size: 'md' })}
         >
           {children}
         </DropdownMenu.SubContent>
       </DropdownMenu.Portal>
     </DropdownMenu.Sub>
   )
-}
-
-type WorkflowComposerMode = 'chat' | 'brainstorm' | 'plan' | 'permission'
-
-function workflowComposerMode(request: DesktopPermissionRequest | null): WorkflowComposerMode {
-  if (!request) return 'chat'
-  if (request.toolName === 'AskUserQuestion') return 'brainstorm'
-  return 'permission'
 }
 
 export function shouldShowComposerStatusSummary({

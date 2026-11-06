@@ -73,6 +73,7 @@ import type {
   DesktopSessionMetadataPatch,
   DesktopRuntimeStatus,
   GenerateDesktopTaskSuggestionsInput,
+  GenerateDesktopComposerPredictionInput,
   DesktopProjectSource,
   DesktopProjectSourceReadResult,
   DesktopSettingsChange,
@@ -187,6 +188,7 @@ export const RENDERER_CAPABILITIES = [
   'config.manage.v1',
   'config.profiles.v1',
   'task-suggestions.v1',
+  'composer-predictions.v1',
   'release-notes.read.v1',
   'thread.side-chat.v1',
   'speech.transcription.v1',
@@ -3416,6 +3418,14 @@ export function createAgentSessionDesktopClient(
           context: input.context,
         })
       }),
+    generateComposerPrediction: (input: GenerateDesktopComposerPredictionInput) =>
+      withRequiredAgent(async () => {
+        requireAgentCapability('composer-predictions.v1')
+        return rpc.call('composer-prediction/generate', {
+          threadId: input.threadId,
+          turnId: input.turnId,
+        })
+      }),
     refreshModelProviders: (providerId) =>
       withAgentOrMock(
         async () => {
@@ -3796,6 +3806,7 @@ export function createAgentSessionDesktopClient(
             settings,
             ...(creationSurface ? { creationSurface } : {}),
             ...(options.workflowId ? { workflowId: options.workflowId } : {}),
+            ...(options.threadId ? { threadId: options.threadId } : {}),
             title: options.sessionName,
             operationId: options.operationId ?? crypto.randomUUID(),
           })

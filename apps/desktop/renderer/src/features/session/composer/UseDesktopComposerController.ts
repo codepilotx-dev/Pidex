@@ -35,9 +35,7 @@ import { createTaskSession, executeComposerSubmitTransaction } from './ComposerS
 import { composerDraftStore } from './ComposerDraftStore.js'
 import {
   createPendingSubmission,
-  isOnPendingSubmissionPage,
   pendingSubmissionStore,
-  startPendingSubmission,
   type PendingSubmission,
 } from '../state/PendingSubmissionStore.js'
 import { QUICK_CHAT_PATH } from '../../layout/shell/UseWorkbenchRouteController.js'
@@ -96,12 +94,16 @@ type ControllerOptions = {
     draftKey: ComposerDraftKey,
     snapshot: ComposerDraftContentSnapshot,
   ) => boolean | void
+  /** 提交登记后立即把本次内容移出输入框；失败时用同一快照回填。 */
+  onDraftCleared?: (draftKey: ComposerDraftKey, snapshot: ComposerDraftContentSnapshot) => void
+  /** 失败回填原稿；返回 false 表示等待期间用户已输入新内容，本次不覆盖。 */
+  onDraftRestore?: (draftKey: ComposerDraftKey, snapshot: ComposerDraftContentSnapshot) => boolean
   createSessionForWorkspace: (
     target?: DesktopWorkspace | null,
     initialSessionName?: string,
     projectlessPrompt?: string,
     creationSurface?: ThreadCreationSurface,
-    options?: { execution?: DesktopSessionExecution; operationId?: string },
+    options?: { execution?: DesktopSessionExecution; operationId?: string; threadId?: string },
   ) => Promise<string | null>
   /** Global error notification for failures that block sending. */
   onError?: (message: string) => void
@@ -185,6 +187,8 @@ export function useDesktopComposerController({
   onAppendAttachmentsForDraft,
   onRemoveAttachmentForDraft,
   onDraftAccepted,
+  onDraftCleared,
+  onDraftRestore,
   createSessionForWorkspace,
   submitToSession,
   onError,
@@ -428,7 +432,11 @@ export function useDesktopComposerController({
     const outcome = await executeComposerSubmitTransaction({
       draft,
       targetSessionId: isNewSession ? null : routedSessionId,
-      // 校验通过后立即登记 pending 并进入临时会话页；创建不再阻塞首屏。
+      /**
+       * 校验通过后立即登记提交快照并进入会话路由。会话 ID 在这里就确定，
+       * 因此路由、快照和首条消息的 inputId 自始至终是同一个值：创建完成时
+       * 不再换路由，消息区直接从快照过渡到思考态。
+       */
       onPrepared: isNewSession
         ? (prepared) => {
             const submission = createPendingSubmission({
@@ -437,10 +445,11 @@ export function useDesktopComposerController({
               workspace,
             })
             pendingSubmission = submission
-            startPendingSubmission({
-              submission,
-              navigate: (path) => navigate(path, { replace: true }),
-            })
+            pendingSubmissionStore.register(submission)
+            navigate(sessionPath(submission.submissionId), { replace: true })
+            // 快照已承载本次提交，输入框只留可编辑草稿；草稿内容在交接到
+            // 真实会话后再移走，否则 `handoff` 会把空草稿交给新会话。
+            onDraftCleared?.(sourceDraftKey, snapshot)
           }
         : undefined,
       createSession: isNewSession
@@ -472,13 +481,17 @@ export function useDesktopComposerController({
                       surface === 'working' || surface === 'chat' || surface === 'coding'
                         ? surface
                         : undefined,
-                      { execution, operationId: createOperationId },
+                      {
+                        execution,
+                        operationId: createOperationId,
+                        threadId: draft.clientId,
+                      },
                     ),
                 })
               },
             })
         : undefined,
-      // 创建成功后先交接草稿，再用真实会话页替换临时路由。
+      // 创建成功后交接草稿；路由在登记时就已经是本会话，无需再切换。
       onSessionCreated: isNewSession
         ? (nextSessionId) => {
             pendingSessionId = nextSessionId
@@ -486,19 +499,21 @@ export function useDesktopComposerController({
               sourceDraftKey,
               draftTargetKey(nextSessionId),
             )
-            if (handoff) draftClientIdRef.current = handoff.submitted.clientId
+            if (handoff) {
+              draftClientIdRef.current = handoff.submitted.clientId
+              // 内容已由快照承载：交接后再移走，新会话输入框保持空的可编辑草稿。
+              // 来源页输入在登记时已清空，创建会话复制的也是空内容。
+              composerDraftStore.clearSubmittedContent(
+                draftTargetKey(nextSessionId),
+                handoff.submitted.clientId,
+              )
+            }
             if (pendingSubmission) {
               pendingSubmissionStore.update(pendingSubmission.submissionId, {
-                sessionId: nextSessionId,
                 stage: 'sending',
               })
             }
           }
-        : undefined,
-      // Keep navigation before submission so the routed page owns all
-      // streaming state from the first response event onward.
-      navigateToSession: isNewSession
-        ? (nextSessionId) => navigate(sessionPath(nextSessionId), { replace: true })
         : undefined,
       submitToSession: async (targetSessionId, value, metadata) => {
         if (
@@ -530,6 +545,12 @@ export function useDesktopComposerController({
       const failureDraftKey: ComposerDraftKey = failedSessionId
         ? draftTargetKey(failedSessionId)
         : sourceDraftKey
+      // 登记时已移走提交内容：失败后把原稿放回去。等待期间用户新输入的内容优先。
+      // 发送失败时交接过来的会话草稿是空的，先按原快照补回技能与目标等字段。
+      if (isNewSession) {
+        if (outcome.sessionId) composerDraftStore.set(failureDraftKey, draft)
+        onDraftRestore?.(failureDraftKey, snapshot)
+      }
       composerDraftStore.setSubmitOutcome(failureDraftKey, outcome)
       if (outcome.phase === 'send') {
         onError?.(outcome.message)
@@ -540,9 +561,9 @@ export function useDesktopComposerController({
     const acceptedDraftKey: ComposerDraftKey = isNewSession
       ? draftTargetKey(outcome.sessionId)
       : sourceDraftKey
-    const clearContent = onDraftAccepted
-      ? onDraftAccepted(acceptedDraftKey, snapshot) !== false
-      : true
+    // 新建会话的输入在登记时已移走，成功后无需再比对；已有会话沿用原逻辑。
+    const clearContent =
+      isNewSession || !onDraftAccepted ? true : onDraftAccepted(acceptedDraftKey, snapshot) !== false
     const nextDraft = composerDraftStore.completeSubmission(acceptedDraftKey, draft.clientId, {
       clearContent,
       browserAnnotations: draft.browserAnnotations,
@@ -558,35 +579,40 @@ export function useDesktopComposerController({
   }
 
   /**
-   * pending 页只负责首屏展示：创建失败时退回来源页并保留原稿，
-   * 发送失败时真实会话页已经接上，这里只移除启动提示。
+   * 提交快照只负责创建期间的首屏展示。发送确认可能早于正式投影，所以成功时
+   * 保留快照，由会话页在投影出现同一 inputId 后接管；失败时投影不会出现这条
+   * 消息，直接移除并回到来源页。
    */
   function settlePendingSubmission(
     submission: PendingSubmission,
     outcome: ComposerSubmitOutcome,
   ): void {
-    const stillOnPendingPage = isOnPendingSubmissionPage(readPathname(), submission.submissionId)
     if (outcome.status !== 'failed') {
-      pendingSubmissionStore.remove(submission.submissionId)
+      // 用户已经离开该会话页时无需保留，避免后台结果把人拉回。
+      if (readPathname() !== sessionPath(submission.submissionId)) {
+        pendingSubmissionStore.remove(submission.submissionId)
+      }
       return
     }
+    // 发送失败：路由已经是该会话，保留草稿就地重试即可。
     if (outcome.sessionId) {
-      // 发送失败：草稿已在真实会话页，保持可重试并移除启动提示。
       pendingSubmissionStore.remove(submission.submissionId)
       return
     }
-    if (stillOnPendingPage) {
-      // 创建失败：退回来源页，原稿写入来源草稿键后再清理临时目标。
-      // 本次尝试已记录的 operationId 必须随草稿带回，重试才能复用已创建的工作树。
-      const attempt = composerDraftStore.peek(submission.sourceDraftKey)?.launchAttempt
-      composerDraftStore.revertHandoff(
-        submission.sourceDraftKey,
-        draftTargetKey(submission.submissionId),
-        withLaunchAttempt(draft, attempt),
-      )
-      composerDraftStore.setSubmitOutcome(submission.sourceDraftKey, outcome)
-      navigate(sourceDraftPath(submission.sourceDraftKey), { replace: true })
+    // 创建失败：会话并不存在，回到来源页。已记录的 operationId 随草稿带回，
+    // 重试才能复用已创建的工作树。用户已经离开时不抢导航。
+    if (readPathname() !== sessionPath(submission.submissionId)) {
+      pendingSubmissionStore.remove(submission.submissionId)
+      return
     }
+    const attempt = composerDraftStore.peek(submission.sourceDraftKey)?.launchAttempt
+    composerDraftStore.revertHandoff(
+      submission.sourceDraftKey,
+      draftTargetKey(submission.submissionId),
+      withLaunchAttempt(draft, attempt),
+    )
+    composerDraftStore.setSubmitOutcome(submission.sourceDraftKey, outcome)
+    navigate(sourceDraftPath(submission.sourceDraftKey), { replace: true })
     pendingSubmissionStore.remove(submission.submissionId)
   }
 

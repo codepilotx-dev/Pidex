@@ -68,8 +68,6 @@ function composerCardProps(overrides: Partial<ComposerCardProps> = {}): Composer
     onProviderModelChange: () => {},
     onOpenWorkspace: () => {},
     onClearWorkspace: () => {},
-    onBranchSelect: () => {},
-    onCreateBranch: () => {},
     onPermissionChange: () => {},
     onSubmit: () => {},
     onThinkingChange: () => {},
@@ -443,7 +441,7 @@ describe('composer surface variant', () => {
     expect(thread).toContain('footerClassName="workflow-main-scroll-footer tw:px-0 tw:pb-4"')
   })
 
-  test('Composer utility bar 只在有内容时渲染，首页默认显示项目、工作组和分支', () => {
+  test('Composer utility bar 只在有内容时渲染，首页默认显示项目和工作组', () => {
     const emptyThread = renderToStaticMarkup(
       <ComposerCard {...composerCardProps({ placement: 'thread' })} />,
     )
@@ -461,7 +459,9 @@ describe('composer surface variant', () => {
     expect(home.split('composer-bottom composer-utility-bar').length - 1).toBe(1)
     expect(home).toContain(WORKSPACE.name)
     expect(home).toContain('工作组')
-    expect(home).toContain(WORKSPACE.branchName)
+    // 分支切换已移入“配置本地环境”菜单，不再占用悬浮栏芯片。
+    expect(home).not.toContain('选择分支')
+    expect(home).toContain('aria-label="配置本地环境"')
   })
 
   test('暂停队列与 thread Goal 共用一个 utility bar，且队列不再显示数量头', () => {
@@ -579,14 +579,15 @@ describe('composer surface variant', () => {
     expect(html).not.toContain('选择文件夹')
   })
 
-  test('Coding 选中 workspace 后显示工作组、分支与项目行为', () => {
+  test('Coding 首页把分支切换收进本地环境设置菜单', () => {
     const html = renderToStaticMarkup(
       <ComposerCard {...composerCardProps({ surface: 'coding', workspace: WORKSPACE })} />,
     )
     expect(html).toContain('Alpha 工作区')
     expect(html).toContain('工作组')
-    expect(html).toContain('feature/working-surface')
-    expect(html).toContain('选择分支')
+    // 顶部悬浮栏不再单独占用分支芯片，分支入口只保留在“配置本地环境”菜单里。
+    expect(html).not.toContain('选择分支')
+    expect(html).toContain('aria-label="配置本地环境"')
   })
 
   test('Chat 不渲染项目选择，但保留工作组、输入与提交结构', () => {

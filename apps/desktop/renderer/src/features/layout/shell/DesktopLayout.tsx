@@ -30,6 +30,7 @@ import { normalizePathForComparison } from '../../../utils/PathUtils.js'
 import type { SessionBoundComposerProps } from '../../session/composer/SessionBoundComposer.js'
 import { getDesktopComposerBranchName } from '../../session/composer/ComposerWorkspacePresentation.js'
 import { composerDraftStore } from '../../session/composer/ComposerDraftStore.js'
+import { selectLatestCompletedTurnId } from '../../session/composer/ComposerPrediction.js'
 import { isBuiltinSkill } from '../../plugins/BuiltinSkillPresentation.js'
 import { listRuntimeSkills } from '../../settings/plugins/SkillClientAdapter.js'
 import type { ComposerDraftKey } from '../../session/composer/ComposerTypes.js'
@@ -85,6 +86,7 @@ import { TaskConversationLinks } from '../../automation/TaskConversationLinks.js
 import { NO_WORKSPACE_DIFF } from '../../workspace/UseWorkspaceState.js'
 import { shouldRestoreLastWorkspace } from '../../workspace/LastWorkspaceRestore.js'
 import { useSessionState } from '../../session/state/UseSessionState.js'
+import { pendingSubmissionStore } from '../../session/state/PendingSubmissionStore.js'
 import { useSessionTitleRegeneration } from '../../session/state/UseSessionTitleRegeneration.js'
 import { useDesktopCommands } from '../../session/UseDesktopCommands.js'
 import { useEverOpened, useLastNonNull } from '../../../hooks/UsePresenceRetention.js'
@@ -154,7 +156,6 @@ import type { WorkbenchTabRenderContext } from '../tabs/WorkbenchTabRegistry.js'
 import { createWorkspaceFileTabId } from '../tabs/WorkspaceFileTabId.js'
 import { CommandMenuDialog } from '../../search/CommandMenuDialog.js'
 import { DesktopComposer } from '../../session/composer/DesktopComposer.js'
-import { buildCommandMenuTasks } from '../../search/CommandMenuModel.js'
 import { GlobalErrorModal } from '../../../components/GlobalErrorModal.js'
 import { toastStore } from '../../../components/toast/ToastState.js'
 import { Archive } from 'lucide-react'
@@ -364,6 +365,9 @@ export function DesktopLayout(): React.ReactNode {
   const subscribedRustSearchAndDiffKernels = useDesktopRuntimeSettingsField(
     (s) => s.values.rustSearchAndDiffKernels,
   )
+  const subscribedComposerPredictions = useDesktopRuntimeSettingsField(
+    (s) => s.values['desktop.composer_predictions'],
+  )
   const subscribedEnableAutoReviewPermissionMode = useDesktopRuntimeSettingsField(
     (s) => s.values.enableAutoReviewPermissionMode,
   )
@@ -432,6 +436,7 @@ export function DesktopLayout(): React.ReactNode {
         installPidexDependencies: subscribedInstallPidexDependencies,
         enableMemory: subscribedEnableMemory,
         rustSearchAndDiffKernels: subscribedRustSearchAndDiffKernels,
+        'desktop.composer_predictions': subscribedComposerPredictions,
         enableAutoReviewPermissionMode: subscribedEnableAutoReviewPermissionMode,
         enableFullAccessPermissionMode: subscribedEnableFullAccessPermissionMode,
         recentWorkspaces: subscribedRecentWorkspaces,
@@ -476,6 +481,7 @@ export function DesktopLayout(): React.ReactNode {
       subscribedInstallPidexDependencies,
       subscribedEnableMemory,
       subscribedRustSearchAndDiffKernels,
+      subscribedComposerPredictions,
       subscribedEnableAutoReviewPermissionMode,
       subscribedEnableFullAccessPermissionMode,
       subscribedRecentWorkspaces,
@@ -519,6 +525,7 @@ export function DesktopLayout(): React.ReactNode {
       installPidexDependencies,
       enableMemory,
       rustSearchAndDiffKernels,
+      'desktop.composer_predictions': composerPredictionsEnabled,
       enableAutoReviewPermissionMode,
       enableFullAccessPermissionMode,
       recentWorkspaces,
@@ -797,7 +804,9 @@ export function DesktopLayout(): React.ReactNode {
     appendComposerAttachmentsForDraft,
     removeComposerAttachmentForDraft,
     clearComposerDraftIfUnchanged,
+    restoreComposerDraftIfEmpty,
     activateSessionById,
+    markActiveSessionRead,
     createSessionForWorkspace,
     submitToSession,
     interrupt,
@@ -959,6 +968,8 @@ export function DesktopLayout(): React.ReactNode {
     }
 
     const routedSession = sessions.find((item) => item.id === routedSessionId)
+    // 本次首条消息的会话还在创建中：路由先于目录存在，不能按“找不到对话”处理。
+    if (!routedSession && pendingSubmissions[routedSessionId]) return
     if (!routedSession) {
       activateSessionById(null)
       setWorkspaceState(null)
@@ -1783,6 +1794,10 @@ export function DesktopLayout(): React.ReactNode {
   )
   const uiSnapshotRef = useRef<ConversationUiState>(createDefaultConversationUiState())
   const restoredConversationUiIdentityRef = useRef<string | null>(null)
+  /**
+   * 正在交接首条消息的真实会话：布局沿用临时页的工作台状态，不按该会话
+   * 自己的默认 UI 快照恢复。快照被正式投影接管后自动失效。
+   */
   const currentWorkspaceUiIdentity = currentWorkspace
     ? [
         currentWorkspace.projectId ?? '',
@@ -1846,6 +1861,10 @@ export function DesktopLayout(): React.ReactNode {
     restoredConversationUiIdentityRef.current = restoreIdentity
 
     prevSessionIdRef.current = currentId
+
+    // 首条消息建立会话时沿用当前工作台布局：路由没有变化，右栏与输入区
+    // 不应该在这个瞬间跳回该会话的默认状态。快照移走后恢复正常切换逻辑。
+    if (currentId && pendingSubmissions[currentId]) return
 
     const restoreAttachmentPreview = (
       restored: ReturnType<typeof createDefaultWorkbenchTabsState>,
@@ -2295,8 +2314,12 @@ export function DesktopLayout(): React.ReactNode {
   const isConversationLoading =
     isConversationRoute &&
     (!sessionsHydrated || sessionId !== routedSessionId || gitDetection === 'loading')
-  // pending 页没有真实会话：不等工作区就绪就直接显示已提交消息与启动状态。
-  const isPendingSubmissionRoute = location.pathname.startsWith('/pending/')
+  // 首条消息在会话建立前就已经在这条路由上，输入区要全程保持可用。
+  const pendingSubmissions = useStore(
+    pendingSubmissionStore.store,
+    (state) => state.submissions,
+  )
+  const hasPendingSubmission = Boolean(routedSessionId && pendingSubmissions[routedSessionId])
   const branchName = getDesktopComposerBranchName(currentWorkspace)
   const quickChatRecentTasks = useMemo(() => {
     const workspaceKey = currentWorkspace?.path.replace(/\\/g, '/').toLowerCase() ?? null
@@ -2317,15 +2340,12 @@ export function DesktopLayout(): React.ReactNode {
   }, [currentWorkspace?.path, sessions])
   const composerContextTasks = useMemo(
     () =>
-      buildCommandMenuTasks(
-        sessions.filter((item) => item.id !== routedSessionId),
-        '',
-      ).map((item) => ({
+      sessions.filter((item) => !item.archivedAt).map((item) => ({
         id: item.id,
-        title: item.title,
+        title: sessionDisplayTitle(item),
         workspaceName: item.workspaceName,
       })),
-    [routedSessionId, sessions],
+    [sessions],
   )
   const composerBrowserContext = useMemo(() => {
     if (!browserState?.open || !/^https?:\/\//u.test(browserState.url)) return null
@@ -2739,8 +2759,6 @@ export function DesktopLayout(): React.ReactNode {
         onSkillTokenActivate={(invocation) => {
           void handleActivateComposerSkill(invocation)
         }}
-        onBranchSelect={handleBranchSelect}
-        onCreateBranch={handleCreateBranch}
         capabilities={{ goals: false, review: false, status: false }}
         onPermissionChange={async (value) => {
           try {
@@ -3649,6 +3667,16 @@ export function DesktopLayout(): React.ReactNode {
     </SidebarFrame>
   )
 
+  const composerPredictionTurnId = useMemo(() => {
+    if (!composerPredictionsEnabled || !routedSessionId) return null
+    return selectLatestCompletedTurnId(events, activeSessionItem?.latestTurnStatus ?? null)
+  }, [
+    activeSessionItem?.latestTurnStatus,
+    composerPredictionsEnabled,
+    events,
+    routedSessionId,
+  ])
+
   const composerProps = useMemo<SessionBoundComposerProps | null>(
     () =>
       isQuickChatPage || isConversationRoute
@@ -3661,6 +3689,8 @@ export function DesktopLayout(): React.ReactNode {
             utilityBarVariant: isQuickChatPage ? 'home' : 'default',
             draftKey: mainComposerDraftKey,
             routedSessionId,
+            composerPredictionsEnabled,
+            predictionTurnId: composerPredictionTurnId,
             sessionStatus,
             permissionMode: effectivePermissionMode,
             planModeActive,
@@ -3708,6 +3738,8 @@ export function DesktopLayout(): React.ReactNode {
             onRemoveAttachmentForDraft: removeComposerAttachmentForDraft,
             onOpenAttachment: handleOpenDraftAttachment,
             onDraftAccepted: clearComposerDraftIfUnchanged,
+            onDraftCleared: clearComposerDraftIfUnchanged,
+            onDraftRestore: restoreComposerDraftIfEmpty,
             onChooseWorkspace: handleChooseWorkspace,
             onInputChange: inputBinding.replace,
             onInterrupt: interrupt,
@@ -3728,8 +3760,6 @@ export function DesktopLayout(): React.ReactNode {
             onSkillTokenActivate: (invocation) => {
               void handleActivateComposerSkill(invocation)
             },
-            onBranchSelect: handleBranchSelect,
-            onCreateBranch: handleCreateBranch,
             onStartReview: handleStartAiReview,
             onPermissionChange: handlePermissionChange,
             onPlanModeChange: handlePlanModeChange,
@@ -3798,6 +3828,7 @@ export function DesktopLayout(): React.ReactNode {
       removeComposerAttachmentForDraft,
       handleOpenDraftAttachment,
       clearComposerDraftIfUnchanged,
+      restoreComposerDraftIfEmpty,
       handleChooseWorkspace,
       interrupt,
       location,
@@ -3826,6 +3857,8 @@ export function DesktopLayout(): React.ReactNode {
       handleFollowUpEdit,
       handleFollowUpRemove,
       handleFollowUpResume,
+      composerPredictionsEnabled,
+      composerPredictionTurnId,
     ],
   )
 
@@ -3949,7 +3982,7 @@ export function DesktopLayout(): React.ReactNode {
       planModeActive,
       providerModelOptions,
       sessionStatus,
-      composerProps: isConversationLoading && !isPendingSubmissionRoute ? null : composerProps,
+      composerProps: isConversationLoading && !hasPendingSubmission ? null : composerProps,
       composerDraft: {
         store: inputBinding.store,
         replace: inputBinding.replace,
@@ -4028,7 +4061,7 @@ export function DesktopLayout(): React.ReactNode {
       planModeActive,
       providerModelOptions,
       sessionStatus,
-      isPendingSubmissionRoute,
+      hasPendingSubmission,
       composerProps,
       inputBinding,
       effectiveBottomPanelVisible,
@@ -4336,6 +4369,7 @@ export function DesktopLayout(): React.ReactNode {
               bottomPanelVisible={effectiveBottomPanelVisible}
               workspaceLayout={workspaceLayout}
               resizeActive={rightResizePhase !== 'idle'}
+              onWorkspaceInteraction={markActiveSessionRead}
             />
           </WorkspaceHeaderProvider>
         </QuickChatContext.Provider>

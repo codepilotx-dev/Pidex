@@ -225,7 +225,7 @@ describe('composer submit transaction', () => {
     await executeComposerSubmitTransaction({
       draft: store.get('home'),
       createSession: async () => 'new',
-      navigateToSession: () => {
+      onSessionCreated: () => {
         store.handoff('home', 'session:new')
       },
       submitToSession: async () => {
@@ -302,7 +302,7 @@ describe('composer submit transaction', () => {
     await executeComposerSubmitTransaction({
       draft: firstDraft,
       createSession: async () => 'session-1',
-      navigateToSession: (sessionId) => {
+      onSessionCreated: (sessionId) => {
         const handoff = store.handoff('home', `session:${sessionId}`)
         expect(handoff?.replacement.clientId).toBe('draft-2')
         store.update('home', (current) => ({
@@ -536,7 +536,7 @@ describe('composer submit transaction', () => {
         events.push('create')
         return 'session-1'
       },
-      navigateToSession: (sessionId) => {
+      onSessionCreated: (sessionId) => {
         const handoff = store.handoff('home', `session:${sessionId}`)
         expect(handoff?.replacement.clientId).toBe('draft-2')
         events.push(`navigate:${sessionId}`)
@@ -597,7 +597,7 @@ describe('composer submit transaction', () => {
       createSession: async () => {
         throw new Error('无法创建无项目工作区')
       },
-      navigateToSession: (sessionId) => events.push(`navigate:${sessionId}`),
+      onSessionCreated: (sessionId) => events.push(`navigate:${sessionId}`),
       submitToSession: async (sessionId) => {
         events.push(`send:${sessionId}`)
         return 'sent'
