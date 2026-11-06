@@ -53,6 +53,8 @@ export type SessionLifecycleUpdate = {
   status: Turn['status']
   sequence: number
   error?: string | null
+  /** Envelope occurrence time (ms); the auto-read watermark for a terminal turn. */
+  occurredAt: number
 }
 
 /**
@@ -134,6 +136,7 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
             status: event.payload.turn.status,
             sequence: event.sequence,
             error: null,
+            occurredAt: event.occurredAt,
           }
         : null
     case 'turn/failed':
@@ -144,6 +147,7 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
             status: event.payload.turn.status,
             sequence: event.sequence,
             error: safeTurnError(event.payload.turn.error ?? event.payload.error.message),
+            occurredAt: event.occurredAt,
           }
         : null
     case 'turn/statusChanged':
@@ -154,6 +158,7 @@ function sessionLifecycleUpdate(event: EventEnvelope): SessionLifecycleUpdate | 
             status: event.payload.status,
             sequence: event.sequence,
             error: event.payload.status === 'failed' ? safeTurnError(event.payload.reason) : null,
+            occurredAt: event.occurredAt,
           }
         : null
     default:

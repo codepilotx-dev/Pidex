@@ -78,6 +78,7 @@ import type {
   DesktopSettingsChange,
   DesktopSessionStoreChange,
   DesktopSessionSnapshot,
+  DesktopSessionListItem,
   DesktopStoredSettings,
   DesktopThemeSettings,
   DesktopSubagentRead,
@@ -268,6 +269,48 @@ export async function collectAllThreadPages(
   return threads
 }
 
+/**
+ * Default foreground probe. Uses the real DOM when present and degrades to
+ * "always foreground" in non-DOM environments (e.g. unit tests without a DOM),
+ * where tests inject their own controller through the client environment.
+ */
+function createDefaultForegroundController(
+  environment: DesktopClientEnvironment,
+): import('./Types.js').DesktopForegroundController {
+  const doc = typeof document !== 'undefined' ? document : undefined
+  const win =
+    environment.window ?? (typeof window !== 'undefined' ? (window as unknown as typeof environment.window) : undefined)
+  return {
+    isForeground() {
+      if (doc) {
+        if (doc.visibilityState === 'hidden') return false
+        if (typeof doc.hasFocus === 'function' && !doc.hasFocus()) return false
+      }
+      return true
+    },
+    addChangeListener(listener) {
+      const cleanups: Array<() => void> = []
+      if (doc) {
+        doc.addEventListener('visibilitychange', listener)
+        cleanups.push(() => doc.removeEventListener('visibilitychange', listener))
+      }
+      if (win?.addEventListener && win.removeEventListener) {
+        const onFocus = (): void => listener()
+        const onBlur = (): void => listener()
+        win.addEventListener('focus', onFocus)
+        win.addEventListener('blur', onBlur)
+        cleanups.push(() => {
+          win.removeEventListener?.('focus', onFocus)
+          win.removeEventListener?.('blur', onBlur)
+        })
+      }
+      return () => {
+        for (const cleanup of cleanups) cleanup()
+      }
+    },
+  }
+}
+
 export function createAgentSessionDesktopClient(
   environment: DesktopClientEnvironment,
   mockClient: DesktopApi &
@@ -337,6 +380,21 @@ export function createAgentSessionDesktopClient(
   const refreshTimers = new Map<string, ReturnType<typeof setTimeout>>()
   const confirmedReadThroughBySessionId = new Map<string, number>()
   const pendingReadThroughBySessionId = new Map<string, Map<string, number>>()
+  // One serial chain per session for every read-state mutation (manual read,
+  // manual unread and automatic clear) so operations land on the server in the
+  // exact order the user triggered them, and a later manual unread always wins.
+  const readOperationTailBySessionId = new Map<string, Promise<void>>()
+  // Coalesced automatic clear: repeated completion/failure events collapse into a
+  // single pending watermark equal to the largest read-through target.
+  const automaticReadTargetBySessionId = new Map<string, number>()
+  const automaticReadScheduledBySessionId = new Set<string>()
+  // A deferred (backgrounded) or failed automatic clear that must be retried on
+  // the next catalog refresh or foreground restore — never by an immediate,
+  // self-scheduled retry (that would spin against a failing backend).
+  const automaticReadRetryBySessionId = new Map<string, number>()
+  // Bumped when the user marks a session unread so any queued or in-flight
+  // automatic clear is invalidated and cannot wipe the fresh manual unread.
+  const automaticReadGenerationBySessionId = new Map<string, number>()
   const pendingSettingsUpdates = new Map<string, Promise<void>>()
   const approvalRetryOperations = new Map<string, string>()
   const pendingDesktopSettingsSaves = new Map<string, Promise<DesktopStoredSettings>>()
@@ -344,6 +402,11 @@ export function createAgentSessionDesktopClient(
   let sessionStoreReconcile: Promise<void> | null = null
   let backgroundReconcileFailed = false
   const reconciliationErrorListeners = new Set<(error: unknown) => void>()
+  const foregroundController = environment.foreground ?? createDefaultForegroundController(environment)
+  const isForeground = (): boolean => foregroundController.isForeground()
+  foregroundController.addChangeListener?.(() => {
+    if (isForeground()) retryPendingAutomaticReads()
+  })
 
   function notifyReconciliationError(error: unknown): void {
     if (backgroundReconcileFailed) return
@@ -968,6 +1031,9 @@ export function createAgentSessionDesktopClient(
       update.threadId,
       (lifecycleEpochBySessionId.get(update.threadId) ?? 0) + 1,
     )
+    // A completed/failed turn of the session the user is currently viewing should
+    // be marked read automatically (only while the window is in the foreground).
+    maybeAutoReadAfterLifecycle(update)
     const cached = sessionSnapshots.get(update.threadId)
     if (!cached) return
     const targetError =
@@ -1042,6 +1108,9 @@ export function createAgentSessionDesktopClient(
       sessionSnapshots.set(item.id, snapshot)
       return snapshot
     })
+    // A failed/deferred automatic clear is retried on the next catalog refresh for
+    // the currently viewed session (only when the window is in the foreground).
+    if (!archived) retryPendingAutomaticReads()
     return snapshots
   }
 
@@ -1585,23 +1654,203 @@ export function createAgentSessionDesktopClient(
   const operationError = (error: unknown) =>
     error instanceof Error ? error.message : String(error)
 
+  type ThreadCacheMode = 'metadata' | 'read-state'
   const cacheThreadListItem = async (
     rawThread: ThreadListItem,
+    mode: ThreadCacheMode = 'metadata',
   ): Promise<DesktopSessionSnapshot> => {
     const requestEpoch = lifecycleEpochBySessionId.get(rawThread.id) ?? 0
-    const thread = applySessionReadThrough(rawThread)
+    // Mutation responses use getListItem's narrow projection; preserve richer
+    // catalog/detail fields instead of overwriting them with adapter defaults.
+    const thread = mode === 'read-state' ? rawThread : applySessionReadThrough(rawThread)
     const projectsById = await loadProjectsById()
     const listSnapshot = agentThreadListItemToDesktopSnapshot(
       thread,
       thread.projectID ? projectsById.get(thread.projectID) : null,
     )
     const snapshot = sessionSnapshots.get(thread.id) ?? listSnapshot
-    snapshot.item = { ...snapshot.item, ...listSnapshot.item }
-    snapshot.updatedAt = listSnapshot.updatedAt
+    if (mode === 'read-state') {
+      snapshot.item = { ...snapshot.item, unreadAt: listSnapshot.item.unreadAt }
+    } else {
+      snapshot.item = {
+        ...snapshot.item,
+        sessionName: listSnapshot.item.sessionName,
+        customTitle: listSnapshot.item.customTitle,
+        aiTitle: listSnapshot.item.aiTitle,
+        archivedAt: listSnapshot.item.archivedAt,
+        unreadAt: listSnapshot.item.unreadAt,
+      }
+      snapshot.updatedAt = listSnapshot.updatedAt
+    }
     const reconciled = applyLifecycleSnapshotFreshness(snapshot, requestEpoch)
     sessionSnapshots.set(thread.id, reconciled)
     emitSessionStoreChange()
     return reconciled
+  }
+
+  /**
+   * Serializes every read-state mutation for one session. Manual read / manual
+   * unread / automatic clear all funnel through this chain, so the last user
+   * action is the last server call and its optimistic state is the final one.
+   */
+  function enqueueSessionReadOperation<T>(
+    sessionId: string,
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const previous = readOperationTailBySessionId.get(sessionId) ?? Promise.resolve()
+    const result = previous.then(operation, operation)
+    readOperationTailBySessionId.set(
+      sessionId,
+      result.then(
+        () => undefined,
+        () => undefined,
+      ),
+    )
+    return result
+  }
+
+  /** Invalidates any queued or in-flight automatic clear for a session. */
+  function invalidateAutomaticRead(sessionId: string): void {
+    automaticReadGenerationBySessionId.set(
+      sessionId,
+      (automaticReadGenerationBySessionId.get(sessionId) ?? 0) + 1,
+    )
+    automaticReadTargetBySessionId.delete(sessionId)
+    automaticReadScheduledBySessionId.delete(sessionId)
+    automaticReadRetryBySessionId.delete(sessionId)
+  }
+
+  async function performMarkRead(
+    sessionId: string,
+    readThroughTimestamp: number,
+    options: { automatic: boolean; generation?: number },
+  ): Promise<DesktopSessionListItem | null> {
+    const requestId = crypto.randomUUID()
+    const pendingReadThrough = pendingReadThroughBySessionId.get(sessionId) ?? new Map()
+    pendingReadThrough.set(requestId, readThroughTimestamp)
+    pendingReadThroughBySessionId.set(sessionId, pendingReadThrough)
+    const cached = sessionSnapshots.get(sessionId)
+    const previousUnreadAt = cached?.item.unreadAt ?? null
+    if (
+      !options.automatic &&
+      cached?.item.unreadAt &&
+      Date.parse(cached.item.unreadAt) <= readThroughTimestamp
+    ) {
+      cached.item = { ...cached.item, unreadAt: null }
+      sessionSnapshots.set(sessionId, cached)
+      emitSessionStoreChange()
+    }
+    try {
+      const response = await rpc.call('thread/mark-read', {
+        threadId: sessionId,
+        readThroughAt: readThroughTimestamp,
+        operationId: requestId,
+      })
+      pendingReadThrough.delete(requestId)
+      if (pendingReadThrough.size === 0) pendingReadThroughBySessionId.delete(sessionId)
+      // The user may have marked the session unread while this automatic request
+      // was in flight. Discard its result so it can never hide the manual unread.
+      if (
+        options.automatic &&
+        (automaticReadGenerationBySessionId.get(sessionId) ?? 0) !== (options.generation ?? 0)
+      ) {
+        return null
+      }
+      confirmedReadThroughBySessionId.set(
+        sessionId,
+        Math.max(confirmedReadThroughBySessionId.get(sessionId) ?? 0, readThroughTimestamp),
+      )
+      return (await cacheThreadListItem(response.thread, 'read-state')).item
+    } catch (error) {
+      pendingReadThrough.delete(requestId)
+      if (pendingReadThrough.size === 0) pendingReadThroughBySessionId.delete(sessionId)
+      if (options.automatic) {
+        // Never let an unconfirmed read hide the row behind a permanent watermark:
+        // restore the optimistic value and leave a retry marker for the next
+        // catalog refresh / foreground restore instead of retrying immediately.
+        const current = sessionSnapshots.get(sessionId)
+        if (current && current.item.unreadAt == null && previousUnreadAt != null) {
+          current.item = { ...current.item, unreadAt: previousUnreadAt }
+          sessionSnapshots.set(sessionId, current)
+          emitSessionStoreChange()
+        }
+        throw error
+      }
+      await refreshAgentSessionStoreChange().catch(() => {})
+      throw error
+    }
+  }
+
+  /**
+   * Queues (and coalesces) an automatic mark-read for one session. Duplicate
+   * requests collapse to a single serial operation that reads through the largest
+   * target, so a burst of completion/failure events never issues a burst of RPCs.
+   */
+  function queueAutomaticRead(sessionId: string, readThroughTimestamp: number): void {
+    if (!Number.isFinite(readThroughTimestamp) || readThroughTimestamp <= 0) return
+    if (readThroughTimestamp <= (confirmedReadThroughBySessionId.get(sessionId) ?? 0)) {
+      automaticReadRetryBySessionId.delete(sessionId)
+      return
+    }
+    const pending = automaticReadTargetBySessionId.get(sessionId)
+    automaticReadTargetBySessionId.set(
+      sessionId,
+      pending === undefined ? readThroughTimestamp : Math.max(pending, readThroughTimestamp),
+    )
+    if (automaticReadScheduledBySessionId.has(sessionId)) return
+    automaticReadScheduledBySessionId.add(sessionId)
+    void enqueueSessionReadOperation(sessionId, async () => {
+      automaticReadScheduledBySessionId.delete(sessionId)
+      const target = automaticReadTargetBySessionId.get(sessionId)
+      automaticReadTargetBySessionId.delete(sessionId)
+      if (target === undefined) return
+      const generation = automaticReadGenerationBySessionId.get(sessionId) ?? 0
+      try {
+        await performMarkRead(sessionId, target, { automatic: true, generation })
+        if ((automaticReadGenerationBySessionId.get(sessionId) ?? 0) === generation) {
+          automaticReadRetryBySessionId.delete(sessionId)
+        }
+      } catch {
+        if ((automaticReadGenerationBySessionId.get(sessionId) ?? 0) === generation) {
+          const retry = automaticReadRetryBySessionId.get(sessionId) ?? 0
+          automaticReadRetryBySessionId.set(sessionId, Math.max(retry, target))
+        }
+      }
+    })
+  }
+
+  /**
+   * On foreground restore / catalog refresh, retry the pending automatic clear for
+   * the currently viewed session only. The retry target grows to cover any unread
+   * that accumulated while the window was in the background.
+   */
+  function retryPendingAutomaticReads(): void {
+    const sessionId = activeSessionId
+    if (!sessionId || !isForeground()) return
+    const retry = automaticReadRetryBySessionId.get(sessionId)
+    if (retry === undefined) return
+    const cachedUnreadAt = sessionSnapshots.get(sessionId)?.item.unreadAt
+    const cachedTimestamp = cachedUnreadAt ? Date.parse(cachedUnreadAt) : 0
+    const target = Math.max(retry, Number.isFinite(cachedTimestamp) ? cachedTimestamp : 0)
+    if (target <= 0) return
+    // Clear the marker before queueing so an in-flight retry is not scheduled
+    // again on every catalog refresh; a failure re-arms it.
+    automaticReadRetryBySessionId.delete(sessionId)
+    queueAutomaticRead(sessionId, target)
+  }
+
+  function maybeAutoReadAfterLifecycle(update: SessionLifecycleUpdate): void {
+    if (update.status !== 'completed' && update.status !== 'failed') return
+    if (update.threadId !== activeSessionId) return
+    if (!Number.isFinite(update.occurredAt) || update.occurredAt <= 0) return
+    if (!isForeground()) {
+      // Window hidden or unfocused: keep the unread and clear it when the user
+      // comes back to the currently viewed session.
+      const retry = automaticReadRetryBySessionId.get(update.threadId) ?? 0
+      automaticReadRetryBySessionId.set(update.threadId, Math.max(retry, update.occurredAt))
+      return
+    }
+    queueAutomaticRead(update.threadId, update.occurredAt)
   }
 
   type AgentReviewApi = ReturnType<(typeof import('./AgentReviewApi.js'))['createAgentReviewApi']>
@@ -3643,8 +3892,14 @@ export function createAgentSessionDesktopClient(
     setActiveSession: (sessionId) =>
       withAgentOrMock(
         async () => {
+          const previous = activeSessionId
           activeSessionId = sessionId
           emitSessionStoreChange()
+          // If this session accrued a deferred automatic clear while the window was
+          // backgrounded, clear it now that the user is viewing it again.
+          if (sessionId && sessionId !== previous && isForeground()) {
+            if (automaticReadRetryBySessionId.has(sessionId)) retryPendingAutomaticReads()
+          }
         },
         () => mockClient.setActiveSession(sessionId),
       ),
@@ -3660,39 +3915,10 @@ export function createAgentSessionDesktopClient(
           if (!Number.isFinite(readThroughTimestamp)) {
             throw new Error('INVALID_READ_THROUGH_AT')
           }
-          const requestId = crypto.randomUUID()
-          const pendingReadThrough = pendingReadThroughBySessionId.get(sessionId) ?? new Map()
-          pendingReadThrough.set(requestId, readThroughTimestamp)
-          pendingReadThroughBySessionId.set(sessionId, pendingReadThrough)
-          const cached = sessionSnapshots.get(sessionId)
-          if (cached?.item.unreadAt && Date.parse(cached.item.unreadAt) <= readThroughTimestamp) {
-            cached.item = { ...cached.item, unreadAt: null }
-            sessionSnapshots.set(sessionId, cached)
-            emitSessionStoreChange()
-          }
-          try {
-            const response = await rpc.call('thread/mark-read', {
-              threadId: sessionId,
-              readThroughAt: readThroughTimestamp,
-              operationId: requestId,
-            })
-            confirmedReadThroughBySessionId.set(
-              sessionId,
-              Math.max(confirmedReadThroughBySessionId.get(sessionId) ?? 0, readThroughTimestamp),
-            )
-            pendingReadThrough.delete(requestId)
-            if (pendingReadThrough.size === 0) {
-              pendingReadThroughBySessionId.delete(sessionId)
-            }
-            return (await cacheThreadListItem(response.thread)).item
-          } catch (error) {
-            pendingReadThrough.delete(requestId)
-            if (pendingReadThrough.size === 0) {
-              pendingReadThroughBySessionId.delete(sessionId)
-            }
-            await refreshAgentSessionStoreChange().catch(() => {})
-            throw error
-          }
+          const item = await enqueueSessionReadOperation(sessionId, () =>
+            performMarkRead(sessionId, readThroughTimestamp, { automatic: false }),
+          )
+          return item as DesktopSessionListItem
         },
         () => mockClient.markSessionRead(sessionId, readThroughAt),
       ),
@@ -3703,28 +3929,42 @@ export function createAgentSessionDesktopClient(
           if (!Number.isFinite(unreadTimestamp) || unreadTimestamp < 0) {
             throw new Error('INVALID_UNREAD_AT')
           }
-          const requestId = crypto.randomUUID()
-          const cached = sessionSnapshots.get(sessionId)
-          if (cached) {
-            const currentTimestamp = cached.item.unreadAt ? Date.parse(cached.item.unreadAt) : 0
-            cached.item = {
-              ...cached.item,
-              unreadAt: new Date(Math.max(currentTimestamp, unreadTimestamp)).toISOString(),
+          // Invalidate automatic clearing *before* the manual unread is enqueued so
+          // any queued or in-flight automatic mark-read can no longer clear it. Both
+          // operations share the same serial chain, so this unread lands last.
+          invalidateAutomaticRead(sessionId)
+          return enqueueSessionReadOperation(sessionId, async () => {
+            const requestId = crypto.randomUUID()
+            const cached = sessionSnapshots.get(sessionId)
+            if (cached) {
+              const currentTimestamp = cached.item.unreadAt
+                ? Date.parse(cached.item.unreadAt)
+                : 0
+              cached.item = {
+                ...cached.item,
+                unreadAt: new Date(Math.max(currentTimestamp, unreadTimestamp)).toISOString(),
+              }
+              sessionSnapshots.set(sessionId, cached)
+              emitSessionStoreChange()
             }
-            sessionSnapshots.set(sessionId, cached)
-            emitSessionStoreChange()
-          }
-          try {
-            const response = await rpc.call('thread/mark-unread', {
-              threadId: sessionId,
-              unreadAt: unreadTimestamp,
-              operationId: requestId,
-            })
-            return (await cacheThreadListItem(response.thread)).item
-          } catch (error) {
-            await refreshAgentSessionStoreChange().catch(() => {})
-            throw error
-          }
+            try {
+              const response = await rpc.call('thread/mark-unread', {
+                threadId: sessionId,
+                unreadAt: unreadTimestamp,
+                operationId: requestId,
+              })
+              // A previously confirmed read watermark must not re-hide this manual
+              // unread on the next catalog merge.
+              const confirmed = confirmedReadThroughBySessionId.get(sessionId)
+              if (confirmed !== undefined && confirmed >= unreadTimestamp) {
+                confirmedReadThroughBySessionId.set(sessionId, unreadTimestamp - 1)
+              }
+              return (await cacheThreadListItem(response.thread, 'read-state')).item
+            } catch (error) {
+              await refreshAgentSessionStoreChange().catch(() => {})
+              throw error
+            }
+          })
         },
         () => mockClient.markSessionUnread(sessionId, unreadAt),
       ),

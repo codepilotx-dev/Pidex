@@ -41,6 +41,7 @@ export type {
   DesktopAgentReviewApi,
   DesktopAgentThreadTitleApi,
   DesktopClientEnvironment,
+  DesktopForegroundController,
   DesktopReleaseNotesApi,
   DesktopRuntimeCapabilityApi,
   DesktopAutomationApi,

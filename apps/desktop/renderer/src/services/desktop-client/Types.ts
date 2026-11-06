@@ -93,6 +93,18 @@ type DesktopClientWindow = {
   dispatchEvent?: Window['dispatchEvent']
 }
 
+/**
+ * Window foreground probe used to decide whether a completion/failure of the
+ * currently viewed session may auto-clear its unread flag. The default reads the
+ * real DOM (`document.visibilityState` + focus); tests inject their own controller
+ * so the behavior is exercisable without a DOM.
+ */
+export type DesktopForegroundController = {
+  isForeground(): boolean
+  /** Registers a callback fired on visibility/focus changes; returns an unsubscribe. */
+  addChangeListener?(listener: () => void): () => void
+}
+
 export type DesktopClientEnvironment = {
   window?: DesktopClientWindow
   localStorage?: Storage
@@ -101,6 +113,7 @@ export type DesktopClientEnvironment = {
   openExternal?: (url: string) => void | Promise<void>
   debugBridgePort?: number
   debugBridgeToken?: string
+  foreground?: DesktopForegroundController
 }
 
 export type DesktopReviewAgentFileSummary = {
