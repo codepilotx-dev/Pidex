@@ -78,20 +78,19 @@ test('sidebar marks the worktree environment and colors the primary pull request
       revision: 1,
     },
   }
+  const primary = {
+    owner: 'octocat',
+    repository: 'fixture',
+    number: 42,
+    url: 'https://github.com/octocat/fixture/pull/42',
+    title: 'Fix it',
+    origin: 'manual' as const,
+    primary: true,
+    status: { state: 'mergeable' as const, reason: null, stale: false, checkedAt: 1 },
+  }
   applyThreadPullRequestList({
     threadId: session.id,
-    items: [
-      {
-        owner: 'octocat',
-        repository: 'fixture',
-        number: 42,
-        url: 'https://github.com/octocat/fixture/pull/42',
-        title: 'Fix it',
-        origin: 'manual',
-        primary: true,
-        status: { state: 'mergeable', reason: null, stale: false, checkedAt: 1 },
-      },
-    ],
+    items: [primary],
   })
 
   const markup = renderSessionRows([session])
@@ -99,6 +98,23 @@ test('sidebar marks the worktree environment and colors the primary pull request
   expect(markup).toContain('aria-label="Pull Request #42"')
   expect(markup).toContain('tw:text-app-success')
   expect(markup).toContain('#42 Fix it · 可合并')
+
+  applyThreadPullRequestList({
+    threadId: session.id,
+    items: [
+      primary,
+      {
+        ...primary,
+        number: 68,
+        url: 'https://github.com/octocat/fixture/pull/68',
+        title: 'Second PR',
+        primary: false,
+      },
+    ],
+  })
+  const multiple = renderSessionRows([session])
+  expect(multiple).toContain('aria-label="Pull Request #42, Pull Request #68"')
+  expect(multiple).toContain('#68 Second PR · 可合并')
 })
 
 test('a local session without links shows neither the worktree nor the pull request marker', () => {

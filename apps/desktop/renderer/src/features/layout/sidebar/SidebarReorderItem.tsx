@@ -17,7 +17,7 @@ import { sidebarSessionKeyAllowed } from './SidebarDragRules.js'
 import { useSidebarViewportGate } from './SidebarViewportGate.js'
 
 export const SIDEBAR_REORDER_EXCLUDED_TARGETS =
-  'input, textarea, select, a, [contenteditable="true"], [data-sidebar-reorder-exclude], .sidebar-project-actions, .sidebar-session-actions, .sidebar-session-confirm-archive-button, .sidebar-section-actions'
+  'input, textarea, select, a, [contenteditable="true"], [data-sidebar-reorder-exclude], .sidebar-project-actions, .sidebar-session-actions, .sidebar-section-actions'
 const sensors = [
   PointerSensor.configure({
     activationConstraints: [new PointerActivationConstraints.Distance({ value: 6 })],

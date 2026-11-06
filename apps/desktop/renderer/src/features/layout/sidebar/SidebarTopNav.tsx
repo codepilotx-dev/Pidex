@@ -191,11 +191,13 @@ function SidebarNavItems({
   items,
   isActiveView,
   plainActive = false,
+  onNewChat,
 }: {
   items: readonly SidebarNavItem[]
   isActiveView: (view: AppView) => boolean
   /** 固定“新建任务”入口不显示选中底色，只保留 aria-current。 */
   plainActive?: boolean
+  onNewChat?: () => void
 }): React.ReactNode {
   const { t } = useLocale()
   return (
@@ -221,7 +223,23 @@ function SidebarNavItems({
             layout="flex"
             leading={item.icon}
           >
-            <Link aria-current={active ? 'page' : undefined} to={item.path}>
+            <Link
+              aria-current={active ? 'page' : undefined}
+              to={item.path}
+              onClick={(event) => {
+                if (
+                  item.view === 'new' &&
+                  !event.defaultPrevented &&
+                  event.button === 0 &&
+                  !event.ctrlKey &&
+                  !event.metaKey &&
+                  !event.shiftKey &&
+                  !event.altKey
+                ) {
+                  onNewChat?.()
+                }
+              }}
+            >
               {t(item.label)}
             </Link>
           </SidebarRow>
@@ -267,12 +285,14 @@ export function SidebarHeader({
   unreadActivityCount = 0,
   scrollOverlapping = false,
   onOpenCommandMenu,
+  onNewChat,
 }: {
   showActions?: boolean
   hasUnread?: boolean
   unreadActivityCount?: number
   scrollOverlapping?: boolean
   onOpenCommandMenu: () => void
+  onNewChat?: () => void
 }): React.ReactNode {
   const { t } = useLocale()
   const navigate = useNavigate()
@@ -413,6 +433,7 @@ export function SidebarHeader({
       </header>
       <SidebarNewTaskNav
         label="新聊天"
+        onNewChat={onNewChat}
         isActiveView={(view) => view === 'new' && location.pathname === '/new'}
         scrollOverlapping={scrollOverlapping}
       />
@@ -452,10 +473,12 @@ export function SidebarTopNav({
  */
 export function SidebarNewTaskNav({
   label,
+  onNewChat,
   isActiveView,
   scrollOverlapping,
 }: {
   label?: string
+  onNewChat?: () => void
   isActiveView: (view: AppView) => boolean
   scrollOverlapping: boolean
 }): React.ReactNode {
@@ -478,6 +501,7 @@ export function SidebarNewTaskNav({
         items={label ? fixedItems.map((item) => ({ ...item, label })) : fixedItems}
         isActiveView={isActiveView}
         plainActive
+        onNewChat={onNewChat}
       />
     </nav>
   )

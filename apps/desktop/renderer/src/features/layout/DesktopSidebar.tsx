@@ -86,6 +86,7 @@ type Props = {
   workspace: DesktopWorkspace | null
   onChooseWorkspace: () => void
   onCreateSession: (workspace?: DesktopWorkspace | null) => void
+  onNewChat?: () => void
   onOpenCommandMenu: () => void
   onOpenWhatsNew: (restoreFocusElement: HTMLElement | null) => void
   onPinWorkspace: (workspace: DesktopWorkspace) => void
@@ -129,6 +130,7 @@ export function DesktopSidebar({
   workspace,
   onChooseWorkspace,
   onCreateSession,
+  onNewChat,
   onOpenCommandMenu,
   onOpenWhatsNew,
   onPinWorkspace,
@@ -708,6 +710,7 @@ export function DesktopSidebar({
         }}
       />
       <SidebarHeader
+        onNewChat={onNewChat}
         showActions={active}
         hasUnread={hasUnread}
         unreadActivityCount={unreadActivityCount}

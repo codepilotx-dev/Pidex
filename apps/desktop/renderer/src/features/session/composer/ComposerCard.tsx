@@ -693,7 +693,6 @@ export function ComposerCard({
   const activeSlashQuery = suggestionRequest?.kind === 'slash' ? suggestionRequest : null
   const reviewMenuRequested = suggestionRequest?.kind === 'review'
 
-  const [archiveConfirmationOpen, setArchiveConfirmationOpen] = useState(false)
   const {
     contextDirectory,
     setContextDirectory,
@@ -790,7 +789,7 @@ export function ComposerCard({
     onCompact,
     onOpenSide: onOpenSideChat,
     onFork: onForkConversation,
-    onArchive: () => setArchiveConfirmationOpen(true),
+    onArchive: () => onArchiveConversation?.(),
     onChooseProject: onChooseWorkspace,
     onClearProject: onClearWorkspace,
     showThreadActions: placement === 'thread' && !subagentMode && Boolean(routedSessionId),
@@ -2377,17 +2376,6 @@ export function ComposerCard({
         onDescriptionChange={setSessionGroupDraftDescription}
         onNameChange={setSessionGroupDraftName}
         onSubmit={() => void createSessionGroup()}
-      />
-      <ConfirmationDialog
-        actionLabel="确认归档"
-        description="归档后可在设置中恢复此任务。"
-        open={archiveConfirmationOpen}
-        title="归档当前任务？"
-        onAction={() => {
-          setArchiveConfirmationOpen(false)
-          onArchiveConversation?.()
-        }}
-        onCancel={() => setArchiveConfirmationOpen(false)}
       />
       <ConfirmationDialog
         open={fullAccessConfirmationOpen}

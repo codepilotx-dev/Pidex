@@ -725,6 +725,28 @@ export function DesktopLayout(): React.ReactNode {
   const [homeGrillModeActive, setHomeGrillModeActive] = useState(false)
   const [homeLocalRouterMode, setHomeLocalRouterMode] = useState<'off'>('off')
 
+  /**
+   * 新建会话时的模式复位：清掉首页 plan/grill 页面态与草稿中的协作模式、
+   * 目标模式与预算，但保留文本、附件、技能等草稿内容。互斥逻辑仍在
+   * handlePlanModeChange / handleGrillModeChange 中，这里只做整体清零。
+   */
+  const resetHomeComposerModes = useCallback((): void => {
+    setHomePlanModeActive(false)
+    setHomeGrillModeActive(false)
+    composerDraftStore.resetSessionModes('home')
+  }, [])
+
+  // 显式进入新会话页（侧栏“新建/新聊天”、产品模式切换、返回首页等）时复位模式。
+  // 目录刷新与普通切会话不改变路由，不会触发；已停留在首页时的重复点击由
+  // 各自的显式入口（handleNewConversation / handleCreateSession / handleUseSkill）复位。
+  const previousPathnameRef = useRef(location.pathname)
+  useEffect(() => {
+    const enteredQuickChat = isQuickChatPage && previousPathnameRef.current !== QUICK_CHAT_PATH
+    previousPathnameRef.current = location.pathname
+    if (!enteredQuickChat) return
+    resetHomeComposerModes()
+  }, [isQuickChatPage, location.pathname, resetHomeComposerModes])
+
   const session = useSessionState({
     permissionMode,
     permissionConfig: settings.values.permissionConfig,
@@ -1050,6 +1072,7 @@ export function DesktopLayout(): React.ReactNode {
   )
 
   const handleClearWorkspace = useCallback((): void => {
+    resetHomeComposerModes()
     navigate(QUICK_CHAT_PATH)
     activateSessionById(null)
     setWorkspaceState(null)
@@ -1061,6 +1084,7 @@ export function DesktopLayout(): React.ReactNode {
     activateSessionById,
     inputBinding,
     navigate,
+    resetHomeComposerModes,
     setDiffState,
     setSelectedFile,
     setWorkspaceState,
@@ -1106,6 +1130,7 @@ export function DesktopLayout(): React.ReactNode {
 
   const handleCreateSession = useCallback(
     async (target?: DesktopWorkspace | null): Promise<void> => {
+      resetHomeComposerModes()
       if (target === null) {
         navigate(QUICK_CHAT_PATH)
         activateSessionById(null)
@@ -1133,6 +1158,7 @@ export function DesktopLayout(): React.ReactNode {
       handleOpenRecentWorkspace,
       inputBinding,
       navigate,
+      resetHomeComposerModes,
       setDiffState,
       setSelectedFile,
       setWorkspaceState,
@@ -1623,14 +1649,17 @@ export function DesktopLayout(): React.ReactNode {
   }, [])
 
   const handleNewConversation = useCallback(async (): Promise<void> => {
+    resetHomeComposerModes()
     activateSessionById(null)
     inputBinding.replace('')
     setComposerAttachments([])
     navigate(QUICK_CHAT_PATH)
-  }, [activateSessionById, inputBinding, navigate, setComposerAttachments])
+  }, [activateSessionById, inputBinding, navigate, resetHomeComposerModes, setComposerAttachments])
 
   const handleUseSkill = useCallback(
     (skill: DesktopInstalledSkill): void => {
+      // 技能入口属于新建会话：先复位模式（不动技能），再设置所选技能。
+      resetHomeComposerModes()
       activateSessionById(null)
       inputBinding.replace('')
       setComposerAttachments([])
@@ -1640,7 +1669,7 @@ export function DesktopLayout(): React.ReactNode {
       })
       navigate(QUICK_CHAT_PATH)
     },
-    [activateSessionById, inputBinding, navigate, setComposerAttachments],
+    [activateSessionById, inputBinding, navigate, resetHomeComposerModes, setComposerAttachments],
   )
 
   const handleOpenSkillPreview = useCallback(
@@ -3479,6 +3508,7 @@ export function DesktopLayout(): React.ReactNode {
         unavailableWorkspacePaths={unavailableWorkspacePaths}
         workspace={currentWorkspace}
         onChooseWorkspace={() => void handleChooseWorkspace()}
+        onNewChat={resetHomeComposerModes}
         onCreateSession={(workspaceItem) => {
           closeSidebarPreview()
           void handleCreateSession(workspaceItem)

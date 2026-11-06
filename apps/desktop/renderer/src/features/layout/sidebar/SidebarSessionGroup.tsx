@@ -165,7 +165,6 @@ function SidebarSessionGroupComponent({
 }: Props): React.ReactNode {
   const [hoveredSessionId, setHoveredSessionId] = useState<string | null>(null)
   const [focusedSessionId, setFocusedSessionId] = useState<string | null>(null)
-  const [confirmArchiveSessionId, setConfirmArchiveSessionId] = useState<string | null>(null)
   const [paging, setPaging] = useState(() =>
     createSidebarSessionPagingState({ groupKey, initialLimit }),
   )
@@ -470,7 +469,7 @@ function SidebarSessionGroupComponent({
           kind: 'item',
           label: '归档',
           icon: <Archive size={APP_ICON_SIZE} />,
-          onSelect: () => setConfirmArchiveSessionId(session.id),
+          onSelect: () => void onArchiveSessions([session]),
         },
         { kind: 'separator' },
         {
@@ -486,6 +485,7 @@ function SidebarSessionGroupComponent({
     [
       currentSectionId,
       customSections,
+      onArchiveSessions,
       onMoveToDefault,
       onMoveToSection,
       onPinSession,
@@ -502,7 +502,6 @@ function SidebarSessionGroupComponent({
   const sessionRows = visibleSessions.map((session, index) => (
     <SidebarSessionRow
       buildActions={buildSessionContextMenuActions}
-      confirmingArchive={confirmArchiveSessionId === session.id}
       dropIndexBase={dropIndexBase}
       fallbackTitle={sessionFallbackTitles[session.id]}
       focused={focusedSessionId === session.id}
@@ -533,7 +532,6 @@ function SidebarSessionGroupComponent({
       onSelectSession={onSelectSession}
       onToggleSessionUnread={onToggleSessionUnread}
       onUnpinSession={onUnpinSession}
-      onRequestArchive={setConfirmArchiveSessionId}
       onRequestPullRequestLink={requestPullRequestLink}
       onRequestRenameDialog={requestRenameDialog}
     />
@@ -694,7 +692,6 @@ export const SidebarSessionGroup = memo(SidebarSessionGroupComponent)
 
 type SidebarSessionRowProps = {
   buildActions: (session: SessionListItem) => ContextMenuAction[]
-  confirmingArchive: boolean
   dropIndexBase: number
   fallbackTitle: string
   focused: boolean
@@ -724,7 +721,6 @@ type SidebarSessionRowProps = {
   onSelectSession: (session: SessionListItem) => void
   onToggleSessionUnread: (session: SessionListItem) => void
   onUnpinSession: (session: SessionListItem) => void
-  onRequestArchive: Dispatch<SetStateAction<string | null>>
   onRequestPullRequestLink: (sessionId: string) => void
   onRequestRenameDialog: (session: SessionListItem) => void
 }
@@ -735,7 +731,6 @@ type SidebarSessionRowProps = {
  */
 function SidebarSessionRowComponent({
   buildActions,
-  confirmingArchive,
   dropIndexBase,
   fallbackTitle,
   focused,
@@ -765,7 +760,6 @@ function SidebarSessionRowComponent({
   onSelectSession,
   onToggleSessionUnread,
   onUnpinSession,
-  onRequestArchive,
   onRequestPullRequestLink,
   onRequestRenameDialog,
 }: SidebarSessionRowProps): React.ReactNode {
@@ -785,7 +779,7 @@ function SidebarSessionRowComponent({
   const hideInputPill = waitingForInput && isActive
   const indicatorState = hideInputPill ? (session.unreadAt ? 'unread' : 'idle') : visualState
   const showActions = hovered || focused
-  const showIndicators = !showActions && !confirmingArchive
+  const showIndicators = !showActions
   const metaClassName = cx(
     'sidebar-session-meta',
     'tw:flex',
@@ -794,7 +788,6 @@ function SidebarSessionRowComponent({
     'tw:w-auto',
     'tw:min-w-0 tw:gap-1',
     indicatorState === 'needs-input' && 'sidebar-session-meta--approval',
-    confirmingArchive && 'confirming-archive',
   )
   // 双行（标题 + 工作区）行高由两行内容决定，时间线行沿用 48px 基准。
   const rowHeightClass = presentation !== 'compact' ? 'tw:[--sidebar-row-height:48px]' : null
@@ -889,7 +882,6 @@ function SidebarSessionRowComponent({
         if (getDraggingSession()) return
         if (containsRelatedTarget(event.currentTarget, event.relatedTarget)) return
         onHoverChange((current) => (current === session.id ? null : current))
-        onRequestArchive((current) => (current === session.id ? null : current))
       }}
       onFocusCapture={(event) => {
         if (!containsRelatedTarget(event.currentTarget, event.target)) return
@@ -933,16 +925,14 @@ function SidebarSessionRowComponent({
           )}
           {showIndicators && primaryPullRequest && PrimaryPullRequestIcon && (
             <button
-              aria-label={`Pull Request #${primaryPullRequest.number}`}
+              aria-label={pullRequestItems.map((item) => `Pull Request #${item.number}`).join(', ')}
               className={cx(
-                'sidebar-indicator sidebar-pull-request tw:inline-flex tw:size-6 tw:flex-none tw:cursor-pointer tw:items-center tw:justify-center tw:border-0 tw:bg-transparent tw:p-0 tw:[&>svg]:size-icon-md',
+                'sidebar-indicator sidebar-pull-request tw:inline-flex tw:h-6 tw:min-w-6 tw:flex-none tw:cursor-pointer tw:items-center tw:justify-center tw:gap-0.5 tw:border-0 tw:bg-transparent tw:p-0 tw:[&>svg]:size-icon-md',
                 primaryPullRequestVisual?.className,
               )}
-              title={threadPullRequestTitle(
-                primaryPullRequest.number,
-                primaryPullRequest.title,
-                primaryPullRequest.status,
-              )}
+              title={pullRequestItems
+                .map((item) => threadPullRequestTitle(item.number, item.title, item.status))
+                .join('\n')}
               type="button"
               onClick={(event) => {
                 event.preventDefault()
@@ -951,18 +941,14 @@ function SidebarSessionRowComponent({
               }}
             >
               <PrimaryPullRequestIcon aria-hidden="true" size={APP_ICON_SIZE} />
+              {pullRequestItems.length > 1 && (
+                <span aria-hidden="true" className="tw:type-caption">
+                  {pullRequestItems.length}
+                </span>
+              )}
             </button>
           )}
-          {confirmingArchive ? (
-            <button
-              className="sidebar-session-confirm-archive-button tw:w-full tw:rounded-md tw:bg-app-danger-subtle tw:px-2 tw:text-app-danger tw:whitespace-nowrap tw:[line-height:var(--cpx-sys-line-height-tight)]"
-              onClick={() => void onArchiveSessions([session])}
-              title="确认归档"
-              type="button"
-            >
-              确认
-            </button>
-          ) : showActions ? (
+          {showActions ? (
             <div className="sidebar-session-actions tw:flex tw:w-full tw:items-center tw:justify-end tw:gap-1">
               {session.pinnedAt ? (
                 <Button
@@ -994,7 +980,7 @@ function SidebarSessionRowComponent({
                 className="sidebar-session-action-button"
                 variant="text"
                 iconSize="md"
-                onClick={() => onRequestArchive(session.id)}
+                onClick={() => void onArchiveSessions([session])}
                 size="compact"
                 title="归档"
               >
