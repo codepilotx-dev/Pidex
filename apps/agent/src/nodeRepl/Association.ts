@@ -9,6 +9,8 @@
 export const NODE_REPL_SERVER_NAME = 'node_repl'
 export const NODE_REPL_PLUGIN_ID = 'computer-use'
 export const NODE_REPL_TOOL_NAME = `mcp__${NODE_REPL_SERVER_NAME}__js`
+/** 清除当前 chat 求值上下文的入口；与 `js` 同一宿主服务，不提升任何能力。 */
+export const NODE_REPL_RESET_TOOL_NAME = `mcp__${NODE_REPL_SERVER_NAME}__js_reset`
 
 export type HostManagedMcpDeclaration = {
   server: string

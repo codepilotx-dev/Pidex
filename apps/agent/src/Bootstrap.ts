@@ -5,7 +5,7 @@ import { LocalEnvironmentRepository } from './local-environment/LocalEnvironment
 import { LocalEnvironmentCatalog } from './local-environment/LocalEnvironmentCatalog'
 import { computerToolDefinitions } from './tool/Computer/Definition'
 import { NodeReplService, defaultNodeReplServer } from './nodeRepl/NodeReplService'
-import { nodeReplToolDefinition } from './nodeRepl/Definition'
+import { nodeReplResetToolDefinition, nodeReplToolDefinition } from './nodeRepl/Definition'
 import { NODE_REPL_PLUGIN_ID, NODE_REPL_SERVER_NAME } from './nodeRepl/Association'
 import { Effect } from 'effect'
 import { loadConfig } from './config/Config'
@@ -630,23 +630,25 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
           )
             return []
           return [
-            nodeReplToolDefinition({
-              plugins,
-              computer,
-              service: nodeRepl,
-              executor: toolExecutor,
-              validateConfiguration: async () => {
-                if (
-                  JSON.stringify(await nodeReplConfiguration(workspace)) !== JSON.stringify(server)
-                )
-                  throw new AgentError(
-                    'MCP_CONFIG_CHANGED',
-                    'node_repl 配置已变化，请开始新一轮任务',
-                    409,
-                  )
-              },
-              ...(server ? { server } : {}),
-            }),
+          const validateConfiguration = async () => {
+            if (JSON.stringify(await nodeReplConfiguration(workspace)) !== JSON.stringify(server))
+              throw new AgentError('MCP_CONFIG_CHANGED', 'node_repl 配置已变化，请开始新一轮任务', 409)
+          }
+          const shared = {
+            plugins,
+            computer,
+            service: nodeRepl,
+            executor: toolExecutor,
+            validateConfiguration,
+            ...(server ? { server } : {}),
+          }
+          // `js_reset` 只清空当前聊天的求值上下文，同样受该服务器自己的工具开关约束。
+          const resetEnabled =
+            !server ||
+            (!server.disabledTools?.includes('js_reset') &&
+              (!server.enabledTools || server.enabledTools.includes('js_reset')))
+            nodeReplToolDefinition(shared),
+            ...(resetEnabled ? [nodeReplResetToolDefinition(shared)] : []),
           ]
         },
       },
@@ -885,12 +887,21 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       environmentDeltas,
     )
     const localContextPaths = new LocalContextPathService(new LocalContextPathRepository(db))
-    const history = new ThreadHistoryService(db, hub, (threadID) => {
-      return sideChatEnvironmentCleanup.prepareSource(
-        threadID,
-        review.prepareThreadSnapshotCleanup(threadID),
-      )
-    })
+    const history = new ThreadHistoryService(
+      db,
+      hub,
+      (threadID) => {
+        const cleanup = sideChatEnvironmentCleanup.prepareSource(
+          threadID,
+          review.prepareThreadSnapshotCleanup(threadID),
+        )
+        return async () => {
+          await cleanup()
+          await nodeRepl.closeThread(threadID)
+        }
+      },
+      (threadID) => nodeRepl.closeThread(threadID),
+    )
     const threadTitles = new ThreadTitleService(db, history, piModels, logger, configService)
     const subagentWorkspaces = new SubagentWorkspaceCoordinator(db, config.storage.workspacesRoot)
     const resumeCheckpoints = new ResumeCheckpointResolver(db, approvals)
@@ -1448,6 +1459,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       unsubscribePlugins()
       browser.dispose()
       await speech.dispose()
+      await nodeRepl.dispose()
       automationScheduler?.dispose()
       unsubscribeAutomationEvents()
       unsubscribeExecutionLogs()

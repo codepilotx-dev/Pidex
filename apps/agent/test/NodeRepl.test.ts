@@ -2,9 +2,14 @@ import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { McpClient, StdioTransport } from '@earendil-works/pi-mcp'
 import type { NodeReplChildMessage, NodeReplHostMessage } from '../src/nodeRepl/Protocol'
 import { computerOperationRecoveryFrom } from '../src/nodeRepl/Protocol'
-import { runNodeReplScript, type NodeReplChildTransport } from '../src/nodeRepl/ChildRuntime'
+import {
+  NodeReplRuntime,
+  runNodeReplScript,
+  type NodeReplChildTransport,
+} from '../src/nodeRepl/ChildRuntime'
 import {
   NodeReplPaused,
   NodeReplService,
@@ -20,12 +25,23 @@ import {
   isTrustedHostMcpServer,
 } from '../src/nodeRepl/Association'
 import { createMcpGenerationBinding } from '../src/runtime-composition/Composer'
-import { nodeReplToolDefinition } from '../src/nodeRepl/Definition'
+import { nodeReplResetToolDefinition, nodeReplToolDefinition } from '../src/nodeRepl/Definition'
+import { connectMcpClient, mcpStdioEnvironment } from '../src/mcp/McpClientFactory'
 import { PluginManagementService } from '../src/plugin/PluginManagementService'
 
 const roots: string[] = []
+const services: NodeReplService[] = []
+const closureClients: McpClient[] = []
+
+/** Registers a service so its child processes are always reaped after the test. */
+const tracked = (service = new NodeReplService()) => {
+  services.push(service)
+  return service
+}
 
 afterEach(async () => {
+  await Promise.all(closureClients.splice(0).map((client) => client.close().catch(() => undefined)))
+  await Promise.all(services.splice(0).map((service) => service.closeAll()))
   await Promise.all(roots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
 })
 
@@ -122,6 +138,83 @@ describe('node_repl cell runtime', () => {
   })
 })
 
+describe('node_repl runtime cell isolation', () => {
+  /** Drives the runtime directly so cell ids and late frames can be observed. */
+  const harness = () => {
+    const sent: NodeReplChildMessage[] = []
+    const queue: NodeReplHostMessage[] = []
+    let resolveNext: ((message: NodeReplHostMessage | null) => void) | null = null
+    let closed = false
+    const transport: NodeReplChildTransport = {
+      send: (message) => sent.push(message),
+      next: () =>
+        queue.length
+          ? Promise.resolve(queue.shift()!)
+          : new Promise<NodeReplHostMessage | null>((resolve) => {
+              resolveNext = resolve
+            }),
+      close: () => {
+        closed = true
+        resolveNext?.(null)
+        resolveNext = null
+      },
+    }
+    const push = (message: NodeReplHostMessage) => {
+      if (resolveNext) {
+        const resolve = resolveNext
+        resolveNext = null
+        resolve(message)
+      } else queue.push(message)
+    }
+    return { sent, transport, push, isClosed: () => closed }
+  }
+
+  test('drops a result frame addressed to a cell that is no longer active', async () => {
+    const runtime = new NodeReplRuntime()
+    const cellA = harness()
+    const running = runtime.run(
+      cellA.transport,
+      `await computer.apps(); nodeRepl.write('late')`,
+      'cell-a',
+    )
+    // 单元格 A 已经结束并切到单元格 B 之后，A 的结果才到达。
+    const cellB = harness()
+    cellA.push({ type: 'result', id: 1, cellId: 'cell-a', ok: true, result: { text: 'a' } })
+    await running
+    expect(runtime.cellId).toBeUndefined()
+    expect(runtime.accepts('cell-a')).toBe(false)
+    expect(runtime.accepts('cell-b')).toBe(false)
+
+    const second = runtime.run(cellB.transport, `nodeRepl.write('b')`, 'cell-b')
+    expect(runtime.accepts('cell-b')).toBe(true)
+    await second
+    // 迟到的 A 结果不能进入 B 的待处理表。
+    cellB.push({ type: 'result', id: 1, cellId: 'cell-a', ok: true, result: { text: 'leak' } })
+    expect(runtime.accepts('cell-a')).toBe(false)
+  })
+
+  test('a leftover bridge from a finished cell cannot reach the next cell', async () => {
+    const runtime = new NodeReplRuntime()
+    const first = harness()
+    // 单元格一保存自己的 computer 引用；它属于那个单元格，不属于之后的单元格。
+    await runtime.run(
+      first.transport,
+      `globalThis.stale = computer; nodeRepl.write('saved')`,
+      'cell-x',
+    )
+    const next = harness()
+    await runtime.run(
+      next.transport,
+      `try { await stale.apps() } catch (error) { nodeRepl.write(error.code) }`,
+      'cell-y',
+    )
+    const writes = next.sent.flatMap((message) => (message.type === 'write' ? [message.text] : []))
+    // 残留引用被拒绝：既没有借用当前单元格的桥，也没有产生新的 call 帧。
+    expect(writes).toEqual(['NODE_REPL_CONTEXT_LOST'])
+    expect(next.sent.some((message) => message.type === 'call')).toBe(false)
+  })
+})
+
 describe('node_repl host service', () => {
   const execute = (
     service: NodeReplService,
@@ -137,7 +230,7 @@ describe('node_repl host service', () => {
     })
 
   test('runs a real isolated cell and collects text and images', async () => {
-    const service = new NodeReplService()
+    const service = tracked()
     const result = await execute(service, `nodeRepl.write('hello'); nodeRepl.emitImage('AAAA')`)
     expect(result.paused).toBe(false)
     expect(result.text).toBe('hello')
@@ -163,7 +256,7 @@ describe('node_repl host service', () => {
     `,
       'utf8',
     )
-    const result = await execute(new NodeReplService(), 'ignored by fixture', {
+    const result = await execute(tracked(), 'ignored by fixture', {
       server: {
         ...defaultNodeReplServer(),
         transport: {
@@ -177,15 +270,123 @@ describe('node_repl host service', () => {
     expect(result.text).toBe('custom-env:custom-argument')
   })
 
-  test('each call is a fresh process: no globals, bindings or module cache survive', async () => {
-    const service = new NodeReplService()
-    await execute(service, `globalThis.__pidexLeak = 1; nodeRepl.write('set')`)
-    const second = await execute(service, `nodeRepl.write(typeof globalThis.__pidexLeak)`)
-    expect(second.text).toBe('undefined')
+  test('keeps bindings, functions and mutated objects across cells of one chat', async () => {
+    const service = tracked()
+    const first = await execute(service, `let n = 0; n += 1; nodeRepl.write(String(n))`)
+    expect(first.text).toBe('1')
+    const second = await execute(service, `n += 1; nodeRepl.write(String(n))`)
+    expect(second.text).toBe('2')
+    // 对象身份保留：第二个单元格改的是同一个对象，读回时字段与身份都在。
+    await execute(service, `globalThis.shared = { count: 0 }; nodeRepl.write('created')`)
+    const mutated = await execute(
+      service,
+      `shared.count = 7; shared.self = shared === globalThis.shared; nodeRepl.write(JSON.stringify(shared))`,
+    )
+    expect(JSON.parse(mutated.text)).toEqual({ count: 7, self: true })
+    const read = await execute(service, `nodeRepl.write(String(shared.self))`)
+    expect(read.text).toBe('true')
+  })
+
+  test('carries a top-level-await binding into a later cell', async () => {
+    const service = tracked()
+    await execute(
+      service,
+      `const sum = (await Promise.resolve(41)) + 1; let tag = 'x'; class Box { v = 1 }; nodeRepl.write('tla')`,
+    )
+    const later = await execute(service, `nodeRepl.write(JSON.stringify([sum, tag, new Box().v]))`)
+    expect(JSON.parse(later.text)).toEqual([42, 'x', 1])
+  })
+
+  test('isolates chats from each other', async () => {
+    const service = tracked()
+    await execute(service, `globalThis.__chatA = 'a'; let localA = 1; nodeRepl.write('set')`)
+    const other = await execute(
+      service,
+      `nodeRepl.write([typeof __chatA, typeof localA].join(','))`,
+      {
+        threadID: 'thread-2',
+      },
+    )
+    expect(other.text).toBe('undefined,undefined')
+  })
+
+  test('js_reset clears the chat context so earlier bindings are gone', async () => {
+    const service = tracked()
+    await execute(service, `globalThis.__stale = 1; let stale = 2; nodeRepl.write('set')`)
+    await service.reset('thread-1')
+    const after = await execute(service, `nodeRepl.write([typeof __stale, typeof stale].join(','))`)
+    expect(after.text).toBe('undefined,undefined')
+  })
+
+  test('an ordinary script error keeps the context alive', async () => {
+    const service = tracked()
+    await expect(
+      execute(service, `let survived = 5; throw new Error('boom')`),
+    ).rejects.toMatchObject({
+      code: 'NODE_REPL_SCRIPT_ERROR',
+    })
+    const after = await execute(service, `nodeRepl.write(String(survived))`)
+    expect(after.text).toBe('5')
+  })
+
+  test('a cancelled cell discards the context instead of leaking it forward', async () => {
+    const service = tracked()
+    const controller = new AbortController()
+    let started = false
+    const pending = execute(service, `await computer.apps(); nodeRepl.write('late')`, {
+      signal: controller.signal,
+      runOperation: async () => {
+        started = true
+        await new Promise(() => {})
+        return { kind: 'result', result: { text: 'never' } }
+      },
+    })
+    while (!started) await new Promise((resolve) => setTimeout(resolve, 10))
+    controller.abort()
+    await expect(pending).rejects.toMatchObject({ code: 'RUN_ABORTED' })
+    // 上下文随取消一起丢弃：下一个单元格必须是干净进程。
+    const after = await execute(service, `nodeRepl.write('fresh')`)
+    expect(after.text).toBe('fresh')
+  })
+
+  test('a timed-out cell does not leak its operation into the next cell', async () => {
+    const service = tracked()
+    const seen: string[] = []
+    let releaseOperation: (() => void) | undefined
+    const timedOut = execute(service, `await computer.read('w1'); nodeRepl.write('late')`, {
+      timeoutMs: 1_000,
+      runOperation: async (request) => {
+        seen.push(request.method)
+        // 宿主迟迟不返回：超时先终止这条连接。
+        await new Promise<void>((resolve) => {
+          releaseOperation = resolve
+        })
+        return { kind: 'result', result: { text: 'late-result' } }
+      },
+    })
+    await expect(timedOut).rejects.toMatchObject({ code: 'NODE_REPL_TIMEOUT' })
+    releaseOperation?.()
+    // 新单元格跑在全新进程上，看不到上一单元格的操作或输出。
+    const next = await execute(service, `nodeRepl.write('clean')`)
+    expect(next.text).toBe('clean')
+    expect(seen).toEqual(['read'])
+  })
+
+  test('a changed server declaration starts a new process', async () => {
+    const service = tracked()
+    const server = defaultNodeReplServer()
+    await execute(service, `globalThis.__config = 1; nodeRepl.write('set')`, { server })
+    const same = await execute(service, `nodeRepl.write(String(globalThis.__config))`, { server })
+    expect(same.text).toBe('1')
+    // 声明任意字段变化都要求新的求值上下文。
+    const changed = await execute(service, `nodeRepl.write(String(globalThis.__config))`, {
+      server: { ...server, toolTimeoutMs: 30_000 },
+    })
+    expect(changed.text).toBe('undefined')
   })
 
   test('bridges computer calls to the host operation runner', async () => {
-    const service = new NodeReplService()
+    const service = tracked()
     const seen: string[] = []
     const result = await execute(service, `nodeRepl.write((await computer.apps()).text)`, {
       runOperation: async (request) => {
@@ -199,7 +400,7 @@ describe('node_repl host service', () => {
 
   test('waits for issued operations even when the script omits await', async () => {
     let completed = false
-    await execute(new NodeReplService(), 'void computer.apps()', {
+    await execute(tracked(), 'void computer.apps()', {
       runOperation: async () => {
         await new Promise((resolve) => setTimeout(resolve, 30))
         completed = true
@@ -210,7 +411,7 @@ describe('node_repl host service', () => {
   })
 
   test('stops the cell when the host arranges an approval pause', async () => {
-    const service = new NodeReplService()
+    const service = tracked()
     const result = await execute(service, `await computer.read('w1'); nodeRepl.write('after')`, {
       runOperation: async () => ({ kind: 'paused' }),
     })
@@ -220,7 +421,7 @@ describe('node_repl host service', () => {
   })
 
   test('kills a cell that exceeds its timeout', async () => {
-    const service = new NodeReplService()
+    const service = tracked()
     await expect(
       execute(service, `await new Promise(() => {}); nodeRepl.write('never')`, {
         timeoutMs: 1_000,
@@ -230,13 +431,15 @@ describe('node_repl host service', () => {
 
   test('stops the MCP process when its plugin is disabled', async () => {
     let cleaned = false
-    const service = new NodeReplService((stop) => {
-      const timer = setTimeout(stop, 300)
-      return () => {
-        clearTimeout(timer)
-        cleaned = true
-      }
-    })
+    const service = tracked(
+      new NodeReplService((stop) => {
+        const timer = setTimeout(stop, 300)
+        return () => {
+          clearTimeout(timer)
+          cleaned = true
+        }
+      }),
+    )
     await expect(execute(service, 'await new Promise(() => {})')).rejects.toMatchObject({
       code: 'NODE_REPL_UNAVAILABLE',
     })
@@ -244,13 +447,52 @@ describe('node_repl host service', () => {
   })
 
   test('honours cancellation before starting any work', async () => {
-    const service = new NodeReplService()
+    const service = tracked()
     const controller = new AbortController()
     controller.abort()
     await expect(
       execute(service, `nodeRepl.write('x')`, { signal: controller.signal }),
     ).rejects.toMatchObject({ code: 'RUN_ABORTED' })
   })
+
+  test('the spawned child answers a two-cell round trip in one context', async () => {
+    const command = resolveNodeReplCommand()
+    const client = new McpClient({ name: 'pidex-test', version: '1', requestTimeoutMs: 30_000 })
+    const transport = new StdioTransport({
+      command: command.executable,
+      args: command.args,
+      env: mcpStdioEnvironment({ type: 'stdio', command: command.executable }),
+      inheritEnv: false,
+      stderr: 'pipe',
+      closeTimeoutMs: 200,
+    })
+    closureClients.push(client)
+    try {
+      await connectMcpClient(client, transport, 20_000)
+      client.setRequestHandler('pidex/computer', async () => ({
+        ok: true,
+        result: { text: 'host-ok' },
+      }))
+      const tools = (await client.listTools()).map((tool) => tool.name).sort()
+      // 子进程把 js 与 js_reset 一起对外声明。
+      expect(tools).toEqual(['js', 'js_reset'])
+      const call = (name: string, args: Record<string, unknown>) =>
+        client.callTool(name, args, { timeoutMs: 20_000 })
+      const first = await call('js', { code: `let n = 1; n += 1; nodeRepl.write(String(n))` })
+      expect(first.content).toEqual([{ type: 'text', text: '2' }])
+      const second = await call('js', { code: `n += 1; nodeRepl.write(String(n))` })
+      expect(second.content).toEqual([{ type: 'text', text: '3' }])
+      // 真实子进程上的 host 桥接仍走 pidex/computer。
+      const bridged = await call('js', { code: `nodeRepl.write((await computer.apps()).text)` })
+      expect(bridged.content).toEqual([{ type: 'text', text: 'host-ok' }])
+      const reset = await call('js_reset', {})
+      expect(reset.isError ?? false).toBe(false)
+      const cleared = await call('js', { code: `nodeRepl.write(typeof n)` })
+      expect(cleared.content).toEqual([{ type: 'text', text: 'undefined' }])
+    } finally {
+      await client.close().catch(() => undefined)
+    }
+  }, 60_000)
 
   test('the installed binary re-enters itself in child mode', () => {
     expect(resolveNodeReplCommand('C:/Pidex/pidex-agent.exe')).toEqual({
@@ -447,6 +689,65 @@ describe('node_repl tool exposure', () => {
     const tool = definition()
     const context = { invocation: { toolCallID: 't1' }, profile: 'main' } as never
     expect(tool.inspectInput?.({ code: 'x', title: 'y' }, context)).toBeUndefined()
+  })
+})
+
+describe('node_repl js_reset exposure', () => {
+  const resetDeps = (overrides: Record<string, unknown> = {}) => ({
+    plugins: { isEnabled: () => true } as never,
+    computer: { available: () => true, inspect: () => undefined } as never,
+    service: {} as never,
+    executor: {} as never,
+    ...overrides,
+  })
+
+  test('is a deferred, main-agent-only chat entry with no capability elevation', () => {
+    const tool = nodeReplResetToolDefinition(resetDeps())
+    expect(tool.sdkName).toBe('mcp__node_repl__js_reset')
+    expect(tool.origin).toEqual({
+      kind: 'mcp',
+      serverName: NODE_REPL_SERVER_NAME,
+      rawToolName: 'js_reset',
+      generation: 0,
+    })
+    expect(tool.visibility).toBe('deferred')
+    expect(tool.allowedModes).toEqual(['chat'])
+    expect(tool.allowedProfiles).toEqual(['main'])
+    // 内置服务无需审批；它也不声明进程或外部状态能力。
+    expect(tool.approvalStrategy).toBe('never-review')
+    expect(tool.capabilities.process).toBe(false)
+    expect(tool.capabilities.externalState).toBe(false)
+  })
+
+  test('resets the invoking chat through the host service', async () => {
+    const reset: string[] = []
+    const tool = nodeReplResetToolDefinition(
+      resetDeps({
+        service: { reset: async (threadID: string) => void reset.push(threadID) } as never,
+      }),
+    )
+    const result = await tool.execute({}, {
+      invocation: { threadID: 'thread-9', toolCallID: 'call-reset' },
+      profile: 'main',
+    } as never)
+    expect(reset).toEqual(['thread-9'])
+    expect(result.terminated).toBe(false)
+    // 不经过 service.execute，因此既不启动进程也不触发脚本。
+    expect(result.images).toEqual([])
+  })
+
+  test('rejects a non-host identity like the js entry does', async () => {
+    const tool = nodeReplResetToolDefinition(resetDeps())
+    await expect(
+      tool.execute({}, { profile: 'subagent', invocation: { toolCallID: 'x' } } as never),
+    ).rejects.toMatchObject({ code: 'PERMISSION_DENIED' })
+  })
+
+  test('is unavailable while the computer-use plugin is disabled', () => {
+    const tool = nodeReplResetToolDefinition(
+      resetDeps({ plugins: { isEnabled: () => false } as never }),
+    )
+    expect(tool.available?.()).toBe(false)
   })
 })
 

@@ -20,9 +20,19 @@ export type NodeReplOperationRequest =
 
 export type NodeReplImage = { data: string; mimeType: string }
 
+/**
+ * 宿主结果帧带回单元格标识：子进程只接受属于当前活动单元格的帧，上一单元格
+ * 迟到的结果不能冒充当前单元格的返回值。
+ */
 export type NodeReplHostMessage =
-  | { type: 'result'; id: number; ok: true; result: ComputerResult }
-  | { type: 'result'; id: number; ok: false; error: { code: string; message: string } }
+  | { type: 'result'; id: number; cellId?: string; ok: true; result: ComputerResult }
+  | {
+      type: 'result'
+      id: number
+      cellId?: string
+      ok: false
+      error: { code: string; message: string }
+    }
 
 export type NodeReplChildMessage =
   | { type: 'call'; id: number; method: NodeReplMethod; args: Record<string, unknown> }
