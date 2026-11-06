@@ -1927,7 +1927,7 @@ export class AgentRuntimeService implements AgentRuntime {
           const decision = await this.options.toolExecutor.previewApproval(
             input.tool,
             input.input,
-            executionContext,
+            { ...executionContext, toolCatalog: composition.bindings.toolCatalog },
             input.toolCallID,
           )
           if (decision.decision === 'allow') {

@@ -521,6 +521,7 @@ describe('核心工具面', () => {
       )
       return fauxAssistantMessage('done')
     }
+    let deferredResult: TranscriptContext['messages'][number] | undefined
     faux.setResponses([
       (context: TranscriptContext) => {
         capture(context)
@@ -530,6 +531,10 @@ describe('核心工具面', () => {
       },
       (context: TranscriptContext) => {
         expect(getCurrentTools(context.messages).map((tool) => tool.name)).toContain('mcp_report')
+        return fauxAssistantMessage(fauxToolCall('mcp_report', {}), { stopReason: 'toolUse' })
+      },
+      (context: TranscriptContext) => {
+        deferredResult = context.messages.at(-1)
         return capture(context)
       },
     ])
@@ -582,6 +587,7 @@ describe('核心工具面', () => {
       expect(previewCatalog.content).toContain('mcp_report')
       expect(releases).toBe(1)
       await runtime.run(request)
+      expect(deferredResult).toMatchObject({ role: 'toolResult', isError: false })
       expect(prompts[0]).toContain('mcp_report')
       expect(prompts[0]).toContain('[mcp:demo-server]')
       const repository = new RuntimeCompositionRepository(db)
