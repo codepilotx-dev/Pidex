@@ -154,6 +154,7 @@ import {
 } from './storage/database/StorageCapabilities'
 import { createThreadReadDefinition } from './tool/ThreadRead/Definition'
 import { createWorkgroupReadDefinition } from './tool/WorkgroupRead/Definition'
+import { createAttachPullRequestDefinition } from './tool/AttachPullRequest/Definition'
 import { ThreadReadViewRepository } from './session/ThreadReadViewRepository'
 import {
   BindingHandoffWorkspace,
@@ -578,6 +579,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     tools.register(createTerminalReadDefinition(terminalOutput))
     tools.register(createThreadReadDefinition(new ThreadReadViewRepository(db)))
     tools.register(createWorkgroupReadDefinition(sessionGroups))
+    tools.register(createAttachPullRequestDefinition(threadPullRequests))
     const mcpConfigs = new McpConfigService(new McpSettingsRepository(db), configService)
     const usage = new UsageService(new UsageRepository(db), providers, piModels, credentials, {
       subscriptionModels: anthropicUsageModels,
