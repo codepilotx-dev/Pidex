@@ -38,6 +38,7 @@ const CONSOLE_KEYS = new Set([
   'model',
   'packaged',
   'phase',
+  'progress',
   'pid',
   'port',
   'provider',

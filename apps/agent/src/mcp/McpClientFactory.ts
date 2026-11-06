@@ -237,6 +237,10 @@ const inherited = (references: Record<string, string> | undefined) =>
       .filter((entry): entry is [string, string] => typeof entry[1] === 'string'),
   )
 
+export const mcpStdioEnvironment = (
+  transport: Extract<McpServerDeclaration['transport'], { type: 'stdio' }>,
+) => ({ ...defaultEnvironment(), ...(transport.env ?? {}), ...inherited(transport.envFromHost) })
+
 const requestHeaders = (server: McpServerDeclaration) => {
   if (server.transport.type !== 'http') return {}
   const headers: Record<string, string> = {
@@ -326,11 +330,7 @@ export class McpClientFactory {
             command: server.transport.command,
             ...(server.transport.args ? { args: [...server.transport.args] } : {}),
             ...(server.transport.cwd ? { cwd: server.transport.cwd } : {}),
-            env: {
-              ...defaultEnvironment(),
-              ...(server.transport.env ?? {}),
-              ...inherited(server.transport.envFromHost),
-            },
+            env: mcpStdioEnvironment(server.transport),
             inheritEnv: false,
             stderr: 'pipe',
           }),

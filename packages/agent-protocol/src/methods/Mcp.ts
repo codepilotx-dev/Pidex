@@ -12,7 +12,7 @@ const EnvironmentReferenceMapSchema = Schema.Record(NonEmptyStringSchema, NonEmp
 const TimeoutSchema = Schema.Int.check(Schema.isBetween({ minimum: 100, maximum: 600_000 }))
 
 export const McpScopeSchema = Schema.Literals(['user', 'local'])
-/** Runtime status may also describe a host-managed server that is never user-editable. */
+/** Runtime status includes host services as well as editable user declarations. */
 export const McpRuntimeScopeSchema = Schema.Literals(['user', 'local', 'host'])
 /** Host-managed MCP servers are injected by the host and belong to a plugin. */
 export const McpManagedBySchema = Schema.Literals(['user', 'host'])
@@ -68,6 +68,8 @@ export const McpServerListItemSchema = Schema.Struct({
   server: McpServerDeclarationSchema,
   effective: Schema.Boolean,
   shadowedByScope: Schema.optional(McpScopeSchema),
+  /** Editable default supplied by a plugin; removing an override restores it. */
+  providedDefault: Schema.optional(Schema.Boolean),
 })
 
 export const McpListParamsSchema = Schema.Struct({
@@ -111,6 +113,8 @@ export const McpRuntimeServerStatusSchema = Schema.Struct({
   toolCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   resourceCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
   promptCount: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  /** Starts a fresh process on each call rather than holding a connection. */
+  onDemand: Schema.optional(Schema.Boolean),
   /** Optional host-managed marker; older clients can ignore it. */
   managedBy: Schema.optional(McpManagedBySchema),
   /** Plugin that owns a host-managed server, for example `computer-use`. */

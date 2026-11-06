@@ -1,5 +1,6 @@
-import type { ComputerResult } from '@pidex/agent-protocol'
+import type { ComputerResult, McpServerDeclaration } from '@pidex/agent-protocol'
 import { z } from 'zod'
+import { createHash } from 'node:crypto'
 import { AgentError } from '../Domain'
 import type { ComputerUseService } from '../computer/ComputerUseService'
 import type { PluginManagementService } from '../plugin/PluginManagementService'
@@ -7,7 +8,11 @@ import type { ToolContext, ToolDefinition, ToolStructuredResult } from '../tool/
 import type { ToolExecutionContext, ToolExecutor } from '../tool/ToolExecutor'
 import { NODE_REPL_PLUGIN_ID, NODE_REPL_SERVER_NAME, NODE_REPL_TOOL_NAME } from './Association'
 import type { ComputerOperationRecovery, NodeReplOperationRequest } from './Protocol'
-import type { NodeReplOperationOutcome, NodeReplService } from './NodeReplService'
+import {
+  isBuiltinNodeReplServer,
+  type NodeReplOperationOutcome,
+  type NodeReplService,
+} from './NodeReplService'
 
 const INTERNAL_TOOL_BY_METHOD = {
   apps: 'ComputerApps',
@@ -54,7 +59,11 @@ export function nodeReplToolDefinition(deps: {
   computer: ComputerUseService
   service: NodeReplService
   executor: ToolExecutor
+  server?: McpServerDeclaration
+  validateConfiguration?: () => Promise<void>
 }): ToolDefinition<NodeReplJsInput, NodeReplOutput> {
+  const external = Boolean(deps.server && !isBuiltinNodeReplServer(deps.server))
+  const approvalMode = deps.server?.tools?.js?.approvalMode ?? deps.server?.defaultToolsApprovalMode
   const nestedContext = (context: ToolContext, toolCallID: string): ToolExecutionContext => ({
     threadID: context.invocation!.threadID,
     turnID: context.invocation!.turnID,
@@ -75,6 +84,7 @@ export function nodeReplToolDefinition(deps: {
     toolCallID: string,
     resumed: boolean,
   ): Promise<NodeReplOperationOutcome> => {
+    await deps.validateConfiguration?.()
     const name = INTERNAL_TOOL_BY_METHOD[method]
     // Audit identity stays distinct from the js call. It is deterministic so a
     // resumed execution is idempotent instead of writing a second row.
@@ -135,8 +145,9 @@ export function nodeReplToolDefinition(deps: {
   return {
     sdkName: NODE_REPL_TOOL_NAME,
     name: NODE_REPL_TOOL_NAME,
-    description:
-      '电脑控制：在独立进程中执行一段 JavaScript，通过 computer API 发现 Windows 应用（computer.apps）、读取窗口界面与截图（computer.read）、执行操作（computer.action）。每次调用都是全新进程，globals 与绑定不跨调用保留；只提供 computer 与 nodeRepl，没有 import、Shell、文件或网络。仅主 Agent、聊天模式可用；每次电脑操作仍走统一权限与审批链。',
+    description: external
+      ? '通过配置的 stdio MCP node_repl 服务执行 JavaScript。使用 computer 桥接时每次操作仍经过 Pidex 判权。外部运行时的可用 API 由该服务决定。'
+      : '电脑控制：在独立进程中执行一段 JavaScript，通过 computer API 发现 Windows 应用（computer.apps）、读取窗口界面与截图（computer.read）、执行操作（computer.action）。每次调用都是全新进程，globals 与绑定不跨调用保留；只提供 computer 与 nodeRepl，没有 import、Shell、文件或网络。仅主 Agent、聊天模式可用；每次电脑操作仍走统一权限与审批链。',
     schema: jsSchema,
     inputSchema: z.toJSONSchema(jsSchema),
     origin: {
@@ -144,17 +155,29 @@ export function nodeReplToolDefinition(deps: {
       serverName: NODE_REPL_SERVER_NAME,
       rawToolName: 'js',
       generation: 0,
+      ...(deps.server
+        ? {
+            configurationHash: createHash('sha256')
+              .update(JSON.stringify(deps.server))
+              .digest('hex'),
+          }
+        : {}),
     },
     capabilities: {
       filesystem: 'none',
       network: 'none',
-      process: false,
-      externalState: false,
+      process: external,
+      externalState: external,
       userInteraction: false,
     },
     allowedModes: ['chat'],
     allowedProfiles: ['main'],
-    approvalStrategy: 'never-review',
+    approvalStrategy:
+      approvalMode === 'prompt' || approvalMode === 'writes'
+        ? 'always-review'
+        : approvalMode === 'approve' || !external
+          ? 'never-review'
+          : 'policy',
     visibility: 'deferred',
     executionMode: 'sequential',
     available: () => deps.plugins.isEnabled(NODE_REPL_PLUGIN_ID) && deps.computer.available(),
@@ -178,6 +201,7 @@ export function nodeReplToolDefinition(deps: {
       const invocation = requireHostIdentity(context)
       if (!deps.plugins.isEnabled(NODE_REPL_PLUGIN_ID))
         throw new AgentError('PLUGIN_DISABLED', 'Computer Use 插件未启用，无法使用 node_repl', 403)
+      await deps.validateConfiguration?.()
       const recovery = context.computerRecovery
       if (recovery) {
         // Resume executes only the saved operation; the original script never runs again.
@@ -199,12 +223,20 @@ export function nodeReplToolDefinition(deps: {
         }
       }
       const result = await deps.service.execute({
+        ...(deps.server ? { server: deps.server } : {}),
+        title: input.title,
         threadID: invocation.threadID,
         code: input.code,
         timeoutMs: input.timeout_ms,
         signal: context.signal,
-        runOperation: (request: NodeReplOperationRequest) =>
-          runInternal(request.method, request.args, context, invocation.toolCallID, false),
+        runOperation: (request: NodeReplOperationRequest, signal) =>
+          runInternal(
+            request.method,
+            request.args,
+            { ...context, signal },
+            invocation.toolCallID,
+            false,
+          ),
       })
       return result.paused
         ? { text: '已暂停等待应用授权，请批准后重新观察。', images: [], terminated: true }

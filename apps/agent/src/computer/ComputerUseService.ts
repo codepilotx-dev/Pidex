@@ -12,6 +12,7 @@ import { AgentError } from '../Domain'
 import type { ConfigService } from '../config/ConfigService'
 import type { AgentDatabase } from '../storage/database/AgentDatabase'
 import type { EventHub } from '../storage/events/EventHub'
+import type { AgentLogger } from '../observability/AgentLogger'
 import { ComputerPolicyService } from './ComputerPolicyService'
 import { isFullAccessPermissionConfig, type PermissionConfig } from '@pidex/shared/thread'
 import type { PluginManagementService } from '../plugin/PluginManagementService'
@@ -23,7 +24,14 @@ type Identity = { threadID: string; turnID: string; agentID?: string; toolCallID
  */
 const HOST_STALE_MS = 45_000
 const HOST_POLL_MS = 20_000
-type Host = { instanceId: string; connectionId: string; available: boolean; seenAt: number }
+type Host = {
+  instanceId: string
+  connectionId: string
+  available: boolean
+  seenAt: number
+  runtimeInstalled?: boolean
+  runtime?: ComputerState['runtime']
+}
 type Pending = {
   command: ComputerCommand
   dispatched: boolean
@@ -62,13 +70,17 @@ export class ComputerUseService {
     private readonly hub: EventHub,
     private readonly plugins: PluginManagementService,
     policy?: ComputerPolicyService,
+    private readonly logger?: Pick<AgentLogger, 'info' | 'warn'>,
   ) {
     this.policy = policy ?? new ComputerPolicyService(config)
     this.unsubscribePolicy = this.policy.subscribe(() => this.stop())
     this.unsubscribePlugins = plugins.subscribe((pluginId) => {
       if (pluginId !== 'computer-use') return
-      if (!this.enabled()) this.stop()
-      else this.changed()
+      if (!this.enabled()) {
+        if (this.host?.runtime?.status === 'downloading')
+          this.logger?.info('computer.runtime.cancelled')
+        this.stop()
+      } else this.changed()
     })
     let previousPermissions = this.permissions()
     this.unsubscribeConfig = config.subscribe((event) => {
@@ -180,11 +192,18 @@ export class ComputerUseService {
   }
   enabled = () => this.plugins.isEnabled('computer-use')
   available = () =>
-    Boolean(this.enabled() && this.host?.available && Date.now() - this.host.seenAt < HOST_STALE_MS)
+    Boolean(
+      this.enabled() &&
+      this.host?.runtimeInstalled &&
+      this.host.available &&
+      Date.now() - this.host.seenAt < HOST_STALE_MS,
+    )
   state(): ComputerState {
     return {
+      ...(this.enabled() && this.host?.runtime ? { runtime: this.host.runtime } : {}),
+      runtimeInstalled: Boolean(this.host?.runtimeInstalled),
       enabled: this.enabled(),
-      available: Boolean(this.host?.available),
+      available: this.available(),
       ownerThreadId: this.owner?.threadID ?? null,
       ownerTurnId: this.owner?.turnID ?? null,
       targetName: this.targetName,
@@ -277,7 +296,14 @@ export class ComputerUseService {
     this.changed()
     return this.state()
   }
-  register(instanceId: string, connectionId: string, available: boolean, identitySupport = false) {
+  register(
+    instanceId: string,
+    connectionId: string,
+    available: boolean,
+    identitySupport = false,
+    runtime?: ComputerState['runtime'],
+    runtimeInstalled?: boolean,
+  ) {
     available = available && identitySupport
     if (
       this.host &&
@@ -287,9 +313,37 @@ export class ComputerUseService {
       this.discoveredApps.clear()
       this.reset('电脑宿主已重新连接')
     }
-    const previous = this.host?.available
-    this.host = { instanceId, connectionId, available, seenAt: Date.now() }
-    if (previous !== available) this.changed()
+    const previousRuntime = this.host?.runtime
+    const previous = JSON.stringify({
+      available: this.host?.available,
+      runtime: this.host?.runtime,
+      runtimeInstalled: this.host?.runtimeInstalled,
+    })
+    this.host = {
+      instanceId,
+      connectionId,
+      available,
+      seenAt: Date.now(),
+      runtimeInstalled: identitySupport && (runtimeInstalled ?? available),
+      ...(identitySupport && runtime ? { runtime } : {}),
+    }
+    if (
+      runtime &&
+      (runtime.status !== previousRuntime?.status || runtime.progress !== previousRuntime?.progress)
+    ) {
+      const fields = { phase: runtime.status, progress: runtime.progress, code: runtime.error }
+      if (runtime.status === 'error') this.logger?.warn('computer.runtime.failed', fields)
+      else this.logger?.info('computer.runtime.' + runtime.status, fields)
+    }
+    if (
+      previous !==
+      JSON.stringify({
+        available,
+        runtime: this.host.runtime,
+        runtimeInstalled: this.host.runtimeInstalled,
+      })
+    )
+      this.changed()
     return this.state()
   }
   requireHost(instanceId: string, connectionId: string) {
@@ -334,6 +388,8 @@ export class ComputerUseService {
   }
   release(instanceId: string) {
     if (this.host?.instanceId !== instanceId) return
+    if (this.host.runtime?.status === 'downloading')
+      this.logger?.info('computer.runtime.cancelled', { reason: 'host_released' })
     this.host = undefined
     this.grants.clear()
     this.discoveredApps.clear()

@@ -126,6 +126,10 @@ export class McpConnectionManager {
     private readonly updated?: (generation: number) => void | Promise<void>,
     private readonly diagnosticContext?: McpDiagnosticContextProvider,
     private readonly oauth?: McpOAuthCoordinator,
+    private readonly managed?: {
+      owns(name: string): boolean
+      definitions(workspace?: string): Promise<ToolDefinition<any, any>[]>
+    },
   ) {}
 
   async status(workspace?: string) {
@@ -134,50 +138,53 @@ export class McpConnectionManager {
     const config = await this.configs.list(workspace)
     const current = runtime.current
     const statuses: McpRuntimeServerStatus[] = await Promise.all(
-      config.servers.map(async (item) => {
-        const auth = (await this.oauth?.authSummary(item.server, runtime.key).catch(() => ({
-          source: 'none' as const,
-          canLogin: item.server.transport.type === 'http' && item.server.transport.auth !== 'none',
-          canLogout: false,
-        }))) ?? { source: 'none' as const, canLogin: false, canLogout: false }
-        if (!item.effective) {
-          return {
-            name: item.server.name,
-            scope: item.server.scope,
-            type: item.server.transport.type,
-            state: 'shadowed',
-            auth,
-            toolCount: 0,
-            resourceCount: 0,
-            promptCount: 0,
-          }
-        }
-        if (!item.server.enabled) {
-          return {
-            name: item.server.name,
-            scope: item.server.scope,
-            type: item.server.transport.type,
-            state: 'disabled',
-            auth,
-            toolCount: 0,
-            resourceCount: 0,
-            promptCount: 0,
-          }
-        }
-        const handle = current?.handles.get(item.server.name)
-        return handle
-          ? statusFor(handle, auth)
-          : {
+      config.servers
+        .filter((item) => !this.managed?.owns(item.server.name))
+        .map(async (item) => {
+          const auth = (await this.oauth?.authSummary(item.server, runtime.key).catch(() => ({
+            source: 'none' as const,
+            canLogin:
+              item.server.transport.type === 'http' && item.server.transport.auth !== 'none',
+            canLogout: false,
+          }))) ?? { source: 'none' as const, canLogin: false, canLogout: false }
+          if (!item.effective) {
+            return {
               name: item.server.name,
               scope: item.server.scope,
               type: item.server.transport.type,
-              state: 'starting',
+              state: 'shadowed',
               auth,
               toolCount: 0,
               resourceCount: 0,
               promptCount: 0,
             }
-      }),
+          }
+          if (!item.server.enabled) {
+            return {
+              name: item.server.name,
+              scope: item.server.scope,
+              type: item.server.transport.type,
+              state: 'disabled',
+              auth,
+              toolCount: 0,
+              resourceCount: 0,
+              promptCount: 0,
+            }
+          }
+          const handle = current?.handles.get(item.server.name)
+          return handle
+            ? statusFor(handle, auth)
+            : {
+                name: item.server.name,
+                scope: item.server.scope,
+                type: item.server.transport.type,
+                state: 'starting',
+                auth,
+                toolCount: 0,
+                resourceCount: 0,
+                promptCount: 0,
+              }
+        }),
     )
     return {
       servers: statuses,
@@ -197,6 +204,7 @@ export class McpConnectionManager {
     const runtime = await this.runtime(workspace)
     await this.ensure(runtime, false)
     const generation = runtime.current!
+    const managedDefinitions = (await this.managed?.definitions(workspace)) ?? []
     const unavailable = generation.requiredServerNames.filter(
       (name) => generation.handles.get(name)?.state !== 'connected',
     )
@@ -213,9 +221,12 @@ export class McpConnectionManager {
 
     return {
       generation: generation.id,
-      definitions: generation.definitions,
+      definitions: [...generation.definitions, ...managedDefinitions],
       serverInstructions: generation.serverInstructions,
-      catalog: new TurnToolCatalog(this.baseCatalog, generation.definitions),
+      catalog: new TurnToolCatalog(this.baseCatalog, [
+        ...generation.definitions,
+        ...managedDefinitions,
+      ]),
       listServers: () => {
         return [...generation.handles.entries()].map(([name, handle]) => ({
           name,
@@ -354,7 +365,9 @@ export class McpConnectionManager {
   ): Promise<McpReloadResult> {
     const previous = runtime.current
     const desired = declarations
-      .filter((item) => item.effective && item.server.enabled)
+      .filter(
+        (item) => item.effective && item.server.enabled && !this.managed?.owns(item.server.name),
+      )
       .map((item) => item.server)
     const handles = new Map<string, ConnectionHandle>()
     const added: string[] = []

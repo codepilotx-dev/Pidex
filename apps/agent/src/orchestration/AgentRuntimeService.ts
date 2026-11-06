@@ -1770,6 +1770,7 @@ export class AgentRuntimeService implements AgentRuntime {
                   ...(request.resume.authorizationFingerprint
                     ? { approvedAuthorizationFingerprint: request.resume.authorizationFingerprint }
                     : {}),
+                  toolCatalog: composition.bindings.toolCatalog,
                   ...(nodeReplRecovery ? { computerRecovery: nodeReplRecovery } : {}),
                 },
               )
@@ -2350,11 +2351,17 @@ export class AgentRuntimeService implements AgentRuntime {
     const definitions = (request.toolCatalog?.all() ?? [])
       .filter((definition) => definition.origin?.kind === 'mcp')
       .map((definition) => {
-        const origin = definition.origin as { kind: 'mcp'; serverName: string; rawToolName: string }
+        const origin = definition.origin as {
+          kind: 'mcp'
+          serverName: string
+          rawToolName: string
+          configurationHash?: string
+        }
         return {
           sdkName: definition.sdkName,
           serverName: origin.serverName,
           rawToolName: origin.rawToolName,
+          ...(origin.configurationHash ? { configurationHash: origin.configurationHash } : {}),
         }
       })
     const serverInstructions = (request.promptSections ?? [])

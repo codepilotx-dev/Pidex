@@ -22,6 +22,8 @@ const application = applicationArgument
   : resolve(root, 'release/win-unpacked/Pidex Desktop.exe')
 const resources = join(dirname(application), 'resources')
 const agent = join(resources, 'agent/pidex-agent.exe')
+if (existsSync(join(resources, 'cua/cpx-cua.exe')))
+  throw new Error('独立启动冒烟要求安装包不内置 CUA')
 if (!existsSync(application) || !existsSync(agent))
   throw new Error('x64 冒烟所需的桌面程序或 Agent 不存在')
 await assertWindowsX64PE(application)
@@ -67,7 +69,12 @@ try {
   if (!response.ok || ((await response.json()) as { ok?: boolean }).ok !== true) {
     throw new Error(`Agent /api/ready 冒烟失败：HTTP ${response.status}`)
   }
-  console.log(`[Pidex] desktop.ready and /api/ready smoke passed: ${ready.origin}`)
+  if (
+    existsSync(join(isolatedRoot, 'profile/runtimes/cua')) ||
+    existsSync(join(isolatedRoot, 'appdata/Pidex Desktop/runtimes/cua'))
+  )
+    throw new Error('未启用插件的首次启动不应下载 CUA')
+  console.log(`[Pidex] desktop.ready and /api/ready smoke passed without CUA: ${ready.origin}`)
 } finally {
   child.kill()
   if (process.platform === 'win32' && child.pid) {

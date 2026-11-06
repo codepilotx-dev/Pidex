@@ -359,10 +359,17 @@ export function McpEditorDialog({
               </div>
             ) : null}
 
+            {server?.name === 'node_repl' ? (
+              <p className="tw:type-caption tw:text-app-text-soft">
+                按需启动兼容 js 工具的 stdio MCP
+                服务。更换程序需要配套运行时；删除自定义配置会恢复插件默认入口。
+              </p>
+            ) : null}
             <FormCard>
               <FormRow label="名称">
                 <Input
                   aria-label="MCP server 名称"
+                  disabled={server?.name === 'node_repl'}
                   value={form.name}
                   placeholder="MCP server name"
                   onChange={(event) =>
@@ -505,18 +512,20 @@ export function McpEditorDialog({
                   onChange={(enabled) => update((current) => ({ ...current, enabled }))}
                 />
               </FormRow>
-              <FormRow label="必需 Server">
-                <span className="tw:flex tw:items-center tw:gap-2">
-                  <ToggleSwitch
-                    ariaLabel="必需 Server"
-                    checked={form.required}
-                    onChange={(required) => update((current) => ({ ...current, required }))}
-                  />
-                  <span className="tw:type-caption tw:text-app-text-soft">
-                    开启后，连接失败会阻止任务开始。
+              {server?.name !== 'node_repl' ? (
+                <FormRow label="必需 Server">
+                  <span className="tw:flex tw:items-center tw:gap-2">
+                    <ToggleSwitch
+                      ariaLabel="必需 Server"
+                      checked={form.required}
+                      onChange={(required) => update((current) => ({ ...current, required }))}
+                    />
+                    <span className="tw:type-caption tw:text-app-text-soft">
+                      开启后，连接失败会阻止任务开始。
+                    </span>
                   </span>
-                </span>
-              </FormRow>
+                </FormRow>
+              ) : null}
               {form.type === 'http' ? (
                 <>
                   <FormRow label="OAuth">
@@ -606,7 +615,7 @@ export function McpEditorDialog({
                   rows={form.toolApprovals}
                   onChange={(toolApprovals) => update((current) => ({ ...current, toolApprovals }))}
                 />
-                {form.type === 'stdio' ? (
+                {form.type === 'stdio' && server?.name !== 'node_repl' ? (
                   <FormRow label="传递会话诊断上下文">
                     <ToggleSwitch
                       ariaLabel="传递会话诊断上下文"
@@ -674,7 +683,7 @@ export function McpEditorDialog({
                     size={APP_ICON_SIZE}
                     strokeWidth={APP_ICON_STROKE_WIDTH}
                   />
-                  删除
+                  {server.name === 'node_repl' ? '恢复默认配置' : '删除'}
                 </Button>
               ) : null}
             </span>

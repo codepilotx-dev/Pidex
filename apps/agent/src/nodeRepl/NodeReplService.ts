@@ -1,29 +1,16 @@
 import { basename } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import type { ComputerResult } from '@pidex/agent-protocol'
+import { McpClient, StdioTransport } from '@earendil-works/pi-mcp'
+import { z } from 'zod'
+import { connectMcpClient, mcpStdioEnvironment } from '../mcp/McpClientFactory'
+import type { ComputerResult, McpServerDeclaration } from '@pidex/agent-protocol'
 import { AgentError } from '../Domain'
-import {
-  clampNodeReplTimeout,
-  type NodeReplChildMessage,
-  type NodeReplHostMessage,
-  type NodeReplImage,
-  type NodeReplOperationRequest,
-} from './Protocol'
+import { clampNodeReplTimeout, type NodeReplImage, type NodeReplOperationRequest } from './Protocol'
 
 /** Startup flag the installed agent binary uses to dispatch the child mode. */
 export const NODE_REPL_CHILD_FLAG = '--pidex-node-repl'
 
 export type NodeReplCommand = { executable: string; args: string[] }
-
-export type NodeReplChildHandle = {
-  write(line: string): Promise<void> | void
-  lines(): AsyncIterable<string>
-  stderr(): Promise<string>
-  kill(): void
-  exited: Promise<number>
-}
-
-export type NodeReplSpawner = (command: NodeReplCommand, signal: AbortSignal) => NodeReplChildHandle
 
 /** Operational outcome of one internal computer operation. */
 export type NodeReplOperationOutcome =
@@ -36,10 +23,12 @@ export type NodeReplExecuteInput = {
   threadID: string
   code: string
   timeoutMs?: number | undefined
+  server?: McpServerDeclaration
+  title?: string
   signal: AbortSignal
   runOperation: (
     request: NodeReplOperationRequest,
-    child: NodeReplChildHandle,
+    signal: AbortSignal,
   ) => Promise<NodeReplOperationOutcome>
 }
 
@@ -60,55 +49,46 @@ export const resolveNodeReplCommand = (execPath = process.execPath): NodeReplCom
     ? { executable: execPath, args: ['run', childEntry()] }
     : { executable: execPath, args: [NODE_REPL_CHILD_FLAG] }
 
-const decodeLines = async function* (stream: ReadableStream<Uint8Array>) {
-  const reader = stream.getReader()
-  const decoder = new TextDecoder()
-  let buffer = ''
-  try {
-    for (;;) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buffer += decoder.decode(value, { stream: true })
-      for (;;) {
-        const index = buffer.indexOf('\n')
-        if (index < 0) break
-        const line = buffer.slice(0, index)
-        buffer = buffer.slice(index + 1)
-        if (line.trim()) yield line
-      }
-    }
-    if (buffer.trim()) yield buffer
-  } finally {
-    reader.releaseLock()
+export const defaultNodeReplServer = (): McpServerDeclaration => {
+  const command = resolveNodeReplCommand()
+  return {
+    name: 'node_repl',
+    scope: 'user',
+    enabled: true,
+    transport: { type: 'stdio', command: command.executable, args: command.args },
   }
 }
 
-const defaultSpawner: NodeReplSpawner = (command, signal) => {
-  const child = Bun.spawn([command.executable, ...command.args], {
-    windowsHide: true,
-    stdin: 'pipe',
-    stdout: 'pipe',
-    stderr: 'pipe',
-    env: { ...process.env, PIDEX_NODE_REPL_CHILD: '1' },
-    ...(signal ? { signal } : {}),
-  })
-  return {
-    write: async (line: string) => {
-      child.stdin.write(`${line}\n`)
-      await child.stdin.flush()
-    },
-    lines: () => decodeLines(child.stdout as ReadableStream<Uint8Array>),
-    stderr: async () => new Response(child.stderr as ReadableStream<Uint8Array>).text(),
-    kill: () => {
-      try {
-        child.kill()
-      } catch {
-        // Already exited; killing is best-effort cleanup.
-      }
-    },
-    exited: child.exited,
-  }
+export const isBuiltinNodeReplServer = (server: McpServerDeclaration) => {
+  const transport = server.transport
+  const command = resolveNodeReplCommand()
+  return (
+    transport.type === 'stdio' &&
+    transport.command === command.executable &&
+    JSON.stringify(transport.args ?? []) === JSON.stringify(command.args) &&
+    !transport.cwd &&
+    Object.keys(transport.env ?? {}).length === 0 &&
+    Object.keys(transport.envFromHost ?? {}).length === 0
+  )
 }
+
+const operationSchema = z.discriminatedUnion('method', [
+  z.object({ method: z.literal('apps'), args: z.object({}).strict() }),
+  z.object({
+    method: z.literal('read'),
+    args: z.object({ windowRef: z.string().min(1) }).strict(),
+  }),
+  z.object({
+    method: z.literal('action'),
+    args: z
+      .object({
+        windowRef: z.string().min(1),
+        observationId: z.string().min(1),
+        operation: z.record(z.string(), z.unknown()),
+      })
+      .strict(),
+  }),
+])
 
 /** Raised internally when the cell stopped because an operation needs approval. */
 export class NodeReplPaused extends Error {
@@ -126,10 +106,7 @@ export class NodeReplPaused extends Error {
 export class NodeReplService {
   private readonly locks = new Map<string, Promise<unknown>>()
 
-  constructor(
-    private readonly spawn: NodeReplSpawner = defaultSpawner,
-    private readonly command: () => NodeReplCommand = resolveNodeReplCommand,
-  ) {}
+  constructor(private readonly subscribeStop?: (stop: () => void) => () => void) {}
 
   /** Serializes cells of one chat; separate chats keep their own process. */
   private serialize<T>(threadID: string, task: () => Promise<T>): Promise<T> {
@@ -150,74 +127,108 @@ export class NodeReplService {
   }
 
   private async runCell(input: NodeReplExecuteInput): Promise<NodeReplExecuteResult> {
-    const timeoutMs = clampNodeReplTimeout(input.timeoutMs)
+    if (input.signal.aborted) throw new AgentError('RUN_ABORTED', '任务已停止', 499)
+    const server = input.server ?? defaultNodeReplServer()
+    const timeoutMs = clampNodeReplTimeout(input.timeoutMs ?? server.toolTimeoutMs)
+    if (!server.enabled || server.transport.type !== 'stdio')
+      throw new AgentError('NODE_REPL_UNAVAILABLE', 'node_repl 需要启用的 stdio MCP 配置', 503)
+    const transport = server.transport
+    const client = new McpClient({
+      name: 'pidex-agent',
+      version: '0.2.0',
+      requestTimeoutMs: timeoutMs,
+    })
+    const abort = new AbortController()
     const text: string[] = []
     const images: NodeReplImage[] = []
-    const abort = new AbortController()
-    const onOuterAbort = () => abort.abort()
-    input.signal.addEventListener('abort', onOuterAbort, { once: true })
-    const child = this.spawn(this.command(), abort.signal)
-    let timer: ReturnType<typeof setTimeout> | undefined
+    const operations = new Set<Promise<NodeReplOperationOutcome>>()
+    let paused = false
+    let unavailable = false
+    const stop = () => {
+      abort.abort()
+      void client.close().catch(() => undefined)
+    }
+    input.signal.addEventListener('abort', stop, { once: true })
+    const unsubscribe = this.subscribeStop?.(() => {
+      unavailable = true
+      stop()
+    })
+    const timer = setTimeout(stop, timeoutMs)
+    client.setRequestHandler('pidex/computer', async (params, requestContext) => {
+      const request = operationSchema.parse(params) as NodeReplOperationRequest
+      if (abort.signal.aborted) throw new Error('Execution stopped')
+      const operation = input.runOperation(
+        request,
+        AbortSignal.any([abort.signal, requestContext.signal]),
+      )
+      operations.add(operation)
+      let outcome: NodeReplOperationOutcome
+      try {
+        outcome = await operation
+      } finally {
+        operations.delete(operation)
+      }
+      if (outcome.kind === 'paused') {
+        paused = true
+        stop()
+        throw new NodeReplPaused()
+      }
+      if (outcome.kind === 'denied')
+        return { ok: false, error: { code: outcome.code, message: outcome.message } }
+      if (outcome.result.images) images.push(...outcome.result.images)
+      return { ok: true, result: outcome.result }
+    })
     try {
-      if (input.signal.aborted) throw new AgentError('RUN_ABORTED', '任务已停止', 499)
-      timer = setTimeout(() => abort.abort(), timeoutMs)
-      await child.write(
-        JSON.stringify({ type: 'init', code: input.code, timeoutMs } satisfies NodeReplHostMessage),
+      if (abort.signal.aborted) throw new Error('Execution stopped')
+      await connectMcpClient(
+        client,
+        new StdioTransport({
+          command: transport.command,
+          ...(transport.args ? { args: transport.args } : {}),
+          ...(transport.cwd ? { cwd: transport.cwd } : {}),
+          env: mcpStdioEnvironment(transport),
+          inheritEnv: false,
+          stderr: 'pipe',
+          closeTimeoutMs: 200,
+        }),
+        Math.min(server.startupTimeoutMs ?? 10_000, timeoutMs),
       )
-      for await (const line of child.lines()) {
-        let message: NodeReplChildMessage
-        try {
-          message = JSON.parse(line) as NodeReplChildMessage
-        } catch {
-          continue
-        }
-        if (message.type === 'write') {
-          text.push(message.text)
-        } else if (message.type === 'image') {
-          images.push({ data: message.data, mimeType: message.mimeType })
-        } else if (message.type === 'done') {
-          return { text: text.join('\n'), images, paused: false }
-        } else if (message.type === 'error') {
-          throw new AgentError('NODE_REPL_SCRIPT_ERROR', message.message, 400)
-        } else if (message.type === 'call') {
-          const outcome = await input.runOperation(
-            { method: message.method, args: message.args } as NodeReplOperationRequest,
-            child,
-          )
-          if (outcome.kind === 'paused') throw new NodeReplPaused()
-          const reply: NodeReplHostMessage =
-            outcome.kind === 'result'
-              ? { type: 'result', id: message.id, ok: true, result: outcome.result }
-              : {
-                  type: 'result',
-                  id: message.id,
-                  ok: false,
-                  error: { code: outcome.code, message: outcome.message },
-                }
-          if (outcome.kind === 'result' && outcome.result.images)
-            images.push(...outcome.result.images)
-          await child.write(JSON.stringify(reply))
-        }
+      if (abort.signal.aborted) throw new Error('Execution stopped')
+      const tools = await client.listTools({ signal: abort.signal })
+      if (!tools.some((tool) => tool.name === 'js'))
+        throw new AgentError('NODE_REPL_INCOMPATIBLE', 'node_repl MCP 未提供 js 工具', 400)
+      const result = await client.callTool(
+        'js',
+        {
+          code: input.code,
+          title: input.title ?? 'JavaScript',
+          timeout_ms: timeoutMs,
+        },
+        { signal: abort.signal },
+      )
+      // A cell can omit await; its already-issued operations still finish or cancel with the cell.
+      await Promise.all(operations)
+      if (paused) return { text: text.join('\n'), images, paused: true }
+      if (abort.signal.aborted) throw new Error('Execution stopped')
+      for (const item of result.content) {
+        if (item.type === 'text') text.push(item.text)
+        if (item.type === 'image') images.push({ data: item.data, mimeType: item.mimeType })
       }
-      throw new AgentError('NODE_REPL_CHILD_EXITED', 'JavaScript 执行进程提前退出', 500)
+      if (result.isError) throw new AgentError('NODE_REPL_SCRIPT_ERROR', text.join('\n'), 400)
+      return { text: text.join('\n'), images, paused: false }
     } catch (cause) {
-      if (cause instanceof NodeReplPaused) return { text: text.join('\n'), images, paused: true }
-      if (abort.signal.aborted) {
-        if (input.signal.aborted) throw new AgentError('RUN_ABORTED', '任务已停止', 499)
+      if (paused) return { text: text.join('\n'), images, paused: true }
+      if (input.signal.aborted) throw new AgentError('RUN_ABORTED', '任务已停止', 499)
+      if (unavailable) throw new AgentError('NODE_REPL_UNAVAILABLE', 'Computer Use 插件已禁用', 403)
+      if (abort.signal.aborted)
         throw new AgentError('NODE_REPL_TIMEOUT', `JavaScript 执行超时（${timeoutMs}ms）`, 408)
-      }
       if (cause instanceof AgentError) throw cause
-      const stderr = await child.stderr().catch(() => '')
-      throw new AgentError(
-        'NODE_REPL_FAILED',
-        stderr.trim() || (cause instanceof Error ? cause.message : String(cause)),
-        500,
-      )
+      throw new AgentError('NODE_REPL_FAILED', 'node_repl MCP 启动或调用失败，请检查配置', 500)
     } finally {
-      if (timer) clearTimeout(timer)
-      input.signal.removeEventListener('abort', onOuterAbort)
-      child.kill()
-      await child.exited.catch(() => undefined)
+      unsubscribe?.()
+      clearTimeout(timer)
+      input.signal.removeEventListener('abort', stop)
+      await client.close().catch(() => undefined)
     }
   }
 }

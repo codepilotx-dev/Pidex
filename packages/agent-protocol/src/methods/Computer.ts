@@ -40,7 +40,21 @@ export const ComputerPermissionSchema = Schema.Struct({
   chatThreadIds: Schema.optional(Schema.Array(OpaqueIDSchema)),
   policy: Schema.optional(ComputerPolicyDecisionSchema),
 })
+export const ComputerRuntimeStateSchema = Schema.Struct({
+  status: Schema.Literals(['downloading', 'starting', 'ready', 'error']),
+  progress: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: 100 }))),
+  error: Schema.optional(
+    Schema.Literals([
+      'download_failed',
+      'integrity_failed',
+      'unsupported_platform',
+      'start_failed',
+    ]),
+  ),
+})
 export const ComputerStateSchema = Schema.Struct({
+  runtimeInstalled: Schema.optional(Schema.Boolean),
+  runtime: Schema.optional(ComputerRuntimeStateSchema),
   enabled: Schema.Boolean,
   available: Schema.Boolean,
   ownerThreadId: Schema.NullOr(Schema.String),
@@ -143,7 +157,12 @@ export const ComputerRpcMethods = {
 } as const satisfies MethodMap
 export const ComputerHostRpcMethods = {
   'computer/host/registerIdentity': defineMethod({
-    params: Schema.Struct({ instanceId: OpaqueIDSchema, available: Schema.Boolean }),
+    params: Schema.Struct({
+      instanceId: OpaqueIDSchema,
+      available: Schema.Boolean,
+      runtime: Schema.optional(ComputerRuntimeStateSchema),
+      runtimeInstalled: Schema.optional(Schema.Boolean),
+    }),
     result: ComputerStateSchema,
     errors,
     capability: 'computer.host.identity.v1',

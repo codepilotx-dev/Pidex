@@ -98,6 +98,7 @@ export type ToolOrigin =
       serverName: string
       rawToolName: string
       generation: number
+      configurationHash?: string
     }
 
 export interface ToolCatalogEntry<Input = unknown, Output = unknown> {

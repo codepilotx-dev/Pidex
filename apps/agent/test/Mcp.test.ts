@@ -12,6 +12,9 @@ import {
   McpConnectionError,
   sanitizeMcpServerInstructions,
 } from '../src/mcp/McpClientFactory'
+import { McpRuntimeService } from '../src/mcp/McpRuntimeService'
+import { nodeReplToolDefinition } from '../src/nodeRepl/Definition'
+import { defaultNodeReplServer } from '../src/nodeRepl/NodeReplService'
 import { McpConnectionManager } from '../src/mcp/McpConnectionManager'
 import { McpConfigError, McpConfigService } from '../src/mcp/McpConfigService'
 import { createMcpInstructionSections } from '../src/mcp/McpPromptSections'
@@ -48,6 +51,60 @@ afterEach(async () => {
 })
 
 describe('MCP configuration', () => {
+  test('plugin MCP defaults can be edited, disabled and restored without deleting other settings', async () => {
+    const database = new MemorySettings()
+    const configs = new McpConfigService(new McpSettingsRepository(database))
+    const runtime = new McpRuntimeService(configs, {} as never, undefined, undefined, () => [
+      defaultNodeReplServer(),
+    ])
+    const fallback = (await runtime.list({})).servers.find(
+      (item) => item.server.name === 'node_repl',
+    )!
+    expect(fallback.providedDefault).toBe(true)
+    await runtime.setEnabled({
+      scope: 'user',
+      name: 'node_repl',
+      enabled: false,
+      operationId: 'disable-default',
+    })
+    expect(
+      (await runtime.list({})).servers.find((item) => item.server.name === 'node_repl')?.server
+        .enabled,
+    ).toBe(false)
+    const configured = {
+      ...fallback.server,
+      transport: {
+        type: 'stdio' as const,
+        command: 'custom.exe',
+        args: ['--mcp'],
+        env: { REPL_MODE: 'test' },
+      },
+    }
+    await runtime.save({
+      server: configured,
+      originalName: 'node_repl',
+      operationId: 'configure-default',
+    })
+    expect(
+      (await configs.list()).servers.find((item) => item.server.name === 'node_repl')?.server
+        .transport,
+    ).toEqual(configured.transport)
+    await runtime.remove({ scope: 'user', name: 'node_repl', operationId: 'reset-default' })
+    expect(
+      (await runtime.list({})).servers.find((item) => item.server.name === 'node_repl')
+        ?.providedDefault,
+    ).toBe(true)
+    expect((await configs.list()).servers.some((item) => item.server.name === 'context7')).toBe(
+      true,
+    )
+    await expect(
+      runtime.save({
+        server: { ...configured, transport: { type: 'http', url: 'https://example.com' } },
+        operationId: 'bad-transport',
+      }),
+    ).rejects.toMatchObject({ code: 'MCP_CONFIG_INVALID' })
+  })
+
   test('seeds Context7 as an ordinary enabled server and keeps its removal persisted', async () => {
     const database = new MemorySettings()
     database.values.set('mcp.settings.v1', { sentinel: 'preserved' })
@@ -881,6 +938,48 @@ describe('MCP transports', () => {
 })
 
 describe('MCP turn catalog', () => {
+  test('scoped plugin adapters are not connected twice and disabled adapters do not enter later turns', async () => {
+    const declared = defaultNodeReplServer()
+    const configs = {
+      workspace: async () => null,
+      list: async () => ({ generation: 1, servers: [{ server: declared, effective: true }] }),
+    }
+    let enabled = true
+    let connections = 0
+    const definition = nodeReplToolDefinition({
+      plugins: { isEnabled: () => true } as never,
+      computer: { available: () => true } as never,
+      service: {} as never,
+      executor: {} as never,
+    })
+    const manager = new McpConnectionManager(
+      configs as never,
+      new ToolCatalog([]),
+      {
+        connect: async () => {
+          connections++
+          throw new Error('must not connect')
+        },
+      } as never,
+      undefined,
+      undefined,
+      undefined,
+      {
+        owns: (name) => name === 'node_repl',
+        definitions: async () => (enabled ? [definition] : []),
+      },
+    )
+    const first = await manager.acquire()
+    expect(first.catalog.all().map((tool) => tool.sdkName)).toEqual(['mcp__node_repl__js'])
+    enabled = false
+    const second = await manager.acquire()
+    expect(second.catalog.all()).toEqual([])
+    expect(connections).toBe(0)
+    await first.release()
+    await second.release()
+    await manager.dispose()
+  })
+
   test('scrubs and bounds server instructions before exposing them as external context', () => {
     const instructions = sanitizeMcpServerInstructions(
       `api_key=super-secret\n${'工具说明🙂'.repeat(8_000)}`,

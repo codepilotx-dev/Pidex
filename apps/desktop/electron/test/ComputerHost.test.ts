@@ -7,7 +7,8 @@ import {
   nativeAction,
   toResult,
 } from '../src/computer/DesktopComputerController'
-import { CpxCuaRuntime, resolveCpxCuaExecutable } from '../src/computer/CpxCuaRuntime'
+import { CpxCuaRuntime } from '../src/computer/CpxCuaRuntime'
+import { CUA_ARTIFACT, resolveCpxCuaExecutable } from '../src/computer/CuaRuntimeArtifact'
 import type { DesktopLogger } from '../src/logging/DesktopLogger'
 
 const logger: DesktopLogger = {
@@ -306,19 +307,83 @@ test('原生结果保留文本、错误码与截图，用于聊天与渲染', ()
   expect(toResult({ structuredContent: {} }).text).toBe('操作已完成')
 })
 
-test('打包后从 resources/cua 解析运行时，开发态用 Cargo 输出', () => {
-  expect(
-    resolveCpxCuaExecutable({
-      packaged: true,
-      resourcesPath: 'C:\\app\\resources',
-      moduleDirectory: 'C:\\repo\\apps\\desktop\\electron\\dist',
-    }),
-  ).toBe('C:\\app\\resources\\cua\\cpx-cua.exe')
-  expect(
-    resolveCpxCuaExecutable({
-      packaged: false,
-      resourcesPath: 'C:\\app\\resources',
-      moduleDirectory: 'C:\\repo\\apps\\desktop\\electron\\dist',
-    }),
-  ).toBe('C:\\repo\\apps\\desktop\\native\\cpx-cua\\dist\\cpx-cua.exe')
+test('运行时路径只由用户缓存目录和固定版本摘要决定', () => {
+  const path = resolveCpxCuaExecutable('C:/profile')
+  expect(path).toContain(CUA_ARTIFACT.tag)
+  expect(path).toContain(CUA_ARTIFACT.sha256)
+  expect(path.endsWith('cpx-cua.exe')).toBe(true)
+  expect(path).not.toContain('resources')
 })
+
+test('并发启动共用一次准备，停止后迟到的下载不能启动进程', async () => {
+  const prepared = deferred<string>()
+  let calls = 0
+  let signal: AbortSignal | undefined
+  const runtime = new CpxCuaRuntime((abort) => {
+    calls++
+    signal = abort
+    return prepared.promise
+  }, logger)
+  const first = runtime.start()
+  const second = runtime.start()
+  expect(calls).toBe(1)
+  runtime.stop()
+  expect(signal?.aborted).toBe(true)
+  prepared.resolve('must-not-be-spawned.exe')
+  const results = await Promise.allSettled([first, second])
+  expect(results.map((result) => result.status)).toEqual(['rejected', 'rejected'])
+})
+
+test('激活失败不随轮询重复启动，重新启用后可重试', async () => {
+  type Next = { generation: string; enabled: boolean; command: null }
+  const polls: Array<ReturnType<typeof deferred<Next>>> = []
+  const reports: any[] = []
+  let starts = 0
+  const controller = new DesktopComputerController(
+    { getSupervisor: () => undefined, resolveExecutable: () => undefined, logger },
+    {
+      rpc: {
+        invalidate() {},
+        async call(method: string, params: any) {
+          if (method === 'computer/host/registerIdentity') reports.push(params)
+          if (method === 'computer/host/next') {
+            const next = deferred<Next>()
+            polls.push(next)
+            return next.promise
+          }
+          return { ok: true }
+        },
+      } as unknown as ComputerHostClient,
+      runtime: {
+        async start() {
+          starts++
+          throw new Error('fixture failure')
+        },
+        stop() {},
+        async callTool() {
+          throw new Error('must not execute')
+        },
+      },
+    },
+  )
+  try {
+    await controller.ensure()
+    await until(() => polls.length > 0)
+    polls.shift()!.resolve({ generation: 'generation:1', enabled: true, command: null })
+    await until(
+      () => reports.some((report) => report.runtime?.status === 'error') && polls.length > 0,
+    )
+    polls.shift()!.resolve({ generation: 'generation:1', enabled: true, command: null })
+    await until(() => polls.length > 0)
+    expect(starts).toBe(1)
+    polls.shift()!.resolve({ generation: 'generation:2', enabled: true, command: null })
+    await until(() => starts === 2)
+    expect(reports.find((report) => report.runtime?.status === 'error').runtime.error).toBe(
+      'start_failed',
+    )
+  } finally {
+    controller.dispose()
+    for (const next of polls)
+      next.resolve({ generation: 'generation:2', enabled: false, command: null })
+  }
+}, 6000)

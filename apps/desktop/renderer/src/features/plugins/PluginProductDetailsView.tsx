@@ -1,3 +1,4 @@
+import { ComputerRuntimeStatus } from './ComputerRuntimeStatus.js'
 import type { PluginDetails } from '@pidex/agent-protocol'
 import type React from 'react'
 import {
@@ -105,6 +106,7 @@ export function PluginProductDetailsView({
               {item.name}
             </h1>
             <p className="tw:m-0 tw:text-app-text-soft tw:type-body">{item.description}</p>
+            {item.id === 'computer-use' ? <ComputerRuntimeStatus /> : null}
           </div>
           <div className={cx('catalog-details-view__primary-action', DETAILS_ACTION_GROUP_CLASS)}>
             {item.canUninstall && item.installed && onUninstall ? (

@@ -73,7 +73,8 @@ import {
 } from '@pidex/shared/desktop-deep-link-ipc'
 import { DesktopBrowserController } from './browser/BrowserController.js'
 import { DesktopComputerController } from './computer/DesktopComputerController.js'
-import { resolveCpxCuaExecutable } from './computer/CpxCuaRuntime.js'
+import { fetchCuaArtifact } from './computer/CuaArtifactNetwork.js'
+import { hasCachedCuaRuntime, prepareCuaRuntime } from './computer/CuaRuntimeArtifact.js'
 import {
   registerMicrophoneIpc,
   WINDOWS_MICROPHONE_PRIVACY_SETTINGS_URL,
@@ -301,12 +302,9 @@ async function startDesktop(): Promise<void> {
   })
   computerController = new DesktopComputerController({
     getSupervisor: () => supervisor,
-    resolveExecutable: () =>
-      resolveCpxCuaExecutable({
-        packaged: app.isPackaged,
-        resourcesPath: process.resourcesPath,
-        moduleDirectory,
-      }),
+    isRuntimeInstalled: () => hasCachedCuaRuntime(app.getPath('userData')),
+    resolveExecutable: (signal, onDownloading) =>
+      prepareCuaRuntime(app.getPath('userData'), signal, onDownloading, fetchCuaArtifact),
     logger,
   })
 

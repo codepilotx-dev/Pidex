@@ -31,7 +31,14 @@ export const computerHandlers: RpcHandlerGroup = {
       case 'computer/host/register':
         return computer.register(params.instanceId, context.connectionId!, params.available)
       case 'computer/host/registerIdentity':
-        return computer.register(params.instanceId, context.connectionId!, params.available, true)
+        return computer.register(
+          params.instanceId,
+          context.connectionId!,
+          params.available,
+          true,
+          params.runtime,
+          params.runtimeInstalled,
+        )
       case 'computer/host/next':
         return computer.next(params.generation)
       case 'computer/host/complete':

@@ -6,15 +6,13 @@
 
 普通重启开发 Agent 时会复用上一次的回环端口和本地认证令牌，并为新进程生成新的实例标识。保持 `dev:desktop` 运行即可由现有重连页自动恢复；显式修改 `PIDEX_DEV_AGENT_PORT` 会建立新的连接身份，需要重启 Desktop。
 
-## 跳过附加运行时构建
+## 电脑控制运行时
 
-`bun run build:cua` 优先复用与当前 CUA 源码指纹匹配的本地 EXE，否则下载本仓库 `cua-<指纹>` Release 的 Windows x64 预编译产物，并验证 GitHub 提供的 SHA-256。没有对应 Release 时回退到原有 Cargo 构建；下载或校验失败直接报错。`PIDEX_CUA_PROFILE=debug` 始终从源码构建。
+CUA 源码和发布流程独立维护于 [Pidex-Dev/cua](https://github.com/Pidex-Dev/cua/tree/codex/pidex-cua)，安装包不包含 EXE。开发和安装环境均在启用 Computer Use 插件时，从该仓库的固定 Release 下载 Windows x64 运行时。
 
-独立的 `CUA runtime` 工作流在 main 的 CUA 源码或构建脚本变化时发布预编译 EXE，也可在 main 手动运行以初始化产物。需要明确从源码构建时运行 `bun scripts/BuildCua.ts`。桌面安装包继续使用原来的 `resources/cua/cpx-cua.exe` 布局。
+版本及 SHA-256 固定在 `src/computer/CuaRuntimeArtifact.ts`；系统网络代理由 Electron 处理，每次重定向仅允许 GitHub 官方资产 CDN。下载校验后原子安装到 `userData/runtimes/cua/<tag>/<sha256>/cpx-cua.exe`，后续启动重新校验缓存，可离线复用。首次启用需要联网；失败可在电脑控制设置中重新启用，不回退源码构建。
 
-运行 `bun run dev:desktop --no-build` 可跳过电脑控制原生运行时的自动构建。已有产物继续使用；缺少产物时仍可启动应用，电脑控制暂不可用，设置页会在启用后显示不可用提示。需要电脑控制时运行 `bun run build:cua`，再重启 Desktop。
-
-此参数仍保留当前工作树的 Electron 主进程、preload、浏览器注入脚本编译及 Renderer 开发服务，也仍需先启动 `bun run dev:agent`。不带参数时，缺少电脑控制运行时仍会自动构建，构建失败则退出。
+禁用插件、宿主失效及应用退出会取消准备并停止运行时，完整缓存保留。`bun run dev:desktop --no-build` 仍接受，但启动不再编译或预下载 CUA。
 
 ## 环境变量
 

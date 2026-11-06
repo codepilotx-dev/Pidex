@@ -5,15 +5,22 @@ import type {
   ComputerResult,
   ComputerWindow,
   ComputerIdentity,
+  ComputerState,
 } from '@pidex/agent-protocol'
-import { CpxCuaRuntime, type CpxCuaToolResult } from './CpxCuaRuntime.js'
+import {
+  CpxCuaRuntime,
+  type CpxCuaToolResult,
+  type CpxCuaExecutableResolver,
+} from './CpxCuaRuntime.js'
+import { CuaArtifactError } from './CuaRuntimeArtifact.js'
 import { ComputerHostRpcClient } from './ComputerHostRpcClient.js'
 import type { DesktopLogger } from '../logging/DesktopLogger.js'
 import type { SidecarSupervisor } from '../sidecar/Supervisor.js'
 
 export type DesktopComputerControllerOptions = {
   getSupervisor: () => SidecarSupervisor | undefined
-  resolveExecutable: () => string | undefined
+  resolveExecutable: CpxCuaExecutableResolver
+  isRuntimeInstalled?: () => Promise<boolean>
   logger: DesktopLogger
 }
 
@@ -53,6 +60,8 @@ export class DesktopComputerController {
   #generation?: string
   #disposed = false
   #ready = false
+  #runtimeInstalled = false
+  #activationFailed = false
   #activating?: Promise<void>
   #executing?: Promise<void>
 
@@ -63,7 +72,13 @@ export class DesktopComputerController {
     this.#rpc = dependencies?.rpc ?? new ComputerHostRpcClient(options.getSupervisor)
     this.#runtime =
       dependencies?.runtime ??
-      new CpxCuaRuntime(options.resolveExecutable, options.logger, () => this.#runtimeLost())
+      new CpxCuaRuntime(
+        options.resolveExecutable,
+        options.logger,
+        () => this.#runtimeLost(),
+        (status, progress) =>
+          this.#reportRuntime({ status, ...(progress === undefined ? {} : { progress }) }),
+      )
   }
 
   /** Registers with the Agent and starts draining computer commands. */
@@ -72,9 +87,13 @@ export class DesktopComputerController {
     const host = this.#host ?? this.#createHost()
     if (host.registered) return
     try {
+      if (this.options.isRuntimeInstalled)
+        this.#runtimeInstalled = await this.options.isRuntimeInstalled().catch(() => false)
+      if (this.#disposed || this.#host !== host) return
       await this.#rpc.call('computer/host/registerIdentity', {
         instanceId: host.instanceId,
         available: this.#ready,
+        runtimeInstalled: this.#runtimeInstalled,
       })
       if (this.#disposed || this.#host !== host) return
       host.registered = true
@@ -131,10 +150,27 @@ export class DesktopComputerController {
    * old generation, so the driver process is retired instead of reused.
    */
   #releaseNativeState(): void {
+    this.#activationFailed = false
     this.#ready = false
     this.#generation = undefined
     this.#windows.clear()
     this.#runtime.stop()
+  }
+
+  async #reportRuntime(runtime: NonNullable<ComputerState['runtime']>): Promise<void> {
+    const host = this.#host
+    if (this.#disposed || !host || !this.#generation) return
+    if (runtime.status === 'starting') this.#runtimeInstalled = true
+    this.options.logger.info('computer.runtime.preparing', {
+      phase: runtime.status,
+      progress: runtime.progress,
+    })
+    await this.#rpc.call('computer/host/registerIdentity', {
+      instanceId: host.instanceId,
+      available: this.#ready,
+      runtimeInstalled: this.#runtimeInstalled,
+      runtime,
+    })
   }
 
   #poll(): void {
@@ -156,23 +192,40 @@ export class DesktopComputerController {
           this.#releaseNativeState()
           return
         }
-        if (!this.#ready && !this.#activating && !this.#executing) {
+        if (!this.#ready && !this.#activationFailed && !this.#activating && !this.#executing) {
           const generation = this.#generation
           this.#activating = this.#runtime
             .start()
             .then(async () => {
               if (this.#disposed || this.#host !== host || this.#generation !== generation) return
+              this.#runtimeInstalled = true
               this.#ready = true
               await this.#rpc.call('computer/host/registerIdentity', {
                 instanceId,
                 available: true,
+                runtime: { status: 'ready' },
+                runtimeInstalled: this.#runtimeInstalled,
               })
             })
-            .catch(async () => {
-              if (this.#host !== host || this.#generation !== generation) return
-              this.#releaseNativeState()
+            .catch(async (error) => {
+              if (this.#disposed || this.#host !== host || this.#generation !== generation) return
+              this.#runtime.stop()
+              this.#ready = false
+              this.#windows.clear()
+              this.#activationFailed = true
+              this.options.logger.warn('computer.runtime.failed', {
+                code: error instanceof CuaArtifactError ? error.code : 'start_failed',
+              })
               await this.#rpc
-                .call('computer/host/registerIdentity', { instanceId, available: false })
+                .call('computer/host/registerIdentity', {
+                  instanceId,
+                  available: false,
+                  runtimeInstalled: this.#runtimeInstalled,
+                  runtime: {
+                    status: 'error',
+                    error: error instanceof CuaArtifactError ? error.code : 'start_failed',
+                  },
+                })
                 .catch(() => undefined)
             })
             .finally(() => {

@@ -4,7 +4,7 @@ import { ComputerUseService } from './computer/ComputerUseService'
 import { LocalEnvironmentRepository } from './local-environment/LocalEnvironmentRepository'
 import { LocalEnvironmentCatalog } from './local-environment/LocalEnvironmentCatalog'
 import { computerToolDefinitions } from './tool/Computer/Definition'
-import { NodeReplService } from './nodeRepl/NodeReplService'
+import { NodeReplService, defaultNodeReplServer } from './nodeRepl/NodeReplService'
 import { nodeReplToolDefinition } from './nodeRepl/Definition'
 import { NODE_REPL_PLUGIN_ID, NODE_REPL_SERVER_NAME } from './nodeRepl/Association'
 import { Effect } from 'effect'
@@ -571,7 +571,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     })
     const browser = new BrowserService(db, hub, configService)
     const tools = new ToolRegistry()
-    const computer = new ComputerUseService(configService, db, hub, plugins)
+    const computer = new ComputerUseService(configService, db, hub, plugins, undefined, logger)
     yield* Effect.promise(() => computer.initialize())
     for (const definition of computerToolDefinitions(computer)) tools.register(definition)
     if (browser.available())
@@ -591,6 +591,17 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
     )
     const mcpElicitations = new McpElicitationService(db, hub)
     yield* Effect.promise(() => mcpElicitations.restore())
+    const nodeRepl = new NodeReplService((stop) => {
+      const unsubscribe = plugins.subscribe((pluginId) => {
+        if (pluginId === NODE_REPL_PLUGIN_ID && !plugins.isEnabled(NODE_REPL_PLUGIN_ID)) stop()
+      })
+      if (!plugins.isEnabled(NODE_REPL_PLUGIN_ID)) stop()
+      return unsubscribe
+    })
+    const nodeReplConfiguration = async (workspace?: string) =>
+      (await mcpConfigs.list(workspace)).servers.find(
+        (item) => item.effective && item.server.name === NODE_REPL_SERVER_NAME,
+      )?.server
     const mcpConnections = new McpConnectionManager(
       mcpConfigs,
       tools,
@@ -606,26 +617,67 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       },
       new McpDiagnosticContextProvider(new ThreadProjection(db)),
       mcpOAuthCoordinator,
+      {
+        owns: (name) => name === NODE_REPL_SERVER_NAME,
+        definitions: async (workspace) => {
+          const server = await nodeReplConfiguration(workspace)
+          if (
+            server &&
+            (!server.enabled ||
+              server.transport.type !== 'stdio' ||
+              server.disabledTools?.includes('js') ||
+              (server.enabledTools && !server.enabledTools.includes('js')))
+          )
+            return []
+          return [
+            nodeReplToolDefinition({
+              plugins,
+              computer,
+              service: nodeRepl,
+              executor: toolExecutor,
+              validateConfiguration: async () => {
+                if (
+                  JSON.stringify(await nodeReplConfiguration(workspace)) !== JSON.stringify(server)
+                )
+                  throw new AgentError(
+                    'MCP_CONFIG_CHANGED',
+                    'node_repl 配置已变化，请开始新一轮任务',
+                    409,
+                  )
+              },
+              ...(server ? { server } : {}),
+            }),
+          ]
+        },
+      },
     )
     const mcpOAuth = new McpOAuthService(mcpConfigs, mcpConnections, mcpOAuthCoordinator)
-    const mcp = new McpRuntimeService(mcpConfigs, mcpConnections, mcpOAuth, () => {
-      if (!plugins.isEnabled(NODE_REPL_PLUGIN_ID)) return []
-      const connected = computer.available()
-      return [
-        {
-          name: NODE_REPL_SERVER_NAME,
-          scope: 'host',
-          type: 'stdio',
-          state: connected ? 'connected' : 'starting',
-          auth: { source: 'none', canLogin: false, canLogout: false },
-          toolCount: connected ? 1 : 0,
-          resourceCount: 0,
-          promptCount: 0,
-          managedBy: 'host',
-          pluginId: NODE_REPL_PLUGIN_ID,
-        },
-      ]
-    })
+    const mcp = new McpRuntimeService(
+      mcpConfigs,
+      mcpConnections,
+      mcpOAuth,
+      async (workspace) => {
+        if (!plugins.isEnabled(NODE_REPL_PLUGIN_ID)) return []
+        const server = await nodeReplConfiguration(workspace)
+        const connected = computer.available() && server?.enabled !== false
+        return [
+          {
+            name: NODE_REPL_SERVER_NAME,
+            scope: server?.scope ?? 'user',
+            type: 'stdio',
+            state: server?.enabled === false ? 'disabled' : connected ? 'connected' : 'starting',
+            auth: { source: 'none', canLogin: false, canLogout: false },
+            toolCount: connected ? 1 : 0,
+            resourceCount: 0,
+            promptCount: 0,
+            onDemand: true,
+            managedBy: 'user',
+            pluginId: NODE_REPL_PLUGIN_ID,
+          },
+        ]
+      },
+      () => (plugins.isEnabled(NODE_REPL_PLUGIN_ID) ? [defaultNodeReplServer()] : []),
+    )
     const guardianEvidence = new GuardianEvidenceService(async (threadID) => {
       try {
         return (await workspaceResolver.resolve(threadID)).workspace
@@ -744,13 +796,6 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
         for (const event of events) await Effect.runPromise(hub.publish(event))
       },
     })
-    // Host-managed node_repl entry. Registered after the executor exists; it is
-    // never written to user MCP config and only the bundled computer-use plugin
-    // makes it available.
-    const nodeRepl = new NodeReplService()
-    tools.register(
-      nodeReplToolDefinition({ plugins, computer, service: nodeRepl, executor: toolExecutor }),
-    )
     const questions = new QuestionService(db, hub, false)
     const artifacts = yield* Effect.promise(() => ArtifactService.open(config.dataDir, db))
     tools.register(intelligentUiDefinition(artifacts))

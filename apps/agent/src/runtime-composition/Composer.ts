@@ -153,6 +153,7 @@ export interface MpcToolIdentity {
   readonly sdkName: string
   readonly serverName: string
   readonly rawToolName: string
+  readonly configurationHash?: string
 }
 
 /**
@@ -176,6 +177,7 @@ export const createMcpGenerationBinding = (
       name: definition.sdkName,
       server: definition.serverName,
       rawName: definition.rawToolName,
+      ...(definition.configurationHash ? { configurationHash: definition.configurationHash } : {}),
     }))
     .sort((a, b) => a.name.localeCompare(b.name))
   return {

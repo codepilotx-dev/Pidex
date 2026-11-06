@@ -1,6 +1,5 @@
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
-import { join, resolve } from 'node:path'
 import type { DesktopLogger } from '../logging/DesktopLogger.js'
 
 /** MCP revision the native runtime negotiates; kept in lockstep with its protocol session. */
@@ -13,26 +12,10 @@ export type CpxCuaToolResult = {
   isError?: boolean
 }
 
-/**
- * Packaged installs ship the runtime under `resources/cua`; development runs use
- * the `build:cua` output inside the Cargo workspace.
- */
-export const resolveCpxCuaExecutable = (input: {
-  packaged: boolean
-  resourcesPath: string
-  moduleDirectory: string
-}): string =>
-  input.packaged
-    ? join(input.resourcesPath, 'cua', 'cpx-cua.exe')
-    : join(
-        resolve(input.moduleDirectory, '../../../../'),
-        'apps',
-        'desktop',
-        'native',
-        'cpx-cua',
-        'dist',
-        'cpx-cua.exe',
-      )
+export type CpxCuaExecutableResolver = (
+  signal: AbortSignal,
+  onDownloading: (progress?: number) => Promise<void>,
+) => string | undefined | Promise<string | undefined>
 
 type Pending = {
   resolve: (value: Record<string, unknown>) => void
@@ -70,21 +53,28 @@ const REQUIRED_TOOLS = [
 export class CpxCuaRuntime {
   #child?: ChildProcess
   #starting?: Promise<void>
+  #preparing?: AbortController
   #pending = new Map<number, Pending>()
   #sequence = 0
   #buffer = ''
   #ready = false
 
   constructor(
-    private readonly resolveExecutable: () => string | undefined,
+    private readonly resolveExecutable: CpxCuaExecutableResolver,
     private readonly logger: DesktopLogger,
     private readonly onUnexpectedExit?: () => void,
+    private readonly onPreparing?: (
+      status: 'downloading' | 'starting',
+      progress?: number,
+    ) => Promise<void>,
   ) {}
 
   async start(): Promise<void> {
     if (this.#starting) return this.#starting
     if (this.#ready) return
-    this.#starting ??= this.#spawn().finally(() => {
+    const preparing = new AbortController()
+    this.#preparing = preparing
+    this.#starting = this.#spawn(preparing.signal).finally(() => {
       this.#starting = undefined
     })
     return this.#starting
@@ -97,6 +87,8 @@ export class CpxCuaRuntime {
   }
 
   stop(): void {
+    this.#preparing?.abort()
+    this.#preparing = undefined
     const child = this.#child
     this.#child = undefined
     this.#ready = false
@@ -107,10 +99,16 @@ export class CpxCuaRuntime {
     child.kill()
   }
 
-  async #spawn(): Promise<void> {
-    const executable = this.resolveExecutable()
+  async #spawn(signal: AbortSignal): Promise<void> {
+    const executable = await this.resolveExecutable(signal, async (progress) => {
+      signal.throwIfAborted()
+      await this.onPreparing?.('downloading', progress)
+    })
+    signal.throwIfAborted()
     if (!executable || !existsSync(executable))
-      throw new Error('未找到 CPX-CUA 原生运行时，请重新安装或运行 bun run build:cua')
+      throw new Error('未找到 CPX-CUA 原生运行时，请重新启用电脑控制插件')
+    await this.onPreparing?.('starting')
+    signal.throwIfAborted()
     const child = spawn(executable, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     this.#child = child
     this.#buffer = ''
@@ -125,11 +123,12 @@ export class CpxCuaRuntime {
     })
     const failed = (reason: string) => {
       if (this.#child !== child) return
+      const wasReady = this.#ready
       this.#child = undefined
       this.#ready = false
       this.#reject(new Error(reason))
       this.logger.warn('computer.runtime-exited', { reason })
-      this.onUnexpectedExit?.()
+      if (wasReady) this.onUnexpectedExit?.()
     }
     child.on('error', () => failed('CPX-CUA 启动失败'))
     child.on('exit', (code) => failed(`CPX-CUA 原生运行时已退出（${code ?? '未知'}）`))
@@ -160,7 +159,7 @@ export class CpxCuaRuntime {
           (tool: any) => tool?.name === 'cpx_apps' && tool['x-cpx-identity-v1'] === true,
         )
       )
-        throw new Error('CPX-CUA 缺少可信身份核验能力，请重新构建原生运行时')
+        throw new Error('CPX-CUA 缺少可信身份核验能力，请更新电脑控制运行时')
       if (REQUIRED_TOOLS.some((name) => !names.has(name)))
         throw new Error('CPX-CUA 缺少必需的原生能力')
       if (this.#child !== child) throw new Error('CPX-CUA 启动已取消')

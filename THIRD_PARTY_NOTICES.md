@@ -61,14 +61,14 @@ runtime and llama.cpp/ggml components are MIT-licensed, and miniaudio is used
 under its MIT No Attribution option. See `third_party/funasr/` for source,
 version and license details.
 
-Pidex includes the CPX-CUA Windows computer-control runtime vendored from
-cua-driver (trycua/cua) at commit `32b34fbc75abeb96af77df49ae0da72328e67707`.
-The imported Rust workspace provides the Windows UI Automation, window
-enumeration, screenshot and background-input layers; Pidex maintains its
-own `cpx-cua.exe` entry point, tool allowlist and host-resolved application
-identity on top of it. These portions are licensed under the MIT License. See
-`third_party/cpx-cua/LICENSE`, `third_party/cpx-cua/UPSTREAM.md` and
-`third_party/cpx-cua/NATIVE_NOTICES.md`.
+Pidex downloads the CPX-CUA Windows computer-control runtime on plugin enable
+from https://github.com/Pidex-Dev/cua/releases. Its source and release workflow
+are maintained in that fork; the desktop installer does not bundle the EXE
+or Rust source. The runtime is based on cua-driver (trycua/cua) commit
+`32b34fbc75abeb96af77df49ae0da72328e67707`, with Pidex's stdio host, tool
+allowlist and verified application identities. These portions are MIT-licensed.
+See `third_party/cpx-cua/` for retained licenses and provenance; releases also
+include the full license bundle.
 
 CPX-CUA's Windows signature verification adapts the CodeSigning sample from
 Microsoft Windows-classic-samples, copyright Microsoft Corporation, under MIT.

@@ -6,7 +6,6 @@ for (const [label, command] of [
   ['共享协议类型检查', ['bun', 'run', '--cwd', 'packages/shared', 'typecheck']],
   ['Renderer 构建', ['bun', 'run', '--cwd', 'apps/desktop/renderer', 'build']],
   ['Agent 构建', ['bun', 'run', '--cwd', 'apps/agent', 'build']],
-  ['CPX-CUA 原生运行时构建', ['bun', 'run', 'build:cua']],
   ['Electron 构建', ['bun', 'run', '--cwd', 'apps/desktop/electron', 'build']],
 ] as const) {
   console.log(`\n[Pidex] ${label}`)

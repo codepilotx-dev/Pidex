@@ -72,9 +72,12 @@ export function resolveSettingsSectionVisibility(
   context: {
     workspacePath: string | null
     capabilityState: SettingsCapabilityState
+    computerRuntimeInstalled?: boolean
   },
 ): SettingsSectionVisibility {
   if (requires == null) return { visible: true, pending: false }
+  if (requires.computerRuntimeInstalled && !context.computerRuntimeInstalled)
+    return { visible: false, pending: false }
   if (requires.workspace === true && (context.workspacePath ?? '').trim().length === 0) {
     return { visible: false, pending: false }
   }

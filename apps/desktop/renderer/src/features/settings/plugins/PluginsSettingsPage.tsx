@@ -1,3 +1,5 @@
+import { ComputerRuntimeStatus } from '../../plugins/ComputerRuntimeStatus.js'
+import { useComputerSettings } from '../UseComputerSettings.js'
 import type React from 'react'
 import { FileCode2, Package, Plus, RefreshCw, Server } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -67,6 +69,7 @@ export function PluginsSettingsPage({
   const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const requestedTab = parseTab(searchParams.get('tab'))
+  const { state: computerState } = useComputerSettings()
   const [query, setQuery] = useState('')
   const searchRef = useRef<HTMLInputElement | null>(null)
 
@@ -94,8 +97,7 @@ export function PluginsSettingsPage({
   const [skillDialogTrigger, setSkillDialogTrigger] = useState<HTMLElement | null>(null)
 
   const [servers, setServers] = useState<DesktopMcpServerListItem[] | undefined>()
-  // Host-managed servers (node_repl) are never user config, so they are shown
-  // read-only from runtime status instead of the editable declaration list.
+  // Runtime-only host services are separate from editable MCP declarations.
   const [hostServers, setHostServers] = useState<DesktopMcpRuntimeServerStatus[]>([])
   const [mcpError, setMcpError] = useState<string | null>(null)
   const [mcpStatus, setMcpStatus] = useState<string | null>(null)
@@ -695,7 +697,12 @@ export function PluginsSettingsPage({
                 <ExtensionManagementRow
                   key={item.id}
                   title={item.name}
-                  description={pluginErrors[item.id] || item.description}
+                  description={
+                    <>
+                      {pluginErrors[item.id] || item.description}
+                      {item.id === 'computer-use' ? <ComputerRuntimeStatus /> : null}
+                    </>
+                  }
                   icon={
                     <PluginIcon
                       plugin={{ ...item, workspacePath }}
@@ -704,7 +711,13 @@ export function PluginsSettingsPage({
                       name={item.iconName}
                     />
                   }
-                  metadata={pluginStatusLabel(item)}
+                  metadata={
+                    item.id === 'computer-use' && item.enabled && !computerState.runtimeInstalled
+                      ? computerState.runtime?.status === 'error'
+                        ? '安装失败'
+                        : '安装中'
+                      : pluginStatusLabel(item)
+                  }
                   dimmed={item.status === 'disabled'}
                   onActivate={(trigger) => {
                     setSelectedPluginId(item.id)
@@ -770,7 +783,7 @@ export function PluginsSettingsPage({
                 <ExtensionManagementRow
                   key={`host:${status.name}`}
                   title={status.name}
-                  description="由 Computer Use 插件启用，宿主提供，不可编辑。"
+                  description="由插件提供的运行时入口。"
                   icon={<Server size={APP_ICON_SIZE} strokeWidth={APP_ICON_STROKE_WIDTH} />}
                   metadata={
                     <HostManagedMcpBadge state={status.state} toolCount={status.toolCount} />
@@ -998,8 +1011,8 @@ function mcpMetadata(server: DesktopMcpServerListItem): React.ReactNode {
     )
   }
   const status: Record<typeof runtime.state, string> = {
-    connected: '已连接',
-    starting: '正在连接',
+    connected: runtime.onDemand ? '按需启动' : '已连接',
+    starting: runtime.onDemand ? '等待组件就绪' : '正在连接',
     needs_auth: '需要认证',
     failed: '连接失败',
     disabled: '已禁用',
@@ -1066,7 +1079,7 @@ function withoutRecordKey<T>(values: Record<string, T>, key: string): Record<str
   return next
 }
 
-/** Read-only status for a host-managed server such as node_repl. */
+/** Status for non-configurable host services. */
 function HostManagedMcpBadge({
   state,
   toolCount,

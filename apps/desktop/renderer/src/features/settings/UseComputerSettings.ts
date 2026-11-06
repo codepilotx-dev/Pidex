@@ -48,5 +48,18 @@ export function useComputerSettings() {
     }
   }
 
-  return { state, busy, error, update }
+  async function retry(): Promise<void> {
+    setBusy(true)
+    setError('')
+    try {
+      setState(await desktopClient.configureComputer({ enabled: false }))
+      setState(await desktopClient.configureComputer({ enabled: true }))
+    } catch {
+      setError('电脑控制重新启用失败，请重试。')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  return { state, busy, error, update, retry }
 }

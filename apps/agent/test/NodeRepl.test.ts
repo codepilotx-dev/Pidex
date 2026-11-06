@@ -10,6 +10,7 @@ import {
   NodeReplService,
   NODE_REPL_CHILD_FLAG,
   resolveNodeReplCommand,
+  defaultNodeReplServer,
 } from '../src/nodeRepl/NodeReplService'
 import {
   NODE_REPL_PLUGIN_ID,
@@ -18,6 +19,7 @@ import {
   hostManagedMcpDeclarations,
   isTrustedHostMcpServer,
 } from '../src/nodeRepl/Association'
+import { createMcpGenerationBinding } from '../src/runtime-composition/Composer'
 import { nodeReplToolDefinition } from '../src/nodeRepl/Definition'
 import { PluginManagementService } from '../src/plugin/PluginManagementService'
 
@@ -142,6 +144,39 @@ describe('node_repl host service', () => {
     expect(result.images).toEqual([{ data: 'AAAA', mimeType: 'image/png' }])
   })
 
+  test('uses a configured stdio command, arguments and environment', async () => {
+    const root = await temporaryRoot()
+    const entry = join(root, 'configured.ts')
+    await writeFile(
+      entry,
+      `
+      import { createInterface } from 'node:readline'
+      for await (const line of createInterface({ input: process.stdin })) {
+        const request = JSON.parse(line)
+        if (request.id === undefined) continue
+        const result = request.method === 'initialize'
+          ? { protocolVersion: '2025-06-18', capabilities: { tools: {} }, serverInfo: { name: 'fixture', version: '1' } }
+          : request.method === 'tools/list' ? { tools: [{ name: 'js', inputSchema: { type: 'object' } }] }
+          : { content: [{ type: 'text', text: process.env.PIDEX_TEST_REPL + ':' + process.argv.at(-1) }] }
+        process.stdout.write(JSON.stringify({ jsonrpc: '2.0', id: request.id, result }) + '\\n')
+      }
+    `,
+      'utf8',
+    )
+    const result = await execute(new NodeReplService(), 'ignored by fixture', {
+      server: {
+        ...defaultNodeReplServer(),
+        transport: {
+          type: 'stdio',
+          command: process.execPath,
+          args: ['run', entry, 'custom-argument'],
+          env: { PIDEX_TEST_REPL: 'custom-env' },
+        },
+      },
+    })
+    expect(result.text).toBe('custom-env:custom-argument')
+  })
+
   test('each call is a fresh process: no globals, bindings or module cache survive', async () => {
     const service = new NodeReplService()
     await execute(service, `globalThis.__pidexLeak = 1; nodeRepl.write('set')`)
@@ -162,6 +197,18 @@ describe('node_repl host service', () => {
     expect(result.text).toBe('windows')
   })
 
+  test('waits for issued operations even when the script omits await', async () => {
+    let completed = false
+    await execute(new NodeReplService(), 'void computer.apps()', {
+      runOperation: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30))
+        completed = true
+        return { kind: 'result', result: { text: 'done' } }
+      },
+    })
+    expect(completed).toBe(true)
+  })
+
   test('stops the cell when the host arranges an approval pause', async () => {
     const service = new NodeReplService()
     const result = await execute(service, `await computer.read('w1'); nodeRepl.write('after')`, {
@@ -179,6 +226,21 @@ describe('node_repl host service', () => {
         timeoutMs: 1_000,
       }),
     ).rejects.toMatchObject({ code: 'NODE_REPL_TIMEOUT' })
+  })
+
+  test('stops the MCP process when its plugin is disabled', async () => {
+    let cleaned = false
+    const service = new NodeReplService((stop) => {
+      const timer = setTimeout(stop, 300)
+      return () => {
+        clearTimeout(timer)
+        cleaned = true
+      }
+    })
+    await expect(execute(service, 'await new Promise(() => {})')).rejects.toMatchObject({
+      code: 'NODE_REPL_UNAVAILABLE',
+    })
+    expect(cleaned).toBe(true)
   })
 
   test('honours cancellation before starting any work', async () => {
@@ -306,6 +368,69 @@ describe('node_repl tool exposure', () => {
     expect(tool.approvalStrategy).toBe('never-review')
     expect(tool.capabilities.externalState).toBe(false)
     expect(tool.capabilities.process).toBe(false)
+  })
+
+  test('configured executables use MCP process and external-state permissions', () => {
+    const tool = nodeReplToolDefinition({
+      plugins: { isEnabled: () => true } as never,
+      computer: { available: () => true } as never,
+      service: {} as never,
+      executor: {} as never,
+      server: { ...defaultNodeReplServer(), transport: { type: 'stdio', command: 'custom.exe' } },
+    })
+    expect(tool.approvalStrategy).toBe('policy')
+    expect(tool.capabilities.process).toBe(true)
+    expect(tool.capabilities.externalState).toBe(true)
+  })
+
+  test('saving the unchanged built-in command preserves its existing authorization behavior', () => {
+    const tool = nodeReplToolDefinition({
+      plugins: {} as never,
+      computer: {} as never,
+      service: {} as never,
+      executor: {} as never,
+      server: defaultNodeReplServer(),
+    })
+    expect(tool.approvalStrategy).toBe('never-review')
+    expect(tool.capabilities.process).toBe(false)
+  })
+
+  test('configuration fingerprints prevent a changed executable from resuming an approved binding', () => {
+    const binding = (command: string) => {
+      const tool = nodeReplToolDefinition({
+        plugins: {} as never,
+        computer: {} as never,
+        service: {} as never,
+        executor: {} as never,
+        server: { ...defaultNodeReplServer(), transport: { type: 'stdio', command } },
+      })
+      const origin = tool.origin!
+      if (origin.kind !== 'mcp') throw new Error('expected MCP origin')
+      return createMcpGenerationBinding('workspace', {
+        serverInstructions: [],
+        definitions: [{ sdkName: tool.sdkName, ...origin }],
+      }).bindingHash
+    }
+    expect(binding('first.exe')).not.toBe(binding('second.exe'))
+    expect(binding('first.exe')).toBe(binding('first.exe'))
+  })
+
+  test('rejects stale configuration before starting a process', async () => {
+    const tool = nodeReplToolDefinition({
+      plugins: { isEnabled: () => true } as never,
+      computer: {} as never,
+      service: {} as never,
+      executor: {} as never,
+      validateConfiguration: async () => {
+        throw new Error('configuration changed')
+      },
+    })
+    await expect(
+      tool.execute({ code: 'x', title: 'x' }, {
+        invocation: { toolCallID: 'call' },
+        profile: 'main',
+      } as never),
+    ).rejects.toThrow('configuration changed')
   })
 
   test('is unavailable while the computer-use plugin is disabled', () => {

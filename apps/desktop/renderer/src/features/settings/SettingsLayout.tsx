@@ -1,3 +1,4 @@
+import { useComputerSettings } from './UseComputerSettings.js'
 import { useMemo } from 'react'
 import type React from 'react'
 import { useEffect, useState } from 'react'
@@ -53,10 +54,12 @@ export function SettingsLayout({ activeTabOverride }: Props = {}): React.ReactNo
   const navigate = useNavigate()
   const location = useLocation()
   const capabilityState = useSettingsCapabilityState()
+  const { state: computerState } = useComputerSettings()
   const activeItem = SETTINGS_ITEMS.find((item) => item.routeId === activeTab)
   const visibility = resolveSettingsSectionVisibility(activeItem?.requires, {
     workspacePath,
     capabilityState,
+    computerRuntimeInstalled: computerState.runtimeInstalled,
   })
 
   useEffect(() => {

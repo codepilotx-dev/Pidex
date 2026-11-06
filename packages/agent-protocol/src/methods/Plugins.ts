@@ -53,8 +53,8 @@ export const PluginDetailSkillSchema = Schema.Struct({
 
 /**
  * A component a plugin bundles or relies on. `host` components are injected by
- * the host runtime (for example the `node_repl` MCP server) and are never
- * user-editable, so clients must not offer edit or launch actions for them.
+ * the host runtime (for example the `node_repl` MCP adapter). Ownership does not
+ * grant launch authority; editable MCP settings use the MCP management API.
  */
 export const PluginComponentSchema = Schema.Struct({
   kind: Schema.Literals(['skill', 'mcp', 'documentation']),

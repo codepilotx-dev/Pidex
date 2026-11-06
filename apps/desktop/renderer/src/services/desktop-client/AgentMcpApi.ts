@@ -45,7 +45,7 @@ function desktopMcpServer(
     effective: item.effective,
     ...(item.shadowedByScope ? { shadowedByScope: item.shadowedByScope } : {}),
     editable: true,
-    removable: true,
+    removable: !item.providedDefault,
     transport: server.transport,
     ...(server.startupTimeoutMs ? { startupTimeoutMs: server.startupTimeoutMs } : {}),
     ...(server.toolTimeoutMs ? { toolTimeoutMs: server.toolTimeoutMs } : {}),

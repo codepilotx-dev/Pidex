@@ -1,3 +1,4 @@
+import { useComputerSettings } from './UseComputerSettings.js'
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ScrollArea } from '../../components/ui/ScrollArea.js'
 import { ArrowLeft } from 'lucide-react'
@@ -26,6 +27,7 @@ type Props = {
 export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChange }: Props) {
   const { t, locale } = useLocale()
   const capabilityState = useSettingsCapabilityState()
+  const { state: computerState } = useComputerSettings()
   const itemVisibility = useMemo(() => {
     const visibility = new Map<string, { visible: boolean; pending: boolean }>()
     for (const group of SETTINGS_GROUPS) {
@@ -35,12 +37,13 @@ export function SettingsNav({ activeTab, workspacePath = null, onBack, onTabChan
           resolveSettingsSectionVisibility('requires' in item ? item.requires : undefined, {
             workspacePath,
             capabilityState,
+            computerRuntimeInstalled: computerState.runtimeInstalled,
           }),
         )
       }
     }
     return visibility
-  }, [capabilityState, workspacePath])
+  }, [capabilityState, workspacePath, computerState.runtimeInstalled])
   const [searchQuery, setSearchQuery] = useState('')
   const [activeResultIndex, setActiveResultIndex] = useState(0)
   const searchInputRef = useRef<HTMLInputElement>(null)

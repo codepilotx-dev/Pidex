@@ -1,3 +1,4 @@
+import { ComputerRuntimeStatus } from './ComputerRuntimeStatus.js'
 import type React from 'react'
 import { ExternalLink, Plus } from 'lucide-react'
 import { Button } from '../../components/ui/Button.js'
@@ -97,6 +98,7 @@ export function PluginCatalogCard({
             >
               {item.description}
             </span>
+            {item.id === 'computer-use' ? <ComputerRuntimeStatus /> : null}
             {error ? (
               <span
                 className="plugin-catalog-card__error tw:min-w-0 tw:text-app-danger tw:type-body-sm tw:wrap-anywhere"

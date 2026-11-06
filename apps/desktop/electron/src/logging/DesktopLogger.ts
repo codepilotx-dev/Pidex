@@ -23,6 +23,7 @@ const CONSOLE_KEYS = new Set([
   'method',
   'packaged',
   'phase',
+  'progress',
   'pid',
   'port',
   'reason',

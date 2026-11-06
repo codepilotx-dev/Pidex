@@ -1,3 +1,4 @@
+import { nodeReplToolDefinition } from '../src/nodeRepl/Definition'
 import { afterEach, describe, expect, test } from 'bun:test'
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
@@ -51,7 +52,15 @@ afterEach(async () => {
   await removeFixturePaths(paths.splice(0))
 }, 30_000)
 
-async function fixture(options: { enabled?: boolean } = {}) {
+async function fixture(
+  options: {
+    enabled?: boolean
+    logger?: {
+      info: (event: string, fields?: Record<string, unknown>) => void
+      warn: (event: string, fields?: Record<string, unknown>) => void
+    }
+  } = {},
+) {
   const root = await mkdtemp(join(tmpdir(), 'cpx-computer-'))
   paths.push(root)
   const db = new AgentDatabase(join(root, 'history.sqlite'))
@@ -88,7 +97,7 @@ async function fixture(options: { enabled?: boolean } = {}) {
   })
   plugins.initializeComputerUse(options.enabled ?? true)
   await plugins.list()
-  const computer = new ComputerUseService(config, db, hub, plugins, policy)
+  const computer = new ComputerUseService(config, db, hub, plugins, policy, options.logger)
   await computer.initialize()
   cleanups.push(() => {
     computer.dispose()
@@ -865,4 +874,114 @@ describe('聊天电脑授权', () => {
     await discover(computer, other, signal)
     expect(computer.inspect(other, REF, false).ruleRequiresApproval).toBe(true)
   })
+})
+
+test('运行时准备状态从可信宿主转发，禁用插件隐藏状态并保留授权', async () => {
+  const { computer, configuration } = await fixture()
+  configuration.desktop.computerAppApprovalsV2 = [
+    { appId: APP.appId, name: APP.name, decision: 'allow' },
+  ]
+  computer.register(HOST.instanceId, HOST.connectionId, false, true, { status: 'downloading' })
+  expect(computer.state().runtime).toEqual({ status: 'downloading' })
+  expect(computer.available()).toBe(false)
+  computer.register(HOST.instanceId, HOST.connectionId, false, true, {
+    status: 'error',
+    error: 'download_failed',
+  })
+  expect(computer.state().runtime?.error).toBe('download_failed')
+  await computer.configure({ enabled: false })
+  expect(computer.state().runtime).toBeUndefined()
+  expect(configuration.desktop.computerAppApprovalsV2).toHaveLength(1)
+  await computer.configure({ enabled: true })
+  computer.register(HOST.instanceId, HOST.connectionId, true, true, { status: 'ready' })
+  expect(computer.available()).toBe(true)
+  expect(computer.state().runtime?.status).toBe('ready')
+})
+
+test('转发真实下载进度和安装状态，并输出 Agent 生命周期日志', async () => {
+  const events: Array<{ event: string; fields: Record<string, unknown> | undefined }> = []
+  const record = (event: string, fields?: Record<string, unknown>) => {
+    events.push({ event, fields })
+  }
+  const { computer } = await fixture({ logger: { info: record, warn: record } })
+  computer.register(
+    HOST.instanceId,
+    HOST.connectionId,
+    false,
+    true,
+    { status: 'downloading', progress: 0 },
+    false,
+  )
+  computer.register(
+    HOST.instanceId,
+    HOST.connectionId,
+    false,
+    true,
+    { status: 'downloading', progress: 50 },
+    false,
+  )
+  expect(computer.state().runtime?.progress).toBe(50)
+  expect(computer.state().runtimeInstalled).toBe(false)
+  expect(events.at(-1)).toMatchObject({
+    event: 'computer.runtime.downloading',
+    fields: { progress: 50 },
+  })
+  computer.register(HOST.instanceId, HOST.connectionId, false, true, { status: 'starting' }, true)
+  expect(computer.state().runtimeInstalled).toBe(true)
+  await computer.configure({ enabled: false })
+  expect(computer.state().runtimeInstalled).toBe(true)
+  computer.register(
+    HOST.instanceId,
+    HOST.connectionId,
+    false,
+    true,
+    { status: 'error', error: 'download_failed' },
+    true,
+  )
+  expect(events.at(-1)?.event).toBe('computer.runtime.failed')
+  await computer.configure({ enabled: true })
+  computer.register(
+    HOST.instanceId,
+    HOST.connectionId,
+    false,
+    true,
+    { status: 'downloading', progress: 0 },
+    false,
+  )
+  await computer.configure({ enabled: false })
+  expect(events.at(-1)?.event).toBe('computer.runtime.cancelled')
+})
+
+test('未安装、准备中、失败或禁用时不暴露 Computer 与 node_repl 工具', async () => {
+  const { computer, plugins } = await fixture()
+  const registry = new ToolRegistry()
+  const ordinaryNames = registry.list('chat').map((tool) => tool.sdkName)
+  const definitions = computerToolDefinitions(computer)
+  const nodeRepl = nodeReplToolDefinition({
+    plugins,
+    computer,
+    service: {} as never,
+    executor: {} as never,
+  })
+  const names = new Set([...definitions.map((tool) => tool.sdkName), nodeRepl.sdkName])
+  for (const tool of [...definitions, nodeRepl]) registry.register(tool)
+  const exposedComputerTools = () => registry.list('chat').filter((tool) => names.has(tool.sdkName))
+  for (const runtime of [
+    undefined,
+    { status: 'downloading' as const, progress: 50 },
+    { status: 'error' as const, error: 'download_failed' as const },
+  ]) {
+    computer.register(HOST.instanceId, HOST.connectionId, false, true, runtime, false)
+    expect(computer.available()).toBe(false)
+    expect(exposedComputerTools()).toHaveLength(0)
+    expect(registry.list('chat').map((tool) => tool.sdkName)).toEqual(ordinaryNames)
+  }
+  computer.register(HOST.instanceId, HOST.connectionId, true, true, { status: 'ready' }, false)
+  expect(exposedComputerTools()).toHaveLength(0)
+  computer.register(HOST.instanceId, HOST.connectionId, true, true, { status: 'ready' }, true)
+  expect(exposedComputerTools()).toHaveLength(4)
+  await computer.configure({ enabled: false })
+  expect(exposedComputerTools()).toHaveLength(0)
+  expect(computer.state().available).toBe(false)
+  expect(registry.list('chat').map((tool) => tool.sdkName)).toEqual(ordinaryNames)
 })

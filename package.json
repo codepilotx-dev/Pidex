@@ -28,7 +28,6 @@
     "typecheck": "bun run --cwd packages/material-icon-theme typecheck && bun run --cwd packages/model-schema typecheck && bun run --cwd packages/shared typecheck && bun run --cwd packages/agent-protocol typecheck && bun run --cwd packages/session-view typecheck && bun run --cwd apps/auth-broker typecheck && bun run --cwd apps/agent typecheck && bun run --cwd apps/desktop/renderer typecheck && bun run --cwd apps/desktop/electron typecheck && bun run --cwd apps/website typecheck",
     "build:renderer": "bun run --cwd apps/desktop/renderer build",
     "build:agent": "bun run --cwd apps/agent build",
-    "build:cua": "bun run scripts/PrepareCua.ts",
     "build:desktop": "bun run --cwd apps/desktop/electron build",
     "test:desktop:smoke": "bun run --cwd apps/desktop/electron test:smoke",
     "perf:renderer": "bun scripts/performance/RunSuite.ts --suite=renderer --enforce",

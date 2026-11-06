@@ -22,6 +22,8 @@
 - 必须保留 watchdog、ready stdout/health probe、就绪超时、断线重连、`/api/shutdown` 和优雅退出，并保持开发与 packaged sidecar 路径兼容。
 - 必须保留 Agent executable、Renderer、model snapshot、third-party notices/licenses 的 `extraResources` 布局。
 
+- CUA 仅从 `Pidex-Dev/cua` 的应用内固定 Release 和 SHA-256 按需获取；源码及构建流程维护在独立仓库，Desktop 构建和安装包不得重新内置 Rust 工程或 EXE。下载须保留逐跳来源检查、完整性校验及禁用/退出取消语义，准备状态复用 computer RPC。
+
 ## Windows 标题栏
 
 - Windows 主窗口继续使用 `titleBarStyle: "hidden"` 和 Electron Window Controls Overlay（通过 `createWindowsTitleBarOverlay` 统一创建）；Renderer 绘制菜单栏，Windows/Electron 只绘制原生最小化、最大化和关闭按钮，禁止改回完整原生标题栏或全自绘窗口按钮。

@@ -93,9 +93,32 @@ describe('settings registry gating declarations', () => {
     expect(requiresByRouteId.get('voice')).toEqual({
       capabilities: ['speech.transcription.v1'],
     })
-    expect(requiresByRouteId.get('computer')).toEqual({ capabilities: ['computer.use.v1'] })
+    expect(requiresByRouteId.get('computer')).toEqual({
+      capabilities: ['computer.use.v1'],
+      computerRuntimeInstalled: true,
+    })
     expect(requiresByRouteId.get('browser')).toEqual({
       capabilities: ['browser.host.v1', 'browser.manage.v1'],
     })
   })
+})
+
+test('电脑控制导航和直达路由只在组件安装完成后可见', () => {
+  const requirement = { capabilities: ['computer.use.v1'] as const, computerRuntimeInstalled: true }
+  for (const installed of [undefined, false]) {
+    expect(
+      resolveSettingsSectionVisibility(requirement, {
+        workspacePath: null,
+        capabilityState: READY_WITH,
+        computerRuntimeInstalled: installed,
+      }),
+    ).toEqual({ visible: false, pending: false })
+  }
+  expect(
+    resolveSettingsSectionVisibility(requirement, {
+      workspacePath: null,
+      capabilityState: READY_WITH,
+      computerRuntimeInstalled: true,
+    }),
+  ).toEqual({ visible: true, pending: false })
 })

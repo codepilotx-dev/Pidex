@@ -26,6 +26,7 @@ export type SettingsSearchRow = {
 }
 
 export type SettingsSectionRequirement = {
+  computerRuntimeInstalled?: boolean
   /** 需要活动工作区上下文才可使用。 */
   workspace?: boolean
   /** 需要任一列出的运行时协议能力（任一满足即可见）。 */
@@ -264,7 +265,7 @@ export const SETTINGS_GROUPS = [
         label: '电脑控制',
         description: '读取已运行应用的界面并执行操作',
         icon: MonitorSmartphone,
-        requires: { capabilities: ['computer.use.v1'] },
+        requires: { capabilities: ['computer.use.v1'], computerRuntimeInstalled: true },
         rows: [
           row('启用电脑控制', '开启后 Agent 才能发现已运行的应用'),
           row('应用授权', '始终允许、拒绝或撤销单个应用'),
