@@ -104,6 +104,7 @@ import { McpOAuthCoordinator } from './mcp/McpOAuthCoordinator'
 import { McpOAuthService } from './mcp/McpOAuthService'
 import { ThreadProjection } from './transport/ThreadProjection'
 import { TaskSuggestionService } from './suggestion/TaskSuggestionService'
+import { ComposerPredictionService } from './suggestion/ComposerPredictionService'
 import { ThreadTitleService } from './session/ThreadTitleService'
 import { UsageService } from './usage/UsageService'
 import { UsageRepository } from './storage/repositories/UsageRepository'
@@ -629,7 +630,6 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
               (server.enabledTools && !server.enabledTools.includes('js')))
           )
             return []
-          return [
           const validateConfiguration = async () => {
             if (JSON.stringify(await nodeReplConfiguration(workspace)) !== JSON.stringify(server))
               throw new AgentError('MCP_CONFIG_CHANGED', 'node_repl 配置已变化，请开始新一轮任务', 409)
@@ -647,6 +647,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
             !server ||
             (!server.disabledTools?.includes('js_reset') &&
               (!server.enabledTools || server.enabledTools.includes('js_reset')))
+          return [
             nodeReplToolDefinition(shared),
             ...(resetEnabled ? [nodeReplResetToolDefinition(shared)] : []),
           ]
@@ -882,6 +883,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       },
     })
     const suggestions = new TaskSuggestionService(db, piModels, memory, logger, {}, configService)
+    const composerPredictions = new ComposerPredictionService(db, piModels, logger, {}, configService)
     const sideChatEnvironmentCleanup = new SideChatEnvironmentCleanup(
       db.repositories.sideChats,
       environmentDeltas,
@@ -1413,6 +1415,7 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       plugins,
       mcp,
       suggestions,
+      composerPredictions,
       usage,
       turnPatches,
       computer,
@@ -1456,10 +1459,10 @@ export const createBootstrap = (options: BootstrapOptions = {}) =>
       disposed = true
       pets.dispose()
       computer.dispose()
+      await nodeRepl.dispose()
       unsubscribePlugins()
       browser.dispose()
       await speech.dispose()
-      await nodeRepl.dispose()
       automationScheduler?.dispose()
       unsubscribeAutomationEvents()
       unsubscribeExecutionLogs()

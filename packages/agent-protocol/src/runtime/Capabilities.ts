@@ -111,6 +111,7 @@ export const Capabilities = [
   'task.schedule.v1',
   'schedule.draft.v1',
   'system.memory.v1',
+  'composer-predictions.v1',
 ] as const
 
 export const ProtocolCapabilitySchema = Schema.Literals(Capabilities)

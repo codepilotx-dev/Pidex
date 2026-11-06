@@ -58,6 +58,7 @@ import type { SkillManagementService } from '../../prompt/SkillManagementService
 import type { PluginManagementService } from '../../plugin/PluginManagementService'
 import type { McpRuntimeService } from '../../mcp/McpRuntimeService'
 import type { TaskSuggestionService } from '../../suggestion/TaskSuggestionService'
+import type { ComposerPredictionService } from '../../suggestion/ComposerPredictionService'
 import type { UsageService } from '../../usage/UsageService'
 import type { ConfigService } from '../../config/ConfigService'
 import type { TurnPatchService } from '../../patch/TurnPatchService'
@@ -170,6 +171,7 @@ export type RpcRouterDependencies = {
   plugins?: PluginManagementService
   mcp?: McpRuntimeService
   suggestions?: TaskSuggestionService
+  composerPredictions?: ComposerPredictionService
   usage: UsageService
   turnPatches: TurnPatchService
   terminalContext: TerminalContextService

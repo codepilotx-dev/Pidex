@@ -44,6 +44,7 @@ import type { SkillManagementService } from '../prompt/SkillManagementService'
 import type { PluginManagementService } from '../plugin/PluginManagementService'
 import type { McpRuntimeService } from '../mcp/McpRuntimeService'
 import type { TaskSuggestionService } from '../suggestion/TaskSuggestionService'
+import type { ComposerPredictionService } from '../suggestion/ComposerPredictionService'
 import type { ConfigService } from '../config/ConfigService'
 import type { UsageService } from '../usage/UsageService'
 import type { TurnPatchService } from '../patch/TurnPatchService'
@@ -106,6 +107,8 @@ export interface TransportDependencies {
   plugins: PluginManagementService
   mcp: McpRuntimeService
   suggestions: TaskSuggestionService
+  /** 输入预测是增强能力；未装配时 RPC 返回 PREDICTION_UNAVAILABLE。 */
+  composerPredictions?: ComposerPredictionService
   logger: AgentLogger
   usage: UsageService
   turnPatches: TurnPatchService
@@ -498,6 +501,7 @@ export const createApp = (dependencies: TransportDependencies) => {
     skills,
     plugins,
     suggestions,
+    composerPredictions,
     logger,
   } = dependencies
   const app = new Hono()
@@ -536,6 +540,7 @@ export const createApp = (dependencies: TransportDependencies) => {
     skills,
     plugins,
     suggestions,
+    ...(composerPredictions ? { composerPredictions } : {}),
     usage: dependencies.usage,
     mcp: dependencies.mcp,
     turnPatches: dependencies.turnPatches,

@@ -3150,6 +3150,14 @@ const fixtures = {
       ],
     },
   ),
+  'composer-prediction/generate': methodFixture(
+    'composer-prediction/generate',
+    {
+      threadId: threadListItem.id,
+      turnId: 'turn:1',
+    },
+    { prediction: '继续实现输入预测的灰字提示' },
+  ),
   'subagent/list': methodFixture(
     'subagent/list',
     {
@@ -6319,7 +6327,7 @@ describe('RPC method schema contracts', () => {
 
   test('keeps valid params and results for every formal method decodable', () => {
     const methods = Object.keys(AllRpcMethods) as RpcMethod[]
-    expect(methods).toHaveLength(351)
+    expect(methods).toHaveLength(352)
     const activeFixtureKeys = Object.keys(fixtures).filter(
       (method) => !method.startsWith('taskboard/'),
     )
@@ -6687,7 +6695,7 @@ describe('RPC method schema contracts', () => {
   })
 
   test('公共 runtime 方法表不包含 desktop host terminal schema', () => {
-    expect(Object.keys(RpcMethods)).toHaveLength(330)
+    expect(Object.keys(RpcMethods)).toHaveLength(331)
     expect('terminal/host/context' in RpcMethods).toBe(false)
     expect(Object.keys(AllRpcMethods)).toContain('terminal/host/context')
   })

@@ -61,6 +61,8 @@ export const ApplicationErrorCodeSchema = Schema.Literals([
   'TURN_NOT_FOUND',
   'TURN_ACTIVE',
   'TURN_ID_MISMATCH',
+  'TURN_NOT_COMPLETED',
+  'PREDICTION_UNAVAILABLE',
   'MODEL_UNAVAILABLE',
   'SANDBOX_UNAVAILABLE',
   'SANDBOX_BUSY',

@@ -17,6 +17,7 @@ import { SideChatRpcMethods } from './SideChat'
 import { WorktreeRpcMethods } from './Worktree'
 import { SessionGroupRpcMethods } from './SessionGroup'
 import { WorkflowRpcMethods } from './Workflow'
+import { ComposerPredictionRpcMethods } from './Predictions'
 import type { TerminalRpcMethodMap } from './Terminal'
 import type { LocalEnvironmentHostRpcMethodMap } from './LocalEnvironment'
 
@@ -38,6 +39,7 @@ export const RpcMethods = {
   ...WorktreeRpcMethods,
   ...SessionGroupRpcMethods,
   ...WorkflowRpcMethods,
+  ...ComposerPredictionRpcMethods,
 } as const
 export { BaseRpcMethods } from './Base'
 export const RpcMethodMap = RpcMethods
@@ -100,3 +102,4 @@ export * from './Usage'
 export * from './Worktree'
 export * from './SessionGroup'
 export * from './Workflow'
+export * from './Predictions'
